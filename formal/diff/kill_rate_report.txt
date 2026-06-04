@@ -1,0 +1,197 @@
+# Item 12 — Mutation kill-rate audit (enumeration surface)
+
+Source of truth: formal/diff/mutate.py
+Total run_group calls: 73
+Total enumerated mutations: 190
+
+## Per-source-constant breakdown
+
+  ACCEPT_TASK_GOAL_SRC — 1 mutations across 1 test(s)
+    ACCEPT_TASK_GOAL_MUTATIONS (1) → formal/diff/test_goal_system_value_diff.py
+  APPLY_BANK_EXPANSION_SRC — 1 mutations across 1 test(s)
+    APPLY_BANK_EXPANSION_MUTATIONS (1) → formal/diff/test_apply_baseline_diff.py
+  APPLY_CLAIM_SRC — 4 mutations across 2 test(s)
+    APPLY_CLAIM_MUTATIONS (1) → formal/diff/test_apply_baseline_diff.py
+    CLAIM_MUTATIONS (3) → formal/diff/test_inventory_chain_safe_diff.py
+  APPLY_EQUIP_SRC — 1 mutations across 1 test(s)
+    APPLY_EQUIP_MUTATIONS (1) → formal/diff/test_apply_baseline_diff.py
+  APPLY_FIGHT_SRC — 1 mutations across 1 test(s)
+    APPLY_FIGHT_MUTATIONS (1) → formal/diff/test_apply_baseline_diff.py
+  APPLY_MOVE_SRC — 1 mutations across 1 test(s)
+    APPLY_MOVE_MUTATIONS (1) → formal/diff/test_apply_baseline_diff.py
+  APPLY_REST_SRC — 2 mutations across 2 test(s)
+    APPLY_REST_MUTATIONS (1) → formal/diff/test_apply_baseline_diff.py
+    LIVENESS_REST_MUTATIONS (1) → formal/diff/test_local_progress_diff.py
+  ARBITER_SELECT_SRC — 5 mutations across 1 test(s)
+    ARBITER_SELECT_MUTATIONS (5) → formal/diff/test_arbiter_select_diff.py
+  BANK_EXPANSION_SRC — 2 mutations across 1 test(s)
+    BANK_EXPANSION_MUTATIONS (2) → formal/diff/test_bank_expansion_diff.py
+  BANK_SELECTION_SRC — 5 mutations across 1 test(s)
+    BANK_SELECTION_MUTATIONS (5) → formal/diff/test_bank_selection_diff.py
+  CLAIM_PENDING_GOAL_SRC — 1 mutations across 1 test(s)
+    CLAIM_PENDING_GOAL_MUTATIONS (1) → formal/diff/test_goal_system_value_diff.py
+  COMBAT_SRC — 3 mutations across 1 test(s)
+    PREDICT_WIN_MUTATIONS (3) → formal/diff/test_predict_win_diff.py
+  COMPLETE_TASK_GOAL_SRC — 1 mutations across 1 test(s)
+    COMPLETE_TASK_GOAL_MUTATIONS (1) → formal/diff/test_goal_system_value_diff.py
+  COST_CORE_SRC — 3 mutations across 1 test(s)
+    COST_CORE_MUTATIONS (3) → formal/diff/test_action_cost_nonneg_diff.py
+  CYCLES_FOR_PROGRESS_SRC — 3 mutations across 1 test(s)
+    CYCLES_FOR_PROGRESS_MUTATIONS (3) → formal/diff/test_cycles_for_progress_diff.py
+  CYCLE_STEP_SRC — 4 mutations across 1 test(s)
+    CYCLE_STEP_MUTATIONS (4) → formal/diff/test_cycle_step_diff.py
+  DECIDE_KEY_SRC — 4 mutations across 1 test(s)
+    DECIDE_KEY_MUTATIONS (4) → formal/diff/test_decide_key_diff.py
+  DEPOSIT_INVENTORY_GOAL_SRC — 1 mutations across 1 test(s)
+    DEPOSIT_INVENTORY_GOAL_MUTATIONS (1) → formal/diff/test_goal_system_value_diff.py
+  DISCARD_OVERSTOCK_GOAL_SRC — 1 mutations across 1 test(s)
+    DISCARD_OVERSTOCK_GOAL_MUTATIONS (1) → formal/diff/test_goal_system_value_diff.py
+  EQUIP_SRC — 2 mutations across 1 test(s)
+    EQUIP_MUTATIONS (2) → formal/diff/test_phase7_invariants_diff.py
+  EXPAND_BANK_GOAL_SRC — 1 mutations across 1 test(s)
+    EXPAND_BANK_GOAL_MUTATIONS (1) → tests/test_ai/test_goals_expand_bank.py
+  GAME_DATA_SRC — 3 mutations across 1 test(s)
+    GAME_DATA_MUTATIONS (3) → formal/diff/test_game_data_accessors_diff.py
+  GATHERING_APPLY_SRC — 3 mutations across 2 test(s)
+    GATHERING_APPLY_MUTATIONS (2) → formal/diff/test_apply_baseline_diff.py
+    LIVENESS_GATHERING_MUTATIONS (1) → formal/diff/test_local_progress_diff.py
+  GATHERING_GOAL_SRC — 4 mutations across 2 test(s)
+    GATHERING_GOAL_MUTATIONS (2) → formal/diff/test_phase7_invariants_diff.py
+    GATHER_MATERIALS_BAND_MUTATIONS (2) → formal/diff/test_goal_value_band_safety_diff.py
+  GATHER_APPLY_SRC — 3 mutations across 1 test(s)
+    GATHER_APPLY_MUTATIONS (3) → formal/diff/test_gather_apply_diff.py
+  INVENTORY_CAPS_SRC — 3 mutations across 1 test(s)
+    INVENTORY_CAPS_MUTATIONS (3) → formal/diff/test_inventory_caps_diff.py
+  LEVEL_SKILL_GOAL_SRC — 1 mutations across 1 test(s)
+    LEVEL_SKILL_GOAL_MUTATIONS (1) → tests/test_ai/test_level_skill_goal.py
+  LOW_YIELD_BOUNDARY_SRC — 3 mutations across 1 test(s)
+    LOW_YIELD_MUTATIONS (3) → formal/diff/test_low_yield_cancel_diff.py
+  LOW_YIELD_CANCEL_GOAL_SRC — 1 mutations across 1 test(s)
+    LOW_YIELD_CANCEL_GOAL_MUTATIONS (1) → formal/diff/test_goal_system_value_diff.py
+  MEASURE_SRC — 2 mutations across 1 test(s)
+    LIVENESS_MEASURE_MUTATIONS (2) → formal/diff/test_local_progress_diff.py
+  NPC_BUY_CORE_SRC — 3 mutations across 1 test(s)
+    NPC_BUY_MUTATIONS (3) → formal/diff/test_npc_buy_inventory_diff.py
+  OBJECTIVE_COMPLETION_SRC — 3 mutations across 1 test(s)
+    WEIGHTED_REMAINING_MUTATIONS (3) → formal/diff/test_weighted_remaining_diff.py
+  OBJECTIVE_SRC — 2 mutations across 1 test(s)
+    OBJECTIVE_MUTATIONS (2) → formal/diff/test_objective_diff.py
+  OWNED_COUNT_SRC — 3 mutations across 1 test(s)
+    OWNED_COUNT_MUTATIONS (3) → formal/diff/test_owned_count_diff.py
+  PLANNER_SRC — 3 mutations across 1 test(s)
+    PLANNER_MUTATIONS (3) → formal/diff/test_planner_admissibility_diff.py
+  PLAYER_SRC — 4 mutations across 1 test(s)
+    PLAN_EXISTS_BUILD_ACTIONS_MUTATIONS (4) → formal/diff/test_plan_exists_diff.py
+  PREREQUISITE_GRAPH_SRC — 4 mutations across 1 test(s)
+    PREREQUISITE_GRAPH_MUTATIONS (4) → formal/diff/test_prerequisite_graph_diff.py
+  PRIORITY_BAND_SRC — 4 mutations across 1 test(s)
+    PRIORITY_BAND_MUTATIONS (4) → formal/diff/test_priority_band_diff.py
+  PROGRESSION_GOAL_SRC — 1 mutations across 1 test(s)
+    PROGRESSION_GOAL_MUTATIONS (1) → formal/diff/test_goal_system_value_diff.py
+  PROJECTIONS_SRC — 3 mutations across 1 test(s)
+    CHEAPEST_PATH_MUTATIONS (3) → formal/diff/test_cheapest_path_diff.py
+  PROJECTION_SRC — 3 mutations across 1 test(s)
+    PROJECTION_MUTATIONS (3) → formal/diff/test_loadout_projection_diff.py
+  PURSUE_TASK_GOAL_SRC — 2 mutations across 1 test(s)
+    PURSUE_TASK_MUTATIONS (2) → formal/diff/test_goal_value_band_safety_diff.py
+  REACH_UNLOCK_LEVEL_GOAL_SRC — 1 mutations across 1 test(s)
+    REACH_UNLOCK_LEVEL_GOAL_MUTATIONS (1) → formal/diff/test_goal_system_value_diff.py
+  RECIPE_CLOSURE_SRC — 3 mutations across 1 test(s)
+    RECIPE_CLOSURE_MUTATIONS (3) → formal/diff/test_recipe_closure_diff.py
+  RESTORE_HP_GOAL_SRC — 1 mutations across 1 test(s)
+    RESTORE_HP_GOAL_MUTATIONS (1) → formal/diff/test_goal_system_value_diff.py
+  SCALAR_CORE_SRC — 5 mutations across 1 test(s)
+    SCALAR_CORE_MUTATIONS (5) → formal/diff/test_scalarizer_diff.py
+  SCALAR_PRIORITY_SRC — 1 mutations across 1 test(s)
+    SCALAR_PRIORITY_MUTATIONS (1) → formal/diff/test_goal_value_band_safety_diff.py
+  SCORING_SRC — 10 mutations across 2 test(s)
+    SCORING_MUTATIONS (4) → formal/diff/test_equipment_scoring_diff.py
+    REALIZABLE_LOADOUT_MUTATIONS (6) → formal/diff/test_realizable_loadout_diff.py
+  SELL_INVENTORY_GOAL_SRC — 1 mutations across 1 test(s)
+    SELL_INVENTORY_GOAL_MUTATIONS (1) → formal/diff/test_goal_system_value_diff.py
+  SKILL_XP_CURVE_SRC — 3 mutations across 1 test(s)
+    SKILL_XP_CURVE_MUTATIONS (3) → formal/diff/test_skill_xp_curve_diff.py
+  SRC — 6 mutations across 1 test(s)
+    MUTATIONS (6) → formal/diff/test_calculate_path_diff.py
+  STORE_WARMUP_SRC — 4 mutations across 1 test(s)
+    STORE_WARMUP_MUTATIONS (4) → formal/diff/test_store_warmup_diff.py
+  STRATEGY_BLEND_SRC — 6 mutations across 1 test(s)
+    STRATEGY_BLEND_MUTATIONS (6) → formal/diff/test_strategy_blend_diff.py
+  STRATEGY_SRC — 7 mutations across 2 test(s)
+    STRATEGY_MUTATIONS (4) → formal/diff/test_strategy_traversal_diff.py
+    REACHABILITY_MUTATIONS (3) → formal/diff/test_reachability_diff.py
+  STUCK_DETECTOR_SRC — 4 mutations across 1 test(s)
+    STUCK_DETECTOR_MUTATIONS (4) → formal/diff/test_stuck_detector_diff.py
+  TASK_BATCH_SRC — 3 mutations across 1 test(s)
+    TASK_BATCH_MUTATIONS (3) → formal/diff/test_task_batch_diff.py
+  TASK_CANCEL_GOAL_SRC — 1 mutations across 1 test(s)
+    TASK_CANCEL_GOAL_MUTATIONS (1) → formal/diff/test_goal_system_value_diff.py
+  TASK_CANCEL_SRC — 3 mutations across 1 test(s)
+    TASK_CANCEL_MUTATIONS (3) → formal/diff/test_inventory_chain_safe_diff.py
+  TASK_DECISION_CORE_SRC — 4 mutations across 1 test(s)
+    TASK_DECISION_MUTATIONS (4) → formal/diff/test_task_decision_diff.py
+  TASK_EXCHANGE_GOAL_SRC — 1 mutations across 1 test(s)
+    TASK_EXCHANGE_GOAL_MUTATIONS (1) → formal/diff/test_goal_system_value_diff.py
+  TASK_EXCHANGE_SRC — 3 mutations across 1 test(s)
+    TASK_EXCHANGE_MUTATIONS (3) → formal/diff/test_inventory_chain_safe_diff.py
+  TASK_FEASIBILITY_SRC — 3 mutations across 1 test(s)
+    TASK_FEASIBILITY_MUTATIONS (3) → formal/diff/test_task_feasibility_diff.py
+  UNEQUIP_SRC — 3 mutations across 1 test(s)
+    UNEQUIP_MUTATIONS (3) → formal/diff/test_inventory_chain_safe_diff.py
+  UNLOCK_BANK_GOAL_SRC — 1 mutations across 1 test(s)
+    UNLOCK_BANK_GOAL_MUTATIONS (1) → formal/diff/test_goal_system_value_diff.py
+  UPGRADE_SELECTION_SRC — 5 mutations across 1 test(s)
+    UPGRADE_SELECTION_MUTATIONS (5) → formal/diff/test_upgrade_selection_diff.py
+  WINNABLE_CASCADE_SRC — 3 mutations across 1 test(s)
+    WINNABLE_CASCADE_MUTATIONS (3) → formal/diff/test_winnable_cascade_diff.py
+  WITHDRAW_ITEM_SRC — 3 mutations across 1 test(s)
+    WITHDRAW_ITEM_MUTATIONS (3) → formal/diff/test_inventory_chain_safe_diff.py
+
+## Per-test-file aggregation
+
+  formal/diff/test_action_cost_nonneg_diff.py — 3 mutations across 1 src(s)
+  formal/diff/test_apply_baseline_diff.py — 8 mutations across 7 src(s)
+  formal/diff/test_arbiter_select_diff.py — 5 mutations across 1 src(s)
+  formal/diff/test_bank_expansion_diff.py — 2 mutations across 1 src(s)
+  formal/diff/test_bank_selection_diff.py — 5 mutations across 1 src(s)
+  formal/diff/test_calculate_path_diff.py — 6 mutations across 1 src(s)
+  formal/diff/test_cheapest_path_diff.py — 3 mutations across 1 src(s)
+  formal/diff/test_cycle_step_diff.py — 4 mutations across 1 src(s)
+  formal/diff/test_cycles_for_progress_diff.py — 3 mutations across 1 src(s)
+  formal/diff/test_decide_key_diff.py — 4 mutations across 1 src(s)
+  formal/diff/test_equipment_scoring_diff.py — 4 mutations across 1 src(s)
+  formal/diff/test_game_data_accessors_diff.py — 3 mutations across 1 src(s)
+  formal/diff/test_gather_apply_diff.py — 3 mutations across 1 src(s)
+  formal/diff/test_goal_system_value_diff.py — 13 mutations across 13 src(s)
+  formal/diff/test_goal_value_band_safety_diff.py — 5 mutations across 3 src(s)
+  formal/diff/test_inventory_caps_diff.py — 3 mutations across 1 src(s)
+  formal/diff/test_inventory_chain_safe_diff.py — 15 mutations across 5 src(s)
+  formal/diff/test_loadout_projection_diff.py — 3 mutations across 1 src(s)
+  formal/diff/test_local_progress_diff.py — 4 mutations across 3 src(s)
+  formal/diff/test_low_yield_cancel_diff.py — 3 mutations across 1 src(s)
+  formal/diff/test_npc_buy_inventory_diff.py — 3 mutations across 1 src(s)
+  formal/diff/test_objective_diff.py — 2 mutations across 1 src(s)
+  formal/diff/test_owned_count_diff.py — 3 mutations across 1 src(s)
+  formal/diff/test_phase7_invariants_diff.py — 4 mutations across 2 src(s)
+  formal/diff/test_plan_exists_diff.py — 4 mutations across 1 src(s)
+  formal/diff/test_planner_admissibility_diff.py — 3 mutations across 1 src(s)
+  formal/diff/test_predict_win_diff.py — 3 mutations across 1 src(s)
+  formal/diff/test_prerequisite_graph_diff.py — 4 mutations across 1 src(s)
+  formal/diff/test_priority_band_diff.py — 4 mutations across 1 src(s)
+  formal/diff/test_reachability_diff.py — 3 mutations across 1 src(s)
+  formal/diff/test_realizable_loadout_diff.py — 6 mutations across 1 src(s)
+  formal/diff/test_recipe_closure_diff.py — 3 mutations across 1 src(s)
+  formal/diff/test_scalarizer_diff.py — 5 mutations across 1 src(s)
+  formal/diff/test_skill_xp_curve_diff.py — 3 mutations across 1 src(s)
+  formal/diff/test_store_warmup_diff.py — 4 mutations across 1 src(s)
+  formal/diff/test_strategy_blend_diff.py — 6 mutations across 1 src(s)
+  formal/diff/test_strategy_traversal_diff.py — 4 mutations across 1 src(s)
+  formal/diff/test_stuck_detector_diff.py — 4 mutations across 1 src(s)
+  formal/diff/test_task_batch_diff.py — 3 mutations across 1 src(s)
+  formal/diff/test_task_decision_diff.py — 4 mutations across 1 src(s)
+  formal/diff/test_task_feasibility_diff.py — 3 mutations across 1 src(s)
+  formal/diff/test_upgrade_selection_diff.py — 5 mutations across 1 src(s)
+  formal/diff/test_weighted_remaining_diff.py — 3 mutations across 1 src(s)
+  formal/diff/test_winnable_cascade_diff.py — 3 mutations across 1 src(s)
+  tests/test_ai/test_goals_expand_bank.py — 1 mutations across 1 src(s)
+  tests/test_ai/test_level_skill_goal.py — 1 mutations across 1 src(s)
