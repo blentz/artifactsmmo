@@ -56,6 +56,7 @@ import Formal.Liveness.GoldSemantics
 import Formal.Liveness.SkillXpSemantics
 import Formal.Liveness.RichApplyConsistency
 import Formal.Liveness.LearningStoreBridge
+import Formal.Liveness.MetaGoalDispatch
 import Formal.Liveness.TaskPoolSemantics
 import Formal.Liveness.TaskPoolTrajectory
 
@@ -459,3 +460,12 @@ open Formal.Liveness.LearningStoreBridge
 #print axioms taskCancelFires_false_when_PURSUE
 #print axioms ls_pivots_on_combat_or_no_history
 #print axioms ls_pursues_on_req_none
+
+-- Item 7: MetaGoal dispatch + .objectiveStep discharge.
+open Formal.Liveness.MetaGoalDispatch
+#print axioms dispatch_reachCharLevel
+#print axioms dispatch_reachSkillLevel
+#print axioms dispatch_obtainItem
+#print axioms applyDispatch_reachCharLevel
+#print axioms applyDispatch_reachSkillLevel
+#print axioms applyDispatch_obtainItem
