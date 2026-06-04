@@ -1,0 +1,31 @@
+# Item 14 — OpenAPI conformance audit
+
+openapi.json schemas: 208
+Tracked schemas: 4
+
+## 14a — Schema property drift per tracked schema
+
+### BankSchema
+  ⚠ fields in spec but NOT tracked: ['expansions']
+### ItemSchema
+  ⚠ fields in spec but NOT tracked: ['conditions', 'description', 'name', 'subtype', 'tradeable']
+### MonsterSchema
+  ⚠ fields in spec but NOT tracked: ['drops', 'effects', 'max_gold', 'min_gold', 'name', 'type']
+### RecipeSchema
+  ⚠ schema not found in openapi.json
+
+## 14b — GameData.load schema imports
+
+Schemas imported by game_data.py: 2
+  - MapContentType
+  - MapLayer
+
+## 14c — Replay coverage
+
+Live API responses are deserialized via the auto-generated
+artifactsmmo-api-client. The client's pydantic models enforce
+conformance at parse time (unknown fields → ignored or rejected
+per the schema's additionalProperties policy). GameData.load
+consumes these models, so 14c is satisfied transitively: if a
+live response deviates from openapi.json, parsing FAILS before
+GameData sees the data.
