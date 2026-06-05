@@ -13,7 +13,14 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session as SqlSession
 from sqlmodel import SQLModel, col, create_engine, select
 
-from artifactsmmo_cli.ai.learning.models import Blocker, Cycle, Session, SkillXpObservation, TaskRewardObservation
+from artifactsmmo_cli.ai.learning.models import (
+    Blocker,
+    Cycle,
+    LearnedSetting,
+    Session,
+    SkillXpObservation,
+    TaskRewardObservation,
+)
 from artifactsmmo_cli.ai.learning.store_warmup_core import (
     warmup_gated_median,
     warmup_gated_success_rate,
@@ -483,3 +490,42 @@ class LearningStore:
     def close(self) -> None:
         self._engine.dispose()
 
+
+    def get_learned_int(self, key: str, default: int) -> int:
+        """Read a per-character int setting (e.g. `task_exchange_min_coins`).
+        Returns `default` when the row is missing or any DB error fires —
+        keeps the player loop alive on degraded storage."""
+        try:
+            with SqlSession(self._engine) as s:
+                row = s.exec(
+                    select(LearnedSetting).where(
+                        LearnedSetting.character == self._character,
+                        LearnedSetting.key == key,
+                    )
+                ).first()
+                return int(row.value) if row is not None else default
+        except SQLAlchemyError:
+            return default
+
+    def set_learned_int(self, key: str, value: int) -> None:
+        """Upsert a per-character int setting. Persists across sessions so
+        repeated re-discovery (e.g. the taskmaster's exchange cost via HTTP
+        478 climbs) only pays its discovery rejections once per character."""
+        try:
+            with SqlSession(self._engine) as s:
+                row = s.exec(
+                    select(LearnedSetting).where(
+                        LearnedSetting.character == self._character,
+                        LearnedSetting.key == key,
+                    )
+                ).first()
+                if row is not None:
+                    row.value = int(value)
+                    s.add(row)
+                else:
+                    s.add(LearnedSetting(
+                        character=self._character, key=key, value=int(value),
+                    ))
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[learning] set_learned_int({key}) failed: {e}")

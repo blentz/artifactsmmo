@@ -126,8 +126,13 @@ class GamePlayer:
         # API does not expose the per-exchange cost as data, so we discover it
         # from HTTP 478 ("missing items") failures: raise the bound past any coin
         # count that failed, and pin it to the exact cost once an exchange
-        # succeeds. Starts at 1 (optimistic) — never a hardcoded cost.
-        self._task_exchange_min_coins: int = 1
+        # succeeds. Persisted via history.set_learned_int so a restart doesn't
+        # re-pay the discovery climb (trace 2026-05/06: 42 HTTP 478s across
+        # ~10 sessions = ~4 rejections per re-discovery).
+        self._task_exchange_min_coins: int = (
+            history.get_learned_int("task_exchange_min_coins", 1)
+            if history is not None else 1
+        )
         self._goal_first_selected_at: dict[str, int] = {}
         self.history = history
         self._last_path_plan: PathPlan | None = None
@@ -1195,12 +1200,19 @@ class GamePlayer:
         if not isinstance(action, TaskExchangeAction):
             return
         before = prev_state.inventory.get(TASKS_COIN_CODE, 0)
+        prev = self._task_exchange_min_coins
         if outcome == "error:HTTP_478":
             self._task_exchange_min_coins = max(self._task_exchange_min_coins, before + 1)
         elif outcome == "ok":
             spent = before - new_state.inventory.get(TASKS_COIN_CODE, 0)
             if spent > 0:
                 self._task_exchange_min_coins = spent
+        # Persist any change so the next session doesn't re-discover the same
+        # minimum via fresh HTTP 478 rejections.
+        if self.history is not None and self._task_exchange_min_coins != prev:
+            self.history.set_learned_int(
+                "task_exchange_min_coins", self._task_exchange_min_coins,
+            )
 
     def _record_skill_observations(self, state: WorldState, skill_max_xp: dict[str, int]) -> None:
         """Persist observed XP-to-next-level for each skill at its current level."""
