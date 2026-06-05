@@ -4,6 +4,7 @@ prerequisite graph. Frozen + hashable so P3 traversal can use visited-sets."""
 from dataclasses import dataclass
 from typing import Protocol
 
+from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -54,4 +55,16 @@ class ObtainItem:
     quantity: int = 1
 
     def is_satisfied(self, state: WorldState, game_data: GameData) -> bool:
+        # Equippable items (weapons / shields / gear / tools): owning the
+        # item isn't the end-state — the goal of the meta-objective is to
+        # WEAR it. Trace 2026-06-05T03:37: Robby crafted wooden_shield but
+        # never equipped it; root dropped from candidates because owned >=
+        # 1, the UpgradeEquipmentGoal never re-fired, and the shield sat
+        # in inventory forever. Require occupancy of an equipment slot
+        # (any slot the type can fill) for equippables. Recipe-input
+        # codes (ash_plank, copper_bar, ash_wood) stay on the owned-count
+        # rule — they're consumed by crafts and never enter equipment.
+        stats = game_data.item_stats(self.code)
+        if stats is not None and ITEM_TYPE_TO_SLOTS.get(stats.type_):
+            return self.code in state.equipment.values()
         return owned_count(state, self.code) >= self.quantity

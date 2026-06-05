@@ -1,4 +1,4 @@
-from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
@@ -60,3 +60,45 @@ def test_nodes_are_hashable():
     # frozen dataclasses → usable in visited-sets during P3 traversal
     assert {ReachCharLevel(5), ReachSkillLevel("mining", 3), ObtainItem("x", 2)}
     assert ObtainItem("x", 2) == ObtainItem("x", 2)
+
+
+def test_obtain_item_resource_satisfied_when_owned():
+    """Non-equippable items (resources) are satisfied by owned_count alone —
+    the legacy semantic for crafting-input goals."""
+    gd = GameData()
+    gd._item_stats = {"ash_wood": ItemStats(code="ash_wood", level=1, type_="resource")}
+    state = make_state(inventory={"ash_wood": 6})
+    assert ObtainItem("ash_wood", 6).is_satisfied(state, gd) is True
+    assert ObtainItem("ash_wood", 7).is_satisfied(state, gd) is False
+
+
+def test_obtain_item_equippable_requires_equipped_not_owned():
+    """Trace 2026-06-05T03:37: Robby crafted wooden_shield, owned_count went
+    to 1, ObtainItem(wooden_shield).is_satisfied returned True, the meta-
+    objective root dropped, and the shield sat in inventory forever
+    without ever equipping. For equippable types (anything with an
+    ITEM_TYPE_TO_SLOTS entry), satisfaction must REQUIRE the item to be
+    in an equipment slot — owning a spare doesn't count."""
+    gd = GameData()
+    gd._item_stats = {
+        "wooden_shield": ItemStats(code="wooden_shield", level=1, type_="shield"),
+    }
+    # Owned but NOT equipped → NOT satisfied (the bug we're closing).
+    state_owned = make_state(inventory={"wooden_shield": 1}, equipment={"shield_slot": None})
+    assert ObtainItem("wooden_shield").is_satisfied(state_owned, gd) is False
+    # Equipped → satisfied.
+    state_equipped = make_state(inventory={}, equipment={"shield_slot": "wooden_shield"})
+    assert ObtainItem("wooden_shield").is_satisfied(state_equipped, gd) is True
+    # Owned AND equipped (spare in bag) → satisfied (equipped occupies the slot).
+    state_both = make_state(inventory={"wooden_shield": 1},
+                            equipment={"shield_slot": "wooden_shield"})
+    assert ObtainItem("wooden_shield").is_satisfied(state_both, gd) is True
+
+
+def test_obtain_item_equippable_unknown_stats_falls_back_to_owned():
+    """When stats aren't loaded for a code, we can't classify it as
+    equippable — fall back to the legacy owned_count check rather than
+    deadlocking the goal."""
+    gd = GameData()  # no item_stats entries
+    state = make_state(inventory={"mystery_thing": 1})
+    assert ObtainItem("mystery_thing").is_satisfied(state, gd) is True

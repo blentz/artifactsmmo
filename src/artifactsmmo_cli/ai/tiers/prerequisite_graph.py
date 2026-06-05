@@ -14,6 +14,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachSkillLevel,
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -42,6 +43,19 @@ def prerequisites(node: MetaGoal, state: WorldState, game_data: GameData) -> lis
     """Direct prerequisites of `node`, derived from game data."""
     if isinstance(node, ObtainItem):
         if node.is_satisfied(state, game_data):
+            return []
+        # For equippables: if the item is already OWNED (in inventory or
+        # bank) but not yet equipped, no recipe descent is needed — the
+        # only remaining step is the equip itself. Without this guard,
+        # the prereq tree falls into the recipe (which consumed its
+        # inputs during the original craft) and the bot would re-gather
+        # mats to build a second copy. The arbiter's UpgradeEquipmentGoal
+        # plans the EquipAction for the existing copy via the empty
+        # prereq path.
+        equipped_codes = [c for c in state.equipment.values() if c is not None]
+        if owned_count_pure(
+            state.inventory, state.bank_items, equipped_codes, node.code,
+        ) >= node.quantity:
             return []
         recipe = game_data.crafting_recipe(node.code)
         if recipe is not None:

@@ -34,9 +34,14 @@ from formal.diff.oracle_client import run_oracle
 
 
 class _FakeStats:
-    def __init__(self, crafting_skill: str | None, crafting_level: int):
+    def __init__(self, crafting_skill: str | None, crafting_level: int,
+                 type_: str | None = None):
         self.crafting_skill = crafting_skill
         self.crafting_level = crafting_level
+        # `type_` only matters for the equippable-vs-resource branch in
+        # ObtainItem.is_satisfied. None → falls through to the legacy
+        # owned_count rule, preserving the original test semantics.
+        self.type_ = type_
 
 
 class _FakeGameData:
