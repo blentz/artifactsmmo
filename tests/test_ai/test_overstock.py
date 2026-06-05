@@ -455,3 +455,132 @@ class TestEquippableDominance:
             bank_items={"copper_dagger": 1},
         )
         assert useful_quantity_cap("wooden_stick", state, gd) == 0
+
+
+class TestEquippableDominanceArmorAndAccessories:
+    """Dominance gate extended-coverage across all equippable categories
+    (armor, shield, accessory) and across multi-slot types (ring,
+    artifact, utility) where the dominator must own enough copies to
+    fill every slot before the dominated item becomes redundant."""
+
+    def test_armor_tier_dominance(self):
+        """body_armor: iron (resistance 12) dominates copper (resistance 5)."""
+        gd = GameData()
+        gd._item_stats = {
+            "copper_armor": ItemStats(code="copper_armor", level=1, type_="body_armor",
+                                       resistance={"fire": 5}),
+            "iron_armor": ItemStats(code="iron_armor", level=5, type_="body_armor",
+                                     resistance={"fire": 12}),
+        }
+        gd._crafting_recipes = {}
+        state = make_state(inventory={"copper_armor": 1, "iron_armor": 1})
+        assert useful_quantity_cap("copper_armor", state, gd) == 0
+        assert useful_quantity_cap("iron_armor", state, gd) == 1
+
+    def test_shield_tier_dominance(self):
+        """shield: copper (resistance 5) dominates wooden (resistance 0)."""
+        gd = GameData()
+        gd._item_stats = {
+            "wooden_shield": ItemStats(code="wooden_shield", level=1, type_="shield",
+                                        resistance={}),
+            "copper_shield": ItemStats(code="copper_shield", level=1, type_="shield",
+                                        resistance={"fire": 5}),
+        }
+        gd._crafting_recipes = {}
+        state = make_state(inventory={"wooden_shield": 1, "copper_shield": 1})
+        assert useful_quantity_cap("wooden_shield", state, gd) == 0
+
+    def test_boots_tier_dominance(self):
+        gd = GameData()
+        gd._item_stats = {
+            "copper_boots": ItemStats(code="copper_boots", level=1, type_="boots",
+                                       resistance={"fire": 4}),
+            "iron_boots": ItemStats(code="iron_boots", level=5, type_="boots",
+                                     resistance={"fire": 10}),
+        }
+        gd._crafting_recipes = {}
+        state = make_state(inventory={"copper_boots": 1, "iron_boots": 1})
+        assert useful_quantity_cap("copper_boots", state, gd) == 0
+
+    def test_ring_multi_slot_one_better_does_not_dominate(self):
+        """ring has TWO slots — bot wears 2 rings. 1 iron_ring + 1
+        copper_ring: the copper is still needed to fill the 2nd slot.
+        copper must NOT be dominated until 2+ iron_rings are owned."""
+        gd = GameData()
+        gd._item_stats = {
+            "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
+                                      attack={"fire": 3}),
+            "iron_ring": ItemStats(code="iron_ring", level=5, type_="ring",
+                                    attack={"fire": 8}),
+        }
+        gd._crafting_recipes = {}
+        # Only 1 iron — bot still wants copper for ring2_slot.
+        state = make_state(inventory={"copper_ring": 1, "iron_ring": 1})
+        assert useful_quantity_cap("copper_ring", state, gd) == 1, (
+            "copper_ring is the 2nd-best ring and the bot wears 2 rings; "
+            "with only 1 iron_ring owned it can't yet dominate"
+        )
+        # Two irons — copper is now redundant.
+        state2 = make_state(inventory={"copper_ring": 1, "iron_ring": 2})
+        assert useful_quantity_cap("copper_ring", state2, gd) == 0, (
+            "2 iron_rings can fill both ring slots; copper is dominated"
+        )
+
+    def test_artifact_multi_slot_dominance_requires_three(self):
+        """artifact has THREE slots — need 3 dominator copies to flush."""
+        gd = GameData()
+        gd._item_stats = {
+            "copper_artifact": ItemStats(code="copper_artifact", level=1, type_="artifact",
+                                          attack={"fire": 2}),
+            "iron_artifact": ItemStats(code="iron_artifact", level=5, type_="artifact",
+                                        attack={"fire": 7}),
+        }
+        gd._crafting_recipes = {}
+        # 2 irons — copper still needed for 3rd slot.
+        state2 = make_state(inventory={"copper_artifact": 1, "iron_artifact": 2})
+        assert useful_quantity_cap("copper_artifact", state2, gd) == 1
+        # 3 irons — copper redundant.
+        state3 = make_state(inventory={"copper_artifact": 1, "iron_artifact": 3})
+        assert useful_quantity_cap("copper_artifact", state3, gd) == 0
+
+    def test_amulet_single_slot_dominance(self):
+        gd = GameData()
+        gd._item_stats = {
+            "copper_amulet": ItemStats(code="copper_amulet", level=1, type_="amulet",
+                                        attack={"fire": 3}),
+            "iron_amulet": ItemStats(code="iron_amulet", level=5, type_="amulet",
+                                      attack={"fire": 8}),
+        }
+        gd._crafting_recipes = {}
+        state = make_state(inventory={"copper_amulet": 1, "iron_amulet": 1})
+        assert useful_quantity_cap("copper_amulet", state, gd) == 0
+
+    def test_higher_tier_pickaxe_dominates_lower_tier_across_bank(self):
+        """Tool dominance with the dominator banked — bot has copper_pickaxe
+        equipped, iron_pickaxe in bank. copper still equipped (wrapper
+        floor keeps it >= 1) but the dominance rule itself classifies it
+        as dominated — once swapped to iron via OptimizeLoadout, the
+        copper drops to inv and becomes discard-eligible."""
+        gd = GameData()
+        gd._item_stats = {
+            "copper_pickaxe": ItemStats(code="copper_pickaxe", level=1, type_="weapon",
+                                         attack={"fire": 3},
+                                         skill_effects={"mining": -10}),
+            "iron_pickaxe": ItemStats(code="iron_pickaxe", level=5, type_="weapon",
+                                       attack={"fire": 8},
+                                       skill_effects={"mining": -20}),
+        }
+        gd._crafting_recipes = {}
+        # Equipped — wrapper floor keeps copper at >=1
+        state = make_state(
+            inventory={},
+            bank_items={"iron_pickaxe": 1},
+            equipment={"weapon_slot": "copper_pickaxe"},
+        )
+        assert useful_quantity_cap("copper_pickaxe", state, gd) >= 1
+        # After hypothetical swap: iron equipped, copper in inv. Now copper is dominated.
+        state2 = make_state(
+            inventory={"copper_pickaxe": 1},
+            equipment={"weapon_slot": "iron_pickaxe"},
+        )
+        assert useful_quantity_cap("copper_pickaxe", state2, gd) == 0

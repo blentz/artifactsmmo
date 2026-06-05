@@ -77,9 +77,8 @@ def useful_quantity_cap(
 
 def _is_equippable_dominated(item_code: str, state: WorldState,
                               game_data: GameData) -> bool:
-    """True when a different owned/equipped item fills every slot this
-    item could fill AND scores strictly higher on equip_value AND covers
-    every skill_effect of this item with equal-or-better magnitude.
+    """True when strictly-better same-slot peers are owned in numbers
+    sufficient to fill every slot this item could fill.
 
     Dominance is per-(slot, skill-effect-set). A pure combat weapon
     (attack-only, no skill_effects) is dominated by a higher-attack
@@ -88,6 +87,12 @@ def _is_equippable_dominated(item_code: str, state: WorldState,
     by an item that ALSO carries those same skill_effects at equal-or-
     better magnitude; a combat weapon never dominates a tool because the
     tool's `skill_effects[mining]` is unmatched.
+
+    Multi-slot types (ring×2, artifact×3, utility×2) require enough
+    dominator copies to occupy EVERY slot — 1 iron_ring doesn't
+    dominate a copper_ring while the bot still needs a second ring to
+    wear. The summed owned count (inventory + bank + equipped) of
+    qualifying peers must be >= len(slots_for_type).
     """
     stats = game_data.item_stats(item_code)
     if stats is None:
@@ -95,6 +100,7 @@ def _is_equippable_dominated(item_code: str, state: WorldState,
     slots = ITEM_TYPE_TO_SLOTS.get(stats.type_, [])
     if not slots:
         return False
+    slot_count = len(slots)
     my_value = _equip_value(stats)
     my_effects = stats.skill_effects or {}
     candidates: set[str] = set(state.inventory)
@@ -102,6 +108,9 @@ def _is_equippable_dominated(item_code: str, state: WorldState,
         candidates |= set(state.bank_items)
     candidates |= {c for c in state.equipment.values() if c is not None}
     candidates.discard(item_code)
+    equipped_codes = [c for c in state.equipment.values() if c is not None]
+    bank_items = state.bank_items or {}
+    dominator_owned = 0
     for peer_code in candidates:
         peer = game_data.item_stats(peer_code)
         if peer is None:
@@ -123,7 +132,14 @@ def _is_equippable_dominated(item_code: str, state: WorldState,
         if any(abs(peer_effects.get(skill, 0)) < abs(magnitude)
                for skill, magnitude in my_effects.items()):
             continue
-        return True
+        peer_count = (
+            state.inventory.get(peer_code, 0)
+            + bank_items.get(peer_code, 0)
+            + sum(1 for c in equipped_codes if c == peer_code)
+        )
+        dominator_owned += peer_count
+        if dominator_owned >= slot_count:
+            return True
     return False
 
 
