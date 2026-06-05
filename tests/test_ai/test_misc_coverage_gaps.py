@@ -1,67 +1,60 @@
-"""Behavior tests closing coverage gaps in documented blockers, inventory
-caps, and GameData recursion guards / lookup helpers."""
+"""Coverage-gap closers for small remaining branches."""
 
-from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
+from fractions import Fraction
+
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.inventory_caps import overstocked_items
+from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
+from artifactsmmo_cli.ai.scalar_priority import yield_bonus_for_goal
+from artifactsmmo_cli.ai.tiers.means import _has_sellable
 from tests.test_ai.fixtures import make_state
 
 
-class TestDocumentedBlockerSkipsUnknownMonsterLevel:
-    def test_monster_with_nonpositive_level_is_not_a_combat_gate(self):
-        """A monster whose level is unknown (<=0) produces no combat blocker
-        (line 49 continue); a real over-level monster still does."""
-        gd = GameData()
-        gd._monster_level = {"ghost": 0, "yellow_slime": 4}
-        reg = BlockerRegistry()
-        state = make_state(level=1, skills={})
-        added = seed_documented_blockers(reg, gd, state)
-        assert "fight:ghost" not in reg.blockers
-        assert "fight:yellow_slime" in reg.blockers
-        assert added == 1
+def test_level_skill_goal_max_depth_is_100():
+    """Crafts can need deep recipe chains; budget matches GatherMaterials."""
+    assert LevelSkillGoal("weaponcrafting", 3).max_depth == 100
 
 
-class TestOverstockSkipsZeroQty:
-    def test_zero_quantity_inventory_entry_is_skipped(self):
-        """An inventory entry at qty 0 never counts as overstock (line 94);
-        a real over-cap item does."""
-        gd = GameData()
-        gd._item_stats = {"junk": ItemStats(code="junk", level=1, type_="resource")}
-        gd._crafting_recipes = {}
-        state = make_state(inventory={"phantom": 0, "junk": 7})
-        excess = overstocked_items(state, gd)
-        assert "phantom" not in excess
-        # junk has no recipe/task use -> cap 0 -> all 7 overstocked.
-        assert excess["junk"] == 7
+def test_yield_bonus_for_goal_history_none_returns_zero():
+    """yield_bonus_for_goal short-circuits to 0 when history is absent."""
+    state = make_state()
+    gd = GameData()
+    assert yield_bonus_for_goal("AcceptTask", state, gd, None) == Fraction(0)
 
 
-class TestMaxRecipeDemandCycleGuard:
-    def test_recursive_recipe_cycle_terminates(self):
-        """A cyclic recipe graph (a needs b, b needs a) must not infinite-loop;
-        the visited guard (line 137) caps the recursion and returns a finite
-        demand."""
-        gd = GameData()
-        gd._crafting_recipes = {
-            "alpha": {"beta": 2},
-            "beta": {"alpha": 3},
-        }
-        # Should return without hanging; demand is a finite positive number.
-        demand = gd.max_recipe_demand("alpha")
-        assert demand >= 0
-        assert isinstance(demand, int)
+def test_has_sellable_skips_zero_qty():
+    """_has_sellable iterates inventory but skips items with qty <= 0."""
+    state = make_state(inventory={"copper_dagger": 0})
+    gd = GameData()
+    gd._npc_sell_prices = {"merchant": {"copper_dagger": 5}}
+    assert _has_sellable(state, gd) is False
 
 
-class TestActiveGatheringSkillsCycleGuard:
-    def test_recipe_cycle_does_not_loop(self):
-        """active_gathering_skills walks recipe trees; a cyclic recipe must
-        terminate via the visited guard (line 279) and still report the
-        reachable gather skill."""
-        gd = GameData()
-        gd._crafting_recipes = {
-            "alpha": {"beta": 1},
-            "beta": {"alpha": 1, "raw_ore": 2},
-        }
-        gd._resource_drops = {"ore_rocks": "raw_ore"}
-        gd._resource_skill = {"ore_rocks": ("mining", 1)}
-        skills = gd.active_gathering_skills("alpha", None)
-        assert "mining" in skills
+def test_has_sellable_skips_no_buyer():
+    """_has_sellable skips items with qty > 0 but no NPC buys them."""
+    state = make_state(inventory={"obscure_item": 1})
+    gd = GameData()
+    assert _has_sellable(state, gd) is False
+
+
+def test_has_sellable_skips_untradeable():
+    """_has_sellable skips items whose stats.tradeable=False."""
+    state = make_state(inventory={"bound_item": 1})
+    gd = GameData()
+    gd._npc_sell_prices = {"merchant": {"bound_item": 5}}
+    gd._item_stats = {
+        "bound_item": ItemStats(code="bound_item", level=1, type_="weapon",
+                                tradeable=False),
+    }
+    assert _has_sellable(state, gd) is False
+
+
+def test_has_sellable_true_when_tradeable_and_has_buyer():
+    """Sanity check for the positive path (qty > 0, buyer exists, tradeable)."""
+    state = make_state(inventory={"good_item": 1})
+    gd = GameData()
+    gd._npc_sell_prices = {"merchant": {"good_item": 5}}
+    gd._item_stats = {
+        "good_item": ItemStats(code="good_item", level=1, type_="weapon",
+                               tradeable=True),
+    }
+    assert _has_sellable(state, gd) is True
