@@ -3,6 +3,7 @@
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
+from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.level_skill import (
     MAX_SKILL_GAP,
@@ -25,11 +26,29 @@ def _gd_with_weapon_recipes() -> GameData:
             code="iron_dagger", level=10, type_="weapon",
             crafting_skill="weaponcrafting", crafting_level=10,
         ),
+        "copper_bar": ItemStats(
+            code="copper_bar", level=1, type_="resource",
+            crafting_skill="mining", crafting_level=1,
+        ),
+        "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource"),
+        "iron_bar": ItemStats(
+            code="iron_bar", level=10, type_="resource",
+            crafting_skill="mining", crafting_level=10,
+        ),
+        "iron_ore": ItemStats(code="iron_ore", level=10, type_="resource"),
     }
     gd._crafting_recipes = {
         "copper_dagger": {"copper_bar": 6},
         "iron_dagger": {"iron_bar": 6},
+        # Recipe-closure walk: dagger ← bar ← ore (gather). Registering the
+        # intermediate recipes + resource drops lets LevelSkillGoal's tightened
+        # relevant_actions filter see copper_rocks as in-closure for
+        # weaponcrafting.
+        "copper_bar": {"copper_ore": 1},
+        "iron_bar": {"iron_ore": 1},
     }
+    gd._resource_drops = {"copper_rocks": "copper_ore", "iron_rocks": "iron_ore"}
+    gd._resource_skill = {"copper_rocks": ("mining", 1), "iron_rocks": ("mining", 10)}
     return gd
 
 
@@ -144,6 +163,46 @@ class TestRelevantActions:
         assert "ash_plank" not in codes
         assert any(isinstance(a, RestAction) for a in relevant)
         assert any(isinstance(a, GatherAction) for a in relevant)
+
+    def test_excludes_gathers_outside_skill_recipe_closure(self):
+        """Trace 2026-06-05 (cycles 80/120/300):
+        LevelSkill(weaponcrafting->5) timed out at 90s with ~250k nodes
+        because the relevant_actions filter accepted EVERY gather as
+        'fair game'. With the closure-bound filter, only gathers whose
+        drop is in a weaponcrafting recipe input survive."""
+        goal = LevelSkillGoal("weaponcrafting", 3)
+        gd = _gd_with_weapon_recipes()
+        # ash_tree drops ash_wood -> NOT in any weaponcrafting recipe
+        # closure (those recipes use copper_bar -> copper_ore -> copper_rocks).
+        gd._resource_drops["ash_tree"] = "ash_wood"
+        gd._resource_skill["ash_tree"] = ("woodcutting", 1)
+        actions = [
+            GatherAction(resource_code="copper_rocks"),  # in-closure
+            GatherAction(resource_code="ash_tree"),       # OUT of closure
+        ]
+        relevant = goal.relevant_actions(actions, make_state(), gd)
+        resources = {a.resource_code for a in relevant if isinstance(a, GatherAction)}
+        assert "copper_rocks" in resources
+        assert "ash_tree" not in resources, (
+            "ash_tree drops ash_wood — not a weaponcrafting recipe input — "
+            "should be filtered out to keep planner branching bounded"
+        )
+
+    def test_withdraw_filtered_to_recipe_inputs(self):
+        """Symmetric to the gather restriction: only withdraws of items in
+        the skill's recipe closure (leaves + intermediates + in-skill
+        items themselves) are relevant."""
+        goal = LevelSkillGoal("weaponcrafting", 3)
+        gd = _gd_with_weapon_recipes()
+        actions = [
+            WithdrawItemAction(code="copper_ore", quantity=1, bank_location=(4, 0)),
+            WithdrawItemAction(code="copper_bar", quantity=1, bank_location=(4, 0)),
+            WithdrawItemAction(code="copper_dagger", quantity=1, bank_location=(4, 0)),
+            WithdrawItemAction(code="ash_wood", quantity=1, bank_location=(4, 0)),
+        ]
+        relevant = goal.relevant_actions(actions, make_state(), gd)
+        codes = {a.code for a in relevant if isinstance(a, WithdrawItemAction)}
+        assert codes == {"copper_ore", "copper_bar", "copper_dagger"}
 
 
 class TestRepr:

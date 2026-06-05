@@ -9,10 +9,12 @@ that skill family until the skill levels up.
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.skill_xp_curve import SkillXpCurve
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.recipe_closure import recipe_closure
 from artifactsmmo_cli.ai.world_state import WorldState
 
 MAX_SKILL_GAP = 5
@@ -91,21 +93,44 @@ class LevelSkillGoal(Goal):
     def relevant_actions(
         self, actions: list[Action], state: WorldState, game_data: GameData
     ) -> list[Action]:
-        """Craft anything in this skill family + supporting Gather / Rest /
-        Deposit / Withdraw. Withdraw is included so the planner can pull
-        already-banked recipe inputs instead of re-gathering them — closes
-        the same regrind regression seen in PursueTaskGoal."""
+        """Craft items in this skill family + Gather / Withdraw for the
+        SPECIFIC materials those crafts consume + recovery / deposit.
+
+        Trace 2026-06-05 (cycles 80/120/300): LevelSkill(weaponcrafting->5)
+        timed out at 90s with ~250k nodes explored because the prior
+        filter accepted EVERY gather and every withdraw as 'fair game'.
+        Branching factor was the entire gather/withdraw surface across
+        the game. With the recipe-closure restriction below, only the
+        gathers/withdraws that can feed a crafting-skill recipe survive,
+        which empirically holds plan resolution under a few hundred nodes."""
+        # Collect the recipe closure for items this skill can craft.
+        skill_craftables: set[str] = set()
+        for code, recipe in game_data._crafting_recipes.items():
+            stats = game_data.item_stats(code)
+            if stats is None or stats.crafting_skill != self._skill_name:
+                continue
+            if not recipe:
+                continue
+            skill_craftables.add(code)
+        needed_resources, craftable_mats = recipe_closure(game_data, skill_craftables)
+        # Withdraw-eligible item codes: leaf inputs (drops of needed
+        # resources) + intermediate craftables + the in-skill item itself.
+        withdrawable: set[str] = set(craftable_mats) | skill_craftables
+        for res in needed_resources:
+            drop = game_data.resource_drop_item(res)
+            if drop is not None:
+                withdrawable.add(drop)
+
         result: list[Action] = []
         for action in actions:
             if "recovery" in action.tags or "deposit" in action.tags:
                 result.append(action)
-            elif "withdraw" in action.tags:
-                # Any banked material may be a recipe input for a craft in
-                # this skill family; let the planner figure out which.
-                result.append(action)
             elif isinstance(action, GatherAction):
-                # All gathers are fair game; they replenish materials for crafting.
-                result.append(action)
+                if action.resource_code in needed_resources:
+                    result.append(action)
+            elif isinstance(action, WithdrawItemAction):
+                if action.code in withdrawable:
+                    result.append(action)
             elif isinstance(action, CraftAction):
                 stats = game_data.item_stats(action.code)
                 if stats is not None and stats.crafting_skill == self._skill_name:
