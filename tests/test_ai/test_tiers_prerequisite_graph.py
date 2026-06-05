@@ -109,6 +109,57 @@ def test_objective_roots_cover_level_skills_gear():
     assert any(isinstance(r, ObtainItem) for r in roots)  # gear targets
 
 
+def test_objective_roots_adds_craft_bootstrap_when_skill_at_floor():
+    """Robby's level-3 trace 2026-06-04: weaponcrafting / gearcrafting /
+    jewelrycrafting all sat at level 1 with 0 XP because the level-50
+    ReachSkillLevel root has gap-50 effort and consistently lost ranking
+    to small-effort gear chains. Those gear chains then stalled — copper
+    recipes need weaponcrafting>=1 (technically met) but copper_dagger
+    requires 6 copper_bar which itself needs mining XP; nothing forced a
+    craft, so 951 gold and 1400 mining XP accumulated with zero gear
+    progress.
+
+    Fix: when a crafting skill is at the level-1 floor, objective_roots
+    (with state) prepends ReachSkillLevel(skill, 5) — gap-4 effort, much
+    more likely to win ranking and give LevelSkillGoal an actual cycle to
+    fire."""
+    gd = _gd()
+    obj = CharacterObjective.from_game_data(gd)
+    # Fresh character: all skills at the floor.
+    state = make_state(skills={s: 1 for s in SKILL_NAMES})
+    roots = objective_roots(obj, state)
+    for skill in ("weaponcrafting", "gearcrafting", "jewelrycrafting"):
+        assert ReachSkillLevel(skill, 5) in roots, (
+            f"missing craft-bootstrap root for {skill}; got {roots}"
+        )
+
+
+def test_objective_roots_omits_craft_bootstrap_when_skill_above_floor():
+    """Once a crafting skill is above the bootstrap target (>=5), the small
+    bootstrap root drops out and the long-haul ReachSkillLevel(skill, 50)
+    root takes over without competition from the bootstrap."""
+    gd = _gd()
+    obj = CharacterObjective.from_game_data(gd)
+    state = make_state(skills={"weaponcrafting": 6, "gearcrafting": 5,
+                                "jewelrycrafting": 1})
+    roots = objective_roots(obj, state)
+    assert ReachSkillLevel("weaponcrafting", 5) not in roots
+    assert ReachSkillLevel("gearcrafting", 5) not in roots
+    assert ReachSkillLevel("jewelrycrafting", 5) in roots  # still at floor
+
+
+def test_objective_roots_backward_compat_without_state():
+    """Legacy callers that don't pass state still get the original root
+    set — no bootstrap roots, no regressions in old replay harnesses."""
+    gd = _gd()
+    obj = CharacterObjective.from_game_data(gd)
+    roots = objective_roots(obj)
+    # No bootstrap roots — only the canonical target=50 ReachSkillLevel.
+    for skill in ("weaponcrafting", "gearcrafting", "jewelrycrafting"):
+        assert ReachSkillLevel(skill, 5) not in roots
+        assert ReachSkillLevel(skill, 50) in roots
+
+
 def test_cyclic_recipe_traversal_terminates():
     """prerequisites returns finite direct edges; a visited-set BFS over a
     cyclic recipe terminates (P2 adds no traversal; the test drives one)."""

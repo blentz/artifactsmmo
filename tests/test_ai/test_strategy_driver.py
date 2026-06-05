@@ -628,17 +628,68 @@ class TestPursueTaskEndToEnd:
         )
         assert len(plan) >= 1
 
-    def test_meta_step_suppressed_when_pursuing_items_task(self, monkeypatch, tmp_path):
-        """Trace-cycle-760: meta-objective's `ObtainItem(ash_wood)` step was
-        out-ranking the discretionary PursueTask(copper_ore) on positional
-        order, causing 1-cycle ash-forest detours mid-copper-grind. With the
-        suppression in StrategyArbiter.select, an active PURSUE_TASK should
-        force step_goal=None and PursueTask wins."""
+    def test_meta_step_suppressed_when_redundant_with_task_chain(self, monkeypatch, tmp_path):
+        """Suppression contract: when an items-task is being pursued AND the
+        meta-objective's chosen_step is a GatherMaterials goal whose target
+        sits INSIDE the task's recipe chain, the step is suppressed (the
+        task's PursueTask plan already gathers it; a separate cycle would
+        be a redundant 1-cycle detour).
+
+        Setup: task=ash_plank with recipe ash_plank<-ash_wood. chosen_step
+        = ObtainItem(ash_wood) is exactly the input the task chain produces.
+        Expected: GatherMaterials(ash_wood) does not appear in goals_tried."""
         monkeypatch.setattr(means_module, "task_decision", lambda *_: means_module.PURSUE)
 
         planner = GOAPPlanner()
         gd = _make_planner_gd()
-        # Make ash_tree gatherable so the step goal WOULD plan if it ran.
+        # ash_plank<-ash_wood recipe so the task chain consumes ash_wood.
+        gd._crafting_recipes["ash_plank"] = {"ash_wood": 1}
+        gd._resource_locations = {"ash_tree": [(3, 0)]}
+        gd._resource_drops["ash_tree"] = "ash_wood"
+        gd._resource_skill["ash_tree"] = ("woodcutting", 1)
+
+        state = make_state(
+            level=5, hp=150, max_hp=150, xp=0, max_xp=500,
+            task_code="ash_plank", task_type="items",
+            task_progress=0, task_total=1,
+            skills={"woodcutting": 1, "weaponcrafting": 5},
+            inventory={"ash_plank": 1},
+        )
+        actions = [TaskTradeAction(code="ash_plank", quantity=1, taskmaster_location=(2, 1))]
+        ctx = _ctx(combat_monster="chicken")
+
+        store = LearningStore(db_path=str(tmp_path / "step_redundant.db"), character="testchar")
+        try:
+            arbiter = StrategyArbiter(planner, history=store)
+            decision = _FakeDecision(chosen_step=ObtainItem("ash_wood"))
+            goal, _plan, tried = arbiter.select(decision, state, gd, actions, ctx)
+        finally:
+            store.close()
+
+        assert repr(goal) == "PursueTask(ash_plank)", (
+            f"expected PursueTask, got {goal!r}"
+        )
+        assert all(gt["goal"] != "GatherMaterials(ash_wood)" for gt in tried), (
+            f"ash-wood step is REDUNDANT with the task's own chain — should "
+            f"be suppressed, but goals_tried={tried}"
+        )
+
+    def test_meta_step_allowed_when_independent_of_task_chain(self, monkeypatch, tmp_path):
+        """Counterpart contract: when chosen_step's target is NOT in the
+        active task's recipe chain, the step is INDEPENDENT progress (e.g.
+        gear chain) and must run despite the active task. Pre-refinement,
+        14e3830 suppressed the step indiscriminately, which is why Robby
+        never crafted gear — every meta-step nudge got dropped.
+
+        Setup: task=copper_bar with recipe copper_bar<-copper_ore.
+        chosen_step = ObtainItem(ash_wood) which is unrelated (e.g. for a
+        wooden_shield upgrade). Expected: GatherMaterials(ash_wood) appears
+        in goals_tried — the step is allowed to compete."""
+        monkeypatch.setattr(means_module, "task_decision", lambda *_: means_module.PURSUE)
+
+        planner = GOAPPlanner()
+        gd = _make_planner_gd()
+        gd._crafting_recipes["copper_bar"] = {"copper_ore": 10}
         gd._resource_locations = {"ash_tree": [(3, 0)]}
         gd._resource_drops["ash_tree"] = "ash_wood"
         gd._resource_skill["ash_tree"] = ("woodcutting", 1)
@@ -653,21 +704,18 @@ class TestPursueTaskEndToEnd:
         actions = [TaskTradeAction(code="copper_bar", quantity=1, taskmaster_location=(2, 1))]
         ctx = _ctx(combat_monster="chicken")
 
-        store = LearningStore(db_path=str(tmp_path / "step.db"), character="testchar")
+        store = LearningStore(db_path=str(tmp_path / "step_indep.db"), character="testchar")
         try:
             arbiter = StrategyArbiter(planner, history=store)
-            # chosen_step = ObtainItem(ash_wood) — a meta-objective nudge that
-            # is unrelated to the active copper_bar task. Pre-fix, the step
-            # would plan first (it's positionally ahead of discretionary
-            # PursueTask) and the arbiter would return GatherMaterials(ash_wood).
             decision = _FakeDecision(chosen_step=ObtainItem("ash_wood"))
-            goal, _plan, tried = arbiter.select(decision, state, gd, actions, ctx)
+            _goal, _plan, tried = arbiter.select(decision, state, gd, actions, ctx)
         finally:
             store.close()
 
-        assert repr(goal) == "PursueTask(copper_bar)", (
-            f"expected PursueTask, got {goal!r}"
-        )
-        assert all(gt["goal"] != "GatherMaterials(ash_wood)" for gt in tried), (
-            f"ash-wood step should be suppressed, but goals_tried={tried}"
+        # The step is tried (independent chain). Whether it wins depends on
+        # whether it plans + position — we only assert that the candidate
+        # is no longer SUPPRESSED at construction time.
+        assert any(gt["goal"] == "GatherMaterials(ash_wood)" for gt in tried), (
+            f"ash-wood step is INDEPENDENT of the copper_bar task chain — "
+            f"should be allowed to compete, but goals_tried={tried}"
         )

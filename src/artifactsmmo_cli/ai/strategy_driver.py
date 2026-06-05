@@ -49,6 +49,30 @@ plan[0], so this steers search reachability/direction, not commitment. Tunable:
 raise toward 5 if traces show 90s-budget headroom; deeper risks a no_plan
 timeout on a long recipe chain."""
 
+
+def _task_recipe_inputs(task_code: str | None, game_data: GameData) -> frozenset[str]:
+    """All items the task's recipe transitively depends on (just the input
+    set, not their quantities). Used to detect when an objective-step
+    GatherMaterials goal is REDUNDANT with the active PursueTask — the task's
+    own plan already gathers/crafts those items, so a separate meta-step for
+    one of them is the marginal 1-cycle detour `step_suppression` guards
+    against. An input that lives OUTSIDE the task chain (e.g. ash_wood for
+    a wooden_shield while the task is copper_ore) is genuinely independent
+    progress and must NOT be suppressed."""
+    if not task_code:
+        return frozenset()
+    chain: set[str] = set()
+    queue: list[str] = [task_code]
+    while queue:
+        code = queue.pop()
+        recipe = game_data.crafting_recipe(code) or {}
+        for mat in recipe:
+            if mat in chain:
+                continue
+            chain.add(mat)
+            queue.append(mat)
+    return frozenset(chain)
+
 # ---------------------------------------------------------------------------
 # Flat map functions + StrategyArbiter
 # ---------------------------------------------------------------------------
@@ -224,16 +248,19 @@ class StrategyArbiter:
 
         step_goal = objective_step_goal(chosen_step, state, game_data, ctx)
 
-        # An active items-task pursuit pre-empts the meta-objective's
-        # single-cycle step. Without this, the meta-objective's discretionary
-        # nudge (e.g. GatherMaterials(ash_wood) for a long-term skill goal)
-        # wins on positional order over the discretionary PursueTask, causing
-        # 1-cycle interruptions of a long PursueTask(copper_ore) run to walk
-        # to the ash forest and back — wasting a full game cooldown for a
-        # marginal meta-step. Suppressing the step here keeps the locally
-        # committed task running; the meta-objective resumes once the task
-        # completes (or PursueTask stops firing).
-        if MeansKind.PURSUE_TASK in discretionary_kinds:
+        # An active items-task pursuit suppresses the meta-objective's
+        # GatherMaterials step ONLY when that step targets an item the task's
+        # OWN recipe chain already produces — PursueTask plans the same
+        # gather, so the meta-step is a redundant 1-cycle detour. A step
+        # whose target lives outside the task chain (e.g. ash_wood for a
+        # wooden_shield while the task is copper_ore) is independent gear
+        # progress and must not be suppressed; without it the bot never
+        # crafts equipment because the chain never gets cycles to
+        # accumulate. Non-GatherMaterials steps (UpgradeEquipment, LevelSkill)
+        # are sustained, high-value goals and always allowed to compete.
+        if (MeansKind.PURSUE_TASK in discretionary_kinds
+                and isinstance(step_goal, GatherMaterialsGoal)
+                and step_goal._target_item in _task_recipe_inputs(state.task_code, game_data)):
             step_goal = None
 
         # Build ordered candidates: guards, collect, step, discretionary.

@@ -313,7 +313,7 @@ class StrategyEngine:
         """
         interrupt = "restore_hp" if state.hp_percent < CRITICAL_HP_FRACTION else None
         candidates: list[tuple[MetaGoal, MetaGoal, float, int, float]] = []   # root, step, final, effort, pre
-        for root in objective_roots(self.objective):
+        for root in objective_roots(self.objective, state):
             if root.is_satisfied(state, game_data):
                 continue
             if not is_reachable(root, state, game_data):

@@ -65,15 +65,46 @@ def prerequisites(node: MetaGoal, state: WorldState, game_data: GameData) -> lis
     return []  # ReachSkillLevel → leaf (materials enter via ObtainItem chains)
 
 
-def objective_roots(objective: CharacterObjective) -> list[MetaGoal]:
+_CRAFT_BOOTSTRAP_TARGET = 5
+"""Bootstrap target level for crafting skills (weaponcrafting / gearcrafting /
+jewelrycrafting). The full-objective ReachSkillLevel(skill, 50) root has a
+gap-50 effort proxy and consistently loses Tier-2 ranking to small-effort gear
+chains — but those gear chains then stall because crafting them requires the
+very skill XP the bot never bothers to grind. A small bootstrap root with
+gap 4 (from starting skill 1) ranks competitively, gives LevelSkillGoal a
+real chance to fire, and unlocks the gear chain by lifting the skill above
+the level-1 floor. Removed automatically once the skill reaches the target
+(then the level-50 root takes over)."""
+
+_CRAFTING_BOOTSTRAP_SKILLS: frozenset[str] = frozenset(
+    {"weaponcrafting", "gearcrafting", "jewelrycrafting"}
+)
+
+
+def objective_roots(
+    objective: CharacterObjective,
+    state: WorldState | None = None,
+) -> list[MetaGoal]:
     """The Tier-1 objective expressed as root meta-goals for P3's search.
 
     Tools (target_tools) are emitted alongside combat gear (target_gear).
     Both compete for the weapon_slot in the equipment layer; the planner
     pursues whichever currently scores higher in the Tier-2 ranking,
     and OptimizeLoadout swaps the active item per the current task's
-    gathering-skill needs."""
+    gathering-skill needs.
+
+    When `state` is supplied, an extra bootstrap `ReachSkillLevel(skill,
+    _CRAFT_BOOTSTRAP_TARGET)` root is prepended for each crafting skill the
+    character is still at the level-1 floor on. This breaks the
+    chicken-and-egg between gear crafting and crafting-skill XP: gear chains
+    need craft levels >= recipe gate, but the skill never grows because no
+    other goal forces a craft. Backwards-compatible — callers that pass no
+    state get the previous root set (legacy tests / replay harnesses)."""
     roots: list[MetaGoal] = [ReachCharLevel(objective.target_char_level)]
+    if state is not None:
+        for skill in _CRAFTING_BOOTSTRAP_SKILLS:
+            if state.skills.get(skill, 1) < _CRAFT_BOOTSTRAP_TARGET:
+                roots.append(ReachSkillLevel(skill, _CRAFT_BOOTSTRAP_TARGET))
     roots.extend(ReachSkillLevel(skill, level)
                  for skill, level in objective.target_skill_levels.items())
     roots.extend(ObtainItem(code) for code in objective.target_gear.values())
