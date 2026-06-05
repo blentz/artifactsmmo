@@ -58,6 +58,30 @@ def useful_quantity_cap(
                                               batch_buffer, safety_floor)
 
 
+def _task_chain_demand(target_item: str, root_item: str, root_qty: int,
+                        game_data: GameData,
+                        visited: frozenset[str] | None = None) -> int:
+    """Recursive count of `target_item` needed to craft `root_qty` of
+    `root_item`. Returns 0 when target isn't reachable from root via the
+    recipe chain. Cycle-safe via `visited` frozenset path tracking — without
+    it a self-referential recipe (e.g. recycle loops) would recurse forever.
+
+    Used to compute how many copies of a mid-chain material the bot still
+    needs to complete the active items-task without re-gathering."""
+    if visited is None:
+        visited = frozenset()
+    if target_item == root_item:
+        return root_qty
+    if root_item in visited:
+        return 0
+    recipe = game_data.crafting_recipe(root_item) or {}
+    sub = visited | {root_item}
+    return sum(
+        _task_chain_demand(target_item, mat, qty_per * root_qty, game_data, sub)
+        for mat, qty_per in recipe.items()
+    )
+
+
 def useful_quantity_cap_excl_equipped(
     item_code: str, state: WorldState, game_data: GameData,
     batch_buffer: int = BATCH_BUFFER, safety_floor: int = SAFETY_FLOOR,
@@ -68,11 +92,21 @@ def useful_quantity_cap_excl_equipped(
     if recipe_max > 0:
         recipe_cap = max(recipe_cap, safety_floor)
 
-    # Active items-task demand: keep enough to finish the task
+    # Active items-task demand: keep enough to finish the task. Covers two
+    # cases: (a) item_code IS the task item (direct match) and (b) item_code
+    # is a transitive recipe input for the task item. Without (b) the bot
+    # discards mid-chain materials it could have crafted into the task item
+    # — e.g. 67 ash_wood deleted while the active task wants 10 more
+    # ash_plank that 1:1 require ash_wood (trace 2026-06-05 inv build-up
+    # following the apple-delete bug f1f8941). Bank's _keep_codes already
+    # protected the chain; DiscardOverstock must apply the same discipline
+    # or the two caps diverge and one or the other wastes resources.
     task_cap = 0
-    if state.task_type == "items" and state.task_code == item_code:
+    if state.task_type == "items" and state.task_code:
         remaining = max(0, state.task_total - state.task_progress)
-        task_cap = remaining
+        if remaining > 0:
+            task_cap = _task_chain_demand(item_code, state.task_code,
+                                           remaining, game_data)
 
     # Action-consumed items (e.g. tasks_coin for TaskExchange)
     action_cap = ACTION_CONSUMABLES_CAP.get(item_code, 0)

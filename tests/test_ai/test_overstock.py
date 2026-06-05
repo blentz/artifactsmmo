@@ -67,6 +67,77 @@ class TestUsefulQuantityCap:
         assert "apple" not in excess  # 5 <= 10 cap → not overstocked
         assert excess.get("cooked_chicken") == 2  # 12 - 10 = 2 excess
 
+    def test_cap_protects_task_chain_inputs(self):
+        """Trace 2026-06-05: Robby task=ash_plank(3/13) sat on 67 ash_wood;
+        DiscardOverstock would have nuked 62 ash_wood because the cap fell
+        to recipe_max*5=5 — useful_quantity_cap didn't expand the task
+        chain. The bank's _keep_codes already protects task-chain
+        materials; the discard cap must match that discipline or the two
+        diverge (bank protects, discard deletes).
+
+        ash_plank<-ash_wood at 1:1, task needs 10 more ash_planks => need
+        10 ash_wood to complete the task without re-gathering. Cap should
+        be max(recipe_cap=5, task_chain=10) = 10."""
+        gd = GameData()
+        gd._item_stats = {
+            "ash_wood": ItemStats(code="ash_wood", level=1, type_="resource"),
+            "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource"),
+        }
+        gd._crafting_recipes = {"ash_plank": {"ash_wood": 1}}
+        state = make_state(
+            level=3, task_code="ash_plank", task_type="items",
+            task_total=13, task_progress=3,
+            inventory={"ash_wood": 67, "ash_plank": 3},
+        )
+        cap = useful_quantity_cap("ash_wood", state, gd)
+        assert cap >= 10, (
+            f"cap should protect 10 ash_wood for the 10 ash_plank task remainder, got {cap}"
+        )
+        excess = overstocked_items(state, gd)
+        # 67 - 10 = 57 truly excess; bot may discard the surplus but the 10
+        # needed for task completion must stay.
+        assert excess.get("ash_wood", 0) <= 67 - 10
+
+    def test_cap_chain_demand_scales_by_recipe_quantity(self):
+        """Deeper chain: wooden_shield<-ash_plank x6, ash_plank<-ash_wood x1.
+        Task=wooden_shield(0/2) means 2 shields => 12 ash_plank => 12 ash_wood.
+        Cap on ash_wood must scale to 12, not the 5 recipe_max*batch baseline."""
+        gd = GameData()
+        gd._item_stats = {
+            "ash_wood": ItemStats(code="ash_wood", level=1, type_="resource"),
+            "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource"),
+            "wooden_shield": ItemStats(code="wooden_shield", level=1, type_="shield"),
+        }
+        gd._crafting_recipes = {
+            "wooden_shield": {"ash_plank": 6},
+            "ash_plank": {"ash_wood": 1},
+        }
+        state = make_state(
+            level=3, task_code="wooden_shield", task_type="items",
+            task_total=2, task_progress=0,
+        )
+        assert useful_quantity_cap("ash_wood", state, gd) >= 12
+        assert useful_quantity_cap("ash_plank", state, gd) >= 12
+
+    def test_cap_chain_demand_cycle_safe(self):
+        """Self-referential recipe (a uses b, b uses a) must terminate
+        without infinite recursion. Returns 0 chain demand for any item
+        not reachable from the root via a non-cyclic path."""
+        gd = GameData()
+        gd._item_stats = {
+            "a": ItemStats(code="a", level=1, type_="resource"),
+            "b": ItemStats(code="b", level=1, type_="resource"),
+            "c": ItemStats(code="c", level=1, type_="resource"),
+        }
+        gd._crafting_recipes = {"a": {"b": 1}, "b": {"a": 1}}
+        state = make_state(task_code="a", task_type="items",
+                           task_total=5, task_progress=0)
+        # Should terminate. Cap on c (not in chain) is recipe_max*batch + safety = 0.
+        cap_c = useful_quantity_cap("c", state, gd)
+        assert cap_c == 0
+        # b IS reachable from a once: need 5 b for 5 a.
+        assert useful_quantity_cap("b", state, gd) >= 5
+
     def test_cap_zero_for_non_healing_consumable(self):
         """Only hp_restore>0 consumables qualify for the keep cap. A
         consumable with hp_restore=0 (e.g. some buff potion) gets the
