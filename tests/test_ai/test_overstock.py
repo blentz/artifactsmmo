@@ -11,6 +11,7 @@ from artifactsmmo_cli.ai.goals.discard_overstock import (
 )
 from artifactsmmo_cli.ai.inventory_caps import (
     BATCH_BUFFER,
+    CONSUMABLE_KEEP,
     overstocked_items,
     useful_quantity_cap,
 )
@@ -45,6 +46,39 @@ class TestUsefulQuantityCap:
         gd = _gd_with_sap_recipes()
         state = make_state(level=1)
         assert useful_quantity_cap("random_junk", state, gd) == 0
+
+    def test_cap_keeps_healing_consumables(self):
+        """Trace 2026-06-05 cycle 71: Robby deleted 5 apples because apples
+        have no recipe / no active-task use / no equip slot, so cap fell to
+        0 and DiscardOverstock nuked them. Apples (hp_restore>0) have real
+        survival value — keep up to CONSUMABLE_KEEP regardless of recipe use."""
+        gd = GameData()
+        gd._item_stats = {
+            "apple": ItemStats(code="apple", level=1, type_="consumable", hp_restore=20),
+            "cooked_chicken": ItemStats(code="cooked_chicken", level=1,
+                                        type_="consumable", hp_restore=40),
+        }
+        gd._crafting_recipes = {}
+        state = make_state(level=3, inventory={"apple": 5, "cooked_chicken": 12})
+        assert useful_quantity_cap("apple", state, gd) == CONSUMABLE_KEEP
+        assert useful_quantity_cap("cooked_chicken", state, gd) == CONSUMABLE_KEEP
+        # Excess above CONSUMABLE_KEEP is still legitimately overstock.
+        excess = overstocked_items(state, gd)
+        assert "apple" not in excess  # 5 <= 10 cap → not overstocked
+        assert excess.get("cooked_chicken") == 2  # 12 - 10 = 2 excess
+
+    def test_cap_zero_for_non_healing_consumable(self):
+        """Only hp_restore>0 consumables qualify for the keep cap. A
+        consumable with hp_restore=0 (e.g. some buff potion) gets the
+        normal recipe/task/equip rules."""
+        gd = GameData()
+        gd._item_stats = {
+            "buff_dust": ItemStats(code="buff_dust", level=1,
+                                   type_="consumable", hp_restore=0),
+        }
+        gd._crafting_recipes = {}
+        state = make_state()
+        assert useful_quantity_cap("buff_dust", state, gd) == 0
 
     def test_cap_respects_active_task_demand(self):
         gd = _gd_with_sap_recipes()

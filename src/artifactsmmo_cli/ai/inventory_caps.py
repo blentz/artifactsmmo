@@ -21,6 +21,15 @@ EQUIPPABLE_KEEP = 1
 """Keep at least one of any equippable item Robby can wear — even if not
 currently equipped — so the equipment optimizer has it as a swap candidate."""
 
+CONSUMABLE_KEEP = 10
+"""Keep up to this many of any HP-restoring consumable (apple, cooked_chicken,
+potion, etc.). Pre-fix the cap was 0 for any consumable not in a recipe and
+not the active task item, so the DiscardOverstock guard would delete healing
+stock — Robby trashed 5 apples mid-grind on 2026-06-05 (trace cycle 71) for
+exactly this reason. Healing stock has real survival value at the
+ApplyConsumable / RestAction layer and should be retained rather than
+nuked the moment inventory edges over the DISCARD_HIGH threshold."""
+
 # Items consumed by API actions (not recipes). Keep enough to use them.
 ACTION_CONSUMABLES_CAP = {
     TASKS_COIN_CODE: 9,  # TaskExchange burns 3; keep ~3 batches worth
@@ -72,11 +81,15 @@ def useful_quantity_cap_excl_equipped(
     # candidate pool. Without this, the bot discards weapons/armor it
     # could swap to per-fight.
     equippable_cap = 0
+    consumable_cap = 0
     stats = game_data.item_stats(item_code)
-    if stats is not None and ITEM_TYPE_TO_SLOTS.get(stats.type_):
-        equippable_cap = EQUIPPABLE_KEEP
+    if stats is not None:
+        if ITEM_TYPE_TO_SLOTS.get(stats.type_):
+            equippable_cap = EQUIPPABLE_KEEP
+        if stats.hp_restore > 0:
+            consumable_cap = CONSUMABLE_KEEP
 
-    return max(recipe_cap, task_cap, action_cap, equippable_cap)
+    return max(recipe_cap, task_cap, action_cap, equippable_cap, consumable_cap)
 
 
 def overstocked_items(
