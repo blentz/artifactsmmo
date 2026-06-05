@@ -49,10 +49,12 @@ class TestUsefulQuantityCap:
         assert useful_quantity_cap("random_junk", state, gd) == 0
 
     def test_cap_keeps_healing_consumables(self):
-        """Trace 2026-06-05 cycle 71: Robby deleted 5 apples because apples
-        have no recipe / no active-task use / no equip slot, so cap fell to
-        0 and DiscardOverstock nuked them. Apples (hp_restore>0) have real
-        survival value — keep up to CONSUMABLE_KEEP regardless of recipe use."""
+        """Trace 2026-06-05 cycle 71: Robby deleted 5 apples; second
+        trace at 16:13 deleted 19 apples in a single Delete(apple×19).
+        Apples (hp_restore>0) STACK in one inventory slot regardless
+        of count, so capping low frees zero slots while throwing away
+        healing stock. Post-fix CONSUMABLE_KEEP = 999 so any plausible
+        accumulation is protected — symmetric to the tasks_coin fix."""
         gd = GameData()
         gd._item_stats = {
             "apple": ItemStats(code="apple", level=1, type_="consumable", hp_restore=20),
@@ -60,13 +62,14 @@ class TestUsefulQuantityCap:
                                         type_="consumable", hp_restore=40),
         }
         gd._crafting_recipes = {}
-        state = make_state(level=3, inventory={"apple": 5, "cooked_chicken": 12})
+        state = make_state(level=3, inventory={"apple": 29, "cooked_chicken": 50})
         assert useful_quantity_cap("apple", state, gd) == CONSUMABLE_KEEP
         assert useful_quantity_cap("cooked_chicken", state, gd) == CONSUMABLE_KEEP
-        # Excess above CONSUMABLE_KEEP is still legitimately overstock.
+        # 29 apples / 50 chicken both well under the cap → not overstocked.
         excess = overstocked_items(state, gd)
-        assert "apple" not in excess  # 5 <= 10 cap → not overstocked
-        assert excess.get("cooked_chicken") == 2  # 12 - 10 = 2 excess
+        assert excess == {}, (
+            f"healing consumables must not be flagged overstock; got {excess}"
+        )
 
     def test_cap_protects_task_chain_inputs(self):
         """Trace 2026-06-05: Robby task=ash_plank(3/13) sat on 67 ash_wood;

@@ -29,14 +29,18 @@ weapon_slot and `EQUIPPABLE_KEEP=1` protects each individually. The
 dominated stick should be the FIRST thing the discard ladder picks when
 inventory pressure forces a delete."""
 
-CONSUMABLE_KEEP = 10
-"""Keep up to this many of any HP-restoring consumable (apple, cooked_chicken,
-potion, etc.). Pre-fix the cap was 0 for any consumable not in a recipe and
-not the active task item, so the DiscardOverstock guard would delete healing
-stock — Robby trashed 5 apples mid-grind on 2026-06-05 (trace cycle 71) for
-exactly this reason. Healing stock has real survival value at the
-ApplyConsumable / RestAction layer and should be retained rather than
-nuked the moment inventory edges over the DISCARD_HIGH threshold."""
+CONSUMABLE_KEEP = 999
+"""Keep effectively unlimited HP-restoring consumables (apple,
+cooked_chicken, potion, etc.). Consumables STACK in a single inventory
+slot regardless of quantity — capping low frees zero slots while
+throwing away healing stock with real survival value. Trace 2026-06-05
+16:13: bot deleted 19 apples in one Delete(apple×19) action because the
+prior cap of 10 declared excess=19; 19 apples is 19 RestAction-class
+heals worth of insurance lost for zero slot benefit. Same fix pattern
+as tasks_coin (602f7b4) — raise the cap past any plausible accumulation
+since stacking-items don't cost slots per unit. Original prior cap was
+0 (everything deleted, fixed in f1f8941) → 10 (insufficient, still
+delete-heavy) → 999 (stack-aware floor)."""
 
 # Items consumed by API actions (not recipes). Keep enough to use them.
 ACTION_CONSUMABLES_CAP = {
