@@ -1,5 +1,3 @@
-set_option linter.unusedVariables false
-
 /-
 Phase-18: Value-range theorems for the 14 Goals in `src/artifactsmmo_cli/ai/goals/`
 that were not already covered by Phase-1/16/17 (PriorityBand, GoalValueBands,

@@ -1,5 +1,3 @@
-set_option linter.unusedSimpArgs false
-
 /-
 Phase-9 (REAL BUG #16): GameData monster-stat accessor contract.
 

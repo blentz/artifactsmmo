@@ -5,9 +5,6 @@ import Formal.Liveness.TaskLifecyclePhase
 import Formal.Liveness.TaskCompleteReachable
 import Mathlib.Tactic
 
-set_option linter.unusedSimpArgs false
-set_option linter.unusedVariables false
-
 /-! # Lifecycle bound (Perimeter Item 1a partial discharge)
 
 Refines `taskCancelFires` to be conditional on `taskFeasibleProjected`

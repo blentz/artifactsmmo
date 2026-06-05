@@ -50,9 +50,8 @@ import Formal.Liveness.PlanAction
 import Mathlib.Tactic.Ring
 import Mathlib.Tactic.Set
 
-set_option linter.unusedSimpArgs false
+set_option linter.dupNamespace false
 set_option linter.unusedVariables false
-
 
 namespace Formal.Liveness.PlanExists
 
