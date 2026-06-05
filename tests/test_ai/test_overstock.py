@@ -342,3 +342,116 @@ class TestDiscardOverstockGoal:
         # One batch per overstocked code (sap + extra)
         codes = {a.code if isinstance(a, DeleteItemAction) else a.item_code for a in relevant}
         assert codes == {"sap", "extra"}
+
+
+class TestEquippableDominance:
+    """Equippable cap drops to 0 when a strictly-better same-slot peer is
+    owned — discard ladder picks the dominated item first."""
+
+    def test_wooden_stick_dominated_by_copper_dagger(self):
+        """Trace pattern: bot crafts copper_dagger (attack 12) but
+        wooden_stick (attack 0) remains protected at EQUIPPABLE_KEEP=1.
+        User asked: when forced to discard, drop the redundant one.
+        Post-fix: dagger present → stick cap=0 → discard-eligible."""
+        gd = GameData()
+        gd._item_stats = {
+            "wooden_stick": ItemStats(code="wooden_stick", level=1, type_="weapon",
+                                       attack={}),
+            "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
+                                        attack={"fire": 12}),
+        }
+        gd._crafting_recipes = {}
+        state = make_state(inventory={"wooden_stick": 1, "copper_dagger": 1})
+        assert useful_quantity_cap("wooden_stick", state, gd) == 0, (
+            "wooden_stick should be delete-eligible when copper_dagger is owned"
+        )
+        # And the dominator must stay protected.
+        assert useful_quantity_cap("copper_dagger", state, gd) == 1
+
+    def test_equipped_weapon_protected_from_discard_when_equipped(self):
+        """Equipped items are floor-1 in useful_quantity_cap regardless of
+        dominance — losing the item Robby is wearing is never OK."""
+        gd = GameData()
+        gd._item_stats = {
+            "wooden_stick": ItemStats(code="wooden_stick", level=1, type_="weapon",
+                                       attack={}),
+            "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
+                                        attack={"fire": 12}),
+        }
+        gd._crafting_recipes = {}
+        state = make_state(
+            inventory={"wooden_stick": 1, "copper_dagger": 1},
+            equipment={"weapon_slot": "wooden_stick"},
+        )
+        # wooden_stick is EQUIPPED; useful_quantity_cap floor returns >=1.
+        assert useful_quantity_cap("wooden_stick", state, gd) >= 1
+
+    def test_tool_not_dominated_by_higher_attack_combat_weapon(self):
+        """copper_pickaxe (weapon_slot, low attack, skill_effects[mining])
+        is NOT dominated by copper_dagger (weapon_slot, attack 12, no
+        skill_effects) because the dagger doesn't cover the pickaxe's
+        mining bonus. Each must stay protected."""
+        gd = GameData()
+        gd._item_stats = {
+            "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
+                                        attack={"fire": 12}),
+            "copper_pickaxe": ItemStats(code="copper_pickaxe", level=1, type_="weapon",
+                                         attack={"fire": 3},
+                                         skill_effects={"mining": -10}),
+        }
+        gd._crafting_recipes = {}
+        state = make_state(inventory={"copper_dagger": 1, "copper_pickaxe": 1})
+        assert useful_quantity_cap("copper_pickaxe", state, gd) == 1
+        assert useful_quantity_cap("copper_dagger", state, gd) == 1
+
+    def test_tool_dominates_lower_magnitude_same_skill_tool(self):
+        """iron_pickaxe (mining -20) dominates copper_pickaxe (mining -10)
+        when iron has higher equip_value too."""
+        gd = GameData()
+        gd._item_stats = {
+            "copper_pickaxe": ItemStats(code="copper_pickaxe", level=1, type_="weapon",
+                                         attack={"fire": 3},
+                                         skill_effects={"mining": -10}),
+            "iron_pickaxe": ItemStats(code="iron_pickaxe", level=5, type_="weapon",
+                                       attack={"fire": 8},
+                                       skill_effects={"mining": -20}),
+        }
+        gd._crafting_recipes = {}
+        state = make_state(inventory={"copper_pickaxe": 1, "iron_pickaxe": 1})
+        assert useful_quantity_cap("copper_pickaxe", state, gd) == 0, (
+            "copper_pickaxe dominated by iron_pickaxe (higher attack + better mining)"
+        )
+
+    def test_no_dominance_when_peer_lower_equip_value(self):
+        """copper_helmet (level 1, attack defense 5) is NOT dominated by
+        wooden_helmet (defense 0). Strictly-higher equip_value required."""
+        gd = GameData()
+        gd._item_stats = {
+            "wooden_helmet": ItemStats(code="wooden_helmet", level=1, type_="helmet",
+                                        resistance={}),
+            "copper_helmet": ItemStats(code="copper_helmet", level=1, type_="helmet",
+                                        resistance={"fire": 5}),
+        }
+        gd._crafting_recipes = {}
+        state = make_state(inventory={"wooden_helmet": 1, "copper_helmet": 1})
+        # wooden_helmet dominated by copper.
+        assert useful_quantity_cap("wooden_helmet", state, gd) == 0
+        # copper_helmet has no dominator.
+        assert useful_quantity_cap("copper_helmet", state, gd) == 1
+
+    def test_dominance_considers_bank_items(self):
+        """Banked copper_dagger should dominate inventory wooden_stick
+        same as inventory copper_dagger would — owned via bank counts."""
+        gd = GameData()
+        gd._item_stats = {
+            "wooden_stick": ItemStats(code="wooden_stick", level=1, type_="weapon",
+                                       attack={}),
+            "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
+                                        attack={"fire": 12}),
+        }
+        gd._crafting_recipes = {}
+        state = make_state(
+            inventory={"wooden_stick": 1},
+            bank_items={"copper_dagger": 1},
+        )
+        assert useful_quantity_cap("wooden_stick", state, gd) == 0

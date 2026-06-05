@@ -19,7 +19,15 @@ bot doesn't immediately re-gather what it just discarded."""
 
 EQUIPPABLE_KEEP = 1
 """Keep at least one of any equippable item Robby can wear — even if not
-currently equipped — so the equipment optimizer has it as a swap candidate."""
+currently equipped — so the equipment optimizer has it as a swap candidate.
+DROPS TO ZERO when the item is DOMINATED by another owned item that fills
+the same equipment slot AND has strictly higher equip_value AND covers
+every skill_effect of the dominated item with equal-or-better magnitude.
+Without this dominance gate, the bot keeps `wooden_stick` (starter, attack
+0) forever even after crafting `copper_dagger` (attack 12) — both occupy
+weapon_slot and `EQUIPPABLE_KEEP=1` protects each individually. The
+dominated stick should be the FIRST thing the discard ladder picks when
+inventory pressure forces a delete."""
 
 CONSUMABLE_KEEP = 10
 """Keep up to this many of any HP-restoring consumable (apple, cooked_chicken,
@@ -65,6 +73,68 @@ def useful_quantity_cap(
                                                           batch_buffer, safety_floor))
     return useful_quantity_cap_excl_equipped(item_code, state, game_data,
                                               batch_buffer, safety_floor)
+
+
+def _is_equippable_dominated(item_code: str, state: WorldState,
+                              game_data: GameData) -> bool:
+    """True when a different owned/equipped item fills every slot this
+    item could fill AND scores strictly higher on equip_value AND covers
+    every skill_effect of this item with equal-or-better magnitude.
+
+    Dominance is per-(slot, skill-effect-set). A pure combat weapon
+    (attack-only, no skill_effects) is dominated by a higher-attack
+    pure-combat weapon for the same slot — `wooden_stick` by
+    `copper_dagger`. A tool (skill_effects non-empty) is dominated only
+    by an item that ALSO carries those same skill_effects at equal-or-
+    better magnitude; a combat weapon never dominates a tool because the
+    tool's `skill_effects[mining]` is unmatched.
+    """
+    stats = game_data.item_stats(item_code)
+    if stats is None:
+        return False
+    slots = ITEM_TYPE_TO_SLOTS.get(stats.type_, [])
+    if not slots:
+        return False
+    my_value = _equip_value(stats)
+    my_effects = stats.skill_effects or {}
+    candidates: set[str] = set(state.inventory)
+    if state.bank_items:
+        candidates |= set(state.bank_items)
+    candidates |= {c for c in state.equipment.values() if c is not None}
+    candidates.discard(item_code)
+    for peer_code in candidates:
+        peer = game_data.item_stats(peer_code)
+        if peer is None:
+            continue
+        peer_slots = ITEM_TYPE_TO_SLOTS.get(peer.type_, [])
+        # Peer must fit every slot this item fits (so it can substitute everywhere).
+        if not all(s in peer_slots for s in slots):
+            continue
+        if _equip_value(peer) <= my_value:
+            continue
+        # Peer must cover this item's skill_effects (else dropping a tool
+        # in favor of a higher-attack weapon would silently lose a skill
+        # bonus the bot relies on). Skill effect values are NEGATIVE
+        # cooldown-reduction percentages — bigger magnitude wins, so we
+        # compare on `abs` (mirrors `tools.tool_value`). A peer without the
+        # skill key contributes 0, which fails the abs comparison and
+        # disqualifies the peer as a dominator for tool roles.
+        peer_effects = peer.skill_effects or {}
+        if any(abs(peer_effects.get(skill, 0)) < abs(magnitude)
+               for skill, magnitude in my_effects.items()):
+            continue
+        return True
+    return False
+
+
+def _equip_value(stats: object) -> float:
+    """Inline mirror of `tiers/equip_value.equip_value` — kept local here
+    to avoid a tiers→inventory_caps import cycle. Same formula:
+    attack + resistance + hp_restore."""
+    attack = sum(stats.attack.values()) if stats.attack else 0  # type: ignore[attr-defined]
+    resistance = sum(stats.resistance.values()) if stats.resistance else 0  # type: ignore[attr-defined]
+    hp = getattr(stats, "hp_restore", 0)
+    return float(attack + resistance + hp)
 
 
 def _task_chain_demand(target_item: str, root_item: str, root_qty: int,
@@ -121,14 +191,19 @@ def useful_quantity_cap_excl_equipped(
     action_cap = ACTION_CONSUMABLES_CAP.get(item_code, 0)
 
     # Equippable items: keep one of each for the equipment optimizer's
-    # candidate pool. Without this, the bot discards weapons/armor it
-    # could swap to per-fight.
+    # candidate pool — unless this code is DOMINATED by another owned
+    # item that fills every slot it could and scores strictly higher on
+    # equip_value while covering every skill_effect. A dominated item
+    # (wooden_stick once copper_dagger is owned) becomes delete-eligible
+    # so the discard ladder picks the least-useful redundant weapon
+    # first, instead of one-of-each-blindly.
     equippable_cap = 0
     consumable_cap = 0
     stats = game_data.item_stats(item_code)
     if stats is not None:
         if ITEM_TYPE_TO_SLOTS.get(stats.type_):
-            equippable_cap = EQUIPPABLE_KEEP
+            if not _is_equippable_dominated(item_code, state, game_data):
+                equippable_cap = EQUIPPABLE_KEEP
         if stats.hp_restore > 0:
             consumable_cap = CONSUMABLE_KEEP
 
