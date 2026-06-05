@@ -74,7 +74,7 @@ theorem productionLadder_eq_pursueTask
   obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12⟩ := hConds
   simp only [MeansKind.allInLadderOrder, List.findSome?,
              fires, h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12,
-             hPursue, if_true, if_false, Option.some.injEq]
+             hPursue, if_true]
   rfl
 
 /-- Item 3 corollary: under the conditions, `cycleStep` applies

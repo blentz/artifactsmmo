@@ -151,7 +151,7 @@ theorem lifecycle_progress_from_bounds_proven
     rw [← hpoint k s]; exact hkfire
   -- Step 3: contradiction.
   by_contra hno
-  push_neg at hno
+  push Not at hno
   -- hno after push_neg: ∀ k, (cycleStepN' k s).level ≤ s.level.
   -- Convert to concrete cycleStepN form via hpoint.
   have hnoConc : ∀ k, (cycleStepN k s).level ≤ s.level := by

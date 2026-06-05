@@ -156,7 +156,7 @@ theorem ai_reaches_level_fifty_aux :
     intro s hgap h
     by_cases hlvl50 : s.level ≥ 50
     · exact ⟨0, by rw [cycleStepN_zero]; exact hlvl50⟩
-    · push_neg at hlvl50
+    · push Not at hlvl50
       obtain ⟨k₁, hk₁⟩ := level_advances_once s hlvl50 h
       set s' := cycleStepN k₁ s with hsdef
       have hs'_inv : GlobalInvariants s' := by
