@@ -4,6 +4,7 @@ import pytest
 
 from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
 from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
@@ -272,16 +273,65 @@ def test_select_returns_objective_step_when_calm():
     gd._resource_skill = {}
     gd._resource_drops = {}
     fill_monster_stat_defaults(gd)
-    # Level 1 char with HP full, no task (so AcceptTask would fire as discretionary,
-    # but chosen_step goal (GrindCharacterXP) appears before discretionary).
-    # Use xp=0 and initial_xp=0 to make GrindXP not satisfied.
-    state = make_state(level=1, hp=150, max_hp=150, xp=0, max_xp=500, task_code=None, task_total=0)
+    # Level 1 char with HP full, a non-items task active so AcceptTask
+    # does NOT fire (`task_code=None` would suppress the step in favor of
+    # AcceptTask per the post-4e771a2 rule). The original test used
+    # task_code=None and relied on positional priority; that's no longer
+    # the contract — see test_select_suppresses_step_when_no_task below.
+    state = make_state(level=1, hp=150, max_hp=150, xp=0, max_xp=500,
+                       task_code="chicken", task_type="monsters",
+                       task_progress=0, task_total=10)
     actions = [FightAction(monster_code="chicken", locations=frozenset([(1, 0)]))]
     ctx = _ctx(combat_monster="chicken")
     arbiter = StrategyArbiter(planner, history=None)
     decision = _FakeDecision(chosen_step=ReachCharLevel(5))
     goal, plan, goals_tried = arbiter.select(decision, state, gd, actions, ctx)
     assert isinstance(goal, GrindCharacterXPGoal), f"expected GrindCharacterXPGoal, got {goal!r}"
+    assert len(plan) >= 1
+
+
+def test_select_suppresses_step_when_no_task():
+    """Trace 2026-05-19 (cycles 318-342): with task_code=None, a positional
+    walk had GatherMaterials(copper_ring) step preempting AcceptTask
+    every other cycle, locking the bot into a Gather→Discard loop (gather
+    1 copper_ore → DISCARD_HIGH deletes 1 → repeat for 12+ cycles).
+    Suppressing the meta-objective step when no task is active and
+    AcceptTask is available lets AcceptTask win, breaking the loop.
+
+    Setup mirrors the production trace: step_goal is a plannable
+    GatherMaterials (copper_ring chain — Gather(copper_rocks) is
+    available) AND AcceptTaskAction is available. Pre-fix the step won
+    positionally and the bot grabbed a copper_ore; post-fix AcceptTask
+    wins because the step is suppressed in the no-task state, breaking
+    the discard cycle."""
+    planner = GOAPPlanner()
+    gd = _make_planner_gd()
+    gd._crafting_recipes["copper_ring"] = {"copper_ore": 6}
+    gd._resource_locations = {"copper_rocks": [(1, 0)]}
+    gd._resource_drops["copper_rocks"] = "copper_ore"
+    gd._resource_skill["copper_rocks"] = ("mining", 1)
+    state = make_state(level=3, hp=130, max_hp=130, xp=0, max_xp=350,
+                       task_code=None, task_type=None, task_progress=0, task_total=0,
+                       skills={"mining": 3})
+    actions = [
+        GatherAction(resource_code="copper_rocks",
+                     locations=frozenset([(1, 0)])),
+        AcceptTaskAction(taskmaster_location=(2, 1)),
+    ]
+    ctx = _ctx(combat_monster="chicken")
+    arbiter = StrategyArbiter(planner, history=None)
+    decision = _FakeDecision(chosen_step=ObtainItem("copper_ring"))
+    goal, plan, tried = arbiter.select(decision, state, gd, actions, ctx)
+    # AcceptTask must win: the loop-breaker contract.
+    assert isinstance(goal, AcceptTaskGoal), (
+        f"expected AcceptTaskGoal to preempt meta-step when no task active, "
+        f"got {goal!r}; goals_tried={tried}"
+    )
+    # And: the GatherMaterials step must NOT have been tried — suppression
+    # at construction time is the load-bearing invariant.
+    assert all("GatherMaterials" not in t["goal"] for t in tried), (
+        f"meta-step should be suppressed; goals_tried={tried}"
+    )
     assert len(plan) >= 1
 
 

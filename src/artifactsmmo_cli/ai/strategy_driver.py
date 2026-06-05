@@ -285,6 +285,21 @@ class StrategyArbiter:
                 and step_goal._target_item in _task_recipe_inputs(state.task_code, game_data)):
             step_goal = None
 
+        # Trace 2026-05-19 (cycles 318-342): with task_code=None, the bot
+        # locked into a Gather→Discard loop — meta-objective step
+        # GatherMaterials(copper_ring) ran every other cycle pulling
+        # copper_ore that DISCARD_HIGH immediately deleted because the
+        # overstock cap had no task floor to lean on. AcceptTask was in
+        # the discretionary kinds the whole time but sat positionally
+        # AFTER the meta-step, so it never won. When there's no active
+        # task, accepting one is the cheap unblock: it gives PursueTask a
+        # target, brings the task-chain keep-set online, and gives the
+        # gathered materials a destination other than the trash. Suppress
+        # the meta-step in this state so AcceptTask wins the walk.
+        if (state.task_code is None
+                and MeansKind.ACCEPT_TASK in discretionary_kinds):
+            step_goal = None
+
         # Build ordered candidates: guards, collect, step, discretionary.
         candidates: list[Candidate] = []
         for gk in guard_kinds:
