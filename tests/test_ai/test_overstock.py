@@ -15,6 +15,7 @@ from artifactsmmo_cli.ai.inventory_caps import (
     overstocked_items,
     useful_quantity_cap,
 )
+from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 from tests.test_ai.fixtures import make_state
 
 
@@ -150,6 +151,23 @@ class TestUsefulQuantityCap:
         gd._crafting_recipes = {}
         state = make_state()
         assert useful_quantity_cap("buff_dust", state, gd) == 0
+
+    def test_cap_protects_tasks_coin_at_scale(self):
+        """Trace 2026-06-05T02:55: Robby deleted 3 tasks_coin (out of 12)
+        because the legacy cap of 9 declared the excess as overstock.
+        Tasks_coins stack in a single inventory slot regardless of
+        quantity, so the low cap freed zero slots while throwing away
+        TaskExchange currency. Cap is now 999 so any plausible
+        accumulation is protected — overstock filter should never strip
+        them."""
+        gd = GameData()
+        gd._item_stats = {}
+        gd._crafting_recipes = {}
+        state = make_state(inventory={TASKS_COIN_CODE: 50})
+        assert useful_quantity_cap(TASKS_COIN_CODE, state, gd) >= 50
+        assert overstocked_items(state, gd) == {}, (
+            "50 tasks_coin must not be flagged overstock — they stack"
+        )
 
     def test_cap_respects_active_task_demand(self):
         gd = _gd_with_sap_recipes()

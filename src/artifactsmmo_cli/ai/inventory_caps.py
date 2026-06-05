@@ -32,7 +32,16 @@ nuked the moment inventory edges over the DISCARD_HIGH threshold."""
 
 # Items consumed by API actions (not recipes). Keep enough to use them.
 ACTION_CONSUMABLES_CAP = {
-    TASKS_COIN_CODE: 9,  # TaskExchange burns 3; keep ~3 batches worth
+    # Tasks-coins stack in a single inventory slot regardless of quantity,
+    # so capping low (was 9 = 3 batches) frees no actual slots — it just
+    # throws away TaskExchange currency. Trace 2026-06-05T02:55: Robby
+    # deleted 3 tasks_coin (out of 12 he'd grinded for) because the cap
+    # rule kicked in during a DiscardOverstock cycle. Each coin is worth
+    # one third of a random-item exchange; deleting them is a real
+    # economic loss with no slot benefit. Set to a value larger than any
+    # plausible accumulation; the keep-set still ensures coins are
+    # protected from bank-deposit too.
+    TASKS_COIN_CODE: 999,
 }
 
 
