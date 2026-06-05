@@ -161,14 +161,20 @@ theorem cumulative_state_change_under_no_wait
 
 /-! ## Phase 23b extension — restricted progress-means set -/
 
-/-- The 12-element subset of `MeansKind` for which Phase 23b proves
-    strict measure decrease (or level advance). The 5 deferred kinds
-    (`acceptTask`, `pursueTask`, `completeTask`, `taskCancel`,
-    `lowYieldCancel`) are task-lifecycle transitions that require Phase
-    23c's task-lifecycle counter. -/
+/-- The 13-element subset of `MeansKind` for which Phase 23b (+ the
+    CRAFT_RELIEF extension) proves strict measure decrease (or level
+    advance). The 5 deferred kinds (`acceptTask`, `pursueTask`,
+    `completeTask`, `taskCancel`, `lowYieldCancel`) are task-lifecycle
+    transitions that require Phase 23c's task-lifecycle counter.
+
+    `craftRelief` was deferred in the initial CRAFT_RELIEF wiring
+    (f42065f) because the ExtMeasure didn't carry a flag for it; the
+    follow-up extension added a 15th slot (`craftReliefFlag`) and
+    modified `applyActionKind .craft` to clear `craftReliefFires`,
+    making the slot strictly decrease on every CRAFT_RELIEF cycle. -/
 def progressMeans : List MeansKind :=
   [.hpCritical, .bankUnlock, .reachUnlockLevel,
-   .discardCritical, .depositFull, .discardHigh,
+   .discardCritical, .craftRelief, .depositFull, .discardHigh,
    .claimPending, .sellPressured, .objectiveStep,
    .taskExchange, .sellIdle, .bankExpand]
 
@@ -184,7 +190,7 @@ LEX-BELOW the existing 6. Slot encodings: 1 = "still has work", 0 =
 @[simp] theorem b2n_true  : b2n true  = 1 := rfl
 @[simp] theorem b2n_false : b2n false = 0 := rfl
 
-/-- Extended 14-tuple lex measure. Slots 1-6 mirror `Measure` exactly. -/
+/-- Extended 15-tuple lex measure. Slots 1-6 mirror `Measure` exactly. -/
 structure ExtMeasure where
   -- 1-6: Phase-19c base.
   levelDeficit            : Nat
@@ -202,6 +208,10 @@ structure ExtMeasure where
   objectiveStepFlag       : Nat
   taskCoinsTotal          : Nat
   gold                    : Nat
+  -- 15: CRAFT_RELIEF circuit breaker (post-02edee4). `.craft` apply
+  -- clears `craftReliefFires`, so this slot strictly decreases (true→false
+  -- as 1→0 via `b2n`) on every CRAFT_RELIEF cycle.
+  craftReliefFlag         : Nat
   deriving DecidableEq, Repr
 
 /-- Extract the extended measure from a `State`. -/
@@ -219,7 +229,8 @@ noncomputable def extMeasure (s : State) : ExtMeasure :=
     pendingItemsFlag        := b2n s.pendingItemsNonempty
     objectiveStepFlag       := b2n s.objectiveStepFires
     taskCoinsTotal          := s.taskCoinsTotal
-    gold                    := s.gold }
+    gold                    := s.gold
+    craftReliefFlag         := b2n s.craftReliefFires }
 
 /-! ## Strict lex order on `ExtMeasure`
 
@@ -313,16 +324,29 @@ def extMeasureLt (m₁ m₂ : ExtMeasure) : Prop :=
      ∧ m₁.objectiveStepFlag = m₂.objectiveStepFlag
      ∧ m₁.taskCoinsTotal = m₂.taskCoinsTotal
      ∧ m₁.gold < m₂.gold)
+  ∨ (m₁.levelDeficit = m₂.levelDeficit ∧ m₁.xpDeficit = m₂.xpDeficit
+     ∧ m₁.taskCycles = m₂.taskCycles
+     ∧ m₁.skillXpDeficitProjected = m₂.skillXpDeficitProjected
+     ∧ m₁.bankPressure = m₂.bankPressure ∧ m₁.hpDeficit = m₂.hpDeficit
+     ∧ m₁.bankInaccessibleFlag = m₂.bankInaccessibleFlag
+     ∧ m₁.overstockFlag = m₂.overstockFlag
+     ∧ m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag
+     ∧ m₁.sellableFlag = m₂.sellableFlag
+     ∧ m₁.pendingItemsFlag = m₂.pendingItemsFlag
+     ∧ m₁.objectiveStepFlag = m₂.objectiveStepFlag
+     ∧ m₁.taskCoinsTotal = m₂.taskCoinsTotal
+     ∧ m₁.gold = m₂.gold
+     ∧ m₁.craftReliefFlag < m₂.craftReliefFlag)
 
 /-! ### Well-foundedness of `extMeasureLt` via embedding into Mathlib lex. -/
 
-/-- Right-associated 14-tuple of `Nat` for the embedding. -/
-abbrev LexFourteen :=
+/-- Right-associated 15-tuple of `Nat` for the embedding. -/
+abbrev LexFifteen :=
   Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ
-    Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat
+    Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat ×ₗ Nat
 
-/-- Embed an `ExtMeasure` into the right-associated lex 14-tuple. -/
-def toLex14 (m : ExtMeasure) : LexFourteen :=
+/-- Embed an `ExtMeasure` into the right-associated lex 15-tuple. -/
+def toLex15 (m : ExtMeasure) : LexFifteen :=
   toLex (m.levelDeficit,
     toLex (m.xpDeficit,
       toLex (m.taskCycles,
@@ -335,14 +359,15 @@ def toLex14 (m : ExtMeasure) : LexFourteen :=
                     toLex (m.sellableFlag,
                       toLex (m.pendingItemsFlag,
                         toLex (m.objectiveStepFlag,
-                          toLex (m.taskCoinsTotal, m.gold)))))))))))))
+                          toLex (m.taskCoinsTotal,
+                            toLex (m.gold, m.craftReliefFlag))))))))))))))
 
-/-- `extMeasureLt` implies the embedded `<` on `LexFourteen`. -/
-theorem toLex14_lt_of_extMeasureLt
+/-- `extMeasureLt` implies the embedded `<` on `LexFifteen`. -/
+theorem toLex15_lt_of_extMeasureLt
     {m₁ m₂ : ExtMeasure} (h : extMeasureLt m₁ m₂) :
-    toLex14 m₁ < toLex14 m₂ := by
-  simp only [toLex14, Prod.Lex.lt_iff, ofLex_toLex]
-  rcases h with h | h | h | h | h | h | h | h | h | h | h | h | h | h
+    toLex15 m₁ < toLex15 m₂ := by
+  simp only [toLex15, Prod.Lex.lt_iff, ofLex_toLex]
+  rcases h with h | h | h | h | h | h | h | h | h | h | h | h | h | h | h
   · exact Or.inl h
   · obtain ⟨h1, h⟩ := h
     exact Or.inr ⟨h1, Or.inl h⟩
@@ -383,16 +408,21 @@ theorem toLex14_lt_of_extMeasureLt
   · obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h⟩ := h
     exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4,
             Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8,
-              Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+              Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12, Or.inr ⟨h13, Or.inl h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
+  · obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h⟩ := h
+    exact Or.inr ⟨h1, Or.inr ⟨h2, Or.inr ⟨h3, Or.inr ⟨h4,
+            Or.inr ⟨h5, Or.inr ⟨h6, Or.inr ⟨h7, Or.inr ⟨h8,
+              Or.inr ⟨h9, Or.inr ⟨h10, Or.inr ⟨h11, Or.inr ⟨h12,
+                Or.inr ⟨h13, Or.inr ⟨h14, h⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩⟩
 
 /-- Well-foundedness of `extMeasureLt`, by `InvImage` reduction to
-    Mathlib's standard well-founded order on `LexFourteen`. -/
+    Mathlib's standard well-founded order on `LexFifteen`. -/
 theorem extMeasureLt_wellFounded : WellFounded extMeasureLt := by
-  have hwf : WellFounded (fun a b : LexFourteen => a < b) :=
-    (inferInstance : WellFoundedRelation LexFourteen).wf
+  have hwf : WellFounded (fun a b : LexFifteen => a < b) :=
+    (inferInstance : WellFoundedRelation LexFifteen).wf
   exact Subrelation.wf
-    (h₁ := fun {a b} h => toLex14_lt_of_extMeasureLt h)
-    (InvImage.wf toLex14 hwf)
+    (h₁ := fun {a b} h => toLex15_lt_of_extMeasureLt h)
+    (InvImage.wf toLex15 hwf)
 
 /-! ## Slot-decrease helpers — one per slot 1..14 -/
 
@@ -545,8 +575,29 @@ theorem extLt_of_gold_dec {m₁ m₂ : ExtMeasure}
     (h13 : m₁.taskCoinsTotal = m₂.taskCoinsTotal)
     (h : m₁.gold < m₂.gold) :
     extMeasureLt m₁ m₂ :=
-  Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
-    ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h⟩))))))))))))
+  Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl
+    ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h⟩)))))))))))))
+
+/-- Slot 15 (craftReliefFlag) decrease with slots 1-14 equal. -/
+theorem extLt_of_craftRelief_dec {m₁ m₂ : ExtMeasure}
+    (h1 : m₁.levelDeficit = m₂.levelDeficit)
+    (h2 : m₁.xpDeficit = m₂.xpDeficit)
+    (h3 : m₁.taskCycles = m₂.taskCycles)
+    (h4 : m₁.skillXpDeficitProjected = m₂.skillXpDeficitProjected)
+    (h5 : m₁.bankPressure = m₂.bankPressure)
+    (h6 : m₁.hpDeficit = m₂.hpDeficit)
+    (h7 : m₁.bankInaccessibleFlag = m₂.bankInaccessibleFlag)
+    (h8 : m₁.overstockFlag = m₂.overstockFlag)
+    (h9 : m₁.selectBankDepositsFlag = m₂.selectBankDepositsFlag)
+    (h10 : m₁.sellableFlag = m₂.sellableFlag)
+    (h11 : m₁.pendingItemsFlag = m₂.pendingItemsFlag)
+    (h12 : m₁.objectiveStepFlag = m₂.objectiveStepFlag)
+    (h13 : m₁.taskCoinsTotal = m₂.taskCoinsTotal)
+    (h14 : m₁.gold = m₂.gold)
+    (h : m₁.craftReliefFlag < m₂.craftReliefFlag) :
+    extMeasureLt m₁ m₂ :=
+  Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr
+    ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h⟩)))))))))))))
 
 /-! ## cycleStep level-monotonicity
 
@@ -770,6 +821,38 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
             < b2n s.hasOverstockItems
       show b2n false < b2n s.hasOverstockItems
       rw [hpre]; decide
+  | craftRelief =>
+    -- CRAFT_RELIEF fires → `.craft` apply clears `craftReliefFires`,
+    -- leaving slots 1-14 of the measure unchanged (level/xp/task/skill/
+    -- bank/hp/flags/coins/gold all preserved) and strictly decreasing
+    -- slot 15 (craftReliefFlag). Mirrors discardCritical's overstock
+    -- decrement pattern, just on the new slot.
+    right
+    have hcs : cycleStep s = applyActionKind .craft s := by
+      unfold cycleStep; rw [hk]; rfl
+    rw [hcs]
+    simp only [fires, ProductionLadder.craftReliefFires] at hfires
+    have hpre : s.craftReliefFires = true := hfires
+    refine ⟨rfl, ?_⟩
+    refine extLt_of_craftRelief_dec ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_
+    · unfold extMeasure applyActionKind; rfl
+    · unfold extMeasure applyActionKind; rfl
+    · unfold extMeasure applyActionKind; rfl
+    · unfold extMeasure applyActionKind; rfl
+    · unfold extMeasure applyActionKind; rfl
+    · unfold extMeasure applyActionKind; rfl
+    · unfold extMeasure applyActionKind; rfl
+    · unfold extMeasure applyActionKind; rfl
+    · unfold extMeasure applyActionKind; rfl
+    · unfold extMeasure applyActionKind; rfl
+    · unfold extMeasure applyActionKind; rfl
+    · unfold extMeasure applyActionKind; rfl
+    · unfold extMeasure applyActionKind; rfl
+    · unfold extMeasure applyActionKind; rfl
+    · show b2n ((applyActionKind .craft s).craftReliefFires) < b2n s.craftReliefFires
+      have : (applyActionKind .craft s).craftReliefFires = false := by
+        simp [applyActionKind]
+      rw [this, hpre]; decide
   | depositFull =>
     right
     have hcs : cycleStep s = applyActionKind .depositAll s := by
@@ -959,7 +1042,6 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
   | taskCancel      => exfalso; revert hmem; unfold progressMeans; decide
   | pursueTask      => exfalso; revert hmem; unfold progressMeans; decide
   | acceptTask      => exfalso; revert hmem; unfold progressMeans; decide
-  | craftRelief     => exfalso; revert hmem; unfold progressMeans; decide
 
 /-! ## Headline — strong form (restricted trajectory)
 

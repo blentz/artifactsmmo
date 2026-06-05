@@ -390,8 +390,17 @@ noncomputable def applyActionKind : ActionKind → State → State
         match s.craftSkill with
         | some sk => (sk, 1) :: s.skillXpDelta
         | none => s.skillXpDelta
+      -- CRAFT_RELIEF post-condition: crafting consumes recipe inputs, so
+      -- the production-side `craft_relief_candidates(...)` predicate
+      -- becomes vacuously false until inventory rebuilds. The state-
+      -- carried Bool is refreshed externally by the player snapshot;
+      -- inside the apply we mirror that "predicate evaluates false
+      -- immediately after the craft" by clearing the flag. This is what
+      -- lets `extMeasureLt` strictly decrease on the craftReliefFlag
+      -- slot, sealing CRAFT_RELIEF termination (CumulativeProgress.lean).
       { s with craftableSlots := s.craftableSlots + 1,
-               skillXpDelta := newSkillXp }
+               skillXpDelta := newSkillXp,
+               craftReliefFires := false }
   -- Item 4b: .equip cons-prepends (slot, code) per equipTarget; no-op
   -- when equipTarget is none. Mirrors EquipAction.apply (equip.py:50+).
   | .equip, s =>
