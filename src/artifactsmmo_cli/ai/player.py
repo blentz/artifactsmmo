@@ -901,18 +901,23 @@ class GamePlayer:
                     cost_weight=_delete_cost(item_code, self.game_data),
                 ))
 
-        # NPC buy actions: one per (npc, item) pair for consumables
+        # NPC buy actions: one per (npc, item) pair. Prior version filtered to
+        # hp_restore>0 (consumables only), which made every non-potion vendor
+        # item unreachable — the planner could never spend gold on weapons,
+        # gear, tools, or ammo even when the merchant carried them. Drop the
+        # filter so the action set covers the full vendor surface; the
+        # planner / goal layer decides whether to actually buy.
         for npc_code, stock in self.game_data._npc_stock.items():
             npc_loc = self.game_data.npc_location(npc_code)
             for item_code in stock:
-                item_stats = self.game_data.item_stats(item_code)
-                if item_stats is not None and item_stats.hp_restore > 0:
-                    actions.append(NpcBuyAction(
-                        npc_code=npc_code,
-                        item_code=item_code,
-                        quantity=1,
-                        npc_location=npc_loc,
-                    ))
+                if self.game_data.item_stats(item_code) is None:
+                    continue  # unknown item -> can't reason about it; skip safely
+                actions.append(NpcBuyAction(
+                    npc_code=npc_code,
+                    item_code=item_code,
+                    quantity=1,
+                    npc_location=npc_loc,
+                ))
 
         # NPC sell actions: one per (npc, item) pair where the NPC buys the item
         for npc_code, sell_prices in self.game_data._npc_sell_prices.items():

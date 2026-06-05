@@ -1203,8 +1203,13 @@ class TestBuildActionsExtended:
         assert "iron_ore" in delete_codes
         assert "copper_dagger" not in delete_codes  # equipped — must be skipped
 
-    def test_npc_buy_actions_include_consumables_only(self):
-        """NPC buy actions are only built for items with hp_restore > 0."""
+    def test_npc_buy_actions_cover_full_vendor_stock(self):
+        """NPC buy actions are built for every known item a vendor carries —
+        not just consumables. Prior version filtered to hp_restore>0 which
+        made weapons / gear / tools / ammo at any merchant unreachable to the
+        planner; gold sat idle while the bot stayed under-geared. The action
+        layer must surface the full surface; the goal/planner layer decides
+        whether to buy."""
         player = GamePlayer(character="hero")
         gd = GameData()
         gd._monster_locations = {}
@@ -1215,12 +1220,16 @@ class TestBuildActionsExtended:
         gd._item_stats = {
             "cooked_chicken": ItemStats(code="cooked_chicken", level=1, type_="consumable", hp_restore=50),
             "raw_iron": ItemStats(code="raw_iron", level=1, type_="resource"),
+            "unknown_thing": ItemStats(code="unknown_thing", level=1, type_="resource"),
         }
         gd._crafting_recipes = {}
         gd._resource_skill = {}
         gd._monster_level = {}
         gd._npc_locations = {"cook": (5, 0)}
-        gd._npc_stock = {"cook": ["cooked_chicken", "raw_iron"]}
+        # Vendor stock includes a consumable, a resource, AND an item the
+        # client has no stats for (mystery_box) — the unknown one is the
+        # only thing the loop must still skip (can't reason without stats).
+        gd._npc_stock = {"cook": ["cooked_chicken", "raw_iron", "mystery_box"]}
         player.game_data = gd
         player.state = make_state()
 
@@ -1229,7 +1238,11 @@ class TestBuildActionsExtended:
         npc_buy_items = {a.item_code for a in actions if isinstance(a, NpcBuyAction)}
 
         assert "cooked_chicken" in npc_buy_items
-        assert "raw_iron" not in npc_buy_items  # no hp_restore
+        assert "raw_iron" in npc_buy_items, (
+            "non-consumable vendor stock must produce a buy action (was filtered out by "
+            "the legacy hp_restore>0 gate, leaving gold unspendable on gear)"
+        )
+        assert "mystery_box" not in npc_buy_items  # unknown items legitimately skipped
 
 
 class TestBuildGoalsTaskCancelNeverSuppressed:
