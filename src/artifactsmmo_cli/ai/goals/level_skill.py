@@ -91,10 +91,17 @@ class LevelSkillGoal(Goal):
     def relevant_actions(
         self, actions: list[Action], state: WorldState, game_data: GameData
     ) -> list[Action]:
-        """Craft anything in this skill family + supporting Gather/Rest/Deposit."""
+        """Craft anything in this skill family + supporting Gather / Rest /
+        Deposit / Withdraw. Withdraw is included so the planner can pull
+        already-banked recipe inputs instead of re-gathering them — closes
+        the same regrind regression seen in PursueTaskGoal."""
         result: list[Action] = []
         for action in actions:
             if "recovery" in action.tags or "deposit" in action.tags:
+                result.append(action)
+            elif "withdraw" in action.tags:
+                # Any banked material may be a recipe input for a craft in
+                # this skill family; let the planner figure out which.
                 result.append(action)
             elif isinstance(action, GatherAction):
                 # All gathers are fair game; they replenish materials for crafting.

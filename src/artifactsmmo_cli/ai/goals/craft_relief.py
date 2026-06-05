@@ -13,6 +13,7 @@ gear progress in one stroke."""
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
+from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -49,13 +50,17 @@ class CraftReliefGoal(Goal):
 
     def relevant_actions(self, actions: list[Action], state: WorldState,
                          game_data: GameData) -> list[Action]:
-        """Only Move + Craft of the target item — keeps the planner from
-        exploring gather/fight branches when the whole point is to convert
-        existing inventory into the goal product."""
+        """Move + Craft of the target item + Withdraw of any recipe input
+        already in the bank. Withdraw lets the bot pull mats from the bank
+        instead of failing the craft when ingredients are split between
+        inventory and bank."""
+        recipe = game_data.crafting_recipe(self._target_item) or {}
+        mat_codes = frozenset(recipe.keys())
         return [
             a for a in actions
             if (isinstance(a, CraftAction) and a.code == self._target_item)
             or isinstance(a, MoveAction)
+            or (isinstance(a, WithdrawItemAction) and a.code in mat_codes)
         ]
 
     @property

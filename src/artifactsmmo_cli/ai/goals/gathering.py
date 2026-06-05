@@ -5,6 +5,7 @@ from fractions import Fraction
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -89,12 +90,27 @@ class GatherMaterialsGoal(Goal):
         return max(1.0, 40.0 * fraction_remaining)
 
     def relevant_actions(self, actions: list[Action], state: WorldState, game_data: GameData) -> list[Action]:
-        """Restrict planning to gather/smelt/deposit — excludes combat and unrelated gathers."""
+        """Restrict planning to gather/smelt/deposit/withdraw — excludes
+        combat and unrelated gathers. Withdraw is included so a material
+        already banked is pulled rather than re-gathered."""
         needed_resources, craftable_mats = recipe_closure(game_data, self._needed)
+        # Withdraw-eligible item codes: drops of needed resources (leaf raw
+        # materials) + the craftable intermediates themselves.
+        withdrawable: set[str] = set(craftable_mats) | set(self._needed)
+        for res in needed_resources:
+            drop = game_data.resource_drop_item(res)
+            if drop is not None:
+                withdrawable.add(drop)
 
         result: list[Action] = []
         for action in actions:
-            if "recovery" in action.tags or "deposit" in action.tags or (isinstance(action, GatherAction) and action.resource_code in needed_resources) or (isinstance(action, CraftAction) and action.code in craftable_mats):
+            if (
+                "recovery" in action.tags
+                or "deposit" in action.tags
+                or (isinstance(action, GatherAction) and action.resource_code in needed_resources)
+                or (isinstance(action, CraftAction) and action.code in craftable_mats)
+                or (isinstance(action, WithdrawItemAction) and action.code in withdrawable)
+            ):
                 result.append(action)
         return result
 

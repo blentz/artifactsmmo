@@ -12,6 +12,7 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
+from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -76,12 +77,33 @@ class PursueTaskGoal(Goal):
         self, actions: list[Action], state: WorldState, game_data: GameData
     ) -> list[Action]:
         """Scope to the task item's recipe closure (gather its resources, craft
-        its intermediates) plus the TaskTrade that submits it — so the planner
-        doesn't branch across every gather/craft in the game and time out."""
+        its intermediates, withdraw any already-banked mats) plus the
+        TaskTrade that submits it — so the planner doesn't branch across
+        every gather/craft in the game and time out. Withdraw is included
+        so a bot whose materials are already in the bank doesn't re-gather
+        the whole stack from scratch (trace 2026-06-05: 14-action gather
+        plans while the bank held the same ash_wood)."""
         needed_resources, craftable_mats = recipe_closure(game_data, [self._task_code])
+        # The withdraw-eligible item codes are (a) leaf raw materials —
+        # drops of the needed resources, e.g. ash_wood (drop of ash_tree)
+        # — plus (b) intermediate craftables already in the bank, e.g.
+        # ash_plank waiting to be TaskTraded.
+        withdrawable: set[str] = set(craftable_mats)
+        for res in needed_resources:
+            drop = game_data.resource_drop_item(res)
+            if drop is not None:
+                withdrawable.add(drop)
+        withdrawable.add(self._task_code)  # the task item itself, banked previously
         result: list[Action] = []
         for action in actions:
-            if "recovery" in action.tags or "deposit" in action.tags or (isinstance(action, GatherAction) and action.resource_code in needed_resources) or (isinstance(action, CraftAction) and action.code in craftable_mats) or (isinstance(action, TaskTradeAction) and action.code == self._task_code):
+            if (
+                "recovery" in action.tags
+                or "deposit" in action.tags
+                or (isinstance(action, GatherAction) and action.resource_code in needed_resources)
+                or (isinstance(action, CraftAction) and action.code in craftable_mats)
+                or (isinstance(action, TaskTradeAction) and action.code == self._task_code)
+                or (isinstance(action, WithdrawItemAction) and action.code in withdrawable)
+            ):
                 result.append(action)
         return result
 

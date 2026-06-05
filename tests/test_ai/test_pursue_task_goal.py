@@ -5,6 +5,7 @@ from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
+from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.pursue_task import PRIORITY_WHEN_FIRING, PursueTaskGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
@@ -105,6 +106,36 @@ class TestPursueTaskGoal:
         assert gathered == {"copper_rocks"}
         assert crafted == {"copper_bar"}
         assert traded == {"copper_bar"}
+
+    def test_relevant_actions_includes_withdraw_for_recipe_chain(self):
+        """If recipe materials are already in the bank, the planner must be
+        able to Withdraw them instead of regathering. Pre-fix, PursueTask's
+        relevant_actions silently dropped every WithdrawItemAction so the
+        bot ignored its bank entirely — Robby (trace 2026-06-05) had
+        cycles of repeated Gather(ash_tree) while the same ash_wood sat
+        banked. Withdraw of the task item itself (copper_bar already
+        crafted and banked) is also kept."""
+        g = PursueTaskGoal("copper_bar", 0)
+        gd = self._closure_gd()
+        actions = [
+            # In-closure raw material (leaf input).
+            WithdrawItemAction(code="copper_ore", quantity=1, bank_location=(4, 0)),
+            # The task item itself, previously banked.
+            WithdrawItemAction(code="copper_bar", quantity=1, bank_location=(4, 0)),
+            # Out-of-closure item — must be dropped.
+            WithdrawItemAction(code="iron_ore", quantity=1, bank_location=(4, 0)),
+        ]
+        kept = g.relevant_actions(actions, _items_task(), gd)
+        withdraw_codes = {a.code for a in kept if isinstance(a, WithdrawItemAction)}
+        assert "copper_ore" in withdraw_codes, (
+            "leaf-input withdraw should be allowed so banked mats can be pulled"
+        )
+        assert "copper_bar" in withdraw_codes, (
+            "task-item withdraw should be allowed (banked crafted unit ready for TaskTrade)"
+        )
+        assert "iron_ore" not in withdraw_codes, (
+            "unrelated withdraw must stay filtered to bound planner branching"
+        )
 
 
 class TestPursueTaskPlans:
