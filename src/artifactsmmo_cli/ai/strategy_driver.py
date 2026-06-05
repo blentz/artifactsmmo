@@ -224,6 +224,18 @@ class StrategyArbiter:
 
         step_goal = objective_step_goal(chosen_step, state, game_data, ctx)
 
+        # An active items-task pursuit pre-empts the meta-objective's
+        # single-cycle step. Without this, the meta-objective's discretionary
+        # nudge (e.g. GatherMaterials(ash_wood) for a long-term skill goal)
+        # wins on positional order over the discretionary PursueTask, causing
+        # 1-cycle interruptions of a long PursueTask(copper_ore) run to walk
+        # to the ash forest and back — wasting a full game cooldown for a
+        # marginal meta-step. Suppressing the step here keeps the locally
+        # committed task running; the meta-objective resumes once the task
+        # completes (or PursueTask stops firing).
+        if MeansKind.PURSUE_TASK in discretionary_kinds:
+            step_goal = None
+
         # Build ordered candidates: guards, collect, step, discretionary.
         candidates: list[Candidate] = []
         for gk in guard_kinds:

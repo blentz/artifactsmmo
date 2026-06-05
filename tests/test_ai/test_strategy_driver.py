@@ -40,6 +40,7 @@ from artifactsmmo_cli.ai.strategy_driver import (
 )
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext
+import artifactsmmo_cli.ai.tiers.means as means_module
 from artifactsmmo_cli.ai.tiers.means import MeansKind
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
 from tests.test_ai.fixtures import make_state
@@ -590,8 +591,6 @@ class TestPursueTaskEndToEnd:
     PursueTask(copper_bar), NOT GrindCharacterXP."""
 
     def test_items_task_selects_pursue_not_grind(self, monkeypatch, tmp_path):
-        import artifactsmmo_cli.ai.tiers.means as means_module
-
         # Patch task_decision in means so PURSUE_TASK fires without needing a
         # populated LearningStore.
         monkeypatch.setattr(means_module, "task_decision", lambda *_: means_module.PURSUE)
@@ -628,3 +627,47 @@ class TestPursueTaskEndToEnd:
             f"expected PursueTask(copper_bar), got {goal!r}"
         )
         assert len(plan) >= 1
+
+    def test_meta_step_suppressed_when_pursuing_items_task(self, monkeypatch, tmp_path):
+        """Trace-cycle-760: meta-objective's `ObtainItem(ash_wood)` step was
+        out-ranking the discretionary PursueTask(copper_ore) on positional
+        order, causing 1-cycle ash-forest detours mid-copper-grind. With the
+        suppression in StrategyArbiter.select, an active PURSUE_TASK should
+        force step_goal=None and PursueTask wins."""
+        monkeypatch.setattr(means_module, "task_decision", lambda *_: means_module.PURSUE)
+
+        planner = GOAPPlanner()
+        gd = _make_planner_gd()
+        # Make ash_tree gatherable so the step goal WOULD plan if it ran.
+        gd._resource_locations = {"ash_tree": [(3, 0)]}
+        gd._resource_drops["ash_tree"] = "ash_wood"
+        gd._resource_skill["ash_tree"] = ("woodcutting", 1)
+
+        state = make_state(
+            level=5, hp=150, max_hp=150, xp=0, max_xp=500,
+            task_code="copper_bar", task_type="items",
+            task_progress=0, task_total=1,
+            skills={"weaponcrafting": 5, "woodcutting": 1},
+            inventory={"copper_bar": 1},
+        )
+        actions = [TaskTradeAction(code="copper_bar", quantity=1, taskmaster_location=(2, 1))]
+        ctx = _ctx(combat_monster="chicken")
+
+        store = LearningStore(db_path=str(tmp_path / "step.db"), character="testchar")
+        try:
+            arbiter = StrategyArbiter(planner, history=store)
+            # chosen_step = ObtainItem(ash_wood) — a meta-objective nudge that
+            # is unrelated to the active copper_bar task. Pre-fix, the step
+            # would plan first (it's positionally ahead of discretionary
+            # PursueTask) and the arbiter would return GatherMaterials(ash_wood).
+            decision = _FakeDecision(chosen_step=ObtainItem("ash_wood"))
+            goal, _plan, tried = arbiter.select(decision, state, gd, actions, ctx)
+        finally:
+            store.close()
+
+        assert repr(goal) == "PursueTask(copper_bar)", (
+            f"expected PursueTask, got {goal!r}"
+        )
+        assert all(gt["goal"] != "GatherMaterials(ash_wood)" for gt in tried), (
+            f"ash-wood step should be suppressed, but goals_tried={tried}"
+        )
