@@ -94,6 +94,24 @@ _CRAFTING_BOOTSTRAP_SKILLS: frozenset[str] = frozenset(
     {"weaponcrafting", "gearcrafting", "jewelrycrafting"}
 )
 
+_CHAR_LEVEL_BOOTSTRAP_HORIZON = 2
+"""Look-ahead for the character-level bootstrap root. When `state.level <
+target_char_level`, prepend a `ReachCharLevel(current + _HORIZON)` root so
+GrindCharacterXP gets a low-effort competitor that ranks above
+gear-chain ObtainItems.
+
+Trace 2026-06-03/05 (3 days): Robby was last seen in combat 2026-06-03
+01:45 when he dinged level 3. After that NO fights at all across ~3300
+cycles — bot stuck at level 3, xp 6/350, every fight-XP-gain event
+attributed to L1 or L2. Root cause: `ReachCharLevel(50)` has effort=47
+and consistently loses Tier-1 ranking to small-effort gear/tool roots
+(unmet_closure_size ~6-30). The bot funded gear progress via tasks
+forever and never bothered combat. A bootstrap root with effort=2
+restores combat parity without overriding the long-term goal —
+GrindCharacterXP fires until level rises +2, then a new bootstrap
+auto-emits at the next horizon. Removed once current_level + horizon >=
+target_char_level (we're already in the home stretch)."""
+
 
 def objective_roots(
     objective: CharacterObjective,
@@ -116,6 +134,11 @@ def objective_roots(
     state get the previous root set (legacy tests / replay harnesses)."""
     roots: list[MetaGoal] = [ReachCharLevel(objective.target_char_level)]
     if state is not None:
+        # Char-level bootstrap: gap-2 root competing with gear chains so
+        # GrindCharacterXP actually fires. See _CHAR_LEVEL_BOOTSTRAP_HORIZON.
+        char_horizon = state.level + _CHAR_LEVEL_BOOTSTRAP_HORIZON
+        if char_horizon < objective.target_char_level:
+            roots.append(ReachCharLevel(char_horizon))
         for skill in _CRAFTING_BOOTSTRAP_SKILLS:
             if state.skills.get(skill, 1) < _CRAFT_BOOTSTRAP_TARGET:
                 roots.append(ReachSkillLevel(skill, _CRAFT_BOOTSTRAP_TARGET))

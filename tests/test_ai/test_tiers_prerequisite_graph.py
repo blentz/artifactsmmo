@@ -134,6 +134,45 @@ def test_objective_roots_adds_craft_bootstrap_when_skill_at_floor():
         )
 
 
+def test_objective_roots_adds_char_level_bootstrap_when_far_from_target():
+    """Trace 2026-06-03/05: Robby last fought 2026-06-03T01:45 (dinged
+    level 3), then ZERO fights across ~3300 cycles. Char xp stuck at
+    6/350. Root cause: ReachCharLevel(50) effort=47 always lost ranking
+    to small-effort gear chains; GrindCharacterXP never selected.
+
+    Fix: when state.level + horizon < target_char_level, prepend a
+    near-term ReachCharLevel(state.level + 2) root. Small effort (=2)
+    competes with gear, gives GrindCharacterXP an actual chance to fire.
+    Removed automatically when within the horizon."""
+    gd = _gd()
+    obj = CharacterObjective.from_game_data(gd)
+    # Level 3 character — bootstrap should aim for level 5.
+    state = make_state(level=3, skills={s: 1 for s in SKILL_NAMES})
+    roots = objective_roots(obj, state)
+    assert ReachCharLevel(5) in roots, (
+        f"missing char-level bootstrap root at level 3; got {roots}"
+    )
+    # The long-haul target root must still exist.
+    assert ReachCharLevel(obj.target_char_level) in roots
+
+
+def test_objective_roots_omits_char_level_bootstrap_near_target():
+    """Once horizon-overrun (state.level + horizon >= target), the
+    bootstrap drops out — the long-haul ReachCharLevel(50) is now the
+    near-term root anyway."""
+    gd = _gd()
+    obj = CharacterObjective.from_game_data(gd)
+    # Bot at level 48, target 50: 48 + 2 = 50 >= 50 → no bootstrap.
+    state = make_state(level=48, skills={s: 1 for s in SKILL_NAMES})
+    roots = objective_roots(obj, state)
+    char_roots = [r for r in roots if isinstance(r, ReachCharLevel)]
+    assert ReachCharLevel(obj.target_char_level) in char_roots
+    # Bootstrap target (level+2=50) coincides with long-haul → only one root.
+    assert len(char_roots) == 1, (
+        f"expected exactly the long-haul char-level root, got {char_roots}"
+    )
+
+
 def test_objective_roots_omits_craft_bootstrap_when_skill_above_floor():
     """Once a crafting skill is above the bootstrap target (>=5), the small
     bootstrap root drops out and the long-haul ReachSkillLevel(skill, 50)
