@@ -2,9 +2,11 @@
   Formal.Liveness.MeansKind
 
   Production-granularity `MeansKind` enum mirroring the StrategyArbiter's
-  ladder. There are 18 means in total, ordered:
+  ladder. There are 19 means in total, ordered:
 
-    GUARD_ORDER (6, from `tiers/guards.py:49`)
+    GUARD_ORDER (7, from `tiers/guards.py:49`)  -- CRAFT_RELIEF added between
+                                                   DISCARD_CRITICAL and
+                                                   DEPOSIT_FULL
     ++ COLLECT_REWARD_ORDER (5, from `tiers/means.py:35`)
     ++ [OBJECTIVE_STEP] (1)
     ++ DISCRETIONARY_ORDER (6, from `tiers/means.py:42`)  -- includes WAIT
@@ -41,6 +43,11 @@ inductive MeansKind where
   | bankUnlock          -- BANK_UNLOCK,        guards.py:69
   | reachUnlockLevel    -- REACH_UNLOCK_LEVEL, guards.py:77
   | discardCritical     -- DISCARD_CRITICAL,   guards.py:81
+  | craftRelief         -- CRAFT_RELIEF,       guards.py (circuit breaker
+                        --                     between DISCARD_CRITICAL and
+                        --                     DEPOSIT_FULL; fires when inv
+                        --                     >= 0.70 AND a goal item is
+                        --                     craftable from inventory)
   | depositFull         -- DEPOSIT_FULL,       guards.py:83
   | discardHigh         -- DISCARD_HIGH,       guards.py:86
   -- Collect-reward (COLLECT_REWARD_ORDER, means.py:35)
@@ -65,13 +72,14 @@ inductive MeansKind where
     `productionLadder` falls through to it whenever no other means fires,
     so the ladder is unconditionally total (see `NoDeadlockV2.lean`). -/
 def allInLadderOrder : List MeansKind :=
-  [.hpCritical, .bankUnlock, .reachUnlockLevel, .discardCritical, .depositFull, .discardHigh,
+  [.hpCritical, .bankUnlock, .reachUnlockLevel, .discardCritical,
+   .craftRelief, .depositFull, .discardHigh,
    .claimPending, .completeTask, .sellPressured, .lowYieldCancel, .taskCancel,
    .objectiveStep,
    .pursueTask, .acceptTask, .taskExchange, .sellIdle, .bankExpand,
    .wait]
 
-/-- Sanity: 18 constructors. -/
-example : allInLadderOrder.length = 18 := by decide
+/-- Sanity: 19 constructors. -/
+example : allInLadderOrder.length = 19 := by decide
 
 end Formal.Liveness.MeansKind

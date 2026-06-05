@@ -117,8 +117,9 @@ _GUARD_INDEX = {
     GuardKind.BANK_UNLOCK: 1,
     GuardKind.REACH_UNLOCK_LEVEL: 2,
     GuardKind.DISCARD_CRITICAL: 3,
-    GuardKind.DEPOSIT_FULL: 4,
-    GuardKind.DISCARD_HIGH: 5,
+    GuardKind.CRAFT_RELIEF: 4,
+    GuardKind.DEPOSIT_FULL: 5,
+    GuardKind.DISCARD_HIGH: 6,
 }
 
 _MEANS_INDEX = {

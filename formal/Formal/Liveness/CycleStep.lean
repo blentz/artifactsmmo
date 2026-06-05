@@ -116,6 +116,7 @@ noncomputable def planFor : MeansKind → State → Plan
   | .bankUnlock       , _ => [.fight]
   | .reachUnlockLevel , _ => [.fight]
   | .discardCritical  , _ => [.deleteItem]
+  | .craftRelief      , _ => [.craft]
   | .depositFull      , _ => [.depositAll]
   | .discardHigh      , _ => [.deleteItem]
   | .claimPending     , _ => [.claimPendingItem]
@@ -274,6 +275,22 @@ theorem cycleStep_progress_or_waits
       have : (applyActionKind .deleteItem s).hasOverstockItems = false := hpost
       rw [heq] at this; exact this
     rw [hpre] at hpre'; cases hpre'
+  | craftRelief =>
+    -- CRAFT_RELIEF plans `.craft`, which advances `craftableSlots` by +1
+    -- (Plan.lean line ≈387). The post-state's craftableSlots differs from
+    -- the pre-state's, hence cycleStep s ≠ s. Mirrors the pursueTask /
+    -- bankExpand pattern of "post.field = pre.field + 1 → state changed".
+    left
+    have hcs : cycleStep s = applyActionKind .craft s := by
+      unfold cycleStep; rw [hk]; rfl
+    rw [hcs]
+    intro heq
+    have hpost : (applyActionKind .craft s).craftableSlots
+                  = s.craftableSlots + 1 := by
+      simp [applyActionKind]
+    have hpre' : s.craftableSlots = s.craftableSlots + 1 := by
+      rw [heq] at hpost; exact hpost
+    exact Nat.succ_ne_self _ hpre'.symm
   | depositFull =>
     left
     have hcs : cycleStep s = applyActionKind .depositAll s := by

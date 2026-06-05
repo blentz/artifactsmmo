@@ -148,6 +148,15 @@ structure State where
       StrategyArbiter inserts the StepGoal candidate iff the objective
       tier yields a plannable step). -/
   objectiveStepFires : Bool
+  /-- OPAQUE: production's CRAFT_RELIEF guard firing predicate. Mirrors
+      `tiers/guards.py::_fires(GuardKind.CRAFT_RELIEF, …)`: fires when
+      `_used_fraction(state) ≥ CRAFT_RELIEF_FRACTION (0.70)` AND
+      `craft_relief_candidates(state, game_data, …)` returns a non-empty
+      list (i.e. some task / target_gear / target_tools item is craftable
+      from current inventory + skill). State-carried Bool — the Lean
+      model doesn't reproduce the recipe walk; a diff harness must
+      assert the production computation matches this field. -/
+  craftReliefFires : Bool
   /-- `state.bank_items is not None` (means.py:104). -/
   bankItemsKnown : Bool
   /-- `len(state.bank_items)` when known, else `0` (means.py:108). -/

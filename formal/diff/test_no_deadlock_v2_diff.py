@@ -434,16 +434,13 @@ def test_productionLadder_falsifiable_without_objective_step(
 # Sanity / mirror tests
 # ---------------------------------------------------------------------------
 
-def test_ladder_has_18_entries() -> None:
-    """Mirror sanity: Python ladder matches the Lean 17-element list plus
-    the new WAIT last-resort fallback (Phase 20e-v2 prodfix).
+def test_ladder_has_19_entries() -> None:
+    """Mirror sanity: Python ladder matches the Lean 19-element list.
 
-    Lean side still has 17 entries; the WAIT extension is production-only
-    until the Lean ladder catches up. The diff tests treat WAIT as
-    end-of-ladder so the Lean disjunctive headline (any of the 17 fires
-    OR objective step) is unaffected — WAIT is below objective in
-    discretionary order and only fires when nothing else does."""
-    assert len(ALL_IN_LADDER_ORDER) == 18
+    19 = original 17 + WAIT (Phase 20e-v2) + CRAFT_RELIEF (circuit
+    breaker inserted between DISCARD_CRITICAL and DEPOSIT_FULL). Lean
+    side mirrors via MeansKind.allInLadderOrder.length = 19."""
+    assert len(ALL_IN_LADDER_ORDER) == 19
 
 
 def test_no_task_state_acceptTask_fires() -> None:

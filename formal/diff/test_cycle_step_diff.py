@@ -523,7 +523,7 @@ def test_scope_includes_mutation_targets() -> None:
 
 
 def test_witness_plan_for_covers_all_means() -> None:
-    """Mirror plan_for must cover every LadderMeans (18 entries)."""
+    """Mirror plan_for must cover every LadderMeans (19 entries)."""
     from formal.sim.production_ladder import ALL_IN_LADDER_ORDER
     missing = set(ALL_IN_LADDER_ORDER) - set(MIRROR_PLAN_FOR.keys())
     assert not missing, f"MIRROR_PLAN_FOR missing: {missing}"

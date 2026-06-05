@@ -86,6 +86,7 @@ MIRROR_PLAN_FOR: dict[LadderMeans, str] = {
     LadderMeans.BANK_UNLOCK:        "fight",
     LadderMeans.REACH_UNLOCK_LEVEL: "fight",
     LadderMeans.DISCARD_CRITICAL:   "deleteItem",
+    LadderMeans.CRAFT_RELIEF:       "craft",
     LadderMeans.DEPOSIT_FULL:       "depositAll",
     LadderMeans.DISCARD_HIGH:       "deleteItem",
     LadderMeans.CLAIM_PENDING:      "claimPendingItem",

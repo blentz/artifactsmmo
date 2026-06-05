@@ -84,6 +84,12 @@ theorem cycleStep_xp_level_preserved_when_no_fight_no_complete (s : State)
       show (applyActionKind .deleteItem s).level = s.level
             ∧ (applyActionKind .deleteItem s).xp = s.xp
       exact ⟨rfl, rfl⟩
+    | craftRelief =>
+      -- planFor .craftRelief = [.craft]; applyActionKind .craft preserves
+      -- level and xp (bumps craftableSlots + skillXpDelta only).
+      show (applyActionKind .craft s).level = s.level
+            ∧ (applyActionKind .craft s).xp = s.xp
+      exact ⟨rfl, rfl⟩
     | depositFull =>
       show (applyActionKind .depositAll s).level = s.level
             ∧ (applyActionKind .depositAll s).xp = s.xp

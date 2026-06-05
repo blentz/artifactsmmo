@@ -884,7 +884,8 @@ def runDecideKey (args : Array Json) : Json :=
       | 1 => .bankUnlock
       | 2 => .reachUnlockLevel
       | 3 => .discardCritical
-      | 4 => .depositFull
+      | 4 => .craftRelief
+      | 5 => .depositFull
       | _ => .discardHigh
     Json.mkObj [("repr", Json.str (Formal.DecideKey.goalReprOfGuard k))]
   else

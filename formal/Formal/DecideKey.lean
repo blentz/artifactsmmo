@@ -159,6 +159,7 @@ inductive GuardKind where
   | bankUnlock
   | reachUnlockLevel
   | discardCritical
+  | craftRelief
   | depositFull
   | discardHigh
 deriving Repr, DecidableEq
@@ -190,6 +191,7 @@ def goalReprOfGuard : GuardKind → String
   | .discardHigh      => "DiscardOverstock"
   | .bankUnlock       => "UnlockBank"
   | .reachUnlockLevel => "ReachUnlockLevel"
+  | .craftRelief      => "CraftRelief"
   | .depositFull      => "DepositInventory"
 
 /-- TOTAL `match`: every `MeansKind` variant maps to a non-empty repr string. -/

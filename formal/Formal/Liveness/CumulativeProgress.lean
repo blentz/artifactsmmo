@@ -577,6 +577,9 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
     | discardCritical =>
       show (applyActionKind .deleteItem s).level ≥ s.level
       simp [applyActionKind]
+    | craftRelief =>
+      show (applyActionKind .craft s).level ≥ s.level
+      simp [applyActionKind]
     | depositFull =>
       show (applyActionKind .depositAll s).level ≥ s.level
       simp [applyActionKind]
@@ -956,6 +959,7 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
   | taskCancel      => exfalso; revert hmem; unfold progressMeans; decide
   | pursueTask      => exfalso; revert hmem; unfold progressMeans; decide
   | acceptTask      => exfalso; revert hmem; unfold progressMeans; decide
+  | craftRelief     => exfalso; revert hmem; unfold progressMeans; decide
 
 /-! ## Headline — strong form (restricted trajectory)
 

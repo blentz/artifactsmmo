@@ -250,6 +250,13 @@ def bankExpandFires (s : State) : Bool :=
               ≥ BANK_EXPAND_FILL_NUM * s.bankCapacity)
   && decide (s.gold ≥ s.nextExpansionCost)
 
+/-- CRAFT_RELIEF. Mirrors `tiers/guards.py::_fires(CRAFT_RELIEF, …)`:
+    fires when inv pressure crosses `CRAFT_RELIEF_FRACTION` (0.70) AND a
+    goal item is craftable from current inventory. Opaque Bool — the
+    Lean state carries production's answer (see `Measure.State`); a diff
+    harness asserts agreement with `craft_relief_candidates`. -/
+def craftReliefFires (s : State) : Bool := s.craftReliefFires
+
 /-- Dispatch: per-MeansKind firing predicate.
     `noncomputable` because `lowYieldCancelFires` references the opaque
     axiom `lowYieldSampleThreshold` (Phase 23d-5). -/
@@ -259,6 +266,7 @@ noncomputable def fires (k : MeansKind) (s : State) : Bool :=
   | .bankUnlock       => bankUnlockFires s
   | .reachUnlockLevel => reachUnlockLevelFires s
   | .discardCritical  => discardCriticalFires s
+  | .craftRelief      => craftReliefFires s
   | .depositFull      => depositFullFires s
   | .discardHigh      => discardHighFires s
   | .claimPending     => claimPendingFires s

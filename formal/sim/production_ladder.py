@@ -37,12 +37,13 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 
 class LadderMeans(Enum):
-    """Unified 17-entry enum mirroring `Formal.Liveness.MeansKind.MeansKind`."""
+    """Unified 19-entry enum mirroring `Formal.Liveness.MeansKind.MeansKind`."""
 
     HP_CRITICAL = "hp_critical"
     BANK_UNLOCK = "bank_unlock"
     REACH_UNLOCK_LEVEL = "reach_unlock_level"
     DISCARD_CRITICAL = "discard_critical"
+    CRAFT_RELIEF = "craft_relief"
     DEPOSIT_FULL = "deposit_full"
     DISCARD_HIGH = "discard_high"
     CLAIM_PENDING = "claim_pending"
@@ -64,6 +65,7 @@ ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
     LadderMeans.BANK_UNLOCK,
     LadderMeans.REACH_UNLOCK_LEVEL,
     LadderMeans.DISCARD_CRITICAL,
+    LadderMeans.CRAFT_RELIEF,
     LadderMeans.DEPOSIT_FULL,
     LadderMeans.DISCARD_HIGH,
     LadderMeans.CLAIM_PENDING,
@@ -86,6 +88,7 @@ _GUARD_MAP: dict[LadderMeans, GuardKind] = {
     LadderMeans.BANK_UNLOCK: GuardKind.BANK_UNLOCK,
     LadderMeans.REACH_UNLOCK_LEVEL: GuardKind.REACH_UNLOCK_LEVEL,
     LadderMeans.DISCARD_CRITICAL: GuardKind.DISCARD_CRITICAL,
+    LadderMeans.CRAFT_RELIEF: GuardKind.CRAFT_RELIEF,
     LadderMeans.DEPOSIT_FULL: GuardKind.DEPOSIT_FULL,
     LadderMeans.DISCARD_HIGH: GuardKind.DISCARD_HIGH,
 }
@@ -111,6 +114,7 @@ assert tuple(g for g in GUARD_ORDER) == (
     GuardKind.BANK_UNLOCK,
     GuardKind.REACH_UNLOCK_LEVEL,
     GuardKind.DISCARD_CRITICAL,
+    GuardKind.CRAFT_RELIEF,
     GuardKind.DEPOSIT_FULL,
     GuardKind.DISCARD_HIGH,
 ), "GUARD_ORDER drift — Lean MeansKind.allInLadderOrder is stale"
