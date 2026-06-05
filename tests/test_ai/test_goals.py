@@ -7,6 +7,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
@@ -1200,3 +1201,33 @@ class TestDepositInventorySelective:
             result = a.apply(result, gd)
         assert set(result.inventory) == {"copper_ore", "tasks_coin", "cooked_chicken", "copper_dagger"}
         assert result.bank_items == {"gold_ore": 5, "sap": 5}
+
+    def test_planner_bounded_by_relevant_actions_filter(self):
+        """Trace 2026-06-04 cycle 760: planner spent 90s + 29842 nodes
+        searching DepositInventory because relevant_actions returned the full
+        action set (Gather/Fight/Move/…). After the filter to deposit-tagged
+        actions, the plan resolves in a single node — DepositAll alone
+        satisfies `inventory_used == initial - bankable`."""
+        gd = self._gd()
+        goal = DepositInventoryGoal(bank_accessible=True, game_data=gd)
+        deposit = DepositAllAction(bank_location=(4, 1), accessible=True, game_data=gd)
+        # Decoy actions the planner WOULD have explored pre-filter. None of
+        # them can reduce inventory_used to the target, so pre-filter the
+        # planner expands them all and times out.
+        decoys = [
+            MoveAction(x=2, y=0), MoveAction(x=3, y=0), MoveAction(x=5, y=0),
+            RestAction(),
+            GatherAction(resource_code="copper_rocks", locations=frozenset([(1, 0)])),
+        ]
+        state = make_state(
+            x=0, y=0, inventory_max=104, bank_items={},
+            inventory={f"item_{i}": 1 for i in range(20)},
+        )
+        planner = GOAPPlanner()
+        plan = planner.plan(state, goal, [deposit, *decoys], gd)
+        assert plan == [deposit], f"expected single-step deposit plan, got {plan!r}"
+        assert planner.last_stats.nodes_explored <= 2, (
+            f"relevant_actions filter should cap planner at ~2 nodes, "
+            f"got {planner.last_stats.nodes_explored}"
+        )
+        assert not planner.last_stats.timed_out

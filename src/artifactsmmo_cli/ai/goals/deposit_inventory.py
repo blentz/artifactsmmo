@@ -1,5 +1,6 @@
 """DepositInventoryGoal: deposit bankable inventory to the bank as it fills up."""
 
+from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -51,6 +52,17 @@ class DepositInventoryGoal(Goal):
             if self._game_data is not None else 0
         )
         return {"inventory_used": state.inventory_used - bankable}
+
+    def relevant_actions(self, actions: list[Action], state: WorldState,
+                         game_data: GameData) -> list[Action]:
+        """Only `deposit`-tagged actions can reduce inventory_used to the
+        bankable-removed target. Without this filter the planner explores the
+        full action set (Gather/Fight/Craft/Move/…) up to max_depth=15 looking
+        for `inventory_used == target`, which empirically blows to ~30k nodes
+        and times out at the 90s budget (trace 2026-06-04 cycles 760/20/60).
+        DepositAllAction already includes the Move-to-bank in its apply, so
+        movement isn't needed as a separate planner step."""
+        return [a for a in actions if "deposit" in a.tags]
 
     def __repr__(self) -> str:
         return "DepositInventory"
