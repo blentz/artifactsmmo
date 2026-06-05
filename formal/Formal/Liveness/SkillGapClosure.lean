@@ -5,6 +5,9 @@ import Formal.Liveness.TaskLifecyclePhase
 import Formal.Liveness.TaskCompleteReachable
 import Mathlib.Tactic
 
+set_option linter.unusedSimpArgs false
+set_option linter.unusedVariables false
+
 /-! # Skill-gap closure — Phase 23d-7 (hand-written)
 
 User mandate (2026-06-01):

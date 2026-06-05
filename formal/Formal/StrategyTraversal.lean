@@ -1,3 +1,5 @@
+set_option linter.unusedSimpArgs false
+
 /-
 Formal model of the `strategy_traversal` PURE CORE from
 `src/artifactsmmo_cli/ai/tiers/strategy.py`:

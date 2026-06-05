@@ -1,3 +1,5 @@
+set_option linter.unusedSimpArgs false
+
 /-
 Formal model of the `select_pure` PURE CORE from
 `src/artifactsmmo_cli/ai/arbiter_select.py` (extracted from `StrategyArbiter.select`

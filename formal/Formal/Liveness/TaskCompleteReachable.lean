@@ -4,6 +4,9 @@ import Formal.Liveness.Measure
 import Formal.Liveness.TaskLifecyclePhase
 import Mathlib.Tactic
 
+set_option linter.unusedSimpArgs false
+set_option linter.unusedVariables false
+
 /-! # TaskComplete reachability — Phase 23d-6 (hand-written)
 
 Proves: for any state with an accepted (or in-progress) task and

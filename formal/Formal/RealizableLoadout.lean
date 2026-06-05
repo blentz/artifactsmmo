@@ -1,3 +1,5 @@
+set_option linter.unusedSimpArgs false
+
 /-
 Formal model of the realizable-loadout invariant from
 `src/artifactsmmo_cli/ai/equipment/realizable_loadout.py`, the post-condition
