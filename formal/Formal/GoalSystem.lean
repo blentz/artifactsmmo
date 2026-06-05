@@ -348,7 +348,7 @@ def restoreHpValue (hpPercent : Rat) : Rat :=
   else (1 - hpPercent) * 100
 
 theorem restoreHp_value_in_range (hp : Rat)
-    (h0 : 0 ≤ hp) (h1 : hp ≤ 1) :
+    (_h0 : 0 ≤ hp) (h1 : hp ≤ 1) :
     0 ≤ restoreHpValue hp ∧ restoreHpValue hp ≤ 110 := by
   unfold restoreHpValue restoreHpCriticalFraction restoreHpCriticalValue
   by_cases hc : hp < 25 / 100
@@ -380,7 +380,7 @@ def depositInventoryValue
   else (usedFraction - depositRampStart) / (1 - depositRampStart) * depositMaxValue
 
 theorem depositInventory_value_in_range
-    (a s im : Bool) (uf : Rat) (h0 : 0 ≤ uf) (h1 : uf ≤ 1) :
+    (a s im : Bool) (uf : Rat) (_h0 : 0 ≤ uf) (h1 : uf ≤ 1) :
     0 ≤ depositInventoryValue a s im uf ∧ depositInventoryValue a s im uf ≤ 80 := by
   unfold depositInventoryValue depositRampStart depositMaxValue
   grind

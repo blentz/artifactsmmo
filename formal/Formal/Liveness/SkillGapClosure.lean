@@ -202,7 +202,7 @@ theorem skill_gap_then_complete_reachable (s : State)
     (hCode : s.taskCode.isSome = true)
     (hTot : s.taskTotal > 0)
     (hLT : s.taskProgress < s.taskTotal)
-    (hSkillGap : s.projectedSkillXpDelta < s.targetSkillXp) :
+    (_hSkillGap : s.projectedSkillXpDelta < s.targetSkillXp) :
     ∃ (K_skill K_complete : Nat),
       (applyPlan
         ((List.replicate K_skill .gather) ++ (List.replicate K_complete .taskTrade))

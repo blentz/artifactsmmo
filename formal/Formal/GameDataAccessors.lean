@@ -68,8 +68,8 @@ theorem accessor_some_iff_present {α : Type} (m : Lookup α) (k : String) :
     (accessor m k).isSome ↔ present m k := by
   unfold accessor present
   cases h : m.find? (fun p => p.1 = k) with
-  | none => simp [h]
-  | some v => simp [h]
+  | none => simp
+  | some v => simp
 
 /-- accessor-none-iff-absent: contrapositive. Absent ⇒ accessor yields `none`
 (modelling the Python `KeyError` raise). -/
@@ -77,8 +77,8 @@ theorem accessor_none_iff_absent {α : Type} (m : Lookup α) (k : String) :
     accessor m k = none ↔ ¬ present m k := by
   unfold accessor present
   cases h : m.find? (fun p => p.1 = k) with
-  | none => simp [h]
-  | some v => simp [h]
+  | none => simp
+  | some v => simp
 
 /-- accessor-some-value: when present, the returned value is the snd of the
 first matching pair. -/

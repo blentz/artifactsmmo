@@ -127,7 +127,7 @@ theorem taskTrade_step_reaches_complete (s : State)
     > capable of reaching the TaskComplete outcome."
 -/
 theorem taskComplete_reachable (s : State)
-    (hCode : s.taskCode.isSome = true)
+    (_hCode : s.taskCode.isSome = true)
     (hTot : s.taskTotal > 0)
     (hLT : s.taskProgress < s.taskTotal) :
     (applyPlan (List.replicate (s.taskTotal - s.taskProgress) .taskTrade) s).taskLifecyclePhase = TaskLifecyclePhase.complete := by

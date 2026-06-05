@@ -343,7 +343,7 @@ noncomputable def applyFightN (n : Nat) (s : State) : State :=
 
 theorem applyFightN_succ_left (n : Nat) (s : State) :
     applyFightN (n+1) s = applyFightN n (applyActionKind .fight s) := by
-  simp [applyFightN, applyPlan, List.replicate_succ, List.foldl]
+  simp [applyFightN, applyPlan, List.replicate_succ]
 
 /-- Per-fight level monotonicity. -/
 theorem fight_level_monotone (s : State) :

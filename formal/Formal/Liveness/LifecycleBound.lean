@@ -47,7 +47,7 @@ def taskCancelFiresRefined (s : State) : Bool :=
     `.accepted`. Establishes that taskCancelFires_refined does not
     block the .accepted → .complete trajectory. -/
 theorem taskCancelFiresRefined_inactive_when_feasible (s : State)
-    (hAccepted : s.taskLifecyclePhase = .accepted)
+    (_hAccepted : s.taskLifecyclePhase = .accepted)
     (hFeas : s.taskFeasibleProjected = true) :
     taskCancelFiresRefined s = false := by
   show ((decide (s.taskLifecyclePhase = .accepted)
@@ -58,7 +58,7 @@ theorem taskCancelFiresRefined_inactive_when_feasible (s : State)
 
 /-- Step lemma: same for `.inProgress`. -/
 theorem taskCancelFiresRefined_inactive_when_feasible_inProgress (s : State)
-    (hInProgress : s.taskLifecyclePhase = .inProgress)
+    (_hInProgress : s.taskLifecyclePhase = .inProgress)
     (hFeas : s.taskFeasibleProjected = true) :
     taskCancelFiresRefined s = false := by
   show ((decide (s.taskLifecyclePhase = .accepted)

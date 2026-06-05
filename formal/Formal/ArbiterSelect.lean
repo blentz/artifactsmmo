@@ -378,7 +378,6 @@ theorem walk_returns_guard_when_plannable_guard_exists
       cases htr : tried with
       | none =>
         unfold walk
-        simp only [htr]
         -- skip = false || suppressed c.id || satisfied c.id
         by_cases hsk : (suppressed c.id || satisfied c.id) = true
         · simp only [Bool.false_or, hsk, if_true]
@@ -388,7 +387,7 @@ theorem walk_returns_guard_when_plannable_guard_exists
             cases hh : (suppressed c.id || satisfied c.id) with
             | false => rfl
             | true => exact absurd hh hsk
-          simp only [Bool.false_or, hskf, if_false]
+          simp only [Bool.false_or, hskf]
           by_cases hplc : plannable c.id = true
           · simp only [hplc, if_true]
             exact ⟨c, rfl, hch⟩
@@ -396,12 +395,11 @@ theorem walk_returns_guard_when_plannable_guard_exists
               cases hpl : plannable c.id with
               | false => rfl
               | true => exact absurd hpl hplc
-            simp only [hplc', if_false]
+            simp only [hplc']
             rw [htr] at hwr
             exact ⟨r, hwr, hrm⟩
       | some t =>
         unfold walk
-        simp only [htr]
         -- skip evaluates to: decide (t = c.id) || suppressed c.id || satisfied c.id
         by_cases htc : t = c.id
         · -- walk skips head (skip is true via the tried branch), recurse on rest
@@ -418,7 +416,7 @@ theorem walk_returns_guard_when_plannable_guard_exists
               cases hh : (suppressed c.id || satisfied c.id) with
               | false => rfl
               | true => exact absurd hh hsk
-            simp only [ht_dec, Bool.false_or, hskf, if_false]
+            simp only [ht_dec, Bool.false_or, hskf]
             by_cases hplc : plannable c.id = true
             · simp only [hplc, if_true]
               exact ⟨c, rfl, hch⟩
@@ -426,7 +424,7 @@ theorem walk_returns_guard_when_plannable_guard_exists
                 cases hpl : plannable c.id with
                 | false => rfl
                 | true => exact absurd hpl hplc
-              simp only [hplc', if_false]
+              simp only [hplc']
               rw [htr] at hwr
               exact ⟨r, hwr, hrm⟩
 

@@ -467,16 +467,16 @@ theorem pickSlotStep_claimSafe
   cases hfm : rec.candidates.filter
       (fun c => decide (1 ≤ effAvail c inv equip claimed)) with
   | nil =>
-    simp [hfm]
+    simp
     cases hcur : rec.current with
-    | none => simp [hcur]; exact h_safe
+    | none => simp; exact h_safe
     | some cur =>
       by_cases hav : 1 ≤ effAvail cur inv equip claimed
-      · simp [hcur, hav]
+      · simp [hav]
         exact claimSafe_claim claimed inv equip h_safe cur hav
-      · simp [hcur, hav]; exact h_safe
+      · simp [hav]; exact h_safe
   | cons f fs =>
-    simp [hfm]
+    simp
     have h_best_avail : 1 ≤ effAvail (argmaxByCode score f fs) inv equip claimed := by
       have h_mem : argmaxByCode score f fs ∈ f :: fs := argmaxByCode_mem score f fs
       have h_in_filter : argmaxByCode score f fs ∈ rec.candidates.filter
@@ -486,13 +486,13 @@ theorem pickSlotStep_claimSafe
       exact of_decide_eq_true hd
     cases hcur : rec.current with
     | none =>
-      simp [hcur]
+      simp
       exact claimSafe_claim claimed inv equip h_safe _ h_best_avail
     | some cur =>
       by_cases h_eq : cur = argmaxByCode score f fs
-      · simp [hcur, h_eq]
+      · simp [h_eq]
         exact claimSafe_claim claimed inv equip h_safe _ h_best_avail
-      · simp [hcur, h_eq]
+      · simp [h_eq]
         by_cases h_imp : score (argmaxByCode score f fs) > score cur
         · simp [h_imp]
           exact claimSafe_claim claimed inv equip h_safe _ h_best_avail
@@ -534,30 +534,30 @@ theorem pickSlotStep_demand_delta
   cases hfm : rec.candidates.filter
       (fun c => decide (1 ≤ effAvail c inv equip claimed)) with
   | nil =>
-    simp [hfm]
+    simp
     cases hcur : rec.current with
-    | none => simp [hcur]
+    | none => simp
     | some cur =>
       by_cases hav : 1 ≤ effAvail cur inv equip claimed
-      · simp [hcur, hav, claim]; by_cases hc : c = cur
+      · simp [hav, claim]; by_cases hc : c = cur
         · subst hc; simp
         · simp [hc, Ne.symm hc]
-      · simp [hcur, hav]
+      · simp [hav]
   | cons f fs =>
-    simp [hfm]
+    simp
     cases hcur : rec.current with
     | none =>
-      simp [hcur, claim]
+      simp [claim]
       by_cases hc : c = argmaxByCode score f fs
       · subst hc; simp
       · simp [hc, Ne.symm hc]
     | some cur =>
       by_cases h_eq : cur = argmaxByCode score f fs
-      · simp [hcur, h_eq, claim]
+      · simp [h_eq, claim]
         by_cases hc : c = argmaxByCode score f fs
         · subst hc; simp
         · simp [hc, Ne.symm hc]
-      · simp [hcur, h_eq]
+      · simp [h_eq]
         by_cases h_imp : score (argmaxByCode score f fs) > score cur
         · simp [h_imp, claim]
           by_cases hc : c = argmaxByCode score f fs
@@ -567,7 +567,7 @@ theorem pickSlotStep_demand_delta
           by_cases hav : 1 ≤ effAvail cur inv equip claimed
           · simp [hav, claim]
             by_cases hc : c = cur
-            · subst hc; simp [Ne.symm h_eq]
+            · subst hc; simp
             · simp [hc, Ne.symm hc]
           · simp [hav, claim]
             by_cases hc : c = argmaxByCode score f fs
@@ -597,10 +597,10 @@ theorem pickLoadoutAux_slotCount_le_claim_delta
         slotCount c (pickLoadoutAux inv equip rest p.2).1
           + (if p.1 = some c then 1 else 0) := by
       cases hv : p.1 with
-      | none => simp [slotCount_cons_none, hv]
+      | none => simp [slotCount_cons_none]
       | some d =>
         rw [slotCount_cons_some]
-        simp [hv]; by_cases hcd : c = d
+        simp; by_cases hcd : c = d
         · subst hcd; simp
         · simp [hcd, Ne.symm hcd]
     rw [h_count]

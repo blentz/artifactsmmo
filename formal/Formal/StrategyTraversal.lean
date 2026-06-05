@@ -1258,7 +1258,7 @@ theorem actStepShared_none_preserves_unvisited
         | nil =>
           simp only [hu] at hnone ⊢
           by_cases hc : g.kind q = Kind.obtain ∧ g.producible q = false
-          · simp only [hc, if_true] at hnone ⊢
+          · simp only [hc] at hnone ⊢
             intro hain
             rcases List.mem_cons.mp hain with hh | hh
             · exact hqa hh.symm
@@ -1348,7 +1348,7 @@ theorem actStepShared_sound (g : Graph) :
       | nil =>
         simp only [hu] at h
         by_cases hc : g.kind node = Kind.obtain ∧ g.producible node = false
-        · simp only [hc, if_true] at h; exact absurd h (by simp)
+        · simp only [hc] at h; exact absurd h (by simp)
         · simp only [hc, if_false] at h
           simp at h; subst h
           refine ⟨hnode, ?_, ?_⟩
