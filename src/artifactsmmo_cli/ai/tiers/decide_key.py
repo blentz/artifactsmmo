@@ -59,6 +59,10 @@ _GUARD_REPR: dict[GuardKind, str] = {
     GuardKind.BANK_UNLOCK: "UnlockBank",
     GuardKind.REACH_UNLOCK_LEVEL: "ReachUnlockLevel",
     GuardKind.DEPOSIT_FULL: "DepositInventory",
+    # CRAFT_RELIEF's runtime repr is CraftRelief({target_item}) — the
+    # target is state-dependent. The static prefix below satisfies
+    # exhaustiveness for callers that only want the goal family.
+    GuardKind.CRAFT_RELIEF: "CraftRelief",
 }
 
 _MEANS_REPR: dict[MeansKind, str] = {

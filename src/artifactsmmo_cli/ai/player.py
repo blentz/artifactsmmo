@@ -1158,6 +1158,14 @@ class GamePlayer:
                 observed = self.history.skill_max_xp_observations(skill)
                 if observed:
                     skill_xp_curves[skill] = SkillXpCurve(observed=observed)
+        # CRAFT_RELIEF guard needs the long-term gear / tool targets so it
+        # can score craftable-from-inventory candidates that advance the
+        # equipment chain (not just the active task item).
+        target_gear: frozenset[str] = frozenset()
+        target_tools: frozenset[str] = frozenset()
+        if self._objective is not None:
+            target_gear = frozenset(self._objective.target_gear.values())
+            target_tools = frozenset(self._objective.target_tools.values())
         return SelectionContext(
             bank_accessible=self._bank_accessible,
             bank_required_level=self._bank_required_level,
@@ -1166,6 +1174,8 @@ class GamePlayer:
             task_exchange_min_coins=self._task_exchange_min_coins,
             combat_monster=combat_monster,
             skill_xp_curves=skill_xp_curves,
+            target_gear=target_gear,
+            target_tools=target_tools,
         )
 
     def _log_action(self, action: Action, goal: Goal, plan: list[Action]) -> None:

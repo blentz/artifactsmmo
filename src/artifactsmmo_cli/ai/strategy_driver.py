@@ -11,7 +11,9 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
+from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
 from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
+from artifactsmmo_cli.ai.goals.craft_relief import CraftReliefGoal
 from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
 from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
@@ -77,8 +79,13 @@ def _task_recipe_inputs(task_code: str | None, game_data: GameData) -> frozenset
 # Flat map functions + StrategyArbiter
 # ---------------------------------------------------------------------------
 
-def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext) -> Goal:
-    """Map a GuardKind to a parameterized Goal instance."""
+def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
+              state: WorldState | None = None) -> Goal:
+    """Map a GuardKind to a parameterized Goal instance.
+
+    `state` is required for CRAFT_RELIEF (which inspects current inventory
+    to pick its craft target); optional otherwise to preserve legacy
+    callers / tests that constructed guards without a state."""
     if kind is GuardKind.HP_CRITICAL:
         return RestoreHPGoal()
     if kind is GuardKind.DISCARD_CRITICAL or kind is GuardKind.DISCARD_HIGH:
@@ -93,6 +100,21 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext) -> Go
         return ReachUnlockLevelGoal(target_level=ctx.bank_required_level)
     if kind is GuardKind.DEPOSIT_FULL:
         return DepositInventoryGoal(bank_accessible=ctx.bank_accessible, game_data=game_data)
+    if kind is GuardKind.CRAFT_RELIEF:
+        if state is None:
+            raise ValueError("CRAFT_RELIEF guard requires a state to pick a target")
+        cands = craft_relief_candidates(
+            state, game_data,
+            target_gear=ctx.target_gear, target_tools=ctx.target_tools,
+        )
+        if not cands:
+            raise ValueError("CRAFT_RELIEF mapped but no relief candidate available")
+        top = cands[0]
+        return CraftReliefGoal(
+            target_item=top.item_code,
+            initial_qty=state.inventory.get(top.item_code, 0),
+            batch=top.quantity,
+        )
     raise ValueError(f"Unknown GuardKind: {kind!r}")
 
 
@@ -266,7 +288,7 @@ class StrategyArbiter:
         # Build ordered candidates: guards, collect, step, discretionary.
         candidates: list[Candidate] = []
         for gk in guard_kinds:
-            g = map_guard(gk, game_data, ctx)
+            g = map_guard(gk, game_data, ctx, state)
             candidates.append(Candidate(goal=g, is_means=False, repr_=repr(g)))
         for mk in collect_kinds:
             g = map_means(mk, game_data, ctx, state)
