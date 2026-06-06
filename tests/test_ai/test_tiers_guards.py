@@ -21,6 +21,37 @@ def _ctx(**kw) -> SelectionContext:
     return SelectionContext(**base)
 
 
+def _combat_gd(monster_hp: int, monster_attack: dict[str, int]) -> GameData:
+    gd = GameData()
+    gd._monster_hp = {"mob": monster_hp}
+    gd._monster_attack = {"mob": monster_attack}
+    gd._monster_resistance = {"mob": {}}
+    gd._monster_critical_strike = {"mob": 0}
+    gd._monster_initiative = {"mob": 10}
+    gd._monster_level = {"mob": 1}
+    return gd
+
+
+def test_rest_for_combat_silent_when_already_winnable_at_current_hp():
+    """When the player can already win at CURRENT hp (predict_win True), there's
+    nothing to rest for — the guard stays inert even though hp < max_hp."""
+    # Strong player vs weak mob: wins even while hurt.
+    state = make_state(hp=40, max_hp=100, attack={"fire": 50}, initiative=90)
+    gd = _combat_gd(monster_hp=5, monster_attack={"fire": 1})
+    assert _fires(GuardKind.REST_FOR_COMBAT, state, gd, None,
+                  _ctx(combat_monster="mob")) is False
+
+
+def test_rest_for_combat_fires_when_winnable_only_at_max_hp():
+    """Hurt player loses now but would win at full hp -> the guard fires so the
+    bot rests before engaging."""
+    # At hp=12 the mob's hits kill the player first; at max_hp=100 it survives.
+    state = make_state(hp=12, max_hp=100, attack={"fire": 8}, initiative=5)
+    gd = _combat_gd(monster_hp=40, monster_attack={"fire": 10})
+    assert _fires(GuardKind.REST_FOR_COMBAT, state, gd, None,
+                  _ctx(combat_monster="mob")) is True
+
+
 def test_hp_critical_fires_below_quarter_and_outranks_all():
     state = make_state(hp=10, max_hp=100)            # 10% < 0.25
     guards = active_guards(state, GameData(), None, _ctx())

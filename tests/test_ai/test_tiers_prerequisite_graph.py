@@ -42,6 +42,14 @@ def test_obtain_already_owned_has_no_prereqs():
     assert prerequisites(ObtainItem("copper_dagger"), s, gd) == []
 
 
+def test_obtain_already_equipped_is_satisfied_leaf():
+    """An equippable already worn satisfies ObtainItem.is_satisfied, so the
+    prereq descent short-circuits to an empty list (line 45-46)."""
+    gd = _gd()
+    s = make_state(equipment={"weapon_slot": "copper_dagger"})
+    assert prerequisites(ObtainItem("copper_dagger"), s, gd) == []
+
+
 def test_obtain_gatherable_yields_gather_skill():
     gd = _gd()
     assert prerequisites(ObtainItem("copper_ore"), make_state(), gd) == [ReachSkillLevel("mining", 1)]
