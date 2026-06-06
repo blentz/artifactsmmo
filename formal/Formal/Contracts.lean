@@ -139,6 +139,34 @@ example : ∀ (recipeDemand : Int)
     overstock recipeDemand equippableCap consumableCap actionCap taskRemaining equipped qty = 0 :=
   @overstock_zero_of_not_over
 
+-- equipCap_zero_of_not_equippable: not equippable ⇒ equippableCap = 0
+example : ∀ (isDominated : Bool),
+    equipCapValue false isDominated = 0 :=
+  @equipCap_zero_of_not_equippable
+-- equipCap_zero_of_dominated: dominated ⇒ equippableCap = 0 (regardless of equippable flag)
+example : ∀ (isEquippable : Bool),
+    equipCapValue isEquippable true = 0 :=
+  @equipCap_zero_of_dominated
+-- equipCap_eq_keep_of_undominated_equippable: equippable AND not dominated ⇒ equippableCap = EQUIPPABLE_KEEP
+example : equipCapValue true false = equippableKeep :=
+  @equipCap_eq_keep_of_undominated_equippable
+-- consumableCap_zero_of_not_healing: hp_restore = 0 ⇒ consumableCap = 0
+example : consumableCapValue 0 = 0 :=
+  @consumableCap_zero_of_not_healing
+-- consumableCap_eq_keep_of_healing: hp_restore > 0 ⇒ consumableCap = CONSUMABLE_KEEP
+example : ∀ (hpRestore : Int), hpRestore > 0 →
+    consumableCapValue hpRestore = consumableKeep :=
+  @consumableCap_eq_keep_of_healing
+-- equipCapFromPeers_dominated: dominance-detected peers zero the equippable cap
+example : ∀ (isEquippable : Bool) (peers : List Peer) (slotCount : Int),
+    isDominatedBy peers slotCount = true →
+    equipCapFromPeers isEquippable peers slotCount = 0 :=
+  @equipCapFromPeers_dominated
+-- isDominatedBy_nil_of_positive_slot: empty peer list never dominates (positive slots)
+example : ∀ (slotCount : Int), slotCount ≥ 1 →
+    isDominatedBy [] slotCount = false :=
+  @isDominatedBy_nil_of_positive_slot
+
 /-! ### PredictWin role contracts. -/
 
 -- predict_win_eq_sim: closed-form verdict = operational fight-sim verdict

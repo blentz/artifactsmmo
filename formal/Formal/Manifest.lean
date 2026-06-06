@@ -15,13 +15,21 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @batch_fits          -- task-branch ∧ usable ≥ mats ⇒ result*mats ≤ usable
 #check @non_task_one        -- ¬task-branch ⇒ result = 1
 -- InventoryCaps required roles:
-#check @cap_eq_max_of_five      -- ¬equipped ⇒ cap = max-of-four
-#check @cap_eq_max_one_of_five  -- equipped ⇒ cap = max(1, max-of-four)
+#check @cap_eq_max_of_five      -- ¬equipped ⇒ cap = max-of-five
+#check @cap_eq_max_one_of_five  -- equipped ⇒ cap = max(1, max-of-five)
 #check @equipped_ge_one         -- equipped ⇒ 1 ≤ cap
 #check @recipe_cap_ge_safety    -- demand>0 ⇒ recipeCap ≥ SAFETY_FLOOR
 #check @overstock_exact         -- overstock = qty-cap iff over, else 0
 #check @overstock_pos_of_over   -- over ⇒ excess > 0
 #check @overstock_zero_of_not_over -- ¬over ⇒ excess = 0
+-- InventoryCaps predicate-level roles (component-value derivation):
+#check @equipCap_zero_of_not_equippable -- ¬equippable ⇒ equippableCap = 0
+#check @equipCap_zero_of_dominated      -- dominated ⇒ equippableCap = 0
+#check @equipCap_eq_keep_of_undominated_equippable -- equippable ∧ ¬dominated ⇒ equippableCap = EQUIPPABLE_KEEP
+#check @consumableCap_zero_of_not_healing -- hp_restore = 0 ⇒ consumableCap = 0
+#check @consumableCap_eq_keep_of_healing  -- hp_restore > 0 ⇒ consumableCap = CONSUMABLE_KEEP
+#check @equipCapFromPeers_dominated       -- dominator-owned ≥ slotCount ⇒ equippableCap = 0
+#check @isDominatedBy_nil_of_positive_slot -- empty peer list, slot ≥ 1 ⇒ ¬dominated
 -- PredictWin required roles:
 #check @predict_win_eq_sim          -- closed-form verdict = operational fight-sim
 #check @maxturns_sound              -- rounds_to_kill > MAX_TURNS ⇒ ¬win

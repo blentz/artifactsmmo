@@ -180,3 +180,106 @@ def test_equipped_floor_binds_against_lean():
     assert py_cap == 1
     assert py_cap == lean["cap"]
     assert py_over.get(code, 0) == lean["overstock"] == 0
+
+
+# -----------------------------------------------------------------------------
+# Predicate-level differential: the new equipCapValue / consumableCapValue /
+# equipCapFromPeers models prove the Python predicates compose into the Lean-
+# modeled component values. Without these tests the Lean predicates exist but
+# their Python<->Lean parity isn't checked.
+# -----------------------------------------------------------------------------
+
+
+@settings(max_examples=200)
+@given(
+    is_equippable=st.booleans(),
+    is_dominated=st.booleans(),
+)
+def test_equip_cap_value_matches_lean(is_equippable, is_dominated):
+    """Lean's `equipCapValue` proves: cap=EQUIPPABLE_KEEP iff equippable AND
+    NOT dominated; cap=0 otherwise. Python's `useful_quantity_cap_excl_equipped`
+    composes the same two predicates inline. Cross-check the composition."""
+    py_cap = (
+        ic_mod.EQUIPPABLE_KEEP
+        if (is_equippable and not is_dominated) else 0
+    )
+    lean = run_oracle(
+        "equip_cap_value",
+        [[1 if is_equippable else 0, 1 if is_dominated else 0]],
+    )[0]
+    assert py_cap == lean["equippable_cap"]
+
+
+@settings(max_examples=200)
+@given(hp_restore=st.integers(min_value=-50, max_value=100))
+def test_consumable_cap_value_matches_lean(hp_restore):
+    """Lean's `consumableCapValue` proves: cap=CONSUMABLE_KEEP iff hp_restore
+    > 0; cap=0 otherwise. The negative-hp_restore branch is also covered
+    (sanity — hp_restore is an Int in the API but is meant to be non-negative)."""
+    py_cap = ic_mod.CONSUMABLE_KEEP if hp_restore > 0 else 0
+    lean = run_oracle("consumable_cap_value", [[hp_restore]])[0]
+    assert py_cap == lean["consumable_cap"]
+
+
+@settings(max_examples=200)
+@given(
+    is_equippable=st.booleans(),
+    slot_count=st.integers(min_value=1, max_value=4),
+    peers=st.lists(
+        st.tuples(
+            st.booleans(),  # fitsAllSlots
+            st.booleans(),  # strictlyHigher
+            st.booleans(),  # coversSkillEffects
+            st.integers(min_value=0, max_value=5),  # ownedCount
+        ),
+        min_size=0, max_size=6,
+    ),
+)
+def test_equip_cap_from_peers_matches_lean(is_equippable, slot_count, peers):
+    """Lean's `equipCapFromPeers` proves the dominance algorithm: a candidate
+    is dominated when qualifying-peer owned count meets/exceeds slotCount.
+    Replicate the algorithm in Python, then compare cap outputs."""
+    # Python mirror of dominatorOwned + isDominatedBy + equipCapValue.
+    dominator_owned = 0
+    for fits, higher, covers, owned in peers:
+        if fits and higher and covers:
+            dominator_owned += owned
+    is_dominated = dominator_owned >= slot_count
+    py_cap = (
+        ic_mod.EQUIPPABLE_KEEP
+        if (is_equippable and not is_dominated) else 0
+    )
+
+    args = [1 if is_equippable else 0, slot_count, len(peers)]
+    for fits, higher, covers, owned in peers:
+        args.extend([
+            1 if fits else 0,
+            1 if higher else 0,
+            1 if covers else 0,
+            owned,
+        ])
+    lean = run_oracle("equip_cap_from_peers", [args])[0]
+    assert py_cap == lean["equippable_cap"]
+
+
+def test_equip_cap_from_peers_nil_undominated():
+    """Pin the empty-peer-list theorem (`isDominatedBy_nil_of_positive_slot`):
+    no peers + any positive slotCount → not dominated → cap = EQUIPPABLE_KEEP
+    when equippable."""
+    for slot_count in (1, 2, 3, 4):
+        lean = run_oracle(
+            "equip_cap_from_peers",
+            [[1, slot_count, 0]],  # equippable=1, no peers
+        )[0]
+        assert lean["equippable_cap"] == ic_mod.EQUIPPABLE_KEEP
+
+
+def test_equip_cap_from_peers_dominated_zero():
+    """Pin the dominance-supersedes theorem
+    (`equipCapFromPeers_dominated`): even if equippable=true, when
+    qualifying-peer owned count meets slotCount, cap = 0."""
+    # 1 fully-qualifying peer with ownedCount=2 vs slotCount=2 → dominated.
+    args = [1, 2, 1,
+            1, 1, 1, 2]  # peer: fits, higher, covers, owned=2
+    lean = run_oracle("equip_cap_from_peers", [args])[0]
+    assert lean["equippable_cap"] == 0

@@ -79,6 +79,37 @@ def runPredictWin (g : Nat → Int) : Json :=
 /-- Read an Int field (defaulting to 0) from a JSON array of Ints. -/
 def intArg (xs : Array Json) (i : Nat) : Int := (xs[i]!.getInt?).toOption.getD 0
 
+/-- Evaluate the `equipCapValue` predicate-level model in Lean.
+    args layout (2 ints): equippable(0/1), dominated(0/1).
+    Returns the Lean-computed `equippableCap` component. -/
+def runEquipCapValue (isEquippable isDominated : Int) : Json :=
+  Json.mkObj [("equippable_cap",
+    Json.num (equipCapValue (isEquippable != 0) (isDominated != 0)))]
+
+/-- Evaluate the `consumableCapValue` predicate-level model in Lean.
+    args layout (1 int): hpRestore. Returns the Lean-computed
+    `consumableCap` component. -/
+def runConsumableCapValue (hpRestore : Int) : Json :=
+  Json.mkObj [("consumable_cap", Json.num (consumableCapValue hpRestore))]
+
+/-- Evaluate the `equipCapFromPeers` (dominance + slot gate) model in Lean.
+    args layout: equippable(0/1), slotCount, peer_count, then for each
+    peer: fitsAllSlots(0/1), strictlyHigher(0/1), coversSkillEffects(0/1),
+    ownedCount. Returns the Lean-computed `equippableCap` after the
+    dominance check. -/
+def runEquipCapFromPeers (args : Array Json) : Json :=
+  let isEquippable := intArg args 0 != 0
+  let slotCount := intArg args 1
+  let peerCount := (intArg args 2).toNat
+  let peers : List Peer := (List.range peerCount).map fun i =>
+    let base := 3 + i * 4
+    { fitsAllSlots := intArg args base != 0
+      strictlyHigher := intArg args (base + 1) != 0
+      coversSkillEffects := intArg args (base + 2) != 0
+      ownedCount := intArg args (base + 3) }
+  Json.mkObj [("equippable_cap",
+    Json.num (equipCapFromPeers isEquippable peers slotCount))]
+
 /-- Group a flat Int list into `SlotData` quadruples
 (newCode, oldCode, newC, oldC). Trailing partials are dropped. -/
 def toSlots : List Int → List SlotData
@@ -1234,6 +1265,17 @@ def runOne (item : Json) : Json :=
     runInventoryCaps (intArg args 0) (intArg args 1) (intArg args 2)
       (intArg args 3) (intArg args 4) (intArg args 5) (intArg args 6)
       (intArg args 7 != 0) (intArg args 8)
+  else if kind == "equip_cap_value" then
+    -- args: [equippable(0/1), dominated(0/1)]
+    runEquipCapValue (intArg args 0) (intArg args 1)
+  else if kind == "consumable_cap_value" then
+    -- args: [hpRestore]
+    runConsumableCapValue (intArg args 0)
+  else if kind == "equip_cap_from_peers" then
+    -- args: [equippable(0/1), slotCount, peerCount,
+    --        for each peer: fitsAllSlots(0/1), strictlyHigher(0/1),
+    --        coversSkillEffects(0/1), ownedCount]
+    runEquipCapFromPeers args
   else if kind == "predict_win" then
     runPredictWin (fun i => intArg args i)
   else if kind == "loadout_projection" then
