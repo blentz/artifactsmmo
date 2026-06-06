@@ -18,6 +18,7 @@ import Formal.FallbackChain
 import Formal.AcceptTaskGate
 import Formal.TaskTradeReadyPriority
 import Formal.WithdrawSetExpansion
+import Formal.RecycleProtection
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
@@ -681,3 +682,13 @@ open Formal.PriorityBand
 #check @Formal.WithdrawSetExpansion.perCraftQty_none_of_no_recipe
 #check @Formal.WithdrawSetExpansion.perCraftQty_some_when_in_recipe
 #check @Formal.WithdrawSetExpansion.trace_copper_chain_per_craft
+
+-- RecycleProtection (target_gear / target_tools exclusion proof):
+#check @Formal.RecycleProtection.protected_contains_target_gear
+#check @Formal.RecycleProtection.protected_contains_target_tools
+#check @Formal.RecycleProtection.protected_excluded_from_recycle
+#check @Formal.RecycleProtection.unprotected_craftable_in_recycle
+#check @Formal.RecycleProtection.recycle_subset_when_protection_grows
+#check @Formal.RecycleProtection.trace_copper_dagger_excluded
+#check @Formal.RecycleProtection.trace_copper_axe_excluded
+#check @Formal.RecycleProtection.trace_off_target_kept
