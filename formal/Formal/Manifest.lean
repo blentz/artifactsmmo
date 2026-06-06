@@ -1,5 +1,6 @@
 import Formal
 import Formal.OwnedCount
+import Formal.GearPolicy
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
@@ -513,3 +514,11 @@ open Formal.PriorityBand
 #check @Formal.GoalSystem.sellInventory_cold_satisfied_zero
 #check @Formal.GoalSystem.sellInventory_cold_inv_max_zero
 #check @Formal.GoalSystem.sellInventory_cold_not_sellable_zero
+
+
+-- GearPolicy (Phase G1 of composition-correctness plan):
+#check @Formal.GearPolicy.armor_score_nonneg                         -- AScore ≥ 0 under nonneg data
+#check @Formal.GearPolicy.armor_weakly_dominates_empty_slot          -- any armor ≥ empty baseline
+#check @Formal.GearPolicy.armor_strictly_dominates_empty_slot        -- nontrivial armor > empty
+#check @Formal.GearPolicy.armor_score_mono_in_resistance             -- AScore monotone in resistance
+#check @Formal.GearPolicy.pickSlot_empty_returns_some                -- empty slot + candidates ⇒ pick fills
