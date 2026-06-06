@@ -10,6 +10,12 @@ def test_wait_action_apply_returns_state_unchanged():
     assert WaitAction().apply(state, None).hp == 42
 
 
+def test_wait_action_always_applicable():
+    """WaitAction is the always-firing last resort, so is_applicable is
+    unconditionally True (line 32-33)."""
+    assert WaitAction().is_applicable(make_state(), None) is True
+
+
 def test_wait_goal_value_constant():
     g = WaitGoal()
     state = make_state()

@@ -199,6 +199,17 @@ class TestOptimizeLoadoutAction:
         action = OptimizeLoadoutAction(target_monster_code="yellow_slime")
         assert action.is_applicable(state, gd) is False
 
+    def test_not_applicable_when_no_target_monster(self):
+        """Empty target_monster_code is the documented no-target sentinel: no
+        swap is computed and the action is inert (line 42-43)."""
+        gd = _gd_with_combat_items()
+        state = make_state(
+            level=1, inventory={"copper_dagger": 1},
+            equipment={"weapon_slot": "fishing_net"},
+        )
+        action = OptimizeLoadoutAction(target_monster_code="")
+        assert action.is_applicable(state, gd) is False
+
     def test_apply_updates_equipment_and_inventory(self):
         gd = _gd_with_combat_items()
         state = make_state(

@@ -588,6 +588,15 @@ class TestEquipAction:
         assert new_state.equipment["weapon_slot"] == "copper_dagger"
         assert new_state.inventory.get("copper_dagger", 0) == 0
 
+    def test_not_applicable_when_slot_mismatches_item_type(self):
+        """A weapon code targeted at a helmet slot is non-executable on the
+        server, so is_applicable rejects it (slot/type gate, line 63-64)."""
+        action = EquipAction(code="copper_dagger", slot="helmet_slot")
+        stats = ItemStats(code="copper_dagger", level=1, type_="weapon")
+        state = make_state(inventory={"copper_dagger": 1}, level=5)
+        gd = make_game_data(item_stats={"copper_dagger": stats})
+        assert action.is_applicable(state, gd) is False
+
 
 def _consumable_stats(code: str = "cooked_chicken", hp_restore: int = 80) -> dict[str, ItemStats]:
     return {code: ItemStats(code=code, level=1, type_="consumable", hp_restore=hp_restore)}
