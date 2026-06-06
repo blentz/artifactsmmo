@@ -77,6 +77,8 @@ markers = [
 [tool.coverage.run]
 branch = false
 source = ["src/artifactsmmo_cli"]
+# scripts/ are live-I/O wrappers (need API/token); exercised manually, not by the test suite.
+omit = ["scripts/*"]
 
 [tool.uv.sources]
 artifactsmmo-api-client = { path = "artifactsmmo-api-client", editable = true }

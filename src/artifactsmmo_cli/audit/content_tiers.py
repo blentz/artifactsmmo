@@ -21,6 +21,26 @@ def _band_index(level: int, band: int) -> int:
     return level // band
 
 
+def render_markdown(tiers: list[ContentTier]) -> str:
+    """Render tiers as a committed markdown table (the journey axis artifact)."""
+    lines = [
+        "# Content-unlock tiers (generated — do not hand-edit)",
+        "",
+        "Journey axis for the behavioral-completeness matrix. Regenerate with",
+        "`uv run python scripts/gen_content_tiers.py`.",
+        "",
+        "| Tier | Levels | Items | Monsters | Resources |",
+        "|---|---|---|---|---|",
+    ]
+    for t in tiers:
+        lines.append(
+            f"| {t.name} | {t.min_level}-{t.max_level} | "
+            f"{', '.join(t.items) or '—'} | {', '.join(t.monsters) or '—'} | "
+            f"{', '.join(t.resources) or '—'} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
 def derive_content_tiers(
     items: dict[str, int],
     monsters: dict[str, int],
