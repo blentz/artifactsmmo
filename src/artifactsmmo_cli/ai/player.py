@@ -50,6 +50,7 @@ from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blocke
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, GoalAttempt, GoalRankEntry
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_latch import GearLatch
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.projections import PathPlan, cheapest_path_to_level
@@ -137,6 +138,13 @@ class GamePlayer:
         self.history = history
         self._last_path_plan: PathPlan | None = None
         self._cycle_observer = cycle_observer
+        # Event-driven gear prioritization: the latch (set on level-up or a
+        # predicted-winnable fight loss, cleared when gear is level-appropriate)
+        # is updated once per cycle BEFORE selection and read into the
+        # SelectionContext to fire the GEAR_REVIEW guard.
+        self._gear_latch = GearLatch()
+        self._prev_level: int | None = None
+        self._last_outcome: str | None = None
 
     def set_cycle_observer(self, observer: "Callable[[CycleSnapshot], None] | None") -> None:
         """Allow callers (e.g. TUI host) to subscribe after construction."""
@@ -256,6 +264,15 @@ class GamePlayer:
                 game_data = self.game_data
 
                 self._maybe_retry_bank()
+
+                # Update the gear-review latch BEFORE selection so the
+                # GEAR_REVIEW guard sees this cycle's state. prev is the
+                # character level from the previous cycle (or the current level
+                # on the very first cycle, so no spurious level-up trigger).
+                prev = self._prev_level if self._prev_level is not None else state.level
+                self._gear_latch.update(prev, state, self._last_outcome, game_data)
+                self._prev_level = state.level
+                self._arbiter.set_cycle(self._cycle_counter)
 
                 assert self._strategy is not None
                 combat_monster = self._winnable_farm_target()
@@ -402,6 +419,11 @@ class GamePlayer:
                     plan_len=len(plan),
                     cycles_to_satisfy=cycles_to_satisfy,
                 )
+                # Record the action outcome so the next cycle's gear-latch
+                # update can detect a fight loss ("error:fight_lost"). Only set
+                # on the action-execution path — no_plan cycles leave the
+                # previous value intact (they continue before reaching here).
+                self._last_outcome = outcome
                 self.state = new_state
 
                 # After action.execute (or dry_run apply), record the cycle
@@ -1291,6 +1313,7 @@ class GamePlayer:
             skill_xp_curves=skill_xp_curves,
             target_gear=target_gear,
             target_tools=target_tools,
+            gear_review_active=self._gear_latch.active,
         )
 
     def _log_action(self, action: Action, goal: Goal, plan: list[Action]) -> None:
