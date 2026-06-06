@@ -49,6 +49,50 @@ def weapon_score(weapon: ItemStats, monster_resistance: dict[str, int]) -> int:
     return 2 * weapon_score_raw(weapon, monster_resistance) + non_tool_bonus
 
 
+def gather_score(item: ItemStats, skill: str) -> int:
+    """Gather-purpose surrogate: how much this item boosts the named skill.
+
+    Returns the (signed) ``skill_effects[skill]`` entry; MORE NEGATIVE is
+    BETTER (the game encodes a -10 entry as "10% faster cooldown for this
+    skill"). BIT-EQUIVALENT to Lean ``PurposeRouting.gatherScore``.
+
+    Spec from Formal/PurposeRouting.lean: the gather picker minimizes this
+    score over feasible candidates. A non-gathering item (no skill_effects
+    entry for `skill`) returns 0 — every gather tool beats it.
+    """
+    return item.skill_effects.get(skill, 0)
+
+
+def pick_gather_loadout(
+    skill: str, state: WorldState, game_data: GameData,
+) -> dict[str, str | None]:
+    """Best {slot: code | None} loadout for the gather skill `skill`.
+
+    Mirrors `pick_loadout` but uses `gather_score` (argmin) for the
+    weapon slot — pick the tool with the most-negative skill_effect on
+    `skill`. Armor slots fall through to the existing combat picker
+    against an empty monster_attack (no monster). Strict-improvement
+    semantics are preserved per slot (no-downgrade, ties keep current).
+
+    Spec: Formal/PurposeRouting.lean's pickGatherSlot_score_optimal —
+    the chosen item minimizes gatherScore over feasible candidates.
+    """
+    result: dict[str, str | None] = dict(state.equipment)
+    candidates = _candidates_for_slot("weapon_slot", state, game_data)
+    if not candidates:
+        return result
+    # argmin of gather_score across owned weapon-slot candidates.
+    best = min(candidates, key=lambda s: gather_score(s, skill))
+    current_code = state.equipment.get("weapon_slot")
+    current_stats = game_data.item_stats(current_code) if current_code else None
+    if current_stats is None:
+        result["weapon_slot"] = best.code
+        return result
+    if gather_score(best, skill) < gather_score(current_stats, skill):
+        result["weapon_slot"] = best.code
+    return result
+
+
 def armor_score(armor: ItemStats, monster_attack: dict[str, int]) -> int:
     """Estimated damage REDUCED per hit by an armor piece. Higher = better defense.
 

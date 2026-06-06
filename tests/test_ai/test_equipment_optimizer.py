@@ -91,6 +91,61 @@ class TestWeaponScore:
         assert weapon_score(weapon_5atk, zero_res) - weapon_score(tool_5atk, zero_res) == 1
 
 
+def _equipment_with(weapon_slot: str | None) -> dict[str, str | None]:
+    return {
+        "weapon_slot": weapon_slot, "rune_slot": None, "shield_slot": None,
+        "helmet_slot": None, "body_armor_slot": None, "leg_armor_slot": None,
+        "boots_slot": None, "ring1_slot": None, "ring2_slot": None,
+        "amulet_slot": None, "artifact1_slot": None, "artifact2_slot": None,
+        "artifact3_slot": None, "utility1_slot": None, "utility2_slot": None,
+        "bag_slot": None,
+    }
+
+
+class TestGatherScore:
+    """Specs from Formal/PurposeRouting.lean — gather picker = argmin gatherScore."""
+
+    def test_picks_skill_specific_tool_when_owned(self):
+        from artifactsmmo_cli.ai.equipment.scoring import pick_gather_loadout
+        gd = _gd_with_combat_items()
+        state = make_state(
+            level=1, inventory={"copper_axe": 1},
+            equipment=_equipment_with(weapon_slot="wooden_stick"),
+        )
+        loadout = pick_gather_loadout("woodcutting", state, gd)
+        assert loadout["weapon_slot"] == "copper_axe"
+
+    def test_keeps_current_when_no_gather_tool_owned(self):
+        from artifactsmmo_cli.ai.equipment.scoring import pick_gather_loadout
+        gd = _gd_with_combat_items()
+        state = make_state(
+            level=1, inventory={},
+            equipment=_equipment_with(weapon_slot="wooden_stick"),
+        )
+        loadout = pick_gather_loadout("fishing", state, gd)
+        assert loadout["weapon_slot"] == "wooden_stick"
+
+    def test_argmin_picks_most_negative_skill_effect(self):
+        from artifactsmmo_cli.ai.equipment.scoring import gather_score, pick_gather_loadout
+        gd = GameData()
+        gd._item_stats = {
+            "weak_axe": ItemStats(code="weak_axe", level=1, type_="weapon",
+                                  subtype="tool", attack={"earth": 1},
+                                  skill_effects={"woodcutting": -3}),
+            "strong_axe": ItemStats(code="strong_axe", level=1, type_="weapon",
+                                    subtype="tool", attack={"earth": 1},
+                                    skill_effects={"woodcutting": -10}),
+        }
+        assert gather_score(gd._item_stats["weak_axe"], "woodcutting") == -3
+        assert gather_score(gd._item_stats["strong_axe"], "woodcutting") == -10
+        state = make_state(
+            level=1, inventory={"weak_axe": 1, "strong_axe": 1},
+            equipment=_equipment_with(weapon_slot=None),
+        )
+        loadout = pick_gather_loadout("woodcutting", state, gd)
+        assert loadout["weapon_slot"] == "strong_axe"
+
+
 class TestArmorScore:
     def test_armor_resisting_monster_primary_wins(self):
         gd = _gd_with_combat_items()
