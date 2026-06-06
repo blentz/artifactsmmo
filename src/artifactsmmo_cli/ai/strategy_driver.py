@@ -182,23 +182,29 @@ def objective_step_goal(
         if ctx.combat_monster is None:
             return None
         # Items-task stand-down was designed for the LONG-HAUL
-        # ReachCharLevel(50) root: don't preempt PURSUE_TASK with a
-        # 47-level grind when the task is paying out task XP soon. But
-        # items tasks chain indefinitely (one finishes, another starts),
-        # so the unconditional stand-down meant the bot NEVER fought —
-        # trace 2026-06-03/05 showed zero combat across 3300+ cycles
-        # and Robby permanently parked at level 3.
+        # ReachCharLevel(50) root: don't preempt PURSUE_TASK's
+        # gold / tasks_coin / skill-XP / gear-progression payout
+        # with a 47-level combat grind. Items tasks DO NOT award
+        # character XP — combat is the only source (verified in
+        # trace: all 1229 char-XP gain events attributed to
+        # `Fight(...)`, zero to `CompleteTask` or `TaskTrade`). But
+        # items tasks chain indefinitely (one finishes, another
+        # starts), so the unconditional stand-down meant the bot
+        # NEVER fought — trace 2026-06-03/05 showed zero combat
+        # across 3300+ cycles and Robby permanently parked at
+        # level 3.
         #
-        # Bootstrap roots (`ReachCharLevel(state.level + horizon)`, see
-        # tiers.prerequisite_graph._CHAR_LEVEL_BOOTSTRAP_HORIZON) are
-        # the critical-path nudge that breaks this. A small-gap step
-        # (target - current <= horizon * 2 = 4) is the bootstrap path:
-        # let it grind through even when an items task is active. The
+        # Bootstrap roots (`ReachCharLevel(state.level + horizon)`,
+        # see tiers.prerequisite_graph._CHAR_LEVEL_BOOTSTRAP_HORIZON)
+        # are the critical-path nudge that breaks this. A small-gap
+        # step (target - current <= 4) is the bootstrap path: let it
+        # grind through even when an items task is active. The
         # bootstrap target advances with each level-up so the bot is
         # never grinding more than `horizon` levels at a time. The
         # long-haul level-50 step still stands down — its grind would
         # be 40+ unbroken combat cycles, which is the wrong trade for
-        # an in-progress task.
+        # an in-progress items task that's paying out gold + skill XP
+        # + task rewards every batch.
         bootstrap_gap = step.level - state.level
         if bootstrap_gap > 4 and (
                 state.task_type == "items" and state.task_code
