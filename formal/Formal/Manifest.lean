@@ -707,3 +707,10 @@ open Formal.PriorityBand
 #check @Formal.TieredSelection.escalation_iff_no_cheap
 #check @Formal.TieredSelection.wait_only_when_no_full
 #check @Formal.TieredSelection.memo_skip_sound
+
+-- GearLatch (gear-review latch state machine: set on level-up / fight-loss,
+-- clear when no craftable upgrade remains, hold otherwise):
+#check @Formal.GearLatch.set_on_levelup
+#check @Formal.GearLatch.set_on_loss
+#check @Formal.GearLatch.clear_iff_no_upgrade
+#check @Formal.GearLatch.monotone_until_clear
