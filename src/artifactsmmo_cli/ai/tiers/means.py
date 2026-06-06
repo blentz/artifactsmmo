@@ -102,7 +102,37 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
                 and task_decision(state, game_data, history) == PURSUE)
 
     if kind is MeansKind.ACCEPT_TASK:
-        return not state.task_code
+        if state.task_code:
+            return False
+        # Defer AcceptTask whenever the player has GEAR-CHAIN work to do.
+        # An immediate AcceptTask after TaskComplete re-locks the cycle
+        # into another items task before UpgradeEquipment can fire,
+        # leaving target gear unworn for hundreds of cycles. Two
+        # deferral conditions:
+        #   (a) target gear is OWNED but UNEQUIPPED → UpgradeEquipment
+        #       should win first (one-action equip);
+        #   (b) target gear is CRAFTABLE under current skill levels →
+        #       the fallback walk should drive the gather/craft chain
+        #       rather than accept another task that competes for the
+        #       same materials.
+        # Both conditions are about the AI's own gear pipeline, not the
+        # task economy — accepting a task while gear is in progress
+        # creates contention for materials (copper_bar) that the gear
+        # chain needs. Trace 2026-06-06 12:28: 2 copper_daggers crafted
+        # via CraftRelief never equipped; full armor set never started
+        # despite 2300+ gold and crafting skills at level 6+.
+        equipped = {c for c in state.equipment.values() if c is not None}
+        for code in ctx.target_gear:
+            if code in equipped:
+                continue
+            if state.inventory.get(code, 0) > 0:
+                return False  # owned + unequipped → defer for UpgradeEquipment
+            stats = game_data.item_stats(code)
+            if stats is None or not stats.crafting_skill:
+                continue
+            if state.skills.get(stats.crafting_skill, 1) >= stats.crafting_level:
+                return False  # craftable now → defer for gear chain
+        return True
 
     if kind is MeansKind.TASK_EXCHANGE:
         return _tasks_coin_total(state) >= ctx.task_exchange_min_coins
