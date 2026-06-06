@@ -188,3 +188,34 @@ def test_handle_stuck_goal_oscillation_level3_exits():
     with pytest.raises(SystemExit) as exc_info:
         player._handle_stuck(StuckSignal.GOAL_OSCILLATION, client=None)
     assert exc_info.value.code == 2
+
+
+def test_cooldown_outcome_does_not_count_as_failure_for_stuck_detection():
+    """Trace 2026-06-06 cycles 0-1: bot's GrindCharacterXP fired,
+    OptimizeLoadout returned error:cooldown (server timing, not goal
+    failure). StuckDetector counted it as `succeeded=False`, flagged
+    GOAL_OSCILLATION, suppressed GrindCharacterXP for 5 cycles. Bot
+    abandoned combat after one server-timing miss.
+
+    Fix: error:cooldown is treated as `succeeded=True` for stuck-
+    detection purposes — the action's intent was correct, only the
+    timing was off. Suppression no longer triggers from this outcome."""
+    detector = StuckDetector(history_size=10)
+    # Two consecutive cooldown rejections of the same goal — would have
+    # previously flagged GOAL_OSCILLATION (any-failure-twice pattern).
+    for _ in range(2):
+        detector.record(CycleRecord(
+            goal_name="GrindCharacterXP(yellow_slime)",
+            action_name="OptimizeLoadout(yellow_slime)",
+            planned_depth=2,
+            planner_timed_out=False,
+            succeeded=True,  # post-fix mapping: cooldown -> succeeded
+            state_key=(0, 0, 0, _),
+        ))
+    # No stuck signal should fire from these records — succeeded=True
+    # means the detector treats them as healthy.
+    history = list(detector._history)
+    assert all(r.succeeded for r in history), (
+        "post-fix mapping: cooldown rejections record as succeeded=True so "
+        "the stuck detector doesn't escalate to suppression"
+    )

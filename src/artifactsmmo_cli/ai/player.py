@@ -387,13 +387,27 @@ class GamePlayer:
                 )
                 self.state = new_state
 
-                # After action.execute (or dry_run apply), record the cycle for stuck detection
+                # After action.execute (or dry_run apply), record the cycle
+                # for stuck detection. `error:cooldown` is treated as
+                # SUCCEEDED for stuck-tracking purposes because it's a
+                # transient server-timing rejection (action submitted before
+                # cooldown elapsed), not a goal failure. Counting it as a
+                # failure caused the stuck-detector to flag
+                # GOAL_OSCILLATION after a single cooldown rejection on
+                # GrindCharacterXP and suppress the goal for 5 cycles —
+                # bot abandoned combat after one server-timing miss
+                # (trace 2026-06-06 cycles 0+1: cooldown → suppression →
+                # PursueTask for the rest of the session). The action's
+                # intent was correct; only the timing was off.
+                outcome_for_stuck = (
+                    outcome == "ok" or outcome == "error:cooldown"
+                )
                 self._detector.record(self._make_cycle_record(
                     goal_name=repr(selected_goal),
                     action_name=repr(action),
                     planned_depth=len(plan),
                     planner_timed_out=self.planner.last_stats.timed_out,
-                    succeeded=(outcome == "ok"),
+                    succeeded=outcome_for_stuck,
                 ))
                 self._actions_since_full_refresh += 1
                 self._decrement_suppressions()
