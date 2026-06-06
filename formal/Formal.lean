@@ -40,6 +40,26 @@ import Formal.WinnableCascade
 import Formal.CheapestPath
 import Formal.GoalValueBands
 import Formal.GoalSystem
+-- De-Mathlib'd safety modules (core-only; quarantine compliant).
+import Formal.GuardCoverage
+import Formal.ActionSetCompleteness
+import Formal.ActionApplicability
+import Formal.CombatTargetExistence
+import Formal.StepDispatch
+import Formal.CycleInvariants
+import Formal.NoActionDeadlock
+import Formal.MultiCycleLiveness
+import Formal.EquipValueAugmented
+import Formal.GearPolicy
+import Formal.RankingComposition
+import Formal.PersonalityGrounding
+import Formal.PurposeRouting
+import Formal.FallbackChain
+import Formal.TaskTradeReadyPriority
+import Formal.AcceptTaskGate
+import Formal.WithdrawSetExpansion
+import Formal.RecycleProtection
+import Formal.LivenessChain
 import Formal.Liveness.Placeholder
 import Formal.Liveness.TaskLifecyclePhase
 import Formal.Liveness.Measure
