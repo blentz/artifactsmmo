@@ -541,3 +541,143 @@ open Formal.WeightedRemaining in
 #print axioms Formal.GoalSystem.sellInventory_cold_satisfied_zero
 #print axioms Formal.GoalSystem.sellInventory_cold_inv_max_zero
 #print axioms Formal.GoalSystem.sellInventory_cold_not_sellable_zero
+-- GuardCoverage (de-Mathlib'd safety module)
+#print axioms Formal.GuardCoverage.low_hp_triggers_critical
+#print axioms Formal.GuardCoverage.critical_inv_with_overstock_triggers_discard
+#print axioms Formal.GuardCoverage.high_inv_with_bank_triggers_deposit
+#print axioms Formal.GuardCoverage.rest_for_combat_triggers_when_needed
+#print axioms Formal.GuardCoverage.firstGuard_nonzero_when_low_hp
+#print axioms Formal.GuardCoverage.stuck_state_always_guarded
+-- ActionSetCompleteness (de-Mathlib'd safety module)
+#print axioms Formal.ActionSetCompleteness.capability_mapping_total
+#print axioms Formal.ActionSetCompleteness.capability_mapping_deterministic
+#print axioms Formal.ActionSetCompleteness.every_action_has_a_capability
+-- LivenessChain (de-Mathlib'd safety module)
+#print axioms Formal.LivenessChain.chain_emits_fight_when_target_exists_and_applicable
+#print axioms Formal.LivenessChain.chain_none_implies_picker_or_applicability_blocked
+-- PersonalityGrounding (de-Mathlib'd safety module)
+#print axioms Formal.PersonalityGrounding.balanced_pos
+#print axioms Formal.PersonalityGrounding.balanced_armor_outranks_empty_unconditional
+#print axioms Formal.PersonalityGrounding.balanced_gear_armor_strictly_outranks_empty
+-- TaskTradeReadyPriority (de-Mathlib'd safety module)
+#print axioms Formal.TaskTradeReadyPriority.suppress_total
+#print axioms Formal.TaskTradeReadyPriority.suppress_deterministic
+#print axioms Formal.TaskTradeReadyPriority.hasPursueTask_true_of_mem
+#print axioms Formal.TaskTradeReadyPriority.suppress_true_when_all_conditions_hold
+#print axioms Formal.TaskTradeReadyPriority.suppress_false_when_no_pursue
+#print axioms Formal.TaskTradeReadyPriority.suppress_false_when_not_items
+#print axioms Formal.TaskTradeReadyPriority.suppress_false_when_inv_zero
+#print axioms Formal.TaskTradeReadyPriority.suppress_false_when_step_not_gather_taskcode
+#print axioms Formal.TaskTradeReadyPriority.trace_144020_suppress
+-- GearPolicy (de-Mathlib'd safety module)
+#print axioms Formal.GearPolicy.armor_score_nonneg
+#print axioms Formal.GearPolicy.armor_weakly_dominates_empty_slot
+#print axioms Formal.GearPolicy.armor_strictly_dominates_empty_slot
+#print axioms Formal.GearPolicy.armor_score_mono_in_resistance
+#print axioms Formal.GearPolicy.pickSlot_empty_returns_some
+-- ActionApplicability (de-Mathlib'd safety module)
+#print axioms Formal.ActionApplicability.fightApplicable_false_of_no_locations
+#print axioms Formal.ActionApplicability.fightApplicable_false_of_no_inv_room
+#print axioms Formal.ActionApplicability.fightApplicable_false_of_low_hp
+#print axioms Formal.ActionApplicability.fightApplicable_false_of_underleveled_monster
+#print axioms Formal.ActionApplicability.fightApplicable_false_of_overleveled_monster
+#print axioms Formal.ActionApplicability.fightApplicable_false_of_undergear
+#print axioms Formal.ActionApplicability.fightApplicable_mono_in_hp
+#print axioms Formal.ActionApplicability.fightApplicable_false_under_level_window
+#print axioms Formal.ActionApplicability.winnable_does_not_imply_applicable
+#print axioms Formal.ActionApplicability.restApplicable_iff_subfull
+#print axioms Formal.ActionApplicability.equipApplicable_iff
+-- NoActionDeadlock (de-Mathlib'd safety module)
+#print axioms Formal.NoActionDeadlock.at_least_wait_applicable
+#print axioms Formal.NoActionDeadlock.progress_available_when_any_capability
+#print axioms Formal.NoActionDeadlock.select_action_total
+#print axioms Formal.NoActionDeadlock.select_action_deterministic
+#print axioms Formal.NoActionDeadlock.progress_or_rest_when_capable
+#print axioms Formal.NoActionDeadlock.ai_always_acts
+-- CycleInvariants (de-Mathlib'd safety module)
+#print axioms Formal.CycleInvariants.cycle_executes_exactly_one
+#print axioms Formal.CycleInvariants.fight_strictly_raises_xp_when_positive
+#print axioms Formal.CycleInvariants.rest_raises_hp_when_subfull
+#print axioms Formal.CycleInvariants.consumable_raises_hp_when_useful
+#print axioms Formal.CycleInvariants.xp_monotone_under_well_formed
+-- EquipValueAugmented (de-Mathlib'd safety module)
+#print axioms Formal.EquipValueAugmented.equipValue_strict_of_strict_raw
+#print axioms Formal.EquipValueAugmented.equipValue_tiebreaks_nontool_over_tool
+#print axioms Formal.EquipValueAugmented.rawSum_mono_in_attack
+#print axioms Formal.EquipValueAugmented.rawSum_mono_in_resistance
+#print axioms Formal.EquipValueAugmented.rawSum_mono_in_hpBonus
+#print axioms Formal.EquipValueAugmented.rawSum_mono_in_crit
+#print axioms Formal.EquipValueAugmented.rawSum_mono_in_dmg
+#print axioms Formal.EquipValueAugmented.equipValue_nontool_zero_eq_one
+#print axioms Formal.EquipValueAugmented.equipValue_tool_zero_eq_zero
+#print axioms Formal.EquipValueAugmented.copper_dagger_strictly_outranks_fishing_net
+-- FallbackChain (de-Mathlib'd safety module)
+#print axioms Formal.FallbackChain.walk_some_of_nonNone_exists
+#print axioms Formal.FallbackChain.walk_picks_upgrade_when_present
+#print axioms Formal.FallbackChain.walk_deterministic
+#print axioms Formal.FallbackChain.passOne_first_match
+#print axioms Formal.FallbackChain.trace_122752_walk_picks_equip
+-- StepDispatch (de-Mathlib'd safety module)
+#print axioms Formal.StepDispatch.stepDispatch_total
+#print axioms Formal.StepDispatch.stepDispatch_deterministic
+#print axioms Formal.StepDispatch.dispatch_obtain_equippable_goes_to_upgrade
+#print axioms Formal.StepDispatch.dispatch_obtain_nonequippable_goes_to_gather
+#print axioms Formal.StepDispatch.dispatch_reach_skill_goes_to_level_skill
+#print axioms Formal.StepDispatch.dispatch_reach_char_with_target_goes_to_grind
+#print axioms Formal.StepDispatch.dispatch_reach_char_no_target_safe_fails
+#print axioms Formal.StepDispatch.obtain_only_routes_to_obtain_classes
+#print axioms Formal.StepDispatch.reach_skill_only_routes_to_level_skill
+#print axioms Formal.StepDispatch.reach_char_only_routes_to_grind
+-- MultiCycleLiveness (de-Mathlib'd safety module)
+#print axioms Formal.MultiCycleLiveness.xp_monotone_over_sequence
+#print axioms Formal.MultiCycleLiveness.nFights_all_well_formed
+#print axioms Formal.MultiCycleLiveness.multi_fight_raises_xp_by_at_least
+#print axioms Formal.MultiCycleLiveness.bounded_fights_suffice_for_xp_delta
+-- RankingComposition (de-Mathlib'd safety module)
+#print axioms Formal.RankingComposition.value_zero_of_base_zero
+#print axioms Formal.RankingComposition.value_zero_of_marginal_zero
+#print axioms Formal.RankingComposition.value_zero_of_balancing_zero
+#print axioms Formal.RankingComposition.value_strict_of_strict_marginal
+#print axioms Formal.RankingComposition.value_mono_in_marginal
+#print axioms Formal.RankingComposition.armor_root_outranks_empty_baseline
+#print axioms Formal.RankingComposition.unique_positive_marginal_dominates
+-- AcceptTaskGate (de-Mathlib'd safety module)
+#print axioms Formal.AcceptTaskGate.fires_total
+#print axioms Formal.AcceptTaskGate.fires_deterministic
+#print axioms Formal.AcceptTaskGate.fires_false_when_active_task
+#print axioms Formal.AcceptTaskGate.entry_defers_when_owned_not_equipped
+#print axioms Formal.AcceptTaskGate.entry_defers_when_craftable
+#print axioms Formal.AcceptTaskGate.fires_false_when_owned_unequipped_gear_exists
+#print axioms Formal.AcceptTaskGate.fires_false_when_craftable_gear_exists
+#print axioms Formal.AcceptTaskGate.entry_does_not_defer_when_equipped
+#print axioms Formal.AcceptTaskGate.entry_does_not_defer_when_unowned_uncraftable
+-- PurposeRouting (de-Mathlib'd safety module)
+#print axioms Formal.PurposeRouting.combatScore_strict_of_strict_wscore
+#print axioms Formal.PurposeRouting.combatScore_tiebreaks_nontool_over_tool
+#print axioms Formal.PurposeRouting.combat_picks_nontool_over_tied_tool
+#print axioms Formal.PurposeRouting.pickGatherSlot_score_optimal
+#print axioms Formal.PurposeRouting.argminBy_le
+#print axioms Formal.PurposeRouting.argminBy_mem
+-- CombatTargetExistence (de-Mathlib'd safety module)
+#print axioms Formal.CombatTargetExistence.pickWinnable_some_of_exists
+#print axioms Formal.CombatTargetExistence.pickBest_some_of_acc_some
+#print axioms Formal.CombatTargetExistence.pickBest_none_iff_acc_none_and_none_winnable
+#print axioms Formal.CombatTargetExistence.winnableFarmTarget_task_override
+#print axioms Formal.CombatTargetExistence.winnableFarmTarget_falls_through_no_task
+-- WithdrawSetExpansion (de-Mathlib'd safety module)
+#print axioms Formal.WithdrawSetExpansion.closureStep_terminates
+#print axioms Formal.WithdrawSetExpansion.closureStep_zero_fuel
+#print axioms Formal.WithdrawSetExpansion.closureStep_empty_work
+#print axioms Formal.WithdrawSetExpansion.hasCode_append_right
+#print axioms Formal.WithdrawSetExpansion.perCraftQty_none_of_no_recipe
+#print axioms Formal.WithdrawSetExpansion.perCraftQty_some_when_in_recipe
+#print axioms Formal.WithdrawSetExpansion.trace_copper_chain_per_craft
+-- RecycleProtection (de-Mathlib'd safety module)
+#print axioms Formal.RecycleProtection.protected_contains_target_gear
+#print axioms Formal.RecycleProtection.protected_contains_target_tools
+#print axioms Formal.RecycleProtection.protected_excluded_from_recycle
+#print axioms Formal.RecycleProtection.unprotected_craftable_in_recycle
+#print axioms Formal.RecycleProtection.recycle_subset_when_protection_grows
+#print axioms Formal.RecycleProtection.trace_copper_dagger_excluded
+#print axioms Formal.RecycleProtection.trace_copper_axe_excluded
+#print axioms Formal.RecycleProtection.trace_off_target_kept

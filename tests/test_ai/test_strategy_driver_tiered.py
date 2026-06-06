@@ -31,8 +31,10 @@ class _ScriptedPlanner:
         return []
 
 
-def test_cheap_budget_constant_is_one_second():
-    assert CHEAP == 1.0
+def test_cheap_budget_is_ten_seconds():
+    # Sized above the ~7.5s I/O-bound planning time of a reachable goal under
+    # --learn so the cheap pass doesn't starve real goals (live-bot fix).
+    assert CHEAP == 10.0
 
 
 def _arbiter_with(planner):

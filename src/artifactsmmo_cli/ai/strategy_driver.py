@@ -45,11 +45,15 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 )
 from artifactsmmo_cli.ai.world_state import WorldState
 
-CHEAP_BUDGET_SECONDS = 1.0
-"""Per-candidate budget for the arbiter's cheap first pass. Goals that plan in
-under a second (a Fight, SellInventory, a shallow craft) win immediately; wide
-goals that would time out at 90s fail fast here and are memoized. Guards bypass
-this and always get the full budget. Tunable; see the tiered-budget spec."""
+CHEAP_BUDGET_SECONDS = 10.0
+"""Per-candidate budget for the arbiter's cheap first pass. Sized ABOVE the
+I/O-bound planning time of a reachable goal under `--learn` (~7.5s; each A* node
+issues LearningStore SQLite queries) so a legitimately-plannable goal — e.g. the
+gear-chain GatherMaterials step — is found in the cheap pass instead of being
+starved and forcing escalation. Width-unfindable goals still exceed 10s here and
+are memoized. Guards bypass this and always get the full (300s) budget. Tunable;
+see the tiered-budget spec. (A 1s value starved real goals on the live --learn
+bot, which then escalated every doomed candidate at the full budget.)"""
 
 LEVEL_LOOKAHEAD = 3
 """How many levels ahead the objective step / task skill-gate targets, replacing
