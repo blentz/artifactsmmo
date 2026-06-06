@@ -6,6 +6,7 @@ import Formal.CombatTargetExistence
 import Formal.ActionApplicability
 import Formal.StepDispatch
 import Formal.LivenessChain
+import Formal.RankingComposition
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
@@ -571,3 +572,12 @@ open Formal.PriorityBand
 -- LivenessChain (Phase G6 capstone):
 #check @Formal.LivenessChain.chain_emits_fight_when_target_exists_and_applicable
 #check @Formal.LivenessChain.chain_none_implies_picker_or_applicability_blocked
+
+-- RankingComposition (G1→ranker bridge):
+#check @Formal.RankingComposition.value_zero_of_base_zero
+#check @Formal.RankingComposition.value_zero_of_marginal_zero
+#check @Formal.RankingComposition.value_zero_of_balancing_zero
+#check @Formal.RankingComposition.value_strict_of_strict_marginal
+#check @Formal.RankingComposition.value_mono_in_marginal
+#check @Formal.RankingComposition.armor_root_outranks_empty_baseline
+#check @Formal.RankingComposition.unique_positive_marginal_dominates

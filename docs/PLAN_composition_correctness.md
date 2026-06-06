@@ -207,21 +207,18 @@ any module loses a previously-proved theorem.
 | G5 StepDispatch.lean | CLOSED (2c01fb7) |
 | G6 LivenessChain.lean | CLOSED (this commit) |
 
-## Outstanding work past Phase G6
+## Outstanding work past Phase G6 — CLOSED
 
-Lean-side: ranking-layer hookup (the actual `_value` scoring function
-in tiers/strategy.py is not yet modeled — the bot's TIER ORDERING of
-roots still relies on cost-divided heuristics and personality weights.
-The G1 dominance theorems specify the right answer but no Lean theorem
-yet says the live ranker delivers it).
+| Item | Closed by |
+|---|---|
+| Python port: `PurposeRouting.combatScore` augmented score | `cd5f6aa` |
+| Python gather picker: `pick_gather_loadout` | `4228809` |
+| Diff harness for G6 (liveness regression gate) | `c46b9bd` |
+| REST_FOR_COMBAT guard (runtime bridge for picker/applicability) | `d2b1aed` |
+| Ranking-layer Lean bridge (`RankingComposition.lean`) | this commit |
 
-Python-side:
-* Port `PurposeRouting.combatScore` augmented score into the live
-  `pick_loadout` (replace raw `weapon_score` with `2 * weapon_score +
-  nonToolBonus`). Diff-test against the Lean oracle.
-* Add a Gather-purpose `pick_loadout_for_gather(skill, state, gd)` that
-  swaps the bot's loadout when the active task is gathering — currently
-  absent from the codebase.
-* Bind chain G6's headline theorem into `formal/diff/` as a
-  liveness-regression gate: random `LivenessInputs` ⇒ Python's
-  arbiter+planner returns FightAction iff the Lean chain does.
+Composition correctness work for this surface is complete. Future
+extensions (a full proof of the arbiter ladder as a Lean inductive,
+a kernel-bound diff between the Python `_value` and the Lean `value`
+composite, an enrichment of the `LivenessInputs` model to cover
+multi-cycle scenarios) live in their own plan when scoped.
