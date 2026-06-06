@@ -377,7 +377,8 @@ class StrategyArbiter:
                 and MeansKind.ACCEPT_TASK in discretionary_kinds):
             step_goal = None
 
-        # Build ordered candidates: guards, collect, step, discretionary.
+        # Build ordered candidates: guards, collect, step + fallback-step
+        # chain, discretionary.
         candidates: list[Candidate] = []
         for gk in guard_kinds:
             g = map_guard(gk, game_data, ctx, state)
@@ -385,8 +386,28 @@ class StrategyArbiter:
         for mk in collect_kinds:
             g = map_means(mk, game_data, ctx, state)
             candidates.append(Candidate(goal=g, is_means=True, repr_=repr(g)))
+        # Append step_goal + every fallback-step goal in ranking order so
+        # select_pure walks them all before reaching discretionary. Trace
+        # 2026-06-06 16:34 (cycles 0-1): top step's GrindCharacterXP
+        # produced plan_len=0 (yellow_slime fails level filter) and the
+        # arbiter dropped straight to TaskExchange (timed out, 18260
+        # nodes), emitting Wait. Including fallback steps lets the gear
+        # chain (GatherMaterials/UpgradeEquipment) get tried even when the
+        # top combat step can't plan.
+        added_reprs: set[str] = set()
         if step_goal is not None:
-            candidates.append(Candidate(goal=step_goal, is_means=True, repr_=repr(step_goal)))
+            r = repr(step_goal)
+            candidates.append(Candidate(goal=step_goal, is_means=True, repr_=r))
+            added_reprs.add(r)
+        for alt in fallback_steps:
+            alt_goal = objective_step_goal(alt, state, game_data, ctx)
+            if alt_goal is None:
+                continue
+            r = repr(alt_goal)
+            if r in added_reprs:
+                continue
+            added_reprs.add(r)
+            candidates.append(Candidate(goal=alt_goal, is_means=True, repr_=r))
         for mk in discretionary_kinds:
             g = map_means(mk, game_data, ctx, state)
             candidates.append(Candidate(goal=g, is_means=True, repr_=repr(g)))

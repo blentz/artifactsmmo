@@ -228,9 +228,13 @@ class TestPickWinnableMonster:
 
     def test_low_success_rate_excluded(self, tmp_path):
         """A monster with observed losses below 0.5 win rate (with enough
-        samples) is dropped, even if it's the highest-level option."""
+        samples) is dropped, even if it's the highest-level option.
+
+        Player at level 2 so chicken(L1) passes the FightAction level
+        window (max(1, 2-1)=1, 2+2=4); both monsters in [1,4] before
+        the win-rate veto removes yellow_slime."""
         player, store = self._player_with_monsters(
-            tmp_path, level=3, monster_levels={"chicken": 1, "yellow_slime": 3},
+            tmp_path, level=2, monster_levels={"chicken": 1, "yellow_slime": 3},
         )
         # Seed 6 cycles of Fight(yellow_slime) all failed → success_rate=0.
         store.start_session()

@@ -1167,16 +1167,27 @@ class GamePlayer:
         return is_winnable(projected, self.game_data, monster_code, self.history)
 
     def _pick_winnable_monster(self) -> str | None:
-        """Highest-level monster that `_is_winnable` (stat prediction not vetoed
-        by observed losses). Returns None when no monster is winnable, so the
-        caller can suppress combat-driving goals and let upgrade goals dominate.
+        """Highest-level monster that `_is_winnable` AND falls inside
+        FightAction's level filter (monster_level in
+        [max(1, char_level-1), char_level+2]).
 
-        No level cap: predict_win's stat math is the gate (the win-rate veto
-        corrects any monster the formula over-rates once losses accumulate)."""
+        Trace 2026-06-06 16:34: picker returned yellow_slime (lvl 2) for
+        Robby (lvl 4). yellow_slime won the winnable check (predict_win
+        at max_hp = True) but FightAction.is_applicable rejected it
+        because monster_level=2 < max(1, 4-1)=3. GrindCharacterXP got
+        the step slot but planner produced no plan; the arbiter fell
+        through to TaskExchange which timed out at 18260 nodes — bot
+        emitted Wait. Honoring the level filter at picker time prevents
+        the dead-target → empty-plan cascade.
+        """
         assert self.game_data is not None
         assert self.state is not None
+        min_level = max(1, self.state.level - 1)
+        max_level = self.state.level + 2
         best: tuple[str, int] | None = None
         for code, level in self.game_data._monster_level.items():
+            if not (min_level <= level <= max_level):
+                continue
             if not self._is_winnable(code):
                 continue
             if best is None or level > best[1]:

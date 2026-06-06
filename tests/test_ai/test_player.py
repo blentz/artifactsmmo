@@ -317,12 +317,15 @@ class TestWinnable:
             store.close()
 
     def test_pick_returns_highest_level_winnable(self):
+        """Player at level 5 → FightAction window [4,7]. wolf(L4) qualifies;
+        chicken(L1) is below the window and excluded by the level filter;
+        titan(L8) is above the window. wolf is the only candidate."""
         gd = _winnable_gd({
             "chicken": {"level": 1, "hp": 10, "attack": {"fire": 1}},
             "wolf": {"level": 4, "hp": 10, "attack": {"fire": 1}},
             "titan": {"level": 8, "hp": 100000, "attack": {"fire": 1}},  # unwinnable
         })
-        state = make_state(level=10, max_hp=100, attack={"fire": 50}, initiative=50)
+        state = make_state(level=5, max_hp=100, attack={"fire": 50}, initiative=50)
         assert self._player(gd, state)._pick_winnable_monster() == "wolf"
 
     def test_pick_none_when_nothing_winnable(self):
