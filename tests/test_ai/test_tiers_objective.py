@@ -107,8 +107,9 @@ def test_gap_measures_level_and_skill_and_gear_deficit():
     assert g.char_level_gap == 40
     assert g.skill_gaps["mining"] == 45
     assert g.skill_gaps["woodcutting"] == 49  # default level 1 → gap 49
-    # weapon target iron_sword(30) vs equipped wooden_stick(4) → gap 26.
-    assert g.gear_gaps["weapon_slot"] == 26.0
+    # weapon target iron_sword(2*30+1=61) vs equipped wooden_stick(2*4+1=9)
+    # → gap 52 (augmented equip_value: 2*raw + nonToolBonus).
+    assert g.gear_gaps["weapon_slot"] == 52.0
     assert 0.0 < g.char_level_fraction <= 1.0
     assert 0.0 < g.gear_fraction <= 1.0
 
@@ -117,7 +118,8 @@ def test_empty_slot_scores_full_target_value():
     obj = CharacterObjective.from_game_data(_gd())
     state = make_state(level=50, skills={s: 50 for s in SKILL_NAMES}, equipment={})
     g = obj.gap(state)
-    assert g.gear_gaps["weapon_slot"] == 30.0  # full iron_sword value
+    # Empty slot: full augmented iron_sword value = 2*30 + 1 (non-tool) = 61.
+    assert g.gear_gaps["weapon_slot"] == 61.0
 
 
 def test_gear_fraction_zero_and_complete_when_no_gear_targeted():
