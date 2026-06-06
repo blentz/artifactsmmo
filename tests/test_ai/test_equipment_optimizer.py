@@ -17,17 +17,20 @@ from tests.test_ai.fixtures import make_state
 def _gd_with_combat_items() -> GameData:
     gd = GameData()
     gd._item_stats = {
+        # wooden_stick is a real combat weapon (subtype="")
         "wooden_stick": ItemStats(
             code="wooden_stick", level=1, type_="weapon",
             attack={"earth": 4},
         ),
+        # fishing_net is a GATHER TOOL (subtype="tool") — real game data
         "fishing_net": ItemStats(
-            code="fishing_net", level=1, type_="weapon",
-            attack={"water": 5},
+            code="fishing_net", level=1, type_="weapon", subtype="tool",
+            attack={"water": 5}, skill_effects={"fishing": -10},
         ),
+        # copper_axe is a GATHER TOOL (woodcutting)
         "copper_axe": ItemStats(
-            code="copper_axe", level=1, type_="weapon",
-            attack={"earth": 5},
+            code="copper_axe", level=1, type_="weapon", subtype="tool",
+            attack={"earth": 5}, skill_effects={"woodcutting": -10},
         ),
         "leather_armor": ItemStats(
             code="leather_armor", level=1, type_="body_armor",
@@ -59,10 +62,33 @@ class TestWeaponScore:
         assert weapon_score(gd._item_stats["fishing_net"], slime_res) > \
                weapon_score(gd._item_stats["wooden_stick"], slime_res)
 
-    def test_no_attack_means_zero_score(self):
+    def test_no_attack_zero_raw_plus_nontool_bonus(self):
+        """Augmented score = 2*raw + nonToolBonus (Formal/PurposeRouting.lean).
+        A zero-attack non-tool weapon still scores 1 from the tiebreaker."""
         gd = _gd_with_combat_items()
-        bare = ItemStats(code="empty", level=1, type_="weapon")
-        assert weapon_score(bare, gd.monster_resistance("yellow_slime")) == 0
+        bare = ItemStats(code="empty", level=1, type_="weapon")  # subtype="" → non-tool
+        assert weapon_score(bare, gd.monster_resistance("yellow_slime")) == 1
+
+    def test_no_attack_zero_raw_zero_for_tool(self):
+        """A zero-attack TOOL scores exactly 0 — no bonus."""
+        gd = _gd_with_combat_items()
+        bare_tool = ItemStats(code="empty_tool", level=1, type_="weapon", subtype="tool")
+        assert weapon_score(bare_tool, gd.monster_resistance("yellow_slime")) == 0
+
+    def test_nontool_tiebreaker_over_tool_on_raw_tie(self):
+        """When raw WScores tie, the non-tool weapon strictly outranks the
+        tool. Formal closure of the 2026-06-06 fishing_net/wooden_stick
+        case at the score level."""
+        gd = _gd_with_combat_items()
+        # Construct a zero-resistance target so both score 5*100 raw.
+        zero_res = {"earth": 0, "fire": 0, "water": 0, "air": 0}
+        tool_5atk = ItemStats(code="t5", level=1, type_="weapon", subtype="tool",
+                              attack={"earth": 5})
+        weapon_5atk = ItemStats(code="w5", level=1, type_="weapon",
+                                attack={"earth": 5})
+        assert weapon_score(weapon_5atk, zero_res) > weapon_score(tool_5atk, zero_res)
+        # And the difference is EXACTLY 1 (the nonToolBonus).
+        assert weapon_score(weapon_5atk, zero_res) - weapon_score(tool_5atk, zero_res) == 1
 
 
 class TestArmorScore:

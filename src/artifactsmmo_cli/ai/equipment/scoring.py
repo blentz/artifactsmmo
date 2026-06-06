@@ -7,15 +7,13 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
-def weapon_score(weapon: ItemStats, monster_resistance: dict[str, int]) -> int:
-    """Estimated damage-per-hit a weapon deals against a monster.
+def weapon_score_raw(weapon: ItemStats, monster_resistance: dict[str, int]) -> int:
+    """Raw element-discounted attack surrogate ``Σ atk * max(0, 100 - res%)``.
 
-    Returns the EXACT integer surrogate ``Σ atk * max(0, 100 - res%)`` (i.e.
-    100× the float expression ``Σ atk * max(0, 1 - res%/100)``). The score is
-    only ever COMPARED (``argmax`` and the strict-improvement test inside
-    ``pick_loadout``); since ``100 > 0``, the surrogate preserves every
-    ``<``/``=``/``>`` comparison exactly. This is BIT-EQUIVALENT to the Lean
-    ``WScore`` model — no floating-point rounding, no order disagreement.
+    BIT-EQUIVALENT to the Lean ``EquipmentScoring.WScore`` (no subtype
+    augmentation). The composite ``weapon_score`` adds the non-tool
+    tiebreaker on top of this; this raw value is exported for the
+    differential gate against the kernel-checked WScore oracle.
     """
     score = 0
     for elem in ELEMENTS:
@@ -23,6 +21,32 @@ def weapon_score(weapon: ItemStats, monster_resistance: dict[str, int]) -> int:
         res_pct = monster_resistance.get(elem, 0)
         score += atk * max(0, 100 - res_pct)
     return score
+
+
+def weapon_score(weapon: ItemStats, monster_resistance: dict[str, int]) -> int:
+    """Estimated damage-per-hit a weapon deals against a monster.
+
+    Returns the EXACT integer surrogate ``2 * weapon_score_raw +
+    nonToolBonus``, where ``nonToolBonus = 0 if subtype == "tool" else 1``.
+    BIT-EQUIVALENT to the Lean ``PurposeRouting.combatScore`` model
+    (Formal/PurposeRouting.lean), which proves:
+
+    * any strict WScore ordering is PRESERVED in the augmented score
+      (``combatScore_strict_of_strict_wscore``) — multiplying the raw
+      WScore by 2 protects every strict inequality from the +0/+1
+      tiebreaker;
+    * on a WScore TIE, the non-tool weapon strictly outranks the tool
+      (``combatScore_tiebreaks_nontool_over_tool``).
+
+    Without the tiebreaker, a tool tied on raw attack (e.g. fishing_net at
+    5 water vs wooden_stick at 5 earth against a zero-resistance slime)
+    would be picked by the left-fold argmax purely on iteration order —
+    the formal closure of the 2026-06-06 trace bug where Robby kept
+    fishing_net equipped for combat against slimes despite owning combat
+    weapons that scored equal.
+    """
+    non_tool_bonus = 0 if weapon.subtype == "tool" else 1
+    return 2 * weapon_score_raw(weapon, monster_resistance) + non_tool_bonus
 
 
 def armor_score(armor: ItemStats, monster_attack: dict[str, int]) -> int:

@@ -32,7 +32,7 @@ from hypothesis import given, settings, strategies as st
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.equipment.elements import ELEMENTS
-from artifactsmmo_cli.ai.equipment.scoring import armor_score, pick_loadout, weapon_score
+from artifactsmmo_cli.ai.equipment.scoring import armor_score, pick_loadout, weapon_score_raw
 from artifactsmmo_cli.ai.game_data import ItemStats
 from artifactsmmo_cli.ai.world_state import WorldState
 from formal.diff.oracle_client import run_oracle
@@ -92,7 +92,10 @@ def _item_block(code_id: int, stats: ItemStats | None, slot: str) -> list[int]:
 
 
 def _py_score(stats: ItemStats, slot: str, monster_atk: dict, monster_res: dict) -> int:
-    return (weapon_score(stats, monster_res) if slot == _WEAPON_SLOT
+    # Compare against RAW WScore (no nonToolBonus). The augmented combat
+    # score (composite weapon_score) is verified in a separate diff against
+    # the PurposeRouting.combatScore oracle.
+    return (weapon_score_raw(stats, monster_res) if slot == _WEAPON_SLOT
             else armor_score(stats, monster_atk))
 
 
