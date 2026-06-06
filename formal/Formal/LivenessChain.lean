@@ -1,7 +1,6 @@
 import Formal.CombatTargetExistence
 import Formal.StepDispatch
 import Formal.ActionApplicability
-import Mathlib.Tactic
 
 /-!
 # Formal.LivenessChain
@@ -135,11 +134,8 @@ theorem chain_none_implies_picker_or_applicability_blocked
     rw [hPick] at hNone
     simp only at hNone
     rw [dispatch_reach_char_with_target_goes_to_grind] at hNone
-    by_contra hApp
-    have hAppTrue : fightApplicable i.fightInputs = true := by
-      cases hF : fightApplicable i.fightInputs with
-      | true  => rfl
-      | false => exact absurd hF hApp
-    simp [hAppTrue] at hNone
+    cases hF : fightApplicable i.fightInputs with
+    | false => rfl
+    | true => rw [hF] at hNone; simp at hNone
 
 end Formal.LivenessChain
