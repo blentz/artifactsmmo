@@ -191,6 +191,33 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
     raise ValueError(f"Unknown MeansKind: {kind!r}")
 
 
+def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameData) -> Goal:
+    """Map an equippable target to UpgradeEquipment when it is reachable, else to
+    GatherMaterials for its recipe.
+
+    UpgradeEquipmentGoal.is_plannable is False when the target's materials aren't
+    yet gathered (min_gathers > max_depth — the depth-reachability gate). Returning
+    that depth-gated UpgradeEquipment would have the arbiter SKIP it (the gate
+    short-circuits planning), and with nothing driving the gather, gear progress
+    stalls and the cheap pass falls through to doomed discretionary goals
+    (TaskExchange/LevelSkill) that escalate at the full budget — the live-bot
+    stall. Instead, while the target is depth-unreachable, drive GatherMaterials
+    for its direct recipe so the materials accumulate across cycles; once they are
+    in hand UpgradeEquipment becomes plannable and fires the craft+equip. (Mirrors
+    the GEAR_REVIEW guard's gather/upgrade split for the objective-step path.)"""
+    upgrade = UpgradeEquipmentGoal(initial_equipment=state.equipment, committed_target=(code, slot))
+    if upgrade.is_plannable(state, game_data):
+        return upgrade
+    recipe = game_data._crafting_recipes.get(code) or {}
+    if recipe:
+        return GatherMaterialsGoal(target_item=code, needed=dict(recipe))
+    # Unreachable in practice: is_plannable is only False when min_gathers >
+    # max_depth, which requires a non-empty recipe (a recipe-less item needs at
+    # most one gather, so it is always plannable and returns above). Kept as a
+    # total-function fallback.
+    return upgrade  # pragma: no cover
+
+
 def objective_step_goal(
     step: MetaGoal | None,
     state: WorldState,
@@ -213,10 +240,7 @@ def objective_step_goal(
         stats = game_data.item_stats(step.code)
         slots = ITEM_TYPE_TO_SLOTS.get(stats.type_) if stats is not None else None
         if slots:
-            return UpgradeEquipmentGoal(
-                initial_equipment=state.equipment,
-                committed_target=(step.code, slots[0]),
-            )
+            return _equippable_goal(step.code, slots[0], state, game_data)
         # Intermediate step: if the chain root is an equippable, plan
         # against the root directly. UpgradeEquipmentGoal's planner
         # walks the recipe chain (craft intermediates + final + equip)
@@ -225,10 +249,7 @@ def objective_step_goal(
             root_stats = game_data.item_stats(root.code)
             root_slots = ITEM_TYPE_TO_SLOTS.get(root_stats.type_) if root_stats is not None else None
             if root_slots:
-                return UpgradeEquipmentGoal(
-                    initial_equipment=state.equipment,
-                    committed_target=(root.code, root_slots[0]),
-                )
+                return _equippable_goal(root.code, root_slots[0], state, game_data)
         return GatherMaterialsGoal(target_item=step.code, needed={step.code: step.quantity})
     if isinstance(step, ReachSkillLevel):
         current = state.skills.get(step.skill, 0)

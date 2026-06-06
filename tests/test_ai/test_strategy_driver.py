@@ -1105,3 +1105,31 @@ def test_plans_forwards_budget_to_planner():
 def test_arbiter_has_doomed_memo():
     arbiter = StrategyArbiter(GOAPPlanner(), history=None)
     assert isinstance(arbiter._memo, DoomedMemo)
+
+
+def _gd_boots_chain():
+    gd = GameData()
+    gd._item_stats = {"copper_boots": ItemStats(code="copper_boots", level=1, type_="boots",
+                                                crafting_skill="gearcrafting", crafting_level=1)}
+    gd._crafting_recipes = {"copper_boots": {"copper_bar": 8}, "copper_bar": {"copper_ore": 10}}
+    return gd
+
+
+def test_objective_step_equippable_gathers_when_depth_unreachable():
+    """An equippable step whose materials aren't gathered (UpgradeEquipment
+    depth-unreachable: 8 bars = 80 ore >> max_depth) maps to GatherMaterials so
+    the arbiter accumulates the materials, instead of a depth-gated
+    UpgradeEquipment the arbiter would skip (the live-bot stall)."""
+    gd = _gd_boots_chain()
+    state = make_state(level=4, inventory={"copper_ore": 29})
+    goal = objective_step_goal(ObtainItem("copper_boots", 1), state, gd, _ctx())
+    assert isinstance(goal, GatherMaterialsGoal)
+
+
+def test_objective_step_equippable_upgrades_when_materials_in_hand():
+    """With the recipe materials in hand the target is depth-reachable, so the
+    step maps to UpgradeEquipment for the craft+equip."""
+    gd = _gd_boots_chain()
+    state = make_state(level=4, inventory={"copper_bar": 8})
+    goal = objective_step_goal(ObtainItem("copper_boots", 1), state, gd, _ctx())
+    assert isinstance(goal, UpgradeEquipmentGoal)
