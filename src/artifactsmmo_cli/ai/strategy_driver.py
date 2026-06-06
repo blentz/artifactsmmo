@@ -7,12 +7,12 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.arbiter_select import Candidate, select_pure
+from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
 from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
-from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
 from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
 from artifactsmmo_cli.ai.goals.craft_relief import CraftReliefGoal
 from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
@@ -44,6 +44,12 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachSkillLevel,
 )
 from artifactsmmo_cli.ai.world_state import WorldState
+
+CHEAP_BUDGET_SECONDS = 1.0
+"""Per-candidate budget for the arbiter's cheap first pass. Goals that plan in
+under a second (a Fight, SellInventory, a shallow craft) win immediately; wide
+goals that would time out at 90s fail fast here and are memoized. Guards bypass
+this and always get the full budget. Tunable; see the tiered-budget spec."""
 
 LEVEL_LOOKAHEAD = 3
 """How many levels ahead the objective step / task skill-gate targets, replacing
@@ -255,6 +261,10 @@ class StrategyArbiter:
         self._memo = DoomedMemo()
         self._cycle = 0
 
+    def set_cycle(self, cycle: int) -> None:
+        """Player calls this each cycle so the memo's re-probe window advances."""
+        self._cycle = cycle
+
     def _plans(
         self,
         goal: Goal,
@@ -458,18 +468,62 @@ class StrategyArbiter:
             g = map_means(mk, game_data, ctx, state)
             candidates.append(Candidate(goal=g, is_means=True, repr_=repr(g)))
 
-        def try_plan(goal: Goal) -> list[Action]:
-            return self._plans(goal, state, game_data, actions)
+        # Partition: guard candidates always get the full budget and bypass the
+        # memo (safety/gear-critical, few, rarely time out). Non-guard candidates
+        # go through the cheap pass → escalation → memo machinery.
+        guard_reprs = {c.repr_ for c in candidates if not c.is_means}
+        non_wait = [c for c in candidates if not isinstance(c.goal, WaitGoal)]
+
+        def _budget_for(goal: Goal, cheap: bool) -> float | None:
+            if repr(goal) in guard_reprs:
+                return None  # guards: full budget always
+            return CHEAP_BUDGET_SECONDS if cheap else None
+
+        def _skip(goal: Goal) -> bool:
+            # Memo only governs non-guard goals; guards are never memo-skipped.
+            return repr(goal) not in guard_reprs and self._memo.is_doomed(
+                repr(goal), state, self._cycle)
+
+        def try_plan_cheap(goal: Goal) -> list[Action]:
+            if _skip(goal):
+                return []
+            return self._plans(goal, state, game_data, actions, _budget_for(goal, cheap=True))
+
+        def try_plan_full(goal: Goal) -> list[Action]:
+            if _skip(goal):
+                return []
+            plan = self._plans(goal, state, game_data, actions, _budget_for(goal, cheap=False))
+            if not plan and repr(goal) not in guard_reprs:
+                self._memo.mark(repr(goal), state, self._cycle)
+            else:
+                self._memo.clear(repr(goal))
+            return plan
 
         def satisfied(goal: Goal) -> bool:
             return goal.is_satisfied(state)
 
+        # Cheap pass over non-Wait candidates (guards inside still get full budget).
         chosen, plan, new_committed = select_pure(
-            candidates=candidates,
-            committed_repr=self._committed_repr,
-            try_plan=try_plan,
-            is_satisfied=satisfied,
-            is_suppressed=is_suppressed,
-        )
+            candidates=non_wait, committed_repr=self._committed_repr,
+            try_plan=try_plan_cheap, is_satisfied=satisfied, is_suppressed=is_suppressed)
+        if chosen is None:
+            # Escalation pass at full budget; memoize timeouts.
+            chosen, plan, new_committed = select_pure(
+                candidates=non_wait, committed_repr=self._committed_repr,
+                try_plan=try_plan_full, is_satisfied=satisfied, is_suppressed=is_suppressed)
+        if chosen is None:
+            # Last resort: Wait (special-cased to a single WaitAction).
+            wait = next((c for c in candidates if isinstance(c.goal, WaitGoal)), None)
+            if wait is not None and not is_suppressed(wait.goal):
+                chosen, plan, new_committed = wait.goal, [WaitAction()], self._committed_repr
+
         self._committed_repr = new_committed
+        # The two-pass walk probes a non-guard candidate at most twice (cheap
+        # then full budget); collapse those to the LAST (full-budget) attempt so
+        # goals_tried stays one record per goal (the planner-attempt telemetry is
+        # diagnostic-only; the final attempt carries the authoritative stats).
+        deduped: dict[str, dict[str, object]] = {}
+        for attempt in self.goals_tried:
+            deduped[str(attempt["goal"])] = attempt
+        self.goals_tried = list(deduped.values())
         return chosen, plan, self.goals_tried
