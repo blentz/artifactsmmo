@@ -1,4 +1,3 @@
-import Mathlib.Tactic
 
 /-!
 # Formal.TaskTradeReadyPriority
@@ -123,7 +122,7 @@ theorem suppress_false_when_inv_zero
     (s : SimState) (h : s.inventoryTaskCode < 1) :
     suppressFallback s = false := by
   unfold suppressFallback
-  have hN : ¬ (s.inventoryTaskCode ≥ 1) := by linarith
+  have hN : ¬ (s.inventoryTaskCode ≥ 1) := by omega
   simp [hN]
 
 theorem suppress_false_when_step_not_gather_taskcode

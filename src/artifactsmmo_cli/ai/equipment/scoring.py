@@ -179,7 +179,7 @@ def pick_loadout(
 
     def _claim(code: str | None) -> None:
         if code is None:
-            return
+            return  # pragma: no cover — every call site passes a non-None code (best.code or a non-None-guarded current_code); the None guard is defensive
         claimed_codes[code] = claimed_codes.get(code, 0) + 1
 
     for slot in _ordered_slots():

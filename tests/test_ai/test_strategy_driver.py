@@ -31,11 +31,12 @@ from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
-from artifactsmmo_cli.ai.arbiter_select import Candidate, _precedes
+from artifactsmmo_cli.ai.arbiter_select import Candidate, _precedes, select_pure
 from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
 from artifactsmmo_cli.ai.strategy_driver import (
     LEVEL_LOOKAHEAD,
     StrategyArbiter,
+    _task_recipe_inputs,
     map_guard,
     map_means,
     objective_step_goal,
@@ -143,6 +144,47 @@ def test_map_guard_gear_review_no_upgrade_found_returns_upgrade_goal():
     assert isinstance(goal, UpgradeEquipmentGoal)
 
 
+def test_map_guard_rest_for_combat_is_restore_hp():
+    """REST_FOR_COMBAT maps to a RestoreHPGoal (line 106-107)."""
+    assert isinstance(map_guard(GuardKind.REST_FOR_COMBAT, GameData(), _ctx()),
+                      RestoreHPGoal)
+
+
+def test_map_guard_craft_relief_no_state_raises():
+    """CRAFT_RELIEF needs a state to pick its target; without one it raises
+    (line 121-122)."""
+    with pytest.raises(ValueError, match="CRAFT_RELIEF guard requires a state"):
+        map_guard(GuardKind.CRAFT_RELIEF, GameData(), _ctx())
+
+
+def test_map_guard_craft_relief_no_candidate_raises():
+    """CRAFT_RELIEF mapped with a state that has no craftable relief candidate
+    raises rather than returning a bogus goal (line 127-128)."""
+    # Empty inventory + no recipes -> craft_relief_candidates returns [].
+    state = make_state(inventory={})
+    with pytest.raises(ValueError, match="no relief candidate"):
+        map_guard(GuardKind.CRAFT_RELIEF, GameData(), _ctx(), state)
+
+
+def test_task_recipe_inputs_empty_for_no_task():
+    """No task code -> empty input set (line 71-72)."""
+    assert _task_recipe_inputs(None, GameData()) == frozenset()
+
+
+def test_task_recipe_inputs_walks_chain_and_dedupes_shared_material():
+    """Two recipe branches sharing a material visit it once (the `mat in chain`
+    guard, line 79-80); the full transitive input set is returned."""
+    gd = GameData()
+    # dagger <- bar(+handle); bar <- ore; handle <- ore  (ore shared).
+    gd._crafting_recipes = {
+        "dagger": {"bar": 1, "handle": 1},
+        "bar": {"ore": 2},
+        "handle": {"ore": 1},
+    }
+    inputs = _task_recipe_inputs("dagger", gd)
+    assert inputs == frozenset({"bar", "handle", "ore"})
+
+
 # ---------------------------------------------------------------------------
 # map_means unit tests
 # ---------------------------------------------------------------------------
@@ -207,6 +249,18 @@ def test_objective_step_obtain_material():
     g = objective_step_goal(step, make_state(), gd, _ctx())
     assert isinstance(g, GatherMaterialsGoal)
     assert g._needed == {"ash_plank": 6}
+
+
+def test_objective_step_intermediate_maps_to_equippable_root():
+    """An intermediate recipe-input step (ash_plank, no slots) whose chain ROOT
+    is an equippable (wooden_shield) plans UpgradeEquipmentGoal against the
+    ROOT so the whole craft+equip chain runs under one commit (lines 220-224)."""
+    gd = _gd()
+    step = ObtainItem("ash_plank", 6)
+    root = ObtainItem("wooden_shield", 1)
+    g = objective_step_goal(step, make_state(), gd, _ctx(), root=root)
+    assert isinstance(g, UpgradeEquipmentGoal)
+    assert g._committed_target == ("wooden_shield", "shield_slot")
 
 
 def test_objective_step_reach_skill_level():
@@ -293,6 +347,44 @@ def test_select_guard_preempts_means():
     goal, plan, goals_tried = arbiter.select(decision, state, gd, actions, ctx)
     assert isinstance(goal, RestoreHPGoal), f"expected RestoreHPGoal, got {goal!r}"
     assert len(plan) >= 1
+
+
+@dataclass(frozen=True)
+class _FallbackDecision:
+    """Decision stub carrying the fallback-step chain the arbiter reads via
+    getattr (chosen_step + fallback_steps/roots)."""
+    chosen_step: ObtainItem | ReachCharLevel | ReachSkillLevel | None
+    fallback_steps: list
+    fallback_roots: list
+
+
+def test_select_promotes_upgrade_equipment_from_fallback_first_pass():
+    """When the top chosen_step yields no goal, the fallback FIRST pass prefers
+    a fallback step that maps to UpgradeEquipmentGoal (the one-step equip),
+    promoting it over later fallbacks (lines 393-400)."""
+    planner = GOAPPlanner()
+    gd = _gd()  # has wooden_shield (equippable) + ash_plank recipe
+    # wooden_shield owned in inventory -> UpgradeEquipmentGoal is a one-action
+    # equip the planner can resolve.
+    state = make_state(
+        hp=100, max_hp=100, inventory={"wooden_shield": 1},
+        equipment={"shield_slot": None}, inventory_max=20,
+    )
+    # No chosen_step; a fallback ObtainItem(wooden_shield) -> UpgradeEquipmentGoal.
+    decision = _FallbackDecision(
+        chosen_step=None,
+        fallback_steps=[ObtainItem("wooden_shield", 1)],
+        fallback_roots=[None],
+    )
+    goal, plan, goals_tried = arbiter_select_with(planner, decision, state, gd)
+    tried_reprs = {str(e["goal"]) for e in goals_tried}
+    assert any("UpgradeEquipment" in r for r in tried_reprs), tried_reprs
+
+
+def arbiter_select_with(planner, decision, state, gd):
+    arbiter = StrategyArbiter(planner, history=None)
+    arbiter.set_cycle(0)
+    return arbiter.select(decision, state, gd, [], _ctx())
 
 
 def test_select_returns_objective_step_when_calm():
@@ -593,6 +685,60 @@ def test_precedes_false_when_target_absent():
     assert _precedes(candidates, repr(goal_a), "NotPresent") is False
     # a_repr also absent → a_idx is None → return False
     assert _precedes(candidates, "AlsoAbsent", "NotPresent") is False
+
+
+def test_select_pure_skips_satisfied_candidate():
+    """select_pure skips a satisfied candidate (line 92-93) and returns the next
+    plannable one. Pure unit test over injected closures — no planner/state."""
+    sat_goal = AcceptTaskGoal()
+    next_goal = AcceptTaskGoal()
+    sat = Candidate(goal=sat_goal, is_means=True, repr_="Satisfied")
+    nxt = Candidate(goal=next_goal, is_means=True, repr_="Next")
+
+    def try_plan(g):
+        return [object()]  # non-empty stand-in plan
+
+    def is_satisfied(g):
+        return g is sat_goal  # the first candidate is satisfied
+
+    def is_suppressed(g):
+        return False
+
+    goal, plan, committed = select_pure(
+        [sat, nxt], None, try_plan, is_satisfied, is_suppressed)
+    assert goal is next_goal
+    assert plan
+    assert committed == "Next"
+
+
+def test_select_pure_skips_suppressed_candidate():
+    """A suppressed candidate is skipped (line 90-91) before the satisfied/plan
+    checks, so a later candidate wins."""
+    supp_goal = AcceptTaskGoal()
+    next_goal = AcceptTaskGoal()
+    supp = Candidate(goal=supp_goal, is_means=True, repr_="Suppressed")
+    nxt = Candidate(goal=next_goal, is_means=True, repr_="Next")
+
+    goal, plan, committed = select_pure(
+        [supp, nxt], None,
+        try_plan=lambda g: [object()],
+        is_satisfied=lambda g: False,
+        is_suppressed=lambda g: g is supp_goal,
+    )
+    assert goal is next_goal
+    assert committed == "Next"
+
+
+def test_select_pure_returns_none_when_nothing_plans():
+    """When no candidate plans, select_pure returns the empty result."""
+    g = Candidate(goal=AcceptTaskGoal(), is_means=True, repr_="Only")
+    result = select_pure(
+        [g], None,
+        try_plan=lambda goal: [],
+        is_satisfied=lambda goal: False,
+        is_suppressed=lambda goal: False,
+    )
+    assert result == (None, [], None)
 
 
 def test_select_skips_satisfied_step_goal_continues_to_next():

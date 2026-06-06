@@ -79,30 +79,34 @@ Lean core only (no mathlib), matching `PlannerAdmissibility.lean` precedent.
 
 ## Follow-up TODOs
 
-- [ ] **FIX BROKEN MODULE: `formal/Formal/RecycleProtection.lean`.** Clean `lake
-      build` (gate part a) is RED at HEAD — `linter.unusedSimpArgs` fires on
-      load-bearing `simp [h] at hNot2` / `simp [hF1]` contradiction patterns
-      (lines 113, 122). Cache-masked at commit 842f4a5 (the committer had stale
-      `.olean`s, so the lint never ran). The hypotheses ARE used (they supply the
-      `decide`-reducing rewrite), so this is a linter false-positive at toolchain
-      v4.30.0 — the right fix is `set_option linter.unusedSimpArgs false` scoped to
-      those proofs (or restructure to `exact`). Blocks the full formal gate; my
-      `PlannerDepthBound` module itself builds + is axiom-clean independently.
+- [x] **DONE 2026-06-06 (branch `chore/followups-formal-gate-coverage`) — formal
+      gate fully restored.** RecycleProtection's `linter.unusedSimpArgs` issue was
+      not a mere false-positive: a clean rebuild surfaced real `unsolved goals`
+      (the module was a Mathlib-importing ORPHAN, never compiled by the default
+      build, so its errors were cache-masked). Fixed by restructuring those proofs
+      to explicit `simp only`/contrapositive forms (commit 07a2a0c). The clean run
+      then exposed a larger pre-existing issue: **19 `Formal/` safety modules
+      imported Mathlib while living outside `Formal/Liveness/` (violating the
+      core-only quarantine) and weren't imported into `Formal.lean` (orphan
+      check)**. Per user decision, all 19 were converted to CORE-ONLY
+      (`linarith`→`omega`, Mathlib List/min lemmas → core; statements
+      byte-identical, adversarially verified; 54 theorems now axiom-free) and wired
+      into `Formal.lean`. Final gate: `lake build` GREEN (6099 jobs); orphan check
+      OK (113 modules); no-sorry OK; cross-namespace Mathlib-leak OK; safety +
+      liveness axiom checks OK.
+      - Minor residual follow-up: the 19 de-Mathlib'd modules are not yet listed in
+        `Formal/Audit.lean`'s by-name axiom roster (the safety gate covers them via
+        the build + leak check, and they were spot-`#print axioms`-verified clean,
+        but registering them in Audit.lean would audit each by name).
 
-- [ ] **CLOSE PRE-EXISTING COVERAGE GAPS.** `uv run pytest` is at 98.80% (126
-      lines, `--cov-fail-under=100` RED) at HEAD — independent of this work (my
-      changes are coverage-neutral: +34 statements, all covered, 126 missing
-      before AND after). Pre-existing gaps include `commands/stats.py` 75%
-      (66-72, 103, 112-130, 148-158, 174-183, 230-231, 266-271), `ai/craft_relief.py`
-      89% (42,47,71,91), `ai/goals/craft_relief.py` (40,49), `ai/tiers/means.py`
-      90% (126-134), `ai/equipment/scoring.py` 93%, `ai/goals/level_skill.py`
-      (the pre-existing `if not recipe: continue`), `ai/strategy_driver.py`
-      (65,73,92,107,113,190-193 + the select fall-through), `ai/player.py`,
-      `ai/inventory_caps.py`, `ai/learning/store.py`, `ai/trace_stats.py`, etc.
-      Likely env-gated (network/TOKEN) command tests not running here. Audit
-      whether these are genuinely uncovered or just not exercised in this
-      environment, then add tests (or justified carve-outs) to restore the 100%
-      gate.
+- [x] **DONE 2026-06-06 — coverage restored to 100%.** `uv run pytest` now reports
+      **100.00%** (0 missing), 2751 tests, via ~50 real behavior-asserting tests
+      across the previously-uncovered files (stats, craft_relief, means, scoring,
+      goals, inventory_caps, learning/store, trace_stats, strategy_driver, player,
+      actions, arbiter, blockers). One justified `# pragma: no cover`
+      (`equipment/scoring.py:182` — an unreachable `_claim(None)` guard). A
+      hash-seed-flaky scoring test was made deterministic. None required live
+      network/TOKEN.
 
 ## Open questions / risks
 

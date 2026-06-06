@@ -636,6 +636,21 @@ def test_active_gathering_skills_handles_multi_skill_recipes():
     assert gd.active_gathering_skills("alloy_bar") == {"mining"}
 
 
+def test_active_gathering_skills_terminates_on_cyclic_recipe():
+    """A self-referential / cyclic recipe graph must not loop forever — the
+    visited-set guard (line 334-335) terminates the walk and still surfaces the
+    real gather skill."""
+    gd = GameData()
+    # foo <- bar and bar <- foo form a cycle; bar also consumes copper_ore.
+    gd._crafting_recipes = {
+        "foo": {"bar": 1},
+        "bar": {"foo": 1, "copper_ore": 1},
+    }
+    gd._resource_drops = {"copper_rocks": "copper_ore"}
+    gd._resource_skill = {"copper_rocks": ("mining", 1)}
+    assert gd.active_gathering_skills("foo") == {"mining"}
+
+
 def test_max_character_level_is_documented_50():
     """Documented cap per https://docs.artifactsmmo.com/concepts/stats_and_fights/.
     Constant — does not depend on loaded monster data (events/bosses can

@@ -1,4 +1,3 @@
-import Mathlib.Tactic
 
 /-!
 # Formal.ActionApplicability
@@ -85,7 +84,7 @@ theorem fightApplicable_false_of_no_inv_room (i : FightInputs)
     (h : i.inventoryFree < i.minFreeSlots) :
     fightApplicable i = false := by
   unfold fightApplicable hasInventoryRoom
-  have : ¬ (i.inventoryFree ≥ i.minFreeSlots) := by linarith
+  have : ¬ (i.inventoryFree ≥ i.minFreeSlots) := by omega
   simp [this]
 
 /-- If hp is at or below the 50% floor, the predicate is false. -/
@@ -93,7 +92,7 @@ theorem fightApplicable_false_of_low_hp (i : FightInputs)
     (h : i.hp * 100 ≤ 50 * i.maxHp) :
     fightApplicable i = false := by
   unfold fightApplicable hpAboveFightFloor
-  have : ¬ (i.hp * 100 > 50 * i.maxHp) := by linarith
+  have : ¬ (i.hp * 100 > 50 * i.maxHp) := by omega
   simp [this]
 
 /-- If monster level is below `max(1, lvl-1)`, the predicate is false. -/
@@ -104,7 +103,7 @@ theorem fightApplicable_false_of_underleveled_monster (i : FightInputs)
     unfold monsterLevelInWindow
     apply decide_eq_false
     intro ⟨h1, _⟩
-    linarith
+    omega
   unfold fightApplicable
   simp [hWin]
 
@@ -116,7 +115,7 @@ theorem fightApplicable_false_of_overleveled_monster (i : FightInputs)
     unfold monsterLevelInWindow
     apply decide_eq_false
     intro ⟨_, h2⟩
-    linarith
+    omega
   unfold fightApplicable
   simp [hWin]
 
@@ -125,7 +124,7 @@ theorem fightApplicable_false_of_undergear (i : FightInputs)
     (h : i.bestEqLevel < i.monsterLevel - 1) :
     fightApplicable i = false := by
   unfold fightApplicable gearMeetsMonster
-  have : ¬ (i.bestEqLevel ≥ i.monsterLevel - 1) := by linarith
+  have : ¬ (i.bestEqLevel ≥ i.monsterLevel - 1) := by omega
   simp [this]
 
 /-! ## Monotonicity. -/
@@ -144,7 +143,7 @@ theorem fightApplicable_mono_in_hp (i : FightInputs) (hp' : Int)
     apply decide_eq_true
     have hMul : i.hp * 100 ≤ hp' * 100 :=
       Int.mul_le_mul_of_nonneg_right hLe (by decide)
-    linarith
+    omega
   unfold fightApplicable
   simp only [Bool.and_eq_true]
   exact ⟨⟨⟨⟨hLoc, hInv⟩, hHp'⟩, hWin⟩, hGear⟩

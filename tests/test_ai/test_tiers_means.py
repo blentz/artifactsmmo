@@ -75,6 +75,61 @@ def test_accept_task_in_discretionary_when_no_task():
     assert MeansKind.ACCEPT_TASK in discretionary
 
 
+def test_accept_task_fires_when_target_gear_already_equipped():
+    """Equipped target gear doesn't block AcceptTask — that gear slot needs no
+    further work, so the deferral `continue`s past it."""
+    state = make_state(task_code=None,
+                       equipment={"weapon_slot": "copper_dagger"})
+    _, discretionary = active_means(
+        state, GameData(), None, _ctx(target_gear=frozenset({"copper_dagger"})))
+    assert MeansKind.ACCEPT_TASK in discretionary
+
+
+def test_accept_task_deferred_when_target_gear_owned_but_unequipped():
+    """Target gear sitting in inventory unequipped defers AcceptTask so
+    UpgradeEquipment can fire first (the trace 2026-06-06 regression)."""
+    state = make_state(task_code=None, inventory={"copper_dagger": 1})
+    _, discretionary = active_means(
+        state, GameData(), None, _ctx(target_gear=frozenset({"copper_dagger"})))
+    assert MeansKind.ACCEPT_TASK not in discretionary
+
+
+def test_accept_task_deferred_when_target_gear_craftable_now():
+    """Target gear that's craftable under current skills defers AcceptTask so
+    the gear chain wins material contention."""
+    gd = GameData()
+    gd._item_stats = {
+        "copper_dagger": ItemStats(
+            code="copper_dagger", level=1, type_="weapon",
+            crafting_skill="weaponcrafting", crafting_level=1),
+    }
+    # weaponcrafting defaults to 1 in make_state → skill >= crafting_level.
+    state = make_state(task_code=None)
+    _, discretionary = active_means(
+        state, gd, None, _ctx(target_gear=frozenset({"copper_dagger"})))
+    assert MeansKind.ACCEPT_TASK not in discretionary
+
+
+def test_accept_task_fires_when_target_gear_unknown_or_uncraftable():
+    """Target gear with no stats (or no crafting_skill, or skill too low) does
+    not defer AcceptTask — the loop falls through and the task is accepted."""
+    gd = GameData()
+    gd._item_stats = {
+        # Skill too high to craft now (skill-gate path, line 133-134 false).
+        "future_gear": ItemStats(
+            code="future_gear", level=20, type_="weapon",
+            crafting_skill="weaponcrafting", crafting_level=20),
+        # No crafting_skill at all (line 132 continue path).
+        "dropped_gear": ItemStats(
+            code="dropped_gear", level=5, type_="weapon"),
+    }
+    state = make_state(task_code=None)
+    _, discretionary = active_means(
+        state, gd, None,
+        _ctx(target_gear=frozenset({"future_gear", "dropped_gear"})))
+    assert MeansKind.ACCEPT_TASK in discretionary
+
+
 def test_claim_pending_fires_with_pending_items():
     state = make_state(pending_items=(("id1", "copper_ore"),))
     collect, _ = active_means(state, GameData(), None, _ctx())

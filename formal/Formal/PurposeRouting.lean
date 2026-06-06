@@ -1,6 +1,5 @@
 import Formal.EquipmentScoring
 import Formal.GearPolicy
-import Mathlib.Tactic
 
 /-!
 # Formal.PurposeRouting
@@ -100,7 +99,7 @@ theorem combatScore_strict_of_strict_wscore
   -- WScore a + 1 ≤ WScore b ⇒ 2*WScore a + 2 ≤ 2*WScore b
   -- 2*WScore a + bonus_a ≤ 2*WScore a + 1 ≤ 2*WScore b - 1 ≤ 2*WScore b + bonus_b - 1
   -- Strict because gap is ≥ 1 from hStrict
-  linarith
+  omega
 
 /-- **Tie-break to non-tool**: WScore tie + non-tool beats tool in combat
 score. This is the user's invariant for the fishing_net-vs-wooden_stick
@@ -115,7 +114,7 @@ theorem combatScore_tiebreaks_nontool_over_tool
   rw [hTie]
   have ht := nonToolBonus_tool tool hTool
   have hn := nonToolBonus_nontool nonTool hNonTool
-  linarith
+  omega
 
 /-! ## Gather purpose: skill-effect minimization.
 
@@ -199,7 +198,7 @@ theorem argminBy_le (score : Item → Int) (best : Item) (xs : List Item) :
       | head =>
         -- x = best (original); show score (argmin y ys) ≤ score best
         have hAuxRec : score (argminBy score y ys) ≤ score y := hIH y (List.Mem.head _)
-        linarith
+        omega
       | tail _ hx2 =>
         cases hx2 with
         | head => exact hIH y (List.Mem.head _)
@@ -212,10 +211,10 @@ theorem argminBy_le (score : Item → Int) (best : Item) (xs : List Item) :
         cases hx2 with
         | head =>
           -- x = y; need score (argmin best ys) ≤ score y
-          have hBestLeY : score best ≤ score y := not_lt.mp hge
+          have hBestLeY : score best ≤ score y := by omega
           have hAuxBest : score (argminBy score best ys) ≤ score best :=
             hIH best (List.Mem.head _)
-          linarith
+          omega
         | tail _ hRest => exact hIH x (List.Mem.tail _ hRest)
 
 /-- **Gather-purpose optimality**: the picked item minimizes `gatherScore`

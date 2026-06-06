@@ -516,6 +516,58 @@ class _StubDecision:
         return {}
 
 
+def test_run_derives_crafting_target_from_fallback_obtain_item():
+    """When the top chosen_step is not an ObtainItem, run() walks fallback_steps
+    and adopts the first ObtainItem's code as the crafting_target so the bank
+    keep-set protects that chain's materials (player.py lines 302-307)."""
+    from artifactsmmo_cli.ai.tiers import ObtainItem
+
+    class _FallbackDecision:
+        chosen_step = None            # not an ObtainItem -> crafting_target None
+        chosen_root = None
+        fallback_steps = [ObtainItem("copper_dagger", 1)]
+
+        def to_trace(self):
+            return {}
+
+    player = GamePlayer(character="hero")
+    client = MagicMock()
+    initial_state = make_state(hp=100, max_hp=150, level=5)
+    captured: dict[str, object] = {}
+
+    goal = MagicMock()
+    goal.is_satisfied.return_value = False
+    goal.__repr__ = lambda self: "StubGoal()"  # type: ignore[assignment]
+
+    def capture_select(decision, state, game_data, actions, ctx, **kw):
+        captured["crafting_target"] = state.crafting_target
+        raise KeyboardInterrupt  # stop after the derivation we care about
+
+    # run() rebuilds self._strategy from loaded game data (player.py line 217),
+    # so stub the StrategyEngine *constructor* to yield a decide() that returns
+    # the fallback-bearing decision. The arbiter (set in __init__, never rebuilt)
+    # is stubbed directly to capture the derived crafting_target.
+    strategy_mock = MagicMock()
+    strategy_mock.decide.return_value = _FallbackDecision()
+    player._arbiter = MagicMock()
+    player._arbiter.select.side_effect = capture_select
+
+    p_maps, p_items, p_resources, p_monsters, p_npcs, p_events, p_bank = _patch_game_data_load()
+    with patch.object(ClientManager_mock := MagicMock(), "client", client):
+        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+            with patch("artifactsmmo_cli.ai.player.StrategyEngine", return_value=strategy_mock):
+                with p_maps, p_items, p_resources, p_monsters, p_npcs, p_events, p_bank:
+                    with patch.object(player, "_fetch_world_state", return_value=initial_state):
+                        with patch.object(player, "_wait_for_cooldown"):
+                            with patch.object(player, "_maybe_periodic_refresh"):
+                                with patch.object(player, "_build_actions", return_value=[]):
+                                    with patch.object(player, "_winnable_farm_target", return_value=None):
+                                        with patch("artifactsmmo_cli.ai.player.time.sleep"):
+                                            with pytest.raises(KeyboardInterrupt):
+                                                player.run()
+    assert captured["crafting_target"] == "copper_dagger"
+
+
 def _run_one_action_with(player, action, new_state, outcome, client):
     """Drive run() through exactly one action-execution cycle by stubbing the
     strategy/arbiter to return a fixed (goal, [action]) plan, then raising

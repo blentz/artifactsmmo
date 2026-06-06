@@ -1,4 +1,3 @@
-import Mathlib.Tactic
 
 /-!
 # Formal.RecycleProtection
@@ -65,10 +64,8 @@ theorem protected_excluded_from_recycle
   intro h
   rw [List.mem_filter] at h
   obtain ⟨_, hNot⟩ := h
-  have hC : (protectedCodes b).contains code = true := by
-    simp [List.contains_iff_exists_mem_beq]
-    exact ⟨code, hProt, by simp⟩
-  simp [hC] at hNot
+  simp at hNot
+  exact hNot hProt
 
 /-! ## Completeness: off-target codes remain in recycle set. -/
 
@@ -80,15 +77,7 @@ theorem unprotected_craftable_in_recycle
   unfold recycleCodes
   rw [List.mem_filter]
   refine ⟨hCraft, ?_⟩
-  simp only [decide_eq_true_eq, decide_not]
-  intro hContains
-  simp [List.contains_iff_exists_mem_beq] at hContains
-  obtain ⟨c, hCM, hBeq⟩ := hContains
-  have hEq : c = code := by
-    have := beq_iff_eq.mp hBeq
-    exact this.symm
-  rw [hEq] at hCM
-  exact hNotProt hCM
+  simpa using hNotProt
 
 /-! ## Monotonicity: extending protected set never adds to recycle set. -/
 
@@ -106,20 +95,10 @@ theorem recycle_subset_when_protection_grows
   obtain ⟨hCraft, hNot2⟩ := hC
   rw [hSame]
   refine ⟨hCraft, ?_⟩
-  -- hNot2: !decide (contains b2 c) = true. Reduce to ¬ contains b2 c.
-  -- Goal: !decide (contains b1 c) = true. Reduce similarly. Contrapositive.
-  have hF2 : (protectedCodes b2).contains c = false := by
-    cases h : (protectedCodes b2).contains c with
-    | true => simp [h] at hNot2
-    | false => rfl
-  have hF1 : (protectedCodes b1).contains c = false := by
-    cases h : (protectedCodes b1).contains c with
-    | true =>
-      have := hPInc c h
-      rw [this] at hF2
-      exact hF2
-    | false => rfl
-  simp [hF1]
+  -- Normalize both to `¬ (protectedCodes _).contains c = true`.
+  simp only [decide_not, Bool.not_eq_true', decide_eq_false_iff_not] at hNot2 ⊢
+  intro h1
+  exact hNot2 (hPInc c h1)
 
 /-! ## Trace-mirror: the 2026-06-06 16:34 case. -/
 

@@ -10,7 +10,7 @@ from sqlmodel import Session as SqlSession
 from sqlmodel import create_engine, select
 
 from artifactsmmo_cli.ai.learning.models import Cycle, Session
-from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.learning.store import LearningStore, _parse_skill_xp_value
 
 
 @pytest.fixture
@@ -869,3 +869,43 @@ class TestDegradationOnDbError:
         _break_engine(store)
         assert store.task_reward_sample_count() == 0
         assert store.mean_task_reward_value(default=7.0) == 7.0
+
+    def test_get_learned_int_returns_default_on_error(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        assert store.get_learned_int("task_exchange_min_coins", default=3) == 3
+
+    def test_set_learned_int_swallows_error(self, tmp_db_path, capsys):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        # No exception; best-effort write degrades to a logged message.
+        store.set_learned_int("task_exchange_min_coins", 9)
+        assert "set_learned_int" in capsys.readouterr().out
+
+
+class TestLearnedInt:
+    def test_round_trip_and_update(self, tmp_db_path):
+        """First set inserts; a second set on the same key updates the existing
+        row in place (lines 522-524) rather than inserting a duplicate."""
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        assert store.get_learned_int("min_coins", default=1) == 1  # absent -> default
+        store.set_learned_int("min_coins", 4)
+        assert store.get_learned_int("min_coins", default=1) == 4
+        store.set_learned_int("min_coins", 9)  # update existing row
+        assert store.get_learned_int("min_coins", default=1) == 9
+        store.close()
+
+    def test_learned_int_is_per_character(self, tmp_db_path):
+        a = LearningStore(db_path=tmp_db_path, character="alice")
+        a.set_learned_int("min_coins", 5)
+        b = LearningStore(db_path=tmp_db_path, character="bob")
+        # bob has no row for this key -> default.
+        assert b.get_learned_int("min_coins", default=0) == 0
+        assert a.get_learned_int("min_coins", default=0) == 5
+        a.close()
+        b.close()
+
+
+def test_parse_skill_xp_value_none_returns_zero():
+    """A None raw delta-json yields 0 without attempting to parse (line 40-41)."""
+    assert _parse_skill_xp_value(None, "mining") == 0

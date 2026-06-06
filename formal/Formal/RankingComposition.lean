@@ -1,5 +1,4 @@
 import Formal.GearPolicy
-import Mathlib.Tactic
 
 /-!
 # Formal.RankingComposition
@@ -43,13 +42,13 @@ def value (base marginal balancing : Int) : Int :=
 /-! ## Independence: zero in any factor zeroes the whole. -/
 
 theorem value_zero_of_base_zero (m b : Int) : value 0 m b = 0 := by
-  unfold value; ring
+  simp [value]
 
 theorem value_zero_of_marginal_zero (base b : Int) : value base 0 b = 0 := by
-  unfold value; ring
+  simp [value]
 
 theorem value_zero_of_balancing_zero (base m : Int) : value base m 0 = 0 := by
-  unfold value; ring
+  simp [value]
 
 /-! ## Monotonicity in marginal (the main lever G1 controls). -/
 
@@ -127,6 +126,6 @@ theorem value_eq_of_eq_marginal
 Useful for proofs that reassemble the factors in different orderings. -/
 theorem value_comm_left (base m b : Int) :
     value base m b = value m base b := by
-  unfold value; ring
+  unfold value; rw [Int.mul_comm base m]
 
 end Formal.RankingComposition

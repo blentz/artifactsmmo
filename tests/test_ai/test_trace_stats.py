@@ -1,7 +1,15 @@
 """Tests for the trace-stats analyzer."""
 
-from artifactsmmo_cli.ai.learning.models import Cycle
-from artifactsmmo_cli.ai.trace_stats import analyze
+from datetime import datetime, timezone
+
+from sqlmodel import Session as SqlSession, SQLModel, create_engine
+
+from artifactsmmo_cli.ai.learning.models import Cycle, Session
+from artifactsmmo_cli.ai.trace_stats import (
+    analyze,
+    list_sessions,
+    load_cycles_from_db,
+)
 
 
 def _cycle(**kw) -> Cycle:
@@ -162,3 +170,103 @@ def test_duration_uses_ts_span():
     ]
     s = analyze(cycles)
     assert s.duration_minutes == 90.0
+
+
+def test_unparseable_ts_yields_zero_duration():
+    """An ISO ts the parser rejects leaves duration at its zero default
+    rather than raising."""
+    cycles = [
+        _cycle(ts="not-a-timestamp"),
+        _cycle(ts="still-not-a-timestamp", cycle_index=1),
+    ]
+    s = analyze(cycles)
+    assert s.duration_minutes == 0.0
+
+
+def test_stuck_window_flushed_when_state_changes_midstream():
+    """A stuck window (>=8 identical cycles) followed by a state change is
+    recorded mid-stream, not only at end of input."""
+    stuck = [
+        _cycle(ts=f"2026-06-05T00:{i:02d}:00+00:00", cycle_index=i,
+               task_code="x", task_progress=0, inventory_used=50)
+        for i in range(9)
+    ]
+    moved = [
+        _cycle(ts="2026-06-05T01:00:00+00:00", cycle_index=9,
+               task_code="x", task_progress=1, inventory_used=51),
+        _cycle(ts="2026-06-05T01:01:00+00:00", cycle_index=10,
+               task_code="x", task_progress=2, inventory_used=52),
+    ]
+    s = analyze(stuck + moved)
+    assert len(s.stuck_windows) == 1
+    w = s.stuck_windows[0]
+    assert w.cycles == 9
+    assert w.progress == 0 and w.inventory == 50
+
+
+def _seed_db(db_path: str) -> None:
+    """Two sessions for two characters, each with cycles at known timestamps."""
+    engine = create_engine(f"sqlite:///{db_path}")
+    SQLModel.metadata.create_all(engine)
+    early = datetime(2026, 6, 5, 10, 0, 0, tzinfo=timezone.utc).isoformat()
+    late = datetime(2026, 6, 5, 12, 0, 0, tzinfo=timezone.utc).isoformat()
+    with SqlSession(engine) as s:
+        s.add(Session(session_id="old", character="Robby", started_at=early,
+                      ended_at=None, cycle_count=2, exit_reason=None))
+        s.add(Session(session_id="new", character="Robby", started_at=late,
+                      ended_at=late, cycle_count=1, exit_reason="normal"))
+        s.add(Session(session_id="other", character="Alice", started_at=late,
+                      ended_at=late, cycle_count=1, exit_reason="normal"))
+        s.add(Cycle(ts="2026-06-05T10:00:00+00:00", session_id="old",
+                    cycle_index=0, character="Robby", outcome="ok"))
+        s.add(Cycle(ts="2026-06-05T10:05:00+00:00", session_id="old",
+                    cycle_index=1, character="Robby", outcome="ok"))
+        s.add(Cycle(ts="2026-06-05T12:00:00+00:00", session_id="new",
+                    cycle_index=0, character="Robby", outcome="ok"))
+        s.add(Cycle(ts="2026-06-05T12:00:00+00:00", session_id="other",
+                    cycle_index=0, character="Alice", outcome="ok"))
+        s.commit()
+    engine.dispose()
+
+
+def test_load_cycles_since_until_window(tmp_path):
+    db = str(tmp_path / "learning.db")
+    _seed_db(db)
+    rows = load_cycles_from_db(
+        db_path=db, character="Robby", session_id=None,
+        since="2026-06-05T10:01:00+00:00", until="2026-06-05T11:00:00+00:00",
+    )
+    # The 10:00 cycle is excluded by `since`; the 12:00 cycle by `until`;
+    # only the 10:05 cycle survives the window.
+    assert [r.ts for r in rows] == ["2026-06-05T10:05:00+00:00"]
+
+
+def test_load_cycles_limit_caps_rows(tmp_path):
+    db = str(tmp_path / "learning.db")
+    _seed_db(db)
+    rows = load_cycles_from_db(
+        db_path=db, character="Robby", session_id=None, limit=1,
+    )
+    assert len(rows) == 1
+
+
+def test_load_cycles_last_session_resolves_most_recent(tmp_path):
+    db = str(tmp_path / "learning.db")
+    _seed_db(db)
+    rows = load_cycles_from_db(db_path=db, character="Robby", session_id="last")
+    # "new" started later than "old", so only its single cycle is returned.
+    assert [r.session_id for r in rows] == ["new"]
+
+
+def test_load_cycles_last_no_session_returns_empty(tmp_path):
+    db = str(tmp_path / "learning.db")
+    _seed_db(db)
+    rows = load_cycles_from_db(db_path=db, character="Ghost", session_id="last")
+    assert rows == []
+
+
+def test_list_sessions_filters_by_character(tmp_path):
+    db = str(tmp_path / "learning.db")
+    _seed_db(db)
+    sess = list_sessions(db, character="Alice")
+    assert [s.session_id for s in sess] == ["other"]

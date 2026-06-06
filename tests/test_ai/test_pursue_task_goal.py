@@ -1,5 +1,8 @@
 """Tests for PursueTaskGoal — the items-task PURSUE actuator."""
 
+import os
+import tempfile
+
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
@@ -7,7 +10,12 @@ from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.goals.pursue_task import PRIORITY_WHEN_FIRING, PursueTaskGoal
+from artifactsmmo_cli.ai.goals.pursue_task import (
+    PRIORITY_FLOOR,
+    PRIORITY_WHEN_FIRING,
+    PursueTaskGoal,
+)
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from tests.test_ai.fixtures import make_state
 
@@ -28,6 +36,24 @@ class TestPursueTaskGoal:
     def test_value_zero_when_satisfied(self):
         g = PursueTaskGoal("copper_bar", 0)
         assert g.value(_items_task(progress=20), GameData()) == 0.0
+
+    def test_value_with_history_clamps_to_band(self):
+        """An unsatisfied goal evaluated WITH a (cold) learning store routes
+        the scalar-yield bonus through the band clamp; a cold goal yields the
+        PRIORITY_FLOOR (line 62-64), staying inside the discretionary band."""
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            path = f.name
+        try:
+            store = LearningStore(db_path=path, character="testchar")
+            store.start_session()
+            g = PursueTaskGoal("copper_bar", 0)
+            value = g.value(_items_task(progress=0), GameData(), history=store)
+            # Cold store -> no yield samples -> clamp returns the floor exactly.
+            assert value == float(PRIORITY_FLOOR)
+            store.close()
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
 
     def test_desired_state_is_one_more_unit(self):
         g = PursueTaskGoal("copper_bar", 5)

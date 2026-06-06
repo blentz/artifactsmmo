@@ -12,6 +12,7 @@ from artifactsmmo_cli.ai.goals.discard_overstock import (
 from artifactsmmo_cli.ai.inventory_caps import (
     BATCH_BUFFER,
     CONSUMABLE_KEEP,
+    _is_equippable_dominated,
     overstocked_items,
     useful_quantity_cap,
 )
@@ -587,3 +588,63 @@ class TestEquippableDominanceArmorAndAccessories:
             equipment={"weapon_slot": "iron_pickaxe"},
         )
         assert useful_quantity_cap("copper_pickaxe", state2, gd) == 0
+
+
+class TestDominanceEdgeCases:
+    def test_not_dominated_when_item_has_no_stats(self):
+        """An item with no game-data stats can't be reasoned about as
+        equippable -> never dominated (line 102-103)."""
+        gd = GameData()
+        gd._item_stats = {}
+        state = make_state(inventory={"unknown_item": 1})
+        assert _is_equippable_dominated("unknown_item", state, gd) is False
+
+    def test_not_dominated_when_item_type_has_no_slots(self):
+        """A non-equippable type (no entry in ITEM_TYPE_TO_SLOTS) is never
+        dominated (line 104-106)."""
+        gd = GameData()
+        gd._item_stats = {
+            "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource"),
+        }
+        state = make_state(inventory={"copper_ore": 5})
+        assert _is_equippable_dominated("copper_ore", state, gd) is False
+
+    def test_peer_with_no_stats_is_skipped(self):
+        """A peer code owned but absent from game data is skipped, so it can't
+        count as a dominator (line 120-121); the item stays undominated."""
+        gd = GameData()
+        gd._item_stats = {
+            "wooden_stick": ItemStats(code="wooden_stick", level=1, type_="weapon",
+                                       attack={}),
+            # ghost_weapon owned but has NO stats entry.
+        }
+        gd._crafting_recipes = {}
+        state = make_state(inventory={"wooden_stick": 1, "ghost_weapon": 1})
+        assert _is_equippable_dominated("wooden_stick", state, gd) is False
+
+    def test_peer_in_different_slot_does_not_dominate(self):
+        """A higher-value peer that fits a DIFFERENT slot can't substitute, so
+        it isn't a dominator (line 122-125)."""
+        gd = GameData()
+        gd._item_stats = {
+            "wooden_stick": ItemStats(code="wooden_stick", level=1, type_="weapon",
+                                       attack={}),
+            # A shield scores higher but occupies shield_slot, not weapon_slot.
+            "iron_shield": ItemStats(code="iron_shield", level=5, type_="shield",
+                                      attack={"fire": 99}),
+        }
+        gd._crafting_recipes = {}
+        state = make_state(inventory={"wooden_stick": 1, "iron_shield": 1})
+        assert _is_equippable_dominated("wooden_stick", state, gd) is False
+
+    def test_overstocked_skips_zero_quantity_entries(self):
+        """A zero-quantity inventory entry is skipped by overstocked_items
+        (line 244-245) and never reported as excess."""
+        gd = GameData()
+        gd._item_stats = {
+            "junk": ItemStats(code="junk", level=1, type_="resource"),
+        }
+        gd._crafting_recipes = {}
+        # junk has cap 0 (no recipe/task use) but qty 0 -> skipped entirely.
+        state = make_state(inventory={"junk": 0})
+        assert overstocked_items(state, gd) == {}

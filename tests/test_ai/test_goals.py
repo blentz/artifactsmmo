@@ -734,6 +734,37 @@ class TestGatherMaterialsGoal:
         value = goal.value(state, make_game_data())
         assert 1.0 <= value < 40.0
 
+    def test_value_zero_when_satisfied_with_history(self):
+        """A satisfied goal evaluated WITH a learning store still returns 0:
+        the base is 0, the history ramp leaves it at 0, and the
+        `ramped <= 0` early return fires (line 50-52)."""
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            path = f.name
+        try:
+            store = LearningStore(db_path=path, character="testchar")
+            store.start_session()
+            goal = GatherMaterialsGoal(
+                target_item="copper_dagger", needed={"copper_ore": 6})
+            # Materials already on hand -> is_satisfied True -> base 0.
+            state = make_state(inventory={"copper_ore": 6}, bank_items={})
+            assert goal.value(state, make_game_data(), history=store) == 0.0
+            store.close()
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_value_zero_when_needed_total_non_positive(self):
+        """A malformed `needed` whose quantities sum to <= 0 (but isn't
+        is_satisfied) returns 0 from the total_needed guard (line 75-76)
+        rather than dividing by zero."""
+        # inv lacks the positive entry so the goal is NOT satisfied, but the
+        # mixed-sign quantities sum to zero.
+        goal = GatherMaterialsGoal(
+            target_item="copper_dagger", needed={"copper_ore": 5, "slag": -5})
+        state = make_state(inventory={}, bank_items={})
+        assert goal.is_satisfied(state) is False
+        assert goal.value(state, make_game_data()) == 0.0
+
     def test_value_counts_intermediate_materials(self):
         # If copper_bar needs 2 copper_ore and we have 4 copper_ore, 2 bars are craftable
         gd = make_game_data()

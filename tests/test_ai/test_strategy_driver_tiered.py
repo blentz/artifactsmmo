@@ -87,3 +87,19 @@ def test_wait_selected_when_nothing_plans():
     goal, plan, _ = a.select(_FakeDecision(chosen_step=None), state, _make_planner_gd(), [], _ctx())
     assert isinstance(goal, WaitGoal)
     assert len(plan) == 1 and isinstance(plan[0], WaitAction)
+
+
+def test_plans_short_circuits_wait_goal_without_invoking_planner():
+    """_plans special-cases WaitGoal: it returns a single-WaitAction plan and
+    records a zero-node goals_tried entry WITHOUT calling the planner (which
+    would never terminate on the no-op WaitAction) — lines 308-317."""
+    planner = _ScriptedPlanner(cheap_ok=set(), full_only=set())
+    a = _arbiter_with(planner)
+    state = make_state()
+    plan = a._plans(WaitGoal(), state, _make_planner_gd(), [])
+    assert len(plan) == 1 and isinstance(plan[0], WaitAction)
+    # Planner was never consulted for the Wait goal.
+    assert planner.budgets == []
+    # A diagnostic goals_tried entry was recorded for the Wait attempt.
+    assert any(entry["goal"] == repr(WaitGoal()) and entry["nodes"] == 0
+               for entry in a.goals_tried)

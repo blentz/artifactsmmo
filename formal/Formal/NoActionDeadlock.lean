@@ -1,5 +1,4 @@
 import Formal.CycleInvariants
-import Mathlib.Tactic
 
 /-!
 # Formal.NoActionDeadlock
