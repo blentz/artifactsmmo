@@ -13,6 +13,8 @@ import Formal.MultiCycleLiveness
 import Formal.NoActionDeadlock
 import Formal.GuardCoverage
 import Formal.ActionSetCompleteness
+import Formal.EquipValueAugmented
+import Formal.FallbackChain
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
@@ -626,3 +628,22 @@ open Formal.PriorityBand
 #check @Formal.ActionSetCompleteness.capability_mapping_total
 #check @Formal.ActionSetCompleteness.capability_mapping_deterministic
 #check @Formal.ActionSetCompleteness.every_action_has_a_capability
+
+-- EquipValueAugmented (recent runtime fix proof):
+#check @Formal.EquipValueAugmented.equipValue_strict_of_strict_raw
+#check @Formal.EquipValueAugmented.equipValue_tiebreaks_nontool_over_tool
+#check @Formal.EquipValueAugmented.rawSum_mono_in_attack
+#check @Formal.EquipValueAugmented.rawSum_mono_in_resistance
+#check @Formal.EquipValueAugmented.rawSum_mono_in_hpBonus
+#check @Formal.EquipValueAugmented.rawSum_mono_in_crit
+#check @Formal.EquipValueAugmented.rawSum_mono_in_dmg
+#check @Formal.EquipValueAugmented.equipValue_nontool_zero_eq_one
+#check @Formal.EquipValueAugmented.equipValue_tool_zero_eq_zero
+#check @Formal.EquipValueAugmented.copper_dagger_strictly_outranks_fishing_net
+
+-- FallbackChain (two-pass arbiter walk proof):
+#check @Formal.FallbackChain.walk_some_of_nonNone_exists
+#check @Formal.FallbackChain.walk_picks_upgrade_when_present
+#check @Formal.FallbackChain.walk_deterministic
+#check @Formal.FallbackChain.passOne_first_match
+#check @Formal.FallbackChain.trace_122752_walk_picks_equip
