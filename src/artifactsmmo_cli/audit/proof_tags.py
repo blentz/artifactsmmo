@@ -51,6 +51,22 @@ def build_index(module_tags: dict[str, ProofTags]) -> list[IndexRow]:
     ]
 
 
+def render_index_markdown(rows: list[IndexRow]) -> str:
+    lines = [
+        "# Proof → concept index (generated — do not hand-edit)",
+        "",
+        "Inverse of the MATRIX proof-coverage column. Regenerate with",
+        "`uv run python scripts/gen_proof_concept_index.py`. A module with no",
+        "concept tag, or a concept with no module, is a traceability gap.",
+        "",
+        "| Module | Concepts | Properties |",
+        "|---|---|---|",
+    ]
+    for r in rows:
+        lines.append(f"| {r.module} | {', '.join(r.concepts)} | {', '.join(r.properties)} |")
+    return "\n".join(lines) + "\n"
+
+
 def cross_check(tagged: set[str], manifest_modules: set[str]) -> list[str]:
     """Every module whose theorems are in Manifest.lean must carry tags. Returns a
     list of human-readable errors (empty = clean)."""
