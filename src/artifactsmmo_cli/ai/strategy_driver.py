@@ -161,8 +161,17 @@ def objective_step_goal(
     state: WorldState,
     game_data: GameData,
     ctx: SelectionContext,
+    root: MetaGoal | None = None,
 ) -> Goal | None:
-    """Map the strategy's chosen step to a Goal."""
+    """Map the strategy's chosen step to a Goal.
+
+    When `root` is provided and is an equippable ObtainItem (e.g.
+    copper_boots) while `step` is an intermediate recipe-input
+    ObtainItem (e.g. copper_bar) along the root's chain, return
+    UpgradeEquipmentGoal targeting the ROOT so the planner crafts the
+    whole chain (intermediates + final + equip) under one goal commit
+    instead of stopping at the intermediate.
+    """
     if step is None:
         return None
     if isinstance(step, ObtainItem):
@@ -173,6 +182,18 @@ def objective_step_goal(
                 initial_equipment=state.equipment,
                 committed_target=(step.code, slots[0]),
             )
+        # Intermediate step: if the chain root is an equippable, plan
+        # against the root directly. UpgradeEquipmentGoal's planner
+        # walks the recipe chain (craft intermediates + final + equip)
+        # while GatherMaterialsGoal stops at the intermediate.
+        if isinstance(root, ObtainItem) and root.code != step.code:
+            root_stats = game_data.item_stats(root.code)
+            root_slots = ITEM_TYPE_TO_SLOTS.get(root_stats.type_) if root_stats is not None else None
+            if root_slots:
+                return UpgradeEquipmentGoal(
+                    initial_equipment=state.equipment,
+                    committed_target=(root.code, root_slots[0]),
+                )
         return GatherMaterialsGoal(target_item=step.code, needed={step.code: step.quantity})
     if isinstance(step, ReachSkillLevel):
         current = state.skills.get(step.skill, 0)
@@ -292,7 +313,9 @@ class StrategyArbiter:
             return r != "TaskCancel" and r in suppressed
 
         chosen_step: MetaGoal | None = getattr(decision, "chosen_step", None)
+        chosen_root: MetaGoal | None = getattr(decision, "chosen_root", None)
         fallback_steps: list[MetaGoal] = getattr(decision, "fallback_steps", [])
+        fallback_roots: list[MetaGoal] = getattr(decision, "fallback_roots", [])
 
         guard_kinds = active_guards(state, game_data, self._history, ctx)
         collect_kinds, discretionary_kinds = active_means(state, game_data, self._history, ctx)
@@ -311,19 +334,21 @@ class StrategyArbiter:
         # copper_dagger sat in inventory. An owned-but-unequipped target
         # is a ONE-action win (EquipAction) vs a multi-cycle GatherMaterials
         # chain; the ready-to-equip path is always preferable.
-        step_goal = objective_step_goal(chosen_step, state, game_data, ctx)
+        step_goal = objective_step_goal(chosen_step, state, game_data, ctx, root=chosen_root)
         if step_goal is None:
             # First pass: prefer UpgradeEquipmentGoal (one-step equip).
-            for alt in fallback_steps:
-                candidate = objective_step_goal(alt, state, game_data, ctx)
+            for idx, alt in enumerate(fallback_steps):
+                alt_root = fallback_roots[idx] if idx < len(fallback_roots) else None
+                candidate = objective_step_goal(alt, state, game_data, ctx, root=alt_root)
                 if isinstance(candidate, UpgradeEquipmentGoal):
                     step_goal = candidate
                     chosen_step = alt
                     break
             # Second pass: any non-None goal in ranking order.
             if step_goal is None:
-                for alt in fallback_steps:
-                    step_goal = objective_step_goal(alt, state, game_data, ctx)
+                for idx, alt in enumerate(fallback_steps):
+                    alt_root = fallback_roots[idx] if idx < len(fallback_roots) else None
+                    step_goal = objective_step_goal(alt, state, game_data, ctx, root=alt_root)
                     if step_goal is not None:
                         chosen_step = alt
                         break
@@ -399,8 +424,9 @@ class StrategyArbiter:
             r = repr(step_goal)
             candidates.append(Candidate(goal=step_goal, is_means=True, repr_=r))
             added_reprs.add(r)
-        for alt in fallback_steps:
-            alt_goal = objective_step_goal(alt, state, game_data, ctx)
+        for idx, alt in enumerate(fallback_steps):
+            alt_root = fallback_roots[idx] if idx < len(fallback_roots) else None
+            alt_goal = objective_step_goal(alt, state, game_data, ctx, root=alt_root)
             if alt_goal is None:
                 continue
             r = repr(alt_goal)

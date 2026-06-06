@@ -224,6 +224,13 @@ class StrategyDecision:
     # PursueTask ran because bootstrap step yielded None and the gear
     # roots (copper_boots, copper_helmet) at score 1.0 were never tried.
     fallback_steps: list[MetaGoal] = field(default_factory=list)
+    # The ROOT paired with each fallback step (same index). The arbiter
+    # uses this to map an intermediate ObtainItem step back to its
+    # equippable root: a step like ObtainItem(copper_bar, 8) emerged from
+    # ObtainItem(copper_boots) → UpgradeEquipmentGoal(copper_boots) should
+    # be used (planner crafts bars + boots in one chain) rather than
+    # GatherMaterials(copper_bar) which only crafts bars and stops.
+    fallback_roots: list[MetaGoal] = field(default_factory=list)
 
     def to_trace(self) -> dict[str, object]:
         return {
@@ -233,6 +240,7 @@ class StrategyDecision:
             "desired_state": self.desired_state,
             "ranking": [rs.to_dict() for rs in self.ranking],
             "fallback_steps": [repr(s) for s in self.fallback_steps],
+            "fallback_roots": [repr(r) for r in self.fallback_roots],
         }
 
 
@@ -393,11 +401,14 @@ class StrategyEngine:
                         chosen_step = sticky_candidate[1]
             # Fallback chain: all OTHER ranked steps below the chosen one,
             # in ranking order. The arbiter consults these when the top
-            # step's goal is None (combat target missing, etc.).
+            # step's goal is None (combat target missing, etc.). Paired
+            # with their root for intermediate-step → equippable mapping.
             fallback_steps = [c[1] for c in candidates if c[1] is not chosen_step]
+            fallback_roots = [c[0] for c in candidates if c[1] is not chosen_step]
         else:
             chosen_root = chosen_step = None
             fallback_steps = []
+            fallback_roots = []
         return StrategyDecision(
             interrupt=interrupt,
             chosen_root=chosen_root,
@@ -405,4 +416,5 @@ class StrategyEngine:
             desired_state=desired_state_of(chosen_step),
             ranking=ranking,
             fallback_steps=fallback_steps,
+            fallback_roots=fallback_roots,
         )
