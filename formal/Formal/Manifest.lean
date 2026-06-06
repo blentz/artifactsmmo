@@ -1,6 +1,7 @@
 import Formal
 import Formal.OwnedCount
 import Formal.GearPolicy
+import Formal.PurposeRouting
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
@@ -522,3 +523,11 @@ open Formal.PriorityBand
 #check @Formal.GearPolicy.armor_strictly_dominates_empty_slot        -- nontrivial armor > empty
 #check @Formal.GearPolicy.armor_score_mono_in_resistance             -- AScore monotone in resistance
 #check @Formal.GearPolicy.pickSlot_empty_returns_some                -- empty slot + candidates ⇒ pick fills
+
+-- PurposeRouting (Phase G2):
+#check @Formal.PurposeRouting.combatScore_strict_of_strict_wscore       -- strict WScore order preserved
+#check @Formal.PurposeRouting.combatScore_tiebreaks_nontool_over_tool   -- WScore tie ⇒ non-tool wins
+#check @Formal.PurposeRouting.combat_picks_nontool_over_tied_tool       -- argmax over [tool,nontool] = nontool on tie
+#check @Formal.PurposeRouting.pickGatherSlot_score_optimal              -- gather pick = argmin gatherScore
+#check @Formal.PurposeRouting.argminBy_le                               -- argmin is lower bound
+#check @Formal.PurposeRouting.argminBy_mem                              -- argmin is in input
