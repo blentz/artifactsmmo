@@ -7,6 +7,7 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.arbiter_select import Candidate, select_pure
+from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -251,6 +252,8 @@ class StrategyArbiter:
         self._history = history
         self._committed_repr: str | None = None
         self.goals_tried: list[dict[str, object]] = []
+        self._memo = DoomedMemo()
+        self._cycle = 0
 
     def _plans(
         self,
@@ -258,6 +261,7 @@ class StrategyArbiter:
         state: WorldState,
         game_data: GameData,
         actions: list[Action],
+        budget_seconds: float | None = None,
     ) -> list[Action]:
         """Attempt to plan goal; record attempt in goals_tried; return plan ([] = failed).
 
@@ -292,7 +296,8 @@ class StrategyArbiter:
                 "plan_len": 0,
             })
             return []
-        plan = self._planner.plan(state, goal, actions, game_data, self._history)
+        plan = self._planner.plan(state, goal, actions, game_data, self._history,
+                                  budget_seconds=budget_seconds)
         stats = self._planner.last_stats
         self.goals_tried.append({
             "goal": repr(goal),

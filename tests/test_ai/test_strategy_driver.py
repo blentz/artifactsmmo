@@ -32,6 +32,7 @@ from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.arbiter_select import Candidate, _precedes
+from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
 from artifactsmmo_cli.ai.strategy_driver import (
     LEVEL_LOOKAHEAD,
     StrategyArbiter,
@@ -381,7 +382,7 @@ class _SpyPlanner:
         self.calls = 0
         self.last_stats = GOAPPlanner().last_stats
 
-    def plan(self, state, goal, actions, game_data, history=None):
+    def plan(self, state, goal, actions, game_data, history=None, *, budget_seconds=None):
         self.calls += 1
         return []
 
@@ -896,3 +897,30 @@ class TestPursueTaskEndToEnd:
         assert any(isinstance(a, TaskTradeAction) for a in plan), (
             f"PursueTask plan must include TaskTrade, got plan={plan}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Task 4: _plans forwards budget; arbiter owns a DoomedMemo
+# ---------------------------------------------------------------------------
+
+def test_plans_forwards_budget_to_planner():
+    """_plans passes its budget_seconds through to planner.plan."""
+    captured = {}
+
+    class _BudgetSpy:
+        def __init__(self):
+            self.last_stats = GOAPPlanner().last_stats
+
+        def plan(self, state, goal, actions, game_data, history=None, *, budget_seconds=None):
+            captured["budget"] = budget_seconds
+            return []
+
+    arbiter = StrategyArbiter(_BudgetSpy(), history=None)
+    arbiter._plans(AcceptTaskGoal(), make_state(task_code=None, task_total=0), _gd(),
+                   [AcceptTaskAction(taskmaster_location=(2, 1))], budget_seconds=1.0)
+    assert captured["budget"] == 1.0
+
+
+def test_arbiter_has_doomed_memo():
+    arbiter = StrategyArbiter(GOAPPlanner(), history=None)
+    assert isinstance(arbiter._memo, DoomedMemo)
