@@ -4,6 +4,7 @@ import Formal.GearPolicy
 import Formal.PurposeRouting
 import Formal.CombatTargetExistence
 import Formal.ActionApplicability
+import Formal.StepDispatch
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
@@ -553,3 +554,15 @@ open Formal.PriorityBand
 #check @Formal.ActionApplicability.winnable_does_not_imply_applicable
 #check @Formal.ActionApplicability.restApplicable_iff_subfull
 #check @Formal.ActionApplicability.equipApplicable_iff
+
+-- StepDispatch (Phase G5):
+#check @Formal.StepDispatch.stepDispatch_total
+#check @Formal.StepDispatch.stepDispatch_deterministic
+#check @Formal.StepDispatch.dispatch_obtain_equippable_goes_to_upgrade
+#check @Formal.StepDispatch.dispatch_obtain_nonequippable_goes_to_gather
+#check @Formal.StepDispatch.dispatch_reach_skill_goes_to_level_skill
+#check @Formal.StepDispatch.dispatch_reach_char_with_target_goes_to_grind
+#check @Formal.StepDispatch.dispatch_reach_char_no_target_safe_fails
+#check @Formal.StepDispatch.obtain_only_routes_to_obtain_classes
+#check @Formal.StepDispatch.reach_skill_only_routes_to_level_skill
+#check @Formal.StepDispatch.reach_char_only_routes_to_grind
