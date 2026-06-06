@@ -1,4 +1,3 @@
-import Mathlib.Tactic
 
 /-!
 # Formal.CycleInvariants
@@ -87,7 +86,7 @@ theorem fight_strictly_raises_xp_when_positive
     s.xp < (applyAction s (Action.fight xpG hpL)).xp := by
   refine ⟨rfl, ?_⟩
   show s.xp < s.xp + xpG
-  linarith
+  omega
 
 /-- Rest raises hp when state was sub-full. -/
 theorem rest_raises_hp_when_subfull (s : State) (h : s.hp < s.maxHp) :
@@ -102,11 +101,7 @@ theorem consumable_raises_hp_when_useful
     (s : State) (gain : Int) (hSub : s.hp < s.maxHp) (hGain : 0 < gain) :
     s.hp < (applyAction s (Action.useConsumable gain)).hp := by
   show s.hp < min s.maxHp (s.hp + gain)
-  by_cases hCap : s.maxHp ≤ s.hp + gain
-  · rw [min_eq_left hCap]; exact hSub
-  · have hCap' : s.hp + gain < s.maxHp := not_le.mp hCap
-    rw [min_eq_right (le_of_lt hCap')]
-    linarith
+  omega
 
 /-! ### (c) Monotone xp: no action lowers xp. -/
 
@@ -126,11 +121,11 @@ theorem xp_monotone_under_well_formed (s : State) (a : Action) (h : WellFormed a
   | fight xpG hpL =>
     show s.xp ≤ s.xp + xpG
     obtain ⟨hX, _⟩ := h
-    linarith
-  | rest => exact le_refl s.xp
-  | useConsumable _ => exact le_refl s.xp
-  | gather => exact le_refl s.xp
-  | craft => exact le_refl s.xp
-  | wait => exact le_refl s.xp
+    omega
+  | rest => exact Int.le_refl s.xp
+  | useConsumable _ => exact Int.le_refl s.xp
+  | gather => exact Int.le_refl s.xp
+  | craft => exact Int.le_refl s.xp
+  | wait => exact Int.le_refl s.xp
 
 end Formal.CycleInvariants

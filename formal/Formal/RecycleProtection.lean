@@ -1,4 +1,3 @@
-import Mathlib.Tactic
 
 /-!
 # Formal.RecycleProtection
@@ -65,9 +64,7 @@ theorem protected_excluded_from_recycle
   intro h
   rw [List.mem_filter] at h
   obtain ⟨_, hNot⟩ := h
-  -- hNot says code is not protected; hProt says it is.
-  simp only [decide_not, List.contains_eq_mem, Bool.not_eq_true',
-    decide_eq_false_iff_not, decide_eq_true_eq] at hNot
+  simp at hNot
   exact hNot hProt
 
 /-! ## Completeness: off-target codes remain in recycle set. -/
@@ -80,10 +77,7 @@ theorem unprotected_craftable_in_recycle
   unfold recycleCodes
   rw [List.mem_filter]
   refine ⟨hCraft, ?_⟩
-  -- Goal: (decide ¬ contains code) = true.  Reduce to non-membership.
-  simp only [decide_not, List.contains_eq_mem, Bool.not_eq_true',
-    decide_eq_false_iff_not, decide_eq_true_eq]
-  exact hNotProt
+  simpa using hNotProt
 
 /-! ## Monotonicity: extending protected set never adds to recycle set. -/
 
@@ -101,14 +95,10 @@ theorem recycle_subset_when_protection_grows
   obtain ⟨hCraft, hNot2⟩ := hC
   rw [hSame]
   refine ⟨hCraft, ?_⟩
-  -- After normalizing the Boolean filter predicate, hNot2 says c is not
-  -- protected under b2; the goal says c is not protected under b1.
-  simp only [decide_eq_true_eq, Bool.not_eq_true] at hNot2 ⊢
-  -- Contrapositive of hPInc: if c were protected under b1 it would be under b2.
-  by_contra hc1
-  rw [Bool.not_eq_false] at hc1
-  rw [hPInc c hc1] at hNot2
-  exact absurd hNot2 (by simp)
+  -- Normalize both to `¬ (protectedCodes _).contains c = true`.
+  simp only [decide_not, Bool.not_eq_true', decide_eq_false_iff_not] at hNot2 ⊢
+  intro h1
+  exact hNot2 (hPInc c h1)
 
 /-! ## Trace-mirror: the 2026-06-06 16:34 case. -/
 

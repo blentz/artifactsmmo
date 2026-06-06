@@ -1,5 +1,4 @@
 import Formal.EquipmentScoring
-import Mathlib.Tactic
 
 /-!
 # Formal.GearPolicy
@@ -21,6 +20,38 @@ Closes Phase G1 of `docs/PLAN_composition_correctness.md`.
 
 namespace Formal.GearPolicy
 open Formal.EquipmentScoring
+
+/-! ## Core-only list-sum helpers (replace Mathlib `List.sum_pos` / `List.sum_le_sum`). -/
+
+/-- If every element of `l` is nonnegative and some element is strictly
+positive, the sum is strictly positive. -/
+private theorem sum_pos_of_mem_pos (l : List Int) (x : Int)
+    (hAll : ∀ y ∈ l, 0 ≤ y) (hMem : x ∈ l) (hx : 0 < x) :
+    0 < l.sum := by
+  obtain ⟨pre, post, hSplit⟩ := List.append_of_mem hMem
+  rw [hSplit, List.sum_append, List.sum_cons]
+  have hPre : 0 ≤ pre.sum := by
+    apply sum_nonneg_of_terms
+    intro y hy
+    exact hAll y (by rw [hSplit]; exact List.mem_append.mpr (Or.inl hy))
+  have hPost : 0 ≤ post.sum := by
+    apply sum_nonneg_of_terms
+    intro y hy
+    exact hAll y (by rw [hSplit]; exact List.mem_append.mpr (Or.inr (List.mem_cons_of_mem _ hy)))
+  omega
+
+/-- Pointwise-`≤` mapped lists have `≤` sums (core induction). -/
+private theorem map_sum_le_map_sum (l : List Int) (f g : Int → Int)
+    (h : ∀ e ∈ l, f e ≤ g e) :
+    (l.map f).sum ≤ (l.map g).sum := by
+  induction l with
+  | nil => simp
+  | cons a t ih =>
+    simp only [List.map_cons, List.sum_cons]
+    have hHead : f a ≤ g a := h a List.mem_cons_self
+    have hTail : (t.map f).sum ≤ (t.map g).sum :=
+      ih (fun e he => h e (List.mem_cons_of_mem _ he))
+    omega
 
 /-! ## Empty-slot baseline.
 
@@ -94,37 +125,22 @@ theorem armor_strictly_dominates_empty_slot
   rw [baselineScore_def]
   unfold AScore
   -- The 4 element-terms are all ≥ 0; the one at element `e` is strictly > 0.
-  set L := elements.map
-    (fun e' => aTerm (elemGet monsterAtk e') (elemGet item.resistance e'))
-  have hAll : ∀ x ∈ L, 0 ≤ x := by
+  have hAll : ∀ x ∈ elements.map
+      (fun e' => aTerm (elemGet monsterAtk e') (elemGet item.resistance e')), 0 ≤ x := by
     intro x hx
-    simp only [L, List.mem_map] at hx
+    rw [List.mem_map] at hx
     obtain ⟨e', he', hxe'⟩ := hx
     rw [← hxe']
     exact aTerm_nonneg _ _ (hAtk e' he') (hRes e' he')
-  have hMem : aTerm (elemGet monsterAtk e) (elemGet item.resistance e) ∈ L := by
-    simp only [L, List.mem_map]
+  have hMem : aTerm (elemGet monsterAtk e) (elemGet item.resistance e) ∈
+      elements.map
+        (fun e' => aTerm (elemGet monsterAtk e') (elemGet item.resistance e')) := by
+    rw [List.mem_map]
     exact ⟨e, he, rfl⟩
   have hTermPos : 0 < aTerm (elemGet monsterAtk e) (elemGet item.resistance e) := by
     unfold aTerm
     exact Int.mul_pos hStrictAtk hStrictRes
-  -- one strictly-positive term plus a sum of nonneg ⇒ total > 0
-  obtain ⟨pre, post, hSplit⟩ := List.append_of_mem hMem
-  rw [hSplit]
-  rw [List.sum_append, List.sum_cons]
-  have hPre : 0 ≤ pre.sum := by
-    apply sum_nonneg_of_terms
-    intro x hx
-    apply hAll
-    rw [hSplit]
-    exact List.mem_append.mpr (Or.inl hx)
-  have hPost : 0 ≤ post.sum := by
-    apply sum_nonneg_of_terms
-    intro x hx
-    apply hAll
-    rw [hSplit]
-    exact List.mem_append.mpr (Or.inr (List.mem_cons_of_mem _ hx))
-  linarith
+  exact sum_pos_of_mem_pos _ _ hAll hMem hTermPos
 
 /-! ## Monotonicity in resistance.
 
@@ -149,7 +165,7 @@ theorem armor_score_mono_in_resistance
               elemGet a.resistance e ≤ elemGet b.resistance e) :
     AScore a monsterAtk ≤ AScore b monsterAtk := by
   unfold AScore
-  apply List.sum_le_sum
+  apply map_sum_le_map_sum
   intro e he
   exact aTerm_mono_in_res _ _ _ (hAtk e he) (hLe e he)
 

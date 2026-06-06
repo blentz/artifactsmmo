@@ -1,4 +1,3 @@
-import Mathlib.Tactic
 
 /-!
 # Formal.AcceptTaskGate
@@ -129,7 +128,7 @@ theorem entry_defers_when_craftable
     defersAcceptTask g = true := by
   unfold defersAcceptTask
   rw [if_neg (by simp [hEq])]
-  have hNotOwned' : ¬ (g.ownedCount ≥ 1) := by linarith
+  have hNotOwned' : ¬ (g.ownedCount ≥ 1) := by omega
   rw [if_neg hNotOwned']
   rw [if_pos ⟨hSkill, hLevel⟩]
 
@@ -163,14 +162,14 @@ theorem entry_does_not_defer_when_unowned_uncraftable
     defersAcceptTask g = false := by
   unfold defersAcceptTask
   rw [if_neg (by simp [hEq])]
-  have hNotOwned' : ¬ (g.ownedCount ≥ 1) := by linarith
+  have hNotOwned' : ¬ (g.ownedCount ≥ 1) := by omega
   rw [if_neg hNotOwned']
   rcases hUncraft with hS | hL
   · rw [if_neg]
     intro ⟨h, _⟩
-    linarith
+    omega
   · rw [if_neg]
     intro ⟨_, h⟩
-    linarith
+    omega
 
 end Formal.AcceptTaskGate

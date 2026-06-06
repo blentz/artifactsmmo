@@ -1,5 +1,4 @@
 import Formal.RankingComposition
-import Mathlib.Tactic
 
 /-!
 # Formal.PersonalityGrounding
