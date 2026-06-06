@@ -206,6 +206,53 @@ class TestUpgradeEquipmentGoal:
         state = make_state(equipment=_make_equipment())
         assert goal.is_satisfied(state) is False
 
+    def test_committed_satisfied_when_item_in_inventory_post_optimize_swap(self):
+        """Trace 2026-06-06 cycles 0-8: bot ping-ponged between
+        Equip(copper_axe) and OptimizeLoadout(yellow_slime) → 8 equip
+        events / 9 cycles, 3 cooldown errors. Mechanism:
+          1. UpgradeEquipment(committed=copper_axe) equips axe.
+          2. GrindCharacterXP's OptimizeLoadout pre-fight swaps to a
+             combat weapon; axe drops back to inventory.
+          3. UpgradeEquipment.is_satisfied saw equipment[slot] != axe
+             → False → re-fired → equipped axe again → loop.
+        Fix: committed-target satisfaction allows the item to be in
+        INVENTORY too. The 'I have crafted/obtained this gear' mission
+        is complete the moment the item is owned; per-fight slot
+        management belongs to OptimizeLoadout, not UpgradeEquipment."""
+        committed = ("copper_axe", "weapon_slot")
+        goal = UpgradeEquipmentGoal(committed_target=committed)
+        # Item is in inventory but slot holds a combat-swap (copper_dagger).
+        state = make_state(
+            inventory={"copper_axe": 1},
+            equipment=_make_equipment(weapon_slot="copper_dagger"),
+        )
+        assert goal.is_satisfied(state) is True, (
+            "committed UpgradeEquipment must NOT re-fire when the item is "
+            "already owned in inventory and OptimizeLoadout has swapped the "
+            "slot for combat; that's the per-fight thrash this fix breaks"
+        )
+
+    def test_committed_satisfied_when_item_in_slot(self):
+        """Equipped also satisfies (original contract preserved)."""
+        committed = ("copper_axe", "weapon_slot")
+        goal = UpgradeEquipmentGoal(committed_target=committed)
+        state = make_state(
+            inventory={},
+            equipment=_make_equipment(weapon_slot="copper_axe"),
+        )
+        assert goal.is_satisfied(state) is True
+
+    def test_committed_not_satisfied_when_item_neither_owned_nor_equipped(self):
+        """The original obtain-the-gear contract still holds when the
+        item is genuinely absent."""
+        committed = ("copper_axe", "weapon_slot")
+        goal = UpgradeEquipmentGoal(committed_target=committed)
+        state = make_state(
+            inventory={},
+            equipment=_make_equipment(weapon_slot="wooden_stick"),
+        )
+        assert goal.is_satisfied(state) is False
+
     def test_value_35_when_craftable_upgrade_available(self):
         stats = ItemStats(
             code="copper_dagger", level=1, type_="weapon",
