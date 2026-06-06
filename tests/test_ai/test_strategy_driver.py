@@ -63,7 +63,8 @@ def _gd():
 
 def _ctx(**kw):
     base = dict(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
-                initial_xp=0, task_exchange_min_coins=1, combat_monster=None)
+                initial_xp=0, task_exchange_min_coins=1, combat_monster=None,
+                gear_review_active=False)
     base.update(kw)
     return SelectionContext(**base)
 

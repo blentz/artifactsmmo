@@ -48,6 +48,9 @@ class SelectionContext:
     # leaves the guard task-only.
     target_gear: frozenset[str] = field(default_factory=frozenset)
     target_tools: frozenset[str] = field(default_factory=frozenset)
+    # Post-level-up / post-fight-loss gear prioritization latch. Set by the
+    # player's GearLatch and cleared when no craftable upgrade remains.
+    gear_review_active: bool = False
 
 
 class GuardKind(Enum):
@@ -59,6 +62,7 @@ class GuardKind(Enum):
     CRAFT_RELIEF = "craft_relief"
     DEPOSIT_FULL = "deposit_full"
     DISCARD_HIGH = "discard_high"
+    GEAR_REVIEW = "gear_review"  # post-level-up / post-loss gear prioritization
 
 
 GUARD_ORDER: tuple[GuardKind, ...] = (
@@ -70,6 +74,7 @@ GUARD_ORDER: tuple[GuardKind, ...] = (
     GuardKind.CRAFT_RELIEF,  # craft-before-deposit/discard when applicable
     GuardKind.DEPOSIT_FULL,
     GuardKind.DISCARD_HIGH,
+    GuardKind.GEAR_REVIEW,  # lowest-priority guard, still above all means
 )
 
 
@@ -129,6 +134,8 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
                 and bool(select_bank_deposits(state, game_data)))
     if kind is GuardKind.DISCARD_HIGH:
         return bool(overstocked_items(state, game_data)) and _used_fraction(state) >= DISCARD_HIGH_FRACTION
+    if kind is GuardKind.GEAR_REVIEW:
+        return ctx.gear_review_active
     return False
 
 
