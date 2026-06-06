@@ -4,10 +4,11 @@ instrumental means. The only surviving priority ladder, scoped to guards.
 Pure: predicates read state/game_data/history + an explicit SelectionContext
 (player runtime flags). No Goal-class imports — the driver maps GuardKind to goals."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
+from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_caps import overstocked_items
@@ -51,6 +52,7 @@ class SelectionContext:
 
 class GuardKind(Enum):
     HP_CRITICAL = "hp_critical"
+    REST_FOR_COMBAT = "rest_for_combat"  # combat target winnable at max_hp but not at current_hp
     BANK_UNLOCK = "bank_unlock"
     REACH_UNLOCK_LEVEL = "reach_unlock_level"
     DISCARD_CRITICAL = "discard_critical"
@@ -61,6 +63,7 @@ class GuardKind(Enum):
 
 GUARD_ORDER: tuple[GuardKind, ...] = (
     GuardKind.HP_CRITICAL,
+    GuardKind.REST_FOR_COMBAT,  # preempts the next Fight when current hp is insufficient
     GuardKind.BANK_UNLOCK,
     GuardKind.REACH_UNLOCK_LEVEL,
     GuardKind.DISCARD_CRITICAL,
@@ -80,6 +83,26 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
            history: LearningStore | None, ctx: SelectionContext) -> bool:
     if kind is GuardKind.HP_CRITICAL:
         return state.hp_percent < CRITICAL_HP_FRACTION
+    if kind is GuardKind.REST_FOR_COMBAT:
+        # Trace 2026-06-06 session 05:26: Robby kept firing FightAction at
+        # hp=76 vs yellow_slime, losing each time because predict_win at
+        # current_hp returned False while the picker's max_hp projection
+        # said winnable. The cheap FightAction.is_applicable level filter
+        # passed, so no Rest was inserted. This guard preempts the
+        # Fight-at-low-HP path by forcing RestoreHP whenever:
+        #   (a) a combat target is selected,
+        #   (b) state.hp < state.max_hp (Rest is actionable),
+        #   (c) predict_win at current hp is False, AND
+        #   (d) predict_win at max_hp is True (i.e. resting MEANS we can
+        #       then win — otherwise this isn't a hp problem, it's a gear
+        #       problem and the picker should have rejected the target).
+        if ctx.combat_monster is None:
+            return False
+        if state.hp >= state.max_hp:
+            return False
+        if predict_win(state, game_data, ctx.combat_monster):
+            return False
+        return predict_win(replace(state, hp=state.max_hp), game_data, ctx.combat_monster)
     if kind is GuardKind.BANK_UNLOCK:
         if ctx.bank_unlock_monster is None or ctx.bank_accessible:
             return False

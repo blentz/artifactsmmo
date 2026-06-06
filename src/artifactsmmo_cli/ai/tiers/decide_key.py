@@ -54,6 +54,7 @@ def decide_key(neg_final: float, effort: int, root_repr: str
 
 _GUARD_REPR: dict[GuardKind, str] = {
     GuardKind.HP_CRITICAL: "RestoreHP",
+    GuardKind.REST_FOR_COMBAT: "RestoreHP",
     GuardKind.DISCARD_CRITICAL: "DiscardOverstock",
     GuardKind.DISCARD_HIGH: "DiscardOverstock",
     GuardKind.BANK_UNLOCK: "UnlockBank",

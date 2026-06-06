@@ -88,6 +88,8 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
     callers / tests that constructed guards without a state."""
     if kind is GuardKind.HP_CRITICAL:
         return RestoreHPGoal()
+    if kind is GuardKind.REST_FOR_COMBAT:
+        return RestoreHPGoal()
     if kind is GuardKind.DISCARD_CRITICAL or kind is GuardKind.DISCARD_HIGH:
         return DiscardOverstockGoal(game_data=game_data)
     if kind is GuardKind.BANK_UNLOCK:
