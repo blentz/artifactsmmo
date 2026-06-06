@@ -1,5 +1,4 @@
 import Formal.CycleInvariants
-import Mathlib.Tactic
 
 /-!
 # Formal.MultiCycleLiveness
@@ -47,7 +46,7 @@ theorem xp_monotone_over_sequence
     (s : State) (acts : List Action) (h : AllWellFormed acts) :
     s.xp ≤ (runSequence s acts).xp := by
   induction acts generalizing s with
-  | nil => exact le_refl s.xp
+  | nil => exact Int.le_refl s.xp
   | cons a rest ih =>
     obtain ⟨hHead, hTail⟩ := h
     have hStep : s.xp ≤ (applyAction s a).xp :=
@@ -55,7 +54,7 @@ theorem xp_monotone_over_sequence
     have hRec : (applyAction s a).xp ≤ (runSequence (applyAction s a) rest).xp :=
       ih (applyAction s a) hTail
     show s.xp ≤ (runSequence (applyAction s a) rest).xp
-    linarith
+    omega
 
 /-! ## XP gain bound for N fights. -/
 
@@ -87,10 +86,12 @@ theorem multi_fight_raises_xp_by_at_least
     have hIH := ih (applyAction s (Action.fight xpG hpL))
     rw [hAfter1] at hIH
     -- Convert (succ k : Int) = k + 1.
+    have hCast : (Nat.succ k : Int) = (k : Int) + 1 := by
+      rw [Int.natCast_succ]
     have hSucc : (Nat.succ k : Int) * xpG = (k : Int) * xpG + xpG := by
-      push_cast; ring
+      rw [hCast, Int.add_mul, Int.one_mul]
     rw [hSucc]
-    linarith
+    omega
 
 /-! ## Bounded reach. -/
 
@@ -109,8 +110,9 @@ theorem bounded_fights_suffice_for_xp_delta
   have hAtLeast : delta ≤ (delta.toNat : Int) * xpG := by
     have hToNat : (delta.toNat : Int) = delta := Int.toNat_of_nonneg hD
     rw [hToNat]
-    have hXge1 : 1 ≤ xpG := hX
-    nlinarith
-  linarith
+    have hXge1 : (1 : Int) ≤ xpG := hX
+    calc delta = delta * 1 := by rw [Int.mul_one]
+      _ ≤ delta * xpG := Int.mul_le_mul_of_nonneg_left hXge1 hD
+  omega
 
 end Formal.MultiCycleLiveness

@@ -1,5 +1,3 @@
-import Mathlib.Tactic
-
 /-!
 # Formal.EquipValueAugmented
 
@@ -59,23 +57,23 @@ theorem nonToolBonus_le_one (isTool : Bool) : nonToolBonus isTool ≤ 1 := by
 
 theorem rawSum_mono_in_attack (s : RawStats) (a' : Int) (h : s.attack ≤ a') :
     rawSum s ≤ rawSum { s with attack := a' } := by
-  unfold rawSum; simp; linarith
+  unfold rawSum; simp; omega
 
 theorem rawSum_mono_in_resistance (s : RawStats) (r' : Int) (h : s.resistance ≤ r') :
     rawSum s ≤ rawSum { s with resistance := r' } := by
-  unfold rawSum; simp; linarith
+  unfold rawSum; simp; omega
 
 theorem rawSum_mono_in_hpBonus (s : RawStats) (h' : Int) (h : s.hpBonus ≤ h') :
     rawSum s ≤ rawSum { s with hpBonus := h' } := by
-  unfold rawSum; simp; linarith
+  unfold rawSum; simp; omega
 
 theorem rawSum_mono_in_crit (s : RawStats) (c' : Int) (h : s.crit ≤ c') :
     rawSum s ≤ rawSum { s with crit := c' } := by
-  unfold rawSum; simp; linarith
+  unfold rawSum; simp; omega
 
 theorem rawSum_mono_in_dmg (s : RawStats) (d' : Int) (h : s.dmg ≤ d') :
     rawSum s ≤ rawSum { s with dmg := d' } := by
-  unfold rawSum; simp; linarith
+  unfold rawSum; simp; omega
 
 /-! ## Strict-order preservation. -/
 
@@ -90,7 +88,7 @@ theorem equipValue_strict_of_strict_raw
   have hA1 : nonToolBonus aTool ≤ 1 := nonToolBonus_le_one aTool
   have hB0 : 0 ≤ nonToolBonus bTool := nonToolBonus_nonneg bTool
   have hB1 : nonToolBonus bTool ≤ 1 := nonToolBonus_le_one bTool
-  linarith
+  omega
 
 /-! ## Tie-break to non-tool. -/
 
@@ -103,7 +101,8 @@ theorem equipValue_tiebreaks_nontool_over_tool
     equipValue toolStats true < equipValue nonToolStats false := by
   unfold equipValue nonToolBonus
   rw [hTie]
-  simp
+  rw [if_pos rfl, if_neg (by decide)]
+  omega
 
 /-! ## Boundary values. -/
 
