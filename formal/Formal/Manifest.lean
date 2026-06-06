@@ -7,6 +7,9 @@ import Formal.ActionApplicability
 import Formal.StepDispatch
 import Formal.LivenessChain
 import Formal.RankingComposition
+import Formal.PersonalityGrounding
+import Formal.CycleInvariants
+import Formal.MultiCycleLiveness
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
@@ -581,3 +584,21 @@ open Formal.PriorityBand
 #check @Formal.RankingComposition.value_mono_in_marginal
 #check @Formal.RankingComposition.armor_root_outranks_empty_baseline
 #check @Formal.RankingComposition.unique_positive_marginal_dominates
+
+-- PersonalityGrounding (discharges G1→ranker hypothesis under BalancedPersonality):
+#check @Formal.PersonalityGrounding.balanced_pos
+#check @Formal.PersonalityGrounding.balanced_armor_outranks_empty_unconditional
+#check @Formal.PersonalityGrounding.balanced_gear_armor_strictly_outranks_empty
+
+-- CycleInvariants (per-cycle Player loop):
+#check @Formal.CycleInvariants.cycle_executes_exactly_one
+#check @Formal.CycleInvariants.fight_strictly_raises_xp_when_positive
+#check @Formal.CycleInvariants.rest_raises_hp_when_subfull
+#check @Formal.CycleInvariants.consumable_raises_hp_when_useful
+#check @Formal.CycleInvariants.xp_monotone_under_well_formed
+
+-- MultiCycleLiveness (bounded reach across cycles):
+#check @Formal.MultiCycleLiveness.xp_monotone_over_sequence
+#check @Formal.MultiCycleLiveness.nFights_all_well_formed
+#check @Formal.MultiCycleLiveness.multi_fight_raises_xp_by_at_least
+#check @Formal.MultiCycleLiveness.bounded_fights_suffice_for_xp_delta
