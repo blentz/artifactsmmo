@@ -292,11 +292,23 @@ class StrategyArbiter:
             return r != "TaskCancel" and r in suppressed
 
         chosen_step: MetaGoal | None = getattr(decision, "chosen_step", None)
+        fallback_steps: list[MetaGoal] = getattr(decision, "fallback_steps", [])
 
         guard_kinds = active_guards(state, game_data, self._history, ctx)
         collect_kinds, discretionary_kinds = active_means(state, game_data, self._history, ctx)
 
+        # Walk: top step first, then fallbacks in ranking order. First
+        # non-None goal wins. Closes the 2026-06-06 09:59 gap where
+        # bootstrap step returned None (no winnable target) and gear roots
+        # below it (ranked 1.0) were never tried — bot dropped straight
+        # to discretionary PursueTask instead of pursuing the runner-up.
         step_goal = objective_step_goal(chosen_step, state, game_data, ctx)
+        if step_goal is None:
+            for alt in fallback_steps:
+                step_goal = objective_step_goal(alt, state, game_data, ctx)
+                if step_goal is not None:
+                    chosen_step = alt
+                    break
 
         # An active items-task pursuit suppresses the meta-objective's
         # GatherMaterials step ONLY when that step targets an item the task's

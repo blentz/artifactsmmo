@@ -25,7 +25,19 @@ def equip_value(stats: ItemStats) -> float:
     """
     attack = sum(stats.attack.values()) if stats.attack else 0
     resistance = sum(stats.resistance.values()) if stats.resistance else 0
-    raw = attack + resistance + stats.hp_restore
+    # 2026-06-06 trace 09:59: copper_boots(hp_bonus=10), copper_helmet
+    # (dmg=3, hp_bonus=20), copper_ring(dmg=2) all scored equip_value=0
+    # (later =1 after the nonToolBonus augment) because raw summed ONLY
+    # attack+resistance+hp_restore. Armor with no per-element resistance
+    # but real defensive stats (max-HP bonus, damage bonus %, crit %) was
+    # invisible to the ranker → ObtainItem(copper_boots) marginal stuck
+    # at 0.05 → ranked below 8 ReachSkillLevel roots → never pursued.
+    # Folding hp_bonus, dmg, critical_strike into the raw signal closes
+    # the armor-pursuit gap. The mixed units (flat hp vs %) are intentional:
+    # only ARGMAX ORDERING matters for ranker decisions, and every modeled
+    # contributor is positively correlated with combat capability.
+    raw = (attack + resistance + stats.hp_restore
+           + stats.hp_bonus + stats.dmg + stats.critical_strike)
     non_tool_bonus = 0 if stats.subtype == "tool" else 1
     return float(2 * raw + non_tool_bonus)
 

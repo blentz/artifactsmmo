@@ -217,6 +217,13 @@ class StrategyDecision:
     chosen_step: MetaGoal | None
     desired_state: dict[str, object]
     ranking: list[RootScore] = field(default_factory=list)
+    # Ranked alternative steps below the chosen one. Used by the arbiter
+    # to fall back when the top step's goal is None (e.g. ReachCharLevel
+    # with no winnable monster) instead of dropping straight into
+    # discretionary. Closes the 2026-06-06 09:59 gap where 50+ cycles of
+    # PursueTask ran because bootstrap step yielded None and the gear
+    # roots (copper_boots, copper_helmet) at score 1.0 were never tried.
+    fallback_steps: list[MetaGoal] = field(default_factory=list)
 
     def to_trace(self) -> dict[str, object]:
         return {
@@ -225,6 +232,7 @@ class StrategyDecision:
             "chosen_step": repr(self.chosen_step) if self.chosen_step is not None else None,
             "desired_state": self.desired_state,
             "ranking": [rs.to_dict() for rs in self.ranking],
+            "fallback_steps": [repr(s) for s in self.fallback_steps],
         }
 
 
@@ -373,10 +381,6 @@ class StrategyEngine:
             top_root, top_step, top_final, _top_effort, _top_pre = candidates[0]
             chosen_root: MetaGoal | None = top_root
             chosen_step: MetaGoal | None = top_step
-            # Tier-2 sticky commitment: keep the previous cycle's chosen root
-            # when it survives this cycle's filters AND its score is within
-            # the dominance threshold of the new winner. Prevents single-cycle
-            # objective flap from transient combat_capable flips.
             if last_chosen_root is not None and last_chosen_root != repr(top_root):
                 sticky_candidate = next(
                     (c for c in candidates if repr(c[0]) == last_chosen_root),
@@ -384,17 +388,21 @@ class StrategyEngine:
                 )
                 if sticky_candidate is not None:
                     sticky_final = sticky_candidate[2]
-                    # Sticky wins unless top is strictly dominant
-                    # (top_final > STICKY_DOMINANCE_RATIO * sticky_final).
                     if top_final <= STICKY_DOMINANCE_RATIO * sticky_final:
                         chosen_root = sticky_candidate[0]
                         chosen_step = sticky_candidate[1]
+            # Fallback chain: all OTHER ranked steps below the chosen one,
+            # in ranking order. The arbiter consults these when the top
+            # step's goal is None (combat target missing, etc.).
+            fallback_steps = [c[1] for c in candidates if c[1] is not chosen_step]
         else:
             chosen_root = chosen_step = None
+            fallback_steps = []
         return StrategyDecision(
             interrupt=interrupt,
             chosen_root=chosen_root,
             chosen_step=chosen_step,
             desired_state=desired_state_of(chosen_step),
             ranking=ranking,
+            fallback_steps=fallback_steps,
         )
