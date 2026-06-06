@@ -3,6 +3,7 @@ import Formal.OwnedCount
 import Formal.GearPolicy
 import Formal.PurposeRouting
 import Formal.CombatTargetExistence
+import Formal.ActionApplicability
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
@@ -539,3 +540,16 @@ open Formal.PriorityBand
 #check @Formal.CombatTargetExistence.pickBest_none_iff_acc_none_and_none_winnable
 #check @Formal.CombatTargetExistence.winnableFarmTarget_task_override
 #check @Formal.CombatTargetExistence.winnableFarmTarget_falls_through_no_task
+
+-- ActionApplicability (Phase G4):
+#check @Formal.ActionApplicability.fightApplicable_false_of_no_locations
+#check @Formal.ActionApplicability.fightApplicable_false_of_no_inv_room
+#check @Formal.ActionApplicability.fightApplicable_false_of_low_hp
+#check @Formal.ActionApplicability.fightApplicable_false_of_underleveled_monster
+#check @Formal.ActionApplicability.fightApplicable_false_of_overleveled_monster
+#check @Formal.ActionApplicability.fightApplicable_false_of_undergear
+#check @Formal.ActionApplicability.fightApplicable_mono_in_hp
+#check @Formal.ActionApplicability.fightApplicable_false_under_level_window
+#check @Formal.ActionApplicability.winnable_does_not_imply_applicable
+#check @Formal.ActionApplicability.restApplicable_iff_subfull
+#check @Formal.ActionApplicability.equipApplicable_iff
