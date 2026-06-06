@@ -4,11 +4,20 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
+import typer
 from typer.testing import CliRunner
 
 from artifactsmmo_cli.ai.file_tracer import FileTracer
 from artifactsmmo_cli.ai.null_tracer import NullTracer
-from artifactsmmo_cli.commands.play import app, default_learn_db_path, play
+from artifactsmmo_cli.commands.play import default_learn_db_path, play
+
+# `play` is a plain command function registered directly on the root app in
+# main.py (`app.command("play")(play)`) — it is no longer its own Typer group
+# (that double-nesting made `artifactsmmo play <name>` fail with "Missing
+# command"). For isolated invocation we register it on a single-command Typer,
+# which Typer collapses so `runner.invoke(app, ["hero"])` runs play directly.
+app = typer.Typer()
+app.command()(play)
 
 
 @pytest.fixture

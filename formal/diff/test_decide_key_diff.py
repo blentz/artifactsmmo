@@ -120,6 +120,8 @@ _GUARD_INDEX = {
     GuardKind.CRAFT_RELIEF: 4,
     GuardKind.DEPOSIT_FULL: 5,
     GuardKind.DISCARD_HIGH: 6,
+    GuardKind.REST_FOR_COMBAT: 7,
+    GuardKind.GEAR_REVIEW: 8,
 }
 
 _MEANS_INDEX = {

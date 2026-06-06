@@ -19,6 +19,9 @@ import Formal.OwnedCount
 import Formal.UpgradeSelection
 import Formal.Scalarizer
 import Formal.PlannerAdmissibility
+import Formal.PlannerDepthBound
+import Formal.TieredSelection
+import Formal.GearLatch
 import Formal.TaskDecision
 import Formal.LowYieldCancel
 import Formal.StrategyBlend
@@ -1851,3 +1854,67 @@ example : Formal.GoalValueBands.pursueTaskValue 0
 example : Formal.GoalValueBands.gatherMaterialsValue 0
     = Formal.GoalValueBands.gatherMaterialsFloor :=
   @Formal.GoalValueBands.gatherMaterials_cold_eq_floor
+
+-- PlannerDepthBound (planner returns no plan longer than max_depth ⇒ the
+-- depth-based reachability gate is sound):
+example : ∀ (maxDepth : Nat) (n : Formal.PlannerDepthBound.Node),
+    Formal.PlannerDepthBound.Reachable maxDepth n → n.planLen ≤ maxDepth :=
+  @Formal.PlannerDepthBound.plan_length_le_max_depth
+
+example : ∀ (maxDepth lb : Nat) (satisfyingLen : Formal.PlannerDepthBound.Node → Prop),
+    (∀ n, satisfyingLen n → n.planLen ≥ lb) → maxDepth < lb →
+    ∀ (n : Formal.PlannerDepthBound.Node),
+      Formal.PlannerDepthBound.Reachable maxDepth n → ¬ satisfyingLen n :=
+  @Formal.PlannerDepthBound.reachable_not_satisfying_when_lb_exceeds_depth
+
+-- TieredSelection (StrategyArbiter two-pass walk: cheap pass first, escalate to
+-- full budget, else Wait; the no-plan memo soundly elides re-planning):
+-- cheap_winner_is_first_cheaply_plannable: pass-1 result is the FIRST non-skipped
+-- candidate that plans cheaply (plannable, non-skipped, member, prefix all fail).
+example : ∀ {C : Type} (skip cheapPlans : C → Bool) (cand : List C) (c : C),
+    Formal.TieredSelection.firstPlanning skip cheapPlans cand = some c →
+    cheapPlans c = true ∧ skip c = false ∧ c ∈ cand ∧
+    (∃ pre post, cand = pre ++ c :: post ∧
+        ∀ x ∈ pre, ¬ (cheapPlans x = true ∧ skip x = false)) :=
+  @Formal.TieredSelection.cheap_winner_is_first_cheaply_plannable
+-- escalation_iff_no_cheap: select = full-pass result ⇔ (no non-skipped candidate
+-- plans cheaply) ∨ (pass 1 and pass 2 coincide).
+example : ∀ {C : Type} (skip cheapPlans fullPlans : C → Bool) (cand : List C),
+    Formal.TieredSelection.select skip cheapPlans fullPlans cand
+        = Formal.TieredSelection.firstPlanning skip fullPlans cand
+      ↔ (∀ c ∈ cand, ¬ (cheapPlans c = true ∧ skip c = false))
+        ∨ Formal.TieredSelection.firstPlanning skip cheapPlans cand
+            = Formal.TieredSelection.firstPlanning skip fullPlans cand :=
+  @Formal.TieredSelection.escalation_iff_no_cheap
+-- wait_only_when_no_full: select = none (Wait) ⇒ no non-skipped candidate plans fully.
+example : ∀ {C : Type} (skip cheapPlans fullPlans : C → Bool) (cand : List C),
+    Formal.TieredSelection.select skip cheapPlans fullPlans cand = none →
+    ∀ c ∈ cand, ¬ (fullPlans c = true ∧ skip c = false) :=
+  @Formal.TieredSelection.wait_only_when_no_full
+-- memo_skip_sound: the memo only carries goals with no plan at either budget;
+-- a skipped candidate plans NEITHER cheaply NOR fully.
+example : ∀ {C : Type} (skip cheapPlans fullPlans : C → Bool),
+    (∀ c, skip c = true → cheapPlans c = false ∧ fullPlans c = false) →
+    ∀ (c : C), skip c = true → ¬ (cheapPlans c = true) ∧ ¬ (fullPlans c = true) :=
+  @Formal.TieredSelection.memo_skip_sound
+
+-- GearLatch (gear-review latch transition mirroring GearLatch.update):
+-- set_on_levelup: level-up + craftable upgrade ⇒ latch ON.
+example : ∀ {leveledUp : Bool} (active loss hasUpgrade : Bool),
+    leveledUp = true → hasUpgrade = true →
+    Formal.GearLatch.step active leveledUp loss hasUpgrade = true :=
+  @Formal.GearLatch.set_on_levelup
+-- set_on_loss: fight-loss + craftable upgrade ⇒ latch ON.
+example : ∀ (active leveledUp loss hasUpgrade : Bool),
+    loss = true → hasUpgrade = true →
+    Formal.GearLatch.step active leveledUp loss hasUpgrade = true :=
+  @Formal.GearLatch.set_on_loss
+-- clear_iff_no_upgrade: no craftable upgrade ⇒ latch forced OFF this cycle.
+example : ∀ (active leveledUp loss : Bool),
+    Formal.GearLatch.step active leveledUp loss false = false :=
+  @Formal.GearLatch.clear_iff_no_upgrade
+-- monotone_until_clear: once set, no new trigger, upgrade available ⇒ stays ON.
+example : ∀ (active leveledUp loss hasUpgrade : Bool),
+    active = true → leveledUp = false → loss = false → hasUpgrade = true →
+    Formal.GearLatch.step active leveledUp loss hasUpgrade = true :=
+  @Formal.GearLatch.monotone_until_clear

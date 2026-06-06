@@ -188,6 +188,31 @@ class TestRelevantActions:
             "should be filtered out to keep planner branching bounded"
         )
 
+    def test_excludes_crafts_and_closure_above_current_skill_level(self):
+        """Only recipes craftable AT the character's current skill give XP, so
+        only THEIR closure should reach the planner. weaponcrafting@2 can craft
+        copper_dagger (level 1) but NOT iron_dagger (level 10); the iron chain
+        (iron_bar->iron_ore->iron_rocks) must be excluded or it re-inflates the
+        branching factor back to the 505k-node / 90s timeout this filter exists
+        to prevent (Robby weaponcrafting@2 regression)."""
+        goal = LevelSkillGoal("weaponcrafting", 5)
+        gd = _gd_with_weapon_recipes()
+        state = make_state(skills={"weaponcrafting": 2})
+        actions = [
+            CraftAction(code="copper_dagger", quantity=1),   # craft level 1 <= 2: keep
+            CraftAction(code="iron_dagger", quantity=1),      # craft level 10 > 2: drop
+            GatherAction(resource_code="copper_rocks"),        # copper chain: keep
+            GatherAction(resource_code="iron_rocks"),          # iron chain: drop
+        ]
+        relevant = goal.relevant_actions(actions, state, gd)
+        craft_codes = {a.code for a in relevant if isinstance(a, CraftAction)}
+        gather_res = {a.resource_code for a in relevant if isinstance(a, GatherAction)}
+        assert craft_codes == {"copper_dagger"}
+        assert gather_res == {"copper_rocks"}, (
+            "iron_rocks feeds only iron_dagger (craft level 10), uncraftable at "
+            "weaponcrafting 2 — it must not be in the relevant-action closure"
+        )
+
     def test_withdraw_filtered_to_recipe_inputs(self):
         """Symmetric to the gather restriction: only withdraws of items in
         the skill's recipe closure (leaves + intermediates + in-skill

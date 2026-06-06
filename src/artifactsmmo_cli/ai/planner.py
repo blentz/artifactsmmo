@@ -67,10 +67,17 @@ class GOAPPlanner:
         actions: list[Action],
         game_data: GameData,
         history: LearningStore | None = None,
+        *,
+        budget_seconds: float | None = None,
     ) -> list[Action]:
-        """Return the lowest-cost action plan to satisfy `goal` from `state`, or [] if none found."""
+        """Return the lowest-cost action plan to satisfy `goal` from `state`, or [] if none found.
+
+        ``budget_seconds`` overrides the module-level ``_SEARCH_BUDGET_SECONDS`` for this
+        call only.  Pass ``None`` (the default) to preserve the existing 90s behaviour.
+        """
         max_depth = goal.max_depth
-        deadline = time.monotonic() + _SEARCH_BUDGET_SECONDS
+        budget = _SEARCH_BUDGET_SECONDS if budget_seconds is None else budget_seconds
+        deadline = time.monotonic() + budget
         stats = PlanStats()
 
         visited: set[tuple[object, ...]] = set()

@@ -907,8 +907,8 @@ trailing args).
   — the diff test uses query 0 only on numeric fields and parameterises repr
   ties off-line). For simplicity we emit cmp(a, b) treating reprs as equal
   (the strict-total-order property at the (negFinal, effort) projection).
-* For query 1: `[1]` = GuardKind index 0..5.
-* For query 2: `[1]` = MeansKind index 0..9.
+* For query 1: `[1]` = GuardKind index 0..8.
+* For query 2: `[1]` = MeansKind index 0..10.
 
 Emits:
 * query 0: cmp outcome as `"lt" | "eq" | "gt"`.
@@ -930,7 +930,9 @@ def runDecideKey (args : Array Json) : Json :=
       | 3 => .discardCritical
       | 4 => .craftRelief
       | 5 => .depositFull
-      | _ => .discardHigh
+      | 6 => .discardHigh
+      | 7 => .restForCombat
+      | _ => .gearReview
     Json.mkObj [("repr", Json.str (Formal.DecideKey.goalReprOfGuard k))]
   else
     let idx := (intArg args 1).toNat

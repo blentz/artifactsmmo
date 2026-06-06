@@ -22,7 +22,7 @@ def test_play_help_shows_learn_flags():
         [
             sys.executable, "-c",
             "from artifactsmmo_cli.main import app; app()",
-            "play", "play", "--help",
+            "play", "--help",
         ],
         capture_output=True, text=True, timeout=30,
     )

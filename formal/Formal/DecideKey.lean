@@ -153,7 +153,10 @@ theorem decideCmp_ne_of_repr_ne (a b : Key) (h : a.rootRepr ≠ b.rootRepr) :
 
 /-! ## (2) Dispatcher inductives + total `repr` maps. -/
 
-/-- Mirror of `src/artifactsmmo_cli/ai/tiers/guards.py::GuardKind`. -/
+/-- Mirror of `src/artifactsmmo_cli/ai/tiers/guards.py::GuardKind`. The two
+trailing variants (`restForCombat`, `gearReview`) are appended last so the
+oracle's index dispatch (and the diff test's `_GUARD_INDEX`) keeps the existing
+0..6 positions stable. -/
 inductive GuardKind where
   | hpCritical
   | bankUnlock
@@ -162,6 +165,8 @@ inductive GuardKind where
   | craftRelief
   | depositFull
   | discardHigh
+  | restForCombat
+  | gearReview
 deriving Repr, DecidableEq
 
 /-- Mirror of `src/artifactsmmo_cli/ai/tiers/means.py::MeansKind`. -/
@@ -187,12 +192,14 @@ is added to `GuardKind`, this declaration FAILS TO ELABORATE unless a case is
 added. The fall-through is statically unreachable. -/
 def goalReprOfGuard : GuardKind → String
   | .hpCritical       => "RestoreHP"
+  | .restForCombat    => "RestoreHP"
   | .discardCritical  => "DiscardOverstock"
   | .discardHigh      => "DiscardOverstock"
   | .bankUnlock       => "UnlockBank"
   | .reachUnlockLevel => "ReachUnlockLevel"
   | .craftRelief      => "CraftRelief"
   | .depositFull      => "DepositInventory"
+  | .gearReview       => "UpgradeEquipment"
 
 /-- TOTAL `match`: every `MeansKind` variant maps to a non-empty repr string. -/
 def goalReprOfMeans : MeansKind → String

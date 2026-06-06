@@ -16,15 +16,11 @@ from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.tui.app import WatchApp
 from artifactsmmo_cli.tui.observer import ThreadSafeBridge
 
-app = typer.Typer(help="Run the autonomous AI player")
-
-
 def default_learn_db_path() -> str:
     """Return ~/.cache/artifactsmmo/learning.db (parent dirs created on first use)."""
     return str(Path.home() / ".cache" / "artifactsmmo" / "learning.db")
 
 
-@app.command("play")
 def play(
     character: str = typer.Argument(..., help="Character name to play"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show full plan each cycle"),

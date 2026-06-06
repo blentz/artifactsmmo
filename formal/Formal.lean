@@ -17,6 +17,9 @@ import Formal.OwnedCount
 import Formal.UpgradeSelection
 import Formal.Scalarizer
 import Formal.PlannerAdmissibility
+import Formal.PlannerDepthBound
+import Formal.TieredSelection
+import Formal.GearLatch
 import Formal.ArbiterSelect
 import Formal.TaskDecision
 import Formal.WeightedRemaining

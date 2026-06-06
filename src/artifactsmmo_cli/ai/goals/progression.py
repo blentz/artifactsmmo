@@ -14,6 +14,7 @@ from artifactsmmo_cli.ai.goals.upgrade_selection import (
     inventory_key,
 )
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.min_gathers import min_gathers
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -91,6 +92,33 @@ class UpgradeEquipmentGoal(Goal):
             return {}
         code, slot = upgrade
         return {"equipment": {slot: code}}
+
+    def is_plannable(self, state: WorldState, game_data: GameData,
+                     history: LearningStore | None = None) -> bool:
+        """Skip when the target needs more gather actions than max_depth.
+
+        is_satisfied requires the target item EQUIPPED, which means crafting it
+        first; a gather mints +1, so obtaining the target from raw materials
+        needs ≥ `min_gathers` gather steps. The planner never returns a plan
+        longer than `max_depth` (formal/Formal/PlannerDepthBound.lean:
+        plan_length_le_max_depth), so when `min_gathers > max_depth` no plan can
+        exist — running the 90s A* is pure waste. copper_boots from scratch =
+        80 gathers ≫ base max_depth 15: the Robby first-cycle stall. When the
+        target (or its materials) is already in hand/bank the count drops and the
+        short craft+equip plan IS reachable, so the goal stays plannable and
+        GatherMaterials does the accumulating across cycles."""
+        if self.is_satisfied(state):
+            return True
+        target = self.find_upgrade_target(state, game_data)
+        if target is None:
+            return True
+        item, _slot = target
+        owned: dict[str, int] = dict(state.inventory)
+        for code, qty in (state.bank_items or {}).items():
+            owned[code] = owned.get(code, 0) + qty
+        if owned.get(item, 0) > 0:
+            return True
+        return min_gathers(item, 1, game_data._crafting_recipes, owned) <= self.max_depth
 
     def relevant_actions(self, actions: list[Action], state: WorldState,
                          game_data: GameData) -> list[Action]:

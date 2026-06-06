@@ -692,3 +692,25 @@ open Formal.PriorityBand
 #check @Formal.RecycleProtection.trace_copper_dagger_excluded
 #check @Formal.RecycleProtection.trace_copper_axe_excluded
 #check @Formal.RecycleProtection.trace_off_target_kept
+
+-- PlannerDepthBound (planner never returns a plan longer than max_depth ⇒ a
+-- depth-based pre-plan skip is sound; copper_boots @ max_depth 15 is the bug):
+#check @Formal.PlannerDepthBound.reachable_planLen_eq_depth
+#check @Formal.PlannerDepthBound.reachable_depth_le_maxDepth
+#check @Formal.PlannerDepthBound.plan_length_le_max_depth
+#check @Formal.PlannerDepthBound.reachable_not_satisfying_when_lb_exceeds_depth
+#check @Formal.PlannerDepthBound.copper_boots_unreachable_under_upgrade_depth
+
+-- TieredSelection (StrategyArbiter two-pass walk: cheap pass, escalate to full,
+-- else Wait; the per-cycle no-plan memo elides re-planning soundly):
+#check @Formal.TieredSelection.cheap_winner_is_first_cheaply_plannable
+#check @Formal.TieredSelection.escalation_iff_no_cheap
+#check @Formal.TieredSelection.wait_only_when_no_full
+#check @Formal.TieredSelection.memo_skip_sound
+
+-- GearLatch (gear-review latch state machine: set on level-up / fight-loss,
+-- clear when no craftable upgrade remains, hold otherwise):
+#check @Formal.GearLatch.set_on_levelup
+#check @Formal.GearLatch.set_on_loss
+#check @Formal.GearLatch.clear_iff_no_upgrade
+#check @Formal.GearLatch.monotone_until_clear

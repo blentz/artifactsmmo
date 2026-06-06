@@ -11,6 +11,7 @@ from artifactsmmo_cli.ai.tiers.guards import (
     active_guards,
 )
 from tests.test_ai.fixtures import make_state
+from tests.test_ai.test_strategy_driver import _ctx as driver_ctx
 
 
 def _ctx(**kw) -> SelectionContext:
@@ -120,3 +121,17 @@ def test_fires_returns_false_for_unknown_guard_kind():
     with patch("artifactsmmo_cli.ai.tiers.guards.GUARD_ORDER", (unknown,)):  # type: ignore[arg-type]
         result = _fires(unknown, state, GameData(), None, ctx)  # type: ignore[arg-type]
     assert result is False
+
+
+def test_gear_review_in_guard_order_below_survival_above_none():
+    # GEAR_REVIEW is the LAST guard (lowest-priority guard, still above all means).
+    assert GUARD_ORDER[-1] is GuardKind.GEAR_REVIEW
+    assert GuardKind.HP_CRITICAL in GUARD_ORDER[:GUARD_ORDER.index(GuardKind.GEAR_REVIEW)]
+
+
+def test_gear_review_fires_only_when_ctx_active(make_planner_gd):
+    state = make_state(hp=150, max_hp=150)
+    active_ctx = driver_ctx(gear_review_active=True)
+    inactive_ctx = driver_ctx(gear_review_active=False)
+    assert GuardKind.GEAR_REVIEW in active_guards(state, make_planner_gd, None, active_ctx)
+    assert GuardKind.GEAR_REVIEW not in active_guards(state, make_planner_gd, None, inactive_ctx)

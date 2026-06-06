@@ -7,11 +7,12 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.arbiter_select import Candidate, select_pure
+from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
+from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
-from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
 from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
 from artifactsmmo_cli.ai.goals.craft_relief import CraftReliefGoal
 from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
@@ -44,6 +45,12 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 )
 from artifactsmmo_cli.ai.world_state import WorldState
 
+CHEAP_BUDGET_SECONDS = 1.0
+"""Per-candidate budget for the arbiter's cheap first pass. Goals that plan in
+under a second (a Fight, SellInventory, a shallow craft) win immediately; wide
+goals that would time out at 90s fail fast here and are memoized. Guards bypass
+this and always get the full budget. Tunable; see the tiered-budget spec."""
+
 LEVEL_LOOKAHEAD = 3
 """How many levels ahead the objective step / task skill-gate targets, replacing
 the old hard current+1. The planner re-plans every cycle and executes only
@@ -74,6 +81,14 @@ def _task_recipe_inputs(task_code: str | None, game_data: GameData) -> frozenset
             chain.add(mat)
             queue.append(mat)
     return frozenset(chain)
+
+def _materials_in_hand(item: str, state: WorldState, game_data: GameData) -> bool:
+    """True if every direct recipe material for `item` is fully covered by
+    inventory + bank (so the craft+equip plan is short and reachable)."""
+    recipe = game_data._crafting_recipes.get(item) or {}
+    bank = state.bank_items or {}
+    return bool(recipe) and all(
+        state.inventory.get(mat, 0) + bank.get(mat, 0) >= qty for mat, qty in recipe.items())
 
 # ---------------------------------------------------------------------------
 # Flat map functions + StrategyArbiter
@@ -117,6 +132,22 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
             initial_qty=state.inventory.get(top.item_code, 0),
             batch=top.quantity,
         )
+    if kind is GuardKind.GEAR_REVIEW:
+        if state is None:
+            raise ValueError("GEAR_REVIEW guard requires a state")
+        probe = UpgradeEquipmentGoal(initial_equipment=state.equipment)
+        target = probe.find_upgrade_target(state, game_data)
+        if target is None:
+            # No upgrade found — defensive fallback (active_guards gates on ctx,
+            # so this branch is only reachable if the latch fired without an upgrade).
+            return UpgradeEquipmentGoal(initial_equipment=state.equipment)
+        item, slot = target
+        if state.inventory.get(item, 0) > 0 or _materials_in_hand(item, state, game_data):
+            return UpgradeEquipmentGoal(initial_equipment=state.equipment,
+                                        committed_target=(item, slot))
+        recipe = game_data._crafting_recipes.get(item) or {}
+        needed = {mat: qty for mat, qty in recipe.items()}
+        return GatherMaterialsGoal(target_item=item, needed=needed)
     raise ValueError(f"Unknown GuardKind: {kind!r}")
 
 
@@ -251,6 +282,12 @@ class StrategyArbiter:
         self._history = history
         self._committed_repr: str | None = None
         self.goals_tried: list[dict[str, object]] = []
+        self._memo = DoomedMemo()
+        self._cycle = 0
+
+    def set_cycle(self, cycle: int) -> None:
+        """Player calls this each cycle so the memo's re-probe window advances."""
+        self._cycle = cycle
 
     def _plans(
         self,
@@ -258,6 +295,7 @@ class StrategyArbiter:
         state: WorldState,
         game_data: GameData,
         actions: list[Action],
+        budget_seconds: float | None = None,
     ) -> list[Action]:
         """Attempt to plan goal; record attempt in goals_tried; return plan ([] = failed).
 
@@ -277,7 +315,23 @@ class StrategyArbiter:
                 "plan_len": 1,
             })
             return wait_plan
-        plan = self._planner.plan(state, goal, actions, game_data, self._history)
+        # Provably-sound pre-plan reachability gate: a goal whose minimum plan is
+        # longer than its max_depth can never be planned (the planner never
+        # returns a plan longer than max_depth — formal/Formal/PlannerDepthBound),
+        # so skip it instead of burning the full 90s budget. This is what stops
+        # UpgradeEquipment(copper_boots) — 80 gathers vs max_depth 15 — from
+        # stalling the first cycle.
+        if not goal.is_plannable(state, game_data, self._history):
+            self.goals_tried.append({
+                "goal": repr(goal),
+                "nodes": 0,
+                "depth": 0,
+                "timed_out": False,
+                "plan_len": 0,
+            })
+            return []
+        plan = self._planner.plan(state, goal, actions, game_data, self._history,
+                                  budget_seconds=budget_seconds)
         stats = self._planner.last_stats
         self.goals_tried.append({
             "goal": repr(goal),
@@ -438,18 +492,62 @@ class StrategyArbiter:
             g = map_means(mk, game_data, ctx, state)
             candidates.append(Candidate(goal=g, is_means=True, repr_=repr(g)))
 
-        def try_plan(goal: Goal) -> list[Action]:
-            return self._plans(goal, state, game_data, actions)
+        # Partition: guard candidates always get the full budget and bypass the
+        # memo (safety/gear-critical, few, rarely time out). Non-guard candidates
+        # go through the cheap pass → escalation → memo machinery.
+        guard_reprs = {c.repr_ for c in candidates if not c.is_means}
+        non_wait = [c for c in candidates if not isinstance(c.goal, WaitGoal)]
+
+        def _budget_for(goal: Goal, cheap: bool) -> float | None:
+            if repr(goal) in guard_reprs:
+                return None  # guards: full budget always
+            return CHEAP_BUDGET_SECONDS if cheap else None
+
+        def _skip(goal: Goal) -> bool:
+            # Memo only governs non-guard goals; guards are never memo-skipped.
+            return repr(goal) not in guard_reprs and self._memo.is_doomed(
+                repr(goal), state, self._cycle)
+
+        def try_plan_cheap(goal: Goal) -> list[Action]:
+            if _skip(goal):
+                return []
+            return self._plans(goal, state, game_data, actions, _budget_for(goal, cheap=True))
+
+        def try_plan_full(goal: Goal) -> list[Action]:
+            if _skip(goal):
+                return []
+            plan = self._plans(goal, state, game_data, actions, _budget_for(goal, cheap=False))
+            if not plan and repr(goal) not in guard_reprs:
+                self._memo.mark(repr(goal), state, self._cycle)
+            else:
+                self._memo.clear(repr(goal))
+            return plan
 
         def satisfied(goal: Goal) -> bool:
             return goal.is_satisfied(state)
 
+        # Cheap pass over non-Wait candidates (guards inside still get full budget).
         chosen, plan, new_committed = select_pure(
-            candidates=candidates,
-            committed_repr=self._committed_repr,
-            try_plan=try_plan,
-            is_satisfied=satisfied,
-            is_suppressed=is_suppressed,
-        )
+            candidates=non_wait, committed_repr=self._committed_repr,
+            try_plan=try_plan_cheap, is_satisfied=satisfied, is_suppressed=is_suppressed)
+        if chosen is None:
+            # Escalation pass at full budget; memoize timeouts.
+            chosen, plan, new_committed = select_pure(
+                candidates=non_wait, committed_repr=self._committed_repr,
+                try_plan=try_plan_full, is_satisfied=satisfied, is_suppressed=is_suppressed)
+        if chosen is None:
+            # Last resort: Wait (special-cased to a single WaitAction).
+            wait = next((c for c in candidates if isinstance(c.goal, WaitGoal)), None)
+            if wait is not None and not is_suppressed(wait.goal):
+                chosen, plan, new_committed = wait.goal, [WaitAction()], self._committed_repr
+
         self._committed_repr = new_committed
+        # The two-pass walk probes a non-guard candidate at most twice (cheap
+        # then full budget); collapse those to the LAST (full-budget) attempt so
+        # goals_tried stays one record per goal (the planner-attempt telemetry is
+        # diagnostic-only; the final attempt carries the authoritative stats).
+        deduped: dict[str, dict[str, object]] = {}
+        for attempt in self.goals_tried:
+            deduped[str(attempt["goal"])] = attempt
+        self.goals_tried = list(deduped.values())
         return chosen, plan, self.goals_tried

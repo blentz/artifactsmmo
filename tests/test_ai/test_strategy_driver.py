@@ -32,6 +32,7 @@ from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.arbiter_select import Candidate, _precedes
+from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
 from artifactsmmo_cli.ai.strategy_driver import (
     LEVEL_LOOKAHEAD,
     StrategyArbiter,
@@ -62,7 +63,8 @@ def _gd():
 
 def _ctx(**kw):
     base = dict(bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
-                initial_xp=0, task_exchange_min_coins=1, combat_monster=None)
+                initial_xp=0, task_exchange_min_coins=1, combat_monster=None,
+                gear_review_active=False)
     base.update(kw)
     return SelectionContext(**base)
 
@@ -105,6 +107,40 @@ def test_map_guard_deposit_full():
 def test_map_guard_unknown_raises():
     with pytest.raises(ValueError):
         map_guard("bogus", GameData(), _ctx())  # type: ignore[arg-type]
+
+
+def test_map_guard_gear_review_gathers_when_materials_missing():
+    gd = GameData()
+    gd._item_stats = {"copper_boots": ItemStats(code="copper_boots", level=1, type_="boots",
+                                                crafting_skill="gearcrafting", crafting_level=1)}
+    gd._crafting_recipes = {"copper_boots": {"copper_bar": 8}, "copper_bar": {"copper_ore": 10}}
+    state = make_state(level=4, inventory={}, bank_items={})
+    goal = map_guard(GuardKind.GEAR_REVIEW, gd, _ctx(gear_review_active=True), state)
+    assert isinstance(goal, GatherMaterialsGoal)
+
+
+def test_map_guard_gear_review_upgrades_when_materials_in_hand():
+    gd = GameData()
+    gd._item_stats = {"copper_boots": ItemStats(code="copper_boots", level=1, type_="boots",
+                                                crafting_skill="gearcrafting", crafting_level=1)}
+    gd._crafting_recipes = {"copper_boots": {"copper_bar": 8}, "copper_bar": {"copper_ore": 10}}
+    state = make_state(level=4, inventory={"copper_bar": 8})
+    goal = map_guard(GuardKind.GEAR_REVIEW, gd, _ctx(gear_review_active=True), state)
+    assert isinstance(goal, UpgradeEquipmentGoal)
+
+
+def test_map_guard_gear_review_no_state_raises():
+    """map_guard(GEAR_REVIEW) without a state must raise ValueError (line 137)."""
+    with pytest.raises(ValueError, match="GEAR_REVIEW guard requires a state"):
+        map_guard(GuardKind.GEAR_REVIEW, GameData(), _ctx())
+
+
+def test_map_guard_gear_review_no_upgrade_found_returns_upgrade_goal():
+    """When find_upgrade_target returns None (empty game data, no upgrades),
+    map_guard falls back to a plain UpgradeEquipmentGoal (line 143)."""
+    state = make_state(level=1, inventory={}, equipment={})
+    goal = map_guard(GuardKind.GEAR_REVIEW, GameData(), _ctx(gear_review_active=True), state)
+    assert isinstance(goal, UpgradeEquipmentGoal)
 
 
 # ---------------------------------------------------------------------------
@@ -372,6 +408,47 @@ def test_select_returns_none_when_nothing_plans():
         decision, state, gd, actions, ctx, suppressed={"Wait"})
     assert goal is None
     assert plan == []
+
+
+class _SpyPlanner:
+    """Records plan() calls so a test can prove the arbiter skipped the search."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.last_stats = GOAPPlanner().last_stats
+
+    def plan(self, state, goal, actions, game_data, history=None, *, budget_seconds=None):
+        self.calls += 1
+        return []
+
+
+def test_plans_skips_unplannable_goal_without_searching():
+    """A goal whose is_plannable() is False is never handed to the planner: the
+    arbiter records a skipped attempt and returns [] without the 90s search.
+    UpgradeEquipment(copper_boots) needs 80 gathers ≫ max_depth 15 ⇒ unplannable."""
+    gd = GameData()
+    gd._crafting_recipes = {
+        "copper_boots": {"copper_bar": 8},
+        "copper_bar": {"copper_ore": 10},
+    }
+    spy = _SpyPlanner()
+    arbiter = StrategyArbiter(spy, history=None)
+    goal = UpgradeEquipmentGoal(committed_target=("copper_boots", "boots_slot"))
+    state = make_state(inventory={}, bank_items={})
+    plan = arbiter._plans(goal, state, gd, [])
+    assert plan == []
+    assert spy.calls == 0, "unplannable goal must NOT invoke the planner"
+    assert arbiter.goals_tried[-1]["plan_len"] == 0
+
+
+def test_plans_runs_planner_for_plannable_goal():
+    """A goal with default is_plannable() True is handed to the planner."""
+    spy = _SpyPlanner()
+    arbiter = StrategyArbiter(spy, history=None)
+    goal = AcceptTaskGoal()
+    state = make_state(task_code=None, task_total=0)
+    arbiter._plans(goal, state, _gd(), [AcceptTaskAction(taskmaster_location=(2, 1))])
+    assert spy.calls == 1
 
 
 def test_select_skips_suppressed_means():
@@ -855,3 +932,30 @@ class TestPursueTaskEndToEnd:
         assert any(isinstance(a, TaskTradeAction) for a in plan), (
             f"PursueTask plan must include TaskTrade, got plan={plan}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Task 4: _plans forwards budget; arbiter owns a DoomedMemo
+# ---------------------------------------------------------------------------
+
+def test_plans_forwards_budget_to_planner():
+    """_plans passes its budget_seconds through to planner.plan."""
+    captured = {}
+
+    class _BudgetSpy:
+        def __init__(self):
+            self.last_stats = GOAPPlanner().last_stats
+
+        def plan(self, state, goal, actions, game_data, history=None, *, budget_seconds=None):
+            captured["budget"] = budget_seconds
+            return []
+
+    arbiter = StrategyArbiter(_BudgetSpy(), history=None)
+    arbiter._plans(AcceptTaskGoal(), make_state(task_code=None, task_total=0), _gd(),
+                   [AcceptTaskAction(taskmaster_location=(2, 1))], budget_seconds=1.0)
+    assert captured["budget"] == 1.0
+
+
+def test_arbiter_has_doomed_memo():
+    arbiter = StrategyArbiter(GOAPPlanner(), history=None)
+    assert isinstance(arbiter._memo, DoomedMemo)
