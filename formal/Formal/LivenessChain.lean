@@ -62,7 +62,7 @@ def chainEmitsFight (i : LivenessInputs) (hasTask : Bool) (taskTarget : Option I
   | none => none
   | some monster =>
       -- 2. Dispatch the bootstrap step against the chosen target.
-      let ctx : DispatchContext := { combatMonster := some monster }
+      let ctx : DispatchContext := { combatMonster := some monster, targetReachable := true }
       match stepDispatch ctx (MetaGoal.reachCharLevel i.bootstrapLevel) with
       | some (GoalClass.grindCharacterXP m) =>
           -- 3. Check FightAction applicability for that monster.
@@ -95,7 +95,7 @@ theorem chain_emits_fight_when_target_exists_and_applicable
   rw [hPick]
   -- Step 2: dispatch is grindCharacterXP code.
   show ∃ monster,
-    (match stepDispatch { combatMonster := some code } (MetaGoal.reachCharLevel i.bootstrapLevel) with
+    (match stepDispatch { combatMonster := some code, targetReachable := true } (MetaGoal.reachCharLevel i.bootstrapLevel) with
      | some (GoalClass.grindCharacterXP m) =>
          if fightApplicable i.fightInputs = true then some m else none
      | _ => none) = some monster

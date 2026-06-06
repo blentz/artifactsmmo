@@ -573,6 +573,7 @@ open Formal.PriorityBand
 #check @Formal.StepDispatch.stepDispatch_total
 #check @Formal.StepDispatch.stepDispatch_deterministic
 #check @Formal.StepDispatch.dispatch_obtain_equippable_goes_to_upgrade
+#check @Formal.StepDispatch.dispatch_obtain_equippable_unreachable_goes_to_gather
 #check @Formal.StepDispatch.dispatch_obtain_nonequippable_goes_to_gather
 #check @Formal.StepDispatch.dispatch_reach_skill_goes_to_level_skill
 #check @Formal.StepDispatch.dispatch_reach_char_with_target_goes_to_grind

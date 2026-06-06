@@ -43,16 +43,30 @@ inductive GoalClass where
   | grindCharacterXP : (monster : Int) → GoalClass
 deriving Repr, DecidableEq
 
-/-- The dispatch context: combat_monster might be `None` (no winnable
-target) which gates the ReachCharLevel branch to a safe-fail. -/
+/-- The dispatch context.
+
+* `combatMonster` might be `None` (no winnable target) which gates the
+  ReachCharLevel branch to a safe-fail.
+* `targetReachable` mirrors `UpgradeEquipmentGoal.is_plannable` for an
+  equippable ObtainItem target: `true` when the target is depth-REACHABLE
+  (its materials are in hand or craftable within `max_depth`), `false`
+  when depth-UNREACHABLE (`min_gathers(code) > max_depth` — materials not
+  yet gathered). It gates the equippable ObtainItem branch between the
+  craft+equip UpgradeEquipment goal and the GatherMaterials fallback that
+  drives the gather so materials accumulate. -/
 structure DispatchContext where
   combatMonster : Option Int
+  targetReachable : Bool
 
 /-! ## The dispatch function. -/
 
 /-- Mirrors `objective_step_goal` exactly:
 
-* `ObtainItem(code, equippable=true)` → `UpgradeEquipment(code)`
+* `ObtainItem(code, equippable=true)` with `targetReachable = true`
+  → `UpgradeEquipment(code)` (the craft+equip);
+* `ObtainItem(code, equippable=true)` with `targetReachable = false`
+  → `GatherMaterials(code, 1)` (drive the gather so materials accumulate;
+  UpgradeEquipment fires once they're in hand);
 * `ObtainItem(code, equippable=false)` → `GatherMaterials(code, 1)`
 * `ReachSkillLevel(skill, level)` → `LevelSkill(skill, level)`
 * `ReachCharLevel(level)` with `combatMonster = some _` → `GrindCharacterXP`
@@ -60,7 +74,8 @@ structure DispatchContext where
 -/
 def stepDispatch (ctx : DispatchContext) : MetaGoal → Option GoalClass
   | MetaGoal.obtainItem code true =>
-      some (GoalClass.upgradeEquipment code)
+      if ctx.targetReachable then some (GoalClass.upgradeEquipment code)
+      else some (GoalClass.gatherMaterials code 1)
   | MetaGoal.obtainItem code false =>
       some (GoalClass.gatherMaterials code 1)
   | MetaGoal.reachSkillLevel skill level =>
@@ -78,7 +93,7 @@ theorem stepDispatch_total (ctx : DispatchContext) (step : MetaGoal) :
     stepDispatch ctx step = none ∨ ∃ g, stepDispatch ctx step = some g := by
   cases step with
   | obtainItem code eq =>
-    cases eq <;> simp [stepDispatch]
+    cases eq <;> simp only [stepDispatch] <;> cases ctx.targetReachable <;> simp
   | reachSkillLevel skill level => simp [stepDispatch]
   | reachCharLevel level =>
     simp [stepDispatch]
@@ -98,11 +113,23 @@ theorem stepDispatch_deterministic (ctx : DispatchContext) (step : MetaGoal) :
 
 /-! ## Per-branch correctness. -/
 
-/-- Equippable ObtainItem dispatches to UpgradeEquipment. -/
+/-- Equippable ObtainItem with a depth-REACHABLE target dispatches to
+UpgradeEquipment (the craft+equip). -/
 theorem dispatch_obtain_equippable_goes_to_upgrade (ctx : DispatchContext)
-    (code : Int) :
+    (h : ctx.targetReachable = true) (code : Int) :
     stepDispatch ctx (MetaGoal.obtainItem code true) =
-      some (GoalClass.upgradeEquipment code) := rfl
+      some (GoalClass.upgradeEquipment code) := by
+  simp [stepDispatch, h]
+
+/-- Equippable ObtainItem with a depth-UNREACHABLE target dispatches to
+GatherMaterials — the fallback that drives the gather so the target's
+recipe materials accumulate across cycles; UpgradeEquipment fires once
+they're in hand. -/
+theorem dispatch_obtain_equippable_unreachable_goes_to_gather
+    (ctx : DispatchContext) (h : ctx.targetReachable = false) (code : Int) :
+    stepDispatch ctx (MetaGoal.obtainItem code true) =
+      some (GoalClass.gatherMaterials code 1) := by
+  simp [stepDispatch, h]
 
 /-- Non-equippable ObtainItem dispatches to GatherMaterials. -/
 theorem dispatch_obtain_nonequippable_goes_to_gather (ctx : DispatchContext)
@@ -118,7 +145,8 @@ theorem dispatch_reach_skill_goes_to_level_skill (ctx : DispatchContext)
 
 /-- ReachCharLevel with a combat target dispatches to GrindCharacterXP. -/
 theorem dispatch_reach_char_with_target_goes_to_grind (level monster : Int) :
-    stepDispatch { combatMonster := some monster } (MetaGoal.reachCharLevel level) =
+    stepDispatch { combatMonster := some monster, targetReachable := true }
+      (MetaGoal.reachCharLevel level) =
       some (GoalClass.grindCharacterXP monster) := rfl
 
 /-- **Safe-fail**: ReachCharLevel with NO combat target returns `none`. The
@@ -127,7 +155,8 @@ discretionary. The Python contract requires this — without it, the step
 goal would be `GrindCharacterXP(<undefined>)` which would crash the
 planner. -/
 theorem dispatch_reach_char_no_target_safe_fails (level : Int) :
-    stepDispatch { combatMonster := none } (MetaGoal.reachCharLevel level) =
+    stepDispatch { combatMonster := none, targetReachable := true }
+      (MetaGoal.reachCharLevel level) =
       none := rfl
 
 /-! ## Uniqueness of routing. -/
@@ -141,9 +170,18 @@ theorem obtain_only_routes_to_obtain_classes (ctx : DispatchContext)
   intros g hG
   cases eq with
   | true =>
-    rw [dispatch_obtain_equippable_goes_to_upgrade] at hG
-    cases hG
-    left; exact ⟨code, rfl⟩
+    -- The equippable branch is conditional on `ctx.targetReachable`:
+    -- reachable ⇒ UpgradeEquipment, unreachable ⇒ GatherMaterials. Both
+    -- are obtain-classes, so the disjunction holds either way.
+    cases hR : ctx.targetReachable with
+    | true =>
+      rw [dispatch_obtain_equippable_goes_to_upgrade ctx hR] at hG
+      cases hG
+      left; exact ⟨code, rfl⟩
+    | false =>
+      rw [dispatch_obtain_equippable_unreachable_goes_to_gather ctx hR] at hG
+      cases hG
+      right; exact ⟨code, 1, rfl⟩
   | false =>
     rw [dispatch_obtain_nonequippable_goes_to_gather] at hG
     cases hG

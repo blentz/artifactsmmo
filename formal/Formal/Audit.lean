@@ -621,6 +621,7 @@ open Formal.WeightedRemaining in
 #print axioms Formal.StepDispatch.stepDispatch_total
 #print axioms Formal.StepDispatch.stepDispatch_deterministic
 #print axioms Formal.StepDispatch.dispatch_obtain_equippable_goes_to_upgrade
+#print axioms Formal.StepDispatch.dispatch_obtain_equippable_unreachable_goes_to_gather
 #print axioms Formal.StepDispatch.dispatch_obtain_nonequippable_goes_to_gather
 #print axioms Formal.StepDispatch.dispatch_reach_skill_goes_to_level_skill
 #print axioms Formal.StepDispatch.dispatch_reach_char_with_target_goes_to_grind
