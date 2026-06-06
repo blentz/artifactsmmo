@@ -82,6 +82,14 @@ def _task_recipe_inputs(task_code: str | None, game_data: GameData) -> frozenset
             queue.append(mat)
     return frozenset(chain)
 
+def _materials_in_hand(item: str, state: WorldState, game_data: GameData) -> bool:
+    """True if every direct recipe material for `item` is fully covered by
+    inventory + bank (so the craft+equip plan is short and reachable)."""
+    recipe = game_data._crafting_recipes.get(item) or {}
+    bank = state.bank_items or {}
+    return bool(recipe) and all(
+        state.inventory.get(mat, 0) + bank.get(mat, 0) >= qty for mat, qty in recipe.items())
+
 # ---------------------------------------------------------------------------
 # Flat map functions + StrategyArbiter
 # ---------------------------------------------------------------------------
@@ -124,6 +132,22 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
             initial_qty=state.inventory.get(top.item_code, 0),
             batch=top.quantity,
         )
+    if kind is GuardKind.GEAR_REVIEW:
+        if state is None:
+            raise ValueError("GEAR_REVIEW guard requires a state")
+        probe = UpgradeEquipmentGoal(initial_equipment=state.equipment)
+        target = probe.find_upgrade_target(state, game_data)
+        if target is None:
+            # No upgrade found — defensive fallback (active_guards gates on ctx,
+            # so this branch is only reachable if the latch fired without an upgrade).
+            return UpgradeEquipmentGoal(initial_equipment=state.equipment)
+        item, slot = target
+        if state.inventory.get(item, 0) > 0 or _materials_in_hand(item, state, game_data):
+            return UpgradeEquipmentGoal(initial_equipment=state.equipment,
+                                        committed_target=(item, slot))
+        recipe = game_data._crafting_recipes.get(item) or {}
+        needed = {mat: qty for mat, qty in recipe.items()}
+        return GatherMaterialsGoal(target_item=item, needed=needed)
     raise ValueError(f"Unknown GuardKind: {kind!r}")
 
 

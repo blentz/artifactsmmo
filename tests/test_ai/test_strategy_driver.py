@@ -109,6 +109,26 @@ def test_map_guard_unknown_raises():
         map_guard("bogus", GameData(), _ctx())  # type: ignore[arg-type]
 
 
+def test_map_guard_gear_review_gathers_when_materials_missing():
+    gd = GameData()
+    gd._item_stats = {"copper_boots": ItemStats(code="copper_boots", level=1, type_="boots",
+                                                crafting_skill="gearcrafting", crafting_level=1)}
+    gd._crafting_recipes = {"copper_boots": {"copper_bar": 8}, "copper_bar": {"copper_ore": 10}}
+    state = make_state(level=4, inventory={}, bank_items={})
+    goal = map_guard(GuardKind.GEAR_REVIEW, gd, _ctx(gear_review_active=True), state)
+    assert isinstance(goal, GatherMaterialsGoal)
+
+
+def test_map_guard_gear_review_upgrades_when_materials_in_hand():
+    gd = GameData()
+    gd._item_stats = {"copper_boots": ItemStats(code="copper_boots", level=1, type_="boots",
+                                                crafting_skill="gearcrafting", crafting_level=1)}
+    gd._crafting_recipes = {"copper_boots": {"copper_bar": 8}, "copper_bar": {"copper_ore": 10}}
+    state = make_state(level=4, inventory={"copper_bar": 8})
+    goal = map_guard(GuardKind.GEAR_REVIEW, gd, _ctx(gear_review_active=True), state)
+    assert isinstance(goal, UpgradeEquipmentGoal)
+
+
 # ---------------------------------------------------------------------------
 # map_means unit tests
 # ---------------------------------------------------------------------------
