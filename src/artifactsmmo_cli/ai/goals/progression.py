@@ -64,25 +64,22 @@ class UpgradeEquipmentGoal(Goal):
         return any(skill in active for skill in stats.skill_effects)
 
     def is_satisfied(self, state: WorldState) -> bool:
-        # Committed to a specific (item, slot): satisfied as soon as the
-        # item is OWNED — either currently in `slot` OR sitting in
-        # inventory ready for OptimizeLoadout to manage. Earlier rule
-        # required THAT item in THAT slot, which created a thrash with
-        # combat-time OptimizeLoadout: GrindCharacterXP's pre-fight swap
-        # to a combat weapon (e.g. copper_dagger) left the committed
-        # tool (copper_axe) in inventory, so this is_satisfied flipped
-        # back to False and UpgradeEquipment re-fired to swap the tool
-        # back. Trace 2026-06-06 cycles 0-8 (9-cycle session): 8 equip
-        # events, 3 cooldown errors, axe<->combat-weapon ping-pong.
-        # OptimizeLoadout owns per-fight slot management; UpgradeEquipment
-        # owns CRAFT + ONCE-EQUIP, then steps aside. Without a commitment,
-        # keep the snapshot rule so an inventory-ready equip into any slot
-        # still counts.
+        # Committed to a specific (item, slot): satisfied when item OCCUPIES
+        # that slot. The earlier inventory-suffices rule (3a2dbc8) was the
+        # wrong half of the equip-thrash fix — it stopped the goal from
+        # firing the EquipAction at all, so chosen_root=ObtainItem(tool)
+        # locked the arbiter into a step that short-circuited every cycle
+        # and discretionary PursueTask ran forever (trace 2026-06-06 cycles
+        # 9-278, 0 fights). The real thrash root was ObtainItem(tool)
+        # demanding a slot occupied by a per-fight combat weapon — fixed
+        # at the META layer by treating tools as satisfied when owned (see
+        # meta_goal.ObtainItem.is_satisfied subtype=='tool' branch). Tools
+        # never recommit here because their parent root drops. Real gear
+        # (wooden_shield etc.) still requires slot occupancy and equips
+        # exactly once.
         if self._committed_target is not None:
             item, slot = self._committed_target
-            if state.equipment.get(slot) == item:
-                return True
-            return state.inventory.get(item, 0) > 0
+            return state.equipment.get(slot) == item
         for slot, current in state.equipment.items():
             if current is not None and current != self._initial_equipment.get(slot):
                 return True

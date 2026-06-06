@@ -206,30 +206,29 @@ class TestUpgradeEquipmentGoal:
         state = make_state(equipment=_make_equipment())
         assert goal.is_satisfied(state) is False
 
-    def test_committed_satisfied_when_item_in_inventory_post_optimize_swap(self):
-        """Trace 2026-06-06 cycles 0-8: bot ping-ponged between
-        Equip(copper_axe) and OptimizeLoadout(yellow_slime) → 8 equip
-        events / 9 cycles, 3 cooldown errors. Mechanism:
-          1. UpgradeEquipment(committed=copper_axe) equips axe.
-          2. GrindCharacterXP's OptimizeLoadout pre-fight swaps to a
-             combat weapon; axe drops back to inventory.
-          3. UpgradeEquipment.is_satisfied saw equipment[slot] != axe
-             → False → re-fired → equipped axe again → loop.
-        Fix: committed-target satisfaction allows the item to be in
-        INVENTORY too. The 'I have crafted/obtained this gear' mission
-        is complete the moment the item is owned; per-fight slot
-        management belongs to OptimizeLoadout, not UpgradeEquipment."""
+    def test_committed_not_satisfied_when_item_only_in_inventory(self):
+        """Per-fight tool/combat-weapon thrash is broken at the META layer,
+        not at the goal layer. Trace 2026-06-06 cycles 0-8 had
+        UpgradeEquipment ping-pong with OptimizeLoadout, fixed by an
+        inventory-suffices rule. That rule then short-circuited the goal so
+        the EquipAction never planned at all (trace 01:24-04:57: 0 fights,
+        chosen_root locked on ObtainItem(copper_pickaxe), step satisfied,
+        arbiter fell to PursueTask for 278 cycles). The fix moved up a
+        layer: meta-level ObtainItem treats TOOLS as satisfied when owned
+        (OptimizeLoadout rotates them per task), so the parent root drops
+        out and UpgradeEquipment never recommits to a tool. At the goal
+        level the contract is the original strict one — committed means
+        slot-occupancy."""
         committed = ("copper_axe", "weapon_slot")
         goal = UpgradeEquipmentGoal(committed_target=committed)
-        # Item is in inventory but slot holds a combat-swap (copper_dagger).
         state = make_state(
             inventory={"copper_axe": 1},
             equipment=_make_equipment(weapon_slot="copper_dagger"),
         )
-        assert goal.is_satisfied(state) is True, (
-            "committed UpgradeEquipment must NOT re-fire when the item is "
-            "already owned in inventory and OptimizeLoadout has swapped the "
-            "slot for combat; that's the per-fight thrash this fix breaks"
+        assert goal.is_satisfied(state) is False, (
+            "committed UpgradeEquipment satisfaction requires the slot to "
+            "actually hold the target; the tool-rotation thrash is broken at "
+            "the meta-root layer (ObtainItem.is_satisfied subtype='tool')"
         )
 
     def test_committed_satisfied_when_item_in_slot(self):

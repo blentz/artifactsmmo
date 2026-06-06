@@ -95,6 +95,36 @@ def test_obtain_item_equippable_requires_equipped_not_owned():
     assert ObtainItem("wooden_shield").is_satisfied(state_both, gd) is True
 
 
+def test_obtain_item_tool_satisfied_when_owned_not_required_equipped():
+    """Trace 2026-06-06 session 01:24-04:57 (278 cycles, 0 fights): Robby
+    owned copper_pickaxe + copper_axe (mining/woodcutting tools) but wore
+    fishing_net. ObtainItem(copper_pickaxe) was unsatisfied (slot != code)
+    → ranked #1 → step short-circuited → bootstrap ReachCharLevel(5) never
+    reached → discretionary PursueTask ran forever. Tools (subtype='tool')
+    ROTATE through weapon_slot per the active gathering task — owning the
+    tool IS the goal; OptimizeLoadout owns the per-fight slot. Distinct
+    from real gear (wooden_shield etc.) which still requires equip."""
+    gd = GameData()
+    gd._item_stats = {
+        "copper_pickaxe": ItemStats(
+            code="copper_pickaxe", level=1, type_="weapon", subtype="tool",
+            skill_effects={"mining": -10},
+        ),
+    }
+    # Tool owned, weapon_slot holds a combat weapon → STILL satisfied.
+    state_owned = make_state(
+        inventory={"copper_pickaxe": 1},
+        equipment={"weapon_slot": "copper_dagger"},
+    )
+    assert ObtainItem("copper_pickaxe").is_satisfied(state_owned, gd) is True
+    # Not owned anywhere → not satisfied.
+    state_missing = make_state(inventory={}, equipment={"weapon_slot": "copper_dagger"})
+    assert ObtainItem("copper_pickaxe").is_satisfied(state_missing, gd) is False
+    # Tool equipped also satisfies (owned_count includes equipped copy).
+    state_equipped = make_state(inventory={}, equipment={"weapon_slot": "copper_pickaxe"})
+    assert ObtainItem("copper_pickaxe").is_satisfied(state_equipped, gd) is True
+
+
 def test_obtain_item_equippable_unknown_stats_falls_back_to_owned():
     """When stats aren't loaded for a code, we can't classify it as
     equippable — fall back to the legacy owned_count check rather than
