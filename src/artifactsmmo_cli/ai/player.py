@@ -1089,10 +1089,21 @@ class GamePlayer:
         return plan.next_action_monster
 
     def _is_winnable(self, monster_code: str) -> bool:
-        """Runtime beatability: the shared is_winnable predictor with this
-        player's learned history applied as the loss veto."""
+        """Target-selection beatability: can the bot beat this monster AFTER
+        a normal HP recovery (Rest / consumable)? The planner inserts the
+        recovery step before FightAction when state.hp is below max. Without
+        projecting to max_hp here, a single mid-damage cycle (hp=58%, the
+        critical-HP guard's threshold is 25% so RestoreHP doesn't preempt)
+        narrows the winnable set to the lowest-level monsters → the FightAction
+        action-layer level filter (`monster_level >= state.level-1`) rejects
+        those too → no monster picked → bootstrap step plans nothing →
+        discretionary PursueTask wins forever. Trace 2026-06-06 session
+        01:24-04:57: Robby parked at hp=76/130 for 278 cycles, 0 fights.
+        Per-cycle HP veto is FightAction.is_applicable's job (uses real hp);
+        target selection asks the strategic question."""
         assert self.state is not None and self.game_data is not None
-        return is_winnable(self.state, self.game_data, monster_code, self.history)
+        projected = replace(self.state, hp=self.state.max_hp)
+        return is_winnable(projected, self.game_data, monster_code, self.history)
 
     def _pick_winnable_monster(self) -> str | None:
         """Highest-level monster that `_is_winnable` (stat prediction not vetoed
