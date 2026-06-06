@@ -374,6 +374,47 @@ def test_select_returns_none_when_nothing_plans():
     assert plan == []
 
 
+class _SpyPlanner:
+    """Records plan() calls so a test can prove the arbiter skipped the search."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.last_stats = GOAPPlanner().last_stats
+
+    def plan(self, state, goal, actions, game_data, history=None):
+        self.calls += 1
+        return []
+
+
+def test_plans_skips_unplannable_goal_without_searching():
+    """A goal whose is_plannable() is False is never handed to the planner: the
+    arbiter records a skipped attempt and returns [] without the 90s search.
+    UpgradeEquipment(copper_boots) needs 80 gathers ≫ max_depth 15 ⇒ unplannable."""
+    gd = GameData()
+    gd._crafting_recipes = {
+        "copper_boots": {"copper_bar": 8},
+        "copper_bar": {"copper_ore": 10},
+    }
+    spy = _SpyPlanner()
+    arbiter = StrategyArbiter(spy, history=None)
+    goal = UpgradeEquipmentGoal(committed_target=("copper_boots", "boots_slot"))
+    state = make_state(inventory={}, bank_items={})
+    plan = arbiter._plans(goal, state, gd, [])
+    assert plan == []
+    assert spy.calls == 0, "unplannable goal must NOT invoke the planner"
+    assert arbiter.goals_tried[-1]["plan_len"] == 0
+
+
+def test_plans_runs_planner_for_plannable_goal():
+    """A goal with default is_plannable() True is handed to the planner."""
+    spy = _SpyPlanner()
+    arbiter = StrategyArbiter(spy, history=None)
+    goal = AcceptTaskGoal()
+    state = make_state(task_code=None, task_total=0)
+    arbiter._plans(goal, state, _gd(), [AcceptTaskAction(taskmaster_location=(2, 1))])
+    assert spy.calls == 1
+
+
 def test_select_skips_suppressed_means():
     """A means whose repr is in `suppressed` is skipped, falling through."""
     planner = GOAPPlanner()

@@ -103,13 +103,22 @@ class LevelSkillGoal(Goal):
         the game. With the recipe-closure restriction below, only the
         gathers/withdraws that can feed a crafting-skill recipe survive,
         which empirically holds plan resolution under a few hundred nodes."""
-        # Collect the recipe closure for items this skill can craft.
+        # Collect the recipe closure for items this skill can craft AT THE
+        # CHARACTER'S CURRENT LEVEL. Recipes above the current skill level can't
+        # be crafted yet (CraftAction.is_applicable gates on crafting_level), so
+        # they yield no XP and their material closure only inflates the planner's
+        # branching factor. Without this level bound the closure pulled every
+        # in-skill recipe — including high-tier ones with deep ore/bar chains —
+        # back to the 505k-node / 90s timeout (Robby weaponcrafting@2 regression).
+        current = state.skills.get(self._skill_name, 0)
         skill_craftables: set[str] = set()
         for code, recipe in game_data._crafting_recipes.items():
             stats = game_data.item_stats(code)
             if stats is None or stats.crafting_skill != self._skill_name:
                 continue
             if not recipe:
+                continue
+            if stats.crafting_level > current:
                 continue
             skill_craftables.add(code)
         needed_resources, craftable_mats = recipe_closure(game_data, skill_craftables)
@@ -131,10 +140,11 @@ class LevelSkillGoal(Goal):
             elif isinstance(action, WithdrawItemAction):
                 if action.code in withdrawable:
                     result.append(action)
-            elif isinstance(action, CraftAction):
-                stats = game_data.item_stats(action.code)
-                if stats is not None and stats.crafting_skill == self._skill_name:
-                    result.append(action)
+            # Only crafts in this skill family that are craftable NOW (level <=
+            # current, enforced via skill_craftables); higher-tier crafts can't
+            # be made and would only widen the search.
+            elif isinstance(action, CraftAction) and action.code in skill_craftables:
+                result.append(action)
         return result
 
     @property

@@ -19,6 +19,7 @@ import Formal.OwnedCount
 import Formal.UpgradeSelection
 import Formal.Scalarizer
 import Formal.PlannerAdmissibility
+import Formal.PlannerDepthBound
 import Formal.TaskDecision
 import Formal.LowYieldCancel
 import Formal.StrategyBlend
@@ -1851,3 +1852,15 @@ example : Formal.GoalValueBands.pursueTaskValue 0
 example : Formal.GoalValueBands.gatherMaterialsValue 0
     = Formal.GoalValueBands.gatherMaterialsFloor :=
   @Formal.GoalValueBands.gatherMaterials_cold_eq_floor
+
+-- PlannerDepthBound (planner returns no plan longer than max_depth ⇒ the
+-- depth-based reachability gate is sound):
+example : ∀ (maxDepth : Nat) (n : Formal.PlannerDepthBound.Node),
+    Formal.PlannerDepthBound.Reachable maxDepth n → n.planLen ≤ maxDepth :=
+  @Formal.PlannerDepthBound.plan_length_le_max_depth
+
+example : ∀ (maxDepth lb : Nat) (satisfyingLen : Formal.PlannerDepthBound.Node → Prop),
+    (∀ n, satisfyingLen n → n.planLen ≥ lb) → maxDepth < lb →
+    ∀ (n : Formal.PlannerDepthBound.Node),
+      Formal.PlannerDepthBound.Reachable maxDepth n → ¬ satisfyingLen n :=
+  @Formal.PlannerDepthBound.reachable_not_satisfying_when_lb_exceeds_depth

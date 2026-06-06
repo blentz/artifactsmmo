@@ -692,3 +692,11 @@ open Formal.PriorityBand
 #check @Formal.RecycleProtection.trace_copper_dagger_excluded
 #check @Formal.RecycleProtection.trace_copper_axe_excluded
 #check @Formal.RecycleProtection.trace_off_target_kept
+
+-- PlannerDepthBound (planner never returns a plan longer than max_depth ⇒ a
+-- depth-based pre-plan skip is sound; copper_boots @ max_depth 15 is the bug):
+#check @Formal.PlannerDepthBound.reachable_planLen_eq_depth
+#check @Formal.PlannerDepthBound.reachable_depth_le_maxDepth
+#check @Formal.PlannerDepthBound.plan_length_le_max_depth
+#check @Formal.PlannerDepthBound.reachable_not_satisfying_when_lb_exceeds_depth
+#check @Formal.PlannerDepthBound.copper_boots_unreachable_under_upgrade_depth

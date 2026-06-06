@@ -277,6 +277,21 @@ class StrategyArbiter:
                 "plan_len": 1,
             })
             return wait_plan
+        # Provably-sound pre-plan reachability gate: a goal whose minimum plan is
+        # longer than its max_depth can never be planned (the planner never
+        # returns a plan longer than max_depth — formal/Formal/PlannerDepthBound),
+        # so skip it instead of burning the full 90s budget. This is what stops
+        # UpgradeEquipment(copper_boots) — 80 gathers vs max_depth 15 — from
+        # stalling the first cycle.
+        if not goal.is_plannable(state, game_data, self._history):
+            self.goals_tried.append({
+                "goal": repr(goal),
+                "nodes": 0,
+                "depth": 0,
+                "timed_out": False,
+                "plan_len": 0,
+            })
+            return []
         plan = self._planner.plan(state, goal, actions, game_data, self._history)
         stats = self._planner.last_stats
         self.goals_tried.append({
