@@ -904,6 +904,50 @@ class GamePlayer:
                     if mat_qty > materials_to_withdraw.get(mat_code, 0):
                         materials_to_withdraw[mat_code] = mat_qty
 
+        # Walk recipe closure transitively. The first pass above only adds
+        # withdraws for DIRECT recipe inputs of equippables (e.g. copper_bar
+        # for copper_dagger). Trace 2026-06-06 15:21: bot looped gather →
+        # deposit copper_ore for 80 cycles because WithdrawItemAction
+        # (copper_ore, ...) was never in the action set — copper_ore is the
+        # recipe input of copper_bar (non-equippable), so the inner block
+        # skipped it. Bank had 414 copper_ore unused while bot regathered.
+        # Expand recipe chains so EVERY material the bot may need can be
+        # withdrawn instead of regathered.
+        pending = list(materials_to_withdraw.keys())
+        while pending:
+            code = pending.pop()
+            sub_recipe = self.game_data._crafting_recipes.get(code)
+            if not sub_recipe:
+                continue
+            for sub_mat, sub_qty in sub_recipe.items():
+                # Quantity = parent withdraw qty × per-craft sub recipe qty,
+                # capped to a reasonable batch (we never need more than one
+                # full equippable's worth of raw materials in one withdraw).
+                parent_qty = materials_to_withdraw.get(code, 1)
+                desired = sub_qty * parent_qty
+                if desired > materials_to_withdraw.get(sub_mat, 0):
+                    materials_to_withdraw[sub_mat] = desired
+                    pending.append(sub_mat)
+
+        # Also add SMALLER-QUANTITY withdraws (one craft unit's worth) so
+        # the action is applicable even when inventory_free is below the
+        # full-chain quantity. Trace 2026-06-06 15:21: WithdrawItemAction
+        # (copper_ore, 80) was added but state.inventory_free=56 — planner
+        # fell back to gather. Adding Withdraw(copper_ore, 10) (one
+        # copper_bar craft's worth) lets the planner chain
+        # Withdraw → Craft → Withdraw → Craft instead.
+        per_craft_withdraws: dict[str, int] = {}
+        for item_code, recipe in self.game_data._crafting_recipes.items():
+            if item_code in materials_to_withdraw:
+                for sub_mat, sub_qty in recipe.items():
+                    if sub_qty > per_craft_withdraws.get(sub_mat, 0):
+                        per_craft_withdraws[sub_mat] = sub_qty
+        for mat_code, mat_qty in per_craft_withdraws.items():
+            if mat_qty != materials_to_withdraw.get(mat_code, 0):
+                actions.append(WithdrawItemAction(
+                    code=mat_code, quantity=mat_qty,
+                    bank_location=bank, accessible=self._bank_accessible))
+
         for mat_code, mat_qty in materials_to_withdraw.items():
             actions.append(WithdrawItemAction(
                 code=mat_code, quantity=mat_qty, bank_location=bank, accessible=self._bank_accessible))
