@@ -20,6 +20,7 @@ import Formal.UpgradeSelection
 import Formal.Scalarizer
 import Formal.PlannerAdmissibility
 import Formal.PlannerDepthBound
+import Formal.TieredSelection
 import Formal.TaskDecision
 import Formal.LowYieldCancel
 import Formal.StrategyBlend
@@ -1864,3 +1865,34 @@ example : ∀ (maxDepth lb : Nat) (satisfyingLen : Formal.PlannerDepthBound.Node
     ∀ (n : Formal.PlannerDepthBound.Node),
       Formal.PlannerDepthBound.Reachable maxDepth n → ¬ satisfyingLen n :=
   @Formal.PlannerDepthBound.reachable_not_satisfying_when_lb_exceeds_depth
+
+-- TieredSelection (StrategyArbiter two-pass walk: cheap pass first, escalate to
+-- full budget, else Wait; the no-plan memo soundly elides re-planning):
+-- cheap_winner_is_first_cheaply_plannable: pass-1 result is the FIRST non-skipped
+-- candidate that plans cheaply (plannable, non-skipped, member, prefix all fail).
+example : ∀ {C : Type} (skip cheapPlans : C → Bool) (cand : List C) (c : C),
+    Formal.TieredSelection.firstPlanning skip cheapPlans cand = some c →
+    cheapPlans c = true ∧ skip c = false ∧ c ∈ cand ∧
+    (∃ pre post, cand = pre ++ c :: post ∧
+        ∀ x ∈ pre, ¬ (cheapPlans x = true ∧ skip x = false)) :=
+  @Formal.TieredSelection.cheap_winner_is_first_cheaply_plannable
+-- escalation_iff_no_cheap: select = full-pass result ⇔ (no non-skipped candidate
+-- plans cheaply) ∨ (pass 1 and pass 2 coincide).
+example : ∀ {C : Type} (skip cheapPlans fullPlans : C → Bool) (cand : List C),
+    Formal.TieredSelection.select skip cheapPlans fullPlans cand
+        = Formal.TieredSelection.firstPlanning skip fullPlans cand
+      ↔ (∀ c ∈ cand, ¬ (cheapPlans c = true ∧ skip c = false))
+        ∨ Formal.TieredSelection.firstPlanning skip cheapPlans cand
+            = Formal.TieredSelection.firstPlanning skip fullPlans cand :=
+  @Formal.TieredSelection.escalation_iff_no_cheap
+-- wait_only_when_no_full: select = none (Wait) ⇒ no non-skipped candidate plans fully.
+example : ∀ {C : Type} (skip cheapPlans fullPlans : C → Bool) (cand : List C),
+    Formal.TieredSelection.select skip cheapPlans fullPlans cand = none →
+    ∀ c ∈ cand, ¬ (fullPlans c = true ∧ skip c = false) :=
+  @Formal.TieredSelection.wait_only_when_no_full
+-- memo_skip_sound: the memo only carries goals with no plan at either budget;
+-- a skipped candidate plans NEITHER cheaply NOR fully.
+example : ∀ {C : Type} (skip cheapPlans fullPlans : C → Bool),
+    (∀ c, skip c = true → cheapPlans c = false ∧ fullPlans c = false) →
+    ∀ (c : C), skip c = true → ¬ (cheapPlans c = true) ∧ ¬ (fullPlans c = true) :=
+  @Formal.TieredSelection.memo_skip_sound

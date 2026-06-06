@@ -700,3 +700,10 @@ open Formal.PriorityBand
 #check @Formal.PlannerDepthBound.plan_length_le_max_depth
 #check @Formal.PlannerDepthBound.reachable_not_satisfying_when_lb_exceeds_depth
 #check @Formal.PlannerDepthBound.copper_boots_unreachable_under_upgrade_depth
+
+-- TieredSelection (StrategyArbiter two-pass walk: cheap pass, escalate to full,
+-- else Wait; the per-cycle no-plan memo elides re-planning soundly):
+#check @Formal.TieredSelection.cheap_winner_is_first_cheaply_plannable
+#check @Formal.TieredSelection.escalation_iff_no_cheap
+#check @Formal.TieredSelection.wait_only_when_no_full
+#check @Formal.TieredSelection.memo_skip_sound
