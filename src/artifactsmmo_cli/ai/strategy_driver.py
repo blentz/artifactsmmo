@@ -181,9 +181,29 @@ def objective_step_goal(
     if isinstance(step, ReachCharLevel):
         if ctx.combat_monster is None:
             return None
-        if (state.task_type == "items" and state.task_code
+        # Items-task stand-down was designed for the LONG-HAUL
+        # ReachCharLevel(50) root: don't preempt PURSUE_TASK with a
+        # 47-level grind when the task is paying out task XP soon. But
+        # items tasks chain indefinitely (one finishes, another starts),
+        # so the unconditional stand-down meant the bot NEVER fought —
+        # trace 2026-06-03/05 showed zero combat across 3300+ cycles
+        # and Robby permanently parked at level 3.
+        #
+        # Bootstrap roots (`ReachCharLevel(state.level + horizon)`, see
+        # tiers.prerequisite_graph._CHAR_LEVEL_BOOTSTRAP_HORIZON) are
+        # the critical-path nudge that breaks this. A small-gap step
+        # (target - current <= horizon * 2 = 4) is the bootstrap path:
+        # let it grind through even when an items task is active. The
+        # bootstrap target advances with each level-up so the bot is
+        # never grinding more than `horizon` levels at a time. The
+        # long-haul level-50 step still stands down — its grind would
+        # be 40+ unbroken combat cycles, which is the wrong trade for
+        # an in-progress task.
+        bootstrap_gap = step.level - state.level
+        if bootstrap_gap > 4 and (
+                state.task_type == "items" and state.task_code
                 and state.task_total > 0 and state.task_progress < state.task_total):
-            return None        # grind can't advance an items task; let PURSUE_TASK run
+            return None        # long-haul grind, items task active → defer
         return GrindCharacterXPGoal(target_monster=ctx.combat_monster, initial_xp=state.xp,
                                     game_data=game_data)
     return None
