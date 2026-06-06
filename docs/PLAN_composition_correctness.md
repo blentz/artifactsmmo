@@ -200,9 +200,28 @@ any module loses a previously-proved theorem.
 
 | Phase | Status |
 |---|---|
-| G1 GearPolicy.lean | IN PROGRESS (this commit) |
-| G2 PurposeRouting.lean | pending |
-| G3 CombatTargetExistence.lean | pending |
-| G4 ActionApplicability.lean | pending |
-| G5 StepDispatch.lean | pending |
-| G6 LivenessChain.lean | pending |
+| G1 GearPolicy.lean | CLOSED (8a67ad8) |
+| G2 PurposeRouting.lean | CLOSED (8efa10b) |
+| G3 CombatTargetExistence.lean | CLOSED (11bc90c) |
+| G4 ActionApplicability.lean | CLOSED (ca35cbf) |
+| G5 StepDispatch.lean | CLOSED (2c01fb7) |
+| G6 LivenessChain.lean | CLOSED (this commit) |
+
+## Outstanding work past Phase G6
+
+Lean-side: ranking-layer hookup (the actual `_value` scoring function
+in tiers/strategy.py is not yet modeled — the bot's TIER ORDERING of
+roots still relies on cost-divided heuristics and personality weights.
+The G1 dominance theorems specify the right answer but no Lean theorem
+yet says the live ranker delivers it).
+
+Python-side:
+* Port `PurposeRouting.combatScore` augmented score into the live
+  `pick_loadout` (replace raw `weapon_score` with `2 * weapon_score +
+  nonToolBonus`). Diff-test against the Lean oracle.
+* Add a Gather-purpose `pick_loadout_for_gather(skill, state, gd)` that
+  swaps the bot's loadout when the active task is gathering — currently
+  absent from the codebase.
+* Bind chain G6's headline theorem into `formal/diff/` as a
+  liveness-regression gate: random `LivenessInputs` ⇒ Python's
+  arbiter+planner returns FightAction iff the Lean chain does.

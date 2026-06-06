@@ -5,6 +5,7 @@ import Formal.PurposeRouting
 import Formal.CombatTargetExistence
 import Formal.ActionApplicability
 import Formal.StepDispatch
+import Formal.LivenessChain
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
@@ -566,3 +567,7 @@ open Formal.PriorityBand
 #check @Formal.StepDispatch.obtain_only_routes_to_obtain_classes
 #check @Formal.StepDispatch.reach_skill_only_routes_to_level_skill
 #check @Formal.StepDispatch.reach_char_only_routes_to_grind
+
+-- LivenessChain (Phase G6 capstone):
+#check @Formal.LivenessChain.chain_emits_fight_when_target_exists_and_applicable
+#check @Formal.LivenessChain.chain_none_implies_picker_or_applicability_blocked
