@@ -1,4 +1,3 @@
-import Mathlib.Tactic
 
 /-!
 # Formal.GuardCoverage
@@ -154,7 +153,7 @@ theorem firstGuard_handles_critical_inv
   have h1 : hpCritical p = false := by
     unfold hpCritical
     simp
-    linarith
+    omega
   rw [if_neg (by simp [h1]), if_neg (by simp [hRest])]
   rw [if_pos (critical_inv_with_overstock_triggers_discard p hInv hOver)]
 
