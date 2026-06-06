@@ -42,4 +42,4 @@ def test_explicit_budget_caps_wall_clock(make_planner_gd: GameData) -> None:
 def test_default_budget_uses_module_constant() -> None:
     sig = inspect.signature(GOAPPlanner.plan)
     assert sig.parameters["budget_seconds"].default is None
-    assert _SEARCH_BUDGET_SECONDS == 90.0
+    assert _SEARCH_BUDGET_SECONDS == 300.0
