@@ -11,6 +11,7 @@ from artifactsmmo_cli.ai.tiers.guards import (
     active_guards,
 )
 from tests.test_ai.fixtures import make_state
+from tests.test_ai.test_strategy_driver import _ctx as driver_ctx
 
 
 def _ctx(**kw) -> SelectionContext:
@@ -129,7 +130,6 @@ def test_gear_review_in_guard_order_below_survival_above_none():
 
 
 def test_gear_review_fires_only_when_ctx_active(make_planner_gd):
-    from tests.test_ai.test_strategy_driver import _ctx as driver_ctx
     state = make_state(hp=150, max_hp=150)
     active_ctx = driver_ctx(gear_review_active=True)
     inactive_ctx = driver_ctx(gear_review_active=False)
