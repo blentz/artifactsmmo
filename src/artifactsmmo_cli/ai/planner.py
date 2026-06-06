@@ -11,12 +11,6 @@ from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
-CHEAP_BUDGET_SECONDS = 1.0
-"""Per-candidate budget for the arbiter's cheap first pass. Goals that plan in
-under a second (a Fight, SellInventory, a shallow craft) win immediately; wide
-goals that would time out at 90s fail fast here and are memoized. Guards bypass
-this and always get the full budget. Tunable; see the tiered-budget spec."""
-
 _SEARCH_BUDGET_SECONDS = 90.0
 """A* wall-clock budget. Set to span a game action cooldown (typically 60s+) so
 the bot can plan the next action during the current one's cooldown. Deep recipe
