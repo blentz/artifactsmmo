@@ -17,6 +17,7 @@ import Formal.EquipValueAugmented
 import Formal.FallbackChain
 import Formal.AcceptTaskGate
 import Formal.TaskTradeReadyPriority
+import Formal.WithdrawSetExpansion
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
@@ -671,3 +672,12 @@ open Formal.PriorityBand
 #check @Formal.TaskTradeReadyPriority.suppress_false_when_inv_zero
 #check @Formal.TaskTradeReadyPriority.suppress_false_when_step_not_gather_taskcode
 #check @Formal.TaskTradeReadyPriority.trace_144020_suppress
+
+-- WithdrawSetExpansion (recipe-closure withdraw fix proof):
+#check @Formal.WithdrawSetExpansion.closureStep_terminates
+#check @Formal.WithdrawSetExpansion.closureStep_zero_fuel
+#check @Formal.WithdrawSetExpansion.closureStep_empty_work
+#check @Formal.WithdrawSetExpansion.hasCode_append_right
+#check @Formal.WithdrawSetExpansion.perCraftQty_none_of_no_recipe
+#check @Formal.WithdrawSetExpansion.perCraftQty_some_when_in_recipe
+#check @Formal.WithdrawSetExpansion.trace_copper_chain_per_craft
