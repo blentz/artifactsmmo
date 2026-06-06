@@ -271,6 +271,23 @@ class GamePlayer:
                 self._last_decision = decision
                 step = decision.chosen_step
                 crafting_target = step.code if isinstance(step, ObtainItem) else None
+                # When the top step isn't ObtainItem (e.g. bootstrap
+                # ReachCharLevel with no winnable target), look down the
+                # fallback chain — the arbiter will walk it for the actual
+                # step_goal, and the bank keep-set must protect THAT
+                # target's recipe materials. Trace 2026-06-06 15:21
+                # session: chosen_step=ReachCharLevel(6), crafting_target
+                # stayed None, DEPOSIT_FULL guard cycled 21 gathered
+                # copper_ore into bank because keep-set didn't protect
+                # them — bot ran a Gather→Deposit→Gather loop forever
+                # while wooden_shield/copper_helmet/copper_boots roots
+                # ranked 1.0 with valid ObtainItem steps in fallback.
+                if crafting_target is None:
+                    fallback_steps = getattr(decision, "fallback_steps", [])
+                    for alt in fallback_steps:
+                        if isinstance(alt, ObtainItem):
+                            crafting_target = alt.code
+                            break
                 self.state = state = replace(state, crafting_target=crafting_target)
                 selected_goal, plan, goals_tried = self._arbiter.select(
                     decision, state, game_data, actions, ctx,
