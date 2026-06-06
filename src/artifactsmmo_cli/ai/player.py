@@ -961,10 +961,23 @@ class GamePlayer:
         for slot in all_slots:
             actions.append(UnequipAction(slot=slot))
 
-        # Recycle actions: one per craftable equippable item
+        # Recycle actions: one per craftable equippable item, EXCEPT
+        # target_gear and target_tools — the objective wants those at
+        # hand, recycling destroys them. Trace 2026-06-06 16:34 verify
+        # showed a plan recycling copper_axe + copper_dagger + copper_pickaxe
+        # (all target_tools / target_gear codes) just to free inventory
+        # slots / recover bars for boots crafting. That trades long-term
+        # gathering capability for a one-shot copper_bar windfall — net
+        # loss because the recycled tools take dozens of cycles to remake.
+        protected_codes: set[str] = set()
+        if self._objective is not None:
+            protected_codes.update(self._objective.target_gear.values())
+            protected_codes.update(self._objective.target_tools.values())
         for item_code in self.game_data._crafting_recipes:
             stats = self.game_data.item_stats(item_code)
             if stats is None or not ITEM_TYPE_TO_SLOTS.get(stats.type_):
+                continue
+            if item_code in protected_codes:
                 continue
             workshop_loc = self.game_data.workshop_location(stats.crafting_skill) if stats.crafting_skill else None
             actions.append(RecycleAction(code=item_code, quantity=1, workshop_location=workshop_loc))
