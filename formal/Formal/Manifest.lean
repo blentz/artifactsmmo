@@ -2,6 +2,7 @@ import Formal
 import Formal.OwnedCount
 import Formal.GearPolicy
 import Formal.PurposeRouting
+import Formal.CombatTargetExistence
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
@@ -531,3 +532,10 @@ open Formal.PriorityBand
 #check @Formal.PurposeRouting.pickGatherSlot_score_optimal              -- gather pick = argmin gatherScore
 #check @Formal.PurposeRouting.argminBy_le                               -- argmin is lower bound
 #check @Formal.PurposeRouting.argminBy_mem                              -- argmin is in input
+
+-- CombatTargetExistence (Phase G3):
+#check @Formal.CombatTargetExistence.pickWinnable_some_of_exists
+#check @Formal.CombatTargetExistence.pickBest_some_of_acc_some
+#check @Formal.CombatTargetExistence.pickBest_none_iff_acc_none_and_none_winnable
+#check @Formal.CombatTargetExistence.winnableFarmTarget_task_override
+#check @Formal.CombatTargetExistence.winnableFarmTarget_falls_through_no_task
