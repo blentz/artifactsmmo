@@ -302,13 +302,31 @@ class StrategyArbiter:
         # bootstrap step returned None (no winnable target) and gear roots
         # below it (ranked 1.0) were never tried — bot dropped straight
         # to discretionary PursueTask instead of pursuing the runner-up.
+        # Prefer UpgradeEquipment steps over GatherMaterials steps when both
+        # exist in the fallback chain. Trace 2026-06-06 12:28: bot crafted
+        # 2 copper_daggers via CraftRelief guard but never equipped — the
+        # fallback walk hit copper_boots (step=copper_ore→GatherMaterials)
+        # before copper_dagger (step=copper_dagger→UpgradeEquipment), so
+        # arbiter sticky-committed to GatherMaterials forever while
+        # copper_dagger sat in inventory. An owned-but-unequipped target
+        # is a ONE-action win (EquipAction) vs a multi-cycle GatherMaterials
+        # chain; the ready-to-equip path is always preferable.
         step_goal = objective_step_goal(chosen_step, state, game_data, ctx)
         if step_goal is None:
+            # First pass: prefer UpgradeEquipmentGoal (one-step equip).
             for alt in fallback_steps:
-                step_goal = objective_step_goal(alt, state, game_data, ctx)
-                if step_goal is not None:
+                candidate = objective_step_goal(alt, state, game_data, ctx)
+                if isinstance(candidate, UpgradeEquipmentGoal):
+                    step_goal = candidate
                     chosen_step = alt
                     break
+            # Second pass: any non-None goal in ranking order.
+            if step_goal is None:
+                for alt in fallback_steps:
+                    step_goal = objective_step_goal(alt, state, game_data, ctx)
+                    if step_goal is not None:
+                        chosen_step = alt
+                        break
 
         # An active items-task pursuit suppresses the meta-objective's
         # GatherMaterials step ONLY when that step targets an item the task's
