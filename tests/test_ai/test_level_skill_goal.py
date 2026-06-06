@@ -188,6 +188,31 @@ class TestRelevantActions:
             "should be filtered out to keep planner branching bounded"
         )
 
+    def test_skips_in_skill_item_with_empty_recipe(self):
+        """An in-skill craftable registered with an EMPTY recipe dict yields no
+        material closure, so it's skipped (line 119-120) and contributes no
+        gather/withdraw actions — only the real copper_dagger chain survives."""
+        goal = LevelSkillGoal("weaponcrafting", 3)
+        gd = _gd_with_weapon_recipes()
+        # A weaponcrafting item whose recipe is registered but empty.
+        gd._item_stats["mystery_blade"] = ItemStats(
+            code="mystery_blade", level=1, type_="weapon",
+            crafting_skill="weaponcrafting", crafting_level=1,
+        )
+        gd._crafting_recipes["mystery_blade"] = {}
+        actions = [
+            CraftAction(code="copper_dagger", quantity=1),
+            CraftAction(code="mystery_blade", quantity=1),
+            GatherAction(resource_code="copper_rocks"),
+        ]
+        relevant = goal.relevant_actions(actions, make_state(), gd)
+        craft_codes = {a.code for a in relevant if isinstance(a, CraftAction)}
+        # mystery_blade still passes the craft-family filter (it IS in-skill)
+        # but contributes nothing to the gather closure.
+        assert "copper_dagger" in craft_codes
+        gather_res = {a.resource_code for a in relevant if isinstance(a, GatherAction)}
+        assert gather_res == {"copper_rocks"}
+
     def test_excludes_crafts_and_closure_above_current_skill_level(self):
         """Only recipes craftable AT the character's current skill give XP, so
         only THEIR closure should reach the planner. weaponcrafting@2 can craft
