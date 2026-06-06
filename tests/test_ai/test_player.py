@@ -716,6 +716,62 @@ class TestBuildGoalsTier1:
         assert "ring1_slot" in slots
         assert "ring2_slot" in slots
 
+    def test_build_actions_expands_transitive_withdraw_chain(self):
+        """A two-level recipe chain (dagger <- bar <- ore) must surface a
+        Withdraw for the LEAF ore, not just the direct bar input, so the bot
+        pulls banked ore instead of regathering (lines 938-952). It must also
+        emit a smaller per-craft withdraw (lines 961-969)."""
+        from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+        weapon = ItemStats(code="copper_dagger", level=1, type_="weapon",
+                           crafting_skill="weaponcrafting", crafting_level=1)
+        bar = ItemStats(code="copper_bar", level=1, type_="resource",
+                        crafting_skill="mining", crafting_level=1)
+        player = self._make_player_with_gd(
+            extra_stats={"copper_dagger": weapon, "copper_bar": bar},
+            extra_recipes={
+                "copper_dagger": {"copper_bar": 6},  # equippable -> bar enters withdraw set
+                "copper_bar": {"copper_ore": 10},     # bar's own recipe -> ore is the leaf
+            },
+        )
+        player.state = make_state(skills={"weaponcrafting": 1, "mining": 1})
+        actions = player._build_actions()
+        withdraws = [a for a in actions if isinstance(a, WithdrawItemAction)]
+        codes = {a.code for a in withdraws}
+        # Transitive leaf surfaced.
+        assert "copper_ore" in codes
+        assert "copper_bar" in codes
+        # A per-craft (one bar's worth = 10 ore) withdraw distinct from the
+        # full-chain qty (6 bars * 10 = 60 ore) exists.
+        ore_qtys = {a.quantity for a in withdraws if a.code == "copper_ore"}
+        assert 10 in ore_qtys and 60 in ore_qtys
+
+    def test_build_actions_skips_recycle_for_protected_target_gear(self):
+        """Recycle actions are NOT built for codes the objective protects as
+        target_gear (recycling them destroys objective progress) — line 1002-1003."""
+        from artifactsmmo_cli.ai.actions.recycle import RecycleAction
+        weapon = ItemStats(code="copper_dagger", level=1, type_="weapon",
+                           crafting_skill="weaponcrafting", crafting_level=1)
+        helmet = ItemStats(code="copper_helmet", level=1, type_="helmet",
+                           crafting_skill="gearcrafting", crafting_level=1)
+        player = self._make_player_with_gd(
+            extra_stats={"copper_dagger": weapon, "copper_helmet": helmet},
+            extra_recipes={
+                "copper_dagger": {"copper_ore": 2},
+                "copper_helmet": {"copper_ore": 2},
+            },
+        )
+
+        class _Obj:
+            target_gear = {"weapon_slot": "copper_dagger"}
+            target_tools: dict[str, str] = {}
+
+        player._objective = _Obj()  # type: ignore[assignment]
+        player.state = make_state(skills={"weaponcrafting": 1, "gearcrafting": 1})
+        actions = player._build_actions()
+        recycle_codes = {a.code for a in actions if isinstance(a, RecycleAction)}
+        assert "copper_dagger" not in recycle_codes  # protected target_gear
+        assert "copper_helmet" in recycle_codes       # unprotected -> recyclable
+
 
 class TestLogAction:
     def test_log_with_single_action(self):
