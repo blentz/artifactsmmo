@@ -1905,16 +1905,16 @@ example : ∀ {leveledUp : Bool} (active loss hasUpgrade : Bool),
     Formal.GearLatch.step active leveledUp loss hasUpgrade = true :=
   @Formal.GearLatch.set_on_levelup
 -- set_on_loss: fight-loss + craftable upgrade ⇒ latch ON.
-example : ∀ {loss : Bool} (active leveledUp hasUpgrade : Bool),
+example : ∀ (active leveledUp loss hasUpgrade : Bool),
     loss = true → hasUpgrade = true →
-    Formal.GearLatch.step active leveledUp true hasUpgrade = true :=
+    Formal.GearLatch.step active leveledUp loss hasUpgrade = true :=
   @Formal.GearLatch.set_on_loss
 -- clear_iff_no_upgrade: no craftable upgrade ⇒ latch forced OFF this cycle.
 example : ∀ (active leveledUp loss : Bool),
     Formal.GearLatch.step active leveledUp loss false = false :=
   @Formal.GearLatch.clear_iff_no_upgrade
 -- monotone_until_clear: once set, no new trigger, upgrade available ⇒ stays ON.
-example : ∀ (active hasUpgrade : Bool),
-    active = true → hasUpgrade = true →
-    Formal.GearLatch.step true false false true = true :=
+example : ∀ (active leveledUp loss hasUpgrade : Bool),
+    active = true → leveledUp = false → loss = false → hasUpgrade = true →
+    Formal.GearLatch.step active leveledUp loss hasUpgrade = true :=
   @Formal.GearLatch.monotone_until_clear

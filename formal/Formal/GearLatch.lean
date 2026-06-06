@@ -42,10 +42,10 @@ theorem set_on_levelup (active loss hasUpgrade : Bool)
 
 /-- **SET ON LOSS.** A predicted-winnable fight loss with a craftable upgrade
 available sets the latch ON, regardless of the prior value or level change. -/
-theorem set_on_loss (active leveledUp hasUpgrade : Bool)
-    (_hloss : loss = true) (hup : hasUpgrade = true) :
-    step active leveledUp true hasUpgrade = true := by
-  subst hup; cases active <;> cases leveledUp <;> rfl
+theorem set_on_loss (active leveledUp loss hasUpgrade : Bool)
+    (hloss : loss = true) (hup : hasUpgrade = true) :
+    step active leveledUp loss hasUpgrade = true := by
+  subst hloss; subst hup; cases active <;> cases leveledUp <;> rfl
 
 /-- **CLEAR IFF NO UPGRADE.** With no craftable upgrade remaining, the latch is
 forced OFF this cycle — even if it was triggered. The clear dominates. -/
@@ -56,10 +56,11 @@ theorem clear_iff_no_upgrade (active leveledUp loss : Bool) :
 /-- **MONOTONE UNTIL CLEAR.** Once set (`active = true`), with no new level-up or
 loss but an upgrade still available, the latch STAYS set — it does not flicker
 off while there is still gear to chase. -/
-theorem monotone_until_clear (active hasUpgrade : Bool)
-    (_hactive : active = true) (_hup : hasUpgrade = true) :
-    step true false false true = true := by
-  rfl
+theorem monotone_until_clear (active leveledUp loss hasUpgrade : Bool)
+    (hactive : active = true) (hnolvl : leveledUp = false) (hnoloss : loss = false)
+    (hup : hasUpgrade = true) :
+    step active leveledUp loss hasUpgrade = true := by
+  subst hactive; subst hnolvl; subst hnoloss; subst hup; rfl
 
 /-! ### Non-vacuity / corner witnesses. -/
 
