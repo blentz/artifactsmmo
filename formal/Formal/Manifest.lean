@@ -10,6 +10,9 @@ import Formal.RankingComposition
 import Formal.PersonalityGrounding
 import Formal.CycleInvariants
 import Formal.MultiCycleLiveness
+import Formal.NoActionDeadlock
+import Formal.GuardCoverage
+import Formal.ActionSetCompleteness
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
@@ -602,3 +605,24 @@ open Formal.PriorityBand
 #check @Formal.MultiCycleLiveness.nFights_all_well_formed
 #check @Formal.MultiCycleLiveness.multi_fight_raises_xp_by_at_least
 #check @Formal.MultiCycleLiveness.bounded_fights_suffice_for_xp_delta
+
+-- NoActionDeadlock (AI never freezes):
+#check @Formal.NoActionDeadlock.at_least_wait_applicable
+#check @Formal.NoActionDeadlock.progress_available_when_any_capability
+#check @Formal.NoActionDeadlock.select_action_total
+#check @Formal.NoActionDeadlock.select_action_deterministic
+#check @Formal.NoActionDeadlock.progress_or_rest_when_capable
+#check @Formal.NoActionDeadlock.ai_always_acts
+
+-- GuardCoverage (every stuck state triggers a guard):
+#check @Formal.GuardCoverage.low_hp_triggers_critical
+#check @Formal.GuardCoverage.critical_inv_with_overstock_triggers_discard
+#check @Formal.GuardCoverage.high_inv_with_bank_triggers_deposit
+#check @Formal.GuardCoverage.rest_for_combat_triggers_when_needed
+#check @Formal.GuardCoverage.firstGuard_nonzero_when_low_hp
+#check @Formal.GuardCoverage.stuck_state_always_guarded
+
+-- ActionSetCompleteness (every capability has an action):
+#check @Formal.ActionSetCompleteness.capability_mapping_total
+#check @Formal.ActionSetCompleteness.capability_mapping_deterministic
+#check @Formal.ActionSetCompleteness.every_action_has_a_capability
