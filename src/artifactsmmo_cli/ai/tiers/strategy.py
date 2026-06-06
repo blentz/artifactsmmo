@@ -40,6 +40,29 @@ PRIOR_GATHER_SKILL = 0.4
 PRIOR_CONSUMABLE_SKILL = 0.3
 SKILL_MARGINAL = 0.2
 CHAR_MARGINAL = 1.0
+"""Base char-level marginal (multiplier on PRIOR_CHAR_LEVEL=1.0). The
+DYNAMIC marginal applied at `_marginal` scales upward with the gap
+between current state.level and the root's target — see `_marginal`."""
+
+CHAR_REACHABLE_HORIZON = 10
+"""Char-level horizon for the urgency boost — gaps within this window
+are scored as "actionable now". The bootstrap root
+(`ReachCharLevel(state.level + 2)`, gap=2) sits at the steep end; the
+long-haul `ReachCharLevel(50)` at L3 (gap 47) is outside the horizon
+and gets no bonus. This makes the SHORT-horizon root rank above tool
+roots (matching the user's request to grind monsters when the bot is
+behind) while the long-haul root yields to the bootstrap so the
+e27779e stand-down doesn't trigger on the LONG step.level."""
+
+CHAR_GAP_PER_LEVEL = 0.06
+"""Per-level urgency for char-level roots WITHIN the reachable horizon.
+For a bootstrap gap of 2: bonus = (10 - 2) × 0.06 = 0.48 →
+marginal = 1.48 → value = PRIOR_CHAR_LEVEL × 1.48 = 1.48, beating
+PRIOR_RELEVANT_TOOL (1.1) so GrindCharacterXP fires when the bot is
+under-leveled. For gaps outside the horizon: bonus = 0, marginal stays
+at CHAR_MARGINAL (1.0), and long-haul char-level roots compete on
+equal footing with combat gear (also PRIOR_COMBAT_GEAR = 1.0)."""
+
 GEAR_EQUIP_SCALE = 20.0
 """Normalizes gear equip-value gain to ~[0,1]; tune so a first-tier upgrade ~0.7-0.9."""
 BALANCE_K = 0.25
@@ -233,7 +256,24 @@ class StrategyEngine:
 
     def _marginal(self, root: MetaGoal, state: WorldState, game_data: GameData) -> float:
         if isinstance(root, ReachCharLevel):
-            return CHAR_MARGINAL
+            # Inverse-gap char-level urgency: smaller gaps (the bootstrap
+            # root `ReachCharLevel(state.level + 2)`) score HIGHER than the
+            # long-haul `ReachCharLevel(target_char_level)` root. This
+            # is the load-bearing rank ordering so the bootstrap (whose
+            # step.level is 2 away from current) bypasses the e27779e
+            # items-task stand-down, while the long-haul root (whose
+            # step.level is far from current) doesn't trigger the
+            # stand-down by winning the rank. User request 2026-06-06:
+            # "PursueTask can be deprioritized when we need ...
+            # GrindMonstersForXP." Implemented at the ranking layer —
+            # when the SHORT-horizon char-level root beats
+            # PRIOR_RELEVANT_TOOL (1.1), its step (GrindCharacterXP)
+            # takes the step slot ahead of PursueTask in the arbiter
+            # walk.
+            gap = max(0, root.level - state.level)
+            reach = max(0, CHAR_REACHABLE_HORIZON - gap)
+            bonus = reach * CHAR_GAP_PER_LEVEL
+            return CHAR_MARGINAL + bonus
         if isinstance(root, ReachSkillLevel):
             return SKILL_MARGINAL
         if isinstance(root, ObtainItem):

@@ -655,3 +655,50 @@ class TestRelevantToolBoost:
         assert pickaxe_score <= char_score, (
             f"no boost expected: pickaxe={pickaxe_score} char={char_score}"
         )
+
+
+def test_reach_char_level_marginal_scales_with_inverse_gap():
+    """User request 2026-06-06: bot should grind char XP when under-
+    leveled (PursueTask deprioritized when GrindCharacterXP is needed).
+    Implemented via inverse-gap urgency on `_marginal(ReachCharLevel)`:
+    the bootstrap root (small gap) outranks tools so its step
+    (GrindCharacterXP) takes the step slot. Long-haul (large gap) stays
+    at base CHAR_MARGINAL so the bootstrap-bypass in objective_step_goal
+    (e27779e) doesn't get triggered on the wrong step.level."""
+    gd = GameData()
+    fill_monster_stat_defaults(gd)
+    obj = CharacterObjective.from_game_data(gd)
+    eng = StrategyEngine(obj, BalancedPersonality())
+    state = make_state(level=3)
+    # Bootstrap-class root (gap=2): high marginal — boost = (10-2)*0.06 = 0.48.
+    boot_value = eng._value(ReachCharLevel(5), state, gd)
+    # Long-haul root (gap=47, outside the 10-level horizon): no boost.
+    long_value = eng._value(ReachCharLevel(50), state, gd)
+    assert boot_value > long_value, (
+        f"bootstrap value {boot_value} should outrank long-haul {long_value} "
+        f"so the bootstrap step wins decide() and triggers GrindCharacterXP"
+    )
+    # And the bootstrap value must beat PRIOR_RELEVANT_TOOL (1.1) so it
+    # also outranks active-task tools.
+    assert boot_value > 1.1, (
+        f"bootstrap value {boot_value} must exceed PRIOR_RELEVANT_TOOL=1.1 "
+        f"so tools don't preempt the combat grind when the bot is "
+        f"under-leveled"
+    )
+
+
+def test_reach_char_level_marginal_zero_bonus_when_already_at_target():
+    """Sanity: target == current → gap = 0 → reach = horizon → full
+    bonus. Edge-case behavior. (Actually `decide()` filters satisfied
+    roots out first, so this scenario doesn't fire in practice — but
+    `_value` should still return a sane number.)"""
+    gd = GameData()
+    fill_monster_stat_defaults(gd)
+    obj = CharacterObjective.from_game_data(gd)
+    eng = StrategyEngine(obj, BalancedPersonality())
+    state = make_state(level=10)
+    v = eng._value(ReachCharLevel(10), state, gd)
+    # gap=0, reach=10, bonus=10*0.06=0.6 → marginal=1.6 → value=1.6
+    assert abs(v - 1.6) < 0.001, (
+        f"at target: gap=0 → full reach window bonus, expected ~1.6, got {v}"
+    )
