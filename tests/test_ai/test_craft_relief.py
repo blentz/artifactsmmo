@@ -95,6 +95,68 @@ class TestCraftReliefCandidates:
         )
         assert craft_relief_candidates(state, gd) == []
 
+    def test_no_candidate_when_item_has_no_crafting_skill(self):
+        """A task item whose stats carry no crafting_skill (a raw resource,
+        not a craftable) can't be a relief candidate."""
+        gd = _gd_ash_plank()
+        # ash_wood itself is the task — it has no crafting_skill.
+        state = make_state(
+            task_code="ash_wood", task_type="items",
+            task_progress=0, task_total=5,
+            inventory={"ash_wood": 5},
+        )
+        assert craft_relief_candidates(state, gd) == []
+
+    def test_no_candidate_when_item_has_skill_but_no_recipe(self):
+        """Stats name a crafting_skill but no recipe is registered — guard
+        treats it as uncraftable rather than crashing."""
+        gd = _gd_ash_plank()
+        gd._item_stats["phantom_item"] = ItemStats(
+            code="phantom_item", level=1, type_="resource",
+            crafting_skill="woodcutting", crafting_level=1,
+        )
+        # No entry in _crafting_recipes for phantom_item.
+        state = make_state(
+            task_code="phantom_item", task_type="items",
+            task_progress=0, task_total=5,
+            inventory={"ash_wood": 67}, skills={"woodcutting": 1},
+        )
+        assert craft_relief_candidates(state, gd) == []
+
+    def test_target_tools_emit_priority_two_candidate(self):
+        """A craftable target tool surfaces at priority_class 2."""
+        gd = _gd_ash_plank()
+        gd._item_stats["wooden_pickaxe"] = ItemStats(
+            code="wooden_pickaxe", level=1, type_="weapon",
+            crafting_skill="weaponcrafting", crafting_level=1,
+        )
+        gd._crafting_recipes["wooden_pickaxe"] = {"ash_plank": 4}
+        state = make_state(
+            inventory={"ash_plank": 8}, skills={"weaponcrafting": 1},
+        )
+        cands = craft_relief_candidates(
+            state, gd, target_tools=frozenset({"wooden_pickaxe"}),
+        )
+        assert any(c.item_code == "wooden_pickaxe" and c.priority_class == 2
+                   for c in cands)
+
+    def test_duplicate_code_across_task_and_gear_considered_once(self):
+        """When the same code is both the task item and a target_gear entry,
+        the second `consider` short-circuits on the seen-set."""
+        gd = _gd_ash_plank()
+        state = make_state(
+            task_code="ash_plank", task_type="items",
+            task_progress=0, task_total=13,
+            inventory={"ash_wood": 20}, skills={"woodcutting": 1},
+        )
+        cands = craft_relief_candidates(
+            state, gd, target_gear=frozenset({"ash_plank"}),
+        )
+        # Only one ash_plank candidate, at the task priority (0), not gear (1).
+        ash = [c for c in cands if c.item_code == "ash_plank"]
+        assert len(ash) == 1
+        assert ash[0].priority_class == 0
+
     def test_target_gear_emits_lower_priority_candidate(self):
         """Gear/tools rank below the task item but still surface when no task is
         active or task can't be crafted from inv."""
@@ -206,6 +268,26 @@ class TestMapGuardCraftRelief:
         goal = map_guard(GuardKind.CRAFT_RELIEF, gd, _ctx(), state)
         assert isinstance(goal, CraftReliefGoal)
         assert repr(goal) == "CraftRelief(ash_plank)"
+
+
+class TestCraftReliefGoalApi:
+    def test_value_is_guard_band_until_one_more_unit_crafted(self):
+        gd = _gd_ash_plank()
+        goal = CraftReliefGoal(target_item="ash_plank", initial_qty=3)
+        # Below initial_qty + 1 → goal unsatisfied → guard-band value.
+        below = make_state(inventory={"ash_plank": 3})
+        assert not goal.is_satisfied(below)
+        assert goal.value(below, gd) == 70.0
+        # At initial_qty + 1 → satisfied → zero value.
+        at = make_state(inventory={"ash_plank": 4})
+        assert goal.is_satisfied(at)
+        assert goal.value(at, gd) == 0.0
+
+    def test_desired_state_requests_one_additional_unit(self):
+        gd = _gd_ash_plank()
+        goal = CraftReliefGoal(target_item="ash_plank", initial_qty=3)
+        state = make_state(inventory={"ash_plank": 3})
+        assert goal.desired_state(state, gd) == {"inventory": {"ash_plank": 4}}
 
 
 class TestArbiterEndToEnd:
