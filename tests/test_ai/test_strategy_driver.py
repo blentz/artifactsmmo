@@ -129,6 +129,20 @@ def test_map_guard_gear_review_upgrades_when_materials_in_hand():
     assert isinstance(goal, UpgradeEquipmentGoal)
 
 
+def test_map_guard_gear_review_no_state_raises():
+    """map_guard(GEAR_REVIEW) without a state must raise ValueError (line 137)."""
+    with pytest.raises(ValueError, match="GEAR_REVIEW guard requires a state"):
+        map_guard(GuardKind.GEAR_REVIEW, GameData(), _ctx())
+
+
+def test_map_guard_gear_review_no_upgrade_found_returns_upgrade_goal():
+    """When find_upgrade_target returns None (empty game data, no upgrades),
+    map_guard falls back to a plain UpgradeEquipmentGoal (line 143)."""
+    state = make_state(level=1, inventory={}, equipment={})
+    goal = map_guard(GuardKind.GEAR_REVIEW, GameData(), _ctx(gear_review_active=True), state)
+    assert isinstance(goal, UpgradeEquipmentGoal)
+
+
 # ---------------------------------------------------------------------------
 # map_means unit tests
 # ---------------------------------------------------------------------------

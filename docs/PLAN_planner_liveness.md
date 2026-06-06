@@ -106,10 +106,20 @@ Lean core only (no mathlib), matching `PlannerAdmissibility.lean` precedent.
 
 ## Open questions / risks
 
-- LevelSkill(weaponcrafting) has `max_depth=100` and plan ~67 (<100) but still
-  times out from **search WIDTH**, not depth. The depth gate will NOT catch it.
-  Width is a separate problem (tiered planning budget) — out of scope for this
-  plan; flag remaining cost after the depth gate lands.
+- **[LANDED 2026-06-06]** LevelSkill(weaponcrafting) has `max_depth=100` and
+  plan ~67 (<100) but still times out from **search WIDTH**, not depth. The
+  depth gate alone does NOT catch it. This was addressed by the **tiered-budget
+  + gear-prioritization** feature on branch `fix/planner-depth-bound-stuck-cycle`
+  (spec: `docs/superpowers/specs/2026-06-06-tiered-budget-gear-prioritization-design.md`,
+  plan: `docs/superpowers/plans/2026-06-06-tiered-budget-gear-prioritization.md`).
+  The feature adds: (a) a `DoomedMemo` that records width-unfindable goals after
+  the first timeout so they are skipped on subsequent cycles until the
+  plannability signature (char level + skill levels) changes; (b) a tiered
+  `CHEAP_BUDGET_SECONDS=1.0` first pass so fast goals win immediately without
+  burning 90s; (c) a `GearLatch` (GEAR_REVIEW guard) that triggers
+  UpgradeEquipmentGoal when a better piece is craftable/available, with the
+  commitment persisted across cycles. Width stall resolved; depth gate + memo
+  together make first-cycle planning bounded.
 - `TaskExchange` timeout cause not yet root-caused; verify post-gate.
 - Decide whether GatherMaterialsGoal (which already scales max_depth) needs the
   same gate (likely not — it sets `max_depth = max(100, units*100)`).
