@@ -51,6 +51,16 @@ class TestSeedDocumentedBlockers:
         # Already-beatable monsters stay OUT (chicken at L1, char L2).
         assert "fight:chicken" not in reg.blockers
 
+    def test_skips_unknown_level_monster(self):
+        """A monster with a non-positive level (the 'unknown level' sentinel)
+        is skipped, never seeding a fight blocker (line 48-49)."""
+        reg = BlockerRegistry()
+        gd = _gd_with_progression()
+        gd._monster_level["phantom"] = 0  # unknown-level sentinel
+        state = make_state(level=2, skills={"weaponcrafting": 1, "mining": 1})
+        seed_documented_blockers(reg, gd, state)
+        assert "fight:phantom" not in reg.blockers
+
     def test_max_gap_filters_distant(self):
         """Callers wanting an actionable-only view can opt in to a cap."""
         reg = BlockerRegistry()
