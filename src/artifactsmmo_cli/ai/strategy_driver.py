@@ -343,6 +343,25 @@ class StrategyArbiter:
                 and step_goal._target_item in _task_recipe_inputs(state.task_code, game_data)):
             step_goal = None
 
+        # Trade-ready PursueTask wins over fallback gear-chain gathering.
+        # Trace 2026-06-06 14:40 (cycles 25-26): task=items/copper_bar at
+        # 20/21, 1 copper_bar in inventory; gear-chain fallback
+        # ObtainItem(copper_boots) → GatherMaterials(copper_bar, needed=8)
+        # ran instead of PursueTask's TaskTrade. One trade would complete
+        # the task; the bot instead gathered MORE copper_ore for armor
+        # while the held bar sat unused.
+        # When the fallback step's target IS the task code AND the bot
+        # holds that item, defer the fallback for one cycle so
+        # PursueTask's TaskTrade can immediately advance task_progress.
+        # After TaskComplete + rotation (or after trading), the suppression
+        # clears and fallback resumes the gear chain.
+        if (MeansKind.PURSUE_TASK in discretionary_kinds
+                and state.task_type == "items"
+                and isinstance(step_goal, GatherMaterialsGoal)
+                and step_goal._target_item == state.task_code
+                and state.inventory.get(state.task_code, 0) > 0):
+            step_goal = None
+
         # Trace 2026-05-19 (cycles 318-342): with task_code=None, the bot
         # locked into a Gather→Discard loop — meta-objective step
         # GatherMaterials(copper_ring) ran every other cycle pulling

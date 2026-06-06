@@ -16,6 +16,7 @@ import Formal.ActionSetCompleteness
 import Formal.EquipValueAugmented
 import Formal.FallbackChain
 import Formal.AcceptTaskGate
+import Formal.TaskTradeReadyPriority
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
@@ -659,3 +660,14 @@ open Formal.PriorityBand
 #check @Formal.AcceptTaskGate.fires_false_when_craftable_gear_exists
 #check @Formal.AcceptTaskGate.entry_does_not_defer_when_equipped
 #check @Formal.AcceptTaskGate.entry_does_not_defer_when_unowned_uncraftable
+
+-- TaskTradeReadyPriority (trade-ready fallback suppression proof):
+#check @Formal.TaskTradeReadyPriority.suppress_total
+#check @Formal.TaskTradeReadyPriority.suppress_deterministic
+#check @Formal.TaskTradeReadyPriority.hasPursueTask_true_of_mem
+#check @Formal.TaskTradeReadyPriority.suppress_true_when_all_conditions_hold
+#check @Formal.TaskTradeReadyPriority.suppress_false_when_no_pursue
+#check @Formal.TaskTradeReadyPriority.suppress_false_when_not_items
+#check @Formal.TaskTradeReadyPriority.suppress_false_when_inv_zero
+#check @Formal.TaskTradeReadyPriority.suppress_false_when_step_not_gather_taskcode
+#check @Formal.TaskTradeReadyPriority.trace_144020_suppress

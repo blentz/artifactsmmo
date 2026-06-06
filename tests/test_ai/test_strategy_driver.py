@@ -794,3 +794,64 @@ class TestPursueTaskEndToEnd:
             f"ash-wood step is INDEPENDENT of the copper_bar task chain — "
             f"should be allowed to compete, but goals_tried={tried}"
         )
+
+    def test_task_trade_ready_suppresses_fallback_gather(self, monkeypatch, tmp_path):
+        """Trace 2026-06-06 14:40 (cycles 25-26): task=items/copper_bar at
+        20/21 with 1 copper_bar in inventory; the gear-chain fallback
+        step GatherMaterials(copper_bar, needed=8) for ObtainItem(copper_boots)
+        ran INSTEAD of PursueTask's TaskTrade. One trade would complete
+        the task; bot gathered MORE copper_ore for armor while the held
+        bar sat unused.
+
+        Contract: when fallback step targets the task code AND inventory
+        holds at least one unit, the fallback is SUPPRESSED so PursueTask
+        wins the cycle and TaskTrade can fire.
+        """
+        monkeypatch.setattr(means_module, "task_decision", lambda *_: means_module.PURSUE)
+
+        planner = GOAPPlanner()
+        gd = _make_planner_gd()
+        # copper_bar recipe so GatherMaterials(copper_bar) is a plausible step;
+        # 'copper_bar' itself is NOT in _task_recipe_inputs("copper_bar")
+        # (which returns {copper_ore}), so the EXISTING suppression rule does
+        # NOT fire. Only the NEW trade-ready rule should suppress.
+        gd._crafting_recipes["copper_bar"] = {"copper_ore": 10}
+        gd._resource_locations = {"copper_rocks": [(1, 0)]}
+        gd._resource_drops["copper_rocks"] = "copper_ore"
+        gd._resource_skill["copper_rocks"] = ("mining", 1)
+
+        state = make_state(
+            level=4, hp=135, max_hp=135, xp=0, max_xp=500,
+            task_code="copper_bar", task_type="items",
+            task_progress=20, task_total=21,
+            skills={"mining": 12, "weaponcrafting": 2},
+            inventory={"copper_bar": 1},
+        )
+        actions = [
+            TaskTradeAction(code="copper_bar", quantity=1, taskmaster_location=(2, 1)),
+            GatherAction(resource_code="copper_rocks", locations=frozenset([(1, 0)])),
+        ]
+        ctx = _ctx(combat_monster="chicken")
+
+        store = LearningStore(db_path=str(tmp_path / "trade_ready.db"), character="testchar")
+        try:
+            arbiter = StrategyArbiter(planner, history=store)
+            # chosen_step matches the fallback case: ObtainItem(copper_bar, 8)
+            # maps via objective_step_goal to GatherMaterialsGoal(copper_bar).
+            decision = _FakeDecision(chosen_step=ObtainItem("copper_bar", 8))
+            goal, plan, tried = arbiter.select(decision, state, gd, actions, ctx)
+        finally:
+            store.close()
+
+        attempted = [gt["goal"] for gt in tried]
+        assert "GatherMaterials(copper_bar)" not in attempted, (
+            f"trade-ready suppression must drop the fallback GatherMaterials, "
+            f"but goals_tried={attempted}"
+        )
+        assert repr(goal) == "PursueTask(copper_bar)", (
+            f"expected PursueTask to win when inventory holds the task item, "
+            f"got {goal!r}"
+        )
+        assert any(isinstance(a, TaskTradeAction) for a in plan), (
+            f"PursueTask plan must include TaskTrade, got plan={plan}"
+        )
