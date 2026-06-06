@@ -60,6 +60,7 @@ class _FakeGameData:
     recipe_demand=st.integers(min_value=0, max_value=12),
     equippable=st.booleans(),
     use_coin=st.booleans(),
+    is_healing=st.booleans(),
     task_remaining=st.integers(min_value=0, max_value=30),
     equipped=st.booleans(),
     qty=st.integers(min_value=0, max_value=80),
@@ -68,12 +69,21 @@ class _FakeGameData:
     batch_buffer=st.integers(min_value=1, max_value=5),
     safety_floor=st.integers(min_value=1, max_value=5),
 )
-def test_python_matches_lean(recipe_demand, equippable, use_coin, task_remaining,
-                             equipped, qty, batch_buffer, safety_floor):
+def test_python_matches_lean(recipe_demand, equippable, use_coin, is_healing,
+                             task_remaining, equipped, qty, batch_buffer,
+                             safety_floor):
     code = TASKS_COIN_CODE if use_coin else "X"
-    action_cap = 9 if use_coin else 0
+    # Read action_cap from the actual Python constant (raised to 999 by
+    # 602f7b4 because tasks_coin stacks). The Lean model takes actionCap
+    # as a parameter, so the model stays correct; pass the same value the
+    # Python code uses.
+    action_cap = ic_mod.ACTION_CONSUMABLES_CAP.get(code, 0)
     item_type = "weapon" if equippable else "resource"
-    stats = ItemStats(code=code, level=1, type_=item_type)
+    # hp_restore activates the consumable cap (f1f8941, c3b8dfa). Generate
+    # both branches: hp_restore=0 (cap inert) AND hp_restore>0 (cap kicks in).
+    hp_restore_val = 20 if is_healing else 0
+    stats = ItemStats(code=code, level=1, type_=item_type,
+                       hp_restore=hp_restore_val)
 
     with MonkeyPatch.context() as mp:
         mp.setattr(_FakeGameData, "max_recipe_demand",
@@ -87,16 +97,40 @@ def test_python_matches_lean(recipe_demand, equippable, use_coin, task_remaining
         py_over = ic_mod.overstocked_items(state, game_data,
                                            batch_buffer, safety_floor)
 
+        # Compute the per-component values Python would feed to the Lean
+        # model: equippable_cap and consumable_cap come from the same
+        # predicates Python applies in `useful_quantity_cap_excl_equipped`.
+        # ITEM_TYPE_TO_SLOTS check matches the production wrapper.
+        from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
+        equippable_cap = (
+            ic_mod.EQUIPPABLE_KEEP
+            if (stats.type_ and ITEM_TYPE_TO_SLOTS.get(stats.type_)
+                and not ic_mod._is_equippable_dominated(code, state, game_data))
+            else 0
+        )
+        consumable_cap = (
+            ic_mod.CONSUMABLE_KEEP if stats.hp_restore > 0 else 0
+        )
+
     lean = run_oracle(
         "inventory_caps",
-        [[batch_buffer, safety_floor, recipe_demand, 1 if equippable else 0,
-          action_cap, task_remaining, 1 if equipped else 0, qty]],
+        [[batch_buffer, safety_floor, recipe_demand,
+          equippable_cap, consumable_cap,
+          action_cap, task_remaining,
+          1 if equipped else 0, qty]],
     )[0]
 
-    assert py_cap == lean["cap"]
+    assert py_cap == lean["cap"], (
+        f"cap mismatch: py={py_cap} lean={lean['cap']} "
+        f"recipe={recipe_demand} equippable_cap={equippable_cap} "
+        f"consumable_cap={consumable_cap} action={action_cap} "
+        f"task_rem={task_remaining} equipped={equipped}"
+    )
     # overstocked_items records excess only when qty > 0 and qty > cap.
     py_excess = py_over.get(code, 0)
-    assert py_excess == lean["overstock"]
+    assert py_excess == lean["overstock"], (
+        f"overstock mismatch: py={py_excess} lean={lean['overstock']}"
+    )
 
 
 def test_safety_floor_binds_against_lean():
@@ -118,7 +152,7 @@ def test_safety_floor_binds_against_lean():
         py_cap = ic_mod.useful_quantity_cap(code, state, game_data, 1, 3)
         py_over = ic_mod.overstocked_items(state, game_data, 1, 3)
 
-    lean = run_oracle("inventory_caps", [[1, 3, 1, 0, 0, 0, 0, 2]])[0]
+    lean = run_oracle("inventory_caps", [[1, 3, 1, 0, 0, 0, 0, 0, 2]])[0]
     assert py_cap == 3
     assert py_cap == lean["cap"]
     assert py_over.get(code, 0) == lean["overstock"] == 0
@@ -142,7 +176,7 @@ def test_equipped_floor_binds_against_lean():
         py_cap = ic_mod.useful_quantity_cap(code, state, game_data)
         py_over = ic_mod.overstocked_items(state, game_data)
 
-    lean = run_oracle("inventory_caps", [[5, 3, 0, 0, 0, 0, 1, 1]])[0]
+    lean = run_oracle("inventory_caps", [[5, 3, 0, 0, 0, 0, 0, 1, 1]])[0]
     assert py_cap == 1
     assert py_cap == lean["cap"]
     assert py_over.get(code, 0) == lean["overstock"] == 0

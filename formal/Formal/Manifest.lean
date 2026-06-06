@@ -15,8 +15,8 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @batch_fits          -- task-branch ∧ usable ≥ mats ⇒ result*mats ≤ usable
 #check @non_task_one        -- ¬task-branch ⇒ result = 1
 -- InventoryCaps required roles:
-#check @cap_eq_max_of_four      -- ¬equipped ⇒ cap = max-of-four
-#check @cap_eq_max_one_of_four  -- equipped ⇒ cap = max(1, max-of-four)
+#check @cap_eq_max_of_five      -- ¬equipped ⇒ cap = max-of-four
+#check @cap_eq_max_one_of_five  -- equipped ⇒ cap = max(1, max-of-four)
 #check @equipped_ge_one         -- equipped ⇒ 1 ≤ cap
 #check @recipe_cap_ge_safety    -- demand>0 ⇒ recipeCap ≥ SAFETY_FLOOR
 #check @overstock_exact         -- overstock = qty-cap iff over, else 0

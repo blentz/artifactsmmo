@@ -31,11 +31,24 @@ def runCalculatePath (sx sy ex ey : Int) : Json :=
 def runTaskBatch (taskBranch : Bool) (remaining mats free held : Int) : Json :=
   Json.mkObj [("k", Json.num (batchSize taskBranch remaining mats free held))]
 
-/-- Compute one inventory_caps result using the SAME proved `cap`/`overstock`. -/
-def runInventoryCaps (batchBuf safetyFlr recipeDemand : Int) (equippable : Bool)
-    (actionCap taskRemaining : Int) (equipped : Bool) (qty : Int) : Json :=
-  let c := capWith batchBuf safetyFlr recipeDemand equippable actionCap taskRemaining equipped
-  let o := overstockWith batchBuf safetyFlr recipeDemand equippable actionCap taskRemaining equipped qty
+/-- Compute one inventory_caps result using the SAME proved `cap`/`overstock`.
+
+    args layout (9 ints):
+    * batchBuf, safetyFlr, recipeDemand, equippableCap, consumableCap,
+      actionCap, taskRemaining, equipped(0/1), qty
+
+    The Python differential side computes `equippableCap` and
+    `consumableCap` from the per-item predicates (`ITEM_TYPE_TO_SLOTS`,
+    dominance walk, `stats.hp_restore > 0`) before encoding the request,
+    so the Lean model takes the resulting Int components and the
+    differential is end-to-end. -/
+def runInventoryCaps (batchBuf safetyFlr recipeDemand : Int)
+    (equippableCap consumableCap actionCap taskRemaining : Int)
+    (equipped : Bool) (qty : Int) : Json :=
+  let c := capWith batchBuf safetyFlr recipeDemand
+              equippableCap consumableCap actionCap taskRemaining equipped
+  let o := overstockWith batchBuf safetyFlr recipeDemand
+              equippableCap consumableCap actionCap taskRemaining equipped qty
   Json.mkObj [("cap", Json.num c), ("overstock", Json.num o)]
 
 /-- Compute one predict_win verdict using the SAME proved `predictWin`/`rawHit`.
@@ -1216,9 +1229,11 @@ def runOne (item : Json) : Json :=
     runTaskBatch (intArg args 0 != 0) (intArg args 1) (intArg args 2)
       (intArg args 3) (intArg args 4)
   else if kind == "inventory_caps" then
-    -- args: [batchBuf, safetyFlr, recipeDemand, equippable(0/1), actionCap, taskRemaining, equipped(0/1), qty]
+    -- args: [batchBuf, safetyFlr, recipeDemand, equippableCap, consumableCap,
+    --        actionCap, taskRemaining, equipped(0/1), qty]
     runInventoryCaps (intArg args 0) (intArg args 1) (intArg args 2)
-      (intArg args 3 != 0) (intArg args 4) (intArg args 5) (intArg args 6 != 0) (intArg args 7)
+      (intArg args 3) (intArg args 4) (intArg args 5) (intArg args 6)
+      (intArg args 7 != 0) (intArg args 8)
   else if kind == "predict_win" then
     runPredictWin (fun i => intArg args i)
   else if kind == "loadout_projection" then
