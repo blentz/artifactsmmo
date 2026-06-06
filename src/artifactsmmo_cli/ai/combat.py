@@ -20,7 +20,11 @@ WIN_RATE_THRESHOLD = 0.5
 """Below this observed Fight success rate, the learned-loss veto fires."""
 
 MIN_WIN_SAMPLES = 5
-"""Observed fights required before the loss veto overrides the stat prediction."""
+"""Observed fights required before the loss veto overrides the stat prediction.
+Coupled to WARMUP_MIN_SAMPLES in store_warmup_core: success_rate returns 1.0
+below that threshold, so a lower MIN_WIN_SAMPLES is INERT without also
+lowering the warmup gate (which would broaden the contract across all
+learned estimates)."""
 
 
 def _round_half_up(value: float) -> int:
