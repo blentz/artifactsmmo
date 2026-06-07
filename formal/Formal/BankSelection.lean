@@ -1,3 +1,4 @@
+-- @concept: bank, items, crafting @property: safety
 /-
 Formal model of `select_bank_deposits` (and `_keep_codes`, `_recipe_materials`,
 `_best_fighting_weapon`) from `src/artifactsmmo_cli/ai/bank_selection.py`.

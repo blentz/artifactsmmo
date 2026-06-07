@@ -1,3 +1,4 @@
+-- @concept: tasks @property: safety, totality
 
 /-!
 # Formal.TaskTradeReadyPriority

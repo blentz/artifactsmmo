@@ -1,3 +1,4 @@
+-- @concept: items, core @property: safety
 /-
 Phase-7 invariants covering three independently-verifiable contracts surfaced
 during the Phase-6 recon batch:

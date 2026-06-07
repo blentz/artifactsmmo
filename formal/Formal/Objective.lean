@@ -1,3 +1,4 @@
+-- @concept: crafting, items, characters @property: reachability, dominance
 /-
 Formal model of `is_attainable`, `CharacterObjective.from_game_data` (gear
 selection), `gap`, and `ObjectiveGap.is_complete` from

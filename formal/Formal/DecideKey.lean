@@ -1,3 +1,4 @@
+-- @concept: core, planner @property: dominance, totality
 /-
 Formal model of the strategy-decide sort key + dispatcher-exhaustiveness
 extracted from `src/artifactsmmo_cli/ai/tiers/decide_key.py` (which encodes

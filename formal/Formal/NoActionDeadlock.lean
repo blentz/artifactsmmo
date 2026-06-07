@@ -1,3 +1,4 @@
+-- @concept: core @property: no-deadlock, totality
 import Formal.CycleInvariants
 
 /-!

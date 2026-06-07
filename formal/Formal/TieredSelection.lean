@@ -1,3 +1,4 @@
+-- @concept: core, planner @property: totality, dominance
 /-
 Formal model of the StrategyArbiter's TWO-PASS candidate walk, mirroring the
 tiered budget selection in `src/artifactsmmo_cli/ai/tiers/` (the arbiter walks

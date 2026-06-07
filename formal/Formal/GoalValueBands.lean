@@ -1,3 +1,4 @@
+-- @concept: core, planner @property: safety, monotonicity
 /-
 Phase-17 headline theorems: PursueTaskGoal.value and GatherMaterialsGoal.value
 are both routed through `Formal.PriorityBand.clampIntoBand` with band ceilings

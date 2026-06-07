@@ -1,3 +1,4 @@
+-- @concept: tasks, characters @property: monotonicity, safety
 /-
 Formal model of the pure cores extracted from
 `src/artifactsmmo_cli/ai/tiers/objective_completion.py`

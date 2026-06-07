@@ -1,3 +1,4 @@
+-- @concept: core @property: safety
 /-
 Formal model of the **Action.apply baseline-preservation** contract.
 

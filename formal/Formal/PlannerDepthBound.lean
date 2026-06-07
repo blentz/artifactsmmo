@@ -1,3 +1,4 @@
+-- @concept: planner, core @property: safety, reachability
 /-
 Formal model of the GOAP planner's DEPTH BOUND and the reachability
 consequence that justifies a sound pre-plan skip, from

@@ -1,3 +1,4 @@
+-- @concept: core, planner @property: totality, dominance
 
 /-!
 # Formal.FallbackChain

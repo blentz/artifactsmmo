@@ -1,3 +1,4 @@
+-- @concept: core @property: safety
 /-
 Formal model of the `StuckDetector` deterministic state machine from
 `src/artifactsmmo_cli/ai/recovery.py`.

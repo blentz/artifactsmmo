@@ -1,3 +1,4 @@
+-- @concept: core, planner @property: safety
 /-
 Formal model of `clamp_into_band` from
 `src/artifactsmmo_cli/ai/priority_band.py`.

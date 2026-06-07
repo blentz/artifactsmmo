@@ -1,3 +1,4 @@
+-- @concept: combat, monsters @property: reachability, safety
 
 /-!
 # Formal.CombatTargetExistence

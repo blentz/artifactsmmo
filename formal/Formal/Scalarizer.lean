@@ -1,3 +1,4 @@
+-- @concept: core @property: monotonicity
 /-
 Formal model of the pure cores extracted from
 `src/artifactsmmo_cli/ai/learning/scalarizer.py`

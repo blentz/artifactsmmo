@@ -1,3 +1,4 @@
+-- @concept: core, planner @property: dominance, monotonicity
 import Formal.GearPolicy
 
 /-!

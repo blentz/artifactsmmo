@@ -1,3 +1,4 @@
+-- @concept: core, planner @property: safety
 /-
 Formal model of the Action.cost(...) ≥ 0 contract that seals the Phase-2
 Dijkstra-optimality proof (`PlannerAdmissibility.lean`).

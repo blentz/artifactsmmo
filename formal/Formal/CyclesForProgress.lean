@@ -1,3 +1,4 @@
+-- @concept: characters @property: reachability, monotonicity
 /-
 Formal model of the pure core extracted from
 `src/artifactsmmo_cli/ai/learning/projections.py` (`cycles_for_progress`,

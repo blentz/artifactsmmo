@@ -1,3 +1,4 @@
+-- @concept: items, crafting, bank @property: safety, reachability
 /-
 Phase 8 mixed batch: four targets from the recon shortlist.
 

@@ -1,3 +1,4 @@
+-- @concept: core @property: safety
 /-
 Phase-7 Target F: pin the warm-up gates of `LearningStore`. The store's
 median and success-rate aggregates both gate on `len(rows) >= 5` before

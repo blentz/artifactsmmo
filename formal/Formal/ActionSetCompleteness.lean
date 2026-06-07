@@ -1,3 +1,4 @@
+-- @concept: core @property: totality
 
 /-!
 # Formal.ActionSetCompleteness

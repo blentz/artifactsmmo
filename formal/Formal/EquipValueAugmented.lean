@@ -1,3 +1,4 @@
+-- @concept: items, characters @property: dominance, monotonicity
 /-!
 # Formal.EquipValueAugmented
 

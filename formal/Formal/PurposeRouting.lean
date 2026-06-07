@@ -1,3 +1,4 @@
+-- @concept: items, characters @property: dominance
 import Formal.EquipmentScoring
 import Formal.GearPolicy
 

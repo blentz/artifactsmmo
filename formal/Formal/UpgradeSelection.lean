@@ -1,3 +1,4 @@
+-- @concept: items, characters @property: dominance
 /-
 Formal model of the pure upgrade-selection cores from
 `src/artifactsmmo_cli/ai/goals/upgrade_selection.py` (extracted from

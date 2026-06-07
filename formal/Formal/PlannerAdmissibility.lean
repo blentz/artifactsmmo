@@ -1,3 +1,4 @@
+-- @concept: planner, core @property: dominance
 /-
 Formal model of the GOAP planner's A* search and the
 "first satisfied node popped is least-cost" claim, from

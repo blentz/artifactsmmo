@@ -1,3 +1,4 @@
+-- @concept: bank, items @property: safety
 /-
 Formal model of the slot-bookkeeping cores of FOUR `Action.is_applicable` /
 `.apply` pairs that previously shared the `NpcBuyAction` shape of REAL BUG #6

@@ -1,3 +1,4 @@
+-- @concept: crafting, items @property: totality, safety
 
 /-!
 # Formal.WithdrawSetExpansion
