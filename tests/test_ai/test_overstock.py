@@ -6,7 +6,6 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.discard_overstock import (
     _DISCARD_OVERSTOCK_CRITICAL,
     _DISCARD_OVERSTOCK_HIGH_PRESSURE,
-    PRIORITY_WHEN_OVERSTOCKED,
     DiscardOverstockGoal,
 )
 from artifactsmmo_cli.ai.inventory_caps import (
@@ -189,17 +188,27 @@ class TestUsefulQuantityCap:
         assert cap >= 1
 
     def test_equippable_craftable_capped_at_one(self):
-        """Equippable craftables (weapon/armor/ring) cap at 1 — keep a single
-        spare for the optimizer's swap pool, discard the rest. We don't need
-        a hoard of duplicate daggers."""
+        """Equippable craftables (weapon/armor/ring) keep a useful floor of 1 —
+        a single spare for the optimizer's swap pool. Post-spec-2026-06-07 the
+        useful_quantity_cap is the SPACE-DRIVEN floor, not a dump trigger: with
+        free slots (low pressure) the surplus is NOT overstock. The floor only
+        decides excess once the bag is genuinely full."""
         gd = GameData()
         gd._item_stats = {"copper_dagger": ItemStats(
             code="copper_dagger", level=1, type_="weapon",
             crafting_skill="weaponcrafting", crafting_level=1)}
         gd._crafting_recipes = {"copper_dagger": {"copper_bar": 6}}  # not a recipe ingredient
-        state = make_state(level=5, inventory={"copper_dagger": 3})
+        # useful floor unchanged (1) — but with free slots nothing is overstock.
+        state = make_state(level=5, inventory={"copper_dagger": 3}, inventory_max=20)
         assert useful_quantity_cap("copper_dagger", state, gd) == 1
-        assert overstocked_items(state, gd) == {"copper_dagger": 2}
+        assert overstocked_items(state, gd) == {}, (
+            "free slots → no space pressure → surplus is not overstock"
+        )
+        # Under genuine space pressure (bag near-full) the useful floor binds:
+        # 19/20 = 0.95 >= watermark → 3 held - floor 1 = 2 excess.
+        full = make_state(level=5, inventory={"copper_dagger": 3, "junk": 16},
+                          inventory_max=20)
+        assert overstocked_items(full, gd).get("copper_dagger") == 2
 
     def test_equippable_cap_yields_to_active_task(self):
         """...unless a task requires more — task_cap overrides the equippable
@@ -232,12 +241,17 @@ class TestOverstockedItems:
 
 
 class TestDiscardOverstockGoal:
-    def test_fires_high_when_overstocked(self):
+    def test_no_value_when_free_slots(self):
+        """Space-driven (spec 2026-06-07): with free slots (low pressure) the
+        surplus is NOT overstock, so the goal is satisfied and value is 0 —
+        even at 50 sap. The player uses its inventory; the per-item cap is no
+        longer a space-blind dump trigger."""
         gd = _gd_with_sap_recipes()
         goal = DiscardOverstockGoal(game_data=gd)
-        # Large inventory_max so pressure is low (50/200=25%); checks baseline tier.
+        # Large inventory_max so pressure is low (50/200=25%): no overstock.
         state = make_state(level=1, inventory={"sap": 50}, inventory_max=200)
-        assert goal.value(state, gd) == PRIORITY_WHEN_OVERSTOCKED
+        assert goal.value(state, gd) == 0.0
+        assert goal.is_satisfied(state) is True
 
     def test_priority_escalates_under_high_pressure(self):
         """Inventory pressure >= 0.85 → DISCARD_OVERSTOCK_HIGH_PRESSURE (55)."""

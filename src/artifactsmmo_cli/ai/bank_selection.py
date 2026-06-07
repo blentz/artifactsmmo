@@ -42,7 +42,8 @@ def _recipe_materials(roots: list[str], game_data: GameData) -> set[str]:
     return materials
 
 
-def _keep_codes(state: WorldState, game_data: GameData) -> set[str]:
+def _keep_codes(state: WorldState, game_data: GameData,
+                profile_codes: frozenset[str] = frozenset()) -> set[str]:
     keep: set[str] = {TASKS_COIN_CODE}
     if state.task_code:
         keep.add(state.task_code)
@@ -62,15 +63,24 @@ def _keep_codes(state: WorldState, game_data: GameData) -> set[str]:
     if state.task_type == "items" and state.task_code:
         recipe_roots.append(state.task_code)
     keep |= _recipe_materials(recipe_roots, game_data)
+    # Per-goal inventory profile: the ACTIVE gather goal's target materials
+    # (target_gear / target_tools recipe closures, threaded in by the caller
+    # via `profile_codes`). Without this, an active GatherMaterials goal whose
+    # materials are NOT the crafting_target/task chain (e.g. ash_wood for a
+    # fishing_net tool while the task is copper_ore) gets banked — undoing the
+    # withdraw and livelocking the gather (spec 2026-06-07). The profile is a
+    # SOFT target; here it just joins the keep-set so deposit never banks it.
+    keep |= profile_codes
     return keep
 
 
-def select_bank_deposits(state: WorldState, game_data: GameData) -> list[tuple[str, int]]:
+def select_bank_deposits(state: WorldState, game_data: GameData,
+                         profile_codes: frozenset[str] = frozenset()) -> list[tuple[str, int]]:
     """Items to deposit, ordered (sell_value desc, code asc), excluding the
     keep-set (task item, task coins, HP consumables, best fighting weapon,
-    crafting-target materials). Items with no known NPC buy-back price get
-    value 0 and sort last."""
-    keep = _keep_codes(state, game_data)
+    crafting-target materials, AND the active goal's profile codes). Items
+    with no known NPC buy-back price get value 0 and sort last."""
+    keep = _keep_codes(state, game_data, profile_codes)
 
     def sell_value(code: str) -> int:
         buyers = game_data.npcs_buying_item(code)
