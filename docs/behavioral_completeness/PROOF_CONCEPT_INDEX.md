@@ -33,6 +33,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | GoalValueBands | core, planner | safety, monotonicity |
 | GuardCoverage | core | no-deadlock, safety |
 | InventoryChainSafe | bank, items | safety |
+| LiquidationVenue | grandexchange | dominance, totality, safety, monotonicity |
 | Liveness.ItemsTaskRun | tasks | safety, totality, reachability |
 | Liveness.ItemsTaskTermination | tasks, crafting, bank | safety, totality |
 | LivenessChain | combat, monsters | reachability, no-deadlock |

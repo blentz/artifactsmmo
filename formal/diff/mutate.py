@@ -38,6 +38,7 @@ GATHER_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gathe
 GATHER_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_selection.py"
 MONSTER_DROP_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "monster_drop_selection.py"
 CRAFT_VS_BUY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_vs_buy.py"
+LIQUIDATION_VENUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "liquidation_venue.py"
 NEAREST_TILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "nearest_tile.py"
 CONSUMABLE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_selection.py"
 BANK_EXPANSION_TIMING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_expansion_timing.py"
@@ -1216,6 +1217,36 @@ CRAFT_VS_BUY_MUTATIONS = [
      "    affordable = gold + total_price >= reserve"),
 ]
 
+# liquidation_venue mutations -- old strings matched to current
+# liquidation_venue.py text. Each perturbs the immediate-fill venue decision so the
+# Python venue/realized verdict diverges from the Lean `chooseVenue`/
+# `realizedProceeds` oracle. Killed by formal/diff/test_liquidation_venue_diff.py.
+LIQUIDATION_VENUE_MUTATIONS = [
+    # Flip the strict `>` to `>=`: a standing order that merely TIES the NPC
+    # sell-back now spuriously wins GE, violating the strict-dominance rule. The
+    # tie cases in the diff fire.
+    ("liquidation_venue: strict > -> >= (GE wins on a tie)",
+     "if ge_proceeds is not None and ge_proceeds > npc_pay:",
+     "if ge_proceeds is not None and ge_proceeds >= npc_pay:"),
+    # Drop the `is not None` guard: GE can now be chosen on a phantom (absent)
+    # order — exactly the anti-surrogate violation. (A `None > int` comparison
+    # raises in Python, so the diff's None cases diverge by erroring/branching.)
+    ("liquidation_venue: drop isSome guard (GE on phantom order)",
+     "if ge_proceeds is not None and ge_proceeds > npc_pay:",
+     "if ge_proceeds is not None or ge_proceeds > npc_pay:"),
+    # Invert the comparison `>` to `<`: GE now fires when the order pays LESS than
+    # the NPC sell-back, inverting the value objective.
+    ("liquidation_venue: > -> < (inverted proceeds objective)",
+     "if ge_proceeds is not None and ge_proceeds > npc_pay:",
+     "if ge_proceeds is not None and ge_proceeds < npc_pay:"),
+    # Break the realized-gold coupling: realize the NPC price even when GE is
+    # chosen, so the proceeds no longer reflect the actual venue. The realized
+    # field in the diff diverges on every GE win.
+    ("liquidation_venue: realized decouple (GE realizes npc_pay)",
+     "    if venue is Venue.GE and ge_proceeds is not None:\n        return ge_proceeds\n    return npc_pay",
+     "    if venue is Venue.GE and ge_proceeds is not None:\n        return npc_pay\n    return npc_pay"),
+]
+
 # nearest_tile mutations -- old strings matched to current nearest_tile.py text.
 # Each perturbs the Manhattan metric or the lex (manhattan, x, y) tie-break so the
 # Python winner diverges from the Lean `nearestTile` oracle. Killed by
@@ -2150,6 +2181,8 @@ def main() -> int:
               "formal/diff/test_monster_drop_selection_diff.py", survivors)
     run_group(CRAFT_VS_BUY_SRC, CRAFT_VS_BUY_MUTATIONS,
               "formal/diff/test_craft_vs_buy_diff.py", survivors)
+    run_group(LIQUIDATION_VENUE_SRC, LIQUIDATION_VENUE_MUTATIONS,
+              "formal/diff/test_liquidation_venue_diff.py", survivors)
     run_group(NEAREST_TILE_SRC, NEAREST_TILE_MUTATIONS,
               "formal/diff/test_nearest_tile_diff.py", survivors)
     run_group(CONSUMABLE_SELECTION_SRC, CONSUMABLE_SELECTION_MUTATIONS,

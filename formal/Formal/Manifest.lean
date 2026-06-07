@@ -287,6 +287,13 @@ open Formal.PriorityBand
 #check @Formal.CraftVsBuy.buy_stable_under_more_gold     -- monotonicity: ↑gold keeps buy
 #check @Formal.CraftVsBuy.buy_stable_under_lower_buy     -- monotonicity: ↓buy cost keeps buy
 #check @Formal.CraftVsBuy.buy_preserves_reserve          -- safety: buy ⇒ post-buy gold ≥ reserve
+-- LiquidationVenue required roles (immediate-fill liquidation venue over Int with Option Int):
+#check @Formal.LiquidationVenue.venue_total              -- totality: always NPC or GE
+#check @Formal.LiquidationVenue.ge_iff_fillable_and_higher -- dominance: GE ⇔ fillable order pays strictly more
+#check @Formal.LiquidationVenue.ge_requires_fillable_order -- safety/anti-surrogate: GE ⇒ order isSome
+#check @Formal.LiquidationVenue.chosen_venue_maximizes   -- safety/no-value-loss: realized ≥ npcPay and ≥ any order
+#check @Formal.LiquidationVenue.ge_stable_under_higher_ge -- monotonicity: ↑order keeps GE
+#check @Formal.LiquidationVenue.ge_stable_under_lower_npc -- monotonicity: ↓npc floor keeps GE
 -- NearestTile required roles (Manhattan-nearest tile, lex (manhattan,x,y) over Int coords):
 #check @Formal.NearestTile.nearestTile_nil                    -- totality: none ⇔ empty
 #check @Formal.NearestTile.nearestTile_total                  -- totality: nonempty ⇒ isSome

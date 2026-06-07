@@ -707,6 +707,14 @@ open Formal.WeightedRemaining in
 #print axioms Formal.CraftVsBuy.buy_stable_under_lower_buy
 #print axioms Formal.CraftVsBuy.buy_preserves_reserve
 
+-- LiquidationVenue (immediate-fill liquidation venue over Int with Option Int)
+#print axioms Formal.LiquidationVenue.venue_total
+#print axioms Formal.LiquidationVenue.ge_iff_fillable_and_higher
+#print axioms Formal.LiquidationVenue.ge_requires_fillable_order
+#print axioms Formal.LiquidationVenue.chosen_venue_maximizes
+#print axioms Formal.LiquidationVenue.ge_stable_under_higher_ge
+#print axioms Formal.LiquidationVenue.ge_stable_under_lower_npc
+
 -- NearestTile (Manhattan-nearest tile, lex (manhattan, x, y) over Int coords)
 #print axioms Formal.NearestTile.nearestTile_nil
 #print axioms Formal.NearestTile.nearestTile_total

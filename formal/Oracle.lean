@@ -1073,6 +1073,25 @@ def runCraftVsBuy (args : Array Json) : Json :=
     | Formal.CraftVsBuy.Method.craft => 0
   Json.mkObj [("method", Json.num code)]
 
+/-- Compute one liquidation_venue result using the SAME proved
+`Formal.LiquidationVenue.chooseVenue` / `realizedProceeds`.
+
+args layout (3 Ints): `[npcPay, gePresent(0/1), geProceeds]`. When
+`gePresent = 0` the standing-order field is `none` (the anti-surrogate guard);
+otherwise it is `some geProceeds`. Emits the chosen venue (`1` = GE, `0` = NPC,
+matching the Python `Venue.GE`/`Venue.NPC` encoding) and the realized proceeds at
+that choice (so the differential pins the gold coupling, not just the label). -/
+def runLiquidationVenue (args : Array Json) : Json :=
+  let npcPay := intArg args 0
+  let geProceeds : Option Int :=
+    if intArg args 1 != 0 then some (intArg args 2) else none
+  let venue := Formal.LiquidationVenue.chooseVenue npcPay geProceeds
+  let code : Int := match venue with
+    | Formal.LiquidationVenue.Venue.ge => 1
+    | Formal.LiquidationVenue.Venue.npc => 0
+  let realized := Formal.LiquidationVenue.realizedProceeds npcPay geProceeds venue
+  Json.mkObj [("venue", Json.num code), ("realized", Json.num realized)]
+
 /-- Compute one nearest_tile result using the SAME proved
 `Formal.NearestTile.nearestTile`.
 
@@ -1488,6 +1507,8 @@ def runOne (item : Json) : Json :=
     runMonsterDropSelection args
   else if kind == "craft_vs_buy" then
     runCraftVsBuy args
+  else if kind == "liquidation_venue" then
+    runLiquidationVenue args
   else if kind == "nearest_tile" then
     runNearestTile args
   else if kind == "consumable_selection" then

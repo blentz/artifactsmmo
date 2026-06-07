@@ -33,6 +33,7 @@ import Formal.GatherApply
 import Formal.GatherSelection
 import Formal.MonsterDropSelection
 import Formal.CraftVsBuy
+import Formal.LiquidationVenue
 import Formal.NearestTile
 import Formal.ConsumableSelection
 import Formal.BankExpansionTiming
@@ -2029,6 +2030,43 @@ example : ∀ (a b b' p g r : Int),
 example : ∀ (a b p g r : Int),
     Formal.CraftVsBuy.cheaperAcquisition a b p g r = Formal.CraftVsBuy.Method.buy → g - p ≥ r :=
   @Formal.CraftVsBuy.buy_preserves_reserve
+
+/-! ### LiquidationVenue role contracts (immediate-fill liquidation venue, Int + Option Int). -/
+
+-- venue_total: TOTALITY — the decision is always NPC or GE.
+example : ∀ (npcPay : Int) (geProceeds : Option Int),
+    Formal.LiquidationVenue.chooseVenue npcPay geProceeds = Formal.LiquidationVenue.Venue.npc ∨
+    Formal.LiquidationVenue.chooseVenue npcPay geProceeds = Formal.LiquidationVenue.Venue.ge :=
+  @Formal.LiquidationVenue.venue_total
+-- ge_iff_fillable_and_higher: DOMINANCE — GE ⇔ a fillable order pays strictly more.
+example : ∀ (npcPay : Int) (geProceeds : Option Int),
+    Formal.LiquidationVenue.chooseVenue npcPay geProceeds = Formal.LiquidationVenue.Venue.ge ↔
+    ∃ g, geProceeds = some g ∧ g > npcPay :=
+  @Formal.LiquidationVenue.ge_iff_fillable_and_higher
+-- ge_requires_fillable_order: SAFETY/anti-surrogate — GE ⇒ a standing order exists.
+example : ∀ (npcPay : Int) (geProceeds : Option Int),
+    Formal.LiquidationVenue.chooseVenue npcPay geProceeds = Formal.LiquidationVenue.Venue.ge →
+    geProceeds.isSome :=
+  @Formal.LiquidationVenue.ge_requires_fillable_order
+-- chosen_venue_maximizes: SAFETY/no-value-loss — realized ≥ npcPay and ≥ any order.
+example : ∀ (npcPay : Int) (geProceeds : Option Int),
+    npcPay ≤ Formal.LiquidationVenue.realizedProceeds npcPay geProceeds
+      (Formal.LiquidationVenue.chooseVenue npcPay geProceeds)
+    ∧ ∀ g, geProceeds = some g →
+        g ≤ Formal.LiquidationVenue.realizedProceeds npcPay geProceeds
+          (Formal.LiquidationVenue.chooseVenue npcPay geProceeds) :=
+  @Formal.LiquidationVenue.chosen_venue_maximizes
+-- ge_stable_under_higher_ge: MONOTONICITY — raising the order keeps GE.
+example : ∀ (npcPay g g' : Int),
+    Formal.LiquidationVenue.chooseVenue npcPay (some g) = Formal.LiquidationVenue.Venue.ge → g ≤ g' →
+    Formal.LiquidationVenue.chooseVenue npcPay (some g') = Formal.LiquidationVenue.Venue.ge :=
+  @Formal.LiquidationVenue.ge_stable_under_higher_ge
+-- ge_stable_under_lower_npc: MONOTONICITY — lowering the NPC floor keeps GE.
+example : ∀ (npcPay npcPay' : Int) (geProceeds : Option Int),
+    Formal.LiquidationVenue.chooseVenue npcPay geProceeds = Formal.LiquidationVenue.Venue.ge →
+    npcPay' ≤ npcPay →
+    Formal.LiquidationVenue.chooseVenue npcPay' geProceeds = Formal.LiquidationVenue.Venue.ge :=
+  @Formal.LiquidationVenue.ge_stable_under_lower_npc
 
 /-! ### NearestTile role contracts (Manhattan-nearest tile, lex (manhattan, x, y)). -/
 
