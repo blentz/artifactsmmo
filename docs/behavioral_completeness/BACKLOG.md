@@ -21,10 +21,10 @@ multi-session architectural effort (deferred section below) or out-of-scope
 
 ## Deferred — multi-session architectural work
 
-These are genuine but NOT single-session: each needs a model change (and, for
-two, code plumbing) before an honest proof is possible. Landing a decision core
-without the coupling/plumbing would be a vacuous/inert proof (the rejected-tasks
-lesson), so they are tracked here rather than force-closed.
+These are genuine but NOT single-session: each needs a model change (coupling or
+wiring) before an honest proof is possible. Landing a decision core without the
+coupling/wiring would be a vacuous/inert proof (the rejected-tasks lesson), so
+they are tracked here rather than force-closed.
 
 - **tasks — taskTrade↔inventory coupling** (blocks the honest items-task termination
   capstone). The shared Liveness apply model collapses `.taskTrade`: it advances
@@ -54,13 +54,9 @@ lesson), so they are tracked here rather than force-closed.
   path wired into the arbiter action set with `select_monster_for_drop` as the target
   picker (deep model change). NOT CLOSED until that wiring lands.
 
-- **grandexchange — needs order-book ingestion.** The GE is in-API but `game_data`
-  has zero order-book ingestion. The only honest decision is immediate-fill
-  liquidation (sell into an existing fillable buy order vs NPC — an `Option`-gated
-  dominance proof); a posted-price proof would be a sham (posted price ≠ realized
-  proceeds). Needs `/grandexchange/orders` plumbed into `game_data` +
-  `GeFillBuyOrderAction` first, then `liquidation_venue` + `LiquidationVenue.lean`.
-  Two-session.
+_(grandexchange is no longer deferred: order-book ingestion landed and BOTH
+immediate-fill sides are proven + live-wired-CLOSED — see Closed below. Posting a
+new order is reclassified IGNORE-with-reason — see the IGNORE table.)_
 
 ## Closed
 
@@ -75,6 +71,7 @@ lesson), so they are tracked here rather than force-closed.
 | npcs | THIN | 0 | CLOSED 2026-06-07 — buy-vs-gather for raw NPC-sold mats is the raw instance of CraftVsBuy (already proven + wired); cite-only |
 | combat | THIN | 0 | CLOSED 2026-06-07 — loadout-swap selection already proven (RealizableLoadout/EquipmentScoring/PurposeRouting); audit under-citation fixed |
 | characters | THIN | 0 | CLOSED 2026-06-07 — single-char coherence proven downstream (CycleInvariants/MultiCycleLiveness/ActionApplicability + StrategyTraversal); only multi-char roster out-of-scope |
+| grandexchange | UNPROVEN | 0 | CLOSED 2026-06-07 — immediate-fill BOTH sides proven + live-wired: SELL via LiquidationVenue (fill standing buy order vs NPC sell-back), BUY/source via BuySourceVenue (fill standing sell order vs NPC buy) [dominance, totality, safety, monotonicity]. Posting a new order reclassified IGNORE (see below) |
 
 ## Deliberately not actioned (IGNORE — score 0)
 
@@ -85,3 +82,4 @@ lesson), so they are tracked here rather than force-closed.
 | badges | IGNORE | 0 | cosmetic, no mechanical reward |
 | leaderboard | IGNORE | 0 | read-only ranking, nothing to act on |
 | simulation | IGNORE | 0 | local winnability model replaces the network endpoint |
+| grandexchange (posting) | IGNORE | 0 | posting a NEW order is speculative (may never fill); immediate-fill BOTH sides already cover liquidation + sourcing; `/grandexchange/history/{code}` records only completed sales (no unfilled-order denominator) so the API cannot support a fill-probability model; a posted-price realizability proof would be a surrogate sham |
