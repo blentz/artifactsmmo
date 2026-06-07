@@ -3,6 +3,7 @@ actionable subgoal. Pure; P3a runs it in shadow (traced, not enacted)."""
 
 from dataclasses import asdict, dataclass, field
 
+from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.projections import expected_yield_per_cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -132,7 +133,7 @@ def actionable_step(root: MetaGoal, state: WorldState, game_data: GameData) -> M
         unmet = [p for p in prerequisites(node, state, game_data)
                  if not p.is_satisfied(state, game_data)]
         if not unmet:
-            if isinstance(node, ObtainItem) and not _producible(node.code, game_data):
+            if isinstance(node, ObtainItem) and not _producible(node.code, state, game_data):
                 return None
             return node
         sub_path = path | {node}
@@ -171,12 +172,20 @@ def root_cost(root: MetaGoal, state: WorldState, game_data: GameData) -> int:
     return unmet_closure_size(root, state, game_data)
 
 
-def _producible(code: str, game_data: GameData) -> bool:
-    """True when the item can be made by known means: craftable (has a recipe)
-    or gatherable (some resource drops it). Buying / monster-drops are not
-    modelled yet, so such items read as not-producible."""
-    return (game_data.crafting_recipe(code) is not None
-            or code in game_data._resource_drops.values())
+def _producible(code: str, state: WorldState, game_data: GameData) -> bool:
+    """True when the item can be made by known means: craftable (has a recipe),
+    gatherable (some resource drops it), or obtainable by FIGHTING — some monster
+    that drops it is WINNABLE with the best on-hand loadout.
+
+    The winnability gate is load-bearing: a drop from an unwinnable monster must
+    NOT read as producible, else the planner would emit an unreachable FightAction
+    plan. Buying is still out of scope here (offered as a planner alternative in
+    GatherMaterialsGoal.relevant_actions, not as a producibility source)."""
+    if (game_data.crafting_recipe(code) is not None
+            or code in game_data._resource_drops.values()):
+        return True
+    return any(is_winnable(state, game_data, monster_code)
+               for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(code))
 
 
 def is_reachable(root: MetaGoal, state: WorldState, game_data: GameData,
@@ -191,7 +200,7 @@ def is_reachable(root: MetaGoal, state: WorldState, game_data: GameData,
         return True  # grinding the skill is always an available action
     prereqs = prerequisites(root, state, game_data)
     if isinstance(root, ObtainItem) and not prereqs:
-        return _producible(root.code, game_data)
+        return _producible(root.code, state, game_data)
     sub_path = path | {root}
     return all(is_reachable(p, state, game_data, sub_path) for p in prereqs)
 
