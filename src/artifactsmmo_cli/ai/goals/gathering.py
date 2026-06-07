@@ -4,9 +4,10 @@ from fractions import Fraction
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
-from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.gathering import GatherAction, _nearest
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gather_selection import GatherCandidate, select_gather_source
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.priority_band import clamp_into_band
@@ -112,6 +113,46 @@ class GatherMaterialsGoal(Goal):
                 or (isinstance(action, WithdrawItemAction) and action.code in withdrawable)
             ):
                 result.append(action)
+
+        # Yield-aware narrowing: when a needed item is the PRIMARY drop of >1
+        # resource present in `result`, keep only the source minimizing expected
+        # gathers (proved in formal/Formal/GatherSelection.lean). Single-source
+        # items and non-gather actions are untouched; an unknown drop table
+        # fail-opens (no narrowing).
+        gathers = [a for a in result if isinstance(a, GatherAction)]
+        by_item: dict[str, list[GatherAction]] = {}
+        for a in gathers:
+            drop = game_data.resource_drop_item(a.resource_code)
+            if drop is not None:
+                by_item.setdefault(drop, []).append(a)
+        drop_losers: set[int] = set()
+        for item, group in by_item.items():
+            if len(group) < 2:
+                continue
+            candidates: list[GatherCandidate] = []
+            valid = True
+            for a in group:
+                row = next((r for r in game_data.resource_drop_table(a.resource_code) if r[0] == item), None)
+                if row is None:
+                    valid = False
+                    break
+                _code, rate, mn, mx = row
+                if a.locations:
+                    loc = _nearest(a.locations, state)
+                    dist = abs(loc[0] - state.x) + abs(loc[1] - state.y)
+                else:
+                    dist = 0
+                candidates.append(GatherCandidate(
+                    resource_code=a.resource_code, rate=rate, min_quantity=mn,
+                    max_quantity=mx, distance=dist))
+            if not valid:
+                continue
+            winner = select_gather_source(item, candidates)
+            for a in group:
+                if a.resource_code != winner:
+                    drop_losers.add(id(a))
+        if drop_losers:
+            result = [a for a in result if id(a) not in drop_losers]
         return result
 
     @property
