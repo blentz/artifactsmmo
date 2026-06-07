@@ -45,6 +45,7 @@ BANK_EXPANSION_TIMING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_exp
 EVENT_WINDOW_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "event_availability.py"
 COST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "cost_core.py"
 NPC_BUY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "npc_buy_core.py"
+TASK_TRADE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "task_trade_core.py"
 APPLY_MOVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "movement.py"
 APPLY_EQUIP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "equip.py"
 APPLY_CLAIM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "claim.py"
@@ -1004,6 +1005,7 @@ _ALL_SRCS = [
     EVENT_WINDOW_SRC,
     COST_CORE_SRC,
     NPC_BUY_CORE_SRC,
+    TASK_TRADE_CORE_SRC,
     APPLY_MOVE_SRC, APPLY_EQUIP_SRC, APPLY_CLAIM_SRC,
     APPLY_REST_SRC, APPLY_FIGHT_SRC, APPLY_BANK_EXPANSION_SRC,
     WITHDRAW_ITEM_SRC, UNEQUIP_SRC, TASK_EXCHANGE_SRC, TASK_CANCEL_SRC,
@@ -1098,6 +1100,39 @@ GATHER_APPLY_MUTATIONS = [
     ("gather_apply: is_applicable >= -> > (off-by-one on slot floor)",
      "    return (inv.cap - inv.used) >= min_free",
      "    return (inv.cap - inv.used) > min_free"),
+]
+
+
+# task_trade_core mutations -- old strings matched to current task_trade_core.py.
+# Each perturbs the live held↔progress trade transition so the Python result
+# diverges from the proven `quantity`-fold `ItemsTaskRun.trade` oracle. Killed by
+# formal/diff/test_items_task_run_diff.py.
+TASK_TRADE_CORE_MUTATIONS = [
+    # Drop the held decrement: progress advances but inventory is not consumed
+    # (the exact "free progress" hole the coupled model forbids). The diff pins
+    # new_held == held - quantity against the oracle.
+    ("task_trade_core: drop held decrement (held unchanged)",
+     "    return (held - quantity, progress + quantity)",
+     "    return (held, progress + quantity)"),
+    # Drop the progress increment: inventory is consumed but progress stalls.
+    # The diff pins new_progress == progress + quantity.
+    ("task_trade_core: drop progress increment (progress unchanged)",
+     "    return (held - quantity, progress + quantity)",
+     "    return (held - quantity, progress)"),
+    # Swap +/- on the transition: held grows, progress shrinks (sign inversion).
+    ("task_trade_core: swap +/- (held + quantity, progress - quantity)",
+     "    return (held - quantity, progress + quantity)",
+     "    return (held + quantity, progress - quantity)"),
+    # Weaken the action guard: drop the held >= quantity check (always-true held
+    # side). The held-below-quantity boundary test fires.
+    ("task_trade_core: drop held>=quantity guard",
+     "    if held < quantity:\n        return False",
+     "    if held < quantity:\n        return True"),
+    # Drop the goal stop guard: progress < total becomes always-true, so the
+    # action would over-trade past total. The progress-at-total test fires.
+    ("task_trade_core: drop progress<total goal guard",
+     "    return progress < total",
+     "    return True"),
 ]
 
 
@@ -2195,6 +2230,8 @@ def main() -> int:
               "formal/diff/test_action_cost_nonneg_diff.py", survivors)
     run_group(NPC_BUY_CORE_SRC, NPC_BUY_MUTATIONS,
               "formal/diff/test_npc_buy_inventory_diff.py", survivors)
+    run_group(TASK_TRADE_CORE_SRC, TASK_TRADE_CORE_MUTATIONS,
+              "formal/diff/test_items_task_run_diff.py", survivors)
     run_group(APPLY_MOVE_SRC, APPLY_MOVE_MUTATIONS,
               "formal/diff/test_apply_baseline_diff.py", survivors)
     run_group(APPLY_EQUIP_SRC, APPLY_EQUIP_MUTATIONS,
