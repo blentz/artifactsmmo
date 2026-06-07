@@ -34,9 +34,9 @@ Column legend:
 - **Concept → player**: tile coordinates + content (monster/resource/workshop/bank/npc spawn) used to route movement (MapSchema)
 - **Strategic uses**: maps are the spatial index every gather/fight/craft action must resolve a destination against before moving (openapi schema MapSchema)
 - **Opportunity cost × tier**: free lookup at all tiers; T1 content is clustered near spawn so path cost is low, higher tiers (T4-T6) are farther so pathing/movement cost rises (content_tiers.md)
-- **Behavior coverage**: CalculatePath-driven movement underlies progression/level_skill/deposit (tiers/means.py, goals/progression.py)
-- **Proof coverage**: CheapestPath [reachability, dominance] (proves nearest-tile selection) (PROOF_CONCEPT_INDEX)
-- **Gap + policy**: THIN — act; pathing is proven but multi-layer/obstacle map traversal is only partially modeled (synthesis)
+- **Behavior coverage**: every action embeds a semantic MoveTo to its content tile; nearest-tile resolution is game_data.nearest_location (actions/movement_semantic.py, game_data.py)
+- **Proof coverage**: none — no module in the index is tagged `maps`; nearest_location is unproven (PROOF_CONCEPT_INDEX)
+- **Gap + policy**: THIN — act; movement is wired (MoveTo + nearest_location) but tile-routing/multi-layer traversal is unproven (synthesis)
 
 ### monsters
 - **Player → concept**: read monster catalog/stats; engage indirectly via fight (openapi /monsters, /monsters/{code}, /my/{name}/action/fight)
@@ -61,7 +61,7 @@ Column legend:
 - **Concept → player**: raw materials (ore/wood/fish/fiber) at drop rates + gathering-skill XP; gated by skill level (ResourceSchema, DropRateSchema)
 - **Strategic uses**: resources are the feedstock for all crafting and the main gathering-skill XP source; gather to satisfy recipe inputs (openapi schema ResourceSchema)
 - **Opportunity cost × tier**: T1 copper/ash gathers are fast and feed early gear; higher-tier nodes (T5 mithril, T6 adamantite) need skill level investment first (content_tiers.md)
-- **Behavior coverage**: GatherMaterials, LevelSkill, GatherApply means drive gathering (goals/gathering.py, tiers/means.py)
+- **Behavior coverage**: GatherMaterialsGoal and LevelSkillGoal drive gathering via GatheringAction (goals/gathering.py, goals/level_skill.py)
 - **Proof coverage**: GatherApply [safety] (PROOF_CONCEPT_INDEX)
 - **Gap + policy**: THIN — act; gathering is the current live bottleneck (ash_wood/copper for gear) and is modeled but only one safety theorem backs it (synthesis)
 
@@ -70,7 +70,7 @@ Column legend:
 - **Concept → player**: stat effects when equipped, recipe inputs, sale value, task/quest material — items are the universal value currency (ItemSchema)
 - **Strategic uses**: items are equipped for combat stats, consumed in recipes, or sold for gold; gear upgrades unlock harder content (openapi schema ItemSchema)
 - **Opportunity cost × tier**: T1 copper gear is cheap and immediately equippable; each tier's gear (T3 steel, T5 mithril, T6 adamantite) costs proportionally more inputs but enables the next monster band (content_tiers.md)
-- **Behavior coverage**: UpgradeEquipment, GatherMaterials, SellInventory, DepositInventory, DiscardOverstock all act on items (goals/upgrade_selection.py, tiers/means.py)
+- **Behavior coverage**: UpgradeEquipmentGoal (value selection in upgrade_selection.py), SellInventory, DepositInventory, DiscardOverstock all act on items (goals/progression.py, goals/upgrade_selection.py)
 - **Proof coverage**: OwnedCount/EquipValueAugmented/GearLatch/GearPolicy/UpgradeSelection/RecycleProtection [safety, dominance, monotonicity] (PROOF_CONCEPT_INDEX)
 - **Gap + policy**: THIN — act; items are heavily covered for gear/recipe but item give/transfer between characters is unmodeled and accepted (synthesis)
 
@@ -89,7 +89,7 @@ Column legend:
 - **Strategic uses**: bank is the keep-set-protected store that prevents DEPOSIT_FULL from banking task/recipe inputs and freezing progress; deposit when inventory pressured (openapi schema BankSchema)
 - **Opportunity cost × tier**: at all tiers banking is near-free; the cost is the keep-set policy — banking a needed recipe input stalls PursueTask, so the trade is correctness not gold (content_tiers.md)
 - **Behavior coverage**: DepositInventory, ExpandBank, UnlockBank, withdraw means; keep-set in tiers/means.py (goals/deposit_inventory.py, goals/expand_bank.py)
-- **Proof coverage**: BankSelection/InventoryChainSafe/WithdrawSetExpansion/Phase8Invariants [safety, totality, reachability] (PROOF_CONCEPT_INDEX)
+- **Proof coverage**: BankSelection/InventoryChainSafe/Phase8Invariants [safety, reachability] (PROOF_CONCEPT_INDEX)
 - **Gap + policy**: THIN — act; deposit/withdraw/keep-set proven, but expansion-purchase timing is heuristic (synthesis)
 
 ### npcs
