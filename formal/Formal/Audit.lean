@@ -698,6 +698,13 @@ open Formal.WeightedRemaining in
 #print axioms Formal.CraftVsBuy.buy_stable_under_more_gold
 #print axioms Formal.CraftVsBuy.buy_stable_under_lower_buy
 #print axioms Formal.CraftVsBuy.buy_preserves_reserve
+
+-- ConsumableSelection (overheal-aware consumable lex-argmin over Int)
+#print axioms Formal.ConsumableSelection.select_none_iff_no_usable
+#print axioms Formal.ConsumableSelection.select_mem
+#print axioms Formal.ConsumableSelection.select_is_min
+#print axioms Formal.ConsumableSelection.select_no_overheal_when_fit_exists
+#print axioms Formal.ConsumableSelection.select_dominance_monotone
 -- BankExpansionTiming (bank-expansion firing decision over Int)
 #print axioms Formal.BankExpansionTiming.expand_total
 #print axioms Formal.BankExpansionTiming.expand_iff

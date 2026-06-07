@@ -71,7 +71,7 @@ Column legend:
 - **Strategic uses**: items are equipped for combat stats, consumed in recipes, or sold for gold; gear upgrades unlock harder content (openapi schema ItemSchema)
 - **Opportunity cost × tier**: T1 copper gear is cheap and immediately equippable; each tier's gear (T3 steel, T5 mithril, T6 adamantite) costs proportionally more inputs but enables the next monster band (content_tiers.md)
 - **Behavior coverage**: UpgradeEquipmentGoal (value selection in upgrade_selection.py), SellInventory, DepositInventory, DiscardOverstock all act on items (goals/progression.py, goals/upgrade_selection.py)
-- **Proof coverage**: OwnedCount/EquipValueAugmented/GearLatch/GearPolicy/UpgradeSelection/RecycleProtection [safety, dominance, monotonicity] (PROOF_CONCEPT_INDEX)
+- **Proof coverage**: OwnedCount/EquipValueAugmented/GearLatch/GearPolicy/UpgradeSelection/RecycleProtection [safety, dominance, monotonicity] + ConsumableSelection [dominance, monotonicity, totality, safety] (PROOF_CONCEPT_INDEX)
 - **Gap + policy**: THIN — act; items are heavily covered for gear/recipe but item give/transfer between characters is unmodeled and accepted (synthesis)
 
 ### crafting

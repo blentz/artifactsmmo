@@ -30,6 +30,7 @@ import Formal.CyclesForProgress
 import Formal.GatherApply
 import Formal.GatherSelection
 import Formal.CraftVsBuy
+import Formal.ConsumableSelection
 import Formal.BankExpansionTiming
 import Formal.EventWindow
 import Formal.NpcBuyInventory

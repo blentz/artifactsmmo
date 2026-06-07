@@ -279,6 +279,12 @@ open Formal.PriorityBand
 #check @Formal.CraftVsBuy.buy_stable_under_more_gold     -- monotonicity: ↑gold keeps buy
 #check @Formal.CraftVsBuy.buy_stable_under_lower_buy     -- monotonicity: ↓buy cost keeps buy
 #check @Formal.CraftVsBuy.buy_preserves_reserve          -- safety: buy ⇒ post-buy gold ≥ reserve
+-- ConsumableSelection required roles (overheal-aware consumable lex-argmin over Int):
+#check @Formal.ConsumableSelection.select_none_iff_no_usable        -- totality: none ⇔ no usable
+#check @Formal.ConsumableSelection.select_mem                       -- winner is a usable candidate
+#check @Formal.ConsumableSelection.select_is_min                    -- dominance: nothing usable beats winner
+#check @Formal.ConsumableSelection.select_no_overheal_when_fit_exists -- safety: fitter exists ⇒ winner fits
+#check @Formal.ConsumableSelection.select_dominance_monotone        -- monotonicity: larger fit not ranked worse
 -- BankExpansionTiming required roles (bank-expansion firing decision over Int):
 #check @Formal.BankExpansionTiming.expand_total                  -- totality: always true or false
 #check @Formal.BankExpansionTiming.expand_iff                    -- dominance: exact firing condition

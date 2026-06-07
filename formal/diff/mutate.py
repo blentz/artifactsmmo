@@ -37,6 +37,7 @@ CYCLES_FOR_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" 
 GATHER_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gather_apply_core.py"
 GATHER_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_selection.py"
 CRAFT_VS_BUY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_vs_buy.py"
+CONSUMABLE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_selection.py"
 BANK_EXPANSION_TIMING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_expansion_timing.py"
 EVENT_WINDOW_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "event_availability.py"
 COST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "cost_core.py"
@@ -993,6 +994,7 @@ _ALL_SRCS = [
     GATHER_APPLY_SRC,
     GATHER_SELECTION_SRC,
     CRAFT_VS_BUY_SRC,
+    CONSUMABLE_SELECTION_SRC,
     BANK_EXPANSION_TIMING_SRC,
     EVENT_WINDOW_SRC,
     COST_CORE_SRC,
@@ -1165,6 +1167,39 @@ CRAFT_VS_BUY_MUTATIONS = [
     ("craft_vs_buy: affordability - -> + (wrong post-buy gold)",
      "    affordable = gold - total_price >= reserve",
      "    affordable = gold + total_price >= reserve"),
+]
+
+# consumable_selection mutations -- old strings matched to current
+# consumable_selection.py text. Each perturbs the overheal-aware lex key or the
+# usability filter so the Python pick diverges from the Lean `selectConsumable`
+# oracle. Killed by formal/diff/test_consumable_selection_diff.py.
+CONSUMABLE_SELECTION_MUTATIONS = [
+    # overheal-flag direction flip: `restore > deficit` -> `restore < deficit`, so a
+    # FITTING item is wrongly flagged as overheal (and vice versa); the fit-preference
+    # inverts and a big overhealer can beat a small fitter — the original bug.
+    ("consumable_selection: overheal flag direction flip (> -> <)",
+     "    overheal = restore > deficit",
+     "    overheal = restore < deficit"),
+    # waste sign flip: `restore - deficit` -> `deficit - restore`, so among
+    # overhealers the LARGEST overshoot is preferred (negative waste sorts first).
+    ("consumable_selection: waste sign flip (restore - deficit -> deficit - restore)",
+     "    waste = (restore - deficit) if overheal else 0",
+     "    waste = (deficit - restore) if overheal else 0"),
+    # coverage sign flip: `-restore` -> `restore`, so among fitters the SMALLEST
+    # restore is chosen (argmin over +restore) instead of the largest coverage.
+    ("consumable_selection: coverage sign flip (-restore -> restore)",
+     "    return (overheal_flag, waste, -restore, code)",
+     "    return (overheal_flag, waste, restore, code)"),
+    # drop the code tiebreak (constant third-from-key field): ties resolve by
+    # list order instead of code, so a smaller-code candidate appearing later loses.
+    ("consumable_selection: drop code tiebreak (constant key)",
+     "    return (overheal_flag, waste, -restore, code)",
+     '    return (overheal_flag, waste, -restore, "")'),
+    # usability filter weakening: `qty <= 0` -> `qty < 0`, so a qty==0 item becomes
+    # usable and can be (wrongly) selected — the empty-stack item the filter must skip.
+    ("consumable_selection: usability filter qty <= 0 -> < 0 (admits qty==0)",
+     "        if qty <= 0:\n            continue",
+     "        if qty < 0:\n            continue"),
 ]
 
 # bank_expansion_timing mutations -- old strings matched to current
@@ -2032,6 +2067,8 @@ def main() -> int:
               "formal/diff/test_gather_selection_diff.py", survivors)
     run_group(CRAFT_VS_BUY_SRC, CRAFT_VS_BUY_MUTATIONS,
               "formal/diff/test_craft_vs_buy_diff.py", survivors)
+    run_group(CONSUMABLE_SELECTION_SRC, CONSUMABLE_SELECTION_MUTATIONS,
+              "formal/diff/test_consumable_selection_diff.py", survivors)
     run_group(BANK_EXPANSION_TIMING_SRC, BANK_EXPANSION_TIMING_MUTATIONS,
               "formal/diff/test_bank_expansion_timing_diff.py", survivors)
     run_group(EVENT_WINDOW_SRC, EVENT_WINDOW_MUTATIONS,

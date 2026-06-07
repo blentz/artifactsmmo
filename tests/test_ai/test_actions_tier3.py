@@ -375,6 +375,17 @@ class TestBestConsumableHelper:
         result = _best_consumable({"bread": 1, "chicken": 1}, item_stats)
         assert result == ("chicken", 50)
 
+    def test_skips_items_without_stats_or_zero_restore(self):
+        from artifactsmmo_cli.ai.actions.consumable import _best_consumable
+        # "mystery" has no ItemStats entry; "ore" has hp_restore 0 — both skipped,
+        # leaving only "bread" as the best consumable.
+        item_stats = {
+            "ore": ItemStats(code="ore", level=1, type_="resource", hp_restore=0),
+            "bread": ItemStats(code="bread", level=1, type_="consumable", hp_restore=30),
+        }
+        result = _best_consumable({"mystery": 2, "ore": 5, "bread": 1}, item_stats)
+        assert result == ("bread", 30)
+
 
 class TestUseConsumableAction:
     def _make_item_stats_with_food(self, code: str, hp: int) -> dict[str, ItemStats]:

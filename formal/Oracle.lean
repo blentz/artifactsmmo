@@ -1048,6 +1048,28 @@ def runCraftVsBuy (args : Array Json) : Json :=
     | Formal.CraftVsBuy.Method.craft => 0
   Json.mkObj [("method", Json.num code)]
 
+/-- Compute one consumable_selection result using the SAME proved
+`Formal.ConsumableSelection.selectConsumable`.
+
+args layout: `[deficit, N, code0, restore0, qty0, code1, restore1, qty1, ...]` —
+the deficit, then `N` candidates, each the 3 ints `[code, restore, qty]`. Builds
+the `List Candidate`, runs the overheal-aware lex-argmin, and emits the winning
+candidate's `code` (or `-1` when nothing is usable, mirroring `Option.none`). -/
+def runConsumableSelection (args : Array Json) : Json :=
+  let deficit := intArg args 0
+  let n := (intArg args 1).toNat
+  let cands : List Formal.ConsumableSelection.Candidate :=
+    (List.range n).map (fun k =>
+      let base := 2 + 3 * k
+      { code := (intArg args base).toNat,
+        restore := intArg args (base + 1),
+        qty := intArg args (base + 2) })
+  let selected : Int :=
+    match Formal.ConsumableSelection.selectConsumable deficit cands with
+    | some c => Int.ofNat c.code
+    | none => -1
+  Json.mkObj [("selected", Json.num selected)]
+
 /-- Compute one bank_expansion_timing result using the SAME proved
 `Formal.BankExpansionTiming.shouldExpandBank`.
 
@@ -1420,6 +1442,8 @@ def runOne (item : Json) : Json :=
     runGatherSelection args
   else if kind == "craft_vs_buy" then
     runCraftVsBuy args
+  else if kind == "consumable_selection" then
+    runConsumableSelection args
   else if kind == "bank_expansion_timing" then
     runBankExpansionTiming args
   else if kind == "event_window" then

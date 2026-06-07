@@ -9,6 +9,7 @@ from artifactsmmo_api_client.api.my_characters.action_use_item_my_name_action_us
 from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.consumable_selection import select_consumable
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -44,10 +45,12 @@ class UseConsumableAction(Action):
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         if state.hp >= state.max_hp:
             return False
-        return _best_consumable(state.inventory, self._item_stats) is not None
+        deficit = state.max_hp - state.hp
+        return select_consumable(state.inventory, self._item_stats, deficit) is not None
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
-        best = _best_consumable(state.inventory, self._item_stats)
+        deficit = state.max_hp - state.hp
+        best = select_consumable(state.inventory, self._item_stats, deficit)
         assert best is not None
         item_code, _ = best
         new_inventory = dict(state.inventory)
@@ -63,20 +66,22 @@ class UseConsumableAction(Action):
 
     def cost(self, state: WorldState, game_data: GameData,
              history: LearningStore | None = None) -> float:
-        # _best_consumable picks the highest-restore potion; if a smaller potion would
-        # fit the deficit without overheal, this still penalizes (planner Rests). Ranking
-        # consumables by fit-to-deficit is a future refinement, out of P4 scope.
-        best = _best_consumable(state.inventory, self._item_stats)
+        # select_consumable is overheal-aware: it picks the best-FITTING consumable
+        # for the deficit, only overhealing when NOTHING fits. So the 100.0 Rest-
+        # forcing sentinel fires only when even the chosen (least-overheal) item still
+        # overshoots — i.e. no fitting consumable exists.
+        deficit = state.max_hp - state.hp
+        best = select_consumable(state.inventory, self._item_stats, deficit)
         if best is None:
             return 2.0                        # not applicable anyway; cheap default
         _, restore = best
-        deficit = state.max_hp - state.hp
-        if deficit >= restore:
-            return 2.0                        # heal not wasted -> beats Rest (10.0)
+        if restore <= deficit:
+            return 2.0                        # fits the deficit -> beats Rest (10.0)
         return 100.0  # overheal: must exceed RestAction.cost (10.0) so the planner Rests.
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
-        best = _best_consumable(state.inventory, self._item_stats)
+        deficit = state.max_hp - state.hp
+        best = select_consumable(state.inventory, self._item_stats, deficit)
         if best is None:
             raise RuntimeError("UseConsumable: no consumable in inventory at execute time")
         item_code, _ = best
