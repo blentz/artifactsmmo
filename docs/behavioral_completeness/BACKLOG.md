@@ -41,14 +41,18 @@ lesson), so they are tracked here rather than force-closed.
   from obtainment) and REJECTED; only Task-1's honest keep-set/batch contracts
   were kept.
 
-- **monsters — drop-driven selection needs producibility wiring.** The decision
+- **monsters — selection core PROVEN; producibility wiring deferred.** The decision
   (pick the monster minimizing expected kills = rate/avg_qty for a needed drop) is
-  a GatherSelection-shaped clone, BUT monster-drops are currently non-producible
-  (`tiers/strategy._producible` + `prerequisite_graph` treat them as leaves), so
-  no FightAction is ever emitted to obtain a drop — the core would be inert. Honest
-  close needs: restore `min_quantity` into `_monster_drops` (dropped at load) +
-  wire monster-drops as producible + a FightAction-narrowing call site, THEN the
-  proven core. Two-session.
+  now a landed, proven, differentially+mutation-locked GatherSelection-shaped core:
+  `src/artifactsmmo_cli/ai/monster_drop_selection.py` ↔ `formal/Formal/MonsterDropSelection.lean`
+  (axiom-clean). The DATA fix landed too: `_monster_drops` restores `min_quantity`
+  (was dropped at load) so avg_qty is faithful, + a `GameData.monsters_dropping(item)`
+  accessor. STILL DEFERRED: monster-drops remain non-producible (`tiers/strategy._producible`
+  + `prerequisite_graph` treat them as leaves) and FightAction is only emitted by
+  combat-XP goals, NOT by any `ObtainItem(drop_item)` goal — so `select_monster_for_drop`
+  has NO live caller and is INERT. Remaining work: a new ObtainItem→FightAction goal/action
+  path wired into the arbiter action set with `select_monster_for_drop` as the target
+  picker (deep model change). NOT CLOSED until that wiring lands.
 
 - **grandexchange — needs order-book ingestion.** The GE is in-API but `game_data`
   has zero order-book ingestion. The only honest decision is immediate-fill

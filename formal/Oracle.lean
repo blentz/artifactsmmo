@@ -1035,6 +1035,30 @@ def runGatherSelection (args : Array Json) : Json :=
     | none => -1
   Json.mkObj [("selected", Json.num selected)]
 
+/-- Compute one monster_drop_selection result using the SAME proved
+`Formal.MonsterDropSelection.selectMonsterForDrop`.
+
+Variable-length candidate list, flattened the same way as `runGatherSelection`:
+`args = [N, c0,r0,mn0,mx0,d0, c1,r1,mn1,mx1,d1, ...]` where `N` is the candidate
+count and each record is the 5 ints `[code, rate, minQ, maxQ, dist]`. Builds the
+`List Candidate`, runs the lex-argmin selector, and emits the winning candidate's
+`code` (or `-1` when the list is empty, mirroring `Option.none`). -/
+def runMonsterDropSelection (args : Array Json) : Json :=
+  let n := (intArg args 0).toNat
+  let cands : List Formal.MonsterDropSelection.Candidate :=
+    (List.range n).map (fun k =>
+      let base := 1 + 5 * k
+      { code := (intArg args base).toNat,
+        rate := (intArg args (base + 1)).toNat,
+        minQ := (intArg args (base + 2)).toNat,
+        maxQ := (intArg args (base + 3)).toNat,
+        dist := (intArg args (base + 4)).toNat })
+  let selected : Int :=
+    match Formal.MonsterDropSelection.selectMonsterForDrop cands with
+    | some c => Int.ofNat c.code
+    | none => -1
+  Json.mkObj [("selected", Json.num selected)]
+
 /-- Compute one craft_vs_buy result using the SAME proved
 `Formal.CraftVsBuy.cheaperAcquisition`.
 
@@ -1460,6 +1484,8 @@ def runOne (item : Json) : Json :=
     runGatherApply args
   else if kind == "gather_selection" then
     runGatherSelection args
+  else if kind == "monster_drop_selection" then
+    runMonsterDropSelection args
   else if kind == "craft_vs_buy" then
     runCraftVsBuy args
   else if kind == "nearest_tile" then

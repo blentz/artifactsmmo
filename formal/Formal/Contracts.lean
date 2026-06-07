@@ -31,6 +31,7 @@ import Formal.DecideKey
 import Formal.CyclesForProgress
 import Formal.GatherApply
 import Formal.GatherSelection
+import Formal.MonsterDropSelection
 import Formal.CraftVsBuy
 import Formal.NearestTile
 import Formal.ConsumableSelection
@@ -1957,6 +1958,42 @@ example : ∀ (a b : Formal.GatherSelection.Candidate),
 -- gather_selected_reaches_needed: REACHABILITY — +1 loop reaches the needed quantity.
 example : ∀ (needed owned : Nat), needed ≤ owned + (needed - owned) :=
   @Formal.GatherSelection.gather_selected_reaches_needed
+
+/-! ### MonsterDropSelection role contracts (expected-kills lex-argmin monster-drop). -/
+
+-- select_some_iff_nonempty: TOTALITY/no-deadlock — none ⇔ empty list.
+example : ∀ (cs : List Formal.MonsterDropSelection.Candidate),
+    Formal.MonsterDropSelection.selectMonsterForDrop cs = none ↔ cs = [] :=
+  @Formal.MonsterDropSelection.select_some_iff_nonempty
+-- select_mem: the winner is a REAL candidate in the input list.
+example : ∀ {cs : List Formal.MonsterDropSelection.Candidate} {c : Formal.MonsterDropSelection.Candidate},
+    Formal.MonsterDropSelection.selectMonsterForDrop cs = some c → c ∈ cs :=
+  @Formal.MonsterDropSelection.select_mem
+-- select_is_lex_min: DOMINANCE — no candidate strictly beats the winner on the lex key.
+example : ∀ {cs : List Formal.MonsterDropSelection.Candidate} {c : Formal.MonsterDropSelection.Candidate},
+    Formal.MonsterDropSelection.selectMonsterForDrop cs = some c →
+    ∀ x ∈ cs, ¬ Formal.MonsterDropSelection.keyLt x c :=
+  @Formal.MonsterDropSelection.select_is_lex_min
+-- select_no_fewer_kills_at_le_distance: a strictly-fewer-kills candidate must be strictly FARTHER.
+example : ∀ {cs : List Formal.MonsterDropSelection.Candidate} {c : Formal.MonsterDropSelection.Candidate},
+    Formal.MonsterDropSelection.selectMonsterForDrop cs = some c →
+    ∀ x ∈ cs,
+      Formal.MonsterDropSelection.expectedKills x < Formal.MonsterDropSelection.expectedKills c →
+      c.dist < x.dist :=
+  @Formal.MonsterDropSelection.select_no_fewer_kills_at_le_distance
+-- expected_kills_mono_in_rate: MONOTONICITY — ↑rate (yields fixed, positive avg) ⇒ ≥ expected kills.
+example : ∀ (a b : Formal.MonsterDropSelection.Candidate),
+    a.minQ = b.minQ → a.maxQ = b.maxQ → 0 < a.minQ + a.maxQ → a.rate ≤ b.rate →
+    Formal.MonsterDropSelection.expectedKills a ≤ Formal.MonsterDropSelection.expectedKills b :=
+  @Formal.MonsterDropSelection.expected_kills_mono_in_rate
+-- keyLt_total: TOTALITY of the lex key order (trichotomy).
+example : ∀ (a b : Formal.MonsterDropSelection.Candidate),
+    Formal.MonsterDropSelection.keyLt a b ∨ Formal.MonsterDropSelection.keyEq a b
+      ∨ Formal.MonsterDropSelection.keyLt b a :=
+  @Formal.MonsterDropSelection.keyLt_total
+-- kills_reach_needed: REACHABILITY — +1 kill loop reaches the needed quantity.
+example : ∀ (needed owned : Nat), needed ≤ owned + (needed - owned) :=
+  @Formal.MonsterDropSelection.kills_reach_needed
 
 /-! ### CraftVsBuy role contracts (craft-vs-buy acquisition decision over Int). -/
 

@@ -37,6 +37,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | Liveness.ItemsTaskTermination | tasks, crafting, bank | safety, totality |
 | LivenessChain | combat, monsters | reachability, no-deadlock |
 | LowYieldCancel | tasks | safety, monotonicity |
+| MonsterDropSelection | monsters | dominance, monotonicity, totality, reachability |
 | MultiCycleLiveness | characters, combat | reachability, monotonicity |
 | NearestTile | maps | safety, dominance, totality, monotonicity |
 | NoActionDeadlock | core | no-deadlock, totality |

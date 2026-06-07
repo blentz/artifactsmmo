@@ -689,6 +689,14 @@ open Formal.WeightedRemaining in
 #print axioms Formal.GatherSelection.select_no_cheaper_at_le_distance
 #print axioms Formal.GatherSelection.expected_gathers_mono_in_rate
 #print axioms Formal.GatherSelection.gather_selected_reaches_needed
+-- MonsterDropSelection (expected-kills lex-argmin monster-drop selection)
+#print axioms Formal.MonsterDropSelection.select_some_iff_nonempty
+#print axioms Formal.MonsterDropSelection.select_mem
+#print axioms Formal.MonsterDropSelection.select_is_lex_min
+#print axioms Formal.MonsterDropSelection.select_no_fewer_kills_at_le_distance
+#print axioms Formal.MonsterDropSelection.expected_kills_mono_in_rate
+#print axioms Formal.MonsterDropSelection.keyLt_total
+#print axioms Formal.MonsterDropSelection.kills_reach_needed
 
 -- CraftVsBuy (craft-vs-buy acquisition decision over Int)
 #print axioms Formal.CraftVsBuy.acquisition_total

@@ -271,6 +271,14 @@ open Formal.PriorityBand
 #check @Formal.GatherSelection.select_no_cheaper_at_le_distance  -- corollary: strictly-cheaper ⇒ strictly-farther
 #check @Formal.GatherSelection.expected_gathers_mono_in_rate     -- monotonicity: ↑rate ⇒ ≥ expected gathers
 #check @Formal.GatherSelection.gather_selected_reaches_needed    -- reachability: +1 loop reaches needed qty
+-- MonsterDropSelection required roles (expected-kills lex-argmin monster-drop selection):
+#check @Formal.MonsterDropSelection.select_some_iff_nonempty          -- totality/no-deadlock: none ⇔ empty
+#check @Formal.MonsterDropSelection.select_mem                        -- winner is a real candidate
+#check @Formal.MonsterDropSelection.select_is_lex_min                 -- dominance: nothing strictly beats the winner
+#check @Formal.MonsterDropSelection.select_no_fewer_kills_at_le_distance -- corollary: fewer-kills ⇒ strictly-farther
+#check @Formal.MonsterDropSelection.expected_kills_mono_in_rate       -- monotonicity: ↑rate ⇒ ≥ expected kills
+#check @Formal.MonsterDropSelection.kills_reach_needed                -- reachability: +1 kill loop reaches needed qty
+#check @Formal.MonsterDropSelection.keyLt_total                       -- totality of the lex key order
 -- CraftVsBuy required roles (craft-vs-buy acquisition decision over Int):
 #check @Formal.CraftVsBuy.acquisition_total              -- totality: always craft or buy
 #check @Formal.CraftVsBuy.buy_iff_affordable_and_cheaper -- dominance: exact buy firing condition
