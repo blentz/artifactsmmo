@@ -2,7 +2,7 @@
 drop of more than one resource, pick the source minimizing the EXPECTED number of
 gathers to acquire one unit — `rate / avg_quantity` — tie-broken by nearest node
 then code (a total order ⇒ a unique, deterministic winner). Pure: no I/O. This is
-the differential target proved in formal/Formal/GatherSelection.lean over exact ℚ.
+the differential target proved in formal/Formal/GatherSelection.lean over exact rationals (Q).
 """
 
 from dataclasses import dataclass

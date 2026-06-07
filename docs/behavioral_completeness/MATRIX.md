@@ -61,9 +61,9 @@ Column legend:
 - **Concept → player**: raw materials (ore/wood/fish/fiber) at drop rates + gathering-skill XP; gated by skill level (ResourceSchema, DropRateSchema)
 - **Strategic uses**: resources are the feedstock for all crafting and the main gathering-skill XP source; gather to satisfy recipe inputs (openapi schema ResourceSchema)
 - **Opportunity cost × tier**: T1 copper/ash gathers are fast and feed early gear; higher-tier nodes (T5 mithril, T6 adamantite) need skill level investment first (content_tiers.md)
-- **Behavior coverage**: GatherMaterialsGoal and LevelSkillGoal drive gathering via GatheringAction (goals/gathering.py, goals/level_skill.py)
-- **Proof coverage**: GatherApply [safety] (PROOF_CONCEPT_INDEX)
-- **Gap + policy**: THIN — act; gathering is the current live bottleneck (ash_wood/copper for gear) and is modeled but only one safety theorem backs it (synthesis)
+- **Behavior coverage**: yield-optimal multi-source narrowing in GatherMaterialsGoal.relevant_actions via select_gather_source (goals/gathering.py, gather_selection.py)
+- **Proof coverage**: GatherSelection [dominance, monotonicity, totality, reachability] + GatherApply [safety] (PROOF_CONCEPT_INDEX)
+- **Gap + policy**: CLOSED — act: gather the yield-optimal source; four proof classes satisfied (synthesis)
 
 ### items
 - **Player → concept**: read item catalog; equip/unequip, deposit/withdraw/give, buy/sell via npc & ge (openapi /items, /items/{code}, /my/{name}/action/bank/*/item, /my/{name}/action/give/item)
