@@ -1010,6 +1010,30 @@ def runGatherApply (args : Array Json) : Json :=
     Json.mkObj [("used", Json.num (Int.ofNat post.used)),
                 ("cap", Json.num (Int.ofNat post.cap))]
 
+/-- Compute one gather_selection result using the SAME proved
+`Formal.GatherSelection.selectGatherSource`.
+
+Variable-length candidate list, flattened the same way as `runArbiterSelect`:
+`args = [N, c0,r0,mn0,mx0,d0, c1,r1,mn1,mx1,d1, ...]` where `N` is the candidate
+count and each record is the 5 ints `[code, rate, minQ, maxQ, dist]`. Builds the
+`List Candidate`, runs the lex-argmin selector, and emits the winning candidate's
+`code` (or `-1` when the list is empty, mirroring `Option.none`). -/
+def runGatherSelection (args : Array Json) : Json :=
+  let n := (intArg args 0).toNat
+  let cands : List Formal.GatherSelection.Candidate :=
+    (List.range n).map (fun k =>
+      let base := 1 + 5 * k
+      { code := (intArg args base).toNat,
+        rate := (intArg args (base + 1)).toNat,
+        minQ := (intArg args (base + 2)).toNat,
+        maxQ := (intArg args (base + 3)).toNat,
+        dist := (intArg args (base + 4)).toNat })
+  let selected : Int :=
+    match Formal.GatherSelection.selectGatherSource cands with
+    | some c => Int.ofNat c.code
+    | none => -1
+  Json.mkObj [("selected", Json.num selected)]
+
 /-- Compute one npc_buy_inventory result.
 
 Two queries (chosen by `args[0]`):
@@ -1340,6 +1364,8 @@ def runOne (item : Json) : Json :=
     runCyclesForProgress args
   else if kind == "gather_apply" then
     runGatherApply args
+  else if kind == "gather_selection" then
+    runGatherSelection args
   else if kind == "npc_buy_inventory" then
     runNpcBuyInventory args
   else if kind == "action_cost_nonneg" then

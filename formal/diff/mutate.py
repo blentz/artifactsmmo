@@ -35,6 +35,7 @@ STRATEGY_BLEND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "strat
 DECIDE_KEY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "decide_key.py"
 CYCLES_FOR_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "cycles_for_progress_core.py"
 GATHER_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gather_apply_core.py"
+GATHER_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_selection.py"
 COST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "cost_core.py"
 NPC_BUY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "npc_buy_core.py"
 APPLY_MOVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "movement.py"
@@ -987,6 +988,7 @@ _ALL_SRCS = [
     LOW_YIELD_BOUNDARY_SRC, STRATEGY_BLEND_SRC, DECIDE_KEY_SRC,
     CYCLES_FOR_PROGRESS_SRC,
     GATHER_APPLY_SRC,
+    GATHER_SELECTION_SRC,
     COST_CORE_SRC,
     NPC_BUY_CORE_SRC,
     APPLY_MOVE_SRC, APPLY_EQUIP_SRC, APPLY_CLAIM_SRC,
@@ -1083,6 +1085,44 @@ GATHER_APPLY_MUTATIONS = [
     ("gather_apply: is_applicable >= -> > (off-by-one on slot floor)",
      "    return (inv.cap - inv.used) >= min_free",
      "    return (inv.cap - inv.used) > min_free"),
+]
+
+
+# gather_selection mutations -- old strings matched to current gather_selection.py
+# text. Each perturbs the lex-argmin metric / tie-break so the Python winner
+# diverges from the Lean `selectGatherSource` oracle. Killed by
+# formal/diff/test_gather_selection_diff.py.
+GATHER_SELECTION_MUTATIONS = [
+    # Drop the average-yield divisor: the metric degenerates to bare `rate`,
+    # ignoring min/max quantity. A high-yield high-rate source then loses to a
+    # low-yield low-rate one — the avg-quantity cases in the diff fire.
+    ("gather_selection: drop avg_quantity divisor (metric = rate only)",
+     "    avg_quantity = Fraction(c.min_quantity + c.max_quantity, 2)\n"
+     "    return Fraction(c.rate) / avg_quantity",
+     "    avg_quantity = Fraction(c.min_quantity + c.max_quantity, 2)\n"
+     "    return Fraction(c.rate)"),
+    # avg_quantity uses `*` instead of `+`: wrong average (min*max not min+max),
+    # so the expected-gathers ordering changes whenever min != max.
+    ("gather_selection: avg_quantity + -> * (wrong average)",
+     "    avg_quantity = Fraction(c.min_quantity + c.max_quantity, 2)",
+     "    avg_quantity = Fraction(c.min_quantity * c.max_quantity, 2)"),
+    # Argmin -> argmax: pick the WORST (most expensive) source. Any list with two
+    # distinct keys diverges from the Lean lex-min.
+    ("gather_selection: min -> max (argmin becomes argmax)",
+     "    return min(candidates, key=_key).resource_code",
+     "    return max(candidates, key=_key).resource_code"),
+    # Swap distance and expected_gathers in the lex key: distance now dominates the
+    # metric, inverting the primary objective on any expected-gathers-vs-distance
+    # tension.
+    ("gather_selection: lex key swap (distance before expected_gathers)",
+     "    return (_expected_gathers(c), c.distance, c.resource_code)",
+     "    return (c.distance, _expected_gathers(c), c.resource_code)"),
+    # Drop the code tie-break (constant third field): two candidates tying on
+    # (expected_gathers, distance) become order-ambiguous; Python `min` first-wins
+    # by list position, diverging from the Lean code-ordered tie-break.
+    ("gather_selection: drop code tie-break (third field constant)",
+     "    return (_expected_gathers(c), c.distance, c.resource_code)",
+     "    return (_expected_gathers(c), c.distance, \"\")"),
 ]
 
 
@@ -1872,6 +1912,8 @@ def main() -> int:
               "formal/diff/test_cycles_for_progress_diff.py", survivors)
     run_group(GATHER_APPLY_SRC, GATHER_APPLY_MUTATIONS,
               "formal/diff/test_gather_apply_diff.py", survivors)
+    run_group(GATHER_SELECTION_SRC, GATHER_SELECTION_MUTATIONS,
+              "formal/diff/test_gather_selection_diff.py", survivors)
     run_group(COST_CORE_SRC, COST_CORE_MUTATIONS,
               "formal/diff/test_action_cost_nonneg_diff.py", survivors)
     run_group(NPC_BUY_CORE_SRC, NPC_BUY_MUTATIONS,
