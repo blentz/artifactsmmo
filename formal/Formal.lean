@@ -29,6 +29,7 @@ import Formal.DecideKey
 import Formal.CyclesForProgress
 import Formal.GatherApply
 import Formal.GatherSelection
+import Formal.CraftVsBuy
 import Formal.NpcBuyInventory
 import Formal.InventoryChainSafe
 import Formal.Contracts

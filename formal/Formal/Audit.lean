@@ -689,3 +689,12 @@ open Formal.WeightedRemaining in
 #print axioms Formal.GatherSelection.select_no_cheaper_at_le_distance
 #print axioms Formal.GatherSelection.expected_gathers_mono_in_rate
 #print axioms Formal.GatherSelection.gather_selected_reaches_needed
+
+-- CraftVsBuy (craft-vs-buy acquisition decision over Int)
+#print axioms Formal.CraftVsBuy.acquisition_total
+#print axioms Formal.CraftVsBuy.buy_iff_affordable_and_cheaper
+#print axioms Formal.CraftVsBuy.craft_when_not_cheaper
+#print axioms Formal.CraftVsBuy.craft_when_unaffordable
+#print axioms Formal.CraftVsBuy.buy_stable_under_more_gold
+#print axioms Formal.CraftVsBuy.buy_stable_under_lower_buy
+#print axioms Formal.CraftVsBuy.buy_preserves_reserve
