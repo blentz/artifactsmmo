@@ -1,3 +1,4 @@
+-- @concept: core, planner @property: totality
 
 /-!
 # Formal.StepDispatch

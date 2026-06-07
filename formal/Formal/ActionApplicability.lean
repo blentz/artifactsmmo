@@ -1,3 +1,4 @@
+-- @concept: combat, characters @property: safety, monotonicity
 
 /-!
 # Formal.ActionApplicability

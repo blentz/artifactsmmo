@@ -1,3 +1,4 @@
+-- @concept: tasks, crafting @property: reachability, safety
 /-
 Formal model of `task_requirement` / `_item_skill_gap` from
 `src/artifactsmmo_cli/ai/task_feasibility.py`.

@@ -1,3 +1,4 @@
+-- @concept: items @property: safety, monotonicity
 /-
 Formal model of `owned_count` from
 `src/artifactsmmo_cli/ai/tiers/owned_count.py` (`owned_count_pure`).

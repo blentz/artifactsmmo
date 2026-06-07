@@ -1,3 +1,4 @@
+-- @concept: core @property: safety
 /-
 Phase-9 (REAL BUG #16): GameData monster-stat accessor contract.
 

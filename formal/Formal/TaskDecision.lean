@@ -1,3 +1,4 @@
+-- @concept: tasks @property: dominance, monotonicity
 /-
 Formal model of the pure decision core extracted from
 `src/artifactsmmo_cli/ai/task_decision.py` into

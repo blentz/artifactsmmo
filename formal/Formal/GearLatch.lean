@@ -1,3 +1,4 @@
+-- @concept: items, characters @property: safety, monotonicity
 /-
 Formal model of the gear-review latch transition mirroring
 `src/artifactsmmo_cli/ai/gear_latch.py::GearLatch.update`:

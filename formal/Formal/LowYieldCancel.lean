@@ -1,3 +1,4 @@
+-- @concept: tasks @property: safety, monotonicity
 /-
 Formal model of the pure decision boundary extracted from
 `src/artifactsmmo_cli/ai/learning/projections.py::low_yield_cancel_fires` into

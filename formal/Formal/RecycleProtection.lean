@@ -1,3 +1,4 @@
+-- @concept: items, crafting @property: safety
 
 /-!
 # Formal.RecycleProtection

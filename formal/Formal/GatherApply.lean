@@ -1,3 +1,4 @@
+-- @concept: resources, items @property: safety
 /-
 Formal model of the slot-bookkeeping core of
 `src/artifactsmmo_cli/ai/actions/gathering.py`

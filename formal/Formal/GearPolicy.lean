@@ -1,3 +1,4 @@
+-- @concept: items, characters @property: dominance, safety
 import Formal.EquipmentScoring
 
 /-!

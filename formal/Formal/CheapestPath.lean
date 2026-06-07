@@ -1,3 +1,4 @@
+-- @concept: combat, monsters @property: reachability, dominance
 /-
 Phase 12 — Formal model of `cheapest_path_to_level` from
 `src/artifactsmmo_cli/ai/learning/projections.py`.

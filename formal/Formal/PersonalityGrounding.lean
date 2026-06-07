@@ -1,3 +1,4 @@
+-- @concept: characters, items @property: dominance
 import Formal.RankingComposition
 
 /-!

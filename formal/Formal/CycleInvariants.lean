@@ -1,3 +1,4 @@
+-- @concept: characters, combat @property: safety, monotonicity
 
 /-!
 # Formal.CycleInvariants

@@ -1,3 +1,4 @@
+-- @concept: combat, monsters @property: reachability, no-deadlock
 import Formal.CombatTargetExistence
 import Formal.StepDispatch
 import Formal.ActionApplicability

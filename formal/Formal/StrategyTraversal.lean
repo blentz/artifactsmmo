@@ -1,3 +1,4 @@
+-- @concept: crafting, planner @property: reachability, totality
 /-
 Formal model of the `strategy_traversal` PURE CORE from
 `src/artifactsmmo_cli/ai/tiers/strategy.py`:

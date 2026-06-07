@@ -1,3 +1,4 @@
+-- @concept: core, planner @property: monotonicity, safety
 /-
 Formal model of the pure cores extracted from
 `src/artifactsmmo_cli/ai/tiers/strategy_blend.py`

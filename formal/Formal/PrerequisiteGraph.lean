@@ -1,3 +1,4 @@
+-- @concept: crafting, items @property: safety, totality
 /-
 Formal model of the data-derived EDGE STRUCTURE of `prerequisites` and the
 `combat_capable` aggregation from

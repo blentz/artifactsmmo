@@ -1,3 +1,4 @@
+-- @concept: tasks, items @property: safety, totality
 
 /-!
 # Formal.AcceptTaskGate

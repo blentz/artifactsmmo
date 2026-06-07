@@ -1,3 +1,4 @@
+-- @concept: characters, combat @property: reachability, monotonicity
 import Formal.CycleInvariants
 
 /-!
