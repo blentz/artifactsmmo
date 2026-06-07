@@ -31,6 +31,10 @@ import Formal.CyclesForProgress
 import Formal.GatherApply
 import Formal.GatherSelection
 import Formal.CraftVsBuy
+import Formal.NearestTile
+import Formal.ConsumableSelection
+import Formal.BankExpansionTiming
+import Formal.EventWindow
 import Formal.NpcBuyInventory
 import Formal.InventoryChainSafe
 import Formal.ActionCostNonneg
@@ -1987,6 +1991,149 @@ example : ∀ (a b b' p g r : Int),
 example : ∀ (a b p g r : Int),
     Formal.CraftVsBuy.cheaperAcquisition a b p g r = Formal.CraftVsBuy.Method.buy → g - p ≥ r :=
   @Formal.CraftVsBuy.buy_preserves_reserve
+
+/-! ### NearestTile role contracts (Manhattan-nearest tile, lex (manhattan, x, y)). -/
+
+-- nearestTile_nil: TOTALITY — none ⇔ empty tile list.
+example : ∀ (ox oy : Int) (cs : List Formal.NearestTile.Tile),
+    Formal.NearestTile.nearestTile ox oy cs = none ↔ cs = [] :=
+  @Formal.NearestTile.nearestTile_nil
+-- nearestTile_total: TOTALITY — a non-empty list always selects SOME tile.
+example : ∀ (ox oy : Int) {cs : List Formal.NearestTile.Tile}, cs ≠ [] →
+    (Formal.NearestTile.nearestTile ox oy cs).isSome :=
+  @Formal.NearestTile.nearestTile_total
+-- nearestTile_mem: SAFETY — the selected tile is a real element of the list.
+example : ∀ {ox oy : Int} {cs : List Formal.NearestTile.Tile} {t : Formal.NearestTile.Tile},
+    Formal.NearestTile.nearestTile ox oy cs = some t → t ∈ cs :=
+  @Formal.NearestTile.nearestTile_mem
+-- nearestTile_min: DOMINANCE — the winner's Manhattan distance is ≤ every tile's.
+example : ∀ {ox oy : Int} {cs : List Formal.NearestTile.Tile} {t : Formal.NearestTile.Tile},
+    Formal.NearestTile.nearestTile ox oy cs = some t →
+    ∀ u ∈ cs, Formal.NearestTile.manhattan ox oy t ≤ Formal.NearestTile.manhattan ox oy u :=
+  @Formal.NearestTile.nearestTile_min
+-- nearestTile_deterministic_lexmin: DETERMINISM — lex-min on ties (closes apply/execute).
+example : ∀ {ox oy : Int} {cs : List Formal.NearestTile.Tile} {t : Formal.NearestTile.Tile},
+    Formal.NearestTile.nearestTile ox oy cs = some t →
+    ∀ u ∈ cs, Formal.NearestTile.manhattan ox oy u = Formal.NearestTile.manhattan ox oy t →
+      (t.1 < u.1 ∨ (t.1 = u.1 ∧ t.2 ≤ u.2)) :=
+  @Formal.NearestTile.nearestTile_deterministic_lexmin
+-- cost_monotone_in_distance: MONOTONICITY — staticGatherCost = 6 + manhattan monotone.
+example : ∀ (ox oy : Int) (a b : Formal.NearestTile.Tile),
+    Formal.NearestTile.manhattan ox oy a ≤ Formal.NearestTile.manhattan ox oy b →
+    Formal.NearestTile.staticGatherCost ox oy a ≤ Formal.NearestTile.staticGatherCost ox oy b :=
+  @Formal.NearestTile.cost_monotone_in_distance
+-- nearestTile_least_cost: COST corollary — the winner is the least-cost destination.
+example : ∀ {ox oy : Int} {cs : List Formal.NearestTile.Tile} {t : Formal.NearestTile.Tile},
+    Formal.NearestTile.nearestTile ox oy cs = some t →
+    ∀ u ∈ cs,
+      Formal.NearestTile.staticGatherCost ox oy t ≤ Formal.NearestTile.staticGatherCost ox oy u :=
+  @Formal.NearestTile.nearestTile_least_cost
+
+/-! ### ConsumableSelection role contracts (overheal-aware consumable lex-argmin). -/
+
+-- select_none_iff_no_usable: TOTALITY — none ⇔ no usable consumable.
+example : ∀ (deficit : Int) (cs : List Formal.ConsumableSelection.Candidate),
+    Formal.ConsumableSelection.selectConsumable deficit cs = none ↔
+    Formal.ConsumableSelection.usableList cs = [] :=
+  @Formal.ConsumableSelection.select_none_iff_no_usable
+-- select_mem: the winner is a usable candidate.
+example : ∀ (deficit : Int) {cs : List Formal.ConsumableSelection.Candidate}
+    {c : Formal.ConsumableSelection.Candidate},
+    Formal.ConsumableSelection.selectConsumable deficit cs = some c →
+    c ∈ Formal.ConsumableSelection.usableList cs :=
+  @Formal.ConsumableSelection.select_mem
+-- select_is_min: DOMINANCE — nothing usable strictly beats the winner.
+example : ∀ (deficit : Int) {cs : List Formal.ConsumableSelection.Candidate}
+    {c : Formal.ConsumableSelection.Candidate},
+    Formal.ConsumableSelection.selectConsumable deficit cs = some c →
+    ∀ x ∈ Formal.ConsumableSelection.usableList cs,
+      ¬ Formal.ConsumableSelection.keyLt deficit x c :=
+  @Formal.ConsumableSelection.select_is_min
+-- select_no_overheal_when_fit_exists: SAFETY — if some usable item fits, the winner fits.
+example : ∀ (deficit : Int) {cs : List Formal.ConsumableSelection.Candidate}
+    {c f : Formal.ConsumableSelection.Candidate},
+    Formal.ConsumableSelection.selectConsumable deficit cs = some c →
+    f ∈ Formal.ConsumableSelection.usableList cs → f.restore ≤ deficit →
+    c.restore ≤ deficit :=
+  @Formal.ConsumableSelection.select_no_overheal_when_fit_exists
+-- select_dominance_monotone: MONOTONICITY — a larger fitting restore is never ranked worse.
+example : ∀ (deficit : Int) (a b : Formal.ConsumableSelection.Candidate),
+    a.restore ≤ deficit → b.restore ≤ deficit → a.code = b.code → b.restore ≤ a.restore →
+    ¬ Formal.ConsumableSelection.keyLt deficit b a :=
+  @Formal.ConsumableSelection.select_dominance_monotone
+
+/-! ### BankExpansionTiming role contracts (bank-expansion firing decision over Int). -/
+
+-- expand_total: TOTALITY — the decision is always true or false.
+example : ∀ (u c g k r tn td : Int),
+    Formal.BankExpansionTiming.shouldExpandBank u c g k r tn td = true ∨
+    Formal.BankExpansionTiming.shouldExpandBank u c g k r tn td = false :=
+  @Formal.BankExpansionTiming.expand_total
+-- expand_iff: DOMINANCE — exact firing condition (at-threshold ∧ reserve-safe).
+example : ∀ (u c g k r tn td : Int),
+    Formal.BankExpansionTiming.shouldExpandBank u c g k r tn td = true ↔
+    (u * td ≥ c * tn ∧ g - k ≥ r) :=
+  @Formal.BankExpansionTiming.expand_iff
+-- expand_preserves_reserve: SAFETY — fire ⇒ post-buy gold ≥ reserve.
+example : ∀ (u c g k r tn td : Int),
+    Formal.BankExpansionTiming.shouldExpandBank u c g k r tn td = true → g - k ≥ r :=
+  @Formal.BankExpansionTiming.expand_preserves_reserve
+-- no_expand_when_unaffordable: dominance corollary — unaffordable ⇒ no fire.
+example : ∀ (u c g k r tn td : Int), ¬ (g - k ≥ r) →
+    Formal.BankExpansionTiming.shouldExpandBank u c g k r tn td = false :=
+  @Formal.BankExpansionTiming.no_expand_when_unaffordable
+-- no_expand_when_below_threshold: dominance corollary — below threshold ⇒ no fire.
+example : ∀ (u c g k r tn td : Int), ¬ (u * td ≥ c * tn) →
+    Formal.BankExpansionTiming.shouldExpandBank u c g k r tn td = false :=
+  @Formal.BankExpansionTiming.no_expand_when_below_threshold
+-- expand_stable_under_more_gold: MONOTONICITY in gold — ↑gold keeps fire.
+example : ∀ (u c g g' k r tn td : Int),
+    Formal.BankExpansionTiming.shouldExpandBank u c g k r tn td = true → g ≤ g' →
+    Formal.BankExpansionTiming.shouldExpandBank u c g' k r tn td = true :=
+  @Formal.BankExpansionTiming.expand_stable_under_more_gold
+-- expand_stable_under_more_fill: MONOTONICITY in fill — ↑used keeps fire (0 ≤ tden).
+example : ∀ (u u' c g k r tn td : Int), 0 ≤ td →
+    Formal.BankExpansionTiming.shouldExpandBank u c g k r tn td = true → u ≤ u' →
+    Formal.BankExpansionTiming.shouldExpandBank u' c g k r tn td = true :=
+  @Formal.BankExpansionTiming.expand_stable_under_more_fill
+
+/-! ### EventWindow role contracts (event-NPC trade-window gate over Int). -/
+
+-- tradeable_total: TOTALITY — the gate is always true or false.
+example : ∀ (isEvent active hasSpawn : Bool) (r t m : Int),
+    Formal.EventWindow.eventNpcTradeable isEvent active hasSpawn r t m = true ∨
+    Formal.EventWindow.eventNpcTradeable isEvent active hasSpawn r t m = false :=
+  @Formal.EventWindow.tradeable_total
+-- non_event_always_tradeable: DOMINANCE — a non-event NPC is always tradeable.
+example : ∀ (active hasSpawn : Bool) (r t m : Int),
+    Formal.EventWindow.eventNpcTradeable false active hasSpawn r t m = true :=
+  @Formal.EventWindow.non_event_always_tradeable
+-- inactive_event_not_tradeable: SAFETY — an inactive event is never tradeable.
+example : ∀ (hasSpawn : Bool) (r t m : Int),
+    Formal.EventWindow.eventNpcTradeable true false hasSpawn r t m = false :=
+  @Formal.EventWindow.inactive_event_not_tradeable
+-- unreachable_window_not_tradeable: SAFETY — window ≤ travel+margin ⇒ not tradeable.
+example : ∀ (r t m : Int), r ≤ t + m →
+    Formal.EventWindow.eventNpcTradeable true true true r t m = false :=
+  @Formal.EventWindow.unreachable_window_not_tradeable
+-- tradeable_iff_window_open: DOMINANCE — exact firing condition.
+example : ∀ (r t m : Int),
+    Formal.EventWindow.eventNpcTradeable true true true r t m = true ↔ r > t + m :=
+  @Formal.EventWindow.tradeable_iff_window_open
+-- tradeable_monotone_in_remaining: MONOTONICITY — ↑remaining keeps the window open.
+example : ∀ (r r' t m : Int),
+    Formal.EventWindow.eventNpcTradeable true true true r t m = true → r ≤ r' →
+    Formal.EventWindow.eventNpcTradeable true true true r' t m = true :=
+  @Formal.EventWindow.tradeable_monotone_in_remaining
+-- tradeable_antitone_in_distance: MONOTONICITY — ↓travel keeps the window open.
+example : ∀ (r t t' m : Int),
+    Formal.EventWindow.eventNpcTradeable true true true r t m = true → t' ≤ t →
+    Formal.EventWindow.eventNpcTradeable true true true r t' m = true :=
+  @Formal.EventWindow.tradeable_antitone_in_distance
+-- window_open_reachable: REACHABILITY — a real firing witness (anti-vacuity).
+example : ∃ (r t m : Int),
+    Formal.EventWindow.eventNpcTradeable true true true r t m = true ∧ t ≥ 0 ∧ m ≥ 0 :=
+  Formal.EventWindow.window_open_reachable
 
 -- ItemsTaskTermination (items-task keepSet/batchK conformance — Task 1).
 -- keepSet_contains_task_item: SAFETY — the task item is always kept.

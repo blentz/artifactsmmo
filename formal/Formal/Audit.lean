@@ -698,6 +698,40 @@ open Formal.WeightedRemaining in
 #print axioms Formal.CraftVsBuy.buy_stable_under_more_gold
 #print axioms Formal.CraftVsBuy.buy_stable_under_lower_buy
 #print axioms Formal.CraftVsBuy.buy_preserves_reserve
+
+-- NearestTile (Manhattan-nearest tile, lex (manhattan, x, y) over Int coords)
+#print axioms Formal.NearestTile.nearestTile_nil
+#print axioms Formal.NearestTile.nearestTile_total
+#print axioms Formal.NearestTile.nearestTile_mem
+#print axioms Formal.NearestTile.nearestTile_min
+#print axioms Formal.NearestTile.nearestTile_deterministic_lexmin
+#print axioms Formal.NearestTile.cost_monotone_in_distance
+#print axioms Formal.NearestTile.nearestTile_least_cost
+
+-- ConsumableSelection (overheal-aware consumable lex-argmin over Int)
+#print axioms Formal.ConsumableSelection.select_none_iff_no_usable
+#print axioms Formal.ConsumableSelection.select_mem
+#print axioms Formal.ConsumableSelection.select_is_min
+#print axioms Formal.ConsumableSelection.select_no_overheal_when_fit_exists
+#print axioms Formal.ConsumableSelection.select_dominance_monotone
+-- BankExpansionTiming (bank-expansion firing decision over Int)
+#print axioms Formal.BankExpansionTiming.expand_total
+#print axioms Formal.BankExpansionTiming.expand_iff
+#print axioms Formal.BankExpansionTiming.expand_preserves_reserve
+#print axioms Formal.BankExpansionTiming.no_expand_when_unaffordable
+#print axioms Formal.BankExpansionTiming.no_expand_when_below_threshold
+#print axioms Formal.BankExpansionTiming.expand_stable_under_more_gold
+#print axioms Formal.BankExpansionTiming.expand_stable_under_more_fill
+#print axioms Formal.BankExpansionTiming.expand_true_witness
+-- EventWindow (event-NPC trade-window gate over Int)
+#print axioms Formal.EventWindow.tradeable_total
+#print axioms Formal.EventWindow.non_event_always_tradeable
+#print axioms Formal.EventWindow.inactive_event_not_tradeable
+#print axioms Formal.EventWindow.unreachable_window_not_tradeable
+#print axioms Formal.EventWindow.tradeable_iff_window_open
+#print axioms Formal.EventWindow.tradeable_monotone_in_remaining
+#print axioms Formal.EventWindow.tradeable_antitone_in_distance
+#print axioms Formal.EventWindow.window_open_reachable
 -- ItemsTaskTermination (items-task keepSet/batchK conformance — Task 1)
 #print axioms Formal.Liveness.ItemsTaskTermination.keepSet_contains_task_item
 #print axioms Formal.Liveness.ItemsTaskTermination.keepSet_contains_recipe_inputs

@@ -17,6 +17,7 @@ open Formal.InventoryChainSafe
 open Formal.Phase7Invariants
 open Formal.StoreWarmup
 open Formal.WinnableCascade
+open Formal.NearestTile
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
 def runCalculatePath (sx sy ex ey : Int) : Json :=
@@ -1048,6 +1049,85 @@ def runCraftVsBuy (args : Array Json) : Json :=
     | Formal.CraftVsBuy.Method.craft => 0
   Json.mkObj [("method", Json.num code)]
 
+/-- Compute one nearest_tile result using the SAME proved
+`Formal.NearestTile.nearestTile`.
+
+args layout: `[originX, originY, N, x0, y0, x1, y1, ...]` — the origin coords, the
+tile count `N`, then `N` `(x, y)` Int pairs. Builds the `List Tile`, runs the
+Manhattan-lex-argmin selector, and emits the selected tile's `x`/`y` (with
+`present = false` when the list is empty, mirroring `Option.none`). -/
+def runNearestTile (args : Array Json) : Json :=
+  let originX := intArg args 0
+  let originY := intArg args 1
+  let n := (intArg args 2).toNat
+  let tiles : List Formal.NearestTile.Tile :=
+    (List.range n).map (fun k =>
+      let base := 3 + 2 * k
+      (intArg args base, intArg args (base + 1)))
+  match Formal.NearestTile.nearestTile originX originY tiles with
+  | some t => Json.mkObj [("present", Json.bool true), ("x", Json.num t.1), ("y", Json.num t.2)]
+  | none => Json.mkObj [("present", Json.bool false), ("x", Json.num 0), ("y", Json.num 0)]
+
+/-- Compute one consumable_selection result using the SAME proved
+`Formal.ConsumableSelection.selectConsumable`.
+
+args layout: `[deficit, N, code0, restore0, qty0, code1, restore1, qty1, ...]` —
+the deficit, then `N` candidates, each the 3 ints `[code, restore, qty]`. Builds
+the `List Candidate`, runs the overheal-aware lex-argmin, and emits the winning
+candidate's `code` (or `-1` when nothing is usable, mirroring `Option.none`). -/
+def runConsumableSelection (args : Array Json) : Json :=
+  let deficit := intArg args 0
+  let n := (intArg args 1).toNat
+  let cands : List Formal.ConsumableSelection.Candidate :=
+    (List.range n).map (fun k =>
+      let base := 2 + 3 * k
+      { code := (intArg args base).toNat,
+        restore := intArg args (base + 1),
+        qty := intArg args (base + 2) })
+  let selected : Int :=
+    match Formal.ConsumableSelection.selectConsumable deficit cands with
+    | some c => Int.ofNat c.code
+    | none => -1
+  Json.mkObj [("selected", Json.num selected)]
+
+/-- Compute one bank_expansion_timing result using the SAME proved
+`Formal.BankExpansionTiming.shouldExpandBank`.
+
+args layout (7 Ints): `[used, capacity, gold, cost, reserve, triggerNum, triggerDen]`.
+Runs the firing decision and emits `{"expand": 1}` when it fires / `{"expand": 0}`
+otherwise, matching the Python `int(should_expand_bank(...))` encoding in the
+differential test. -/
+def runBankExpansionTiming (args : Array Json) : Json :=
+  let b := Formal.BankExpansionTiming.shouldExpandBank
+    (intArg args 0) (intArg args 1) (intArg args 2) (intArg args 3)
+    (intArg args 4) (intArg args 5) (intArg args 6)
+  Json.mkObj [("expand", Json.num (if b then 1 else 0))]
+
+/-- Compute one event_window result using the SAME proved
+`Formal.EventWindow.eventNpcTradeable`.
+
+args layout (6 Ints): `[isEvent, active, hasSpawn, remaining, travel, margin]`,
+where the three boolean flags are encoded as `0/1` (and read as `!= 0`) and the
+last three are the integer seconds the Python side derives:
+* `isEvent`   = `npc_event_code(...) is not None`,
+* `active`    = event code ∈ `active_events`,
+* `hasSpawn`  = `npc_location(...) is not None`,
+* `remaining` = `int((expiration - now).total_seconds())`,
+* `travel`    = `manhattan_distance * 5`,
+* `margin`    = `10`.
+
+Emits `{"tradeable": 1}` for tradeable / `{"tradeable": 0}` otherwise, matching the
+Python `int(event_npc_tradeable(...))` encoding in the differential test. -/
+def runEventWindow (args : Array Json) : Json :=
+  let isEvent := intArg args 0 != 0
+  let active := intArg args 1 != 0
+  let hasSpawn := intArg args 2 != 0
+  let remaining := intArg args 3
+  let travel := intArg args 4
+  let margin := intArg args 5
+  let b := Formal.EventWindow.eventNpcTradeable isEvent active hasSpawn remaining travel margin
+  Json.mkObj [("tradeable", Json.num (if b then 1 else 0))]
+
 /-- Compute one npc_buy_inventory result.
 
 Two queries (chosen by `args[0]`):
@@ -1382,6 +1462,14 @@ def runOne (item : Json) : Json :=
     runGatherSelection args
   else if kind == "craft_vs_buy" then
     runCraftVsBuy args
+  else if kind == "nearest_tile" then
+    runNearestTile args
+  else if kind == "consumable_selection" then
+    runConsumableSelection args
+  else if kind == "bank_expansion_timing" then
+    runBankExpansionTiming args
+  else if kind == "event_window" then
+    runEventWindow args
   else if kind == "npc_buy_inventory" then
     runNpcBuyInventory args
   else if kind == "action_cost_nonneg" then

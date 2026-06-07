@@ -37,6 +37,10 @@ CYCLES_FOR_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" 
 GATHER_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gather_apply_core.py"
 GATHER_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_selection.py"
 CRAFT_VS_BUY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_vs_buy.py"
+NEAREST_TILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "nearest_tile.py"
+CONSUMABLE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_selection.py"
+BANK_EXPANSION_TIMING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_expansion_timing.py"
+EVENT_WINDOW_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "event_availability.py"
 COST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "cost_core.py"
 NPC_BUY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "npc_buy_core.py"
 APPLY_MOVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "movement.py"
@@ -991,6 +995,10 @@ _ALL_SRCS = [
     GATHER_APPLY_SRC,
     GATHER_SELECTION_SRC,
     CRAFT_VS_BUY_SRC,
+    NEAREST_TILE_SRC,
+    CONSUMABLE_SELECTION_SRC,
+    BANK_EXPANSION_TIMING_SRC,
+    EVENT_WINDOW_SRC,
     COST_CORE_SRC,
     NPC_BUY_CORE_SRC,
     APPLY_MOVE_SRC, APPLY_EQUIP_SRC, APPLY_CLAIM_SRC,
@@ -1161,6 +1169,147 @@ CRAFT_VS_BUY_MUTATIONS = [
     ("craft_vs_buy: affordability - -> + (wrong post-buy gold)",
      "    affordable = gold - total_price >= reserve",
      "    affordable = gold + total_price >= reserve"),
+]
+
+# nearest_tile mutations -- old strings matched to current nearest_tile.py text.
+# Each perturbs the Manhattan metric or the lex (manhattan, x, y) tie-break so the
+# Python winner diverges from the Lean `nearestTile` oracle. Killed by
+# formal/diff/test_nearest_tile_diff.py.
+NEAREST_TILE_MUTATIONS = [
+    # Argmin -> argmax: pick the FARTHEST tile. Any list with two distinct keys
+    # diverges from the Lean lex-min.
+    ("nearest_tile: min -> max (argmin becomes argmax)",
+     "    return min(",
+     "    return max("),
+    # Drop the y-axis distance term: the metric ignores vertical distance, so two
+    # tiles equal in x-distance but differing in y now mis-rank.
+    ("nearest_tile: drop y-axis distance term",
+     "        key=lambda t: (abs(t[0] - origin_x) + abs(t[1] - origin_y), t[0], t[1]),",
+     "        key=lambda t: (abs(t[0] - origin_x), t[0], t[1]),"),
+    # Distance + -> -: subtract the y-distance instead of adding it, breaking the
+    # Manhattan metric whenever the y term is nonzero.
+    ("nearest_tile: distance + -> - (broken manhattan)",
+     "        key=lambda t: (abs(t[0] - origin_x) + abs(t[1] - origin_y), t[0], t[1]),",
+     "        key=lambda t: (abs(t[0] - origin_x) - abs(t[1] - origin_y), t[0], t[1]),"),
+    # Swap the x and y tie-break fields: on a distance tie the lex order now compares
+    # y before x, inverting the deterministic winner whenever x and y disagree.
+    ("nearest_tile: lex tie-break swap (y before x)",
+     "        key=lambda t: (abs(t[0] - origin_x) + abs(t[1] - origin_y), t[0], t[1]),",
+     "        key=lambda t: (abs(t[0] - origin_x) + abs(t[1] - origin_y), t[1], t[0]),"),
+    # Drop the lex tie-break entirely (constant second/third fields): two tiles tying
+    # on distance become order-ambiguous; Python `min` first-wins by list position,
+    # diverging from the Lean (x, y)-ordered tie-break — the apply/execute divergence.
+    ("nearest_tile: drop lex tie-break (constant fields)",
+     "        key=lambda t: (abs(t[0] - origin_x) + abs(t[1] - origin_y), t[0], t[1]),",
+     "        key=lambda t: (abs(t[0] - origin_x) + abs(t[1] - origin_y), 0, 0),"),
+]
+
+
+# consumable_selection mutations -- old strings matched to current
+# consumable_selection.py text. Each perturbs the overheal-aware lex key or the
+# usability filter so the Python pick diverges from the Lean `selectConsumable`
+# oracle. Killed by formal/diff/test_consumable_selection_diff.py.
+CONSUMABLE_SELECTION_MUTATIONS = [
+    # overheal-flag direction flip: `restore > deficit` -> `restore < deficit`, so a
+    # FITTING item is wrongly flagged as overheal (and vice versa); the fit-preference
+    # inverts and a big overhealer can beat a small fitter — the original bug.
+    ("consumable_selection: overheal flag direction flip (> -> <)",
+     "    overheal = restore > deficit",
+     "    overheal = restore < deficit"),
+    # waste sign flip: `restore - deficit` -> `deficit - restore`, so among
+    # overhealers the LARGEST overshoot is preferred (negative waste sorts first).
+    ("consumable_selection: waste sign flip (restore - deficit -> deficit - restore)",
+     "    waste = (restore - deficit) if overheal else 0",
+     "    waste = (deficit - restore) if overheal else 0"),
+    # coverage sign flip: `-restore` -> `restore`, so among fitters the SMALLEST
+    # restore is chosen (argmin over +restore) instead of the largest coverage.
+    ("consumable_selection: coverage sign flip (-restore -> restore)",
+     "    return (overheal_flag, waste, -restore, code)",
+     "    return (overheal_flag, waste, restore, code)"),
+    # drop the code tiebreak (constant third-from-key field): ties resolve by
+    # list order instead of code, so a smaller-code candidate appearing later loses.
+    ("consumable_selection: drop code tiebreak (constant key)",
+     "    return (overheal_flag, waste, -restore, code)",
+     '    return (overheal_flag, waste, -restore, "")'),
+    # usability filter weakening: `qty <= 0` -> `qty < 0`, so a qty==0 item becomes
+    # usable and can be (wrongly) selected — the empty-stack item the filter must skip.
+    ("consumable_selection: usability filter qty <= 0 -> < 0 (admits qty==0)",
+     "        if qty <= 0:\n            continue",
+     "        if qty < 0:\n            continue"),
+]
+
+# bank_expansion_timing mutations -- old strings matched to current
+# bank_expansion_timing.py text. Each perturbs the fill-threshold cross-multiply
+# or the reserve-safety gate so the Python verdict diverges from the Lean
+# `shouldExpandBank` oracle. Killed by
+# formal/diff/test_bank_expansion_timing_diff.py.
+BANK_EXPANSION_TIMING_MUTATIONS = [
+    # Flip the fill-threshold boundary `>=` to `>`: at an exact fill tie
+    # (used*den == cap*num) the bank should be eligible, but now it spuriously
+    # refuses. The cross-multiply boundary cases in the diff fire.
+    ("bank_expansion_timing: threshold >= -> > (off-by-one on fill boundary)",
+     "    at_threshold = used * trigger_den >= capacity * trigger_num",
+     "    at_threshold = used * trigger_den > capacity * trigger_num"),
+    # Drop the cross-multiply: compare used*den against capacity (no trigger_num),
+    # so the fill threshold is computed against the wrong rational. Any
+    # trigger_num != 1 with a capacity that disagrees diverges.
+    ("bank_expansion_timing: drop trigger_num factor in cross-multiply",
+     "    at_threshold = used * trigger_den >= capacity * trigger_num",
+     "    at_threshold = used * trigger_den >= capacity"),
+    # Flip the reserve boundary `>=` to `>`: at exactly gold-cost == reserve the
+    # buy preserves the reserve and should fire, but now it refuses. The
+    # reserve-boundary cases (reserve in {0,500}) fire.
+    ("bank_expansion_timing: reserve >= -> > (off-by-one on reserve floor)",
+     "    reserve_safe = gold - cost >= reserve",
+     "    reserve_safe = gold - cost > reserve"),
+    # `gold - cost` -> `gold + cost`: the reserve test ADDS the cost instead of
+    # subtracting it, so the SAFETY gate is computed from the wrong post-buy gold.
+    # Any nonzero cost diverges (the SAFETY-HOLE the fix closes).
+    ("bank_expansion_timing: reserve - -> + (wrong post-buy gold)",
+     "    reserve_safe = gold - cost >= reserve",
+     "    reserve_safe = gold + cost >= reserve"),
+    # Replace the `and` with `or`: fires when EITHER at-threshold OR reserve-safe,
+    # dropping the conjunction so below-threshold-but-affordable (and
+    # at-threshold-but-unaffordable, the SAFETY hole) cases now wrongly fire.
+    ("bank_expansion_timing: and -> or (conjunction dropped)",
+     "    return at_threshold and reserve_safe",
+     "    return at_threshold or reserve_safe"),
+    # Drop the reserve gate entirely: regress to the bare fill check, ignoring the
+    # reserve floor — the exact pre-fix SAFETY-HOLE bug. The reserve=500 cases
+    # where gold-cost < 500 but at threshold now wrongly fire.
+    ("bank_expansion_timing: drop reserve gate (regress to bare fill check)",
+     "    return at_threshold and reserve_safe",
+     "    return at_threshold"),
+]
+
+
+EVENT_WINDOW_MUTATIONS = [
+    # Flip the window check `>` to `>=`: at exactly remaining == travel+margin the
+    # window is too tight (no slack to arrive), but now it spuriously trades. The
+    # boundary cases in the diff fire.
+    ("event_window: window > -> >= (off-by-one on arrival margin)",
+     "return remaining > travel_seconds + EVENT_ARRIVAL_MARGIN_SECONDS",
+     "return remaining >= travel_seconds + EVENT_ARRIVAL_MARGIN_SECONDS"),
+    # Invert the window check `>` to `<`: the bot now trades EXACTLY when the
+    # window has too little time, inverting the reachability gate.
+    ("event_window: window > -> < (inverted reachability)",
+     "return remaining > travel_seconds + EVENT_ARRIVAL_MARGIN_SECONDS",
+     "return remaining < travel_seconds + EVENT_ARRIVAL_MARGIN_SECONDS"),
+    # Drop the arrival margin: the safety buffer disappears, so trips that can't
+    # actually finish before expiry now fire. Cases near the margin diverge.
+    ("event_window: drop arrival margin (+ -> -)",
+     "return remaining > travel_seconds + EVENT_ARRIVAL_MARGIN_SECONDS",
+     "return remaining > travel_seconds - EVENT_ARRIVAL_MARGIN_SECONDS"),
+    # Flip the inactive-event guard to return True: an event with no active
+    # window is now wrongly treated as tradeable. Inactive cases diverge.
+    ("event_window: inactive guard False -> True",
+     "        return False  # event not active",
+     "        return True  # event not active"),
+    # Drop the travel cost: distance no longer matters, so far merchants with a
+    # short window now spuriously trade. Nonzero-distance cases diverge.
+    ("event_window: drop travel cost (* -> * 0)",
+     "    travel_seconds = distance * EVENT_TRAVEL_SECONDS_PER_TILE",
+     "    travel_seconds = distance * 0"),
 ]
 
 
@@ -1954,6 +2103,14 @@ def main() -> int:
               "formal/diff/test_gather_selection_diff.py", survivors)
     run_group(CRAFT_VS_BUY_SRC, CRAFT_VS_BUY_MUTATIONS,
               "formal/diff/test_craft_vs_buy_diff.py", survivors)
+    run_group(NEAREST_TILE_SRC, NEAREST_TILE_MUTATIONS,
+              "formal/diff/test_nearest_tile_diff.py", survivors)
+    run_group(CONSUMABLE_SELECTION_SRC, CONSUMABLE_SELECTION_MUTATIONS,
+              "formal/diff/test_consumable_selection_diff.py", survivors)
+    run_group(BANK_EXPANSION_TIMING_SRC, BANK_EXPANSION_TIMING_MUTATIONS,
+              "formal/diff/test_bank_expansion_timing_diff.py", survivors)
+    run_group(EVENT_WINDOW_SRC, EVENT_WINDOW_MUTATIONS,
+              "formal/diff/test_event_window_diff.py", survivors)
     run_group(COST_CORE_SRC, COST_CORE_MUTATIONS,
               "formal/diff/test_action_cost_nonneg_diff.py", survivors)
     run_group(NPC_BUY_CORE_SRC, NPC_BUY_MUTATIONS,

@@ -12,14 +12,17 @@ concept tag, or a concept with no module, is a traceability gap.
 | ActionSetCompleteness | core | totality |
 | ApplyBaseline | core | safety |
 | ArbiterSelect | core, planner | dominance, totality |
+| BankExpansionTiming | bank | dominance, monotonicity, totality, safety |
 | BankSelection | bank, items, crafting | safety |
 | CheapestPath | combat, monsters | reachability, dominance |
 | CombatTargetExistence | combat, monsters | reachability, safety |
+| ConsumableSelection | items | dominance, monotonicity, totality, safety |
 | CraftVsBuy | crafting, npcs | dominance, monotonicity, totality, safety |
 | CycleInvariants | characters, combat | safety, monotonicity |
 | CyclesForProgress | characters | reachability, monotonicity |
 | DecideKey | core, planner | dominance, totality |
 | EquipValueAugmented | items, characters | dominance, monotonicity |
+| EventWindow | events | totality, safety, dominance, monotonicity, reachability |
 | FallbackChain | core, planner | totality, dominance |
 | GameDataAccessors | core | safety |
 | GatherApply | resources, items | safety |
@@ -34,6 +37,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | LivenessChain | combat, monsters | reachability, no-deadlock |
 | LowYieldCancel | tasks | safety, monotonicity |
 | MultiCycleLiveness | characters, combat | reachability, monotonicity |
+| NearestTile | maps | safety, dominance, totality, monotonicity |
 | NoActionDeadlock | core | no-deadlock, totality |
 | NpcBuyInventory | npcs, items | safety |
 | Objective | crafting, items, characters | reachability, dominance |

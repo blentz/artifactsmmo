@@ -19,6 +19,7 @@ import Formal.AcceptTaskGate
 import Formal.TaskTradeReadyPriority
 import Formal.WithdrawSetExpansion
 import Formal.RecycleProtection
+import Formal.BankExpansionTiming
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
@@ -278,6 +279,38 @@ open Formal.PriorityBand
 #check @Formal.CraftVsBuy.buy_stable_under_more_gold     -- monotonicity: ↑gold keeps buy
 #check @Formal.CraftVsBuy.buy_stable_under_lower_buy     -- monotonicity: ↓buy cost keeps buy
 #check @Formal.CraftVsBuy.buy_preserves_reserve          -- safety: buy ⇒ post-buy gold ≥ reserve
+-- NearestTile required roles (Manhattan-nearest tile, lex (manhattan,x,y) over Int coords):
+#check @Formal.NearestTile.nearestTile_nil                    -- totality: none ⇔ empty
+#check @Formal.NearestTile.nearestTile_total                  -- totality: nonempty ⇒ isSome
+#check @Formal.NearestTile.nearestTile_mem                    -- safety: winner is a real tile
+#check @Formal.NearestTile.nearestTile_min                    -- dominance: winner's distance ≤ all
+#check @Formal.NearestTile.nearestTile_deterministic_lexmin   -- determinism: lex-min closes apply/execute
+#check @Formal.NearestTile.cost_monotone_in_distance          -- monotonicity: cost = 6 + dist monotone
+#check @Formal.NearestTile.nearestTile_least_cost             -- corollary: winner is least-cost destination
+-- ConsumableSelection required roles (overheal-aware consumable lex-argmin over Int):
+#check @Formal.ConsumableSelection.select_none_iff_no_usable        -- totality: none ⇔ no usable
+#check @Formal.ConsumableSelection.select_mem                       -- winner is a usable candidate
+#check @Formal.ConsumableSelection.select_is_min                    -- dominance: nothing usable beats winner
+#check @Formal.ConsumableSelection.select_no_overheal_when_fit_exists -- safety: fitter exists ⇒ winner fits
+#check @Formal.ConsumableSelection.select_dominance_monotone        -- monotonicity: larger fit not ranked worse
+-- BankExpansionTiming required roles (bank-expansion firing decision over Int):
+#check @Formal.BankExpansionTiming.expand_total                  -- totality: always true or false
+#check @Formal.BankExpansionTiming.expand_iff                    -- dominance: exact firing condition
+#check @Formal.BankExpansionTiming.expand_preserves_reserve      -- safety: fire ⇒ post-buy gold ≥ reserve
+#check @Formal.BankExpansionTiming.no_expand_when_unaffordable   -- corollary: unaffordable ⇒ no fire
+#check @Formal.BankExpansionTiming.no_expand_when_below_threshold -- corollary: below threshold ⇒ no fire
+#check @Formal.BankExpansionTiming.expand_stable_under_more_gold  -- monotonicity: ↑gold keeps fire
+#check @Formal.BankExpansionTiming.expand_stable_under_more_fill  -- monotonicity: ↑used keeps fire (0 ≤ tden)
+#check @Formal.BankExpansionTiming.expand_true_witness            -- non-vacuity: concrete true witness
+-- EventWindow required roles (event-NPC trade-window gate over Int):
+#check @Formal.EventWindow.tradeable_total                    -- totality: always true or false
+#check @Formal.EventWindow.non_event_always_tradeable         -- dominance: non-event NPC always tradeable
+#check @Formal.EventWindow.inactive_event_not_tradeable       -- safety: inactive event ⇒ not tradeable
+#check @Formal.EventWindow.unreachable_window_not_tradeable   -- safety: remaining ≤ travel+margin ⇒ not tradeable
+#check @Formal.EventWindow.tradeable_iff_window_open          -- dominance: exact firing condition
+#check @Formal.EventWindow.tradeable_monotone_in_remaining    -- monotonicity: ↑remaining keeps open
+#check @Formal.EventWindow.tradeable_antitone_in_distance     -- monotonicity: ↓travel keeps open
+#check @Formal.EventWindow.window_open_reachable              -- reachability: a real firing witness
 -- NpcBuyInventory required roles (REAL BUG #6: NpcBuyAction.apply overflows inventory_max):
 #check @Formal.NpcBuyInventory.npc_buy_is_applicable_imp_free_ge -- passing check ⇒ quantity ≤ free
 #check @Formal.NpcBuyInventory.npc_buy_is_applicable_imp_gold_ge -- passing check ⇒ price*quantity ≤ gold
