@@ -5,12 +5,31 @@ Reads `formal/sim/game_data_snapshot.json` (captured by
 `snapshot_game_data.py`) and compares against the current live API.
 
 Skips if the server is unreachable (network errors only). FAILS if the
-server returns data that disagrees with the snapshot — indicating the
+server returns data that disagrees with the snapshot --- indicating the
 snapshot is stale and the Lean fixture must be regenerated.
+
+Hermeticity (cleanup of the live HTTPS connection):
+`GameData.load` drives the shared `ClientManager` httpx client, which
+keeps an IDLE keep-alive TLS socket in its connection pool after the
+last request. If that socket is left for the garbage collector to
+finalize, Python emits a ``ResourceWarning`` for the unclosed
+``ssl.SSLSocket`` at an arbitrary later moment; pytest's
+``unraisableexception`` plugin promotes that warning to a failure and
+attributes it to whichever test happens to be running when the GC
+fires. Across a full ``pytest formal/diff/`` sweep this surfaced as a
+non-deterministic, order-dependent failure of one of the
+``*_match_live`` tests (the snapshot data itself never drifted).
+
+The `live_game_data` fixture below loads the live data once, then
+closes the httpx client and resets the `ClientManager` singleton in
+teardown, so no socket survives into another test's window.
 """
 
 import json
+import re
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
@@ -24,11 +43,17 @@ SNAPSHOT_PATH = (
 )
 
 
-def _load_snapshot() -> dict:
-    return json.loads(SNAPSHOT_PATH.read_text())
+def _load_snapshot() -> dict[str, Any]:
+    data: dict[str, Any] = json.loads(SNAPSHOT_PATH.read_text())
+    return data
 
 
-def _load_live() -> GameData:
+@pytest.fixture(scope="module")
+def live_game_data() -> Iterator[GameData]:
+    """Load live GameData once for the module and guarantee the live
+    HTTPS connection is closed in teardown (hermeticity --- see module
+    docstring). Skips (does not fail) when no token is configured or the
+    server is unreachable."""
     try:
         cfg = Config.from_token_file()
     except ValueError as e:
@@ -36,17 +61,33 @@ def _load_live() -> GameData:
     mgr = ClientManager()
     try:
         mgr.initialize(cfg)
-        return GameData.load(mgr.client)
+        data = GameData.load(mgr.client)
     except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout,
             httpx.HTTPError) as e:
+        # Tear down any partially-opened client before skipping.
+        if mgr.is_initialized():
+            mgr.client.get_httpx_client().close()
+        ClientManager._instance = None
+        ClientManager._client = None
+        ClientManager._api = None
+        ClientManager._config = None
         pytest.skip(f"server unreachable: {e}")
+    try:
+        yield data
+    finally:
+        # Close the pooled keep-alive TLS socket so the garbage
+        # collector never finalizes an open ssl.SSLSocket mid-sweep.
+        mgr.client.get_httpx_client().close()
+        ClientManager._instance = None
+        ClientManager._client = None
+        ClientManager._api = None
+        ClientManager._config = None
 
 
-def test_snapshot_recipes_match_live() -> None:
+def test_snapshot_recipes_match_live(live_game_data: GameData) -> None:
     snapshot = _load_snapshot()
-    live = _load_live()
     snap_recipes = snapshot["crafting_recipes"]
-    live_recipes = {k: dict(v) for k, v in live._crafting_recipes.items()}
+    live_recipes = {k: dict(v) for k, v in live_game_data._crafting_recipes.items()}
     assert snap_recipes == live_recipes, (
         f"Snapshot drift: recipes diverge from live API. Regenerate via "
         f"`uv run python formal/sim/snapshot_game_data.py`. "
@@ -54,21 +95,19 @@ def test_snapshot_recipes_match_live() -> None:
     )
 
 
-def test_snapshot_monster_levels_match_live() -> None:
+def test_snapshot_monster_levels_match_live(live_game_data: GameData) -> None:
     snapshot = _load_snapshot()
-    live = _load_live()
     snap_levels = snapshot["monster_level"]
-    live_levels = dict(live._monster_level)
+    live_levels = dict(live_game_data._monster_level)
     assert snap_levels == live_levels, (
         "Snapshot drift: monster_level diverges from live API."
     )
 
 
-def test_snapshot_resource_skills_match_live() -> None:
+def test_snapshot_resource_skills_match_live(live_game_data: GameData) -> None:
     snapshot = _load_snapshot()
-    live = _load_live()
     snap_skills = {k: tuple(v) for k, v in snapshot["resource_skill"].items()}
-    live_skills = dict(live._resource_skill)
+    live_skills = dict(live_game_data._resource_skill)
     assert snap_skills == live_skills, (
         "Snapshot drift: resource_skill diverges from live API."
     )
@@ -113,7 +152,6 @@ def test_snapshot_recipe_count_matches_lean_fixture() -> None:
         / "Formal" / "Liveness" / "GameDataFixture.lean"
     ).read_text()
     # Find "theorem snapshot_recipe_count : allRecipes.length = N"
-    import re
     m = re.search(r"snapshot_recipe_count.*?length\s*=\s*(\d+)", fixture_lean)
     assert m, "Could not find snapshot_recipe_count theorem in Lean fixture"
     pinned = int(m.group(1))
