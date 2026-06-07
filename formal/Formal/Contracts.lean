@@ -1,4 +1,5 @@
 import Formal.CalculatePath
+import Formal.Liveness.ItemsTaskTermination
 import Formal.TaskBatch
 import Formal.InventoryCaps
 import Formal.PredictWin
@@ -1986,3 +1987,21 @@ example : ∀ (a b b' p g r : Int),
 example : ∀ (a b p g r : Int),
     Formal.CraftVsBuy.cheaperAcquisition a b p g r = Formal.CraftVsBuy.Method.buy → g - p ≥ r :=
   @Formal.CraftVsBuy.buy_preserves_reserve
+
+-- ItemsTaskTermination (items-task keepSet/batchK conformance — Task 1).
+-- keepSet_contains_task_item: SAFETY — the task item is always kept.
+example : ∀ (inp : Formal.Liveness.ItemsTaskTermination.TaskInputs),
+    inp.taskCode ∈ Formal.Liveness.ItemsTaskTermination.keepSet inp :=
+  @Formal.Liveness.ItemsTaskTermination.keepSet_contains_task_item
+-- keepSet_contains_recipe_inputs: SAFETY — every task recipe input is kept.
+example : ∀ (inp : Formal.Liveness.ItemsTaskTermination.TaskInputs) (m : Nat),
+    m ∈ inp.recipeInputs → m ∈ Formal.Liveness.ItemsTaskTermination.keepSet inp :=
+  @Formal.Liveness.ItemsTaskTermination.keepSet_contains_recipe_inputs
+-- batchK_ge_one: TOTALITY — batch is always ≥ 1.
+example : ∀ (inp : Formal.Liveness.ItemsTaskTermination.TaskInputs),
+    Formal.Liveness.ItemsTaskTermination.batchK inp ≥ 1 :=
+  @Formal.Liveness.ItemsTaskTermination.batchK_ge_one
+-- batchK_le_remaining: SAFETY — with ≥1 remaining, batch never over-trades.
+example : ∀ (inp : Formal.Liveness.ItemsTaskTermination.TaskInputs),
+    inp.remaining ≥ 1 → Formal.Liveness.ItemsTaskTermination.batchK inp ≤ inp.remaining :=
+  @Formal.Liveness.ItemsTaskTermination.batchK_le_remaining

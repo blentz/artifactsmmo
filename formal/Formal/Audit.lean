@@ -698,3 +698,8 @@ open Formal.WeightedRemaining in
 #print axioms Formal.CraftVsBuy.buy_stable_under_more_gold
 #print axioms Formal.CraftVsBuy.buy_stable_under_lower_buy
 #print axioms Formal.CraftVsBuy.buy_preserves_reserve
+-- ItemsTaskTermination (items-task keepSet/batchK conformance — Task 1)
+#print axioms Formal.Liveness.ItemsTaskTermination.keepSet_contains_task_item
+#print axioms Formal.Liveness.ItemsTaskTermination.keepSet_contains_recipe_inputs
+#print axioms Formal.Liveness.ItemsTaskTermination.batchK_ge_one
+#print axioms Formal.Liveness.ItemsTaskTermination.batchK_le_remaining
