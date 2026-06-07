@@ -67,6 +67,9 @@ class GameData:
     _crafting_recipes: dict[str, dict[str, int]] = field(default_factory=dict)
     _resource_skill: dict[str, tuple[str, int]] = field(default_factory=dict)  # code -> (skill, level)
     _resource_drops: dict[str, str] = field(default_factory=dict)  # resource_code -> primary drop item
+    _resource_drops_full: dict[str, list[tuple[str, int, int, int]]] = field(default_factory=dict)
+    """resource_code -> [(item_code, rate, min_quantity, max_quantity), ...]; full
+    drop table (the primary `_resource_drops` keeps only the lowest-rate item)."""
     _monster_level: dict[str, int] = field(default_factory=dict)
     _monster_hp: dict[str, int] = field(default_factory=dict)
     _monster_type: dict[str, str] = field(default_factory=dict)  # "normal" / "elite" / "boss"
@@ -184,6 +187,10 @@ class GameData:
     def resource_drop_item(self, code: str) -> str | None:
         """Primary item dropped when gathering this resource (for planning simulation)."""
         return self._resource_drops.get(code)
+
+    def resource_drop_table(self, code: str) -> list[tuple[str, int, int, int]]:
+        """Full (item, rate, min_q, max_q) drop rows for a resource; [] if unknown."""
+        return self._resource_drops_full.get(code, [])
 
     MAX_CHARACTER_LEVEL = 50
     """Documented character level cap.
@@ -558,6 +565,9 @@ class GameData:
                 # Pick the primary drop: most common (lowest rate value = 1/rate)
                 if res.drops:
                     self._resource_drops[res.code] = min(res.drops, key=lambda d: d.rate).code
+                    self._resource_drops_full[res.code] = [
+                        (d.code, d.rate, d.min_quantity, d.max_quantity) for d in res.drops
+                    ]
 
             if len(result.data) < 100:
                 break
