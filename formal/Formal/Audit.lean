@@ -689,6 +689,14 @@ open Formal.WeightedRemaining in
 #print axioms Formal.GatherSelection.select_no_cheaper_at_le_distance
 #print axioms Formal.GatherSelection.expected_gathers_mono_in_rate
 #print axioms Formal.GatherSelection.gather_selected_reaches_needed
+-- MonsterDropSelection (expected-kills lex-argmin monster-drop selection)
+#print axioms Formal.MonsterDropSelection.select_some_iff_nonempty
+#print axioms Formal.MonsterDropSelection.select_mem
+#print axioms Formal.MonsterDropSelection.select_is_lex_min
+#print axioms Formal.MonsterDropSelection.select_no_fewer_kills_at_le_distance
+#print axioms Formal.MonsterDropSelection.expected_kills_mono_in_rate
+#print axioms Formal.MonsterDropSelection.keyLt_total
+#print axioms Formal.MonsterDropSelection.kills_reach_needed
 
 -- CraftVsBuy (craft-vs-buy acquisition decision over Int)
 #print axioms Formal.CraftVsBuy.acquisition_total
@@ -698,6 +706,14 @@ open Formal.WeightedRemaining in
 #print axioms Formal.CraftVsBuy.buy_stable_under_more_gold
 #print axioms Formal.CraftVsBuy.buy_stable_under_lower_buy
 #print axioms Formal.CraftVsBuy.buy_preserves_reserve
+
+-- LiquidationVenue (immediate-fill liquidation venue over Int with Option Int)
+#print axioms Formal.LiquidationVenue.venue_total
+#print axioms Formal.LiquidationVenue.ge_iff_fillable_and_higher
+#print axioms Formal.LiquidationVenue.ge_requires_fillable_order
+#print axioms Formal.LiquidationVenue.chosen_venue_maximizes
+#print axioms Formal.LiquidationVenue.ge_stable_under_higher_ge
+#print axioms Formal.LiquidationVenue.ge_stable_under_lower_npc
 
 -- NearestTile (Manhattan-nearest tile, lex (manhattan, x, y) over Int coords)
 #print axioms Formal.NearestTile.nearestTile_nil
@@ -737,3 +753,16 @@ open Formal.WeightedRemaining in
 #print axioms Formal.Liveness.ItemsTaskTermination.keepSet_contains_recipe_inputs
 #print axioms Formal.Liveness.ItemsTaskTermination.batchK_ge_one
 #print axioms Formal.Liveness.ItemsTaskTermination.batchK_le_remaining
+-- ItemsTaskRun (inventory-COUPLED items-task termination model — supersedes
+-- the collapsed-trade concern; trade consumes inventory to advance progress)
+#print axioms Formal.Liveness.ItemsTaskRun.trade_consumes
+#print axioms Formal.Liveness.ItemsTaskRun.trade_stuck_without_held
+#print axioms Formal.Liveness.ItemsTaskRun.trade_stuck_at_total
+#print axioms Formal.Liveness.ItemsTaskRun.run_total
+#print axioms Formal.Liveness.ItemsTaskRun.applyRun_total
+#print axioms Formal.Liveness.ItemsTaskRun.applyRun_cons
+#print axioms Formal.Liveness.ItemsTaskRun.replicate_trade_accounts
+#print axioms Formal.Liveness.ItemsTaskRun.replicate_trade_progress_of_room
+#print axioms Formal.Liveness.ItemsTaskRun.obtain_then_trades_reach
+#print axioms Formal.Liveness.ItemsTaskRun.obtain_then_trades_reach_exists
+#print axioms Formal.Liveness.ItemsTaskRun.held_accounts

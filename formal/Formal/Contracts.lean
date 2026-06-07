@@ -1,5 +1,6 @@
 import Formal.CalculatePath
 import Formal.Liveness.ItemsTaskTermination
+import Formal.Liveness.ItemsTaskRun
 import Formal.TaskBatch
 import Formal.InventoryCaps
 import Formal.PredictWin
@@ -30,7 +31,9 @@ import Formal.DecideKey
 import Formal.CyclesForProgress
 import Formal.GatherApply
 import Formal.GatherSelection
+import Formal.MonsterDropSelection
 import Formal.CraftVsBuy
+import Formal.LiquidationVenue
 import Formal.NearestTile
 import Formal.ConsumableSelection
 import Formal.BankExpansionTiming
@@ -1957,6 +1960,42 @@ example : ∀ (a b : Formal.GatherSelection.Candidate),
 example : ∀ (needed owned : Nat), needed ≤ owned + (needed - owned) :=
   @Formal.GatherSelection.gather_selected_reaches_needed
 
+/-! ### MonsterDropSelection role contracts (expected-kills lex-argmin monster-drop). -/
+
+-- select_some_iff_nonempty: TOTALITY/no-deadlock — none ⇔ empty list.
+example : ∀ (cs : List Formal.MonsterDropSelection.Candidate),
+    Formal.MonsterDropSelection.selectMonsterForDrop cs = none ↔ cs = [] :=
+  @Formal.MonsterDropSelection.select_some_iff_nonempty
+-- select_mem: the winner is a REAL candidate in the input list.
+example : ∀ {cs : List Formal.MonsterDropSelection.Candidate} {c : Formal.MonsterDropSelection.Candidate},
+    Formal.MonsterDropSelection.selectMonsterForDrop cs = some c → c ∈ cs :=
+  @Formal.MonsterDropSelection.select_mem
+-- select_is_lex_min: DOMINANCE — no candidate strictly beats the winner on the lex key.
+example : ∀ {cs : List Formal.MonsterDropSelection.Candidate} {c : Formal.MonsterDropSelection.Candidate},
+    Formal.MonsterDropSelection.selectMonsterForDrop cs = some c →
+    ∀ x ∈ cs, ¬ Formal.MonsterDropSelection.keyLt x c :=
+  @Formal.MonsterDropSelection.select_is_lex_min
+-- select_no_fewer_kills_at_le_distance: a strictly-fewer-kills candidate must be strictly FARTHER.
+example : ∀ {cs : List Formal.MonsterDropSelection.Candidate} {c : Formal.MonsterDropSelection.Candidate},
+    Formal.MonsterDropSelection.selectMonsterForDrop cs = some c →
+    ∀ x ∈ cs,
+      Formal.MonsterDropSelection.expectedKills x < Formal.MonsterDropSelection.expectedKills c →
+      c.dist < x.dist :=
+  @Formal.MonsterDropSelection.select_no_fewer_kills_at_le_distance
+-- expected_kills_mono_in_rate: MONOTONICITY — ↑rate (yields fixed, positive avg) ⇒ ≥ expected kills.
+example : ∀ (a b : Formal.MonsterDropSelection.Candidate),
+    a.minQ = b.minQ → a.maxQ = b.maxQ → 0 < a.minQ + a.maxQ → a.rate ≤ b.rate →
+    Formal.MonsterDropSelection.expectedKills a ≤ Formal.MonsterDropSelection.expectedKills b :=
+  @Formal.MonsterDropSelection.expected_kills_mono_in_rate
+-- keyLt_total: TOTALITY of the lex key order (trichotomy).
+example : ∀ (a b : Formal.MonsterDropSelection.Candidate),
+    Formal.MonsterDropSelection.keyLt a b ∨ Formal.MonsterDropSelection.keyEq a b
+      ∨ Formal.MonsterDropSelection.keyLt b a :=
+  @Formal.MonsterDropSelection.keyLt_total
+-- kills_reach_needed: REACHABILITY — +1 kill loop reaches the needed quantity.
+example : ∀ (needed owned : Nat), needed ≤ owned + (needed - owned) :=
+  @Formal.MonsterDropSelection.kills_reach_needed
+
 /-! ### CraftVsBuy role contracts (craft-vs-buy acquisition decision over Int). -/
 
 -- acquisition_total: TOTALITY — the decision is always craft or buy.
@@ -1991,6 +2030,43 @@ example : ∀ (a b b' p g r : Int),
 example : ∀ (a b p g r : Int),
     Formal.CraftVsBuy.cheaperAcquisition a b p g r = Formal.CraftVsBuy.Method.buy → g - p ≥ r :=
   @Formal.CraftVsBuy.buy_preserves_reserve
+
+/-! ### LiquidationVenue role contracts (immediate-fill liquidation venue, Int + Option Int). -/
+
+-- venue_total: TOTALITY — the decision is always NPC or GE.
+example : ∀ (npcPay : Int) (geProceeds : Option Int),
+    Formal.LiquidationVenue.chooseVenue npcPay geProceeds = Formal.LiquidationVenue.Venue.npc ∨
+    Formal.LiquidationVenue.chooseVenue npcPay geProceeds = Formal.LiquidationVenue.Venue.ge :=
+  @Formal.LiquidationVenue.venue_total
+-- ge_iff_fillable_and_higher: DOMINANCE — GE ⇔ a fillable order pays strictly more.
+example : ∀ (npcPay : Int) (geProceeds : Option Int),
+    Formal.LiquidationVenue.chooseVenue npcPay geProceeds = Formal.LiquidationVenue.Venue.ge ↔
+    ∃ g, geProceeds = some g ∧ g > npcPay :=
+  @Formal.LiquidationVenue.ge_iff_fillable_and_higher
+-- ge_requires_fillable_order: SAFETY/anti-surrogate — GE ⇒ a standing order exists.
+example : ∀ (npcPay : Int) (geProceeds : Option Int),
+    Formal.LiquidationVenue.chooseVenue npcPay geProceeds = Formal.LiquidationVenue.Venue.ge →
+    geProceeds.isSome :=
+  @Formal.LiquidationVenue.ge_requires_fillable_order
+-- chosen_venue_maximizes: SAFETY/no-value-loss — realized ≥ npcPay and ≥ any order.
+example : ∀ (npcPay : Int) (geProceeds : Option Int),
+    npcPay ≤ Formal.LiquidationVenue.realizedProceeds npcPay geProceeds
+      (Formal.LiquidationVenue.chooseVenue npcPay geProceeds)
+    ∧ ∀ g, geProceeds = some g →
+        g ≤ Formal.LiquidationVenue.realizedProceeds npcPay geProceeds
+          (Formal.LiquidationVenue.chooseVenue npcPay geProceeds) :=
+  @Formal.LiquidationVenue.chosen_venue_maximizes
+-- ge_stable_under_higher_ge: MONOTONICITY — raising the order keeps GE.
+example : ∀ (npcPay g g' : Int),
+    Formal.LiquidationVenue.chooseVenue npcPay (some g) = Formal.LiquidationVenue.Venue.ge → g ≤ g' →
+    Formal.LiquidationVenue.chooseVenue npcPay (some g') = Formal.LiquidationVenue.Venue.ge :=
+  @Formal.LiquidationVenue.ge_stable_under_higher_ge
+-- ge_stable_under_lower_npc: MONOTONICITY — lowering the NPC floor keeps GE.
+example : ∀ (npcPay npcPay' : Int) (geProceeds : Option Int),
+    Formal.LiquidationVenue.chooseVenue npcPay geProceeds = Formal.LiquidationVenue.Venue.ge →
+    npcPay' ≤ npcPay →
+    Formal.LiquidationVenue.chooseVenue npcPay' geProceeds = Formal.LiquidationVenue.Venue.ge :=
+  @Formal.LiquidationVenue.ge_stable_under_lower_npc
 
 /-! ### NearestTile role contracts (Manhattan-nearest tile, lex (manhattan, x, y)). -/
 
@@ -2152,3 +2228,45 @@ example : ∀ (inp : Formal.Liveness.ItemsTaskTermination.TaskInputs),
 example : ∀ (inp : Formal.Liveness.ItemsTaskTermination.TaskInputs),
     inp.remaining ≥ 1 → Formal.Liveness.ItemsTaskTermination.batchK inp ≤ inp.remaining :=
   @Formal.Liveness.ItemsTaskTermination.batchK_le_remaining
+
+-- ItemsTaskRun (inventory-COUPLED items-task termination model — supersedes the
+-- collapsed-trade concern). `trade` REQUIRES and CONSUMES one held task item to
+-- advance one unit of progress, faithful to the API taskTrade.
+-- trade_consumes: SAFETY (coupling) — progress advances ONLY by consuming
+-- exactly one held item.
+example : ∀ (s : Formal.Liveness.ItemsTaskRun.RunState),
+    0 < s.held ∧ s.progress < s.total →
+      (Formal.Liveness.ItemsTaskRun.trade s).held = s.held - 1
+      ∧ (Formal.Liveness.ItemsTaskRun.trade s).progress = s.progress + 1 :=
+  @Formal.Liveness.ItemsTaskRun.trade_consumes
+-- trade_stuck_without_held: SAFETY — no held item ⇒ no progress (no free
+-- progress out of an empty inventory).
+example : ∀ (s : Formal.Liveness.ItemsTaskRun.RunState),
+    s.held = 0 → Formal.Liveness.ItemsTaskRun.trade s = s :=
+  @Formal.Liveness.ItemsTaskRun.trade_stuck_without_held
+-- run_total: TOTALITY — trade is defined on every state.
+example : ∀ (s : Formal.Liveness.ItemsTaskRun.RunState),
+    ∃ t : Formal.Liveness.ItemsTaskRun.RunState,
+      Formal.Liveness.ItemsTaskRun.trade s = t :=
+  @Formal.Liveness.ItemsTaskRun.run_total
+-- obtain_then_trades_reach: REACHABILITY — obtain (total-progress) then that
+-- many trades reaches progress = total.
+example : ∀ (s : Formal.Liveness.ItemsTaskRun.RunState),
+    s.progress < s.total →
+      (Formal.Liveness.ItemsTaskRun.applyRun
+        (Formal.Liveness.ItemsTaskRun.obtain s (s.total - s.progress))
+        (List.replicate (s.total - s.progress) Formal.Liveness.ItemsTaskRun.trade)).progress
+        = s.total :=
+  @Formal.Liveness.ItemsTaskRun.obtain_then_trades_reach
+-- held_accounts: NON-VACUITY — from held = 0, the whole run consumes EXACTLY
+-- the obtained items: ends held = 0 and progress = total (no free progress).
+example : ∀ (s : Formal.Liveness.ItemsTaskRun.RunState),
+    s.held = 0 → s.progress < s.total →
+      (Formal.Liveness.ItemsTaskRun.applyRun
+          (Formal.Liveness.ItemsTaskRun.obtain s (s.total - s.progress))
+          (List.replicate (s.total - s.progress) Formal.Liveness.ItemsTaskRun.trade)).held = 0
+      ∧ (Formal.Liveness.ItemsTaskRun.applyRun
+          (Formal.Liveness.ItemsTaskRun.obtain s (s.total - s.progress))
+          (List.replicate (s.total - s.progress) Formal.Liveness.ItemsTaskRun.trade)).progress
+          = s.total :=
+  @Formal.Liveness.ItemsTaskRun.held_accounts

@@ -36,7 +36,9 @@ DECIDE_KEY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "decide_ke
 CYCLES_FOR_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "cycles_for_progress_core.py"
 GATHER_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gather_apply_core.py"
 GATHER_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_selection.py"
+MONSTER_DROP_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "monster_drop_selection.py"
 CRAFT_VS_BUY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_vs_buy.py"
+LIQUIDATION_VENUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "liquidation_venue.py"
 NEAREST_TILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "nearest_tile.py"
 CONSUMABLE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_selection.py"
 BANK_EXPANSION_TIMING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_expansion_timing.py"
@@ -994,6 +996,7 @@ _ALL_SRCS = [
     CYCLES_FOR_PROGRESS_SRC,
     GATHER_APPLY_SRC,
     GATHER_SELECTION_SRC,
+    MONSTER_DROP_SELECTION_SRC,
     CRAFT_VS_BUY_SRC,
     NEAREST_TILE_SRC,
     CONSUMABLE_SELECTION_SRC,
@@ -1136,6 +1139,49 @@ GATHER_SELECTION_MUTATIONS = [
 ]
 
 
+# monster_drop_selection mutations -- old strings matched to current
+# monster_drop_selection.py text. Each perturbs the lex-argmin metric / tie-break
+# so the Python winner diverges from the Lean `selectMonsterForDrop` oracle.
+# Killed by formal/diff/test_monster_drop_selection_diff.py. The distance
+# tie-break drop and the argmin->argmax flip are the two the task pins.
+MONSTER_DROP_SELECTION_MUTATIONS = [
+    # Drop the average-yield divisor: the metric degenerates to bare `rate`,
+    # ignoring min/max quantity; high-yield high-rate loses to low-yield low-rate.
+    ("monster_drop_selection: drop avg_quantity divisor (metric = rate only)",
+     "    avg_quantity = Fraction(c.min_quantity + c.max_quantity, 2)\n"
+     "    return Fraction(c.rate) / avg_quantity",
+     "    avg_quantity = Fraction(c.min_quantity + c.max_quantity, 2)\n"
+     "    return Fraction(c.rate)"),
+    # avg_quantity uses `*` instead of `+`: wrong average, ordering changes when
+    # min != max.
+    ("monster_drop_selection: avg_quantity + -> * (wrong average)",
+     "    avg_quantity = Fraction(c.min_quantity + c.max_quantity, 2)",
+     "    avg_quantity = Fraction(c.min_quantity * c.max_quantity, 2)"),
+    # Argmin -> argmax: pick the WORST (most kills) monster. Any list with two
+    # distinct keys diverges from the Lean lex-min (flips the `<` direction).
+    ("monster_drop_selection: min -> max (argmin becomes argmax)",
+     "    return min(candidates, key=_key).monster_code",
+     "    return max(candidates, key=_key).monster_code"),
+    # Swap distance and expected_kills in the lex key: distance dominates, inverting
+    # the primary objective on any kills-vs-distance tension.
+    ("monster_drop_selection: lex key swap (distance before expected_kills)",
+     "    return (_expected_kills(c), c.distance, c.monster_code)",
+     "    return (c.distance, _expected_kills(c), c.monster_code)"),
+    # Drop the distance tie-break (constant second field): candidates tying on
+    # expected_kills become distance-ambiguous; Python `min` first-wins by list
+    # position, diverging from the Lean distance-ordered tie-break.
+    ("monster_drop_selection: drop distance tie-break (second field constant)",
+     "    return (_expected_kills(c), c.distance, c.monster_code)",
+     "    return (_expected_kills(c), 0, c.monster_code)"),
+    # Drop the code tie-break (constant third field): candidates tying on
+    # (expected_kills, distance) become order-ambiguous; Python `min` first-wins,
+    # diverging from the Lean code-ordered tie-break.
+    ("monster_drop_selection: drop code tie-break (third field constant)",
+     "    return (_expected_kills(c), c.distance, c.monster_code)",
+     "    return (_expected_kills(c), c.distance, \"\")"),
+]
+
+
 # craft_vs_buy mutations -- old strings matched to current craft_vs_buy.py text.
 # Each perturbs the affordability test or the strict-cheaper test so the Python
 # BUY/CRAFT verdict diverges from the Lean `cheaperAcquisition` oracle. Killed by
@@ -1169,6 +1215,36 @@ CRAFT_VS_BUY_MUTATIONS = [
     ("craft_vs_buy: affordability - -> + (wrong post-buy gold)",
      "    affordable = gold - total_price >= reserve",
      "    affordable = gold + total_price >= reserve"),
+]
+
+# liquidation_venue mutations -- old strings matched to current
+# liquidation_venue.py text. Each perturbs the immediate-fill venue decision so the
+# Python venue/realized verdict diverges from the Lean `chooseVenue`/
+# `realizedProceeds` oracle. Killed by formal/diff/test_liquidation_venue_diff.py.
+LIQUIDATION_VENUE_MUTATIONS = [
+    # Flip the strict `>` to `>=`: a standing order that merely TIES the NPC
+    # sell-back now spuriously wins GE, violating the strict-dominance rule. The
+    # tie cases in the diff fire.
+    ("liquidation_venue: strict > -> >= (GE wins on a tie)",
+     "if ge_proceeds is not None and ge_proceeds > npc_pay:",
+     "if ge_proceeds is not None and ge_proceeds >= npc_pay:"),
+    # Drop the `is not None` guard: GE can now be chosen on a phantom (absent)
+    # order — exactly the anti-surrogate violation. (A `None > int` comparison
+    # raises in Python, so the diff's None cases diverge by erroring/branching.)
+    ("liquidation_venue: drop isSome guard (GE on phantom order)",
+     "if ge_proceeds is not None and ge_proceeds > npc_pay:",
+     "if ge_proceeds is not None or ge_proceeds > npc_pay:"),
+    # Invert the comparison `>` to `<`: GE now fires when the order pays LESS than
+    # the NPC sell-back, inverting the value objective.
+    ("liquidation_venue: > -> < (inverted proceeds objective)",
+     "if ge_proceeds is not None and ge_proceeds > npc_pay:",
+     "if ge_proceeds is not None and ge_proceeds < npc_pay:"),
+    # Break the realized-gold coupling: realize the NPC price even when GE is
+    # chosen, so the proceeds no longer reflect the actual venue. The realized
+    # field in the diff diverges on every GE win.
+    ("liquidation_venue: realized decouple (GE realizes npc_pay)",
+     "    if venue is Venue.GE and ge_proceeds is not None:\n        return ge_proceeds\n    return npc_pay",
+     "    if venue is Venue.GE and ge_proceeds is not None:\n        return npc_pay\n    return npc_pay"),
 ]
 
 # nearest_tile mutations -- old strings matched to current nearest_tile.py text.
@@ -2101,8 +2177,12 @@ def main() -> int:
               "formal/diff/test_gather_apply_diff.py", survivors)
     run_group(GATHER_SELECTION_SRC, GATHER_SELECTION_MUTATIONS,
               "formal/diff/test_gather_selection_diff.py", survivors)
+    run_group(MONSTER_DROP_SELECTION_SRC, MONSTER_DROP_SELECTION_MUTATIONS,
+              "formal/diff/test_monster_drop_selection_diff.py", survivors)
     run_group(CRAFT_VS_BUY_SRC, CRAFT_VS_BUY_MUTATIONS,
               "formal/diff/test_craft_vs_buy_diff.py", survivors)
+    run_group(LIQUIDATION_VENUE_SRC, LIQUIDATION_VENUE_MUTATIONS,
+              "formal/diff/test_liquidation_venue_diff.py", survivors)
     run_group(NEAREST_TILE_SRC, NEAREST_TILE_MUTATIONS,
               "formal/diff/test_nearest_tile_diff.py", survivors)
     run_group(CONSUMABLE_SELECTION_SRC, CONSUMABLE_SELECTION_MUTATIONS,

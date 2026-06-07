@@ -884,9 +884,10 @@ def test_monster_drops_populated_after_load(monkeypatch):
     """OpenAPI conformance: monster.drops list survives _load_monsters."""
 
     class FakeDrop:
-        def __init__(self, code, rate, max_quantity):
+        def __init__(self, code, rate, min_quantity, max_quantity):
             self.code = code
             self.rate = rate
+            self.min_quantity = min_quantity
             self.max_quantity = max_quantity
 
     class FakeMonster:
@@ -907,7 +908,7 @@ def test_monster_drops_populated_after_load(monkeypatch):
             self.initiative = 100
             self.min_gold = 1
             self.max_gold = 3
-            self.drops = [FakeDrop("egg", 5, 1), FakeDrop("feather", 10, 1)]
+            self.drops = [FakeDrop("egg", 5, 1, 2), FakeDrop("feather", 10, 1, 1)]
 
     class FakeResult:
         def __init__(self):
@@ -921,9 +922,13 @@ def test_monster_drops_populated_after_load(monkeypatch):
     )
     gd = GameData()
     gd._load_monsters(client=None)
-    assert gd.monster_drops("chicken") == [("egg", 5, 1), ("feather", 10, 1)]
+    assert gd.monster_drops("chicken") == [("egg", 5, 1, 2), ("feather", 10, 1, 1)]
     assert gd.monster_min_gold("chicken") == 1
     assert gd.monster_max_gold("chicken") == 3
+    # min_quantity is restored symmetric to max_quantity (was dropped at load).
+    assert gd.monsters_dropping("egg") == [("chicken", 5, 1, 2)]
+    assert gd.monsters_dropping("feather") == [("chicken", 10, 1, 1)]
+    assert gd.monsters_dropping("nonexistent_item") == []
 
 
 def test_item_stats_tradeable_default_true():

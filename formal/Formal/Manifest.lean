@@ -271,6 +271,14 @@ open Formal.PriorityBand
 #check @Formal.GatherSelection.select_no_cheaper_at_le_distance  -- corollary: strictly-cheaper ⇒ strictly-farther
 #check @Formal.GatherSelection.expected_gathers_mono_in_rate     -- monotonicity: ↑rate ⇒ ≥ expected gathers
 #check @Formal.GatherSelection.gather_selected_reaches_needed    -- reachability: +1 loop reaches needed qty
+-- MonsterDropSelection required roles (expected-kills lex-argmin monster-drop selection):
+#check @Formal.MonsterDropSelection.select_some_iff_nonempty          -- totality/no-deadlock: none ⇔ empty
+#check @Formal.MonsterDropSelection.select_mem                        -- winner is a real candidate
+#check @Formal.MonsterDropSelection.select_is_lex_min                 -- dominance: nothing strictly beats the winner
+#check @Formal.MonsterDropSelection.select_no_fewer_kills_at_le_distance -- corollary: fewer-kills ⇒ strictly-farther
+#check @Formal.MonsterDropSelection.expected_kills_mono_in_rate       -- monotonicity: ↑rate ⇒ ≥ expected kills
+#check @Formal.MonsterDropSelection.kills_reach_needed                -- reachability: +1 kill loop reaches needed qty
+#check @Formal.MonsterDropSelection.keyLt_total                       -- totality of the lex key order
 -- CraftVsBuy required roles (craft-vs-buy acquisition decision over Int):
 #check @Formal.CraftVsBuy.acquisition_total              -- totality: always craft or buy
 #check @Formal.CraftVsBuy.buy_iff_affordable_and_cheaper -- dominance: exact buy firing condition
@@ -279,6 +287,13 @@ open Formal.PriorityBand
 #check @Formal.CraftVsBuy.buy_stable_under_more_gold     -- monotonicity: ↑gold keeps buy
 #check @Formal.CraftVsBuy.buy_stable_under_lower_buy     -- monotonicity: ↓buy cost keeps buy
 #check @Formal.CraftVsBuy.buy_preserves_reserve          -- safety: buy ⇒ post-buy gold ≥ reserve
+-- LiquidationVenue required roles (immediate-fill liquidation venue over Int with Option Int):
+#check @Formal.LiquidationVenue.venue_total              -- totality: always NPC or GE
+#check @Formal.LiquidationVenue.ge_iff_fillable_and_higher -- dominance: GE ⇔ fillable order pays strictly more
+#check @Formal.LiquidationVenue.ge_requires_fillable_order -- safety/anti-surrogate: GE ⇒ order isSome
+#check @Formal.LiquidationVenue.chosen_venue_maximizes   -- safety/no-value-loss: realized ≥ npcPay and ≥ any order
+#check @Formal.LiquidationVenue.ge_stable_under_higher_ge -- monotonicity: ↑order keeps GE
+#check @Formal.LiquidationVenue.ge_stable_under_lower_npc -- monotonicity: ↓npc floor keeps GE
 -- NearestTile required roles (Manhattan-nearest tile, lex (manhattan,x,y) over Int coords):
 #check @Formal.NearestTile.nearestTile_nil                    -- totality: none ⇔ empty
 #check @Formal.NearestTile.nearestTile_total                  -- totality: nonempty ⇒ isSome
@@ -770,3 +785,15 @@ open Formal.PriorityBand
 #check @Formal.Liveness.ItemsTaskTermination.keepSet_contains_recipe_inputs  -- safety
 #check @Formal.Liveness.ItemsTaskTermination.batchK_ge_one                   -- totality
 #check @Formal.Liveness.ItemsTaskTermination.batchK_le_remaining             -- safety
+
+-- ItemsTaskRun (inventory-COUPLED items-task termination model — supersedes
+-- the collapsed-trade concern; `trade` consumes one held item to advance one
+-- unit of progress, faithful to the API taskTrade):
+#check @Formal.Liveness.ItemsTaskRun.trade_consumes                  -- safety (coupling)
+#check @Formal.Liveness.ItemsTaskRun.trade_stuck_without_held        -- safety (no free progress)
+#check @Formal.Liveness.ItemsTaskRun.trade_stuck_at_total            -- safety (no over-trade)
+#check @Formal.Liveness.ItemsTaskRun.run_total                       -- totality
+#check @Formal.Liveness.ItemsTaskRun.applyRun_total                  -- totality
+#check @Formal.Liveness.ItemsTaskRun.obtain_then_trades_reach        -- reachability
+#check @Formal.Liveness.ItemsTaskRun.obtain_then_trades_reach_exists -- reachability
+#check @Formal.Liveness.ItemsTaskRun.held_accounts                   -- safety (non-vacuity: items conserved)

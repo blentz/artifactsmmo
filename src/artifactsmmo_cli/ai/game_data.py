@@ -78,10 +78,12 @@ class GameData:
     _monster_critical_strike: dict[str, int] = field(default_factory=dict)  # code -> crit %
     _monster_initiative: dict[str, int] = field(default_factory=dict)  # code -> initiative
     # OpenAPI conformance (Item 14 remediation): monster reward + loot fields.
-    _monster_drops: dict[str, list[tuple[str, int, int]]] = field(default_factory=dict)
-    """code -> [(item_code, rate, max_quantity), ...]. Drop rate is 1-in-N
-    (smaller = more common per server convention). Loot prediction relies
-    on this; was previously dropped at parse time."""
+    _monster_drops: dict[str, list[tuple[str, int, int, int]]] = field(default_factory=dict)
+    """code -> [(item_code, rate, min_quantity, max_quantity), ...]. Drop rate is
+    1-in-N (smaller = more common per server convention). Loot prediction relies
+    on this; was previously dropped at parse time. `min_quantity` is restored
+    symmetric to `max_quantity` so avg_qty = (min+max)/2 is faithful (openapi
+    DropRateSchema carries both)."""
     _monster_min_gold: dict[str, int] = field(default_factory=dict)
     """code -> min gold reward per fight win."""
     _monster_max_gold: dict[str, int] = field(default_factory=dict)
@@ -282,12 +284,25 @@ class GameData:
         unknown — see `monster_attack`."""
         return self._monster_initiative[code]
 
-    def monster_drops(self, code: str) -> list[tuple[str, int, int]]:
+    def monster_drops(self, code: str) -> list[tuple[str, int, int, int]]:
         """OpenAPI conformance (Item 14): drop table from a monster fight.
-        Returns [(item_code, rate, max_quantity), ...]; empty list if no
-        drops known or monster missing. Rate is 1-in-N (smaller = more
+        Returns [(item_code, rate, min_quantity, max_quantity), ...]; empty list
+        if no drops known or monster missing. Rate is 1-in-N (smaller = more
         common per server convention)."""
         return self._monster_drops.get(code, [])
+
+    def monsters_dropping(self, item: str) -> list[tuple[str, int, int, int]]:
+        """Every monster whose drop table contains `item`, as
+        [(monster_code, rate, min_quantity, max_quantity), ...] in catalog
+        order. Empty when nothing drops the item. Used by drop-driven monster
+        selection (pick the monster minimizing expected kills for a needed
+        drop)."""
+        out: list[tuple[str, int, int, int]] = []
+        for monster_code, drops in self._monster_drops.items():
+            for drop_code, rate, min_q, max_q in drops:
+                if drop_code == item:
+                    out.append((monster_code, rate, min_q, max_q))
+        return out
 
     def monster_min_gold(self, code: str) -> int:
         """OpenAPI conformance (Item 14): minimum gold reward per fight win.
@@ -649,14 +664,16 @@ class GameData:
                 self._monster_max_gold[mon.code] = int(max_gold or 0)
                 raw_drops = getattr(mon, "drops", None)
                 if raw_drops is not None and not isinstance(raw_drops, Unset):
-                    drops: list[tuple[str, int, int]] = []
+                    drops: list[tuple[str, int, int, int]] = []
                     for d in raw_drops:
                         drop_code = getattr(d, "code", None)
                         rate = getattr(d, "rate", None)
+                        min_q = getattr(d, "min_quantity", None)
                         max_q = getattr(d, "max_quantity", None)
                         if drop_code is not None and rate is not None:
                             drops.append((
                                 str(drop_code), int(rate),
+                                int(min_q if min_q is not None else 1),
                                 int(max_q if max_q is not None else 1),
                             ))
                     self._monster_drops[mon.code] = drops
