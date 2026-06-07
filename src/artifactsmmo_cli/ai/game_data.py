@@ -99,6 +99,14 @@ class GameData:
     into it for immediate gold. Populated from the live GE-orders API read (the
     source of truth); never fabricated. A buy order is a real standing offer, so
     its price is realizable proceeds (unlike a speculative new sell order)."""
+    _ge_sell_orders: dict[str, tuple[str, int, int]] = field(default_factory=dict)
+    """item_code -> (order_id, price, quantity) for the LOWEST-price OPEN SELL
+    order standing in the Grand Exchange — the cheapest one the player can BUY from
+    by filling it (immediate, guaranteed acquisition). This is the DUAL of
+    `_ge_buy_orders`: buying picks the lowest price, liquidating picks the highest.
+    Populated from the live GE-orders API read (the source of truth); never
+    fabricated. A sell order is a real standing offer, so its price is a realizable
+    acquisition cost (unlike a speculative new buy order)."""
     _event_npc_spawns: dict[str, tuple[int, int]] = field(default_factory=dict)  # npc_code -> fixed event spawn tile
     _npc_event_code: dict[str, str] = field(default_factory=dict)  # npc_code -> event code (membership = is_event_npc)
     _bank_capacity: int = 0
@@ -429,6 +437,15 @@ class GameData:
         liquidation_venue)."""
         return self._ge_buy_orders.get(item_code)
 
+    def ge_best_sell_order(self, item_code: str) -> tuple[str, int, int] | None:
+        """The lowest-price OPEN SELL order for item_code as (order_id, price,
+        quantity), or None if no such standing order exists. This is the cheapest
+        order the player fills by BUYING from it (immediate acquisition). It is the
+        DUAL of `ge_best_buy_order`: buying minimizes price, liquidating maximizes
+        it. Only API-sourced orders appear here; absence is encoded as None (the
+        anti-surrogate guard for buy_source_venue)."""
+        return self._ge_sell_orders.get(item_code)
+
     def grand_exchange_location(self) -> tuple[int, int] | None:
         """Tile of the Grand Exchange, or None if the map has no GE."""
         return self._grand_exchange_location
@@ -628,12 +645,13 @@ class GameData:
             page += 1
 
     def _load_ge_orders(self, client: AuthenticatedClient) -> None:
-        """Index the highest-price OPEN BUY order per item from the live GE order
-        book. Filling such an order sells the item for immediate gold, so its price
-        is realizable proceeds. We page the BUY side of the order book and keep, per
-        item, the single highest-price order (ties broken by larger quantity, then
-        order id for determinism). The API is the source of truth; no order is
-        fabricated."""
+        """Index, per item, the highest-price OPEN BUY order and the lowest-price
+        OPEN SELL order from the live GE order book. Filling a BUY order sells the
+        item for immediate gold (realizable proceeds); filling a SELL order buys the
+        item for immediate, guaranteed acquisition (realizable cost). We page each
+        side of the order book and keep, per item, the single best order (BUY: max
+        price; SELL: min price; ties broken by larger quantity, then order id for
+        determinism). The API is the source of truth; no order is fabricated."""
         page = 1
         while True:
             result = get_ge_orders(client=client, type_=GEOrderType.BUY, page=page, size=100)
@@ -646,6 +664,27 @@ class GameData:
                     current[1], current[2], current[0]
                 ):
                     self._ge_buy_orders[order.code] = candidate
+            if len(result.data) < 100:
+                break
+            page += 1
+        # SELL side (the DUAL): index the LOWEST-price open sell order per item.
+        # Filling such an order BUYS the item for immediate, guaranteed acquisition,
+        # so its price is a realizable cost (the cheapest fillable buy source). We
+        # keep, per item, the single lowest-price order (ties broken by larger
+        # quantity, then order id for determinism — same tie-break shape as the BUY
+        # pass). The API is the source of truth; no order is fabricated.
+        page = 1
+        while True:
+            result = get_ge_orders(client=client, type_=GEOrderType.SELL, page=page, size=100)
+            if result is None or not result.data:
+                break
+            for order in result.data:
+                candidate = (order.id, order.price, order.quantity)
+                current = self._ge_sell_orders.get(order.code)
+                if current is None or (-order.price, order.quantity, order.id) > (
+                    -current[1], current[2], current[0]
+                ):
+                    self._ge_sell_orders[order.code] = candidate
             if len(result.data) < 100:
                 break
             page += 1

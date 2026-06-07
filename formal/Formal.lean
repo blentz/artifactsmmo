@@ -32,6 +32,7 @@ import Formal.GatherSelection
 import Formal.MonsterDropSelection
 import Formal.CraftVsBuy
 import Formal.LiquidationVenue
+import Formal.BuySourceVenue
 import Formal.NearestTile
 import Formal.ConsumableSelection
 import Formal.BankExpansionTiming

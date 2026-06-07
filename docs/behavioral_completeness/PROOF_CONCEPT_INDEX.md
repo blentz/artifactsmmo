@@ -14,6 +14,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | ArbiterSelect | core, planner | dominance, totality |
 | BankExpansionTiming | bank | dominance, monotonicity, totality, safety |
 | BankSelection | bank, items, crafting | safety |
+| BuySourceVenue | grandexchange | dominance, totality, safety, monotonicity |
 | CheapestPath | combat, monsters | reachability, dominance |
 | CombatTargetExistence | combat, monsters | reachability, safety |
 | ConsumableSelection | items | dominance, monotonicity, totality, safety |

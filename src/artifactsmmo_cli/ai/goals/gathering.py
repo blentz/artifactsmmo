@@ -6,8 +6,10 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction, _nearest
+from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.buy_source_venue import BuyVenue, choose_buy_venue
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.craft_vs_buy import GOLD_RESERVE, Method, acquisition_method
 from artifactsmmo_cli.ai.game_data import GameData
@@ -213,10 +215,29 @@ class GatherMaterialsGoal(Goal):
                 continue
             if acquisition_method(item, qty, state, game_data, GOLD_RESERVE) is not Method.BUY:
                 continue
-            npc_code, _price = min(sellers, key=lambda np: np[1])
+            npc_code, npc_price = min(sellers, key=lambda np: np[1])
             result.append(NpcBuyAction(npc_code=npc_code, item_code=item,
                                        npc_location=game_data.npc_location(npc_code),
                                        quantity=qty))
+            # Immediate-fill GE buy source (DUAL of the discard_overstock GE
+            # liquidation): when a standing GE SELL order is strictly cheaper than
+            # the NPC buy price AND can supply the whole qty in one fill, also offer
+            # a GeFillSellOrder. buy_source_venue → GE (gated by choose_buy_venue,
+            # proved in formal/Formal/BuySourceVenue.lean) is the decision; the
+            # least-cost planner then picks GE vs NPC buy. We only fill an EXISTING
+            # order — never post a new one.
+            ge_loc = game_data.grand_exchange_location()
+            order = game_data.ge_best_sell_order(item)
+            ge_price: int | None = None
+            if order is not None and order[2] >= qty:
+                ge_price = order[1]
+            if ge_loc is not None and order is not None and \
+                    choose_buy_venue(npc_price, ge_price) is BuyVenue.GE:
+                order_id, price, _order_qty = order
+                result.append(GeFillSellOrderAction(
+                    order_id=order_id, item_code=item, price=price,
+                    quantity=qty, ge_location=ge_loc,
+                ))
 
         return result
 
