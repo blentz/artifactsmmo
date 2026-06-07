@@ -181,15 +181,22 @@ INVENTORY_PROFILE_MUTATIONS = [
      "        return held - floor",
      "    if held > floor:\n"
      "        return held - floor + 1"),
-    # Drop the strict-over-floor guard: held == floor (at the protected target)
-    # wrongly reports as overstock (breaks the at-target protection boundary).
-    ("inventory_profile: over-floor guard > -> >=",
+    # overstock floor-drop: shed held - floor + 1 via floor underflow — return
+    # the full held instead of held - floor (sheds a profile item below its
+    # target). Kills the protected-floor subtraction.
+    ("inventory_profile: drop protected floor from excess (held - floor -> held)",
      "    if held > floor:\n"
      "        return held - floor\n"
      "    return 0",
-     "    if held >= floor:\n"
-     "        return held - floor\n"
+     "    if held > floor:\n"
+     "        return held\n"
      "    return 0"),
+    # NOTE: a `held > floor -> held >= floor` mutant was considered and
+    # REJECTED as an EQUIVALENT mutant: at `held == floor` the `>=` branch
+    # returns `held - floor == 0`, identical to the original's `return 0`, and
+    # both agree for every other `held`. Shipping an unkillable equivalent
+    # mutant is proof-theater; the strict-vs-nonstrict boundary is instead
+    # pinned by the Lean `overstock_pos_iff` (excess > 0 iff held > floor).
 ]
 
 

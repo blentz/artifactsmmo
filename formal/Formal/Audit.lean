@@ -433,6 +433,7 @@ open Formal.WeightedRemaining in
 #print axioms Formal.Phase10GoalLattices.deposit_full_value
 #print axioms Formal.Phase10GoalLattices.deposit_ramp_start_value
 #print axioms Formal.Phase10GoalLattices.deposit_midramp_value
+#print axioms Formal.Phase10GoalLattices.deposit_just_below_ramp_value
 #print axioms Formal.Phase10GoalLattices.overstock_satisfied_zero
 #print axioms Formal.Phase10GoalLattices.overstock_tier_order
 #print axioms Formal.Phase10GoalLattices.overstock_critical_at_threshold

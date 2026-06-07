@@ -68,8 +68,11 @@ theorem lowYieldSampleThreshold_pos : lowYieldSampleThreshold > 0 := by decide
 def CRITICAL_HP_NUM : Nat := 25
 def CRITICAL_HP_DEN : Nat := 100
 
-/-- `DEPOSIT_FULL_FRACTION = 0.80` (guards.py:18). -/
-def DEPOSIT_FULL_NUM : Nat := 80
+/-- `DEPOSIT_FULL_FRACTION = 0.90` (guards.py; raised from 0.80 per spec
+2026-06-07 so it stays STRICTLY ABOVE the deposit ramp start 0.85 — the
+`fires(DEPOSIT_FULL) ⇒ depositInventoryValue > 0` invariant in
+Formal.Liveness.MeansFiring requires DEPOSIT_FULL_FRACTION > depositRampStart). -/
+def DEPOSIT_FULL_NUM : Nat := 90
 def DEPOSIT_FULL_DEN : Nat := 100
 
 /-- `DISCARD_HIGH_FRACTION = 0.85` (guards.py:19). -/

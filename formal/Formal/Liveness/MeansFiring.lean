@@ -240,35 +240,33 @@ theorem _fires_depositFull_implies_depositInventory_positive (s : State) :
   obtain ⟨⟨⟨_, hmax⟩, hused⟩, _⟩ := h
   have hmax_ne : s.inventoryMax ≠ 0 := Nat.pos_iff_ne_zero.mp hmax
   have hmax_pos_rat : (0 : Rat) < (s.inventoryMax : Rat) := by exact_mod_cast hmax
-  -- usedFractionRat s ≥ 80/100
-  have huf_ge : usedFractionRat s ≥ 80 / 100 := by
+  -- usedFractionRat s ≥ 90/100 (DEPOSIT_FULL_FRACTION raised to 0.90 per spec
+  -- 2026-06-07, kept strictly above the 0.85 deposit ramp start).
+  have huf_ge : usedFractionRat s ≥ 90 / 100 := by
+    have h2 : (90 : Nat) * s.inventoryMax ≤ 100 * s.inventoryUsed := by
+      unfold DEPOSIT_FULL_DEN DEPOSIT_FULL_NUM at hused; omega
+    have h3 : (90 * s.inventoryMax : Rat) ≤ (100 * s.inventoryUsed : Rat) := by
+      exact_mod_cast h2
     unfold usedFractionRat
     simp [hmax_ne]
     rw [div_le_div_iff₀ (by norm_num : (0 : Rat) < 100) hmax_pos_rat]
-    have h1 : DEPOSIT_FULL_DEN * s.inventoryUsed ≥ DEPOSIT_FULL_NUM * s.inventoryMax := hused
-    unfold DEPOSIT_FULL_DEN DEPOSIT_FULL_NUM at h1
-    have h2 : 80 * s.inventoryMax ≤ 100 * s.inventoryUsed := by omega
-    have h3 : (80 * s.inventoryMax : Rat) ≤ (100 * s.inventoryUsed : Rat) := by exact_mod_cast h2
     linarith
-  unfold depositInventoryValue depositRampStart depositMaxValue
-  simp
-  -- After simp, target uses `2⁻¹` form. Build positivity from huf_ge.
-  have hhalf_eq : (2⁻¹ : Rat) = 1 / 2 := by norm_num
-  have hnot_lt : ¬ usedFractionRat s < (2⁻¹ : Rat) := by
-    rw [hhalf_eq]; intro hlt
-    have : (1 : Rat) / 2 ≤ 80 / 100 := by norm_num
+  -- ramp start 17/20 (= 0.85) < 90/100 (= 0.90), so the guard fraction puts us
+  -- strictly above the ramp and the value branch is strictly positive.
+  have hnot_lt : ¬ usedFractionRat s < depositRampStart := by
+    unfold depositRampStart
+    intro hlt
+    have : (17 : Rat) / 20 ≤ 90 / 100 := by norm_num
     linarith
-  simp [hnot_lt]
-  -- Now: 0 < (uf - 2⁻¹) / (1 - 2⁻¹) * 80
-  have huf_gt : usedFractionRat s > 2⁻¹ := by
-    rw [hhalf_eq]
-    have : (1 : Rat) / 2 < 80 / 100 := by norm_num
+  unfold depositInventoryValue
+  rw [if_neg (by simp), if_neg (by simp), if_neg hnot_lt]
+  unfold depositMaxValue
+  have huf_gt : usedFractionRat s > (17 / 20 : Rat) := by
+    have : (17 : Rat) / 20 < 90 / 100 := by norm_num
     linarith
-  have hnum_pos : usedFractionRat s - 2⁻¹ > 0 := by linarith
-  have hden_pos : (1 : Rat) - 2⁻¹ > 0 := by norm_num
+  have hnum_pos : usedFractionRat s - 17 / 20 > 0 := by linarith
+  have hden_pos : (1 : Rat) - 17 / 20 > 0 := by norm_num
   have h80 : (0 : Rat) < 80 := by norm_num
-  -- Goal may be `0 < (uf - 2⁻¹) / (1 - 2⁻¹) * 80` or factored —
-  -- close it by positivity.
   positivity
 
 /-- DISCARD_HIGH: `_fires .discardHigh s` ⇒

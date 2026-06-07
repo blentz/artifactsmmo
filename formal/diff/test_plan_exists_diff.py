@@ -229,10 +229,11 @@ def _state_BANK_UNLOCK():
 
 def _state_DEPOSIT_FULL():
     gd = _base_game_data()
-    # 17 / 20 = 85% > DEPOSIT_FULL_FRACTION (80%); an unknown item (cap=0)
-    # so select_bank_deposits returns it (junk → bankable).
+    # 18 / 20 = 90% >= DEPOSIT_FULL_FRACTION (0.90, raised from 0.80 per spec
+    # 2026-06-07 to stay strictly above the 0.85 deposit ramp); an unknown item
+    # (cap=0) so select_bank_deposits returns it (junk → bankable).
     state = _base_state(
-        inventory={"junk": 17},
+        inventory={"junk": 18},
         inventory_max=20,
         bank_items={},  # bank known/empty
     )

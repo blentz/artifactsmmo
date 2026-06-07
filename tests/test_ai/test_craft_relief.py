@@ -248,8 +248,10 @@ class TestCraftReliefGuard:
         state = make_state(
             task_code="ash_plank", task_type="items",
             task_progress=3, task_total=13,
-            inventory={"ash_wood": 80, "gold_ore": 10},
-            inventory_max=104,  # 86.5%
+            inventory={"ash_wood": 84, "gold_ore": 10},
+            # 94/104 = 90.4% >= DEPOSIT_FULL_FRACTION (0.90, raised from 0.80
+            # per spec 2026-06-07 to stay strictly above the 0.85 deposit ramp).
+            inventory_max=104,
         )
         guards = active_guards(state, gd, None, _ctx())
         assert GuardKind.CRAFT_RELIEF in guards

@@ -23,10 +23,13 @@ CRAFT_RELIEF_FRACTION = 0.70
 from current inventory, the CRAFT_RELIEF guard fires AHEAD of DEPOSIT_FULL.
 Catches the case where raw materials would otherwise be banked or deleted
 while the bot was one Craft action from converting them into task progress."""
-DEPOSIT_FULL_FRACTION = 0.85
+DEPOSIT_FULL_FRACTION = 0.90
 """Space-driven (spec 2026-06-07): deposit pressure only appears near-full so
-the player uses most of the bag. Matches DepositInventoryGoal._RAMP_START — a
-guard firing below the goal's ramp would map to a value-0 goal."""
+the player uses most of the bag. Kept STRICTLY ABOVE
+DepositInventoryGoal._RAMP_START (0.85) so the DEPOSIT_FULL guard only fires
+where the deposit goal already has strictly-positive value — the proven
+liveness invariant `fires(DEPOSIT_FULL) ⇒ depositInventoryValue > 0`
+(Formal.Liveness.MeansFiring) requires DEPOSIT_FULL_FRACTION > _RAMP_START."""
 DISCARD_HIGH_FRACTION = 0.85
 DISCARD_CRITICAL_FRACTION = 0.95
 MAX_ACHIEVABLE_GAP = 5
