@@ -1412,6 +1412,35 @@ def runCheapestPath (args : Array Json) : Json :=
     , ("total_cycles", Json.num (Int.ofNat plan.totalCycles))
     ]
 
+/-- Compute one items_task_run result using the SAME proved
+`Formal.Liveness.ItemsTaskRun.trade` / `applyRun`.
+
+Models the live `TaskTradeAction` (held/progress projection) as `quantity`-fold
+application of the proven per-unit `trade`: from `RunState{held, progress,
+total}`, fold `quantity` copies of `trade` via `applyRun … (List.replicate
+quantity trade)`. Over the reachable trading domain (`held >= quantity ≥ 1` and
+`progress + quantity ≤ total`) every per-unit trade fires, so the result is
+`held - quantity`, `progress + quantity` — exactly what the live
+`task_trade_step` computes.
+
+args layout (4 Ints): `[held, progress, total, quantity]`. Emits the post-state
+`{"held": Int, "progress": Int}` and the applicability flag `{"applicable":
+Bool}` (whether the per-unit `trade` is fireable at the start state, i.e.
+`0 < held ∧ progress < total`). -/
+def runItemsTaskRun (args : Array Json) : Json :=
+  let held := (intArg args 0).toNat
+  let progress := (intArg args 1).toNat
+  let total := (intArg args 2).toNat
+  let quantity := (intArg args 3).toNat
+  let s : Formal.Liveness.ItemsTaskRun.RunState :=
+    { held := held, progress := progress, total := total }
+  let post := Formal.Liveness.ItemsTaskRun.applyRun s
+    (List.replicate quantity Formal.Liveness.ItemsTaskRun.trade)
+  let fireable := decide (0 < s.held ∧ s.progress < s.total)
+  Json.mkObj [("held", Json.num (Int.ofNat post.held)),
+              ("progress", Json.num (Int.ofNat post.progress)),
+              ("applicable", Json.bool fireable)]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -1531,6 +1560,8 @@ def runOne (item : Json) : Json :=
     runWinnableCascade args
   else if kind == "cheapest_path" then
     runCheapestPath args
+  else if kind == "items_task_run" then
+    runItemsTaskRun args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

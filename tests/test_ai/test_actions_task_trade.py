@@ -45,11 +45,36 @@ class TestTaskTradeAction:
         state = make_state(task_code="iron_ore", task_type="items", inventory={"iron_ore": 2})
         assert a.is_applicable(state, gd) is False
 
+    def test_not_applicable_when_quantity_is_zero(self):
+        # The core's quantity >= 1 guard: a degenerate empty trade is refused
+        # even with ample inventory and room (held > 0, progress < total).
+        a = TaskTradeAction(code="iron_ore", quantity=0, taskmaster_location=(1, 2))
+        gd = make_gd()
+        state = make_state(
+            task_code="iron_ore", task_type="items",
+            task_progress=0, task_total=20, inventory={"iron_ore": 10},
+        )
+        assert a.is_applicable(state, gd) is False
+
     def test_applicable_with_matching_items_task_and_inventory(self):
         a = TaskTradeAction(code="iron_ore", quantity=5, taskmaster_location=(1, 2))
         gd = make_gd()
-        state = make_state(task_code="iron_ore", task_type="items", inventory={"iron_ore": 10})
+        state = make_state(
+            task_code="iron_ore", task_type="items",
+            task_progress=0, task_total=20, inventory={"iron_ore": 10},
+        )
         assert a.is_applicable(state, gd) is True
+
+    def test_not_applicable_when_progress_already_complete(self):
+        # The goal stop guard (progress >= total) is modeled in the core so the
+        # live action never over-trades past total (ItemsTaskRun.trade_stuck_at_total).
+        a = TaskTradeAction(code="iron_ore", quantity=5, taskmaster_location=(1, 2))
+        gd = make_gd()
+        state = make_state(
+            task_code="iron_ore", task_type="items",
+            task_progress=20, task_total=20, inventory={"iron_ore": 10},
+        )
+        assert a.is_applicable(state, gd) is False
 
     def test_apply_decrements_inventory_and_advances_task(self):
         a = TaskTradeAction(code="iron_ore", quantity=5, taskmaster_location=(1, 2))

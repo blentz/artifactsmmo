@@ -45,6 +45,7 @@ BANK_EXPANSION_TIMING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_exp
 EVENT_WINDOW_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "event_availability.py"
 COST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "cost_core.py"
 NPC_BUY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "npc_buy_core.py"
+TASK_TRADE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "task_trade_core.py"
 APPLY_MOVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "movement.py"
 APPLY_EQUIP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "equip.py"
 APPLY_CLAIM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "claim.py"
@@ -270,9 +271,9 @@ REALIZABLE_LOADOUT_MUTATIONS = [
     # slots then see the current code as physically unspoken-for and can
     # duplicate it, violating Property 1 (output realizability).
     ("realizable_loadout: drop _claim(current_code) on keep-current",
-     "        elif _effective_available(current_code) >= 1:\n"
+     "        elif current_code is not None and _effective_available(current_code) >= 1:\n"
      "            _claim(current_code)",
-     "        elif _effective_available(current_code) >= 1:\n"
+     "        elif current_code is not None and _effective_available(current_code) >= 1:\n"
      "            pass"),
     # Phase-15 new mutation C: swap weapon_score and armor_score per slot.
     # weapon_slot uses armor_score (defense-oriented) and the rest use
@@ -418,7 +419,7 @@ STRATEGY_MUTATIONS = [
     # obtain leaf is wrongly returned as the actionable step (a node with no real
     # action). The actionable-correctness contract (obtain ⇒ producible) catches it.
     ("strategy: actionable_step drop producible check",
-     "            if isinstance(node, ObtainItem) and not _producible(node.code, game_data):\n"
+     "            if isinstance(node, ObtainItem) and not _producible(node.code, state, game_data):\n"
      "                return None\n"
      "            return node",
      "            return node"),
@@ -649,9 +650,9 @@ SCALAR_CORE_MUTATIONS = [
     # disagrees bit-for-bit with the Lean Rat oracle on inputs with denominators
     # that aren't powers of two).
     ("scalar_core: float-seed skill_xp_component (breaks byte-equivalence on Fraction inputs)",
-     "    skill_xp_component = 0\n"
+     "    skill_xp_component: Any = 0\n"
      "    for skill_name, delta in skill_xp.items():",
-     "    skill_xp_component = 0.0\n"
+     "    skill_xp_component: Any = 0.0\n"
      "    for skill_name, delta in skill_xp.items():"),
 ]
 
@@ -1004,6 +1005,7 @@ _ALL_SRCS = [
     EVENT_WINDOW_SRC,
     COST_CORE_SRC,
     NPC_BUY_CORE_SRC,
+    TASK_TRADE_CORE_SRC,
     APPLY_MOVE_SRC, APPLY_EQUIP_SRC, APPLY_CLAIM_SRC,
     APPLY_REST_SRC, APPLY_FIGHT_SRC, APPLY_BANK_EXPANSION_SRC,
     WITHDRAW_ITEM_SRC, UNEQUIP_SRC, TASK_EXCHANGE_SRC, TASK_CANCEL_SRC,
@@ -1098,6 +1100,39 @@ GATHER_APPLY_MUTATIONS = [
     ("gather_apply: is_applicable >= -> > (off-by-one on slot floor)",
      "    return (inv.cap - inv.used) >= min_free",
      "    return (inv.cap - inv.used) > min_free"),
+]
+
+
+# task_trade_core mutations -- old strings matched to current task_trade_core.py.
+# Each perturbs the live held↔progress trade transition so the Python result
+# diverges from the proven `quantity`-fold `ItemsTaskRun.trade` oracle. Killed by
+# formal/diff/test_items_task_run_diff.py.
+TASK_TRADE_CORE_MUTATIONS = [
+    # Drop the held decrement: progress advances but inventory is not consumed
+    # (the exact "free progress" hole the coupled model forbids). The diff pins
+    # new_held == held - quantity against the oracle.
+    ("task_trade_core: drop held decrement (held unchanged)",
+     "    return (held - quantity, progress + quantity)",
+     "    return (held, progress + quantity)"),
+    # Drop the progress increment: inventory is consumed but progress stalls.
+    # The diff pins new_progress == progress + quantity.
+    ("task_trade_core: drop progress increment (progress unchanged)",
+     "    return (held - quantity, progress + quantity)",
+     "    return (held - quantity, progress)"),
+    # Swap +/- on the transition: held grows, progress shrinks (sign inversion).
+    ("task_trade_core: swap +/- (held + quantity, progress - quantity)",
+     "    return (held - quantity, progress + quantity)",
+     "    return (held + quantity, progress - quantity)"),
+    # Weaken the action guard: drop the held >= quantity check (always-true held
+    # side). The held-below-quantity boundary test fires.
+    ("task_trade_core: drop held>=quantity guard",
+     "    if held < quantity:\n        return False",
+     "    if held < quantity:\n        return True"),
+    # Drop the goal stop guard: progress < total becomes always-true, so the
+    # action would over-trade past total. The progress-at-total test fires.
+    ("task_trade_core: drop progress<total goal guard",
+     "    return progress < total",
+     "    return True"),
 ]
 
 
@@ -1515,6 +1550,9 @@ APPLY_FIGHT_MUTATIONS = [
         "            y=dest[1],\n"
         "            cooldown_expires=None,\n"
         "            task_progress=new_progress,\n"
+        "            task_lifecycle_phase=derive_task_lifecycle_phase(\n"
+        "                state.task_code, new_progress, state.task_total\n"
+        "            ),\n"
         "        )",
         "        return WorldState(\n"
         "            character=state.character,\n"
@@ -1771,6 +1809,7 @@ TASK_CANCEL_MUTATIONS = [
      "            task_type=None,\n"
      "            task_progress=0,\n"
      "            task_total=0,\n"
+     "            task_lifecycle_phase=TaskLifecyclePhase.NONE,\n"
      "        )",
      "        return dataclasses.replace(\n"
      "            state,\n"
@@ -1781,6 +1820,7 @@ TASK_CANCEL_MUTATIONS = [
      "            task_type=None,\n"
      "            task_progress=0,\n"
      "            task_total=0,\n"
+     "            task_lifecycle_phase=TaskLifecyclePhase.NONE,\n"
      "        )"),
 ]
 
@@ -2195,6 +2235,8 @@ def main() -> int:
               "formal/diff/test_action_cost_nonneg_diff.py", survivors)
     run_group(NPC_BUY_CORE_SRC, NPC_BUY_MUTATIONS,
               "formal/diff/test_npc_buy_inventory_diff.py", survivors)
+    run_group(TASK_TRADE_CORE_SRC, TASK_TRADE_CORE_MUTATIONS,
+              "formal/diff/test_items_task_run_diff.py", survivors)
     run_group(APPLY_MOVE_SRC, APPLY_MOVE_MUTATIONS,
               "formal/diff/test_apply_baseline_diff.py", survivors)
     run_group(APPLY_EQUIP_SRC, APPLY_EQUIP_MUTATIONS,

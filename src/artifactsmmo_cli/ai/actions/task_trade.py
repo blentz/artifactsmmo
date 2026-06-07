@@ -12,6 +12,10 @@ from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.movement import MoveAction
+from artifactsmmo_cli.ai.actions.task_trade_core import (
+    task_trade_applicable,
+    task_trade_step,
+)
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
@@ -33,17 +37,22 @@ class TaskTradeAction(Action):
             return False
         if state.task_type != "items" or state.task_code != self.code:
             return False
-        return state.inventory.get(self.code, 0) >= self.quantity
+        held = state.inventory.get(self.code, 0)
+        return task_trade_applicable(
+            held, self.quantity, state.task_progress, state.task_total
+        )
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         new_inventory = dict(state.inventory)
-        remaining = new_inventory.get(self.code, 0) - self.quantity
+        held = new_inventory.get(self.code, 0)
+        remaining, new_progress = task_trade_step(
+            held, state.task_progress, self.quantity
+        )
         if remaining <= 0:
             new_inventory.pop(self.code, None)
         else:
             new_inventory[self.code] = remaining
         dest = self.taskmaster_location or (state.x, state.y)
-        new_progress = state.task_progress + self.quantity
         return dataclasses.replace(
             state,
             x=dest[0],
