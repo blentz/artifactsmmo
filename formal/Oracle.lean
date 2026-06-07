@@ -14,6 +14,7 @@ open Formal.CyclesForProgress
 open Formal.GatherApply
 open Formal.ActionCostNonneg
 open Formal.InventoryChainSafe
+open Formal.InventoryProfile
 open Formal.Phase7Invariants
 open Formal.StoreWarmup
 open Formal.WinnableCascade
@@ -1305,6 +1306,25 @@ def runInventoryChainSafe (args : Array Json) : Json :=
                   ("post_used", Json.num (Int.ofNat post.used)),
                   ("cap", Json.num (Int.ofNat post.cap))]
 
+/-- Compute one inventory_profile result using the SAME proved `overstockExcess`.
+
+    args layout (7 ints): `[held, profileTarget, usefulFloor, used, cap,
+    watermarkNum, watermarkDen]`. Emits the overstock excess and the
+    under-pressure flag (the two observable outputs of the space-driven core,
+    mirroring `overstock_excess` in inventory_caps.py). -/
+def runInventoryProfile (args : Array Json) : Json :=
+  let held := intArg args 0
+  let profileTarget := intArg args 1
+  let usefulFloor := intArg args 2
+  let used := intArg args 3
+  let cap := intArg args 4
+  let wnum := intArg args 5
+  let wden := intArg args 6
+  let excess := Formal.InventoryProfile.overstockExcess held profileTarget usefulFloor
+                  used cap wnum wden
+  let pressure := Formal.InventoryProfile.underPressure used cap wnum wden
+  Json.mkObj [("excess", Json.num excess), ("under_pressure", Json.bool pressure)]
+
 /-- Compute one phase7_invariants result. Three sub-queries:
 * `0` = baseValue: `[0, totalNeeded, effectiveNum, effectiveDen]` → `{value_num, value_den}`
 * `1` = isApplicable: `[1, invQty, charLevel, hasStats(0/1), itemType, level,
@@ -1574,6 +1594,8 @@ def runOne (item : Json) : Json :=
     runActionCostNonneg args
   else if kind == "inventory_chain_safe" then
     runInventoryChainSafe args
+  else if kind == "inventory_profile" then
+    runInventoryProfile args
   else if kind == "phase7_invariants" then
     runPhase7Invariants args
   else if kind == "store_warmup" then

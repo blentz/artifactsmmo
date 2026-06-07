@@ -341,6 +341,25 @@ open Formal.WeightedRemaining in
 #print axioms Formal.InventoryChainSafe.task_cancel_boundary_witness
 #print axioms Formal.InventoryChainSafe.task_cancel_no_coin_refused
 #print axioms Formal.InventoryChainSafe.task_cancel_no_task_refused
+-- InventoryChainSafe high-watermark deposit safety (spec 2026-06-07):
+#print axioms Formal.InventoryChainSafe.deposit_fires_before_overflow
+#print axioms Formal.InventoryChainSafe.deposit_fires_before_overflow_at_85
+#print axioms Formal.InventoryChainSafe.deposit_fires_monotone
+#print axioms Formal.InventoryChainSafe.deposit_watermark_boundary_witness
+#print axioms Formal.InventoryChainSafe.gather_overflows_full_witness
+-- InventoryProfile (per-goal soft-target overstock core, spec 2026-06-07):
+#print axioms Formal.InventoryProfile.overstock_exact
+#print axioms Formal.InventoryProfile.no_overstock_below_watermark
+#print axioms Formal.InventoryProfile.space_driven_witness
+#print axioms Formal.InventoryProfile.profile_protection
+#print axioms Formal.InventoryProfile.overstock_zero_of_le_floor
+#print axioms Formal.InventoryProfile.profile_protection_witness
+#print axioms Formal.InventoryProfile.monotone_accumulation
+#print axioms Formal.InventoryProfile.held_after_shed_ge_floor
+#print axioms Formal.InventoryProfile.shed_idempotent
+#print axioms Formal.InventoryProfile.overstock_pos_iff
+#print axioms Formal.InventoryProfile.protectedFloor_ge_profile
+#print axioms Formal.InventoryProfile.protectedFloor_ge_useful
 #print axioms Formal.Phase7Invariants.baseValue_nonpos_zero
 #print axioms Formal.Phase7Invariants.baseValue_pos_ge_one
 #print axioms Formal.Phase7Invariants.baseValue_nonneg

@@ -17,48 +17,60 @@ from tests.test_ai.fixtures import make_state
 
 
 class TestOverstockExcessCore:
-    """Pure space-driven overstock function.
+    """Pure space-driven overstock function (exact integer domain).
 
-    overstock_excess(held, profile_target, useful_floor, used_fraction,
-    watermark) returns held - max(profile_target, useful_floor) when held
-    exceeds that floor AND used_fraction >= watermark; else 0.
+    overstock_excess(held, profile_target, useful_floor, used, cap,
+    watermark_num, watermark_den) returns held - max(profile_target,
+    useful_floor) when held exceeds that floor AND
+    used/cap >= watermark_num/watermark_den (cross-multiplied); else 0.
+    Watermark defaults to 17/20 (0.85).
     """
 
     def test_below_watermark_never_overstock(self):
-        # Free slots (low pressure) → nothing is overstock even far over floor.
+        # Free slots (low pressure: 1/20 = 5% < 85%) → nothing overstock.
         assert overstock_excess(100, profile_target=0, useful_floor=0,
-                                used_fraction=0.10, watermark=0.85) == 0
+                                used=1, cap=20) == 0
 
     def test_at_or_below_profile_target_never_overstock(self):
         # held <= profile_target → never overstock, regardless of pressure.
         assert overstock_excess(10, profile_target=10, useful_floor=0,
-                                used_fraction=1.0, watermark=0.85) == 0
+                                used=20, cap=20) == 0
         assert overstock_excess(5, profile_target=10, useful_floor=0,
-                                used_fraction=1.0, watermark=0.85) == 0
+                                used=20, cap=20) == 0
 
     def test_over_floor_under_pressure_is_excess(self):
-        # held 30 > max(target 10, floor 5) = 10, pressure high → excess 20.
+        # held 30 > max(target 10, floor 5) = 10, pressure 18/20=90% → excess 20.
         assert overstock_excess(30, profile_target=10, useful_floor=5,
-                                used_fraction=0.90, watermark=0.85) == 20
+                                used=18, cap=20) == 20
 
     def test_useful_floor_binds_when_higher_than_profile(self):
         # useful_floor 12 > profile 3 → floor is 12 → excess 8.
         assert overstock_excess(20, profile_target=3, useful_floor=12,
-                                used_fraction=1.0, watermark=0.85) == 8
+                                used=20, cap=20) == 8
 
     def test_profile_floor_binds_when_higher_than_useful(self):
         # profile 25 > useful_floor 5 → floor is 25 → 20 held not overstock.
         assert overstock_excess(20, profile_target=25, useful_floor=5,
-                                used_fraction=1.0, watermark=0.85) == 0
+                                used=20, cap=20) == 0
 
     def test_exactly_at_watermark_is_pressure(self):
-        # used_fraction == watermark counts as pressure (>=).
+        # used/cap == watermark (17/20) counts as pressure (>=).
         assert overstock_excess(10, profile_target=0, useful_floor=0,
-                                used_fraction=0.85, watermark=0.85) == 10
+                                used=17, cap=20) == 10
+
+    def test_just_below_watermark_not_pressure(self):
+        # 16/20 = 80% < 85% watermark → not pressure → no overstock.
+        assert overstock_excess(10, profile_target=0, useful_floor=0,
+                                used=16, cap=20) == 0
 
     def test_zero_held_never_overstock(self):
         assert overstock_excess(0, profile_target=0, useful_floor=0,
-                                used_fraction=1.0, watermark=0.85) == 0
+                                used=20, cap=20) == 0
+
+    def test_zero_cap_never_overstock(self):
+        # No capacity → no pressure → no overstock (avoids div-by-zero).
+        assert overstock_excess(10, profile_target=0, useful_floor=0,
+                                used=0, cap=0) == 0
 
 
 class TestInventoryProfile:
