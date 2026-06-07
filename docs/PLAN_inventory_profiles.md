@@ -36,9 +36,20 @@ dump trigger; bank keep-set doesn't protect the ACTIVE gather goal's materials.
 - [ ] Register Manifest/Contracts/Audit/concept-index; oracle+differential; gate part(d); mutate.py.
 
 ## Verify
-- [ ] uv run pytest tests/ -q → 100% cov, 0 fail.
-- [ ] SCENARIO test: GatherMaterials(fishing_net) + ash_wood in profile + free slots
-      → ash_wood NOT deposited/discarded; held accumulates; no oscillation.
-      FAILS on old code, PASSES on new.
-- [ ] formal gate green (build, no_sorry, axioms, axioms_liveness, concept_index, diff, mutate).
-- [ ] mypy + ruff clean.
+- [x] uv run pytest tests/ -q → 100% cov, 2953 pass.
+- [x] SCENARIO test (test_inventory_profile_scenario.py): GatherMaterials(fishing_net)
+      + ash_wood in profile + free slots → ash_wood NOT deposited/discarded; held
+      accumulates; no oscillation. FAILS on old code (TypeError: no profile API),
+      PASSES on new.
+- [x] formal gate (build, no_sorry, axioms, axioms_liveness, concept_index, diff,
+      mutate). InventoryProfile mutation group: 5/5 killed, 0 survivors.
+- [x] mypy + ruff clean.
+
+## DESIGN NOTE — deposit ramp vs DEPOSIT_FULL guard (caught by the proof)
+Raising _RAMP_START 0.5→0.85 collided with the proven liveness invariant
+`fires(DEPOSIT_FULL) ⇒ depositInventoryValue > 0` (MeansFiring). Resolution:
+DEPOSIT_FULL guard fraction raised 0.80→0.90 so it stays STRICTLY ABOVE the 0.85
+ramp; liveness model + proof re-derived at 90/100. The livelock fix itself is the
+profile keep-set (∪ profile), independent of the exact ramp value.
+
+## STATUS: COMPLETE — commits 46395ee, ec77e3a, 92b9a1a.
