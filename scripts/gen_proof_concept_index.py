@@ -14,7 +14,9 @@ from artifactsmmo_cli.audit.proof_tags import (
 
 FORMAL = Path("formal/Formal")
 INDEX = Path("docs/behavioral_completeness/PROOF_CONCEPT_INDEX.md")
-_MANIFEST_RE = re.compile(r"#check @Formal\.([A-Za-z0-9_.]+?)\.[A-Za-z0-9_']+")
+# Greedy module group so nested modules (e.g. Formal.Liveness.Foo.thm ->
+# "Liveness.Foo") are captured whole; the trailing segment is the theorem name.
+_MANIFEST_RE = re.compile(r"#check @Formal\.([A-Za-z0-9_.]+)\.[A-Za-z0-9_']+")
 
 
 def _module_name(path: Path) -> str:

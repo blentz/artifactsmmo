@@ -730,3 +730,10 @@ open Formal.PriorityBand
 #check @Formal.GearLatch.set_on_loss
 #check @Formal.GearLatch.clear_iff_no_upgrade
 #check @Formal.GearLatch.monotone_until_clear
+
+-- ItemsTaskTermination (items-task keepSet/batchK conformance models —
+-- Task 1 of tasks-termination; capstone added in a later task):
+#check @Formal.Liveness.ItemsTaskTermination.keepSet_contains_task_item     -- safety
+#check @Formal.Liveness.ItemsTaskTermination.keepSet_contains_recipe_inputs  -- safety
+#check @Formal.Liveness.ItemsTaskTermination.batchK_ge_one                   -- totality
+#check @Formal.Liveness.ItemsTaskTermination.batchK_le_remaining             -- safety

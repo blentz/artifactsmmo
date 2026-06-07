@@ -34,6 +34,7 @@ import Formal.Liveness.TaskInfeasibility
 import Formal.Liveness.TaskCompleteReachable
 import Formal.Liveness.SkillGapClosure
 import Formal.Liveness.RecipeChainClosure
+import Formal.Liveness.ItemsTaskTermination
 import Formal.Liveness.GameDataFixture
 import Formal.Liveness.LevelFiftyReachable
 import Formal.Liveness.LifecycleBound
@@ -479,3 +480,11 @@ open Formal.Liveness.StateFieldGapSemantics
 #print axioms applyActionKind_pendingItemCodes_invariant
 #print axioms applyActionKind_npcStock_invariant
 #print axioms applyActionKind_eventSpawns_invariant
+
+-- Task 1 (tasks-termination): items-task keepSet/batchK conformance models.
+-- Core-only (no Mathlib); listed here so the liveness axiom gate covers them.
+open Formal.Liveness.ItemsTaskTermination
+#print axioms keepSet_contains_task_item
+#print axioms keepSet_contains_recipe_inputs
+#print axioms batchK_ge_one
+#print axioms batchK_le_remaining
