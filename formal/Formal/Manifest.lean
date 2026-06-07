@@ -279,6 +279,14 @@ open Formal.PriorityBand
 #check @Formal.CraftVsBuy.buy_stable_under_more_gold     -- monotonicity: ↑gold keeps buy
 #check @Formal.CraftVsBuy.buy_stable_under_lower_buy     -- monotonicity: ↓buy cost keeps buy
 #check @Formal.CraftVsBuy.buy_preserves_reserve          -- safety: buy ⇒ post-buy gold ≥ reserve
+-- NearestTile required roles (Manhattan-nearest tile, lex (manhattan,x,y) over Int coords):
+#check @Formal.NearestTile.nearestTile_nil                    -- totality: none ⇔ empty
+#check @Formal.NearestTile.nearestTile_total                  -- totality: nonempty ⇒ isSome
+#check @Formal.NearestTile.nearestTile_mem                    -- safety: winner is a real tile
+#check @Formal.NearestTile.nearestTile_min                    -- dominance: winner's distance ≤ all
+#check @Formal.NearestTile.nearestTile_deterministic_lexmin   -- determinism: lex-min closes apply/execute
+#check @Formal.NearestTile.cost_monotone_in_distance          -- monotonicity: cost = 6 + dist monotone
+#check @Formal.NearestTile.nearestTile_least_cost             -- corollary: winner is least-cost destination
 -- ConsumableSelection required roles (overheal-aware consumable lex-argmin over Int):
 #check @Formal.ConsumableSelection.select_none_iff_no_usable        -- totality: none ⇔ no usable
 #check @Formal.ConsumableSelection.select_mem                       -- winner is a usable candidate

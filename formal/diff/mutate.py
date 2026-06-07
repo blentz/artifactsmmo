@@ -37,6 +37,7 @@ CYCLES_FOR_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" 
 GATHER_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gather_apply_core.py"
 GATHER_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_selection.py"
 CRAFT_VS_BUY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_vs_buy.py"
+NEAREST_TILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "nearest_tile.py"
 CONSUMABLE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_selection.py"
 BANK_EXPANSION_TIMING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_expansion_timing.py"
 EVENT_WINDOW_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "event_availability.py"
@@ -994,6 +995,7 @@ _ALL_SRCS = [
     GATHER_APPLY_SRC,
     GATHER_SELECTION_SRC,
     CRAFT_VS_BUY_SRC,
+    NEAREST_TILE_SRC,
     CONSUMABLE_SELECTION_SRC,
     BANK_EXPANSION_TIMING_SRC,
     EVENT_WINDOW_SRC,
@@ -1168,6 +1170,40 @@ CRAFT_VS_BUY_MUTATIONS = [
      "    affordable = gold - total_price >= reserve",
      "    affordable = gold + total_price >= reserve"),
 ]
+
+# nearest_tile mutations -- old strings matched to current nearest_tile.py text.
+# Each perturbs the Manhattan metric or the lex (manhattan, x, y) tie-break so the
+# Python winner diverges from the Lean `nearestTile` oracle. Killed by
+# formal/diff/test_nearest_tile_diff.py.
+NEAREST_TILE_MUTATIONS = [
+    # Argmin -> argmax: pick the FARTHEST tile. Any list with two distinct keys
+    # diverges from the Lean lex-min.
+    ("nearest_tile: min -> max (argmin becomes argmax)",
+     "    return min(",
+     "    return max("),
+    # Drop the y-axis distance term: the metric ignores vertical distance, so two
+    # tiles equal in x-distance but differing in y now mis-rank.
+    ("nearest_tile: drop y-axis distance term",
+     "        key=lambda t: (abs(t[0] - origin_x) + abs(t[1] - origin_y), t[0], t[1]),",
+     "        key=lambda t: (abs(t[0] - origin_x), t[0], t[1]),"),
+    # Distance + -> -: subtract the y-distance instead of adding it, breaking the
+    # Manhattan metric whenever the y term is nonzero.
+    ("nearest_tile: distance + -> - (broken manhattan)",
+     "        key=lambda t: (abs(t[0] - origin_x) + abs(t[1] - origin_y), t[0], t[1]),",
+     "        key=lambda t: (abs(t[0] - origin_x) - abs(t[1] - origin_y), t[0], t[1]),"),
+    # Swap the x and y tie-break fields: on a distance tie the lex order now compares
+    # y before x, inverting the deterministic winner whenever x and y disagree.
+    ("nearest_tile: lex tie-break swap (y before x)",
+     "        key=lambda t: (abs(t[0] - origin_x) + abs(t[1] - origin_y), t[0], t[1]),",
+     "        key=lambda t: (abs(t[0] - origin_x) + abs(t[1] - origin_y), t[1], t[0]),"),
+    # Drop the lex tie-break entirely (constant second/third fields): two tiles tying
+    # on distance become order-ambiguous; Python `min` first-wins by list position,
+    # diverging from the Lean (x, y)-ordered tie-break — the apply/execute divergence.
+    ("nearest_tile: drop lex tie-break (constant fields)",
+     "        key=lambda t: (abs(t[0] - origin_x) + abs(t[1] - origin_y), t[0], t[1]),",
+     "        key=lambda t: (abs(t[0] - origin_x) + abs(t[1] - origin_y), 0, 0),"),
+]
+
 
 # consumable_selection mutations -- old strings matched to current
 # consumable_selection.py text. Each perturbs the overheal-aware lex key or the
@@ -2067,6 +2103,8 @@ def main() -> int:
               "formal/diff/test_gather_selection_diff.py", survivors)
     run_group(CRAFT_VS_BUY_SRC, CRAFT_VS_BUY_MUTATIONS,
               "formal/diff/test_craft_vs_buy_diff.py", survivors)
+    run_group(NEAREST_TILE_SRC, NEAREST_TILE_MUTATIONS,
+              "formal/diff/test_nearest_tile_diff.py", survivors)
     run_group(CONSUMABLE_SELECTION_SRC, CONSUMABLE_SELECTION_MUTATIONS,
               "formal/diff/test_consumable_selection_diff.py", survivors)
     run_group(BANK_EXPANSION_TIMING_SRC, BANK_EXPANSION_TIMING_MUTATIONS,

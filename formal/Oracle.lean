@@ -17,6 +17,7 @@ open Formal.InventoryChainSafe
 open Formal.Phase7Invariants
 open Formal.StoreWarmup
 open Formal.WinnableCascade
+open Formal.NearestTile
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
 def runCalculatePath (sx sy ex ey : Int) : Json :=
@@ -1048,6 +1049,25 @@ def runCraftVsBuy (args : Array Json) : Json :=
     | Formal.CraftVsBuy.Method.craft => 0
   Json.mkObj [("method", Json.num code)]
 
+/-- Compute one nearest_tile result using the SAME proved
+`Formal.NearestTile.nearestTile`.
+
+args layout: `[originX, originY, N, x0, y0, x1, y1, ...]` — the origin coords, the
+tile count `N`, then `N` `(x, y)` Int pairs. Builds the `List Tile`, runs the
+Manhattan-lex-argmin selector, and emits the selected tile's `x`/`y` (with
+`present = false` when the list is empty, mirroring `Option.none`). -/
+def runNearestTile (args : Array Json) : Json :=
+  let originX := intArg args 0
+  let originY := intArg args 1
+  let n := (intArg args 2).toNat
+  let tiles : List Formal.NearestTile.Tile :=
+    (List.range n).map (fun k =>
+      let base := 3 + 2 * k
+      (intArg args base, intArg args (base + 1)))
+  match Formal.NearestTile.nearestTile originX originY tiles with
+  | some t => Json.mkObj [("present", Json.bool true), ("x", Json.num t.1), ("y", Json.num t.2)]
+  | none => Json.mkObj [("present", Json.bool false), ("x", Json.num 0), ("y", Json.num 0)]
+
 /-- Compute one consumable_selection result using the SAME proved
 `Formal.ConsumableSelection.selectConsumable`.
 
@@ -1442,6 +1462,8 @@ def runOne (item : Json) : Json :=
     runGatherSelection args
   else if kind == "craft_vs_buy" then
     runCraftVsBuy args
+  else if kind == "nearest_tile" then
+    runNearestTile args
   else if kind == "consumable_selection" then
     runConsumableSelection args
   else if kind == "bank_expansion_timing" then

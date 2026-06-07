@@ -34,9 +34,9 @@ Column legend:
 - **Concept → player**: tile coordinates + content (monster/resource/workshop/bank/npc spawn) used to route movement (MapSchema)
 - **Strategic uses**: maps are the spatial index every gather/fight/craft action must resolve a destination against before moving (openapi schema MapSchema)
 - **Opportunity cost × tier**: free lookup at all tiers; T1 content is clustered near spawn so path cost is low, higher tiers (T4-T6) are farther so pathing/movement cost rises (content_tiers.md)
-- **Behavior coverage**: every action embeds a semantic MoveTo to its content tile; nearest-tile resolution is game_data.nearest_location (actions/movement_semantic.py, game_data.py)
-- **Proof coverage**: none — no module in the index is tagged `maps`; nearest_location is unproven (PROOF_CONCEPT_INDEX)
-- **Gap + policy**: THIN — act; movement is wired (MoveTo + nearest_location) but tile-routing/multi-layer traversal is unproven (synthesis)
+- **Behavior coverage**: every action embeds a semantic MoveTo to its content tile; nearest-tile resolution is the shared ai/nearest_tile.py primitive used by gathering/combat/movement_semantic and by MoveTo.apply+execute (actions/movement_semantic.py, ai/nearest_tile.py)
+- **Proof coverage**: NearestTile [safety, dominance, totality, monotonicity] — Manhattan-nearest lex-(manhattan,x,y) pick: winner is a real tile, distance ≤ all, deterministic lex-min (closes the MoveTo apply/execute divergence), cost = 6 + dist monotone so the pick IS GatherSelection's trusted distance input (PROOF_CONCEPT_INDEX). NOTE: this is the maps proof; CheapestPath is combat-XP path cost, NOT tile routing — do not cite it here.
+- **Gap + policy**: CLOSED for single-layer/no-obstacle/single-hop tile routing — Manhattan-nearest IS least-cost on the live movement model and is now proven + differential-locked (NearestTile). Honest limit: cross-layer A* / obstacle traversal stays out of scope (utils/pathfinding.py is CLI-only, deliberately unproven) (synthesis)
 
 ### monsters
 - **Player → concept**: read monster catalog/stats; engage indirectly via fight (openapi /monsters, /monsters/{code}, /my/{name}/action/fight)

@@ -699,6 +699,15 @@ open Formal.WeightedRemaining in
 #print axioms Formal.CraftVsBuy.buy_stable_under_lower_buy
 #print axioms Formal.CraftVsBuy.buy_preserves_reserve
 
+-- NearestTile (Manhattan-nearest tile, lex (manhattan, x, y) over Int coords)
+#print axioms Formal.NearestTile.nearestTile_nil
+#print axioms Formal.NearestTile.nearestTile_total
+#print axioms Formal.NearestTile.nearestTile_mem
+#print axioms Formal.NearestTile.nearestTile_min
+#print axioms Formal.NearestTile.nearestTile_deterministic_lexmin
+#print axioms Formal.NearestTile.cost_monotone_in_distance
+#print axioms Formal.NearestTile.nearestTile_least_cost
+
 -- ConsumableSelection (overheal-aware consumable lex-argmin over Int)
 #print axioms Formal.ConsumableSelection.select_none_iff_no_usable
 #print axioms Formal.ConsumableSelection.select_mem

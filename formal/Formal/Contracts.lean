@@ -31,6 +31,7 @@ import Formal.CyclesForProgress
 import Formal.GatherApply
 import Formal.GatherSelection
 import Formal.CraftVsBuy
+import Formal.NearestTile
 import Formal.ConsumableSelection
 import Formal.BankExpansionTiming
 import Formal.EventWindow
@@ -1990,6 +1991,43 @@ example : ∀ (a b b' p g r : Int),
 example : ∀ (a b p g r : Int),
     Formal.CraftVsBuy.cheaperAcquisition a b p g r = Formal.CraftVsBuy.Method.buy → g - p ≥ r :=
   @Formal.CraftVsBuy.buy_preserves_reserve
+
+/-! ### NearestTile role contracts (Manhattan-nearest tile, lex (manhattan, x, y)). -/
+
+-- nearestTile_nil: TOTALITY — none ⇔ empty tile list.
+example : ∀ (ox oy : Int) (cs : List Formal.NearestTile.Tile),
+    Formal.NearestTile.nearestTile ox oy cs = none ↔ cs = [] :=
+  @Formal.NearestTile.nearestTile_nil
+-- nearestTile_total: TOTALITY — a non-empty list always selects SOME tile.
+example : ∀ (ox oy : Int) {cs : List Formal.NearestTile.Tile}, cs ≠ [] →
+    (Formal.NearestTile.nearestTile ox oy cs).isSome :=
+  @Formal.NearestTile.nearestTile_total
+-- nearestTile_mem: SAFETY — the selected tile is a real element of the list.
+example : ∀ {ox oy : Int} {cs : List Formal.NearestTile.Tile} {t : Formal.NearestTile.Tile},
+    Formal.NearestTile.nearestTile ox oy cs = some t → t ∈ cs :=
+  @Formal.NearestTile.nearestTile_mem
+-- nearestTile_min: DOMINANCE — the winner's Manhattan distance is ≤ every tile's.
+example : ∀ {ox oy : Int} {cs : List Formal.NearestTile.Tile} {t : Formal.NearestTile.Tile},
+    Formal.NearestTile.nearestTile ox oy cs = some t →
+    ∀ u ∈ cs, Formal.NearestTile.manhattan ox oy t ≤ Formal.NearestTile.manhattan ox oy u :=
+  @Formal.NearestTile.nearestTile_min
+-- nearestTile_deterministic_lexmin: DETERMINISM — lex-min on ties (closes apply/execute).
+example : ∀ {ox oy : Int} {cs : List Formal.NearestTile.Tile} {t : Formal.NearestTile.Tile},
+    Formal.NearestTile.nearestTile ox oy cs = some t →
+    ∀ u ∈ cs, Formal.NearestTile.manhattan ox oy u = Formal.NearestTile.manhattan ox oy t →
+      (t.1 < u.1 ∨ (t.1 = u.1 ∧ t.2 ≤ u.2)) :=
+  @Formal.NearestTile.nearestTile_deterministic_lexmin
+-- cost_monotone_in_distance: MONOTONICITY — staticGatherCost = 6 + manhattan monotone.
+example : ∀ (ox oy : Int) (a b : Formal.NearestTile.Tile),
+    Formal.NearestTile.manhattan ox oy a ≤ Formal.NearestTile.manhattan ox oy b →
+    Formal.NearestTile.staticGatherCost ox oy a ≤ Formal.NearestTile.staticGatherCost ox oy b :=
+  @Formal.NearestTile.cost_monotone_in_distance
+-- nearestTile_least_cost: COST corollary — the winner is the least-cost destination.
+example : ∀ {ox oy : Int} {cs : List Formal.NearestTile.Tile} {t : Formal.NearestTile.Tile},
+    Formal.NearestTile.nearestTile ox oy cs = some t →
+    ∀ u ∈ cs,
+      Formal.NearestTile.staticGatherCost ox oy t ≤ Formal.NearestTile.staticGatherCost ox oy u :=
+  @Formal.NearestTile.nearestTile_least_cost
 
 /-! ### ConsumableSelection role contracts (overheal-aware consumable lex-argmin). -/
 
