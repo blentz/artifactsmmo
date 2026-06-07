@@ -70,7 +70,7 @@ def _install(graph, mp):
     def fake_prerequisites(node, state, game_data):
         return [graph.node(p) for p in graph.prereqs[graph.id_of(node)]]
 
-    def fake_producible(code, game_data):
+    def fake_producible(code, state, game_data):
         return graph.prod[int(code)]
 
     def make_is_sat(g):
