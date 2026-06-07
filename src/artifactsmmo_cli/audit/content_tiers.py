@@ -68,5 +68,7 @@ def derive_content_tiers(
     for code, lvl in resources.items():
         _tier(lvl).resources.append(code)
     for t in buckets.values():
-        t.items.sort(); t.monsters.sort(); t.resources.sort()
+        t.items.sort()
+        t.monsters.sort()
+        t.resources.sort()
     return [buckets[k] for k in sorted(buckets)]

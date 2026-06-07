@@ -6,7 +6,10 @@ import sys
 from pathlib import Path
 
 from artifactsmmo_cli.audit.proof_tags import (
-    build_index, cross_check, parse_tags, render_index_markdown,
+    build_index,
+    cross_check,
+    parse_tags,
+    render_index_markdown,
 )
 
 FORMAL = Path("formal/Formal")
@@ -33,14 +36,19 @@ def main(check: bool) -> int:
     rendered = render_index_markdown(rows)
     if check:
         if errors:
-            print("\n".join(errors)); return 1
+            print("\n".join(errors))
+            return 1
         if INDEX.exists() and INDEX.read_text() != rendered:
-            print("PROOF_CONCEPT_INDEX.md is stale — run gen_proof_concept_index.py"); return 1
-        print("proof-concept index OK"); return 0
+            print("PROOF_CONCEPT_INDEX.md is stale — run gen_proof_concept_index.py")
+            return 1
+        print("proof-concept index OK")
+        return 0
     INDEX.write_text(rendered)
     if errors:
-        print("\n".join(errors)); return 1
-    print(f"wrote {INDEX} ({len(rows)} modules)"); return 0
+        print("\n".join(errors))
+        return 1
+    print(f"wrote {INDEX} ({len(rows)} modules)")
+    return 0
 
 
 if __name__ == "__main__":
