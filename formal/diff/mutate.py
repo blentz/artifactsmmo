@@ -37,6 +37,7 @@ CYCLES_FOR_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" 
 GATHER_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gather_apply_core.py"
 GATHER_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_selection.py"
 CRAFT_VS_BUY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_vs_buy.py"
+EVENT_WINDOW_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "event_availability.py"
 COST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "cost_core.py"
 NPC_BUY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "npc_buy_core.py"
 APPLY_MOVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "movement.py"
@@ -991,6 +992,7 @@ _ALL_SRCS = [
     GATHER_APPLY_SRC,
     GATHER_SELECTION_SRC,
     CRAFT_VS_BUY_SRC,
+    EVENT_WINDOW_SRC,
     COST_CORE_SRC,
     NPC_BUY_CORE_SRC,
     APPLY_MOVE_SRC, APPLY_EQUIP_SRC, APPLY_CLAIM_SRC,
@@ -1161,6 +1163,35 @@ CRAFT_VS_BUY_MUTATIONS = [
     ("craft_vs_buy: affordability - -> + (wrong post-buy gold)",
      "    affordable = gold - total_price >= reserve",
      "    affordable = gold + total_price >= reserve"),
+]
+
+EVENT_WINDOW_MUTATIONS = [
+    # Flip the window check `>` to `>=`: at exactly remaining == travel+margin the
+    # window is too tight (no slack to arrive), but now it spuriously trades. The
+    # boundary cases in the diff fire.
+    ("event_window: window > -> >= (off-by-one on arrival margin)",
+     "return remaining > travel_seconds + EVENT_ARRIVAL_MARGIN_SECONDS",
+     "return remaining >= travel_seconds + EVENT_ARRIVAL_MARGIN_SECONDS"),
+    # Invert the window check `>` to `<`: the bot now trades EXACTLY when the
+    # window has too little time, inverting the reachability gate.
+    ("event_window: window > -> < (inverted reachability)",
+     "return remaining > travel_seconds + EVENT_ARRIVAL_MARGIN_SECONDS",
+     "return remaining < travel_seconds + EVENT_ARRIVAL_MARGIN_SECONDS"),
+    # Drop the arrival margin: the safety buffer disappears, so trips that can't
+    # actually finish before expiry now fire. Cases near the margin diverge.
+    ("event_window: drop arrival margin (+ -> -)",
+     "return remaining > travel_seconds + EVENT_ARRIVAL_MARGIN_SECONDS",
+     "return remaining > travel_seconds - EVENT_ARRIVAL_MARGIN_SECONDS"),
+    # Flip the inactive-event guard to return True: an event with no active
+    # window is now wrongly treated as tradeable. Inactive cases diverge.
+    ("event_window: inactive guard False -> True",
+     "        return False  # event not active",
+     "        return True  # event not active"),
+    # Drop the travel cost: distance no longer matters, so far merchants with a
+    # short window now spuriously trade. Nonzero-distance cases diverge.
+    ("event_window: drop travel cost (* -> * 0)",
+     "    travel_seconds = distance * EVENT_TRAVEL_SECONDS_PER_TILE",
+     "    travel_seconds = distance * 0"),
 ]
 
 
@@ -1954,6 +1985,8 @@ def main() -> int:
               "formal/diff/test_gather_selection_diff.py", survivors)
     run_group(CRAFT_VS_BUY_SRC, CRAFT_VS_BUY_MUTATIONS,
               "formal/diff/test_craft_vs_buy_diff.py", survivors)
+    run_group(EVENT_WINDOW_SRC, EVENT_WINDOW_MUTATIONS,
+              "formal/diff/test_event_window_diff.py", survivors)
     run_group(COST_CORE_SRC, COST_CORE_MUTATIONS,
               "formal/diff/test_action_cost_nonneg_diff.py", survivors)
     run_group(NPC_BUY_CORE_SRC, NPC_BUY_MUTATIONS,

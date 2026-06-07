@@ -31,6 +31,7 @@ import Formal.CyclesForProgress
 import Formal.GatherApply
 import Formal.GatherSelection
 import Formal.CraftVsBuy
+import Formal.EventWindow
 import Formal.NpcBuyInventory
 import Formal.InventoryChainSafe
 import Formal.ActionCostNonneg
@@ -1987,6 +1988,44 @@ example : ∀ (a b b' p g r : Int),
 example : ∀ (a b p g r : Int),
     Formal.CraftVsBuy.cheaperAcquisition a b p g r = Formal.CraftVsBuy.Method.buy → g - p ≥ r :=
   @Formal.CraftVsBuy.buy_preserves_reserve
+
+/-! ### EventWindow role contracts (event-NPC trade-window gate over Int). -/
+
+-- tradeable_total: TOTALITY — the gate is always true or false.
+example : ∀ (isEvent active hasSpawn : Bool) (r t m : Int),
+    Formal.EventWindow.eventNpcTradeable isEvent active hasSpawn r t m = true ∨
+    Formal.EventWindow.eventNpcTradeable isEvent active hasSpawn r t m = false :=
+  @Formal.EventWindow.tradeable_total
+-- non_event_always_tradeable: DOMINANCE — a non-event NPC is always tradeable.
+example : ∀ (active hasSpawn : Bool) (r t m : Int),
+    Formal.EventWindow.eventNpcTradeable false active hasSpawn r t m = true :=
+  @Formal.EventWindow.non_event_always_tradeable
+-- inactive_event_not_tradeable: SAFETY — an inactive event is never tradeable.
+example : ∀ (hasSpawn : Bool) (r t m : Int),
+    Formal.EventWindow.eventNpcTradeable true false hasSpawn r t m = false :=
+  @Formal.EventWindow.inactive_event_not_tradeable
+-- unreachable_window_not_tradeable: SAFETY — window ≤ travel+margin ⇒ not tradeable.
+example : ∀ (r t m : Int), r ≤ t + m →
+    Formal.EventWindow.eventNpcTradeable true true true r t m = false :=
+  @Formal.EventWindow.unreachable_window_not_tradeable
+-- tradeable_iff_window_open: DOMINANCE — exact firing condition.
+example : ∀ (r t m : Int),
+    Formal.EventWindow.eventNpcTradeable true true true r t m = true ↔ r > t + m :=
+  @Formal.EventWindow.tradeable_iff_window_open
+-- tradeable_monotone_in_remaining: MONOTONICITY — ↑remaining keeps the window open.
+example : ∀ (r r' t m : Int),
+    Formal.EventWindow.eventNpcTradeable true true true r t m = true → r ≤ r' →
+    Formal.EventWindow.eventNpcTradeable true true true r' t m = true :=
+  @Formal.EventWindow.tradeable_monotone_in_remaining
+-- tradeable_antitone_in_distance: MONOTONICITY — ↓travel keeps the window open.
+example : ∀ (r t t' m : Int),
+    Formal.EventWindow.eventNpcTradeable true true true r t m = true → t' ≤ t →
+    Formal.EventWindow.eventNpcTradeable true true true r t' m = true :=
+  @Formal.EventWindow.tradeable_antitone_in_distance
+-- window_open_reachable: REACHABILITY — a real firing witness (anti-vacuity).
+example : ∃ (r t m : Int),
+    Formal.EventWindow.eventNpcTradeable true true true r t m = true ∧ t ≥ 0 ∧ m ≥ 0 :=
+  Formal.EventWindow.window_open_reachable
 
 -- ItemsTaskTermination (items-task keepSet/batchK conformance — Task 1).
 -- keepSet_contains_task_item: SAFETY — the task item is always kept.

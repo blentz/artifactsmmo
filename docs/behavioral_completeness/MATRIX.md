@@ -107,8 +107,8 @@ Column legend:
 - **Strategic uses**: events are timed windows — gold-merchant NPCs and rare content appear only while an event is live, so gate npc-trade on the active event not a static map scan (openapi schema ActiveEventSchema)
 - **Opportunity cost × tier**: events are tier-spanning; cost is opportunistic — diverting to a live merchant event is cheap if reachable, worthless if expired (content_tiers.md)
 - **Behavior coverage**: SellInventory checks is_event_npc + event_npc_tradeable against active_events (goals/sell_inventory.py)
-- **Proof coverage**: none (PROOF_CONCEPT_INDEX)
-- **Gap + policy**: THIN — act; event-merchant trading is wired but unproven and event-spawned combat/resource content is not pursued (synthesis)
+- **Proof coverage**: EventWindow [totality, safety, dominance, monotonicity, reachability] (PROOF_CONCEPT_INDEX)
+- **Gap + policy**: CLOSED — act; event-merchant trade-window gate is wired AND proven (EventWindow: non-event always tradeable, inactive/unreachable refused, exact window-open firing condition, monotone in remaining + antitone in distance, reachable firing witness); event-spawned combat/resource content remains out of scope (future work) (synthesis)
 
 ### effects
 - **Player → concept**: read the effect catalog (openapi /effects, /effects/{code})

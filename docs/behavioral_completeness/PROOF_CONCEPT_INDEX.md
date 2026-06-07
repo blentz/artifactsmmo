@@ -20,6 +20,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | CyclesForProgress | characters | reachability, monotonicity |
 | DecideKey | core, planner | dominance, totality |
 | EquipValueAugmented | items, characters | dominance, monotonicity |
+| EventWindow | events | totality, safety, dominance, monotonicity, reachability |
 | FallbackChain | core, planner | totality, dominance |
 | GameDataAccessors | core | safety |
 | GatherApply | resources, items | safety |

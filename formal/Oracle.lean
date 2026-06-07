@@ -1048,6 +1048,31 @@ def runCraftVsBuy (args : Array Json) : Json :=
     | Formal.CraftVsBuy.Method.craft => 0
   Json.mkObj [("method", Json.num code)]
 
+/-- Compute one event_window result using the SAME proved
+`Formal.EventWindow.eventNpcTradeable`.
+
+args layout (6 Ints): `[isEvent, active, hasSpawn, remaining, travel, margin]`,
+where the three boolean flags are encoded as `0/1` (and read as `!= 0`) and the
+last three are the integer seconds the Python side derives:
+* `isEvent`   = `npc_event_code(...) is not None`,
+* `active`    = event code ∈ `active_events`,
+* `hasSpawn`  = `npc_location(...) is not None`,
+* `remaining` = `int((expiration - now).total_seconds())`,
+* `travel`    = `manhattan_distance * 5`,
+* `margin`    = `10`.
+
+Emits `{"tradeable": 1}` for tradeable / `{"tradeable": 0}` otherwise, matching the
+Python `int(event_npc_tradeable(...))` encoding in the differential test. -/
+def runEventWindow (args : Array Json) : Json :=
+  let isEvent := intArg args 0 != 0
+  let active := intArg args 1 != 0
+  let hasSpawn := intArg args 2 != 0
+  let remaining := intArg args 3
+  let travel := intArg args 4
+  let margin := intArg args 5
+  let b := Formal.EventWindow.eventNpcTradeable isEvent active hasSpawn remaining travel margin
+  Json.mkObj [("tradeable", Json.num (if b then 1 else 0))]
+
 /-- Compute one npc_buy_inventory result.
 
 Two queries (chosen by `args[0]`):
@@ -1382,6 +1407,8 @@ def runOne (item : Json) : Json :=
     runGatherSelection args
   else if kind == "craft_vs_buy" then
     runCraftVsBuy args
+  else if kind == "event_window" then
+    runEventWindow args
   else if kind == "npc_buy_inventory" then
     runNpcBuyInventory args
   else if kind == "action_cost_nonneg" then

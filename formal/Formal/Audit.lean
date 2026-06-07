@@ -698,6 +698,15 @@ open Formal.WeightedRemaining in
 #print axioms Formal.CraftVsBuy.buy_stable_under_more_gold
 #print axioms Formal.CraftVsBuy.buy_stable_under_lower_buy
 #print axioms Formal.CraftVsBuy.buy_preserves_reserve
+-- EventWindow (event-NPC trade-window gate over Int)
+#print axioms Formal.EventWindow.tradeable_total
+#print axioms Formal.EventWindow.non_event_always_tradeable
+#print axioms Formal.EventWindow.inactive_event_not_tradeable
+#print axioms Formal.EventWindow.unreachable_window_not_tradeable
+#print axioms Formal.EventWindow.tradeable_iff_window_open
+#print axioms Formal.EventWindow.tradeable_monotone_in_remaining
+#print axioms Formal.EventWindow.tradeable_antitone_in_distance
+#print axioms Formal.EventWindow.window_open_reachable
 -- ItemsTaskTermination (items-task keepSet/batchK conformance — Task 1)
 #print axioms Formal.Liveness.ItemsTaskTermination.keepSet_contains_task_item
 #print axioms Formal.Liveness.ItemsTaskTermination.keepSet_contains_recipe_inputs

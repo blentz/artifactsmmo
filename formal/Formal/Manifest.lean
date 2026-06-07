@@ -278,6 +278,15 @@ open Formal.PriorityBand
 #check @Formal.CraftVsBuy.buy_stable_under_more_gold     -- monotonicity: ↑gold keeps buy
 #check @Formal.CraftVsBuy.buy_stable_under_lower_buy     -- monotonicity: ↓buy cost keeps buy
 #check @Formal.CraftVsBuy.buy_preserves_reserve          -- safety: buy ⇒ post-buy gold ≥ reserve
+-- EventWindow required roles (event-NPC trade-window gate over Int):
+#check @Formal.EventWindow.tradeable_total                    -- totality: always true or false
+#check @Formal.EventWindow.non_event_always_tradeable         -- dominance: non-event NPC always tradeable
+#check @Formal.EventWindow.inactive_event_not_tradeable       -- safety: inactive event ⇒ not tradeable
+#check @Formal.EventWindow.unreachable_window_not_tradeable   -- safety: remaining ≤ travel+margin ⇒ not tradeable
+#check @Formal.EventWindow.tradeable_iff_window_open          -- dominance: exact firing condition
+#check @Formal.EventWindow.tradeable_monotone_in_remaining    -- monotonicity: ↑remaining keeps open
+#check @Formal.EventWindow.tradeable_antitone_in_distance     -- monotonicity: ↓travel keeps open
+#check @Formal.EventWindow.window_open_reachable              -- reachability: a real firing witness
 -- NpcBuyInventory required roles (REAL BUG #6: NpcBuyAction.apply overflows inventory_max):
 #check @Formal.NpcBuyInventory.npc_buy_is_applicable_imp_free_ge -- passing check ⇒ quantity ≤ free
 #check @Formal.NpcBuyInventory.npc_buy_is_applicable_imp_gold_ge -- passing check ⇒ price*quantity ≤ gold

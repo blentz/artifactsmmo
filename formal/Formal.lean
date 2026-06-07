@@ -30,6 +30,7 @@ import Formal.CyclesForProgress
 import Formal.GatherApply
 import Formal.GatherSelection
 import Formal.CraftVsBuy
+import Formal.EventWindow
 import Formal.NpcBuyInventory
 import Formal.InventoryChainSafe
 import Formal.Contracts
