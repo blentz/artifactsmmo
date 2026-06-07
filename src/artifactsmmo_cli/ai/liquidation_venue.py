@@ -14,6 +14,9 @@ differential target proved in formal/Formal/LiquidationVenue.lean over `Int` wit
 
 from enum import Enum
 
+from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.world_state import WorldState
+
 
 class Venue(Enum):
     NPC = "npc"
@@ -36,3 +39,25 @@ def realized_proceeds(npc_pay: int, ge_proceeds: int | None, venue: Venue) -> in
     if venue is Venue.GE and ge_proceeds is not None:
         return ge_proceeds
     return npc_pay
+
+
+def liquidation_venue(item: str, qty: int, state: WorldState, game_data: GameData) -> Venue:
+    """Impure adapter (like `craft_vs_buy.acquisition_method`): assemble the venue
+    inputs from GameData and delegate to the proved `choose_venue`.
+
+    `npc_pay` is the MAX price any NPC pays to buy `qty` of `item` (per unit; 0 when
+    none buys it — NPC sell-back is per-unit and always realizable). `ge_proceeds`
+    is the price of the highest standing GE buy order IF it can absorb the whole
+    `qty` in one fill (quantity >= qty), else None — the anti-surrogate guard, so a
+    partially-fillable order never masquerades as a single-fill venue for `qty`.
+    State is accepted for signature symmetry with the other adapters; the decision
+    needs only API-sourced prices."""
+    buyers = game_data.npcs_buying_item(item)
+    npc_pay = max((price for _npc, price in buyers), default=0)
+    order = game_data.ge_best_buy_order(item)
+    ge_proceeds: int | None = None
+    if order is not None:
+        _order_id, price, order_qty = order
+        if order_qty >= qty:
+            ge_proceeds = price
+    return choose_venue(npc_pay, ge_proceeds)

@@ -232,6 +232,8 @@ class TestPlayerRunVerboseAndExecute:
                                            return_value=MagicMock(data=[])):
                                     with patch("artifactsmmo_cli.ai.game_data.get_all_events",
                                                return_value=MagicMock(data=[])):
+                                      with patch("artifactsmmo_cli.ai.game_data.get_ge_orders",
+                                                 return_value=MagicMock(data=[])):
                                         with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None):
                                             with patch.object(player, "_fetch_world_state", return_value=initial_state):
                                                 with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
@@ -271,6 +273,8 @@ class TestPlayerRunVerboseAndExecute:
                                            return_value=MagicMock(data=[])):
                                     with patch("artifactsmmo_cli.ai.game_data.get_all_events",
                                                return_value=MagicMock(data=[])):
+                                      with patch("artifactsmmo_cli.ai.game_data.get_ge_orders",
+                                                 return_value=MagicMock(data=[])):
                                         with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None):
                                             with patch.object(player, "_fetch_world_state", return_value=initial_state):
                                                 with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):

@@ -4,12 +4,14 @@ from dataclasses import dataclass, field
 
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.events.get_all_events_events_get import sync as get_all_events
+from artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get import sync as get_ge_orders
 from artifactsmmo_api_client.api.items.get_all_items_items_get import sync as get_all_items
 from artifactsmmo_api_client.api.maps.get_all_maps_maps_get import sync as get_all_maps
 from artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get import sync as get_all_monsters
 from artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get import sync as get_bank_details
 from artifactsmmo_api_client.api.np_cs.get_all_npcs_items_npcs_items_get import sync as get_all_npc_items
 from artifactsmmo_api_client.api.resources.get_all_resources_resources_get import sync as get_all_resources
+from artifactsmmo_api_client.models.ge_order_type import GEOrderType
 from artifactsmmo_api_client.models.map_content_type import MapContentType
 from artifactsmmo_api_client.models.map_layer import MapLayer
 from artifactsmmo_api_client.types import Unset
@@ -91,6 +93,12 @@ class GameData:
     _npc_locations: dict[str, tuple[int, int]] = field(default_factory=dict)  # npc_code -> (x, y)
     _npc_stock: dict[str, dict[str, int]] = field(default_factory=dict)  # npc_code -> {item_code: buy_price}
     _npc_sell_prices: dict[str, dict[str, int]] = field(default_factory=dict)  # npc_code -> {item_code: sell_price}
+    _ge_buy_orders: dict[str, tuple[str, int, int]] = field(default_factory=dict)
+    """item_code -> (order_id, price, quantity) for the HIGHEST-price OPEN BUY
+    order standing in the Grand Exchange — the one the player can fill by selling
+    into it for immediate gold. Populated from the live GE-orders API read (the
+    source of truth); never fabricated. A buy order is a real standing offer, so
+    its price is realizable proceeds (unlike a speculative new sell order)."""
     _event_npc_spawns: dict[str, tuple[int, int]] = field(default_factory=dict)  # npc_code -> fixed event spawn tile
     _npc_event_code: dict[str, str] = field(default_factory=dict)  # npc_code -> event code (membership = is_event_npc)
     _bank_capacity: int = 0
@@ -413,6 +421,18 @@ class GameData:
         ]
         return sorted(results, key=lambda x: -x[1])
 
+    def ge_best_buy_order(self, item_code: str) -> tuple[str, int, int] | None:
+        """The highest-price OPEN BUY order for item_code as (order_id, price,
+        quantity), or None if no such standing order exists. This is the order the
+        player fills by selling into it (immediate gold). Only API-sourced orders
+        appear here; absence is encoded as None (the anti-surrogate guard for
+        liquidation_venue)."""
+        return self._ge_buy_orders.get(item_code)
+
+    def grand_exchange_location(self) -> tuple[int, int] | None:
+        """Tile of the Grand Exchange, or None if the map has no GE."""
+        return self._grand_exchange_location
+
     def nearest_location(self, x: int, y: int, locations: list[tuple[int, int]]) -> tuple[int, int] | None:
         """Find the nearest location to (x, y) by Manhattan distance."""
         if not locations:
@@ -429,6 +449,7 @@ class GameData:
         data._load_monsters(client)
         data._load_npcs(client)
         data._load_events(client)
+        data._load_ge_orders(client)
         data._load_bank_metadata(client)
         return data
 
@@ -602,6 +623,29 @@ class GameData:
                 sell_price = entry.sell_price
                 if not isinstance(sell_price, Unset) and sell_price is not None:
                     self._npc_sell_prices.setdefault(entry.npc, {})[entry.code] = sell_price
+            if len(result.data) < 100:
+                break
+            page += 1
+
+    def _load_ge_orders(self, client: AuthenticatedClient) -> None:
+        """Index the highest-price OPEN BUY order per item from the live GE order
+        book. Filling such an order sells the item for immediate gold, so its price
+        is realizable proceeds. We page the BUY side of the order book and keep, per
+        item, the single highest-price order (ties broken by larger quantity, then
+        order id for determinism). The API is the source of truth; no order is
+        fabricated."""
+        page = 1
+        while True:
+            result = get_ge_orders(client=client, type_=GEOrderType.BUY, page=page, size=100)
+            if result is None or not result.data:
+                break
+            for order in result.data:
+                candidate = (order.id, order.price, order.quantity)
+                current = self._ge_buy_orders.get(order.code)
+                if current is None or (order.price, order.quantity, order.id) > (
+                    current[1], current[2], current[0]
+                ):
+                    self._ge_buy_orders[order.code] = candidate
             if len(result.data) < 100:
                 break
             page += 1

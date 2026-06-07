@@ -509,6 +509,92 @@ def test_npcs_buying_item_returns_sorted_descending_by_price():
     assert gd.npcs_buying_item("unknown") == []
 
 
+def _ge_order(order_id, code, price, quantity):
+    return SimpleNamespace(id=order_id, code=code, price=price, quantity=quantity)
+
+
+def test_load_ge_orders_keeps_highest_price_buy_order_per_item(monkeypatch):
+    """_load_ge_orders should index the highest-price OPEN BUY order per item."""
+    from artifactsmmo_cli.ai.game_data import GameData
+
+    class FakeResult:
+        def __init__(self, data):
+            self.data = data
+
+    def fake_sync(client, type_, page, size):
+        from artifactsmmo_api_client.models.ge_order_type import GEOrderType
+        assert type_ is GEOrderType.BUY  # only the BUY side is fillable by selling in
+        if page == 1:
+            return FakeResult([
+                _ge_order("o1", "iron_ore", price=10, quantity=5),
+                _ge_order("o2", "iron_ore", price=14, quantity=3),  # higher price wins
+                _ge_order("o3", "copper_ore", price=7, quantity=2),
+            ])
+        return FakeResult([])
+
+    monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", fake_sync)
+    gd = GameData()
+    gd._load_ge_orders(client=None)
+
+    assert gd.ge_best_buy_order("iron_ore") == ("o2", 14, 3)
+    assert gd.ge_best_buy_order("copper_ore") == ("o3", 7, 2)
+    assert gd.ge_best_buy_order("unknown") is None
+
+
+def test_load_ge_orders_breaks_price_ties_by_quantity_then_id(monkeypatch):
+    """Equal price → prefer the order with greater fillable quantity, then id."""
+    from artifactsmmo_cli.ai.game_data import GameData
+
+    class FakeResult:
+        def __init__(self, data):
+            self.data = data
+
+    def fake_sync(client, type_, page, size):
+        if page == 1:
+            return FakeResult([
+                _ge_order("a", "gem", price=20, quantity=2),
+                _ge_order("b", "gem", price=20, quantity=9),  # more quantity → wins
+                _ge_order("c", "gem", price=20, quantity=9),  # tie on qty → higher id "c"
+            ])
+        return FakeResult([])
+
+    monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", fake_sync)
+    gd = GameData()
+    gd._load_ge_orders(client=None)
+
+    assert gd.ge_best_buy_order("gem") == ("c", 20, 9)
+
+
+def test_load_ge_orders_paginates_past_full_page(monkeypatch):
+    """A full first page forces a second fetch; the loop terminates on the short page."""
+    from artifactsmmo_cli.ai.game_data import GameData
+
+    class FakeResult:
+        def __init__(self, data):
+            self.data = data
+
+    def fake_sync(client, type_, page, size):
+        if page == 1:
+            return FakeResult([_ge_order(f"p1-{i}", "ore", price=i, quantity=1) for i in range(100)])
+        if page == 2:
+            return FakeResult([_ge_order("p2", "ore", price=999, quantity=4)])
+        return FakeResult([])
+
+    monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", fake_sync)
+    gd = GameData()
+    gd._load_ge_orders(client=None)
+
+    assert gd.ge_best_buy_order("ore") == ("p2", 999, 4)
+
+
+def test_grand_exchange_location_accessor():
+    from artifactsmmo_cli.ai.game_data import GameData
+    gd = GameData()
+    assert gd.grand_exchange_location() is None
+    gd._grand_exchange_location = (3, 4)
+    assert gd.grand_exchange_location() == (3, 4)
+
+
 class TestGameDataLoad:
     def test_load_calls_all_sub_loaders(self):
         client = MagicMock()
@@ -519,8 +605,9 @@ class TestGameDataLoad:
                     with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=empty_page):
                         with patch("artifactsmmo_cli.ai.game_data.get_all_npc_items", return_value=empty_page):
                             with patch("artifactsmmo_cli.ai.game_data.get_all_events", return_value=empty_page):
-                                with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None):
-                                    gd = GameData.load(client)
+                                with patch("artifactsmmo_cli.ai.game_data.get_ge_orders", return_value=empty_page):
+                                    with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None):
+                                        gd = GameData.load(client)
         assert isinstance(gd, GameData)
 
 
