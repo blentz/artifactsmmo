@@ -1034,6 +1034,20 @@ def runGatherSelection (args : Array Json) : Json :=
     | none => -1
   Json.mkObj [("selected", Json.num selected)]
 
+/-- Compute one craft_vs_buy result using the SAME proved
+`Formal.CraftVsBuy.cheaperAcquisition`.
+
+args layout (5 Ints): `[craftCd, buyCd, totalPrice, gold, reserve]`. Runs the
+decision and emits `{"method": 1}` for BUY / `{"method": 0}` for CRAFT, matching
+the Python `Method.BUY`/`Method.CRAFT` encoding in the differential test. -/
+def runCraftVsBuy (args : Array Json) : Json :=
+  let m := Formal.CraftVsBuy.cheaperAcquisition
+    (intArg args 0) (intArg args 1) (intArg args 2) (intArg args 3) (intArg args 4)
+  let code : Int := match m with
+    | Formal.CraftVsBuy.Method.buy => 1
+    | Formal.CraftVsBuy.Method.craft => 0
+  Json.mkObj [("method", Json.num code)]
+
 /-- Compute one npc_buy_inventory result.
 
 Two queries (chosen by `args[0]`):
@@ -1366,6 +1380,8 @@ def runOne (item : Json) : Json :=
     runGatherApply args
   else if kind == "gather_selection" then
     runGatherSelection args
+  else if kind == "craft_vs_buy" then
+    runCraftVsBuy args
   else if kind == "npc_buy_inventory" then
     runNpcBuyInventory args
   else if kind == "action_cost_nonneg" then

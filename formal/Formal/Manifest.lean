@@ -270,6 +270,14 @@ open Formal.PriorityBand
 #check @Formal.GatherSelection.select_no_cheaper_at_le_distance  -- corollary: strictly-cheaper ⇒ strictly-farther
 #check @Formal.GatherSelection.expected_gathers_mono_in_rate     -- monotonicity: ↑rate ⇒ ≥ expected gathers
 #check @Formal.GatherSelection.gather_selected_reaches_needed    -- reachability: +1 loop reaches needed qty
+-- CraftVsBuy required roles (craft-vs-buy acquisition decision over Int):
+#check @Formal.CraftVsBuy.acquisition_total              -- totality: always craft or buy
+#check @Formal.CraftVsBuy.buy_iff_affordable_and_cheaper -- dominance: exact buy firing condition
+#check @Formal.CraftVsBuy.craft_when_not_cheaper         -- corollary: not strictly cheaper ⇒ craft
+#check @Formal.CraftVsBuy.craft_when_unaffordable        -- corollary: unaffordable ⇒ craft
+#check @Formal.CraftVsBuy.buy_stable_under_more_gold     -- monotonicity: ↑gold keeps buy
+#check @Formal.CraftVsBuy.buy_stable_under_lower_buy     -- monotonicity: ↓buy cost keeps buy
+#check @Formal.CraftVsBuy.buy_preserves_reserve          -- safety: buy ⇒ post-buy gold ≥ reserve
 -- NpcBuyInventory required roles (REAL BUG #6: NpcBuyAction.apply overflows inventory_max):
 #check @Formal.NpcBuyInventory.npc_buy_is_applicable_imp_free_ge -- passing check ⇒ quantity ≤ free
 #check @Formal.NpcBuyInventory.npc_buy_is_applicable_imp_gold_ge -- passing check ⇒ price*quantity ≤ gold

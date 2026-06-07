@@ -79,9 +79,9 @@ Column legend:
 - **Concept → player**: produces the crafted item + crafting-skill XP; consumes recipe inputs from inventory (ItemSchema craft field)
 - **Strategic uses**: crafting is how raw materials become gear/consumables and the only path to most equipment; craft when inputs + skill level + workshop are satisfied (openapi schema ItemSchema)
 - **Opportunity cost × tier**: T1 copper_bar/boots craft cheaply; deeper recipe chains (T4 obsidian, T6 adamantite) need multi-step intermediate crafts so planner depth/cost climbs each tier (content_tiers.md)
-- **Behavior coverage**: CraftRelief, UpgradeEquipment, LevelSkill, PursueTask drive crafting via prerequisite graph (goals/craft_relief.py, tiers/means.py)
-- **Proof coverage**: PrerequisiteGraph/WithdrawSetExpansion/RecycleProtection/StrategyTraversal/Phase8Invariants [safety, totality, reachability] (PROOF_CONCEPT_INDEX)
-- **Gap + policy**: UNPROVEN — act; recipe-chain prerequisite expansion proven, but workshop-routing + craft-vs-buy choice remains heuristic (synthesis)
+- **Behavior coverage**: CraftRelief, UpgradeEquipment, LevelSkill, PursueTask drive crafting via prerequisite graph (goals/craft_relief.py, tiers/means.py); craft-vs-buy injects NpcBuyAction into GatherMaterials.relevant_actions when cheaper+affordable (craft_vs_buy.py, goals/gathering.py)
+- **Proof coverage**: PrerequisiteGraph/WithdrawSetExpansion/RecycleProtection/StrategyTraversal/Phase8Invariants [safety, totality, reachability] (PROOF_CONCEPT_INDEX); CraftVsBuy [dominance, monotonicity, totality, safety] + NpcBuyInventory [safety] (PROOF_CONCEPT_INDEX)
+- **Gap + policy**: CLOSED — act: buy when strictly fewer cooldowns and affordable above the gold reserve, else craft; four classes proven (synthesis)
 
 ### bank
 - **Player → concept**: read bank, deposit/withdraw gold & items, buy bank expansion (openapi /my/bank, /my/{name}/action/bank/deposit/*, /my/{name}/action/bank/withdraw/*, /my/{name}/action/bank/buy_expansion)

@@ -5,7 +5,9 @@ from fractions import Fraction
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction, _nearest
+from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.craft_vs_buy import GOLD_RESERVE, Method, acquisition_method
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_selection import GatherCandidate, select_gather_source
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -153,6 +155,23 @@ class GatherMaterialsGoal(Goal):
                     drop_losers.add(id(a))
         if drop_losers:
             result = [a for a in result if id(a) not in drop_losers]
+
+        # Craft-vs-buy: offer an NpcBuy alternative for a needed item that is
+        # NPC-sold, affordable above GOLD_RESERVE, and strictly cheaper to buy than
+        # craft (proved in formal/Formal/CraftVsBuy.lean). The least-cost planner
+        # then picks buy-vs-make. Items with no seller / unaffordable / pricier are
+        # left craft-only.
+        for item, qty in self._needed.items():
+            sellers = game_data.npcs_selling_item(item)
+            if not sellers:
+                continue
+            if acquisition_method(item, qty, state, game_data, GOLD_RESERVE) is not Method.BUY:
+                continue
+            npc_code, _price = min(sellers, key=lambda np: np[1])
+            result.append(NpcBuyAction(npc_code=npc_code, item_code=item,
+                                       npc_location=game_data.npc_location(npc_code),
+                                       quantity=qty))
+
         return result
 
     @property

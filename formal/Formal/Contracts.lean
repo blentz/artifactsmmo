@@ -29,6 +29,7 @@ import Formal.DecideKey
 import Formal.CyclesForProgress
 import Formal.GatherApply
 import Formal.GatherSelection
+import Formal.CraftVsBuy
 import Formal.NpcBuyInventory
 import Formal.InventoryChainSafe
 import Formal.ActionCostNonneg
@@ -1950,3 +1951,38 @@ example : ∀ (a b : Formal.GatherSelection.Candidate),
 -- gather_selected_reaches_needed: REACHABILITY — +1 loop reaches the needed quantity.
 example : ∀ (needed owned : Nat), needed ≤ owned + (needed - owned) :=
   @Formal.GatherSelection.gather_selected_reaches_needed
+
+/-! ### CraftVsBuy role contracts (craft-vs-buy acquisition decision over Int). -/
+
+-- acquisition_total: TOTALITY — the decision is always craft or buy.
+example : ∀ (a b p g r : Int),
+    Formal.CraftVsBuy.cheaperAcquisition a b p g r = Formal.CraftVsBuy.Method.craft ∨
+    Formal.CraftVsBuy.cheaperAcquisition a b p g r = Formal.CraftVsBuy.Method.buy :=
+  @Formal.CraftVsBuy.acquisition_total
+-- buy_iff_affordable_and_cheaper: DOMINANCE — exact buy firing condition.
+example : ∀ (a b p g r : Int),
+    Formal.CraftVsBuy.cheaperAcquisition a b p g r = Formal.CraftVsBuy.Method.buy ↔
+    (g - p ≥ r ∧ b < a) :=
+  @Formal.CraftVsBuy.buy_iff_affordable_and_cheaper
+-- craft_when_not_cheaper: dominance corollary — not strictly cheaper ⇒ craft.
+example : ∀ (a b p g r : Int), ¬ (b < a) →
+    Formal.CraftVsBuy.cheaperAcquisition a b p g r = Formal.CraftVsBuy.Method.craft :=
+  @Formal.CraftVsBuy.craft_when_not_cheaper
+-- craft_when_unaffordable: dominance corollary — unaffordable ⇒ craft.
+example : ∀ (a b p g r : Int), ¬ (g - p ≥ r) →
+    Formal.CraftVsBuy.cheaperAcquisition a b p g r = Formal.CraftVsBuy.Method.craft :=
+  @Formal.CraftVsBuy.craft_when_unaffordable
+-- buy_stable_under_more_gold: MONOTONICITY in gold — ↑gold keeps buy.
+example : ∀ (a b p g g' r : Int),
+    Formal.CraftVsBuy.cheaperAcquisition a b p g r = Formal.CraftVsBuy.Method.buy → g ≤ g' →
+    Formal.CraftVsBuy.cheaperAcquisition a b p g' r = Formal.CraftVsBuy.Method.buy :=
+  @Formal.CraftVsBuy.buy_stable_under_more_gold
+-- buy_stable_under_lower_buy: MONOTONICITY in buy cost — ↓buy cost keeps buy.
+example : ∀ (a b b' p g r : Int),
+    Formal.CraftVsBuy.cheaperAcquisition a b p g r = Formal.CraftVsBuy.Method.buy → b' ≤ b →
+    Formal.CraftVsBuy.cheaperAcquisition a b' p g r = Formal.CraftVsBuy.Method.buy :=
+  @Formal.CraftVsBuy.buy_stable_under_lower_buy
+-- buy_preserves_reserve: SAFETY — buy ⇒ post-buy gold ≥ reserve.
+example : ∀ (a b p g r : Int),
+    Formal.CraftVsBuy.cheaperAcquisition a b p g r = Formal.CraftVsBuy.Method.buy → g - p ≥ r :=
+  @Formal.CraftVsBuy.buy_preserves_reserve
