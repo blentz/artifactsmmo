@@ -698,6 +698,15 @@ open Formal.WeightedRemaining in
 #print axioms Formal.CraftVsBuy.buy_stable_under_more_gold
 #print axioms Formal.CraftVsBuy.buy_stable_under_lower_buy
 #print axioms Formal.CraftVsBuy.buy_preserves_reserve
+-- BankExpansionTiming (bank-expansion firing decision over Int)
+#print axioms Formal.BankExpansionTiming.expand_total
+#print axioms Formal.BankExpansionTiming.expand_iff
+#print axioms Formal.BankExpansionTiming.expand_preserves_reserve
+#print axioms Formal.BankExpansionTiming.no_expand_when_unaffordable
+#print axioms Formal.BankExpansionTiming.no_expand_when_below_threshold
+#print axioms Formal.BankExpansionTiming.expand_stable_under_more_gold
+#print axioms Formal.BankExpansionTiming.expand_stable_under_more_fill
+#print axioms Formal.BankExpansionTiming.expand_true_witness
 -- EventWindow (event-NPC trade-window gate over Int)
 #print axioms Formal.EventWindow.tradeable_total
 #print axioms Formal.EventWindow.non_event_always_tradeable

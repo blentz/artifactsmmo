@@ -12,6 +12,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | ActionSetCompleteness | core | totality |
 | ApplyBaseline | core | safety |
 | ArbiterSelect | core, planner | dominance, totality |
+| BankExpansionTiming | bank | dominance, monotonicity, totality, safety |
 | BankSelection | bank, items, crafting | safety |
 | CheapestPath | combat, monsters | reachability, dominance |
 | CombatTargetExistence | combat, monsters | reachability, safety |

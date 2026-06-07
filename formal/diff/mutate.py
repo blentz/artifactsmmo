@@ -37,6 +37,7 @@ CYCLES_FOR_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" 
 GATHER_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gather_apply_core.py"
 GATHER_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_selection.py"
 CRAFT_VS_BUY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_vs_buy.py"
+BANK_EXPANSION_TIMING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_expansion_timing.py"
 EVENT_WINDOW_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "event_availability.py"
 COST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "cost_core.py"
 NPC_BUY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "npc_buy_core.py"
@@ -992,6 +993,7 @@ _ALL_SRCS = [
     GATHER_APPLY_SRC,
     GATHER_SELECTION_SRC,
     CRAFT_VS_BUY_SRC,
+    BANK_EXPANSION_TIMING_SRC,
     EVENT_WINDOW_SRC,
     COST_CORE_SRC,
     NPC_BUY_CORE_SRC,
@@ -1164,6 +1166,51 @@ CRAFT_VS_BUY_MUTATIONS = [
      "    affordable = gold - total_price >= reserve",
      "    affordable = gold + total_price >= reserve"),
 ]
+
+# bank_expansion_timing mutations -- old strings matched to current
+# bank_expansion_timing.py text. Each perturbs the fill-threshold cross-multiply
+# or the reserve-safety gate so the Python verdict diverges from the Lean
+# `shouldExpandBank` oracle. Killed by
+# formal/diff/test_bank_expansion_timing_diff.py.
+BANK_EXPANSION_TIMING_MUTATIONS = [
+    # Flip the fill-threshold boundary `>=` to `>`: at an exact fill tie
+    # (used*den == cap*num) the bank should be eligible, but now it spuriously
+    # refuses. The cross-multiply boundary cases in the diff fire.
+    ("bank_expansion_timing: threshold >= -> > (off-by-one on fill boundary)",
+     "    at_threshold = used * trigger_den >= capacity * trigger_num",
+     "    at_threshold = used * trigger_den > capacity * trigger_num"),
+    # Drop the cross-multiply: compare used*den against capacity (no trigger_num),
+    # so the fill threshold is computed against the wrong rational. Any
+    # trigger_num != 1 with a capacity that disagrees diverges.
+    ("bank_expansion_timing: drop trigger_num factor in cross-multiply",
+     "    at_threshold = used * trigger_den >= capacity * trigger_num",
+     "    at_threshold = used * trigger_den >= capacity"),
+    # Flip the reserve boundary `>=` to `>`: at exactly gold-cost == reserve the
+    # buy preserves the reserve and should fire, but now it refuses. The
+    # reserve-boundary cases (reserve in {0,500}) fire.
+    ("bank_expansion_timing: reserve >= -> > (off-by-one on reserve floor)",
+     "    reserve_safe = gold - cost >= reserve",
+     "    reserve_safe = gold - cost > reserve"),
+    # `gold - cost` -> `gold + cost`: the reserve test ADDS the cost instead of
+    # subtracting it, so the SAFETY gate is computed from the wrong post-buy gold.
+    # Any nonzero cost diverges (the SAFETY-HOLE the fix closes).
+    ("bank_expansion_timing: reserve - -> + (wrong post-buy gold)",
+     "    reserve_safe = gold - cost >= reserve",
+     "    reserve_safe = gold + cost >= reserve"),
+    # Replace the `and` with `or`: fires when EITHER at-threshold OR reserve-safe,
+    # dropping the conjunction so below-threshold-but-affordable (and
+    # at-threshold-but-unaffordable, the SAFETY hole) cases now wrongly fire.
+    ("bank_expansion_timing: and -> or (conjunction dropped)",
+     "    return at_threshold and reserve_safe",
+     "    return at_threshold or reserve_safe"),
+    # Drop the reserve gate entirely: regress to the bare fill check, ignoring the
+    # reserve floor — the exact pre-fix SAFETY-HOLE bug. The reserve=500 cases
+    # where gold-cost < 500 but at threshold now wrongly fire.
+    ("bank_expansion_timing: drop reserve gate (regress to bare fill check)",
+     "    return at_threshold and reserve_safe",
+     "    return at_threshold"),
+]
+
 
 EVENT_WINDOW_MUTATIONS = [
     # Flip the window check `>` to `>=`: at exactly remaining == travel+margin the
@@ -1985,6 +2032,8 @@ def main() -> int:
               "formal/diff/test_gather_selection_diff.py", survivors)
     run_group(CRAFT_VS_BUY_SRC, CRAFT_VS_BUY_MUTATIONS,
               "formal/diff/test_craft_vs_buy_diff.py", survivors)
+    run_group(BANK_EXPANSION_TIMING_SRC, BANK_EXPANSION_TIMING_MUTATIONS,
+              "formal/diff/test_bank_expansion_timing_diff.py", survivors)
     run_group(EVENT_WINDOW_SRC, EVENT_WINDOW_MUTATIONS,
               "formal/diff/test_event_window_diff.py", survivors)
     run_group(COST_CORE_SRC, COST_CORE_MUTATIONS,

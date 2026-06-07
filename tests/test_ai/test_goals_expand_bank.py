@@ -45,6 +45,23 @@ class TestExpandBankGoal:
         state = make_state(gold=2000, bank_items={f"item_{i}": 1 for i in range(29)})
         assert goal.value(state, gd) == 40.0
 
+    def test_value_zero_when_buy_would_drain_below_reserve(self):
+        """SAFETY-HOLE fix: bank full and gold >= cost (the old bare check would
+        fire), but buying drops gold below GOLD_RESERVE (500), so the goal must
+        NOT fire. gold=520, cost=100 → post-buy 420 < 500."""
+        gd = make_gd(bank_capacity=30, next_expansion_cost=100)
+        goal = ExpandBankGoal(bank_accessible=True, game_data=gd)
+        state = make_state(gold=520, bank_items={f"item_{i}": 1 for i in range(29)})
+        assert goal.value(state, gd) == 0.0
+
+    def test_value_40_when_buy_keeps_gold_at_reserve(self):
+        """Boundary: post-buy gold exactly equals GOLD_RESERVE (500) → fires.
+        gold=600, cost=100 → 500 >= 500."""
+        gd = make_gd(bank_capacity=30, next_expansion_cost=100)
+        goal = ExpandBankGoal(bank_accessible=True, game_data=gd)
+        state = make_state(gold=600, bank_items={f"item_{i}": 1 for i in range(29)})
+        assert goal.value(state, gd) == 40.0
+
     def test_value_zero_when_bank_unknown(self):
         goal = ExpandBankGoal(bank_accessible=True)
         gd = make_gd()

@@ -1048,6 +1048,19 @@ def runCraftVsBuy (args : Array Json) : Json :=
     | Formal.CraftVsBuy.Method.craft => 0
   Json.mkObj [("method", Json.num code)]
 
+/-- Compute one bank_expansion_timing result using the SAME proved
+`Formal.BankExpansionTiming.shouldExpandBank`.
+
+args layout (7 Ints): `[used, capacity, gold, cost, reserve, triggerNum, triggerDen]`.
+Runs the firing decision and emits `{"expand": 1}` when it fires / `{"expand": 0}`
+otherwise, matching the Python `int(should_expand_bank(...))` encoding in the
+differential test. -/
+def runBankExpansionTiming (args : Array Json) : Json :=
+  let b := Formal.BankExpansionTiming.shouldExpandBank
+    (intArg args 0) (intArg args 1) (intArg args 2) (intArg args 3)
+    (intArg args 4) (intArg args 5) (intArg args 6)
+  Json.mkObj [("expand", Json.num (if b then 1 else 0))]
+
 /-- Compute one event_window result using the SAME proved
 `Formal.EventWindow.eventNpcTradeable`.
 
@@ -1407,6 +1420,8 @@ def runOne (item : Json) : Json :=
     runGatherSelection args
   else if kind == "craft_vs_buy" then
     runCraftVsBuy args
+  else if kind == "bank_expansion_timing" then
+    runBankExpansionTiming args
   else if kind == "event_window" then
     runEventWindow args
   else if kind == "npc_buy_inventory" then

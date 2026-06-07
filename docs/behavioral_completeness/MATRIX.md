@@ -89,8 +89,8 @@ Column legend:
 - **Strategic uses**: bank is the keep-set-protected store that prevents DEPOSIT_FULL from banking task/recipe inputs and freezing progress; deposit when inventory pressured (openapi schema BankSchema)
 - **Opportunity cost × tier**: at all tiers banking is near-free; the cost is the keep-set policy — banking a needed recipe input stalls PursueTask, so the trade is correctness not gold (content_tiers.md)
 - **Behavior coverage**: DepositInventory, ExpandBank, UnlockBank, withdraw means; keep-set in tiers/means.py (goals/deposit_inventory.py, goals/expand_bank.py)
-- **Proof coverage**: BankSelection/InventoryChainSafe/Phase8Invariants [safety, reachability] (PROOF_CONCEPT_INDEX)
-- **Gap + policy**: THIN — act; deposit/withdraw/keep-set proven, but expansion-purchase timing is heuristic (synthesis)
+- **Proof coverage**: BankSelection/InventoryChainSafe/Phase8Invariants [safety, reachability] + BankExpansionTiming [dominance, monotonicity, totality, safety] (PROOF_CONCEPT_INDEX)
+- **Gap + policy**: CLOSED — deposit/withdraw/keep-set proven; expansion-purchase timing now proven (BankExpansionTiming: exact rational fill threshold via cross-multiply ∧ reserve-safe gold floor, closing the gold-drain SAFETY hole) (synthesis)
 
 ### npcs
 - **Player → concept**: read npc catalog/items; buy from and sell to an npc at its tile (openapi /npcs/details, /npcs/items, /my/{name}/action/npc/buy, /my/{name}/action/npc/sell)

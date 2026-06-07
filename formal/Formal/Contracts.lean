@@ -31,6 +31,7 @@ import Formal.CyclesForProgress
 import Formal.GatherApply
 import Formal.GatherSelection
 import Formal.CraftVsBuy
+import Formal.BankExpansionTiming
 import Formal.EventWindow
 import Formal.NpcBuyInventory
 import Formal.InventoryChainSafe
@@ -1988,6 +1989,41 @@ example : ∀ (a b b' p g r : Int),
 example : ∀ (a b p g r : Int),
     Formal.CraftVsBuy.cheaperAcquisition a b p g r = Formal.CraftVsBuy.Method.buy → g - p ≥ r :=
   @Formal.CraftVsBuy.buy_preserves_reserve
+
+/-! ### BankExpansionTiming role contracts (bank-expansion firing decision over Int). -/
+
+-- expand_total: TOTALITY — the decision is always true or false.
+example : ∀ (u c g k r tn td : Int),
+    Formal.BankExpansionTiming.shouldExpandBank u c g k r tn td = true ∨
+    Formal.BankExpansionTiming.shouldExpandBank u c g k r tn td = false :=
+  @Formal.BankExpansionTiming.expand_total
+-- expand_iff: DOMINANCE — exact firing condition (at-threshold ∧ reserve-safe).
+example : ∀ (u c g k r tn td : Int),
+    Formal.BankExpansionTiming.shouldExpandBank u c g k r tn td = true ↔
+    (u * td ≥ c * tn ∧ g - k ≥ r) :=
+  @Formal.BankExpansionTiming.expand_iff
+-- expand_preserves_reserve: SAFETY — fire ⇒ post-buy gold ≥ reserve.
+example : ∀ (u c g k r tn td : Int),
+    Formal.BankExpansionTiming.shouldExpandBank u c g k r tn td = true → g - k ≥ r :=
+  @Formal.BankExpansionTiming.expand_preserves_reserve
+-- no_expand_when_unaffordable: dominance corollary — unaffordable ⇒ no fire.
+example : ∀ (u c g k r tn td : Int), ¬ (g - k ≥ r) →
+    Formal.BankExpansionTiming.shouldExpandBank u c g k r tn td = false :=
+  @Formal.BankExpansionTiming.no_expand_when_unaffordable
+-- no_expand_when_below_threshold: dominance corollary — below threshold ⇒ no fire.
+example : ∀ (u c g k r tn td : Int), ¬ (u * td ≥ c * tn) →
+    Formal.BankExpansionTiming.shouldExpandBank u c g k r tn td = false :=
+  @Formal.BankExpansionTiming.no_expand_when_below_threshold
+-- expand_stable_under_more_gold: MONOTONICITY in gold — ↑gold keeps fire.
+example : ∀ (u c g g' k r tn td : Int),
+    Formal.BankExpansionTiming.shouldExpandBank u c g k r tn td = true → g ≤ g' →
+    Formal.BankExpansionTiming.shouldExpandBank u c g' k r tn td = true :=
+  @Formal.BankExpansionTiming.expand_stable_under_more_gold
+-- expand_stable_under_more_fill: MONOTONICITY in fill — ↑used keeps fire (0 ≤ tden).
+example : ∀ (u u' c g k r tn td : Int), 0 ≤ td →
+    Formal.BankExpansionTiming.shouldExpandBank u c g k r tn td = true → u ≤ u' →
+    Formal.BankExpansionTiming.shouldExpandBank u' c g k r tn td = true :=
+  @Formal.BankExpansionTiming.expand_stable_under_more_fill
 
 /-! ### EventWindow role contracts (event-NPC trade-window gate over Int). -/
 

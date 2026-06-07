@@ -19,6 +19,7 @@ import Formal.AcceptTaskGate
 import Formal.TaskTradeReadyPriority
 import Formal.WithdrawSetExpansion
 import Formal.RecycleProtection
+import Formal.BankExpansionTiming
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
@@ -278,6 +279,15 @@ open Formal.PriorityBand
 #check @Formal.CraftVsBuy.buy_stable_under_more_gold     -- monotonicity: ↑gold keeps buy
 #check @Formal.CraftVsBuy.buy_stable_under_lower_buy     -- monotonicity: ↓buy cost keeps buy
 #check @Formal.CraftVsBuy.buy_preserves_reserve          -- safety: buy ⇒ post-buy gold ≥ reserve
+-- BankExpansionTiming required roles (bank-expansion firing decision over Int):
+#check @Formal.BankExpansionTiming.expand_total                  -- totality: always true or false
+#check @Formal.BankExpansionTiming.expand_iff                    -- dominance: exact firing condition
+#check @Formal.BankExpansionTiming.expand_preserves_reserve      -- safety: fire ⇒ post-buy gold ≥ reserve
+#check @Formal.BankExpansionTiming.no_expand_when_unaffordable   -- corollary: unaffordable ⇒ no fire
+#check @Formal.BankExpansionTiming.no_expand_when_below_threshold -- corollary: below threshold ⇒ no fire
+#check @Formal.BankExpansionTiming.expand_stable_under_more_gold  -- monotonicity: ↑gold keeps fire
+#check @Formal.BankExpansionTiming.expand_stable_under_more_fill  -- monotonicity: ↑used keeps fire (0 ≤ tden)
+#check @Formal.BankExpansionTiming.expand_true_witness            -- non-vacuity: concrete true witness
 -- EventWindow required roles (event-NPC trade-window gate over Int):
 #check @Formal.EventWindow.tradeable_total                    -- totality: always true or false
 #check @Formal.EventWindow.non_event_always_tradeable         -- dominance: non-event NPC always tradeable
