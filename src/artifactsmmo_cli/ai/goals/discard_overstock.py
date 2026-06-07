@@ -2,11 +2,13 @@
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
+from artifactsmmo_cli.ai.actions.ge_fill import GeFillBuyOrderAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.inventory_caps import overstocked_items
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.liquidation_venue import Venue, liquidation_venue
 from artifactsmmo_cli.ai.world_state import WorldState
 
 # Value constants (inlined from retired priorities.py).
@@ -87,16 +89,34 @@ class DiscardOverstockGoal(Goal):
                 # npcs_buying_item sorted highest-first
                 npc_code, _price = buyers[0]
                 npc_loc = game_data.npc_location(npc_code)
+            # Immediate-fill GE liquidation: when a standing GE buy order pays
+            # strictly more than the best NPC sell-back AND can absorb the whole
+            # excess in one fill, offer a GeFillBuyOrder. liquidation_venue → GE
+            # (gated by choose_venue, proved in formal/Formal/LiquidationVenue.lean)
+            # is the decision; the least-cost / higher-proceeds planner then picks
+            # GE vs NPC. We only fill an EXISTING order — never post a new one.
+            ge_loc = game_data.grand_exchange_location()
+            order = game_data.ge_best_buy_order(code)
+            ge_action_available = False
+            if ge_loc is not None and order is not None and \
+                    liquidation_venue(code, excess_qty, state, game_data) is Venue.GE:
+                order_id, price, _order_qty = order
+                result.append(GeFillBuyOrderAction(
+                    order_id=order_id, item_code=code, price=price,
+                    quantity=excess_qty, ge_location=ge_loc,
+                ))
+                ge_action_available = True
+
             if npc_code is not None and npc_loc is not None:
                 result.append(NpcSellAction(
                     npc_code=npc_code, item_code=code, quantity=excess_qty,
                     npc_location=npc_loc,
                 ))
-            else:
-                # No buyer, or buyer location unknown — Delete is the only
-                # action the planner can actually execute. Without this
-                # fallback the goal becomes unsatisfiable (plan_len=0) and
-                # silently loses to lower-priority alternatives.
+            elif not ge_action_available:
+                # No NPC buyer (or unknown location) AND no fillable GE order —
+                # Delete is the only action the planner can actually execute.
+                # Without this fallback the goal becomes unsatisfiable (plan_len=0)
+                # and silently loses to lower-priority alternatives.
                 result.append(DeleteItemAction(code=code, quantity=excess_qty))
         return result
 

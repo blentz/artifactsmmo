@@ -3,15 +3,21 @@
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction, _nearest
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.craft_vs_buy import GOLD_RESERVE, Method, acquisition_method
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_selection import GatherCandidate, select_gather_source
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.monster_drop_selection import (
+    MonsterDropCandidate,
+    select_monster_for_drop,
+)
 from artifactsmmo_cli.ai.priority_band import clamp_into_band
 from artifactsmmo_cli.ai.recipe_closure import recipe_closure
 from artifactsmmo_cli.ai.scalar_priority import yield_bonus_for_goal
@@ -155,6 +161,46 @@ class GatherMaterialsGoal(Goal):
                     drop_losers.add(id(a))
         if drop_losers:
             result = [a for a in result if id(a) not in drop_losers]
+
+        # Monster-drop emission + narrowing (the live caller of the proved
+        # select_monster_for_drop core, formal/Formal/MonsterDropSelection.lean).
+        # For a needed item that is a monster drop, enumerate the FightAction for
+        # every WINNABLE monster dropping it, build a MonsterDropCandidate per
+        # monster (rate/min/max from the drop table, distance = nearest spawn),
+        # pick the expected-kills-optimal winner and keep ONLY that FightAction
+        # (drop the dominated ones). Mirrors the GatherSelection narrowing above:
+        # kills replace gathers; monsters replace resource nodes. An item with no
+        # winnable dropper contributes no FightAction (it also reads as
+        # not-producible in tiers/strategy._producible, so no unreachable plan).
+        fights_by_code: dict[str, FightAction] = {
+            a.monster_code: a for a in actions if isinstance(a, FightAction)
+        }
+        for item in self._needed:
+            droppers = game_data.monsters_dropping(item)
+            if not droppers:
+                continue
+            drop_candidates: list[MonsterDropCandidate] = []
+            winner_fights: dict[str, FightAction] = {}
+            for monster_code, rate, mn, mx in droppers:
+                fight = fights_by_code.get(monster_code)
+                if fight is None:
+                    continue
+                if not is_winnable(state, game_data, monster_code):
+                    continue
+                if fight.locations:
+                    loc = _nearest(fight.locations, state)
+                    dist = abs(loc[0] - state.x) + abs(loc[1] - state.y)
+                else:
+                    dist = 0
+                drop_candidates.append(MonsterDropCandidate(
+                    monster_code=monster_code, rate=rate,
+                    min_quantity=mn, max_quantity=mx, distance=dist))
+                winner_fights[monster_code] = fight
+            if not drop_candidates:
+                continue
+            chosen = select_monster_for_drop(item, drop_candidates)
+            if chosen is not None and chosen in winner_fights:
+                result.append(winner_fights[chosen])
 
         # Craft-vs-buy: offer an NpcBuy alternative for a needed item that is
         # NPC-sold, affordable above GOLD_RESERVE, and strictly cheaper to buy than

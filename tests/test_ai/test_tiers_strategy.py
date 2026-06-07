@@ -214,9 +214,10 @@ def _reach_gd():
 def test_producible():
     from artifactsmmo_cli.ai.tiers.strategy import _producible
     gd = _reach_gd()
-    assert _producible("iron_helm", gd) is True   # craftable
-    assert _producible("iron_ore", gd) is True     # gatherable (iron_rocks drops it)
-    assert _producible("drop_blade", gd) is False   # no recipe, no drop
+    s = make_state(level=1)
+    assert _producible("iron_helm", s, gd) is True   # craftable
+    assert _producible("iron_ore", s, gd) is True     # gatherable (iron_rocks drops it)
+    assert _producible("drop_blade", s, gd) is False   # no recipe, drop, or winnable monster
 
 
 def test_is_reachable_gatherable_and_craftable_chain():
