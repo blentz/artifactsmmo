@@ -682,3 +682,10 @@ open Formal.WeightedRemaining in
 #print axioms Formal.RecycleProtection.trace_copper_dagger_excluded
 #print axioms Formal.RecycleProtection.trace_copper_axe_excluded
 #print axioms Formal.RecycleProtection.trace_off_target_kept
+-- GatherSelection (yield-rate lex-argmin gather-source selection)
+#print axioms Formal.GatherSelection.select_some_iff_nonempty
+#print axioms Formal.GatherSelection.select_mem
+#print axioms Formal.GatherSelection.select_is_lex_min
+#print axioms Formal.GatherSelection.select_no_cheaper_at_le_distance
+#print axioms Formal.GatherSelection.expected_gathers_mono_in_rate
+#print axioms Formal.GatherSelection.gather_selected_reaches_needed

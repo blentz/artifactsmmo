@@ -263,6 +263,13 @@ open Formal.PriorityBand
 #check @Formal.GatherApply.chain_safe_min_free_witness -- non-vacuous witness at MIN_FREE_SLOTS
 #check @Formal.GatherApply.is_applicable_boundary_witness     -- witness: applies at the boundary
 #check @Formal.GatherApply.is_applicable_off_boundary_witness -- witness: fails one slot past
+-- GatherSelection required roles (yield-rate lex-argmin gather-source selection):
+#check @Formal.GatherSelection.select_some_iff_nonempty          -- totality/no-deadlock: none ⇔ empty
+#check @Formal.GatherSelection.select_mem                        -- winner is a real candidate
+#check @Formal.GatherSelection.select_is_lex_min                 -- dominance: nothing strictly beats the winner
+#check @Formal.GatherSelection.select_no_cheaper_at_le_distance  -- corollary: strictly-cheaper ⇒ strictly-farther
+#check @Formal.GatherSelection.expected_gathers_mono_in_rate     -- monotonicity: ↑rate ⇒ ≥ expected gathers
+#check @Formal.GatherSelection.gather_selected_reaches_needed    -- reachability: +1 loop reaches needed qty
 -- NpcBuyInventory required roles (REAL BUG #6: NpcBuyAction.apply overflows inventory_max):
 #check @Formal.NpcBuyInventory.npc_buy_is_applicable_imp_free_ge -- passing check ⇒ quantity ≤ free
 #check @Formal.NpcBuyInventory.npc_buy_is_applicable_imp_gold_ge -- passing check ⇒ price*quantity ≤ gold

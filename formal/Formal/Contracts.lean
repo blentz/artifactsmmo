@@ -28,6 +28,7 @@ import Formal.StrategyBlend
 import Formal.DecideKey
 import Formal.CyclesForProgress
 import Formal.GatherApply
+import Formal.GatherSelection
 import Formal.NpcBuyInventory
 import Formal.InventoryChainSafe
 import Formal.ActionCostNonneg
@@ -1918,3 +1919,34 @@ example : ∀ (active leveledUp loss hasUpgrade : Bool),
     active = true → leveledUp = false → loss = false → hasUpgrade = true →
     Formal.GearLatch.step active leveledUp loss hasUpgrade = true :=
   @Formal.GearLatch.monotone_until_clear
+
+/-! ### GatherSelection role contracts (yield-rate lex-argmin gather-source). -/
+
+-- select_some_iff_nonempty: TOTALITY/no-deadlock — none ⇔ empty list.
+example : ∀ (cs : List Formal.GatherSelection.Candidate),
+    Formal.GatherSelection.selectGatherSource cs = none ↔ cs = [] :=
+  @Formal.GatherSelection.select_some_iff_nonempty
+-- select_mem: the winner is a REAL candidate in the input list.
+example : ∀ {cs : List Formal.GatherSelection.Candidate} {c : Formal.GatherSelection.Candidate},
+    Formal.GatherSelection.selectGatherSource cs = some c → c ∈ cs :=
+  @Formal.GatherSelection.select_mem
+-- select_is_lex_min: DOMINANCE — no candidate strictly beats the winner on the lex key.
+example : ∀ {cs : List Formal.GatherSelection.Candidate} {c : Formal.GatherSelection.Candidate},
+    Formal.GatherSelection.selectGatherSource cs = some c →
+    ∀ x ∈ cs, ¬ Formal.GatherSelection.keyLt x c :=
+  @Formal.GatherSelection.select_is_lex_min
+-- select_no_cheaper_at_le_distance: a strictly-cheaper candidate must be strictly FARTHER.
+example : ∀ {cs : List Formal.GatherSelection.Candidate} {c : Formal.GatherSelection.Candidate},
+    Formal.GatherSelection.selectGatherSource cs = some c →
+    ∀ x ∈ cs,
+      Formal.GatherSelection.expectedGathers x < Formal.GatherSelection.expectedGathers c →
+      c.dist < x.dist :=
+  @Formal.GatherSelection.select_no_cheaper_at_le_distance
+-- expected_gathers_mono_in_rate: MONOTONICITY — ↑rate (yields fixed, positive avg) ⇒ ≥ expected gathers.
+example : ∀ (a b : Formal.GatherSelection.Candidate),
+    a.minQ = b.minQ → a.maxQ = b.maxQ → 0 < a.minQ + a.maxQ → a.rate ≤ b.rate →
+    Formal.GatherSelection.expectedGathers a ≤ Formal.GatherSelection.expectedGathers b :=
+  @Formal.GatherSelection.expected_gathers_mono_in_rate
+-- gather_selected_reaches_needed: REACHABILITY — +1 loop reaches the needed quantity.
+example : ∀ (needed owned : Nat), needed ≤ owned + (needed - owned) :=
+  @Formal.GatherSelection.gather_selected_reaches_needed
