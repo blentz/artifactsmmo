@@ -36,6 +36,7 @@ DECIDE_KEY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "decide_ke
 CYCLES_FOR_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "cycles_for_progress_core.py"
 GATHER_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gather_apply_core.py"
 GATHER_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_selection.py"
+CRAFT_VS_BUY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_vs_buy.py"
 COST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "cost_core.py"
 NPC_BUY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "npc_buy_core.py"
 APPLY_MOVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "movement.py"
@@ -989,6 +990,7 @@ _ALL_SRCS = [
     CYCLES_FOR_PROGRESS_SRC,
     GATHER_APPLY_SRC,
     GATHER_SELECTION_SRC,
+    CRAFT_VS_BUY_SRC,
     COST_CORE_SRC,
     NPC_BUY_CORE_SRC,
     APPLY_MOVE_SRC, APPLY_EQUIP_SRC, APPLY_CLAIM_SRC,
@@ -1123,6 +1125,42 @@ GATHER_SELECTION_MUTATIONS = [
     ("gather_selection: drop code tie-break (third field constant)",
      "    return (_expected_gathers(c), c.distance, c.resource_code)",
      "    return (_expected_gathers(c), c.distance, \"\")"),
+]
+
+
+# craft_vs_buy mutations -- old strings matched to current craft_vs_buy.py text.
+# Each perturbs the affordability test or the strict-cheaper test so the Python
+# BUY/CRAFT verdict diverges from the Lean `cheaperAcquisition` oracle. Killed by
+# formal/diff/test_craft_vs_buy_diff.py.
+CRAFT_VS_BUY_MUTATIONS = [
+    # Flip the affordability boundary `>=` to `>`: at exactly gold-price == reserve
+    # the buy should be affordable (reserve preserved), but now it spuriously
+    # refuses. The affordability-boundary cases in the diff fire.
+    ("craft_vs_buy: affordability >= -> > (off-by-one on reserve floor)",
+     "    affordable = gold - total_price >= reserve",
+     "    affordable = gold - total_price > reserve"),
+    # Invert the strict-cheaper comparison `<` to `>`: buy now fires when it is
+    # MORE expensive than craft, exactly inverting the optimization objective.
+    ("craft_vs_buy: strict-cheaper < -> > (inverted objective)",
+     "buy_cooldowns < craft_cooldowns",
+     "buy_cooldowns > craft_cooldowns"),
+    # `<` -> `<=`: a buy that merely TIES craft now fires, violating the
+    # strictly-fewer-cooldowns dominance rule. The equal-cooldown cases diverge.
+    ("craft_vs_buy: strict-cheaper < -> <= (non-strict)",
+     "buy_cooldowns < craft_cooldowns",
+     "buy_cooldowns <= craft_cooldowns"),
+    # Replace the `and` with `or`: buy fires when EITHER affordable OR cheaper,
+    # dropping the conjunction so unaffordable-but-cheaper (and affordable-but-
+    # pricier) cases now wrongly BUY.
+    ("craft_vs_buy: and -> or (conjunction dropped)",
+     "affordable and buy_cooldowns < craft_cooldowns",
+     "affordable or buy_cooldowns < craft_cooldowns"),
+    # `gold - total_price` -> `gold + total_price`: the affordability test now
+    # ADDS the price instead of subtracting it, so the reserve check is computed
+    # from the wrong post-buy gold. Any nonzero price diverges.
+    ("craft_vs_buy: affordability - -> + (wrong post-buy gold)",
+     "    affordable = gold - total_price >= reserve",
+     "    affordable = gold + total_price >= reserve"),
 ]
 
 
@@ -1914,6 +1952,8 @@ def main() -> int:
               "formal/diff/test_gather_apply_diff.py", survivors)
     run_group(GATHER_SELECTION_SRC, GATHER_SELECTION_MUTATIONS,
               "formal/diff/test_gather_selection_diff.py", survivors)
+    run_group(CRAFT_VS_BUY_SRC, CRAFT_VS_BUY_MUTATIONS,
+              "formal/diff/test_craft_vs_buy_diff.py", survivors)
     run_group(COST_CORE_SRC, COST_CORE_MUTATIONS,
               "formal/diff/test_action_cost_nonneg_diff.py", survivors)
     run_group(NPC_BUY_CORE_SRC, NPC_BUY_MUTATIONS,
