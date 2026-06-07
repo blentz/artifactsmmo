@@ -422,6 +422,14 @@ noncomputable def applyActionKind : ActionKind → State → State
   -- mirror: when equipTarget = some (slot, code), apply equip semantics
   -- (cons-prepend). When unequipTarget = some slot, also filter. The
   -- result composes the swap.
+  -- GEAR_REVIEW guard (guards.py:137) maps to the UpgradeEquipment goal,
+  -- whose planner output is an OptimizeLoadout swap. We model the
+  -- GEAR_REVIEW witness with `.optimizeLoadout`; in addition to the
+  -- equipment swap, applying it clears the `gearReviewFires` latch
+  -- (production: once the gear review materializes a swap the
+  -- `gear_review_active` flag is cleared when no craftable upgrade
+  -- remains — mirrored here as the conservative single-step clear, the
+  -- same pattern as `.objectiveStep` clearing `objectiveStepFires`).
   | .optimizeLoadout, s =>
       let afterUnequip : List (String × String) :=
         match s.unequipTarget with
@@ -431,7 +439,7 @@ noncomputable def applyActionKind : ActionKind → State → State
         match s.equipTarget with
         | some (slot, code) => (slot, code) :: afterUnequip
         | none => afterUnequip
-      { s with equipment := newEquip }
+      { s with equipment := newEquip, gearReviewFires := false }
   -- Item 4c: .move teleports to moveTarget (single-step abstraction of
   -- production's multi-tile pathing). No-op when moveTarget is none.
   -- Mirrors MoveAction.apply (move.py:30+) at the post-step state.

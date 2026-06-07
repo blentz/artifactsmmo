@@ -294,6 +294,13 @@ open Formal.PriorityBand
 #check @Formal.LiquidationVenue.chosen_venue_maximizes   -- safety/no-value-loss: realized ≥ npcPay and ≥ any order
 #check @Formal.LiquidationVenue.ge_stable_under_higher_ge -- monotonicity: ↑order keeps GE
 #check @Formal.LiquidationVenue.ge_stable_under_lower_npc -- monotonicity: ↓npc floor keeps GE
+-- BuySourceVenue required roles (immediate-fill BUY source venue, DUAL of LiquidationVenue):
+#check @Formal.BuySourceVenue.venue_total                -- totality: always NPC or GE
+#check @Formal.BuySourceVenue.ge_iff_fillable_and_cheaper -- dominance: GE ⇔ fillable order strictly cheaper
+#check @Formal.BuySourceVenue.ge_requires_fillable_order -- safety/anti-surrogate: GE ⇒ order isSome
+#check @Formal.BuySourceVenue.chosen_minimizes_cost      -- safety/no-value-loss: realized ≤ npcPrice and ≤ any order
+#check @Formal.BuySourceVenue.ge_stable_under_lower_ge   -- monotonicity: ↓order keeps GE
+#check @Formal.BuySourceVenue.ge_stable_under_higher_npc -- monotonicity: ↑npc ceiling keeps GE
 -- NearestTile required roles (Manhattan-nearest tile, lex (manhattan,x,y) over Int coords):
 #check @Formal.NearestTile.nearestTile_nil                    -- totality: none ⇔ empty
 #check @Formal.NearestTile.nearestTile_total                  -- totality: nonempty ⇒ isSome

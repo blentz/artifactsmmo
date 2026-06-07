@@ -1092,6 +1092,26 @@ def runLiquidationVenue (args : Array Json) : Json :=
   let realized := Formal.LiquidationVenue.realizedProceeds npcPay geProceeds venue
   Json.mkObj [("venue", Json.num code), ("realized", Json.num realized)]
 
+/-- Compute one buy_source_venue result using the SAME proved
+`Formal.BuySourceVenue.chooseBuyVenue` / `realizedCost` (the DUAL of
+liquidation_venue).
+
+args layout (3 Ints): `[npcPrice, gePresent(0/1), gePrice]`. When `gePresent = 0`
+the standing-order field is `none` (the anti-surrogate guard); otherwise it is
+`some gePrice`. Emits the chosen venue (`1` = GE, `0` = NPC, matching the Python
+`BuyVenue.GE`/`BuyVenue.NPC` encoding) and the realized cost at that choice (so the
+differential pins the gold coupling, not just the label). -/
+def runBuySourceVenue (args : Array Json) : Json :=
+  let npcPrice := intArg args 0
+  let gePrice : Option Int :=
+    if intArg args 1 != 0 then some (intArg args 2) else none
+  let venue := Formal.BuySourceVenue.chooseBuyVenue npcPrice gePrice
+  let code : Int := match venue with
+    | Formal.BuySourceVenue.BuyVenue.ge => 1
+    | Formal.BuySourceVenue.BuyVenue.npc => 0
+  let realized := Formal.BuySourceVenue.realizedCost npcPrice gePrice venue
+  Json.mkObj [("venue", Json.num code), ("realized", Json.num realized)]
+
 /-- Compute one nearest_tile result using the SAME proved
 `Formal.NearestTile.nearestTile`.
 
@@ -1538,6 +1558,8 @@ def runOne (item : Json) : Json :=
     runCraftVsBuy args
   else if kind == "liquidation_venue" then
     runLiquidationVenue args
+  else if kind == "buy_source_venue" then
+    runBuySourceVenue args
   else if kind == "nearest_tile" then
     runNearestTile args
   else if kind == "consumable_selection" then

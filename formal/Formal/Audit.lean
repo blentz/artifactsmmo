@@ -715,6 +715,14 @@ open Formal.WeightedRemaining in
 #print axioms Formal.LiquidationVenue.ge_stable_under_higher_ge
 #print axioms Formal.LiquidationVenue.ge_stable_under_lower_npc
 
+-- BuySourceVenue (immediate-fill BUY source venue, DUAL of LiquidationVenue)
+#print axioms Formal.BuySourceVenue.venue_total
+#print axioms Formal.BuySourceVenue.ge_iff_fillable_and_cheaper
+#print axioms Formal.BuySourceVenue.ge_requires_fillable_order
+#print axioms Formal.BuySourceVenue.chosen_minimizes_cost
+#print axioms Formal.BuySourceVenue.ge_stable_under_lower_ge
+#print axioms Formal.BuySourceVenue.ge_stable_under_higher_npc
+
 -- NearestTile (Manhattan-nearest tile, lex (manhattan, x, y) over Int coords)
 #print axioms Formal.NearestTile.nearestTile_nil
 #print axioms Formal.NearestTile.nearestTile_total

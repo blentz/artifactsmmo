@@ -80,6 +80,33 @@ def test_not_producible_for_unwinnable_monster_drop() -> None:
     assert _producible("rare_hide", state, gd) is False
 
 
+def test_not_producible_for_winnable_dropper_with_no_spawn_location() -> None:
+    """A needed item dropped only by a WINNABLE monster that has NO known spawn
+    location is NOT producible: relevant_actions would emit no FightAction (the
+    fight-is-None guard), so marking it producible creates a stuck plan."""
+    gd = GameData()
+    gd._monster_level = {"chicken": 1}
+    gd._monster_drops = {"chicken": [("raw_egg", 5, 1, 1)]}
+    gd._monster_locations = {}  # winnable, but nowhere to fight it
+    fill_monster_stat_defaults(gd)
+    gd._monster_hp = {"chicken": 10}
+    state = _winnable_state()
+    assert _producible("raw_egg", state, gd) is False
+
+
+def test_producible_true_for_winnable_dropper_with_spawn_location() -> None:
+    """Symmetric positive: the SAME winnable dropper WITH a known spawn location
+    is producible (existing behavior preserved — a FightAction can be emitted)."""
+    gd = GameData()
+    gd._monster_level = {"chicken": 1}
+    gd._monster_drops = {"chicken": [("raw_egg", 5, 1, 1)]}
+    gd._monster_locations = {"chicken": [(0, 1)]}
+    fill_monster_stat_defaults(gd)
+    gd._monster_hp = {"chicken": 10}
+    state = _winnable_state()
+    assert _producible("raw_egg", state, gd) is True
+
+
 def test_producible_still_true_for_craftable() -> None:
     gd = GameData()
     gd._crafting_recipes = {"iron_helm": {"iron_bar": 5}}

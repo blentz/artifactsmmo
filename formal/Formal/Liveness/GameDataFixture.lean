@@ -2232,6 +2232,8 @@ noncomputable def fixtureFreshState : State where
   pursueTaskFires := false
   objectiveStepFires := false
   craftReliefFires := false
+  restForCombatReady := false
+  gearReviewFires := false
   bankItemsKnown := false
   bankItemsCount := 0
   bankCapacity := 0

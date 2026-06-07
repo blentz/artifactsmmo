@@ -179,12 +179,18 @@ def _producible(code: str, state: WorldState, game_data: GameData) -> bool:
 
     The winnability gate is load-bearing: a drop from an unwinnable monster must
     NOT read as producible, else the planner would emit an unreachable FightAction
-    plan. Buying is still out of scope here (offered as a planner alternative in
+    plan. The SPAWN-LOCATION gate is equally load-bearing: a winnable dropper with
+    no known `monster_locations` entry yields NO FightAction (the fight-is-None
+    guard in GatherMaterialsGoal.relevant_actions), so the item would read
+    producible yet generate an empty/stuck plan. Requiring a non-empty spawn list
+    makes producible ⇒ a FightAction can actually be emitted (genuinely obtainable).
+    Buying is still out of scope here (offered as a planner alternative in
     GatherMaterialsGoal.relevant_actions, not as a producibility source)."""
     if (game_data.crafting_recipe(code) is not None
             or code in game_data._resource_drops.values()):
         return True
     return any(is_winnable(state, game_data, monster_code)
+               and game_data.monster_locations(monster_code)
                for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(code))
 
 

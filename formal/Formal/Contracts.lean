@@ -34,6 +34,7 @@ import Formal.GatherSelection
 import Formal.MonsterDropSelection
 import Formal.CraftVsBuy
 import Formal.LiquidationVenue
+import Formal.BuySourceVenue
 import Formal.NearestTile
 import Formal.ConsumableSelection
 import Formal.BankExpansionTiming
@@ -2067,6 +2068,44 @@ example : ∀ (npcPay npcPay' : Int) (geProceeds : Option Int),
     npcPay' ≤ npcPay →
     Formal.LiquidationVenue.chooseVenue npcPay' geProceeds = Formal.LiquidationVenue.Venue.ge :=
   @Formal.LiquidationVenue.ge_stable_under_lower_npc
+
+/-! ### BuySourceVenue role contracts (immediate-fill BUY source venue, DUAL of
+LiquidationVenue, Int + Option Int). -/
+
+-- venue_total: TOTALITY — the decision is always NPC or GE.
+example : ∀ (npcPrice : Int) (gePrice : Option Int),
+    Formal.BuySourceVenue.chooseBuyVenue npcPrice gePrice = Formal.BuySourceVenue.BuyVenue.npc ∨
+    Formal.BuySourceVenue.chooseBuyVenue npcPrice gePrice = Formal.BuySourceVenue.BuyVenue.ge :=
+  @Formal.BuySourceVenue.venue_total
+-- ge_iff_fillable_and_cheaper: DOMINANCE — GE ⇔ a fillable order is strictly cheaper.
+example : ∀ (npcPrice : Int) (gePrice : Option Int),
+    Formal.BuySourceVenue.chooseBuyVenue npcPrice gePrice = Formal.BuySourceVenue.BuyVenue.ge ↔
+    ∃ g, gePrice = some g ∧ g < npcPrice :=
+  @Formal.BuySourceVenue.ge_iff_fillable_and_cheaper
+-- ge_requires_fillable_order: SAFETY/anti-surrogate — GE ⇒ a standing order exists.
+example : ∀ (npcPrice : Int) (gePrice : Option Int),
+    Formal.BuySourceVenue.chooseBuyVenue npcPrice gePrice = Formal.BuySourceVenue.BuyVenue.ge →
+    gePrice.isSome :=
+  @Formal.BuySourceVenue.ge_requires_fillable_order
+-- chosen_minimizes_cost: SAFETY/no-value-loss — realized ≤ npcPrice and ≤ any order.
+example : ∀ (npcPrice : Int) (gePrice : Option Int),
+    Formal.BuySourceVenue.realizedCost npcPrice gePrice
+      (Formal.BuySourceVenue.chooseBuyVenue npcPrice gePrice) ≤ npcPrice
+    ∧ ∀ g, gePrice = some g →
+        Formal.BuySourceVenue.realizedCost npcPrice gePrice
+          (Formal.BuySourceVenue.chooseBuyVenue npcPrice gePrice) ≤ g :=
+  @Formal.BuySourceVenue.chosen_minimizes_cost
+-- ge_stable_under_lower_ge: MONOTONICITY — lowering the order keeps GE.
+example : ∀ (npcPrice g g' : Int),
+    Formal.BuySourceVenue.chooseBuyVenue npcPrice (some g) = Formal.BuySourceVenue.BuyVenue.ge → g' ≤ g →
+    Formal.BuySourceVenue.chooseBuyVenue npcPrice (some g') = Formal.BuySourceVenue.BuyVenue.ge :=
+  @Formal.BuySourceVenue.ge_stable_under_lower_ge
+-- ge_stable_under_higher_npc: MONOTONICITY — raising the NPC ceiling keeps GE.
+example : ∀ (npcPrice npcPrice' : Int) (gePrice : Option Int),
+    Formal.BuySourceVenue.chooseBuyVenue npcPrice gePrice = Formal.BuySourceVenue.BuyVenue.ge →
+    npcPrice ≤ npcPrice' →
+    Formal.BuySourceVenue.chooseBuyVenue npcPrice' gePrice = Formal.BuySourceVenue.BuyVenue.ge :=
+  @Formal.BuySourceVenue.ge_stable_under_higher_npc
 
 /-! ### NearestTile role contracts (Manhattan-nearest tile, lex (manhattan, x, y)). -/
 

@@ -523,7 +523,9 @@ def test_load_ge_orders_keeps_highest_price_buy_order_per_item(monkeypatch):
 
     def fake_sync(client, type_, page, size):
         from artifactsmmo_api_client.models.ge_order_type import GEOrderType
-        assert type_ is GEOrderType.BUY  # only the BUY side is fillable by selling in
+        # _load_ge_orders pages BOTH sides; only the BUY side feeds this assertion.
+        if type_ is not GEOrderType.BUY:
+            return FakeResult([])
         if page == 1:
             return FakeResult([
                 _ge_order("o1", "iron_ore", price=10, quantity=5),
@@ -585,6 +587,88 @@ def test_load_ge_orders_paginates_past_full_page(monkeypatch):
     gd._load_ge_orders(client=None)
 
     assert gd.ge_best_buy_order("ore") == ("p2", 999, 4)
+
+
+def test_load_ge_orders_keeps_lowest_price_sell_order_per_item(monkeypatch):
+    """_load_ge_orders should index the LOWEST-price OPEN SELL order per item — the
+    cheapest fillable BUY source (DUAL of the highest-price buy order)."""
+    from artifactsmmo_cli.ai.game_data import GameData
+
+    class FakeResult:
+        def __init__(self, data):
+            self.data = data
+
+    def fake_sync(client, type_, page, size):
+        from artifactsmmo_api_client.models.ge_order_type import GEOrderType
+        if type_ is not GEOrderType.SELL:
+            return FakeResult([])
+        if page == 1:
+            return FakeResult([
+                _ge_order("s1", "iron_ore", price=10, quantity=5),
+                _ge_order("s2", "iron_ore", price=6, quantity=3),  # lower price wins
+                _ge_order("s3", "copper_ore", price=7, quantity=2),
+            ])
+        return FakeResult([])
+
+    monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", fake_sync)
+    gd = GameData()
+    gd._load_ge_orders(client=None)
+
+    assert gd.ge_best_sell_order("iron_ore") == ("s2", 6, 3)
+    assert gd.ge_best_sell_order("copper_ore") == ("s3", 7, 2)
+    assert gd.ge_best_sell_order("unknown") is None
+
+
+def test_load_ge_orders_sell_breaks_price_ties_by_quantity_then_id(monkeypatch):
+    """Equal (lowest) price → prefer the order with greater fillable quantity, then id."""
+    from artifactsmmo_cli.ai.game_data import GameData
+
+    class FakeResult:
+        def __init__(self, data):
+            self.data = data
+
+    def fake_sync(client, type_, page, size):
+        from artifactsmmo_api_client.models.ge_order_type import GEOrderType
+        if type_ is not GEOrderType.SELL:
+            return FakeResult([])
+        if page == 1:
+            return FakeResult([
+                _ge_order("a", "gem", price=5, quantity=2),
+                _ge_order("b", "gem", price=5, quantity=9),  # more quantity → wins
+                _ge_order("c", "gem", price=5, quantity=9),  # tie on qty → higher id "c"
+            ])
+        return FakeResult([])
+
+    monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", fake_sync)
+    gd = GameData()
+    gd._load_ge_orders(client=None)
+
+    assert gd.ge_best_sell_order("gem") == ("c", 5, 9)
+
+
+def test_load_ge_orders_sell_paginates_past_full_page(monkeypatch):
+    """A full first SELL page forces a second fetch; the loop terminates on the short page."""
+    from artifactsmmo_cli.ai.game_data import GameData
+
+    class FakeResult:
+        def __init__(self, data):
+            self.data = data
+
+    def fake_sync(client, type_, page, size):
+        from artifactsmmo_api_client.models.ge_order_type import GEOrderType
+        if type_ is not GEOrderType.SELL:
+            return FakeResult([])
+        if page == 1:
+            return FakeResult([_ge_order(f"p1-{i}", "ore", price=500 + i, quantity=1) for i in range(100)])
+        if page == 2:
+            return FakeResult([_ge_order("p2", "ore", price=3, quantity=4)])  # lowest → wins
+        return FakeResult([])
+
+    monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_ge_orders", fake_sync)
+    gd = GameData()
+    gd._load_ge_orders(client=None)
+
+    assert gd.ge_best_sell_order("ore") == ("p2", 3, 4)
 
 
 def test_grand_exchange_location_accessor():

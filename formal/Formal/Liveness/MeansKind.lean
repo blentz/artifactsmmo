@@ -2,11 +2,13 @@
   Formal.Liveness.MeansKind
 
   Production-granularity `MeansKind` enum mirroring the StrategyArbiter's
-  ladder. There are 19 means in total, ordered:
+  ladder. There are 21 means in total, ordered:
 
-    GUARD_ORDER (7, from `tiers/guards.py:49`)  -- CRAFT_RELIEF added between
-                                                   DISCARD_CRITICAL and
-                                                   DEPOSIT_FULL
+    GUARD_ORDER (9, from `tiers/guards.py:68`)  -- REST_FOR_COMBAT after
+                                                   HP_CRITICAL; CRAFT_RELIEF
+                                                   between DISCARD_CRITICAL and
+                                                   DEPOSIT_FULL; GEAR_REVIEW
+                                                   last (lowest-priority guard)
     ++ COLLECT_REWARD_ORDER (5, from `tiers/means.py:35`)
     ++ [OBJECTIVE_STEP] (1)
     ++ DISCRETIONARY_ORDER (6, from `tiers/means.py:42`)  -- includes WAIT
@@ -28,7 +30,7 @@
 namespace Formal.Liveness.MeansKind
 
 /-- Production MeansKind enum. Mirrors:
-    - `src/artifactsmmo_cli/ai/tiers/guards.py::GuardKind` (6 constructors)
+    - `src/artifactsmmo_cli/ai/tiers/guards.py::GuardKind` (9 constructors)
     - `src/artifactsmmo_cli/ai/tiers/means.py::MeansKind` (11 constructors,
       split into COLLECT_REWARD_ORDER (5), DISCRETIONARY_ORDER (6))
     - OBJECTIVE_STEP — separate single tier (the objective StepGoal).
@@ -36,20 +38,28 @@ namespace Formal.Liveness.MeansKind
     Order matches production's preordered candidate list:
       GUARD_ORDER ++ COLLECT_REWARD_ORDER ++ [OBJECTIVE_STEP] ++ DISCRETIONARY_ORDER.
 
-    Total 18 constructors. -/
+    Total 21 constructors. -/
 inductive MeansKind where
-  -- Guards (GUARD_ORDER, guards.py:49)
-  | hpCritical          -- HP_CRITICAL,        guards.py:67
-  | bankUnlock          -- BANK_UNLOCK,        guards.py:69
-  | reachUnlockLevel    -- REACH_UNLOCK_LEVEL, guards.py:77
-  | discardCritical     -- DISCARD_CRITICAL,   guards.py:81
-  | craftRelief         -- CRAFT_RELIEF,       guards.py (circuit breaker
+  -- Guards (GUARD_ORDER, guards.py:68)
+  | hpCritical          -- HP_CRITICAL,        guards.py:69
+  | restForCombat       -- REST_FOR_COMBAT,    guards.py:70 (preempts the
+                        --                     next Fight when current hp is
+                        --                     insufficient to win but max-hp
+                        --                     is — same RestoreHP witness as
+                        --                     hpCritical, distinct tier)
+  | bankUnlock          -- BANK_UNLOCK,        guards.py:71
+  | reachUnlockLevel    -- REACH_UNLOCK_LEVEL, guards.py:72
+  | discardCritical     -- DISCARD_CRITICAL,   guards.py:73
+  | craftRelief         -- CRAFT_RELIEF,       guards.py:74 (circuit breaker
                         --                     between DISCARD_CRITICAL and
                         --                     DEPOSIT_FULL; fires when inv
                         --                     >= 0.70 AND a goal item is
                         --                     craftable from inventory)
-  | depositFull         -- DEPOSIT_FULL,       guards.py:83
-  | discardHigh         -- DISCARD_HIGH,       guards.py:86
+  | depositFull         -- DEPOSIT_FULL,       guards.py:75
+  | discardHigh         -- DISCARD_HIGH,       guards.py:76
+  | gearReview          -- GEAR_REVIEW,        guards.py:77 (lowest-priority
+                        --                     guard, still above all means;
+                        --                     fires on ctx.gear_review_active)
   -- Collect-reward (COLLECT_REWARD_ORDER, means.py:35)
   | claimPending        -- CLAIM_PENDING,      means.py:69
   | completeTask        -- COMPLETE_TASK,      means.py:72
@@ -72,14 +82,14 @@ inductive MeansKind where
     `productionLadder` falls through to it whenever no other means fires,
     so the ladder is unconditionally total (see `NoDeadlockV2.lean`). -/
 def allInLadderOrder : List MeansKind :=
-  [.hpCritical, .bankUnlock, .reachUnlockLevel, .discardCritical,
-   .craftRelief, .depositFull, .discardHigh,
+  [.hpCritical, .restForCombat, .bankUnlock, .reachUnlockLevel,
+   .discardCritical, .craftRelief, .depositFull, .discardHigh, .gearReview,
    .claimPending, .completeTask, .sellPressured, .lowYieldCancel, .taskCancel,
    .objectiveStep,
    .pursueTask, .acceptTask, .taskExchange, .sellIdle, .bankExpand,
    .wait]
 
-/-- Sanity: 19 constructors. -/
-example : allInLadderOrder.length = 19 := by decide
+/-- Sanity: 21 constructors. -/
+example : allInLadderOrder.length = 21 := by decide
 
 end Formal.Liveness.MeansKind

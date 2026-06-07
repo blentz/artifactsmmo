@@ -78,6 +78,10 @@ theorem cycleStep_xp_level_preserved_when_no_fight_no_complete (s : State)
       show (applyActionKind .rest s).level = s.level
             ∧ (applyActionKind .rest s).xp = s.xp
       exact ⟨rfl, rfl⟩
+    | restForCombat =>
+      show (applyActionKind .rest s).level = s.level
+            ∧ (applyActionKind .rest s).xp = s.xp
+      exact ⟨rfl, rfl⟩
     | bankUnlock => rw [hpl] at hbu; exact absurd rfl hbu
     | reachUnlockLevel => rw [hpl] at hru; exact absurd rfl hru
     | discardCritical =>
@@ -97,6 +101,10 @@ theorem cycleStep_xp_level_preserved_when_no_fight_no_complete (s : State)
     | discardHigh =>
       show (applyActionKind .deleteItem s).level = s.level
             ∧ (applyActionKind .deleteItem s).xp = s.xp
+      exact ⟨rfl, rfl⟩
+    | gearReview =>
+      show (applyActionKind .optimizeLoadout s).level = s.level
+            ∧ (applyActionKind .optimizeLoadout s).xp = s.xp
       exact ⟨rfl, rfl⟩
     | claimPending =>
       show (applyActionKind .claimPendingItem s).level = s.level

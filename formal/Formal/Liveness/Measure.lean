@@ -157,6 +157,23 @@ structure State where
       model doesn't reproduce the recipe walk; a diff harness must
       assert the production computation matches this field. -/
   craftReliefFires : Bool
+  /-- OPAQUE: production's REST_FOR_COMBAT guard combat conditions. Mirrors
+      `tiers/guards.py::_fires(GuardKind.REST_FOR_COMBAT, …)` clauses (a),
+      (c), (d): a combat target is selected, `predict_win` at current hp is
+      False, and `predict_win` at max hp is True. The remaining clause (b)
+      — `state.hp < state.max_hp` — is NOT folded in here; it is checked
+      numerically by `restForCombatFires` against `hp`/`maxHp` so the
+      cycle-step progress proof can derive `hp ≠ maxHp` for the `.rest`
+      witness. State-carried Bool — the Lean model doesn't reproduce
+      `predict_win`; a diff harness must assert the production computation
+      matches this field. -/
+  restForCombatReady : Bool
+  /-- OPAQUE: production's GEAR_REVIEW guard firing predicate. Mirrors
+      `tiers/guards.py::_fires(GuardKind.GEAR_REVIEW, …)`: fires iff
+      `ctx.gear_review_active` (the post-level-up / post-loss gear
+      prioritization latch). State-carried Bool — a diff harness asserts
+      agreement with `ctx.gear_review_active`. -/
+  gearReviewFires : Bool
   /-- `state.bank_items is not None` (means.py:104). -/
   bankItemsKnown : Bool
   /-- `len(state.bank_items)` when known, else `0` (means.py:108). -/
