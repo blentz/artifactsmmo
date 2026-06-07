@@ -11,22 +11,22 @@ wooden_shield + copper_boots gear, so the **gather → craft → equip** chain
 (resources/crafting/items/tasks/combat) is the binding constraint right now,
 while the market/cosmetic/info concepts are not.
 
+**All single-session gaps are closed.** Every remaining open item is either a
+multi-session architectural effort (deferred section below) or out-of-scope
+(IGNORE). The ranked open backlog is empty.
+
 | Rank | Concept | Gap kind | Score | Next step |
 |---|---|---|---|---|
-| 1 | items | THIN | 18 | model item give/transfer; extend gear proofs to consumables |
-| 2 | combat | THIN | 18 | prove loadout-swap-before-fight optimality |
-| — | tasks | UNPROVEN (PARTIAL) | 18 | **blocked on a model change** — keep-set/batch safety+totality proven (ItemsTaskTermination); end-to-end termination needs the taskTrade-inventory coupling (follow-up below); not a single-session gap |
-| 4 | characters | THIN | 12 | model multi-character roster (create/select) |
-| 5 | bank | THIN | 12 | prove bank-expansion purchase timing |
-| 6 | maps | THIN | 8 | prove multi-layer/obstacle traversal |
-| 7 | monsters | UNPROVEN | 8 | prove drop-driven monster selection (kill X for drop Y) |
-| 8 | npcs | THIN | 2 | model npc-buy of recipe inputs (buy-vs-gather) |
-| 9 | grandexchange | MISSING | 2 | add GE buy/sell goal (high-tier liquidity) |
-| 10 | events | THIN | 1 | prove event-merchant trade window; pursue event content |
+| — | (none) | — | — | all tractable gaps closed; see Deferred + Closed below |
 
-## Follow-up: deeper model work (multi-session, architectural)
+## Deferred — multi-session architectural work
 
-- **taskTrade↔inventory coupling** (blocks the honest items-task termination
+These are genuine but NOT single-session: each needs a model change (and, for
+two, code plumbing) before an honest proof is possible. Landing a decision core
+without the coupling/plumbing would be a vacuous/inert proof (the rejected-tasks
+lesson), so they are tracked here rather than force-closed.
+
+- **tasks — taskTrade↔inventory coupling** (blocks the honest items-task termination
   capstone). The shared Liveness apply model collapses `.taskTrade`: it advances
   `taskProgress` UNCONDITIONALLY without consuming the obtained task item
   (`Plan.lean` ~316-321 "the Lean model does not track per-trade inventory
@@ -41,12 +41,36 @@ while the market/cosmetic/info concepts are not.
   from obtainment) and REJECTED; only Task-1's honest keep-set/batch contracts
   were kept.
 
+- **monsters — drop-driven selection needs producibility wiring.** The decision
+  (pick the monster minimizing expected kills = rate/avg_qty for a needed drop) is
+  a GatherSelection-shaped clone, BUT monster-drops are currently non-producible
+  (`tiers/strategy._producible` + `prerequisite_graph` treat them as leaves), so
+  no FightAction is ever emitted to obtain a drop — the core would be inert. Honest
+  close needs: restore `min_quantity` into `_monster_drops` (dropped at load) +
+  wire monster-drops as producible + a FightAction-narrowing call site, THEN the
+  proven core. Two-session.
+
+- **grandexchange — needs order-book ingestion.** The GE is in-API but `game_data`
+  has zero order-book ingestion. The only honest decision is immediate-fill
+  liquidation (sell into an existing fillable buy order vs NPC — an `Option`-gated
+  dominance proof); a posted-price proof would be a sham (posted price ≠ realized
+  proceeds). Needs `/grandexchange/orders` plumbed into `game_data` +
+  `GeFillBuyOrderAction` first, then `liquidation_venue` + `LiquidationVenue.lean`.
+  Two-session.
+
 ## Closed
 
 | Concept | Gap kind | Score | Resolution |
 |---|---|---|---|
-| resources | THIN | 0 | CLOSED 2026-06-06 — yield-optimal multi-source narrowing via GatherSelection (dominance, monotonicity, totality, reachability proven) |
-| crafting | UNPROVEN | 0 | CLOSED 2026-06-06 — craft-vs-buy injects NpcBuyAction when cheaper+affordable; CraftVsBuy [dominance, monotonicity, totality, safety] proven |
+| resources | THIN | 0 | CLOSED 2026-06-06 — yield-optimal multi-source narrowing via GatherSelection (dominance, monotonicity, totality, reachability) |
+| crafting | UNPROVEN | 0 | CLOSED 2026-06-06 — craft-vs-buy injects NpcBuyAction when cheaper+affordable; CraftVsBuy [dominance, monotonicity, totality, safety] |
+| events | THIN | 0 | CLOSED 2026-06-07 — EventWindow trade-window gate proven [totality, safety, dominance, monotonicity, reachability] |
+| bank | THIN | 0 | CLOSED 2026-06-07 — BankExpansionTiming: reserve-preserving expansion gate, closed a real gold-drain-below-reserve safety hole [dominance, monotonicity, totality, safety] |
+| items | THIN | 0 | CLOSED 2026-06-07 — ConsumableSelection: overheal-aware fit-to-deficit picker, fixed a real spurious-Rest bug [dominance, monotonicity, totality, safety] |
+| maps | THIN | 0 | CLOSED 2026-06-07 — NearestTile: unified the triplicated _nearest, closed the apply/execute divergence [safety, dominance, totality, monotonicity] |
+| npcs | THIN | 0 | CLOSED 2026-06-07 — buy-vs-gather for raw NPC-sold mats is the raw instance of CraftVsBuy (already proven + wired); cite-only |
+| combat | THIN | 0 | CLOSED 2026-06-07 — loadout-swap selection already proven (RealizableLoadout/EquipmentScoring/PurposeRouting); audit under-citation fixed |
+| characters | THIN | 0 | CLOSED 2026-06-07 — single-char coherence proven downstream (CycleInvariants/MultiCycleLiveness/ActionApplicability + StrategyTraversal); only multi-char roster out-of-scope |
 
 ## Deliberately not actioned (IGNORE — score 0)
 

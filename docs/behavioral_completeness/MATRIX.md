@@ -27,7 +27,7 @@ Column legend:
 - **Opportunity cost × tier**: at every tier the sheet is read free each cycle; mis-reading HP/level is what makes T1→T6 progression stall, so the cost of NOT modeling it is total (content_tiers.md)
 - **Behavior coverage**: GrindCharacterXP, ReachUnlockLevel, RestoreHP, plus all task/skill goals read the sheet (goals/grind_character_xp.py, tiers/guards.py)
 - **Proof coverage**: CycleInvariants/CyclesForProgress/MultiCycleLiveness/WeightedRemaining [safety, reachability, monotonicity] (PROOF_CONCEPT_INDEX)
-- **Gap + policy**: THIN — act; character is read everywhere but create/delete/multi-char roster is unmodeled (single-char only) and accepted (synthesis)
+- **Gap + policy**: CLOSED (by existing coverage) — single-character next-action/skill coherence is proven downstream: per-cycle coherence + bounded progress by CycleInvariants/MultiCycleLiveness/CyclesForProgress/ActionApplicability/WeightedRemaining, and which-step/skill-to-advance by StrategyTraversal/ArbiterSelect/RankingComposition (skill target is a deterministic min() clamp on the chosen objective step, not an independent ranking). The bot makes no standalone single-char decision to prove; only multi-char roster (create/delete/select) is unmodeled and is explicitly accepted/out-of-scope (synthesis)
 
 ### maps
 - **Player → concept**: read map grid, find tiles by content/coords (openapi /maps, /maps/{layer}/{x}/{y}, /maps/id/{map_id})
@@ -45,7 +45,7 @@ Column legend:
 - **Opportunity cost × tier**: T1 chicken/cow give cheap safe XP; higher-tier monsters (T4 demon, T6 sandwhisper_empress) give better drops but risk loss without gear/level (content_tiers.md)
 - **Behavior coverage**: GrindCharacterXP, ReachUnlockLevel target monsters; winnability filters in tiers/guards.py (goals/grind_character_xp.py)
 - **Proof coverage**: CombatTargetExistence/CheapestPath/LivenessChain [reachability, safety, dominance] (PROOF_CONCEPT_INDEX)
-- **Gap + policy**: UNPROVEN — act; targeting is proven but drop-driven monster selection (kill X for drop Y) is heuristic, not proven optimal (synthesis)
+- **Gap + policy**: UNPROVEN (DEFERRED, multi-session) — drop-driven monster selection (pick the monster minimizing expected kills = rate/avg_qty for a needed drop) is a real GatherSelection-shaped decision, but it is currently DEAD relative to the bot: monster-drops are NOT a producible source (tiers/strategy._producible + prerequisite_graph treat them as non-producible leaves), so no FightAction is emitted to obtain a drop item. An honest close needs (a) restoring min_quantity into _monster_drops (dropped at load) and (b) wiring monster-drops as producible + a FightAction-narrowing call site — then the proven core. Landing a proven-but-inert core alone would mislabel CLOSED; tracked as multi-session (synthesis)
 
 ### combat
 - **Player → concept**: initiate a fight at the character's tile; simulate a fight (openapi /my/{name}/action/fight, /simulation/fight_simulation)
@@ -53,8 +53,8 @@ Column legend:
 - **Strategic uses**: combat converts the best-on-hand loadout into XP/drops only when the fight is winnable; engage when is_winnable holds (openapi schema CharacterFightSchema)
 - **Opportunity cost × tier**: T1 fights are low-risk free XP; at T4-T6 a mis-judged fight wastes a full cooldown and HP, so winnability gating cost dominates (content_tiers.md)
 - **Behavior coverage**: GrindCharacterXP/ReachUnlockLevel drive fights; is_winnable gate + RestoreHP recovery (tiers/guards.py, goals/restore_hp.py)
-- **Proof coverage**: ActionApplicability/CombatTargetExistence/LivenessChain [safety, reachability, dominance] (PROOF_CONCEPT_INDEX)
-- **Gap + policy**: THIN — act; applicability + target existence proven, but loadout-swap-before-fight optimality remains heuristic (synthesis)
+- **Proof coverage**: ActionApplicability/CombatTargetExistence/LivenessChain [safety, reachability, dominance] + RealizableLoadout/EquipmentScoring/PurposeRouting [dominance, monotonicity, totality, safety] (PROOF_CONCEPT_INDEX)
+- **Gap + policy**: CLOSED — act; the loadout-swap-before-fight DECISION (best on-hand loadout pre-fight) is already proven — RealizableLoadout.pickLoadout_optimal/no_downgrade/realizable + EquipmentScoring + PurposeRouting (the THIN tag was stale, an audit under-citation); the cost-ordering that sequences swap-before-fight is pinned by ActionCostNonneg + unit tests (lifting the k≥2 ordering lemmas to Lean is an optional deferred refinement) (synthesis)
 
 ### resources
 - **Player → concept**: read resource catalog; gather at the character's tile (openapi /resources, /resources/{code}, /my/{name}/action/gathering)
@@ -98,8 +98,8 @@ Column legend:
 - **Strategic uses**: npcs are the reliable gold sink/source; sell only items that have a buyer npc, buy recipe inputs not worth gathering (openapi schema NPCSchema)
 - **Opportunity cost × tier**: T1 surplus (slimeballs, ore) sells for steady gold; at higher tiers npc sell value lags gear cost so gold is better spent than hoarded (content_tiers.md)
 - **Behavior coverage**: SellInventory + _has_sellable buyer-npc check; npc means in tiers/means.py (goals/sell_inventory.py, tiers/means.py)
-- **Proof coverage**: NpcBuyInventory [safety] (PROOF_CONCEPT_INDEX)
-- **Gap + policy**: THIN — act; npc-sell gated correctly but npc-buy of recipe inputs (buy-vs-gather) is unmodeled (synthesis)
+- **Proof coverage**: NpcBuyInventory [safety] + CraftVsBuy [dominance, monotonicity, totality, safety] (PROOF_CONCEPT_INDEX)
+- **Gap + policy**: CLOSED — act; buy-vs-gather for a raw NPC-sold material IS the raw-item instance of cheaper_acquisition (craft_cooldowns = min_gathers gather count, crafts=0), already proven in CraftVsBuy and wired via GatherMaterials.relevant_actions + strategy_driver; the operational min_gathers→units coupling (gather count = realized units) is the same multi-session follow-up as the taskTrade-inventory coupling (synthesis)
 
 ### events
 - **Player → concept**: read event catalog + active/spawned events (openapi /events, /events/active, /events/spawn)
@@ -126,7 +126,7 @@ Column legend:
 - **Opportunity cost × tier**: low value at T1 (gather is fast); rises at T4-T6 where rare drops fetch high gold and scarce inputs (mithril, adamantite) are slow to gather (content_tiers.md)
 - **Behavior coverage**: none — no goal/means/guard touches grandexchange (none)
 - **Proof coverage**: none (PROOF_CONCEPT_INDEX)
-- **Gap + policy**: MISSING — exploit later; high-leverage at high tiers but not the current bottleneck, so deferred behind gear/task gap closure (synthesis)
+- **Gap + policy**: MISSING (DEFERRED, multi-session) — the GE IS in the current API but has ZERO order-book ingestion in game_data; an honest close is the immediate-fill liquidation decision (sell into an existing fillable buy order vs NPC, an Option-gated dominance proof), which requires plumbing /grandexchange/orders into game_data FIRST. A posted-price dominance proof would be a tasks-style sham (posted price ≠ realized proceeds; an unposted order may never fill). Tracked as a two-session effort (order-book ingestion → liquidation_venue + LiquidationVenue.lean); not a single-session decision core (synthesis)
 
 ### achievements
 - **Player → concept**: read account/character achievement progress (openapi /achievements, /achievements/{code}, /accounts/{account}/achievements)
