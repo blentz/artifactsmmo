@@ -737,3 +737,16 @@ open Formal.WeightedRemaining in
 #print axioms Formal.Liveness.ItemsTaskTermination.keepSet_contains_recipe_inputs
 #print axioms Formal.Liveness.ItemsTaskTermination.batchK_ge_one
 #print axioms Formal.Liveness.ItemsTaskTermination.batchK_le_remaining
+-- ItemsTaskRun (inventory-COUPLED items-task termination model — supersedes
+-- the collapsed-trade concern; trade consumes inventory to advance progress)
+#print axioms Formal.Liveness.ItemsTaskRun.trade_consumes
+#print axioms Formal.Liveness.ItemsTaskRun.trade_stuck_without_held
+#print axioms Formal.Liveness.ItemsTaskRun.trade_stuck_at_total
+#print axioms Formal.Liveness.ItemsTaskRun.run_total
+#print axioms Formal.Liveness.ItemsTaskRun.applyRun_total
+#print axioms Formal.Liveness.ItemsTaskRun.applyRun_cons
+#print axioms Formal.Liveness.ItemsTaskRun.replicate_trade_accounts
+#print axioms Formal.Liveness.ItemsTaskRun.replicate_trade_progress_of_room
+#print axioms Formal.Liveness.ItemsTaskRun.obtain_then_trades_reach
+#print axioms Formal.Liveness.ItemsTaskRun.obtain_then_trades_reach_exists
+#print axioms Formal.Liveness.ItemsTaskRun.held_accounts

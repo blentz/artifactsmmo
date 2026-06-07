@@ -35,6 +35,7 @@ import Formal.Liveness.TaskCompleteReachable
 import Formal.Liveness.SkillGapClosure
 import Formal.Liveness.RecipeChainClosure
 import Formal.Liveness.ItemsTaskTermination
+import Formal.Liveness.ItemsTaskRun
 import Formal.Liveness.GameDataFixture
 import Formal.Liveness.LevelFiftyReachable
 import Formal.Liveness.LifecycleBound
@@ -488,3 +489,21 @@ open Formal.Liveness.ItemsTaskTermination
 #print axioms keepSet_contains_recipe_inputs
 #print axioms batchK_ge_one
 #print axioms batchK_le_remaining
+
+-- tasks-termination follow-up: ItemsTaskRun — the inventory-COUPLED run
+-- model that supersedes the collapsed-trade concern. `trade` REQUIRES and
+-- CONSUMES one held task item to advance progress (the coupling the rejected
+-- capstone lacked); `held_accounts` proves the whole run consumes EXACTLY the
+-- items obtained (no free progress). Core-only; axiom-clean.
+open Formal.Liveness.ItemsTaskRun
+#print axioms trade_consumes
+#print axioms trade_stuck_without_held
+#print axioms trade_stuck_at_total
+#print axioms run_total
+#print axioms applyRun_total
+#print axioms applyRun_cons
+#print axioms replicate_trade_accounts
+#print axioms replicate_trade_progress_of_room
+#print axioms obtain_then_trades_reach
+#print axioms obtain_then_trades_reach_exists
+#print axioms held_accounts

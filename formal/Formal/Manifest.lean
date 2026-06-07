@@ -770,3 +770,15 @@ open Formal.PriorityBand
 #check @Formal.Liveness.ItemsTaskTermination.keepSet_contains_recipe_inputs  -- safety
 #check @Formal.Liveness.ItemsTaskTermination.batchK_ge_one                   -- totality
 #check @Formal.Liveness.ItemsTaskTermination.batchK_le_remaining             -- safety
+
+-- ItemsTaskRun (inventory-COUPLED items-task termination model — supersedes
+-- the collapsed-trade concern; `trade` consumes one held item to advance one
+-- unit of progress, faithful to the API taskTrade):
+#check @Formal.Liveness.ItemsTaskRun.trade_consumes                  -- safety (coupling)
+#check @Formal.Liveness.ItemsTaskRun.trade_stuck_without_held        -- safety (no free progress)
+#check @Formal.Liveness.ItemsTaskRun.trade_stuck_at_total            -- safety (no over-trade)
+#check @Formal.Liveness.ItemsTaskRun.run_total                       -- totality
+#check @Formal.Liveness.ItemsTaskRun.applyRun_total                  -- totality
+#check @Formal.Liveness.ItemsTaskRun.obtain_then_trades_reach        -- reachability
+#check @Formal.Liveness.ItemsTaskRun.obtain_then_trades_reach_exists -- reachability
+#check @Formal.Liveness.ItemsTaskRun.held_accounts                   -- safety (non-vacuity: items conserved)

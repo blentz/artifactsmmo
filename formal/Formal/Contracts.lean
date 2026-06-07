@@ -1,5 +1,6 @@
 import Formal.CalculatePath
 import Formal.Liveness.ItemsTaskTermination
+import Formal.Liveness.ItemsTaskRun
 import Formal.TaskBatch
 import Formal.InventoryCaps
 import Formal.PredictWin
@@ -2152,3 +2153,45 @@ example : ∀ (inp : Formal.Liveness.ItemsTaskTermination.TaskInputs),
 example : ∀ (inp : Formal.Liveness.ItemsTaskTermination.TaskInputs),
     inp.remaining ≥ 1 → Formal.Liveness.ItemsTaskTermination.batchK inp ≤ inp.remaining :=
   @Formal.Liveness.ItemsTaskTermination.batchK_le_remaining
+
+-- ItemsTaskRun (inventory-COUPLED items-task termination model — supersedes the
+-- collapsed-trade concern). `trade` REQUIRES and CONSUMES one held task item to
+-- advance one unit of progress, faithful to the API taskTrade.
+-- trade_consumes: SAFETY (coupling) — progress advances ONLY by consuming
+-- exactly one held item.
+example : ∀ (s : Formal.Liveness.ItemsTaskRun.RunState),
+    0 < s.held ∧ s.progress < s.total →
+      (Formal.Liveness.ItemsTaskRun.trade s).held = s.held - 1
+      ∧ (Formal.Liveness.ItemsTaskRun.trade s).progress = s.progress + 1 :=
+  @Formal.Liveness.ItemsTaskRun.trade_consumes
+-- trade_stuck_without_held: SAFETY — no held item ⇒ no progress (no free
+-- progress out of an empty inventory).
+example : ∀ (s : Formal.Liveness.ItemsTaskRun.RunState),
+    s.held = 0 → Formal.Liveness.ItemsTaskRun.trade s = s :=
+  @Formal.Liveness.ItemsTaskRun.trade_stuck_without_held
+-- run_total: TOTALITY — trade is defined on every state.
+example : ∀ (s : Formal.Liveness.ItemsTaskRun.RunState),
+    ∃ t : Formal.Liveness.ItemsTaskRun.RunState,
+      Formal.Liveness.ItemsTaskRun.trade s = t :=
+  @Formal.Liveness.ItemsTaskRun.run_total
+-- obtain_then_trades_reach: REACHABILITY — obtain (total-progress) then that
+-- many trades reaches progress = total.
+example : ∀ (s : Formal.Liveness.ItemsTaskRun.RunState),
+    s.progress < s.total →
+      (Formal.Liveness.ItemsTaskRun.applyRun
+        (Formal.Liveness.ItemsTaskRun.obtain s (s.total - s.progress))
+        (List.replicate (s.total - s.progress) Formal.Liveness.ItemsTaskRun.trade)).progress
+        = s.total :=
+  @Formal.Liveness.ItemsTaskRun.obtain_then_trades_reach
+-- held_accounts: NON-VACUITY — from held = 0, the whole run consumes EXACTLY
+-- the obtained items: ends held = 0 and progress = total (no free progress).
+example : ∀ (s : Formal.Liveness.ItemsTaskRun.RunState),
+    s.held = 0 → s.progress < s.total →
+      (Formal.Liveness.ItemsTaskRun.applyRun
+          (Formal.Liveness.ItemsTaskRun.obtain s (s.total - s.progress))
+          (List.replicate (s.total - s.progress) Formal.Liveness.ItemsTaskRun.trade)).held = 0
+      ∧ (Formal.Liveness.ItemsTaskRun.applyRun
+          (Formal.Liveness.ItemsTaskRun.obtain s (s.total - s.progress))
+          (List.replicate (s.total - s.progress) Formal.Liveness.ItemsTaskRun.trade)).progress
+          = s.total :=
+  @Formal.Liveness.ItemsTaskRun.held_accounts
