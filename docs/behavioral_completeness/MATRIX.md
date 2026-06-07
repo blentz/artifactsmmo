@@ -17,8 +17,8 @@ Column legend:
 - **Strategic uses**: steady gold + coin economy (docs)
 - **Opportunity cost × tier**: T1 cheap; competes with gear gather (content_tiers.md)
 - **Behavior coverage**: PursueTask/AcceptTask/CompleteTask/TaskExchange (tiers/means.py)
-- **Proof coverage**: TaskDecision.req_none_pursues [dominance] (PROOF_CONCEPT_INDEX)
-- **Gap + policy**: UNPROVEN — act; prove reachability (synthesis)
+- **Proof coverage**: ItemsTaskTermination keepSet/batchK [safety, totality] + TaskCompleteReachable [reachability, over the collapsed trade model] + TaskFeasibility [reachability, safety] + AcceptTaskGate [totality, safety] + TaskTradeReadyPriority [safety, totality] + WeightedRemaining [monotonicity, safety] + LowYieldCancel [safety, monotonicity] + TaskDecision [dominance, monotonicity] (PROOF_CONCEPT_INDEX)
+- **Gap + policy**: UNPROVEN (PARTIAL) — act; per-decision safety/totality proven (keep-set protects the task item's transitive recipe inputs; batch >= 1) and the trade-chain reaches complete over the model; END-TO-END "feasible items-task terminates" stays OPEN because the shared liveness model collapses taskTrade-inventory (trade advances progress without consuming the obtained item), so obtainment is not yet coupled to progress — tracked as the taskTrade-inventory-coupling follow-up (synthesis)
 
 ### characters
 - **Player → concept**: create/delete/select active character, read sheet (openapi /characters/create, /characters/delete, /characters/active, /my/characters)

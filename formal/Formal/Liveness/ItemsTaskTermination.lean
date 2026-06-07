@@ -1,4 +1,4 @@
--- @concept: tasks, crafting, bank @property: reachability, totality, safety
+-- @concept: tasks, crafting, bank @property: safety, totality
 
 /-! # Items-Task Termination — conformance models (Task 1 of tasks-termination)
 
