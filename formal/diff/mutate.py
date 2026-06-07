@@ -271,9 +271,9 @@ REALIZABLE_LOADOUT_MUTATIONS = [
     # slots then see the current code as physically unspoken-for and can
     # duplicate it, violating Property 1 (output realizability).
     ("realizable_loadout: drop _claim(current_code) on keep-current",
-     "        elif _effective_available(current_code) >= 1:\n"
+     "        elif current_code is not None and _effective_available(current_code) >= 1:\n"
      "            _claim(current_code)",
-     "        elif _effective_available(current_code) >= 1:\n"
+     "        elif current_code is not None and _effective_available(current_code) >= 1:\n"
      "            pass"),
     # Phase-15 new mutation C: swap weapon_score and armor_score per slot.
     # weapon_slot uses armor_score (defense-oriented) and the rest use
@@ -419,7 +419,7 @@ STRATEGY_MUTATIONS = [
     # obtain leaf is wrongly returned as the actionable step (a node with no real
     # action). The actionable-correctness contract (obtain ⇒ producible) catches it.
     ("strategy: actionable_step drop producible check",
-     "            if isinstance(node, ObtainItem) and not _producible(node.code, game_data):\n"
+     "            if isinstance(node, ObtainItem) and not _producible(node.code, state, game_data):\n"
      "                return None\n"
      "            return node",
      "            return node"),
@@ -650,9 +650,9 @@ SCALAR_CORE_MUTATIONS = [
     # disagrees bit-for-bit with the Lean Rat oracle on inputs with denominators
     # that aren't powers of two).
     ("scalar_core: float-seed skill_xp_component (breaks byte-equivalence on Fraction inputs)",
-     "    skill_xp_component = 0\n"
+     "    skill_xp_component: Any = 0\n"
      "    for skill_name, delta in skill_xp.items():",
-     "    skill_xp_component = 0.0\n"
+     "    skill_xp_component: Any = 0.0\n"
      "    for skill_name, delta in skill_xp.items():"),
 ]
 
@@ -1550,6 +1550,9 @@ APPLY_FIGHT_MUTATIONS = [
         "            y=dest[1],\n"
         "            cooldown_expires=None,\n"
         "            task_progress=new_progress,\n"
+        "            task_lifecycle_phase=derive_task_lifecycle_phase(\n"
+        "                state.task_code, new_progress, state.task_total\n"
+        "            ),\n"
         "        )",
         "        return WorldState(\n"
         "            character=state.character,\n"
@@ -1806,6 +1809,7 @@ TASK_CANCEL_MUTATIONS = [
      "            task_type=None,\n"
      "            task_progress=0,\n"
      "            task_total=0,\n"
+     "            task_lifecycle_phase=TaskLifecyclePhase.NONE,\n"
      "        )",
      "        return dataclasses.replace(\n"
      "            state,\n"
@@ -1816,6 +1820,7 @@ TASK_CANCEL_MUTATIONS = [
      "            task_type=None,\n"
      "            task_progress=0,\n"
      "            task_total=0,\n"
+     "            task_lifecycle_phase=TaskLifecyclePhase.NONE,\n"
      "        )"),
 ]
 
