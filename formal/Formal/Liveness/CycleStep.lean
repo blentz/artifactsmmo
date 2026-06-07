@@ -113,12 +113,14 @@ cycles, not a single plan.
     one action per cycle, mirroring the production loop. -/
 noncomputable def planFor : MeansKind → State → Plan
   | .hpCritical       , _ => [.rest]
+  | .restForCombat    , _ => [.rest]
   | .bankUnlock       , _ => [.fight]
   | .reachUnlockLevel , _ => [.fight]
   | .discardCritical  , _ => [.deleteItem]
   | .craftRelief      , _ => [.craft]
   | .depositFull      , _ => [.depositAll]
   | .discardHigh      , _ => [.deleteItem]
+  | .gearReview       , _ => [.optimizeLoadout]
   | .claimPending     , _ => [.claimPendingItem]
   | .completeTask     , _ => [.completeTask]
   | .sellPressured    , _ => [.npcSell]
@@ -214,6 +216,21 @@ theorem cycleStep_progress_or_waits
       simpa using this
     simp only [fires, hpCriticalFires, CRITICAL_HP_DEN, CRITICAL_HP_NUM,
                Bool.and_eq_true, decide_eq_true_eq] at hfires
+    omega
+  | restForCombat =>
+    left
+    have hcs : cycleStep s = applyActionKind .rest s := by
+      unfold cycleStep; rw [hk]; rfl
+    rw [hcs]
+    -- applyActionKind .rest s = { s with hp := s.maxHp }.
+    -- restForCombatFires has the `hp < maxHp` conjunct, so hp ≠ maxHp.
+    show ({s with hp := s.maxHp} : State) ≠ s
+    intro heq
+    have hhp : s.maxHp = s.hp := by
+      have := congrArg State.hp heq
+      simpa using this
+    simp only [fires, restForCombatFires, Bool.and_eq_true,
+               decide_eq_true_eq] at hfires
     omega
   | bankUnlock =>
     left
@@ -319,6 +336,18 @@ theorem cycleStep_progress_or_waits
       have : (applyActionKind .deleteItem s).hasOverstockItems = false := hpost
       rw [heq] at this; exact this
     rw [hpre] at hpre'; cases hpre'
+  | gearReview =>
+    left
+    have hcs : cycleStep s = applyActionKind .optimizeLoadout s := by
+      unfold cycleStep; rw [hk]; rfl
+    rw [hcs]
+    simp only [fires, ProductionLadder.gearReviewFires] at hfires
+    intro heq
+    have hpost : (applyActionKind .optimizeLoadout s).gearReviewFires = false := by
+      simp [applyActionKind]
+    have hpre' : s.gearReviewFires = false := by
+      rw [heq] at hpost; exact hpost
+    rw [hfires] at hpre'; cases hpre'
   | claimPending =>
     left
     have hcs : cycleStep s = applyActionKind .claimPendingItem s := by

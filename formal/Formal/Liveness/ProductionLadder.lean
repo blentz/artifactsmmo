@@ -103,6 +103,19 @@ production source line. -/
 def hpCriticalFires (s : State) : Bool :=
   decide (s.maxHp > 0) && decide (CRITICAL_HP_DEN * s.hp < CRITICAL_HP_NUM * s.maxHp)
 
+/-- REST_FOR_COMBAT guard. Mirrors `guards.py:89-108`:
+      if ctx.combat_monster is None: return False
+      if state.hp >= state.max_hp: return False
+      if predict_win(state, …): return False
+      return predict_win(state @ max_hp, …)
+    Clauses (a)/(c)/(d) — combat target present, not winnable at current hp,
+    winnable at max hp — are folded into the opaque `restForCombatReady`
+    Bool. Clause (b) — `state.hp < state.max_hp` (Rest is actionable) — is
+    checked numerically here so the cycle-step progress proof can derive
+    `hp ≠ maxHp` for the `.rest` witness. -/
+def restForCombatFires (s : State) : Bool :=
+  s.restForCombatReady && decide (s.hp < s.maxHp)
+
 /-- BANK_UNLOCK guard. Mirrors `guards.py:69-76`:
       if ctx.bank_unlock_monster is None or ctx.bank_accessible: return False
       if state.xp > ctx.initial_xp: return False
@@ -151,6 +164,12 @@ def discardHighFires (s : State) : Bool :=
   && decide (s.inventoryMax > 0)
   && decide (DISCARD_HIGH_DEN * s.inventoryUsed
               ≥ DISCARD_HIGH_NUM * s.inventoryMax)
+
+/-- GEAR_REVIEW guard. Mirrors `guards.py:137-138`:
+      return ctx.gear_review_active
+    Opaque Bool — the Lean state carries production's `ctx.gear_review_active`
+    latch; a diff harness asserts agreement. -/
+def gearReviewFires (s : State) : Bool := s.gearReviewFires
 
 /-- CLAIM_PENDING. Mirrors `means.py:67-68`. -/
 def claimPendingFires (s : State) : Bool := s.pendingItemsNonempty
@@ -263,12 +282,14 @@ def craftReliefFires (s : State) : Bool := s.craftReliefFires
 noncomputable def fires (k : MeansKind) (s : State) : Bool :=
   match k with
   | .hpCritical       => hpCriticalFires s
+  | .restForCombat    => restForCombatFires s
   | .bankUnlock       => bankUnlockFires s
   | .reachUnlockLevel => reachUnlockLevelFires s
   | .discardCritical  => discardCriticalFires s
   | .craftRelief      => craftReliefFires s
   | .depositFull      => depositFullFires s
   | .discardHigh      => discardHighFires s
+  | .gearReview       => gearReviewFires s
   | .claimPending     => claimPendingFires s
   | .completeTask     => completeTaskFires s
   | .sellPressured    => sellPressuredFires s

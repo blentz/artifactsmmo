@@ -617,6 +617,9 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
     | hpCritical =>
       show (applyActionKind .rest s).level ≥ s.level
       simp [applyActionKind]
+    | restForCombat =>
+      show (applyActionKind .rest s).level ≥ s.level
+      simp [applyActionKind]
     | bankUnlock =>
       show (applyActionKind .fight s).level ≥ s.level
       simp only [applyActionKind]
@@ -636,6 +639,9 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
       simp [applyActionKind]
     | discardHigh =>
       show (applyActionKind .deleteItem s).level ≥ s.level
+      simp [applyActionKind]
+    | gearReview =>
+      show (applyActionKind .optimizeLoadout s).level ≥ s.level
       simp [applyActionKind]
     | claimPending =>
       show (applyActionKind .claimPendingItem s).level ≥ s.level
@@ -1042,6 +1048,12 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
   | taskCancel      => exfalso; revert hmem; unfold progressMeans; decide
   | pursueTask      => exfalso; revert hmem; unfold progressMeans; decide
   | acceptTask      => exfalso; revert hmem; unfold progressMeans; decide
+  -- restForCombat / gearReview are guards OUT of `progressMeans` scope
+  -- (same as completeTask/lowYieldCancel/taskCancel above): no
+  -- measure-decrease commitment is made for them here; their progress is
+  -- carried by `CycleStep.cycleStep_progress_or_waits`.
+  | restForCombat   => exfalso; revert hmem; unfold progressMeans; decide
+  | gearReview      => exfalso; revert hmem; unfold progressMeans; decide
 
 /-! ## Headline — strong form (restricted trajectory)
 

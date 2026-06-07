@@ -1,6 +1,6 @@
 """Python mirror of `Formal.Liveness.ProductionLadder.productionLadder`.
 
-Walks the 17-element `allInLadderOrder` (GUARD_ORDER ++ COLLECT_REWARD_ORDER
+Walks the 21-element `allInLadderOrder` (GUARD_ORDER ++ COLLECT_REWARD_ORDER
 ++ [OBJECTIVE_STEP] ++ DISCRETIONARY_ORDER) and returns the FIRST means
 whose production `_fires` predicate returns True; None if none fire.
 
@@ -37,15 +37,17 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 
 class LadderMeans(Enum):
-    """Unified 19-entry enum mirroring `Formal.Liveness.MeansKind.MeansKind`."""
+    """Unified 21-entry enum mirroring `Formal.Liveness.MeansKind.MeansKind`."""
 
     HP_CRITICAL = "hp_critical"
+    REST_FOR_COMBAT = "rest_for_combat"
     BANK_UNLOCK = "bank_unlock"
     REACH_UNLOCK_LEVEL = "reach_unlock_level"
     DISCARD_CRITICAL = "discard_critical"
     CRAFT_RELIEF = "craft_relief"
     DEPOSIT_FULL = "deposit_full"
     DISCARD_HIGH = "discard_high"
+    GEAR_REVIEW = "gear_review"
     CLAIM_PENDING = "claim_pending"
     COMPLETE_TASK = "complete_task"
     SELL_PRESSURED = "sell_pressured"
@@ -62,12 +64,14 @@ class LadderMeans(Enum):
 
 ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
     LadderMeans.HP_CRITICAL,
+    LadderMeans.REST_FOR_COMBAT,
     LadderMeans.BANK_UNLOCK,
     LadderMeans.REACH_UNLOCK_LEVEL,
     LadderMeans.DISCARD_CRITICAL,
     LadderMeans.CRAFT_RELIEF,
     LadderMeans.DEPOSIT_FULL,
     LadderMeans.DISCARD_HIGH,
+    LadderMeans.GEAR_REVIEW,
     LadderMeans.CLAIM_PENDING,
     LadderMeans.COMPLETE_TASK,
     LadderMeans.SELL_PRESSURED,
@@ -85,12 +89,14 @@ ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
 
 _GUARD_MAP: dict[LadderMeans, GuardKind] = {
     LadderMeans.HP_CRITICAL: GuardKind.HP_CRITICAL,
+    LadderMeans.REST_FOR_COMBAT: GuardKind.REST_FOR_COMBAT,
     LadderMeans.BANK_UNLOCK: GuardKind.BANK_UNLOCK,
     LadderMeans.REACH_UNLOCK_LEVEL: GuardKind.REACH_UNLOCK_LEVEL,
     LadderMeans.DISCARD_CRITICAL: GuardKind.DISCARD_CRITICAL,
     LadderMeans.CRAFT_RELIEF: GuardKind.CRAFT_RELIEF,
     LadderMeans.DEPOSIT_FULL: GuardKind.DEPOSIT_FULL,
     LadderMeans.DISCARD_HIGH: GuardKind.DISCARD_HIGH,
+    LadderMeans.GEAR_REVIEW: GuardKind.GEAR_REVIEW,
 }
 
 _MEANS_MAP: dict[LadderMeans, MeansKind] = {
@@ -111,12 +117,14 @@ _MEANS_MAP: dict[LadderMeans, MeansKind] = {
 # Lean ladder.  Any reordering on the production side breaks this.
 assert tuple(g for g in GUARD_ORDER) == (
     GuardKind.HP_CRITICAL,
+    GuardKind.REST_FOR_COMBAT,
     GuardKind.BANK_UNLOCK,
     GuardKind.REACH_UNLOCK_LEVEL,
     GuardKind.DISCARD_CRITICAL,
     GuardKind.CRAFT_RELIEF,
     GuardKind.DEPOSIT_FULL,
     GuardKind.DISCARD_HIGH,
+    GuardKind.GEAR_REVIEW,
 ), "GUARD_ORDER drift — Lean MeansKind.allInLadderOrder is stale"
 
 assert COLLECT_REWARD_ORDER == (

@@ -83,12 +83,14 @@ BANK_EXPANSION_SLOTS = 20
 
 MIRROR_PLAN_FOR: dict[LadderMeans, str] = {
     LadderMeans.HP_CRITICAL:        "rest",
+    LadderMeans.REST_FOR_COMBAT:    "rest",
     LadderMeans.BANK_UNLOCK:        "fight",
     LadderMeans.REACH_UNLOCK_LEVEL: "fight",
     LadderMeans.DISCARD_CRITICAL:   "deleteItem",
     LadderMeans.CRAFT_RELIEF:       "craft",
     LadderMeans.DEPOSIT_FULL:       "depositAll",
     LadderMeans.DISCARD_HIGH:       "deleteItem",
+    LadderMeans.GEAR_REVIEW:        "optimizeLoadout",
     LadderMeans.CLAIM_PENDING:      "claimPendingItem",
     LadderMeans.COMPLETE_TASK:      "completeTask",
     LadderMeans.SELL_PRESSURED:     "npcSell",
