@@ -13,23 +13,23 @@ while the market/cosmetic/info concepts are not.
 
 | Rank | Concept | Gap kind | Score | Next step |
 |---|---|---|---|---|
-| 1 | crafting | UNPROVEN | 27 | prove workshop-routing + craft-vs-buy decision |
-| 2 | tasks | UNPROVEN | 18 | prove PursueTask reachability (task completion terminates) |
-| 3 | items | THIN | 18 | model item give/transfer; extend gear proofs to consumables |
-| 4 | combat | THIN | 18 | prove loadout-swap-before-fight optimality |
-| 5 | characters | THIN | 12 | model multi-character roster (create/select) |
-| 6 | bank | THIN | 12 | prove bank-expansion purchase timing |
-| 7 | maps | THIN | 8 | prove multi-layer/obstacle traversal |
-| 8 | monsters | UNPROVEN | 8 | prove drop-driven monster selection (kill X for drop Y) |
-| 9 | npcs | THIN | 2 | model npc-buy of recipe inputs (buy-vs-gather) |
-| 10 | grandexchange | MISSING | 2 | add GE buy/sell goal (high-tier liquidity) |
-| 11 | events | THIN | 1 | prove event-merchant trade window; pursue event content |
+| 1 | tasks | UNPROVEN | 18 | prove PursueTask reachability (task completion terminates) |
+| 2 | items | THIN | 18 | model item give/transfer; extend gear proofs to consumables |
+| 3 | combat | THIN | 18 | prove loadout-swap-before-fight optimality |
+| 4 | characters | THIN | 12 | model multi-character roster (create/select) |
+| 5 | bank | THIN | 12 | prove bank-expansion purchase timing |
+| 6 | maps | THIN | 8 | prove multi-layer/obstacle traversal |
+| 7 | monsters | UNPROVEN | 8 | prove drop-driven monster selection (kill X for drop Y) |
+| 8 | npcs | THIN | 2 | model npc-buy of recipe inputs (buy-vs-gather) |
+| 9 | grandexchange | MISSING | 2 | add GE buy/sell goal (high-tier liquidity) |
+| 10 | events | THIN | 1 | prove event-merchant trade window; pursue event content |
 
 ## Closed
 
 | Concept | Gap kind | Score | Resolution |
 |---|---|---|---|
 | resources | THIN | 0 | CLOSED 2026-06-06 — yield-optimal multi-source narrowing via GatherSelection (dominance, monotonicity, totality, reachability proven) |
+| crafting | UNPROVEN | 0 | CLOSED 2026-06-06 — craft-vs-buy injects NpcBuyAction when cheaper+affordable; CraftVsBuy [dominance, monotonicity, totality, safety] proven |
 
 ## Deliberately not actioned (IGNORE — score 0)
 
