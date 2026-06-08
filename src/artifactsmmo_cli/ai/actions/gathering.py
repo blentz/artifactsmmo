@@ -41,6 +41,18 @@ class GatherAction(Action):
 
     _MIN_FREE_SLOTS = 3  # gathering can produce ore + random bonus drops simultaneously
 
+    # Re-gathering a material that is already sitting in the bank is wasteful:
+    # a WithdrawItemAction pulls it instantly (no gather cooldown) and is cheaper
+    # in aggregate. Without this penalty the planner front-loads gathers whenever
+    # the character is standing on the resource node (a single gather at the node,
+    # cost 6, beats the bank round-trip), so the lowest-*total*-cost plan ordered
+    # gathers first. Since only plan[0] executes per cycle and the character never
+    # leaves the node, banked stock was never withdrawn (live bug
+    # 2026-06-07: 40 banked ash_wood re-gathered for 40+ cycles). The penalty is
+    # large enough to dominate any plausible bank round-trip distance, so a
+    # banked-material withdraw provably sorts before re-gathering that material.
+    _BANKED_REGATHER_PENALTY = 100.0
+
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         if not self.locations:
             return False
@@ -91,6 +103,15 @@ class GatherAction(Action):
         dest = _nearest(self.locations, state)
         dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
         static = 6.0 + dist
+        # Penalize re-gathering a material the bank already holds, so the
+        # planner withdraws banked stock before re-gathering it (see
+        # _BANKED_REGATHER_PENALTY). The penalty applies per banked unit's
+        # worth: once the bank is exhausted the deficit gathers carry no
+        # penalty, preserving optimal handling of the unavoidable shortfall.
+        drop_item = game_data.resource_drop_item(self.resource_code) or self.resource_code
+        banked = (state.bank_items or {}).get(drop_item, 0)
+        if banked > 0:
+            static += self._BANKED_REGATHER_PENALTY
         if history is None:
             return learned_cost_pure(static, 0.0, 1.0, has_history=False)
         learned = history.action_cost(repr(self), default=static, window=50)
