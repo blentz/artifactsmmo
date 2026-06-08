@@ -32,6 +32,7 @@ import Formal.DecideKey
 import Formal.CyclesForProgress
 import Formal.GatherApply
 import Formal.GatherSelection
+import Formal.ShoppingList
 import Formal.MonsterDropSelection
 import Formal.CraftVsBuy
 import Formal.LiquidationVenue
@@ -2024,6 +2025,35 @@ example : ∀ (a b : Formal.GatherSelection.Candidate),
 -- gather_selected_reaches_needed: REACHABILITY — +1 loop reaches the needed quantity.
 example : ∀ (needed owned : Nat), needed ≤ owned + (needed - owned) :=
   @Formal.GatherSelection.gather_selected_reaches_needed
+
+/-! ### ShoppingList role contracts (bank-aware recipe net: dominance, monotonicity,
+reconstruction, short-circuit). -/
+
+-- credit_plus_deficit: RECONSTRUCTION (per node) — min(have,qty) + deficit = qty.
+example : ∀ (qty «have» : Nat),
+    min «have» qty + Formal.ShoppingList.deficit qty «have» = qty :=
+  @Formal.ShoppingList.credit_plus_deficit
+-- deficit_antitone: MONOTONICITY (per node) — more held copies ⇒ deficit non-increasing.
+example : ∀ (qty h₁ h₂ : Nat), h₁ ≤ h₂ →
+    Formal.ShoppingList.deficit qty h₂ ≤ Formal.ShoppingList.deficit qty h₁ :=
+  @Formal.ShoppingList.deficit_antitone
+-- deficit_zero_iff_covered: the withdraw-don't-gather predicate — net 0 ⇔ covered.
+example : ∀ (qty «have» : Nat),
+    Formal.ShoppingList.deficit qty «have» = 0 ↔ qty ≤ «have» :=
+  @Formal.ShoppingList.deficit_zero_iff_covered
+-- rawReq_le_naive: DOMINANCE — bank-credited work ≤ naive (gather-everything) work.
+example : ∀ (owned : Nat → Nat) (r : Formal.ShoppingList.Recipe) (fuel item qty : Nat),
+    Formal.ShoppingList.rawReq owned r fuel item qty ≤ Formal.ShoppingList.naiveReq r fuel item qty :=
+  fun owned r fuel item qty => Formal.ShoppingList.rawReq_le_naive owned r fuel item qty
+-- rawReq_antitone_owned: MONOTONICITY — more bank stock ⇒ ≤ remaining work.
+example : ∀ (r : Formal.ShoppingList.Recipe) (o₁ o₂ : Nat → Nat),
+    (∀ i, o₁ i ≤ o₂ i) → ∀ fuel item qty,
+    Formal.ShoppingList.rawReq o₂ r fuel item qty ≤ Formal.ShoppingList.rawReq o₁ r fuel item qty :=
+  fun r o₁ o₂ hle fuel item qty => Formal.ShoppingList.rawReq_antitone_owned r o₁ o₂ hle fuel item qty
+-- touched_covered_singleton: SHORT-CIRCUIT — covered item prunes its subtree (only itself touched).
+example : ∀ (owned : Nat → Nat) (r : Formal.ShoppingList.Recipe) (fuel item qty : Nat),
+    qty ≤ owned item → Formal.ShoppingList.touched owned r (fuel + 1) item qty = [item] :=
+  @Formal.ShoppingList.touched_covered_singleton
 
 /-! ### MonsterDropSelection role contracts (expected-kills lex-argmin monster-drop). -/
 

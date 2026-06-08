@@ -3,6 +3,7 @@
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS, EquipAction
+from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -15,6 +16,9 @@ from artifactsmmo_cli.ai.goals.upgrade_selection import (
 )
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.min_gathers import min_gathers
+from artifactsmmo_cli.ai.recipe_closure import recipe_closure
+from artifactsmmo_cli.ai.shopping_list import fully_covered_materials
+from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -122,46 +126,84 @@ class UpgradeEquipmentGoal(Goal):
 
     def relevant_actions(self, actions: list[Action], state: WorldState,
                          game_data: GameData) -> list[Action]:
-        """Lock planning to the upgrade target's SLOT.
+        """Lock planning to the upgrade target's recipe CLOSURE + SLOT.
 
         is_satisfied (when committed) requires the target item in its slot, but
         the planner still needs a narrow action set or it finds cheaper detours.
-        The bug this prevents: while gathering ash_plank for a wooden_shield
-        (shield_slot), the planner crafted a fishing_net (a weapon tool sharing
-        the ash_plank recipe) and equipped it via OptimizeLoadout. Lock to the
-        slot — keep only:
-          - the EquipAction for the exact target item into the target slot,
-          - CraftActions for the target item, items equippable in the target
-            slot, and non-equippable recipe-chain materials (ash_plank, bars),
-          - gather/withdraw and recovery/deposit support.
-        Drop UnequipActions and every other equip-tagged action (including
-        OptimizeLoadout, which equips arbitrary slots) and crafts of equippables
-        belonging to a different slot.
+        Two bugs this prevents:
+
+        1. SLOT LOCK: while gathering ash_plank for a wooden_shield (shield_slot),
+           the planner crafted a fishing_net (a weapon tool sharing the ash_plank
+           recipe) and equipped it via OptimizeLoadout. Keep only the EquipAction
+           for the exact target item into the target slot; drop UnequipActions and
+           every other equip-tagged action (OptimizeLoadout etc.).
+
+        2. CLOSURE LOCK + BANK-AWARE GATHER PRUNING (fixes the live Robby
+           timeout): the prior version kept EVERY non-equippable craft, every
+           gather, and (via a catch-all) every Fight/Recycle/NpcBuy/NpcSell — so
+           UpgradeEquipment(copper gear) gave the planner ~1000 actions and the
+           A* search exploded (~20k-57k nodes, timeout, plan_len 0) even though
+           the bank held 485 copper_ore. Restrict crafts/gathers/withdraws to the
+           target's recipe closure (copper_dagger -> copper_bar -> copper_ore),
+           and within that, PRUNE the gather for any material the bank+inventory
+           fully cover (net deficit 0 per the bank-aware shopping_list) — that
+           material is withdrawn, not re-gathered. A material with ANY net deficit
+           keeps its gather (never prune the only path to a real deficit), so a
+           reachable plan is never pruned (PlannerAdmissibility preserved). The
+           result is a short withdraw->craft->equip plan in << budget.
         """
         target = self.find_upgrade_target(state, game_data)
         if target is None:
             return actions
         target_item, target_slot = target
+        # Recipe closure of the target: the resources to gather and the craftable
+        # intermediates (copper_bar, copper_dagger). Restrict the action set to
+        # this so the planner cannot wander into unrelated crafts/fights/gathers.
+        needed_resources, craftable_mats = recipe_closure(game_data, (target_item,))
+        in_closure_crafts = set(craftable_mats) | {target_item}
+        # Withdraw-eligible item codes: the craftable intermediates + the target
+        # + the leaf raw-material drops of needed resources.
+        withdrawable: set[str] = set(in_closure_crafts)
+        for res in needed_resources:
+            drop = game_data.resource_drop_item(res)
+            if drop is not None:
+                withdrawable.add(drop)
+        # Materials the bank+inventory fully cover — withdraw them, don't gather.
+        owned: dict[str, int] = dict(state.inventory)
+        for code, qty in (state.bank_items or {}).items():
+            owned[code] = owned.get(code, 0) + qty
+        covered = fully_covered_materials(target_item, 1, game_data._crafting_recipes, owned)
         result: list[Action] = []
         for action in actions:
             if "recovery" in action.tags or "deposit" in action.tags:
                 result.append(action)
             elif isinstance(action, UnequipAction):
                 continue
+            elif isinstance(action, GatherAction):
+                # Keep only closure gathers, and only when their drop is NOT fully
+                # bank/inventory-covered (else the WithdrawItemAction supplies it).
+                if action.resource_code not in needed_resources:
+                    continue
+                drop = game_data.resource_drop_item(action.resource_code)
+                if drop is not None and drop in covered:
+                    continue
+                result.append(action)
             elif isinstance(action, CraftAction):
-                stats = game_data.item_stats(action.code)
-                slots = ITEM_TYPE_TO_SLOTS.get(stats.type_, []) if stats is not None else []
-                # Keep target-slot equippables and non-equippable materials
-                # (recipe chain); drop equippables for other slots.
-                if not slots or target_slot in slots:
+                # Keep only closure crafts (the chain intermediates + target).
+                if action.code in in_closure_crafts:
+                    result.append(action)
+            elif isinstance(action, WithdrawItemAction):
+                # Keep only withdraws of closure items (chain materials/target).
+                if action.code in withdrawable:
                     result.append(action)
             elif "equip" in action.tags:
                 # Only the exact target item into the target slot. Drops
                 # OptimizeLoadout and any other-item/other-slot equip.
                 if isinstance(action, EquipAction) and action.code == target_item and action.slot == target_slot:
                     result.append(action)
-            else:
-                result.append(action)
+            # Everything else (Fight, Recycle, NpcBuy/Sell, OptimizeLoadout, task
+            # actions, gold/bank-expansion, map transitions) is irrelevant to
+            # building+equipping the target — drop it to bound the search.
         return result
 
     def find_upgrade_target(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:

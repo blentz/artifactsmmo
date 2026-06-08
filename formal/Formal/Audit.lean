@@ -709,6 +709,16 @@ open Formal.WeightedRemaining in
 #print axioms Formal.GatherSelection.select_no_cheaper_at_le_distance
 #print axioms Formal.GatherSelection.expected_gathers_mono_in_rate
 #print axioms Formal.GatherSelection.gather_selected_reaches_needed
+-- ShoppingList (bank-aware recipe net: dominance, monotonicity, reconstruction, short-circuit)
+#print axioms Formal.ShoppingList.credit_plus_deficit
+#print axioms Formal.ShoppingList.deficit_le_qty
+#print axioms Formal.ShoppingList.deficit_antitone
+#print axioms Formal.ShoppingList.deficit_zero_iff_covered
+#print axioms Formal.ShoppingList.rawReq_mono_qty
+#print axioms Formal.ShoppingList.rawReq_le_naive
+#print axioms Formal.ShoppingList.rawReq_antitone_owned
+#print axioms Formal.ShoppingList.naiveReq_raw
+#print axioms Formal.ShoppingList.touched_covered_singleton
 -- MonsterDropSelection (expected-kills lex-argmin monster-drop selection)
 #print axioms Formal.MonsterDropSelection.select_some_iff_nonempty
 #print axioms Formal.MonsterDropSelection.select_mem

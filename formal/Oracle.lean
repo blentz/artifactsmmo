@@ -1036,6 +1036,42 @@ def runGatherSelection (args : Array Json) : Json :=
     | none => -1
   Json.mkObj [("selected", Json.num selected)]
 
+/-- Compute one shopping_list result using the SAME proved
+`Formal.ShoppingList.rawReq` (the total raw gather work the bank-aware net list
+implies).
+
+args layout (all Nat ≥ 0):
+* `[0]`                  nRecipe (number of `(item, sub, qty)` triples)
+* `[1 .. 3*nRecipe]`     the triples, flat: item0 sub0 qty0 ...
+* next: nOwned, then `(item, qty)` owned pairs flat
+* next: queryItem, queryQty, fuel
+
+Emits the Lean `rawReq owned r fuel queryItem queryQty` — compared against the
+Python `sum of net deficits over raw-leaf items` from the live `shopping_list`
+(equal for tree recipes, which the diff test generates). -/
+def runShoppingList (args : Array Json) : Json :=
+  let g := fun i => (intArg args i).toNat
+  let nRecipe := g 0
+  let triples : List (Nat × Nat × Nat) :=
+    (List.range nRecipe).map (fun k => (g (1 + 3*k), g (2 + 3*k), g (3 + 3*k)))
+  let p1 := 1 + 3*nRecipe
+  let nOwned := g p1
+  let ownedPairs : List (Nat × Nat) :=
+    (List.range nOwned).map (fun k => (g (p1 + 1 + 2*k), g (p1 + 2 + 2*k)))
+  let p2 := p1 + 1 + 2*nOwned
+  let queryItem := g p2
+  let queryQty := g (p2 + 1)
+  let fuel := g (p2 + 2)
+  let r : Formal.ShoppingList.Recipe :=
+    fun item => (triples.filter (fun t => decide (t.1 = item))).map (fun t => (t.2.1, t.2.2))
+  let owned := tableLookup ownedPairs 0
+  let keys := (Formal.ShoppingList.touched owned r fuel queryItem queryQty).mergeSort (· ≤ ·)
+    |>.eraseDups
+  let keysJson := Json.arr ((keys.map (fun n => Json.num (Int.ofNat n))).toArray)
+  Json.mkObj [("raw_work",
+      Json.num (Int.ofNat (Formal.ShoppingList.rawReq owned r fuel queryItem queryQty))),
+    ("keys", keysJson)]
+
 /-- Compute one monster_drop_selection result using the SAME proved
 `Formal.MonsterDropSelection.selectMonsterForDrop`.
 
@@ -1572,6 +1608,8 @@ def runOne (item : Json) : Json :=
     runGatherApply args
   else if kind == "gather_selection" then
     runGatherSelection args
+  else if kind == "shopping_list" then
+    runShoppingList args
   else if kind == "monster_drop_selection" then
     runMonsterDropSelection args
   else if kind == "craft_vs_buy" then
