@@ -723,6 +723,22 @@ class TestGatherMaterialsGoal:
         state = make_state(inventory={"copper_ore": 5}, bank_items={})
         assert goal.is_satisfied(state) is False
 
+    def test_satisfied_when_finished_target_already_banked(self):
+        """Live bug 2026-06-08: the bank held a finished fishing_net but the bot
+        kept grinding ash_wood to craft a SECOND one — GatherMaterials' is_satisfied
+        only tracked the recipe materials, never the finished item. Owning the
+        finished target (here in the bank) must satisfy the goal so the redundant
+        craft is dropped (the objective withdraws the existing copy)."""
+        goal = GatherMaterialsGoal(target_item="fishing_net", needed={"ash_plank": 6})
+        # No materials at all, but a finished fishing_net sits in the bank.
+        state = make_state(inventory={}, bank_items={"fishing_net": 1})
+        assert goal.is_satisfied(state) is True
+
+    def test_satisfied_when_finished_target_in_inventory(self):
+        goal = GatherMaterialsGoal(target_item="fishing_net", needed={"ash_plank": 6})
+        state = make_state(inventory={"fishing_net": 1}, bank_items={})
+        assert goal.is_satisfied(state) is True
+
     def test_desired_state_returns_needed(self):
         needed = {"copper_ore": 6}
         goal = GatherMaterialsGoal(target_item="copper_dagger", needed=needed)

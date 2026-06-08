@@ -271,6 +271,15 @@ class GatherMaterialsGoal(Goal):
 
     def is_satisfied(self, state: WorldState) -> bool:
         bank = state.bank_items or {}
+        # Already have the FINISHED target item (inventory + bank)? Then
+        # gathering materials to craft ANOTHER is redundant — the objective
+        # withdraws the existing copy instead. Without this short-circuit, a
+        # sticky-committed GatherMaterials(fishing_net) keeps grinding ash_wood
+        # for a second fishing_net even though one already sits in the bank
+        # (this goal's is_satisfied only tracked the recipe MATERIALS, not the
+        # finished item, so it never noticed the banked copy).
+        if state.inventory.get(self._target_item, 0) + bank.get(self._target_item, 0) >= 1:
+            return True
         return all(
             state.inventory.get(mat, 0) + bank.get(mat, 0) >= qty
             for mat, qty in self._needed.items()
