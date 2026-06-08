@@ -10,6 +10,7 @@ from artifactsmmo_cli.ai.arbiter_select import Candidate, select_pure
 from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
 from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gather_step_target import gather_step_target
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
@@ -48,6 +49,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachCharLevel,
     ReachSkillLevel,
 )
+from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
 
 CHEAP_BUDGET_SECONDS = 10.0
@@ -158,9 +160,17 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
         if state.inventory.get(item, 0) > 0 or _materials_in_hand(item, state, game_data):
             return UpgradeEquipmentGoal(initial_equipment=state.equipment,
                                         committed_target=(item, slot))
-        recipe = game_data._crafting_recipes.get(item) or {}
-        needed = {mat: qty for mat, qty in recipe.items()}
-        return GatherMaterialsGoal(target_item=item, needed=needed)
+        # Materials not in hand: route to the FLAT deepest actionable step rather
+        # than GatherMaterials(item, DIRECT recipe). For a from-scratch deep chain
+        # the direct-recipe goal must gather through the multi-level recipe and
+        # explodes the GOAP search (655k nodes / 90s timeout at qty 480 offline);
+        # the flat leaf gather is linear and budget-feasible, and the macro chain
+        # is reached by repeated cycle execution. Reuses the proved
+        # gather_step_target core (see _gather_goal_for_unreachable_equippable).
+        committed = UpgradeEquipmentGoal(initial_equipment=state.equipment,
+                                         committed_target=(item, slot))
+        return _gather_goal_for_unreachable_equippable(
+            item, state, game_data, committed.max_depth)
     raise ValueError(f"Unknown GuardKind: {kind!r}")
 
 
@@ -200,6 +210,51 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
     raise ValueError(f"Unknown MeansKind: {kind!r}")
 
 
+def _gather_goal_for_unreachable_equippable(
+    code: str, state: WorldState, game_data: GameData, equip_max_depth: int,
+) -> GatherMaterialsGoal:
+    """Build a budget-FEASIBLE GatherMaterials goal for a depth-unreachable
+    equippable `code` (its full craft chain exceeds `equip_max_depth`).
+
+    The naive fallback — GatherMaterials(code, code's DIRECT recipe) — must plan a
+    chain that gathers `min_gathers(code)` raw units THROUGH the multi-level recipe;
+    for a from-scratch DEEP chain (empty bank, e.g. steel_boots ← 6 steel_bar ←
+    8 iron_bar ← 10 iron_ore = 480 raw) the GOAP search over the gather/craft/deposit
+    interleavings EXPLODES super-linearly (measured offline: 655k nodes / 90s timeout
+    / plan_len 0 at qty 480; live: 1M+ nodes). Piece A (bank-credited shopping_list)
+    prunes NOTHING here — there is no bank stock to credit.
+
+    The fix is the SAME macro/micro bound Piece C wired into `objective_step_goal`:
+    route to the strategy's DEEPEST actionable step (the raw base material), whose
+    gather is FLAT (`min_gathers == qty`, no recipe sub-tree to interleave) and
+    therefore LINEAR in the planner (measured offline: ~38 nodes/unit, 18k nodes /
+    0.8s at qty 480 — well within budget). Gathering the leaf makes real incremental
+    progress; once it accumulates the next recipe level becomes the actionable step,
+    and UpgradeEquipment fires the craft+equip when the materials are in hand. The
+    macro PLAN (gather leaf → craft up the chain → equip) is reached by REPEATED
+    cycle execution; each cycle descends to micro only for the committed flat batch.
+
+    Reuses the proved cores `actionable_step`
+    (formal/Formal/StrategyTraversal.lean `actStep`) + `gather_step_target`
+    (formal/Formal/StepDispatch.lean `gatherTarget_*`): the routed step is a genuine
+    prerequisite ON the root's recipe path and never harder than the declined root,
+    so PlannerAdmissibility is preserved (a reachable root is never abandoned)."""
+    owned: dict[str, int] = dict(state.inventory)
+    for owned_code, qty in (state.bank_items or {}).items():
+        owned[owned_code] = owned.get(owned_code, 0) + qty
+    step = actionable_step(ObtainItem(code=code, quantity=1), state, game_data)
+    if step is not None and isinstance(step, ObtainItem) and step.code != code:
+        tgt_code, tgt_qty = gather_step_target(
+            code, step.code, step.quantity,
+            game_data._crafting_recipes, owned, equip_max_depth)
+        return GatherMaterialsGoal(target_item=tgt_code, needed={tgt_code: tgt_qty})
+    # No deeper actionable step (the root itself is the actionable leaf, or the
+    # chain is cyclically blocked): fall back to the direct recipe. A recipe-less
+    # root never reaches here (callers gate on a non-empty recipe / is_plannable).
+    recipe = game_data._crafting_recipes.get(code) or {}
+    return GatherMaterialsGoal(target_item=code, needed=dict(recipe))
+
+
 def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameData) -> Goal:
     """Map an equippable target to UpgradeEquipment when it is reachable, else to
     GatherMaterials for its recipe.
@@ -219,7 +274,12 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
         return upgrade
     recipe = game_data._crafting_recipes.get(code) or {}
     if recipe:
-        return GatherMaterialsGoal(target_item=code, needed=dict(recipe))
+        # Depth-UNREACHABLE from-scratch deep chain: route to the FLAT deepest
+        # actionable step instead of GatherMaterials(code, DIRECT recipe), whose
+        # plan must gather through the multi-level recipe and explodes the GOAP
+        # search (see _gather_goal_for_unreachable_equippable).
+        return _gather_goal_for_unreachable_equippable(
+            code, state, game_data, upgrade.max_depth)
     # Unreachable in practice: is_plannable is only False when min_gathers >
     # max_depth, which requires a non-empty recipe (a recipe-less item needs at
     # most one gather, so it is always plannable and returns above). Kept as a
@@ -258,7 +318,31 @@ def objective_step_goal(
             root_stats = game_data.item_stats(root.code)
             root_slots = ITEM_TYPE_TO_SLOTS.get(root_stats.type_) if root_stats is not None else None
             if root_slots:
-                return _equippable_goal(root.code, root_slots[0], state, game_data)
+                upgrade = UpgradeEquipmentGoal(initial_equipment=state.equipment,
+                                               committed_target=(root.code, root_slots[0]))
+                if upgrade.is_plannable(state, game_data):
+                    # Root chain depth-reachable (materials in hand/craftable):
+                    # plan the whole craft+equip under one commit.
+                    return upgrade
+                # Root chain depth-UNREACHABLE (from-scratch deep recipe). The
+                # old fallback GatherMaterials(root, root's DIRECT recipe) needs a
+                # plan that gathers min_gathers(root) raw units THROUGH the deep
+                # recipe — the GOAP search over gather/deposit/craft interleavings
+                # EXPLODES (live: 1M+ nodes, 90s timeout, plan_len 0, then
+                # fall-through; the gear chain never progresses). Route instead to
+                # the strategy's DEEPEST actionable step (the raw base material),
+                # whose gather is FLAT and budget-feasible and makes incremental
+                # progress; once it accumulates the next recipe level becomes the
+                # actionable step. Sound: the step is a prerequisite ON the root's
+                # path and never harder than the root (gather_step_target +
+                # formal/Formal/StepDispatch.lean gatherTarget_*).
+                owned: dict[str, int] = dict(state.inventory)
+                for code, qty in (state.bank_items or {}).items():
+                    owned[code] = owned.get(code, 0) + qty
+                tgt_code, tgt_qty = gather_step_target(
+                    root.code, step.code, step.quantity,
+                    game_data._crafting_recipes, owned, upgrade.max_depth)
+                return GatherMaterialsGoal(target_item=tgt_code, needed={tgt_code: tgt_qty})
         return GatherMaterialsGoal(target_item=step.code, needed={step.code: step.quantity})
     if isinstance(step, ReachSkillLevel):
         current = state.skills.get(step.skill, 0)

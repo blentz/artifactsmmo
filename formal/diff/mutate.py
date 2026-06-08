@@ -37,6 +37,7 @@ CYCLES_FOR_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" 
 GATHER_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gather_apply_core.py"
 GATHER_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_selection.py"
 SHOPPING_LIST_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "shopping_list.py"
+GATHER_STEP_TARGET_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_step_target.py"
 MONSTER_DROP_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "monster_drop_selection.py"
 CRAFT_VS_BUY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_vs_buy.py"
 LIQUIDATION_VENUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "liquidation_venue.py"
@@ -1077,6 +1078,8 @@ _ALL_SRCS = [
     PLAYER_SRC,
     # Phase-22b — cycle-loop mirror.
     CYCLE_STEP_SRC,
+    # Piece-C — feasibility router for depth-unreachable equippable roots.
+    GATHER_STEP_TARGET_SRC,
 ]
 
 
@@ -1253,6 +1256,28 @@ SHOPPING_LIST_MUTATIONS = [
     ("shopping_list: recurse on qty not deficit (ignore credit downstream)",
      "        _expand(material, per_unit * deficit, recipes, owned, net)",
      "        _expand(material, per_unit * qty, recipes, owned, net)"),
+]
+
+
+# gather_step_target mutations -- each breaks the budget-feasibility routing so
+# the Python (code, qty) diverges from the Lean `gatherTarget` oracle.
+# Killed by formal/diff/test_gather_step_target_diff.py.
+GATHER_STEP_TARGET_MUTATIONS = [
+    # Invert the feasibility gate: route to the deep root when OVER budget and to
+    # the step when UNDER — the exact opposite of the sound decision.
+    ("gather_step_target: invert budget gate (<= -> >)",
+     "    if root_cost <= equip_max_depth:",
+     "    if root_cost > equip_max_depth:"),
+    # Always keep the root target (never route to the step) -> the deep root goal
+    # that explodes the planner is built for every unreachable chain.
+    ("gather_step_target: always root (drop step routing)",
+     "    if root_cost <= equip_max_depth:\n        return (root_item, 1)\n    return (step_item, step_qty)",
+     "    return (root_item, 1)"),
+    # Always route to the step (never keep a reachable root) -> a reachable root's
+    # one-commit craft+equip is wrongly abandoned for a bare gather.
+    ("gather_step_target: always step (ignore reachable root)",
+     "    if root_cost <= equip_max_depth:\n        return (root_item, 1)\n    return (step_item, step_qty)",
+     "    return (step_item, step_qty)"),
 ]
 
 
@@ -2334,6 +2359,8 @@ def main() -> int:
               "formal/diff/test_gather_selection_diff.py", survivors)
     run_group(SHOPPING_LIST_SRC, SHOPPING_LIST_MUTATIONS,
               "formal/diff/test_shopping_list_diff.py", survivors)
+    run_group(GATHER_STEP_TARGET_SRC, GATHER_STEP_TARGET_MUTATIONS,
+              "formal/diff/test_gather_step_target_diff.py", survivors)
     run_group(MONSTER_DROP_SELECTION_SRC, MONSTER_DROP_SELECTION_MUTATIONS,
               "formal/diff/test_monster_drop_selection_diff.py", survivors)
     run_group(CRAFT_VS_BUY_SRC, CRAFT_VS_BUY_MUTATIONS,

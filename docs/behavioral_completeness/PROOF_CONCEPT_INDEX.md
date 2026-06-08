@@ -60,7 +60,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | RecycleProtection | items, crafting | safety |
 | Scalarizer | core | monotonicity |
 | ShoppingList | resources | dominance, monotonicity, safety, totality |
-| StepDispatch | core, planner | totality |
+| StepDispatch | core, planner | totality, safety, reachability |
 | StoreWarmup | core | safety |
 | StrategyBlend | core, planner | monotonicity, safety |
 | StrategyTraversal | crafting, planner | reachability, totality |

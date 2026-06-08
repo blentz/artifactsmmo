@@ -672,6 +672,12 @@ open Formal.PriorityBand
 #check @Formal.StepDispatch.obtain_only_routes_to_obtain_classes
 #check @Formal.StepDispatch.reach_skill_only_routes_to_level_skill
 #check @Formal.StepDispatch.reach_char_only_routes_to_grind
+-- Piece-C feasibility router (gather_step_target):
+#check @Formal.StepDispatch.minGathers_raw
+#check @Formal.StepDispatch.minGathers_raw_unowned
+#check @Formal.StepDispatch.gatherTarget_step_only_when_root_over_budget
+#check @Formal.StepDispatch.gatherTarget_root_when_feasible
+#check @Formal.StepDispatch.gatherTarget_step_not_harder_than_root
 
 -- LivenessChain (Phase G6 capstone):
 #check @Formal.LivenessChain.chain_emits_fight_when_target_exists_and_applicable
