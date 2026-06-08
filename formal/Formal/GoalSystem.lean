@@ -369,7 +369,9 @@ theorem restoreHp_critical_is_110 (hp : Rat)
 
 /-! ### DepositInventoryGoal — value range [0, 80]. -/
 
-def depositRampStart : Rat := 1 / 2
+-- High watermark 0.85 (17/20) per spec 2026-06-07: deposit pressure only
+-- appears near-full so the player uses most of the bag (raised from 1/2).
+def depositRampStart : Rat := 17 / 20
 def depositMaxValue : Rat := 80
 
 def depositInventoryValue

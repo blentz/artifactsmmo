@@ -35,27 +35,33 @@ further Gather will fail; clear overstock immediately."""
 class DiscardOverstockGoal(Goal):
     """Sell (if NPC buys) or delete items held beyond their useful cap."""
 
-    def __init__(self, game_data: GameData) -> None:
+    def __init__(self, game_data: GameData,
+                 profile: dict[str, int] | None = None) -> None:
         # game_data stashed so is_satisfied (which only receives state per
         # the Goal protocol) can still compute overstock during planning.
         self._gd = game_data
+        # The active goal's soft inventory profile — never discard a profile
+        # item below its target (spec 2026-06-07).
+        self._profile = profile or {}
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
-        """Pressure-scaled: baseline when overstock present, escalating as
-        the bag fills. Autoregressive sensing — the more inventory pressure,
-        the more urgent overstock management becomes relative to gathering."""
+        """Pressure-scaled, space-driven (spec 2026-06-07): overstock only
+        EXISTS at/above the high watermark (DISCARD_WATERMARK == 0.85), so a
+        non-satisfied DiscardOverstock is already under genuine space pressure.
+        The value escalates again at the critical fraction. Below the watermark
+        there is no overstock and the goal is satisfied (value 0) — the bag's
+        free slots are not a dump trigger."""
         if self.is_satisfied(state):
             return 0.0
         pressure = state.inventory_used / state.inventory_max if state.inventory_max else 0.0
         if pressure >= CRITICAL_PRESSURE_FRACTION:
             return _DISCARD_OVERSTOCK_CRITICAL
-        if pressure >= HIGH_PRESSURE_FRACTION:
-            return _DISCARD_OVERSTOCK_HIGH_PRESSURE
-        return _DISCARD_OVERSTOCK_BASE
+        # Overstock implies pressure >= DISCARD_WATERMARK == HIGH_PRESSURE_FRACTION.
+        return _DISCARD_OVERSTOCK_HIGH_PRESSURE
 
     def is_satisfied(self, state: WorldState) -> bool:
-        return not overstocked_items(state, self._gd)
+        return not overstocked_items(state, self._gd, profile=self._profile)
 
     @property
     def max_depth(self) -> int:
@@ -77,7 +83,7 @@ class DiscardOverstockGoal(Goal):
         overstock entirely. Sell wins over Delete when any NPC buys —
         gold > zero. Sell picks the highest-paying NPC.
         """
-        excess = overstocked_items(state, game_data)
+        excess = overstocked_items(state, game_data, profile=self._profile)
         if not excess:
             return []
         result: list[Action] = []

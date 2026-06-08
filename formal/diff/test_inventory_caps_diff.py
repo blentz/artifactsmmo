@@ -42,9 +42,18 @@ def _make_state(code: str, task_remaining: int, equipped: bool, qty: int) -> Wor
         task_progress = 5
     equipment = {"weapon": code} if equipped else {}
     inventory = {code: qty} if qty != 0 else {}
+    # Post spec-2026-06-07 `overstocked_items` is SPACE-DRIVEN: it only reports
+    # overstock when the bag is under genuine pressure (used/max >= 0.85). This
+    # diff pins the per-item `useful_quantity_cap` <-> Lean `cap` AND, on the
+    # overstock side, the proved `InventoryCaps.overstock` (= qty - cap when
+    # over) — so we hold the bag at 100% pressure (max == used == qty) and pass
+    # an empty profile, isolating the cap formula against Lean exactly as
+    # before. The space-driven gate itself is differential-tested separately in
+    # test_inventory_profile_diff.py.
+    inventory_max = max(1, qty)
     return WorldState(
         character="c", level=1, xp=0, max_xp=100, hp=10, max_hp=10, gold=0,
-        skills={}, x=0, y=0, inventory=inventory, inventory_max=1000,
+        skills={}, x=0, y=0, inventory=inventory, inventory_max=inventory_max,
         equipment=equipment, cooldown_expires=None, task_code=task_code,
         task_type=task_type, task_progress=task_progress, task_total=task_total,
         bank_items=None, bank_gold=None, pending_items=None,

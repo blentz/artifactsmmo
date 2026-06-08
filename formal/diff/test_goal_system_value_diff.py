@@ -169,13 +169,16 @@ def restore_hp_value_model(hp_percent: Fraction) -> Fraction:
 
 def deposit_inventory_value_model(accessible: bool, satisfied: bool, inv_max_zero: bool,
                                   used_fraction: Fraction) -> Fraction:
+    # High watermark 0.85 (17/20) per spec 2026-06-07 (raised from 1/2 so
+    # deposit is space-driven). Mirrors DepositInventoryGoal._RAMP_START.
+    ramp = Fraction(17, 20)
     if (not accessible) or inv_max_zero:
         return Fraction(0)
     if satisfied:
         return Fraction(0)
-    if used_fraction < Fraction(1, 2):
+    if used_fraction < ramp:
         return Fraction(0)
-    return (used_fraction - Fraction(1, 2)) / (Fraction(1) - Fraction(1, 2)) * Fraction(80)
+    return (used_fraction - ramp) / (Fraction(1) - ramp) * Fraction(80)
 
 
 def sell_inventory_value_model(inv_max_zero: bool, satisfied: bool, sellable: bool,

@@ -50,6 +50,20 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @consumableCap_eq_keep_of_healing  -- hp_restore > 0 ⇒ consumableCap = CONSUMABLE_KEEP
 #check @equipCapFromPeers_dominated       -- dominator-owned ≥ slotCount ⇒ equippableCap = 0
 #check @isDominatedBy_nil_of_positive_slot -- empty peer list, slot ≥ 1 ⇒ ¬dominated
+-- InventoryProfile required roles (per-goal soft-target overstock core, spec 2026-06-07):
+#check @Formal.InventoryProfile.overstock_exact            -- pins the space-driven overstock formula
+#check @Formal.InventoryProfile.no_overstock_below_watermark -- below watermark ⇒ 0 overstock (space-driven)
+#check @Formal.InventoryProfile.profile_protection          -- held ≤ profileTarget ⇒ never overstock
+#check @Formal.InventoryProfile.overstock_zero_of_le_floor  -- held ≤ protectedFloor ⇒ never overstock
+#check @Formal.InventoryProfile.monotone_accumulation       -- shed step keeps held ≥ profileTarget (no oscillation)
+#check @Formal.InventoryProfile.held_after_shed_ge_floor    -- shed step keeps held ≥ protectedFloor
+#check @Formal.InventoryProfile.shed_idempotent             -- a second shed removes nothing (converges)
+#check @Formal.InventoryProfile.overstock_pos_iff           -- excess > 0 iff pressure ∧ over floor
+#check @Formal.InventoryProfile.protectedFloor_ge_profile   -- protectedFloor ≥ profileTarget
+-- InventoryChainSafe high-watermark deposit safety (spec 2026-06-07):
+#check @Formal.InventoryChainSafe.deposit_fires_before_overflow    -- unit gather overflows ⇒ deposit already firing
+#check @Formal.InventoryChainSafe.deposit_fires_before_overflow_at_85 -- ditto at the 17/20 production watermark
+#check @Formal.InventoryChainSafe.deposit_fires_monotone           -- firing region upward-closed in used
 -- PredictWin required roles:
 #check @predict_win_eq_sim          -- closed-form verdict = operational fight-sim
 #check @maxturns_sound              -- rounds_to_kill > MAX_TURNS ⇒ ¬win

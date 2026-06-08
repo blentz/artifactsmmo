@@ -99,20 +99,24 @@ class TestDepositInventoryGoal:
         assert goal.is_satisfied(state) is False
 
     def test_value_returns_zero_when_below_ramp_start(self):
-        """No urgency to deposit while inventory is below 50% used."""
+        """No urgency to deposit while inventory is below the 85% high
+        watermark (spec 2026-06-07 raised _RAMP_START 0.5 -> 0.85 so the player
+        uses most of the bag before deposit pressure appears)."""
         goal = DepositInventoryGoal(game_data=self._gd())
-        # 8/20 used = 40% — below 50% ramp start. value should be 0.
-        inventory = {f"item_{i}": 1 for i in range(8)}
+        # 16/20 used = 80% — below the 85% ramp start. value should be 0.
+        inventory = {f"item_{i}": 1 for i in range(16)}
         state = make_state(inventory=inventory, inventory_max=20)
         assert goal.value(state, self._gd()) == 0.0
 
-    def test_value_ramps_from_50_to_100_percent_used(self):
-        """At 75% used the value should sit between 0 and the max (80)."""
+    def test_value_ramps_from_85_to_100_percent_used(self):
+        """At 90% used the value should sit between 0 and the max (80).
+        The ramp now runs 0.85 -> 1.0 mapped onto 0 -> 80, so 90% used is
+        (0.90-0.85)/0.15 * 80 ≈ 26.7."""
         goal = DepositInventoryGoal(game_data=self._gd())
-        inventory = {f"item_{i}": 1 for i in range(15)}  # 15/20 = 75%
+        inventory = {f"item_{i}": 1 for i in range(18)}  # 18/20 = 90%
         state = make_state(inventory=inventory, inventory_max=20)
         v = goal.value(state, self._gd())
-        assert 35.0 < v < 50.0  # halfway up the ramp ≈ 40
+        assert 20.0 < v < 35.0  # ~26.7, between 0 and 80
 
     def test_satisfied_when_only_kept_items_remain(self):
         """No fixed-fraction rule: satisfaction is purely 'nothing bankable'."""

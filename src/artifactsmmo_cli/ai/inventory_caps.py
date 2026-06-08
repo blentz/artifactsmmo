@@ -17,6 +17,52 @@ SAFETY_FLOOR = 3
 """Always keep at least this many of any item that has any recipe use, so the
 bot doesn't immediately re-gather what it just discarded."""
 
+# The high watermark, kept as an EXACT integer ratio (17/20 = 0.85). The
+# overstock decision compares `used / cap >= num / den` by cross-multiplication
+# over integers — exact, no float drift at the boundary (mirrored by the proved
+# Lean core overstockExcess in formal/Formal/InventoryProfile.lean).
+DISCARD_WATERMARK_NUM = 17
+DISCARD_WATERMARK_DEN = 20
+DISCARD_WATERMARK = DISCARD_WATERMARK_NUM / DISCARD_WATERMARK_DEN
+"""inventory_used/inventory_max at or above which an over-floor item becomes
+overstock (== 0.85). Below this watermark the bag has real free slots, so
+NOTHING is overstock — the per-item `useful_quantity_cap` stops being a
+space-blind dump trigger. At/above the watermark, `useful_quantity_cap` (the
+useful floor) and the active goal's profile target (the protected floor)
+jointly decide what may be shed. Space-driven half of the per-goal
+inventory-profile design (spec 2026-06-07): deposit/discard fire only under
+genuine space pressure."""
+
+
+def overstock_excess(
+    held: int, profile_target: int, useful_floor: int,
+    used: int, cap: int,
+    watermark_num: int = DISCARD_WATERMARK_NUM,
+    watermark_den: int = DISCARD_WATERMARK_DEN,
+) -> int:
+    """Pure space-driven overstock decision (proved in
+    formal/Formal/InventoryProfile.lean as `overstockExcess`).
+
+    An item is overstock only when the bag is under real space pressure
+    (`used / cap >= watermark_num / watermark_den`, compared by exact integer
+    cross-multiplication) AND `held` exceeds the protected floor
+    `max(profile_target, useful_floor)`. Below the watermark — with free slots
+    — nothing is overstock, so an active-goal material accumulating toward its
+    profile target is never shed. The excess returned is
+    `held - max(profile_target, useful_floor)`; otherwise 0.
+
+    `profile_target` is the SOFT floor the active goal wants on hand;
+    `useful_floor` is the per-item `useful_quantity_cap`, which now only
+    tiebreaks WHICH overstock to shed once the bag is genuinely full. An item
+    at or below `profile_target` is NEVER overstock, regardless of pressure.
+    A non-positive `cap` reads as no pressure (no overstock)."""
+    if cap <= 0 or used * watermark_den < cap * watermark_num:
+        return 0
+    floor = profile_target if profile_target > useful_floor else useful_floor
+    if held > floor:
+        return held - floor
+    return 0
+
 EQUIPPABLE_KEEP = 1
 """Keep at least one of any equippable item Robby can wear — even if not
 currently equipped — so the equipment optimizer has it as a swap candidate.
@@ -233,17 +279,36 @@ def useful_quantity_cap_excl_equipped(
 def overstocked_items(
     state: WorldState, game_data: GameData,
     batch_buffer: int = BATCH_BUFFER, safety_floor: int = SAFETY_FLOOR,
+    profile: dict[str, int] | None = None,
+    watermark: tuple[int, int] = (DISCARD_WATERMARK_NUM, DISCARD_WATERMARK_DEN),
 ) -> dict[str, int]:
     """Return {item_code: excess_quantity} for every overstocked item.
 
-    Items with no recipe use and no task use get a cap of 0 — they're pure
-    junk. Items with caps return their `qty - cap` excess.
+    SPACE-DRIVEN + profile-preserving (spec 2026-06-07). An item is overstock
+    only when the bag is under real space pressure
+    (`inventory_used / inventory_max >= watermark`) AND `held` exceeds the
+    protected floor `max(profile_target, useful_quantity_cap)`. Below the
+    watermark — with free slots — NOTHING is overstock, so the per-item
+    `useful_quantity_cap` is no longer a space-blind dump trigger; it only
+    tiebreaks WHICH overstock to shed once the bag is genuinely full. An item
+    at or below its profile target is never overstock (the active goal's
+    materials are protected).
+
+    `profile` is the active goal's soft target map (item_code -> target_qty);
+    `None`/absent means an empty profile (the per-item useful floor still
+    applies under pressure).
     """
+    profile = profile or {}
+    used = state.inventory_used
+    cap = state.inventory_max
+    watermark_num, watermark_den = watermark
     excess: dict[str, int] = {}
     for code, qty in state.inventory.items():
         if qty <= 0:
             continue
-        cap = useful_quantity_cap(code, state, game_data, batch_buffer, safety_floor)
-        if qty > cap:
-            excess[code] = qty - cap
+        useful_floor = useful_quantity_cap(code, state, game_data, batch_buffer, safety_floor)
+        over = overstock_excess(qty, profile.get(code, 0), useful_floor,
+                                used, cap, watermark_num, watermark_den)
+        if over > 0:
+            excess[code] = over
     return excess

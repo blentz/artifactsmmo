@@ -57,7 +57,7 @@ def test_deposit_zero_cap_returns_zero():
 def test_deposit_below_ramp_returns_zero():
     g = DepositInventoryGoal(bank_accessible=True, game_data=None)
     state = _mk(inventory={"x": 40}, inventory_max=100)
-    # used_fraction = 0.4 < 0.5 → 0
+    # used_fraction = 0.4 < 0.85 high watermark → 0
     # (game_data=None → is_satisfied=True actually short-circuits; bypass
     # by using bank_accessible=False to hit the early-zero deterministically)
     g2 = DepositInventoryGoal(bank_accessible=False, game_data=None)
@@ -80,7 +80,9 @@ def test_deposit_full_value_at_cap():
     # The Lean theorem `deposit_full_value` pins the *formula* output
     # (80) independent of is_satisfied. Verify the constant.
     assert DepositInventoryGoal._MAX_VALUE == 80.0
-    assert DepositInventoryGoal._RAMP_START == 0.5
+    # High watermark 0.85 per spec 2026-06-07 (raised from 0.5 to make deposit
+    # space-driven — the old 0.5 ramp was the livelock's deposit-pressure bug).
+    assert DepositInventoryGoal._RAMP_START == 0.85
 
 
 # ─── DiscardOverstockGoal tier constants ─────────────────────────────────────

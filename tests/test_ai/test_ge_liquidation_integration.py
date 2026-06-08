@@ -37,7 +37,10 @@ def test_surplus_with_better_ge_buy_order_emits_ge_fill_action():
     winner — the proven core is genuinely invoked on a live path."""
     # NPC pays 3; standing GE buy order pays 9 and can absorb all 10 → GE wins.
     gd = _gd(npc_buy=("merchant", 3), ge_order=("ord-7", 9, 10))
-    state = make_state(inventory={"iron_ore": 10}, inventory_max=20)
+    # inventory_max=11 keeps the bag under genuine space pressure (10/11 >=
+    # the 0.85 discard watermark) so the space-driven overstock fires and the
+    # GE-liquidation path is exercised (spec 2026-06-07).
+    state = make_state(inventory={"iron_ore": 10}, inventory_max=11)
     goal = DiscardOverstockGoal(gd)
 
     emitted = goal.relevant_actions([], state, gd)
@@ -59,7 +62,10 @@ def test_surplus_with_better_ge_buy_order_emits_ge_fill_action():
 def test_surplus_without_ge_order_emits_only_npc_sell():
     """No standing GE buy order → liquidation_venue → NPC; no GeFill emitted."""
     gd = _gd(npc_buy=("merchant", 3), ge_order=None)
-    state = make_state(inventory={"iron_ore": 10}, inventory_max=20)
+    # inventory_max=11 keeps the bag under genuine space pressure (10/11 >=
+    # the 0.85 discard watermark) so the space-driven overstock fires and the
+    # GE-liquidation path is exercised (spec 2026-06-07).
+    state = make_state(inventory={"iron_ore": 10}, inventory_max=11)
     goal = DiscardOverstockGoal(gd)
 
     emitted = goal.relevant_actions([], state, gd)
@@ -71,7 +77,10 @@ def test_surplus_without_ge_order_emits_only_npc_sell():
 def test_surplus_with_ge_order_priced_below_npc_emits_only_npc_sell():
     """Standing order pays LESS than NPC sell-back → choose_venue → NPC; no GeFill."""
     gd = _gd(npc_buy=("merchant", 12), ge_order=("ord-7", 9, 10))
-    state = make_state(inventory={"iron_ore": 10}, inventory_max=20)
+    # inventory_max=11 keeps the bag under genuine space pressure (10/11 >=
+    # the 0.85 discard watermark) so the space-driven overstock fires and the
+    # GE-liquidation path is exercised (spec 2026-06-07).
+    state = make_state(inventory={"iron_ore": 10}, inventory_max=11)
     goal = DiscardOverstockGoal(gd)
 
     emitted = goal.relevant_actions([], state, gd)
@@ -84,7 +93,10 @@ def test_surplus_with_ge_order_too_small_emits_only_npc_sell():
     """Order pays more per unit but cannot absorb the whole excess in one fill →
     liquidation_venue → NPC (the anti-surrogate quantity guard)."""
     gd = _gd(npc_buy=("merchant", 3), ge_order=("ord-7", 9, 4))
-    state = make_state(inventory={"iron_ore": 10}, inventory_max=20)
+    # inventory_max=11 keeps the bag under genuine space pressure (10/11 >=
+    # the 0.85 discard watermark) so the space-driven overstock fires and the
+    # GE-liquidation path is exercised (spec 2026-06-07).
+    state = make_state(inventory={"iron_ore": 10}, inventory_max=11)
     goal = DiscardOverstockGoal(gd)
 
     emitted = goal.relevant_actions([], state, gd)
@@ -99,7 +111,10 @@ def test_surplus_no_npc_buyer_but_ge_order_emits_ge_fill_not_delete():
     from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
 
     gd = _gd(npc_buy=None, ge_order=("ord-7", 4, 10))
-    state = make_state(inventory={"iron_ore": 10}, inventory_max=20)
+    # inventory_max=11 keeps the bag under genuine space pressure (10/11 >=
+    # the 0.85 discard watermark) so the space-driven overstock fires and the
+    # GE-liquidation path is exercised (spec 2026-06-07).
+    state = make_state(inventory={"iron_ore": 10}, inventory_max=11)
     goal = DiscardOverstockGoal(gd)
 
     emitted = goal.relevant_actions([], state, gd)

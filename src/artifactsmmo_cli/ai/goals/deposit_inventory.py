@@ -13,18 +13,28 @@ MIN_FREE_SLOTS = 5
 class DepositInventoryGoal(Goal):
     """Deposit bankable inventory to the bank as it fills up.
 
-    Value ramps from 50% used (0) to 100% used (80). Satisfied when nothing
-    remains to bank — the keep-set (task item, crafting materials, best weapon,
-    task coins, HP consumables) may itself exceed any fixed fraction of the bag,
-    so a percentage-based satisfaction rule could never be reached.
+    Value ramps from the high watermark (85% used → 0) to 100% used (80).
+    Satisfied when nothing remains to bank — the keep-set (task item, crafting
+    materials, best weapon, task coins, HP consumables, AND the active goal's
+    profile materials) may itself exceed any fixed fraction of the bag, so a
+    percentage-based satisfaction rule could never be reached.
+
+    SPACE-DRIVEN (spec 2026-06-07): the ramp starts at the high watermark
+    (0.85), not 0.5, so the player can use most of its inventory before deposit
+    pressure appears. Deposit NEVER banks a profile item — the active gather
+    goal's target materials join the keep-set via `profile_codes`. This kills
+    the withdraw↔deposit livelock (an active-goal material being banked the
+    cycle after it was withdrawn).
     """
 
-    _RAMP_START = 0.5   # fraction used below which the goal is inactive
+    _RAMP_START = 0.85  # fraction used below which the goal is inactive
     _MAX_VALUE = 80.0   # value at 100% used; outranks FarmItems(35) once near cap
 
-    def __init__(self, bank_accessible: bool = True, game_data: GameData | None = None) -> None:
+    def __init__(self, bank_accessible: bool = True, game_data: GameData | None = None,
+                 profile_codes: frozenset[str] = frozenset()) -> None:
         self._bank_accessible = bank_accessible
         self._game_data = game_data
+        self._profile_codes = profile_codes
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
@@ -42,13 +52,14 @@ class DepositInventoryGoal(Goal):
         if state.inventory_max == 0 or self._game_data is None:
             return True
         # Satisfied once nothing remains to bank (see class docstring).
-        return not select_bank_deposits(state, self._game_data)
+        return not select_bank_deposits(state, self._game_data, self._profile_codes)
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         # Post-deposit inventory_used (current minus everything bankable) — this
         # is exactly the satisfied state, keeping the A* heuristic reachable.
         bankable = (
-            sum(qty for _, qty in select_bank_deposits(state, self._game_data))
+            sum(qty for _, qty in select_bank_deposits(state, self._game_data,
+                                                        self._profile_codes))
             if self._game_data is not None else 0
         )
         return {"inventory_used": state.inventory_used - bankable}

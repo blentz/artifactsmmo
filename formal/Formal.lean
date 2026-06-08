@@ -1,6 +1,7 @@
 import Formal.CalculatePath
 import Formal.TaskBatch
 import Formal.InventoryCaps
+import Formal.InventoryProfile
 import Formal.PredictWin
 import Formal.LoadoutProjection
 import Formal.EquipmentScoring

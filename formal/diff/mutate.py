@@ -152,6 +152,54 @@ INVENTORY_CAPS_MUTATIONS = [
 ]
 
 
+# inventory_profile (overstock_excess) mutations -- the space-driven,
+# profile-preserving overstock core. Each breaks one of the three proved
+# guarantees and is killed by formal/diff/test_inventory_profile_diff.py.
+INVENTORY_PROFILE_MUTATIONS = [
+    # Drop the watermark gate: overstock fires regardless of space pressure
+    # (resurrects the space-blind dump trigger — the bug). Killed by the
+    # space-driven differential (16/20 below watermark must yield 0).
+    ("inventory_profile: drop watermark gate (always under pressure)",
+     "    if cap <= 0 or used * watermark_den < cap * watermark_num:\n"
+     "        return 0",
+     "    if cap <= 0:\n"
+     "        return 0"),
+    # Flip the pressure comparison < -> <= : a state exactly one unit below the
+    # watermark wrongly reads as under pressure (off-by-one on the gate).
+    ("inventory_profile: pressure comparison flip (< -> <=)",
+     "    if cap <= 0 or used * watermark_den < cap * watermark_num:",
+     "    if cap <= 0 or used * watermark_den <= cap * watermark_num:"),
+    # Use min instead of max for the protected floor: the floor collapses to the
+    # SMALLER of profile_target / useful_floor, so a profile item above the
+    # useful floor can be shed below its target (breaks profile-protection).
+    ("inventory_profile: protected floor max -> min",
+     "    floor = profile_target if profile_target > useful_floor else useful_floor",
+     "    floor = profile_target if profile_target < useful_floor else useful_floor"),
+    # overstock off-by-one: shed held - floor + 1 (over-discards by one).
+    ("inventory_profile: overstock off-by-one (+1)",
+     "    if held > floor:\n"
+     "        return held - floor",
+     "    if held > floor:\n"
+     "        return held - floor + 1"),
+    # overstock floor-drop: shed held - floor + 1 via floor underflow — return
+    # the full held instead of held - floor (sheds a profile item below its
+    # target). Kills the protected-floor subtraction.
+    ("inventory_profile: drop protected floor from excess (held - floor -> held)",
+     "    if held > floor:\n"
+     "        return held - floor\n"
+     "    return 0",
+     "    if held > floor:\n"
+     "        return held\n"
+     "    return 0"),
+    # NOTE: a `held > floor -> held >= floor` mutant was considered and
+    # REJECTED as an EQUIVALENT mutant: at `held == floor` the `>=` branch
+    # returns `held - floor == 0`, identical to the original's `return 0`, and
+    # both agree for every other `held`. Shipping an unkillable equivalent
+    # mutant is proof-theater; the strict-vs-nonstrict boundary is instead
+    # pinned by the Lean `overstock_pos_iff` (excess > 0 iff held > floor).
+]
+
+
 # predict_win mutations -- old strings matched to current combat.py text.
 PREDICT_WIN_MUTATIONS = [
     # initiative tiebreak: flip the player-first `<=` to a strict `<` (combat.py:79).
@@ -2195,6 +2243,8 @@ def main() -> int:
     run_group(TASK_BATCH_SRC, TASK_BATCH_MUTATIONS, "formal/diff/test_task_batch_diff.py", survivors)
     run_group(INVENTORY_CAPS_SRC, INVENTORY_CAPS_MUTATIONS,
               "formal/diff/test_inventory_caps_diff.py", survivors)
+    run_group(INVENTORY_CAPS_SRC, INVENTORY_PROFILE_MUTATIONS,
+              "formal/diff/test_inventory_profile_diff.py", survivors)
     run_group(COMBAT_SRC, PREDICT_WIN_MUTATIONS,
               "formal/diff/test_predict_win_diff.py", survivors)
     run_group(PROJECTION_SRC, PROJECTION_MUTATIONS,

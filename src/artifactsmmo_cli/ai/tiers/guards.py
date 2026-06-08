@@ -12,6 +12,7 @@ from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_caps import overstocked_items
+from artifactsmmo_cli.ai.inventory_profile import inventory_profile
 from artifactsmmo_cli.ai.learning.skill_xp_curve import SkillXpCurve
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -22,7 +23,13 @@ CRAFT_RELIEF_FRACTION = 0.70
 from current inventory, the CRAFT_RELIEF guard fires AHEAD of DEPOSIT_FULL.
 Catches the case where raw materials would otherwise be banked or deleted
 while the bot was one Craft action from converting them into task progress."""
-DEPOSIT_FULL_FRACTION = 0.80
+DEPOSIT_FULL_FRACTION = 0.90
+"""Space-driven (spec 2026-06-07): deposit pressure only appears near-full so
+the player uses most of the bag. Kept STRICTLY ABOVE
+DepositInventoryGoal._RAMP_START (0.85) so the DEPOSIT_FULL guard only fires
+where the deposit goal already has strictly-positive value — the proven
+liveness invariant `fires(DEPOSIT_FULL) ⇒ depositInventoryValue > 0`
+(Formal.Liveness.MeansFiring) requires DEPOSIT_FULL_FRACTION > _RAMP_START."""
 DISCARD_HIGH_FRACTION = 0.85
 DISCARD_CRITICAL_FRACTION = 0.95
 MAX_ACHIEVABLE_GAP = 5
@@ -84,6 +91,17 @@ def _used_fraction(state: WorldState) -> float:
     return state.inventory_used / state.inventory_max
 
 
+def active_profile(state: WorldState, game_data: GameData,
+                   ctx: SelectionContext) -> dict[str, int]:
+    """The active goal's SOFT inventory profile, derived from the
+    SelectionContext's long-term gear/tool codes + the committed
+    crafting_target + active items-task (spec 2026-06-07). Deposit/discard
+    never bank/delete a profile item below its target."""
+    return inventory_profile(state, game_data,
+                             target_gear=ctx.target_gear,
+                             target_tools=ctx.target_tools)
+
+
 def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
            history: LearningStore | None, ctx: SelectionContext) -> bool:
     if kind is GuardKind.HP_CRITICAL:
@@ -121,7 +139,9 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
                 and state.level < ctx.bank_required_level
                 and ctx.bank_required_level - state.level <= MAX_ACHIEVABLE_GAP)
     if kind is GuardKind.DISCARD_CRITICAL:
-        return bool(overstocked_items(state, game_data)) and _used_fraction(state) >= DISCARD_CRITICAL_FRACTION
+        return (bool(overstocked_items(state, game_data,
+                                       profile=active_profile(state, game_data, ctx)))
+                and _used_fraction(state) >= DISCARD_CRITICAL_FRACTION)
     if kind is GuardKind.CRAFT_RELIEF:
         if _used_fraction(state) < CRAFT_RELIEF_FRACTION:
             return False
@@ -131,9 +151,13 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
         ))
     if kind is GuardKind.DEPOSIT_FULL:
         return (ctx.bank_accessible and _used_fraction(state) >= DEPOSIT_FULL_FRACTION
-                and bool(select_bank_deposits(state, game_data)))
+                and bool(select_bank_deposits(
+                    state, game_data,
+                    frozenset(active_profile(state, game_data, ctx)))))
     if kind is GuardKind.DISCARD_HIGH:
-        return bool(overstocked_items(state, game_data)) and _used_fraction(state) >= DISCARD_HIGH_FRACTION
+        return (bool(overstocked_items(state, game_data,
+                                       profile=active_profile(state, game_data, ctx)))
+                and _used_fraction(state) >= DISCARD_HIGH_FRACTION)
     if kind is GuardKind.GEAR_REVIEW:
         return ctx.gear_review_active
     return False

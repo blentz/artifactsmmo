@@ -340,4 +340,81 @@ theorem task_cancel_no_coin_refused :
 theorem task_cancel_no_task_refused :
     taskCancelIsApplicable { coins := 5 } false = false := by decide
 
+/-! ### High-watermark deposit safety (spec 2026-06-07).
+
+`DepositInventoryGoal._RAMP_START` was raised 0.5 → 0.85 so the player uses
+most of its bag before deposit pressure appears. The SAFETY obligation: this
+must NOT reintroduce a gather-fails-on-full bug — the high-watermark deposit
+must still FIRE before a further gather overflows `inventory_max`.
+
+We model the deposit-firing predicate over the shared `Inv` and an integer
+watermark ratio `wnum/wden` (production 17/20). `depositFires` is true when the
+used fraction is at or above the watermark — `used * wden ≥ cap * wnum` — the
+exact integer cross-multiplication mirroring `used_fraction >= _RAMP_START`.
+The key theorem `deposit_fires_before_overflow` proves that whenever the bag is
+so full that the next unit gather would overflow (`used ≥ cap`), the deposit is
+already firing — for ANY watermark with `wnum ≤ wden` (so 0.85 is safe). -/
+
+/-- The deposit-firing predicate: used fraction ≥ watermark (`wnum/wden`),
+by exact integer cross-multiplication. Mirrors
+`used_fraction >= _RAMP_START` in `DepositInventoryGoal.value`. -/
+def depositFires (i : Inv) (wnum wden : Nat) : Bool :=
+  decide (i.used * wden ≥ i.cap * wnum)
+
+/-- A single gather of `q ≥ 1` would OVERFLOW the bag when fewer than `q` slots
+are free, i.e. `used + q > cap`. -/
+def gatherOverflows (i : Inv) (q : Nat) : Bool :=
+  decide (i.used + q > i.cap)
+
+/-- SAFETY (the load-bearing theorem): whenever a unit gather would overflow
+(`used ≥ cap`, the only way a single item exceeds `cap` given `used ≤ cap`),
+the deposit is ALREADY firing — for any watermark with `wnum ≤ wden`. So
+raising `_RAMP_START` to 0.85 (17/20, `wnum=17 ≤ wden=20`) does NOT let the bag
+overflow before deposit kicks in: at the brim, deposit pressure is on. -/
+theorem deposit_fires_before_overflow
+    (i : Inv) (wnum wden : Nat)
+    (hwf : i.used ≤ i.cap) (hwm : wnum ≤ wden)
+    (hover : gatherOverflows i 1 = true) :
+    depositFires i wnum wden = true := by
+  simp only [gatherOverflows, decide_eq_true_eq] at hover
+  simp only [depositFires, decide_eq_true_eq]
+  -- used + 1 > cap with used ≤ cap forces used = cap.
+  have hfull : i.used = i.cap := by omega
+  -- cap * wden ≥ cap * wnum since wnum ≤ wden.
+  have : i.cap * wnum ≤ i.cap * wden := Nat.mul_le_mul_left i.cap hwm
+  rw [hfull]; exact this
+
+/-- Production-watermark instance: at the 17/20 (0.85) watermark, a brim-full
+bag is firing deposit. Pins the concrete safe value chosen by the spec. -/
+theorem deposit_fires_before_overflow_at_85
+    (i : Inv) (hwf : i.used ≤ i.cap) (hover : gatherOverflows i 1 = true) :
+    depositFires i 17 20 = true :=
+  deposit_fires_before_overflow i 17 20 hwf (by decide) hover
+
+/-- The firing region is UPWARD-CLOSED in `used`: if deposit fires at `used`,
+it fires at any `used' ≥ used` (same cap). Pins that once pressure is on it
+stays on as the bag fills — no spurious de-activation between watermark and
+overflow. -/
+theorem deposit_fires_monotone
+    (i : Inv) (used' wnum wden : Nat)
+    (hge : used' ≥ i.used)
+    (h : depositFires i wnum wden = true) :
+    depositFires { i with used := used' } wnum wden = true := by
+  simp only [depositFires, decide_eq_true_eq] at h ⊢
+  have : i.used * wden ≤ used' * wden := Nat.mul_le_mul_right wden hge
+  omega
+
+/-- Non-vacuity / regression witness: a 17/20 bag at used=17 cap=20 (exactly at
+the watermark) fires; used=16 cap=20 (just below, 80%) does NOT fire — the
+player keeps using the bag below the watermark. Pins the boundary. -/
+theorem deposit_watermark_boundary_witness :
+    depositFires { used := 17, cap := 20 } 17 20 = true
+      ∧ depositFires { used := 16, cap := 20 } 17 20 = false := by
+  refine ⟨by decide, by decide⟩
+
+/-- Anti-vacuity for the safety hypothesis: a brim-full 20/20 bag really does
+overflow on a unit gather (so the safety theorem's premise is reachable). -/
+theorem gather_overflows_full_witness :
+    gatherOverflows { used := 20, cap := 20 } 1 = true := by decide
+
 end Formal.InventoryChainSafe

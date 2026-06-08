@@ -3,6 +3,7 @@ import Formal.Liveness.ItemsTaskTermination
 import Formal.Liveness.ItemsTaskRun
 import Formal.TaskBatch
 import Formal.InventoryCaps
+import Formal.InventoryProfile
 import Formal.PredictWin
 import Formal.LoadoutProjection
 import Formal.EquipmentScoring
@@ -180,6 +181,69 @@ example : ∀ (isEquippable : Bool) (peers : List Peer) (slotCount : Int),
 example : ∀ (slotCount : Int), slotCount ≥ 1 →
     isDominatedBy [] slotCount = false :=
   @isDominatedBy_nil_of_positive_slot
+
+/-! ### InventoryProfile role contracts (per-goal soft-target overstock, spec 2026-06-07).
+
+Fully-qualified to avoid clashing with the `InventoryCaps.overstock_exact`
+opened above. These pin the THREE design guarantees (space-driven, profile-
+protection, monotone accumulation) at their exact statements. -/
+
+-- overstock_exact: pins the full branch structure of the space-driven overstock.
+example : ∀ (held profileTarget usefulFloor used cap watermarkNum watermarkDen : Int),
+    Formal.InventoryProfile.overstockExcess held profileTarget usefulFloor used cap watermarkNum watermarkDen
+      = (if Formal.InventoryProfile.underPressure used cap watermarkNum watermarkDen then
+           (if held > Formal.InventoryProfile.protectedFloor profileTarget usefulFloor
+            then held - Formal.InventoryProfile.protectedFloor profileTarget usefulFloor else 0)
+         else 0) :=
+  @Formal.InventoryProfile.overstock_exact
+-- no_overstock_below_watermark: ¬pressure ⇒ 0 overstock (the per-item cap is not a dump trigger).
+example : ∀ (held profileTarget usefulFloor used cap watermarkNum watermarkDen : Int),
+    Formal.InventoryProfile.underPressure used cap watermarkNum watermarkDen = false →
+      Formal.InventoryProfile.overstockExcess held profileTarget usefulFloor used cap watermarkNum watermarkDen = 0 :=
+  @Formal.InventoryProfile.no_overstock_below_watermark
+-- profile_protection: held ≤ profileTarget ⇒ NEVER overstock, ∀ pressure (mirrors task keep-set protection).
+example : ∀ (held profileTarget usefulFloor used cap watermarkNum watermarkDen : Int),
+    held ≤ profileTarget →
+      Formal.InventoryProfile.overstockExcess held profileTarget usefulFloor used cap watermarkNum watermarkDen = 0 :=
+  @Formal.InventoryProfile.profile_protection
+-- overstock_zero_of_le_floor: held ≤ protectedFloor ⇒ never overstock.
+example : ∀ (held profileTarget usefulFloor used cap watermarkNum watermarkDen : Int),
+    held ≤ Formal.InventoryProfile.protectedFloor profileTarget usefulFloor →
+      Formal.InventoryProfile.overstockExcess held profileTarget usefulFloor used cap watermarkNum watermarkDen = 0 :=
+  @Formal.InventoryProfile.overstock_zero_of_le_floor
+-- monotone_accumulation: a shed step keeps held ≥ profileTarget (no withdraw↔deposit oscillation).
+example : ∀ (held profileTarget usefulFloor used cap watermarkNum watermarkDen : Int),
+    held ≥ profileTarget →
+      Formal.InventoryProfile.heldAfterShed held profileTarget usefulFloor used cap watermarkNum watermarkDen
+        ≥ profileTarget :=
+  @Formal.InventoryProfile.monotone_accumulation
+-- shed_idempotent: a second shed removes nothing — the discard cycle converges.
+example : ∀ (held profileTarget usefulFloor used cap watermarkNum watermarkDen : Int),
+    Formal.InventoryProfile.overstockExcess
+      (Formal.InventoryProfile.heldAfterShed held profileTarget usefulFloor used cap watermarkNum watermarkDen)
+      profileTarget usefulFloor used cap watermarkNum watermarkDen = 0 :=
+  @Formal.InventoryProfile.shed_idempotent
+-- overstock_pos_iff: excess > 0 iff pressure ∧ over protectedFloor.
+example : ∀ (held profileTarget usefulFloor used cap watermarkNum watermarkDen : Int),
+    Formal.InventoryProfile.overstockExcess held profileTarget usefulFloor used cap watermarkNum watermarkDen > 0
+      ↔ (Formal.InventoryProfile.underPressure used cap watermarkNum watermarkDen = true
+          ∧ held > Formal.InventoryProfile.protectedFloor profileTarget usefulFloor) :=
+  @Formal.InventoryProfile.overstock_pos_iff
+
+/-! ### InventoryChainSafe high-watermark deposit safety (spec 2026-06-07). -/
+
+-- deposit_fires_before_overflow: unit gather overflows ⇒ deposit already firing (∀ wnum ≤ wden).
+example : ∀ (i : Formal.InventoryChainSafe.Inv) (wnum wden : Nat),
+    i.used ≤ i.cap → wnum ≤ wden →
+    Formal.InventoryChainSafe.gatherOverflows i 1 = true →
+      Formal.InventoryChainSafe.depositFires i wnum wden = true :=
+  @Formal.InventoryChainSafe.deposit_fires_before_overflow
+-- deposit_fires_monotone: firing region upward-closed in used (pressure stays on as bag fills).
+example : ∀ (i : Formal.InventoryChainSafe.Inv) (used' wnum wden : Nat),
+    used' ≥ i.used →
+    Formal.InventoryChainSafe.depositFires i wnum wden = true →
+      Formal.InventoryChainSafe.depositFires { i with used := used' } wnum wden = true :=
+  @Formal.InventoryChainSafe.deposit_fires_monotone
 
 /-! ### PredictWin role contracts. -/
 

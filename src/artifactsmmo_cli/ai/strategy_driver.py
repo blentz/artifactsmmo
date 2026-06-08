@@ -35,7 +35,12 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
-from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext, active_guards
+from artifactsmmo_cli.ai.tiers.guards import (
+    GuardKind,
+    SelectionContext,
+    active_guards,
+    active_profile,
+)
 from artifactsmmo_cli.ai.tiers.means import MeansKind, active_means
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
@@ -110,7 +115,8 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
     if kind is GuardKind.REST_FOR_COMBAT:
         return RestoreHPGoal()
     if kind is GuardKind.DISCARD_CRITICAL or kind is GuardKind.DISCARD_HIGH:
-        return DiscardOverstockGoal(game_data=game_data)
+        profile = (active_profile(state, game_data, ctx) if state is not None else None)
+        return DiscardOverstockGoal(game_data=game_data, profile=profile)
     if kind is GuardKind.BANK_UNLOCK:
         return UnlockBankGoal(
             bank_locked=not ctx.bank_accessible,
@@ -120,7 +126,10 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
     if kind is GuardKind.REACH_UNLOCK_LEVEL:
         return ReachUnlockLevelGoal(target_level=ctx.bank_required_level)
     if kind is GuardKind.DEPOSIT_FULL:
-        return DepositInventoryGoal(bank_accessible=ctx.bank_accessible, game_data=game_data)
+        profile_codes = (frozenset(active_profile(state, game_data, ctx))
+                         if state is not None else frozenset())
+        return DepositInventoryGoal(bank_accessible=ctx.bank_accessible,
+                                    game_data=game_data, profile_codes=profile_codes)
     if kind is GuardKind.CRAFT_RELIEF:
         if state is None:
             raise ValueError("CRAFT_RELIEF guard requires a state to pick a target")

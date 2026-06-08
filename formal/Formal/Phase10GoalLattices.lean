@@ -34,24 +34,29 @@ namespace Formal.Phase10GoalLattices
 
 /-! ### DepositInventoryGoal -/
 
-/-- Ramp start fraction: below this, value = 0. Modeled as numerator/100. -/
-def rampStartNum : Nat := 50
-def rampStartDen : Nat := 100
+/-- Ramp start fraction: below this, value = 0. The high watermark 0.85
+(17/20) per spec 2026-06-07 (raised from 0.5 to make deposit space-driven).
+Modeled as numerator/denominator. -/
+def rampStartNum : Nat := 17
+def rampStartDen : Nat := 20
 def depositMaxValue : Nat := 80
 
 /-- Deposit goal value, scaled to integer arithmetic to avoid Float.
 Input: `used` and `cap` (both Nat). Returns a Nat ≤ depositMaxValue.
-The Python formula is:
-  if used_frac < 0.5: 0
-  else: (used_frac - 0.5) / 0.5 * 80 = (used*200/cap - 100) * 80 / 100
-We model it discretely: scaled value = (2*used*depositMaxValue - cap*depositMaxValue) / cap
-clamped to [0, depositMaxValue]. -/
+The Python formula (DepositInventoryGoal.value) is:
+  if used_frac < 0.85: 0
+  else: (used_frac - 0.85) / 0.15 * 80
+With used_frac = used/cap and the 17/20 ramp this is
+  (20*used - 17*cap) * 80 / (3*cap)
+clamped to [0, depositMaxValue]. We model the gate `used/cap < 17/20` as
+`20*used < 17*cap`. -/
 def depositValue (used cap : Nat) (satisfied : Bool) : Nat :=
   if satisfied then 0
   else if cap = 0 then 0
-  else if 2 * used < cap then 0      -- used/cap < 0.5
+  else if rampStartDen * used < rampStartNum * cap then 0   -- used/cap < 17/20
   else
-    let raw := (2 * used * depositMaxValue - cap * depositMaxValue) / cap
+    let raw := ((rampStartDen * used - rampStartNum * cap) * depositMaxValue)
+                 / ((rampStartDen - rampStartNum) * cap)
     if raw > depositMaxValue then depositMaxValue else raw
 
 theorem deposit_satisfied_zero (used cap : Nat) :
@@ -62,14 +67,15 @@ theorem deposit_zero_cap_zero (used : Nat) :
     depositValue used 0 false = 0 := by
   unfold depositValue; simp
 
-theorem deposit_below_ramp_zero (used cap : Nat) (h : 2 * used < cap) :
+theorem deposit_below_ramp_zero (used cap : Nat)
+    (h : rampStartDen * used < rampStartNum * cap) :
     depositValue used cap false = 0 := by
-  unfold depositValue
   have hcap : cap ≠ 0 := by
     intro hz
-    rw [hz] at h
+    rw [hz, Nat.mul_zero] at h
     exact Nat.not_lt_zero _ h
-  simp [h, hcap]
+  simp only [depositValue, if_neg (by decide : ¬ (false = true)),
+    if_neg hcap, if_pos h]
 
 theorem deposit_bounded (used cap : Nat) (sat : Bool) :
     depositValue used cap sat ≤ depositMaxValue := by
@@ -82,7 +88,8 @@ theorem deposit_bounded (used cap : Nat) (sat : Bool) :
   · exact Nat.zero_le _
   · -- raw branch with a let
     by_cases hraw :
-      ((2 * used * depositMaxValue - cap * depositMaxValue) / cap) > depositMaxValue
+      (((rampStartDen * used - rampStartNum * cap) * depositMaxValue)
+        / ((rampStartDen - rampStartNum) * cap)) > depositMaxValue
     · simp [hraw]
     · simp [hraw]
       exact Nat.le_of_not_lt hraw
@@ -91,11 +98,17 @@ theorem deposit_bounded (used cap : Nat) (sat : Bool) :
 (via the clamp branch — raw = (2cap·80 - cap·80)/cap = 80). -/
 theorem deposit_full_value : depositValue 100 100 false = 80 := by decide
 
-/-- Witness: at used=50 (50% full, the ramp start), raw = (100·80 - 100·80)/100 = 0. -/
-theorem deposit_ramp_start_value : depositValue 50 100 false = 0 := by decide
+/-- Witness: at used=85 (85% full, the 17/20 ramp start), raw =
+(20·85 - 17·100)·80 / (3·100) = 0·80/300 = 0. -/
+theorem deposit_ramp_start_value : depositValue 85 100 false = 0 := by decide
 
-/-- Witness: at used=75 (75% full), value should be 40 (halfway through ramp). -/
-theorem deposit_midramp_value : depositValue 75 100 false = 40 := by decide
+/-- Witness: at used=90 (90% full, a third of the way up the 0.85→1.0 ramp),
+raw = (20·90 - 17·100)·80 / (3·100) = 100·80/300 = 26 (integer division). -/
+theorem deposit_midramp_value : depositValue 90 100 false = 26 := by decide
+
+/-- Witness: just below the ramp (used=84, 84% < 85%) yields 0 — the player
+keeps using the bag below the high watermark (spec 2026-06-07). -/
+theorem deposit_just_below_ramp_value : depositValue 84 100 false = 0 := by decide
 
 /-! ### DiscardOverstockGoal value lattice (3-tier) -/
 
