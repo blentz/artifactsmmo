@@ -36,6 +36,8 @@ from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
 from artifactsmmo_cli.ai.strategy_driver import (
     LEVEL_LOOKAHEAD,
     StrategyArbiter,
+    _equippable_goal,
+    _gather_goal_for_unreachable_equippable,
     _task_recipe_inputs,
     map_guard,
     map_means,
@@ -118,6 +120,127 @@ def test_map_guard_gear_review_gathers_when_materials_missing():
     state = make_state(level=4, inventory={}, bank_items={})
     goal = map_guard(GuardKind.GEAR_REVIEW, gd, _ctx(gear_review_active=True), state)
     assert isinstance(goal, GatherMaterialsGoal)
+
+
+def _deep_chain_gd():
+    """steel_boots <- 6 steel_bar <- 8 iron_bar <- 10 iron_ore = 480 raw from
+    scratch — the depth-unreachable deep equippable chain (Piece D)."""
+    gd = GameData()
+    gd._item_stats = {
+        "steel_boots": ItemStats(code="steel_boots", level=2, type_="boots",
+                                 crafting_skill="gearcrafting", crafting_level=1),
+        "steel_bar": ItemStats(code="steel_bar", level=1, type_="resource",
+                               crafting_skill="gearcrafting", crafting_level=1),
+        "iron_bar": ItemStats(code="iron_bar", level=1, type_="resource",
+                              crafting_skill="gearcrafting", crafting_level=1),
+        "iron_ore": ItemStats(code="iron_ore", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"steel_boots": {"steel_bar": 6},
+                            "steel_bar": {"iron_bar": 8},
+                            "iron_bar": {"iron_ore": 10}}
+    gd._resource_drops = {"iron_rocks": "iron_ore"}
+    gd._resource_locations = {"iron_rocks": [(2, 0)]}
+    return gd
+
+
+def test_gear_review_deep_chain_routes_to_flat_leaf_not_explosive_recipe():
+    """Piece D: from-scratch deep equippable (steel_boots = 480 raw) is
+    depth-UNREACHABLE. The GEAR_REVIEW guard must NOT build the explosive
+    GatherMaterials(steel_boots, {steel_bar: 6}) (whose plan gathers 480 units
+    through the multi-level recipe — 655k nodes / 90s timeout offline). It routes
+    to the FLAT deepest actionable step (iron_ore), a linear, budget-feasible
+    gather. Pins the macro/micro bound so a regression to the deep goal fails."""
+    gd = _deep_chain_gd()
+    state = make_state(level=2, inventory={}, bank_items={})
+    goal = map_guard(GuardKind.GEAR_REVIEW, gd, _ctx(gear_review_active=True), state)
+    assert isinstance(goal, GatherMaterialsGoal)
+    # The target is the raw leaf, NOT the equippable root nor its direct recipe.
+    assert goal._needed == {"iron_ore": 10}
+    assert goal._target_item == "iron_ore"
+
+
+def test_equippable_goal_deep_chain_routes_to_flat_leaf():
+    """Same Piece-D bound on the objective-step _equippable_goal path: a
+    depth-unreachable deep equippable routes to the deepest actionable step
+    (never the explosive root recipe).
+
+    No bank stock -> the deepest actionable step is the raw leaf iron_ore."""
+    gd = _deep_chain_gd()
+    state = make_state(level=2, inventory={}, bank_items={})
+    goal = _equippable_goal("steel_boots", "boots_slot", state, gd)
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert goal._needed == {"iron_ore": 10}
+
+
+def test_equippable_goal_deep_chain_advances_step_as_leaf_accumulates():
+    """The macro/micro progression: with enough raw iron_ore banked to make one
+    iron_bar, the deepest ACTIONABLE step advances to iron_bar (its direct
+    prereq, iron_ore, is now satisfiable). The routed sub-goal is at most ONE
+    recipe level deep — bounded, never the 3-level explosive chain. Also exercises
+    the bank-credit loop in the helper."""
+    gd = _deep_chain_gd()
+    state = make_state(level=2, inventory={}, bank_items={"iron_ore": 10})
+    goal = _equippable_goal("steel_boots", "boots_slot", state, gd)
+    assert isinstance(goal, GatherMaterialsGoal)
+    # Step advanced one level up the chain; still NOT the steel_boots root recipe.
+    assert goal._needed == {"iron_bar": 8}
+    assert goal._target_item == "iron_bar"
+
+
+def test_deep_chain_flat_leaf_plans_within_budget():
+    """The routed flat-leaf goal plans LINEARLY (no recipe sub-tree to interleave)
+    — the whole point of the bound. Offline: the deep recipe goal hit 655k nodes /
+    90s timeout; the flat leaf is ~50 nodes. Bound the live planner node count."""
+    from artifactsmmo_cli.ai.actions.crafting import CraftAction
+    from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
+    from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+    gd = _deep_chain_gd()
+    gd._workshop_locations = {"gearcrafting": (0, 0)}
+    state = make_state(level=2, inventory={}, bank_items={})
+    goal = _equippable_goal("steel_boots", "boots_slot", state, gd)
+    actions = [
+        DepositAllAction(bank_location=(0, 0), accessible=True, game_data=gd),
+        GatherAction(resource_code="iron_rocks", locations=frozenset({(2, 0)})),
+    ]
+    for code in gd._crafting_recipes:
+        st = gd.item_stats(code)
+        ws = gd.workshop_location(st.crafting_skill) if st.crafting_skill else None
+        actions.append(CraftAction(code=code, quantity=1, workshop_location=ws))
+        actions.append(WithdrawItemAction(code=code, quantity=1, bank_location=(0, 0),
+                                          accessible=True))
+    actions.append(WithdrawItemAction(code="iron_ore", quantity=1, bank_location=(0, 0),
+                                       accessible=True))
+    planner = GOAPPlanner()
+    plan = planner.plan(state, goal, actions, gd, None, budget_seconds=30.0)
+    assert plan  # a real plan is found (goal not abandoned)
+    assert not planner.last_stats.timed_out
+    # Linear, tiny node count — locks the bound. The deep recipe goal needed
+    # 655k nodes; this stays under a generous 5k ceiling.
+    assert planner.last_stats.nodes_explored < 5000, planner.last_stats.nodes_explored
+
+
+def test_gather_helper_falls_back_to_direct_recipe_without_deeper_step():
+    """When the actionable_step IS the root itself (a 1-level recipe whose only
+    input is a raw leaf already at the root's depth), there is no deeper step to
+    route to, so the helper returns the root's direct recipe (the total-function
+    fallback branch)."""
+    gd = GameData()
+    gd._item_stats = {
+        "plank": ItemStats(code="plank", level=1, type_="resource",
+                           crafting_skill="woodcrafting", crafting_level=1),
+        "wood": ItemStats(code="wood", level=1, type_="resource"),
+    }
+    # plank has an EMPTY recipe, so it has no deeper prerequisite; actionable_step
+    # resolves to plank itself (step.code == root), the helper takes the
+    # total-function fallback and returns the (empty) direct recipe.
+    gd._crafting_recipes = {"plank": {}}  # empty recipe -> no deeper step
+    gd._resource_drops = {"tree": "plank"}
+    gd._resource_locations = {"tree": [(1, 0)]}
+    state = make_state(inventory={}, bank_items={})
+    goal = _gather_goal_for_unreachable_equippable("plank", state, gd, 15)
+    assert isinstance(goal, GatherMaterialsGoal)
+    # Empty recipe -> needed is the (empty) direct recipe fallback.
+    assert goal._target_item == "plank"
 
 
 def test_map_guard_gear_review_upgrades_when_materials_in_hand():

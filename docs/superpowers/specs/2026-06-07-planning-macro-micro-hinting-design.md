@@ -1,7 +1,7 @@
 # Design: Macro/Micro Planning + Bank-Aware Acquisition
 
 Date: 2026-06-07
-Status: Drafting — pending design discussion (planner-architecture change)
+Status: CLOSED (2026-06-08) — all four pieces (A/B/C/D) landed; see Status summary at end.
 Trigger: user direction + observed planner search explosion on deep recipe chains.
 
 ## Problem
@@ -134,10 +134,60 @@ path (ash_plank/wooden_shield) is preserved. The timeout-then-fallthrough for th
 deep chain is eliminated because the deep `GatherMaterials(root)` goal is never
 built; the flat deepest-step gather plans within budget every cycle.
 
-### D. Macro/micro toggle
+### D. Macro/micro bound on from-scratch deep chains — STATUS: LANDED (2026-06-08)
 Expose the abstraction as a toggle/budget: plan at macro granularity (kinds of step,
 bank-credited) first; descend to micro (unit quantities) only for the committed
 plan's near-term steps. Keeps search bounded on deep chains.
+
+**VERIFY-FIRST (offline repros, deleted after verification; pinned by new tests in
+`tests/test_ai/test_strategy_driver.py`).** Measured GOAP `nodes_explored` on the
+worst realistic from-scratch chain steel_boots ← 6 steel_bar ← 8 iron_bar ←
+10 iron_ore (min_gathers = 480 raw, empty bank), faithfully mirroring the LIVE
+action factory (`player._build_actions`: qty-1 gathers + qty-1 crafts + withdraw +
+deposit):
+
+| case | min_gathers | nodes | result |
+|---|---|---|---|
+| BANK-COVERED deep (Piece A credits the bars) | — | **1** | pruned, no gather |
+| FLAT leaf gather `GatherMaterials(iron_ore, {iron_ore:N})` (Piece C target) | 60 / 120 / 240 / 480 | 1,960 / 4,300 / 8,980 / **18,340** | **LINEAR** (~38 nodes/unit), 0.8s @480, never times out |
+| DEEP `GatherMaterials(root, DIRECT recipe)` | 24 / 60 / **480** | 2,724 / 31,513 / **655,052** | **SUPER-LINEAR**, 90s TIMEOUT @480, plan_len 0 |
+
+So post-A/B/C the explosion is NOT subsumed: it persists wherever a depth-UNREACHABLE
+equippable is routed to `GatherMaterials(root, root's DIRECT recipe)`, whose plan must
+gather 480 units THROUGH the 3-level recipe (interleaving gather/craft/deposit at every
+level — the cliff is recipe DEPTH×count). Piece A credits nothing (empty bank). Piece C
+fixed exactly ONE such site (`objective_step_goal`, the intermediate-step path) but TWO
+others survived and still built the explosive deep goal: the **GEAR_REVIEW guard**
+(`map_guard`) and **`_equippable_goal`** (the objective-step equippable path). Both were
+genuinely reachable (a from-scratch gear upgrade) and reproduced the live 1M-node /
+timeout blowup.
+
+**Fix (the macro/micro bound, reusing Piece C's already-proven core — NOT a new
+toggle/module):** route those two sites through the SAME
+`actionable_step` + `gather_step_target` machinery Piece C uses, via the shared helper
+`strategy_driver._gather_goal_for_unreachable_equippable`. The deepest ACTIONABLE step
+is the deepest recipe node whose DIRECT prerequisites are already satisfied — so its own
+recipe is at most ONE level above raw, never the full chain. Gathering it is the micro
+batch for the macro plan; the macro plan (gather leaf → craft up the chain → equip) is
+reached by REPEATED cycle execution: as the leaf accumulates, the next level becomes the
+actionable step (verified: with 10 banked iron_ore the routed step advances iron_ore →
+iron_bar; the iron_bar sub-goal plans in 9,677 nodes / 0.6s — bounded, one level deep).
+Post-fix both sites build `GatherMaterials(iron_ore)` and plan in **50 nodes / 0.01s**.
+
+No new Lean proof is needed because no new decision logic was introduced — the bound is
+the proved `gather_step_target` (`formal/Formal/StepDispatch.lean` `gatherTarget_*`:
+routes only when the root strictly exceeds budget, and the step is never harder than the
+declined root) composed with the proved `actionable_step`
+(`formal/Formal/StrategyTraversal.lean` `actStep`). **PlannerAdmissibility is preserved**:
+the routed step is a genuine prerequisite ON the root's recipe path, so a reachable goal
+is never abandoned or falsely declared infeasible; progress accrues every cycle until
+UpgradeEquipment fires the craft+equip. The reused cores' differentials
+(`test_gather_step_target_diff` / `test_strategy_traversal_diff` / `test_shopping_list_diff`)
+and the full gate stay green.
+
+Net: D was a REAL gap post-A/B/C (not subsumed), closed by the minimal honest fix —
+wiring the existing proven bound into the two unrouted sites plus pinning tests — rather
+than a redundant macro/micro toggle module.
 
 ## Proof obligations (keep the gate honest)
 
@@ -158,11 +208,26 @@ at any level, proof-backed). The macro feasibility gate (C) also subsumes the
 goal-mismatch fix. Implement incrementally: shopping-list core → equippable
 short-circuit → feasibility gate → macro/micro toggle.
 
-## Open questions for design discussion
+## Open questions for design discussion — RESOLVED (2026-06-08)
 
-- Toggle granularity: per-goal flag, a global planner mode, or automatic (macro when
-  estimated micro-node-count exceeds a budget)?
-- Where the macro pass lives: in the arbiter (objective→goal translation) vs the
-  planner (pre-expansion) vs a new layer between.
-- How much of the existing `materials_to_withdraw` / `min_gathers` machinery the
-  shopping-list core subsumes vs reuses.
+- ~~Toggle granularity~~ — No toggle was built. The macro/micro bound is AUTOMATIC and
+  implicit: `gather_step_target` routes to the deepest actionable step ONLY when the root
+  strictly exceeds the equip depth budget (`min_gathers(root) > equip_max_depth`); a
+  depth-reachable root plans directly. No per-goal flag or global mode.
+- ~~Where the macro pass lives~~ — In the arbiter (objective→goal translation), as the
+  shared helper `strategy_driver._gather_goal_for_unreachable_equippable` called by all
+  three equippable-routing sites (`objective_step_goal`, GEAR_REVIEW guard,
+  `_equippable_goal`). Not in the planner.
+- ~~materials_to_withdraw / min_gathers subsumption~~ — `min_gathers` is reused directly
+  (it IS the depth-reachability gate inside `gather_step_target`); the shopping-list core
+  handles the bank-credit/withdraw seeding orthogonally (Piece A).
+
+## Status summary (2026-06-08)
+
+All four pieces closed: **A** (shopping-list, landed 90a36f6/2e836af), **B** (prefer bank
+equippable — subsumed by existing least-cost search, pinning test only), **C** (feasibility
+gate / depth-unreachable routing in `objective_step_goal`, landed f58802c), **D** (the same
+bound wired into the two remaining unrouted sites — GEAR_REVIEW guard + `_equippable_goal`).
+The from-scratch deep-chain GOAP explosion (655k nodes / 90s timeout) is eliminated at every
+equippable-routing site; flat-leaf gathers plan in tens of nodes and accrue progress every
+cycle until UpgradeEquipment fires.
