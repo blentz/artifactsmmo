@@ -263,6 +263,77 @@ def test_objective_step_intermediate_maps_to_equippable_root():
     assert g._committed_target == ("wooden_shield", "shield_slot")
 
 
+def test_objective_step_intermediate_unreachable_root_routes_to_deepest_step():
+    """From-scratch DEEP equippable chain: the intermediate step maps to the
+    equippable ROOT, but the root's UpgradeEquipment is depth-UNREACHABLE
+    (min_gathers 480 >> max_depth 15). The old fallback built
+    GatherMaterials(root, root's direct recipe) -> the planner exploded
+    (1M+ nodes / 90s timeout / plan_len 0, then fall-through). The fix routes to
+    the DEEPEST actionable step (the raw base material) as a FLAT gather that
+    plans within budget. Piece-C feasibility gate."""
+    gd = GameData()
+    gd._item_stats = {
+        "steel_boots": ItemStats(code="steel_boots", level=5, type_="boots",
+                                 crafting_skill="gearcrafting", crafting_level=1),
+        "steel_bar": ItemStats(code="steel_bar", level=1, type_="resource",
+                               crafting_skill="weaponcrafting", crafting_level=1),
+        "iron_bar": ItemStats(code="iron_bar", level=1, type_="resource",
+                              crafting_skill="weaponcrafting", crafting_level=1),
+        "iron_ore": ItemStats(code="iron_ore", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"steel_boots": {"steel_bar": 6},
+                            "steel_bar": {"iron_bar": 8},
+                            "iron_bar": {"iron_ore": 10}}
+    gd._resource_drops = {"iron_rocks": "iron_ore"}
+    state = make_state(level=5, inventory={}, bank_items={})
+    step = ObtainItem("iron_ore", 480)   # deepest actionable step
+    root = ObtainItem("steel_boots", 1)
+    g = objective_step_goal(step, state, gd, _ctx(), root=root)
+    assert isinstance(g, GatherMaterialsGoal)
+    # Targets the FLAT raw step, NOT the deep root recipe {steel_bar: 6}.
+    assert g._needed == {"iron_ore": 480}
+
+
+def test_objective_step_unreachable_root_credits_bank_then_routes_to_step():
+    """The router credits inventory + BANK before deciding. Bank holds some
+    intermediate but not enough to make the root depth-reachable, so it still
+    routes to the deepest step (covers the bank-credit loop)."""
+    gd = GameData()
+    gd._item_stats = {
+        "steel_boots": ItemStats(code="steel_boots", level=5, type_="boots",
+                                 crafting_skill="gearcrafting", crafting_level=1),
+        "steel_bar": ItemStats(code="steel_bar", level=1, type_="resource",
+                               crafting_skill="weaponcrafting", crafting_level=1),
+        "iron_bar": ItemStats(code="iron_bar", level=1, type_="resource",
+                              crafting_skill="weaponcrafting", crafting_level=1),
+        "iron_ore": ItemStats(code="iron_ore", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"steel_boots": {"steel_bar": 6},
+                            "steel_bar": {"iron_bar": 8},
+                            "iron_bar": {"iron_ore": 10}}
+    gd._resource_drops = {"iron_rocks": "iron_ore"}
+    # Bank has 2 steel_bar (cuts the need to 4) but 4*8*10 = 320 ore >> 15.
+    state = make_state(level=5, inventory={}, bank_items={"steel_bar": 2})
+    step = ObtainItem("iron_ore", 320)
+    root = ObtainItem("steel_boots", 1)
+    g = objective_step_goal(step, state, gd, _ctx(), root=root)
+    assert isinstance(g, GatherMaterialsGoal)
+    assert g._needed == {"iron_ore": 320}
+
+
+def test_objective_step_intermediate_reachable_root_keeps_upgrade():
+    """When the root chain IS depth-reachable (materials in hand), the
+    intermediate-step still maps to UpgradeEquipment(root) for the one-commit
+    craft+equip — the ash_plank/wooden_shield design is preserved."""
+    gd = _gd()  # wooden_shield <- ash_plank x6 <- ash_wood; shallow & in hand
+    state = make_state(level=5, inventory={"ash_plank": 6})
+    step = ObtainItem("ash_plank", 6)
+    root = ObtainItem("wooden_shield", 1)
+    g = objective_step_goal(step, state, gd, _ctx(), root=root)
+    assert isinstance(g, UpgradeEquipmentGoal)
+    assert g._committed_target == ("wooden_shield", "shield_slot")
+
+
 def test_objective_step_reach_skill_level():
     step = ReachSkillLevel("mining", 10)
     # make_state() has mining level 3; target should be bounded to 3+LEVEL_LOOKAHEAD=6

@@ -96,13 +96,43 @@ planning; its multiples exception falls out of Piece A's `shopping_list`. The ho
 deliverable is the pinning test above (locks both halves so a regression fails the
 build) plus this status note — NOT a new module.
 
-### C. Macro feasibility gate for objective→GOAP translation (fixes the open bug)
+### C. Macro feasibility gate for objective→GOAP translation — STATUS: LANDED (2026-06-08)
 The strategy ranks roots (e.g. `ReachCharLevel(5)`); ensure EACH top root is
 translated into a plannable GOAP goal (the char-level/combat root must yield a
 combat/leveling goal, not be dropped so the bot falls through to gathering). A macro
 feasibility check ("can this root reach a plannable goal within budget?") decides
 whether to commit the micro planner or pick the next root — preventing both the
 timeout-then-fallthrough and the deep-chain explosion.
+
+**VERIFIED a real post-Piece-A gap (offline repro, deleted after verification;
+pinned by `tests/test_ai/test_strategy_driver.py` +
+`tests/test_ai/test_gather_step_target.py`):** the ReachCharLevel-with-no-winnable-monster
+fall-through is CORRECT (the bot should gear up first — not a bug, not changed).
+The genuine gap is the from-scratch DEEP equippable chain with NO bank stock
+(steel_boots ← 6 steel_bar ← 8 iron_bar ← 10 iron_ore = 480 raw): Piece A credits
+nothing (no bank), `UpgradeEquipmentGoal.is_plannable`'s sound
+`min_gathers(480) > max_depth(15)` gate correctly defers the craft+equip, but the
+arbiter's fallback then built `GatherMaterials(root, root's DIRECT recipe
+{steel_bar: 6})` — whose plan must gather 480 units THROUGH the deep recipe. The
+GOAP search EXPLODED: measured **1,011,121 nodes / 90s TIMEOUT / plan_len 0**, then
+fall-through and the gear chain never progressed. The explosion cliff is recipe
+DEPTH×count (a FLAT 480-ore gather plans in 1.7s; the 2-level 480 chain times out),
+so no `min_gathers`/`max_depth` gate can distinguish them without a false-infeasible.
+
+**Fix (sound):** route a depth-UNREACHABLE equippable root to the strategy's
+DEEPEST actionable step (the raw base material) as a FLAT, budget-feasible gather
+that makes incremental progress; the next recipe level becomes actionable as it
+accumulates, and UpgradeEquipment fires when materials are in hand. Pure core
+`src/.../ai/gather_step_target.py` (`gather_step_target`: root when
+`min_gathers(root) ≤ equip_max_depth`, else the deepest step) mirrored + proven in
+`formal/Formal/StepDispatch.lean` (`gatherTarget_*`): routes to the step ONLY when
+the root strictly exceeds budget (a reachable root is never abandoned — the
+honesty bar), and the step's flat cost never exceeds the declined root's
+(PlannerAdmissibility preserved — the step is a genuine prerequisite ON the root's
+path). Differential + 3 mutants. The reachable-root one-commit UpgradeEquipment
+path (ash_plank/wooden_shield) is preserved. The timeout-then-fallthrough for the
+deep chain is eliminated because the deep `GatherMaterials(root)` goal is never
+built; the flat deepest-step gather plans within budget every cycle.
 
 ### D. Macro/micro toggle
 Expose the abstraction as a toggle/budget: plan at macro granularity (kinds of step,

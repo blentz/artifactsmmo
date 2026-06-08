@@ -1,4 +1,4 @@
--- @concept: core, planner @property: totality
+-- @concept: core, planner @property: totality, safety, reachability
 
 /-!
 # Formal.StepDispatch
@@ -211,5 +211,110 @@ theorem reach_char_only_routes_to_grind (ctx : DispatchContext) (level : Int) :
     rw [hCM] at hG
     cases hG
     exact ⟨monster, rfl⟩
+
+/-! ## Budget-feasible gather target for a depth-unreachable equippable root.
+
+Models `src/artifactsmmo_cli/ai/gather_step_target.py` (`gather_step_target`),
+the Piece-C feasibility decision wired into `objective_step_goal`.
+
+When the strategy's chosen root is an equippable whose full craft chain is
+depth-UNREACHABLE (`min_gathers(root) > equip_max_depth` — the proven
+`UpgradeEquipmentGoal.is_plannable` gate), the prior fallback drove
+`GatherMaterials(root, root's DIRECT recipe)`. For a from-scratch DEEP chain that
+goal's plan must gather `min_gathers(root)` raw units THROUGH a multi-level
+recipe and the GOAP search EXPLODES (live: 1M+ nodes, 90s timeout, plan_len 0).
+The fix routes to the strategy's DEEPEST actionable `step` (the raw base
+material) — a FLAT gather (`minGathers == qty`) that plans within budget and makes
+incremental progress.
+
+We model `minGathers` exactly as `min_gathers.py`/`ShoppingList.rawReq`: credit
+the item's holdings, then for the deficit gather it (raw: empty recipe) or recurse
+into the sub-recipe at `per_unit * deficit`. `Recipe`/`deficit` are reused from
+ShoppingList's shape (redeclared here to keep StepDispatch self-contained and
+mathlib-free). -/
+
+/-- A recipe environment: item → its `(sub_mat, per_unit)` ingredient list. -/
+abbrev Recipe := Nat → List (Nat × Nat)
+
+/-- Per-node deficit after crediting `have` held copies (truncated `Nat.sub`). -/
+def gdeficit (qty «have» : Nat) : Nat := qty - «have»
+
+mutual
+  /-- Lower bound on gathers to obtain `qty` of `item` crediting `owned`.
+  Mirrors `min_gathers`/`rawReq`: out of fuel ⇒ account the deficit as raw. -/
+  def minGathers (owned : Nat → Nat) (r : Recipe) : Nat → Nat → Nat → Nat
+    | 0, _, qty => qty
+    | fuel + 1, item, qty =>
+      match r item with
+      | []   => gdeficit qty (owned item)
+      | mats => sumGathers owned r fuel mats (gdeficit qty (owned item))
+  /-- Sum sub-material gathers at `per_unit * deficit`. -/
+  def sumGathers (owned : Nat → Nat) (r : Recipe) (fuel : Nat) :
+      List (Nat × Nat) → Nat → Nat
+    | [], _ => 0
+    | (sub, per) :: rest, d => minGathers owned r fuel sub (per * d) + sumGathers owned r fuel rest d
+end
+
+/-- A RAW item (empty recipe) at positive fuel: `minGathers == deficit == qty`
+when nothing is owned — the FLAT gather cost the deepest-step route relies on. -/
+theorem minGathers_raw (owned : Nat → Nat) (r : Recipe) (item qty fuel : Nat)
+    (hraw : r item = []) :
+    minGathers owned r (fuel + 1) item qty = gdeficit qty (owned item) := by
+  simp [minGathers, hraw]
+
+/-- A RAW item with no holdings: `minGathers == qty` exactly (flat). -/
+theorem minGathers_raw_unowned (r : Recipe) (item qty fuel : Nat)
+    (hraw : r item = []) :
+    minGathers (fun _ => 0) r (fuel + 1) item qty = qty := by
+  rw [minGathers_raw _ r item qty fuel hraw]; simp [gdeficit]
+
+/-- The pure routing decision, mirroring `gather_step_target`:
+route to the root when its gather cost fits the budget, else the deepest step. -/
+def gatherTarget (owned : Nat → Nat) (r : Recipe) (fuel : Nat)
+    (rootItem stepItem stepQty equipMaxDepth : Nat) : Nat × Nat :=
+  if minGathers owned r fuel rootItem 1 ≤ equipMaxDepth then (rootItem, 1)
+  else (stepItem, stepQty)
+
+/-- SOUNDNESS (route-only-when-over-budget): the deeper `step` is chosen ONLY
+when the root's gather cost STRICTLY exceeds the equippable depth budget. So a
+depth-reachable root is never abandoned — exactly the Piece-C honesty bar
+(no false-infeasible that drops a doable objective). -/
+theorem gatherTarget_step_only_when_root_over_budget
+    (owned : Nat → Nat) (r : Recipe) (fuel rootItem stepItem stepQty equipMaxDepth : Nat)
+    (h : gatherTarget owned r fuel rootItem stepItem stepQty equipMaxDepth = (stepItem, stepQty))
+    (hne : (stepItem, stepQty) ≠ (rootItem, 1)) :
+    equipMaxDepth < minGathers owned r fuel rootItem 1 := by
+  unfold gatherTarget at h
+  by_cases hb : minGathers owned r fuel rootItem 1 ≤ equipMaxDepth
+  · rw [if_pos hb] at h; exact absurd h hne.symm
+  · exact Nat.lt_of_not_le hb
+
+/-- SOUNDNESS (root-kept-when-feasible): when the root's gather cost fits the
+budget the decision keeps the root target (the caller plans the short craft+equip
+chain). -/
+theorem gatherTarget_root_when_feasible
+    (owned : Nat → Nat) (r : Recipe) (fuel rootItem stepItem stepQty equipMaxDepth : Nat)
+    (h : minGathers owned r fuel rootItem 1 ≤ equipMaxDepth) :
+    gatherTarget owned r fuel rootItem stepItem stepQty equipMaxDepth = (rootItem, 1) := by
+  unfold gatherTarget; simp [h]
+
+/-- SOUNDNESS (never-harder): when the deepest `step` is a RAW leaf with no
+holdings, the routed target's gather cost (`stepQty`) is NOT larger than the root
+gather cost we declined — routing trades DOWN to a flatter sub-target, never up to
+a harder one. Pins that the fix can't pick a worse target than the root.
+
+Hypotheses: the step is the root's transitive base (`stepQty ≤
+minGathers(root)`, which holds because the deepest step's quantity is the
+expanded raw requirement) and we are in the over-budget branch. -/
+theorem gatherTarget_step_not_harder_than_root
+    (owned : Nat → Nat) (r : Recipe) (fuel rootItem stepItem stepQty : Nat)
+    (hstep : r stepItem = [])
+    (hcost : stepQty ≤ minGathers owned r fuel rootItem 1)
+    (hfuel : 0 < fuel) :
+    minGathers owned r fuel stepItem stepQty ≤ minGathers owned r fuel rootItem 1 := by
+  obtain ⟨n, rfl⟩ := Nat.exists_eq_add_of_lt hfuel
+  rw [Nat.zero_add] at hcost ⊢
+  rw [minGathers_raw owned r stepItem stepQty n hstep]
+  exact Nat.le_trans (Nat.sub_le _ _) hcost
 
 end Formal.StepDispatch

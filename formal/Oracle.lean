@@ -1072,6 +1072,43 @@ def runShoppingList (args : Array Json) : Json :=
       Json.num (Int.ofNat (Formal.ShoppingList.rawReq owned r fuel queryItem queryQty))),
     ("keys", keysJson)]
 
+/-- Compute one gather_step_target result using the SAME proved
+`Formal.StepDispatch.gatherTarget` (which calls `Formal.StepDispatch.minGathers`).
+
+This is the Piece-C feasibility router: a depth-unreachable equippable root
+(min_gathers(root) > equipMaxDepth) routes the GatherMaterials goal to the
+strategy's deepest actionable step instead of the deep root recipe.
+
+args layout (all Nat ≥ 0), same recipe/owned prefix as shopping_list:
+* `[0]`                  nRecipe (number of `(item, sub, qty)` triples)
+* `[1 .. 3*nRecipe]`     the triples, flat: item0 sub0 qty0 ...
+* next: nOwned, then `(item, qty)` owned pairs flat
+* next: rootItem, stepItem, stepQty, equipMaxDepth, fuel
+
+Emits the routed `{"code": _, "qty": _}` — compared against the Python
+`gather_step_target`. -/
+def runGatherStepTarget (args : Array Json) : Json :=
+  let g := fun i => (intArg args i).toNat
+  let nRecipe := g 0
+  let triples : List (Nat × Nat × Nat) :=
+    (List.range nRecipe).map (fun k => (g (1 + 3*k), g (2 + 3*k), g (3 + 3*k)))
+  let p1 := 1 + 3*nRecipe
+  let nOwned := g p1
+  let ownedPairs : List (Nat × Nat) :=
+    (List.range nOwned).map (fun k => (g (p1 + 1 + 2*k), g (p1 + 2 + 2*k)))
+  let p2 := p1 + 1 + 2*nOwned
+  let rootItem := g p2
+  let stepItem := g (p2 + 1)
+  let stepQty := g (p2 + 2)
+  let equipMaxDepth := g (p2 + 3)
+  let fuel := g (p2 + 4)
+  let r : Formal.StepDispatch.Recipe :=
+    fun item => (triples.filter (fun t => decide (t.1 = item))).map (fun t => (t.2.1, t.2.2))
+  let owned := tableLookup ownedPairs 0
+  let (code, qty) :=
+    Formal.StepDispatch.gatherTarget owned r fuel rootItem stepItem stepQty equipMaxDepth
+  Json.mkObj [("code", Json.num (Int.ofNat code)), ("qty", Json.num (Int.ofNat qty))]
+
 /-- Compute one monster_drop_selection result using the SAME proved
 `Formal.MonsterDropSelection.selectMonsterForDrop`.
 
@@ -1610,6 +1647,8 @@ def runOne (item : Json) : Json :=
     runGatherSelection args
   else if kind == "shopping_list" then
     runShoppingList args
+  else if kind == "gather_step_target" then
+    runGatherStepTarget args
   else if kind == "monster_drop_selection" then
     runMonsterDropSelection args
   else if kind == "craft_vs_buy" then

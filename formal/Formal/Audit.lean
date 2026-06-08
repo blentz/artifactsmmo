@@ -649,6 +649,11 @@ open Formal.WeightedRemaining in
 #print axioms Formal.StepDispatch.obtain_only_routes_to_obtain_classes
 #print axioms Formal.StepDispatch.reach_skill_only_routes_to_level_skill
 #print axioms Formal.StepDispatch.reach_char_only_routes_to_grind
+#print axioms Formal.StepDispatch.minGathers_raw
+#print axioms Formal.StepDispatch.minGathers_raw_unowned
+#print axioms Formal.StepDispatch.gatherTarget_step_only_when_root_over_budget
+#print axioms Formal.StepDispatch.gatherTarget_root_when_feasible
+#print axioms Formal.StepDispatch.gatherTarget_step_not_harder_than_root
 -- MultiCycleLiveness (de-Mathlib'd safety module)
 #print axioms Formal.MultiCycleLiveness.xp_monotone_over_sequence
 #print axioms Formal.MultiCycleLiveness.nFights_all_well_formed
