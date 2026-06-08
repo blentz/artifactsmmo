@@ -30,6 +30,7 @@ import Formal.DecideKey
 import Formal.CyclesForProgress
 import Formal.GatherApply
 import Formal.GatherSelection
+import Formal.ShoppingList
 import Formal.MonsterDropSelection
 import Formal.CraftVsBuy
 import Formal.LiquidationVenue

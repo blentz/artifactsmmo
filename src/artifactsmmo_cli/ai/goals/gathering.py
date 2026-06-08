@@ -23,6 +23,7 @@ from artifactsmmo_cli.ai.monster_drop_selection import (
 from artifactsmmo_cli.ai.priority_band import clamp_into_band
 from artifactsmmo_cli.ai.recipe_closure import recipe_closure
 from artifactsmmo_cli.ai.scalar_priority import yield_bonus_for_goal
+from artifactsmmo_cli.ai.shopping_list import fully_covered_materials
 from artifactsmmo_cli.ai.world_state import WorldState
 
 # Band constants — Phase-17 wiring of scalar_yield as a discretionary-band
@@ -113,8 +114,28 @@ class GatherMaterialsGoal(Goal):
             if drop is not None:
                 withdrawable.add(drop)
 
+        # Bank-aware gather pruning: the shopping_list credits inventory+bank at
+        # every recipe level; a chain material with NET 0 is fully covered, so the
+        # bot should WITHDRAW it, not re-gather. Prune the gather whose drop is
+        # fully covered (the withdraw stays). A material with any net deficit keeps
+        # its gather, so a reachable plan is never pruned. This bounds the GOAP
+        # search that the 43-step / 21.7k-node GatherMaterials plans exploded into
+        # (live Robby trace) when the bank already held the materials.
+        owned: dict[str, int] = dict(state.inventory)
+        for code, qty in (state.bank_items or {}).items():
+            owned[code] = owned.get(code, 0) + qty
+        covered: set[str] = set()
+        for item, qty in self._needed.items():
+            covered |= fully_covered_materials(item, qty, game_data._crafting_recipes, owned)
+
         result: list[Action] = []
         for action in actions:
+            if (
+                isinstance(action, GatherAction)
+                and game_data.resource_drop_item(action.resource_code) in covered
+            ):
+                # Drop item fully bank/inventory-covered — withdraw, don't gather.
+                continue
             if (
                 "recovery" in action.tags
                 or "deposit" in action.tags

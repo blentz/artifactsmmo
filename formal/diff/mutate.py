@@ -36,6 +36,7 @@ DECIDE_KEY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "decide_ke
 CYCLES_FOR_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "cycles_for_progress_core.py"
 GATHER_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gather_apply_core.py"
 GATHER_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_selection.py"
+SHOPPING_LIST_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "shopping_list.py"
 MONSTER_DROP_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "monster_drop_selection.py"
 CRAFT_VS_BUY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_vs_buy.py"
 LIQUIDATION_VENUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "liquidation_venue.py"
@@ -1223,6 +1224,38 @@ GATHER_SELECTION_MUTATIONS = [
 ]
 
 
+# shopping_list mutations -- old strings matched to current shopping_list.py
+# text. Each breaks the bank-aware credit / short-circuit / recursion so the
+# total raw work the Python net implies diverges from the Lean `rawReq` oracle.
+# Killed by formal/diff/test_shopping_list_diff.py.
+SHOPPING_LIST_MUTATIONS = [
+    # Drop the holdings credit: `used = 0` so the bank is never credited; the net
+    # becomes the full naive requirement and any owned>0 case diverges.
+    ("shopping_list: drop holdings credit (used = 0)",
+     "    used = min(have, qty)",
+     "    used = 0"),
+    # Wrong-sign deficit: `qty + used` instead of `qty - used` over-counts work.
+    ("shopping_list: deficit qty - used -> qty + used",
+     "    deficit = qty - used",
+     "    deficit = qty + used"),
+    # Remove the short-circuit: recurse into the subtree even when fully covered
+    # (deficit <= 0). A bank-covered intermediate then still expands its sub-recipe
+    # work instead of being withdrawn, over-counting.
+    ("shopping_list: drop short-circuit (always expand subtree)",
+     "    if deficit <= 0:\n"
+     "        # Fully covered by holdings: SHORT-CIRCUIT — do not expand the subtree.\n"
+     "        # The banked copies are withdrawn, so no sub-material work is needed.\n"
+     "        return",
+     "    if False:\n"
+     "        return"),
+    # Ignore the credit in the recursion: expand at `per_unit * qty` instead of
+    # `per_unit * deficit`, so partial-bank cases over-count the sub-material work.
+    ("shopping_list: recurse on qty not deficit (ignore credit downstream)",
+     "        _expand(material, per_unit * deficit, recipes, owned, net)",
+     "        _expand(material, per_unit * qty, recipes, owned, net)"),
+]
+
+
 # monster_drop_selection mutations -- old strings matched to current
 # monster_drop_selection.py text. Each perturbs the lex-argmin metric / tie-break
 # so the Python winner diverges from the Lean `selectMonsterForDrop` oracle.
@@ -2299,6 +2332,8 @@ def main() -> int:
               "formal/diff/test_gather_apply_diff.py", survivors)
     run_group(GATHER_SELECTION_SRC, GATHER_SELECTION_MUTATIONS,
               "formal/diff/test_gather_selection_diff.py", survivors)
+    run_group(SHOPPING_LIST_SRC, SHOPPING_LIST_MUTATIONS,
+              "formal/diff/test_shopping_list_diff.py", survivors)
     run_group(MONSTER_DROP_SELECTION_SRC, MONSTER_DROP_SELECTION_MUTATIONS,
               "formal/diff/test_monster_drop_selection_diff.py", survivors)
     run_group(CRAFT_VS_BUY_SRC, CRAFT_VS_BUY_MUTATIONS,

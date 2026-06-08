@@ -285,6 +285,13 @@ open Formal.PriorityBand
 #check @Formal.GatherSelection.select_no_cheaper_at_le_distance  -- corollary: strictly-cheaper ⇒ strictly-farther
 #check @Formal.GatherSelection.expected_gathers_mono_in_rate     -- monotonicity: ↑rate ⇒ ≥ expected gathers
 #check @Formal.GatherSelection.gather_selected_reaches_needed    -- reachability: +1 loop reaches needed qty
+-- ShoppingList required roles (bank-aware recipe net for planner gather-pruning):
+#check @Formal.ShoppingList.credit_plus_deficit         -- reconstruction: credit + deficit = requirement
+#check @Formal.ShoppingList.deficit_antitone            -- monotonicity (node): ↑holdings ⇒ ≤ deficit
+#check @Formal.ShoppingList.deficit_zero_iff_covered    -- withdraw-don't-gather predicate: net 0 ⇔ covered
+#check @Formal.ShoppingList.rawReq_le_naive             -- dominance: bank-credited work ≤ naive work
+#check @Formal.ShoppingList.rawReq_antitone_owned       -- monotonicity (tree): ↑bank ⇒ ≤ remaining work
+#check @Formal.ShoppingList.touched_covered_singleton   -- short-circuit: covered item prunes its subtree
 -- MonsterDropSelection required roles (expected-kills lex-argmin monster-drop selection):
 #check @Formal.MonsterDropSelection.select_some_iff_nonempty          -- totality/no-deadlock: none ⇔ empty
 #check @Formal.MonsterDropSelection.select_mem                        -- winner is a real candidate
