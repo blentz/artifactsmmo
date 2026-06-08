@@ -121,6 +121,61 @@ class TestInventoryUpgradeSkipsZeroQty:
         assert goal._find_inventory_upgrade(state, gd) == ("copper_dagger", "weapon_slot")
 
 
+class TestCraftableFillsSecondMultiSlot:
+    def test_second_ring_slot_craftable_when_same_ring_equipped(self):
+        """A multi-slot item equipped in ONE slot is still craftable for its
+        empty second slot. copper_ring in ring1 must not block crafting another
+        copper_ring for the empty ring2 — per-slot _is_upgrade_over decides
+        (same item over ring1 -> not an upgrade; empty ring2 -> upgrade)."""
+        gd = GameData()
+        gd._item_stats = {
+            "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
+                                     crafting_skill="jewelrycrafting", crafting_level=1),
+        }
+        gd._crafting_recipes = {"copper_ring": {"copper_bar": 6}}
+        goal = UpgradeEquipmentGoal()
+        state = make_state(
+            level=5, skills={"jewelrycrafting": 1},
+            inventory={},
+            equipment={"ring1_slot": "copper_ring", "ring2_slot": None},
+        )
+        assert goal._find_craftable_upgrade_target(state, gd) == ("copper_ring", "ring2_slot")
+
+    def test_no_recraft_when_both_multi_slots_filled(self):
+        """When both ring slots already hold the item, there is no empty slot to
+        fill and the same item is not an upgrade over itself -> no target."""
+        gd = GameData()
+        gd._item_stats = {
+            "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
+                                     crafting_skill="jewelrycrafting", crafting_level=1),
+        }
+        gd._crafting_recipes = {"copper_ring": {"copper_bar": 6}}
+        goal = UpgradeEquipmentGoal()
+        state = make_state(
+            level=5, skills={"jewelrycrafting": 1},
+            inventory={},
+            equipment={"ring1_slot": "copper_ring", "ring2_slot": "copper_ring"},
+        )
+        assert goal._find_craftable_upgrade_target(state, gd) is None
+
+    def test_no_recraft_when_copy_waiting_in_inventory(self):
+        """A copy already in inventory is equip-ready; don't craft a duplicate
+        (the inventory-upgrade path equips it into the empty ring2)."""
+        gd = GameData()
+        gd._item_stats = {
+            "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
+                                     crafting_skill="jewelrycrafting", crafting_level=1),
+        }
+        gd._crafting_recipes = {"copper_ring": {"copper_bar": 6}}
+        goal = UpgradeEquipmentGoal()
+        state = make_state(
+            level=5, skills={"jewelrycrafting": 1},
+            inventory={"copper_ring": 1},
+            equipment={"ring1_slot": "copper_ring", "ring2_slot": None},
+        )
+        assert goal._find_craftable_upgrade_target(state, gd) is None
+
+
 class TestCraftableUpgradeSkipsNonUpgrade:
     def test_skips_candidate_that_is_not_an_upgrade(self):
         """A craftable item worse than the currently-equipped gear is not an

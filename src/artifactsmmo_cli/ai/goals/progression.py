@@ -322,7 +322,6 @@ class UpgradeEquipmentGoal(Goal):
         linear: craft basic items to level the skill, unlocking higher recipes.
         """
         active = game_data.active_gathering_skills(state.task_code, state.crafting_target)
-        equipped = set(state.equipment.values()) - {None}
         # Sort key per (item, slot): (relevant_tool, fills_empty_slot, value,
         # -craft_level, item_code). Higher tuple wins. fills_empty ranks an
         # additive equip (empty slot) above a replacement; value ranks better
@@ -335,12 +334,16 @@ class UpgradeEquipmentGoal(Goal):
         picks: list[tuple[UpgradeCandidate, tuple[str, str]]] = []
         bank = state.bank_items or {}
         for item_code in game_data._crafting_recipes:
-            # Skip if already owned (inventory, bank, or equipped) — otherwise
-            # the bot re-crafts copies of items it already has waiting to equip.
+            # Skip only if a copy is already in inventory/bank waiting to equip —
+            # otherwise the bot re-crafts duplicates of an item it already holds
+            # (the inventory-upgrade path equips that copy). Being EQUIPPED does
+            # NOT skip: a multi-slot item (e.g. a ring in ring1) can still fill
+            # its empty second slot. The per-slot _is_upgrade_over below handles
+            # equipped slots — the same item over an occupied slot is not an
+            # upgrade, while an empty slot of the same type stays craftable.
             if (
                 state.inventory.get(item_code, 0) > 0
                 or bank.get(item_code, 0) > 0
-                or item_code in equipped
             ):
                 continue
             stats = game_data.item_stats(item_code)
