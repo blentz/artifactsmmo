@@ -60,11 +60,41 @@ plans for the net deficit, and withdraws are seeded for every credited bank item
   longer than the gather-everything plan; correctness: the list + bank holdings
   reconstruct the recipe requirement).
 
-### B. Macro equippable short-circuit (serves #1)
+### B. Macro equippable short-circuit (serves #1) — STATUS: ALREADY SATISFIED (2026-06-08)
+
 Before expanding an `ObtainItem(equippable)` step into a craft chain, check: does the
 bank hold the finished equippable? If yes (and the goal isn't a multiple-requiring
 TaskGoal), the obtain step is satisfied by a single withdraw — emit that, skip the
-chain entirely. A pure predicate `prefer_bank_equippable(item, goal, state) -> bool`.
+chain entirely.
+
+**Verified offline that this behavior is ALREADY produced by landed code — no new
+`prefer_bank_equippable` predicate/module is needed (a redundant core would be inert
+theater).** Evidence (repro, deleted after verification; pinned by
+`tests/test_ai/test_prefer_bank_equippable.py`):
+
+- SINGLE item, finished equippable in bank, slot empty: `UpgradeEquipmentGoal`
+  surfaces the banked item via `_find_inventory_upgrade` (it scans `inventory | bank`),
+  while `_find_craftable_upgrade_target` deliberately SKIPS bank-held items (so it is
+  never re-crafted). `find_upgrade_target` returns the banked item, and the least-cost
+  GOAP planner then chooses `Withdraw(item) -> Equip(item)` over the multi-step craft
+  chain (the craft chain stays in the action set for admissibility; it is simply more
+  expensive). This is the macro short-circuit, realized by ordinary least-cost search
+  rather than a special predicate.
+
+- MULTIPLES exception (task needs N, bank has < N): handled by the landed
+  bank-aware `shopping_list` (Piece A). `shopping_list(item, N, recipes, owned)`
+  credits the held copies at the TARGET node and expands the recipe for the REMAINDER
+  `N - held`, so `fully_covered_materials` returns nothing for the target and the
+  deficit's gather/craft actions survive — a single banked copy can never satisfy a
+  multiples requirement. Independently, `PursueTaskGoal.is_satisfied` keys on
+  server-tracked `task_progress >= task_total`, not on bank holdings, so a banked
+  finished item never falsely completes a task.
+
+Net: Piece B's single-item preference falls out of (a) `_find_inventory_upgrade`
+reading the bank + (b) the craftable path skipping bank-held items + (c) least-cost
+planning; its multiples exception falls out of Piece A's `shopping_list`. The honest
+deliverable is the pinning test above (locks both halves so a regression fails the
+build) plus this status note — NOT a new module.
 
 ### C. Macro feasibility gate for objective→GOAP translation (fixes the open bug)
 The strategy ranks roots (e.g. `ReachCharLevel(5)`); ensure EACH top root is
