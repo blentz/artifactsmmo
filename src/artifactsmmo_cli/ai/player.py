@@ -246,6 +246,17 @@ class GamePlayer:
         if seeded:
             print(f"[{self._now()}] Seeded {seeded} documented near-future blockers from game data")
 
+        # Seed the refresh counter so the FIRST loop cycle forces a full bank
+        # load (via `_maybe_periodic_refresh` → `_full_refresh`) BEFORE the first
+        # plan. `_fetch_world_state` carries `bank_items` from the prior state
+        # (None on cycle 0) and the periodic full refresh otherwise only fires
+        # every 20 actions — so without this the planner sees an EMPTY bank for
+        # ~20 cycles and re-gathers materials already banked (the bank-aware
+        # regather penalty / shopping_list credit / withdraw applicability are
+        # all inert when `bank_items` is None). Any value at/above the periodic
+        # threshold triggers the refresh on cycle 0.
+        self._actions_since_full_refresh = 9999
+
         print(f"[{self._now()}] Starting play loop for {self.character}")
 
         try:
