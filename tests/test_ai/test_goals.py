@@ -9,6 +9,7 @@ from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
+from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
@@ -777,6 +778,71 @@ class TestGatherMaterialsGoal:
         state = make_state(inventory={"copper_ore": 4}, bank_items={})
         value = goal.value(state, gd)
         assert value == 1.0  # fully covered by intermediates → min value 1.0
+
+    def test_plan_withdraws_banked_material_before_regathering(self):
+        """Live bug 2026-06-07 (fix/withdraw-before-gather): bank held 40
+        ash_wood, char level 3 standing ON the ash_tree (6,1), goal
+        GatherMaterials(wooden_shield). The planner front-loaded
+        Gather(ash_tree) for 40+ cycles instead of withdrawing the banked
+        ash_wood — because, with the char standing on the resource, a single
+        gather (cost 6) beat the bank round-trip, so the optimal *total*-cost
+        plan put gathers first. Since only plan[0] executes per cycle and the
+        char never leaves the node, the 40 banked units were never withdrawn.
+
+        Withdrawing banked material is instant + cheaper in aggregate than
+        re-gathering it; the plan's FIRST acquisition action must therefore be
+        a Withdraw of the banked material, not a Gather.
+        """
+        bank = (4, 0)
+        gd = make_game_data()
+        gd._resource_locations = {"ash_tree": [(6, 1)]}
+        gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
+        gd._resource_drops = {"ash_tree": "ash_wood"}
+        gd._resource_drops_full = {"ash_tree": [("ash_wood", 1, 1, 1)]}
+        gd._workshop_locations = {"woodcutting": (1, 1), "gearcrafting": (2, 2)}
+        gd._bank_location = bank
+        gd._crafting_recipes = {
+            "ash_plank": {"ash_wood": 8},
+            "wooden_shield": {"ash_plank": 6},
+        }
+        gd._item_stats = {
+            "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource",
+                                   crafting_skill="woodcutting", crafting_level=1),
+            "wooden_shield": ItemStats(code="wooden_shield", level=1, type_="shield",
+                                       crafting_skill="gearcrafting", crafting_level=1),
+        }
+        # needed = one wooden_shield's worth of planks (matches the live step).
+        goal = GatherMaterialsGoal(target_item="wooden_shield", needed={"ash_plank": 6})
+        # Char stands ON the ash_tree; bank holds 40 of the 48 ash_wood needed.
+        state = make_state(
+            level=3, x=6, y=1,
+            skills={"woodcutting": 3, "gearcrafting": 1, "mining": 3},
+            inventory={}, inventory_max=104,
+            bank_items={"ash_wood": 40},
+        )
+        actions = [
+            RestAction(),
+            GatherAction(resource_code="ash_tree", locations=frozenset([(6, 1)])),
+            CraftAction(code="ash_plank", quantity=1, workshop_location=(1, 1)),
+            CraftAction(code="wooden_shield", quantity=1, workshop_location=(2, 2)),
+            # One-craft-unit withdraw (8) + full-chain withdraw (48), as
+            # player._build_actions emits.
+            WithdrawItemAction(code="ash_wood", quantity=8, bank_location=bank),
+            WithdrawItemAction(code="ash_wood", quantity=48, bank_location=bank),
+        ]
+        plan = GOAPPlanner().plan(state, goal, actions, gd, history=None,
+                                  budget_seconds=10.0)
+        assert plan, "planner found no plan"
+        # The FIRST acquisition action must withdraw banked ash_wood, not gather.
+        first_acq = next(
+            a for a in plan
+            if isinstance(a, (WithdrawItemAction, GatherAction))
+        )
+        assert isinstance(first_acq, WithdrawItemAction), (
+            f"expected first acquisition to be a Withdraw of banked ash_wood, "
+            f"got {first_acq!r}; full plan: {[repr(a) for a in plan]}"
+        )
+        assert first_acq.code == "ash_wood"
 
     def test_relevant_actions_includes_direct_gather(self):
         gd = make_game_data()
