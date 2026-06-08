@@ -112,6 +112,48 @@ class TestPlayerRun:
                                         with pytest.raises(KeyboardInterrupt):
                                             player.run()
 
+    def test_initial_bank_load_before_first_plan(self):
+        """The bank MUST be synced into state during init (before the first
+        _build_actions/plan). Otherwise bank_items stays None until the ~20-action
+        periodic refresh and the planner re-gathers materials already banked
+        (the bank-aware penalty / shopping_list credit / withdraw applicability
+        are all inert when bank_items is None)."""
+        player = GamePlayer(character="hero")
+        client = MagicMock()
+
+        call_count = [0]
+
+        def fake_wait():
+            call_count[0] += 1
+            if call_count[0] > 1:
+                raise KeyboardInterrupt
+
+        initial_state = make_state(bank_items=None)
+        refresh_calls = []
+
+        def fake_full_refresh(_client):
+            # Record the counter value at call time so we can prove the seed
+            # forced this refresh on cycle 0 (not the every-20 cadence).
+            refresh_calls.append(player._actions_since_full_refresh)
+            player.state = make_state(bank_items={"copper_ore": 485})
+            player._actions_since_full_refresh = 0
+
+        p_maps, p_items, p_resources, p_monsters, p_npcs, p_events, p_ge, p_bank = _patch_game_data_load()
+        with patch.object(ClientManager_mock := MagicMock(), "client", client):
+            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+                with p_maps, p_items, p_resources, p_monsters, p_npcs, p_events, p_ge, p_bank:
+                    with patch.object(player, "_fetch_world_state", return_value=initial_state):
+                        with patch.object(player, "_full_refresh", side_effect=fake_full_refresh):
+                            with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
+                                with patch.object(player, "_build_actions", return_value=[]):
+                                    with patch("artifactsmmo_cli.ai.player.time.sleep"):
+                                        with pytest.raises(KeyboardInterrupt):
+                                            player.run()
+
+        assert refresh_calls, "first cycle must force a full refresh (bank load)"
+        assert refresh_calls[0] >= 20, "refresh counter must be seeded so the load fires on cycle 0"
+        assert player.state.bank_items == {"copper_ore": 485}
+
     def test_run_refreshes_before_building_actions(self):
         """Periodic refresh must run BEFORE _build_actions so a batched plan's K
         is baked from the same post-refresh inventory the goal/map_means sees."""
@@ -473,9 +515,10 @@ def test_run_loads_remembered_bank_blocker(capsys):
             with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
                 with p_maps, p_items, p_resources, p_monsters, p_npcs, p_events, p_ge, p_bank:
                     with patch.object(player, "_fetch_world_state", return_value=initial_state):
-                        with patch.object(player, "_build_actions", side_effect=boom):
-                            with pytest.raises(KeyboardInterrupt):
-                                player.run()
+                        with patch.object(player, "_maybe_periodic_refresh"):
+                            with patch.object(player, "_build_actions", side_effect=boom):
+                                with pytest.raises(KeyboardInterrupt):
+                                    player.run()
     finally:
         history.close()
         if os.path.exists(db_path):
@@ -505,9 +548,10 @@ def test_run_logs_seeded_documented_blockers(capsys):
             with p_maps, p_items, p_resources, p_monsters, p_npcs, p_events, p_ge, p_bank:
                 with patch.object(player, "_fetch_world_state", return_value=initial_state):
                     with patch("artifactsmmo_cli.ai.player.seed_documented_blockers", return_value=3):
-                        with patch.object(player, "_build_actions", side_effect=boom):
-                            with pytest.raises(KeyboardInterrupt):
-                                player.run()
+                        with patch.object(player, "_maybe_periodic_refresh"):
+                            with patch.object(player, "_build_actions", side_effect=boom):
+                                with pytest.raises(KeyboardInterrupt):
+                                    player.run()
 
     out = capsys.readouterr().out
     assert "Seeded 3 documented near-future blockers" in out
