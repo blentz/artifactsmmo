@@ -93,4 +93,5 @@ def test_learned_minimum_is_per_character(tmp_path):
     b.set_learned_int("task_exchange_min_coins", 4)
     assert a.get_learned_int("task_exchange_min_coins", 1) == 6
     assert b.get_learned_int("task_exchange_min_coins", 1) == 4
-    a.close(); b.close()
+    a.close()
+    b.close()

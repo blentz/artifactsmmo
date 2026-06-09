@@ -1,5 +1,5 @@
 """derive_content_tiers clusters level-gated game content into capability-unlock tiers."""
-from artifactsmmo_cli.audit.content_tiers import ContentTier, derive_content_tiers
+from artifactsmmo_cli.audit.content_tiers import derive_content_tiers
 
 
 def test_groups_items_monsters_resources_by_level_band():

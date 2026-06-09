@@ -1,7 +1,7 @@
 """GearLatch: set on level-up or predicted-winnable fight loss; clear when gear is
 level-appropriate; monotone (stays set until clear holds)."""
-from artifactsmmo_cli.ai.gear_latch import GearLatch
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.gear_latch import GearLatch
 from tests.test_ai.fixtures import make_state
 
 
@@ -32,7 +32,9 @@ def test_sets_on_fight_loss():
 
 def test_clears_when_no_craftable_upgrade():
     latch = GearLatch()
-    empty_gd = GameData(); empty_gd._item_stats = {}; empty_gd._crafting_recipes = {}
+    empty_gd = GameData()
+    empty_gd._item_stats = {}
+    empty_gd._crafting_recipes = {}
     latch.update(prev_level=4, state=make_state(level=5), last_outcome="ok", game_data=empty_gd)
     assert latch.active is False  # set by level-up but immediately cleared: nothing to craft
 

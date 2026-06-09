@@ -95,7 +95,7 @@ def test_handle_stuck_acknowledges_signal():
     assert player._detector._ack_index[StuckSignal.STATE_FROZEN] != initial_ack
 
 
-def test_handle_stuck_state_frozen_level1_triggers_full_refresh(monkeypatch):
+def test_handle_stuck_state_frozen_level1_triggers_full_refresh():
     """Level 1 STATE_FROZEN should call full refresh (via _fetch_world_state for now)."""
     player = GamePlayer(character="testchar")
     player.game_data = GameData()

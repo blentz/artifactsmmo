@@ -2,7 +2,6 @@
 selection context."""
 from artifactsmmo_cli.ai.gear_latch import GearLatch
 from artifactsmmo_cli.ai.player import GamePlayer
-
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_strategy_driver import _make_planner_gd
 

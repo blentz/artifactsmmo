@@ -82,7 +82,7 @@ class _OtherMetaGoal:
     """A MetaGoal-conforming objective that is none of the three concrete
     kinds objective_needs special-cases (exercises the empty fallthrough)."""
 
-    def is_satisfied(self, state, game_data) -> bool:  # noqa: ARG002
+    def is_satisfied(self, state, game_data) -> bool:
         return False
 
 

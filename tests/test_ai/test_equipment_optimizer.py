@@ -79,7 +79,7 @@ class TestWeaponScore:
         """When raw WScores tie, the non-tool weapon strictly outranks the
         tool. Formal closure of the 2026-06-06 fishing_net/wooden_stick
         case at the score level."""
-        gd = _gd_with_combat_items()
+        _gd_with_combat_items()
         # Construct a zero-resistance target so both score 5*100 raw.
         zero_res = {"earth": 0, "fire": 0, "water": 0, "air": 0}
         tool_5atk = ItemStats(code="t5", level=1, type_="weapon", subtype="tool",

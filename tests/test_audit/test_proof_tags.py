@@ -1,5 +1,6 @@
 import pytest
-from artifactsmmo_cli.audit.proof_tags import ProofTags, parse_tags, build_index, cross_check
+
+from artifactsmmo_cli.audit.proof_tags import ProofTags, build_index, cross_check, parse_tags
 
 
 def test_parse_tags_extracts_concepts_and_properties():

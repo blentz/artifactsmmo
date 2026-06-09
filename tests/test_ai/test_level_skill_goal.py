@@ -11,7 +11,6 @@ from artifactsmmo_cli.ai.goals.level_skill import (
     LevelSkillGoal,
 )
 from artifactsmmo_cli.ai.learning.skill_xp_curve import SkillXpCurve
-from artifactsmmo_cli.ai.planner import GOAPPlanner
 from tests.test_ai.fixtures import make_state
 
 
@@ -284,7 +283,7 @@ class TestPlannerIntegration:
         skills[skill] >= target. The planner cannot simulate skill-level advancement
         (no action mutates `skills`), so satisfaction is observed only after a real
         API call advances state.skills via WorldState.from_character_schema."""
-        gd = _gd_with_alchemy_resource()
+        _gd_with_alchemy_resource()
         # Already-satisfied: skills meets target, plan is empty.
         already_state = make_state(
             skills={"alchemy": 2}, skill_xp={"alchemy": 0},

@@ -1,12 +1,11 @@
 """Tests for WorldState ↔ TaskLifecyclePhase invariant (Phase 23c-1)."""
 
-import pytest
 
 from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
-from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.actions.complete_task import CompleteTaskAction
 from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
+from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.task_lifecycle import (
     TaskLifecyclePhase,
     derive_task_lifecycle_phase,

@@ -2,7 +2,8 @@
 
 from datetime import datetime, timezone
 
-from sqlmodel import Session as SqlSession, SQLModel, create_engine
+from sqlmodel import Session as SqlSession
+from sqlmodel import SQLModel, create_engine
 
 from artifactsmmo_cli.ai.learning.models import Cycle, Session
 from artifactsmmo_cli.ai.trace_stats import (

@@ -5,7 +5,6 @@ import tempfile
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session as SqlSession
 from sqlmodel import create_engine, select
 
@@ -176,20 +175,25 @@ class TestRecordCycle:
         assert rows[0][0] == session_id
         assert rows[0][1] == "actual_char"
 
-    def test_record_cycle_swallows_sqlalchemy_error(self, tmp_db_path, monkeypatch):
+    def test_record_cycle_swallows_sqlalchemy_error(self, tmp_db_path, capsys):
         store = LearningStore(db_path=tmp_db_path, character="testchar")
         store.start_session()
 
-        def boom(self, instance):
-            raise SQLAlchemyError("simulated DB failure")
-
-        monkeypatch.setattr(SqlSession, "add", boom)
-        cycle = Cycle(
-            ts="2026-05-17T00:00:00+00:00",
-            session_id="x", cycle_index=0, character="testchar", outcome="ok",
-        )
-        store.record_cycle(cycle)
-        store.close()
+        # Real triggering state: drop the pooled connections, then make the
+        # db file read-only so the next commit raises a genuine
+        # OperationalError (a SQLAlchemyError) straight from sqlite.
+        store._engine.dispose()
+        os.chmod(tmp_db_path, 0o444)
+        try:
+            cycle = Cycle(
+                ts="2026-05-17T00:00:00+00:00",
+                session_id="x", cycle_index=0, character="testchar", outcome="ok",
+            )
+            store.record_cycle(cycle)  # must swallow, never raise
+        finally:
+            os.chmod(tmp_db_path, 0o644)
+            store.close()
+        assert "record_cycle failed" in capsys.readouterr().out
 
 
 def test_package_reexport():
@@ -201,7 +205,7 @@ def test_package_reexport():
 def _insert_cycles(store, action_repr, cooldowns, outcomes=None):
     """Helper: insert N cycles with given cooldowns and outcomes."""
     outcomes = outcomes or ["ok"] * len(cooldowns)
-    for i, (cd, oc) in enumerate(zip(cooldowns, outcomes)):
+    for i, (cd, oc) in enumerate(zip(cooldowns, outcomes, strict=False)):
         store.record_cycle(Cycle(
             ts=f"2026-05-17T00:00:{i:02d}+00:00",
             session_id="x", cycle_index=i, character="x", outcome=oc,

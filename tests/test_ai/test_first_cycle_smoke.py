@@ -23,7 +23,7 @@ def test_many_doomed_candidates_resolve_to_wait_then_skip():
     actions = [AcceptTaskAction(taskmaster_location=(2, 1))]
     ctx = _ctx(combat_monster="chicken")
 
-    g0, plan0, _ = a.select(_FakeDecision(chosen_step=None), state, _make_planner_gd(), actions, ctx)
+    g0, _plan0, _ = a.select(_FakeDecision(chosen_step=None), state, _make_planner_gd(), actions, ctx)
     assert isinstance(g0, WaitGoal)
     n0 = len(planner.budgets)
     assert n0 >= 1, "cycle 0 must actually try (and fail to plan) the doomed candidates"

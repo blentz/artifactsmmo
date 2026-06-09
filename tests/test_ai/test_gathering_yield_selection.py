@@ -45,7 +45,8 @@ def test_no_locations_uses_zero_distance():
     gd = _gd_two_sources()
     state = make_state(skills={"mining": 5})
     goal = GatherMaterialsGoal(target_item="copper_ore", needed={"copper_ore": 10})
-    # rich_rocks rate=1, poor_rocks rate=3; no locations on either → distance=0 tie-break → code "poor_rocks" > "rich_rocks" → rich_rocks wins
+    # rich_rocks rate=1, poor_rocks rate=3; no locations on either → distance=0
+    # tie-break → code "poor_rocks" > "rich_rocks" → rich_rocks wins
     actions = [
         GatherAction(resource_code="rich_rocks", locations=frozenset()),
         GatherAction(resource_code="poor_rocks", locations=frozenset()),

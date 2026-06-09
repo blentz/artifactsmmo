@@ -19,8 +19,8 @@ from artifactsmmo_cli.ai.tiers.means import MeansKind
 from artifactsmmo_cli.ai.tiers.strategy_blend import (
     BALANCE_MAX,
     BALANCE_MIN,
-    LEARN_W_MAX,
     LEARN_SAMPLE_FULL,
+    LEARN_W_MAX,
     balancing,
     blend_weight,
     learned_blend,

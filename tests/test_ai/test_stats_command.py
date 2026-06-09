@@ -6,7 +6,8 @@ section rendering in one pass."""
 
 from datetime import datetime, timezone
 
-from sqlmodel import Session as SqlSession, SQLModel, create_engine
+from sqlmodel import Session as SqlSession
+from sqlmodel import SQLModel, create_engine
 from typer.testing import CliRunner
 
 from artifactsmmo_cli.ai.learning.models import Cycle, Session

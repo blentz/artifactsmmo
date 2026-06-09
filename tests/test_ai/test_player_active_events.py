@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.test_actions_execute import make_api_result, make_char_schema, make_get_character_result
+from tests.test_ai.test_actions_execute import make_char_schema, make_get_character_result
 
 
 class TestFetchActiveEvents:

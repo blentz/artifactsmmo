@@ -544,26 +544,27 @@ class TestStickyCommitment:
         state = make_state(level=5)
         # First cycle: no sticky → pick natural top.
         d1 = eng.decide(state, gd)
-        first_root = repr(d1.chosen_root)
-        # Find a non-top candidate within dominance ratio.
         ranking = [(r.root_repr, r.score) for r in d1.ranking]
-        # Use the SECOND-ranked root as the prior commitment.
-        if len(ranking) < 2:
-            pytest.skip("Need 2+ roots to test sticky")
-        candidate = ranking[1][0]
+        # Precondition (deterministic in _two_root_gd): copper_dagger tops the
+        # ranking (combat-gear prior * equip gain = 2.0) and the SECOND-ranked
+        # root, ReachCharLevel(level=7) (~1.48), sits within the 1.5x dominance
+        # ratio. Plain asserts so a fixture regression FAILS instead of skipping.
+        assert len(ranking) >= 2, "fixture must produce 2+ competing roots"
+        candidate, cand_score = ranking[1]
         top_score = ranking[0][1]
-        cand_score = ranking[1][1]
-        # If second's score is within dominance threshold, sticky should win.
-        if top_score <= 1.5 * cand_score and cand_score > 0:
-            d2 = eng.decide(state, gd, last_chosen_root=candidate)
-            assert repr(d2.chosen_root) == candidate, (
-                f"sticky should have won: top={top_score} sticky={cand_score} "
-                f"ratio={top_score/cand_score:.3f} (1.5 threshold)"
-            )
-        else:
-            # Otherwise the top dominates → sticky correctly loses.
-            d2 = eng.decide(state, gd, last_chosen_root=candidate)
-            assert repr(d2.chosen_root) == first_root
+        assert cand_score > 0, "second-ranked root must have positive score"
+        assert top_score <= 1.5 * cand_score, (
+            f"fixture must keep second root within dominance ratio: "
+            f"top={top_score} second={cand_score} "
+            f"ratio={top_score/cand_score:.3f} (1.5 threshold)"
+        )
+        # Second cycle with the second-ranked root as prior commitment →
+        # sticky wins over the natural top.
+        d2 = eng.decide(state, gd, last_chosen_root=candidate)
+        assert repr(d2.chosen_root) == candidate, (
+            f"sticky should have won: top={top_score} sticky={cand_score} "
+            f"ratio={top_score/cand_score:.3f} (1.5 threshold)"
+        )
 
     def test_sticky_dropped_when_unreachable(self):
         """When last_chosen_root vanishes from candidates (e.g., satisfied or
@@ -592,8 +593,14 @@ class TestStickyCommitment:
              if score > 0 and top_score > 1.5 * score),
             None,
         )
-        if dominated is None:
-            pytest.skip("No dominated candidate available in fixture")
+        # Precondition (deterministic in _two_root_gd): ReachCharLevel(level=50)
+        # scores the flat 1.0 char-level prior while copper_dagger tops at 2.0
+        # (> 1.5 * 1.0), so a strictly dominated candidate always exists. Plain
+        # assert so a fixture regression FAILS instead of skipping.
+        assert dominated is not None, (
+            f"fixture must yield a dominated candidate below top/1.5: "
+            f"top={top_score} ranking={ranking}"
+        )
         # last_chosen_root is the dominated one → top still wins.
         d = eng.decide(state, gd, last_chosen_root=dominated[0])
         assert repr(d.chosen_root) == top_root

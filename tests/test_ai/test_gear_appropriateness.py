@@ -1,7 +1,7 @@
 """has_craftable_upgrade_any_slot: the latch-clear test (gear is level-appropriate
 when no craftable upgrade remains for any slot)."""
-from artifactsmmo_cli.ai.gear_appropriateness import has_craftable_upgrade_any_slot
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.gear_appropriateness import has_craftable_upgrade_any_slot
 from tests.test_ai.fixtures import make_state
 
 
@@ -20,5 +20,6 @@ def test_true_when_a_craftable_upgrade_exists():
 
 def test_false_when_no_craftable_upgrade():
     gd = GameData()
-    gd._item_stats = {}; gd._crafting_recipes = {}
+    gd._item_stats = {}
+    gd._crafting_recipes = {}
     assert has_craftable_upgrade_any_slot(make_state(level=4), gd) is False

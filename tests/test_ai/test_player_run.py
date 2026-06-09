@@ -340,7 +340,7 @@ def test_refresh_if_stale_method_removed():
     assert not hasattr(GamePlayer, "_refresh_if_stale")
 
 
-def test_maybe_periodic_refresh_triggers_at_20_actions(monkeypatch):
+def test_maybe_periodic_refresh_triggers_at_20_actions():
     """_maybe_periodic_refresh should call _full_refresh when counter >= 20, then reset."""
     player = GamePlayer(character="testchar")
     refresh_calls = []
@@ -364,7 +364,7 @@ def test_maybe_periodic_refresh_triggers_at_20_actions(monkeypatch):
     assert player._actions_since_full_refresh == 0
 
 
-def test_full_refresh_resets_counter(monkeypatch):
+def test_full_refresh_resets_counter():
     """_full_refresh itself should reset the action counter to 0."""
     player = GamePlayer(character="testchar")
     player.state = make_state()
@@ -401,7 +401,7 @@ def test_run_calls_handle_stuck_in_no_plan_path():
     client = MagicMock()
 
     # Pre-seed detector with 3 no-plan records (one short of the NO_PROGRESS threshold of 4)
-    for i in range(3):
+    for _i in range(3):
         player._detector.record(CycleRecord(
             state_key=(0, 0, 5, (), (), None, 0, False),
             goal_name="<none>",
@@ -448,7 +448,7 @@ def test_run_calls_handle_stuck_after_successful_action():
 
     frozen_key = (0, 0, 5, (), (), None, 0, False)
     # Pre-seed with 9 records with the same state_key (need >= 5 of 10 to trigger)
-    for i in range(9):
+    for _i in range(9):
         player._detector.record(CycleRecord(
             state_key=frozen_key,
             goal_name="RestoreHP",

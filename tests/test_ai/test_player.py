@@ -194,7 +194,7 @@ class TestArbiterSelection:
     def test_bag_full_selects_deposit_inventory(self):
         gd = make_game_data_mock()
         # copper_ore is a high-demand craft ingredient: its useful-quantity cap
-        # (recipe demand × batch buffer) exceeds the 20 held, so it is NOT
+        # (recipe demand x batch buffer) exceeds the 20 held, so it is NOT
         # overstock — bag-full routes to DepositInventory, not the discard guard.
         gd._crafting_recipes = {"copper_dagger": {"copper_ore": 20}}
         player = self._with_strategy(gd, level=3,

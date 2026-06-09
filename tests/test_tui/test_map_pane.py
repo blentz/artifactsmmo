@@ -1,5 +1,6 @@
-"""MapPane viewport rendering tests (no Textual app needed)."""
+"""MapPane viewport rendering tests (mostly app-free; sizing uses run_test)."""
 
+from textual.app import App, ComposeResult
 from textual.geometry import Size
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
@@ -197,18 +198,30 @@ class TestRenderViewportDimensions:
 
 
 class TestRenderSizing:
-    def test_render_uses_pane_size(self, monkeypatch):
+    async def test_render_uses_pane_size(self):
+        # Mount the pane in a real Textual app so the compositor assigns a
+        # REAL 30x12 content size (no patching of the pane's own property).
         pane = MapPane(_gd_typed())
         pane.update_snapshot(_snap(0, 0))
-        monkeypatch.setattr(type(pane), "size", property(lambda self: Size(30, 12)))
-        lines = pane.render().plain.split("\n")
+
+        class _Host(App):
+            CSS = "MapPane { width: 30; height: 12; }"
+
+            def compose(self) -> ComposeResult:
+                yield pane
+
+        async with _Host().run_test(size=(80, 24)):
+            assert pane.size == Size(30, 12)
+            lines = pane.render().plain.split("\n")
         assert len(lines) == 12
         assert all(len(row) == 30 for row in lines[1:])
 
-    def test_render_falls_back_when_size_zero(self, monkeypatch):
+    def test_render_falls_back_when_size_zero(self):
+        # An UNMOUNTED pane really has size (0, 0) — the genuine triggering
+        # state for the fallback path; nothing needs patching.
         pane = MapPane(_gd_typed())
         pane.update_snapshot(_snap(0, 0))
-        monkeypatch.setattr(type(pane), "size", property(lambda self: Size(0, 0)))
+        assert pane.size == Size(0, 0)
         lines = pane.render().plain.split("\n")
         assert len(lines) == VIEWPORT_H                  # 21 fallback
         assert all(len(row) == VIEWPORT_W for row in lines[1:])

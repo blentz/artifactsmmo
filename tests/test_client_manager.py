@@ -110,7 +110,7 @@ def test_client_manager_client_property():
 
 
 # ──────────────────────────────────────────────
-# APIWrapper – simple pass-through methods
+# APIWrapper - simple pass-through methods
 # ──────────────────────────────────────────────
 
 def _make_wrapper() -> APIWrapper:
@@ -184,7 +184,7 @@ def test_api_wrapper_get_character():
 
 
 # ──────────────────────────────────────────────
-# action_* methods – success path (no exception)
+# action_* methods - success path (no exception)
 # ──────────────────────────────────────────────
 
 def test_api_wrapper_action_move_success():
@@ -280,7 +280,7 @@ def test_api_wrapper_action_use_item_success():
 
 
 # ──────────────────────────────────────────────
-# action_* methods – non-standard status re-raises ValueError
+# action_* methods - non-standard status re-raises ValueError
 # ──────────────────────────────────────────────
 
 def _non_standard_error() -> ValueError:
