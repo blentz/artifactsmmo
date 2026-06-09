@@ -54,6 +54,13 @@ def _parse_skill_xp_value(raw: str | None, skill: str) -> int:
 class LearningStore:
     """Event log + queryable learned stats. Best-effort: errors degrade to defaults."""
 
+    # Default lookback window over recent action cycles (cost/success/effect stats).
+    WINDOW_ACTION = 50
+    # Default lookback window over recent goal completions (cycles-to-satisfy stats).
+    WINDOW_GOAL = 20
+    # Default lookback window over recent cycles for trend queries (goal history, skill XP).
+    WINDOW_RECENT = 100
+
     def __init__(self, db_path: str, character: str) -> None:
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -160,7 +167,7 @@ class LearningStore:
             self._search_cache[key] = compute()
         return self._search_cache[key]  # type: ignore[return-value]
 
-    def action_cost(self, action_repr: str, default: float, window: int = 50) -> float:
+    def action_cost(self, action_repr: str, default: float, window: int = WINDOW_ACTION) -> float:
         """Median actual_cooldown_seconds over last `window` ok cycles, or default if < 5 samples."""
         median = self._cached(
             ("action_cost", action_repr, window),
@@ -188,7 +195,7 @@ class LearningStore:
         except SQLAlchemyError:
             return None
 
-    def success_rate(self, action_repr: str, window: int = 50) -> float:
+    def success_rate(self, action_repr: str, window: int = WINDOW_ACTION) -> float:
         """Fraction of last `window` cycles with outcome=='ok'. 1.0 if < 5 samples."""
         return self._cached(
             ("success_rate", action_repr, window),
@@ -214,7 +221,7 @@ class LearningStore:
 
     _ALLOWED_EFFECT_FIELDS = ("delta_gold", "delta_xp", "delta_hp", "delta_inv_used")
 
-    def action_effect(self, action_repr: str, field: str, window: int = 50) -> float | None:
+    def action_effect(self, action_repr: str, field: str, window: int = WINDOW_ACTION) -> float | None:
         """Median of `field` over recent ok cycles. Allowed fields: delta_gold/delta_xp/delta_hp/delta_inv_used."""
         if field not in self._ALLOWED_EFFECT_FIELDS:
             return None
@@ -238,7 +245,7 @@ class LearningStore:
         except SQLAlchemyError:
             return None
 
-    def goal_avg_cycles_to_satisfy(self, goal_repr: str, window: int = 20) -> float | None:
+    def goal_avg_cycles_to_satisfy(self, goal_repr: str, window: int = WINDOW_GOAL) -> float | None:
         """Median cycles-to-satisfy over last `window` completions. None if < 5 samples."""
         return self._cached(
             ("goal_avg", goal_repr, window),
@@ -264,7 +271,7 @@ class LearningStore:
         except SQLAlchemyError:
             return None
 
-    def recent_goal_cycles(self, goal_repr: str, window: int = 100) -> list[Cycle]:
+    def recent_goal_cycles(self, goal_repr: str, window: int = WINDOW_RECENT) -> list[Cycle]:
         """Return up to `window` most recent Cycle rows where selected_goal=goal_repr
         for the store's character. Newest first.
 
@@ -286,7 +293,7 @@ class LearningStore:
         except SQLAlchemyError:
             return []
 
-    def skill_xp_per_cycle(self, skill: str, window: int = 100) -> float | None:
+    def skill_xp_per_cycle(self, skill: str, window: int = WINDOW_RECENT) -> float | None:
         """Mean positive per-cycle XP gain for `skill` over the most recent `window` cycles.
 
         Only cycles with a positive delta for the given skill are included.
@@ -329,7 +336,7 @@ class LearningStore:
         except SQLAlchemyError:
             return 0
 
-    def action_stats(self, action_repr: str, window: int = 50) -> ActionStats:
+    def action_stats(self, action_repr: str, window: int = WINDOW_ACTION) -> ActionStats:
         """Return one Pydantic-validated rollup for one action."""
         n = self.sample_count(action_repr)
         return ActionStats(
@@ -342,7 +349,7 @@ class LearningStore:
             median_delta_gold=self.action_effect(action_repr, "delta_gold", window=window),
         )
 
-    def goal_stats(self, goal_repr: str, window: int = 20) -> GoalStats:
+    def goal_stats(self, goal_repr: str, window: int = WINDOW_GOAL) -> GoalStats:
         """Return one Pydantic-validated rollup for one goal."""
         try:
             with SqlSession(self._engine) as s:
