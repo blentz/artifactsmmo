@@ -68,7 +68,6 @@ A Python-based CLI/TUI application that:
 ├── AGENTS.md
 ├── generate_openapi_client.sh
 ├── LICENSE
-├── NOTES.md
 ├── openapi_client_config.yml
 ├── openapi.json
 ├── pyproject.toml
