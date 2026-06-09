@@ -49,6 +49,10 @@ from artifactsmmo_cli.utils.validators import (
 app = typer.Typer(help="Grand Exchange trading commands")
 console = Console()
 
+# GE orders/history page size: 100 is the API's maximum `size` (openapi caps it
+# at 100), so one page fetches as much as a single request can return.
+GE_ORDERS_PAGE_SIZE = 100
+
 
 # Market Analysis Helper Functions
 def calculate_price_stats(orders: list[Any]) -> dict[str, float]:
@@ -558,11 +562,13 @@ def analyze_item_market(
         client = ClientManager().client
 
         # Fetch current orders
-        orders_response = get_ge_orders_grandexchange_orders_get.sync(client=client, code=item_code, size=100)
+        orders_response = get_ge_orders_grandexchange_orders_get.sync(
+            client=client, code=item_code, size=GE_ORDERS_PAGE_SIZE
+        )
 
         # Fetch recent history
         history_response = get_ge_history_grandexchange_history_code_get.sync(
-            client=client, code=item_code, size=100
+            client=client, code=item_code, size=GE_ORDERS_PAGE_SIZE
         )
 
         orders_cli_response = handle_api_response(orders_response)
@@ -632,7 +638,7 @@ def show_trending_items(
     try:
         client = ClientManager().client
 
-        response = get_ge_orders_grandexchange_orders_get.sync(client=client, size=100)
+        response = get_ge_orders_grandexchange_orders_get.sync(client=client, size=GE_ORDERS_PAGE_SIZE)
 
         cli_response = handle_api_response(response)
         if cli_response.success and cli_response.data:
@@ -689,7 +695,7 @@ def show_trade_opportunities(
     try:
         client = ClientManager().client
 
-        response = get_ge_orders_grandexchange_orders_get.sync(client=client, size=100)
+        response = get_ge_orders_grandexchange_orders_get.sync(client=client, size=GE_ORDERS_PAGE_SIZE)
 
         cli_response = handle_api_response(response)
         if cli_response.success and cli_response.data:
@@ -727,7 +733,7 @@ def show_price_spreads(
     try:
         client = ClientManager().client
 
-        response = get_ge_orders_grandexchange_orders_get.sync(client=client, size=100)
+        response = get_ge_orders_grandexchange_orders_get.sync(client=client, size=GE_ORDERS_PAGE_SIZE)
 
         cli_response = handle_api_response(response)
         if cli_response.success and cli_response.data:

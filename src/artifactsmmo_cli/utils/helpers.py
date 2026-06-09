@@ -8,6 +8,7 @@ import httpx
 from artifactsmmo_api_client.errors import UnexpectedStatus
 from artifactsmmo_api_client.models.error_response_schema import ErrorResponseSchema
 
+from artifactsmmo_cli.ai.constants import ERROR_CODE_COOLDOWN
 from artifactsmmo_cli.models.responses import CLIResponse
 
 # ArtifactsMMO Error Code Messages
@@ -123,7 +124,7 @@ def handle_api_error(error: Exception) -> CLIResponse[Any]:
 
             # Special handling for cooldown errors (499) - this should not be reached anymore
             # since we now convert ValueError to UnexpectedStatus in the client manager
-            if status_code == 499:
+            if status_code == ERROR_CODE_COOLDOWN:
                 return CLIResponse.error_response(error_message)
 
             return CLIResponse.error_response(error_message)
@@ -145,7 +146,7 @@ def handle_api_error(error: Exception) -> CLIResponse[Any]:
         error_message = get_error_message(status_code)
 
         # Handle special cases that need additional parsing
-        if status_code == 499:
+        if status_code == ERROR_CODE_COOLDOWN:
             # Character cooldown - try to get cooldown time
             return _parse_cooldown_error(error)
         elif status_code == 478:
