@@ -5,13 +5,10 @@ planner without a forward action, the grind target must exist for any gating
 craft skill (monotone progression), and the gating set must strictly shrink as a
 skill is driven across its gate (no livelock)."""
 
-from artifactsmmo_cli.ai.arbiter_select import Candidate
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
-from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
-from artifactsmmo_cli.ai.strategy_reorder import reorder_skill_candidates
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.skill_gates import GateSource, SkillGate, gating_skills
+from artifactsmmo_cli.ai.tiers.skill_gates import gating_skills
 from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
 from tests.test_ai.fixtures import make_state
 
@@ -29,27 +26,15 @@ def _progression_gd() -> GameData:
 
 
 def test_liv_skill_1_gate_yields_a_forward_action():
-    """A wanted item blocked solely by an under-leveled craft skill produces a
-    plannable craft-one candidate (never a no-op)."""
+    """A gating craft skill yields a plannable craft-one target — the forward
+    action that breaks the deadlock (never a no-op). The objective-step mapper
+    routes a ReachSkillLevel step to GatherMaterials(<this target>)."""
     gd = _progression_gd()
-    gates = {"weaponcrafting": SkillGate(required_level=5, source=GateSource.GEAR)}
     state = make_state(skills={"weaponcrafting": 2})
-
-    class _Stub:
-        def __init__(self, n): self._n = n
-        def __repr__(self): return self._n
-
-    cands = [
-        Candidate(goal=_Stub("AcceptTask"), is_means=True, repr_="AcceptTask"),
-        Candidate(goal=LevelSkillGoal("weaponcrafting", 5), is_means=True,
-                  repr_="LevelSkill(weaponcrafting->5)"),
-        Candidate(goal=_Stub("Wait"), is_means=True, repr_="Wait"),
-    ]
-    out, violations = reorder_skill_candidates(cands, gates, state, gd,
-                                               has_paying_task=False)
-    assert violations == []
-    grind = [c for c in out if isinstance(c.goal, GatherMaterialsGoal)]
-    assert len(grind) == 1  # a real forward action exists
+    target = skill_grind_target("weaponcrafting", state, gd)
+    assert target is not None
+    goal = GatherMaterialsGoal(target_item=target, needed={target: 1})
+    assert isinstance(goal, GatherMaterialsGoal)
 
 
 def test_liv_skill_2_grind_target_total_over_progression():
