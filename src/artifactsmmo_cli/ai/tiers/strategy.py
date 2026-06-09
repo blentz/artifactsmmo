@@ -81,6 +81,12 @@ PRIOR_UTILITY_GEAR=0.4 * marginal=0=0 (or PRIOR_UTILITY_GEAR*0.25
 fallback=0.1) and the bot never crafted any tool despite hours of
 gathering. Fix shipped after trace cycle 760 evidence of static
 0.1 tool scoring."""
+COMBAT_READINESS_URGENCY = 2.0
+"""Multiplier applied to the combat-enabling weapon root's marginal while the
+character is not combat-capable (combat_monster is None). Sized to lift the weapon
+root above competing gear/tool/skill/char roots so it becomes chosen_root — the
+binding objective that unblocks combat. Switches off once a weapon makes the bot
+combat-capable (no permanent override of the long-term objective)."""
 """Tier-2 sticky-commitment threshold. The previous cycle's chosen_root is
 kept unless a new top candidate's score strictly exceeds
 `STICKY_DOMINANCE_RATIO * sticky_score`. Matches Tier-3 means-tier
@@ -285,7 +291,8 @@ class StrategyEngine:
             tier = 0.0
         return tier * weight
 
-    def _marginal(self, root: MetaGoal, state: WorldState, game_data: GameData) -> float:
+    def _marginal(self, root: MetaGoal, state: WorldState, game_data: GameData,
+                  combat_monster: str | None = None) -> float:
         if isinstance(root, ReachCharLevel):
             # Inverse-gap char-level urgency: smaller gaps (the bootstrap
             # root `ReachCharLevel(state.level + 2)`) score HIGHER than the
@@ -316,7 +323,12 @@ class StrategyEngine:
             current_stats = game_data.item_stats(current_code) if current_code else None
             current_value = equip_value(current_stats) if current_stats is not None else 0.0
             gain = max(0.0, equip_value(stats) - current_value)
-            return min(1.0, gain / GEAR_EQUIP_SCALE)
+            marginal = min(1.0, gain / GEAR_EQUIP_SCALE)
+            # Combat-readiness urgency: a weapon-slot upgrade is the binding
+            # objective while the character cannot fight at all.
+            if combat_monster is None and slot == "weapon_slot":
+                marginal = max(marginal, 1.0) * COMBAT_READINESS_URGENCY
+            return marginal
         return 0.0
 
     def _balancing(self, root: MetaGoal, state: WorldState) -> float:
@@ -353,8 +365,11 @@ class StrategyEngine:
         weight = self.personality.category_weight(category)
         return PRIOR_RELEVANT_TOOL * weight
 
-    def _value(self, root: MetaGoal, state: WorldState, game_data: GameData) -> float:
-        base = self._base_prior(root) * self._marginal(root, state, game_data) * self._balancing(root, state)
+    def _value(self, root: MetaGoal, state: WorldState, game_data: GameData,
+               combat_monster: str | None = None) -> float:
+        base = (self._base_prior(root)
+                * self._marginal(root, state, game_data, combat_monster)
+                * self._balancing(root, state))
         return max(base, self._relevant_tool_value(root, state, game_data))
 
     def _learned_blend(self, root: MetaGoal, value: float,
@@ -391,7 +406,7 @@ class StrategyEngine:
                 continue
             step = actionable_step(root, state, game_data)
             assert step is not None
-            value = self._value(root, state, game_data)
+            value = self._value(root, state, game_data, combat_monster)
             final = self._learned_blend(root, value, history, combat_monster)
             effort = root_cost(root, state, game_data)
             candidates.append((root, step, final, effort, value))
