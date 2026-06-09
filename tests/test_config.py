@@ -1,6 +1,5 @@
 """Tests for configuration management."""
 
-import os
 import tempfile
 from pathlib import Path
 
@@ -25,22 +24,22 @@ def test_config_from_token_file():
         token_file.unlink()
 
 
-def test_config_from_environment():
+def test_config_from_environment(monkeypatch):
     """Test loading config from environment variable."""
-    # Set environment variable
-    os.environ["ARTIFACTSMMO_TOKEN"] = "env-token-456"
-
-    try:
-        # Use non-existent file path
-        config = Config.from_token_file(Path("nonexistent"))
-        assert config.token == "env-token-456"
-    finally:
-        # Clean up
-        del os.environ["ARTIFACTSMMO_TOKEN"]
+    # monkeypatch restores the prior value after the test; a bare
+    # set-then-del here would destroy an ambient ARTIFACTSMMO_TOKEN
+    # (CI sets one) for every test that runs later in the session.
+    monkeypatch.setenv("ARTIFACTSMMO_TOKEN", "env-token-456")
+    # Use non-existent file path
+    config = Config.from_token_file(Path("nonexistent"))
+    assert config.token == "env-token-456"
 
 
-def test_config_no_token_raises_error():
+def test_config_no_token_raises_error(monkeypatch):
     """Test that missing token raises ValueError."""
+    # Clear the env fallback so the no-token path fires regardless of
+    # the ambient environment.
+    monkeypatch.delenv("ARTIFACTSMMO_TOKEN", raising=False)
     with pytest.raises(ValueError, match="No authentication token found"):
         Config.from_token_file(Path("nonexistent"))
 

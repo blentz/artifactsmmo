@@ -1,5 +1,7 @@
 """End-to-end smoke for --learn flag plumbing."""
 
+import os
+import re
 import subprocess
 import sys
 
@@ -25,9 +27,14 @@ def test_play_help_shows_learn_flags():
             "play", "--help",
         ],
         capture_output=True, text=True, timeout=30,
+        env={**os.environ, "NO_COLOR": "1"},
     )
-    assert "--learn" in result.stdout, result.stdout + result.stderr
-    assert "--learn-db" in result.stdout
+    # Under GitHub Actions rich force-styles the help even with NO_COLOR
+    # (bold/dim spans split "--learn" into "-" + "-learn"); strip ANSI
+    # escapes so the substring asserts see the plain text.
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout)
+    assert "--learn" in plain, plain + result.stderr
+    assert "--learn-db" in plain
 
 
 def test_play_marks_exit_reason_crash_when_run_raises(monkeypatch, tmp_path):
