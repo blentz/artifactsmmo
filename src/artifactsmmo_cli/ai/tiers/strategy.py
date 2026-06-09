@@ -193,7 +193,7 @@ def _producible(code: str, state: WorldState, game_data: GameData) -> bool:
     Buying is still out of scope here (offered as a planner alternative in
     GatherMaterialsGoal.relevant_actions, not as a producibility source)."""
     if (game_data.crafting_recipe(code) is not None
-            or code in game_data._resource_drops.values()):
+            or code in game_data.resource_drops.values()):
         return True
     return any(is_winnable(state, game_data, monster_code)
                and game_data.monster_locations(monster_code)

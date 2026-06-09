@@ -55,6 +55,14 @@ class _FakeGameData:
         return self._item_stats.get(code)
 
     @property
+    def resource_drops(self) -> dict[str, str]:
+        return self._resource_drops
+
+    @property
+    def all_item_stats(self) -> dict[str, ItemStats]:
+        return self._item_stats
+
+    @property
     def max_character_level(self) -> int:
         return self.MAX_CHARACTER_LEVEL
 

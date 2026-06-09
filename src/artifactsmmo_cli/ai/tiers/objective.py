@@ -23,7 +23,7 @@ def is_attainable(code: str, game_data: GameData, _path: frozenset[str] = frozen
             return False
         sub_path = _path | {code}
         return all(is_attainable(mat, game_data, sub_path) for mat in recipe)
-    return code in game_data._resource_drops.values()
+    return code in game_data.resource_drops.values()
 
 
 @dataclass(frozen=True)
@@ -72,7 +72,7 @@ class CharacterObjective:
     def from_game_data(cls, game_data: GameData) -> "CharacterObjective":
         target_skill_levels = {s: game_data.max_skill_level for s in SKILL_NAMES}
         by_type: dict[str, list[tuple[float, str]]] = {}
-        for code, stats in game_data._item_stats.items():
+        for code, stats in game_data.all_item_stats.items():
             if stats.type_ not in ITEM_TYPE_TO_SLOTS:
                 continue
             by_type.setdefault(stats.type_, []).append((equip_value(stats), code))
@@ -89,7 +89,7 @@ class CharacterObjective:
         target_tools: dict[str, str] = {}
         for skill in _GATHERING_SKILLS:
             scored = [(tool_value(stats, skill), code)
-                      for code, stats in game_data._item_stats.items()
+                      for code, stats in game_data.all_item_stats.items()
                       if tool_value(stats, skill) > 0
                       and stats.type_ in ITEM_TYPE_TO_SLOTS
                       and is_attainable(code, game_data)]

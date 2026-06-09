@@ -112,7 +112,7 @@ class LevelSkillGoal(Goal):
         # back to the 505k-node / 90s timeout (Robby weaponcrafting@2 regression).
         current = state.skills.get(self._skill_name, 0)
         skill_craftables: set[str] = set()
-        for code, recipe in game_data._crafting_recipes.items():
+        for code, recipe in game_data.crafting_recipes.items():
             stats = game_data.item_stats(code)
             if stats is None or stats.crafting_skill != self._skill_name:
                 continue
@@ -155,7 +155,7 @@ class LevelSkillGoal(Goal):
     def _has_craftable_in_skill(self, state: WorldState, game_data: GameData) -> bool:
         """True if any recipe in this skill family is craftable at current skill."""
         current = state.skills.get(self._skill_name, 0)
-        for item_code, _recipe in game_data._crafting_recipes.items():
+        for item_code, _recipe in game_data.crafting_recipes.items():
             stats = game_data.item_stats(item_code)
             if stats is None or stats.crafting_skill != self._skill_name:
                 continue

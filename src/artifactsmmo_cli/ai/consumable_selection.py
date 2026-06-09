@@ -19,6 +19,8 @@ Pure: no I/O. This is the differential target proved in
 `formal/Formal/ConsumableSelection.lean` over `Int`.
 """
 
+from collections.abc import Mapping
+
 from artifactsmmo_cli.ai.game_data import ItemStats
 
 
@@ -30,7 +32,7 @@ def _key(code: str, restore: int, deficit: int) -> tuple[int, int, int, str]:
 
 
 def select_consumable(
-    inventory: dict[str, int], item_stats: dict[str, ItemStats], deficit: int
+    inventory: dict[str, int], item_stats: Mapping[str, ItemStats], deficit: int
 ) -> tuple[str, int] | None:
     """Return `(item_code, hp_restore)` for the lex-argmin usable consumable, or
     `None` when no inventory item has `qty > 0` and `hp_restore > 0`."""

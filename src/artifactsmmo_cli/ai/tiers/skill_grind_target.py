@@ -17,10 +17,10 @@ def skill_grind_target(skill: str, state: WorldState, game_data: GameData) -> st
     current = state.skills.get(skill, 0)
     bank = state.bank_items or {}
     best: tuple[int, int, str] | None = None  # maximized key
-    for code, stats in game_data._item_stats.items():
+    for code, stats in game_data.all_item_stats.items():
         if stats.crafting_skill != skill or stats.crafting_level > current:
             continue
-        recipe = game_data._crafting_recipes.get(code)
+        recipe = game_data.crafting_recipe(code)
         if not recipe:
             continue
         mats_missing = sum(

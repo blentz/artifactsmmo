@@ -34,9 +34,9 @@ def _craft_cooldowns(item: str, needed: int, state: WorldState, game_data: GameD
     owned = dict(state.inventory)
     for code, qty in (state.bank_items or {}).items():
         owned[code] = owned.get(code, 0) + qty
-    gathers = min_gathers(item, needed, game_data._crafting_recipes, owned)
+    gathers = min_gathers(item, needed, game_data.crafting_recipes, owned)
     # one craft action per distinct craftable node in the recipe tree (>=1 if craftable)
-    crafts = 1 if (game_data._crafting_recipes.get(item)) else 0
+    crafts = 1 if game_data.crafting_recipe(item) else 0
     return gathers + crafts
 
 

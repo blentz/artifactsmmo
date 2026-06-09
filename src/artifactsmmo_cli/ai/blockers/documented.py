@@ -44,7 +44,7 @@ def seed_documented_blockers(
         return max_gap is None or distance <= max_gap
 
     # === Combat gates ===
-    for code, level in game_data._monster_level.items():
+    for code, level in game_data.monster_levels.items():
         if level <= 0:
             continue
         required_level = max(1, level - 1)
@@ -64,7 +64,7 @@ def seed_documented_blockers(
         added += 1
 
     # === Equip gates ===
-    for code, stats in game_data._item_stats.items():
+    for code, stats in game_data.all_item_stats.items():
         if not ITEM_TYPE_TO_SLOTS.get(stats.type_):
             continue
         if stats.level <= state.level:
@@ -82,7 +82,7 @@ def seed_documented_blockers(
         added += 1
 
     # === Craft gates ===
-    for code, stats in game_data._item_stats.items():
+    for code, stats in game_data.all_item_stats.items():
         if not stats.crafting_skill or stats.crafting_level <= 0:
             continue
         current = state.skills.get(stats.crafting_skill, 0)
@@ -102,7 +102,7 @@ def seed_documented_blockers(
         added += 1
 
     # === Gather gates ===
-    for resource_code, (skill, req_level) in game_data._resource_skill.items():
+    for resource_code, (skill, req_level) in game_data.resource_skills.items():
         current = state.skills.get(skill, 0)
         if req_level <= current:
             continue

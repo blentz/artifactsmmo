@@ -5,6 +5,7 @@ from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS, EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
+from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.upgrade_selection import (
@@ -18,7 +19,6 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.min_gathers import min_gathers
 from artifactsmmo_cli.ai.recipe_closure import recipe_closure
 from artifactsmmo_cli.ai.shopping_list import fully_covered_materials
-from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -122,7 +122,7 @@ class UpgradeEquipmentGoal(Goal):
             owned[code] = owned.get(code, 0) + qty
         if owned.get(item, 0) > 0:
             return True
-        return min_gathers(item, 1, game_data._crafting_recipes, owned) <= self.max_depth
+        return min_gathers(item, 1, game_data.crafting_recipes, owned) <= self.max_depth
 
     def relevant_actions(self, actions: list[Action], state: WorldState,
                          game_data: GameData) -> list[Action]:
@@ -172,7 +172,7 @@ class UpgradeEquipmentGoal(Goal):
         owned: dict[str, int] = dict(state.inventory)
         for code, qty in (state.bank_items or {}).items():
             owned[code] = owned.get(code, 0) + qty
-        covered = fully_covered_materials(target_item, 1, game_data._crafting_recipes, owned)
+        covered = fully_covered_materials(target_item, 1, game_data.crafting_recipes, owned)
         result: list[Action] = []
         for action in actions:
             if "recovery" in action.tags or "deposit" in action.tags:
@@ -196,11 +196,11 @@ class UpgradeEquipmentGoal(Goal):
                 # Keep only withdraws of closure items (chain materials/target).
                 if action.code in withdrawable:
                     result.append(action)
-            elif "equip" in action.tags:
+            elif ("equip" in action.tags and isinstance(action, EquipAction)
+                    and action.code == target_item and action.slot == target_slot):
                 # Only the exact target item into the target slot. Drops
                 # OptimizeLoadout and any other-item/other-slot equip.
-                if isinstance(action, EquipAction) and action.code == target_item and action.slot == target_slot:
-                    result.append(action)
+                result.append(action)
             # Everything else (Fight, Recycle, NpcBuy/Sell, OptimizeLoadout, task
             # actions, gold/bank-expansion, map transitions) is irrelevant to
             # building+equipping the target — drop it to bound the search.
@@ -263,7 +263,7 @@ class UpgradeEquipmentGoal(Goal):
     def _committed_upgrade_if_ready(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
         assert self._committed_target is not None
         item_code, _slot = self._committed_target
-        recipe = game_data._crafting_recipes.get(item_code) or {}
+        recipe = game_data.crafting_recipe(item_code) or {}
         bank = state.bank_items or {}
         if recipe and all(
             state.inventory.get(mat, 0) + bank.get(mat, 0) >= qty
@@ -333,7 +333,7 @@ class UpgradeEquipmentGoal(Goal):
         # `upgrade_selection.craftable_key` argmax.
         picks: list[tuple[UpgradeCandidate, tuple[str, str]]] = []
         bank = state.bank_items or {}
-        for item_code in game_data._crafting_recipes:
+        for item_code in game_data.crafting_recipes:
             # Skip only if a copy is already in inventory/bank waiting to equip —
             # otherwise the bot re-crafts duplicates of an item it already holds
             # (the inventory-upgrade path equips that copy). Being EQUIPPED does
@@ -401,7 +401,7 @@ class UpgradeEquipmentGoal(Goal):
         if target is None:
             return None
         item_code, _slot = target
-        recipe = game_data._crafting_recipes.get(item_code) or {}
+        recipe = game_data.crafting_recipe(item_code) or {}
         bank = state.bank_items or {}
         if not all(
             state.inventory.get(mat, 0) + bank.get(mat, 0) >= qty
@@ -460,8 +460,8 @@ class UpgradeEquipmentGoal(Goal):
                     return True
             # Craftable items beat non-craftable starter gear.
             return (
-                item_code in game_data._crafting_recipes
-                and current_code not in game_data._crafting_recipes
+                item_code in game_data.crafting_recipes
+                and current_code not in game_data.crafting_recipes
             )
         return False
 

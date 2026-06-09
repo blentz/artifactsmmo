@@ -37,14 +37,14 @@ class ExpandBankGoal(Goal):
         if self.is_satisfied(state):
             return 0.0
         used = _bank_fill_known(state)
-        if used is None or game_data._bank_capacity == 0:
+        if used is None or game_data.bank_capacity == 0:
             return 0.0
         # Fire only at/above the fill threshold AND when buying keeps gold at or
         # above GOLD_RESERVE (the SAFETY-HOLE fix: the old bare gold >= cost test
         # could drain gold below the reserve). Exact integer threshold, no float.
         if not should_expand_bank(
-            used, game_data._bank_capacity, state.gold,
-            game_data._next_expansion_cost, GOLD_RESERVE,
+            used, game_data.bank_capacity, state.gold,
+            game_data.next_expansion_cost, GOLD_RESERVE,
             _TRIGGER_FILL_NUM, _TRIGGER_FILL_DEN,
         ):
             return 0.0
@@ -58,12 +58,12 @@ class ExpandBankGoal(Goal):
         # Read capacity from the projected WorldState so the planner can flip
         # this goal False→True by simulating BuyBankExpansionAction.apply
         # (which mints +BANK_EXPANSION_SLOTS into state.bank_capacity). Falling
-        # back to game_data._bank_capacity preserves the cycle-time snapshot
+        # back to game_data.bank_capacity preserves the cycle-time snapshot
         # when the projection hasn't run yet (None == "use API as-of-now").
         if state.bank_capacity is not None:
             capacity = state.bank_capacity
         elif self._game_data is not None:
-            capacity = self._game_data._bank_capacity
+            capacity = self._game_data.bank_capacity
         else:
             capacity = 0
         if capacity <= 0:
@@ -71,7 +71,7 @@ class ExpandBankGoal(Goal):
         return used < capacity * _SATISFIED_FILL
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
-        return {"bank_capacity": game_data._bank_capacity + 1}
+        return {"bank_capacity": game_data.bank_capacity + 1}
 
     def __repr__(self) -> str:
         return "ExpandBank"

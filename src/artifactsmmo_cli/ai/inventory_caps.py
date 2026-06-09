@@ -267,9 +267,8 @@ def useful_quantity_cap_excl_equipped(
     consumable_cap = 0
     stats = game_data.item_stats(item_code)
     if stats is not None:
-        if ITEM_TYPE_TO_SLOTS.get(stats.type_):
-            if not _is_equippable_dominated(item_code, state, game_data):
-                equippable_cap = EQUIPPABLE_KEEP
+        if ITEM_TYPE_TO_SLOTS.get(stats.type_) and not _is_equippable_dominated(item_code, state, game_data):
+            equippable_cap = EQUIPPABLE_KEEP
         if stats.hp_restore > 0:
             consumable_cap = CONSUMABLE_KEEP
 

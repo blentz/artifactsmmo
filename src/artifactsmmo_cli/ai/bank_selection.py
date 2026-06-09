@@ -32,7 +32,7 @@ def _recipe_materials(roots: list[str], game_data: GameData) -> set[str]:
         if item in visited:
             return
         visited.add(item)
-        recipe = game_data._crafting_recipes.get(item) or {}
+        recipe = game_data.crafting_recipe(item) or {}
         for mat in recipe:
             materials.add(mat)
             walk(mat)

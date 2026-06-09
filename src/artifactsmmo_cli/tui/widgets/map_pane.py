@@ -41,7 +41,7 @@ class MapPane(Static):
         self._tile_index = self._build_tile_index(game_data)
         # Known-but-empty tiles render as walkable floor; everything else is
         # unmapped void. Without this set the map is content islands in blank.
-        self._known_tiles = game_data._known_tiles
+        self._known_tiles = game_data.known_tiles
 
     @staticmethod
     def _build_tile_index(gd: GameData) -> dict[tuple[int, int], tuple[str, str]]:
@@ -53,27 +53,30 @@ class MapPane(Static):
             "fishing": "resource_fishing",
             "alchemy": "resource_alchemy",
         }
-        for code, locs in gd._resource_locations.items():
-            skill_lvl = gd._resource_skill.get(code)
+        for code, locs in gd.all_resource_locations.items():
+            skill_lvl = gd.resource_skills.get(code)
             key = skill_to_key.get(skill_lvl[0], "resource_mining") if skill_lvl else "resource_mining"
             for (x, y) in locs:
                 index[(x, y)] = RESOURCE_GLYPHS[key]
-        for _skill, loc in gd._workshop_locations.items():
+        for _skill, loc in gd.workshop_locations.items():
             if loc is not None:
                 index[loc] = structure_glyph("workshop")
-        for npc_code, loc in gd._npc_locations.items():
+        for npc_code, loc in gd.npc_locations.items():
             index[loc] = npc_glyph(npc_code)
-        if gd._bank_location is not None:
-            index[gd._bank_location] = structure_glyph("bank")
-        if gd._grand_exchange_location is not None:
-            index[gd._grand_exchange_location] = structure_glyph("grand_exchange")
-        if gd._taskmaster_location is not None:
-            index[gd._taskmaster_location] = structure_glyph("tasks_master")
-        for code, locs in gd._monster_locations.items():
+        bank_loc = gd.bank_location_or_none
+        if bank_loc is not None:
+            index[bank_loc] = structure_glyph("bank")
+        ge_loc = gd.grand_exchange_location()
+        if ge_loc is not None:
+            index[ge_loc] = structure_glyph("grand_exchange")
+        taskmaster_loc = gd.taskmaster_location_or_none
+        if taskmaster_loc is not None:
+            index[taskmaster_loc] = structure_glyph("tasks_master")
+        for code, locs in gd.all_monster_locations.items():
             glyph = monster_glyph(code)
             for (x, y) in locs:
                 index[(x, y)] = glyph
-        for (x, y) in gd._transition_tiles:
+        for (x, y) in gd.transition_tiles:
             index[(x, y)] = (DOOR_GLYPH, DOOR_COLOR)
         return index
 

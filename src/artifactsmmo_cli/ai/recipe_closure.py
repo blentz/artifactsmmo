@@ -26,10 +26,10 @@ def recipe_closure(game_data: GameData, roots: Iterable[str]) -> tuple[set[str],
         if material in visited:
             return
         visited.add(material)
-        for resource_code, drop_item in game_data._resource_drops.items():
+        for resource_code, drop_item in game_data.resource_drops.items():
             if drop_item == material:
                 needed_resources.add(resource_code)
-        recipe = game_data._crafting_recipes.get(material) or {}
+        recipe = game_data.crafting_recipe(material) or {}
         if recipe:
             craftable_mats.add(material)
             for sub_mat in recipe:
@@ -47,7 +47,7 @@ def raw_material_units(game_data: GameData, item: str, visited: frozenset[str] |
     visited = visited or frozenset()
     if item in visited:
         return 1
-    recipe = game_data._crafting_recipes.get(item)
+    recipe = game_data.crafting_recipe(item)
     if not recipe:
         return 1
     deeper = visited | {item}

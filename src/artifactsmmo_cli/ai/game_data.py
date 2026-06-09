@@ -1,5 +1,14 @@
-"""Static game knowledge cache loaded at startup."""
+"""Static game knowledge cache loaded at startup.
 
+`GameData` is the stable facade over four domain catalogs (items, monsters,
+recipes/resources, world locations). All public names — including `ItemStats`
+and `_GATHERING_SKILLS` re-exported here — keep their historical import path;
+the catalogs own the state and domain queries, the facade owns the API-load
+logic and delegates everything else.
+"""
+
+from collections.abc import Mapping
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
 
 from artifactsmmo_api_client import AuthenticatedClient
@@ -16,127 +25,299 @@ from artifactsmmo_api_client.models.map_content_type import MapContentType
 from artifactsmmo_api_client.models.map_layer import MapLayer
 from artifactsmmo_api_client.types import Unset
 
-_GATHERING_SKILLS = frozenset({"mining", "woodcutting", "fishing", "alchemy"})
+from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS, ItemCatalog, ItemStats
+from artifactsmmo_cli.ai.location_catalog import LocationCatalog
+from artifactsmmo_cli.ai.monster_catalog import MonsterCatalog
+from artifactsmmo_cli.ai.recipe_catalog import RecipeCatalog
 
-
-@dataclass
-class ItemStats:
-    """Relevant stats for an item."""
-
-    code: str
-    level: int
-    type_: str
-    crafting_skill: str | None = None
-    crafting_level: int = 0
-    hp_restore: int = 0  # HP restored when consumed (0 for non-consumables)
-    # skill -> effect value (e.g. woodcutting cooldown reduction)
-    skill_effects: dict[str, int] = field(default_factory=dict)
-    attack: dict[str, int] = field(default_factory=dict)        # element -> attack value (weapon)
-    resistance: dict[str, int] = field(default_factory=dict)    # element -> resistance % (armor)
-    dmg: int = 0                                                 # global damage % bonus
-    dmg_elements: dict[str, int] = field(default_factory=dict)  # element -> dmg % bonus
-    critical_strike: int = 0                                     # crit chance % bonus
-    initiative: int = 0                                          # initiative bonus
-    hp_bonus: int = 0                                            # flat max-HP bonus (gear)
-    # OpenAPI conformance (Item 14 drift remediation): every ItemSchema
-    # field the bot's decision-making logic touches must round-trip
-    # from /v3/items so the planner sees what the server sees.
-    tradeable: bool = True
-    """`item.tradeable`. False → NpcSell rejects this item. Default True
-    matches the legacy bot's assumption; populated from API in
-    `_load_items`."""
-    conditions: list[tuple[str, int]] = field(default_factory=list)
-    """`item.conditions`: list of (condition_code, value) equip/use
-    prerequisites. E.g. [("character_level", 10)]. Defaults to empty
-    list; populated from API."""
-    subtype: str = ""
-    """`item.subtype` (e.g. weapon → 'sword'). Display + future
-    subtype-aware gear scoring."""
+__all__ = ["_GATHERING_SKILLS", "GameData", "ItemStats"]
 
 
 @dataclass
 class GameData:
     """Static cache of game world knowledge. Load once at startup, never mutate."""
 
-    _monster_locations: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
-    _resource_locations: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
-    _workshop_locations: dict[str, tuple[int, int]] = field(default_factory=dict)  # skill -> (x, y)
-    _bank_location: tuple[int, int] | None = None
-    _bank_location_open: bool = False  # True once _bank_location points at an unconditional bank
-    _taskmaster_location: tuple[int, int] | None = None
-    _grand_exchange_location: tuple[int, int] | None = None
-    _item_stats: dict[str, ItemStats] = field(default_factory=dict)
-    _crafting_recipes: dict[str, dict[str, int]] = field(default_factory=dict)
-    _resource_skill: dict[str, tuple[str, int]] = field(default_factory=dict)  # code -> (skill, level)
-    _resource_drops: dict[str, str] = field(default_factory=dict)  # resource_code -> primary drop item
-    _resource_drops_full: dict[str, list[tuple[str, int, int, int]]] = field(default_factory=dict)
-    """resource_code -> [(item_code, rate, min_quantity, max_quantity), ...]; full
-    drop table (the primary `_resource_drops` keeps only the lowest-rate item)."""
-    _monster_level: dict[str, int] = field(default_factory=dict)
-    _monster_hp: dict[str, int] = field(default_factory=dict)
-    _monster_type: dict[str, str] = field(default_factory=dict)  # "normal" / "elite" / "boss"
-    _monster_attack: dict[str, dict[str, int]] = field(default_factory=dict)  # code -> {element: value}
-    _monster_resistance: dict[str, dict[str, int]] = field(default_factory=dict)  # code -> {element: pct}
-    _monster_critical_strike: dict[str, int] = field(default_factory=dict)  # code -> crit %
-    _monster_initiative: dict[str, int] = field(default_factory=dict)  # code -> initiative
-    # OpenAPI conformance (Item 14 remediation): monster reward + loot fields.
-    _monster_drops: dict[str, list[tuple[str, int, int, int]]] = field(default_factory=dict)
-    """code -> [(item_code, rate, min_quantity, max_quantity), ...]. Drop rate is
-    1-in-N (smaller = more common per server convention). Loot prediction relies
-    on this; was previously dropped at parse time. `min_quantity` is restored
-    symmetric to `max_quantity` so avg_qty = (min+max)/2 is faithful (openapi
-    DropRateSchema carries both)."""
-    _monster_min_gold: dict[str, int] = field(default_factory=dict)
-    """code -> min gold reward per fight win."""
-    _monster_max_gold: dict[str, int] = field(default_factory=dict)
-    """code -> max gold reward per fight win."""
-    _npc_locations: dict[str, tuple[int, int]] = field(default_factory=dict)  # npc_code -> (x, y)
-    _npc_stock: dict[str, dict[str, int]] = field(default_factory=dict)  # npc_code -> {item_code: buy_price}
-    _npc_sell_prices: dict[str, dict[str, int]] = field(default_factory=dict)  # npc_code -> {item_code: sell_price}
-    _ge_buy_orders: dict[str, tuple[str, int, int]] = field(default_factory=dict)
-    """item_code -> (order_id, price, quantity) for the HIGHEST-price OPEN BUY
-    order standing in the Grand Exchange — the one the player can fill by selling
-    into it for immediate gold. Populated from the live GE-orders API read (the
-    source of truth); never fabricated. A buy order is a real standing offer, so
-    its price is realizable proceeds (unlike a speculative new sell order)."""
-    _ge_sell_orders: dict[str, tuple[str, int, int]] = field(default_factory=dict)
-    """item_code -> (order_id, price, quantity) for the LOWEST-price OPEN SELL
-    order standing in the Grand Exchange — the cheapest one the player can BUY from
-    by filling it (immediate, guaranteed acquisition). This is the DUAL of
-    `_ge_buy_orders`: buying picks the lowest price, liquidating picks the highest.
-    Populated from the live GE-orders API read (the source of truth); never
-    fabricated. A sell order is a real standing offer, so its price is a realizable
-    acquisition cost (unlike a speculative new buy order)."""
-    _event_npc_spawns: dict[str, tuple[int, int]] = field(default_factory=dict)  # npc_code -> fixed event spawn tile
-    _npc_event_code: dict[str, str] = field(default_factory=dict)  # npc_code -> event code (membership = is_event_npc)
-    _bank_capacity: int = 0
-    _next_expansion_cost: int = 0
-    _slots_per_expansion: int = 0  # learned after the first expansion (response delta)
-    _transition_tiles: set[tuple[int, int]] = field(default_factory=set)
-    _known_tiles: set[tuple[int, int]] = field(default_factory=set)  # every overworld tile that exists, content or not
+    items: ItemCatalog = field(default_factory=ItemCatalog)
+    monsters: MonsterCatalog = field(default_factory=MonsterCatalog)
+    recipes_catalog: RecipeCatalog = field(default_factory=RecipeCatalog)
+    world: LocationCatalog = field(default_factory=LocationCatalog)
+
+    # === Legacy private-state accessors ===
+    # Tests and fixtures seed GameData through these historical private
+    # names; each delegates to the owning catalog so in-place mutation
+    # (`gd._item_stats[code] = ...`) and rebinding (`gd._item_stats = {...}`)
+    # both keep working. Attrs never rebound anywhere are getter-only.
+
+    @property
+    def _monster_locations(self) -> dict[str, list[tuple[int, int]]]:
+        return self.monsters.locations
+
+    @_monster_locations.setter
+    def _monster_locations(self, value: dict[str, list[tuple[int, int]]]) -> None:
+        self.monsters.locations = value
+
+    @property
+    def _resource_locations(self) -> dict[str, list[tuple[int, int]]]:
+        return self.recipes_catalog.locations
+
+    @_resource_locations.setter
+    def _resource_locations(self, value: dict[str, list[tuple[int, int]]]) -> None:
+        self.recipes_catalog.locations = value
+
+    @property
+    def _workshop_locations(self) -> dict[str, tuple[int, int]]:
+        return self.world.workshop_locations
+
+    @_workshop_locations.setter
+    def _workshop_locations(self, value: dict[str, tuple[int, int]]) -> None:
+        self.world.workshop_locations = value
+
+    @property
+    def _bank_location(self) -> tuple[int, int] | None:
+        return self.world.bank_tile
+
+    @_bank_location.setter
+    def _bank_location(self, value: tuple[int, int] | None) -> None:
+        self.world.bank_tile = value
+
+    @property
+    def _bank_location_open(self) -> bool:
+        return self.world.bank_tile_open
+
+    @_bank_location_open.setter
+    def _bank_location_open(self, value: bool) -> None:
+        self.world.bank_tile_open = value
+
+    @property
+    def _taskmaster_location(self) -> tuple[int, int] | None:
+        return self.world.taskmaster_tile
+
+    @_taskmaster_location.setter
+    def _taskmaster_location(self, value: tuple[int, int] | None) -> None:
+        self.world.taskmaster_tile = value
+
+    @property
+    def _grand_exchange_location(self) -> tuple[int, int] | None:
+        return self.world.grand_exchange_tile
+
+    @_grand_exchange_location.setter
+    def _grand_exchange_location(self, value: tuple[int, int] | None) -> None:
+        self.world.grand_exchange_tile = value
+
+    @property
+    def _item_stats(self) -> dict[str, ItemStats]:
+        return self.items.stats
+
+    @_item_stats.setter
+    def _item_stats(self, value: dict[str, ItemStats]) -> None:
+        self.items.stats = value
+
+    @property
+    def _crafting_recipes(self) -> dict[str, dict[str, int]]:
+        return self.recipes_catalog.crafting_recipes
+
+    @_crafting_recipes.setter
+    def _crafting_recipes(self, value: dict[str, dict[str, int]]) -> None:
+        self.recipes_catalog.crafting_recipes = value
+
+    @property
+    def _resource_skill(self) -> dict[str, tuple[str, int]]:
+        return self.recipes_catalog.resource_skill
+
+    @_resource_skill.setter
+    def _resource_skill(self, value: dict[str, tuple[str, int]]) -> None:
+        self.recipes_catalog.resource_skill = value
+
+    @property
+    def _resource_drops(self) -> dict[str, str]:
+        return self.recipes_catalog.resource_drops
+
+    @_resource_drops.setter
+    def _resource_drops(self, value: dict[str, str]) -> None:
+        self.recipes_catalog.resource_drops = value
+
+    @property
+    def _resource_drops_full(self) -> dict[str, list[tuple[str, int, int, int]]]:
+        return self.recipes_catalog.resource_drops_full
+
+    @_resource_drops_full.setter
+    def _resource_drops_full(self, value: dict[str, list[tuple[str, int, int, int]]]) -> None:
+        self.recipes_catalog.resource_drops_full = value
+
+    @property
+    def _monster_level(self) -> dict[str, int]:
+        return self.monsters.levels
+
+    @_monster_level.setter
+    def _monster_level(self, value: dict[str, int]) -> None:
+        self.monsters.levels = value
+
+    @property
+    def _monster_hp(self) -> dict[str, int]:
+        return self.monsters.hp
+
+    @_monster_hp.setter
+    def _monster_hp(self, value: dict[str, int]) -> None:
+        self.monsters.hp = value
+
+    @property
+    def _monster_type(self) -> dict[str, str]:
+        return self.monsters.types
+
+    @_monster_type.setter
+    def _monster_type(self, value: dict[str, str]) -> None:
+        self.monsters.types = value
+
+    @property
+    def _monster_attack(self) -> dict[str, dict[str, int]]:
+        return self.monsters.attack
+
+    @_monster_attack.setter
+    def _monster_attack(self, value: dict[str, dict[str, int]]) -> None:
+        self.monsters.attack = value
+
+    @property
+    def _monster_resistance(self) -> dict[str, dict[str, int]]:
+        return self.monsters.resistance
+
+    @_monster_resistance.setter
+    def _monster_resistance(self, value: dict[str, dict[str, int]]) -> None:
+        self.monsters.resistance = value
+
+    @property
+    def _monster_critical_strike(self) -> dict[str, int]:
+        return self.monsters.critical_strike
+
+    @_monster_critical_strike.setter
+    def _monster_critical_strike(self, value: dict[str, int]) -> None:
+        self.monsters.critical_strike = value
+
+    @property
+    def _monster_initiative(self) -> dict[str, int]:
+        return self.monsters.initiative
+
+    @_monster_initiative.setter
+    def _monster_initiative(self, value: dict[str, int]) -> None:
+        self.monsters.initiative = value
+
+    @property
+    def _monster_drops(self) -> dict[str, list[tuple[str, int, int, int]]]:
+        return self.monsters.drops
+
+    @_monster_drops.setter
+    def _monster_drops(self, value: dict[str, list[tuple[str, int, int, int]]]) -> None:
+        self.monsters.drops = value
+
+    @property
+    def _monster_min_gold(self) -> dict[str, int]:
+        return self.monsters.min_gold
+
+    @property
+    def _monster_max_gold(self) -> dict[str, int]:
+        return self.monsters.max_gold
+
+    @property
+    def _npc_locations(self) -> dict[str, tuple[int, int]]:
+        return self.world.npc_tiles
+
+    @_npc_locations.setter
+    def _npc_locations(self, value: dict[str, tuple[int, int]]) -> None:
+        self.world.npc_tiles = value
+
+    @property
+    def _npc_stock(self) -> dict[str, dict[str, int]]:
+        return self.world.npc_stock
+
+    @_npc_stock.setter
+    def _npc_stock(self, value: dict[str, dict[str, int]]) -> None:
+        self.world.npc_stock = value
+
+    @property
+    def _npc_sell_prices(self) -> dict[str, dict[str, int]]:
+        return self.world.npc_sell_prices
+
+    @_npc_sell_prices.setter
+    def _npc_sell_prices(self, value: dict[str, dict[str, int]]) -> None:
+        self.world.npc_sell_prices = value
+
+    @property
+    def _ge_buy_orders(self) -> dict[str, tuple[str, int, int]]:
+        return self.world.ge_buy_orders
+
+    @_ge_buy_orders.setter
+    def _ge_buy_orders(self, value: dict[str, tuple[str, int, int]]) -> None:
+        self.world.ge_buy_orders = value
+
+    @property
+    def _ge_sell_orders(self) -> dict[str, tuple[str, int, int]]:
+        return self.world.ge_sell_orders
+
+    @_ge_sell_orders.setter
+    def _ge_sell_orders(self, value: dict[str, tuple[str, int, int]]) -> None:
+        self.world.ge_sell_orders = value
+
+    @property
+    def _event_npc_spawns(self) -> dict[str, tuple[int, int]]:
+        return self.world.event_npc_spawns
+
+    @property
+    def _npc_event_code(self) -> dict[str, str]:
+        return self.world.npc_event_codes
+
+    @property
+    def _bank_capacity(self) -> int:
+        return self.world.bank_capacity
+
+    @_bank_capacity.setter
+    def _bank_capacity(self, value: int) -> None:
+        self.world.bank_capacity = value
+
+    @property
+    def _next_expansion_cost(self) -> int:
+        return self.world.next_expansion_cost
+
+    @_next_expansion_cost.setter
+    def _next_expansion_cost(self, value: int) -> None:
+        self.world.next_expansion_cost = value
+
+    @property
+    def _transition_tiles(self) -> set[tuple[int, int]]:
+        return self.world.transition_tiles
+
+    @_transition_tiles.setter
+    def _transition_tiles(self, value: set[tuple[int, int]]) -> None:
+        self.world.transition_tiles = value
+
+    @property
+    def _known_tiles(self) -> set[tuple[int, int]]:
+        return self.world.known_tiles
+
+    @_known_tiles.setter
+    def _known_tiles(self, value: set[tuple[int, int]]) -> None:
+        self.world.known_tiles = value
+
+    # === Public query API (delegates to the domain catalogs) ===
 
     def monster_locations(self, code: str) -> list[tuple[int, int]]:
         """Tiles where a monster spawns."""
-        return self._monster_locations.get(code, [])
+        return self.monsters.monster_locations(code)
 
     def resource_locations(self, code: str) -> list[tuple[int, int]]:
         """Tiles where a resource appears."""
-        return self._resource_locations.get(code, [])
+        return self.recipes_catalog.resource_locations(code)
 
     def workshop_location(self, skill: str) -> tuple[int, int] | None:
         """Location of the workshop for a crafting skill."""
-        return self._workshop_locations.get(skill)
+        return self.world.workshop_location(skill)
 
     def bank_location(self) -> tuple[int, int]:
         """Location of the bank."""
-        if self._bank_location is None:
-            raise RuntimeError("Bank location not found in map data")
-        return self._bank_location
+        return self.world.bank_location()
 
     def has_open_bank(self) -> bool:
         """True when the resolved bank is unconditionally accessible (no
         achievement gate). Used to drop a stale global bank-lock blocker."""
-        return self._bank_location_open
+        return self.world.has_open_bank()
 
     @staticmethod
     def _bank_tile_open(tile: object) -> bool:
@@ -151,64 +332,36 @@ class GameData:
 
     def taskmaster_location(self) -> tuple[int, int]:
         """Location of the tasks master NPC."""
-        if self._taskmaster_location is None:
-            raise RuntimeError("Taskmaster location not found in map data")
-        return self._taskmaster_location
+        return self.world.taskmaster_location()
 
     def item_stats(self, code: str) -> ItemStats | None:
         """Stats for an item."""
-        return self._item_stats.get(code)
+        return self.items.item_stats(code)
 
     def max_recipe_demand(self, item_code: str) -> int:
         """Largest TRANSITIVE quantity of `item_code` consumed to produce any
         single end-item, recursively across the crafting chain. Used by the
         overstock cap: anything beyond this (plus a batch buffer) is dead
-        weight in the inventory.
-
-        Example: copper_bar needs 4 copper_ore; copper_ring needs 6 copper_bar.
-        Direct demand on copper_ore is 4 (per bar). Transitive demand is
-        4 × 6 = 24 (one ring chain). Without the transitive multiplier the
-        cap is 20, but the bot needs 24 ore to satisfy GatherMaterials —
-        DiscardOverstock then deletes ore the gather goal is actively
-        trying to accumulate, causing a gather/delete pingpong.
-
-        Returns 0 when no recipe uses the item.
+        weight in the inventory. Returns 0 when no recipe uses the item.
+        Full worked example on `RecipeCatalog.max_recipe_demand`.
         """
-        return self._max_recipe_demand_recursive(item_code, frozenset())
-
-    def _max_recipe_demand_recursive(self, item_code: str, visited: frozenset[str]) -> int:
-        if item_code in visited:
-            return 0
-        next_visited = visited | {item_code}
-        max_qty = 0
-        for parent_code, recipe in self._crafting_recipes.items():
-            direct = recipe.get(item_code, 0)
-            if direct == 0:
-                continue
-            # Demand multiplied by how many of `parent_code` are themselves
-            # demanded transitively. A leaf with no further demand counts
-            # as 1 (the parent IS the end-item).
-            parent_demand = max(1, self._max_recipe_demand_recursive(parent_code, next_visited))
-            chain_demand = direct * parent_demand
-            if chain_demand > max_qty:
-                max_qty = chain_demand
-        return max_qty
+        return self.recipes_catalog.max_recipe_demand(item_code)
 
     def crafting_recipe(self, code: str) -> dict[str, int] | None:
         """Materials needed to craft an item, or None if not craftable."""
-        return self._crafting_recipes.get(code)
+        return self.recipes_catalog.crafting_recipe(code)
 
     def resource_skill_level(self, code: str) -> tuple[str, int] | None:
         """Skill and level required to gather a resource."""
-        return self._resource_skill.get(code)
+        return self.recipes_catalog.resource_skill_level(code)
 
     def resource_drop_item(self, code: str) -> str | None:
         """Primary item dropped when gathering this resource (for planning simulation)."""
-        return self._resource_drops.get(code)
+        return self.recipes_catalog.resource_drop_item(code)
 
     def resource_drop_table(self, code: str) -> list[tuple[str, int, int, int]]:
         """Full (item, rate, min_q, max_q) drop rows for a resource; [] if unknown."""
-        return self._resource_drops_full.get(code, [])
+        return self.recipes_catalog.resource_drop_table(code)
 
     MAX_CHARACTER_LEVEL = 50
     """Documented character level cap.
@@ -235,77 +388,47 @@ class GameData:
         """Documented per-skill level cap. Constant from official docs."""
         return self.MAX_SKILL_LEVEL
 
-    # === Monster XP formula (documented) ===
-    # Source: https://docs.artifactsmmo.com/concepts/stats_and_fights/
-    #   XP = round((monster_level/player_level * 20 + monster_hp * 0.04)
-    #              * level_penalty * monster_multiplier * wisdom_bonus)
-    #
-    # level_penalty: 1.0 when char_level <= monster_level + 4
-    #                0.7 when char_level - monster_level >= 5
-    #                0.0 when char_level - monster_level >= 10
-    # monster_multiplier: normal=1.0, elite=1.4, boss=2.0
-    # wisdom_bonus: 1 + wisdom * 0.001
-
-    _MONSTER_TYPE_MULTIPLIER = {"normal": 1.0, "elite": 1.4, "boss": 2.0}
-
     def xp_per_kill(self, monster_code: str, char_level: int, wisdom: int = 0) -> int:
         """Compute documented XP gained from killing `monster_code`.
 
-        Returns 0 if monster is unknown (no level on file).
+        Returns 0 if monster is unknown (no level on file). Formula and
+        sources documented on `MonsterCatalog.xp_per_kill`.
         """
-        monster_level = self._monster_level.get(monster_code, 0)
-        if monster_level <= 0 or char_level <= 0:
-            return 0
-        monster_hp = self._monster_hp.get(monster_code, 0)
-        diff = char_level - monster_level
-        if diff >= 10:
-            penalty = 0.0
-        elif diff >= 5:
-            penalty = 0.7
-        else:
-            penalty = 1.0
-        mtype = self._monster_type.get(monster_code, "normal")
-        multiplier = self._MONSTER_TYPE_MULTIPLIER.get(mtype, 1.0)
-        wisdom_bonus = 1.0 + wisdom * 0.001
-        raw = (monster_level / char_level * 20 + monster_hp * 0.04)
-        return round(raw * penalty * multiplier * wisdom_bonus)
+        return self.monsters.xp_per_kill(monster_code, char_level, wisdom)
 
     def monster_attack(self, code: str) -> dict[str, int]:
         """{element: attack_value} for the monster. Raises `KeyError` when the
         monster is unknown — CLAUDE.md "use only API data or fail with an error":
-        silent zero-default would make `predict_win` say True for any unknown
-        monster (zero-attack, zero-hp ⇒ player_first ∧ monster_hit=0 ⇒ True).
-        Single locus: callers iterate over `_monster_level` (the known set);
-        no try/except needed."""
-        return self._monster_attack[code]
+        rationale on `MonsterCatalog.monster_attack`."""
+        return self.monsters.monster_attack(code)
 
     def monster_resistance(self, code: str) -> dict[str, int]:
         """{element: resistance_pct} for the monster. Raises `KeyError` when
         unknown — see `monster_attack` for rationale."""
-        return self._monster_resistance[code]
+        return self.monsters.monster_resistance(code)
 
     def monster_hp(self, code: str) -> int:
         """Max HP of a monster. Raises `KeyError` when unknown — silent zero
         would make `rounds_to_kill = ceil(0 / player_hit) = 0`, defeating the
         beatability verdict."""
-        return self._monster_hp[code]
+        return self.monsters.monster_hp(code)
 
     def monster_critical_strike(self, code: str) -> int:
         """Critical-strike chance % of a monster. Raises `KeyError` when
         unknown — see `monster_attack`."""
-        return self._monster_critical_strike[code]
+        return self.monsters.monster_critical_strike(code)
 
     def monster_initiative(self, code: str) -> int:
         """Initiative (turn-order) stat of a monster. Raises `KeyError` when
         unknown — see `monster_attack`."""
-        return self._monster_initiative[code]
+        return self.monsters.monster_initiative(code)
 
     def monster_drops(self, code: str) -> list[tuple[str, int, int, int]]:
         """OpenAPI conformance (Item 14): drop table from a monster fight.
         Returns [(item_code, rate, min_quantity, max_quantity), ...]; empty list
         if no drops known or monster missing. Rate is 1-in-N (smaller = more
         common per server convention)."""
-        return self._monster_drops.get(code, [])
+        return self.monsters.monster_drops(code)
 
     def monsters_dropping(self, item: str) -> list[tuple[str, int, int, int]]:
         """Every monster whose drop table contains `item`, as
@@ -313,121 +436,65 @@ class GameData:
         order. Empty when nothing drops the item. Used by drop-driven monster
         selection (pick the monster minimizing expected kills for a needed
         drop)."""
-        out: list[tuple[str, int, int, int]] = []
-        for monster_code, drops in self._monster_drops.items():
-            for drop_code, rate, min_q, max_q in drops:
-                if drop_code == item:
-                    out.append((monster_code, rate, min_q, max_q))
-        return out
+        return self.monsters.monsters_dropping(item)
 
     def monster_min_gold(self, code: str) -> int:
         """OpenAPI conformance (Item 14): minimum gold reward per fight win.
         Returns 0 if unknown."""
-        return self._monster_min_gold.get(code, 0)
+        return self.monsters.monster_min_gold(code)
 
     def monster_max_gold(self, code: str) -> int:
         """OpenAPI conformance (Item 14): maximum gold reward per fight win.
         Returns 0 if unknown."""
-        return self._monster_max_gold.get(code, 0)
+        return self.monsters.monster_max_gold(code)
 
     def monster_level(self, code: str) -> int:
         """Level of a monster, or 0 when unknown.
 
-        Invariant-OK silent default: every caller (FightAction.is_applicable,
-        task_feasibility, unlock_bank, reach_unlock_level, tiers/guards) treats
-        `0` as a documented "not a known monster" probe. Changing this to
-        raise would force adding try/except in 5 places (multiple-error-handling
-        antipattern). The probe semantics is the contract."""
-        return self._monster_level.get(code, 0)
+        Invariant-OK silent default: rationale on `MonsterCatalog.monster_level`
+        (callers treat 0 as a documented "not a known monster" probe)."""
+        return self.monsters.monster_level(code)
 
     def best_consumable(self, inventory: dict[str, int]) -> tuple[str, int] | None:
         """Return (item_code, hp_restore) for the highest-restore consumable in inventory, or None."""
-        best: tuple[str, int] | None = None
-        for code, qty in inventory.items():
-            if qty <= 0:
-                continue
-            stats = self._item_stats.get(code)
-            if stats is None or stats.hp_restore <= 0:
-                continue
-            if best is None or stats.hp_restore > best[1]:
-                best = (code, stats.hp_restore)
-        return best
+        return self.items.best_consumable(inventory)
 
     def active_gathering_skills(
         self, task_code: str | None, crafting_target: str | None = None
     ) -> set[str]:
         """Gathering skills involved in producing task_code AND the bot's current
         self-directed crafting target (walking each item's recipe tree).
-
-        E.g. task_code="ash_plank" → recipe needs ash_wood → ash_tree resource →
-        woodcutting. crafting_target="copper_dagger" → copper_bar → copper_ore →
-        mining. Returns the union of distinct gather skills the player should
-        prefer tool upgrades for — so mining a copper-gear's materials counts
-        even when no taskmaster task drives it.
+        Worked example on `RecipeCatalog.active_gathering_skills`.
         """
-        skills: set[str] = set()
-        visited: set[str] = set()
-
-        def walk(item: str) -> None:
-            if item in visited:
-                return
-            visited.add(item)
-            # Direct gather: any resource that drops this item contributes its skill.
-            for res_code, drop in self._resource_drops.items():
-                if drop == item:
-                    sl = self._resource_skill.get(res_code)
-                    if sl is not None:
-                        skills.add(sl[0])
-            # Indirect gather: recurse into the recipe (e.g. ash_plank → ash_wood).
-            recipe = self._crafting_recipes.get(item) or {}
-            for mat in recipe:
-                walk(mat)
-
-        for root in (task_code, crafting_target):
-            if root:
-                walk(root)
-        return skills
+        return self.recipes_catalog.active_gathering_skills(task_code, crafting_target)
 
     def npc_location(self, npc_code: str) -> tuple[int, int] | None:
         """Location of a named NPC: static map scan first, then event spawn tile."""
-        loc = self._npc_locations.get(npc_code)
-        if loc is not None:
-            return loc
-        return self._event_npc_spawns.get(npc_code)
+        return self.world.npc_location(npc_code)
 
     def is_event_npc(self, npc_code: str) -> bool:
         """True if this NPC only exists during a timed event window."""
-        return npc_code in self._npc_event_code
+        return self.world.is_event_npc(npc_code)
 
     def npc_event_code(self, npc_code: str) -> str | None:
         """Event code whose active window spawns this NPC, or None if not an event NPC."""
-        return self._npc_event_code.get(npc_code)
+        return self.world.npc_event_code(npc_code)
 
     def npc_sells_item(self, npc_code: str, item_code: str) -> int | None:
         """Buy price of item_code from npc_code, or None if the NPC doesn't sell it."""
-        return self._npc_stock.get(npc_code, {}).get(item_code)
+        return self.world.npc_sells_item(npc_code, item_code)
 
     def npcs_selling_item(self, item_code: str) -> list[tuple[str, int]]:
         """Return [(npc_code, price)] for all NPCs that sell item_code, cheapest first."""
-        results = [
-            (npc_code, stock[item_code])
-            for npc_code, stock in self._npc_stock.items()
-            if item_code in stock
-        ]
-        return sorted(results, key=lambda x: x[1])
+        return self.world.npcs_selling_item(item_code)
 
     def npc_buys_item(self, npc_code: str, item_code: str) -> int | None:
         """Price npc_code pays for item_code when the player sells it, or None if the NPC doesn't buy it."""
-        return self._npc_sell_prices.get(npc_code, {}).get(item_code)
+        return self.world.npc_buys_item(npc_code, item_code)
 
     def npcs_buying_item(self, item_code: str) -> list[tuple[str, int]]:
         """Return [(npc_code, price)] for all NPCs that buy item_code from the player, highest price first."""
-        results = [
-            (npc_code, prices[item_code])
-            for npc_code, prices in self._npc_sell_prices.items()
-            if item_code in prices
-        ]
-        return sorted(results, key=lambda x: -x[1])
+        return self.world.npcs_buying_item(item_code)
 
     def ge_best_buy_order(self, item_code: str) -> tuple[str, int, int] | None:
         """The highest-price OPEN BUY order for item_code as (order_id, price,
@@ -435,7 +502,7 @@ class GameData:
         player fills by selling into it (immediate gold). Only API-sourced orders
         appear here; absence is encoded as None (the anti-surrogate guard for
         liquidation_venue)."""
-        return self._ge_buy_orders.get(item_code)
+        return self.world.ge_best_buy_order(item_code)
 
     def ge_best_sell_order(self, item_code: str) -> tuple[str, int, int] | None:
         """The lowest-price OPEN SELL order for item_code as (order_id, price,
@@ -444,17 +511,114 @@ class GameData:
         DUAL of `ge_best_buy_order`: buying minimizes price, liquidating maximizes
         it. Only API-sourced orders appear here; absence is encoded as None (the
         anti-surrogate guard for buy_source_venue)."""
-        return self._ge_sell_orders.get(item_code)
+        return self.world.ge_best_sell_order(item_code)
 
     def grand_exchange_location(self) -> tuple[int, int] | None:
         """Tile of the Grand Exchange, or None if the map has no GE."""
-        return self._grand_exchange_location
+        return self.world.grand_exchange_location()
 
     def nearest_location(self, x: int, y: int, locations: list[tuple[int, int]]) -> tuple[int, int] | None:
         """Find the nearest location to (x, y) by Manhattan distance."""
-        if not locations:
-            return None
-        return min(locations, key=lambda loc: abs(loc[0] - x) + abs(loc[1] - y))
+        return self.world.nearest_location(x, y, locations)
+
+    # === Whole-mapping read-only views ===
+    # External code that iterates, membership-tests, or passes a whole index
+    # to a pure helper reads it through these properties instead of touching
+    # the private fields. Each returns the underlying mapping unchanged
+    # (bracket access still raises KeyError on a miss) typed as a read-only
+    # Mapping/Set view.
+
+    @property
+    def crafting_recipes(self) -> Mapping[str, dict[str, int]]:
+        """item_code -> {material: quantity} for every craftable item."""
+        return self.recipes_catalog.crafting_recipes
+
+    @property
+    def resource_drops(self) -> Mapping[str, str]:
+        """resource_code -> primary drop item."""
+        return self.recipes_catalog.resource_drops
+
+    @property
+    def resource_drops_full(self) -> Mapping[str, list[tuple[str, int, int, int]]]:
+        """resource_code -> full (item, rate, min_q, max_q) drop table."""
+        return self.recipes_catalog.resource_drops_full
+
+    @property
+    def monster_levels(self) -> Mapping[str, int]:
+        """monster_code -> level for every known monster."""
+        return self.monsters.levels
+
+    @property
+    def all_item_stats(self) -> Mapping[str, ItemStats]:
+        """item_code -> ItemStats for every known item."""
+        return self.items.stats
+
+    @property
+    def all_monster_locations(self) -> Mapping[str, list[tuple[int, int]]]:
+        """monster_code -> spawn tiles for every known monster."""
+        return self.monsters.locations
+
+    @property
+    def all_resource_locations(self) -> Mapping[str, list[tuple[int, int]]]:
+        """resource_code -> tiles for every known resource."""
+        return self.recipes_catalog.locations
+
+    @property
+    def workshop_locations(self) -> Mapping[str, tuple[int, int]]:
+        """crafting skill -> workshop tile."""
+        return self.world.workshop_locations
+
+    @property
+    def npc_locations(self) -> Mapping[str, tuple[int, int]]:
+        """npc_code -> static map tile (event spawns live elsewhere)."""
+        return self.world.npc_tiles
+
+    @property
+    def npc_stock(self) -> Mapping[str, dict[str, int]]:
+        """npc_code -> {item_code: buy_price} for items the NPC sells."""
+        return self.world.npc_stock
+
+    @property
+    def npc_sell_prices(self) -> Mapping[str, dict[str, int]]:
+        """npc_code -> {item_code: sell_price} the NPC pays the player."""
+        return self.world.npc_sell_prices
+
+    @property
+    def resource_skills(self) -> Mapping[str, tuple[str, int]]:
+        """resource_code -> (skill, level) gathering requirement."""
+        return self.recipes_catalog.resource_skill
+
+    @property
+    def transition_tiles(self) -> AbstractSet[tuple[int, int]]:
+        """Overworld tiles with a map-layer transition (doors)."""
+        return self.world.transition_tiles
+
+    @property
+    def known_tiles(self) -> AbstractSet[tuple[int, int]]:
+        """Every overworld tile that exists, content or not."""
+        return self.world.known_tiles
+
+    @property
+    def bank_capacity(self) -> int:
+        """Bank slot capacity as of the startup snapshot."""
+        return self.world.bank_capacity
+
+    @property
+    def next_expansion_cost(self) -> int:
+        """Gold cost of the next bank expansion."""
+        return self.world.next_expansion_cost
+
+    @property
+    def bank_location_or_none(self) -> tuple[int, int] | None:
+        """Bank tile, or None when the map has no bank (display-safe
+        counterpart to the raising `bank_location()`)."""
+        return self.world.bank_tile
+
+    @property
+    def taskmaster_location_or_none(self) -> tuple[int, int] | None:
+        """Tasks-master tile, or None when unknown (display-safe counterpart
+        to the raising `taskmaster_location()`)."""
+        return self.world.taskmaster_tile
 
     @classmethod
     def load(cls, client: AuthenticatedClient) -> "GameData":

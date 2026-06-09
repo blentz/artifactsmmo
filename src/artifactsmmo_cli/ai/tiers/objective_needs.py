@@ -45,10 +45,10 @@ def _producible_by_self(code: str, game_data: GameData) -> bool:
     purchase-only)."""
     if game_data.crafting_recipe(code) is not None:
         return True
-    if code in game_data._resource_drops.values():
+    if code in game_data.resource_drops.values():
         return True
     return any(item == code
-               for table in game_data._resource_drops_full.values()
+               for table in game_data.resource_drops_full.values()
                for item, *_rest in table)
 
 

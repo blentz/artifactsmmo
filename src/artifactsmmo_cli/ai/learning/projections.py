@@ -231,7 +231,7 @@ def cheapest_path_to_level(
         # Beatable monsters at sim_level: FightAction.is_applicable allows
         # monster_level <= state.level + 1.
         beatable = [
-            (code, lvl) for code, lvl in game_data._monster_level.items()
+            (code, lvl) for code, lvl in game_data.monster_levels.items()
             if 1 <= lvl <= sim_level + 1
         ]
         if not beatable:

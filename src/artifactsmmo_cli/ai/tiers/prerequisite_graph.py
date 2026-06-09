@@ -23,14 +23,14 @@ def combat_capable(state: WorldState, game_data: GameData) -> bool:
     using the shared `predict_win` verdict (gear + damage formula). Replaces the
     old `monster_level <= char_level + 1` proxy so the prerequisite graph agrees
     with FightAction / runtime target selection on what 'beatable' means."""
-    return any(predict_win(state, game_data, code) for code in game_data._monster_level)
+    return any(predict_win(state, game_data, code) for code in game_data.monster_levels)
 
 
 def best_attainable_weapon(game_data: GameData) -> str | None:
     """Highest equip_value weapon in the item table (ties broken by code), or
     None when there are no weapons."""
     best: tuple[float, str] | None = None
-    for code, stats in game_data._item_stats.items():
+    for code, stats in game_data.all_item_stats.items():
         if stats.type_ != "weapon":
             continue
         value = equip_value(stats)
@@ -65,7 +65,7 @@ def prerequisites(node: MetaGoal, state: WorldState, game_data: GameData) -> lis
                 prereqs.append(ReachSkillLevel(stats.crafting_skill, stats.crafting_level))
             prereqs.extend(ObtainItem(mat, qty) for mat, qty in recipe.items())
             return prereqs
-        for res_code, drop in game_data._resource_drops.items():
+        for res_code, drop in game_data.resource_drops.items():
             if drop == node.code:
                 skill_level = game_data.resource_skill_level(res_code)
                 if skill_level is not None:

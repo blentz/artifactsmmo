@@ -28,6 +28,13 @@ class _FakeGameData:
         self._crafting_recipes = {str(k): {str(s): q for s, q in v.items()} for k, v in recipes.items()}
         self._resource_drops = {str(r): str(d) for r, d in drops.items()}
 
+    def crafting_recipe(self, code: str) -> dict[str, int] | None:
+        return self._crafting_recipes.get(code)
+
+    @property
+    def resource_drops(self) -> dict[str, str]:
+        return self._resource_drops
+
 
 def _encode_args(recipes: dict[int, dict[int, int]], drops: dict[int, int],
                  roots: list[int], query: int, fuel: int) -> list[int]:

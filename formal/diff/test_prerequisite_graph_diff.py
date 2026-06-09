@@ -65,6 +65,14 @@ class _FakeGameData:
     def resource_skill_level(self, code: str):
         return self._resource_skill.get(code)
 
+    @property
+    def resource_drops(self) -> dict[str, str]:
+        return self._resource_drops
+
+    @property
+    def monster_levels(self) -> dict[str, int]:
+        return self._monster_level
+
 
 def _unsatisfied_state() -> SimpleNamespace:
     """A WorldState stand-in where every ObtainItem is unsatisfied (owned 0)."""

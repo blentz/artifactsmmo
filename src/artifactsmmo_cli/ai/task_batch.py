@@ -26,7 +26,7 @@ def task_batch_size(state: WorldState, game_data: GameData) -> int:
     mats_per_unit = raw_material_units(game_data, state.task_code)
     needed_resources, _ = recipe_closure(game_data, [state.task_code])
     held_recipe = sum(
-        state.inventory.get(game_data._resource_drops[r], 0) for r in needed_resources
+        state.inventory.get(game_data.resource_drops[r], 0) for r in needed_resources
     )
     usable = (state.inventory_free + held_recipe) - _MIN_FREE_SLOTS
     fit = usable // mats_per_unit

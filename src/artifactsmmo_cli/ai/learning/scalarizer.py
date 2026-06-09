@@ -63,7 +63,7 @@ def expected_coin_value_with_prices(
 
     `sell_back_price`: `{item_code: gold_per_unit}` for every item an NPC
     will buy back from the player. Caller builds it from
-    `GameData._npc_sell_prices` (take the max across NPCs).
+    `GameData.npc_sell_prices` (take the max across NPCs).
     """
     rows = store.recent_goal_cycles("TaskExchange", window=window)
     total_value = 0.0
@@ -109,7 +109,7 @@ def expected_coin_value_with_prices(
 def _max_sell_back_price(game_data: GameData) -> dict[str, int]:
     """Build {item_code: max NPC buy price} for the scalarizer's coin valuation."""
     best: dict[str, int] = {}
-    for prices in game_data._npc_sell_prices.values():
+    for prices in game_data.npc_sell_prices.values():
         for item_code, price in prices.items():
             if price > best.get(item_code, 0):
                 best[item_code] = price

@@ -17,13 +17,13 @@ from artifactsmmo_cli.ai.game_data import GameData
 def _gd_non_event(npc_code: str) -> GameData:
     gd = GameData()
     # No event code wired → npc_event_code returns None.
-    gd._npc_event_code = {}
+    gd._npc_event_code.clear()
     return gd
 
 
 def _gd_event(npc_code: str, event_code: str, spawn: tuple[int, int]) -> GameData:
     gd = GameData()
-    gd._npc_event_code = {npc_code: event_code}
+    gd._npc_event_code.update({npc_code: event_code})
     gd._npc_locations = {npc_code: spawn}
     return gd
 

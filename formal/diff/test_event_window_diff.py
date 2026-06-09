@@ -33,7 +33,7 @@ _NOW = datetime(2026, 6, 7, 12, 0, 0, tzinfo=timezone.utc)
 def _game_data(is_event: bool, has_spawn: bool, spawn: tuple[int, int]) -> GameData:
     gd = GameData()
     if is_event:
-        gd._npc_event_code = {_NPC: _EVENT}
+        gd._npc_event_code.update({_NPC: _EVENT})
         if has_spawn:
             gd._npc_locations = {_NPC: spawn}
     return gd

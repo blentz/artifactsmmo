@@ -49,6 +49,10 @@ class _FakeGameData:
         self._resource_drops = {"R": "H"}
         self._crafting_recipes: dict = {}
 
+    @property
+    def resource_drops(self) -> dict[str, str]:
+        return self._resource_drops
+
 
 @settings(max_examples=300)
 @given(

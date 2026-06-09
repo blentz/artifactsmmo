@@ -1,6 +1,7 @@
 """UseConsumableAction: eat food from inventory to restore HP."""
 
 import dataclasses
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import ClassVar
 
@@ -40,7 +41,7 @@ class UseConsumableAction(Action):
 
     tags: ClassVar[frozenset[str]] = frozenset({"recovery"})
 
-    _item_stats: dict[str, ItemStats] = field(default_factory=dict, repr=False)
+    _item_stats: Mapping[str, ItemStats] = field(default_factory=dict, repr=False)
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         if state.hp >= state.max_hp:

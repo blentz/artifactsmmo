@@ -19,7 +19,7 @@ def delete_cost(item_code: str, game_data: GameData) -> float:
     Ingredient-first ordering: an item that's both a craft ingredient AND sellable
     gets the harsher penalty (50.0), not the milder sellable penalty (25.0).
     """
-    is_ingredient = any(item_code in recipe for recipe in game_data._crafting_recipes.values())
+    is_ingredient = any(item_code in recipe for recipe in game_data.crafting_recipes.values())
     has_sell_price = bool(game_data.npcs_buying_item(item_code))
     if is_ingredient:
         return 50.0

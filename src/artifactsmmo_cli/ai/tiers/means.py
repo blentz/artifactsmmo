@@ -145,20 +145,18 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
             return False
         if state.bank_items is None:
             return False
-        if game_data._bank_capacity == 0:
+        if game_data.bank_capacity == 0:
             return False
-        fill = len(state.bank_items) / game_data._bank_capacity
+        fill = len(state.bank_items) / game_data.bank_capacity
         if fill < BANK_EXPAND_FILL:
             return False
-        return state.gold >= game_data._next_expansion_cost
+        return state.gold >= game_data.next_expansion_cost
 
-    if kind is MeansKind.WAIT:
-        # Always-firing last-resort. Position-last in DISCRETIONARY_ORDER
-        # ensures every other means gets a chance before this candidate is
-        # considered by select_pure's positional walk.
-        return True
-
-    return False  # pragma: no cover — exhaustive over MeansKind enum
+    # MeansKind.WAIT: always-firing last-resort. Position-last in
+    # DISCRETIONARY_ORDER ensures every other means gets a chance before
+    # this candidate is considered by select_pure's positional walk.
+    # (Exhaustive over MeansKind — anything else is unreachable.)
+    return kind is MeansKind.WAIT
 
 
 def active_means(

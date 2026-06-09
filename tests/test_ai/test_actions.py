@@ -880,29 +880,23 @@ class TestRaiseForError:
 def test_delete_cost_weight_rule():
     """Verify cost: ingredient first (50), then sellable (25), else worthless (5)."""
 
-    class FakeGD:
-        def __init__(self, recipes=None, sell_prices=None):
-            self._crafting_recipes = recipes or {}
-            self._npc_sell_prices = sell_prices or {}
-        def npcs_buying_item(self, code):
-            return [(npc, prices[code]) for npc, prices in self._npc_sell_prices.items() if code in prices]
-
     # Ingredient (regardless of sellable status) → 50
-    gd_ingredient = FakeGD(recipes={"sword": {"iron_ore": 5}})
+    gd_ingredient = GameData()
+    gd_ingredient._crafting_recipes = {"sword": {"iron_ore": 5}}
     assert _delete_cost("iron_ore", gd_ingredient) == 50.0
 
-    gd_ingredient_also_sellable = FakeGD(
-        recipes={"sword": {"iron_ore": 5}},
-        sell_prices={"smith": {"iron_ore": 8}},
-    )
+    gd_ingredient_also_sellable = GameData()
+    gd_ingredient_also_sellable._crafting_recipes = {"sword": {"iron_ore": 5}}
+    gd_ingredient_also_sellable._npc_sell_prices = {"smith": {"iron_ore": 8}}
     assert _delete_cost("iron_ore", gd_ingredient_also_sellable) == 50.0
 
     # Sellable but not ingredient → 25
-    gd_sellable_only = FakeGD(sell_prices={"cook": {"raw_meat": 3}})
+    gd_sellable_only = GameData()
+    gd_sellable_only._npc_sell_prices = {"cook": {"raw_meat": 3}}
     assert _delete_cost("raw_meat", gd_sellable_only) == 25.0
 
     # Neither → 5
-    gd_worthless = FakeGD()
+    gd_worthless = GameData()
     assert _delete_cost("garbage", gd_worthless) == 5.0
 
 
