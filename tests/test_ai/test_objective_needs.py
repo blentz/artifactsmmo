@@ -76,3 +76,18 @@ def test_empty_when_obtain_item_owned():
     state = make_state(inventory={"iron_sword": 1})
     needs = objective_needs(ObtainItem("iron_sword"), state, gd)
     assert needs.is_empty
+
+
+class _OtherMetaGoal:
+    """A MetaGoal-conforming objective that is none of the three concrete
+    kinds objective_needs special-cases (exercises the empty fallthrough)."""
+
+    def is_satisfied(self, state, game_data) -> bool:  # noqa: ARG002
+        return False
+
+
+def test_unknown_meta_goal_kind_yields_empty_needs():
+    gd = _gd()
+    state = make_state()
+    needs = objective_needs(_OtherMetaGoal(), state, gd)  # type: ignore[arg-type]
+    assert needs.is_empty

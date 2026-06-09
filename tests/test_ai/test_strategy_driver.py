@@ -1407,6 +1407,50 @@ def test_worth_gate_breaks_sticky_pursue_task(monkeypatch):
     assert repr(goal) == "GatherMaterials(copper_dagger)"
 
 
+def test_worth_gate_bypassed_last_resort_selects_task_when_step_unplannable(monkeypatch):
+    """Last-resort pass: the objective step cannot plan AND the only means are
+    worth-suppressed task means. The worth gate suppresses PursueTask, the step
+    fails, so the ungated re-run selects PursueTask and appends the
+    `worth_gate_bypassed` trace marker (the bot earns instead of idling)."""
+    arbiter = StrategyArbiter(GOAPPlanner(), history=None)
+    # Objective-step goal (GatherMaterials) is UNPLANNABLE; everything else plans.
+    monkeypatch.setattr(
+        arbiter, "_plans",
+        lambda goal, *a, **k: [] if isinstance(goal, GatherMaterialsGoal) else [WaitAction()])
+
+    gd = GameData()
+    gd._item_stats = {
+        "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
+                                   crafting_skill="weaponcrafting", crafting_level=1),
+        "iron_sword": ItemStats(code="iron_sword", level=10, type_="weapon",
+                                crafting_skill="weaponcrafting", crafting_level=10),
+        "cooked_gudgeon": ItemStats(code="cooked_gudgeon", level=1, type_="consumable",
+                                    crafting_skill="cooking", crafting_level=1),
+    }
+    gd._crafting_recipes = {"copper_dagger": {}, "iron_sword": {"copper_dagger": 6},
+                            "cooked_gudgeon": {}}
+    obj = CharacterObjective(target_char_level=50, target_skill_levels={},
+                             target_gear={"weapon_slot": "iron_sword"}, _game_data=gd,
+                             target_tools={})
+    state = make_state(skills={"weaponcrafting": 1, "cooking": 1},
+                       task_type="items", task_code="cooked_gudgeon",
+                       task_total=10, task_progress=0)
+    weapon_grind = GatherMaterialsGoal("copper_dagger", {"copper_dagger": 1})
+    monkeypatch.setattr(sd, "objective_step_goal",
+                        lambda step, st, g, c, root=None: weapon_grind)
+    monkeypatch.setattr(sd, "active_guards", lambda *a, **k: [])
+    monkeypatch.setattr(sd, "active_means",
+                        lambda *a, **k: ([], [sd.MeansKind.PURSUE_TASK]))
+    decision = type("D", (), {"chosen_step": ReachSkillLevel("weaponcrafting", 5),
+                              "chosen_root": ObtainItem("iron_sword"),
+                              "fallback_steps": [], "fallback_roots": []})()
+    ctx = _ctx(combat_monster=None)
+
+    goal, _plan, tried = arbiter.select(decision, state, gd, [], ctx, objective=obj)
+    assert repr(goal).startswith("PursueTask")
+    assert any(t["goal"] == "worth_gate_bypassed" for t in tried)
+
+
 def test_no_objective_keeps_committed_pursue_task(monkeypatch):
     """Control: with NO objective (no worth gate), the committed PursueTask still
     wins via sticky — proving the suppression, not ordering, caused the switch."""
