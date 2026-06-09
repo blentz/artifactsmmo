@@ -46,6 +46,29 @@ But skill leveling has limited utility: it is only worth doing when a
 keeps the objective roots but makes `LevelSkill` dormant unless it is the binding
 gate on a concrete want.
 
+### Purpose: a narrow liveness mechanism
+
+`LevelSkill` is **not** a throughput optimizer and is not meant to be the primary
+skill-progression engine. Its purpose is narrow but important: **break skill-gate
+deadlocks**. It exists to cover the edge-cases where a strategic goal is blocked
+solely by an under-leveled skill and no other routine would advance that skill,
+which would otherwise leave the planner with no forward action.
+
+This work is a step toward proving the planner **never deadlocks, never fails to
+plan, and always reaches level 50**. The design is therefore evaluated primarily on
+the *liveness invariant* it guarantees (below), not on how much it grinds. "Quiet
+under continuous tasking" is the correct behavior: when there is no gate, there is
+no deadlock to break, and `LevelSkill` must stay out of the way.
+
+Why crafting skills only (the rationale for decision 2's gather-gate exclusion):
+the **gather** skills (`mining` / `woodcutting` / `fishing`, and `alchemy`'s
+harvesting) self-level through the gathering the bot already does for tasks and
+materials — they cannot deadlock for lack of activity. The **craft** skills
+(`weaponcrafting` / `gearcrafting` / `jewelrycrafting`, and craft-side
+`cooking` / `alchemy`) can stall, because nothing in the routine *forces* a craft
+unless a task or gear chain demands it. `LevelSkill`'s narrow job is exactly that
+craft-skill gap.
+
 ## The game gate (data model)
 
 The blocking relationship is already in game data:
@@ -166,8 +189,13 @@ pass, classify every `LevelSkillGoal` candidate by its skill `S` against
 
 The craft-one goal is `GatherMaterialsGoal(target_item=t, needed={t: 1})` where
 `t = skill_grind_target(S, state, game_data)` (reuses the existing plannable
-goal/action machinery). If `skill_grind_target` returns `None`, the LevelSkill
-candidate is demoted to the end (no craftable progress exists — nothing to do).
+goal/action machinery). For a **gating** craft skill, `t` is guaranteed non-`None`
+by LIV-SKILL-2; if it is `None` anyway, that is a game-data anomaly violating the
+monotone-progression property — emit a diagnostic (trace record) and do not silently
+mask it, rather than quietly dropping the only candidate that could break the gate.
+For a **non-gating** skill, `None` simply demotes the candidate to the end (no
+strategic want needs it — nothing to do, and no deadlock since other candidates
+carry progress).
 
 Implementation note: prefer a small pure helper `reorder_skill_candidates(
 candidates, gates, state, game_data) -> list[Candidate]` so the ordering policy is
@@ -207,19 +235,58 @@ candidates (tier-assembled) ──> reorder_skill_candidates() ──> ordered c
 - **Items-task stand-down lessons** (`strategy_driver.py:356-384`): honored by
   decision 3 — gear-gating crafting skills never abandon a paying task.
 
-## Known tradeoff (flagged for review)
+## Liveness invariants
 
-Gear-gating crafting skills (`weaponcrafting` / `gearcrafting` / `jewelrycrafting`)
-do not preempt a chained items-task **and** sit below `ACCEPT_TASK` when no task is
+This feature's correctness is its contribution to planner liveness, not its grind
+throughput. The design must guarantee:
+
+- **LIV-SKILL-1 (no skill-gate deadlock).** Whenever a wanted strategic item is
+  blocked *solely* by an under-leveled craft skill `S` and no other candidate can
+  produce a plan, the arbiter selects a plannable forward action — the craft-one
+  grind for `S`. Therefore a skill gate can never leave the planner with no action.
+
+- **LIV-SKILL-2 (grind target totality).** For every craft skill `S` and every
+  level `1 ≤ ℓ < max_skill_level`, game data contains at least one craftable item
+  with `crafting_skill == S` and `crafting_level ≤ ℓ`. Under this assumption
+  `skill_grind_target(S, state)` is **total** on gating craft skills — it never
+  returns `None` for a skill the bot can be gated on — so LIV-SKILL-1's "plannable
+  forward action" always exists. This is verifiable directly from game data and
+  should be asserted as a data-validity check (see Testing); it is the documented
+  monotone-progression property of the skill tree.
+
+- **LIV-SKILL-3 (progress toward the gate).** Each craft-one grind raises
+  `skill_xp[S]` by a positive amount (the crafted item's XP award), so repeated
+  per-cycle replans monotonically reduce the gap to `craft.level`. The gate
+  eventually clears, the wanted item becomes craftable, and `S` drops out of
+  `gating_skills`. No livelock: the gating set strictly shrinks as gates clear,
+  and `LevelSkill` falls silent once unblocked.
+
+If LIV-SKILL-2 ever fails (a gating craft skill with no craftable item at the
+current level), that is a game-data anomaly, **not** a silent-demote case: the
+arbiter must surface it (trace/diagnostic) rather than mask a potential deadlock by
+quietly dropping the candidate. Per the API-interaction guideline, fail loud on
+missing data rather than default around it.
+
+These three properties are the Python-side obligations a future Lean liveness
+theorem (`formal/`) would discharge over the planner; this spec states them so the
+implementation and its tests are written to be provable.
+
+## Intended quietness (not a tradeoff)
+
+Gear-gating craft skills (`weaponcrafting` / `gearcrafting` / `jewelrycrafting`)
+do not preempt a chained items-task and sit below `ACCEPT_TASK` when no task is
 active, so under continuous tasking they grind only in the narrow windows where
-neither a task nor a task-acceptance is available — potentially near-inert for those
-three skills. This is the deliberate conservative reading of decision 3. The grind
-still fires whenever the gate is on the active task's own item (`TASK_ITEM` source
-preempts), and cooking/mining/woodcutting/etc. continue to level naturally from task
-crafts and gathers. If gear progression proves too slow in live traces, the lever is
-decision 3 — let a gating-gear `LevelSkill` rank above `ACCEPT_TASK` (and optionally
-preempt a paying task for a bounded number of cycles). We start conservative and
-tune from trace evidence.
+neither a task nor a task-acceptance is available. This near-inert behavior is
+**intended**, not a deficiency: under continuous tasking there is no skill-gate
+deadlock to break, so `LevelSkill` correctly stays quiet (the narrow-purpose design
+above). The grind fires when it is actually needed — a `TASK_ITEM` gate on the
+active task (preempts the stalled `PursueTask`), or a gear/tool/combat gate with no
+task available. Throughput-style skill progression is the job of routine task crafts
+and gathering, not of this mechanism. Should a future objective require faster
+dedicated gear-skill grinding, the lever is decision 3 (rank a gating-gear
+`LevelSkill` above `ACCEPT_TASK`, or permit bounded paying-task preemption) — but
+that is a throughput choice, independent of the liveness guarantee, which holds
+either way.
 
 ## Testing
 
@@ -245,6 +312,22 @@ mocking the unit under test).
   no timeout.
 - Regression against captured traces: assert zero LevelSkill probes while a paying
   task is active, and a plannable craft-one when a gear gate exists with no task.
+
+Liveness obligations (the point of the feature):
+
+- **LIV-SKILL-1**: construct a state where a wanted item is blocked solely by an
+  under-leveled craft skill and every other candidate fails to plan; assert the
+  arbiter selects the craft-one grind (a real forward action, never `Wait`/no-op).
+- **LIV-SKILL-2**: a data-validity test over the *actual* game-data tables —
+  for every craft skill and every level `1..max-1`, assert ∃ craftable item with
+  `crafting_skill == S` and `crafting_level ≤ ℓ`. If the live tables ever violate
+  this, the test fails loudly (it is the proof's standing assumption). Plus a unit
+  test that `skill_grind_target` is non-`None` for every gating craft skill in a
+  fixture, and that a forced `None` on a gating skill emits the diagnostic rather
+  than silently demoting.
+- **LIV-SKILL-3**: assert each craft-one target's XP award is positive and that the
+  `gating_skills` set strictly shrinks (never re-adds a cleared gate) as a skill is
+  driven across the gate level in a simulated multi-cycle replay.
 
 ## Files
 
