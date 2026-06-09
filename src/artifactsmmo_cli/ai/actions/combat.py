@@ -15,7 +15,7 @@ from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.equipment.scoring import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.nearest_tile import nearest_tile
+from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -27,13 +27,6 @@ LOADOUT_PENALTY = 5.0
 planner sequences OptimizeLoadout before the fight (player executes plan[0] only).
 Must stay < one swap's cost (optimize_loadout.SWAP_COST_PER_SLOT * 2) so the
 penalty orders swap-before-fight without making the swap itself non-favorable."""
-
-
-def _nearest(locations: frozenset[tuple[int, int]], state: WorldState) -> tuple[int, int]:
-    dest = nearest_tile(state.x, state.y, locations)
-    if dest is None:
-        raise ValueError("no combat locations to choose from")
-    return dest
 
 
 @dataclass
@@ -68,7 +61,7 @@ class FightAction(Action):
         return best_eq >= monster_level - 1
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
-        dest = _nearest(self.locations, state)
+        dest = nearest_or_error(state.x, state.y, self.locations, "combat")
         estimated_hp_cost = max(1, state.max_hp // 5)
         new_hp = max(1, state.hp - estimated_hp_cost)
         new_progress = (
@@ -91,7 +84,7 @@ class FightAction(Action):
 
     def cost(self, state: WorldState, game_data: GameData,
              history: LearningStore | None = None) -> float:
-        dest = _nearest(self.locations, state)
+        dest = nearest_or_error(state.x, state.y, self.locations, "combat")
         dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
         static = 10.0 + dist
         if history is None:
@@ -111,7 +104,7 @@ class FightAction(Action):
         return base
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
-        dest = _nearest(self.locations, state)
+        dest = nearest_or_error(state.x, state.y, self.locations, "combat")
         if (state.x, state.y) != dest:
             state = MoveAction(x=dest[0], y=dest[1]).execute(state, client)
         result = action_fight(client=client, name=state.character, body=FightRequestSchema())

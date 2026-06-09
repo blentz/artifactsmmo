@@ -19,15 +19,8 @@ from artifactsmmo_cli.ai.actions.gather_apply_core import (
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.nearest_tile import nearest_tile
+from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.world_state import WorldState
-
-
-def _nearest(locations: frozenset[tuple[int, int]], state: WorldState) -> tuple[int, int]:
-    dest = nearest_tile(state.x, state.y, locations)
-    if dest is None:
-        raise ValueError("no gather locations to choose from")
-    return dest
 
 
 @dataclass
@@ -66,7 +59,7 @@ class GatherAction(Action):
                 and gather_is_applicable_pure(inv, self._MIN_FREE_SLOTS))
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
-        dest = _nearest(self.locations, state)
+        dest = nearest_or_error(state.x, state.y, self.locations, "gather")
         drop_item = game_data.resource_drop_item(self.resource_code) or self.resource_code
         inv = GatherInv(used=state.inventory_used, cap=state.inventory_max,
                         item_count=state.inventory)
@@ -100,7 +93,7 @@ class GatherAction(Action):
 
     def cost(self, state: WorldState, game_data: GameData,
              history: LearningStore | None = None) -> float:
-        dest = _nearest(self.locations, state)
+        dest = nearest_or_error(state.x, state.y, self.locations, "gather")
         dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
         static = 6.0 + dist
         # Penalize re-gathering a material the bank already holds, so the
@@ -119,7 +112,7 @@ class GatherAction(Action):
         return learned_cost_pure(static, learned, rate, has_history=True)
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
-        dest = _nearest(self.locations, state)
+        dest = nearest_or_error(state.x, state.y, self.locations, "gather")
         if (state.x, state.y) != dest:
             state = MoveAction(x=dest[0], y=dest[1]).execute(state, client)
         result = action_gathering(client=client, name=state.character)

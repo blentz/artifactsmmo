@@ -1,4 +1,4 @@
-"""The three `_nearest` call sites and MoveTo.apply/execute resolve their
+"""The gather/fight/goal call sites and MoveTo.apply/execute resolve their
 destination through the shared, proven ai/nearest_tile.py primitive. These tests
 pin the wiring: the normal Manhattan-nearest pick, the lex tie-break agreement
 between MoveTo.apply and the selector, and the empty-destination error guards (the
@@ -6,39 +6,29 @@ old `min()` raised on an empty set; the new code raises an explicit ValueError).
 """
 import pytest
 
-from artifactsmmo_cli.ai.actions.combat import _nearest as combat_nearest
-from artifactsmmo_cli.ai.actions.gathering import _nearest as gather_nearest
 from artifactsmmo_cli.ai.actions.movement_semantic import MoveTo
+from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_actions import make_game_data
 
 
-def test_gather_nearest_picks_manhattan_nearest():
-    state = make_state(x=0, y=0)
-    assert gather_nearest(frozenset([(5, 0), (1, 0)]), state) == (1, 0)
+def test_nearest_or_error_picks_manhattan_nearest():
+    assert nearest_or_error(0, 0, frozenset([(5, 0), (1, 0)]), "gather") == (1, 0)
 
 
-def test_combat_nearest_picks_manhattan_nearest():
-    state = make_state(x=0, y=0)
-    assert combat_nearest(frozenset([(5, 0), (1, 0)]), state) == (1, 0)
-
-
-def test_gather_nearest_lex_tiebreak_on_equal_distance():
+def test_nearest_or_error_lex_tiebreak_on_equal_distance():
     # (3, 0) and (0, 3) both distance 3 from origin; lex-min (x, y) wins -> (0, 3).
-    state = make_state(x=0, y=0)
-    assert gather_nearest(frozenset([(3, 0), (0, 3)]), state) == (0, 3)
+    assert nearest_or_error(0, 0, frozenset([(3, 0), (0, 3)]), "gather") == (0, 3)
 
 
-def test_gather_nearest_raises_on_empty():
-    state = make_state(x=0, y=0)
+def test_nearest_or_error_raises_on_empty_gather():
     with pytest.raises(ValueError, match="no gather locations"):
-        gather_nearest(frozenset(), state)
+        nearest_or_error(0, 0, frozenset(), "gather")
 
 
-def test_combat_nearest_raises_on_empty():
-    state = make_state(x=0, y=0)
+def test_nearest_or_error_raises_on_empty_combat():
     with pytest.raises(ValueError, match="no combat locations"):
-        combat_nearest(frozenset(), state)
+        nearest_or_error(0, 0, frozenset(), "combat")
 
 
 def test_moveto_apply_and_execute_agree_on_tie():

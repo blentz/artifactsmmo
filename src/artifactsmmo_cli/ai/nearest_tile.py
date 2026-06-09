@@ -22,3 +22,14 @@ def nearest_tile(
         tiles,
         key=lambda t: (abs(t[0] - origin_x) + abs(t[1] - origin_y), t[0], t[1]),
     )
+
+
+def nearest_or_error(
+    origin_x: int, origin_y: int, tiles: frozenset[tuple[int, int]] | list[tuple[int, int]], what: str
+) -> tuple[int, int]:
+    """`nearest_tile` for callers that require a destination: raises `ValueError`
+    (naming `what` kind of locations were empty) instead of returning `None`."""
+    dest = nearest_tile(origin_x, origin_y, tiles)
+    if dest is None:
+        raise ValueError(f"no {what} locations to choose from")
+    return dest

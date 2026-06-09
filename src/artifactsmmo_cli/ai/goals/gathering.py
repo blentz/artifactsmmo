@@ -5,7 +5,7 @@ from fractions import Fraction
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
-from artifactsmmo_cli.ai.actions.gathering import GatherAction, _nearest
+from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
@@ -20,6 +20,7 @@ from artifactsmmo_cli.ai.monster_drop_selection import (
     MonsterDropCandidate,
     select_monster_for_drop,
 )
+from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.priority_band import clamp_into_band
 from artifactsmmo_cli.ai.recipe_closure import recipe_closure
 from artifactsmmo_cli.ai.scalar_priority import yield_bonus_for_goal
@@ -92,7 +93,7 @@ class GatherMaterialsGoal(Goal):
             have_direct = state.inventory.get(mat, 0) + bank.get(mat, 0)
             total_effective += min(have_direct, qty_needed)
             # Count intermediate materials that can be crafted into mat (float for smooth gradient)
-            recipe = game_data._crafting_recipes.get(mat) or {}
+            recipe = game_data.crafting_recipe(mat) or {}
             for intermediate, qty_per in recipe.items():
                 have_inter = state.inventory.get(intermediate, 0) + bank.get(intermediate, 0)
                 if qty_per > 0:
@@ -126,7 +127,7 @@ class GatherMaterialsGoal(Goal):
             owned[code] = owned.get(code, 0) + qty
         covered: set[str] = set()
         for item, qty in self._needed.items():
-            covered |= fully_covered_materials(item, qty, game_data._crafting_recipes, owned)
+            covered |= fully_covered_materials(item, qty, game_data.crafting_recipes, owned)
 
         result: list[Action] = []
         for action in actions:
@@ -169,7 +170,7 @@ class GatherMaterialsGoal(Goal):
                     break
                 _code, rate, mn, mx = row
                 if a.locations:
-                    loc = _nearest(a.locations, state)
+                    loc = nearest_or_error(state.x, state.y, a.locations, "gather")
                     dist = abs(loc[0] - state.x) + abs(loc[1] - state.y)
                 else:
                     dist = 0
@@ -211,7 +212,7 @@ class GatherMaterialsGoal(Goal):
                 if not is_winnable(state, game_data, monster_code):
                     continue
                 if fight.locations:
-                    loc = _nearest(fight.locations, state)
+                    loc = nearest_or_error(state.x, state.y, fight.locations, "gather")
                     dist = abs(loc[0] - state.x) + abs(loc[1] - state.y)
                 else:
                     dist = 0
