@@ -23,6 +23,10 @@ def _gd() -> GameData:
                                crafting_skill="jewelrycrafting", crafting_level=1),
         "ruby_gem": ItemStats(code="ruby_gem", level=3, type_="resource",
                               crafting_skill="jewelrycrafting", crafting_level=12),
+        "iron_pick": ItemStats(code="iron_pick", level=10, type_="tool",
+                               crafting_skill="weaponcrafting", crafting_level=10),
+        "plank_helm": ItemStats(code="plank_helm", level=5, type_="helmet",
+                                crafting_skill="gearcrafting", crafting_level=5),
         "coal": ItemStats(code="coal", level=20, type_="resource"),
         "trout": ItemStats(code="trout", level=8, type_="resource"),
     }
@@ -32,6 +36,9 @@ def _gd() -> GameData:
         "cooked_trout": {"trout": 1},
         "ruby_ring": {"ruby_gem": 2},
         "ruby_gem": {"coal": 3},
+        "iron_pick": {"iron_bar": 8},
+        "plank_helm": {"plain_plank": 3},
+        "plain_plank": {"raw_log": 2},
     }
     gd._resource_drops = {"trout_spot": "trout", "coal_rocks": "coal"}
     gd._resource_skill = {"trout_spot": ("fishing", 8), "coal_rocks": ("mining", 20)}
@@ -108,6 +115,23 @@ def test_gather_gate_is_excluded():
     assert "mining" not in gates
 
 
+def test_tool_gate_has_tool_source():
+    gd = _gd()
+    obj = _obj(gd, tools={"weapon_slot": "iron_pick"})
+    state = make_state(skills={"weaponcrafting": 1})
+    gates = gating_skills(state, gd, obj, combat_weapon=None)
+    assert gates["weaponcrafting"] == SkillGate(required_level=10, source=GateSource.TOOL)
+
+
+def test_closure_node_without_item_stats_is_skipped():
+    gd = _gd()
+    obj = _obj(gd, gear={"helmet_slot": "plank_helm"})
+    state = make_state(skills={"gearcrafting": 1})
+    gates = gating_skills(state, gd, obj, combat_weapon=None)
+    # plain_plank is in the recipe closure but has no item_stats (None) -> skipped.
+    assert gates["gearcrafting"] == SkillGate(required_level=5, source=GateSource.GEAR)
+
+
 def test_same_skill_two_wants_keeps_max_level_and_strongest_source():
     gd = _gd()
     gd._item_stats["wc_task"] = ItemStats(
@@ -120,3 +144,23 @@ def test_same_skill_two_wants_keeps_max_level_and_strongest_source():
     gates = gating_skills(state, gd, obj, combat_weapon="iron_dagger")
     assert gates["weaponcrafting"] == SkillGate(required_level=10,
                                                 source=GateSource.TASK_ITEM)
+
+
+def test_gear_then_task_item_merges_to_stronger_task_item_source():
+    # Gear want recorded FIRST (weaker), task-item want recorded LATER (stronger).
+    # Exercises _record merge and _stronger_source's `else b` arm.
+    gd = _gd()
+    gd._item_stats["gc_gear"] = ItemStats(
+        code="gc_gear", level=4, type_="helmet",
+        crafting_skill="gearcrafting", crafting_level=4)
+    gd._item_stats["gc_task"] = ItemStats(
+        code="gc_task", level=7, type_="consumable",
+        crafting_skill="gearcrafting", crafting_level=7)
+    gd._crafting_recipes["gc_gear"] = {"iron_bar": 1}
+    gd._crafting_recipes["gc_task"] = {"iron_bar": 1}
+    obj = _obj(gd, gear={"helmet_slot": "gc_gear"})
+    state = make_state(skills={"gearcrafting": 1}, task_type="items",
+                       task_code="gc_task", task_total=5, task_progress=0)
+    gates = gating_skills(state, gd, obj, combat_weapon=None)
+    assert gates["gearcrafting"] == SkillGate(required_level=7,
+                                              source=GateSource.TASK_ITEM)

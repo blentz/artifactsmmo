@@ -117,6 +117,72 @@ def test_gating_skill_without_craft_target_reports_violation():
     assert violations == ["weaponcrafting"]
 
 
+def test_task_item_gate_falls_back_before_wait_when_no_pursue():
+    # before_pursue bucket, no PursueTask anchor present -> _insert_before falls
+    # back to inserting immediately before Wait.
+    gd = _gd()
+    state = make_state(skills={"weaponcrafting": 1})
+    gates = {"weaponcrafting": SkillGate(required_level=5, source=GateSource.TASK_ITEM)}
+    cands = [
+        _cand(_Stub("AcceptTask")),
+        _cand(LevelSkillGoal("weaponcrafting", 5)),
+        _cand(_Stub("Wait")),
+    ]
+    out, violations = reorder_skill_candidates(cands, gates, state, gd,
+                                               has_paying_task=True)
+    assert violations == []
+    assert _reprs(out) == ["AcceptTask", "GatherMaterials(copper_dagger)", "Wait"]
+
+
+def test_task_item_gate_appends_at_end_when_no_pursue_no_wait():
+    # before_pursue bucket, neither PursueTask anchor nor Wait fallback present ->
+    # _insert_before's final `return lst + bucket` appends at the end.
+    gd = _gd()
+    state = make_state(skills={"weaponcrafting": 1})
+    gates = {"weaponcrafting": SkillGate(required_level=5, source=GateSource.TASK_ITEM)}
+    cands = [
+        _cand(_Stub("AcceptTask")),
+        _cand(LevelSkillGoal("weaponcrafting", 5)),
+    ]
+    out, violations = reorder_skill_candidates(cands, gates, state, gd,
+                                               has_paying_task=True)
+    assert violations == []
+    assert _reprs(out) == ["AcceptTask", "GatherMaterials(copper_dagger)"]
+
+
+def test_gear_gate_with_task_falls_back_before_wait_when_no_pursue():
+    # after_pursue bucket, no PursueTask anchor present -> _insert_after falls back
+    # to inserting immediately before Wait.
+    gd = _gd()
+    state = make_state(skills={"weaponcrafting": 1})
+    gates = {"weaponcrafting": SkillGate(required_level=5, source=GateSource.GEAR)}
+    cands = [
+        _cand(_Stub("AcceptTask")),
+        _cand(LevelSkillGoal("weaponcrafting", 5)),
+        _cand(_Stub("Wait")),
+    ]
+    out, violations = reorder_skill_candidates(cands, gates, state, gd,
+                                               has_paying_task=True)
+    assert violations == []
+    assert _reprs(out) == ["AcceptTask", "GatherMaterials(copper_dagger)", "Wait"]
+
+
+def test_gear_gate_no_task_appends_at_end_when_no_accept_no_wait():
+    # after_accept bucket, neither AcceptTask anchor nor Wait fallback present ->
+    # _insert_after's final `return lst + bucket` appends at the end.
+    gd = _gd()
+    state = make_state(skills={"weaponcrafting": 1})
+    gates = {"weaponcrafting": SkillGate(required_level=5, source=GateSource.GEAR)}
+    cands = [
+        _cand(_Stub("PursueTask(x)")),
+        _cand(LevelSkillGoal("weaponcrafting", 5)),
+    ]
+    out, violations = reorder_skill_candidates(cands, gates, state, gd,
+                                               has_paying_task=False)
+    assert violations == []
+    assert _reprs(out) == ["PursueTask(x)", "GatherMaterials(copper_dagger)"]
+
+
 def test_no_levelskill_candidates_is_identity():
     gd = _gd()
     state = make_state()

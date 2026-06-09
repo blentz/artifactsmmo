@@ -53,3 +53,14 @@ def test_none_for_skill_with_no_recipes():
     gd = _gd()
     state = make_state(skills={"alchemy": 5})
     assert skill_grind_target("alchemy", state, gd) is None
+
+
+def test_in_skill_item_without_recipe_is_skipped():
+    # copper_axe matches the skill and level but has no crafting recipe entry,
+    # so it is skipped; the highest item with a recipe wins instead.
+    gd = _gd()
+    gd._item_stats["copper_axe"] = ItemStats(
+        code="copper_axe", level=3, type_="weapon",
+        crafting_skill="weaponcrafting", crafting_level=3)
+    state = make_state(skills={"weaponcrafting": 3})
+    assert skill_grind_target("weaponcrafting", state, gd) == "wooden_staff"
