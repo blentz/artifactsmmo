@@ -354,7 +354,8 @@ class TestMarginal:
         gd._item_stats = {"copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon", attack={"fire": 6})}
         eng = _eng(gd, target_gear={"weapon_slot": "copper_dagger"})
         state = make_state(equipment={"weapon_slot": None})
-        m = eng._marginal(ObtainItem("copper_dagger"), state, gd)
+        # combat_monster set → combat-readiness urgency off, testing base marginal.
+        m = eng._marginal(ObtainItem("copper_dagger"), state, gd, combat_monster="chicken")
         assert m == min(1.0, equip_value(gd.item_stats("copper_dagger")) / GEAR_EQUIP_SCALE)
         assert m > 0
 
@@ -363,7 +364,8 @@ class TestMarginal:
         gd._item_stats = {"wand": ItemStats(code="wand", level=1, type_="weapon", attack={"fire": 3})}
         eng = _eng(gd, target_gear={"weapon_slot": "wand"})
         state = make_state(equipment={"weapon_slot": "wand"})
-        assert eng._marginal(ObtainItem("wand"), state, gd) == 0.0
+        # combat_monster set → combat-readiness urgency off, testing base marginal.
+        assert eng._marginal(ObtainItem("wand"), state, gd, combat_monster="chicken") == 0.0
 
     def test_char_and_skill_marginal_constants(self):
         eng = _eng(GameData())
@@ -649,7 +651,10 @@ class TestRelevantToolBoost:
         eng = StrategyEngine(obj, BalancedPersonality())
         # No task → no active gathering skill → no boost.
         state = make_state(level=5, task_code=None)
-        d = eng.decide(state, gd)
+        # combat_monster set → combat-readiness urgency off; isolates the
+        # tool-boost mechanism (a not-combat-capable bot would correctly let
+        # the weapon-slot urgency lift the pickaxe, defeating this assertion).
+        d = eng.decide(state, gd, combat_monster="chicken")
         ranking = {r.root_repr: r.score for r in d.ranking}
         pickaxe_score = ranking.get("ObtainItem(code='copper_pickaxe', quantity=1)", 0)
         char_score = ranking.get("ReachCharLevel(level=50)", 0)
@@ -703,3 +708,46 @@ def test_reach_char_level_marginal_zero_bonus_when_already_at_target():
     assert abs(v - 1.6) < 0.001, (
         f"at target: gap=0 → full reach window bonus, expected ~1.6, got {v}"
     )
+
+
+def _combat_gd() -> GameData:
+    gd = GameData()
+    gd._item_stats = {
+        "iron_sword": ItemStats(code="iron_sword", level=10, type_="weapon",
+                                crafting_skill="weaponcrafting", crafting_level=10,
+                                attack={"fire": 20}),
+        "iron_bar": ItemStats(code="iron_bar", level=10, type_="resource",
+                              crafting_skill="mining", crafting_level=10),
+        "iron_ore": ItemStats(code="iron_ore", level=10, type_="resource"),
+        "iron_pickaxe": ItemStats(code="iron_pickaxe", level=10, type_="weapon",
+                                  crafting_skill="weaponcrafting", crafting_level=10,
+                                  skill_effects={"mining": 10}),
+    }
+    gd._crafting_recipes = {"iron_sword": {"iron_bar": 6}, "iron_pickaxe": {"iron_bar": 4},
+                            "iron_bar": {"iron_ore": 1}}
+    gd._resource_drops = {"iron_rocks": "iron_ore"}
+    gd._resource_skill = {"iron_rocks": ("mining", 1)}
+    return gd
+
+
+def _combat_obj(gd: GameData) -> CharacterObjective:
+    return CharacterObjective(
+        target_char_level=50, target_skill_levels={},
+        target_gear={"weapon_slot": "iron_sword"}, _game_data=gd,
+        target_tools={"mining": "iron_pickaxe"})
+
+
+def test_weapon_root_is_chosen_when_not_combat_capable():
+    gd = _combat_gd()
+    eng = StrategyEngine(_combat_obj(gd), BalancedPersonality())
+    state = make_state(level=4, skills={"weaponcrafting": 1, "mining": 1})
+    d = eng.decide(state, gd, history=None, combat_monster=None)
+    assert "iron_sword" in repr(d.chosen_root)
+
+
+def test_decide_returns_a_root_when_combat_capable():
+    gd = _combat_gd()
+    eng = StrategyEngine(_combat_obj(gd), BalancedPersonality())
+    state = make_state(level=4, skills={"weaponcrafting": 1, "mining": 1})
+    d = eng.decide(state, gd, history=None, combat_monster="chicken")
+    assert d.chosen_root is not None

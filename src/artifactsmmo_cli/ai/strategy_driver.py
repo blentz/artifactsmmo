@@ -34,7 +34,6 @@ from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
-from artifactsmmo_cli.ai.strategy_reorder import reorder_skill_candidates
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
 from artifactsmmo_cli.ai.tiers.guards import (
@@ -44,6 +43,7 @@ from artifactsmmo_cli.ai.tiers.guards import (
     active_profile,
 )
 from artifactsmmo_cli.ai.tiers.means import MeansKind, active_means
+from artifactsmmo_cli.ai.tiers.means_worth import means_serves
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
@@ -51,8 +51,8 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachSkillLevel,
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.prerequisite_graph import best_attainable_weapon
-from artifactsmmo_cli.ai.tiers.skill_gates import SkillProgressionError, gating_skills
+from artifactsmmo_cli.ai.tiers.objective_needs import objective_needs
+from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -349,6 +349,14 @@ def objective_step_goal(
                 return GatherMaterialsGoal(target_item=tgt_code, needed={tgt_code: tgt_qty})
         return GatherMaterialsGoal(target_item=step.code, needed={step.code: step.quantity})
     if isinstance(step, ReachSkillLevel):
+        # Plannable craft-one: a "reach skill level N" step is width-unfindable as
+        # a single GOAP goal (the planner can't simulate grinding many crafts).
+        # Route it to crafting ONE shallow in-skill item per cycle; the per-cycle
+        # replan grinds the skill incrementally and the step is always plannable.
+        # Falls back to LevelSkillGoal only when nothing in-skill is craftable now.
+        craft_one = skill_grind_target(step.skill, state, game_data)
+        if craft_one is not None:
+            return GatherMaterialsGoal(target_item=craft_one, needed={craft_one: 1})
         current = state.skills.get(step.skill, 0)
         target = min(step.level, current + LEVEL_LOOKAHEAD)
         return LevelSkillGoal(skill_name=step.skill, target_level=target,
@@ -485,7 +493,7 @@ class StrategyArbiter:
         """
         self.goals_tried = []
 
-        def is_suppressed(goal: Goal) -> bool:
+        def _is_suppressed_base(goal: Goal) -> bool:
             r = repr(goal)
             return r != "TaskCancel" and r in suppressed
 
@@ -573,11 +581,10 @@ class StrategyArbiter:
         # AFTER the meta-step, so it never won. When there's no active
         # task, accepting one is the cheap unblock: it gives PursueTask a
         # target, brings the task-chain keep-set online, and gives the
-        # gathered materials a destination other than the trash. Suppress
-        # the meta-step in this state so AcceptTask wins the walk.
-        if (state.task_code is None
-                and MeansKind.ACCEPT_TASK in discretionary_kinds):
-            step_goal = None
+        # gathered materials a destination other than the trash. The worth
+        # gate below replaces this intent: ACCEPT_TASK is worth-gated, so when
+        # the objective has unmet needs the step competes; when needs are
+        # empty, ACCEPT_TASK is not suppressed and still wins.
 
         # Build ordered candidates: guards, collect, step + fallback-step
         # chain, discretionary.
@@ -615,29 +622,28 @@ class StrategyArbiter:
             g = map_means(mk, game_data, ctx, state)
             candidates.append(Candidate(goal=g, is_means=True, repr_=repr(g)))
 
-        # ── Skill-gate prioritization ──────────────────────────────────────
-        # Demote non-gating LevelSkill candidates below the cheap winners (this
-        # is what kills the planner-budget burn — they are never probed) and
-        # elevate a LevelSkill only when its skill is the binding craft gate on a
-        # wanted gear/tool/task/combat item, swapping the unplannable
-        # ReachSkillLevel target for a plannable craft-one GatherMaterials goal.
-        # A gating craft skill with no craftable item at the current level is a
-        # genuine deadlock (LIV-SKILL-2) — fail loud. See
-        # docs/superpowers/specs/2026-06-08-levelskill-gating-prioritization-design.md.
-        if objective is not None:
-            combat_weapon = (best_attainable_weapon(game_data)
-                             if ctx.combat_monster is None else None)
-            gates = gating_skills(state, game_data, objective, combat_weapon)
-            has_paying_task = (
-                state.task_type == "items" and bool(state.task_code)
-                and state.task_total > 0 and state.task_progress < state.task_total)
-            candidates, skill_violations = reorder_skill_candidates(
-                candidates, gates, state, game_data, has_paying_task)
-            if skill_violations:
-                raise SkillProgressionError(
-                    "gating craft skill(s) with no craftable item at current "
-                    "level (LIV-SKILL-2 deadlock): "
-                    + ", ".join(sorted(skill_violations)))
+        # ── Worth gate ─────────────────────────────────────────────────────
+        # Suppress discretionary task means (PursueTask/AcceptTask) that serve
+        # NONE of the committed objective's unmet needs. A suppressed committed
+        # task is skipped before the sticky check, so the objective step (earlier
+        # in the candidate order) wins instead of an always-plannable distraction
+        # task. See spec 2026-06-09 Components 3/4.
+        worth_suppressed: set[str] = set()
+        if objective is not None and chosen_root is not None:
+            needs = objective_needs(chosen_root, state, game_data)
+            if not needs.is_empty:
+                for mk in (MeansKind.PURSUE_TASK, MeansKind.ACCEPT_TASK):
+                    if mk not in discretionary_kinds:
+                        continue
+                    g = map_means(mk, game_data, ctx, state)
+                    if not means_serves(mk, g, needs, state, game_data):
+                        worth_suppressed.add(repr(g))
+
+        _effective_suppressed = set(suppressed) | worth_suppressed
+
+        def is_suppressed(goal: Goal) -> bool:
+            r = repr(goal)
+            return r != "TaskCancel" and r in _effective_suppressed
 
         # Partition: guard candidates always get the full budget and bypass the
         # memo (safety/gear-critical, few, rarely time out). Non-guard candidates
@@ -682,6 +688,19 @@ class StrategyArbiter:
             chosen, plan, new_committed = select_pure(
                 candidates=non_wait, committed_repr=self._committed_repr,
                 try_plan=try_plan_full, is_satisfied=satisfied, is_suppressed=is_suppressed)
+        if chosen is None and worth_suppressed:
+            # Last resort: objective step unplannable AND every need-serving means
+            # failed, leaving only worth-suppressed task means. Re-run WITHOUT the
+            # worth gate so the bot keeps earning instead of idling. Mark the trace
+            # so "objective stalled, doing income" is observable.
+            chosen, plan, new_committed = select_pure(
+                candidates=non_wait, committed_repr=self._committed_repr,
+                try_plan=try_plan_full, is_satisfied=satisfied,
+                is_suppressed=_is_suppressed_base)
+            if chosen is not None:
+                self.goals_tried.append({"goal": "worth_gate_bypassed", "nodes": 0,
+                                         "depth": 0, "timed_out": False,
+                                         "plan_len": len(plan)})
         if chosen is None:
             # Last resort: Wait (special-cased to a single WaitAction).
             wait = next((c for c in candidates if isinstance(c.goal, WaitGoal)), None)
