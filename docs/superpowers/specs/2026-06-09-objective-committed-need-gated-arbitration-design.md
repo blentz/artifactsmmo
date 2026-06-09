@@ -184,6 +184,22 @@ Target: planning fits inside the ~29s game cooldown so it is hidden (median
 overhead today is 2.8s; only deep replans exceed cooldown). No fixed numeric SLA is
 asserted without the profile.
 
+**Profile result (2026-06-09).** Offline profiling is not cleanly reproducible: no
+learning DB is on disk (created at runtime, gitignored), and a synthetic deep goal
+short-circuits in `relevant_actions`/`recipe_closure` before a real search runs, so
+`cProfile` yields no representative node-expansion sample. The architectural facts
+nonetheless settle scope: learned-cost lookups are already memoized per search
+(`LearningStore._cached`), so cost is compute (node expansion: `WorldState.apply`
+copy + `is_applicable` over the action set) plus ~N windowed `Cycle` aggregates per
+search (N = distinct action reprs, growing with the table). Under the redesign the
+arbiter plans ~1-2 goals/cycle (objective step + maybe one need-serving means), and
+median planning overhead (2.8s) is hidden under the ~29s cooldown — only deep gear
+replans exceed it. **Conclusion:** Task 7 is conditional and deferrable; it is best
+done from a live `--learn` run with the planner instrumented to log per-search
+wall-time + `nodes_explored`, then targeting whichever of {Cycle-table aggregates,
+`apply` copy, branching} the live profile shows dominant. The behavior fix
+(Components 1-6, 8) does not depend on it.
+
 ### Component 8 — Combat-readiness as binding objective
 
 When `combat_monster is None`, the decision tier must make the combat-enabling
