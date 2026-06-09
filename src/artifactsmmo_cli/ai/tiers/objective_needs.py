@@ -39,9 +39,17 @@ def _owned(code: str, state: WorldState) -> int:
 
 
 def _producible_by_self(code: str, game_data: GameData) -> bool:
-    """Craftable (has a recipe) or gatherable (a resource drops it)."""
-    return (game_data.crafting_recipe(code) is not None
-            or code in game_data._resource_drops.values())
+    """Craftable (has a recipe) or gatherable (some resource drops it — primary
+    OR secondary; `_resource_drops` keeps only the primary, so the full drop
+    tables must be consulted too, else a secondary-drop item is mis-read as
+    purchase-only)."""
+    if game_data.crafting_recipe(code) is not None:
+        return True
+    if code in game_data._resource_drops.values():
+        return True
+    return any(item == code
+               for table in game_data._resource_drops_full.values()
+               for item, *_rest in table)
 
 
 def objective_needs(root: MetaGoal, state: WorldState, game_data: GameData) -> NeedSet:
@@ -88,13 +96,16 @@ def objective_needs(root: MetaGoal, state: WorldState, game_data: GameData) -> N
             if (stats is not None and stats.crafting_skill
                     and stats.crafting_level > state.skills.get(stats.crafting_skill, 0)):
                 skill_xp.add(stats.crafting_skill)
-        # process non-craftable, non-gatherable ingredients (buy-only leaves)
+        # Classify recipe-ingredient LEAVES not already handled by the closure
+        # nodes loop: gatherable/craftable → a material need; otherwise → buy-only.
         for ingredient in all_ingredients:
             if ingredient in nodes:
                 continue  # already handled above
             if _owned(ingredient, state) >= 1:
                 continue
-            if not _producible_by_self(ingredient, game_data):
+            if _producible_by_self(ingredient, game_data):
+                materials.add(ingredient)
+            else:
                 buy_only.add(ingredient)
         root_stats = game_data.item_stats(root.code)
         if (root_stats is not None and root_stats.crafting_skill

@@ -91,3 +91,20 @@ def test_unknown_meta_goal_kind_yields_empty_needs():
     state = make_state()
     needs = objective_needs(_OtherMetaGoal(), state, gd)  # type: ignore[arg-type]
     assert needs.is_empty
+
+
+def test_secondary_drop_ingredient_is_material_not_buy_only():
+    """A recipe ingredient that is a SECONDARY resource drop (in the full drop
+    table but not the primary `_resource_drops`) is gatherable — it must be a
+    material need, never mis-classified as buy-only (which would silently pass
+    every task through the worth gate)."""
+    gd = _gd()
+    gd._item_stats["rare_gem"] = ItemStats(code="rare_gem", level=5, type_="resource")
+    gd._crafting_recipes["iron_sword"] = {"iron_bar": 6, "rare_gem": 1}
+    gd._resource_drops["gem_rocks"] = "common_stone"  # primary
+    gd._resource_drops_full["gem_rocks"] = [
+        ("common_stone", 80, 1, 1), ("rare_gem", 5, 1, 1)]  # rare_gem is secondary
+    state = make_state(skills={"weaponcrafting": 1, "mining": 1})
+    needs = objective_needs(ObtainItem("iron_sword"), state, gd)
+    assert "rare_gem" in needs.materials
+    assert "rare_gem" not in needs.buy_only

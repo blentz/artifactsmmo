@@ -18,16 +18,19 @@ from artifactsmmo_cli.ai.world_state import WorldState
 _TASK_KINDS = frozenset({MeansKind.PURSUE_TASK, MeansKind.ACCEPT_TASK})
 
 
-def _task_skill(task_code: str | None, game_data: GameData) -> str | None:
-    """The craft skill the task exercises (its item's crafting_skill), or the
-    first gather skill in its production chain."""
+def _task_skills(task_code: str | None, game_data: GameData) -> set[str]:
+    """ALL skills the task exercises: its item's crafting_skill (if any) plus the
+    gathering skills in its production chain. Returning the full set — not just
+    one — lets a need on any of them count the task as serving (a mixed-recipe
+    task must not be mis-gated because the needed skill is not first alphabetically)."""
     if not task_code:
-        return None
+        return set()
+    skills: set[str] = set()
     stats = game_data.item_stats(task_code)
     if stats is not None and stats.crafting_skill:
-        return stats.crafting_skill
-    gather = game_data.active_gathering_skills(task_code)
-    return next(iter(sorted(gather)), None)
+        skills.add(stats.crafting_skill)
+    skills |= game_data.active_gathering_skills(task_code)
+    return skills
 
 
 def means_serves(kind: MeansKind, goal: Goal | None, needs: NeedSet,
@@ -37,8 +40,11 @@ def means_serves(kind: MeansKind, goal: Goal | None, needs: NeedSet,
         return True
     if needs.is_empty:
         return True
-    skill = _task_skill(state.task_code, game_data)
-    if skill is not None and skill in needs.skill_xp:
+    # A monsters-task is combat — the only source of character XP — so it serves
+    # a char-level objective. Items-tasks award no char XP and never serve it.
+    if needs.char_xp and state.task_type == "monsters":
+        return True
+    if _task_skills(state.task_code, game_data) & needs.skill_xp:
         return True
     if state.task_code is not None and state.task_code in needs.materials:
         return True

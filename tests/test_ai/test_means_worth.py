@@ -71,3 +71,24 @@ def test_non_task_means_pass_through():
     state = make_state(task_type="items", task_code="cooked_gudgeon")
     assert means_serves(MeansKind.SELL_IDLE, None, _weapon_needs(), state, gd) is True
     assert means_serves(MeansKind.BANK_EXPAND, None, _weapon_needs(), state, gd) is True
+
+
+def test_serves_when_a_non_first_gather_skill_is_needed():
+    """A mixed-recipe gather task exercises several skills; a need on ANY of them
+    (not just the alphabetically-first) makes the task serve."""
+    gd = GameData()
+    gd._item_stats = {"mixed_plank": ItemStats(code="mixed_plank", level=1, type_="resource")}
+    gd._crafting_recipes = {"mixed_plank": {"ash_wood": 1, "iron_ore": 1}}
+    gd._resource_drops = {"ash_tree": "ash_wood", "iron_rocks": "iron_ore"}
+    gd._resource_skill = {"ash_tree": ("woodcutting", 1), "iron_rocks": ("mining", 1)}
+    state = make_state(task_type="items", task_code="mixed_plank")
+    needs = NeedSet(frozenset(), frozenset({"woodcutting"}), frozenset(), char_xp=False)
+    assert means_serves(MeansKind.PURSUE_TASK, None, needs, state, gd) is True
+
+
+def test_monsters_task_serves_char_level_objective():
+    """A monsters-task is combat → awards character XP → serves a char-level need."""
+    gd = _gd()
+    state = make_state(task_type="monsters", task_code="chicken")
+    needs = NeedSet(frozenset(), frozenset(), frozenset(), char_xp=True)
+    assert means_serves(MeansKind.PURSUE_TASK, None, needs, state, gd) is True
