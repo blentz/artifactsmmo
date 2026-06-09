@@ -79,7 +79,7 @@ def objective_needs(root: MetaGoal, state: WorldState, game_data: GameData) -> N
                 continue
             if _producible_by_self(node, game_data):
                 materials.add(node)
-            else:
+            else:  # pragma: no cover - recipe_closure only emits producible craftables; buy-only leaves are handled by the all_ingredients loop below
                 buy_only.add(node)
             stats = game_data.item_stats(node)
             if (stats is not None and stats.crafting_skill
