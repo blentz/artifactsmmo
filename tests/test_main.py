@@ -45,8 +45,11 @@ def test_cli_with_token_file():
         token_file.unlink()
 
 
-def test_cli_missing_token():
+def test_cli_missing_token(monkeypatch):
     """Test CLI with missing token file."""
+    # The env var is a fallback token source; clear it so the missing-file
+    # path is exercised regardless of the ambient environment (CI sets it).
+    monkeypatch.delenv("ARTIFACTSMMO_TOKEN", raising=False)
     result = runner.invoke(app, ["--token-file", "nonexistent", "version"])
     assert result.exit_code == 1
     assert "No authentication token found" in result.output

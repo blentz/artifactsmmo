@@ -29,6 +29,9 @@ jobs:
     timeout-minutes: 30
     env:
       PYTHONDONTWRITEBYTECODE: "1"
+      # The suite is fully stubbed (no live API calls), but CLI init requires
+      # a token string to exist; locally the gitignored TOKEN file provides it.
+      ARTIFACTSMMO_TOKEN: "ci-dummy-token"
     steps:
       - uses: actions/checkout@v6
       - name: Install uv
