@@ -48,6 +48,8 @@ from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext
 import artifactsmmo_cli.ai.tiers.means as means_module
 from artifactsmmo_cli.ai.tiers.means import MeansKind
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
+from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.tiers.skill_gates import SkillProgressionError
 from tests.test_ai.fixtures import make_state
 
 
@@ -1327,3 +1329,50 @@ def test_objective_step_equippable_upgrades_when_materials_in_hand():
     state = make_state(level=4, inventory={"copper_bar": 8})
     goal = objective_step_goal(ObtainItem("copper_boots", 1), state, gd, _ctx())
     assert isinstance(goal, UpgradeEquipmentGoal)
+
+
+# ---------------------------------------------------------------------------
+# Skill-gate prioritization (LIV-SKILL-2 deadlock) integration test
+# ---------------------------------------------------------------------------
+
+def test_select_raises_when_gating_craft_skill_has_no_craftable_item():
+    """LIV-SKILL-2: when the objective's target_gear wants an item gated by a
+    craft skill whose ONLY recipe also sits above the character's current skill
+    level (so skill_grind_target finds nothing craftable now), and a
+    LevelSkillGoal for that skill is surfaced into the candidate list via the
+    objective step, select() must raise SkillProgressionError rather than
+    silently dropping the only candidate that could break the deadlock.
+
+    Game data: `mithril_shield` (the wanted gear) is the sole gearcrafting
+    recipe and requires gearcrafting level 10; the character is at gearcrafting
+    level 1 (make_state default). The skill is therefore gating but has no
+    in-skill item craftable at level 1 -> a violation. The objective step
+    ReachSkillLevel("gearcrafting", 10) maps through objective_step_goal to a
+    LevelSkillGoal, putting it into `candidates` so reorder_skill_candidates
+    reports the violation."""
+    planner = GOAPPlanner()
+    gd = _make_planner_gd()
+    gd._item_stats = {
+        "mithril_shield": ItemStats(
+            code="mithril_shield", level=10, type_="shield",
+            crafting_skill="gearcrafting", crafting_level=10),
+    }
+    gd._crafting_recipes = {"mithril_shield": {"mithril_bar": 6}}
+    # Character at gearcrafting level 1: nothing in-skill is craftable now.
+    # A non-items (monsters) task is active so AcceptTask is NOT discretionary
+    # and the objective step is not suppressed into None — the LevelSkillGoal
+    # survives into the candidate list where the reorder reports the violation.
+    state = make_state(
+        skills={"gearcrafting": 1}, inventory={}, bank_items={},
+        task_code="chicken", task_type="monsters",
+        task_progress=0, task_total=10)
+    objective = CharacterObjective(
+        target_char_level=50, target_skill_levels={"gearcrafting": 50},
+        target_gear={"shield_slot": "mithril_shield"}, _game_data=gd)
+    # combat_monster set so the combat-weapon want is skipped (no weapon gate).
+    ctx = _ctx(combat_monster="chicken")
+    arbiter = StrategyArbiter(planner, history=None)
+    # ReachSkillLevel step -> LevelSkillGoal(gearcrafting) into candidates.
+    decision = _FakeDecision(chosen_step=ReachSkillLevel("gearcrafting", 10))
+    with pytest.raises(SkillProgressionError):
+        arbiter.select(decision, state, gd, [], ctx, objective=objective)

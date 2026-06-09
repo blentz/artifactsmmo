@@ -320,6 +320,7 @@ class GamePlayer:
                 selected_goal, plan, goals_tried = self._arbiter.select(
                     decision, state, game_data, actions, ctx,
                     suppressed=set(self._suppressed_goals),
+                    objective=self._objective,
                 )
                 # Trace ranking: the candidates the arbiter actually tried, in order.
                 goal_rank_trace: list[dict[str, object]] = [
