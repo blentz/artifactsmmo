@@ -51,7 +51,14 @@ ignore = [
     "SIM108", # ternary-vs-if-else is style not bug.
     "SIM117", # nested-with is stylistic.
     "RUF012", # mutable class attrs (defaults to dict; tests use this).
+    "B904",   # raise-without-from in except blocks; pervasive repo style (78 sites).
+    "RUF001", # repo convention: typographic unicode (en dash, x) in strings.
+    "RUF002", # same convention in docstrings.
 ]
+
+[tool.ruff.lint.flake8-bugbear]
+# typer's declarative CLI API requires call-in-default (B008 false positive).
+extend-immutable-calls = ["typer.Argument", "typer.Option"]
 
 [tool.mypy]
 python_version = "3.13"

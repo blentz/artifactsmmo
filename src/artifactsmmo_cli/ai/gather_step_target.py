@@ -39,6 +39,8 @@ Kept pure (plain dicts, no GameData/WorldState) so the differential harness can
 execute it against the Lean oracle, exactly like `min_gathers`/`shopping_list`.
 """
 
+from collections.abc import Mapping
+
 from artifactsmmo_cli.ai.min_gathers import min_gathers
 
 
@@ -46,7 +48,7 @@ def gather_step_target(
     root_item: str,
     step_item: str,
     step_qty: int,
-    recipes: dict[str, dict[str, int]],
+    recipes: Mapping[str, dict[str, int]],
     owned: dict[str, int],
     equip_max_depth: int,
 ) -> tuple[str, int]:

@@ -6,11 +6,11 @@ import re
 
 REQUIRED_FIELDS = [
     "Player → concept", "Concept → player", "Strategic uses",
-    "Opportunity cost × tier", "Behavior coverage", "Proof coverage", "Gap + policy",  # noqa: RUF001
+    "Opportunity cost × tier", "Behavior coverage", "Proof coverage", "Gap + policy",
 ]
 # Fields that assert strategy and therefore must cite a source.
 # The multiplication-sign character is the canonical field-name used in the MATRIX doc.
-_CITED_FIELDS = {"Strategic uses", "Opportunity cost × tier", "Gap + policy"}  # noqa: RUF001
+_CITED_FIELDS = {"Strategic uses", "Opportunity cost × tier", "Gap + policy"}
 _PLACEHOLDERS = ("tbd", "todo", "fixme", "xxx", "...")
 _FIELD_RE = re.compile(r"^- \*\*(?P<name>[^*]+)\*\*:\s*(?P<body>.*)$")
 _SECTION_RE = re.compile(r"^### (?P<concept>.+)$")

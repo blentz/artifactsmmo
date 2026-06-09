@@ -19,7 +19,7 @@ class MapTransitionAction(Action):
     tags: ClassVar[frozenset[str]] = frozenset({"movement"})
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
-        return (state.x, state.y) in game_data._transition_tiles
+        return (state.x, state.y) in game_data.transition_tiles
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         # Destination depends on server-side response; cannot predict in pure planner.

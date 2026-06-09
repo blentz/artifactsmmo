@@ -28,11 +28,13 @@ Kept pure (plain dicts, no GameData/WorldState) so the differential harness can
 execute it against the Lean oracle, exactly like `min_gathers`.
 """
 
+from collections.abc import Mapping
+
 
 def shopping_list(
     item: str,
     qty: int,
-    recipes: dict[str, dict[str, int]],
+    recipes: Mapping[str, dict[str, int]],
     owned: dict[str, int],
 ) -> dict[str, int]:
     """Net acquisition quantity per item code to obtain `qty` of `item`, crediting
@@ -54,7 +56,7 @@ def shopping_list(
 def _expand(
     item: str,
     qty: int,
-    recipes: dict[str, dict[str, int]],
+    recipes: Mapping[str, dict[str, int]],
     owned: dict[str, int],
     net: dict[str, int],
 ) -> None:
@@ -82,7 +84,7 @@ def _expand(
 def fully_covered_materials(
     item: str,
     qty: int,
-    recipes: dict[str, dict[str, int]],
+    recipes: Mapping[str, dict[str, int]],
     owned: dict[str, int],
 ) -> set[str]:
     """Item codes in the recipe closure of `qty`×`item` whose NET deficit is 0 —

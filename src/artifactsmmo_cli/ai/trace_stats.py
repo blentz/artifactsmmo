@@ -18,7 +18,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlmodel import Session as SqlSession, asc, create_engine, select
+from sqlmodel import Session as SqlSession
+from sqlmodel import asc, create_engine, select
 
 from artifactsmmo_cli.ai.learning.models import Cycle, Session
 

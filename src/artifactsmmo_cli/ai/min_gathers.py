@@ -13,11 +13,13 @@ Kept pure (plain dicts, no GameData/WorldState) so the differential harness can
 execute it against the Lean oracle.
 """
 
+from collections.abc import Mapping
+
 
 def min_gathers(
     item: str,
     qty: int,
-    recipes: dict[str, dict[str, int]],
+    recipes: Mapping[str, dict[str, int]],
     owned: dict[str, int],
 ) -> int:
     """Lower bound on gather actions to obtain `qty` of `item` given `owned`
@@ -31,7 +33,7 @@ def min_gathers(
 def _min_gathers(
     item: str,
     qty: int,
-    recipes: dict[str, dict[str, int]],
+    recipes: Mapping[str, dict[str, int]],
     owned: dict[str, int],
 ) -> int:
     # Consume held copies of this exact item first.

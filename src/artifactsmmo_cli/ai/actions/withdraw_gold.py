@@ -30,9 +30,7 @@ class WithdrawGoldAction(Action):
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         if not self.accessible or self.bank_location is None:
             return False
-        if state.bank_gold is None or state.bank_gold < self.quantity:
-            return False
-        return True
+        return not (state.bank_gold is None or state.bank_gold < self.quantity)
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         dest = self.bank_location or (state.x, state.y)

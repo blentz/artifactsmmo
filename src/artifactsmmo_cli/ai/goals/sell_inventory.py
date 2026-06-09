@@ -60,7 +60,8 @@ class SellInventoryGoal(Goal):
     def relevant_actions(self, actions: list[Action], state: WorldState, game_data: GameData) -> list[Action]:
         result: list[Action] = []
         for action in actions:
-            if "recovery" in action.tags or (isinstance(action, NpcSellAction) and state.inventory.get(action.item_code, 0) > 0):
+            if "recovery" in action.tags or (isinstance(action, NpcSellAction)
+                                             and state.inventory.get(action.item_code, 0) > 0):
                 result.append(action)
         return result
 

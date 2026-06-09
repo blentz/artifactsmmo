@@ -90,11 +90,11 @@ def cycles_for_progress_pure(
     last_progress_at: int | None = None
     prev_progress: int | None = None
     for cycle in chrono:
-        if prev_progress is not None and cycle.task_progress is not None:
-            if cycle.task_progress > prev_progress:
-                if last_progress_at is not None:
-                    intervals.append(cycle.cycle_index - last_progress_at)
-                last_progress_at = cycle.cycle_index
+        if (prev_progress is not None and cycle.task_progress is not None
+                and cycle.task_progress > prev_progress):
+            if last_progress_at is not None:
+                intervals.append(cycle.cycle_index - last_progress_at)
+            last_progress_at = cycle.cycle_index
         prev_progress = cycle.task_progress
 
     for cycle in chrono:

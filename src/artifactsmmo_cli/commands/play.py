@@ -16,6 +16,7 @@ from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.tui.app import WatchApp
 from artifactsmmo_cli.tui.observer import ThreadSafeBridge
 
+
 def default_learn_db_path() -> str:
     """Return ~/.cache/artifactsmmo/learning.db (parent dirs created on first use)."""
     return str(Path.home() / ".cache" / "artifactsmmo" / "learning.db")

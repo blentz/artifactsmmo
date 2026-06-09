@@ -31,6 +31,4 @@ class DoomedMemo:
         sig, set_at = entry
         if sig != plannability_signature(state):
             return False
-        if cycle - set_at >= self._retry_after:
-            return False
-        return True
+        return not cycle - set_at >= self._retry_after

@@ -145,10 +145,7 @@ def should_keep_item(item_info: dict[str, Any], keep_equipment: bool = True, kee
         return True
     if category == "consumable" and keep_consumables:
         return True
-    if category in ["currency", "utility"]:
-        return True
-
-    return False
+    return category in ["currency", "utility"]
 
 
 def execute_single_deposit(character: str, item_code: str, quantity: int) -> tuple[bool, str | None, float | None]:
@@ -480,7 +477,7 @@ def deposit_all_items(
         ) as progress:
             task = progress.add_task(f"Depositing {total_items} items...", total=total_items)
 
-            for i, item in enumerate(items_to_deposit):
+            for _i, item in enumerate(items_to_deposit):
                 item_code = item["code"]
                 quantity = item["quantity"]
                 item_name = item["item_info"].get("name", item_code)

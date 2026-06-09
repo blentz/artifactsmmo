@@ -72,21 +72,17 @@ class BatchResults:
         if "xp" in response_data:
             self.total_xp += response_data["xp"]
         elif "details" in response_data and isinstance(response_data["details"], dict):
-            if "xp" in response_data["details"]:
-                self.total_xp += response_data["details"]["xp"]
+            self.total_xp += response_data["details"].get("xp", 0)
         elif "fight" in response_data and isinstance(response_data["fight"], dict):
-            if "xp" in response_data["fight"]:
-                self.total_xp += response_data["fight"]["xp"]
+            self.total_xp += response_data["fight"].get("xp", 0)
 
         # Extract gold
         if "gold" in response_data:
             self.total_gold += response_data["gold"]
         elif "details" in response_data and isinstance(response_data["details"], dict):
-            if "gold" in response_data["details"]:
-                self.total_gold += response_data["details"]["gold"]
+            self.total_gold += response_data["details"].get("gold", 0)
         elif "fight" in response_data and isinstance(response_data["fight"], dict):
-            if "gold" in response_data["fight"]:
-                self.total_gold += response_data["fight"]["gold"]
+            self.total_gold += response_data["fight"].get("gold", 0)
 
         # Extract items from gathering
         if "details" in response_data and isinstance(response_data["details"], dict):

@@ -44,9 +44,7 @@ def npc_buy_is_applicable_pure(
     free = inv_max - inv_used
     if free < quantity:
         return False
-    if gold < price * quantity:
-        return False
-    return True
+    return not gold < price * quantity
 
 
 def npc_buy_apply_pure(

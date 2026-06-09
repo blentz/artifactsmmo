@@ -49,9 +49,7 @@ class RecycleAction(Action):
         # the bag). When the net is positive we need that many free slots.
         recovered = sum(max(1, (mat_qty * self.quantity) // 2) for mat_qty in recipe.values())
         net = recovered - self.quantity
-        if net > 0 and state.inventory_free < net:
-            return False
-        return True
+        return not (net > 0 and state.inventory_free < net)
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         new_inventory = dict(state.inventory)

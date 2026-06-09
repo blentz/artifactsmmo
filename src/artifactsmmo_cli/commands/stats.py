@@ -277,7 +277,6 @@ def sessions(
     t.add_column("cycles", justify="right")
     t.add_column("exit_reason")
     for r in sess:
-        t.add_column
         t.add_row(r.session_id, r.character, r.started_at,
                   r.ended_at or "(running)", str(r.cycle_count),
                   r.exit_reason or "(none)")
