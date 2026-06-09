@@ -34,6 +34,7 @@ from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.strategy_reorder import reorder_skill_candidates
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
 from artifactsmmo_cli.ai.tiers.guards import (
@@ -49,6 +50,9 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachCharLevel,
     ReachSkillLevel,
 )
+from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.tiers.prerequisite_graph import best_attainable_weapon
+from artifactsmmo_cli.ai.tiers.skill_gates import SkillProgressionError, gating_skills
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -468,6 +472,7 @@ class StrategyArbiter:
         actions: list[Action],
         ctx: SelectionContext,
         suppressed: frozenset[str] | set[str] = frozenset(),
+        objective: CharacterObjective | None = None,
     ) -> tuple[Goal | None, list[Action], list[dict[str, object]]]:
         """Select the first plannable goal from the ordered candidate list.
 
@@ -609,6 +614,30 @@ class StrategyArbiter:
         for mk in discretionary_kinds:
             g = map_means(mk, game_data, ctx, state)
             candidates.append(Candidate(goal=g, is_means=True, repr_=repr(g)))
+
+        # ── Skill-gate prioritization ──────────────────────────────────────
+        # Demote non-gating LevelSkill candidates below the cheap winners (this
+        # is what kills the planner-budget burn — they are never probed) and
+        # elevate a LevelSkill only when its skill is the binding craft gate on a
+        # wanted gear/tool/task/combat item, swapping the unplannable
+        # ReachSkillLevel target for a plannable craft-one GatherMaterials goal.
+        # A gating craft skill with no craftable item at the current level is a
+        # genuine deadlock (LIV-SKILL-2) — fail loud. See
+        # docs/superpowers/specs/2026-06-08-levelskill-gating-prioritization-design.md.
+        if objective is not None:
+            combat_weapon = (best_attainable_weapon(game_data)
+                             if ctx.combat_monster is None else None)
+            gates = gating_skills(state, game_data, objective, combat_weapon)
+            has_paying_task = (
+                state.task_type == "items" and bool(state.task_code)
+                and state.task_total > 0 and state.task_progress < state.task_total)
+            candidates, skill_violations = reorder_skill_candidates(
+                candidates, gates, state, game_data, has_paying_task)
+            if skill_violations:
+                raise SkillProgressionError(
+                    "gating craft skill(s) with no craftable item at current "
+                    "level (LIV-SKILL-2 deadlock): "
+                    + ", ".join(sorted(skill_violations)))
 
         # Partition: guard candidates always get the full budget and bypass the
         # memo (safety/gear-critical, few, rarely time out). Non-guard candidates
