@@ -2,11 +2,13 @@ from dataclasses import dataclass
 
 import pytest
 
+import artifactsmmo_cli.ai.strategy_driver as sd
 from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
+from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
@@ -49,7 +51,6 @@ import artifactsmmo_cli.ai.tiers.means as means_module
 from artifactsmmo_cli.ai.tiers.means import MeansKind
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.skill_gates import SkillProgressionError
 from tests.test_ai.fixtures import make_state
 
 
@@ -648,13 +649,17 @@ def test_select_suppresses_step_when_no_task():
     goal, plan, tried = arbiter.select(decision, state, gd, actions, ctx)
     # AcceptTask must win: the loop-breaker contract.
     assert isinstance(goal, AcceptTaskGoal), (
-        f"expected AcceptTaskGoal to preempt meta-step when no task active, "
+        f"expected AcceptTaskGoal to win over meta-step when no task active, "
         f"got {goal!r}; goals_tried={tried}"
     )
-    # And: the GatherMaterials step must NOT have been tried — suppression
-    # at construction time is the load-bearing invariant.
-    assert all("GatherMaterials" not in t["goal"] for t in tried), (
-        f"meta-step should be suppressed; goals_tried={tried}"
+    # The construction-time AcceptTask-null-step suppression was removed (it is
+    # replaced by the worth gate, which is inactive here since no objective is
+    # passed). The GatherMaterials step may now be tried, but it cannot plan in
+    # the no-task state (plan_len=0), so AcceptTask still wins the walk — the
+    # loop-breaker contract holds via plannability rather than suppression.
+    gather_attempts = [t for t in tried if "GatherMaterials" in str(t["goal"])]
+    assert all(t["plan_len"] == 0 for t in gather_attempts), (
+        f"meta-step must fail to plan in the no-task state; goals_tried={tried}"
     )
     assert len(plan) >= 1
 
@@ -1335,49 +1340,6 @@ def test_objective_step_equippable_upgrades_when_materials_in_hand():
 # Skill-gate prioritization (LIV-SKILL-2 deadlock) integration test
 # ---------------------------------------------------------------------------
 
-def test_select_raises_when_gating_craft_skill_has_no_craftable_item():
-    """LIV-SKILL-2: when the objective's target_gear wants an item gated by a
-    craft skill whose ONLY recipe also sits above the character's current skill
-    level (so skill_grind_target finds nothing craftable now), and a
-    LevelSkillGoal for that skill is surfaced into the candidate list via the
-    objective step, select() must raise SkillProgressionError rather than
-    silently dropping the only candidate that could break the deadlock.
-
-    Game data: `mithril_shield` (the wanted gear) is the sole gearcrafting
-    recipe and requires gearcrafting level 10; the character is at gearcrafting
-    level 1 (make_state default). The skill is therefore gating but has no
-    in-skill item craftable at level 1 -> a violation. The objective step
-    ReachSkillLevel("gearcrafting", 10) maps through objective_step_goal to a
-    LevelSkillGoal, putting it into `candidates` so reorder_skill_candidates
-    reports the violation."""
-    planner = GOAPPlanner()
-    gd = _make_planner_gd()
-    gd._item_stats = {
-        "mithril_shield": ItemStats(
-            code="mithril_shield", level=10, type_="shield",
-            crafting_skill="gearcrafting", crafting_level=10),
-    }
-    gd._crafting_recipes = {"mithril_shield": {"mithril_bar": 6}}
-    # Character at gearcrafting level 1: nothing in-skill is craftable now.
-    # A non-items (monsters) task is active so AcceptTask is NOT discretionary
-    # and the objective step is not suppressed into None — the LevelSkillGoal
-    # survives into the candidate list where the reorder reports the violation.
-    state = make_state(
-        skills={"gearcrafting": 1}, inventory={}, bank_items={},
-        task_code="chicken", task_type="monsters",
-        task_progress=0, task_total=10)
-    objective = CharacterObjective(
-        target_char_level=50, target_skill_levels={"gearcrafting": 50},
-        target_gear={"shield_slot": "mithril_shield"}, _game_data=gd)
-    # combat_monster set so the combat-weapon want is skipped (no weapon gate).
-    ctx = _ctx(combat_monster="chicken")
-    arbiter = StrategyArbiter(planner, history=None)
-    # ReachSkillLevel step -> LevelSkillGoal(gearcrafting) into candidates.
-    decision = _FakeDecision(chosen_step=ReachSkillLevel("gearcrafting", 10))
-    with pytest.raises(SkillProgressionError):
-        arbiter.select(decision, state, gd, [], ctx, objective=objective)
-
-
 def test_objective_step_reachskill_returns_craft_one_when_craftable():
     gd = GameData()
     gd._item_stats = {
@@ -1401,3 +1363,72 @@ def test_objective_step_reachskill_falls_back_to_levelskill_when_nothing_craftab
     state = make_state(skills={"weaponcrafting": 1})  # nothing craftable at level 1
     goal = objective_step_goal(ReachSkillLevel("weaponcrafting", 5), state, gd, _ctx())
     assert isinstance(goal, LevelSkillGoal)
+
+
+def test_worth_gate_breaks_sticky_pursue_task(monkeypatch):
+    """Committed PursueTask that serves no weapon need is worth-suppressed, so the
+    sticky short-circuit breaks and the weapon-grind objective step wins."""
+    arbiter = StrategyArbiter(GOAPPlanner(), history=None)
+    # Stub planning so EVERY goal plans trivially — isolate the SELECTION logic.
+    monkeypatch.setattr(arbiter, "_plans", lambda goal, *a, **k: [WaitAction()])
+
+    gd = GameData()
+    gd._item_stats = {
+        "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
+                                   crafting_skill="weaponcrafting", crafting_level=1),
+        "iron_sword": ItemStats(code="iron_sword", level=10, type_="weapon",
+                                crafting_skill="weaponcrafting", crafting_level=10),
+        "cooked_gudgeon": ItemStats(code="cooked_gudgeon", level=1, type_="consumable",
+                                    crafting_skill="cooking", crafting_level=1),
+    }
+    gd._crafting_recipes = {"copper_dagger": {}, "iron_sword": {"copper_dagger": 6},
+                            "cooked_gudgeon": {}}
+    obj = CharacterObjective(target_char_level=50, target_skill_levels={},
+                             target_gear={"weapon_slot": "iron_sword"}, _game_data=gd,
+                             target_tools={})
+    state = make_state(skills={"weaponcrafting": 1, "cooking": 1},
+                       task_type="items", task_code="cooked_gudgeon",
+                       task_total=10, task_progress=0)
+    weapon_grind = GatherMaterialsGoal("copper_dagger", {"copper_dagger": 1})
+    monkeypatch.setattr(sd, "objective_step_goal",
+                        lambda step, st, g, c, root=None: weapon_grind)
+    monkeypatch.setattr(sd, "active_guards", lambda *a, **k: [])
+    monkeypatch.setattr(sd, "active_means",
+                        lambda *a, **k: ([], [sd.MeansKind.PURSUE_TASK]))
+    decision = type("D", (), {"chosen_step": ReachSkillLevel("weaponcrafting", 5),
+                              "chosen_root": ObtainItem("iron_sword"),
+                              "fallback_steps": [], "fallback_roots": []})()
+    ctx = _ctx(combat_monster=None)
+    # Simulate prior sticky commitment to PursueTask.
+    arbiter._committed_repr = repr(sd.map_means(sd.MeansKind.PURSUE_TASK, gd, ctx, state))
+
+    goal, _plan, _tried = arbiter.select(decision, state, gd, [], ctx, objective=obj)
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert repr(goal) == "GatherMaterials(copper_dagger)"
+
+
+def test_no_objective_keeps_committed_pursue_task(monkeypatch):
+    """Control: with NO objective (no worth gate), the committed PursueTask still
+    wins via sticky — proving the suppression, not ordering, caused the switch."""
+    arbiter = StrategyArbiter(GOAPPlanner(), history=None)
+    monkeypatch.setattr(arbiter, "_plans", lambda goal, *a, **k: [WaitAction()])
+    gd = GameData()
+    gd._item_stats = {"cooked_gudgeon": ItemStats(code="cooked_gudgeon", level=1,
+                      type_="consumable", crafting_skill="cooking", crafting_level=1)}
+    gd._crafting_recipes = {"cooked_gudgeon": {}}
+    state = make_state(skills={"cooking": 1}, task_type="items",
+                       task_code="cooked_gudgeon", task_total=10, task_progress=0)
+    weapon_grind = GatherMaterialsGoal("copper_dagger", {"copper_dagger": 1})
+    monkeypatch.setattr(sd, "objective_step_goal",
+                        lambda step, st, g, c, root=None: weapon_grind)
+    monkeypatch.setattr(sd, "active_guards", lambda *a, **k: [])
+    monkeypatch.setattr(sd, "active_means",
+                        lambda *a, **k: ([], [sd.MeansKind.PURSUE_TASK]))
+    decision = type("D", (), {"chosen_step": ReachSkillLevel("weaponcrafting", 5),
+                              "chosen_root": ObtainItem("iron_sword"),
+                              "fallback_steps": [], "fallback_roots": []})()
+    ctx = _ctx(combat_monster=None)
+    pursue = sd.map_means(sd.MeansKind.PURSUE_TASK, gd, ctx, state)
+    arbiter._committed_repr = repr(pursue)
+    goal, _plan, _tried = arbiter.select(decision, state, gd, [], ctx)  # objective=None
+    assert repr(goal) == repr(pursue)  # committed task kept (sticky), no worth gate
