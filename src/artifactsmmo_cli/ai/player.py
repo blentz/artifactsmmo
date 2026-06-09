@@ -20,34 +20,21 @@ from artifactsmmo_api_client.models.achievement_type import AchievementType
 from artifactsmmo_api_client.models.error_response_schema import ErrorResponseSchema
 from artifactsmmo_api_client.types import Unset
 
-from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
-from artifactsmmo_cli.ai.actions.bank_expansion import BuyBankExpansionAction
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
-from artifactsmmo_cli.ai.actions.combat import FightAction
-from artifactsmmo_cli.ai.actions.complete_task import CompleteTaskAction
-from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
-from artifactsmmo_cli.ai.actions.crafting import CraftAction
-from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
-from artifactsmmo_cli.ai.actions.deposit_gold import DepositGoldAction
-from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS, EquipAction
-from artifactsmmo_cli.ai.actions.gathering import GatherAction
-from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
-from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
-from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
-from artifactsmmo_cli.ai.actions.recycle import RecycleAction
-from artifactsmmo_cli.ai.actions.rest import RestAction
-from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
+from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
-from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
-from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
-from artifactsmmo_cli.ai.actions.unequip import UnequipAction
-from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
 from artifactsmmo_cli.ai.combat import is_winnable
+from artifactsmmo_cli.ai.constants import (
+    BANK_REFRESH_FORCE_SENTINEL,
+    BANK_REFRESH_INTERVAL,
+    ERROR_CODE_COOLDOWN,
+    STUCK_DETECTOR_WINDOW,
+)
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, GoalAttempt, GoalRankEntry
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_latch import GearLatch
@@ -59,11 +46,10 @@ from artifactsmmo_cli.ai.learning.skill_xp_curve import SkillXpCurve
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.null_tracer import NullTracer
 from artifactsmmo_cli.ai.planner import GOAPPlanner, _state_key
-from artifactsmmo_cli.ai.player_helpers import delete_cost as _delete_cost
+from artifactsmmo_cli.ai.player_helpers import delete_cost as _delete_cost  # noqa: F401  (test import target)
 from artifactsmmo_cli.ai.player_helpers import format_plan as _format_plan
 from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckSignal
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
-from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
 from artifactsmmo_cli.ai.tiers import (
     BalancedPersonality,
@@ -107,7 +93,7 @@ class GamePlayer:
         # player fields. New gates (workshop, taskmaster, transitions) plug in
         # by adding a code to this registry instead of growing player.
         self._blockers = BlockerRegistry()
-        self._detector = StuckDetector(history_size=30)
+        self._detector = StuckDetector(history_size=STUCK_DETECTOR_WINDOW)
         self._suppressed_goals: dict[str, int] = {}
         self._actions_since_full_refresh: int = 0
         self._recovery_level: dict[StuckSignal, int] = {}
@@ -250,12 +236,12 @@ class GamePlayer:
         # load (via `_maybe_periodic_refresh` → `_full_refresh`) BEFORE the first
         # plan. `_fetch_world_state` carries `bank_items` from the prior state
         # (None on cycle 0) and the periodic full refresh otherwise only fires
-        # every 20 actions — so without this the planner sees an EMPTY bank for
-        # ~20 cycles and re-gathers materials already banked (the bank-aware
-        # regather penalty / shopping_list credit / withdraw applicability are
-        # all inert when `bank_items` is None). Any value at/above the periodic
-        # threshold triggers the refresh on cycle 0.
-        self._actions_since_full_refresh = 9999
+        # every BANK_REFRESH_INTERVAL actions — so without this the planner
+        # sees an EMPTY bank for ~20 cycles and re-gathers materials already
+        # banked (the bank-aware regather penalty / shopping_list credit /
+        # withdraw applicability are all inert when `bank_items` is None). Any
+        # value at/above the periodic threshold triggers the refresh on cycle 0.
+        self._actions_since_full_refresh = BANK_REFRESH_FORCE_SENTINEL
 
         print(f"[{self._now()}] Starting play loop for {self.character}")
 
@@ -506,7 +492,7 @@ class GamePlayer:
                 new_state = self._sync_pending(client, new_state)
             return new_state, "ok"
         except ApiActionError as e:
-            if e.code == 499:
+            if e.code == ERROR_CODE_COOLDOWN:
                 print(f"[{self._now()}] Server cooldown (HTTP 499) — refreshing state")
                 outcome = "error:cooldown"
             elif e.code == 496 and isinstance(action, (DepositAllAction, WithdrawItemAction)):
@@ -730,8 +716,8 @@ class GamePlayer:
         self._actions_since_full_refresh = 0
 
     def _maybe_periodic_refresh(self, client: AuthenticatedClient) -> None:
-        """Force a full refresh every 20 successful actions."""
-        if self._actions_since_full_refresh >= 20:
+        """Force a full refresh every BANK_REFRESH_INTERVAL successful actions."""
+        if self._actions_since_full_refresh >= BANK_REFRESH_INTERVAL:
             self._full_refresh(client)
 
     def _wait_for_cooldown(self) -> None:
@@ -895,189 +881,15 @@ class GamePlayer:
         self._detector.acknowledge(signal)
 
     def _build_actions(self) -> list[Action]:
-        """Build the action list. Each action handles its own movement in execute() and cost()."""
+        """Build the action list (delegates to the actions factory)."""
         assert self.game_data is not None
-
-        bank = self.game_data.bank_location()
-        taskmaster = self.game_data.taskmaster_location()
-
-        actions: list[Action] = [
-            RestAction(),
-            UseConsumableAction(_item_stats=self.game_data._item_stats),
-            DepositAllAction(bank_location=bank, accessible=self._bank_accessible, game_data=self.game_data),
-            AcceptTaskAction(taskmaster_location=taskmaster),
-            CompleteTaskAction(taskmaster_location=taskmaster),
-            TaskExchangeAction(taskmaster_location=taskmaster, min_coins=self._task_exchange_min_coins),
-            TaskCancelAction(taskmaster_location=taskmaster),
-            ClaimPendingItemAction(),
-        ]
-
-        # Fight and gather actions carry their own locations — no separate move actions needed
-        for monster_code, locs in self.game_data._monster_locations.items():
-            actions.append(FightAction(monster_code=monster_code, locations=frozenset(locs)))
-            actions.append(OptimizeLoadoutAction(target_monster_code=monster_code, game_data=self.game_data))
-
-        for resource_code, locs in self.game_data._resource_locations.items():
-            actions.append(GatherAction(resource_code=resource_code, locations=frozenset(locs)))
-
-        # Craft, equip, and withdraw actions carry workshop/bank locations
-        materials_to_withdraw: dict[str, int] = {}
-        for item_code, recipe in self.game_data._crafting_recipes.items():
-            stats = self.game_data.item_stats(item_code)
-            if stats is None:
-                continue
-            workshop_loc = self.game_data.workshop_location(stats.crafting_skill) if stats.crafting_skill else None
-            actions.append(CraftAction(code=item_code, quantity=1, workshop_location=workshop_loc))
-            for slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):
-                actions.append(EquipAction(code=item_code, slot=slot))
-            if ITEM_TYPE_TO_SLOTS.get(stats.type_):
-                # Allow withdrawing the crafted item from bank to equip it
-                actions.append(WithdrawItemAction(
-                    code=item_code, quantity=1, bank_location=bank, accessible=self._bank_accessible))
-                for mat_code, mat_qty in recipe.items():
-                    if mat_qty > materials_to_withdraw.get(mat_code, 0):
-                        materials_to_withdraw[mat_code] = mat_qty
-
-        # Walk recipe closure transitively. The first pass above only adds
-        # withdraws for DIRECT recipe inputs of equippables (e.g. copper_bar
-        # for copper_dagger). Trace 2026-06-06 15:21: bot looped gather →
-        # deposit copper_ore for 80 cycles because WithdrawItemAction
-        # (copper_ore, ...) was never in the action set — copper_ore is the
-        # recipe input of copper_bar (non-equippable), so the inner block
-        # skipped it. Bank had 414 copper_ore unused while bot regathered.
-        # Expand recipe chains so EVERY material the bot may need can be
-        # withdrawn instead of regathered.
-        pending = list(materials_to_withdraw.keys())
-        while pending:
-            code = pending.pop()
-            sub_recipe = self.game_data._crafting_recipes.get(code)
-            if not sub_recipe:
-                continue
-            for sub_mat, sub_qty in sub_recipe.items():
-                # Quantity = parent withdraw qty × per-craft sub recipe qty,
-                # capped to a reasonable batch (we never need more than one
-                # full equippable's worth of raw materials in one withdraw).
-                parent_qty = materials_to_withdraw.get(code, 1)
-                desired = sub_qty * parent_qty
-                if desired > materials_to_withdraw.get(sub_mat, 0):
-                    materials_to_withdraw[sub_mat] = desired
-                    pending.append(sub_mat)
-
-        # Also add SMALLER-QUANTITY withdraws (one craft unit's worth) so
-        # the action is applicable even when inventory_free is below the
-        # full-chain quantity. Trace 2026-06-06 15:21: WithdrawItemAction
-        # (copper_ore, 80) was added but state.inventory_free=56 — planner
-        # fell back to gather. Adding Withdraw(copper_ore, 10) (one
-        # copper_bar craft's worth) lets the planner chain
-        # Withdraw → Craft → Withdraw → Craft instead.
-        per_craft_withdraws: dict[str, int] = {}
-        for item_code, recipe in self.game_data._crafting_recipes.items():
-            if item_code in materials_to_withdraw:
-                for sub_mat, sub_qty in recipe.items():
-                    if sub_qty > per_craft_withdraws.get(sub_mat, 0):
-                        per_craft_withdraws[sub_mat] = sub_qty
-        for mat_code, mat_qty in per_craft_withdraws.items():
-            if mat_qty != materials_to_withdraw.get(mat_code, 0):
-                actions.append(WithdrawItemAction(
-                    code=mat_code, quantity=mat_qty,
-                    bank_location=bank, accessible=self._bank_accessible))
-
-        for mat_code, mat_qty in materials_to_withdraw.items():
-            actions.append(WithdrawItemAction(
-                code=mat_code, quantity=mat_qty, bank_location=bank, accessible=self._bank_accessible))
-
-        # Allow withdrawing task coins from bank for exchange
-        actions.append(WithdrawItemAction(
-            code=TASKS_COIN_CODE, quantity=1, bank_location=bank, accessible=self._bank_accessible))
-
-        # Unequip actions: one per equipment slot
-        all_slots = {slot for slots in ITEM_TYPE_TO_SLOTS.values() for slot in slots}
-        for slot in all_slots:
-            actions.append(UnequipAction(slot=slot))
-
-        # Recycle actions: one per craftable equippable item, EXCEPT
-        # target_gear and target_tools — the objective wants those at
-        # hand, recycling destroys them. Trace 2026-06-06 16:34 verify
-        # showed a plan recycling copper_axe + copper_dagger + copper_pickaxe
-        # (all target_tools / target_gear codes) just to free inventory
-        # slots / recover bars for boots crafting. That trades long-term
-        # gathering capability for a one-shot copper_bar windfall — net
-        # loss because the recycled tools take dozens of cycles to remake.
-        protected_codes: set[str] = set()
-        if self._objective is not None:
-            protected_codes.update(self._objective.target_gear.values())
-            protected_codes.update(self._objective.target_tools.values())
-        for item_code in self.game_data._crafting_recipes:
-            stats = self.game_data.item_stats(item_code)
-            if stats is None or not ITEM_TYPE_TO_SLOTS.get(stats.type_):
-                continue
-            if item_code in protected_codes:
-                continue
-            workshop_loc = self.game_data.workshop_location(stats.crafting_skill) if stats.crafting_skill else None
-            actions.append(RecycleAction(code=item_code, quantity=1, workshop_location=workshop_loc))
-
-        # Delete actions: built from current inventory when bank is locked.
-        # Cost weights: ingredient=50 (harsher), sellable=25, worthless=5 (cheaper to delete).
-        if not self._bank_accessible and self.state is not None:
-            equipped = set(self.state.equipment.values()) - {None}
-            for item_code, qty in self.state.inventory.items():
-                if qty <= 0 or item_code in equipped:
-                    continue
-                actions.append(DeleteItemAction(
-                    code=item_code, quantity=1,
-                    cost_weight=_delete_cost(item_code, self.game_data),
-                ))
-
-        # NPC buy actions: one per (npc, item) pair. Prior version filtered to
-        # hp_restore>0 (consumables only), which made every non-potion vendor
-        # item unreachable — the planner could never spend gold on weapons,
-        # gear, tools, or ammo even when the merchant carried them. Drop the
-        # filter so the action set covers the full vendor surface; the
-        # planner / goal layer decides whether to actually buy.
-        for npc_code, stock in self.game_data._npc_stock.items():
-            npc_loc = self.game_data.npc_location(npc_code)
-            for item_code in stock:
-                if self.game_data.item_stats(item_code) is None:
-                    continue  # unknown item -> can't reason about it; skip safely
-                actions.append(NpcBuyAction(
-                    npc_code=npc_code,
-                    item_code=item_code,
-                    quantity=1,
-                    npc_location=npc_loc,
-                ))
-
-        # NPC sell actions: one per (npc, item) pair where the NPC buys the item
-        for npc_code, sell_prices in self.game_data._npc_sell_prices.items():
-            npc_loc = self.game_data.npc_location(npc_code)
-            for item_code in sell_prices:
-                actions.append(NpcSellAction(
-                    npc_code=npc_code,
-                    item_code=item_code,
-                    quantity=1,
-                    npc_location=npc_loc,
-                ))
-
-        # Phase B: bank expansion, transitions, gold management
-        actions.append(BuyBankExpansionAction(bank_location=bank, accessible=self._bank_accessible))
-        actions.append(MapTransitionAction())
-        # Gold deposit/withdraw with typical small quantities; let planner decide
-        for q in (50, 100, 500, 1000):
-            actions.append(DepositGoldAction(quantity=q, bank_location=bank, accessible=self._bank_accessible))
-            actions.append(WithdrawGoldAction(quantity=q, bank_location=bank, accessible=self._bank_accessible))
-        # Task trade is built only when current task is items-type
-        if self.state is not None and self.state.task_type == "items" and self.state.task_code:
-            task_code = self.state.task_code
-            k = task_batch_size(self.state, self.game_data)
-            stats = self.game_data.item_stats(task_code)
-            workshop = (self.game_data.workshop_location(stats.crafting_skill)
-                        if stats is not None and stats.crafting_skill else None)
-            if workshop is not None and k > 1:
-                actions.append(CraftAction(code=task_code, quantity=k, workshop_location=workshop))
-            actions.append(TaskTradeAction(code=task_code, quantity=k, taskmaster_location=taskmaster))
-            if k > 1:
-                actions.append(TaskTradeAction(code=task_code, quantity=1, taskmaster_location=taskmaster))
-
-        return actions
+        return build_actions(
+            game_data=self.game_data,
+            state=self.state,
+            objective=self._objective,
+            bank_accessible=self._bank_accessible,
+            task_exchange_min_coins=self._task_exchange_min_coins,
+        )
 
     def _notify_observer(
         self,
@@ -1232,7 +1044,7 @@ class GamePlayer:
         min_level = max(1, self.state.level - 1)
         max_level = self.state.level + 2
         best: tuple[str, int] | None = None
-        for code, level in self.game_data._monster_level.items():
+        for code, level in self.game_data.monster_levels.items():
             if not (min_level <= level <= max_level):
                 continue
             if not self._is_winnable(code):
@@ -1289,10 +1101,10 @@ class GamePlayer:
         since the last attempt — otherwise the flap creates a wasteful
         Deposit→496→UnlockBank→Deposit loop."""
         assert self.state is not None
-        if not self._bank_accessible and self._bank_blocked_since is not None:
-            if (time.monotonic() - self._bank_blocked_since >= _BANK_RETRY_SECONDS
-                    and self.state.level > self._bank_blocked_at_level):
-                self._blockers.clear("bank")
+        if (not self._bank_accessible and self._bank_blocked_since is not None
+                and time.monotonic() - self._bank_blocked_since >= _BANK_RETRY_SECONDS
+                and self.state.level > self._bank_blocked_at_level):
+            self._blockers.clear("bank")
 
     def _selection_context(self, combat_monster: str | None = None) -> SelectionContext:
         assert self.state is not None
