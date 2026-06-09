@@ -77,9 +77,12 @@ def objective_needs(root: MetaGoal, state: WorldState, game_data: GameData) -> N
                 continue
             if _owned(node, state) >= 1:
                 continue
+            # `nodes` are recipe_closure craftables (all producible); buy-only
+            # leaves are handled by the all_ingredients loop below, so this else
+            # is unreachable here.
             if _producible_by_self(node, game_data):
                 materials.add(node)
-            else:  # pragma: no cover - recipe_closure only emits producible craftables; buy-only leaves are handled by the all_ingredients loop below
+            else:  # pragma: no cover
                 buy_only.add(node)
             stats = game_data.item_stats(node)
             if (stats is not None and stats.crafting_skill
