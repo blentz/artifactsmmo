@@ -100,7 +100,7 @@ def _task_recipe_inputs(task_code: str | None, game_data: GameData) -> frozenset
 def _materials_in_hand(item: str, state: WorldState, game_data: GameData) -> bool:
     """True if every direct recipe material for `item` is fully covered by
     inventory + bank (so the craft+equip plan is short and reachable)."""
-    recipe = game_data._crafting_recipes.get(item) or {}
+    recipe = game_data.crafting_recipe(item) or {}
     bank = state.bank_items or {}
     return bool(recipe) and all(
         state.inventory.get(mat, 0) + bank.get(mat, 0) >= qty for mat, qty in recipe.items())
@@ -250,12 +250,12 @@ def _gather_goal_for_unreachable_equippable(
     if step is not None and isinstance(step, ObtainItem) and step.code != code:
         tgt_code, tgt_qty = gather_step_target(
             code, step.code, step.quantity,
-            game_data._crafting_recipes, owned, equip_max_depth)
+            game_data.crafting_recipes, owned, equip_max_depth)
         return GatherMaterialsGoal(target_item=tgt_code, needed={tgt_code: tgt_qty})
     # No deeper actionable step (the root itself is the actionable leaf, or the
     # chain is cyclically blocked): fall back to the direct recipe. A recipe-less
     # root never reaches here (callers gate on a non-empty recipe / is_plannable).
-    recipe = game_data._crafting_recipes.get(code) or {}
+    recipe = game_data.crafting_recipe(code) or {}
     return GatherMaterialsGoal(target_item=code, needed=dict(recipe))
 
 
@@ -276,7 +276,7 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
     upgrade = UpgradeEquipmentGoal(initial_equipment=state.equipment, committed_target=(code, slot))
     if upgrade.is_plannable(state, game_data):
         return upgrade
-    recipe = game_data._crafting_recipes.get(code) or {}
+    recipe = game_data.crafting_recipe(code) or {}
     if recipe:
         # Depth-UNREACHABLE from-scratch deep chain: route to the FLAT deepest
         # actionable step instead of GatherMaterials(code, DIRECT recipe), whose
@@ -345,7 +345,7 @@ def objective_step_goal(
                     owned[code] = owned.get(code, 0) + qty
                 tgt_code, tgt_qty = gather_step_target(
                     root.code, step.code, step.quantity,
-                    game_data._crafting_recipes, owned, upgrade.max_depth)
+                    game_data.crafting_recipes, owned, upgrade.max_depth)
                 return GatherMaterialsGoal(target_item=tgt_code, needed={tgt_code: tgt_qty})
         return GatherMaterialsGoal(target_item=step.code, needed={step.code: step.quantity})
     if isinstance(step, ReachSkillLevel):
@@ -493,10 +493,6 @@ class StrategyArbiter:
         """
         self.goals_tried = []
 
-        def _is_suppressed_base(goal: Goal) -> bool:
-            r = repr(goal)
-            return r != "TaskCancel" and r in suppressed
-
         chosen_step: MetaGoal | None = getattr(decision, "chosen_step", None)
         chosen_root: MetaGoal | None = getattr(decision, "chosen_root", None)
         fallback_steps: list[MetaGoal] = getattr(decision, "fallback_steps", [])
@@ -505,72 +501,9 @@ class StrategyArbiter:
         guard_kinds = active_guards(state, game_data, self._history, ctx)
         collect_kinds, discretionary_kinds = active_means(state, game_data, self._history, ctx)
 
-        # Walk: top step first, then fallbacks in ranking order. First
-        # non-None goal wins. Closes the 2026-06-06 09:59 gap where
-        # bootstrap step returned None (no winnable target) and gear roots
-        # below it (ranked 1.0) were never tried — bot dropped straight
-        # to discretionary PursueTask instead of pursuing the runner-up.
-        # Prefer UpgradeEquipment steps over GatherMaterials steps when both
-        # exist in the fallback chain. Trace 2026-06-06 12:28: bot crafted
-        # 2 copper_daggers via CraftRelief guard but never equipped — the
-        # fallback walk hit copper_boots (step=copper_ore→GatherMaterials)
-        # before copper_dagger (step=copper_dagger→UpgradeEquipment), so
-        # arbiter sticky-committed to GatherMaterials forever while
-        # copper_dagger sat in inventory. An owned-but-unequipped target
-        # is a ONE-action win (EquipAction) vs a multi-cycle GatherMaterials
-        # chain; the ready-to-equip path is always preferable.
-        step_goal = objective_step_goal(chosen_step, state, game_data, ctx, root=chosen_root)
-        if step_goal is None:
-            # First pass: prefer UpgradeEquipmentGoal (one-step equip).
-            for idx, alt in enumerate(fallback_steps):
-                alt_root = fallback_roots[idx] if idx < len(fallback_roots) else None
-                candidate = objective_step_goal(alt, state, game_data, ctx, root=alt_root)
-                if isinstance(candidate, UpgradeEquipmentGoal):
-                    step_goal = candidate
-                    chosen_step = alt
-                    break
-            # Second pass: any non-None goal in ranking order.
-            if step_goal is None:
-                for idx, alt in enumerate(fallback_steps):
-                    alt_root = fallback_roots[idx] if idx < len(fallback_roots) else None
-                    step_goal = objective_step_goal(alt, state, game_data, ctx, root=alt_root)
-                    if step_goal is not None:
-                        chosen_step = alt
-                        break
-
-        # An active items-task pursuit suppresses the meta-objective's
-        # GatherMaterials step ONLY when that step targets an item the task's
-        # OWN recipe chain already produces — PursueTask plans the same
-        # gather, so the meta-step is a redundant 1-cycle detour. A step
-        # whose target lives outside the task chain (e.g. ash_wood for a
-        # wooden_shield while the task is copper_ore) is independent gear
-        # progress and must not be suppressed; without it the bot never
-        # crafts equipment because the chain never gets cycles to
-        # accumulate. Non-GatherMaterials steps (UpgradeEquipment, LevelSkill)
-        # are sustained, high-value goals and always allowed to compete.
-        if (MeansKind.PURSUE_TASK in discretionary_kinds
-                and isinstance(step_goal, GatherMaterialsGoal)
-                and step_goal._target_item in _task_recipe_inputs(state.task_code, game_data)):
-            step_goal = None
-
-        # Trade-ready PursueTask wins over fallback gear-chain gathering.
-        # Trace 2026-06-06 14:40 (cycles 25-26): task=items/copper_bar at
-        # 20/21, 1 copper_bar in inventory; gear-chain fallback
-        # ObtainItem(copper_boots) → GatherMaterials(copper_bar, needed=8)
-        # ran instead of PursueTask's TaskTrade. One trade would complete
-        # the task; the bot instead gathered MORE copper_ore for armor
-        # while the held bar sat unused.
-        # When the fallback step's target IS the task code AND the bot
-        # holds that item, defer the fallback for one cycle so
-        # PursueTask's TaskTrade can immediately advance task_progress.
-        # After TaskComplete + rotation (or after trading), the suppression
-        # clears and fallback resumes the gear chain.
-        if (MeansKind.PURSUE_TASK in discretionary_kinds
-                and state.task_type == "items"
-                and isinstance(step_goal, GatherMaterialsGoal)
-                and step_goal._target_item == state.task_code
-                and state.inventory.get(state.task_code, 0) > 0):
-            step_goal = None
+        step_goal = self._resolve_step_goal(
+            chosen_step, chosen_root, fallback_steps, fallback_roots, state, game_data, ctx)
+        step_goal = self._suppress_step_for_task(step_goal, discretionary_kinds, state, game_data)
 
         # Trace 2026-05-19 (cycles 318-342): with task_code=None, the bot
         # locked into a Gather→Discard loop — meta-objective step
@@ -586,8 +519,117 @@ class StrategyArbiter:
         # the objective has unmet needs the step competes; when needs are
         # empty, ACCEPT_TASK is not suppressed and still wins.
 
-        # Build ordered candidates: guards, collect, step + fallback-step
-        # chain, discretionary.
+        candidates = self._build_candidates(
+            guard_kinds, collect_kinds, discretionary_kinds, step_goal,
+            fallback_steps, fallback_roots, state, game_data, ctx)
+
+        worth_suppressed = self._worth_gate_suppressed(
+            objective, chosen_root, discretionary_kinds, state, game_data, ctx)
+
+        chosen, plan, new_committed = self._arbitrate(
+            candidates, suppressed, worth_suppressed, state, game_data, actions)
+
+        self._committed_repr = new_committed
+        self.goals_tried = self._dedupe_goals_tried()
+        return chosen, plan, self.goals_tried
+
+    def _resolve_step_goal(
+        self,
+        chosen_step: MetaGoal | None,
+        chosen_root: MetaGoal | None,
+        fallback_steps: list[MetaGoal],
+        fallback_roots: list[MetaGoal],
+        state: WorldState,
+        game_data: GameData,
+        ctx: SelectionContext,
+    ) -> Goal | None:
+        """Objective step tier: map the top strategy step to a Goal, walking fallbacks (equip-first) when it is None."""
+        # Walk: top step first, then fallbacks in ranking order. First
+        # non-None goal wins. Closes the 2026-06-06 09:59 gap where
+        # bootstrap step returned None (no winnable target) and gear roots
+        # below it (ranked 1.0) were never tried — bot dropped straight
+        # to discretionary PursueTask instead of pursuing the runner-up.
+        # Prefer UpgradeEquipment steps over GatherMaterials steps when both
+        # exist in the fallback chain. Trace 2026-06-06 12:28: bot crafted
+        # 2 copper_daggers via CraftRelief guard but never equipped — the
+        # fallback walk hit copper_boots (step=copper_ore→GatherMaterials)
+        # before copper_dagger (step=copper_dagger→UpgradeEquipment), so
+        # arbiter sticky-committed to GatherMaterials forever while
+        # copper_dagger sat in inventory. An owned-but-unequipped target
+        # is a ONE-action win (EquipAction) vs a multi-cycle GatherMaterials
+        # chain; the ready-to-equip path is always preferable.
+        step_goal = objective_step_goal(chosen_step, state, game_data, ctx, root=chosen_root)
+        if step_goal is not None:
+            return step_goal
+        # First pass: prefer UpgradeEquipmentGoal (one-step equip).
+        for idx, alt in enumerate(fallback_steps):
+            alt_root = fallback_roots[idx] if idx < len(fallback_roots) else None
+            candidate = objective_step_goal(alt, state, game_data, ctx, root=alt_root)
+            if isinstance(candidate, UpgradeEquipmentGoal):
+                return candidate
+        # Second pass: any non-None goal in ranking order.
+        for idx, alt in enumerate(fallback_steps):
+            alt_root = fallback_roots[idx] if idx < len(fallback_roots) else None
+            candidate = objective_step_goal(alt, state, game_data, ctx, root=alt_root)
+            if candidate is not None:
+                return candidate
+        return None
+
+    def _suppress_step_for_task(
+        self,
+        step_goal: Goal | None,
+        discretionary_kinds: list[MeansKind],
+        state: WorldState,
+        game_data: GameData,
+    ) -> Goal | None:
+        """Step-suppression: drop a GatherMaterials step that the active items task already covers or can trade now."""
+        if MeansKind.PURSUE_TASK not in discretionary_kinds:
+            return step_goal
+        if not isinstance(step_goal, GatherMaterialsGoal):
+            return step_goal
+        # An active items-task pursuit suppresses the meta-objective's
+        # GatherMaterials step ONLY when that step targets an item the task's
+        # OWN recipe chain already produces — PursueTask plans the same
+        # gather, so the meta-step is a redundant 1-cycle detour. A step
+        # whose target lives outside the task chain (e.g. ash_wood for a
+        # wooden_shield while the task is copper_ore) is independent gear
+        # progress and must not be suppressed; without it the bot never
+        # crafts equipment because the chain never gets cycles to
+        # accumulate. Non-GatherMaterials steps (UpgradeEquipment, LevelSkill)
+        # are sustained, high-value goals and always allowed to compete.
+        if step_goal._target_item in _task_recipe_inputs(state.task_code, game_data):
+            return None
+        # Trade-ready PursueTask wins over fallback gear-chain gathering.
+        # Trace 2026-06-06 14:40 (cycles 25-26): task=items/copper_bar at
+        # 20/21, 1 copper_bar in inventory; gear-chain fallback
+        # ObtainItem(copper_boots) → GatherMaterials(copper_bar, needed=8)
+        # ran instead of PursueTask's TaskTrade. One trade would complete
+        # the task; the bot instead gathered MORE copper_ore for armor
+        # while the held bar sat unused.
+        # When the fallback step's target IS the task code AND the bot
+        # holds that item, defer the fallback for one cycle so
+        # PursueTask's TaskTrade can immediately advance task_progress.
+        # After TaskComplete + rotation (or after trading), the suppression
+        # clears and fallback resumes the gear chain.
+        if (state.task_type == "items"
+                and step_goal._target_item == state.task_code
+                and state.inventory.get(state.task_code, 0) > 0):
+            return None
+        return step_goal
+
+    def _build_candidates(
+        self,
+        guard_kinds: list[GuardKind],
+        collect_kinds: list[MeansKind],
+        discretionary_kinds: list[MeansKind],
+        step_goal: Goal | None,
+        fallback_steps: list[MetaGoal],
+        fallback_roots: list[MetaGoal],
+        state: WorldState,
+        game_data: GameData,
+        ctx: SelectionContext,
+    ) -> list[Candidate]:
+        """Candidate ordering: guards, collect, step + fallback-step chain, discretionary."""
         candidates: list[Candidate] = []
         for gk in guard_kinds:
             g = map_guard(gk, game_data, ctx, state)
@@ -621,7 +663,18 @@ class StrategyArbiter:
         for mk in discretionary_kinds:
             g = map_means(mk, game_data, ctx, state)
             candidates.append(Candidate(goal=g, is_means=True, repr_=repr(g)))
+        return candidates
 
+    def _worth_gate_suppressed(
+        self,
+        objective: CharacterObjective | None,
+        chosen_root: MetaGoal | None,
+        discretionary_kinds: list[MeansKind],
+        state: WorldState,
+        game_data: GameData,
+        ctx: SelectionContext,
+    ) -> set[str]:
+        """Worth gate: reprs of discretionary task means serving none of the committed objective's unmet needs."""
         # ── Worth gate ─────────────────────────────────────────────────────
         # Suppress discretionary task means (PursueTask/AcceptTask) that serve
         # NONE of the committed objective's unmet needs. A suppressed committed
@@ -629,15 +682,32 @@ class StrategyArbiter:
         # in the candidate order) wins instead of an always-plannable distraction
         # task. See spec 2026-06-09 Components 3/4.
         worth_suppressed: set[str] = set()
-        if objective is not None and chosen_root is not None:
-            needs = objective_needs(chosen_root, state, game_data)
-            if not needs.is_empty:
-                for mk in (MeansKind.PURSUE_TASK, MeansKind.ACCEPT_TASK):
-                    if mk not in discretionary_kinds:
-                        continue
-                    g = map_means(mk, game_data, ctx, state)
-                    if not means_serves(mk, g, needs, state, game_data):
-                        worth_suppressed.add(repr(g))
+        if objective is None or chosen_root is None:
+            return worth_suppressed
+        needs = objective_needs(chosen_root, state, game_data)
+        if not needs.is_empty:
+            for mk in (MeansKind.PURSUE_TASK, MeansKind.ACCEPT_TASK):
+                if mk not in discretionary_kinds:
+                    continue
+                g = map_means(mk, game_data, ctx, state)
+                if not means_serves(mk, g, needs, state, game_data):
+                    worth_suppressed.add(repr(g))
+        return worth_suppressed
+
+    def _arbitrate(
+        self,
+        candidates: list[Candidate],
+        suppressed: frozenset[str] | set[str],
+        worth_suppressed: set[str],
+        state: WorldState,
+        game_data: GameData,
+        actions: list[Action],
+    ) -> tuple[Goal | None, list[Action], str | None]:
+        """Tier walk: cheap pass → full-budget escalation → worth-gate bypass → Wait fallback."""
+
+        def _is_suppressed_base(goal: Goal) -> bool:
+            r = repr(goal)
+            return r != "TaskCancel" and r in suppressed
 
         _effective_suppressed = set(suppressed) | worth_suppressed
 
@@ -706,8 +776,10 @@ class StrategyArbiter:
             wait = next((c for c in candidates if isinstance(c.goal, WaitGoal)), None)
             if wait is not None and not is_suppressed(wait.goal):
                 chosen, plan, new_committed = wait.goal, [WaitAction()], self._committed_repr
+        return chosen, plan, new_committed
 
-        self._committed_repr = new_committed
+    def _dedupe_goals_tried(self) -> list[dict[str, object]]:
+        """Telemetry: collapse the two-pass probes to one record per goal (the last, full-budget attempt wins)."""
         # The two-pass walk probes a non-guard candidate at most twice (cheap
         # then full budget); collapse those to the LAST (full-budget) attempt so
         # goals_tried stays one record per goal (the planner-attempt telemetry is
@@ -715,5 +787,4 @@ class StrategyArbiter:
         deduped: dict[str, dict[str, object]] = {}
         for attempt in self.goals_tried:
             deduped[str(attempt["goal"])] = attempt
-        self.goals_tried = list(deduped.values())
-        return chosen, plan, self.goals_tried
+        return list(deduped.values())
