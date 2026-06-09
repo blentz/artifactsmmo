@@ -117,14 +117,18 @@ def gating_skills(
     state: WorldState,
     game_data: GameData,
     objective: CharacterObjective,
-    ctx: SelectionContext,
+    combat_weapon: str | None,
 ) -> dict[str, SkillGate]:
     """Skills currently blocking a strategically interesting want.
 
     Maps skill_name -> SkillGate(required_level, source). A skill is gating iff
     it is the craft.skill of some WANTED, NOT-YET-OWNED item (or an item in that
     item's craftable recipe closure) at a craft.level above the character's
-    current skill level. Gather/resource skill gates are excluded."""
+    current skill level. Gather/resource skill gates are excluded.
+
+    `combat_weapon` is the best attainable weapon to chase when the character is
+    not combat-capable (else None) — passed in by the arbiter so this module
+    avoids the combat/predict_win import cycle."""
 ```
 
 `SkillGate` is a small frozen value object: `required_level: int`,
@@ -180,7 +184,7 @@ pass, classify every `LevelSkillGoal` candidate by its skill `S` against
 | Case | Action |
 |---|---|
 | `S` gates the **active task item** (`source == TASK_ITEM`) | replace goal with the craft-one goal; position **before** the `PURSUE_TASK` candidate |
-| `S` gates gear/tool/combat, **no paying task active** | replace with craft-one goal; position **after** `ACCEPT_TASK` but **before** the gear/tool `ObtainItem` steps it unlocks (accepting a task stays the cheap unblock; the grind does not starve task acceptance) |
+| `S` gates gear/tool/combat, **no paying task active** | replace with craft-one goal; position **immediately after** the `ACCEPT_TASK` candidate (accepting a task stays the cheap unblock — the grind fires only when no task is acceptable, i.e. as a near-last-resort deadlock break, consistent with the intended quietness) |
 | `S` gates gear/tool/combat, **paying task active** | replace with craft-one goal; position **after** the `PURSUE_TASK` candidate |
 | `S` **not gating** | demote to the end, immediately before `WAIT` |
 
@@ -190,12 +194,15 @@ pass, classify every `LevelSkillGoal` candidate by its skill `S` against
 The craft-one goal is `GatherMaterialsGoal(target_item=t, needed={t: 1})` where
 `t = skill_grind_target(S, state, game_data)` (reuses the existing plannable
 goal/action machinery). For a **gating** craft skill, `t` is guaranteed non-`None`
-by LIV-SKILL-2; if it is `None` anyway, that is a game-data anomaly violating the
-monotone-progression property — emit a diagnostic (trace record) and do not silently
-mask it, rather than quietly dropping the only candidate that could break the gate.
-For a **non-gating** skill, `None` simply demotes the candidate to the end (no
-strategic want needs it — nothing to do, and no deadlock since other candidates
-carry progress).
+by LIV-SKILL-2; if it is `None` anyway, that is a game-data anomaly that *is* a
+deadlock (no way to break the gate) — `reorder_skill_candidates` returns the skill
+in its violations list and the arbiter **raises `SkillProgressionError`** (fail
+loud) rather than silently dropping the only candidate that could break the gate.
+`skill_grind_target` returns `None` purely from the recipe table (no in-skill
+recipe at/below the current level), independent of inventory/bank freshness, so the
+raise has no false-positive transient. For a **non-gating** skill, `None` simply
+demotes the candidate to the end (no strategic want needs it — nothing to do, and
+no deadlock since other candidates carry progress).
 
 Implementation note: prefer a small pure helper `reorder_skill_candidates(
 candidates, gates, state, game_data) -> list[Candidate]` so the ordering policy is
@@ -262,10 +269,11 @@ throughput. The design must guarantee:
   and `LevelSkill` falls silent once unblocked.
 
 If LIV-SKILL-2 ever fails (a gating craft skill with no craftable item at the
-current level), that is a game-data anomaly, **not** a silent-demote case: the
-arbiter must surface it (trace/diagnostic) rather than mask a potential deadlock by
-quietly dropping the candidate. Per the API-interaction guideline, fail loud on
-missing data rather than default around it.
+current level), that is a game-data anomaly *and a genuine deadlock* — **not** a
+silent-demote case. The arbiter raises `SkillProgressionError` (a custom exception
+in `tiers/skill_gates.py`) rather than mask the deadlock by quietly dropping the
+candidate. Per the API-interaction guideline, fail loud on missing data rather than
+default around it.
 
 These three properties are the Python-side obligations a future Lean liveness
 theorem (`formal/`) would discharge over the planner; this spec states them so the
@@ -333,15 +341,21 @@ Liveness obligations (the point of the feature):
 
 New:
 - `src/artifactsmmo_cli/ai/tiers/skill_gates.py` — `gating_skills`, `SkillGate`,
-  `GateSource`.
+  `GateSource`, `SkillProgressionError`.
 - `src/artifactsmmo_cli/ai/tiers/skill_grind_target.py` — `skill_grind_target`.
 - `src/artifactsmmo_cli/ai/strategy_reorder.py` — `reorder_skill_candidates`
-  (pure ordering policy), if it does not fit cleanly inside `strategy_driver`.
+  (pure ordering policy), returning `(list[Candidate], list[str])` where the
+  second element is the gating craft skills with no grind target (LIV-SKILL-2
+  violations the arbiter raises on).
 
 Modified:
-- `src/artifactsmmo_cli/ai/strategy_driver.py` — call `gating_skills` once per
-  cycle; apply `reorder_skill_candidates` before the cheap pass; map gating
-  LevelSkill candidates to the craft-one `GatherMaterialsGoal`.
+- `src/artifactsmmo_cli/ai/strategy_driver.py` — `select` gains an
+  `objective: CharacterObjective | None = None` param; when present, compute
+  `gating_skills` once per cycle and apply `reorder_skill_candidates` before the
+  cheap pass; raise `SkillProgressionError` on any violation.
+- `src/artifactsmmo_cli/ai/player.py` — pass `objective=self._objective` to
+  `self._arbiter.select(...)` (the objective is already built at startup,
+  `player.py:216`).
 
 Out of scope: removing objective roots, changing `DoomedMemo`, gather-gate
 elevation, any change to `PursueTask`/guard ordering.
