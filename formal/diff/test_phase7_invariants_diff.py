@@ -89,7 +89,11 @@ def test_gather_positive_branch_matches_lean(needed_qty, have_qty):
     value. The Python `_compute_base_value` is `max(1.0, 40 * (1 - effective /
     needed))` where `effective = min(have, needed)`. The Lean `baseValue`
     matches this exactly (in the positive-totalNeeded branch)."""
-    g = GatherMaterialsGoal(target_item="mat", needed={"mat": needed_qty})
+    # target_item must differ from the material code: holding >=1 of the
+    # finished target trips is_satisfied's finished-target short-circuit
+    # (ash-wood preemption fix), which would zero the value upstream of the
+    # baseValue math under test.
+    g = GatherMaterialsGoal(target_item="x", needed={"mat": needed_qty})
     state = _mkstate(inventory={"mat": have_qty})
     gd = GameData()
     py = g.value(state, gd)
