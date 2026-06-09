@@ -1,10 +1,7 @@
 """Tests for bank commands."""
 
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
-
-import pytest
-from artifactsmmo_api_client.errors import UnexpectedStatus
-from typer.testing import CliRunner
 
 from artifactsmmo_cli.commands.bank import (
     _display_operation_summary,
@@ -17,168 +14,162 @@ from artifactsmmo_cli.commands.bank import (
     get_item_info,
     should_keep_item,
 )
+from tests.test_commands.conftest import api_error, api_response, cooldown_status, unexpected_status
+
+BANK_ITEMS_SYNC = "artifactsmmo_api_client.api.my_account.get_bank_items_my_bank_items_get.sync"
+BANK_DETAILS_SYNC = "artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get.sync"
+ITEM_SYNC = "artifactsmmo_api_client.api.items.get_item_items_code_get.sync"
+DEPOSIT_GOLD_SYNC = (
+    "artifactsmmo_api_client.api.my_characters.action_deposit_bank_gold_my_name_action_bank_deposit_gold_post.sync"
+)
+WITHDRAW_GOLD_SYNC = (
+    "artifactsmmo_api_client.api.my_characters.action_withdraw_bank_gold_my_name_action_bank_withdraw_gold_post.sync"
+)
+DEPOSIT_ITEM_SYNC = (
+    "artifactsmmo_api_client.api.my_characters.action_deposit_bank_item_my_name_action_bank_deposit_item_post.sync"
+)
+WITHDRAW_ITEM_SYNC = (
+    "artifactsmmo_api_client.api.my_characters.action_withdraw_bank_item_my_name_action_bank_withdraw_item_post.sync"
+)
+EXPAND_SYNC = (
+    "artifactsmmo_api_client.api.my_characters.action_buy_bank_expansion_my_name_action_bank_buy_expansion_post.sync"
+)
+
+# Item database used to answer get_item stubs at the API boundary.
+ITEM_DB = {
+    "iron_ore": ("ore", "mining", "Iron Ore"),
+    "copper_ore": ("ore", "mining", "Copper Ore"),
+    "coal": ("ore", "mining", "Coal"),
+    "wooden_sword": ("weapon", "sword", "Wooden Sword"),
+    "bread": ("consumable", "food", "Bread"),
+    "craft_mat": ("crafting_material", "crafting", "Crafting Material"),
+}
 
 
-@pytest.fixture
-def runner():
-    """Create a CLI runner for testing."""
-    return CliRunner()
+def make_item(code: str) -> SimpleNamespace:
+    """Build an item payload shaped like the generated ItemSchema."""
+    type_, subtype, name = ITEM_DB[code]
+    return SimpleNamespace(code=code, name=name, type_=type_, subtype=subtype, level=1, tradeable=True)
 
 
-@pytest.fixture
-def mock_client_manager():
-    """Mock the ClientManager."""
-    with patch("artifactsmmo_cli.commands.bank.ClientManager") as mock:
-        mock_instance = Mock()
-        mock.return_value = mock_instance
-        mock_instance.client = Mock()
-        mock_instance.client.my_account = Mock()
-        mock_instance.client.my_characters = Mock()
-        yield mock_instance
+def item_lookup(client, code):
+    """Side effect for the get_item endpoint: answer from ITEM_DB or 404."""
+    if code in ITEM_DB:
+        return api_response(make_item(code))
+    return api_error(404, "Item not found")
 
 
-@pytest.fixture
-def mock_api_response():
-    """Mock API response."""
-    mock_response = Mock()
-    mock_response.status_code = 200
-    return mock_response
+def inventory_response(items: list[tuple[str, int, int]]) -> SimpleNamespace:
+    """Build a get_character payload with the given (code, quantity, slot) inventory."""
+    inventory = [SimpleNamespace(code=c, quantity=q, slot=s) for c, q, s in items]
+    return api_response(SimpleNamespace(name="testchar", inventory=inventory))
 
 
 class TestListCommand:
     """Test list command functionality."""
 
-    def test_list_success(self, runner, mock_client_manager, mock_api_response):
+    def test_list_success(self, runner, stub_api):
         """Test successful list command."""
-        with patch("artifactsmmo_api_client.api.my_account.get_bank_items_my_bank_items_get.sync") as mock_api:
-            mock_api.return_value = mock_api_response
+        with patch(BANK_ITEMS_SYNC) as mock_api:
+            mock_api.return_value = api_response(
+                [{"code": "iron_ore", "quantity": 50}, {"code": "copper_ore", "quantity": 25}]
+            )
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_data = [{"code": "iron_ore", "quantity": 50}, {"code": "copper_ore", "quantity": 25}]
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            result = runner.invoke(app, ["list"])
 
-                result = runner.invoke(app, ["list"])
+            assert result.exit_code == 0
+            assert "iron_ore" in result.stdout
 
-                assert result.exit_code == 0
-
-    def test_list_no_items(self, runner, mock_client_manager, mock_api_response):
+    def test_list_no_items(self, runner, stub_api):
         """Test list command with no items."""
-        with patch("artifactsmmo_api_client.api.my_account.get_bank_items_my_bank_items_get.sync") as mock_api:
-            mock_api.return_value = mock_api_response
+        with patch(BANK_ITEMS_SYNC) as mock_api:
+            mock_api.return_value = api_error(404, "No bank items found")
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, data=None, error="No bank items found")
+            result = runner.invoke(app, ["list"])
 
-                result = runner.invoke(app, ["list"])
+            assert result.exit_code == 0
+            assert "No bank items found" in result.stdout
 
-                assert result.exit_code == 0
-                assert "No bank items found" in result.stdout
-
-    def test_list_api_exception(self, runner, mock_client_manager):
+    def test_list_api_exception(self, runner, stub_api):
         """Test list command with API exception."""
-        with patch("artifactsmmo_api_client.api.my_account.get_bank_items_my_bank_items_get.sync") as mock_api:
-            mock_api.return_value = Mock()
+        with patch(BANK_ITEMS_SYNC) as mock_api:
+            mock_api.side_effect = unexpected_status(500, "API Error")
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
+            result = runner.invoke(app, ["list"])
 
-                with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                    mock_error.return_value = Mock(error="API Error")
-
-                    result = runner.invoke(app, ["list"])
-
-                    assert result.exit_code == 1
-                    assert "API Error" in result.stdout
+            assert result.exit_code == 1
+            assert "API Error" in result.stdout
 
 
 class TestDetailsCommand:
     """Test details command functionality."""
 
-    def test_details_success(self, runner, mock_client_manager, mock_api_response):
+    def test_details_success(self, runner, stub_api):
         """Test successful details command."""
-        with patch("artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get.sync") as mock_api:
-            mock_api.return_value = mock_api_response
+        with patch(BANK_DETAILS_SYNC) as mock_api:
+            mock_api.return_value = api_response(Mock(gold=1000, slots=50, next_expansion_cost=500))
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_data = Mock(gold=1000, slots=50, next_expansion_cost=500)
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            result = runner.invoke(app, ["details"])
 
-                result = runner.invoke(app, ["details"])
+            assert result.exit_code == 0
+            assert "Bank Gold: 1000" in result.stdout
+            assert "Bank Slots: 50" in result.stdout
+            assert "Expansion Cost: 500" in result.stdout
 
-                assert result.exit_code == 0
-                assert "Bank Gold: 1000" in result.stdout
-                assert "Bank Slots: 50" in result.stdout
-                assert "Expansion Cost: 500" in result.stdout
-
-    def test_details_missing_expansion_cost(self, runner, mock_client_manager, mock_api_response):
+    def test_details_missing_expansion_cost(self, runner, stub_api):
         """Test details renders the MISSING marker when an API field is absent."""
-        with patch("artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get.sync") as mock_api:
-            mock_api.return_value = mock_api_response
+        with patch(BANK_DETAILS_SYNC) as mock_api:
+            mock_api.return_value = api_response(Mock(gold=1000, slots=50, next_expansion_cost=None))
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_data = Mock(gold=1000, slots=50, next_expansion_cost=None)
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            result = runner.invoke(app, ["details"])
 
-                result = runner.invoke(app, ["details"])
+            assert result.exit_code == 0
+            assert "Bank Gold: 1000" in result.stdout
+            assert "Expansion Cost: —" in result.stdout
 
-                assert result.exit_code == 0
-                assert "Bank Gold: 1000" in result.stdout
-                assert "Expansion Cost: —" in result.stdout
-
-    def test_details_error(self, runner, mock_client_manager, mock_api_response):
+    def test_details_error(self, runner, stub_api):
         """Test details command with error."""
-        with patch("artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get.sync") as mock_api:
-            mock_api.return_value = mock_api_response
+        with patch(BANK_DETAILS_SYNC) as mock_api:
+            mock_api.return_value = api_error(403, "Access denied")
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, data=None, error="Access denied")
+            result = runner.invoke(app, ["details"])
 
-                result = runner.invoke(app, ["details"])
+            assert result.exit_code == 1
+            assert "Access denied" in result.stdout
 
-                assert result.exit_code == 1
-                assert "Access denied" in result.stdout
-
-    def test_details_api_exception(self, runner, mock_client_manager):
+    def test_details_api_exception(self, runner, stub_api):
         """Test details command with API exception."""
-        with patch("artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get.sync") as mock_api:
-            mock_api.return_value = Mock()
+        with patch(BANK_DETAILS_SYNC) as mock_api:
+            mock_api.side_effect = unexpected_status(500, "API Error")
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
+            result = runner.invoke(app, ["details"])
 
-                with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                    mock_error.return_value = Mock(error="API Error")
-
-                    result = runner.invoke(app, ["details"])
-
-                    assert result.exit_code == 1
-                    assert "API Error" in result.stdout
+            assert result.exit_code == 1
+            assert "API Error" in result.stdout
 
 
 class TestDepositGoldCommand:
     """Test deposit-gold command functionality."""
 
-    def test_deposit_gold_success(self, runner, mock_client_manager, mock_api_response):
+    def test_deposit_gold_success(self, runner, stub_api):
         """Test successful deposit gold command."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_deposit_bank_gold_my_name_action_bank_deposit_gold_post.sync"
-        ) as mock_api:
-            mock_api.return_value = mock_api_response
+        with patch(DEPOSIT_GOLD_SYNC) as mock_api:
+            mock_api.return_value = api_response(Mock())
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, message="Gold deposited")
+            result = runner.invoke(app, ["deposit-gold", "testchar", "100"])
 
-                result = runner.invoke(app, ["deposit-gold", "testchar", "100"])
+            assert result.exit_code == 0
+            assert "Deposited 100 gold" in result.stdout
 
-                assert result.exit_code == 0
-                assert "Gold deposited" in result.stdout
+    def test_deposit_gold_with_cooldown(self, runner, stub_api):
+        """Test deposit gold command with cooldown.
 
-    def test_deposit_gold_with_cooldown(self, runner, mock_client_manager, mock_api_response):
-        """Test deposit gold command with cooldown."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_deposit_bank_gold_my_name_action_bank_deposit_gold_post.sync"
-        ) as mock_api:
-            mock_api.return_value = mock_api_response
+        NOTE: handle_api_response never produces a cooldown CLIResponse (cooldowns
+        arrive as 499 errors through handle_api_error), so the command's
+        response-cooldown branch is only reachable by patching the helper.
+        """
+        with patch(DEPOSIT_GOLD_SYNC) as mock_api:
+            mock_api.return_value = Mock(status_code=200)
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
                 mock_handle.return_value = Mock(success=False, cooldown_remaining=10, message=None, error=None)
@@ -188,149 +179,99 @@ class TestDepositGoldCommand:
                 assert result.exit_code == 0
                 assert "cooldown" in result.stdout
 
-    def test_deposit_gold_error(self, runner, mock_client_manager, mock_api_response):
+    def test_deposit_gold_error(self, runner, stub_api):
         """Test deposit gold command with error."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_deposit_bank_gold_my_name_action_bank_deposit_gold_post.sync"
-        ) as mock_api:
-            mock_api.return_value = mock_api_response
+        with patch(DEPOSIT_GOLD_SYNC) as mock_api:
+            mock_api.return_value = api_error(492, "Insufficient gold")
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, cooldown_remaining=None, error="Insufficient gold")
+            result = runner.invoke(app, ["deposit-gold", "testchar", "100"])
 
-                result = runner.invoke(app, ["deposit-gold", "testchar", "100"])
-
-                assert result.exit_code == 1
-                assert "Insufficient gold" in result.stdout
+            assert result.exit_code == 1
+            assert "Insufficient gold" in result.stdout
 
     def test_deposit_gold_validation_error(self, runner):
         """Test deposit gold command with validation error."""
         result = runner.invoke(app, ["deposit-gold", "", "100"])
         assert result.exit_code == 2
 
-    def test_deposit_gold_api_exception(self, runner, mock_client_manager):
+    def test_deposit_gold_api_exception(self, runner, stub_api):
         """Test deposit gold command with API exception."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_deposit_bank_gold_my_name_action_bank_deposit_gold_post.sync"
-        ) as mock_api:
-            mock_api.return_value = Mock()
+        with patch(DEPOSIT_GOLD_SYNC) as mock_api:
+            mock_api.side_effect = unexpected_status(500, "API Error")
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
+            result = runner.invoke(app, ["deposit-gold", "testchar", "100"])
 
-                with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                    mock_error.return_value = Mock(cooldown_remaining=None, error="API Error")
+            assert result.exit_code == 1
+            assert "API Error" in result.stdout
 
-                    result = runner.invoke(app, ["deposit-gold", "testchar", "100"])
-
-                    assert result.exit_code == 1
-                    assert "API Error" in result.stdout
-
-    def test_deposit_gold_api_exception_with_cooldown(self, runner, mock_client_manager):
+    def test_deposit_gold_api_exception_with_cooldown(self, runner, stub_api):
         """Deposit gold renders the cooldown message on a cooldown error (line 281)."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters."
-            "action_deposit_bank_gold_my_name_action_bank_deposit_gold_post.sync"
-        ) as mock_api:
-            mock_api.side_effect = UnexpectedStatus(status_code=499, content=b"{}")
+        with patch(DEPOSIT_GOLD_SYNC) as mock_api:
+            mock_api.side_effect = cooldown_status(15)
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                mock_error.return_value = Mock(cooldown_remaining=15, error=None)
+            result = runner.invoke(app, ["deposit-gold", "testchar", "100"])
 
-                result = runner.invoke(app, ["deposit-gold", "testchar", "100"])
+            assert result.exit_code == 1
+            assert "15" in result.stdout
 
-                assert result.exit_code == 1
-                assert "15" in result.stdout
-
-    def test_withdraw_gold_api_exception_with_cooldown(self, runner, mock_client_manager):
+    def test_withdraw_gold_api_exception_with_cooldown(self, runner, stub_api):
         """Withdraw gold renders the cooldown message on a cooldown error (line 316)."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters."
-            "action_withdraw_bank_gold_my_name_action_bank_withdraw_gold_post.sync"
-        ) as mock_api:
-            mock_api.side_effect = UnexpectedStatus(status_code=499, content=b"{}")
+        with patch(WITHDRAW_GOLD_SYNC) as mock_api:
+            mock_api.side_effect = cooldown_status(8)
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                mock_error.return_value = Mock(cooldown_remaining=8, error=None)
+            result = runner.invoke(app, ["withdraw-gold", "testchar", "50"])
 
-                result = runner.invoke(app, ["withdraw-gold", "testchar", "50"])
+            assert result.exit_code == 1
+            assert "8" in result.stdout
 
-                assert result.exit_code == 1
-                assert "8" in result.stdout
-
-    def test_deposit_item_api_exception_with_cooldown(self, runner, mock_client_manager):
+    def test_deposit_item_api_exception_with_cooldown(self, runner, stub_api):
         """Deposit item renders the cooldown message on a cooldown error (line 353)."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters."
-            "action_deposit_bank_item_my_name_action_bank_deposit_item_post.sync"
-        ) as mock_api:
-            mock_api.side_effect = UnexpectedStatus(status_code=499, content=b"{}")
+        with patch(DEPOSIT_ITEM_SYNC) as mock_api:
+            mock_api.side_effect = cooldown_status(5)
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                mock_error.return_value = Mock(cooldown_remaining=5, error=None)
+            result = runner.invoke(app, ["deposit-item", "testchar", "iron_ore", "10"])
 
-                result = runner.invoke(app, ["deposit-item", "testchar", "iron_ore", "10"])
+            assert result.exit_code == 1
+            assert "5" in result.stdout
 
-                assert result.exit_code == 1
-                assert "5" in result.stdout
-
-    def test_withdraw_item_api_exception_with_cooldown(self, runner, mock_client_manager):
+    def test_withdraw_item_api_exception_with_cooldown(self, runner, stub_api):
         """Withdraw item renders the cooldown message on a cooldown error (line 390)."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters."
-            "action_withdraw_bank_item_my_name_action_bank_withdraw_item_post.sync"
-        ) as mock_api:
-            mock_api.side_effect = UnexpectedStatus(status_code=499, content=b"{}")
+        with patch(WITHDRAW_ITEM_SYNC) as mock_api:
+            mock_api.side_effect = cooldown_status(12)
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                mock_error.return_value = Mock(cooldown_remaining=12, error=None)
+            result = runner.invoke(app, ["withdraw-item", "testchar", "copper_ore", "5"])
 
-                result = runner.invoke(app, ["withdraw-item", "testchar", "copper_ore", "5"])
+            assert result.exit_code == 1
+            assert "12" in result.stdout
 
-                assert result.exit_code == 1
-                assert "12" in result.stdout
-
-    def test_expand_api_exception_with_cooldown(self, runner, mock_client_manager):
+    def test_expand_api_exception_with_cooldown(self, runner, stub_api):
         """Expand renders the cooldown message on a cooldown error (line 418)."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters."
-            "action_buy_bank_expansion_my_name_action_bank_buy_expansion_post.sync"
-        ) as mock_api:
-            mock_api.side_effect = UnexpectedStatus(status_code=499, content=b"{}")
+        with patch(EXPAND_SYNC) as mock_api:
+            mock_api.side_effect = cooldown_status(20)
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                mock_error.return_value = Mock(cooldown_remaining=20, error=None)
+            result = runner.invoke(app, ["expand", "testchar"])
 
-                result = runner.invoke(app, ["expand", "testchar"])
-
-                assert result.exit_code == 1
-                assert "20" in result.stdout
+            assert result.exit_code == 1
+            assert "20" in result.stdout
 
 
 class TestWithdrawGoldCommand:
     """Test withdraw-gold command functionality."""
 
-    def test_withdraw_gold_success(self, runner, mock_client_manager, mock_api_response):
+    def test_withdraw_gold_success(self, runner, stub_api):
         """Test successful withdraw gold command."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_withdraw_bank_gold_my_name_action_bank_withdraw_gold_post.sync"
-        ) as mock_api:
-            mock_api.return_value = mock_api_response
+        with patch(WITHDRAW_GOLD_SYNC) as mock_api:
+            mock_api.return_value = api_response(Mock())
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, message="Gold withdrawn")
+            result = runner.invoke(app, ["withdraw-gold", "testchar", "50"])
 
-                result = runner.invoke(app, ["withdraw-gold", "testchar", "50"])
+            assert result.exit_code == 0
+            assert "Withdrew 50 gold" in result.stdout
 
-                assert result.exit_code == 0
-                assert "Gold withdrawn" in result.stdout
-
-    def test_withdraw_gold_with_cooldown(self, runner, mock_client_manager, mock_api_response):
-        """Test withdraw gold command with cooldown."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_withdraw_bank_gold_my_name_action_bank_withdraw_gold_post.sync"
-        ) as mock_api:
-            mock_api.return_value = mock_api_response
+    def test_withdraw_gold_with_cooldown(self, runner, stub_api):
+        """Test withdraw gold command with cooldown (dead response-cooldown branch)."""
+        with patch(WITHDRAW_GOLD_SYNC) as mock_api:
+            mock_api.return_value = Mock(status_code=200)
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
                 mock_handle.return_value = Mock(success=False, cooldown_remaining=8, message=None, error=None)
@@ -340,69 +281,49 @@ class TestWithdrawGoldCommand:
                 assert result.exit_code == 0
                 assert "cooldown" in result.stdout
 
-    def test_withdraw_gold_error(self, runner, mock_client_manager, mock_api_response):
+    def test_withdraw_gold_error(self, runner, stub_api):
         """Test withdraw gold command with error."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_withdraw_bank_gold_my_name_action_bank_withdraw_gold_post.sync"
-        ) as mock_api:
-            mock_api.return_value = mock_api_response
+        with patch(WITHDRAW_GOLD_SYNC) as mock_api:
+            mock_api.return_value = api_error(460, "Insufficient bank gold")
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, cooldown_remaining=None, error="Insufficient bank gold")
+            result = runner.invoke(app, ["withdraw-gold", "testchar", "50"])
 
-                result = runner.invoke(app, ["withdraw-gold", "testchar", "50"])
-
-                assert result.exit_code == 1
-                assert "Insufficient bank gold" in result.stdout
+            assert result.exit_code == 1
+            assert "Insufficient bank gold" in result.stdout
 
     def test_withdraw_gold_validation_error(self, runner):
         """Test withdraw gold command with validation error."""
         result = runner.invoke(app, ["withdraw-gold", "", "50"])
         assert result.exit_code == 2
 
-    def test_withdraw_gold_api_exception(self, runner, mock_client_manager):
+    def test_withdraw_gold_api_exception(self, runner, stub_api):
         """Test withdraw gold command with API exception."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_withdraw_bank_gold_my_name_action_bank_withdraw_gold_post.sync"
-        ) as mock_api:
-            mock_api.return_value = Mock()
+        with patch(WITHDRAW_GOLD_SYNC) as mock_api:
+            mock_api.side_effect = unexpected_status(500, "API Error")
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
+            result = runner.invoke(app, ["withdraw-gold", "testchar", "50"])
 
-                with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                    mock_error.return_value = Mock(cooldown_remaining=None, error="API Error")
-
-                    result = runner.invoke(app, ["withdraw-gold", "testchar", "50"])
-
-                    assert result.exit_code == 1
-                    assert "API Error" in result.stdout
+            assert result.exit_code == 1
+            assert "API Error" in result.stdout
 
 
 class TestDepositItemCommand:
     """Test deposit-item command functionality."""
 
-    def test_deposit_item_success(self, runner, mock_client_manager, mock_api_response):
+    def test_deposit_item_success(self, runner, stub_api):
         """Test successful deposit item command."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_deposit_bank_item_my_name_action_bank_deposit_item_post.sync"
-        ) as mock_api:
-            mock_api.return_value = mock_api_response
+        with patch(DEPOSIT_ITEM_SYNC) as mock_api:
+            mock_api.return_value = api_response(Mock())
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, message="Item deposited")
+            result = runner.invoke(app, ["deposit-item", "testchar", "iron_ore", "10"])
 
-                result = runner.invoke(app, ["deposit-item", "testchar", "iron_ore", "10"])
+            assert result.exit_code == 0
+            assert "Deposited 10x iron_ore" in result.stdout
 
-                assert result.exit_code == 0
-                assert "Item deposited" in result.stdout
-
-    def test_deposit_item_with_cooldown(self, runner, mock_client_manager, mock_api_response):
-        """Test deposit item command with cooldown."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_deposit_bank_item_my_name_action_bank_deposit_item_post.sync"
-        ) as mock_api:
-            mock_api.return_value = mock_api_response
+    def test_deposit_item_with_cooldown(self, runner, stub_api):
+        """Test deposit item command with cooldown (dead response-cooldown branch)."""
+        with patch(DEPOSIT_ITEM_SYNC) as mock_api:
+            mock_api.return_value = Mock(status_code=200)
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
                 mock_handle.return_value = Mock(success=False, cooldown_remaining=5, message=None, error=None)
@@ -412,69 +333,49 @@ class TestDepositItemCommand:
                 assert result.exit_code == 0
                 assert "cooldown" in result.stdout
 
-    def test_deposit_item_error(self, runner, mock_client_manager, mock_api_response):
+    def test_deposit_item_error(self, runner, stub_api):
         """Test deposit item command with error."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_deposit_bank_item_my_name_action_bank_deposit_item_post.sync"
-        ) as mock_api:
-            mock_api.return_value = mock_api_response
+        with patch(DEPOSIT_ITEM_SYNC) as mock_api:
+            mock_api.return_value = api_error(404, "Item not found")
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, cooldown_remaining=None, error="Item not found")
+            result = runner.invoke(app, ["deposit-item", "testchar", "iron_ore", "10"])
 
-                result = runner.invoke(app, ["deposit-item", "testchar", "iron_ore", "10"])
-
-                assert result.exit_code == 1
-                assert "Item not found" in result.stdout
+            assert result.exit_code == 1
+            assert "Item not found" in result.stdout
 
     def test_deposit_item_validation_error(self, runner):
         """Test deposit item command with validation error."""
         result = runner.invoke(app, ["deposit-item", "", "iron_ore", "10"])
         assert result.exit_code == 2
 
-    def test_deposit_item_api_exception(self, runner, mock_client_manager):
+    def test_deposit_item_api_exception(self, runner, stub_api):
         """Test deposit item command with API exception."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_deposit_bank_item_my_name_action_bank_deposit_item_post.sync"
-        ) as mock_api:
-            mock_api.return_value = Mock()
+        with patch(DEPOSIT_ITEM_SYNC) as mock_api:
+            mock_api.side_effect = unexpected_status(500, "API Error")
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
+            result = runner.invoke(app, ["deposit-item", "testchar", "iron_ore", "10"])
 
-                with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                    mock_error.return_value = Mock(cooldown_remaining=None, error="API Error")
-
-                    result = runner.invoke(app, ["deposit-item", "testchar", "iron_ore", "10"])
-
-                    assert result.exit_code == 1
-                    assert "API Error" in result.stdout
+            assert result.exit_code == 1
+            assert "API Error" in result.stdout
 
 
 class TestWithdrawItemCommand:
     """Test withdraw-item command functionality."""
 
-    def test_withdraw_item_success(self, runner, mock_client_manager, mock_api_response):
+    def test_withdraw_item_success(self, runner, stub_api):
         """Test successful withdraw item command."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_withdraw_bank_item_my_name_action_bank_withdraw_item_post.sync"
-        ) as mock_api:
-            mock_api.return_value = mock_api_response
+        with patch(WITHDRAW_ITEM_SYNC) as mock_api:
+            mock_api.return_value = api_response(Mock())
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, message="Item withdrawn")
+            result = runner.invoke(app, ["withdraw-item", "testchar", "copper_ore", "5"])
 
-                result = runner.invoke(app, ["withdraw-item", "testchar", "copper_ore", "5"])
+            assert result.exit_code == 0
+            assert "Withdrew 5x copper_ore" in result.stdout
 
-                assert result.exit_code == 0
-                assert "Item withdrawn" in result.stdout
-
-    def test_withdraw_item_with_cooldown(self, runner, mock_client_manager, mock_api_response):
-        """Test withdraw item command with cooldown."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_withdraw_bank_item_my_name_action_bank_withdraw_item_post.sync"
-        ) as mock_api:
-            mock_api.return_value = mock_api_response
+    def test_withdraw_item_with_cooldown(self, runner, stub_api):
+        """Test withdraw item command with cooldown (dead response-cooldown branch)."""
+        with patch(WITHDRAW_ITEM_SYNC) as mock_api:
+            mock_api.return_value = Mock(status_code=200)
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
                 mock_handle.return_value = Mock(success=False, cooldown_remaining=12, message=None, error=None)
@@ -484,69 +385,49 @@ class TestWithdrawItemCommand:
                 assert result.exit_code == 0
                 assert "cooldown" in result.stdout
 
-    def test_withdraw_item_error(self, runner, mock_client_manager, mock_api_response):
+    def test_withdraw_item_error(self, runner, stub_api):
         """Test withdraw item command with error."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_withdraw_bank_item_my_name_action_bank_withdraw_item_post.sync"
-        ) as mock_api:
-            mock_api.return_value = mock_api_response
+        with patch(WITHDRAW_ITEM_SYNC) as mock_api:
+            mock_api.return_value = api_error(471, "Insufficient quantity")
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, cooldown_remaining=None, error="Insufficient quantity")
+            result = runner.invoke(app, ["withdraw-item", "testchar", "copper_ore", "5"])
 
-                result = runner.invoke(app, ["withdraw-item", "testchar", "copper_ore", "5"])
-
-                assert result.exit_code == 1
-                assert "Insufficient quantity" in result.stdout
+            assert result.exit_code == 1
+            assert "Insufficient quantity" in result.stdout
 
     def test_withdraw_item_validation_error(self, runner):
         """Test withdraw item command with validation error."""
         result = runner.invoke(app, ["withdraw-item", "", "copper_ore", "5"])
         assert result.exit_code == 2
 
-    def test_withdraw_item_api_exception(self, runner, mock_client_manager):
+    def test_withdraw_item_api_exception(self, runner, stub_api):
         """Test withdraw item command with API exception."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_withdraw_bank_item_my_name_action_bank_withdraw_item_post.sync"
-        ) as mock_api:
-            mock_api.return_value = Mock()
+        with patch(WITHDRAW_ITEM_SYNC) as mock_api:
+            mock_api.side_effect = unexpected_status(500, "API Error")
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
+            result = runner.invoke(app, ["withdraw-item", "testchar", "copper_ore", "5"])
 
-                with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                    mock_error.return_value = Mock(cooldown_remaining=None, error="API Error")
-
-                    result = runner.invoke(app, ["withdraw-item", "testchar", "copper_ore", "5"])
-
-                    assert result.exit_code == 1
-                    assert "API Error" in result.stdout
+            assert result.exit_code == 1
+            assert "API Error" in result.stdout
 
 
 class TestExpandCommand:
     """Test expand command functionality."""
 
-    def test_expand_success(self, runner, mock_client_manager, mock_api_response):
+    def test_expand_success(self, runner, stub_api):
         """Test successful expand command."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_buy_bank_expansion_my_name_action_bank_buy_expansion_post.sync"
-        ) as mock_api:
-            mock_api.return_value = mock_api_response
+        with patch(EXPAND_SYNC) as mock_api:
+            mock_api.return_value = api_response(Mock())
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, message="Bank expanded")
+            result = runner.invoke(app, ["expand", "testchar"])
 
-                result = runner.invoke(app, ["expand", "testchar"])
+            assert result.exit_code == 0
+            assert "Bank expansion purchased" in result.stdout
 
-                assert result.exit_code == 0
-                assert "Bank expanded" in result.stdout
-
-    def test_expand_with_cooldown(self, runner, mock_client_manager, mock_api_response):
-        """Test expand command with cooldown."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_buy_bank_expansion_my_name_action_bank_buy_expansion_post.sync"
-        ) as mock_api:
-            mock_api.return_value = mock_api_response
+    def test_expand_with_cooldown(self, runner, stub_api):
+        """Test expand command with cooldown (dead response-cooldown branch)."""
+        with patch(EXPAND_SYNC) as mock_api:
+            mock_api.return_value = Mock(status_code=200)
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
                 mock_handle.return_value = Mock(success=False, cooldown_remaining=20, message=None, error=None)
@@ -556,140 +437,57 @@ class TestExpandCommand:
                 assert result.exit_code == 0
                 assert "cooldown" in result.stdout
 
-    def test_expand_error(self, runner, mock_client_manager, mock_api_response):
+    def test_expand_error(self, runner, stub_api):
         """Test expand command with error."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_buy_bank_expansion_my_name_action_bank_buy_expansion_post.sync"
-        ) as mock_api:
-            mock_api.return_value = mock_api_response
+        with patch(EXPAND_SYNC) as mock_api:
+            mock_api.return_value = api_error(492, "Insufficient gold")
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, cooldown_remaining=None, error="Insufficient gold")
+            result = runner.invoke(app, ["expand", "testchar"])
 
-                result = runner.invoke(app, ["expand", "testchar"])
-
-                assert result.exit_code == 1
-                assert "Insufficient gold" in result.stdout
+            assert result.exit_code == 1
+            assert "Insufficient gold" in result.stdout
 
     def test_expand_validation_error(self, runner):
         """Test expand command with validation error."""
         result = runner.invoke(app, ["expand", ""])
         assert result.exit_code == 2
 
-    def test_expand_api_exception(self, runner, mock_client_manager):
+    def test_expand_api_exception(self, runner, stub_api):
         """Test expand command with API exception."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_buy_bank_expansion_my_name_action_bank_buy_expansion_post.sync"
-        ) as mock_api:
-            mock_api.return_value = Mock()
+        with patch(EXPAND_SYNC) as mock_api:
+            mock_api.side_effect = unexpected_status(500, "API Error")
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
+            result = runner.invoke(app, ["expand", "testchar"])
 
-                with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                    mock_error.return_value = Mock(cooldown_remaining=None, error="API Error")
-
-                    result = runner.invoke(app, ["expand", "testchar"])
-
-                    assert result.exit_code == 1
-                    assert "API Error" in result.stdout
+            assert result.exit_code == 1
+            assert "API Error" in result.stdout
 
 
 class TestBulkOperations:
-    """Test bulk banking operations."""
+    """Test bulk banking helpers against API-boundary stubs."""
 
-    @pytest.fixture
-    def mock_inventory(self):
-        """Mock character inventory."""
-        return [
-            {"code": "iron_ore", "quantity": 10, "slot": 1},
-            {"code": "copper_ore", "quantity": 5, "slot": 2},
-            {"code": "wooden_sword", "quantity": 1, "slot": 3},
-            {"code": "bread", "quantity": 3, "slot": 4},
-        ]
-
-    @pytest.fixture
-    def mock_item_info(self):
-        """Mock item information."""
-        return {
-            "iron_ore": {
-                "code": "iron_ore",
-                "name": "Iron Ore",
-                "type": "ore",
-                "subtype": "mining",
-                "level": 1,
-                "tradeable": True,
-            },
-            "copper_ore": {
-                "code": "copper_ore",
-                "name": "Copper Ore",
-                "type": "ore",
-                "subtype": "mining",
-                "level": 1,
-                "tradeable": True,
-            },
-            "wooden_sword": {
-                "code": "wooden_sword",
-                "name": "Wooden Sword",
-                "type": "weapon",
-                "subtype": "sword",
-                "level": 1,
-                "tradeable": True,
-            },
-            "bread": {
-                "code": "bread",
-                "name": "Bread",
-                "type": "consumable",
-                "subtype": "food",
-                "level": 1,
-                "tradeable": True,
-            },
-        }
-
-    def test_get_character_inventory(self, mock_client_manager, mock_inventory):
+    def test_get_character_inventory(self, stub_api):
         """Test getting character inventory."""
-        with patch("artifactsmmo_cli.commands.bank.ClientManager") as mock_cm:
-            mock_api = Mock()
-            mock_cm.return_value.api = mock_api
+        stub_api.get_character.return_value = inventory_response(
+            [("iron_ore", 10, 1), ("copper_ore", 5, 2)]
+        )
 
-            mock_response = Mock()
-            mock_api.get_character.return_value = mock_response
+        result = get_character_inventory("testchar")
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_character = Mock()
-                mock_character.inventory = [
-                    Mock(code="iron_ore", quantity=10, slot=1),
-                    Mock(code="copper_ore", quantity=5, slot=2),
-                ]
-                mock_handle.return_value = Mock(success=True, data=mock_character)
+        assert len(result) == 2
+        assert result[0]["code"] == "iron_ore"
+        assert result[0]["quantity"] == 10
 
-                result = get_character_inventory("testchar")
-
-                assert len(result) == 2
-                assert result[0]["code"] == "iron_ore"
-                assert result[0]["quantity"] == 10
-
-    def test_get_item_info(self, mock_client_manager):
+    def test_get_item_info(self, stub_api):
         """Test getting item information."""
-        with patch("artifactsmmo_api_client.api.items.get_item_items_code_get.sync") as mock_api:
-            mock_response = Mock()
-            mock_api.return_value = mock_response
+        with patch(ITEM_SYNC) as mock_api:
+            mock_api.return_value = api_response(make_item("iron_ore"))
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_item = Mock()
-                mock_item.code = "iron_ore"
-                mock_item.name = "Iron Ore"
-                mock_item.type_ = "ore"
-                mock_item.subtype = "mining"
-                mock_item.level = 1
-                mock_item.tradeable = True
-                mock_handle.return_value = Mock(success=True, data=mock_item)
+            result = get_item_info("iron_ore")
 
-                result = get_item_info("iron_ore")
-
-                assert result["code"] == "iron_ore"
-                assert result["name"] == "Iron Ore"
-                assert result["type"] == "ore"
+            assert result["code"] == "iron_ore"
+            assert result["name"] == "Iron Ore"
+            assert result["type"] == "ore"
 
     def test_categorize_item(self):
         """Test item categorization."""
@@ -725,30 +523,25 @@ class TestBulkOperations:
         currency_info = {"type": "currency", "subtype": "gold"}
         assert should_keep_item(currency_info, keep_equipment=False, keep_consumables=False)
 
-    def test_execute_single_deposit_success(self, mock_client_manager):
+    def test_execute_single_deposit_success(self, stub_api):
         """Test successful single deposit operation."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_deposit_bank_item_my_name_action_bank_deposit_item_post.sync"
-        ) as mock_api:
-            mock_response = Mock()
-            mock_api.return_value = mock_response
+        with patch(DEPOSIT_ITEM_SYNC) as mock_api:
+            mock_api.return_value = api_response(Mock())
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, cooldown_remaining=None, error=None)
+            success, error, cooldown = execute_single_deposit("testchar", "iron_ore", 10)
 
-                success, error, cooldown = execute_single_deposit("testchar", "iron_ore", 10)
+            assert success
+            assert error is None
+            assert cooldown is None
 
-                assert success
-                assert error is None
-                assert cooldown is None
+    def test_execute_single_deposit_cooldown(self, stub_api):
+        """Test single deposit operation with cooldown.
 
-    def test_execute_single_deposit_cooldown(self, mock_client_manager):
-        """Test single deposit operation with cooldown."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_deposit_bank_item_my_name_action_bank_deposit_item_post.sync"
-        ) as mock_api:
-            mock_response = Mock()
-            mock_api.return_value = mock_response
+        NOTE: handle_api_response never produces a cooldown CLIResponse, so the
+        in-band cooldown branch is only reachable by patching the helper.
+        """
+        with patch(DEPOSIT_ITEM_SYNC) as mock_api:
+            mock_api.return_value = Mock(status_code=200)
 
             with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
                 mock_handle.return_value = Mock(success=False, cooldown_remaining=5, error=None)
@@ -759,1021 +552,566 @@ class TestBulkOperations:
                 assert error is None
                 assert cooldown == 5
 
-    def test_execute_single_deposit_error(self, mock_client_manager):
+    def test_execute_single_deposit_error(self, stub_api):
         """Test single deposit operation with error."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_deposit_bank_item_my_name_action_bank_deposit_item_post.sync"
-        ) as mock_api:
-            mock_response = Mock()
-            mock_api.return_value = mock_response
+        with patch(DEPOSIT_ITEM_SYNC) as mock_api:
+            mock_api.return_value = api_error(404, "Item not found")
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, cooldown_remaining=None, error="Item not found")
+            success, error, cooldown = execute_single_deposit("testchar", "iron_ore", 10)
 
-                success, error, cooldown = execute_single_deposit("testchar", "iron_ore", 10)
-
-                assert not success
-                assert error == "Item not found"
-                assert cooldown is None
+            assert not success
+            assert "Item not found" in error
+            assert cooldown is None
 
 
 class TestDepositAllCommand:
     """Test deposit-all command functionality."""
 
-    def test_deposit_all_success(self, runner, mock_client_manager):
+    def test_deposit_all_success(self, runner, stub_api):
         """Test successful deposit-all command."""
-        with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.return_value = [
-                {"code": "iron_ore", "quantity": 10, "slot": 1},
-                {"code": "copper_ore", "quantity": 5, "slot": 2},
-            ]
+        stub_api.get_character.return_value = inventory_response(
+            [("iron_ore", 10, 1), ("copper_ore", 5, 2)]
+        )
 
-            with patch("artifactsmmo_cli.commands.bank.get_item_info") as mock_get_info:
-
-                def mock_item_info(code):
-                    items = {
-                        "iron_ore": {
-                            "code": "iron_ore",
-                            "name": "Iron Ore",
-                            "type": "ore",
-                            "subtype": "mining",
-                            "level": 1,
-                            "tradeable": True,
-                        },
-                        "copper_ore": {
-                            "code": "copper_ore",
-                            "name": "Copper Ore",
-                            "type": "ore",
-                            "subtype": "mining",
-                            "level": 1,
-                            "tradeable": True,
-                        },
-                    }
-                    return items.get(code)
-
-                mock_get_info.side_effect = mock_item_info
-
-                with patch("artifactsmmo_cli.commands.bank.execute_single_deposit") as mock_deposit:
-                    mock_deposit.return_value = (True, None, None)
-
-                    result = runner.invoke(app, ["deposit-all", "testchar"])
-
-                    assert result.exit_code == 0
-                    assert "Successfully processed" in result.stdout
-
-    def test_deposit_all_no_inventory(self, runner, mock_client_manager):
-        """Test deposit-all command with no inventory."""
-        with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.return_value = []
+        with patch(ITEM_SYNC, side_effect=item_lookup), patch(DEPOSIT_ITEM_SYNC) as mock_deposit:
+            mock_deposit.return_value = api_response(Mock())
 
             result = runner.invoke(app, ["deposit-all", "testchar"])
 
             assert result.exit_code == 0
-            assert "has no inventory items" in result.stdout
+            assert "Successfully processed" in result.stdout
+            assert mock_deposit.call_count == 2
 
-    def test_deposit_all_with_type_filter(self, runner, mock_client_manager):
+    def test_deposit_all_no_inventory(self, runner, stub_api):
+        """Test deposit-all command with no inventory."""
+        stub_api.get_character.return_value = inventory_response([])
+
+        result = runner.invoke(app, ["deposit-all", "testchar"])
+
+        assert result.exit_code == 0
+        assert "has no inventory items" in result.stdout
+
+    def test_deposit_all_with_type_filter(self, runner, stub_api):
         """Test deposit-all command with type filter."""
-        with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.return_value = [
-                {"code": "iron_ore", "quantity": 10, "slot": 1},
-                {"code": "wooden_sword", "quantity": 1, "slot": 2},
-            ]
+        stub_api.get_character.return_value = inventory_response(
+            [("iron_ore", 10, 1), ("wooden_sword", 1, 2)]
+        )
 
-            with patch("artifactsmmo_cli.commands.bank.filter_items_by_type") as mock_filter:
-                mock_filter.return_value = [
-                    {
-                        "code": "iron_ore",
-                        "quantity": 10,
-                        "slot": 1,
-                        "item_info": {
-                            "code": "iron_ore",
-                            "name": "Iron Ore",
-                            "type": "ore",
-                            "subtype": "mining",
-                            "level": 1,
-                            "tradeable": True,
-                        },
-                    },
-                ]
+        with patch(ITEM_SYNC, side_effect=item_lookup), patch(DEPOSIT_ITEM_SYNC) as mock_deposit:
+            mock_deposit.return_value = api_response(Mock())
 
-                with patch("artifactsmmo_cli.commands.bank.execute_single_deposit") as mock_deposit:
-                    mock_deposit.return_value = (True, None, None)
+            result = runner.invoke(app, ["deposit-all", "testchar", "--type", "resource"])
 
-                    result = runner.invoke(app, ["deposit-all", "testchar", "--type", "resource"])
+            assert result.exit_code == 0
+            # The type filter keeps only the ore; the sword is never deposited.
+            assert mock_deposit.call_count == 1
 
-                    assert result.exit_code == 0
-
-    def test_deposit_all_keep_equipment(self, runner, mock_client_manager):
+    def test_deposit_all_keep_equipment(self, runner, stub_api):
         """Test deposit-all command keeping equipment."""
-        with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.return_value = [
-                {"code": "iron_ore", "quantity": 10, "slot": 1},
-                {"code": "wooden_sword", "quantity": 1, "slot": 2},
-            ]
+        stub_api.get_character.return_value = inventory_response(
+            [("iron_ore", 10, 1), ("wooden_sword", 1, 2)]
+        )
 
-            with patch("artifactsmmo_cli.commands.bank.get_item_info") as mock_get_info:
+        with patch(ITEM_SYNC, side_effect=item_lookup), patch(DEPOSIT_ITEM_SYNC) as mock_deposit:
+            mock_deposit.return_value = api_response(Mock())
 
-                def mock_item_info(code):
-                    items = {
-                        "iron_ore": {
-                            "code": "iron_ore",
-                            "name": "Iron Ore",
-                            "type": "ore",
-                            "subtype": "mining",
-                            "level": 1,
-                            "tradeable": True,
-                        },
-                        "wooden_sword": {
-                            "code": "wooden_sword",
-                            "name": "Wooden Sword",
-                            "type": "weapon",
-                            "subtype": "sword",
-                            "level": 1,
-                            "tradeable": True,
-                        },
-                    }
-                    return items.get(code)
+            result = runner.invoke(app, ["deposit-all", "testchar", "--keep-equipment"])
 
-                mock_get_info.side_effect = mock_item_info
+            assert result.exit_code == 0
+            # Should only deposit iron_ore, not wooden_sword
+            assert mock_deposit.call_count == 1
 
-                with patch("artifactsmmo_cli.commands.bank.execute_single_deposit") as mock_deposit:
-                    mock_deposit.return_value = (True, None, None)
-
-                    result = runner.invoke(app, ["deposit-all", "testchar", "--keep-equipment"])
-
-                    assert result.exit_code == 0
-                    # Should only deposit iron_ore, not wooden_sword
-                    assert mock_deposit.call_count == 1
-
-    def test_deposit_all_with_cooldown(self, runner, mock_client_manager):
+    def test_deposit_all_with_cooldown(self, runner, stub_api):
         """Test deposit-all command with cooldown handling."""
-        with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.return_value = [
-                {"code": "iron_ore", "quantity": 10, "slot": 1},
-            ]
+        stub_api.get_character.return_value = inventory_response([("iron_ore", 10, 1)])
 
-            with patch("artifactsmmo_cli.commands.bank.get_item_info") as mock_get_info:
-                mock_get_info.return_value = {
-                    "code": "iron_ore",
-                    "name": "Iron Ore",
-                    "type": "ore",
-                    "subtype": "mining",
-                    "level": 1,
-                    "tradeable": True,
-                }
+        with patch(ITEM_SYNC, side_effect=item_lookup), patch(DEPOSIT_ITEM_SYNC) as mock_deposit:
+            # First call hits a cooldown error, the retry succeeds
+            mock_deposit.side_effect = [cooldown_status(2), api_response(Mock())]
 
-                with patch("artifactsmmo_cli.commands.bank.execute_single_deposit") as mock_deposit:
-                    # First call returns cooldown, second call succeeds
-                    mock_deposit.side_effect = [(False, None, 2), (True, None, None)]
+            with patch("time.sleep") as mock_sleep:
+                result = runner.invoke(app, ["deposit-all", "testchar"])
 
-                    with patch("time.sleep") as mock_sleep:
-                        result = runner.invoke(app, ["deposit-all", "testchar"])
+                assert result.exit_code == 0
+                assert mock_sleep.called
+                assert mock_deposit.call_count == 2
 
-                        assert result.exit_code == 0
-                        assert mock_sleep.called
-                        assert mock_deposit.call_count == 2
-
-    def test_deposit_all_empty_after_type_filter(self, runner, mock_client_manager):
+    def test_deposit_all_empty_after_type_filter(self, runner, stub_api):
         """Test deposit-all when type filter leaves no items."""
-        with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.return_value = [{"code": "iron_ore", "quantity": 10, "slot": 1}]
+        stub_api.get_character.return_value = inventory_response([("iron_ore", 10, 1)])
 
-            with patch("artifactsmmo_cli.commands.bank.filter_items_by_type") as mock_filter:
-                mock_filter.return_value = []
+        with patch(ITEM_SYNC, side_effect=item_lookup):
+            result = runner.invoke(app, ["deposit-all", "testchar", "--type", "equipment"])
 
-                result = runner.invoke(app, ["deposit-all", "testchar", "--type", "equipment"])
+            assert result.exit_code == 0
+            assert "No items of type 'equipment'" in result.stdout
 
-                assert result.exit_code == 0
-                assert "No items of type 'equipment'" in result.stdout
+    def test_deposit_all_item_info_none_skips_item(self, runner, stub_api):
+        """Test deposit-all skips items where the item lookup fails."""
+        stub_api.get_character.return_value = inventory_response([("mystery_item", 1, 1)])
 
-    def test_deposit_all_item_info_none_skips_item(self, runner, mock_client_manager):
-        """Test deposit-all skips items where get_item_info returns None."""
-        with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.return_value = [{"code": "mystery_item", "quantity": 1, "slot": 1}]
+        with patch(ITEM_SYNC, side_effect=item_lookup):
+            result = runner.invoke(app, ["deposit-all", "testchar"])
 
-            with patch("artifactsmmo_cli.commands.bank.get_item_info") as mock_get_info:
-                mock_get_info.return_value = None
+            assert result.exit_code == 0
+            assert "No items to deposit" in result.stdout
 
-                result = runner.invoke(app, ["deposit-all", "testchar"])
-
-                assert result.exit_code == 0
-                assert "No items to deposit" in result.stdout
-
-    def test_deposit_all_all_items_kept(self, runner, mock_client_manager):
+    def test_deposit_all_all_items_kept(self, runner, stub_api):
         """Test deposit-all when all items are marked to keep."""
-        with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.return_value = [{"code": "wooden_sword", "quantity": 1, "slot": 1}]
+        stub_api.get_character.return_value = inventory_response([("wooden_sword", 1, 1)])
 
-            with patch("artifactsmmo_cli.commands.bank.get_item_info") as mock_get_info:
-                mock_get_info.return_value = {
-                    "code": "wooden_sword",
-                    "name": "Wooden Sword",
-                    "type": "weapon",
-                    "subtype": "sword",
-                    "level": 1,
-                    "tradeable": True,
-                }
+        with patch(ITEM_SYNC, side_effect=item_lookup):
+            result = runner.invoke(app, ["deposit-all", "testchar"])
 
+            assert result.exit_code == 0
+            assert "No items to deposit (all items are marked to keep)" in result.stdout
+
+    def test_deposit_all_cooldown_retry_fails_stops(self, runner, stub_api):
+        """Test deposit-all stops when cooldown retry also fails and continue_on_error is False."""
+        stub_api.get_character.return_value = inventory_response(
+            [("iron_ore", 10, 1), ("copper_ore", 5, 2)]
+        )
+
+        with patch(ITEM_SYNC, side_effect=item_lookup), patch(DEPOSIT_ITEM_SYNC) as mock_deposit:
+            # First call hits a cooldown, retry also fails
+            mock_deposit.side_effect = [cooldown_status(1), api_error(461, "retry failed")]
+
+            with patch("time.sleep"):
                 result = runner.invoke(app, ["deposit-all", "testchar"])
 
                 assert result.exit_code == 0
-                assert "No items to deposit (all items are marked to keep)" in result.stdout
+                assert mock_deposit.call_count == 2
 
-    def test_deposit_all_cooldown_retry_fails_stops(self, runner, mock_client_manager):
-        """Test deposit-all stops when cooldown retry also fails and continue_on_error is False."""
-        with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.return_value = [
-                {"code": "iron_ore", "quantity": 10, "slot": 1},
-                {"code": "copper_ore", "quantity": 5, "slot": 2},
-            ]
-
-            with patch("artifactsmmo_cli.commands.bank.get_item_info") as mock_get_info:
-
-                def mock_item_info(code):
-                    items = {
-                        "iron_ore": {
-                            "code": "iron_ore",
-                            "name": "Iron Ore",
-                            "type": "ore",
-                            "subtype": "mining",
-                            "level": 1,
-                            "tradeable": True,
-                        },
-                        "copper_ore": {
-                            "code": "copper_ore",
-                            "name": "Copper Ore",
-                            "type": "ore",
-                            "subtype": "mining",
-                            "level": 1,
-                            "tradeable": True,
-                        },
-                    }
-                    return items.get(code)
-
-                mock_get_info.side_effect = mock_item_info
-
-                with patch("artifactsmmo_cli.commands.bank.execute_single_deposit") as mock_deposit:
-                    # First call returns cooldown, retry also fails
-                    mock_deposit.side_effect = [(False, None, 1), (False, "retry failed", None)]
-
-                    with patch("time.sleep"):
-                        result = runner.invoke(app, ["deposit-all", "testchar"])
-
-                        assert result.exit_code == 0
-                        assert mock_deposit.call_count == 2
-
-    def test_deposit_all_error_stops_without_continue(self, runner, mock_client_manager):
+    def test_deposit_all_error_stops_without_continue(self, runner, stub_api):
         """Test deposit-all stops on error when continue_on_error is False."""
+        stub_api.get_character.return_value = inventory_response(
+            [("iron_ore", 10, 1), ("copper_ore", 5, 2)]
+        )
+
+        with patch(ITEM_SYNC, side_effect=item_lookup), patch(DEPOSIT_ITEM_SYNC) as mock_deposit:
+            # First call fails with error (no cooldown)
+            mock_deposit.side_effect = [api_error(461, "deposit error"), api_response(Mock())]
+
+            result = runner.invoke(app, ["deposit-all", "testchar"])
+
+            assert result.exit_code == 0
+            # Without --continue-on-error, should stop after first failure
+            assert mock_deposit.call_count == 1
+
+    def test_deposit_all_exception_handler(self, runner, stub_api):
+        """Test deposit-all exception handler exits with code 1.
+
+        NOTE: the outer except clause is unreachable through the real internals
+        (get_character_inventory swallows its own errors), so the in-module
+        helper import is patched to force the path.
+        """
         with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.return_value = [
-                {"code": "iron_ore", "quantity": 10, "slot": 1},
-                {"code": "copper_ore", "quantity": 5, "slot": 2},
-            ]
+            mock_get_inv.side_effect = unexpected_status(500, "unexpected error")
 
-            with patch("artifactsmmo_cli.commands.bank.get_item_info") as mock_get_info:
+            result = runner.invoke(app, ["deposit-all", "testchar"])
 
-                def mock_item_info(code):
-                    items = {
-                        "iron_ore": {
-                            "code": "iron_ore",
-                            "name": "Iron Ore",
-                            "type": "ore",
-                            "subtype": "mining",
-                            "level": 1,
-                            "tradeable": True,
-                        },
-                        "copper_ore": {
-                            "code": "copper_ore",
-                            "name": "Copper Ore",
-                            "type": "ore",
-                            "subtype": "mining",
-                            "level": 1,
-                            "tradeable": True,
-                        },
-                    }
-                    return items.get(code)
+            assert result.exit_code == 1
+            assert "unexpected error" in result.stdout
 
-                mock_get_info.side_effect = mock_item_info
-
-                with patch("artifactsmmo_cli.commands.bank.execute_single_deposit") as mock_deposit:
-                    # First call fails with error (no cooldown)
-                    mock_deposit.side_effect = [(False, "deposit error", None), (True, None, None)]
-
-                    result = runner.invoke(app, ["deposit-all", "testchar"])
-
-                    assert result.exit_code == 0
-                    # Without --continue-on-error, should stop after first failure
-                    assert mock_deposit.call_count == 1
-
-    def test_deposit_all_exception_handler(self, runner, mock_client_manager):
-        """Test deposit-all exception handler exits with code 1."""
-        with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
-
-            with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                mock_error.return_value = Mock(error="unexpected error")
-
-                result = runner.invoke(app, ["deposit-all", "testchar"])
-
-                assert result.exit_code == 1
-
-    def test_deposit_all_with_error_continue(self, runner, mock_client_manager):
+    def test_deposit_all_with_error_continue(self, runner, stub_api):
         """Test deposit-all command with error and continue-on-error."""
-        with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.return_value = [
-                {"code": "iron_ore", "quantity": 10, "slot": 1},
-                {"code": "copper_ore", "quantity": 5, "slot": 2},
-            ]
+        stub_api.get_character.return_value = inventory_response(
+            [("iron_ore", 10, 1), ("copper_ore", 5, 2)]
+        )
 
-            with patch("artifactsmmo_cli.commands.bank.get_item_info") as mock_get_info:
+        with patch(ITEM_SYNC, side_effect=item_lookup), patch(DEPOSIT_ITEM_SYNC) as mock_deposit:
+            # First call fails, second call succeeds
+            mock_deposit.side_effect = [api_error(404, "Item not found"), api_response(Mock())]
 
-                def mock_item_info(code):
-                    items = {
-                        "iron_ore": {
-                            "code": "iron_ore",
-                            "name": "Iron Ore",
-                            "type": "ore",
-                            "subtype": "mining",
-                            "level": 1,
-                            "tradeable": True,
-                        },
-                        "copper_ore": {
-                            "code": "copper_ore",
-                            "name": "Copper Ore",
-                            "type": "ore",
-                            "subtype": "mining",
-                            "level": 1,
-                            "tradeable": True,
-                        },
-                    }
-                    return items.get(code)
+            result = runner.invoke(app, ["deposit-all", "testchar", "--continue-on-error"])
 
-                mock_get_info.side_effect = mock_item_info
-
-                with patch("artifactsmmo_cli.commands.bank.execute_single_deposit") as mock_deposit:
-                    # First call fails, second call succeeds
-                    mock_deposit.side_effect = [(False, "Item not found", None), (True, None, None)]
-
-                    result = runner.invoke(app, ["deposit-all", "testchar", "--continue-on-error"])
-
-                    assert result.exit_code == 0
-                    assert "Failed to process" in result.stdout
-                    assert mock_deposit.call_count == 2
+            assert result.exit_code == 0
+            assert "Failed to process" in result.stdout
+            assert mock_deposit.call_count == 2
 
 
 class TestWithdrawAllCommand:
     """Test withdraw-all command functionality."""
 
-    def test_withdraw_all_success(self, runner, mock_client_manager):
+    def test_withdraw_all_success(self, runner, stub_api):
         """Test successful withdraw-all command."""
-        # Mock bank items
-        mock_bank_item = Mock()
-        mock_bank_item.code = "iron_ore"
-        mock_bank_item.quantity = 50
+        bank_item = SimpleNamespace(code="iron_ore", quantity=50)
 
-        with patch("artifactsmmo_api_client.api.my_account.get_bank_items_my_bank_items_get.sync") as mock_api:
-            mock_response = Mock()
-            mock_api.return_value = mock_response
+        with (
+            patch(BANK_ITEMS_SYNC) as mock_bank,
+            patch(ITEM_SYNC, side_effect=item_lookup),
+            patch(WITHDRAW_ITEM_SYNC) as mock_withdraw,
+        ):
+            mock_bank.return_value = api_response([bank_item])
+            mock_withdraw.return_value = api_response(Mock())
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=[mock_bank_item])
+            result = runner.invoke(app, ["withdraw-all", "testchar", "iron_ore"])
 
-                with patch("artifactsmmo_cli.commands.bank.get_item_info") as mock_get_info:
-                    mock_get_info.return_value = {
-                        "code": "iron_ore",
-                        "name": "Iron Ore",
-                        "type": "ore",
-                        "subtype": "mining",
-                        "level": 1,
-                        "tradeable": True,
-                    }
+            assert result.exit_code == 0
+            assert "Successfully withdrew 50x Iron Ore" in result.stdout
 
-                    with patch("artifactsmmo_cli.commands.bank.execute_single_withdraw") as mock_withdraw:
-                        mock_withdraw.return_value = (True, None, None)
-
-                        result = runner.invoke(app, ["withdraw-all", "testchar", "iron_ore"])
-
-                        assert result.exit_code == 0
-                        assert "Successfully withdrew 50x Iron Ore" in result.stdout
-
-    def test_withdraw_all_item_not_found(self, runner, mock_client_manager):
+    def test_withdraw_all_item_not_found(self, runner, stub_api):
         """Test withdraw-all command with item not found in bank."""
-        with patch("artifactsmmo_api_client.api.my_account.get_bank_items_my_bank_items_get.sync") as mock_api:
-            mock_response = Mock()
-            mock_api.return_value = mock_response
+        with patch(BANK_ITEMS_SYNC) as mock_bank:
+            mock_bank.return_value = api_response([])
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=[])
+            result = runner.invoke(app, ["withdraw-all", "testchar", "iron_ore"])
 
-                with patch("artifactsmmo_cli.commands.bank.validate_character_name") as mock_validate_char:
-                    mock_validate_char.return_value = "testchar"
+            assert result.exit_code == 0
+            assert "not found in bank" in result.stdout
 
-                    with patch("artifactsmmo_cli.commands.bank.validate_item_code") as mock_validate_item:
-                        mock_validate_item.return_value = "iron_ore"
-
-                        result = runner.invoke(app, ["withdraw-all", "testchar", "iron_ore"])
-
-                        assert result.exit_code == 0
-                        assert "not found in bank" in result.stdout
-
-    def test_withdraw_all_zero_quantity(self, runner, mock_client_manager):
+    def test_withdraw_all_zero_quantity(self, runner, stub_api):
         """Test withdraw-all command with zero quantity in bank."""
-        mock_bank_item = Mock()
-        mock_bank_item.code = "iron_ore"
-        mock_bank_item.quantity = 0
+        bank_item = SimpleNamespace(code="iron_ore", quantity=0)
 
-        with patch("artifactsmmo_api_client.api.my_account.get_bank_items_my_bank_items_get.sync") as mock_api:
-            mock_response = Mock()
-            mock_api.return_value = mock_response
+        with patch(BANK_ITEMS_SYNC) as mock_bank:
+            mock_bank.return_value = api_response([bank_item])
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=[mock_bank_item])
+            result = runner.invoke(app, ["withdraw-all", "testchar", "iron_ore"])
 
-                result = runner.invoke(app, ["withdraw-all", "testchar", "iron_ore"])
+            assert result.exit_code == 0
+            assert "No 'iron_ore' items in bank" in result.stdout
 
-                assert result.exit_code == 0
-                assert "No 'iron_ore' items in bank" in result.stdout
-
-    def test_withdraw_all_bank_retrieval_fails(self, runner, mock_client_manager):
+    def test_withdraw_all_bank_retrieval_fails(self, runner, stub_api):
         """Test withdraw-all when bank item retrieval fails."""
-        with patch("artifactsmmo_api_client.api.my_account.get_bank_items_my_bank_items_get.sync") as mock_api:
-            mock_response = Mock()
-            mock_api.return_value = mock_response
+        with patch(BANK_ITEMS_SYNC) as mock_bank:
+            mock_bank.return_value = api_error(500, "Bank unavailable")
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, data=None, error="Bank unavailable")
+            result = runner.invoke(app, ["withdraw-all", "testchar", "iron_ore"])
 
-                result = runner.invoke(app, ["withdraw-all", "testchar", "iron_ore"])
+            assert result.exit_code == 1
+            assert "Could not retrieve bank items" in result.stdout
 
-                assert result.exit_code == 1
-                assert "Could not retrieve bank items" in result.stdout
-
-    def test_withdraw_all_withdrawal_error(self, runner, mock_client_manager):
+    def test_withdraw_all_withdrawal_error(self, runner, stub_api):
         """Test withdraw-all when withdrawal fails with an error."""
-        mock_bank_item = Mock()
-        mock_bank_item.code = "iron_ore"
-        mock_bank_item.quantity = 10
+        bank_item = SimpleNamespace(code="iron_ore", quantity=10)
 
-        with patch("artifactsmmo_api_client.api.my_account.get_bank_items_my_bank_items_get.sync") as mock_api:
-            mock_response = Mock()
-            mock_api.return_value = mock_response
+        with (
+            patch(BANK_ITEMS_SYNC) as mock_bank,
+            patch(ITEM_SYNC, side_effect=item_lookup),
+            patch(WITHDRAW_ITEM_SYNC) as mock_withdraw,
+        ):
+            mock_bank.return_value = api_response([bank_item])
+            mock_withdraw.return_value = api_error(497, "Inventory full")
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=[mock_bank_item])
+            result = runner.invoke(app, ["withdraw-all", "testchar", "iron_ore"])
 
-                with patch("artifactsmmo_cli.commands.bank.get_item_info") as mock_get_info:
-                    mock_get_info.return_value = {
-                        "code": "iron_ore",
-                        "name": "Iron Ore",
-                        "type": "ore",
-                        "subtype": "mining",
-                        "level": 1,
-                        "tradeable": True,
-                    }
+            assert result.exit_code == 1
+            assert "Inventory full" in result.stdout
 
-                    with patch("artifactsmmo_cli.commands.bank.execute_single_withdraw") as mock_withdraw:
-                        mock_withdraw.return_value = (False, "Inventory full", None)
-
-                        result = runner.invoke(app, ["withdraw-all", "testchar", "iron_ore"])
-
-                        assert result.exit_code == 1
-                        assert "Inventory full" in result.stdout
-
-    def test_withdraw_all_exception_handler(self, runner, mock_client_manager):
+    def test_withdraw_all_exception_handler(self, runner, stub_api):
         """Test withdraw-all exception handler exits with code 1."""
-        with patch("artifactsmmo_api_client.api.my_account.get_bank_items_my_bank_items_get.sync") as mock_api:
-            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
+        with patch(BANK_ITEMS_SYNC) as mock_bank:
+            mock_bank.side_effect = unexpected_status(500, "connection error")
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                mock_error.return_value = Mock(error="connection error")
+            result = runner.invoke(app, ["withdraw-all", "testchar", "iron_ore"])
 
-                result = runner.invoke(app, ["withdraw-all", "testchar", "iron_ore"])
+            assert result.exit_code == 1
+            assert "connection error" in result.stdout
 
-                assert result.exit_code == 1
-
-    def test_withdraw_all_with_cooldown(self, runner, mock_client_manager):
+    def test_withdraw_all_with_cooldown(self, runner, stub_api):
         """Test withdraw-all command with cooldown."""
-        mock_bank_item = Mock()
-        mock_bank_item.code = "iron_ore"
-        mock_bank_item.quantity = 25
+        bank_item = SimpleNamespace(code="iron_ore", quantity=25)
 
-        with patch("artifactsmmo_api_client.api.my_account.get_bank_items_my_bank_items_get.sync") as mock_api:
-            mock_response = Mock()
-            mock_api.return_value = mock_response
+        with (
+            patch(BANK_ITEMS_SYNC) as mock_bank,
+            patch(ITEM_SYNC, side_effect=item_lookup),
+            patch(WITHDRAW_ITEM_SYNC) as mock_withdraw,
+        ):
+            mock_bank.return_value = api_response([bank_item])
+            mock_withdraw.side_effect = cooldown_status(5)
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=[mock_bank_item])
+            result = runner.invoke(app, ["withdraw-all", "testchar", "iron_ore"])
 
-                with patch("artifactsmmo_cli.commands.bank.get_item_info") as mock_get_info:
-                    mock_get_info.return_value = {
-                        "code": "iron_ore",
-                        "name": "Iron Ore",
-                        "type": "ore",
-                        "subtype": "mining",
-                        "level": 1,
-                        "tradeable": True,
-                    }
-
-                    with patch("artifactsmmo_cli.commands.bank.execute_single_withdraw") as mock_withdraw:
-                        mock_withdraw.return_value = (False, None, 5)
-
-                        result = runner.invoke(app, ["withdraw-all", "testchar", "iron_ore"])
-
-                        assert result.exit_code == 0
-                        assert "cooldown" in result.stdout
+            assert result.exit_code == 0
+            assert "cooldown" in result.stdout
 
 
 class TestSmartExchangeCommand:
     """Test smart exchange command functionality."""
 
-    def test_smart_exchange_success(self, runner, mock_client_manager):
+    def test_smart_exchange_success(self, runner, stub_api):
         """Test successful smart exchange command."""
-        with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.return_value = [
-                {"code": "iron_ore", "quantity": 10, "slot": 1},
-                {"code": "wooden_sword", "quantity": 1, "slot": 2},
-                {"code": "bread", "quantity": 3, "slot": 3},
-            ]
+        stub_api.get_character.return_value = inventory_response(
+            [("iron_ore", 10, 1), ("wooden_sword", 1, 2), ("bread", 3, 3)]
+        )
 
-            with patch("artifactsmmo_cli.commands.bank.get_item_info") as mock_get_info:
-
-                def mock_item_info(code):
-                    items = {
-                        "iron_ore": {
-                            "code": "iron_ore",
-                            "name": "Iron Ore",
-                            "type": "ore",
-                            "subtype": "mining",
-                            "level": 1,
-                            "tradeable": True,
-                        },
-                        "wooden_sword": {
-                            "code": "wooden_sword",
-                            "name": "Wooden Sword",
-                            "type": "weapon",
-                            "subtype": "sword",
-                            "level": 1,
-                            "tradeable": True,
-                        },
-                        "bread": {
-                            "code": "bread",
-                            "name": "Bread",
-                            "type": "consumable",
-                            "subtype": "food",
-                            "level": 1,
-                            "tradeable": True,
-                        },
-                    }
-                    return items.get(code)
-
-                mock_get_info.side_effect = mock_item_info
-
-                with patch("artifactsmmo_cli.commands.bank.execute_single_deposit") as mock_deposit:
-                    mock_deposit.return_value = (True, None, None)
-
-                    result = runner.invoke(app, ["exchange", "testchar"])
-
-                    assert result.exit_code == 0
-                    assert "Smart Exchange Plan" in result.stdout
-                    # Should deposit iron_ore (resource) but keep wooden_sword (equipment)
-                    # and bread (consumable with keep_consumables=True)
-                    assert mock_deposit.call_count == 1
-
-    def test_smart_exchange_no_items_to_deposit(self, runner, mock_client_manager):
-        """Test smart exchange with no items to deposit."""
-        with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.return_value = [
-                {"code": "wooden_sword", "quantity": 1, "slot": 1},
-            ]
-
-            with patch("artifactsmmo_cli.commands.bank.get_item_info") as mock_get_info:
-                mock_get_info.return_value = {
-                    "code": "wooden_sword",
-                    "name": "Wooden Sword",
-                    "type": "weapon",
-                    "subtype": "sword",
-                    "level": 1,
-                    "tradeable": True,
-                }
-
-                result = runner.invoke(app, ["exchange", "testchar"])
-
-                assert result.exit_code == 0
-                assert "No items to deposit in smart exchange" in result.stdout
-
-    def test_smart_exchange_no_deposit_resources(self, runner, mock_client_manager):
-        """Test smart exchange with --no-deposit-resources."""
-        with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.return_value = [
-                {"code": "iron_ore", "quantity": 10, "slot": 1},
-                {"code": "wooden_sword", "quantity": 1, "slot": 2},
-            ]
-
-            with patch("artifactsmmo_cli.commands.bank.get_item_info") as mock_get_info:
-
-                def mock_item_info(code):
-                    items = {
-                        "iron_ore": {
-                            "code": "iron_ore",
-                            "name": "Iron Ore",
-                            "type": "ore",
-                            "subtype": "mining",
-                            "level": 1,
-                            "tradeable": True,
-                        },
-                        "wooden_sword": {
-                            "code": "wooden_sword",
-                            "name": "Wooden Sword",
-                            "type": "weapon",
-                            "subtype": "sword",
-                            "level": 1,
-                            "tradeable": True,
-                        },
-                    }
-                    return items.get(code)
-
-                mock_get_info.side_effect = mock_item_info
-
-                result = runner.invoke(app, ["exchange", "testchar", "--no-deposit-resources"])
-
-                assert result.exit_code == 0
-                assert "No items to deposit in smart exchange" in result.stdout
-
-    def test_smart_exchange_no_inventory(self, runner, mock_client_manager):
-        """Test smart exchange with no inventory items."""
-        with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.return_value = []
+        with patch(ITEM_SYNC, side_effect=item_lookup), patch(DEPOSIT_ITEM_SYNC) as mock_deposit:
+            mock_deposit.return_value = api_response(Mock())
 
             result = runner.invoke(app, ["exchange", "testchar"])
 
             assert result.exit_code == 0
-            assert "has no inventory items" in result.stdout
+            assert "Smart Exchange Plan" in result.stdout
+            # Should deposit iron_ore (resource) but keep wooden_sword (equipment)
+            # and bread (consumable with keep_consumables=True)
+            assert mock_deposit.call_count == 1
 
-    def test_smart_exchange_item_info_none_skips(self, runner, mock_client_manager):
-        """Test smart exchange skips items where get_item_info returns None."""
-        with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.return_value = [{"code": "mystery_item", "quantity": 5, "slot": 1}]
+    def test_smart_exchange_no_items_to_deposit(self, runner, stub_api):
+        """Test smart exchange with no items to deposit."""
+        stub_api.get_character.return_value = inventory_response([("wooden_sword", 1, 1)])
 
-            with patch("artifactsmmo_cli.commands.bank.get_item_info") as mock_get_info:
-                mock_get_info.return_value = None
+        with patch(ITEM_SYNC, side_effect=item_lookup):
+            result = runner.invoke(app, ["exchange", "testchar"])
 
-                result = runner.invoke(app, ["exchange", "testchar"])
+            assert result.exit_code == 0
+            assert "No items to deposit in smart exchange" in result.stdout
 
-                assert result.exit_code == 0
-                assert "No items to deposit in smart exchange" in result.stdout
+    def test_smart_exchange_no_deposit_resources(self, runner, stub_api):
+        """Test smart exchange with --no-deposit-resources."""
+        stub_api.get_character.return_value = inventory_response(
+            [("iron_ore", 10, 1), ("wooden_sword", 1, 2)]
+        )
 
-    def test_smart_exchange_resource_no_deposit(self, runner, mock_client_manager):
+        with patch(ITEM_SYNC, side_effect=item_lookup):
+            result = runner.invoke(app, ["exchange", "testchar", "--no-deposit-resources"])
+
+            assert result.exit_code == 0
+            assert "No items to deposit in smart exchange" in result.stdout
+
+    def test_smart_exchange_no_inventory(self, runner, stub_api):
+        """Test smart exchange with no inventory items."""
+        stub_api.get_character.return_value = inventory_response([])
+
+        result = runner.invoke(app, ["exchange", "testchar"])
+
+        assert result.exit_code == 0
+        assert "has no inventory items" in result.stdout
+
+    def test_smart_exchange_item_info_none_skips(self, runner, stub_api):
+        """Test smart exchange skips items where the item lookup fails."""
+        stub_api.get_character.return_value = inventory_response([("mystery_item", 5, 1)])
+
+        with patch(ITEM_SYNC, side_effect=item_lookup):
+            result = runner.invoke(app, ["exchange", "testchar"])
+
+            assert result.exit_code == 0
+            assert "No items to deposit in smart exchange" in result.stdout
+
+    def test_smart_exchange_resource_no_deposit(self, runner, stub_api):
         """Test smart exchange keeps resources when deposit_resources is False."""
-        with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.return_value = [{"code": "iron_ore", "quantity": 10, "slot": 1}]
+        stub_api.get_character.return_value = inventory_response([("iron_ore", 10, 1)])
 
-            with patch("artifactsmmo_cli.commands.bank.get_item_info") as mock_get_info:
-                mock_get_info.return_value = {
-                    "code": "iron_ore",
-                    "name": "Iron Ore",
-                    "type": "ore",
-                    "subtype": "mining",
-                    "level": 1,
-                    "tradeable": True,
-                }
+        with patch(ITEM_SYNC, side_effect=item_lookup):
+            result = runner.invoke(app, ["exchange", "testchar", "--no-deposit-resources"])
 
-                result = runner.invoke(app, ["exchange", "testchar", "--no-deposit-resources"])
+            assert result.exit_code == 0
+            assert "No items to deposit in smart exchange" in result.stdout
 
-                assert result.exit_code == 0
-                assert "No items to deposit in smart exchange" in result.stdout
-
-    def test_smart_exchange_cooldown_retry_fails(self, runner, mock_client_manager):
+    def test_smart_exchange_cooldown_retry_fails(self, runner, stub_api):
         """Test smart exchange cooldown handling when retry also fails."""
-        with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.return_value = [
-                {"code": "iron_ore", "quantity": 10, "slot": 1},
-                {"code": "coal", "quantity": 5, "slot": 2},
-            ]
+        stub_api.get_character.return_value = inventory_response(
+            [("iron_ore", 10, 1), ("coal", 5, 2)]
+        )
 
-            with patch("artifactsmmo_cli.commands.bank.get_item_info") as mock_get_info:
+        with patch(ITEM_SYNC, side_effect=item_lookup), patch(DEPOSIT_ITEM_SYNC) as mock_deposit:
+            # cooldown on first, retry also fails
+            mock_deposit.side_effect = [cooldown_status(1), api_error(461, "retry failed")]
 
-                def mock_item_info(code):
-                    return {
-                        "code": code,
-                        "name": code.replace("_", " ").title(),
-                        "type": "ore",
-                        "subtype": "mining",
-                        "level": 1,
-                        "tradeable": True,
-                    }
-
-                mock_get_info.side_effect = mock_item_info
-
-                with patch("artifactsmmo_cli.commands.bank.execute_single_deposit") as mock_deposit:
-                    # cooldown on first, retry also fails
-                    mock_deposit.side_effect = [(False, None, 1), (False, "retry failed", None)]
-
-                    with patch("time.sleep"):
-                        result = runner.invoke(app, ["exchange", "testchar"])
-
-                        assert result.exit_code == 0
-                        assert mock_deposit.call_count == 2
-
-    def test_smart_exchange_cooldown_retry_succeeds(self, runner, mock_client_manager):
-        """Test smart exchange cooldown handling when retry succeeds."""
-        with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.return_value = [{"code": "iron_ore", "quantity": 10, "slot": 1}]
-
-            with patch("artifactsmmo_cli.commands.bank.get_item_info") as mock_get_info:
-                mock_get_info.return_value = {
-                    "code": "iron_ore",
-                    "name": "Iron Ore",
-                    "type": "ore",
-                    "subtype": "mining",
-                    "level": 1,
-                    "tradeable": True,
-                }
-
-                with patch("artifactsmmo_cli.commands.bank.execute_single_deposit") as mock_deposit:
-                    # First call returns cooldown, retry succeeds
-                    mock_deposit.side_effect = [(False, None, 1), (True, None, None)]
-
-                    with patch("time.sleep"):
-                        result = runner.invoke(app, ["exchange", "testchar"])
-
-                        assert result.exit_code == 0
-                        assert mock_deposit.call_count == 2
-
-    def test_smart_exchange_error_stops_without_continue(self, runner, mock_client_manager):
-        """Test smart exchange stops on error when continue_on_error is False."""
-        with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.return_value = [
-                {"code": "iron_ore", "quantity": 10, "slot": 1},
-                {"code": "coal", "quantity": 5, "slot": 2},
-            ]
-
-            with patch("artifactsmmo_cli.commands.bank.get_item_info") as mock_get_info:
-
-                def mock_item_info(code):
-                    return {
-                        "code": code,
-                        "name": code.replace("_", " ").title(),
-                        "type": "ore",
-                        "subtype": "mining",
-                        "level": 1,
-                        "tradeable": True,
-                    }
-
-                mock_get_info.side_effect = mock_item_info
-
-                with patch("artifactsmmo_cli.commands.bank.execute_single_deposit") as mock_deposit:
-                    mock_deposit.side_effect = [(False, "deposit error", None), (True, None, None)]
-
-                    result = runner.invoke(app, ["exchange", "testchar"])
-
-                    assert result.exit_code == 0
-                    assert mock_deposit.call_count == 1
-
-    def test_smart_exchange_exception_handler(self, runner, mock_client_manager):
-        """Test smart exchange exception handler exits with code 1."""
-        with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
-
-            with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                mock_error.return_value = Mock(error="unexpected error")
-
-                result = runner.invoke(app, ["exchange", "testchar"])
-
-                assert result.exit_code == 1
-
-    def test_smart_exchange_keeps_crafting_utility_currency(self, runner, mock_client_manager):
-        """Test smart exchange keeps crafting, utility, and currency items."""
-        with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.return_value = [
-                {"code": "craft_mat", "quantity": 5, "slot": 1},
-            ]
-
-            with patch("artifactsmmo_cli.commands.bank.get_item_info") as mock_get_info:
-                mock_get_info.return_value = {
-                    "code": "craft_mat",
-                    "name": "Crafting Material",
-                    "type": "crafting_material",
-                    "subtype": "crafting",
-                    "level": 1,
-                    "tradeable": True,
-                }
-
+            with patch("time.sleep"):
                 result = runner.invoke(app, ["exchange", "testchar"])
 
                 assert result.exit_code == 0
-                assert "No items to deposit in smart exchange" in result.stdout
+                assert mock_deposit.call_count == 2
 
-    def test_smart_exchange_no_keep_consumables(self, runner, mock_client_manager):
-        """Test smart exchange with --no-keep-consumables."""
+    def test_smart_exchange_cooldown_retry_succeeds(self, runner, stub_api):
+        """Test smart exchange cooldown handling when retry succeeds."""
+        stub_api.get_character.return_value = inventory_response([("iron_ore", 10, 1)])
+
+        with patch(ITEM_SYNC, side_effect=item_lookup), patch(DEPOSIT_ITEM_SYNC) as mock_deposit:
+            # First call hits a cooldown, retry succeeds
+            mock_deposit.side_effect = [cooldown_status(1), api_response(Mock())]
+
+            with patch("time.sleep"):
+                result = runner.invoke(app, ["exchange", "testchar"])
+
+                assert result.exit_code == 0
+                assert mock_deposit.call_count == 2
+
+    def test_smart_exchange_error_stops_without_continue(self, runner, stub_api):
+        """Test smart exchange stops on error when continue_on_error is False."""
+        stub_api.get_character.return_value = inventory_response(
+            [("iron_ore", 10, 1), ("coal", 5, 2)]
+        )
+
+        with patch(ITEM_SYNC, side_effect=item_lookup), patch(DEPOSIT_ITEM_SYNC) as mock_deposit:
+            mock_deposit.side_effect = [api_error(461, "deposit error"), api_response(Mock())]
+
+            result = runner.invoke(app, ["exchange", "testchar"])
+
+            assert result.exit_code == 0
+            assert mock_deposit.call_count == 1
+
+    def test_smart_exchange_exception_handler(self, runner, stub_api):
+        """Test smart exchange exception handler exits with code 1.
+
+        NOTE: the outer except clause is unreachable through the real internals
+        (get_character_inventory swallows its own errors), so the in-module
+        helper import is patched to force the path.
+        """
         with patch("artifactsmmo_cli.commands.bank.get_character_inventory") as mock_get_inv:
-            mock_get_inv.return_value = [
-                {"code": "bread", "quantity": 3, "slot": 1},
-            ]
+            mock_get_inv.side_effect = unexpected_status(500, "unexpected error")
 
-            with patch("artifactsmmo_cli.commands.bank.get_item_info") as mock_get_info:
-                mock_get_info.return_value = {
-                    "code": "bread",
-                    "name": "Bread",
-                    "type": "consumable",
-                    "subtype": "food",
-                    "level": 1,
-                    "tradeable": True,
-                }
+            result = runner.invoke(app, ["exchange", "testchar"])
 
-                with patch("artifactsmmo_cli.commands.bank.execute_single_deposit") as mock_deposit:
-                    mock_deposit.return_value = (True, None, None)
+            assert result.exit_code == 1
+            assert "unexpected error" in result.stdout
 
-                    result = runner.invoke(app, ["exchange", "testchar", "--no-keep-consumables"])
+    def test_smart_exchange_keeps_crafting_utility_currency(self, runner, stub_api):
+        """Test smart exchange keeps crafting, utility, and currency items."""
+        stub_api.get_character.return_value = inventory_response([("craft_mat", 5, 1)])
 
-                    assert result.exit_code == 0
-                    # Should deposit bread since we're not keeping consumables
-                    assert mock_deposit.call_count == 1
+        with patch(ITEM_SYNC, side_effect=item_lookup):
+            result = runner.invoke(app, ["exchange", "testchar"])
+
+            assert result.exit_code == 0
+            assert "No items to deposit in smart exchange" in result.stdout
+
+    def test_smart_exchange_no_keep_consumables(self, runner, stub_api):
+        """Test smart exchange with --no-keep-consumables."""
+        stub_api.get_character.return_value = inventory_response([("bread", 3, 1)])
+
+        with patch(ITEM_SYNC, side_effect=item_lookup), patch(DEPOSIT_ITEM_SYNC) as mock_deposit:
+            mock_deposit.return_value = api_response(Mock())
+
+            result = runner.invoke(app, ["exchange", "testchar", "--no-keep-consumables"])
+
+            assert result.exit_code == 0
+            # Should deposit bread since we're not keeping consumables
+            assert mock_deposit.call_count == 1
 
 
 class TestHelperFunctions:
     """Test helper/utility functions for error and edge-case branches."""
 
-    def test_get_character_inventory_exception(self):
+    def test_get_character_inventory_exception(self, stub_api):
         """Test get_character_inventory returns [] on exception."""
-        with patch("artifactsmmo_cli.commands.bank.ClientManager") as mock_cm:
-            mock_cm.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
+        stub_api.get_character.side_effect = unexpected_status(500, "boom")
 
-            result = get_character_inventory("testchar")
-            assert result == []
+        result = get_character_inventory("testchar")
+        assert result == []
 
-    def test_get_character_inventory_failed_response(self):
-        """Test get_character_inventory returns [] when api response has no data."""
-        with patch("artifactsmmo_cli.commands.bank.ClientManager") as mock_cm:
-            mock_api = Mock()
-            mock_cm.return_value.api = mock_api
-            mock_api.get_character.return_value = Mock()
+    def test_get_character_inventory_failed_response(self, stub_api):
+        """Test get_character_inventory returns [] when the API returns an error."""
+        stub_api.get_character.return_value = api_error(498, "Character not found")
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, data=None)
+        result = get_character_inventory("testchar")
+        assert result == []
 
-                result = get_character_inventory("testchar")
-                assert result == []
-
-    def test_get_item_info_exception(self):
+    def test_get_item_info_exception(self, stub_api):
         """Test get_item_info returns None on exception."""
-        with patch("artifactsmmo_cli.commands.bank.ClientManager") as mock_cm:
-            mock_cm.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
+        with patch(ITEM_SYNC) as mock_api:
+            mock_api.side_effect = unexpected_status(500, "boom")
 
             result = get_item_info("iron_ore")
             assert result is None
 
-    def test_get_item_info_failed_response(self):
-        """Test get_item_info returns None when api response has no data."""
-        with patch("artifactsmmo_cli.commands.bank.ClientManager") as mock_cm:
-            mock_cm.return_value.client = Mock()
+    def test_get_item_info_failed_response(self, stub_api):
+        """Test get_item_info returns None when the API returns an error."""
+        with patch(ITEM_SYNC) as mock_api:
+            mock_api.return_value = api_error(404, "Item not found")
 
-            with patch("artifactsmmo_api_client.api.items.get_item_items_code_get.sync") as mock_api:
-                mock_api.return_value = Mock()
+            result = get_item_info("iron_ore")
+            assert result is None
 
-                with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                    mock_handle.return_value = Mock(success=False, data=None)
-
-                    result = get_item_info("iron_ore")
-                    assert result is None
-
-    def test_filter_items_by_type_item_info_none(self):
-        """Test filter_items_by_type skips items where get_item_info returns None."""
+    def test_filter_items_by_type_item_info_none(self, stub_api):
+        """Test filter_items_by_type skips items where the item lookup fails."""
         inventory = [
             {"code": "unknown_item", "quantity": 5, "slot": 1},
         ]
 
-        with patch("artifactsmmo_cli.commands.bank.get_item_info") as mock_get_info:
-            mock_get_info.return_value = None
-
+        with patch(ITEM_SYNC, side_effect=item_lookup):
             result = filter_items_by_type(inventory, "resource")
             assert result == []
 
-    def test_filter_items_by_type_matching(self):
+    def test_filter_items_by_type_matching(self, stub_api):
         """Test filter_items_by_type returns items matching the requested category."""
         inventory = [
             {"code": "iron_ore", "quantity": 5, "slot": 1},
             {"code": "wooden_sword", "quantity": 1, "slot": 2},
         ]
 
-        def mock_item_info(code):
-            items = {
-                "iron_ore": {"code": "iron_ore", "name": "Iron Ore", "type": "ore", "subtype": "mining"},
-                "wooden_sword": {"code": "wooden_sword", "name": "Wooden Sword", "type": "weapon", "subtype": "sword"},
-            }
-            return items.get(code)
-
-        with patch("artifactsmmo_cli.commands.bank.get_item_info") as mock_get_info:
-            mock_get_info.side_effect = mock_item_info
-
+        with patch(ITEM_SYNC, side_effect=item_lookup):
             result = filter_items_by_type(inventory, "resource")
             assert len(result) == 1
             assert result[0]["code"] == "iron_ore"
 
-    def test_execute_single_deposit_exception_with_cooldown(self):
+    def test_execute_single_deposit_exception_with_cooldown(self, stub_api):
         """Test execute_single_deposit exception path returns cooldown."""
-        with patch("artifactsmmo_cli.commands.bank.ClientManager") as mock_cm:
-            mock_cm.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
+        with patch(DEPOSIT_ITEM_SYNC) as mock_api:
+            mock_api.side_effect = cooldown_status(7)
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                mock_error.return_value = Mock(cooldown_remaining=7, error=None)
+            success, error, cooldown = execute_single_deposit("testchar", "iron_ore", 10)
+            assert success is False
+            assert error is None
+            assert cooldown == 7
 
-                success, error, cooldown = execute_single_deposit("testchar", "iron_ore", 10)
-                assert success is False
-                assert error is None
-                assert cooldown == 7
-
-    def test_execute_single_deposit_exception_with_error(self):
+    def test_execute_single_deposit_exception_with_error(self, stub_api):
         """Test execute_single_deposit exception path returns error string."""
-        with patch("artifactsmmo_cli.commands.bank.ClientManager") as mock_cm:
-            mock_cm.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
+        with patch(DEPOSIT_ITEM_SYNC) as mock_api:
+            mock_api.side_effect = unexpected_status(500, "connection lost")
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                mock_error.return_value = Mock(cooldown_remaining=None, error="connection lost")
+            success, error, cooldown = execute_single_deposit("testchar", "iron_ore", 10)
+            assert success is False
+            assert "connection lost" in error
+            assert cooldown is None
 
-                success, error, cooldown = execute_single_deposit("testchar", "iron_ore", 10)
-                assert success is False
-                assert error == "connection lost"
-                assert cooldown is None
-
-    def test_execute_single_withdraw_success(self):
+    def test_execute_single_withdraw_success(self, stub_api):
         """Test execute_single_withdraw success path."""
-        with patch("artifactsmmo_cli.commands.bank.ClientManager") as mock_cm:
-            mock_cm.return_value.client = Mock()
+        with patch(WITHDRAW_ITEM_SYNC) as mock_api:
+            mock_api.return_value = api_response(Mock())
 
-            with patch(
-                "artifactsmmo_api_client.api.my_characters.action_withdraw_bank_item_my_name_action_bank_withdraw_item_post.sync"
-            ) as mock_api:
-                mock_api.return_value = Mock()
+            success, error, cooldown = execute_single_withdraw("testchar", "iron_ore", 10)
+            assert success is True
+            assert error is None
+            assert cooldown is None
 
-                with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                    mock_handle.return_value = Mock(success=True, cooldown_remaining=None, error=None)
+    def test_execute_single_withdraw_cooldown(self, stub_api):
+        """Test execute_single_withdraw cooldown path.
 
-                    success, error, cooldown = execute_single_withdraw("testchar", "iron_ore", 10)
-                    assert success is True
-                    assert error is None
-                    assert cooldown is None
+        NOTE: handle_api_response never produces a cooldown CLIResponse, so the
+        in-band cooldown branch is only reachable by patching the helper.
+        """
+        with patch(WITHDRAW_ITEM_SYNC) as mock_api:
+            mock_api.return_value = Mock(status_code=200)
 
-    def test_execute_single_withdraw_cooldown(self):
-        """Test execute_single_withdraw cooldown path."""
-        with patch("artifactsmmo_cli.commands.bank.ClientManager") as mock_cm:
-            mock_cm.return_value.client = Mock()
-
-            with patch(
-                "artifactsmmo_api_client.api.my_characters.action_withdraw_bank_item_my_name_action_bank_withdraw_item_post.sync"
-            ) as mock_api:
-                mock_api.return_value = Mock()
-
-                with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                    mock_handle.return_value = Mock(success=False, cooldown_remaining=9, error=None)
-
-                    success, error, cooldown = execute_single_withdraw("testchar", "iron_ore", 10)
-                    assert success is False
-                    assert error is None
-                    assert cooldown == 9
-
-    def test_execute_single_withdraw_error(self):
-        """Test execute_single_withdraw error path."""
-        with patch("artifactsmmo_cli.commands.bank.ClientManager") as mock_cm:
-            mock_cm.return_value.client = Mock()
-
-            with patch(
-                "artifactsmmo_api_client.api.my_characters.action_withdraw_bank_item_my_name_action_bank_withdraw_item_post.sync"
-            ) as mock_api:
-                mock_api.return_value = Mock()
-
-                with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                    mock_handle.return_value = Mock(success=False, cooldown_remaining=None, error="Not enough items")
-
-                    success, error, cooldown = execute_single_withdraw("testchar", "iron_ore", 10)
-                    assert success is False
-                    assert error == "Not enough items"
-                    assert cooldown is None
-
-    def test_execute_single_withdraw_exception_with_cooldown(self):
-        """Test execute_single_withdraw exception path returns cooldown."""
-        with patch("artifactsmmo_cli.commands.bank.ClientManager") as mock_cm:
-            mock_cm.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
-
-            with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                mock_error.return_value = Mock(cooldown_remaining=3, error=None)
+            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
+                mock_handle.return_value = Mock(success=False, cooldown_remaining=9, error=None)
 
                 success, error, cooldown = execute_single_withdraw("testchar", "iron_ore", 10)
                 assert success is False
                 assert error is None
-                assert cooldown == 3
+                assert cooldown == 9
 
-    def test_execute_single_withdraw_exception_with_error(self):
+    def test_execute_single_withdraw_error(self, stub_api):
+        """Test execute_single_withdraw error path."""
+        with patch(WITHDRAW_ITEM_SYNC) as mock_api:
+            mock_api.return_value = api_error(471, "Not enough items")
+
+            success, error, cooldown = execute_single_withdraw("testchar", "iron_ore", 10)
+            assert success is False
+            assert "Not enough items" in error
+            assert cooldown is None
+
+    def test_execute_single_withdraw_exception_with_cooldown(self, stub_api):
+        """Test execute_single_withdraw exception path returns cooldown."""
+        with patch(WITHDRAW_ITEM_SYNC) as mock_api:
+            mock_api.side_effect = cooldown_status(3)
+
+            success, error, cooldown = execute_single_withdraw("testchar", "iron_ore", 10)
+            assert success is False
+            assert error is None
+            assert cooldown == 3
+
+    def test_execute_single_withdraw_exception_with_error(self, stub_api):
         """Test execute_single_withdraw exception path returns error string."""
-        with patch("artifactsmmo_cli.commands.bank.ClientManager") as mock_cm:
-            mock_cm.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
+        with patch(WITHDRAW_ITEM_SYNC) as mock_api:
+            mock_api.side_effect = unexpected_status(500, "connection lost")
 
-            with patch("artifactsmmo_cli.commands.bank.handle_api_error") as mock_error:
-                mock_error.return_value = Mock(cooldown_remaining=None, error="connection lost")
-
-                success, error, cooldown = execute_single_withdraw("testchar", "iron_ore", 10)
-                assert success is False
-                assert error == "connection lost"
-                assert cooldown is None
+            success, error, cooldown = execute_single_withdraw("testchar", "iron_ore", 10)
+            assert success is False
+            assert "connection lost" in error
+            assert cooldown is None
 
 
 class TestDisplayOperationSummary:

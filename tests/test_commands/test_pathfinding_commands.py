@@ -1,148 +1,108 @@
 """Tests for pathfinding commands."""
 
-from unittest.mock import Mock, patch
+from types import SimpleNamespace
+from unittest.mock import patch
 
-from typer.testing import CliRunner
+from artifactsmmo_api_client.models.destination_schema import DestinationSchema
 
 from artifactsmmo_cli.commands.action import app
+from tests.test_commands.conftest import api_response, cooldown_status, unexpected_status
+
+
+def character_at(x: int, y: int) -> SimpleNamespace:
+    """Build a character API payload at the given position."""
+    return api_response(SimpleNamespace(name="testchar", x=x, y=y))
+
+
+def maps_page(tiles: list[SimpleNamespace]) -> SimpleNamespace:
+    """Build a maps page API payload."""
+    return api_response(SimpleNamespace(data=tiles, pages=1))
 
 
 class TestGotoCommand:
     """Test goto command."""
 
-    def setup_method(self):
-        """Set up test fixtures."""
-        self.runner = CliRunner()
-
-    @patch("artifactsmmo_cli.commands.action.get_character_position")
-    @patch("artifactsmmo_cli.commands.action.parse_destination")
-    @patch("artifactsmmo_cli.commands.action.ClientManager")
-    @patch("artifactsmmo_cli.commands.action.handle_api_response")
-    def test_goto_coordinates_success(
-        self, mock_handle_response, mock_client_manager, mock_parse_destination, mock_get_position
-    ):
+    def test_goto_coordinates_success(self, runner, stub_api):
         """A single move is issued and reported as reaching the destination."""
-        mock_get_position.return_value = (0, 0)
-        mock_parse_destination.return_value = (5, 5)
-        mock_api = Mock()
-        mock_client_manager.return_value.api = mock_api
-        mock_handle_response.return_value = Mock(success=True, cooldown_remaining=None, error=None)
+        stub_api.get_character.return_value = character_at(0, 0)
+        stub_api.action_move.return_value = api_response(SimpleNamespace(cooldown=None))
 
-        result = self.runner.invoke(app, ["goto", "testchar", "5 5"])
+        result = runner.invoke(app, ["goto", "testchar", "5 5"])
 
         assert result.exit_code == 0
         assert "Navigation for testchar" in result.stdout
         assert "reached destination" in result.stdout
         # one move only — the server routes the full path
-        mock_api.action_move.assert_called_once()
+        stub_api.action_move.assert_called_once()
+        assert stub_api.action_move.call_args.kwargs["body"] == DestinationSchema(x=5, y=5)
 
-    @patch("artifactsmmo_cli.commands.action.get_character_position")
-    def test_goto_invalid_character(self, mock_get_position):
+    def test_goto_invalid_character(self, runner, stub_api):
         """Test goto with invalid character."""
-        mock_get_position.side_effect = ValueError("Character not found")
+        stub_api.get_character.side_effect = unexpected_status(498, "Character not found")
 
-        result = self.runner.invoke(app, ["goto", "invalidchar", "5 5"])
+        result = runner.invoke(app, ["goto", "invalidchar", "5 5"])
 
         assert result.exit_code == 1
         assert "Could not get character position" in result.stdout
 
-    @patch("artifactsmmo_cli.commands.action.get_character_position")
-    @patch("artifactsmmo_cli.commands.action.parse_destination")
-    @patch("artifactsmmo_cli.commands.action.resolve_named_location")
-    def test_goto_invalid_location(self, mock_resolve_location, mock_parse_destination, mock_get_position):
-        """Test goto with invalid named location."""
-        mock_get_position.return_value = (0, 0)
-        mock_parse_destination.return_value = "invalidlocation"
-        mock_resolve_location.side_effect = ValueError("Location not found")
+    def test_goto_invalid_location(self, runner, stub_api):
+        """Test goto with a named location the map lookup cannot resolve."""
+        stub_api.get_character.return_value = character_at(0, 0)
 
-        result = self.runner.invoke(app, ["goto", "testchar", "invalidlocation"])
+        with patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_maps:
+            mock_maps.side_effect = unexpected_status(404, "Maps not found")
+
+            result = runner.invoke(app, ["goto", "testchar", "invalidlocation"])
 
         assert result.exit_code == 1
         assert "Could not find location" in result.stdout
 
-    @patch("artifactsmmo_cli.commands.action.get_character_position")
-    @patch("artifactsmmo_cli.commands.action.parse_destination")
-    def test_goto_already_at_destination(self, mock_parse_destination, mock_get_position):
+    def test_goto_already_at_destination(self, runner, stub_api):
         """Test goto when already at destination."""
-        mock_get_position.return_value = (5, 5)
-        mock_parse_destination.return_value = (5, 5)
+        stub_api.get_character.return_value = character_at(5, 5)
 
-        result = self.runner.invoke(app, ["goto", "testchar", "5 5"])
+        result = runner.invoke(app, ["goto", "testchar", "5 5"])
 
         assert result.exit_code == 0
         assert "already at the destination" in result.stdout
+        stub_api.action_move.assert_not_called()
 
     @patch("time.sleep")
-    @patch("artifactsmmo_cli.commands.action.get_character_position")
-    @patch("artifactsmmo_cli.commands.action.parse_destination")
-    @patch("artifactsmmo_cli.commands.action.ClientManager")
-    @patch("artifactsmmo_cli.commands.action.handle_api_response")
-    def test_goto_with_cooldown_wait(
-        self, mock_handle_response, mock_client_manager, mock_parse_destination, mock_get_position, mock_sleep
-    ):
+    def test_goto_with_cooldown_wait(self, mock_sleep, runner, stub_api):
         """On cooldown with wait enabled, the move is retried after waiting."""
-        mock_get_position.return_value = (0, 0)
-        mock_parse_destination.return_value = (1, 1)
-        mock_api = Mock()
-        mock_client_manager.return_value.api = mock_api
-        mock_handle_response.side_effect = [
-            Mock(success=False, cooldown_remaining=1, error=None),
-            Mock(success=True, cooldown_remaining=None, error=None),
+        stub_api.get_character.return_value = character_at(0, 0)
+        stub_api.action_move.side_effect = [
+            cooldown_status(1),
+            api_response(SimpleNamespace(cooldown=None)),
         ]
 
-        result = self.runner.invoke(app, ["goto", "testchar", "1 1"])  # wait_cooldown defaults to True
+        result = runner.invoke(app, ["goto", "testchar", "1 1"])  # wait_cooldown defaults to True
 
         assert result.exit_code == 0
         assert "cooldown" in result.stdout.lower() or "waiting" in result.stdout.lower()
-        assert mock_api.action_move.call_count == 2
+        assert stub_api.action_move.call_count == 2
+        assert "reached destination" in result.stdout
 
-    @patch("artifactsmmo_cli.commands.action.get_character_position")
-    @patch("artifactsmmo_cli.commands.action.parse_destination")
-    @patch("artifactsmmo_cli.commands.action.ClientManager")
-    @patch("artifactsmmo_cli.commands.action.handle_api_response")
-    def test_goto_with_cooldown_no_wait(
-        self, mock_handle_response, mock_client_manager, mock_parse_destination, mock_get_position
-    ):
+    def test_goto_with_cooldown_no_wait(self, runner, stub_api):
         """Test goto with cooldown and no wait option."""
-        mock_get_position.return_value = (0, 0)
-        mock_parse_destination.return_value = (1, 1)
-        mock_api = Mock()
-        mock_client_manager.return_value.api = mock_api
-        mock_handle_response.return_value = Mock(success=False, cooldown_remaining=30, error=None)
+        stub_api.get_character.return_value = character_at(0, 0)
+        stub_api.action_move.side_effect = cooldown_status(30)
 
-        result = self.runner.invoke(app, ["goto", "testchar", "1 1", "--no-wait-cooldown"])
+        result = runner.invoke(app, ["goto", "testchar", "1 1", "--no-wait-cooldown"])
 
         assert result.exit_code == 0
         assert "Move blocked by cooldown" in result.stdout
+        stub_api.action_move.assert_called_once()
 
 
 class TestPathCommand:
     """Test path command."""
 
-    def setup_method(self):
-        """Set up test fixtures."""
-        self.runner = CliRunner()
-
-    @patch("artifactsmmo_cli.commands.action.get_character_position")
-    @patch("artifactsmmo_cli.commands.action.parse_destination")
-    @patch("artifactsmmo_cli.commands.action.calculate_path")
-    def test_path_coordinates_success(self, mock_calculate_path, mock_parse_destination, mock_get_position):
+    def test_path_coordinates_success(self, runner, stub_api):
         """Test successful path command with coordinates."""
-        # Mock character position
-        mock_get_position.return_value = (0, 0)
+        stub_api.get_character.return_value = character_at(0, 0)
 
-        # Mock destination parsing
-        mock_parse_destination.return_value = (3, 3)
-
-        # Mock path calculation
-        from artifactsmmo_cli.utils.pathfinding import PathResult, PathStep
-
-        mock_path = PathResult(
-            steps=[PathStep(1, 1), PathStep(2, 2), PathStep(3, 3)], total_distance=6, estimated_time=15
-        )
-        mock_calculate_path.return_value = mock_path
-
-        result = self.runner.invoke(app, ["path", "testchar", "3 3"])
+        result = runner.invoke(app, ["path", "testchar", "3 3"])
 
         assert result.exit_code == 0
         assert "Path for testchar" in result.stdout
@@ -154,69 +114,47 @@ class TestPathCommand:
         assert "Total distance: 6" in result.stdout
         assert "Estimated time: ~15 seconds" in result.stdout
 
-    @patch("artifactsmmo_cli.commands.action.get_character_position")
-    @patch("artifactsmmo_cli.commands.action.parse_destination")
-    @patch("artifactsmmo_cli.commands.action.calculate_path")
-    def test_path_already_at_destination(self, mock_calculate_path, mock_parse_destination, mock_get_position):
+    def test_path_already_at_destination(self, runner, stub_api):
         """Test path command when already at destination."""
-        mock_get_position.return_value = (5, 5)
-        mock_parse_destination.return_value = (5, 5)
+        stub_api.get_character.return_value = character_at(5, 5)
 
-        from artifactsmmo_cli.utils.pathfinding import PathResult
-
-        mock_path = PathResult(steps=[], total_distance=0, estimated_time=0)
-        mock_calculate_path.return_value = mock_path
-
-        result = self.runner.invoke(app, ["path", "testchar", "5 5"])
+        result = runner.invoke(app, ["path", "testchar", "5 5"])
 
         assert result.exit_code == 0
         assert "already at the destination" in result.stdout
 
-    @patch("artifactsmmo_cli.commands.action.get_character_position")
-    def test_path_invalid_character(self, mock_get_position):
+    def test_path_invalid_character(self, runner, stub_api):
         """Test path command with invalid character."""
-        mock_get_position.side_effect = ValueError("Character not found")
+        stub_api.get_character.side_effect = unexpected_status(498, "Character not found")
 
-        result = self.runner.invoke(app, ["path", "invalidchar", "5 5"])
+        result = runner.invoke(app, ["path", "invalidchar", "5 5"])
 
         assert result.exit_code == 1
         assert "Could not get character position" in result.stdout
 
-    @patch("artifactsmmo_cli.commands.action.get_character_position")
-    @patch("artifactsmmo_cli.commands.action.parse_destination")
-    @patch("artifactsmmo_cli.commands.action.resolve_named_location")
-    def test_path_named_location(self, mock_resolve_location, mock_parse_destination, mock_get_position):
+    def test_path_named_location(self, runner, stub_api):
         """Test path command with named location."""
-        mock_get_position.return_value = (0, 0)
-        mock_parse_destination.return_value = "bank"
-        mock_resolve_location.return_value = (4, 1)
+        stub_api.get_character.return_value = character_at(0, 0)
+        bank_tile = SimpleNamespace(x=4, y=1, content=SimpleNamespace(type="bank"))
 
-        with patch("artifactsmmo_cli.commands.action.calculate_path") as mock_calculate_path:
-            from artifactsmmo_cli.utils.pathfinding import PathResult, PathStep
+        with patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_maps:
+            mock_maps.return_value = maps_page([bank_tile])
 
-            mock_path = PathResult(
-                steps=[PathStep(1, 0), PathStep(2, 0), PathStep(3, 0), PathStep(4, 0), PathStep(4, 1)],
-                total_distance=5,
-                estimated_time=25,
-            )
-            mock_calculate_path.return_value = mock_path
+            result = runner.invoke(app, ["path", "testchar", "bank"])
 
-            result = self.runner.invoke(app, ["path", "testchar", "bank"])
+        assert result.exit_code == 0
+        assert "Path for testchar" in result.stdout
+        assert "To: (4, 1)" in result.stdout
+        assert "Total moves: 4" in result.stdout
 
-            assert result.exit_code == 0
-            assert "Path for testchar" in result.stdout
-            assert "To: (4, 1)" in result.stdout
+    def test_path_invalid_location(self, runner, stub_api):
+        """Test path command with a named location the map lookup cannot resolve."""
+        stub_api.get_character.return_value = character_at(0, 0)
 
-    @patch("artifactsmmo_cli.commands.action.get_character_position")
-    @patch("artifactsmmo_cli.commands.action.parse_destination")
-    @patch("artifactsmmo_cli.commands.action.resolve_named_location")
-    def test_path_invalid_location(self, mock_resolve_location, mock_parse_destination, mock_get_position):
-        """Test path command with invalid named location."""
-        mock_get_position.return_value = (0, 0)
-        mock_parse_destination.return_value = "invalidlocation"
-        mock_resolve_location.side_effect = ValueError("Location not found")
+        with patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_maps:
+            mock_maps.side_effect = unexpected_status(404, "Maps not found")
 
-        result = self.runner.invoke(app, ["path", "testchar", "invalidlocation"])
+            result = runner.invoke(app, ["path", "testchar", "invalidlocation"])
 
         assert result.exit_code == 1
         assert "Could not find location" in result.stdout

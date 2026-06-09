@@ -1,11 +1,10 @@
 """Tests for info commands."""
 
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import httpx
 import pytest
-from artifactsmmo_api_client.errors import UnexpectedStatus
-from typer.testing import CliRunner
 
 from artifactsmmo_cli.commands.info import (
     _calculate_difficulty_rating,
@@ -20,22 +19,13 @@ from artifactsmmo_cli.commands.info import (
     _matches_resource_criteria,
     app,
 )
+from tests.test_commands.conftest import api_error, api_response, unexpected_status
 
 
 @pytest.fixture
-def runner():
-    """Create a CLI runner for testing."""
-    return CliRunner()
-
-
-@pytest.fixture
-def mock_client_manager():
-    """Mock the ClientManager."""
-    with patch("artifactsmmo_cli.commands.info.ClientManager") as mock:
-        mock_instance = Mock()
-        mock.return_value = mock_instance
-        mock_instance.client = Mock()
-        yield mock_instance
+def mock_client_manager(stub_api):
+    """Stub the ClientManager singleton (network boundary) for info commands."""
+    return stub_api
 
 
 @pytest.fixture
@@ -44,6 +34,31 @@ def mock_api_response():
     mock_response = Mock()
     mock_response.status_code = 200
     return mock_response
+
+
+RESOURCES_SYNC = "artifactsmmo_api_client.api.resources.get_all_resources_resources_get.sync"
+MAPS_SYNC = "artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync"
+CHARACTER_SYNC = "artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync"
+
+
+def make_resource(code, name, skill, level=1):
+    """Build a resource payload shaped like the generated ResourceSchema."""
+    return SimpleNamespace(code=code, name=name, skill=skill, level=level, drops=[])
+
+
+def resources_page(resources, pages=1):
+    """Build a resources page API payload."""
+    return api_response(SimpleNamespace(data=resources, pages=pages))
+
+
+def resource_tile(x, y, code, type_="resource"):
+    """Build a map tile with resource content."""
+    return SimpleNamespace(x=x, y=y, content=SimpleNamespace(type=type_, code=code))
+
+
+def maps_page(tiles, pages=1):
+    """Build a maps page API payload."""
+    return api_response(SimpleNamespace(data=tiles, pages=pages))
 
 
 class TestInfoCommands:
@@ -63,13 +78,12 @@ class TestInfoCommands:
             mock_item.description = "Basic iron ore"
             mock_item.craft = None
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_item)
+            mock_api.return_value = api_response(mock_item)
 
-                result = runner.invoke(app, ["items", "--item-code", "iron_ore"])
+            result = runner.invoke(app, ["items", "--item-code", "iron_ore"])
 
-                assert result.exit_code == 0
-                mock_api.assert_called_once()
+            assert result.exit_code == 0
+            mock_api.assert_called_once()
 
     def test_items_list(self, runner, mock_client_manager, mock_api_response):
         """Test items command for listing items."""
@@ -86,13 +100,12 @@ class TestInfoCommands:
             mock_data = Mock()
             mock_data.data = [mock_item]
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["items"])
+            result = runner.invoke(app, ["items"])
 
-                assert result.exit_code == 0
-                mock_api.assert_called_once()
+            assert result.exit_code == 0
+            mock_api.assert_called_once()
 
     def test_monsters_specific_monster(self, runner, mock_client_manager, mock_api_response):
         """Test monsters command for specific monster."""
@@ -114,13 +127,12 @@ class TestInfoCommands:
             mock_monster.res_air = 0
             mock_monster.drops = []
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_monster)
+            mock_api.return_value = api_response(mock_monster)
 
-                result = runner.invoke(app, ["monsters", "--monster-code", "goblin"])
+            result = runner.invoke(app, ["monsters", "--monster-code", "goblin"])
 
-                assert result.exit_code == 0
-                mock_api.assert_called_once()
+            assert result.exit_code == 0
+            mock_api.assert_called_once()
 
     def test_monsters_list(self, runner, mock_client_manager, mock_api_response):
         """Test monsters command for listing monsters."""
@@ -141,13 +153,12 @@ class TestInfoCommands:
             mock_data = Mock()
             mock_data.data = [mock_monster]
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["monsters"])
+            result = runner.invoke(app, ["monsters"])
 
-                assert result.exit_code == 0
-                mock_api.assert_called_once()
+            assert result.exit_code == 0
+            mock_api.assert_called_once()
 
     def test_monsters_level_exact_match(self, runner, mock_client_manager, mock_api_response):
         """Test monsters command with exact level filtering (backward compatibility)."""
@@ -167,19 +178,18 @@ class TestInfoCommands:
             mock_data = Mock()
             mock_data.data = [mock_monster]
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["monsters", "--level", "5"])
+            result = runner.invoke(app, ["monsters", "--level", "5"])
 
-                assert result.exit_code == 0
-                # Should call API with both min_level and max_level set to 5 for exact match
-                mock_api.assert_called_once()
-                call_args = mock_api.call_args
-                assert call_args.kwargs["min_level"] == 5
-                assert call_args.kwargs["max_level"] == 5
-                assert call_args.kwargs["page"] == 1
-                assert call_args.kwargs["size"] == 50
+            assert result.exit_code == 0
+            # Should call API with both min_level and max_level set to 5 for exact match
+            mock_api.assert_called_once()
+            call_args = mock_api.call_args
+            assert call_args.kwargs["min_level"] == 5
+            assert call_args.kwargs["max_level"] == 5
+            assert call_args.kwargs["page"] == 1
+            assert call_args.kwargs["size"] == 50
 
     def test_monsters_min_level_only(self, runner, mock_client_manager, mock_api_response):
         """Test monsters command with minimum level filtering only."""
@@ -189,18 +199,17 @@ class TestInfoCommands:
             mock_data = Mock()
             mock_data.data = []
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["monsters", "--min-level", "10"])
+            result = runner.invoke(app, ["monsters", "--min-level", "10"])
 
-                assert result.exit_code == 0
-                mock_api.assert_called_once()
-                call_args = mock_api.call_args
-                assert call_args.kwargs["min_level"] == 10
-                assert call_args.kwargs["max_level"] is None
-                assert call_args.kwargs["page"] == 1
-                assert call_args.kwargs["size"] == 50
+            assert result.exit_code == 0
+            mock_api.assert_called_once()
+            call_args = mock_api.call_args
+            assert call_args.kwargs["min_level"] == 10
+            assert call_args.kwargs["max_level"] is None
+            assert call_args.kwargs["page"] == 1
+            assert call_args.kwargs["size"] == 50
 
     def test_monsters_max_level_only(self, runner, mock_client_manager, mock_api_response):
         """Test monsters command with maximum level filtering only."""
@@ -210,18 +219,17 @@ class TestInfoCommands:
             mock_data = Mock()
             mock_data.data = []
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["monsters", "--max-level", "5"])
+            result = runner.invoke(app, ["monsters", "--max-level", "5"])
 
-                assert result.exit_code == 0
-                mock_api.assert_called_once()
-                call_args = mock_api.call_args
-                assert call_args.kwargs["min_level"] is None
-                assert call_args.kwargs["max_level"] == 5
-                assert call_args.kwargs["page"] == 1
-                assert call_args.kwargs["size"] == 50
+            assert result.exit_code == 0
+            mock_api.assert_called_once()
+            call_args = mock_api.call_args
+            assert call_args.kwargs["min_level"] is None
+            assert call_args.kwargs["max_level"] == 5
+            assert call_args.kwargs["page"] == 1
+            assert call_args.kwargs["size"] == 50
 
     def test_monsters_level_range(self, runner, mock_client_manager, mock_api_response):
         """Test monsters command with level range filtering."""
@@ -231,18 +239,17 @@ class TestInfoCommands:
             mock_data = Mock()
             mock_data.data = []
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["monsters", "--min-level", "1", "--max-level", "5"])
+            result = runner.invoke(app, ["monsters", "--min-level", "1", "--max-level", "5"])
 
-                assert result.exit_code == 0
-                mock_api.assert_called_once()
-                call_args = mock_api.call_args
-                assert call_args.kwargs["min_level"] == 1
-                assert call_args.kwargs["max_level"] == 5
-                assert call_args.kwargs["page"] == 1
-                assert call_args.kwargs["size"] == 50
+            assert result.exit_code == 0
+            mock_api.assert_called_once()
+            call_args = mock_api.call_args
+            assert call_args.kwargs["min_level"] == 1
+            assert call_args.kwargs["max_level"] == 5
+            assert call_args.kwargs["page"] == 1
+            assert call_args.kwargs["size"] == 50
 
     def test_monsters_level_conflict_with_min_level(self, runner, mock_client_manager):
         """Test monsters command with conflicting level and min-level parameters."""
@@ -284,13 +291,12 @@ class TestInfoCommands:
             mock_resource.level = 1
             mock_resource.drops = [Mock(code="iron_ore", rate=100)]
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_resource)
+            mock_api.return_value = api_response(mock_resource)
 
-                result = runner.invoke(app, ["resources", "--resource-code", "iron_rocks"])
+            result = runner.invoke(app, ["resources", "--resource-code", "iron_rocks"])
 
-                assert result.exit_code == 0
-                mock_api.assert_called_once()
+            assert result.exit_code == 0
+            mock_api.assert_called_once()
 
     def test_resources_list(self, runner, mock_client_manager, mock_api_response):
         """Test resources command for listing resources."""
@@ -307,13 +313,12 @@ class TestInfoCommands:
             mock_data = Mock()
             mock_data.data = [mock_resource]
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["resources"])
+            result = runner.invoke(app, ["resources"])
 
-                assert result.exit_code == 0
-                mock_api.assert_called_once()
+            assert result.exit_code == 0
+            mock_api.assert_called_once()
 
     def test_achievements_specific(self, runner, mock_client_manager, mock_api_response):
         """Test achievements command for specific achievement."""
@@ -325,13 +330,12 @@ class TestInfoCommands:
             mock_badge.name = "First Kill"
             mock_badge.description = "Kill your first monster"
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_badge)
+            mock_api.return_value = api_response(mock_badge)
 
-                result = runner.invoke(app, ["achievements", "--achievement-code", "first_kill"])
+            result = runner.invoke(app, ["achievements", "--achievement-code", "first_kill"])
 
-                assert result.exit_code == 0
-                mock_api.assert_called_once()
+            assert result.exit_code == 0
+            mock_api.assert_called_once()
 
     def test_achievements_list(self, runner, mock_client_manager, mock_api_response):
         """Test achievements command for listing achievements."""
@@ -346,13 +350,12 @@ class TestInfoCommands:
             mock_data = Mock()
             mock_data.data = [mock_badge]
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["achievements"])
+            result = runner.invoke(app, ["achievements"])
 
-                assert result.exit_code == 0
-                mock_api.assert_called_once()
+            assert result.exit_code == 0
+            mock_api.assert_called_once()
 
     def test_leaderboard_characters(self, runner, mock_client_manager, mock_api_response):
         """Test leaderboard command for characters."""
@@ -370,13 +373,12 @@ class TestInfoCommands:
             mock_data = Mock()
             mock_data.data = [mock_entry]
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["leaderboard", "characters"])
+            result = runner.invoke(app, ["leaderboard", "characters"])
 
-                assert result.exit_code == 0
-                mock_api.assert_called_once()
+            assert result.exit_code == 0
+            mock_api.assert_called_once()
 
     def test_leaderboard_accounts(self, runner, mock_client_manager, mock_api_response):
         """Test leaderboard command for accounts."""
@@ -393,13 +395,12 @@ class TestInfoCommands:
             mock_data = Mock()
             mock_data.data = [mock_entry]
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["leaderboard", "accounts"])
+            result = runner.invoke(app, ["leaderboard", "accounts"])
 
-                assert result.exit_code == 0
-                mock_api.assert_called_once()
+            assert result.exit_code == 0
+            mock_api.assert_called_once()
 
     def test_leaderboard_invalid_type(self, runner):
         """Test leaderboard command with invalid type."""
@@ -422,13 +423,12 @@ class TestInfoCommands:
             mock_data = Mock()
             mock_data.data = [mock_event]
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["events"])
+            result = runner.invoke(app, ["events"])
 
-                assert result.exit_code == 0
-                mock_api.assert_called_once()
+            assert result.exit_code == 0
+            mock_api.assert_called_once()
 
     def test_events_all(self, runner, mock_client_manager, mock_api_response):
         """Test events command for all events."""
@@ -445,39 +445,35 @@ class TestInfoCommands:
             mock_data = Mock()
             mock_data.data = [mock_event]
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["events", "--no-active-only"])
+            result = runner.invoke(app, ["events", "--no-active-only"])
 
-                assert result.exit_code == 0
-                mock_api.assert_called_once()
+            assert result.exit_code == 0
+            mock_api.assert_called_once()
 
     def test_empty_results(self, runner, mock_client_manager, mock_api_response):
         """Test commands with empty results."""
         with patch("artifactsmmo_api_client.api.items.get_all_items_items_get.sync") as mock_api:
             mock_api.return_value = mock_api_response
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=Mock(data=[]))
+            mock_api.return_value = api_response(Mock(data=[]))
 
-                result = runner.invoke(app, ["items"])
+            result = runner.invoke(app, ["items"])
 
-                assert result.exit_code == 0
-                assert "No items found" in result.stdout
+            assert result.exit_code == 0
+            assert "No items found" in result.stdout
 
     def test_api_error_handling(self, runner, mock_client_manager):
         """Test API error handling in info commands."""
         with patch("artifactsmmo_api_client.api.items.get_all_items_items_get.sync") as mock_api:
-            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"API Error")
+            mock_api.side_effect = unexpected_status(500, "API Error")
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_error") as mock_handle:
-                mock_handle.return_value = Mock(error="API Error")
 
-                result = runner.invoke(app, ["items"])
+            result = runner.invoke(app, ["items"])
 
-                assert result.exit_code == 1
-                assert "API Error" in result.stdout
+            assert result.exit_code == 1
+            assert "API Error" in result.stdout
 
     def test_map_specific_coordinates(self, runner, mock_client_manager, mock_api_response):
         """Test map command for specific coordinates."""
@@ -493,14 +489,18 @@ class TestInfoCommands:
             mock_map.content.type = "monster"
             mock_map.content.code = "wolf"
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_map)
+            mock_api.return_value = api_response(mock_map)
 
-                result = runner.invoke(app, ["map", "--x", "5", "--y", "10"])
+            result = runner.invoke(app, ["map", "--x", "5", "--y", "10"])
 
-                assert result.exit_code == 0
-                from artifactsmmo_api_client.models.map_layer import MapLayer
-                mock_api.assert_called_once_with(client=mock_client_manager.client, layer=MapLayer.OVERWORLD, x=5, y=10)
+            assert result.exit_code == 0
+            from artifactsmmo_api_client.models.map_layer import MapLayer
+
+            mock_api.assert_called_once()
+            kwargs = mock_api.call_args.kwargs
+            assert kwargs["layer"] == MapLayer.OVERWORLD
+            assert kwargs["x"] == 5
+            assert kwargs["y"] == 10
 
     def test_map_list_all(self, runner, mock_client_manager, mock_api_response):
         """Test map command for listing all maps."""
@@ -519,13 +519,12 @@ class TestInfoCommands:
             mock_data = Mock()
             mock_data.data = [mock_map]
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["map"])
+            result = runner.invoke(app, ["map"])
 
-                assert result.exit_code == 0
-                mock_api.assert_called_once()
+            assert result.exit_code == 0
+            mock_api.assert_called_once()
 
     def test_map_search_by_content(self, runner, mock_client_manager, mock_api_response):
         """Test map command for searching by content code."""
@@ -544,41 +543,40 @@ class TestInfoCommands:
             mock_data = Mock()
             mock_data.data = [mock_map]
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["map", "--content-code", "wolf"])
+            result = runner.invoke(app, ["map", "--content-code", "wolf"])
 
-                assert result.exit_code == 0
-                mock_api.assert_called_once_with(
-                    client=mock_client_manager.client, content_code="wolf", page=1, size=50
-                )
+            assert result.exit_code == 0
+            mock_api.assert_called_once()
+            kwargs = mock_api.call_args.kwargs
+            assert kwargs["content_code"] == "wolf"
+            assert kwargs["page"] == 1
+            assert kwargs["size"] == 50
 
     def test_map_not_found(self, runner, mock_client_manager, mock_api_response):
         """Test map command when location not found."""
         with patch("artifactsmmo_api_client.api.maps.get_map_by_position_maps_layer_x_y_get.sync") as mock_api:
             mock_api.return_value = mock_api_response
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, data=None, error="Map not found")
+            mock_api.return_value = api_error(500, "Map not found")
 
-                result = runner.invoke(app, ["map", "--x", "999", "--y", "999"])
+            result = runner.invoke(app, ["map", "--x", "999", "--y", "999"])
 
-                assert result.exit_code == 0
-                assert "Map not found" in result.stdout
+            assert result.exit_code == 0
+            assert "Map not found" in result.stdout
 
     def test_map_empty_results(self, runner, mock_client_manager, mock_api_response):
         """Test map command with empty results."""
         with patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_api:
             mock_api.return_value = mock_api_response
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=Mock(data=[]))
+            mock_api.return_value = api_response(Mock(data=[]))
 
-                result = runner.invoke(app, ["map"])
+            result = runner.invoke(app, ["map"])
 
-                assert result.exit_code == 0
-                assert "No map locations found" in result.stdout
+            assert result.exit_code == 0
+            assert "No map locations found" in result.stdout
 
 
 class TestNPCCommands:
@@ -610,16 +608,15 @@ class TestNPCCommands:
             mock_data.data = [mock_map1, mock_map2]
             mock_data.pages = 1
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["npcs"])
+            result = runner.invoke(app, ["npcs"])
 
-                assert result.exit_code == 0
-                assert "Task Master" in result.stdout
-                assert "Bank" in result.stdout
-                assert "(1, 2)" in result.stdout
-                assert "(4, 1)" in result.stdout
+            assert result.exit_code == 0
+            assert "Task Master" in result.stdout
+            assert "Bank" in result.stdout
+            assert "(1, 2)" in result.stdout
+            assert "(4, 1)" in result.stdout
 
     def test_npcs_no_api_data(self, runner, mock_client_manager, mock_api_response):
         """Test npcs command prints error when no API data found."""
@@ -631,14 +628,13 @@ class TestNPCCommands:
             mock_data.data = []
             mock_data.pages = 1
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["npcs"])
+            result = runner.invoke(app, ["npcs"])
 
-                assert result.exit_code == 0
-                assert "No NPC content data found in map API" in result.stdout
-                assert "fallback" not in result.stdout.lower()
+            assert result.exit_code == 0
+            assert "No NPC content data found in map API" in result.stdout
+            assert "fallback" not in result.stdout.lower()
 
     def test_npcs_with_type_filter_no_api_data(self, runner, mock_client_manager, mock_api_response):
         """Test npcs command with type filter when no API data prints error."""
@@ -650,14 +646,13 @@ class TestNPCCommands:
             mock_data.data = []
             mock_data.pages = 1
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["npcs", "--npc-type", "workshop"])
+            result = runner.invoke(app, ["npcs", "--npc-type", "workshop"])
 
-                assert result.exit_code == 0
-                assert "No NPC content data found in map API" in result.stdout
-                assert "fallback" not in result.stdout.lower()
+            assert result.exit_code == 0
+            assert "No NPC content data found in map API" in result.stdout
+            assert "fallback" not in result.stdout.lower()
 
     def test_npcs_pagination_no_api_data(self, runner, mock_client_manager, mock_api_response):
         """Test npcs command pagination when no API data prints error."""
@@ -669,13 +664,12 @@ class TestNPCCommands:
             mock_data.data = []
             mock_data.pages = 1
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["npcs", "--page", "1", "--size", "3"])
+            result = runner.invoke(app, ["npcs", "--page", "1", "--size", "3"])
 
-                assert result.exit_code == 0
-                assert "No NPC content data found in map API" in result.stdout
+            assert result.exit_code == 0
+            assert "No NPC content data found in map API" in result.stdout
 
     def test_npc_specific_found(self, runner, mock_client_manager, mock_api_response):
         """Test npc command for specific NPC found in API data."""
@@ -695,17 +689,16 @@ class TestNPCCommands:
             mock_data.data = [mock_map]
             mock_data.pages = 1
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["npc", "task"])
+            result = runner.invoke(app, ["npc", "task"])
 
-                assert result.exit_code == 0
-                assert "NPC: Task Master" in result.stdout
-                assert "Location" in result.stdout
-                assert "(1, 2)" in result.stdout
-                assert "Town Square" in result.stdout
-                assert "tasks_master" in result.stdout
+            assert result.exit_code == 0
+            assert "NPC: Task Master" in result.stdout
+            assert "Location" in result.stdout
+            assert "(1, 2)" in result.stdout
+            assert "Town Square" in result.stdout
+            assert "tasks_master" in result.stdout
 
     def test_npc_specific_not_in_api(self, runner, mock_client_manager, mock_api_response):
         """Test npc command prints not-found error when NPC absent from API data."""
@@ -717,14 +710,13 @@ class TestNPCCommands:
             mock_data.data = []
             mock_data.pages = 1
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["npc", "bank"])
+            result = runner.invoke(app, ["npc", "bank"])
 
-                assert result.exit_code == 0
-                assert "not found" in result.stdout
-                assert "(4, 1)" not in result.stdout
+            assert result.exit_code == 0
+            assert "not found" in result.stdout
+            assert "(4, 1)" not in result.stdout
 
     def test_npc_not_found(self, runner, mock_client_manager, mock_api_response):
         """Test npc command when NPC not found."""
@@ -736,26 +728,23 @@ class TestNPCCommands:
             mock_data.data = []
             mock_data.pages = 1
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["npc", "nonexistent"])
+            result = runner.invoke(app, ["npc", "nonexistent"])
 
-                assert result.exit_code == 0
-                assert "NPC 'nonexistent' not found" in result.stdout
+            assert result.exit_code == 0
+            assert "NPC 'nonexistent' not found" in result.stdout
 
     def test_npc_api_error(self, runner, mock_client_manager):
         """Test NPC commands handle API errors gracefully."""
         with patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_api:
-            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"API Error")
+            mock_api.side_effect = unexpected_status(500, "API Error")
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_error") as mock_handle:
-                mock_handle.return_value = Mock(error="API Error")
 
-                result = runner.invoke(app, ["npcs"])
+            result = runner.invoke(app, ["npcs"])
 
-                assert result.exit_code == 1
-                assert "API Error" in result.stdout
+            assert result.exit_code == 1
+            assert "API Error" in result.stdout
 
 
 class TestNPCHelperFunctions:
@@ -842,33 +831,16 @@ class TestResourceDiscoveryCommands:
 
     def test_nearest_command_with_character(self, runner, mock_client_manager):
         """Test nearest command with character position."""
+        mock_client_manager.get_character.return_value = api_response(SimpleNamespace(x=5, y=5))
+
         with (
-            patch("artifactsmmo_cli.commands.info.get_character_position") as mock_get_pos,
-            patch("artifactsmmo_cli.commands.info._find_resource_locations") as mock_find_resources,
+            patch(RESOURCES_SYNC) as mock_resources,
+            patch(MAPS_SYNC) as mock_maps,
         ):
-            mock_get_pos.return_value = (5, 5)
-            mock_find_resources.return_value = [
-                {
-                    "name": "Copper Rock",
-                    "type": "resource",
-                    "x": 3,
-                    "y": 4,
-                    "distance": 3,
-                    "level": 1,
-                    "skill": "mining",
-                    "content_code": "copper_rock",
-                },
-                {
-                    "name": "Copper Rock",
-                    "type": "resource",
-                    "x": 7,
-                    "y": 6,
-                    "distance": 3,
-                    "level": 1,
-                    "skill": "mining",
-                    "content_code": "copper_rock",
-                },
-            ]
+            mock_resources.return_value = resources_page([make_resource("copper_rock", "Copper Rock", "mining")])
+            mock_maps.return_value = maps_page(
+                [resource_tile(3, 4, "copper_rock"), resource_tile(7, 6, "copper_rock")]
+            )
 
             result = runner.invoke(app, ["nearest", "copper", "--character", "testchar"])
 
@@ -876,23 +848,16 @@ class TestResourceDiscoveryCommands:
             assert "Nearest Copper Resources" in result.stdout
             assert "(3, 4)" in result.stdout
             assert "(7, 6)" in result.stdout
-            mock_get_pos.assert_called_once_with("testchar")
+            mock_client_manager.get_character.assert_called_once_with(name="testchar")
 
     def test_nearest_command_without_character(self, runner, mock_client_manager):
         """Test nearest command without character position."""
-        with patch("artifactsmmo_cli.commands.info._find_resource_locations") as mock_find_resources:
-            mock_find_resources.return_value = [
-                {
-                    "name": "Iron Rock",
-                    "type": "resource",
-                    "x": 10,
-                    "y": 12,
-                    "distance": 0,
-                    "level": 5,
-                    "skill": "mining",
-                    "content_code": "iron_rock",
-                }
-            ]
+        with (
+            patch(RESOURCES_SYNC) as mock_resources,
+            patch(MAPS_SYNC) as mock_maps,
+        ):
+            mock_resources.return_value = resources_page([make_resource("iron_rock", "Iron Rock", "mining", 5)])
+            mock_maps.return_value = maps_page([resource_tile(10, 12, "iron_rock")])
 
             result = runner.invoke(app, ["nearest", "iron"])
 
@@ -902,54 +867,49 @@ class TestResourceDiscoveryCommands:
 
     def test_nearest_command_with_type_filter(self, runner, mock_client_manager):
         """Test nearest command with resource type filter."""
-        with patch("artifactsmmo_cli.commands.info._find_resource_locations") as mock_find_resources:
-            mock_find_resources.return_value = [
-                {
-                    "name": "Ash Tree",
-                    "type": "resource",
-                    "x": 2,
-                    "y": 3,
-                    "distance": 0,
-                    "level": 1,
-                    "skill": "woodcutting",
-                    "content_code": "ash_tree",
-                }
-            ]
+        with (
+            patch(RESOURCES_SYNC) as mock_resources,
+            patch(MAPS_SYNC) as mock_maps,
+        ):
+            mock_resources.return_value = resources_page([make_resource("ash_tree", "Ash Tree", "woodcutting")])
+            mock_maps.return_value = maps_page([resource_tile(2, 3, "ash_tree")])
 
             result = runner.invoke(app, ["nearest", "tree", "--type", "woodcutting"])
 
             assert result.exit_code == 0
             assert "Tree Resource Locations" in result.stdout
+            assert "(2, 3)" in result.stdout
 
     def test_nearest_command_with_max_distance(self, runner, mock_client_manager):
         """Test nearest command with max distance filter."""
+        mock_client_manager.get_character.return_value = api_response(SimpleNamespace(x=0, y=0))
+
         with (
-            patch("artifactsmmo_cli.commands.info.get_character_position") as mock_get_pos,
-            patch("artifactsmmo_cli.commands.info._find_resource_locations") as mock_find_resources,
+            patch(RESOURCES_SYNC) as mock_resources,
+            patch(MAPS_SYNC) as mock_maps,
         ):
-            mock_get_pos.return_value = (0, 0)
-            mock_find_resources.return_value = [
-                {
-                    "name": "Copper Rock",
-                    "type": "resource",
-                    "x": 2,
-                    "y": 2,
-                    "distance": 4,
-                    "level": 1,
-                    "skill": "mining",
-                    "content_code": "copper_rock",
-                }
-            ]
+            mock_resources.return_value = resources_page([make_resource("copper_rock", "Copper Rock", "mining")])
+            # (2, 2) is distance 4 from (0, 0): within --max-distance 5.
+            # (10, 10) is distance 20: filtered out.
+            mock_maps.return_value = maps_page(
+                [resource_tile(2, 2, "copper_rock"), resource_tile(10, 10, "copper_rock")]
+            )
 
             result = runner.invoke(app, ["nearest", "copper", "--character", "testchar", "--max-distance", "5"])
 
             assert result.exit_code == 0
             assert "Nearest Copper Resources" in result.stdout
+            assert "(2, 2)" in result.stdout
+            assert "(10, 10)" not in result.stdout
 
     def test_nearest_command_no_resources_found(self, runner, mock_client_manager):
         """Test nearest command when no resources found."""
-        with patch("artifactsmmo_cli.commands.info._find_resource_locations") as mock_find_resources:
-            mock_find_resources.return_value = []
+        with (
+            patch(RESOURCES_SYNC) as mock_resources,
+            patch(MAPS_SYNC) as mock_maps,
+        ):
+            mock_resources.return_value = resources_page([])
+            mock_maps.return_value = maps_page([])
 
             result = runner.invoke(app, ["nearest", "nonexistent"])
 
@@ -958,100 +918,44 @@ class TestResourceDiscoveryCommands:
 
     def test_nearest_command_character_not_found(self, runner, mock_client_manager):
         """Test nearest command with invalid character."""
-        with patch("artifactsmmo_cli.commands.info.get_character_position") as mock_get_pos:
-            mock_get_pos.side_effect = ValueError("Character not found")
+        mock_client_manager.get_character.side_effect = unexpected_status(498, "Character not found")
 
-            result = runner.invoke(app, ["nearest", "copper", "--character", "invalidchar"])
+        result = runner.invoke(app, ["nearest", "copper", "--character", "invalidchar"])
 
-            assert result.exit_code == 1
-            assert "Could not get character position" in result.stdout
+        assert result.exit_code == 1
+        assert "Could not get character position" in result.stdout
 
     def test_resources_command_with_location_filter(self, runner, mock_client_manager, mock_api_response):
         """Test resources command with location and radius filter."""
         with (
-            patch("artifactsmmo_api_client.api.resources.get_all_resources_resources_get.sync") as mock_api,
-            patch("artifactsmmo_cli.commands.info._find_resource_locations") as mock_find_resources,
+            patch(RESOURCES_SYNC) as mock_api,
+            patch(MAPS_SYNC) as mock_maps,
         ):
-            mock_api.return_value = mock_api_response
+            mock_api.return_value = resources_page([make_resource("copper_rock", "Copper Rock", "mining")])
+            # (3, 4) is distance 3 from (5, 5): within --radius 3.
+            mock_maps.return_value = maps_page([resource_tile(3, 4, "copper_rock")])
 
-            # Mock resource data
-            mock_resource = Mock()
-            mock_resource.code = "copper_rock"
-            mock_resource.name = "Copper Rock"
-            mock_resource.skill = "mining"
-            mock_resource.level = 1
-            mock_resource.drops = []
+            result = runner.invoke(app, ["resources", "--location", "5 5", "--radius", "3"])
 
-            mock_resources = Mock()
-            mock_resources.data = [mock_resource]
-            mock_resources.pages = 1
-
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value.success = True
-                mock_handle.return_value.data = mock_resources
-
-                mock_find_resources.return_value = [
-                    {
-                        "name": "Copper Rock",
-                        "type": "resource",
-                        "x": 3,
-                        "y": 4,
-                        "distance": 2,
-                        "level": 1,
-                        "skill": "mining",
-                        "content_code": "copper_rock",
-                    }
-                ]
-
-                result = runner.invoke(app, ["resources", "--location", "5 5", "--radius", "3"])
-
-                assert result.exit_code == 0
-                assert "Resources (Near 5, 5 within 3)" in result.stdout
+            assert result.exit_code == 0
+            assert "Resources (Near 5, 5 within 3)" in result.stdout
 
     def test_resources_command_with_character(self, runner, mock_client_manager, mock_api_response):
         """Test resources command with character for distance calculation."""
+        mock_client_manager.get_character.return_value = api_response(SimpleNamespace(x=0, y=0))
+
         with (
-            patch("artifactsmmo_api_client.api.resources.get_all_resources_resources_get.sync") as mock_api,
-            patch("artifactsmmo_cli.commands.info.get_character_position") as mock_get_pos,
-            patch("artifactsmmo_cli.commands.info._find_resource_locations") as mock_find_resources,
+            patch(RESOURCES_SYNC) as mock_api,
+            patch(MAPS_SYNC) as mock_maps,
         ):
-            mock_api.return_value = mock_api_response
-            mock_get_pos.return_value = (0, 0)
+            mock_api.return_value = resources_page([make_resource("iron_ore", "Iron Ore", "mining", 5)])
+            mock_maps.return_value = maps_page([resource_tile(5, 5, "iron_ore")])
 
-            # Mock resource data
-            mock_resource = Mock()
-            mock_resource.code = "iron_ore"
-            mock_resource.name = "Iron Ore"
-            mock_resource.skill = "mining"
-            mock_resource.level = 5
-            mock_resource.drops = []
+            result = runner.invoke(app, ["resources", "--character", "testchar"])
 
-            mock_resources = Mock()
-            mock_resources.data = [mock_resource]
-            mock_resources.pages = 1
-
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value.success = True
-                mock_handle.return_value.data = mock_resources
-
-                mock_find_resources.return_value = [
-                    {
-                        "name": "Iron Ore",
-                        "type": "resource",
-                        "x": 5,
-                        "y": 5,
-                        "distance": 10,
-                        "level": 5,
-                        "skill": "mining",
-                        "content_code": "iron_ore",
-                    }
-                ]
-
-                result = runner.invoke(app, ["resources", "--character", "testchar"])
-
-                assert result.exit_code == 0
-                assert "Resources (Near testchar)" in result.stdout
-                assert "Distance" in result.stdout
+            assert result.exit_code == 0
+            assert "Resources (Near testchar)" in result.stdout
+            assert "Distance" in result.stdout
 
     def test_resources_command_invalid_location(self, runner, mock_client_manager):
         """Test resources command with invalid location format."""
@@ -1069,54 +973,25 @@ class TestResourceDiscoveryCommands:
 
     def test_resources_command_with_type_filter(self, runner, mock_client_manager, mock_api_response):
         """Test resources command with type filter."""
-        with patch("artifactsmmo_api_client.api.resources.get_all_resources_resources_get.sync") as mock_api:
-            mock_api.return_value = mock_api_response
+        with patch(RESOURCES_SYNC) as mock_api:
+            mock_api.return_value = resources_page([make_resource("ash_tree", "Ash Tree", "woodcutting")])
 
-            # Mock resource data
-            mock_resource = Mock()
-            mock_resource.code = "ash_tree"
-            mock_resource.name = "Ash Tree"
-            mock_resource.skill = "woodcutting"
-            mock_resource.level = 1
-            mock_resource.drops = []
+            result = runner.invoke(app, ["resources", "--type", "woodcutting"])
 
-            mock_resources = Mock()
-            mock_resources.data = [mock_resource]
-            mock_resources.pages = 1
-
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value.success = True
-                mock_handle.return_value.data = mock_resources
-
-                result = runner.invoke(app, ["resources", "--type", "woodcutting"])
-
-                assert result.exit_code == 0
-                assert "Resources (Type: woodcutting)" in result.stdout
+            assert result.exit_code == 0
+            assert "Resources (Type: woodcutting)" in result.stdout
+            assert "ash_tree" in result.stdout
 
     def test_resources_command_with_max_level(self, runner, mock_client_manager, mock_api_response):
         """Test resources command with max level filter."""
-        with patch("artifactsmmo_api_client.api.resources.get_all_resources_resources_get.sync") as mock_api:
-            mock_api.return_value = mock_api_response
+        with patch(RESOURCES_SYNC) as mock_api:
+            mock_api.return_value = resources_page([make_resource("copper_rock", "Copper Rock", "mining")])
 
-            # Mock resource data
-            mock_resource = Mock()
-            mock_resource.code = "copper_rock"
-            mock_resource.name = "Copper Rock"
-            mock_resource.skill = "mining"
-            mock_resource.level = 1
-            mock_resource.drops = []
+            result = runner.invoke(app, ["resources", "--max-level", "5"])
 
-            mock_resources = Mock()
-            mock_resources.data = [mock_resource]
-            mock_resources.pages = 1
-
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value.success = True
-                mock_handle.return_value.data = mock_resources
-
-                result = runner.invoke(app, ["resources", "--max-level", "5"])
-
-                assert result.exit_code == 0
+            assert result.exit_code == 0
+            assert mock_api.call_args.kwargs["max_level"] == 5
+            assert "copper_rock" in result.stdout
 
 
 class TestResourceDiscoveryHelpers:
@@ -1124,26 +999,8 @@ class TestResourceDiscoveryHelpers:
 
     def test_get_resource_data(self, mock_client_manager):
         """Test _get_resource_data function."""
-        mock_response = Mock()
-        mock_response.status_code = 200
-
-        mock_resource = Mock()
-        mock_resource.code = "copper_rock"
-        mock_resource.name = "Copper Rock"
-        mock_resource.skill = "mining"
-        mock_resource.level = 1
-
-        mock_resources = Mock()
-        mock_resources.data = [mock_resource]
-        mock_resources.pages = 1
-
-        with (
-            patch("artifactsmmo_api_client.api.resources.get_all_resources_resources_get.sync") as mock_api,
-            patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle,
-        ):
-            mock_api.return_value = mock_response
-            mock_handle.return_value.success = True
-            mock_handle.return_value.data = mock_resources
+        with patch(RESOURCES_SYNC) as mock_api:
+            mock_api.return_value = resources_page([make_resource("copper_rock", "Copper Rock", "mining")])
 
             result = _get_resource_data("copper")
 
@@ -1187,35 +1044,12 @@ class TestResourceDiscoveryHelpers:
 
     def test_find_resource_locations(self, mock_client_manager):
         """Test _find_resource_locations function."""
-        mock_response = Mock()
-        mock_response.status_code = 200
-
-        # Mock map data
-        mock_content = Mock()
-        mock_content.code = "copper_rock"
-        mock_content.type = "resource"
-
-        mock_map_item = Mock()
-        mock_map_item.x = 5
-        mock_map_item.y = 5
-        mock_map_item.content = mock_content
-
-        mock_maps = Mock()
-        mock_maps.data = [mock_map_item]
-        mock_maps.pages = 1
-
-        # Mock resource data
-        resource_data = [{"code": "copper_rock", "name": "Copper Rock", "skill": "mining", "level": 1}]
-
         with (
-            patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_map_api,
-            patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle,
-            patch("artifactsmmo_cli.commands.info._get_resource_data") as mock_get_data,
+            patch(MAPS_SYNC) as mock_map_api,
+            patch(RESOURCES_SYNC) as mock_resources,
         ):
-            mock_map_api.return_value = mock_response
-            mock_handle.return_value.success = True
-            mock_handle.return_value.data = mock_maps
-            mock_get_data.return_value = resource_data
+            mock_map_api.return_value = maps_page([resource_tile(5, 5, "copper_rock")])
+            mock_resources.return_value = resources_page([make_resource("copper_rock", "Copper Rock", "mining")])
 
             result = _find_resource_locations("copper", character_x=0, character_y=0)
 
@@ -1227,34 +1061,12 @@ class TestResourceDiscoveryHelpers:
 
     def test_find_resource_locations_with_max_distance(self, mock_client_manager):
         """Test _find_resource_locations with max distance filter."""
-        mock_response = Mock()
-        mock_response.status_code = 200
-
-        # Mock map data - resource too far away
-        mock_content = Mock()
-        mock_content.code = "copper_rock"
-        mock_content.type = "resource"
-
-        mock_map_item = Mock()
-        mock_map_item.x = 10
-        mock_map_item.y = 10
-        mock_map_item.content = mock_content
-
-        mock_maps = Mock()
-        mock_maps.data = [mock_map_item]
-        mock_maps.pages = 1
-
-        resource_data = [{"code": "copper_rock", "name": "Copper Rock", "skill": "mining", "level": 1}]
-
         with (
-            patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_map_api,
-            patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle,
-            patch("artifactsmmo_cli.commands.info._get_resource_data") as mock_get_data,
+            patch(MAPS_SYNC) as mock_map_api,
+            patch(RESOURCES_SYNC) as mock_resources,
         ):
-            mock_map_api.return_value = mock_response
-            mock_handle.return_value.success = True
-            mock_handle.return_value.data = mock_maps
-            mock_get_data.return_value = resource_data
+            mock_map_api.return_value = maps_page([resource_tile(10, 10, "copper_rock")])
+            mock_resources.return_value = resources_page([make_resource("copper_rock", "Copper Rock", "mining")])
 
             # Resource at (10,10) is distance 20 from (0,0), should be filtered out with max_distance=10
             result = _find_resource_locations("copper", character_x=0, character_y=0, max_distance=10)
@@ -1437,12 +1249,8 @@ class TestCombatAssessment:
         mock_character.dmg_water = 0
         mock_character.dmg_air = 0
 
-        with (
-            patch("artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync") as mock_api,
-            patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle,
-        ):
-            mock_api.return_value = mock_response
-            mock_handle.return_value = Mock(success=True, data=mock_character)
+        with patch(CHARACTER_SYNC) as mock_api:
+            mock_api.return_value = api_response(mock_character)
 
             result = _get_character_data("TestChar")
 
@@ -1454,15 +1262,8 @@ class TestCombatAssessment:
 
     def test_get_character_data_not_found(self, mock_client_manager):
         """Test character data retrieval when character not found."""
-        mock_response = Mock()
-        mock_response.status_code = 404
-
-        with (
-            patch("artifactsmmo_api_client.api.characters.get_character_characters_name_get.sync") as mock_api,
-            patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle,
-        ):
-            mock_api.return_value = mock_response
-            mock_handle.return_value = Mock(success=False, data=None)
+        with patch(CHARACTER_SYNC) as mock_api:
+            mock_api.side_effect = unexpected_status(404, "Character not found")
 
             result = _get_character_data("NonExistent")
 
@@ -1472,20 +1273,21 @@ class TestCombatAssessment:
         """Test monsters command with character comparison."""
         with (
             patch("artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get.sync") as mock_monsters_api,
-            patch("artifactsmmo_cli.commands.info._get_character_data") as mock_get_char,
+            patch(CHARACTER_SYNC) as mock_char_api,
         ):
-            mock_monsters_api.return_value = mock_api_response
-
-            # Mock character data
-            mock_get_char.return_value = {
-                "name": "TestChar",
-                "level": 10,
-                "max_hp": 200,
-                "attack_fire": 30,
-                "attack_earth": 0,
-                "attack_water": 0,
-                "attack_air": 0,
-            }
+            # Character data served at the API boundary
+            mock_char_api.return_value = api_response(
+                SimpleNamespace(
+                    name="TestChar",
+                    level=10,
+                    hp=200,
+                    max_hp=200,
+                    attack_fire=30,
+                    attack_earth=0,
+                    attack_water=0,
+                    attack_air=0,
+                )
+            )
 
             # Mock monster data
             mock_monster = Mock()
@@ -1502,21 +1304,20 @@ class TestCombatAssessment:
             mock_data = Mock()
             mock_data.data = [mock_monster]
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_monsters_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["monsters", "--compare", "TestChar"])
+            result = runner.invoke(app, ["monsters", "--compare", "TestChar"])
 
-                assert result.exit_code == 0
-                assert "Combat Assessment for TestChar" in result.output
-                assert "Easy" in result.output
-                assert "95%" in result.output
-                assert "🟢" in result.output  # Easy difficulty emoji
+            assert result.exit_code == 0
+            assert "Combat Assessment for TestChar" in result.output
+            assert "Easy" in result.output
+            assert "95%" in result.output
+            assert "🟢" in result.output  # Easy difficulty emoji
 
     def test_monsters_command_compare_character_not_found(self, runner, mock_client_manager):
         """Test monsters command with invalid character for comparison."""
-        with patch("artifactsmmo_cli.commands.info._get_character_data") as mock_get_char:
-            mock_get_char.return_value = None
+        with patch(CHARACTER_SYNC) as mock_char_api:
+            mock_char_api.side_effect = unexpected_status(404, "Character not found")
 
             result = runner.invoke(app, ["monsters", "--compare", "NonExistent"])
 
@@ -1543,35 +1344,35 @@ class TestCombatAssessment:
             mock_monster.res_air = 0
             mock_monster.drops = []
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_monster)
+            mock_api.return_value = api_response(mock_monster)
 
-                result = runner.invoke(app, ["monster", "dragon"])
+            result = runner.invoke(app, ["monster", "dragon"])
 
-                assert result.exit_code == 0
-                assert "Monster: Dragon" in result.output
-                assert "Level" in result.output
-                assert "20" in result.output
-                assert "Total Attack" in result.output
+            assert result.exit_code == 0
+            assert "Monster: Dragon" in result.output
+            assert "Level" in result.output
+            assert "20" in result.output
+            assert "Total Attack" in result.output
 
     def test_monster_command_with_compare(self, runner, mock_client_manager, mock_api_response):
         """Test monster command with character comparison."""
         with (
             patch("artifactsmmo_api_client.api.monsters.get_monster_monsters_code_get.sync") as mock_api,
-            patch("artifactsmmo_cli.commands.info._get_character_data") as mock_get_char,
+            patch(CHARACTER_SYNC) as mock_char_api,
         ):
-            mock_api.return_value = mock_api_response
-
-            # Mock character data
-            mock_get_char.return_value = {
-                "name": "TestChar",
-                "level": 15,
-                "max_hp": 250,
-                "attack_fire": 40,
-                "attack_earth": 0,
-                "attack_water": 0,
-                "attack_air": 0,
-            }
+            # Character data served at the API boundary
+            mock_char_api.return_value = api_response(
+                SimpleNamespace(
+                    name="TestChar",
+                    level=15,
+                    hp=250,
+                    max_hp=250,
+                    attack_fire=40,
+                    attack_earth=0,
+                    attack_water=0,
+                    attack_air=0,
+                )
+            )
 
             # Mock monster data
             mock_monster = Mock()
@@ -1589,16 +1390,15 @@ class TestCombatAssessment:
             mock_monster.res_air = 0
             mock_monster.drops = []
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_monster)
+            mock_api.return_value = api_response(mock_monster)
 
-                result = runner.invoke(app, ["monster", "orc", "--compare", "TestChar"])
+            result = runner.invoke(app, ["monster", "orc", "--compare", "TestChar"])
 
-                assert result.exit_code == 0
-                assert "Monster: Orc" in result.output
-                assert "Combat Analysis: TestChar vs Orc" in result.output
-                assert "Difficulty" in result.output
-                assert "Success Probability" in result.output
+            assert result.exit_code == 0
+            assert "Monster: Orc" in result.output
+            assert "Combat Analysis: TestChar vs Orc" in result.output
+            assert "Difficulty" in result.output
+            assert "Success Probability" in result.output
 
     def test_monster_command_not_found(self, runner, mock_client_manager, mock_api_response):
         """Test monster command when monster not found."""
@@ -1607,7 +1407,7 @@ class TestCombatAssessment:
             patch("artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get.sync") as mock_list_api,
         ):
             # Mock failed direct lookup
-            mock_get_api.side_effect = UnexpectedStatus(status_code=404, content=b"Not found")
+            mock_get_api.side_effect = unexpected_status(404, "Not found")
 
             # Mock empty search results
             mock_list_api.return_value = mock_api_response
@@ -1615,13 +1415,12 @@ class TestCombatAssessment:
             mock_data.data = []
             mock_data.pages = 1
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_list_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["monster", "nonexistent"])
+            result = runner.invoke(app, ["monster", "nonexistent"])
 
-                assert result.exit_code == 1
-                assert "Monster 'nonexistent' not found" in result.output
+            assert result.exit_code == 1
+            assert "Monster 'nonexistent' not found" in result.output
 
 
 class TestItemsEdgeCases:
@@ -1645,28 +1444,26 @@ class TestItemsEdgeCases:
             mock_item.description = "A basic iron sword"
             mock_item.craft = mock_craft
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_item)
+            mock_api.return_value = api_response(mock_item)
 
-                result = runner.invoke(app, ["items", "--item-code", "iron_sword"])
+            result = runner.invoke(app, ["items", "--item-code", "iron_sword"])
 
-                assert result.exit_code == 0
-                assert "Craft Skill" in result.output
-                assert "weaponcrafting" in result.output
-                assert "Craft Level" in result.output
+            assert result.exit_code == 0
+            assert "Craft Skill" in result.output
+            assert "weaponcrafting" in result.output
+            assert "Craft Level" in result.output
 
     def test_items_specific_item_not_found(self, runner, mock_client_manager, mock_api_response):
         """Test items command when specific item not found (line 63)."""
         with patch("artifactsmmo_api_client.api.items.get_item_items_code_get.sync") as mock_api:
             mock_api.return_value = mock_api_response
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, data=None, error=None)
+            mock_api.return_value = api_response(None)
 
-                result = runner.invoke(app, ["items", "--item-code", "nonexistent"])
+            result = runner.invoke(app, ["items", "--item-code", "nonexistent"])
 
-                assert result.exit_code == 0
-                assert "nonexistent" in result.output
+            assert result.exit_code == 0
+            assert "nonexistent" in result.output
 
     def test_items_list_with_item_type_filter(self, runner, mock_client_manager, mock_api_response):
         """Test items list with item_type filter (line 71)."""
@@ -1683,14 +1480,13 @@ class TestItemsEdgeCases:
             mock_data = Mock()
             mock_data.data = [mock_item]
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["items", "--item-type", "weapon"])
+            result = runner.invoke(app, ["items", "--item-type", "weapon"])
 
-                assert result.exit_code == 0
-                call_kwargs = mock_api.call_args.kwargs
-                assert call_kwargs["type_"] == "weapon"
+            assert result.exit_code == 0
+            call_kwargs = mock_api.call_args.kwargs
+            assert call_kwargs["type_"] == "weapon"
 
     def test_items_list_with_craft_skill_filter(self, runner, mock_client_manager, mock_api_response):
         """Test items list with craft_skill filter (line 73)."""
@@ -1700,14 +1496,13 @@ class TestItemsEdgeCases:
             mock_data = Mock()
             mock_data.data = []
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["items", "--craft-skill", "weaponcrafting"])
+            result = runner.invoke(app, ["items", "--craft-skill", "weaponcrafting"])
 
-                assert result.exit_code == 0
-                call_kwargs = mock_api.call_args.kwargs
-                assert call_kwargs["craft_skill"] == "weaponcrafting"
+            assert result.exit_code == 0
+            call_kwargs = mock_api.call_args.kwargs
+            assert call_kwargs["craft_skill"] == "weaponcrafting"
 
     def test_items_list_with_craft_level_filter(self, runner, mock_client_manager, mock_api_response):
         """Test items list with craft_level filter (line 75)."""
@@ -1717,14 +1512,13 @@ class TestItemsEdgeCases:
             mock_data = Mock()
             mock_data.data = []
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["items", "--craft-level", "5"])
+            result = runner.invoke(app, ["items", "--craft-level", "5"])
 
-                assert result.exit_code == 0
-                call_kwargs = mock_api.call_args.kwargs
-                assert call_kwargs["min_level"] == 5
+            assert result.exit_code == 0
+            call_kwargs = mock_api.call_args.kwargs
+            assert call_kwargs["min_level"] == 5
 
     def test_items_list_long_description_truncated(self, runner, mock_client_manager, mock_api_response):
         """Test items list truncates long descriptions (line 90)."""
@@ -1741,27 +1535,25 @@ class TestItemsEdgeCases:
             mock_data = Mock()
             mock_data.data = [mock_item]
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["items"])
+            result = runner.invoke(app, ["items"])
 
-                assert result.exit_code == 0
-                # Rich truncates with unicode ellipsis or ASCII ellipsis depending on terminal
-                assert "…" in result.output or "..." in result.output
+            assert result.exit_code == 0
+            # Rich truncates with unicode ellipsis or ASCII ellipsis depending on terminal
+            assert "…" in result.output or "..." in result.output
 
     def test_items_list_api_failure(self, runner, mock_client_manager, mock_api_response):
         """Test items list when API returns failure (line 107)."""
         with patch("artifactsmmo_api_client.api.items.get_all_items_items_get.sync") as mock_api:
             mock_api.return_value = mock_api_response
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, data=None, error="Server error")
+            mock_api.return_value = api_error(500, "Server error")
 
-                result = runner.invoke(app, ["items"])
+            result = runner.invoke(app, ["items"])
 
-                assert result.exit_code == 0
-                assert "Server error" in result.output
+            assert result.exit_code == 0
+            assert "Server error" in result.output
 
 
 class TestMonstersEdgeCases:
@@ -1793,31 +1585,32 @@ class TestMonstersEdgeCases:
             mock_monster.res_air = 0
             mock_monster.drops = [mock_drop]
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_monster)
+            mock_api.return_value = api_response(mock_monster)
 
-                result = runner.invoke(app, ["monsters", "--monster-code", "wolf"])
+            result = runner.invoke(app, ["monsters", "--monster-code", "wolf"])
 
-                assert result.exit_code == 0
-                assert "wolf_fur" in result.output
+            assert result.exit_code == 0
+            assert "wolf_fur" in result.output
 
     def test_monsters_specific_with_compare(self, runner, mock_client_manager, mock_api_response):
         """Test monsters command with specific monster and compare (lines 205-223)."""
         with (
             patch("artifactsmmo_api_client.api.monsters.get_monster_monsters_code_get.sync") as mock_api,
-            patch("artifactsmmo_cli.commands.info._get_character_data") as mock_get_char,
+            patch(CHARACTER_SYNC) as mock_char_api,
         ):
-            mock_api.return_value = mock_api_response
-
-            mock_get_char.return_value = {
-                "name": "TestChar",
-                "level": 10,
-                "max_hp": 200,
-                "attack_fire": 30,
-                "attack_earth": 0,
-                "attack_water": 0,
-                "attack_air": 0,
-            }
+            # Character data served at the API boundary
+            mock_char_api.return_value = api_response(
+                SimpleNamespace(
+                    name="TestChar",
+                    level=10,
+                    hp=200,
+                    max_hp=200,
+                    attack_fire=30,
+                    attack_earth=0,
+                    attack_water=0,
+                    attack_air=0,
+                )
+            )
 
             mock_monster = Mock()
             mock_monster.code = "goblin"
@@ -1834,48 +1627,45 @@ class TestMonstersEdgeCases:
             mock_monster.res_air = 0
             mock_monster.drops = []
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_monster)
+            mock_api.return_value = api_response(mock_monster)
 
-                result = runner.invoke(app, ["monsters", "--monster-code", "goblin", "--compare", "TestChar"])
+            result = runner.invoke(app, ["monsters", "--monster-code", "goblin", "--compare", "TestChar"])
 
-                assert result.exit_code == 0
-                assert "Combat Analysis: TestChar vs Goblin" in result.output
+            assert result.exit_code == 0
+            assert "Combat Analysis: TestChar vs Goblin" in result.output
 
     def test_monsters_specific_not_found(self, runner, mock_client_manager, mock_api_response):
         """Test monsters command for specific monster not found (line 223)."""
         with patch("artifactsmmo_api_client.api.monsters.get_monster_monsters_code_get.sync") as mock_api:
             mock_api.return_value = mock_api_response
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, data=None, error=None)
+            mock_api.return_value = api_response(None)
 
-                result = runner.invoke(app, ["monsters", "--monster-code", "ghost"])
+            result = runner.invoke(app, ["monsters", "--monster-code", "ghost"])
 
-                assert result.exit_code == 0
-                assert "ghost" in result.output
+            assert result.exit_code == 0
+            assert "ghost" in result.output
 
     def test_monsters_list_api_failure(self, runner, mock_client_manager, mock_api_response):
         """Test monsters list when API returns failure (line 309)."""
         with patch("artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get.sync") as mock_api:
             mock_api.return_value = mock_api_response
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, data=None, error="DB error")
+            mock_api.return_value = api_error(500, "DB error")
 
-                result = runner.invoke(app, ["monsters"])
+            result = runner.invoke(app, ["monsters"])
 
-                assert result.exit_code == 0
-                assert "DB error" in result.output
+            assert result.exit_code == 0
+            assert "DB error" in result.output
 
     def test_monster_command_compare_character_not_found(self, runner, mock_client_manager, mock_api_response):
         """Test monster command when compare character not found (lines 329-330)."""
         with (
             patch("artifactsmmo_api_client.api.monsters.get_monster_monsters_code_get.sync") as mock_api,
-            patch("artifactsmmo_cli.commands.info._get_character_data") as mock_get_char,
+            patch(CHARACTER_SYNC) as mock_char_api,
         ):
             mock_api.return_value = mock_api_response
-            mock_get_char.return_value = None
+            mock_char_api.side_effect = unexpected_status(404, "Character not found")
 
             result = runner.invoke(app, ["monster", "goblin", "--compare", "ghost_char"])
 
@@ -1884,18 +1674,12 @@ class TestMonstersEdgeCases:
 
     def test_monster_command_search_by_name_across_pages(self, runner, mock_client_manager, mock_api_response):
         """Test monster command searches by name when code lookup fails (lines 361, 368-380)."""
-        call_count = 0
-
-        def side_effect(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            return mock_api_response
-
         with (
             patch("artifactsmmo_api_client.api.monsters.get_monster_monsters_code_get.sync") as mock_get_api,
             patch("artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get.sync") as mock_list_api,
         ):
-            mock_get_api.return_value = mock_api_response
+            # Exact-code lookup returns nothing; name search succeeds.
+            mock_get_api.return_value = api_response(None)
 
             mock_monster = Mock()
             mock_monster.code = "red_slime"
@@ -1916,25 +1700,12 @@ class TestMonstersEdgeCases:
             mock_data.data = [mock_monster]
             mock_data.pages = 1
 
-            mock_list_api.return_value = mock_api_response
+            mock_list_api.return_value = api_response(mock_data)
 
-            def handle_side_effect(response):
-                # First call is for code lookup (fail), rest are for list search
-                if mock_get_api.call_count > 0 and mock_list_api.call_count == 0:
-                    return Mock(success=False, data=None)
-                return Mock(success=True, data=mock_data)
+            result = runner.invoke(app, ["monster", "slime"])
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                # First call (get by code) fails, second call (search list) succeeds
-                mock_handle.side_effect = [
-                    Mock(success=False, data=None),
-                    Mock(success=True, data=mock_data),
-                ]
-
-                result = runner.invoke(app, ["monster", "slime"])
-
-                assert result.exit_code == 0
-                assert "Red Slime" in result.output
+            assert result.exit_code == 0
+            assert "Red Slime" in result.output
 
     def test_monster_command_search_no_data_on_page(self, runner, mock_client_manager, mock_api_response):
         """Test monster search stops when no data returned (line 361)."""
@@ -1942,23 +1713,18 @@ class TestMonstersEdgeCases:
             patch("artifactsmmo_api_client.api.monsters.get_monster_monsters_code_get.sync") as mock_get_api,
             patch("artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get.sync") as mock_list_api,
         ):
-            mock_get_api.return_value = mock_api_response
-            mock_list_api.return_value = mock_api_response
+            mock_get_api.return_value = api_response(None)
 
             mock_data = Mock()
             mock_data.data = []
             mock_data.pages = 1
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.side_effect = [
-                    Mock(success=False, data=None),
-                    Mock(success=True, data=mock_data),
-                ]
+            mock_list_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["monster", "phantom"])
+            result = runner.invoke(app, ["monster", "phantom"])
 
-                assert result.exit_code == 1
-                assert "phantom" in result.output
+            assert result.exit_code == 1
+            assert "phantom" in result.output
 
     def test_monster_command_list_search_api_failure(self, runner, mock_client_manager, mock_api_response):
         """Test monster search stops when list API fails (line 361)."""
@@ -1966,18 +1732,12 @@ class TestMonstersEdgeCases:
             patch("artifactsmmo_api_client.api.monsters.get_monster_monsters_code_get.sync") as mock_get_api,
             patch("artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get.sync") as mock_list_api,
         ):
-            mock_get_api.return_value = mock_api_response
-            mock_list_api.return_value = mock_api_response
+            mock_get_api.return_value = api_response(None)
+            mock_list_api.return_value = api_error(500, "API down")
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.side_effect = [
-                    Mock(success=False, data=None),
-                    Mock(success=False, data=None, error="API down"),
-                ]
+            result = runner.invoke(app, ["monster", "phantom"])
 
-                result = runner.invoke(app, ["monster", "phantom"])
-
-                assert result.exit_code == 1
+            assert result.exit_code == 1
 
     def test_monster_search_multipage_found_on_second_page(self, runner, mock_client_manager, mock_api_response):
         """Test monster search finds monster on page 2 (lines 368-380, 383)."""
@@ -1985,8 +1745,7 @@ class TestMonstersEdgeCases:
             patch("artifactsmmo_api_client.api.monsters.get_monster_monsters_code_get.sync") as mock_get_api,
             patch("artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get.sync") as mock_list_api,
         ):
-            mock_get_api.return_value = mock_api_response
-            mock_list_api.return_value = mock_api_response
+            mock_get_api.return_value = api_response(None)
 
             # Page 1: no match
             mock_monster_p1 = Mock()
@@ -2028,17 +1787,15 @@ class TestMonstersEdgeCases:
             mock_data_p2.data = [mock_monster_p2]
             mock_data_p2.pages = 2
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.side_effect = [
-                    Mock(success=False, data=None),  # code lookup fails
-                    Mock(success=True, data=mock_data_p1),  # page 1 search
-                    Mock(success=True, data=mock_data_p2),  # page 2 search
-                ]
+            mock_list_api.side_effect = [
+                api_response(mock_data_p1),  # page 1 search
+                api_response(mock_data_p2),  # page 2 search
+            ]
 
-                result = runner.invoke(app, ["monster", "dragon"])
+            result = runner.invoke(app, ["monster", "dragon"])
 
-                assert result.exit_code == 0
-                assert "Fire Dragon" in result.output
+            assert result.exit_code == 0
+            assert "Fire Dragon" in result.output
 
 
 class TestResourcesEdgeCases:
@@ -2046,54 +1803,43 @@ class TestResourcesEdgeCases:
 
     def test_resources_character_position_error(self, runner, mock_client_manager):
         """Test resources command when character position lookup fails (lines 507-509)."""
-        with patch("artifactsmmo_cli.commands.info.get_character_position") as mock_get_pos:
-            mock_get_pos.side_effect = ValueError("Character not found")
+        mock_client_manager.get_character.side_effect = unexpected_status(498, "Character not found")
 
-            result = runner.invoke(app, ["resources", "--character", "badchar"])
+        result = runner.invoke(app, ["resources", "--character", "badchar"])
 
-            assert result.exit_code == 1
-            assert "Could not get character position" in result.output
+        assert result.exit_code == 1
+        assert "Could not get character position" in result.output
 
     def test_resources_specific_with_char_location(self, runner, mock_client_manager, mock_api_response):
         """Test resources specific with character location lookup (lines 539-550)."""
+        mock_client_manager.get_character.return_value = api_response(SimpleNamespace(x=0, y=0))
+
         with (
             patch("artifactsmmo_api_client.api.resources.get_resource_resources_code_get.sync") as mock_api,
-            patch("artifactsmmo_cli.commands.info.get_character_position") as mock_get_pos,
-            patch("artifactsmmo_cli.commands.info._find_resource_locations") as mock_find_locs,
+            patch(RESOURCES_SYNC) as mock_all_resources,
+            patch(MAPS_SYNC) as mock_maps,
         ):
-            mock_api.return_value = mock_api_response
-            mock_get_pos.return_value = (0, 0)
-            mock_find_locs.return_value = [
-                {"x": 3, "y": 4, "distance": 7},
-            ]
+            mock_api.return_value = api_response(make_resource("copper_rock", "Copper Rock", "mining"))
+            mock_all_resources.return_value = resources_page([make_resource("copper_rock", "Copper Rock", "mining")])
+            mock_maps.return_value = maps_page([resource_tile(3, 4, "copper_rock")])
 
-            mock_resource = Mock()
-            mock_resource.code = "copper_rock"
-            mock_resource.name = "Copper Rock"
-            mock_resource.skill = "mining"
-            mock_resource.level = 1
-            mock_resource.drops = []
+            result = runner.invoke(app, ["resources", "--resource-code", "copper_rock", "--character", "testchar"])
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_resource)
-
-                result = runner.invoke(app, ["resources", "--resource-code", "copper_rock", "--character", "testchar"])
-
-                assert result.exit_code == 0
-                assert "Nearest Location" in result.output
+            assert result.exit_code == 0
+            assert "Nearest Location" in result.output
+            assert "(3, 4)" in result.output
 
     def test_resources_specific_not_found(self, runner, mock_client_manager, mock_api_response):
         """Test resources specific when not found (line 555)."""
         with patch("artifactsmmo_api_client.api.resources.get_resource_resources_code_get.sync") as mock_api:
             mock_api.return_value = mock_api_response
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, data=None, error=None)
+            mock_api.return_value = api_response(None)
 
-                result = runner.invoke(app, ["resources", "--resource-code", "fake_rock"])
+            result = runner.invoke(app, ["resources", "--resource-code", "fake_rock"])
 
-                assert result.exit_code == 0
-                assert "fake_rock" in result.output
+            assert result.exit_code == 0
+            assert "fake_rock" in result.output
 
     def test_resources_list_invalid_skill(self, runner, mock_client_manager, mock_api_response):
         """Test resources list with an invalid skill (lines 572-577)."""
@@ -2110,16 +1856,15 @@ class TestResourcesEdgeCases:
             mock_data = Mock()
             mock_data.data = [mock_resource]
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                # "invalid_skill" won't match any GatheringSkill enum value
-                result = runner.invoke(app, ["resources", "--skill", "invalid_skill"])
+            # "invalid_skill" won't match any GatheringSkill enum value
+            result = runner.invoke(app, ["resources", "--skill", "invalid_skill"])
 
-                assert result.exit_code == 0
-                # Should not have passed skill kwarg (invalid)
-                call_kwargs = mock_api.call_args.kwargs
-                assert "skill" not in call_kwargs
+            assert result.exit_code == 0
+            # Should not have passed skill kwarg (invalid)
+            call_kwargs = mock_api.call_args.kwargs
+            assert "skill" not in call_kwargs
 
     def test_resources_list_with_min_level(self, runner, mock_client_manager, mock_api_response):
         """Test resources list with min_level (line 580)."""
@@ -2129,14 +1874,13 @@ class TestResourcesEdgeCases:
             mock_data = Mock()
             mock_data.data = []
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["resources", "--level", "5"])
+            result = runner.invoke(app, ["resources", "--level", "5"])
 
-                assert result.exit_code == 0
-                call_kwargs = mock_api.call_args.kwargs
-                assert call_kwargs["min_level"] == 5
+            assert result.exit_code == 0
+            call_kwargs = mock_api.call_args.kwargs
+            assert call_kwargs["min_level"] == 5
 
     def test_resources_list_type_filter_skips_non_matching(self, runner, mock_client_manager, mock_api_response):
         """Test resources list skips resources that don't match type filter (line 599)."""
@@ -2160,184 +1904,116 @@ class TestResourcesEdgeCases:
             mock_data = Mock()
             mock_data.data = [mock_resource_mining, mock_resource_fishing]
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["resources", "--type", "fishing"])
+            result = runner.invoke(app, ["resources", "--type", "fishing"])
 
-                assert result.exit_code == 0
-                assert "Gudgeon Spot" in result.output
-                assert "Copper Rock" not in result.output
+            assert result.exit_code == 0
+            assert "Gudgeon Spot" in result.output
+            assert "Copper Rock" not in result.output
 
     def test_resources_list_with_center_and_radius_filter(self, runner, mock_client_manager, mock_api_response):
         """Test resources list with center location and radius (lines 624-628)."""
         with (
-            patch("artifactsmmo_api_client.api.resources.get_all_resources_resources_get.sync") as mock_api,
-            patch("artifactsmmo_cli.commands.info._find_resource_locations") as mock_find_locs,
+            patch(RESOURCES_SYNC) as mock_api,
+            patch(MAPS_SYNC) as mock_maps,
         ):
-            mock_api.return_value = mock_api_response
+            mock_api.return_value = resources_page([make_resource("copper_rock", "Copper Rock", "mining")])
+            # Location (3, 4) is within radius=3 of center (5, 5)
+            mock_maps.return_value = maps_page([resource_tile(3, 4, "copper_rock")])
 
-            mock_resource = Mock()
-            mock_resource.code = "copper_rock"
-            mock_resource.name = "Copper Rock"
-            mock_resource.skill = "mining"
-            mock_resource.level = 1
-            mock_resource.drops = []
+            result = runner.invoke(app, ["resources", "--location", "5 5", "--radius", "3"])
 
-            mock_data = Mock()
-            mock_data.data = [mock_resource]
-
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
-
-                # Location within radius=3 of center 5,5
-                mock_find_locs.return_value = [{"x": 3, "y": 4, "distance": 0, "center_distance": 3}]
-
-                result = runner.invoke(app, ["resources", "--location", "5 5", "--radius", "3"])
-
-                assert result.exit_code == 0
+            assert result.exit_code == 0
+            assert "(3, 4)" in result.output
 
     def test_resources_list_location_lookup_exception(self, runner, mock_client_manager, mock_api_response):
         """Test resources list silently ignores location lookup exceptions (lines 632-633)."""
-        with (
-            patch("artifactsmmo_api_client.api.resources.get_all_resources_resources_get.sync") as mock_api,
-            patch("artifactsmmo_cli.commands.info._find_resource_locations") as mock_find_locs,
-        ):
-            mock_api.return_value = mock_api_response
-            mock_find_locs.side_effect = httpx.ConnectError("lookup failure")
+        mock_client_manager.get_character.return_value = api_response(SimpleNamespace(x=0, y=0))
 
-            mock_resource = Mock()
-            mock_resource.code = "copper_rock"
-            mock_resource.name = "Copper Rock"
-            mock_resource.skill = "mining"
-            mock_resource.level = 1
-            mock_resource.drops = []
+        with patch(RESOURCES_SYNC) as mock_api:
+            # First call serves the resources list; the location lookup's
+            # follow-up call fails, which the command swallows.
+            mock_api.side_effect = [
+                resources_page([make_resource("copper_rock", "Copper Rock", "mining")]),
+                httpx.ConnectError("lookup failure"),
+            ]
 
-            mock_data = Mock()
-            mock_data.data = [mock_resource]
+            result = runner.invoke(app, ["resources", "--character", "testchar"])
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
-
-                # With character, so location lookup is attempted
-                with patch("artifactsmmo_cli.commands.info.get_character_position") as mock_pos:
-                    mock_pos.return_value = (0, 0)
-                    result = runner.invoke(app, ["resources", "--character", "testchar"])
-
-                # Should not fail — exception is swallowed
-                assert result.exit_code == 0
+            # Should not fail — exception is swallowed
+            assert result.exit_code == 0
 
     def test_resources_list_resource_not_in_locations(self, runner, mock_client_manager, mock_api_response):
         """Test resources list when resource has no location entry (line 676)."""
+        mock_client_manager.get_character.return_value = api_response(SimpleNamespace(x=0, y=0))
+
         with (
-            patch("artifactsmmo_api_client.api.resources.get_all_resources_resources_get.sync") as mock_api,
-            patch("artifactsmmo_cli.commands.info.get_character_position") as mock_get_pos,
-            patch("artifactsmmo_cli.commands.info._find_resource_locations") as mock_find_locs,
+            patch(RESOURCES_SYNC) as mock_api,
+            patch(MAPS_SYNC) as mock_maps,
         ):
-            mock_api.return_value = mock_api_response
-            mock_get_pos.return_value = (0, 0)
-            # No locations returned for this resource
-            mock_find_locs.return_value = []
+            mock_api.return_value = resources_page([make_resource("rare_gem", "Rare Gem", "mining", 10)])
+            # No map tiles carry this resource: no locations found
+            mock_maps.return_value = maps_page([])
 
-            mock_resource = Mock()
-            mock_resource.code = "rare_gem"
-            mock_resource.name = "Rare Gem"
-            mock_resource.skill = "mining"
-            mock_resource.level = 10
-            mock_resource.drops = []
+            result = runner.invoke(app, ["resources", "--character", "testchar"])
 
-            mock_data = Mock()
-            mock_data.data = [mock_resource]
-
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
-
-                result = runner.invoke(app, ["resources", "--character", "testchar"])
-
-                assert result.exit_code == 0
-                assert "Not found" in result.output
+            assert result.exit_code == 0
+            assert "Not found" in result.output
 
     def test_resources_list_center_resource_not_in_locations(self, runner, mock_client_manager, mock_api_response):
         """Test resources list with center when resource not in locations (line 678)."""
         with (
-            patch("artifactsmmo_api_client.api.resources.get_all_resources_resources_get.sync") as mock_api,
-            patch("artifactsmmo_cli.commands.info._find_resource_locations") as mock_find_locs,
+            patch(RESOURCES_SYNC) as mock_api,
+            patch(MAPS_SYNC) as mock_maps,
         ):
-            mock_api.return_value = mock_api_response
-            mock_find_locs.return_value = []
+            mock_api.return_value = resources_page([make_resource("rare_gem", "Rare Gem", "mining", 10)])
+            mock_maps.return_value = maps_page([])
 
-            mock_resource = Mock()
-            mock_resource.code = "rare_gem"
-            mock_resource.name = "Rare Gem"
-            mock_resource.skill = "mining"
-            mock_resource.level = 10
-            mock_resource.drops = []
-
-            mock_data = Mock()
-            mock_data.data = [mock_resource]
-
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
-
-                # Without character, with center
-                # We need center_x set but no char_x so we hit line 678
-                # center_x is set, but since resource_locations will be empty,
-                # filtered_resources will be empty too... use no-radius variant to avoid filter
-                # Actually with center_x set, filtered_resources will be filtered to empty.
-                # To hit line 678 we need: char_x is None, center_x is not None,
-                # resource_code_val NOT in resource_locations
-                # But if center_x is set, filtered_resources removes items not in resource_locations
-                # So we need to reach the row building with item still in filtered_resources
-                # That means center_x must be set WITHOUT filtering (which only happens when center_x is set)
-                # The filter at line 636-641 removes items not in resource_locations when center_x is set.
-                # So line 678 is only reachable when char_x is set but center_x is None -- but that contradicts.
-                # Actually line 678 is in the row-building loop; it's hit when:
-                # resource_code_val NOT in resource_locations AND char_x is None AND center_x is not None
-                # But the filter at 636 would have removed it. So it seems unreachable with this path.
-                # Skip this sub-case — the condition is structurally unreachable.
-                result = runner.invoke(app, ["resources", "--location", "5 5"])
-                assert result.exit_code == 0
+            # Without character, with center
+            # We need center_x set but no char_x so we hit line 678
+            # center_x is set, but since resource_locations will be empty,
+            # filtered_resources will be empty too... use no-radius variant to avoid filter
+            # Actually with center_x set, filtered_resources will be filtered to empty.
+            # To hit line 678 we need: char_x is None, center_x is not None,
+            # resource_code_val NOT in resource_locations
+            # But if center_x is set, filtered_resources removes items not in resource_locations
+            # So we need to reach the row building with item still in filtered_resources
+            # That means center_x must be set WITHOUT filtering (which only happens when center_x is set)
+            # The filter at line 636-641 removes items not in resource_locations when center_x is set.
+            # So line 678 is only reachable when char_x is set but center_x is None -- but that contradicts.
+            # Actually line 678 is in the row-building loop; it's hit when:
+            # resource_code_val NOT in resource_locations AND char_x is None AND center_x is not None
+            # But the filter at 636 would have removed it. So it seems unreachable with this path.
+            # Skip this sub-case — the condition is structurally unreachable.
+            result = runner.invoke(app, ["resources", "--location", "5 5"])
+            assert result.exit_code == 0
 
     def test_resources_list_near_center_title(self, runner, mock_client_manager, mock_api_response):
         """Test resources list title with near center (no radius) (line 693)."""
         with (
-            patch("artifactsmmo_api_client.api.resources.get_all_resources_resources_get.sync") as mock_api,
-            patch("artifactsmmo_cli.commands.info._find_resource_locations") as mock_find_locs,
+            patch(RESOURCES_SYNC) as mock_api,
+            patch(MAPS_SYNC) as mock_maps,
         ):
-            mock_api.return_value = mock_api_response
+            mock_api.return_value = resources_page([make_resource("copper_rock", "Copper Rock", "mining")])
+            mock_maps.return_value = maps_page([resource_tile(4, 4, "copper_rock")])
 
-            mock_resource = Mock()
-            mock_resource.code = "copper_rock"
-            mock_resource.name = "Copper Rock"
-            mock_resource.skill = "mining"
-            mock_resource.level = 1
-            mock_resource.drops = []
+            result = runner.invoke(app, ["resources", "--location", "5 5"])
 
-            mock_data = Mock()
-            mock_data.data = [mock_resource]
-
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
-
-                mock_find_locs.return_value = [{"x": 4, "y": 4, "distance": 0, "center_distance": 2}]
-
-                result = runner.invoke(app, ["resources", "--location", "5 5"])
-
-                assert result.exit_code == 0
-                assert "Near 5, 5" in result.output
+            assert result.exit_code == 0
+            assert "Near 5, 5" in result.output
 
     def test_resources_list_api_failure(self, runner, mock_client_manager, mock_api_response):
         """Test resources list when API fails (lines 698-702)."""
         with patch("artifactsmmo_api_client.api.resources.get_all_resources_resources_get.sync") as mock_api:
             mock_api.return_value = mock_api_response
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, data=None, error="timeout")
+            mock_api.return_value = api_error(500, "timeout")
 
-                result = runner.invoke(app, ["resources"])
+            result = runner.invoke(app, ["resources"])
 
-                assert result.exit_code == 0
-                assert "timeout" in result.output
+            assert result.exit_code == 0
+            assert "timeout" in result.output
 
     def test_resources_list_no_resources_in_list(self, runner, mock_client_manager, mock_api_response):
         """Test resources list with empty data list (line 700)."""
@@ -2347,13 +2023,12 @@ class TestResourcesEdgeCases:
             mock_data = Mock()
             mock_data.data = []
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["resources"])
+            result = runner.invoke(app, ["resources"])
 
-                assert result.exit_code == 0
-                assert "No resources found" in result.output
+            assert result.exit_code == 0
+            assert "No resources found" in result.output
 
 
 class TestAchievementsEdgeCases:
@@ -2364,13 +2039,12 @@ class TestAchievementsEdgeCases:
         with patch("artifactsmmo_api_client.api.badges.get_badge_badges_code_get.sync") as mock_api:
             mock_api.return_value = mock_api_response
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, data=None, error=None)
+            mock_api.return_value = api_response(None)
 
-                result = runner.invoke(app, ["achievements", "--achievement-code", "fake_badge"])
+            result = runner.invoke(app, ["achievements", "--achievement-code", "fake_badge"])
 
-                assert result.exit_code == 0
-                assert "fake_badge" in result.output
+            assert result.exit_code == 0
+            assert "fake_badge" in result.output
 
     def test_achievements_list_long_description_truncated(self, runner, mock_client_manager, mock_api_response):
         """Test achievements list truncates long descriptions (line 756)."""
@@ -2385,14 +2059,13 @@ class TestAchievementsEdgeCases:
             mock_data = Mock()
             mock_data.data = [mock_badge]
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["achievements"])
+            result = runner.invoke(app, ["achievements"])
 
-                assert result.exit_code == 0
-                # Rich truncates with unicode ellipsis or ASCII ellipsis depending on terminal
-                assert "…" in result.output or "..." in result.output
+            assert result.exit_code == 0
+            # Rich truncates with unicode ellipsis or ASCII ellipsis depending on terminal
+            assert "…" in result.output or "..." in result.output
 
     def test_achievements_list_no_badges(self, runner, mock_client_manager, mock_api_response):
         """Test achievements list with empty data (lines 763-764)."""
@@ -2402,26 +2075,24 @@ class TestAchievementsEdgeCases:
             mock_data = Mock()
             mock_data.data = []
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["achievements"])
+            result = runner.invoke(app, ["achievements"])
 
-                assert result.exit_code == 0
-                assert "No achievements found" in result.output
+            assert result.exit_code == 0
+            assert "No achievements found" in result.output
 
     def test_achievements_list_api_failure(self, runner, mock_client_manager, mock_api_response):
         """Test achievements list when API fails (lines 765-770)."""
         with patch("artifactsmmo_api_client.api.badges.get_all_badges_badges_get.sync") as mock_api:
             mock_api.return_value = mock_api_response
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, data=None, error="badges error")
+            mock_api.return_value = api_error(500, "badges error")
 
-                result = runner.invoke(app, ["achievements"])
+            result = runner.invoke(app, ["achievements"])
 
-                assert result.exit_code == 0
-                assert "badges error" in result.output
+            assert result.exit_code == 0
+            assert "badges error" in result.output
 
 
 class TestLeaderboardEdgeCases:
@@ -2437,13 +2108,12 @@ class TestLeaderboardEdgeCases:
             mock_data = Mock()
             mock_data.data = []
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["leaderboard", "characters"])
+            result = runner.invoke(app, ["leaderboard", "characters"])
 
-                assert result.exit_code == 0
-                assert "No leaderboard data found" in result.output
+            assert result.exit_code == 0
+            assert "No leaderboard data found" in result.output
 
     def test_leaderboard_api_failure(self, runner, mock_client_manager, mock_api_response):
         """Test leaderboard when API fails (line 837)."""
@@ -2452,13 +2122,12 @@ class TestLeaderboardEdgeCases:
         ) as mock_api:
             mock_api.return_value = mock_api_response
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, data=None, error="lb error")
+            mock_api.return_value = api_error(500, "lb error")
 
-                result = runner.invoke(app, ["leaderboard", "characters"])
+            result = runner.invoke(app, ["leaderboard", "characters"])
 
-                assert result.exit_code == 0
-                assert "lb error" in result.output
+            assert result.exit_code == 0
+            assert "lb error" in result.output
 
 
 class TestEventsEdgeCases:
@@ -2472,26 +2141,24 @@ class TestEventsEdgeCases:
             mock_data = Mock()
             mock_data.data = []
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["events"])
+            result = runner.invoke(app, ["events"])
 
-                assert result.exit_code == 0
-                assert "No events found" in result.output
+            assert result.exit_code == 0
+            assert "No events found" in result.output
 
     def test_events_api_failure(self, runner, mock_client_manager, mock_api_response):
         """Test events when API fails (lines 889-894)."""
         with patch("artifactsmmo_api_client.api.events.get_all_active_events_events_active_get.sync") as mock_api:
             mock_api.return_value = mock_api_response
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, data=None, error="events down")
+            mock_api.return_value = api_error(500, "events down")
 
-                result = runner.invoke(app, ["events"])
+            result = runner.invoke(app, ["events"])
 
-                assert result.exit_code == 0
-                assert "events down" in result.output
+            assert result.exit_code == 0
+            assert "events down" in result.output
 
 
 class TestMapEdgeCases:
@@ -2509,26 +2176,24 @@ class TestMapEdgeCases:
             mock_map.skin = "grass"
             mock_map.content = None
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_map)
+            mock_api.return_value = api_response(mock_map)
 
-                result = runner.invoke(app, ["map", "--x", "0", "--y", "0"])
+            result = runner.invoke(app, ["map", "--x", "0", "--y", "0"])
 
-                assert result.exit_code == 0
-                assert "Empty Field" in result.output
+            assert result.exit_code == 0
+            assert "Empty Field" in result.output
 
     def test_map_list_api_failure(self, runner, mock_client_manager, mock_api_response):
         """Test map list when API fails (lines 978-983)."""
         with patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_api:
             mock_api.return_value = mock_api_response
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, data=None, error="map error")
+            mock_api.return_value = api_error(500, "map error")
 
-                result = runner.invoke(app, ["map"])
+            result = runner.invoke(app, ["map"])
 
-                assert result.exit_code == 0
-                assert "map error" in result.output
+            assert result.exit_code == 0
+            assert "map error" in result.output
 
 
 class TestNPCsAdditionalCoverage:
@@ -2559,14 +2224,13 @@ class TestNPCsAdditionalCoverage:
             mock_data.data = [mock_map_bank, mock_map_task]
             mock_data.pages = 1
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["npcs", "--npc-type", "bank"])
+            result = runner.invoke(app, ["npcs", "--npc-type", "bank"])
 
-                assert result.exit_code == 0
-                assert "Bank" in result.output
-                assert "Task Master" not in result.output
+            assert result.exit_code == 0
+            assert "Bank" in result.output
+            assert "Task Master" not in result.output
 
     def test_npcs_pagination_breaks_at_end(self, runner, mock_client_manager, mock_api_response):
         """Test npcs stops pagination at last page (line 1043)."""
@@ -2585,14 +2249,13 @@ class TestNPCsAdditionalCoverage:
             mock_data.data = [mock_map]
             mock_data.pages = 1  # current_page >= pages → break
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["npcs"])
+            result = runner.invoke(app, ["npcs"])
 
-                assert result.exit_code == 0
-                # Should only call API once (not loop beyond page 1)
-                assert mock_api.call_count == 1
+            assert result.exit_code == 0
+            # Should only call API once (not loop beyond page 1)
+            assert mock_api.call_count == 1
 
     def test_npcs_type_filter_in_title(self, runner, mock_client_manager, mock_api_response):
         """Test npcs title includes type filter (line 1073)."""
@@ -2611,13 +2274,12 @@ class TestNPCsAdditionalCoverage:
             mock_data.data = [mock_map]
             mock_data.pages = 1
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["npcs", "--npc-type", "bank"])
+            result = runner.invoke(app, ["npcs", "--npc-type", "bank"])
 
-                assert result.exit_code == 0
-                assert "Type: bank" in result.output
+            assert result.exit_code == 0
+            assert "Type: bank" in result.output
 
     def test_npcs_no_npcs_on_page(self, runner, mock_client_manager, mock_api_response):
         """Test npcs when no NPCs on the requested page (line 1079)."""
@@ -2636,14 +2298,13 @@ class TestNPCsAdditionalCoverage:
             mock_data.data = [mock_map]
             mock_data.pages = 1
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                # Request page 999 — no NPCs will be on that page
-                result = runner.invoke(app, ["npcs", "--page", "999"])
+            # Request page 999 — no NPCs will be on that page
+            result = runner.invoke(app, ["npcs", "--page", "999"])
 
-                assert result.exit_code == 0
-                assert "No NPCs found on page 999" in result.output
+            assert result.exit_code == 0
+            assert "No NPCs found on page 999" in result.output
 
     def test_npc_api_no_data(self, runner, mock_client_manager, mock_api_response):
         """Test npc command stops when API returns no data (line 1112)."""
@@ -2654,13 +2315,12 @@ class TestNPCsAdditionalCoverage:
             mock_data.data = []
             mock_data.pages = 1
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["npc", "blacksmith"])
+            result = runner.invoke(app, ["npc", "blacksmith"])
 
-                assert result.exit_code == 0
-                assert "blacksmith" in result.output
+            assert result.exit_code == 0
+            assert "blacksmith" in result.output
 
     def test_npc_pagination_breaks_at_end(self, runner, mock_client_manager, mock_api_response):
         """Test npc search stops at last page (line 1143)."""
@@ -2679,26 +2339,23 @@ class TestNPCsAdditionalCoverage:
             mock_data.data = [mock_map]
             mock_data.pages = 1  # triggers break
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["npc", "bank"])
+            result = runner.invoke(app, ["npc", "bank"])
 
-                assert result.exit_code == 0
-                assert mock_api.call_count == 1
+            assert result.exit_code == 0
+            assert mock_api.call_count == 1
 
     def test_npc_exception_handler(self, runner, mock_client_manager):
         """Test npc command handles exceptions gracefully (lines 1177-1180)."""
         with patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_api:
-            mock_api.side_effect = UnexpectedStatus(status_code=503, content=b"connection failed")
+            mock_api.side_effect = unexpected_status(503, "connection failed")
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_error") as mock_err:
-                mock_err.return_value = Mock(error="connection failed")
 
-                result = runner.invoke(app, ["npc", "bank"])
+            result = runner.invoke(app, ["npc", "bank"])
 
-                assert result.exit_code == 1
-                assert "connection failed" in result.output
+            assert result.exit_code == 1
+            assert "connection failed" in result.output
 
 
 
@@ -2707,20 +2364,12 @@ class TestFindResourceLocationsEdgeCases:
 
     def test_find_resource_locations_no_data_breaks(self, mock_client_manager):
         """Test _find_resource_locations stops when no data (lines 1490, 1494)."""
-        mock_response = Mock()
-
-        mock_maps_no_data = Mock()
-        mock_maps_no_data.data = []
-        mock_maps_no_data.pages = 1
-
         with (
-            patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_map_api,
-            patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle,
-            patch("artifactsmmo_cli.commands.info._get_resource_data") as mock_get_data,
+            patch(MAPS_SYNC) as mock_map_api,
+            patch(RESOURCES_SYNC) as mock_resources,
         ):
-            mock_map_api.return_value = mock_response
-            mock_handle.return_value = Mock(success=True, data=mock_maps_no_data)
-            mock_get_data.return_value = []
+            mock_map_api.return_value = maps_page([])
+            mock_resources.return_value = resources_page([])
 
             result = _find_resource_locations("copper")
 
@@ -2728,57 +2377,30 @@ class TestFindResourceLocationsEdgeCases:
 
     def test_find_resource_locations_api_failure_breaks(self, mock_client_manager):
         """Test _find_resource_locations stops when API fails (line 1490)."""
-        mock_response = Mock()
-
         with (
-            patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_map_api,
-            patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle,
-            patch("artifactsmmo_cli.commands.info._get_resource_data") as mock_get_data,
+            patch(MAPS_SYNC) as mock_map_api,
+            patch(RESOURCES_SYNC) as mock_resources,
         ):
-            mock_map_api.return_value = mock_response
-            mock_handle.return_value = Mock(success=False, data=None)
-            mock_get_data.return_value = []
+            mock_map_api.return_value = api_error(500, "maps unavailable")
+            mock_resources.return_value = resources_page([])
 
             result = _find_resource_locations("copper")
 
             assert result == []
+            mock_map_api.assert_called_once()
 
     def test_find_resource_locations_pagination(self, mock_client_manager):
         """Test _find_resource_locations follows pagination (line 1539)."""
-        mock_response = Mock()
-
-        mock_content = Mock()
-        mock_content.code = "copper_rock"
-        mock_content.type = "resource"
-
-        mock_map_item = Mock()
-        mock_map_item.x = 5
-        mock_map_item.y = 5
-        mock_map_item.content = mock_content
-
-        # Page 1 has pages=2 so it will loop
-        mock_maps_p1 = Mock()
-        mock_maps_p1.data = [mock_map_item]
-        mock_maps_p1.pages = 2
-
-        # Page 2 has pages=2 so current_page >= pages → break
-        mock_maps_p2 = Mock()
-        mock_maps_p2.data = []
-        mock_maps_p2.pages = 2
-
-        resource_data = [{"code": "copper_rock", "name": "Copper Rock", "skill": "mining", "level": 1}]
-
         with (
-            patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_map_api,
-            patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle,
-            patch("artifactsmmo_cli.commands.info._get_resource_data") as mock_get_data,
+            patch(MAPS_SYNC) as mock_map_api,
+            patch(RESOURCES_SYNC) as mock_resources,
         ):
-            mock_map_api.return_value = mock_response
-            mock_handle.side_effect = [
-                Mock(success=True, data=mock_maps_p1),
-                Mock(success=True, data=mock_maps_p2),
+            # Page 1 has pages=2 so it will loop; page 2 hits current_page >= pages → break
+            mock_map_api.side_effect = [
+                maps_page([resource_tile(5, 5, "copper_rock")], pages=2),
+                maps_page([], pages=2),
             ]
-            mock_get_data.return_value = resource_data
+            mock_resources.return_value = resources_page([make_resource("copper_rock", "Copper Rock", "mining")])
 
             result = _find_resource_locations("copper")
 
@@ -2791,41 +2413,20 @@ class TestGetResourceDataEdgeCases:
 
     def test_get_resource_data_invalid_skill_type(self, mock_client_manager):
         """Test _get_resource_data with invalid resource_type (lines 1566-1570)."""
-        mock_response = Mock()
-
-        mock_resource = Mock()
-        mock_resource.code = "copper_rock"
-        mock_resource.name = "Copper Rock"
-        mock_resource.skill = "mining"
-        mock_resource.level = 1
-
-        mock_resources = Mock()
-        mock_resources.data = [mock_resource]
-        mock_resources.pages = 1
-
-        with (
-            patch("artifactsmmo_api_client.api.resources.get_all_resources_resources_get.sync") as mock_api,
-            patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle,
-        ):
-            mock_api.return_value = mock_response
-            mock_handle.return_value = Mock(success=True, data=mock_resources)
+        with patch(RESOURCES_SYNC) as mock_api:
+            mock_api.return_value = resources_page([make_resource("copper_rock", "Copper Rock", "mining")])
 
             # Pass invalid resource_type that can't be converted to GatheringSkill
             result = _get_resource_data("copper", resource_type="not_a_real_skill")
 
             # Should still work, just without skill filter
             assert isinstance(result, list)
+            assert result[0]["code"] == "copper_rock"
 
     def test_get_resource_data_api_failure(self, mock_client_manager):
         """Test _get_resource_data stops when API fails (lines 1577)."""
-        mock_response = Mock()
-
-        with (
-            patch("artifactsmmo_api_client.api.resources.get_all_resources_resources_get.sync") as mock_api,
-            patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle,
-        ):
-            mock_api.return_value = mock_response
-            mock_handle.return_value = Mock(success=False, data=None)
+        with patch(RESOURCES_SYNC) as mock_api:
+            mock_api.return_value = api_error(500, "resources unavailable")
 
             result = _get_resource_data("copper")
 
@@ -2833,17 +2434,8 @@ class TestGetResourceDataEdgeCases:
 
     def test_get_resource_data_no_data_attribute(self, mock_client_manager):
         """Test _get_resource_data stops when data has no .data (line 1581)."""
-        mock_response = Mock()
-
-        mock_resource_list = Mock()
-        mock_resource_list.data = []  # empty list → break
-
-        with (
-            patch("artifactsmmo_api_client.api.resources.get_all_resources_resources_get.sync") as mock_api,
-            patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle,
-        ):
-            mock_api.return_value = mock_response
-            mock_handle.return_value = Mock(success=True, data=mock_resource_list)
+        with patch(RESOURCES_SYNC) as mock_api:
+            mock_api.return_value = resources_page([])  # empty list → break
 
             result = _get_resource_data("copper")
 
@@ -2851,30 +2443,10 @@ class TestGetResourceDataEdgeCases:
 
     def test_get_resource_data_pagination(self, mock_client_manager):
         """Test _get_resource_data follows pagination (line 1605)."""
-        mock_response = Mock()
-
-        mock_resource = Mock()
-        mock_resource.code = "iron_rock"
-        mock_resource.name = "Iron Rock"
-        mock_resource.skill = "mining"
-        mock_resource.level = 5
-
-        mock_resource_list_p1 = Mock()
-        mock_resource_list_p1.data = [mock_resource]
-        mock_resource_list_p1.pages = 2  # there is a page 2
-
-        mock_resource_list_p2 = Mock()
-        mock_resource_list_p2.data = []
-        mock_resource_list_p2.pages = 2  # current_page >= pages → break
-
-        with (
-            patch("artifactsmmo_api_client.api.resources.get_all_resources_resources_get.sync") as mock_api,
-            patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle,
-        ):
-            mock_api.return_value = mock_response
-            mock_handle.side_effect = [
-                Mock(success=True, data=mock_resource_list_p1),
-                Mock(success=True, data=mock_resource_list_p2),
+        with patch(RESOURCES_SYNC) as mock_api:
+            mock_api.side_effect = [
+                resources_page([make_resource("iron_rock", "Iron Rock", "mining", 5)], pages=2),
+                resources_page([], pages=2),  # current_page >= pages → break
             ]
 
             result = _get_resource_data("iron")
@@ -3056,54 +2628,46 @@ class TestExceptionHandlers:
     def test_achievements_exception_handler(self, runner, mock_client_manager):
         """Test achievements command exception handler (lines 767-770)."""
         with patch("artifactsmmo_api_client.api.badges.get_all_badges_badges_get.sync") as mock_api:
-            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"badge API crash")
+            mock_api.side_effect = unexpected_status(500, "badge API crash")
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_error") as mock_err:
-                mock_err.return_value = Mock(error="badge API crash")
 
-                result = runner.invoke(app, ["achievements"])
+            result = runner.invoke(app, ["achievements"])
 
-                assert result.exit_code == 1
-                assert "badge API crash" in result.output
+            assert result.exit_code == 1
+            assert "badge API crash" in result.output
 
     def test_events_exception_handler(self, runner, mock_client_manager):
         """Test events command exception handler (lines 891-894)."""
         with patch("artifactsmmo_api_client.api.events.get_all_active_events_events_active_get.sync") as mock_api:
-            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"events crash")
+            mock_api.side_effect = unexpected_status(500, "events crash")
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_error") as mock_err:
-                mock_err.return_value = Mock(error="events crash")
 
-                result = runner.invoke(app, ["events"])
+            result = runner.invoke(app, ["events"])
 
-                assert result.exit_code == 1
-                assert "events crash" in result.output
+            assert result.exit_code == 1
+            assert "events crash" in result.output
 
     def test_map_exception_handler(self, runner, mock_client_manager):
         """Test map command exception handler (lines 980-983)."""
         with patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_api:
-            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"map crash")
+            mock_api.side_effect = unexpected_status(500, "map crash")
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_error") as mock_err:
-                mock_err.return_value = Mock(error="map crash")
 
-                result = runner.invoke(app, ["map"])
+            result = runner.invoke(app, ["map"])
 
-                assert result.exit_code == 1
-                assert "map crash" in result.output
+            assert result.exit_code == 1
+            assert "map crash" in result.output
 
     def test_monsters_exception_handler(self, runner, mock_client_manager):
         """monsters list command outer exception handler (lines 327-330)."""
         with patch("artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get.sync") as mock_api:
-            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"monsters crash")
+            mock_api.side_effect = unexpected_status(500, "monsters crash")
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_error") as mock_err:
-                mock_err.return_value = Mock(error="monsters crash")
 
-                result = runner.invoke(app, ["monsters"])
+            result = runner.invoke(app, ["monsters"])
 
-                assert result.exit_code == 1
-                assert "monsters crash" in result.output
+            assert result.exit_code == 1
+            assert "monsters crash" in result.output
 
     def test_monster_list_search_exception_handler(self, runner, mock_client_manager):
         """monster command outer handler when the name-search API raises (lines 401-404)."""
@@ -3112,60 +2676,52 @@ class TestExceptionHandlers:
             patch("artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get.sync") as mock_list,
         ):
             # Exact-code lookup misses; inner except swallows and falls through to list search.
-            mock_code.side_effect = UnexpectedStatus(status_code=404, content=b"no code")
+            mock_code.side_effect = unexpected_status(404, "no code")
             # List search raises -> reaches the outer handler.
-            mock_list.side_effect = UnexpectedStatus(status_code=500, content=b"monster search crash")
+            mock_list.side_effect = unexpected_status(500, "monster search crash")
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_error") as mock_err:
-                mock_err.return_value = Mock(error="monster search crash")
 
-                result = runner.invoke(app, ["monster", "wolf"])
+            result = runner.invoke(app, ["monster", "wolf"])
 
-                assert result.exit_code == 1
-                assert "monster search crash" in result.output
+            assert result.exit_code == 1
+            assert "monster search crash" in result.output
 
     def test_resources_exception_handler(self, runner, mock_client_manager):
         """resources list command outer exception handler (lines 711-713)."""
         with patch("artifactsmmo_api_client.api.resources.get_all_resources_resources_get.sync") as mock_api:
-            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"resources crash")
+            mock_api.side_effect = unexpected_status(500, "resources crash")
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_error") as mock_err:
-                mock_err.return_value = Mock(error="resources crash")
 
-                result = runner.invoke(app, ["resources"])
+            result = runner.invoke(app, ["resources"])
 
-                assert result.exit_code == 1
-                assert "resources crash" in result.output
+            assert result.exit_code == 1
+            assert "resources crash" in result.output
 
     def test_leaderboard_exception_handler(self, runner, mock_client_manager):
         """leaderboard command outer exception handler (lines 831-833)."""
         with patch(
             "artifactsmmo_api_client.api.leaderboard.get_characters_leaderboard_leaderboard_characters_get.sync"
         ) as mock_api:
-            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"leaderboard crash")
+            mock_api.side_effect = unexpected_status(500, "leaderboard crash")
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_error") as mock_err:
-                mock_err.return_value = Mock(error="leaderboard crash")
 
-                result = runner.invoke(app, ["leaderboard"])
+            result = runner.invoke(app, ["leaderboard"])
 
-                assert result.exit_code == 1
-                assert "leaderboard crash" in result.output
+            assert result.exit_code == 1
+            assert "leaderboard crash" in result.output
 
     def test_nearest_exception_handler(self, runner, mock_client_manager):
         """nearest command outer handler when the resource API raises (lines 1272-1274)."""
         # _get_resource_data calls get_all_resources_resources_get.sync, which raises and
         # propagates up to find_nearest_resource's outer handler.
         with patch("artifactsmmo_api_client.api.resources.get_all_resources_resources_get.sync") as mock_api:
-            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"nearest crash")
+            mock_api.side_effect = unexpected_status(500, "nearest crash")
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_error") as mock_err:
-                mock_err.return_value = Mock(error="nearest crash")
 
-                result = runner.invoke(app, ["nearest", "iron"])
+            result = runner.invoke(app, ["nearest", "iron"])
 
-                assert result.exit_code == 1
-                assert "nearest crash" in result.output
+            assert result.exit_code == 1
+            assert "nearest crash" in result.output
 
 
 class TestNPCsPaginationLoop:
@@ -3176,14 +2732,13 @@ class TestNPCsPaginationLoop:
         with patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_api:
             mock_api.return_value = mock_api_response
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, data=None, error=None)
+            mock_api.return_value = api_error(500, "not found")
 
-                result = runner.invoke(app, ["npcs"])
+            result = runner.invoke(app, ["npcs"])
 
-                assert result.exit_code == 0
-                # API failure → no NPC data → error message, no fallback
-                assert "No NPC content data found in map API" in result.output
+            assert result.exit_code == 0
+            # API failure → no NPC data → error message, no fallback
+            assert "No NPC content data found in map API" in result.output
 
     def test_npcs_increments_page_when_more_pages_exist(self, runner, mock_client_manager, mock_api_response):
         """Test npcs increments current_page when pages > 1 (line 1043)."""
@@ -3208,30 +2763,28 @@ class TestNPCsPaginationLoop:
             mock_data_p2.data = []
             mock_data_p2.pages = 2
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.side_effect = [
-                    Mock(success=True, data=mock_data_p1),
-                    Mock(success=True, data=mock_data_p2),
-                ]
+            mock_api.side_effect = [
+                api_response(mock_data_p1),
+                api_response(mock_data_p2),
+            ]
 
-                result = runner.invoke(app, ["npcs"])
+            result = runner.invoke(app, ["npcs"])
 
-                assert result.exit_code == 0
-                assert mock_api.call_count == 2
+            assert result.exit_code == 0
+            assert mock_api.call_count == 2
 
     def test_npc_api_failure_in_loop(self, runner, mock_client_manager, mock_api_response):
         """Test npc stops loop on API failure and shows not-found error (line 1112)."""
         with patch("artifactsmmo_api_client.api.maps.get_all_maps_maps_get.sync") as mock_api:
             mock_api.return_value = mock_api_response
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, data=None, error=None)
+            mock_api.return_value = api_error(500, "not found")
 
-                result = runner.invoke(app, ["npc", "bank"])
+            result = runner.invoke(app, ["npc", "bank"])
 
-                assert result.exit_code == 0
-                # API failure → NPC not found → error message, no fallback
-                assert "not found" in result.output
+            assert result.exit_code == 0
+            # API failure → NPC not found → error message, no fallback
+            assert "not found" in result.output
 
     def test_npc_increments_page_when_more_pages_exist(self, runner, mock_client_manager, mock_api_response):
         """Test npc increments current_page when pages > 1 (line 1143)."""
@@ -3256,17 +2809,16 @@ class TestNPCsPaginationLoop:
             mock_data_p2.data = []
             mock_data_p2.pages = 2
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.side_effect = [
-                    Mock(success=True, data=mock_data_p1),
-                    Mock(success=True, data=mock_data_p2),
-                ]
+            mock_api.side_effect = [
+                api_response(mock_data_p1),
+                api_response(mock_data_p2),
+            ]
 
-                # "dragon" won't match bank NPC
-                result = runner.invoke(app, ["npc", "dragon"])
+            # "dragon" won't match bank NPC
+            result = runner.invoke(app, ["npc", "dragon"])
 
-                assert result.exit_code == 0
-                assert mock_api.call_count == 2
+            assert result.exit_code == 0
+            assert mock_api.call_count == 2
 
 
 
@@ -3299,13 +2851,12 @@ class TestDisplayMonsterDetails:
             mock_monster.res_air = 0
             mock_monster.drops = [mock_drop]
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_monster)
+            mock_api.return_value = api_response(mock_monster)
 
-                result = runner.invoke(app, ["monster", "dragon"])
+            result = runner.invoke(app, ["monster", "dragon"])
 
-                assert result.exit_code == 0
-                assert "dragon_scale" in result.output
+            assert result.exit_code == 0
+            assert "dragon_scale" in result.output
 
 
 class TestResourcesValidSkill:
@@ -3326,15 +2877,14 @@ class TestResourcesValidSkill:
             mock_data = Mock()
             mock_data.data = [mock_resource]
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["resources", "--skill", "mining"])
+            result = runner.invoke(app, ["resources", "--skill", "mining"])
 
-                assert result.exit_code == 0
-                # Valid skill should have been passed as enum in kwargs
-                call_kwargs = mock_api.call_args.kwargs
-                assert "skill" in call_kwargs
+            assert result.exit_code == 0
+            # Valid skill should have been passed as enum in kwargs
+            call_kwargs = mock_api.call_args.kwargs
+            assert "skill" in call_kwargs
 
 
 class TestResourceSpecificLocationException:
@@ -3342,27 +2892,19 @@ class TestResourceSpecificLocationException:
 
     def test_resources_specific_location_exception_swallowed(self, runner, mock_client_manager, mock_api_response):
         """Test resource specific silently ignores location lookup exception (lines 549-550)."""
+        mock_client_manager.get_character.return_value = api_response(SimpleNamespace(x=0, y=0))
+
         with (
             patch("artifactsmmo_api_client.api.resources.get_resource_resources_code_get.sync") as mock_api,
-            patch("artifactsmmo_cli.commands.info.get_character_position") as mock_get_pos,
-            patch("artifactsmmo_cli.commands.info._find_resource_locations") as mock_find_locs,
+            patch(RESOURCES_SYNC) as mock_all_resources,
         ):
-            mock_api.return_value = mock_api_response
-            mock_get_pos.return_value = (0, 0)
-            mock_find_locs.side_effect = httpx.ConnectError("location crash")
+            mock_api.return_value = api_response(make_resource("copper_rock", "Copper Rock", "mining"))
+            # The location lookup's resources-paging call crashes; the command
+            # swallows the error and still renders the resource.
+            mock_all_resources.side_effect = httpx.ConnectError("location crash")
 
-            mock_resource = Mock()
-            mock_resource.code = "copper_rock"
-            mock_resource.name = "Copper Rock"
-            mock_resource.skill = "mining"
-            mock_resource.level = 1
-            mock_resource.drops = []
+            result = runner.invoke(app, ["resources", "--resource-code", "copper_rock", "--character", "testchar"])
 
-            with patch("artifactsmmo_cli.commands.info.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_resource)
-
-                result = runner.invoke(app, ["resources", "--resource-code", "copper_rock", "--character", "testchar"])
-
-                # Exception is swallowed; command succeeds
-                assert result.exit_code == 0
-                assert "copper_rock" in result.output
+            # Exception is swallowed; command succeeds
+            assert result.exit_code == 0
+            assert "copper_rock" in result.output

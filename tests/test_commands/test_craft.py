@@ -2,114 +2,74 @@
 
 from unittest.mock import Mock, patch
 
-import pytest
-from artifactsmmo_api_client.errors import UnexpectedStatus
 from artifactsmmo_api_client.types import UNSET
-from typer.testing import CliRunner
 
 from artifactsmmo_cli.commands.craft import app
-
-
-@pytest.fixture
-def runner():
-    """Create a CLI runner for testing."""
-    return CliRunner()
-
-
-@pytest.fixture
-def mock_client_manager():
-    """Mock the ClientManager."""
-    with patch("artifactsmmo_cli.commands.craft.ClientManager") as mock:
-        mock_instance = Mock()
-        mock.return_value = mock_instance
-        mock_instance.client = Mock()
-        mock_instance.api = Mock()
-        yield mock_instance
-
-
-@pytest.fixture
-def mock_api_response():
-    """Mock API response."""
-    mock_response = Mock()
-    mock_response.status_code = 200
-    return mock_response
+from tests.test_commands.conftest import api_error, api_response, cooldown_status, unexpected_status
 
 
 class TestCraftCommands:
     """Test craft command functionality."""
 
-    def test_craft_success(self, runner, mock_client_manager, mock_api_response):
+    def test_craft_success(self, runner, stub_api):
         """Test successful craft command."""
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_crafting_post.sync"
         ) as mock_api:
-            mock_api.return_value = mock_api_response
+            mock_api.return_value = api_response(Mock())
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, message="Crafting completed")
+            result = runner.invoke(app, ["craft", "testchar", "iron_sword"])
 
-                result = runner.invoke(app, ["craft", "testchar", "iron_sword"])
+            assert result.exit_code == 0
+            assert "Crafted 1x iron_sword" in result.stdout
+            mock_api.assert_called_once()
 
-                assert result.exit_code == 0
-                assert "Crafting completed" in result.stdout
-                mock_api.assert_called_once()
-
-    def test_craft_with_quantity(self, runner, mock_client_manager, mock_api_response):
+    def test_craft_with_quantity(self, runner, stub_api):
         """Test craft command with quantity."""
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_crafting_post.sync"
         ) as mock_api:
-            mock_api.return_value = mock_api_response
+            mock_api.return_value = api_response(Mock())
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, message="Crafting completed")
+            result = runner.invoke(app, ["craft", "testchar", "iron_sword", "--quantity", "5"])
 
-                result = runner.invoke(app, ["craft", "testchar", "iron_sword", "--quantity", "5"])
-
-                assert result.exit_code == 0
-                assert "Crafting completed" in result.stdout
+            assert result.exit_code == 0
+            assert "Crafted 5x iron_sword" in result.stdout
+            assert mock_api.call_args.kwargs["body"].quantity == 5
 
     def test_craft_validation_error(self, runner):
         """Test craft with invalid input."""
         result = runner.invoke(app, ["craft", "", "iron_sword"])
         assert result.exit_code == 2
 
-    def test_recycle_success(self, runner, mock_client_manager, mock_api_response):
+    def test_recycle_success(self, runner, stub_api):
         """Test successful recycle command."""
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_recycling_my_name_action_recycling_post.sync"
         ) as mock_api:
-            mock_api.return_value = mock_api_response
+            mock_api.return_value = api_response(Mock())
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, message="Recycling completed")
+            result = runner.invoke(app, ["recycle", "testchar", "iron_sword"])
 
-                result = runner.invoke(app, ["recycle", "testchar", "iron_sword"])
+            assert result.exit_code == 0
+            assert "Recycled 1x iron_sword" in result.stdout
+            mock_api.assert_called_once()
 
-                assert result.exit_code == 0
-                assert "Recycling completed" in result.stdout
-                mock_api.assert_called_once()
-
-    def test_recycle_with_quantity(self, runner, mock_client_manager, mock_api_response):
+    def test_recycle_with_quantity(self, runner, stub_api):
         """Test recycle command with quantity."""
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_recycling_my_name_action_recycling_post.sync"
         ) as mock_api:
-            mock_api.return_value = mock_api_response
+            mock_api.return_value = api_response(Mock())
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, message="Recycling completed")
+            result = runner.invoke(app, ["recycle", "testchar", "iron_sword", "--quantity", "3"])
 
-                result = runner.invoke(app, ["recycle", "testchar", "iron_sword", "--quantity", "3"])
+            assert result.exit_code == 0
+            assert "Recycled 3x iron_sword" in result.stdout
 
-                assert result.exit_code == 0
-                assert "Recycling completed" in result.stdout
-
-    def test_recipes_success(self, runner, mock_client_manager, mock_api_response):
+    def test_recipes_success(self, runner, stub_api):
         """Test successful recipes command."""
         with patch("artifactsmmo_api_client.api.items.get_all_items_items_get.sync") as mock_api:
-            mock_api.return_value = mock_api_response
-
             # Mock craftable item
             mock_item = Mock()
             mock_item.code = "iron_sword"
@@ -121,32 +81,27 @@ class TestCraftCommands:
             mock_data = Mock()
             mock_data.data = [mock_item]
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["recipes"])
+            result = runner.invoke(app, ["recipes"])
 
-                assert result.exit_code == 0
-                mock_api.assert_called_once()
+            assert result.exit_code == 0
+            mock_api.assert_called_once()
+            assert "iron_sword" in result.stdout
 
-    def test_recipes_with_filters(self, runner, mock_client_manager, mock_api_response):
+    def test_recipes_with_filters(self, runner, stub_api):
         """Test recipes command with filters."""
         with patch("artifactsmmo_api_client.api.items.get_all_items_items_get.sync") as mock_api:
-            mock_api.return_value = mock_api_response
+            mock_api.return_value = api_response(Mock(data=[]))
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=Mock(data=[]))
+            result = runner.invoke(app, ["recipes", "--skill", "weaponcrafting", "--level", "10"])
 
-                result = runner.invoke(app, ["recipes", "--skill", "weaponcrafting", "--level", "10"])
+            assert result.exit_code == 0
+            mock_api.assert_called_once()
 
-                assert result.exit_code == 0
-                mock_api.assert_called_once()
-
-    def test_recipes_no_craftable_items(self, runner, mock_client_manager, mock_api_response):
+    def test_recipes_no_craftable_items(self, runner, stub_api):
         """Test recipes command with no craftable items."""
         with patch("artifactsmmo_api_client.api.items.get_all_items_items_get.sync") as mock_api:
-            mock_api.return_value = mock_api_response
-
             # Mock non-craftable item
             mock_item = Mock()
             mock_item.code = "iron_ore"
@@ -155,19 +110,16 @@ class TestCraftCommands:
             mock_data = Mock()
             mock_data.data = [mock_item]
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["recipes"])
+            result = runner.invoke(app, ["recipes"])
 
-                assert result.exit_code == 0
-                assert "No craftable items found" in result.stdout
+            assert result.exit_code == 0
+            assert "No craftable items found" in result.stdout
 
-    def test_recipes_missing_fields_render_marker(self, runner, mock_client_manager, mock_api_response):
+    def test_recipes_missing_fields_render_marker(self, runner, stub_api):
         """Test recipes renders the MISSING marker when API recipe fields are absent."""
         with patch("artifactsmmo_api_client.api.items.get_all_items_items_get.sync") as mock_api:
-            mock_api.return_value = mock_api_response
-
             mock_item = Mock()
             mock_item.code = None
             mock_item.craft = Mock()
@@ -178,20 +130,24 @@ class TestCraftCommands:
             mock_data = Mock()
             mock_data.data = [mock_item]
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_data)
+            mock_api.return_value = api_response(mock_data)
 
-                result = runner.invoke(app, ["recipes"])
+            result = runner.invoke(app, ["recipes"])
 
-                assert result.exit_code == 0
-                assert "—" in result.stdout
+            assert result.exit_code == 0
+            assert "—" in result.stdout
 
-    def test_cooldown_handling(self, runner, mock_client_manager, mock_api_response):
-        """Test cooldown handling in craft commands."""
+    def test_cooldown_handling(self, runner, stub_api):
+        """Test cooldown handling in craft commands.
+
+        NOTE: handle_api_response never produces a cooldown CLIResponse (cooldowns
+        arrive as 499 errors through handle_api_error), so the command's
+        response-cooldown branch is only reachable by patching the helper.
+        """
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_crafting_post.sync"
         ) as mock_api:
-            mock_api.return_value = mock_api_response
+            mock_api.return_value = Mock(status_code=200)
 
             with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
                 mock_handle.return_value = Mock(success=False, cooldown_remaining=45, error=None)
@@ -201,80 +157,68 @@ class TestCraftCommands:
                 assert result.exit_code == 0
                 assert "cooldown" in result.stdout.lower()
 
-    def test_craft_error_response(self, runner, mock_client_manager, mock_api_response):
+    def test_craft_error_response(self, runner, stub_api):
         """Test craft command with error response."""
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_crafting_post.sync"
         ) as mock_api:
-            mock_api.return_value = mock_api_response
+            mock_api.return_value = api_error(422, "Crafting failed")
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, cooldown_remaining=None, error="Crafting failed")
+            result = runner.invoke(app, ["craft", "testchar", "iron_sword"])
 
-                result = runner.invoke(app, ["craft", "testchar", "iron_sword"])
+            assert result.exit_code == 1
+            assert "Crafting failed" in result.stdout
 
-                assert result.exit_code == 1
-                assert "Crafting failed" in result.stdout
-
-    def test_craft_api_exception_with_cooldown(self, runner, mock_client_manager):
-        """Test craft command with API exception and cooldown."""
+    def test_craft_api_exception_with_cooldown(self, runner, stub_api):
+        """Test craft command with API cooldown error (499)."""
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_crafting_post.sync"
         ) as mock_api:
-            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
+            mock_api.side_effect = cooldown_status(30)
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_error") as mock_error:
-                mock_error.return_value = Mock(cooldown_remaining=30, error=None)
+            result = runner.invoke(app, ["craft", "testchar", "iron_sword"])
 
-                result = runner.invoke(app, ["craft", "testchar", "iron_sword"])
+            assert result.exit_code == 1
+            assert "30" in result.stdout
+            assert "cooldown" in result.stdout.lower()
 
-                assert result.exit_code == 1
-
-    def test_recycle_error_response(self, runner, mock_client_manager, mock_api_response):
+    def test_recycle_error_response(self, runner, stub_api):
         """Test recycle command with error response."""
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_recycling_my_name_action_recycling_post.sync"
         ) as mock_api:
-            mock_api.return_value = mock_api_response
+            mock_api.return_value = api_error(473, "Recycling failed")
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, cooldown_remaining=None, error="Recycling failed")
+            result = runner.invoke(app, ["recycle", "testchar", "iron_sword"])
 
-                result = runner.invoke(app, ["recycle", "testchar", "iron_sword"])
+            assert result.exit_code == 1
+            assert "Recycling failed" in result.stdout
 
-                assert result.exit_code == 1
-                assert "Recycling failed" in result.stdout
-
-    def test_recycle_api_exception_with_cooldown(self, runner, mock_client_manager):
-        """Test recycle command with API exception and cooldown."""
+    def test_recycle_api_exception_with_cooldown(self, runner, stub_api):
+        """Test recycle command with API cooldown error (499)."""
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_recycling_my_name_action_recycling_post.sync"
         ) as mock_api:
-            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
+            mock_api.side_effect = cooldown_status(25)
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_error") as mock_error:
-                mock_error.return_value = Mock(cooldown_remaining=25, error=None)
+            result = runner.invoke(app, ["recycle", "testchar", "iron_sword"])
 
-                result = runner.invoke(app, ["recycle", "testchar", "iron_sword"])
+            assert result.exit_code == 1
+            assert "25" in result.stdout
 
-                assert result.exit_code == 1
-
-    def test_api_error_handling(self, runner, mock_client_manager):
+    def test_api_error_handling(self, runner, stub_api):
         """Test API error handling in craft commands."""
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_crafting_post.sync"
         ) as mock_api:
-            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
+            mock_api.side_effect = unexpected_status(500, "API Error")
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_error") as mock_handle:
-                mock_handle.return_value = Mock(cooldown_remaining=None, error="API Error")
+            result = runner.invoke(app, ["craft", "testchar", "iron_sword"])
 
-                result = runner.invoke(app, ["craft", "testchar", "iron_sword"])
+            assert result.exit_code == 1
+            assert "API Error" in result.stdout
 
-                assert result.exit_code == 1
-                assert "API Error" in result.stdout
-
-    def test_preview_success_can_craft(self, runner, mock_client_manager):
+    def test_preview_success_can_craft(self, runner, stub_api):
         """Test successful preview command when character can craft."""
         # Mock item API response
         mock_item = Mock()
@@ -297,24 +241,16 @@ class TestCraftCommands:
         mock_character.weaponcrafting_level = 10
 
         with patch("artifactsmmo_api_client.api.items.get_all_items_items_get.sync") as mock_items_api:
-            mock_items_api.return_value = Mock()
+            mock_items_api.return_value = api_response(mock_items_data)
+            stub_api.get_character.return_value = api_response(mock_character)
 
-            # Mock the API wrapper's get_character method
-            mock_client_manager.api.get_character.return_value = Mock()
+            result = runner.invoke(app, ["preview", "testchar", "iron_sword"])
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
-                mock_handle.side_effect = [
-                    Mock(success=True, data=mock_items_data),  # Items response
-                    Mock(success=True, data=mock_character),  # Character response
-                ]
+            assert result.exit_code == 0
+            assert "Ready to craft!" in result.stdout
+            assert "✅" in result.stdout
 
-                result = runner.invoke(app, ["preview", "testchar", "iron_sword"])
-
-                assert result.exit_code == 0
-                assert "Ready to craft!" in result.stdout
-                assert "✅" in result.stdout
-
-    def test_preview_success_cannot_craft_materials(self, runner, mock_client_manager):
+    def test_preview_success_cannot_craft_materials(self, runner, stub_api):
         """Test preview command when character lacks materials."""
         # Mock item API response
         mock_item = Mock()
@@ -337,24 +273,16 @@ class TestCraftCommands:
         mock_character.weaponcrafting_level = 10
 
         with patch("artifactsmmo_api_client.api.items.get_all_items_items_get.sync") as mock_items_api:
-            mock_items_api.return_value = Mock()
+            mock_items_api.return_value = api_response(mock_items_data)
+            stub_api.get_character.return_value = api_response(mock_character)
 
-            # Mock the API wrapper's get_character method
-            mock_client_manager.api.get_character.return_value = Mock()
+            result = runner.invoke(app, ["preview", "testchar", "iron_sword"])
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
-                mock_handle.side_effect = [
-                    Mock(success=True, data=mock_items_data),  # Items response
-                    Mock(success=True, data=mock_character),  # Character response
-                ]
+            assert result.exit_code == 1
+            assert "Cannot craft yet" in result.stdout
+            assert "❌" in result.stdout
 
-                result = runner.invoke(app, ["preview", "testchar", "iron_sword"])
-
-                assert result.exit_code == 1
-                assert "Cannot craft yet" in result.stdout
-                assert "❌" in result.stdout
-
-    def test_preview_success_cannot_craft_skill(self, runner, mock_client_manager):
+    def test_preview_success_cannot_craft_skill(self, runner, stub_api):
         """Test preview command when character lacks skill level."""
         # Mock item API response
         mock_item = Mock()
@@ -377,39 +305,28 @@ class TestCraftCommands:
         mock_character.weaponcrafting_level = 5  # Need 20, only have 5
 
         with patch("artifactsmmo_api_client.api.items.get_all_items_items_get.sync") as mock_items_api:
-            mock_items_api.return_value = Mock()
+            mock_items_api.return_value = api_response(mock_items_data)
+            stub_api.get_character.return_value = api_response(mock_character)
 
-            # Mock the API wrapper's get_character method
-            mock_client_manager.api.get_character.return_value = Mock()
+            result = runner.invoke(app, ["preview", "testchar", "iron_sword"])
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
-                mock_handle.side_effect = [
-                    Mock(success=True, data=mock_items_data),  # Items response
-                    Mock(success=True, data=mock_character),  # Character response
-                ]
+            assert result.exit_code == 1
+            assert "Cannot craft yet" in result.stdout
 
-                result = runner.invoke(app, ["preview", "testchar", "iron_sword"])
-
-                assert result.exit_code == 1
-                assert "Cannot craft yet" in result.stdout
-
-    def test_preview_item_not_found(self, runner, mock_client_manager):
+    def test_preview_item_not_found(self, runner, stub_api):
         """Test preview command with non-existent item."""
         mock_items_data = Mock()
         mock_items_data.data = []
 
         with patch("artifactsmmo_api_client.api.items.get_all_items_items_get.sync") as mock_items_api:
-            mock_items_api.return_value = Mock()
+            mock_items_api.return_value = api_response(mock_items_data)
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_items_data)
+            result = runner.invoke(app, ["preview", "testchar", "nonexistent_item"])
 
-                result = runner.invoke(app, ["preview", "testchar", "nonexistent_item"])
+            assert result.exit_code == 1
+            assert "not found" in result.stdout
 
-                assert result.exit_code == 1
-                assert "not found" in result.stdout
-
-    def test_preview_item_not_craftable(self, runner, mock_client_manager):
+    def test_preview_item_not_craftable(self, runner, stub_api):
         """Test preview command with non-craftable item."""
         # Mock item without craft info
         mock_item = Mock()
@@ -420,17 +337,14 @@ class TestCraftCommands:
         mock_items_data.data = [mock_item]
 
         with patch("artifactsmmo_api_client.api.items.get_all_items_items_get.sync") as mock_items_api:
-            mock_items_api.return_value = Mock()
+            mock_items_api.return_value = api_response(mock_items_data)
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=mock_items_data)
+            result = runner.invoke(app, ["preview", "testchar", "iron_ore"])
 
-                result = runner.invoke(app, ["preview", "testchar", "iron_ore"])
+            assert result.exit_code == 1
+            assert "not craftable" in result.stdout
 
-                assert result.exit_code == 1
-                assert "not craftable" in result.stdout
-
-    def test_preview_character_not_found(self, runner, mock_client_manager):
+    def test_preview_character_not_found(self, runner, stub_api):
         """Test preview command with non-existent character."""
         # Mock item API response
         mock_item = Mock()
@@ -444,23 +358,15 @@ class TestCraftCommands:
         mock_items_data.data = [mock_item]
 
         with patch("artifactsmmo_api_client.api.items.get_all_items_items_get.sync") as mock_items_api:
-            mock_items_api.return_value = Mock()
+            mock_items_api.return_value = api_response(mock_items_data)
+            stub_api.get_character.return_value = api_error(498, "Character not found")
 
-            # Mock the API wrapper's get_character method
-            mock_client_manager.api.get_character.return_value = Mock()
+            result = runner.invoke(app, ["preview", "nonexistent", "iron_sword"])
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
-                mock_handle.side_effect = [
-                    Mock(success=True, data=mock_items_data),  # Items response
-                    Mock(success=False, data=None),  # Character response
-                ]
+            assert result.exit_code == 1
+            assert "Character 'nonexistent' not found" in result.stdout
 
-                result = runner.invoke(app, ["preview", "nonexistent", "iron_sword"])
-
-                assert result.exit_code == 1
-                assert "Character 'nonexistent' not found" in result.stdout
-
-    def test_preview_no_materials_required(self, runner, mock_client_manager):
+    def test_preview_no_materials_required(self, runner, stub_api):
         """Test preview command for item with no material requirements."""
         # Mock item with no materials required
         mock_item = Mock()
@@ -479,90 +385,75 @@ class TestCraftCommands:
         mock_character.cooking_level = 5
 
         with patch("artifactsmmo_api_client.api.items.get_all_items_items_get.sync") as mock_items_api:
-            mock_items_api.return_value = Mock()
+            mock_items_api.return_value = api_response(mock_items_data)
+            stub_api.get_character.return_value = api_response(mock_character)
 
-            # Mock the API wrapper's get_character method
-            mock_client_manager.api.get_character.return_value = Mock()
+            result = runner.invoke(app, ["preview", "testchar", "simple_item"])
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
-                mock_handle.side_effect = [
-                    Mock(success=True, data=mock_items_data),  # Items response
-                    Mock(success=True, data=mock_character),  # Character response
-                ]
-
-                result = runner.invoke(app, ["preview", "testchar", "simple_item"])
-
-                assert result.exit_code == 0
-                assert "Ready to craft!" in result.stdout
+            assert result.exit_code == 0
+            assert "Ready to craft!" in result.stdout
 
     def test_preview_validation_error(self, runner):
         """Test preview with invalid input."""
         result = runner.invoke(app, ["preview", "", "iron_sword"])
         assert result.exit_code == 2
 
-    def test_preview_api_exception(self, runner, mock_client_manager):
+    def test_preview_api_exception(self, runner, stub_api):
         """Test preview command with API exception."""
         with patch("artifactsmmo_api_client.api.items.get_all_items_items_get.sync") as mock_api:
-            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
+            mock_api.side_effect = unexpected_status(500, "API Error")
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_error") as mock_handle:
-                mock_handle.return_value = Mock(cooldown_remaining=None, error="API Error")
+            result = runner.invoke(app, ["preview", "testchar", "iron_sword"])
 
-                result = runner.invoke(app, ["preview", "testchar", "iron_sword"])
-
-                assert result.exit_code == 1
-                assert "API Error" in result.stdout
+            assert result.exit_code == 1
+            assert "API Error" in result.stdout
 
 
 class TestCraftUncoveredBranches:
     """Drive the remaining craft/recycle/preview/recipes branches."""
 
-    def test_recycle_cooldown_response(self, runner, mock_client_manager, mock_api_response):
-        """Recycle shows a cooldown message when the response carries cooldown (line 94)."""
+    def test_recycle_cooldown_response(self, runner, stub_api):
+        """Recycle shows a cooldown message when the response carries cooldown (line 94).
+
+        NOTE: handle_api_response never produces a cooldown CLIResponse, so this
+        dead branch is only reachable by patching the helper.
+        """
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_recycling_my_name_action_recycling_post.sync"
         ) as mock_api:
-            mock_api.return_value = mock_api_response
+            mock_api.return_value = Mock(status_code=200)
 
             with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(
-                    success=False, cooldown_remaining=42, error=None
-                )
+                mock_handle.return_value = Mock(success=False, cooldown_remaining=42, error=None)
 
                 result = runner.invoke(app, ["recycle", "testchar", "iron_sword"])
 
                 assert result.exit_code == 0
                 assert "42" in result.stdout
 
-    def test_recycle_api_exception_no_cooldown(self, runner, mock_client_manager):
+    def test_recycle_api_exception_no_cooldown(self, runner, stub_api):
         """Recycle except-branch with no cooldown prints the error (line 104)."""
         with patch(
             "artifactsmmo_api_client.api.my_characters.action_recycling_my_name_action_recycling_post.sync"
         ) as mock_api:
-            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
+            mock_api.side_effect = unexpected_status(500, "Recycle boom")
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_error") as mock_error:
-                mock_error.return_value = Mock(cooldown_remaining=None, error="Recycle boom")
+            result = runner.invoke(app, ["recycle", "testchar", "iron_sword"])
 
-                result = runner.invoke(app, ["recycle", "testchar", "iron_sword"])
+            assert result.exit_code == 1
+            assert "Recycle boom" in result.stdout
 
-                assert result.exit_code == 1
-                assert "Recycle boom" in result.stdout
-
-    def test_preview_items_response_unsuccessful(self, runner, mock_client_manager):
+    def test_preview_items_response_unsuccessful(self, runner, stub_api):
         """Preview reports not found when the items response is unsuccessful (lines 131-132)."""
         with patch("artifactsmmo_api_client.api.items.get_all_items_items_get.sync") as mock_api:
-            mock_api.return_value = Mock()
+            mock_api.return_value = api_error(500, "items lookup failed")
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, data=None)
+            result = runner.invoke(app, ["preview", "testchar", "iron_sword"])
 
-                result = runner.invoke(app, ["preview", "testchar", "iron_sword"])
+            assert result.exit_code == 1
+            assert "Item 'iron_sword' not found" in result.stdout
 
-                assert result.exit_code == 1
-                assert "Item 'iron_sword' not found" in result.stdout
-
-    def test_preview_no_matching_item_code(self, runner, mock_client_manager):
+    def test_preview_no_matching_item_code(self, runner, stub_api):
         """Preview reports not found when results lack the requested code (lines 147-148)."""
         # API returns items, but none whose code matches the requested item.
         other_item = Mock()
@@ -572,53 +463,41 @@ class TestCraftUncoveredBranches:
         items_data.data = [other_item]
 
         with patch("artifactsmmo_api_client.api.items.get_all_items_items_get.sync") as mock_api:
-            mock_api.return_value = Mock()
+            mock_api.return_value = api_response(items_data)
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=items_data)
+            result = runner.invoke(app, ["preview", "testchar", "iron_sword"])
 
-                result = runner.invoke(app, ["preview", "testchar", "iron_sword"])
+            assert result.exit_code == 1
+            assert "Item 'iron_sword' not found" in result.stdout
 
-                assert result.exit_code == 1
-                assert "Item 'iron_sword' not found" in result.stdout
-
-    def test_recipes_invalid_skill_falls_back_to_unset(self, runner, mock_client_manager):
+    def test_recipes_invalid_skill_falls_back_to_unset(self, runner, stub_api):
         """An unrecognized --skill is swallowed into UNSET, not an error (lines 275-277)."""
         with patch("artifactsmmo_api_client.api.items.get_all_items_items_get.sync") as mock_api:
-            mock_api.return_value = Mock()
+            mock_api.return_value = api_response(Mock(data=[]))
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=True, data=Mock(data=[]))
+            result = runner.invoke(app, ["recipes", "--skill", "not_a_real_skill"])
 
-                result = runner.invoke(app, ["recipes", "--skill", "not_a_real_skill"])
+            # Invalid skill does not abort; the items endpoint is still queried.
+            assert result.exit_code == 0
+            mock_api.assert_called_once()
+            assert mock_api.call_args.kwargs["craft_skill"] is UNSET
 
-                # Invalid skill does not abort; the items endpoint is still queried.
-                assert result.exit_code == 0
-                mock_api.assert_called_once()
-                assert mock_api.call_args.kwargs["craft_skill"] is UNSET
-
-    def test_recipes_unsuccessful_response(self, runner, mock_client_manager):
+    def test_recipes_unsuccessful_response(self, runner, stub_api):
         """Recipes prints the retrieve error when the response is unsuccessful (line 326)."""
         with patch("artifactsmmo_api_client.api.items.get_all_items_items_get.sync") as mock_api:
-            mock_api.return_value = Mock()
+            mock_api.return_value = api_error(500, "recipe lookup failed")
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, data=None, error="recipe lookup failed")
+            result = runner.invoke(app, ["recipes"])
 
-                result = runner.invoke(app, ["recipes"])
+            assert result.exit_code == 0
+            assert "recipe lookup failed" in result.stdout
 
-                assert result.exit_code == 0
-                assert "recipe lookup failed" in result.stdout
-
-    def test_recipes_api_exception(self, runner, mock_client_manager):
+    def test_recipes_api_exception(self, runner, stub_api):
         """Recipes except-branch prints the error and exits 1 (lines 328-331)."""
         with patch("artifactsmmo_api_client.api.items.get_all_items_items_get.sync") as mock_api:
-            mock_api.side_effect = UnexpectedStatus(status_code=500, content=b"{}")
+            mock_api.side_effect = unexpected_status(500, "Recipes boom")
 
-            with patch("artifactsmmo_cli.commands.craft.handle_api_error") as mock_error:
-                mock_error.return_value = Mock(error="Recipes boom")
+            result = runner.invoke(app, ["recipes"])
 
-                result = runner.invoke(app, ["recipes"])
-
-                assert result.exit_code == 1
-                assert "Recipes boom" in result.stdout
+            assert result.exit_code == 1
+            assert "Recipes boom" in result.stdout
