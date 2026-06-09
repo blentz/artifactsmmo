@@ -53,6 +53,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import best_attainable_weapon
 from artifactsmmo_cli.ai.tiers.skill_gates import SkillProgressionError, gating_skills
+from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -349,6 +350,14 @@ def objective_step_goal(
                 return GatherMaterialsGoal(target_item=tgt_code, needed={tgt_code: tgt_qty})
         return GatherMaterialsGoal(target_item=step.code, needed={step.code: step.quantity})
     if isinstance(step, ReachSkillLevel):
+        # Plannable craft-one: a "reach skill level N" step is width-unfindable as
+        # a single GOAP goal (the planner can't simulate grinding many crafts).
+        # Route it to crafting ONE shallow in-skill item per cycle; the per-cycle
+        # replan grinds the skill incrementally and the step is always plannable.
+        # Falls back to LevelSkillGoal only when nothing in-skill is craftable now.
+        craft_one = skill_grind_target(step.skill, state, game_data)
+        if craft_one is not None:
+            return GatherMaterialsGoal(target_item=craft_one, needed={craft_one: 1})
         current = state.skills.get(step.skill, 0)
         target = min(step.level, current + LEVEL_LOOKAHEAD)
         return LevelSkillGoal(skill_name=step.skill, target_level=target,

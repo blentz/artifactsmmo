@@ -1376,3 +1376,28 @@ def test_select_raises_when_gating_craft_skill_has_no_craftable_item():
     decision = _FakeDecision(chosen_step=ReachSkillLevel("gearcrafting", 10))
     with pytest.raises(SkillProgressionError):
         arbiter.select(decision, state, gd, [], ctx, objective=objective)
+
+
+def test_objective_step_reachskill_returns_craft_one_when_craftable():
+    gd = GameData()
+    gd._item_stats = {
+        "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
+                                   crafting_skill="weaponcrafting", crafting_level=1),
+    }
+    gd._crafting_recipes = {"copper_dagger": {"copper_bar": 6}}
+    state = make_state(skills={"weaponcrafting": 1})
+    goal = objective_step_goal(ReachSkillLevel("weaponcrafting", 5), state, gd, _ctx())
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert repr(goal) == "GatherMaterials(copper_dagger)"
+
+
+def test_objective_step_reachskill_falls_back_to_levelskill_when_nothing_craftable():
+    gd = GameData()
+    gd._item_stats = {
+        "iron_dagger": ItemStats(code="iron_dagger", level=10, type_="weapon",
+                                 crafting_skill="weaponcrafting", crafting_level=10),
+    }
+    gd._crafting_recipes = {"iron_dagger": {"iron_bar": 6}}
+    state = make_state(skills={"weaponcrafting": 1})  # nothing craftable at level 1
+    goal = objective_step_goal(ReachSkillLevel("weaponcrafting", 5), state, gd, _ctx())
+    assert isinstance(goal, LevelSkillGoal)
