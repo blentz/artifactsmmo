@@ -1,26 +1,32 @@
-name: lint-gate
+name: pytest
+# Runs the full test suite on every push + PR. pyproject addopts already
+# enforce -W error and --cov-fail-under=100; CLAUDE.md mandates 0 errors,
+# 0 warnings, 0 skipped, 100% coverage.
+
 on:
   pull_request:
     paths:
       - "src/**/*.py"
       - "tests/**/*.py"
       - "pyproject.toml"
+      - "uv.lock"
       - "openapi.json"
-      - ".github/workflows/lint-gate.yml"
+      - ".github/workflows/pytest.yml"
   push:
     branches: [main]
     paths:
       - "src/**/*.py"
       - "tests/**/*.py"
       - "pyproject.toml"
+      - "uv.lock"
       - "openapi.json"
-      - ".github/workflows/lint-gate.yml"
+      - ".github/workflows/pytest.yml"
   workflow_dispatch: {}
 
 jobs:
-  ruff:
+  pytest:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     env:
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
@@ -36,5 +42,5 @@ jobs:
           bash generate_openapi_client.sh
       - name: Sync deps
         run: uv sync --dev
-      - name: ruff check (full rule set from pyproject.toml)
-        run: uv run ruff check src/ tests/
+      - name: pytest (full suite, 100% coverage gate)
+        run: uv run pytest
