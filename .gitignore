@@ -81,4 +81,4 @@ TOKEN
 
 # Runtime artifacts from the AI player
 logs.txt
-traces.jsonl
+**/*.jsonl
