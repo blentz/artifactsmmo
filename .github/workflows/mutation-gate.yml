@@ -15,6 +15,10 @@ jobs:
     timeout-minutes: 60
     env:
       PYTHONDONTWRITEBYTECODE: "1"
+      # mutate.py runs die to runner OOM (peak ~22GB locally vs 16GB runner);
+      # unbuffered output makes the post-mortem log show which mutation group
+      # was running when the runner is killed.
+      PYTHONUNBUFFERED: "1"
     steps:
       - uses: actions/checkout@v6
       - name: Install uv

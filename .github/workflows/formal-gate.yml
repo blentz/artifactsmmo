@@ -21,6 +21,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PYTHONDONTWRITEBYTECODE: "1"
+      # See mutation-gate.yml: unbuffered output so an OOM-killed mutation
+      # step's log shows which group was running.
+      PYTHONUNBUFFERED: "1"
     steps:
       - uses: actions/checkout@v6
       - name: Install elan (Lean)

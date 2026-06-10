@@ -14,7 +14,7 @@ GATHERING_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "ga
 LEVEL_SKILL_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "level_skill.py"
 SCORING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "scoring.py"
 SKILL_XP_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "skill_xp_curve.py"
-PLAYER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "player.py"
+ACTION_FACTORY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "factory.py"
 RECIPE_CLOSURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recipe_closure.py"
 TASK_FEASIBILITY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_feasibility.py"
 PREREQUISITE_GRAPH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "prerequisite_graph.py"
@@ -66,7 +66,7 @@ EQUIP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "equip.py"
 STORE_WARMUP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "store_warmup_core.py"
 BANK_EXPANSION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "bank_expansion.py"
 EXPAND_BANK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "expand_bank.py"
-GAME_DATA_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "game_data.py"
+MONSTER_CATALOG_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "monster_catalog.py"
 WINNABLE_CASCADE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "winnable_cascade.py"
 PROJECTIONS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "projections.py"
 # Phase-18 — additional Goal sources.
@@ -147,10 +147,11 @@ INVENTORY_CAPS_MUTATIONS = [
     ("inventory_caps: drop safety-floor clamp",
      "        recipe_cap = max(recipe_cap, safety_floor)",
      "        recipe_cap = recipe_cap"),
-    # overstock off-by-one: record qty - cap + 1 instead of qty - cap.
+    # overstock off-by-one: record over + 1 instead of over (the report
+    # over-sheds every overstocked item by one unit).
     ("inventory_caps: overstock off-by-one (+1)",
-     "            excess[code] = qty - cap",
-     "            excess[code] = qty - cap + 1"),
+     "            excess[code] = over",
+     "            excess[code] = over + 1"),
 ]
 
 
@@ -427,8 +428,8 @@ PREREQUISITE_GRAPH_MUTATIONS = [
     # combat_capable any -> all: requires EVERY monster beatable rather than SOME
     # (the anti-gaming aggregation flip the De Morgan contract catches).
     ("prerequisite_graph: combat_capable any -> all",
-     "    return any(predict_win(state, game_data, code) for code in game_data._monster_level)",
-     "    return all(predict_win(state, game_data, code) for code in game_data._monster_level)"),
+     "    return any(predict_win(state, game_data, code) for code in game_data.monster_levels)",
+     "    return all(predict_win(state, game_data, code) for code in game_data.monster_levels)"),
 ]
 
 
@@ -958,7 +959,7 @@ BANK_EXPANSION_MUTATIONS = [
     ("bank_expansion: drop the capacity update entirely (pre-fix revert)",
      "        return dataclasses.replace(\n"
      "            state,\n"
-     "            gold=state.gold - game_data._next_expansion_cost,\n"
+     "            gold=state.gold - game_data.next_expansion_cost,\n"
      "            x=dest[0],\n"
      "            y=dest[1],\n"
      "            cooldown_expires=None,\n"
@@ -966,7 +967,7 @@ BANK_EXPANSION_MUTATIONS = [
      "        )",
      "        return dataclasses.replace(\n"
      "            state,\n"
-     "            gold=state.gold - game_data._next_expansion_cost,\n"
+     "            gold=state.gold - game_data.next_expansion_cost,\n"
      "            x=dest[0],\n"
      "            y=dest[1],\n"
      "            cooldown_expires=None,\n"
@@ -984,10 +985,10 @@ EXPAND_BANK_GOAL_MUTATIONS = [
      "        if state.bank_capacity is not None:\n"
      "            capacity = state.bank_capacity\n"
      "        elif self._game_data is not None:\n"
-     "            capacity = self._game_data._bank_capacity\n"
+     "            capacity = self._game_data.bank_capacity\n"
      "        else:\n"
      "            capacity = 0",
-     "        capacity = self._game_data._bank_capacity if self._game_data is not None else 0"),
+     "        capacity = self._game_data.bank_capacity if self._game_data is not None else 0"),
 ]
 
 
@@ -1061,7 +1062,7 @@ _ALL_SRCS = [
     APPLY_REST_SRC, APPLY_FIGHT_SRC, APPLY_BANK_EXPANSION_SRC,
     WITHDRAW_ITEM_SRC, UNEQUIP_SRC, TASK_EXCHANGE_SRC, TASK_CANCEL_SRC,
     GATHERING_APPLY_SRC, LEVEL_SKILL_GOAL_SRC,
-    GAME_DATA_SRC,
+    MONSTER_CATALOG_SRC,
     WINNABLE_CASCADE_SRC,
     PROJECTIONS_SRC,
     # Phase-17 — scalar_yield wired through clamp_into_band into discretionary goals.
@@ -1075,7 +1076,9 @@ _ALL_SRCS = [
     # Phase-19d — Tier-1 liveness measure port.
     MEASURE_SRC,
     # Phase 21d-2 — Tier-3 plan-exists differential against real planner.
-    PLAYER_SRC,
+    # (The `_build_actions` body now lives in actions/factory.py — `GamePlayer.
+    # _build_actions` delegates to `build_actions`; mutations target the factory.)
+    ACTION_FACTORY_SRC,
     # Phase-22b — cycle-loop mirror.
     CYCLE_STEP_SRC,
     # Piece-C — feasibility router for depth-unreachable equippable roots.
@@ -1130,8 +1133,10 @@ CYCLES_FOR_PROGRESS_MUTATIONS = [
     # interval count. The general diff test fires whenever progress holds
     # steady for any chronological pair.
     ("cycles_for_progress: strict-increase > -> >= (off-by-one predicate)",
-     "            if cycle.task_progress > prev_progress:",
-     "            if cycle.task_progress >= prev_progress:"),
+     "        if (prev_progress is not None and cycle.task_progress is not None\n"
+     "                and cycle.task_progress > prev_progress):",
+     "        if (prev_progress is not None and cycle.task_progress is not None\n"
+     "                and cycle.task_progress >= prev_progress):"),
 ]
 
 
@@ -1572,12 +1577,8 @@ NPC_BUY_MUTATIONS = [
      "    free = inv_max - inv_used\n"
      "    if free < quantity:\n"
      "        return False\n"
-     "    if gold < price * quantity:\n"
-     "        return False\n"
-     "    return True",
-     "    if gold < price * quantity:\n"
-     "        return False\n"
-     "    return True"),
+     "    return not gold < price * quantity",
+     "    return not gold < price * quantity"),
     # Flip the slot-floor inequality: `free < quantity` -> `free <= quantity`.
     # Off-by-one — quantity exactly at free is now wrongly refused. The
     # boundary test (used=5, cap=10, quantity=5) fires.
@@ -1713,7 +1714,7 @@ APPLY_BANK_EXPANSION_MUTATIONS = [
         "apply-baseline-bank-expansion: revert BuyBankExpansionAction.apply to explicit WorldState(...) dropping baseline",
         "        return dataclasses.replace(\n"
         "            state,\n"
-        "            gold=state.gold - game_data._next_expansion_cost,\n"
+        "            gold=state.gold - game_data.next_expansion_cost,\n"
         "            x=dest[0],\n"
         "            y=dest[1],\n"
         "            cooldown_expires=None,\n"
@@ -1723,7 +1724,7 @@ APPLY_BANK_EXPANSION_MUTATIONS = [
         "            character=state.character,\n"
         "            level=state.level, xp=state.xp, max_xp=state.max_xp,\n"
         "            hp=state.hp, max_hp=state.max_hp,\n"
-        "            gold=state.gold - game_data._next_expansion_cost,\n"
+        "            gold=state.gold - game_data.next_expansion_cost,\n"
         "            skills=state.skills, x=dest[0], y=dest[1],\n"
         "            inventory=state.inventory, inventory_max=state.inventory_max,\n"
         "            equipment=state.equipment, cooldown_expires=None,\n"
@@ -2053,18 +2054,21 @@ STORE_WARMUP_MUTATIONS = [
 # silent-default pattern on one of the five raise-accessors, or inverts the
 # raise/return logic. Killed by formal/diff/test_game_data_accessors_diff.py.
 GAME_DATA_MUTATIONS = [
+    # The accessors moved to MonsterCatalog (game_data.py delegates); the
+    # silent-default resurrections now target monster_catalog.py and remain
+    # observable through the GameData facade the diff test exercises.
     # Mutation 1: resurrect silent {} default on monster_attack.
     ("game_data: monster_attack silent {} default resurrected",
-     "        return self._monster_attack[code]",
-     "        return self._monster_attack.get(code, {})"),
+     "        return self.attack[code]",
+     "        return self.attack.get(code, {})"),
     # Mutation 2: resurrect silent 0 default on monster_hp.
     ("game_data: monster_hp silent 0 default resurrected",
-     "        return self._monster_hp[code]",
-     "        return self._monster_hp.get(code, 0)"),
+     "        return self.hp[code]",
+     "        return self.hp.get(code, 0)"),
     # Mutation 3: invert monster_initiative — silently return absent codes as 9999.
     ("game_data: monster_initiative inverted (silent 9999 default)",
-     "        return self._monster_initiative[code]",
-     "        return self._monster_initiative.get(code, 9999)"),
+     "        return self.initiative[code]",
+     "        return self.initiative.get(code, 9999)"),
 ]
 
 
@@ -2212,7 +2216,9 @@ LIVENESS_GATHERING_MUTATIONS = [
 ]
 
 # Phase 21d-2 — `_build_actions` mutations. Each drops a specific Action
-# class from the canonical action menu. The plan-exists differential
+# class from the canonical action menu. The body moved verbatim to
+# `actions/factory.py::build_actions` (GamePlayer._build_actions delegates),
+# so the mutations target the factory; the plan-exists differential
 # (formal/diff/test_plan_exists_diff.py) must kill each by reporting a
 # real production bug (planner returns empty plan for a firing means).
 PLAN_EXISTS_BUILD_ACTIONS_MUTATIONS = [
@@ -2220,21 +2226,21 @@ PLAN_EXISTS_BUILD_ACTIONS_MUTATIONS = [
     # witness; planner returns []; test_planner_finds_plan_for_firing_means[
     # HP_CRITICAL] fires.
     ("plan_exists: drop RestAction from _build_actions",
-     "        actions: list[Action] = [\n"
-     "            RestAction(),",
-     "        actions: list[Action] = [\n"
-     "            # RestAction(),  # mutation: dropped",),
+     "    actions: list[Action] = [\n"
+     "        RestAction(),",
+     "    actions: list[Action] = [\n"
+     "        # RestAction(),  # mutation: dropped",),
     # Drop DepositAllAction — DEPOSIT_FULL case has no actuator; planner
     # returns []; test_planner_finds_plan_for_firing_means[DEPOSIT_FULL] fires.
     ("plan_exists: drop DepositAllAction from _build_actions",
-     "            DepositAllAction(bank_location=bank, accessible=self._bank_accessible, game_data=self.game_data),",
-     "            # DepositAllAction(...),  # mutation: dropped"),
+     "        DepositAllAction(bank_location=bank, accessible=bank_accessible, game_data=game_data),",
+     "        # DepositAllAction(...),  # mutation: dropped"),
     # Drop FightAction construction — BANK_UNLOCK case has no combat
     # actuator; planner returns []; test_planner_finds_plan_for_firing_means[
     # BANK_UNLOCK] fires (the only fight-rooted in-scope means).
     ("plan_exists: drop FightAction from _build_actions",
-     "            actions.append(FightAction(monster_code=monster_code, locations=frozenset(locs)))",
-     "            pass  # mutation: dropped FightAction append"),
+     "        actions.append(FightAction(monster_code=monster_code, locations=frozenset(locs)))",
+     "        pass  # mutation: dropped FightAction append"),
     # Disable the items-task TaskTradeAction insertion block (BOTH the
     # quantity=k primary and the quantity=1 fallback). PURSUE_TASK then has
     # no trade actuator; planner returns []; test_planner_finds_plan_for_firing_means[
@@ -2242,8 +2248,8 @@ PLAN_EXISTS_BUILD_ACTIONS_MUTATIONS = [
     # line) was a SURVIVOR — the quantity=1 fallback alone is enough for the
     # planner to find a TaskTrade plan, so the mutation must remove both.
     ("plan_exists: disable items-task TaskTradeAction block",
-     '        if self.state is not None and self.state.task_type == "items" and self.state.task_code:',
-     '        if False and self.state is not None and self.state.task_type == "items" and self.state.task_code:'),
+     '    if state is not None and state.task_type == "items" and state.task_code:',
+     '    if False and state is not None and state.task_type == "items" and state.task_code:'),
 ]
 
 
@@ -2419,7 +2425,7 @@ def main() -> int:
               "formal/diff/test_bank_expansion_diff.py", survivors)
     run_group(EXPAND_BANK_GOAL_SRC, EXPAND_BANK_GOAL_MUTATIONS,
               "tests/test_ai/test_goals_expand_bank.py", survivors)
-    run_group(GAME_DATA_SRC, GAME_DATA_MUTATIONS,
+    run_group(MONSTER_CATALOG_SRC, GAME_DATA_MUTATIONS,
               "formal/diff/test_game_data_accessors_diff.py", survivors)
     run_group(WINNABLE_CASCADE_SRC, WINNABLE_CASCADE_MUTATIONS,
               "formal/diff/test_winnable_cascade_diff.py", survivors)
@@ -2467,7 +2473,7 @@ def main() -> int:
     run_group(APPLY_REST_SRC, LIVENESS_REST_MUTATIONS,
               "formal/diff/test_local_progress_diff.py", survivors)
     # Phase 21d-2 — Tier-3 plan-exists differential.
-    run_group(PLAYER_SRC, PLAN_EXISTS_BUILD_ACTIONS_MUTATIONS,
+    run_group(ACTION_FACTORY_SRC, PLAN_EXISTS_BUILD_ACTIONS_MUTATIONS,
               "formal/diff/test_plan_exists_diff.py", survivors)
     # Phase-22b — cycle-loop differential.
     run_group(CYCLE_STEP_SRC, CYCLE_STEP_MUTATIONS,
