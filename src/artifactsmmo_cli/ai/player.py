@@ -29,6 +29,7 @@ from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
 from artifactsmmo_cli.ai.combat import is_winnable
+from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
 from artifactsmmo_cli.ai.constants import (
     BANK_REFRESH_FORCE_SENTINEL,
     BANK_REFRESH_INTERVAL,
@@ -640,31 +641,17 @@ class GamePlayer:
             bank_gold = details.data.gold
             bank_capacity = details.data.slots
 
-        return WorldState(
-            character=state.character,
-            level=state.level,
-            xp=state.xp,
-            max_xp=state.max_xp,
-            hp=state.hp,
-            max_hp=state.max_hp,
-            gold=state.gold,
-            skills=state.skills,
-            x=state.x,
-            y=state.y,
-            inventory=state.inventory,
-            inventory_max=state.inventory_max,
-            equipment=state.equipment,
-            cooldown_expires=state.cooldown_expires,
-            task_code=state.task_code,
-            task_type=state.task_type,
-            task_progress=state.task_progress,
-            task_total=state.task_total,
+        # `dataclasses.replace` so every untouched field carries over. The old
+        # field-by-field WorldState(...) rebuild silently DROPPED every field
+        # it didn't enumerate (attack/dmg/dmg_elements/resistance/
+        # critical_strike/initiative/wisdom/skill_xp) — zeroed combat stats on
+        # every periodic refresh, flapping combat_capable and dooming combat
+        # planning until the next character fetch.
+        return replace(
+            state,
             bank_items=bank_items,
             bank_gold=bank_gold,
             bank_capacity=bank_capacity,
-            pending_items=state.pending_items,
-            active_events=state.active_events,
-            task_lifecycle_phase=state.task_lifecycle_phase,
         )
 
     def _sync_pending(self, client: AuthenticatedClient, state: WorldState) -> WorldState:
@@ -680,32 +667,10 @@ class GamePlayer:
                 for si in items:
                     pairs.append((pi.id, si.code))
             pending = tuple(pairs) if pairs else None
-        return WorldState(
-            character=state.character,
-            level=state.level,
-            xp=state.xp,
-            max_xp=state.max_xp,
-            hp=state.hp,
-            max_hp=state.max_hp,
-            gold=state.gold,
-            skills=state.skills,
-            x=state.x,
-            y=state.y,
-            inventory=state.inventory,
-            inventory_max=state.inventory_max,
-            equipment=state.equipment,
-            cooldown_expires=state.cooldown_expires,
-            task_code=state.task_code,
-            task_type=state.task_type,
-            task_progress=state.task_progress,
-            task_total=state.task_total,
-            bank_items=state.bank_items,
-            bank_gold=state.bank_gold,
-            bank_capacity=state.bank_capacity,
-            pending_items=pending,
-            active_events=state.active_events,
-            task_lifecycle_phase=state.task_lifecycle_phase,
-        )
+        # `dataclasses.replace`: only pending_items changes; every other field
+        # (combat stats included) carries over. See `_sync_bank` for the
+        # stat-dropping bug the explicit rebuild caused.
+        return replace(state, pending_items=pending)
 
     def _full_refresh(self, client: AuthenticatedClient) -> None:
         """Force a complete state refresh: character, bank, pending items."""
@@ -1026,32 +991,39 @@ class GamePlayer:
         return is_winnable(projected, self.game_data, monster_code, self.history)
 
     def _pick_winnable_monster(self) -> str | None:
-        """Highest-level monster that `_is_winnable` AND falls inside
-        FightAction's level filter (monster_level in
-        [max(1, char_level-1), char_level+2]).
+        """Window-preferred winnable monster, with a liveness fallback.
 
+        PREFERRED: highest-level `_is_winnable` monster inside the
+        FightAction level window [max(1, char_level-1), char_level+2].
         Trace 2026-06-06 16:34: picker returned yellow_slime (lvl 2) for
-        Robby (lvl 4). yellow_slime won the winnable check (predict_win
-        at max_hp = True) but FightAction.is_applicable rejected it
-        because monster_level=2 < max(1, 4-1)=3. GrindCharacterXP got
-        the step slot but planner produced no plan; the arbiter fell
-        through to TaskExchange which timed out at 18260 nodes — bot
-        emitted Wait. Honoring the level filter at picker time prevents
-        the dead-target → empty-plan cascade.
+        Robby (lvl 4); FightAction.is_applicable rejected it (below the
+        old hard window) and the dead target cascaded into an empty plan.
+        Honoring the window at picker time prevents that cascade.
+
+        FALLBACK (P0 no-combat deadlock, 2026-06-09 live repro): at
+        level 4 the only stat-winnable monsters were chicken (L1) and
+        yellow_slime (L2) — both below the window, so the picker returned
+        None forever and no combat goal was ever constructed. When the
+        window holds no winnable monster, fall back to the highest-level
+        winnable monster that still grants XP (`xp_per_kill > 0`; the
+        documented curve zeroes out at char_level - monster_level >= 10)
+        and is under the char_level+2 suicide guard.
+        FightAction.is_applicable enforces the SAME xp>0 lower gate, so
+        any fallback target is level-applicable. Returns None only when
+        nothing winnable grants XP — then gear progression is the only
+        path, which is correct. Decision logic lives in the pure core
+        `combat_picker.pick_winnable_monster_pure` (Lean-diff-locked).
         """
         assert self.game_data is not None
         assert self.state is not None
-        min_level = max(1, self.state.level - 1)
-        max_level = self.state.level + 2
-        best: tuple[str, int] | None = None
-        for code, level in self.game_data.monster_levels.items():
-            if not (min_level <= level <= max_level):
-                continue
-            if not self._is_winnable(code):
-                continue
-            if best is None or level > best[1]:
-                best = (code, level)
-        return best[0] if best is not None else None
+        game_data = self.game_data
+        char_level = self.state.level
+        return pick_winnable_monster_pure(
+            char_level,
+            list(game_data.monster_levels.items()),
+            self._is_winnable,
+            lambda code: game_data.xp_per_kill(code, char_level) > 0,
+        )
 
     def _task_aligned_monster(self) -> str | None:
         """The active task's monster when it's a PURSUE monster-task; else None.

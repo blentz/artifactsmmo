@@ -1,7 +1,7 @@
 """Tests for GamePlayer."""
 
 import time
-from dataclasses import replace
+from dataclasses import fields, replace
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
@@ -480,6 +480,52 @@ class TestSyncBank:
 
         assert new_state.bank_items == {}
 
+    def test_sync_bank_drops_no_field(self):
+        """Regression (P0 2026-06-09 secondary bug): the old field-by-field
+        WorldState(...) rebuild silently DROPPED every field it didn't
+        enumerate — attack/dmg/dmg_elements/resistance/critical_strike/
+        initiative/wisdom/skill_xp — zeroing combat stats on every periodic
+        refresh (combat_capable flap, doomed gather probes). `_sync_bank`
+        must change ONLY bank_items/bank_gold/bank_capacity."""
+        player = GamePlayer(character="hero")
+        state = make_state(
+            attack={"air": 5, "fire": 3}, dmg=18, dmg_elements={"air": 7},
+            resistance={"earth": 4}, critical_strike=12, initiative=21,
+            wisdom=9, skill_xp={"mining": 123, "cooking": 4},
+            projected_skill_xp_delta={"mining": 6},
+            crafting_target="copper_dagger",
+            active_events={"bandit_camp": datetime(2026, 6, 9, tzinfo=timezone.utc)},
+            cooldown_expires=datetime(2026, 6, 9, 12, tzinfo=timezone.utc),
+            task_code="chicken", task_type="monsters",
+            task_progress=3, task_total=10,
+        )
+        client = MagicMock()
+
+        bank_slot = MagicMock()
+        bank_slot.code = "copper_ore"
+        bank_slot.quantity = 10
+        bank_items_result = MagicMock()
+        bank_items_result.data = [bank_slot]
+        bank_details_result = MagicMock()
+        bank_details_result.data = MagicMock()
+        bank_details_result.data.gold = 200
+        bank_details_result.data.slots = 60
+
+        with patch("artifactsmmo_cli.ai.player.get_bank_items", return_value=bank_items_result):
+            with patch("artifactsmmo_cli.ai.player.get_bank_details", return_value=bank_details_result):
+                new_state = player._sync_bank(client, state)
+
+        synced = {"bank_items", "bank_gold", "bank_capacity"}
+        for f in fields(WorldState):
+            if f.name in synced:
+                continue
+            assert getattr(new_state, f.name) == getattr(state, f.name), (
+                f"_sync_bank dropped field {f.name!r}"
+            )
+        assert new_state.bank_items == {"copper_ore": 10}
+        assert new_state.bank_gold == 200
+        assert new_state.bank_capacity == 60
+
 
 class TestExecute:
     def test_execute_success_updates_state(self):
@@ -822,6 +868,52 @@ def test_sync_pending_iterates_items_list(monkeypatch):
     assert ("p1", "ruby") in new_state.pending_items
     assert ("p2", "emerald") in new_state.pending_items
     assert len(new_state.pending_items) == 3
+
+
+def test_sync_pending_drops_no_field(monkeypatch):
+    """Regression (P0 2026-06-09 secondary bug): like `_sync_bank`, the old
+    `_sync_pending` rebuilt WorldState field-by-field and dropped every
+    combat stat. It must change ONLY pending_items."""
+
+    class FakeItem:
+        def __init__(self, code):
+            self.code = code
+
+    class FakePending:
+        def __init__(self, id_, items):
+            self.id = id_
+            self.items = items
+
+    class FakeResult:
+        def __init__(self, data):
+            self.data = data
+
+    monkeypatch.setattr(
+        "artifactsmmo_cli.ai.player.get_pending_items",
+        lambda client: FakeResult([FakePending("p1", [FakeItem("diamond")])]),
+    )
+
+    player = GamePlayer(character="testchar")
+    state = make_state(
+        attack={"air": 5}, dmg=18, dmg_elements={"air": 7},
+        resistance={"earth": 4}, critical_strike=12, initiative=21,
+        wisdom=9, skill_xp={"mining": 123},
+        projected_skill_xp_delta={"mining": 6},
+        crafting_target="copper_dagger",
+        active_events={"bandit_camp": datetime(2026, 6, 9, tzinfo=timezone.utc)},
+        bank_items={"copper_ore": 2}, bank_gold=77, bank_capacity=50,
+        task_code="chicken", task_type="monsters",
+        task_progress=3, task_total=10,
+    )
+    new_state = player._sync_pending(client=None, state=state)
+
+    for f in fields(WorldState):
+        if f.name == "pending_items":
+            continue
+        assert getattr(new_state, f.name) == getattr(state, f.name), (
+            f"_sync_pending dropped field {f.name!r}"
+        )
+    assert new_state.pending_items == (("p1", "diamond"),)
 
 
 def test_sync_pending_handles_unset_items_list(monkeypatch):

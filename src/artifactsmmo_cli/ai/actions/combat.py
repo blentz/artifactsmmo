@@ -44,8 +44,19 @@ class FightAction(Action):
         if not self.locations or state.inventory_free < self._MIN_FREE_SLOTS:
             return False
         monster_level = game_data.monster_level(self.monster_code)
-        min_level = max(1, state.level - 1)
-        if not (state.hp_percent > _MIN_FIGHT_HP_FRACTION and min_level <= monster_level <= state.level + 2):
+        if not (state.hp_percent > _MIN_FIGHT_HP_FRACTION and monster_level <= state.level + 2):
+            return False
+        # LOWER level gate: xp_per_kill > 0, NOT the old hard window
+        # `monster_level >= max(1, level-1)`. The documented XP curve zeroes
+        # out at char_level - monster_level >= 10, so a monster too far below
+        # serves no leveling objective and is naturally excluded — while a
+        # slightly-below monster stays fightable. The old window caused the P0
+        # no-combat deadlock (2026-06-09): at level 4 the only stat-winnable
+        # monsters (chicken L1, yellow_slime L2) were below max(1,4-1)=3, so
+        # neither the picker nor this gate ever admitted a fight. The UPPER
+        # bound (level+2 suicide guard) stays. Lean lockstep:
+        # formal/Formal/ActionApplicability.lean (xpPositive gate).
+        if game_data.xp_per_kill(self.monster_code, state.level) <= 0:
             return False
         # NOTE: deliberately a CHEAP level+gear pre-filter, not the full predict_win
         # verdict. predict_win evaluates the best ON-HAND loadout, which makes a

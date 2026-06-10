@@ -216,11 +216,26 @@ class TestFightAction:
         gd = make_game_data(monster_locs={"chicken": [(1, 0)]}, monster_levels={"chicken": 1})
         assert action.is_applicable(state, gd) is False
 
-    def test_not_applicable_monster_too_low_level(self):
+    def test_applicable_below_old_window_when_xp_positive(self):
+        """P0 regression (2026-06-09): the old hard lower window
+        `monster_level >= max(1, level-1)` rejected chicken (L1) at level 3
+        and deadlocked combat when nothing in-window was winnable. The
+        lower gate is now `xp_per_kill > 0` — chicken grants XP at level 3,
+        so the fight is applicable."""
         action = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]))
-        # level 3 → min_level = max(1, 3-1) = 2; chicken is level 1 → excluded
         state = make_state(x=0, y=0, hp=100, max_hp=100, level=3)
         gd = make_game_data(monster_locs={"chicken": [(1, 0)]}, monster_levels={"chicken": 1})
+        assert gd.xp_per_kill("chicken", 3) > 0
+        assert action.is_applicable(state, gd) is True
+
+    def test_not_applicable_monster_grants_zero_xp(self):
+        """The honest lower bound: the documented XP curve zeroes out at
+        char_level - monster_level >= 10, so a far-below monster serves no
+        leveling objective and is excluded — naturally level-tracking."""
+        action = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]))
+        state = make_state(x=0, y=0, hp=100, max_hp=100, level=11)
+        gd = make_game_data(monster_locs={"chicken": [(1, 0)]}, monster_levels={"chicken": 1})
+        assert gd.xp_per_kill("chicken", 11) == 0
         assert action.is_applicable(state, gd) is False
 
     def test_not_applicable_monster_too_high_level(self):
