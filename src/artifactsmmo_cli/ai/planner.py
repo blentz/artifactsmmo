@@ -72,7 +72,8 @@ class GOAPPlanner:
         """Return the lowest-cost action plan to satisfy `goal` from `state`, or [] if none found.
 
         ``budget_seconds`` overrides the module-level ``_SEARCH_BUDGET_SECONDS`` for this
-        call only.  Pass ``None`` (the default) to preserve the existing 90s behaviour.
+        call only.  Pass ``None`` (the default) to use the full 300s escalation budget;
+        the arbiter's cheap first pass passes 10s (strategy_driver.CHEAP_BUDGET_SECONDS).
         """
         max_depth = goal.max_depth
         budget = _SEARCH_BUDGET_SECONDS if budget_seconds is None else budget_seconds

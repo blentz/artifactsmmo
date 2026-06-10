@@ -29,13 +29,14 @@ from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
 from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
-from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
+from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal, tasks_coin_total
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
+from artifactsmmo_cli.ai.task_reservation import consumes_reserved
 from artifactsmmo_cli.ai.tiers.guards import (
     GuardKind,
     SelectionContext,
@@ -96,6 +97,34 @@ def _task_recipe_inputs(task_code: str | None, game_data: GameData) -> frozenset
             chain.add(mat)
             queue.append(mat)
     return frozenset(chain)
+
+def _reservation_consumption(step_goal: Goal, state: WorldState,
+                             game_data: GameData) -> dict[str, int] | None:
+    """The item->qty map a step-tier goal would CONSUME from the material
+    pipeline, or None when it consumes nothing reservation-relevant.
+
+    * GatherMaterialsGoal: its `needed` map (the craft closure is expanded by
+      `consumes_reserved`).
+    * UpgradeEquipmentGoal with a committed target NOT yet owned: the target's
+      direct recipe (the craft+equip plan consumes those inputs). An owned
+      copy is a ONE-action equip that consumes no materials — never deferred
+      (preserves the trace-2026-06-06 ready-to-equip priority).
+    * Anything else: None.
+    """
+    if isinstance(step_goal, GatherMaterialsGoal):
+        return step_goal._needed
+    if isinstance(step_goal, UpgradeEquipmentGoal):
+        target = step_goal._committed_target
+        if target is None:
+            return None
+        item, _slot = target
+        bank = state.bank_items or {}
+        if state.inventory.get(item, 0) + bank.get(item, 0) > 0:
+            return None
+        recipe = game_data.crafting_recipe(item) or {}
+        return recipe or None
+    return None
+
 
 def _materials_in_hand(item: str, state: WorldState, game_data: GameData) -> bool:
     """True if every direct recipe material for `item` is fully covered by
@@ -206,7 +235,12 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
     if kind is MeansKind.ACCEPT_TASK:
         return AcceptTaskGoal()
     if kind is MeansKind.TASK_EXCHANGE:
-        return TaskExchangeGoal(min_coins=ctx.task_exchange_min_coins)
+        # ONE-batch semantics: capture the construction-time coin total so the
+        # goal is satisfied after a single exchange (initial - min_coins), not
+        # after draining every coin (which exceeded max_depth and stormed the
+        # planner budget).
+        return TaskExchangeGoal(min_coins=ctx.task_exchange_min_coins,
+                                initial_total=tasks_coin_total(state))
     if kind is MeansKind.BANK_EXPAND:
         return ExpandBankGoal(bank_accessible=ctx.bank_accessible, game_data=game_data)
     if kind is MeansKind.WAIT:
@@ -582,9 +616,21 @@ class StrategyArbiter:
         state: WorldState,
         game_data: GameData,
     ) -> Goal | None:
-        """Step-suppression: drop a GatherMaterials step that the active items task already covers or can trade now."""
+        """Step-suppression: drop a step the active items task already covers,
+        can trade now, or whose craft would EAT the task's reserved materials."""
         if MeansKind.PURSUE_TASK not in discretionary_kinds:
             return step_goal
+        # Task-material reservation (P0 2026-06-09): a step whose craft closure
+        # CONSUMES a reserved item without surplus is deferred this cycle —
+        # otherwise GatherMaterials(copper_helmet) eats the 6 copper_bars the
+        # copper_bar items task just pooled and the task restarts from zero,
+        # forever. Surplus above the remaining task need passes; re-evaluated
+        # every cycle (defer, not ban). Covers GatherMaterials AND a committed
+        # UpgradeEquipment whose craft consumes reserved inputs.
+        if step_goal is not None:
+            needed = _reservation_consumption(step_goal, state, game_data)
+            if needed is not None and consumes_reserved(needed, state, game_data):
+                return None
         if not isinstance(step_goal, GatherMaterialsGoal):
             return step_goal
         # An active items-task pursuit suppresses the meta-objective's
@@ -653,6 +699,13 @@ class StrategyArbiter:
         for idx, alt in enumerate(fallback_steps):
             alt_root = fallback_roots[idx] if idx < len(fallback_roots) else None
             alt_goal = objective_step_goal(alt, state, game_data, ctx, root=alt_root)
+            # Route every fallback-alt step goal through the SAME task
+            # suppression as the top step (reservation + redundancy +
+            # trade-ready). Pre-fix these were re-appended UNSUPPRESSED, so a
+            # goal the reservation deferred leaked back in via the fallback
+            # chain and still ate the task's pooled materials.
+            alt_goal = self._suppress_step_for_task(
+                alt_goal, discretionary_kinds, state, game_data)
             if alt_goal is None:
                 continue
             r = repr(alt_goal)

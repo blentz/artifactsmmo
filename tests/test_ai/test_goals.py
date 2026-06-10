@@ -9,6 +9,7 @@ from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
+from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
@@ -18,11 +19,12 @@ from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
-from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
+from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal, tasks_coin_total
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 from tests.test_ai.fixtures import make_state
 
 
@@ -1046,59 +1048,132 @@ class TestAcceptTaskGoal:
 
 
 class TestTaskExchangeGoal:
-    def test_value_22_when_coins_meet_learned_minimum(self):
+    """ONE-batch semantics: satisfied once the inventory+bank coin total has
+    dropped by >= min_coins from the total captured at construction."""
+
+    def test_value_22_when_batch_not_yet_spent(self):
         # min_coins is injected (learned empirically), not a hardcoded cost.
-        goal = TaskExchangeGoal(min_coins=6)
+        goal = TaskExchangeGoal(min_coins=6, initial_total=6)
         state = make_state(inventory={"tasks_coin": 6})
         assert goal.value(state, make_game_data()) == 22.0
 
-    def test_value_22_when_coins_in_bank_meet_minimum(self):
-        goal = TaskExchangeGoal(min_coins=6)
+    def test_value_22_when_coins_in_bank(self):
+        goal = TaskExchangeGoal(min_coins=6, initial_total=6)
         state = make_state(bank_items={"tasks_coin": 6})
         assert goal.value(state, make_game_data()) == 22.0
 
-    def test_value_zero_when_no_coins(self):
-        goal = TaskExchangeGoal(min_coins=6)
-        state = make_state(inventory={}, bank_items={})
+    def test_value_zero_once_one_batch_spent(self):
+        goal = TaskExchangeGoal(min_coins=6, initial_total=22)
+        state = make_state(inventory={"tasks_coin": 16})
         assert goal.value(state, make_game_data()) == 0.0
 
-    def test_value_zero_when_below_minimum(self):
-        goal = TaskExchangeGoal(min_coins=6)
-        state = make_state(inventory={"tasks_coin": 5})
-        assert goal.value(state, make_game_data()) == 0.0
+    def test_satisfied_when_exactly_min_coins_spent(self):
+        # Boundary: total dropped by exactly one batch (22 -> 16) = satisfied.
+        goal = TaskExchangeGoal(min_coins=6, initial_total=22)
+        state = make_state(inventory={"tasks_coin": 16})
+        assert goal.is_satisfied(state) is True
 
-    def test_satisfied_when_no_coins(self):
-        goal = TaskExchangeGoal(min_coins=6)
+    def test_not_satisfied_when_fewer_than_min_coins_spent(self):
+        # Boundary partner: one coin short of a full batch (22 -> 17) = not satisfied.
+        goal = TaskExchangeGoal(min_coins=6, initial_total=22)
+        state = make_state(inventory={"tasks_coin": 17})
+        assert goal.is_satisfied(state) is False
+
+    def test_not_satisfied_storm_state_drains_one_batch_only(self):
+        # The P1 storm state: 22 coins split inventory/bank, min learned-able
+        # at 1. Unsatisfied while untouched; satisfied after ONE batch — not
+        # only after draining all 22 (the pre-fix reading).
+        goal = TaskExchangeGoal(min_coins=1, initial_total=22)
+        untouched = make_state(inventory={"tasks_coin": 11},
+                               bank_items={"tasks_coin": 11})
+        assert goal.is_satisfied(untouched) is False
+        one_exchanged = make_state(inventory={"tasks_coin": 10},
+                                   bank_items={"tasks_coin": 11})
+        assert goal.is_satisfied(one_exchanged) is True
+
+    def test_bank_and_inventory_pools_both_count(self):
+        goal = TaskExchangeGoal(min_coins=6, initial_total=10)
+        state = make_state(inventory={"tasks_coin": 2}, bank_items={"tasks_coin": 2})
+        assert goal.is_satisfied(state) is True
+        state = make_state(inventory={"tasks_coin": 3}, bank_items={"tasks_coin": 2})
+        assert goal.is_satisfied(state) is False
+
+    def test_threshold_clamps_at_zero_when_constructed_below_min(self):
+        # initial_total < min_coins: threshold truncates at 0 (Nat subtraction
+        # in Formal.Phase10GoalLattices.taskExchangeSatisfied), so only a
+        # zero-coin state is satisfied.
+        goal = TaskExchangeGoal(min_coins=6, initial_total=3)
+        assert goal.is_satisfied(make_state(inventory={"tasks_coin": 3})) is False
+        assert goal.is_satisfied(make_state(inventory={}, bank_items={})) is True
+
+    def test_value_zero_when_no_coins_and_none_at_construction(self):
+        goal = TaskExchangeGoal(min_coins=6, initial_total=0)
         state = make_state(inventory={}, bank_items={})
-        assert goal.is_satisfied(state) is True
-
-    def test_satisfied_when_below_minimum(self):
-        goal = TaskExchangeGoal(min_coins=6)
-        state = make_state(inventory={"tasks_coin": 5})
-        assert goal.is_satisfied(state) is True
-
-    def test_not_satisfied_when_coins_meet_minimum(self):
-        goal = TaskExchangeGoal(min_coins=6)
-        state = make_state(inventory={"tasks_coin": 6})
-        assert goal.is_satisfied(state) is False
-
-    def test_not_satisfied_when_coins_in_bank_meet_minimum(self):
-        goal = TaskExchangeGoal(min_coins=6)
-        state = make_state(bank_items={"tasks_coin": 6})
-        assert goal.is_satisfied(state) is False
+        assert goal.value(state, make_game_data()) == 0.0
 
     def test_default_minimum_is_one(self):
-        goal = TaskExchangeGoal()
+        goal = TaskExchangeGoal(initial_total=1)
         assert goal.is_satisfied(make_state(inventory={"tasks_coin": 1})) is False
         assert goal.is_satisfied(make_state(inventory={}, bank_items={})) is True
 
-    def test_desired_state_drops_below_batch(self):
-        goal = TaskExchangeGoal(min_coins=6)
+    def test_desired_state_drops_one_batch(self):
+        goal = TaskExchangeGoal(min_coins=6, initial_total=8)
         state = make_state(inventory={"tasks_coin": 8})
         assert goal.desired_state(state, make_game_data()) == {"inventory": {"tasks_coin": 2}}
 
+    def test_desired_state_clamps_at_zero(self):
+        goal = TaskExchangeGoal(min_coins=6, initial_total=4)
+        state = make_state(inventory={"tasks_coin": 4})
+        assert goal.desired_state(state, make_game_data()) == {"inventory": {"tasks_coin": 0}}
+
+    def test_relevant_actions_narrowed_to_exchange_chain(self):
+        # Only the exchange itself, tasks_coin withdraws, and DepositAll can
+        # move the coin total — everything else just widens the search.
+        goal = TaskExchangeGoal(min_coins=1, initial_total=22)
+        state = make_state(inventory={"tasks_coin": 11},
+                           bank_items={"tasks_coin": 11})
+        exchange = TaskExchangeAction(taskmaster_location=(1, 2), min_coins=1)
+        coin_withdraw = WithdrawItemAction(code=TASKS_COIN_CODE, quantity=1,
+                                           bank_location=(4, 0))
+        other_withdraw = WithdrawItemAction(code="copper_ore", quantity=1,
+                                            bank_location=(4, 0))
+        deposit = DepositAllAction(bank_location=(4, 0))
+        noise = [RestAction(), GatherAction(resource_code="ash_tree",
+                                            locations=frozenset({(2, 2)}))]
+        relevant = goal.relevant_actions(
+            [*noise, exchange, coin_withdraw, other_withdraw, deposit],
+            state, make_game_data())
+        assert relevant == [exchange, coin_withdraw, deposit]
+
+    def test_storm_state_plans_short_and_cheap(self):
+        # P1 regression: the 22-coin state must be plannable in a handful of
+        # nodes with the REAL planner (pre-fix: 40-46k nodes, 300s timeout).
+        goal = TaskExchangeGoal(min_coins=1, initial_total=22)
+        state = make_state(inventory={"tasks_coin": 11},
+                           bank_items={"tasks_coin": 11})
+        actions = [
+            RestAction(),
+            GatherAction(resource_code="ash_tree", locations=frozenset({(2, 2)})),
+            TaskExchangeAction(taskmaster_location=(1, 2), min_coins=1),
+            WithdrawItemAction(code=TASKS_COIN_CODE, quantity=1, bank_location=(4, 0)),
+            DepositAllAction(bank_location=(4, 0), game_data=make_game_data()),
+        ]
+        planner = GOAPPlanner()
+        plan = planner.plan(state, goal, actions, make_game_data())
+        assert plan and len(plan) <= 5
+        assert any(isinstance(a, TaskExchangeAction) for a in plan)
+        assert planner.last_stats.nodes_explored < 1000
+        assert planner.last_stats.timed_out is False
+
+    def test_tasks_coin_total_counts_both_pools(self):
+        assert tasks_coin_total(make_state(inventory={"tasks_coin": 4},
+                                           bank_items={"tasks_coin": 3})) == 7
+        # bank unknown (None) counts as zero, not an error.
+        assert tasks_coin_total(make_state(inventory={"tasks_coin": 4},
+                                           bank_items=None)) == 4
+
     def test_repr(self):
-        assert repr(TaskExchangeGoal()) == "TaskExchange"
+        assert repr(TaskExchangeGoal(initial_total=0)) == "TaskExchange"
 
 
 class TestUnlockBankGoal:

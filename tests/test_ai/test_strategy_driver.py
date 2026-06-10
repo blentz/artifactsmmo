@@ -346,6 +346,21 @@ def test_map_means_task_exchange():
     assert isinstance(g, TaskExchangeGoal)
 
 
+def test_map_means_task_exchange_threads_initial_total():
+    """ONE-batch threading: map_means captures the construction-time
+    inventory+bank coin total, so the goal is satisfied after a single
+    batch is spent (7 -> 4 with min 3), not only when fully drained."""
+    state = make_state(inventory={"tasks_coin": 4}, bank_items={"tasks_coin": 3})
+    g = map_means(MeansKind.TASK_EXCHANGE, GameData(), _ctx(task_exchange_min_coins=3), state)
+    assert g.is_satisfied(state) is False
+    one_batch_spent = make_state(inventory={"tasks_coin": 1},
+                                 bank_items={"tasks_coin": 3})
+    assert g.is_satisfied(one_batch_spent) is True
+    partial_spend = make_state(inventory={"tasks_coin": 2},
+                               bank_items={"tasks_coin": 3})
+    assert g.is_satisfied(partial_spend) is False
+
+
 def test_map_means_bank_expand():
     assert isinstance(map_means(MeansKind.BANK_EXPAND, GameData(), _ctx(), make_state()), ExpandBankGoal)
 
