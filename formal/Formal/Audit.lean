@@ -465,7 +465,8 @@ open Formal.WeightedRemaining in
 #print axioms Formal.Phase10GoalLattices.taskExchange_bank_only_fires
 #print axioms Formal.Phase10GoalLattices.taskExchange_split_fires
 #print axioms Formal.Phase10GoalLattices.taskExchange_bounded
-#print axioms Formal.Phase10GoalLattices.taskExchange_reachable_via_drain
+#print axioms Formal.Phase10GoalLattices.taskExchange_one_batch_satisfies
+#print axioms Formal.Phase10GoalLattices.taskExchange_partial_spend_fires
 -- Phase-11 Target A: Player._winnable_farm_target cascade
 #print axioms Formal.WinnableCascade.task_wins
 #print axioms Formal.WinnableCascade.path_wins_when_winnable
@@ -599,12 +600,14 @@ open Formal.WeightedRemaining in
 #print axioms Formal.ActionApplicability.fightApplicable_false_of_no_locations
 #print axioms Formal.ActionApplicability.fightApplicable_false_of_no_inv_room
 #print axioms Formal.ActionApplicability.fightApplicable_false_of_low_hp
-#print axioms Formal.ActionApplicability.fightApplicable_false_of_underleveled_monster
+#print axioms Formal.ActionApplicability.fightApplicable_false_of_zero_xp
 #print axioms Formal.ActionApplicability.fightApplicable_false_of_overleveled_monster
 #print axioms Formal.ActionApplicability.fightApplicable_false_of_undergear
 #print axioms Formal.ActionApplicability.fightApplicable_mono_in_hp
-#print axioms Formal.ActionApplicability.fightApplicable_false_under_level_window
+#print axioms Formal.ActionApplicability.fightApplicable_false_above_level_window
 #print axioms Formal.ActionApplicability.winnable_does_not_imply_applicable
+#print axioms Formal.ActionApplicability.fightApplicable_iff
+#print axioms Formal.ActionApplicability.below_old_window_xp_positive_is_applicable
 #print axioms Formal.ActionApplicability.restApplicable_iff_subfull
 #print axioms Formal.ActionApplicability.equipApplicable_iff
 -- NoActionDeadlock (de-Mathlib'd safety module)
@@ -688,6 +691,9 @@ open Formal.WeightedRemaining in
 #print axioms Formal.CombatTargetExistence.pickWinnable_some_of_exists
 #print axioms Formal.CombatTargetExistence.pickBest_some_of_acc_some
 #print axioms Formal.CombatTargetExistence.pickBest_none_iff_acc_none_and_none_winnable
+#print axioms Formal.CombatTargetExistence.pickWinnableWindowed_some_of_winnable_xp_positive
+#print axioms Formal.CombatTargetExistence.pickWinnableWindowed_prefers_window
+#print axioms Formal.CombatTargetExistence.pickWinnableWindowed_none_implies_no_viable_target
 #print axioms Formal.CombatTargetExistence.winnableFarmTarget_task_override
 #print axioms Formal.CombatTargetExistence.winnableFarmTarget_falls_through_no_task
 -- WithdrawSetExpansion (de-Mathlib'd safety module)

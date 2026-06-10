@@ -84,7 +84,13 @@ theorem claimPending_cold_returns_zero :
     claimPendingValue true = 0 := by
   unfold claimPendingValue; decide
 
-/-! ### TaskExchangeGoal — {0, 22}. -/
+/-! ### TaskExchangeGoal — {0, 22}.
+
+`satisfied` is the opaque ONE-batch predicate: current inventory+bank coin
+total ≤ initial_total - min_coins (initial_total captured at goal
+construction). The satisfaction arithmetic itself is modeled and proven in
+`Formal.Phase10GoalLattices.taskExchangeSatisfied` (Nat-truncated
+subtraction); here we pin only the value lattice over that verdict. -/
 
 def taskExchangeValue (satisfied : Bool) : Rat :=
   if satisfied then 0 else 22

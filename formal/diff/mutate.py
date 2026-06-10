@@ -68,6 +68,8 @@ BANK_EXPANSION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "ban
 EXPAND_BANK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "expand_bank.py"
 MONSTER_CATALOG_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "monster_catalog.py"
 WINNABLE_CASCADE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "winnable_cascade.py"
+COMBAT_PICKER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat_picker.py"
+TASK_RESERVATION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_reservation.py"
 PROJECTIONS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "projections.py"
 # Phase-18 — additional Goal sources.
 ACCEPT_TASK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "accept_task_goal.py"
@@ -1013,6 +1015,55 @@ WINNABLE_CASCADE_MUTATIONS = [
 ]
 
 
+# combat_picker mutations (P0 2026-06-09: window-preferred picker with the
+# xp>0 liveness fallback, extracted from Player._pick_winnable_monster).
+# The differential test must kill every weakening of the fallback tier.
+COMBAT_PICKER_MUTATIONS = [
+    # Mutation 1: drop the liveness fallback entirely — revert to the
+    # window-only picker (re-introduces the P0 no-combat deadlock).
+    ("combat_picker: drop liveness fallback (window-only picker)",
+     "    if best is not None:\n"
+     "        return best[0]\n"
+     "    for code, level in monsters:\n",
+     "    if best is not None:\n"
+     "        return best[0]\n"
+     "    for code, level in ():\n"),
+    # Mutation 2: invert the xp>0 gate — the fallback targets ONLY zero-xp
+    # monsters (no leveling value) and skips xp-positive ones.
+    ("combat_picker: invert xp_positive gate in fallback",
+     "        if level > max_level or not xp_positive(code) or not is_winnable(code):\n",
+     "        if level > max_level or xp_positive(code) or not is_winnable(code):\n"),
+    # Mutation 3: drop the suicide-guard upper bound from the fallback — an
+    # overleveled winnable monster gets picked, which FightAction's level+2
+    # bound would reject (dead-target → empty-plan cascade).
+    ("combat_picker: drop suicide guard from fallback",
+     "        if level > max_level or not xp_positive(code) or not is_winnable(code):\n",
+     "        if not xp_positive(code) or not is_winnable(code):\n"),
+]
+
+
+# task_reservation mutations (P0 2026-06-09: items-task material reservation —
+# the predicate deferring a step-tier goal whose craft would eat the task's
+# pooled materials). The differential test must kill every weakening.
+TASK_RESERVATION_MUTATIONS = [
+    # Mutation 1: flip <= to < on the surplus boundary — owned == demand would
+    # count as surplus and the step eats the exact remaining task need.
+    ("task_reservation: surplus boundary <= becomes <",
+     "        if 0 < owned <= demand[item]:\n",
+     "        if 0 < owned < demand[item]:\n"),
+    # Mutation 2: drop the remaining-multiplication — demand = closure x 1, so
+    # any pooled stock above ONE unit reads as surplus and gets eaten.
+    ("task_reservation: demand = closure x 1 (drop remaining scaling)",
+     "    closure_demand(state.task_code, remaining, game_data, demand, frozenset())\n",
+     "    closure_demand(state.task_code, 1, game_data, demand, frozenset())\n"),
+    # Mutation 3: ignore the items-task gate — monster/skill tasks would
+    # reserve materials they never consume, starving the gear chain.
+    ("task_reservation: ignore task_type gate",
+     "    if state.task_type != \"items\" or not state.task_code:\n",
+     "    if not state.task_code:\n"),
+]
+
+
 def run_diff(test_path: str) -> int:
     return subprocess.run(
         ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
@@ -1064,6 +1115,7 @@ _ALL_SRCS = [
     GATHERING_APPLY_SRC, LEVEL_SKILL_GOAL_SRC,
     MONSTER_CATALOG_SRC,
     WINNABLE_CASCADE_SRC,
+    COMBAT_PICKER_SRC,
     PROJECTIONS_SRC,
     # Phase-17 — scalar_yield wired through clamp_into_band into discretionary goals.
     GATHERING_GOAL_SRC, PURSUE_TASK_GOAL_SRC, SCALAR_PRIORITY_SRC,
@@ -2107,6 +2159,18 @@ TASK_EXCHANGE_GOAL_MUTATIONS = [
     ("task_exchange: return 22.0 -> 220.0",
      "        return 22.0",
      "        return 220.0"),
+    # Revert one-batch satisfaction to the pre-fix drain-ALL-coins reading —
+    # resurrects the P1 planner-timeout storm (killed by
+    # test_task_exchange_one_batch_boundary_matches_model).
+    ("task_exchange: revert one-batch is_satisfied to drain-all",
+     "        return tasks_coin_total(state) <= max(0, self._initial_total - self._min_coins)",
+     "        return tasks_coin_total(state) < self._min_coins"),
+    # Off-by-one on the one-batch boundary: exactly min_coins spent would no
+    # longer satisfy (killed by the s_exact boundary case in
+    # test_task_exchange_one_batch_boundary_matches_model).
+    ("task_exchange: flip <= to < on one-batch satisfaction",
+     "        return tasks_coin_total(state) <= max(0, self._initial_total - self._min_coins)",
+     "        return tasks_coin_total(state) < max(0, self._initial_total - self._min_coins)"),
 ]
 
 TASK_CANCEL_GOAL_MUTATIONS = [
@@ -2429,6 +2493,8 @@ def main() -> int:
               "formal/diff/test_game_data_accessors_diff.py", survivors)
     run_group(WINNABLE_CASCADE_SRC, WINNABLE_CASCADE_MUTATIONS,
               "formal/diff/test_winnable_cascade_diff.py", survivors)
+    run_group(COMBAT_PICKER_SRC, COMBAT_PICKER_MUTATIONS,
+              "formal/diff/test_combat_picker_diff.py", survivors)
     run_group(PROJECTIONS_SRC, CHEAPEST_PATH_MUTATIONS,
               "formal/diff/test_cheapest_path_diff.py", survivors)
     # Phase-17 — scalar_yield wired through clamp_into_band into discretionary goals.
@@ -2478,6 +2544,9 @@ def main() -> int:
     # Phase-22b — cycle-loop differential.
     run_group(CYCLE_STEP_SRC, CYCLE_STEP_MUTATIONS,
               "formal/diff/test_cycle_step_diff.py", survivors)
+    # P0 2026-06-09 — items-task material reservation differential.
+    run_group(TASK_RESERVATION_SRC, TASK_RESERVATION_MUTATIONS,
+              "formal/diff/test_task_reservation_diff.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

@@ -197,14 +197,16 @@ def test_pursue_task_priority_constant():
 
 
 def test_task_exchange_below_min_zero():
-    """Lean: `taskExchange_below_min_zero`. Total coins < min → satisfied → 0."""
-    g = TaskExchangeGoal(min_coins=3)
+    """Lean: `taskExchange_below_min_zero`. Zero coins at construction and
+    now → satisfied (the Nat-truncated threshold clamps at 0) → 0."""
+    g = TaskExchangeGoal(min_coins=3, initial_total=0)
     state = _mk()
     assert g.value(state, GameData()) == 0.0
 
 
 def test_task_exchange_inv_only_fires():
-    g = TaskExchangeGoal(min_coins=3)
+    """Lean: `taskExchange_at_min_fires`. Untouched construction-time total → fires."""
+    g = TaskExchangeGoal(min_coins=3, initial_total=3)
     state = _mk(inventory={TASKS_COIN_CODE: 3})
     assert g.value(state, GameData()) == 22.0
 
@@ -212,12 +214,30 @@ def test_task_exchange_inv_only_fires():
 def test_task_exchange_bank_only_fires():
     """Lean: `taskExchange_bank_only_fires`. Bank coins alone still fire
     the goal (planner can compose Withdraw→Exchange)."""
-    g = TaskExchangeGoal(min_coins=3)
+    g = TaskExchangeGoal(min_coins=3, initial_total=5)
     state = _mk(bank_items={TASKS_COIN_CODE: 5})
     assert g.value(state, GameData()) == 22.0
 
 
 def test_task_exchange_split_fires():
-    g = TaskExchangeGoal(min_coins=3)
+    """Lean: `taskExchange_split_fires`."""
+    g = TaskExchangeGoal(min_coins=3, initial_total=3)
     state = _mk(inventory={TASKS_COIN_CODE: 1}, bank_items={TASKS_COIN_CODE: 2})
+    assert g.value(state, GameData()) == 22.0
+
+
+def test_task_exchange_one_batch_satisfies():
+    """Lean: `taskExchange_one_batch_satisfies`. ONE executed exchange
+    (total drops by exactly min_coins) satisfies the goal — the P1
+    drain-all storm fix."""
+    g = TaskExchangeGoal(min_coins=3, initial_total=9)
+    state = _mk(inventory={TASKS_COIN_CODE: 6})
+    assert g.value(state, GameData()) == 0.0
+
+
+def test_task_exchange_partial_spend_fires():
+    """Lean: `taskExchange_partial_spend_fires`. Fewer than min_coins spent
+    from the construction-time total → still fires (pins the `<=` boundary)."""
+    g = TaskExchangeGoal(min_coins=3, initial_total=9)
+    state = _mk(inventory={TASKS_COIN_CODE: 7})
     assert g.value(state, GameData()) == 22.0

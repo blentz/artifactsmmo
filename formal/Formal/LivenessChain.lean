@@ -44,6 +44,9 @@ structure LivenessInputs where
       projecting hp := max_hp). G3 proves the picker existence claim
       against this. -/
   winnable    : WinnableFn
+  /-- The xp-per-kill positivity oracle (`game_data.xp_per_kill(m, L) > 0`)
+      — the P0-revision fallback tier's lower gate. -/
+  xpPos       : WinnableFn
   /-- The bootstrap root's char-level target — the value carried by the
       ReachCharLevel(level) step the strategy engine produces. -/
   bootstrapLevel : Int
@@ -58,7 +61,7 @@ def chainEmitsFight (i : LivenessInputs) (hasTask : Bool) (taskTarget : Option I
     if hasTask then
       taskTarget  -- task forces target
     else
-      winnableFarmTarget none i.winnable i.monsters
+      winnableFarmTarget i.fightInputs.playerLevel none i.winnable i.xpPos i.monsters
   match pickTarget with
   | none => none
   | some monster =>
@@ -85,14 +88,16 @@ mode (bootstrap step plans nothing, falls to PursueTask) cannot recur
 inside the modeled abstraction. -/
 theorem chain_emits_fight_when_target_exists_and_applicable
     (i : LivenessInputs)
-    (hExists  : ∃ m ∈ i.monsters, i.winnable m = true)
+    (hExists  : ∃ m ∈ i.monsters, i.winnable m = true ∧ i.xpPos m = true ∧
+                  notOverleveled i.fightInputs.playerLevel m = true)
     (hApp     : fightApplicable i.fightInputs = true) :
     ∃ monster, chainEmitsFight i false none = some monster := by
   -- Step 1: picker returns some.
   unfold chainEmitsFight
   simp only [Bool.false_eq_true, if_false]
   obtain ⟨code, hPick⟩ :=
-    winnableFarmTarget_falls_through_no_task i.winnable i.monsters hExists
+    winnableFarmTarget_falls_through_no_task i.fightInputs.playerLevel
+      i.winnable i.xpPos i.monsters hExists
   rw [hPick]
   -- Step 2: dispatch is grindCharacterXP code.
   show ∃ monster,
@@ -107,29 +112,35 @@ theorem chain_emits_fight_when_target_exists_and_applicable
 /-! ## Inverse: when the chain DOES return none, surface which gate. -/
 
 /-- If the chain returns `none` and no task is active, then either no
-winnable target exists, or the FightAction predicate fails. The
-dispatcher cannot be the culprit (G5's safe-fail guarantee). -/
+VIABLE target exists (winnable ∧ xp-positive ∧ under the suicide guard —
+the P0-revision picker's honest-`none` condition), or the FightAction
+predicate fails. The dispatcher cannot be the culprit (G5's safe-fail
+guarantee). -/
 theorem chain_none_implies_picker_or_applicability_blocked
     (i : LivenessInputs)
     (hNone : chainEmitsFight i false none = none) :
-    (∀ m ∈ i.monsters, i.winnable m = false) ∨
+    (∀ m ∈ i.monsters,
+        (i.winnable m && i.xpPos m
+          && notOverleveled i.fightInputs.playerLevel m) = false) ∨
     fightApplicable i.fightInputs = false := by
   unfold chainEmitsFight at hNone
   simp only [Bool.false_eq_true, if_false] at hNone
-  cases hPick : winnableFarmTarget none i.winnable i.monsters with
+  cases hPick : winnableFarmTarget i.fightInputs.playerLevel none
+      i.winnable i.xpPos i.monsters with
   | none =>
-    -- Picker returned none ⇒ no winnable in catalog.
+    -- Picker returned none ⇒ no viable target in catalog.
     left
     unfold winnableFarmTarget at hPick
-    -- hPick : (pickWinnable winnable monsters).map Monster.code = none
-    -- ⇒ pickWinnable winnable monsters = none
-    have hPickNone : pickWinnable i.winnable i.monsters = none := by
-      cases hPW : pickWinnable i.winnable i.monsters with
+    -- hPick : (pickWinnableWindowed ...).map Monster.code = none
+    -- ⇒ pickWinnableWindowed ... = none
+    have hPickNone : pickWinnableWindowed i.fightInputs.playerLevel
+        i.winnable i.xpPos i.monsters = none := by
+      cases hPW : pickWinnableWindowed i.fightInputs.playerLevel
+          i.winnable i.xpPos i.monsters with
       | none => rfl
       | some _ => rw [hPW] at hPick; exact absurd hPick (by simp)
-    intro m hm
-    have := (pickBest_none_iff_acc_none_and_none_winnable i.winnable i.monsters).mp hPickNone
-    exact this m hm
+    exact pickWinnableWindowed_none_implies_no_viable_target
+      i.fightInputs.playerLevel i.winnable i.xpPos i.monsters hPickNone
   | some monster =>
     right
     rw [hPick] at hNone

@@ -8,6 +8,7 @@ import Formal.EquipmentScoring
 import Formal.SkillXpCurve
 import Formal.RecipeClosure
 import Formal.TaskFeasibility
+import Formal.TaskReservation
 import Formal.PrerequisiteGraph
 import Formal.Objective
 import Formal.StrategyTraversal

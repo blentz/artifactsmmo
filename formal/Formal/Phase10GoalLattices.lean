@@ -328,52 +328,66 @@ theorem pursueTask_bounded
 
 def taskExchangePriority : Nat := 22
 
-/-- is_satisfied: inv_coins + bank_coins < min_coins. -/
-def taskExchangeSatisfied (invCoins bankCoins minCoins : Nat) : Bool :=
-  invCoins + bankCoins < minCoins
+/-- is_satisfied (ONE-batch semantics): the goal captures the inventory+bank
+coin total at construction (`initialTotal`) and is satisfied once the current
+total has dropped by at least one batch (`minCoins`) — i.e. after a single
+executed exchange. Nat subtraction truncates at 0, mirroring the Python
+`max(0, initial_total - min_coins)` clamp.
 
-def taskExchangeValue (invCoins bankCoins minCoins : Nat) : Nat :=
-  if taskExchangeSatisfied invCoins bankCoins minCoins then 0
+The pre-fix model (`invCoins + bankCoins < minCoins`, drain-ALL-coins) made
+the minimum production plan ~`total/minCoins` exchanges long — beyond
+`max_depth`, so the goal was a guaranteed planner timeout whenever coins
+accumulated, and the exchange that would teach the real `min_coins` never
+executed. One batch per goal commit matches the cycle model in
+`Formal.Liveness.CycleStep` (exactly one `.taskExchange` per cycle). -/
+def taskExchangeSatisfied (invCoins bankCoins initialTotal minCoins : Nat) : Bool :=
+  invCoins + bankCoins ≤ initialTotal - minCoins
+
+def taskExchangeValue (invCoins bankCoins initialTotal minCoins : Nat) : Nat :=
+  if taskExchangeSatisfied invCoins bankCoins initialTotal minCoins then 0
   else taskExchangePriority
 
 theorem taskExchange_below_min_zero :
-    taskExchangeValue 0 0 3 = 0 := by decide
+    taskExchangeValue 0 0 0 3 = 0 := by decide
 
 theorem taskExchange_at_min_fires :
-    taskExchangeValue 3 0 3 = taskExchangePriority := by decide
+    taskExchangeValue 3 0 3 3 = taskExchangePriority := by decide
 
 theorem taskExchange_bank_only_fires :
-    taskExchangeValue 0 5 3 = taskExchangePriority := by decide
+    taskExchangeValue 0 5 5 3 = taskExchangePriority := by decide
 
 theorem taskExchange_split_fires :
-    taskExchangeValue 1 2 3 = taskExchangePriority := by decide
+    taskExchangeValue 1 2 3 3 = taskExchangePriority := by decide
 
-theorem taskExchange_bounded (inv bank min : Nat) :
-    taskExchangeValue inv bank min ≤ taskExchangePriority := by
+theorem taskExchange_bounded (inv bank init min : Nat) :
+    taskExchangeValue inv bank init min ≤ taskExchangePriority := by
   unfold taskExchangeValue
   split
   · decide
   · exact Nat.le_refl _
 
-/-- Anti-witness: pre-Phase-10 concern was that bank-only coins fire the
-goal but the planner can't drain them via TaskExchange (only inventory
-is consumed). RESOLUTION (NOT-A-BUG): player.py:857 plumbs a
-`WithdrawItemAction(code=TASKS_COIN_CODE, quantity=1, ...)` so the planner
-can compose Withdraw → TaskExchange chains that DO move bank coins through
-inventory and drop the total below min, satisfying the goal. The witness
-below pins that the goal can be satisfied by reducing both pools. -/
-theorem taskExchange_reachable_via_drain
-    (initInv initBank minC : Nat)
-    (drainInv drainBank : Nat)
-    (h : (initInv + initBank) - (drainInv + drainBank) < minC)
-    (hInv : drainInv ≤ initInv) (hBank : drainBank ≤ initBank) :
-    taskExchangeValue (initInv - drainInv) (initBank - drainBank) minC = 0 := by
+/-- ONE batch suffices: spending exactly `minC` coins from the
+construction-time total satisfies the goal. This is the P1 storm fix — the
+plan the planner must find is a single exchange (≤ ~4 actions with
+withdraw/deposit interleaving), not a `total/minC`-long drain that exceeds
+`max_depth`. (Bank-held coins reach inventory via
+`WithdrawItemAction(code=TASKS_COIN_CODE, quantity=1, ...)`, plumbed in
+actions/factory.py, so the planner can compose Withdraw → TaskExchange when
+the inventory pool alone is short.) -/
+theorem taskExchange_one_batch_satisfies (initTotal minC : Nat) :
+    taskExchangeValue (initTotal - minC) 0 initTotal minC = 0 := by
   unfold taskExchangeValue taskExchangeSatisfied
-  have key : (initInv - drainInv) + (initBank - drainBank) < minC := by
-    have e1 : initInv - drainInv + (initBank - drainBank)
-            = (initInv + initBank) - (drainInv + drainBank) := by
-      omega
-    rw [e1]; exact h
-  simp [key]
+  simp
+
+/-- Anything short of one full batch does NOT satisfy: while fewer than
+`minC` coins have been spent from the construction-time total, the goal
+still fires. (Boundary partner of `taskExchange_one_batch_satisfies`;
+pins the `≤` boundary against an off-by-one `<` regression.) -/
+theorem taskExchange_partial_spend_fires
+    (initTotal minC spent : Nat) (hspent : spent < minC) (hmin : minC ≤ initTotal) :
+    taskExchangeValue (initTotal - spent) 0 initTotal minC = taskExchangePriority := by
+  unfold taskExchangeValue taskExchangeSatisfied taskExchangePriority
+  simp
+  omega
 
 end Formal.Phase10GoalLattices

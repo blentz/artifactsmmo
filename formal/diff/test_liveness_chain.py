@@ -126,14 +126,26 @@ class TestLivenessChain:
         state = _state(level=1, hp=10, max_hp=10)
         assert not _chain(state, gd, "godzilla", level=3)
 
-    def test_underleveled_chicken_breaks_applicability_gate(self) -> None:
-        """The 2026-06-06 trace exact case: chicken (lvl 1) vs Robby (lvl 3).
-        The Lean theorem fightApplicable_false_of_underleveled_monster pins
-        this — picker may say winnable, FightAction.is_applicable says no."""
+    def test_below_window_chicken_with_positive_xp_is_fightable(self) -> None:
+        """P0 regression (2026-06-09): chicken (lvl 1) vs Robby (lvl 3).
+        Under the OLD hard lower window this chain returned False and the
+        bot deadlocked when chicken was the only winnable monster. The
+        revised lower gate (`xp_per_kill > 0`; Lean theorem
+        below_old_window_xp_positive_is_applicable) makes the chain LIVE:
+        chicken grants XP at level 3, so the fight is applicable."""
         gd = _stub_gd("chicken", monster_level=1)
         state = _state(level=3, hp=130, max_hp=130)
-        # is_winnable can be True (at full hp), but FightAction filter rejects.
-        assert not _chain(state, gd, "chicken", level=5)
+        assert _chain(state, gd, "chicken", level=5)
+
+    def test_zero_xp_monster_breaks_applicability_gate(self) -> None:
+        """The honest lower bound: at level 11 a chicken (lvl 1) grants
+        ZERO XP (documented curve zeroes at char-monster >= 10). The Lean
+        theorem fightApplicable_false_of_zero_xp pins this — picker may
+        say winnable, FightAction.is_applicable says no."""
+        gd = _stub_gd("chicken", monster_level=1)
+        state = _state(level=11, hp=130, max_hp=130)
+        assert gd.xp_per_kill("chicken", 11) == 0
+        assert not _chain(state, gd, "chicken", level=13)
 
     def test_low_hp_breaks_applicability_at_runtime_only(self) -> None:
         """fightApplicable_false_of_low_hp — current-hp filter, not target
@@ -150,7 +162,7 @@ class TestLivenessChain:
 
 @settings(max_examples=100, deadline=None)
 @given(
-    player_level=st.integers(min_value=2, max_value=10),
+    player_level=st.integers(min_value=2, max_value=15),
     monster_level=st.integers(min_value=1, max_value=15),
     hp_pct=st.integers(min_value=1, max_value=100),
 )
@@ -158,7 +170,8 @@ def test_chain_matches_lean_predicate(
     player_level: int, monster_level: int, hp_pct: int,
 ) -> None:
     """The Lean theorem's positive direction: when ALL of
-      * level window holds (max(1, lvl-1) ≤ monster_level ≤ lvl+2)
+      * xp gate holds (xp_per_kill > 0 — the P0-revision lower bound)
+      * suicide guard holds (monster_level ≤ lvl+2)
       * best_eq ≥ monster_level - 1 (wooden_stick L1 means monster_level ≤ 2)
       * hp_pct > 50%
       * winnable-at-max-hp
@@ -172,8 +185,10 @@ def test_chain_matches_lean_predicate(
     gd = _stub_gd(monster, monster_level)
     state = _state(player_level, hp, max_hp)
 
-    # Pre-compute Lean predicate truth.
-    level_ok = max(1, player_level - 1) <= monster_level <= player_level + 2
+    # Pre-compute Lean predicate truth (post-P0 gates: xp>0 lower bound,
+    # level+2 suicide guard — no hard lower window).
+    level_ok = (gd.xp_per_kill(monster, player_level) > 0
+                and monster_level <= player_level + 2)
     gear_ok = 1 >= monster_level - 1   # wooden_stick.level=1
     hp_ok = hp * 100 > 50 * max_hp
 

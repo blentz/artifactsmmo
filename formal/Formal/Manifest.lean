@@ -60,6 +60,14 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.InventoryProfile.shed_idempotent             -- a second shed removes nothing (converges)
 #check @Formal.InventoryProfile.overstock_pos_iff           -- excess > 0 iff pressure ∧ over floor
 #check @Formal.InventoryProfile.protectedFloor_ge_profile   -- protectedFloor ≥ profileTarget
+-- TaskReservation required roles (P0 2026-06-09 task-material reservation):
+#check @Formal.TaskReservation.remaining_zero_no_reserve -- task done ⇒ nothing reserved/suppressed
+#check @Formal.TaskReservation.surplus_passes            -- owned strictly above demand ⇒ not suppressed
+#check @Formal.TaskReservation.demand_monotone           -- progress↑ ⇒ reserved demand pointwise ≤
+#check @Formal.TaskReservation.closureDemand_mono        -- closure demand monotone in the multiplier
+#check @Formal.TaskReservation.trace_helmet_deferred     -- pinned trace: 5 bars / task 0/11 ⇒ deferred
+#check @Formal.TaskReservation.trace_surplus_allowed     -- pinned trace: 17 bars ⇒ allowed
+#check @Formal.TaskReservation.trace_done_allowed        -- pinned trace: 11/11 ⇒ allowed
 -- InventoryChainSafe high-watermark deposit safety (spec 2026-06-07):
 #check @Formal.InventoryChainSafe.deposit_fires_before_overflow    -- unit gather overflows ⇒ deposit already firing
 #check @Formal.InventoryChainSafe.deposit_fires_before_overflow_at_85 -- ditto at the 17/20 production watermark
@@ -640,10 +648,13 @@ open Formal.PriorityBand
 #check @Formal.PurposeRouting.argminBy_le                               -- argmin is lower bound
 #check @Formal.PurposeRouting.argminBy_mem                              -- argmin is in input
 
--- CombatTargetExistence (Phase G3):
+-- CombatTargetExistence (Phase G3; P0 2026-06-09 window-preferred + fallback):
 #check @Formal.CombatTargetExistence.pickWinnable_some_of_exists
 #check @Formal.CombatTargetExistence.pickBest_some_of_acc_some
 #check @Formal.CombatTargetExistence.pickBest_none_iff_acc_none_and_none_winnable
+#check @Formal.CombatTargetExistence.pickWinnableWindowed_some_of_winnable_xp_positive
+#check @Formal.CombatTargetExistence.pickWinnableWindowed_prefers_window
+#check @Formal.CombatTargetExistence.pickWinnableWindowed_none_implies_no_viable_target
 #check @Formal.CombatTargetExistence.winnableFarmTarget_task_override
 #check @Formal.CombatTargetExistence.winnableFarmTarget_falls_through_no_task
 
@@ -651,12 +662,14 @@ open Formal.PriorityBand
 #check @Formal.ActionApplicability.fightApplicable_false_of_no_locations
 #check @Formal.ActionApplicability.fightApplicable_false_of_no_inv_room
 #check @Formal.ActionApplicability.fightApplicable_false_of_low_hp
-#check @Formal.ActionApplicability.fightApplicable_false_of_underleveled_monster
+#check @Formal.ActionApplicability.fightApplicable_false_of_zero_xp
 #check @Formal.ActionApplicability.fightApplicable_false_of_overleveled_monster
 #check @Formal.ActionApplicability.fightApplicable_false_of_undergear
 #check @Formal.ActionApplicability.fightApplicable_mono_in_hp
-#check @Formal.ActionApplicability.fightApplicable_false_under_level_window
+#check @Formal.ActionApplicability.fightApplicable_false_above_level_window
 #check @Formal.ActionApplicability.winnable_does_not_imply_applicable
+#check @Formal.ActionApplicability.fightApplicable_iff
+#check @Formal.ActionApplicability.below_old_window_xp_positive_is_applicable
 #check @Formal.ActionApplicability.restApplicable_iff_subfull
 #check @Formal.ActionApplicability.equipApplicable_iff
 

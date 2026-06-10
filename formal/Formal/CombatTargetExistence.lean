@@ -13,22 +13,40 @@ cycles. The Python fix (`player.py` 157b631) projects to `max_hp`
 before consulting `is_winnable`. This module formalizes the
 correctness of that projection.
 
+**P0 revision (2026-06-09)**: the production picker is now
+WINDOW-PREFERRED WITH LIVENESS FALLBACK (`pickWinnableWindowed`):
+
+  1. PREFERRED — highest-level winnable monster in the FightAction
+     level window `[max(1, L-1), L+2]`.
+  2. FALLBACK — when the window is empty of winnable monsters, the
+     highest-level winnable monster with `xp_per_kill > 0` that is
+     still under the `L+2` suicide guard.
+  3. `none` only when nothing winnable grants XP — a true combat
+     deadlock (gear progression is then the only path).
+
+The old window-only picker returned `none` FOREVER at level 4 when the
+only stat-winnable monsters were L1/L2 (below the window) — the P0
+no-combat deadlock.
+
 Theorems shipped here:
 
-* `winnable_at_max_hp_exists_implies_picker_returns_some` — the headline
-  anti-livelock claim. If any monster is beatable at full HP, the
-  picker returns a `Some` target, never `None`.
-* `picker_returns_highest_level` — the returned monster has maximum
-  level among winnable candidates.
-* `picker_respects_task_alignment` — when a PURSUE monsters-task is
-  active, the picker returns the task target.
+* `pickWinnableWindowed_some_of_winnable_xp_positive` — the headline
+  anti-livelock claim, TRUE of production: if any winnable monster has
+  positive XP (and is under the suicide guard), the picker returns a
+  `Some` target, never `none`.
+* `pickWinnableWindowed_prefers_window` — when the window holds a
+  winnable monster, the result comes from the window tier.
+* `pickWinnable_some_of_exists` / `pickBest_*` — the single-tier argmax
+  lemmas the windowed picker is built from.
+* `winnableFarmTarget_task_override` — when a PURSUE monsters-task is
+  active, the cascade returns the task target.
 
 The model is intentionally abstract: monsters are integer codes, the
-winnability oracle is a decidable predicate, the picker is a
+winnability / xp oracles are decidable predicates, each tier is a
 left-fold argmax over a list. No `WorldState` / `GameData` plumbing
-here — those live in their own modules. The bridge to runtime is via
-the diff harness (`formal/diff/test_combat_picker_diff.py`, next
-commit).
+here — those live in their own modules. The bridge to runtime is the
+diff harness (`formal/diff/test_combat_picker_diff.py`) against the
+Python pure core `ai/combat_picker.pick_winnable_monster_pure`.
 
 Phase G3 of `docs/PLAN_composition_correctness.md`.
 -/
@@ -166,6 +184,79 @@ theorem pickBest_none_iff_acc_none_and_none_winnable
       rw [if_neg (by simp [hHd])]
       exact ih.mpr (fun m hm => hAll m (List.mem_cons_of_mem _ hm))
 
+/-! ## Window-preferred picker with liveness fallback (P0 2026-06-09).
+
+Mirrors the revised `player._pick_winnable_monster` /
+`combat_picker.pick_winnable_monster_pure`. -/
+
+/-- The FightAction level window: `max(1, L-1) ≤ level ≤ L+2`. -/
+def inWindow (playerLevel : Int) (m : Monster) : Bool :=
+  decide (max 1 (playerLevel - 1) ≤ m.level ∧ m.level ≤ playerLevel + 2)
+
+/-- The suicide-guard upper bound only (the fallback tier's level filter —
+the lower bound is replaced by the xp>0 oracle). -/
+def notOverleveled (playerLevel : Int) (m : Monster) : Bool :=
+  decide (m.level ≤ playerLevel + 2)
+
+/-- Window-preferred picker: try the window tier; when it is empty of
+winnable monsters, fall back to the highest-level winnable monster with
+positive XP under the suicide guard. -/
+def pickWinnableWindowed (playerLevel : Int) (winnable xpPos : WinnableFn)
+    (monsters : List Monster) : Option Monster :=
+  match pickWinnable (fun m => winnable m && inWindow playerLevel m) monsters with
+  | some best => some best
+  | none =>
+      pickWinnable
+        (fun m => winnable m && xpPos m && notOverleveled playerLevel m) monsters
+
+/-- **The headline theorem (TRUE of production)**: if any monster is
+winnable with positive XP under the suicide guard, the windowed picker
+returns SOME target. The fallback tier makes this nearly definitional —
+and it is exactly the claim the P0 deadlock violated (window-only picker
+returned `none` while chicken/yellow_slime were winnable and XP-positive). -/
+theorem pickWinnableWindowed_some_of_winnable_xp_positive
+    (playerLevel : Int) (winnable xpPos : WinnableFn) (xs : List Monster)
+    (h : ∃ m ∈ xs, winnable m = true ∧ xpPos m = true ∧
+                   notOverleveled playerLevel m = true) :
+    ∃ target, pickWinnableWindowed playerLevel winnable xpPos xs = some target := by
+  unfold pickWinnableWindowed
+  cases hWin : pickWinnable (fun m => winnable m && inWindow playerLevel m) xs with
+  | some best => exact ⟨best, rfl⟩
+  | none =>
+      obtain ⟨m, hMem, hW, hX, hO⟩ := h
+      have hFall :
+          ∃ t, pickWinnable
+            (fun m => winnable m && xpPos m && notOverleveled playerLevel m) xs
+            = some t :=
+        pickWinnable_some_of_exists _ xs ⟨m, hMem, by simp [hW, hX, hO]⟩
+      obtain ⟨t, hT⟩ := hFall
+      exact ⟨t, hT⟩
+
+/-- When the window tier finds a winnable monster, the windowed picker
+returns the window tier's answer (the fallback is never consulted). -/
+theorem pickWinnableWindowed_prefers_window
+    (playerLevel : Int) (winnable xpPos : WinnableFn) (xs : List Monster)
+    (best : Monster)
+    (hWin : pickWinnable (fun m => winnable m && inWindow playerLevel m) xs
+            = some best) :
+    pickWinnableWindowed playerLevel winnable xpPos xs = some best := by
+  unfold pickWinnableWindowed
+  rw [hWin]
+
+/-- `none` is honest: the windowed picker returns `none` only when NO
+monster is simultaneously winnable, XP-positive, and under the suicide
+guard — a true combat deadlock. -/
+theorem pickWinnableWindowed_none_implies_no_viable_target
+    (playerLevel : Int) (winnable xpPos : WinnableFn) (xs : List Monster)
+    (hNone : pickWinnableWindowed playerLevel winnable xpPos xs = none) :
+    ∀ m ∈ xs, (winnable m && xpPos m && notOverleveled playerLevel m) = false := by
+  unfold pickWinnableWindowed at hNone
+  cases hWin : pickWinnable (fun m => winnable m && inWindow playerLevel m) xs with
+  | some best => rw [hWin] at hNone; exact absurd hNone (by simp)
+  | none =>
+      rw [hWin] at hNone
+      exact (pickBest_none_iff_acc_none_and_none_winnable _ xs).mp hNone
+
 /-! ## Task-alignment lemma.
 
 When a PURSUE monsters-task is active, the picker shortcut returns the
@@ -173,27 +264,33 @@ task's monster (bypassing the cascade). Modeled here as a cascade
 function that takes an optional task override. -/
 
 /-- Task-aligned cascade: if `taskTarget` is `some code`, return it
-immediately (the task forces the target). Otherwise consult
-`pickWinnable`. This mirrors `_winnable_farm_target`. -/
+immediately (the task forces the target). Otherwise consult the
+window-preferred-with-fallback picker. This mirrors
+`_winnable_farm_target`. -/
 def winnableFarmTarget
-    (taskTarget : Option Int) (winnable : WinnableFn)
+    (playerLevel : Int) (taskTarget : Option Int) (winnable xpPos : WinnableFn)
     (monsters : List Monster) : Option Int :=
   match taskTarget with
   | some t => some t
-  | none => (pickWinnable winnable monsters).map Monster.code
+  | none => (pickWinnableWindowed playerLevel winnable xpPos monsters).map Monster.code
 
 theorem winnableFarmTarget_task_override
-    (taskCode : Int) (winnable : WinnableFn) (monsters : List Monster) :
-    winnableFarmTarget (some taskCode) winnable monsters = some taskCode := by
+    (playerLevel taskCode : Int) (winnable xpPos : WinnableFn)
+    (monsters : List Monster) :
+    winnableFarmTarget playerLevel (some taskCode) winnable xpPos monsters
+      = some taskCode := by
   unfold winnableFarmTarget
   rfl
 
 theorem winnableFarmTarget_falls_through_no_task
-    (winnable : WinnableFn) (monsters : List Monster)
-    (h : ∃ m ∈ monsters, winnable m = true) :
-    ∃ code, winnableFarmTarget none winnable monsters = some code := by
+    (playerLevel : Int) (winnable xpPos : WinnableFn) (monsters : List Monster)
+    (h : ∃ m ∈ monsters, winnable m = true ∧ xpPos m = true ∧
+                         notOverleveled playerLevel m = true) :
+    ∃ code, winnableFarmTarget playerLevel none winnable xpPos monsters
+              = some code := by
   unfold winnableFarmTarget
-  obtain ⟨target, hT⟩ := pickWinnable_some_of_exists winnable monsters h
+  obtain ⟨target, hT⟩ :=
+    pickWinnableWindowed_some_of_winnable_xp_positive playerLevel winnable xpPos monsters h
   rw [hT]
   exact ⟨target.code, rfl⟩
 

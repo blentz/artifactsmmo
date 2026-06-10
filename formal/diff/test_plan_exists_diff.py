@@ -452,6 +452,42 @@ def test_planner_finds_plan_for_firing_means(means: LadderMeans) -> None:
 # Sanity / regression tests
 # ---------------------------------------------------------------------------
 
+def test_task_exchange_storm_state_plans_short() -> None:
+    """P1 timeout-storm regression: 22 task coins (11 inventory + 11 bank),
+    min_coins=1 — the live state that, under the pre-fix drain-ALL-coins
+    `is_satisfied` (total < min_coins), required a ~33-action plan, blew
+    `max_depth`, and burned the full 300s escalation budget (40-46k nodes)
+    every doomed-memo expiry. Under ONE-batch semantics (Lean:
+    `Formal.Phase10GoalLattices.taskExchange_one_batch_satisfies`) a single
+    exchange satisfies the goal, so the REAL planner over the REAL production
+    action menu must return a short non-empty plan."""
+    gd = _base_game_data()
+    state = _base_state(
+        inventory={TASKS_COIN_CODE: 11},
+        bank_items={TASKS_COIN_CODE: 11},
+        bank_gold=0,
+        inventory_max=20,
+    )
+    ctx = _ctx(task_exchange_min_coins=1)
+    assert _means_fires(MeansKind.TASK_EXCHANGE, state, gd, None, ctx), \
+        "TASK_EXCHANGE firing precondition not met"
+    player = _build_player_with_data(gd, state, task_exchange_min_coins=1)
+    actions = _build_actions(player)
+    goal = map_means(MeansKind.TASK_EXCHANGE, gd, ctx, state)
+    planner = GOAPPlanner()
+    plan = planner.plan(state, goal, actions, gd, None)
+    assert plan, (
+        "STORM REGRESSION: planner found no plan for the 22-coin state — "
+        "TaskExchange is back to drain-all (unplannable) semantics."
+    )
+    assert len(plan) <= 5, (
+        f"STORM REGRESSION: plan length {len(plan)} > 5 — one-batch "
+        f"satisfaction regressed toward drain-all.\n"
+        f"  plan: {[type(a).__name__ for a in plan]}"
+    )
+    assert any(isinstance(a, TaskExchangeAction) for a in plan)
+
+
 def test_objective_step_honestly_skipped() -> None:
     """OBJECTIVE_STEP is the synthetic tier-dispatch ActionKind (Phase
     21d-1). Production materialises a sub-goal (UpgradeEquipmentGoal,

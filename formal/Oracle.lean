@@ -1499,6 +1499,34 @@ def runWinnableCascade (args : Array Json) : Json :=
       pickWinnable := codeToOptStr (intArg args 3) }
   Json.mkObj [("result", optStrToJson (Formal.WinnableCascade.winnableFarmTargetPure i))]
 
+/-- Compute one combat_picker result via the SAME proved
+`pickWinnableWindowed` (window-preferred picker with the P0-2026-06-09
+xp>0 liveness fallback).
+args layout:
+  [charLevel, nMonsters,
+   m0.code, m0.level, m0.winnable(0/1), m0.xpPositive(0/1),
+   m1.code, m1.level, m1.winnable(0/1), m1.xpPositive(0/1), ...]
+Monster codes are small ints (unique per request — the predicates are
+keyed by code via first-match lookup).
+Output: { result: code | null }. -/
+def runCombatPicker (args : Array Json) : Json :=
+  let charLevel := intArg args 0
+  let n := (intArg args 1).toNat
+  let entry := fun (k : Nat) =>
+    (intArg args (2 + 4 * k), intArg args (3 + 4 * k),
+     intArg args (4 + 4 * k) != 0, intArg args (5 + 4 * k) != 0)
+  let entries : List (Int × Int × Bool × Bool) := (List.range n).map entry
+  let monsters : List Formal.CombatTargetExistence.Monster :=
+    entries.map (fun e => { code := e.1, level := e.2.1 })
+  let winnable : Formal.CombatTargetExistence.WinnableFn := fun m =>
+    ((entries.find? (fun e => e.1 == m.code)).map (fun e => e.2.2.1)).getD false
+  let xpPos : Formal.CombatTargetExistence.WinnableFn := fun m =>
+    ((entries.find? (fun e => e.1 == m.code)).map (fun e => e.2.2.2)).getD false
+  match Formal.CombatTargetExistence.pickWinnableWindowed
+      charLevel winnable xpPos monsters with
+  | none => Json.mkObj [("result", Json.null)]
+  | some m => Json.mkObj [("result", Json.num m.code)]
+
 /-- Run the cheapest-path greedy model.
 args layout:
   [current, target, maxXp, xpInLevel, nMonsters,
@@ -1553,6 +1581,59 @@ def runItemsTaskRun (args : Array Json) : Json :=
   Json.mkObj [("held", Json.num (Int.ofNat post.held)),
               ("progress", Json.num (Int.ofNat post.progress)),
               ("applicable", Json.bool fireable)]
+
+/-- Compute one task_reservation result via the SAME proved
+`reservedDemand` / `consumesReserved` (P0 2026-06-09 task-material
+reservation; formal/Formal/TaskReservation.lean).
+args layout (flat ints):
+  [nRecipe, (item, sub, qty) * nRecipe,
+   taskIsItems(0/1), taskCode, taskTotal, taskProgress,
+   nNeeded, needed * nNeeded,
+   nOwned, (item, qty) * nOwned,
+   nQuery, query * nQuery,
+   fuel]
+Item codes are small Nats. Output:
+  { consumes: Bool,
+    demand_vals: [lookup demand q | q in query],
+    demand_keys: [hasKey demand q | q in query] }. -/
+def runTaskReservation (args : Array Json) : Json :=
+  let nR := (intArg args 0).toNat
+  let triples : List (Nat × Nat × Nat) := (List.range nR).map (fun k =>
+    ((intArg args (1 + 3 * k)).toNat, (intArg args (2 + 3 * k)).toNat,
+     (intArg args (3 + 3 * k)).toNat))
+  let base := 1 + 3 * nR
+  let t : Formal.TaskReservation.TaskCtx :=
+    { taskIsItems := intArg args base != 0
+      taskCode := (intArg args (base + 1)).toNat
+      taskTotal := (intArg args (base + 2)).toNat
+      taskProgress := (intArg args (base + 3)).toNat }
+  let nNeeded := (intArg args (base + 4)).toNat
+  let needed := (List.range nNeeded).map
+    (fun k => (intArg args (base + 5 + k)).toNat)
+  let oBase := base + 5 + nNeeded
+  let nOwned := (intArg args oBase).toNat
+  let ownedPairs : List (Nat × Nat) := (List.range nOwned).map (fun k =>
+    ((intArg args (oBase + 1 + 2 * k)).toNat,
+     (intArg args (oBase + 2 + 2 * k)).toNat))
+  let qBase := oBase + 1 + 2 * nOwned
+  let nQuery := (intArg args qBase).toNat
+  let queries := (List.range nQuery).map
+    (fun k => (intArg args (qBase + 1 + k)).toNat)
+  let fuel := (intArg args (qBase + 1 + nQuery)).toNat
+  let recipe : Formal.TaskReservation.Recipe := fun i =>
+    (triples.filter (fun tr => tr.1 == i)).map (fun tr => (tr.2.1, tr.2.2))
+  let owned : Nat → Nat := fun i =>
+    ((ownedPairs.find? (fun p => p.1 == i)).map (fun p => p.2)).getD 0
+  let demand := Formal.TaskReservation.reservedDemand recipe fuel t
+  let consumes :=
+    Formal.TaskReservation.consumesReserved recipe fuel t owned needed
+  Json.mkObj
+    [ ("consumes", Json.bool consumes)
+    , ("demand_vals", Json.arr ((queries.map (fun q =>
+        Json.num (Int.ofNat (Formal.TaskReservation.lookup demand q)))).toArray))
+    , ("demand_keys", Json.arr ((queries.map (fun q =>
+        Json.bool (Formal.TaskReservation.hasKey demand q))).toArray))
+    ]
 
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
@@ -1679,10 +1760,14 @@ def runOne (item : Json) : Json :=
     runStoreWarmup args
   else if kind == "winnable_cascade" then
     runWinnableCascade args
+  else if kind == "combat_picker" then
+    runCombatPicker args
   else if kind == "cheapest_path" then
     runCheapestPath args
   else if kind == "items_task_run" then
     runItemsTaskRun args
+  else if kind == "task_reservation" then
+    runTaskReservation args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

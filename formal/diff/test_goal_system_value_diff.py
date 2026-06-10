@@ -225,11 +225,35 @@ def test_claim_pending_value_matches_model():
 
 def test_task_exchange_value_matches_model():
     gd = _gd()
-    goal = TaskExchangeGoal(min_coins=1)
+    # ONE-batch semantics: initial_total captured at construction; satisfied
+    # once the total drops by >= min_coins (Lean:
+    # Formal.Phase10GoalLattices.taskExchangeSatisfied).
+    goal = TaskExchangeGoal(min_coins=1, initial_total=5)
     s_unsat = make_state(inventory={TASKS_COIN_CODE: 5})
     assert Fraction(goal.value(s_unsat, gd)) == task_exchange_value_model(False)
     s_sat = make_state(inventory={TASKS_COIN_CODE: 0}, bank_items={})
     assert Fraction(goal.value(s_sat, gd)) == task_exchange_value_model(True)
+
+
+def test_task_exchange_one_batch_boundary_matches_model():
+    """One-batch satisfaction boundary (Lean:
+    `taskExchange_one_batch_satisfies` / `taskExchange_partial_spend_fires`).
+    Exactly one batch spent => satisfied; one coin short => still fires;
+    the 22-coin storm state (untouched total) => still fires (the pre-fix
+    drain-all reading returned satisfied-only-at-zero here and made the
+    minimum plan ~22 exchanges long — the P1 timeout storm)."""
+    gd = _gd()
+    goal = TaskExchangeGoal(min_coins=6, initial_total=22)
+    # Exactly min_coins spent (22 -> 16): satisfied -> 0.
+    s_exact = make_state(inventory={TASKS_COIN_CODE: 16}, bank_items={})
+    assert Fraction(goal.value(s_exact, gd)) == task_exchange_value_model(True)
+    # One coin short of a full batch (22 -> 17): NOT satisfied -> 22.
+    s_short = make_state(inventory={TASKS_COIN_CODE: 17}, bank_items={})
+    assert Fraction(goal.value(s_short, gd)) == task_exchange_value_model(False)
+    # Untouched total split across inventory + bank: NOT satisfied -> 22.
+    s_full = make_state(inventory={TASKS_COIN_CODE: 11},
+                        bank_items={TASKS_COIN_CODE: 11})
+    assert Fraction(goal.value(s_full, gd)) == task_exchange_value_model(False)
 
 
 def test_task_cancel_satisfied_returns_zero():
@@ -477,7 +501,7 @@ def test_claim_pending_value_constant_is_25():
 
 def test_task_exchange_value_constant_is_22():
     gd = _gd()
-    goal = TaskExchangeGoal(min_coins=1)
+    goal = TaskExchangeGoal(min_coins=1, initial_total=5)
     s = make_state(inventory={TASKS_COIN_CODE: 5})
     assert goal.value(s, gd) == 22.0
 

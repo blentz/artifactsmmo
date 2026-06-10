@@ -13,15 +13,27 @@ two ORTHOGONAL filters, and the bot's target picker conflated them.
 
 This module:
 
-1. Specifies `fightApplicable` as a conjunction of 5 atomic conditions
-   (mirrors Python `actions/combat.py:46-64` exactly).
+1. Specifies `fightApplicable` as a conjunction of 6 atomic conditions
+   (mirrors Python `FightAction.is_applicable` in `actions/combat.py`
+   exactly).
 2. Proves the conditions are independent — each can falsify
    applicability on its own.
 3. Proves applicability is MONOTONE in hp: more current hp never breaks
    the predicate.
-4. Proves the **gear-vs-level orthogonality** that was the root of the
-   2026-06-06 trace: a monster can pass winnability and fail
-   applicability (chicken case) — the picker must check BOTH.
+4. Proves the **gear-vs-level orthogonality** of the 2026-06-06 trace in
+   its post-P0 form: a winnable monster can still fail applicability —
+   but only via the ZERO-XP gate or the upper-bound suicide guard, never
+   via a hard lower level window.
+
+**P0 revision (2026-06-09)**: the old lower bound
+`monster_level >= max(1, level-1)` deadlocked combat at level 4 (the only
+stat-winnable monsters were L1/L2 — below the window, XP-positive). The
+lower gate is now `xp_per_kill(monster, char_level) > 0`: the documented
+XP curve zeroes out at `char_level - monster_level >= 10`, so the gate is
+naturally level-tracking. The upper bound (`level + 2` suicide guard)
+stays. The Lean model takes the computed XP as an input (`xpPerKill`),
+mirroring `game_data.xp_per_kill(...)` being an input to the Python
+predicate.
 
 Phase G4 of `docs/PLAN_composition_correctness.md`.
 -/
@@ -36,12 +48,17 @@ We model the inequality on the scaled integer `hp * 100`, comparing against
 def hpAboveFightFloor (hp maxHp : Int) : Bool :=
   decide (hp * 100 > 50 * maxHp)
 
-/-- `min_level <= monster_level <= state.level + 2` where
-`min_level = max(1, state.level - 1)`. The monster must sit in a 4-level
-window around the player. -/
-def monsterLevelInWindow (playerLevel monsterLevel : Int) : Bool :=
-  let minLevel := max 1 (playerLevel - 1)
-  decide (minLevel ≤ monsterLevel ∧ monsterLevel ≤ playerLevel + 2)
+/-- LOWER gate: `xp_per_kill(monster, char_level) > 0`. A monster whose
+kill grants zero XP (the documented curve zeroes at
+`char_level - monster_level >= 10`) serves no leveling objective and is
+not applicable. Replaces the old hard window lower bound
+`monster_level >= max(1, level-1)` that caused the P0 no-combat deadlock. -/
+def xpPositive (xpPerKill : Int) : Bool :=
+  decide (xpPerKill > 0)
+
+/-- UPPER gate: `monster_level <= state.level + 2` — the suicide guard. -/
+def monsterNotOverleveled (playerLevel monsterLevel : Int) : Bool :=
+  decide (monsterLevel ≤ playerLevel + 2)
 
 /-- `best_eq >= monster_level - 1`. The strongest equipped item's level must
 roughly match the monster. -/
@@ -62,13 +79,17 @@ structure FightInputs where
   monsterLevel  : Int
   bestEqLevel   : Int
   minFreeSlots  : Int
+  xpPerKill     : Int       -- game_data.xp_per_kill(monster, playerLevel)
 
-/-- The composite predicate. Matches Python `combat.py:46-64` term-by-term. -/
+/-- The composite predicate. Matches Python `FightAction.is_applicable`
+term-by-term: locations, inventory room, hp floor, xp>0 lower gate,
+level+2 suicide guard, gear pre-filter. -/
 def fightApplicable (i : FightInputs) : Bool :=
   i.hasLocations
     && hasInventoryRoom i.inventoryFree i.minFreeSlots
     && hpAboveFightFloor i.hp i.maxHp
-    && monsterLevelInWindow i.playerLevel i.monsterLevel
+    && xpPositive i.xpPerKill
+    && monsterNotOverleveled i.playerLevel i.monsterLevel
     && gearMeetsMonster i.bestEqLevel i.monsterLevel
 
 /-! ## Independence of the conditions. -/
@@ -96,29 +117,24 @@ theorem fightApplicable_false_of_low_hp (i : FightInputs)
   have : ¬ (i.hp * 100 > 50 * i.maxHp) := by omega
   simp [this]
 
-/-- If monster level is below `max(1, lvl-1)`, the predicate is false. -/
-theorem fightApplicable_false_of_underleveled_monster (i : FightInputs)
-    (h : i.monsterLevel < max 1 (i.playerLevel - 1)) :
+/-- If the kill grants zero (or negative) XP, the predicate is false.
+This is the NEW lower gate — replaces
+`fightApplicable_false_of_underleveled_monster` (the old hard window). -/
+theorem fightApplicable_false_of_zero_xp (i : FightInputs)
+    (h : i.xpPerKill ≤ 0) :
     fightApplicable i = false := by
-  have hWin : monsterLevelInWindow i.playerLevel i.monsterLevel = false := by
-    unfold monsterLevelInWindow
-    apply decide_eq_false
-    intro ⟨h1, _⟩
-    omega
-  unfold fightApplicable
-  simp [hWin]
+  unfold fightApplicable xpPositive
+  have : ¬ (i.xpPerKill > 0) := by omega
+  simp [this]
 
-/-- If monster level exceeds `state.level + 2`, the predicate is false. -/
+/-- If monster level exceeds `state.level + 2`, the predicate is false.
+The suicide guard survives the P0 revision unchanged. -/
 theorem fightApplicable_false_of_overleveled_monster (i : FightInputs)
     (h : i.monsterLevel > i.playerLevel + 2) :
     fightApplicable i = false := by
-  have hWin : monsterLevelInWindow i.playerLevel i.monsterLevel = false := by
-    unfold monsterLevelInWindow
-    apply decide_eq_false
-    intro ⟨_, h2⟩
-    omega
-  unfold fightApplicable
-  simp [hWin]
+  unfold fightApplicable monsterNotOverleveled
+  have : ¬ (i.monsterLevel ≤ i.playerLevel + 2) := by omega
+  simp [this]
 
 /-- If best-equipped level is below `monster_level - 1`, the predicate is false. -/
 theorem fightApplicable_false_of_undergear (i : FightInputs)
@@ -137,7 +153,7 @@ theorem fightApplicable_mono_in_hp (i : FightInputs) (hp' : Int)
     fightApplicable { i with hp := hp' } = true := by
   unfold fightApplicable at hApp
   simp only [Bool.and_eq_true] at hApp
-  obtain ⟨⟨⟨⟨hLoc, hInv⟩, hHp⟩, hWin⟩, hGear⟩ := hApp
+  obtain ⟨⟨⟨⟨⟨hLoc, hInv⟩, hHp⟩, hXp⟩, hLvl⟩, hGear⟩ := hApp
   have hHp' : hpAboveFightFloor hp' i.maxHp = true := by
     unfold hpAboveFightFloor at hHp ⊢
     simp at hHp
@@ -147,42 +163,67 @@ theorem fightApplicable_mono_in_hp (i : FightInputs) (hp' : Int)
     omega
   unfold fightApplicable
   simp only [Bool.and_eq_true]
-  exact ⟨⟨⟨⟨hLoc, hInv⟩, hHp'⟩, hWin⟩, hGear⟩
+  exact ⟨⟨⟨⟨⟨hLoc, hInv⟩, hHp'⟩, hXp⟩, hLvl⟩, hGear⟩
 
-/-! ## Gear-vs-level orthogonality.
+/-! ## Level-gate structure after the P0 revision.
 
-The 2026-06-06 trace headline: chicken passed winnability at hp=130 but
-failed FightAction.is_applicable (`monsterLevel=1 < max(1, 3-1) = 2`).
-This isn't a bug in either piece — it's the contract: winnability and
-applicability gate ORTHOGONAL conditions, and the target picker must
-respect both. -/
+The 2026-06-06 trace headline was: chicken passed winnability at hp=130
+but failed FightAction.is_applicable (below the old hard window). The
+2026-06-09 P0 deadlock showed that hard lower window starves combat
+entirely when ALL winnable monsters sit below it. The revised contract:
+the only structural level vetoes are ZERO XP (too far below — no
+leveling value) and the `level + 2` suicide guard (too far above). -/
 
-/-- A monster that fails the level filter has NO `fightApplicable` no matter
-how full the bot's hp is or how much gear it owns. (Proves the filter is
-*structural*, not hp-recoverable.) -/
-theorem fightApplicable_false_under_level_window
+/-- A monster above the `level + 2` suicide guard has NO `fightApplicable`
+no matter how full the bot's hp is or how much gear it owns. (The upper
+bound is *structural*, not hp-recoverable — survives the P0 revision.) -/
+theorem fightApplicable_false_above_level_window
     (i : FightInputs) (hp' bestEq' : Int)
-    (h : i.monsterLevel < max 1 (i.playerLevel - 1) ∨
-         i.monsterLevel > i.playerLevel + 2) :
+    (h : i.monsterLevel > i.playerLevel + 2) :
     fightApplicable { i with hp := hp', bestEqLevel := bestEq' } = false := by
-  cases h with
-  | inl hLow =>
-    apply fightApplicable_false_of_underleveled_monster
-    exact hLow
-  | inr hHigh =>
-    apply fightApplicable_false_of_overleveled_monster
-    exact hHigh
+  apply fightApplicable_false_of_overleveled_monster
+  exact h
 
-/-- **Composition theorem**: even if a target is winnable (at any hp), the
-fight is not applicable when the level window excludes the monster. The
-picker must therefore filter winnable candidates BY the level window
-before returning them. -/
+/-- **Composition theorem**: winnability still does not imply
+applicability — a winnable monster whose kill grants zero XP is not
+applicable (it serves no leveling objective). This is the post-P0 form of
+the orthogonality contract: the picker's fallback tier must filter
+winnable candidates by `xp_per_kill > 0`, exactly what
+`CombatTargetExistence.pickWinnableWindowed` does. -/
 theorem winnable_does_not_imply_applicable
     (i : FightInputs) (winnable : Bool)
-    (hLow : i.monsterLevel < max 1 (i.playerLevel - 1)) :
+    (hZero : i.xpPerKill ≤ 0) :
     fightApplicable i = false ∧ winnable = winnable := by
   refine ⟨?_, rfl⟩
-  exact fightApplicable_false_of_underleveled_monster i hLow
+  exact fightApplicable_false_of_zero_xp i hZero
+
+/-- Exact characterization of the predicate as a conjunction of the six
+atomic conditions. Used to show the below-window case is now LIVE. -/
+theorem fightApplicable_iff (i : FightInputs) :
+    fightApplicable i = true ↔
+      i.hasLocations = true ∧ i.inventoryFree ≥ i.minFreeSlots ∧
+      i.hp * 100 > 50 * i.maxHp ∧ i.xpPerKill > 0 ∧
+      i.monsterLevel ≤ i.playerLevel + 2 ∧
+      i.bestEqLevel ≥ i.monsterLevel - 1 := by
+  unfold fightApplicable hasInventoryRoom hpAboveFightFloor xpPositive
+    monsterNotOverleveled gearMeetsMonster
+  simp [and_assoc]
+
+/-- **P0 regression witness (2026-06-09)**: a monster BELOW the old hard
+window `[max(1, level-1), level+2]` but with positive XP IS applicable —
+the exact case the old window rejected forever (level-4 character,
+chicken L1, old window [3,6]). -/
+theorem below_old_window_xp_positive_is_applicable
+    (i : FightInputs)
+    (hLoc  : i.hasLocations = true)
+    (hInv  : i.inventoryFree ≥ i.minFreeSlots)
+    (hHp   : i.hp * 100 > 50 * i.maxHp)
+    (hXp   : i.xpPerKill > 0)
+    (hUp   : i.monsterLevel ≤ i.playerLevel + 2)
+    (hGear : i.bestEqLevel ≥ i.monsterLevel - 1)
+    (_hBelow : i.monsterLevel < max 1 (i.playerLevel - 1)) :
+    fightApplicable i = true := by
+  exact (fightApplicable_iff i).mpr ⟨hLoc, hInv, hHp, hXp, hUp, hGear⟩
 
 /-! ## RestAction applicability — the simplest action and a useful baseline. -/
 
