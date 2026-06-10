@@ -14,6 +14,7 @@ from artifactsmmo_api_client.types import UNSET
 from sqlmodel import Session
 
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
+from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
@@ -589,6 +590,32 @@ class TestExecute:
         assert isinstance(new_state, WorldState)
         assert outcome == "error:cooldown"
         assert "Server cooldown (HTTP 499)" in buf.getvalue()
+
+    def test_execute_http_485_records_already_equipped(self, capsys):
+        """HTTP 485 ("This item is already equipped") is an ordinary
+        action-level failure: refresh state, record the failed outcome, and
+        return — never raise (2026-06-10 Robby trace: equip-485s preceded a
+        silent worker-thread death; ANY future 485 must complete the cycle
+        so replanning and the stuck detector can react)."""
+        player = GamePlayer(character="hero")
+        player.state = make_state()
+        player.game_data = make_game_data_mock()
+        client = MagicMock()
+
+        action = EquipAction(code="small_health_potion", slot="utility2_slot")
+        char = make_char_schema()
+        empty_events = MagicMock()
+        empty_events.data = []
+
+        with patch("artifactsmmo_cli.ai.actions.equip.action_equip",
+                   side_effect=ApiActionError(485, "This item is already equipped")):
+            with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
+                with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
+                    new_state, outcome = player._execute(action, client)
+
+        assert isinstance(new_state, WorldState)
+        assert outcome == "error:already_equipped"
+        assert "Item already equipped (HTTP 485)" in capsys.readouterr().out
 
     def test_execute_network_error_is_transient(self):
         """httpx transport errors (DNS failures, timeouts, connection resets)

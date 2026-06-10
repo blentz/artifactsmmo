@@ -33,6 +33,7 @@ from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
 from artifactsmmo_cli.ai.constants import (
     BANK_REFRESH_FORCE_SENTINEL,
     BANK_REFRESH_INTERVAL,
+    ERROR_CODE_ALREADY_EQUIPPED,
     ERROR_CODE_COOLDOWN,
     STUCK_DETECTOR_WINDOW,
 )
@@ -519,6 +520,16 @@ class GamePlayer:
                 print(f"[{self._now()}] Bank locked (HTTP 496) — need level {required_level} "
                       f"to fight {unlock_monster or '?'}; remembered for future sessions")
                 outcome = "error:bank_locked"
+            elif e.code == ERROR_CODE_ALREADY_EQUIPPED:
+                # HTTP 485 ("This item is already equipped"). The plan-time
+                # gate in EquipAction.is_applicable keeps planned equips from
+                # ever reaching this, but any future 485 must stay an
+                # ordinary failed-cycle outcome: record it, refresh state,
+                # and let the cycle complete so replanning and the stuck
+                # detector can react (2026-06-10 Robby trace: utility2
+                # equip-485 livelock preceded a silent worker-thread death).
+                print(f"[{self._now()}] Item already equipped (HTTP 485) — refreshing state")
+                outcome = "error:already_equipped"
             else:
                 # Finer-grained learning label keyed on the structured code.
                 print(f"[{self._now()}] Action failed: {e} — refreshing state")

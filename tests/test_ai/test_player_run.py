@@ -7,7 +7,10 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlmodel import Session as SqlSession
+from sqlmodel import select
 
+from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
@@ -15,6 +18,9 @@ from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
+from artifactsmmo_cli.ai.goals.wait import WaitGoal
+from artifactsmmo_cli.ai.learning.models import Cycle
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.recovery import CycleRecord, StuckSignal
 from artifactsmmo_cli.ai.strategy_driver import map_means
@@ -485,6 +491,65 @@ def test_run_calls_handle_stuck_after_successful_action():
 
     # STATE_FROZEN L1 should have been invoked
     assert player._recovery_level.get(StuckSignal.STATE_FROZEN) == 1
+
+
+def test_run_survives_http_485_and_keeps_cycling():
+    """An ApiActionError(485, "This item is already equipped") raised by
+    action.execute must NOT kill the run loop: each cycle records the failed
+    outcome (learning + stuck detection see it) and the loop proceeds to the
+    next cycle (2026-06-10 Robby incident: the worker thread died after
+    equip-485 cycles; the 485 class itself must always complete the cycle so
+    replanning and the StuckDetector can react)."""
+    history = LearningStore(db_path=":memory:", character="hero")
+    history.start_session()
+    player = GamePlayer(character="hero", history=history)
+    client = MagicMock()
+
+    call_count = [0]
+
+    def fake_wait():
+        call_count[0] += 1
+        if call_count[0] > 2:  # let TWO full 485 cycles run, then stop
+            raise KeyboardInterrupt
+
+    initial_state = make_state(hp=50, max_hp=150)
+    # Pin the selected plan to a real RestAction whose API call 485s — the
+    # selection layer is not under test here, the run loop's failure
+    # handling is. The goal is a real (never-satisfied) WaitGoal so repr()
+    # and the post-outcome bookkeeping run against a genuine Goal.
+    goal = WaitGoal()
+
+    p_maps, p_items, p_resources, p_monsters, p_npcs, p_events, p_ge, p_bank = _patch_game_data_load()
+    try:
+        with patch.object(ClientManager_mock := MagicMock(), "client", client):
+            with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+                with p_maps, p_items, p_resources, p_monsters, p_npcs, p_events, p_ge, p_bank:
+                    with patch.object(player, "_fetch_world_state", return_value=initial_state):
+                        with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
+                            with patch.object(player, "_maybe_periodic_refresh"):
+                                with patch.object(player, "_build_actions", return_value=[RestAction()]):
+                                    with patch.object(
+                                        player._arbiter, "select",
+                                        return_value=(goal, [RestAction()], []),
+                                    ):
+                                        with patch(
+                                            "artifactsmmo_cli.ai.actions.rest.action_rest",
+                                            side_effect=ApiActionError(485, "This item is already equipped"),
+                                        ):
+                                            with patch("artifactsmmo_cli.ai.player.time.sleep"):
+                                                # Only the loop-stopping KeyboardInterrupt
+                                                # escapes — the 485s never raise out of run().
+                                                with pytest.raises(KeyboardInterrupt):
+                                                    player.run()
+
+        # The loop survived the first 485 and ran a second full cycle.
+        assert call_count[0] == 3
+        # Both cycles recorded the failed outcome for learning.
+        with SqlSession(history._engine) as s:
+            outcomes = [c.outcome for c in s.exec(select(Cycle)).all()]
+        assert outcomes == ["error:already_equipped", "error:already_equipped"]
+    finally:
+        history.close()
 
 
 def test_run_loads_remembered_bank_blocker(capsys):
