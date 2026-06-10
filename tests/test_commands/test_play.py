@@ -1,6 +1,9 @@
 """Tests for the play command (GOAP AI player wiring)."""
 
+import os
 import sqlite3
+import subprocess
+import sys
 import threading
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -36,6 +39,52 @@ class TestDefaultLearnDbPath:
         """Default DB path lives under ~/.cache/artifactsmmo/learning.db."""
         expected = str(Path.home() / ".cache" / "artifactsmmo" / "learning.db")
         assert default_learn_db_path() == expected
+
+
+class TestMutationLockGuard:
+    """Mutate<->play interlock: play must refuse to start while
+    formal/diff/mutate.py holds live mutants in src/ (2026-06-09 incident:
+    play launched mid-run imported a poisoned predicate and crashed)."""
+
+    def test_active_mutation_lock_blocks_play_before_any_setup(self, runner, tmp_path):
+        """Lockfile with a live pid: play exits nonzero with the interlock
+        message before constructing the store, player, or any thread."""
+        lock = tmp_path / ".mutation-run.lock"
+        lock.write_text(f"{os.getpid()}\n2026-06-10T00:00:00+00:00\n")
+        with (
+            patch("artifactsmmo_cli.commands.play.default_lock_path", return_value=lock),
+            patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls,
+            patch("artifactsmmo_cli.commands.play.LearningStore") as mock_store_cls,
+        ):
+            result = runner.invoke(app, ["hero"])
+
+        assert result.exit_code == 2
+        assert "mutation run in progress" in result.output
+        assert "src/ contains live mutants" in result.output
+        # Refused BEFORE any game-data / store / thread setup.
+        mock_store_cls.assert_not_called()
+        mock_player_cls.assert_not_called()
+
+    def test_stale_mutation_lock_warns_and_continues(self, runner, tmp_path):
+        """Lockfile whose pid is dead is debris from a killed run: warn and
+        start normally."""
+        proc = subprocess.Popen([sys.executable, "-c", ""])
+        proc.wait()  # reaped -> pid guaranteed dead
+        lock = tmp_path / ".mutation-run.lock"
+        lock.write_text(f"{proc.pid}\n2026-06-10T00:00:00+00:00\n")
+        with (
+            patch("artifactsmmo_cli.commands.play.default_lock_path", return_value=lock),
+            patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls,
+            patch("artifactsmmo_cli.commands.play.LearningStore") as mock_store_cls,
+        ):
+            mock_player_cls.return_value = Mock()
+            mock_store_cls.return_value = Mock()
+
+            result = runner.invoke(app, ["hero"])
+
+        assert result.exit_code == 0
+        assert "stale mutation lockfile" in result.output
+        mock_player_cls.return_value.run.assert_called_once_with()
 
 
 class TestPlayCommandWiring:

@@ -2,9 +2,15 @@
 import os
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+# Mutate<->play interlock: while this runner holds live mutants in src/, other
+# consumers (artifactsmmo play) must not import the package. The reader side
+# lives in src/artifactsmmo_cli/utils/mutation_lock.py — keep the filename
+# string identical there (MUTATION_LOCKFILE_NAME).
+MUTATION_LOCKFILE = ROOT / ".mutation-run.lock"
 SRC = ROOT / "src" / "artifactsmmo_cli" / "utils" / "pathfinding.py"
 TASK_BATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_batch.py"
 INVENTORY_CAPS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_caps.py"
@@ -2156,6 +2162,40 @@ def _assert_sources_clean() -> None:
         sys.exit(2)
 
 
+def _lock_pid_alive(pid: int) -> bool:
+    """Signal-0 probe: ProcessLookupError = dead, PermissionError = alive
+    (exists, owned by someone else)."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _acquire_mutation_lock() -> None:
+    """Take the repo-root mutation lock (pid + ISO timestamp) for this run.
+
+    An existing lock with a live pid means a second concurrent mutation run —
+    abort (runs must be serialized: racing runs leak mutations into production
+    source). A lock whose pid is dead or unreadable is stale debris from a
+    killed run: warn, remove, continue.
+    """
+    if MUTATION_LOCKFILE.exists():
+        tokens = MUTATION_LOCKFILE.read_text().split()
+        pid = int(tokens[0]) if tokens and tokens[0].isdigit() and int(tokens[0]) > 0 else None
+        if pid is not None and _lock_pid_alive(pid):
+            print(f"MUTATION GATE ABORT: another mutation run is active (pid {pid}, "
+                  f"lock {MUTATION_LOCKFILE}). Mutation runs must be serialized — "
+                  "retry after it finishes.")
+            sys.exit(2)
+        print(f"WARNING: stale mutation lockfile {MUTATION_LOCKFILE} (pid={pid}, "
+              "not running) — removing and continuing.")
+        MUTATION_LOCKFILE.unlink()
+    MUTATION_LOCKFILE.write_text(f"{os.getpid()}\n{datetime.now(UTC).isoformat()}\n")
+
+
 # Phase-18 mutations — each must be killed by formal/diff/test_goal_system_value_diff.py.
 
 ACCEPT_TASK_GOAL_MUTATIONS = [
@@ -2382,6 +2422,16 @@ LIVENESS_REST_MUTATIONS = [
 
 def main() -> int:
     _assert_sources_clean()
+    _acquire_mutation_lock()
+    try:
+        return _run_all_groups()
+    finally:
+        # Always release the interlock, even on a crashed/killed-with-traceback
+        # run, so a dead lock never wedges `artifactsmmo play` startups.
+        MUTATION_LOCKFILE.unlink(missing_ok=True)
+
+
+def _run_all_groups() -> int:
     survivors: list = []
     run_group(SRC, MUTATIONS, "formal/diff/test_calculate_path_diff.py", survivors)
     run_group(TASK_BATCH_SRC, TASK_BATCH_MUTATIONS, "formal/diff/test_task_batch_diff.py", survivors)

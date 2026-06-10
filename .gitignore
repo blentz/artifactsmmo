@@ -82,3 +82,6 @@ TOKEN
 # Runtime artifacts from the AI player
 logs.txt
 **/*.jsonl
+
+# Mutate<->play interlock lockfile (formal/diff/mutate.py)
+.mutation-run.lock

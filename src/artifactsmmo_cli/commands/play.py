@@ -17,6 +17,7 @@ from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.tui.app import WatchApp
 from artifactsmmo_cli.tui.observer import ThreadSafeBridge
+from artifactsmmo_cli.utils.mutation_lock import check_mutation_lock, default_lock_path
 
 
 def default_learn_db_path() -> str:
@@ -39,6 +40,19 @@ def play(
                               help="Run with a live TUI watcher (Textual). Bot runs in a worker thread."),
 ) -> None:
     """Run the autonomous GOAP AI player for one character."""
+    # Mutate<->play interlock: formal/diff/mutate.py live-writes mutants into
+    # src/ and holds a repo-root lockfile for the whole run. Starting the bot
+    # mid-run imports poisoned code (2026-06-09: a mutated predicate crashed
+    # play with SystemExit(2)), so refuse before any game data or threads.
+    lock_path = default_lock_path()
+    lock = check_mutation_lock(lock_path)
+    if lock.state == "active":
+        print(f"mutation run in progress (pid {lock.pid}, lock {lock_path}) — "
+              "src/ contains live mutants; retry after it finishes")
+        raise typer.Exit(code=2)
+    if lock.state == "stale":
+        print(f"Warning: stale mutation lockfile at {lock_path} ({lock.detail}); continuing")
+
     tracer: Tracer = NullTracer()
     if trace:
         path = trace_file or f"play-trace-{character}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.jsonl"
