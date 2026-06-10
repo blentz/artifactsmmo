@@ -1,10 +1,17 @@
 """CRAFT_RELIEF circuit breaker: when inventory pressure forces a decision
-and the bot can craft a goal-item from current inventory, the guard ladder
-should pick CraftRelief instead of routing to DepositInventory or
-DiscardOverstock."""
+and the bot can craft a goal-item from current inventory WITH NET RELIEF
+(inputs consumed > outputs produced), the guard ladder should pick
+CraftRelief instead of routing to DepositInventory or DiscardOverstock —
+and one activation should batch enough crafts to relieve the pressure.
+
+Trace 2026-06-08 cycles 570-632 (locked below): the guard picked
+cooked_gudgeon — a 1:1 recipe that frees ZERO units — and crafted x1
+thirty-eight times, flapping CraftRelief<->PursueTask every 1-2 cycles."""
 
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
+from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
+from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.craft_relief import (
     ReliefCandidate,
     craft_relief_candidates,
@@ -25,7 +32,8 @@ from tests.test_ai.fixtures import make_state
 
 
 def _gd_ash_plank() -> GameData:
-    """Game data with the ash_wood->ash_plank recipe (1:1, woodcutting)."""
+    """Game data with the ash_wood->ash_plank recipe (10:1, woodcutting) —
+    a net-relief recipe: each craft consumes 10 units and produces 1."""
     gd = GameData()
     gd._item_stats = {
         "ash_wood": ItemStats(code="ash_wood", level=1, type_="resource"),
@@ -34,11 +42,60 @@ def _gd_ash_plank() -> GameData:
             crafting_skill="woodcutting", crafting_level=1,
         ),
     }
-    gd._crafting_recipes = {"ash_plank": {"ash_wood": 1}}
+    gd._crafting_recipes = {"ash_plank": {"ash_wood": 10}}
     gd._workshop_locations = {"woodcutting": (2, 3)}
     gd._resource_locations = {"ash_tree": [(3, 0)]}
     gd._resource_drops = {"ash_tree": "ash_wood"}
     gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
+    gd._bank_location = (4, 0)
+    gd._taskmaster_location = (1, 2)
+    fill_monster_stat_defaults(gd)
+    return gd
+
+
+def _gd_gudgeon() -> GameData:
+    """Trace 2026-06-08: gudgeon->cooked_gudgeon is 1:1 (cooking) — one
+    input unit consumed, one output unit produced, ZERO net relief."""
+    gd = GameData()
+    gd._item_stats = {
+        "gudgeon": ItemStats(code="gudgeon", level=1, type_="resource"),
+        "cooked_gudgeon": ItemStats(
+            code="cooked_gudgeon", level=1, type_="consumable",
+            crafting_skill="cooking", crafting_level=1,
+        ),
+    }
+    gd._crafting_recipes = {"cooked_gudgeon": {"gudgeon": 1}}
+    gd._workshop_locations = {"cooking": (1, 1)}
+    gd._resource_locations = {"gudgeon_fishing_spot": [(4, 2)]}
+    gd._resource_drops = {"gudgeon_fishing_spot": "gudgeon"}
+    gd._resource_skill = {"gudgeon_fishing_spot": ("fishing", 1)}
+    gd._bank_location = (4, 0)
+    gd._taskmaster_location = (1, 2)
+    fill_monster_stat_defaults(gd)
+    return gd
+
+
+def _gd_copper() -> GameData:
+    """copper_ore->copper_bar (10:1, mining) + copper_bar->copper_helmet
+    (6 bars, gearcrafting): a net-relief task recipe plus a gear recipe
+    whose closure consumes the task's reserved materials."""
+    gd = GameData()
+    gd._item_stats = {
+        "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource"),
+        "copper_bar": ItemStats(
+            code="copper_bar", level=1, type_="resource",
+            crafting_skill="mining", crafting_level=1,
+        ),
+        "copper_helmet": ItemStats(
+            code="copper_helmet", level=1, type_="helmet",
+            crafting_skill="gearcrafting", crafting_level=1,
+        ),
+    }
+    gd._crafting_recipes = {
+        "copper_bar": {"copper_ore": 10},
+        "copper_helmet": {"copper_bar": 6},
+    }
+    gd._workshop_locations = {"mining": (1, 5), "gearcrafting": (3, 1)}
     gd._bank_location = (4, 0)
     gd._taskmaster_location = (1, 2)
     fill_monster_stat_defaults(gd)
@@ -57,9 +114,9 @@ def _ctx(**overrides: object) -> SelectionContext:
 class TestCraftReliefCandidates:
     def test_task_item_with_materials_in_inventory_is_candidate(self):
         """Robby trace 2026-06-05: 67 ash_wood, task=ash_plank(3/13).
-        ash_plank<-ash_wood at 1:1 with craft_lvl=1; player skill defaults
-        to 1; recipe inputs in inv => candidate emitted, capped by
-        remaining task units (10)."""
+        ash_plank<-10 ash_wood with craft_lvl=1; recipe inputs in inv =>
+        candidate emitted, capped by simultaneously-craftable units (6);
+        usage 67/104 is below the relief threshold so no relief cap binds."""
         gd = _gd_ash_plank()
         state = make_state(
             task_code="ash_plank", task_type="items",
@@ -70,8 +127,70 @@ class TestCraftReliefCandidates:
         assert len(candidates) == 1
         c = candidates[0]
         assert c == ReliefCandidate(
-            item_code="ash_plank", quantity=10, priority_class=0,
+            item_code="ash_plank", quantity=6, priority_class=0,
         )
+
+    def test_one_to_one_recipe_is_not_relief(self):
+        """Trace 2026-06-08 cycles 570-632 LOCKED: 8 gudgeon on hand at 70%
+        pressure, task=cooked_gudgeon — a 1:1 recipe relieves zero units, so
+        it must NOT be a relief candidate (the old code crafted it x1
+        thirty-eight times, ping-ponging (4,2)<->(1,1) per single item)."""
+        gd = _gd_gudgeon()
+        state = make_state(
+            task_code="cooked_gudgeon", task_type="items",
+            task_progress=0, task_total=38,
+            inventory={"gudgeon": 8, "cooked_gudgeon": 6},  # 14/20 = 70%
+            inventory_max=20,
+        )
+        assert state.inventory_used / state.inventory_max >= CRAFT_RELIEF_FRACTION
+        assert craft_relief_candidates(state, gd) == []
+
+    def test_net_positive_recipe_is_selected_with_relief_batch(self):
+        """10 copper_ore -> 1 copper_bar frees 9 units per craft. At 80/100
+        pressure the candidate batches exactly the crafts needed to push
+        usage strictly below the 70% threshold (2 crafts: 80 -> 62)."""
+        gd = _gd_copper()
+        state = make_state(
+            task_code="copper_bar", task_type="items",
+            task_progress=0, task_total=11,
+            inventory={"copper_ore": 80}, inventory_max=100,
+        )
+        candidates = craft_relief_candidates(state, gd)
+        assert candidates == [ReliefCandidate(
+            item_code="copper_bar", quantity=2, priority_class=0,
+        )]
+
+    def test_quantity_bounded_by_simultaneously_craftable(self):
+        """Below the pressure threshold no relief cap applies; the quantity
+        is bounded by what the on-hand inputs can craft simultaneously
+        (80 ore / 10 per craft = 8), not x1."""
+        gd = _gd_copper()
+        state = make_state(
+            task_code="copper_bar", task_type="items",
+            task_progress=0, task_total=11,
+            inventory={"copper_ore": 80}, inventory_max=200,  # 40% used
+        )
+        candidates = craft_relief_candidates(state, gd)
+        assert candidates == [ReliefCandidate(
+            item_code="copper_bar", quantity=8, priority_class=0,
+        )]
+
+    def test_gear_candidate_consuming_reserved_task_materials_excluded(self):
+        """task=copper_bar(0/11) reserves the bar closure (11 bars, 110 ore).
+        copper_helmet eats 6 reserved bars without surplus -> excluded by
+        consumes_reserved; the task item itself stays a candidate (producing
+        it IS the reserved pipeline)."""
+        gd = _gd_copper()
+        state = make_state(
+            task_code="copper_bar", task_type="items",
+            task_progress=0, task_total=11,
+            inventory={"copper_bar": 6, "copper_ore": 80}, inventory_max=200,
+            skills={"mining": 1, "gearcrafting": 1},
+        )
+        candidates = craft_relief_candidates(
+            state, gd, target_gear=frozenset({"copper_helmet"}),
+        )
+        assert [c.item_code for c in candidates] == ["copper_bar"]
 
     def test_no_candidate_when_materials_missing(self):
         gd = _gd_ash_plank()
@@ -199,7 +318,7 @@ class TestCraftReliefGuard:
         """Guard predicate: inv >= CRAFT_RELIEF_FRACTION AND a craftable
         candidate exists. With 73/104 (70.2%) and ash_wood->ash_plank
         recipe ready, CRAFT_RELIEF must fire and rank ahead of
-        DEPOSIT_FULL (which would also fire at 80%+) when applicable."""
+        DEPOSIT_FULL (which would also fire at 90%+) when applicable."""
         gd = _gd_ash_plank()
         state = make_state(
             task_code="ash_plank", task_type="items",
@@ -235,8 +354,24 @@ class TestCraftReliefGuard:
         guards = active_guards(state, gd, None, _ctx())
         assert GuardKind.CRAFT_RELIEF not in guards
 
+    def test_does_not_fire_when_only_candidate_is_one_to_one(self):
+        """Trace 2026-06-08 LOCKED at guard level: at >= 70% pressure with
+        only the 1:1 cooked_gudgeon recipe available, the net-relief gate
+        leaves zero candidates and the guard must stay SILENT — real
+        pressure is handled by DEPOSIT_FULL / DISCARD_HIGH at their own
+        thresholds, not by zero-relief crafting."""
+        gd = _gd_gudgeon()
+        state = make_state(
+            task_code="cooked_gudgeon", task_type="items",
+            task_progress=0, task_total=38,
+            inventory={"gudgeon": 8, "cooked_gudgeon": 6},  # 14/20 = 70%
+            inventory_max=20,
+        )
+        guards = active_guards(state, gd, None, _ctx())
+        assert GuardKind.CRAFT_RELIEF not in guards
+
     def test_preempts_deposit_full_in_ladder(self):
-        """When CRAFT_RELIEF AND DEPOSIT_FULL both fire (inv >= 80% AND
+        """When CRAFT_RELIEF AND DEPOSIT_FULL both fire (inv >= 90% AND
         craftable from inv AND something else is bankable), CRAFT_RELIEF
         must appear first in the active guard ladder so the arbiter picks
         it first."""
@@ -260,7 +395,10 @@ class TestCraftReliefGuard:
 
 
 class TestMapGuardCraftRelief:
-    def test_map_guard_builds_craft_relief_goal(self):
+    def test_map_guard_builds_craft_relief_goal_with_relief_batch(self):
+        """map_guard wires the top candidate's batched quantity into the
+        goal: at 75/104 (72.1%) one 10:1 craft frees 9 units and lands below
+        the threshold, so the goal demands exactly +1 ash_plank."""
         gd = _gd_ash_plank()
         state = make_state(
             task_code="ash_plank", task_type="items",
@@ -270,34 +408,81 @@ class TestMapGuardCraftRelief:
         goal = map_guard(GuardKind.CRAFT_RELIEF, gd, _ctx(), state)
         assert isinstance(goal, CraftReliefGoal)
         assert repr(goal) == "CraftRelief(ash_plank)"
+        assert goal.desired_state(state, gd) == {"inventory": {"ash_plank": 1}}
 
 
 class TestCraftReliefGoalApi:
-    def test_value_is_guard_band_until_one_more_unit_crafted(self):
+    def test_value_is_guard_band_until_batch_crafted(self):
         gd = _gd_ash_plank()
-        goal = CraftReliefGoal(target_item="ash_plank", initial_qty=3)
-        # Below initial_qty + 1 → goal unsatisfied → guard-band value.
-        below = make_state(inventory={"ash_plank": 3})
+        goal = CraftReliefGoal(target_item="ash_plank", initial_qty=3, batch=4)
+        # Below initial_qty + batch → goal unsatisfied → guard-band value.
+        below = make_state(inventory={"ash_plank": 6})
         assert not goal.is_satisfied(below)
         assert goal.value(below, gd) == 70.0
-        # At initial_qty + 1 → satisfied → zero value.
-        at = make_state(inventory={"ash_plank": 4})
+        # At initial_qty + batch → satisfied → zero value.
+        at = make_state(inventory={"ash_plank": 7})
         assert goal.is_satisfied(at)
         assert goal.value(at, gd) == 0.0
 
-    def test_desired_state_requests_one_additional_unit(self):
+    def test_default_batch_is_one_additional_unit(self):
         gd = _gd_ash_plank()
         goal = CraftReliefGoal(target_item="ash_plank", initial_qty=3)
         state = make_state(inventory={"ash_plank": 3})
         assert goal.desired_state(state, gd) == {"inventory": {"ash_plank": 4}}
+        assert goal.is_satisfied(make_state(inventory={"ash_plank": 4}))
+
+    def test_desired_state_requests_batch_additional_units(self):
+        gd = _gd_ash_plank()
+        goal = CraftReliefGoal(target_item="ash_plank", initial_qty=3, batch=4)
+        state = make_state(inventory={"ash_plank": 3})
+        assert goal.desired_state(state, gd) == {"inventory": {"ash_plank": 7}}
+
+    def test_relevant_actions_rebatches_single_craft(self):
+        """The factory's x1 (and task batch-K) CraftActions collapse to ONE
+        craft at the goal's batch quantity; Move and recipe-input withdraws
+        pass through; unrelated actions are dropped."""
+        gd = _gd_ash_plank()
+        goal = CraftReliefGoal(target_item="ash_plank", initial_qty=0, batch=4)
+        actions = [
+            CraftAction(code="ash_plank", quantity=1, workshop_location=(2, 3)),
+            CraftAction(code="ash_plank", quantity=10, workshop_location=(2, 3)),
+            CraftAction(code="cooked_gudgeon", quantity=1, workshop_location=(1, 1)),
+            MoveAction(x=2, y=3),
+            WithdrawItemAction(code="ash_wood", quantity=10,
+                               bank_location=(4, 0), accessible=True),
+            WithdrawItemAction(code="gudgeon", quantity=1,
+                               bank_location=(4, 0), accessible=True),
+            TaskTradeAction(code="ash_plank", quantity=10, taskmaster_location=(1, 2)),
+        ]
+        state = make_state(inventory={"ash_wood": 40})
+        out = goal.relevant_actions(actions, state, gd)
+        crafts = [a for a in out if isinstance(a, CraftAction)]
+        assert len(crafts) == 1
+        assert crafts[0].code == "ash_plank"
+        assert crafts[0].quantity == 4
+        assert any(isinstance(a, MoveAction) for a in out)
+        withdraws = [a for a in out if isinstance(a, WithdrawItemAction)]
+        assert [w.code for w in withdraws] == ["ash_wood"]
+        assert not any(isinstance(a, TaskTradeAction) for a in out)
+
+    def test_relevant_actions_keeps_craft_already_at_batch_quantity(self):
+        """A CraftAction whose quantity already equals the batch is reused
+        as-is (no copy)."""
+        gd = _gd_ash_plank()
+        goal = CraftReliefGoal(target_item="ash_plank", initial_qty=0, batch=1)
+        craft = CraftAction(code="ash_plank", quantity=1, workshop_location=(2, 3))
+        state = make_state(inventory={"ash_wood": 10})
+        out = goal.relevant_actions([craft], state, gd)
+        assert out == [craft]
+        assert out[0] is craft
 
 
 class TestArbiterEndToEnd:
-    def test_arbiter_picks_craft_relief_over_deposit(self):
-        """Full driver path: inv at 87%, ash_wood->ash_plank recipe ready;
-        arbiter must return CraftReliefGoal, not DepositInventoryGoal.
-        Pre-circuit-breaker the trace showed DEPOSIT_FULL winning and the
-        bot trekking to the bank instead of crafting."""
+    def test_arbiter_picks_craft_relief_over_deposit_with_batched_craft(self):
+        """Full driver path: inv at 86.5%, ash_wood->ash_plank (10:1) ready;
+        arbiter must return CraftReliefGoal whose plan crafts the WHOLE
+        relief batch in one CraftAction (x2 frees 18 units: 90 -> 72 < 70%
+        of 104), not one item per cycle."""
         gd = _gd_ash_plank()
         state = make_state(
             x=2, y=3,  # already at the woodcutting workshop tile
@@ -318,6 +503,26 @@ class TestArbiterEndToEnd:
         goal, plan, _tried = arbiter.select(_FakeDecision(), state, gd, actions, _ctx())
         assert isinstance(goal, CraftReliefGoal)
         assert plan, "expected a craft plan"
-        # The first action must be a Craft of the target item (Move folded in
-        # via workshop_location for already-on-tile states).
-        assert any(isinstance(a, CraftAction) and a.code == "ash_plank" for a in plan)
+        crafts = [a for a in plan if isinstance(a, CraftAction)]
+        assert len(crafts) == 1
+        assert crafts[0].code == "ash_plank"
+        assert crafts[0].quantity == 2
+
+    def test_planner_emits_one_batched_craft_not_n_singles(self):
+        """8 crafts' worth of inputs on hand → the plan is ONE CraftAction
+        x8, never 8 separate x1 crafts (trace 2026-06-08: 38 single crafts
+        with up to 8 raw gudgeon on hand)."""
+        gd = _gd_ash_plank()
+        goal = CraftReliefGoal(target_item="ash_plank", initial_qty=0, batch=8)
+        state = make_state(
+            x=2, y=3,
+            inventory={"ash_wood": 80}, inventory_max=104,
+        )
+        actions = [
+            CraftAction(code="ash_plank", quantity=1, workshop_location=(2, 3)),
+        ]
+        plan = GOAPPlanner().plan(state, goal, actions, gd)
+        assert plan, "expected a one-step batched craft plan"
+        crafts = [a for a in plan if isinstance(a, CraftAction)]
+        assert len(crafts) == 1
+        assert crafts[0].quantity == 8

@@ -9,7 +9,10 @@ from enum import Enum
 
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.combat import predict_win
-from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
+from artifactsmmo_cli.ai.craft_relief import (
+    CRAFT_RELIEF_FRACTION,
+    craft_relief_candidates,
+)
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_caps import overstocked_items
 from artifactsmmo_cli.ai.inventory_profile import inventory_profile
@@ -18,11 +21,8 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
 CRITICAL_HP_FRACTION = 0.25
-CRAFT_RELIEF_FRACTION = 0.70
-"""When inv pressure crosses this fraction AND a goal-item is craftable
-from current inventory, the CRAFT_RELIEF guard fires AHEAD of DEPOSIT_FULL.
-Catches the case where raw materials would otherwise be banked or deleted
-while the bot was one Craft action from converting them into task progress."""
+# CRAFT_RELIEF_FRACTION (0.70) lives in craft_relief.py (re-imported above)
+# so the candidate batch sizing and the guard predicate share one threshold.
 DEPOSIT_FULL_FRACTION = 0.90
 """Space-driven (spec 2026-06-07): deposit pressure only appears near-full so
 the player uses most of the bag. Kept STRICTLY ABOVE
