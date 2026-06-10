@@ -52,3 +52,26 @@ def raw_material_units(game_data: GameData, item: str, visited: frozenset[str] |
         return 1
     deeper = visited | {item}
     return sum(qty * raw_material_units(game_data, sub, deeper) for sub, qty in recipe.items())
+
+
+def closure_demand(root: str, multiplier: int, game_data: GameData,
+                   out: dict[str, int], visited: frozenset[str]) -> None:
+    """Accumulate the recipe-closure demand of `root` (x `multiplier`) into
+    `out`. The root itself and every transitive material are recorded at their
+    cumulative required quantity (max across roots). Cycle-safe via `visited`.
+
+    The ONE shared closure-demand implementation: `inventory_profile` (soft
+    keep-targets) and `task_reservation` (step-tier reservation) both consume
+    it. Mirrored by the proved Lean `closureDemand`
+    (formal/Formal/TaskReservation.lean)."""
+    if root in visited:
+        return
+    sub_visited = visited | {root}
+    # Record the root at its own demanded quantity (max across contributors).
+    if multiplier > out.get(root, 0):
+        out[root] = multiplier
+    recipe = game_data.crafting_recipe(root) or {}
+    for mat, qty_per in recipe.items():
+        if qty_per <= 0:
+            continue
+        closure_demand(mat, multiplier * qty_per, game_data, out, sub_visited)

@@ -20,26 +20,8 @@ Each root contributes its recipe-closure raw materials x required quantities.
 from collections.abc import Iterable
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.recipe_closure import closure_demand
 from artifactsmmo_cli.ai.world_state import WorldState
-
-
-def _closure_demand(root: str, multiplier: int, game_data: GameData,
-                    out: dict[str, int], visited: frozenset[str]) -> None:
-    """Accumulate the recipe-closure demand of `root` (x `multiplier`) into
-    `out`. The root itself and every transitive material are recorded at their
-    cumulative required quantity (max across roots). Cycle-safe via `visited`.
-    """
-    if root in visited:
-        return
-    sub_visited = visited | {root}
-    # Record the root at its own demanded quantity (max across contributors).
-    if multiplier > out.get(root, 0):
-        out[root] = multiplier
-    recipe = game_data.crafting_recipe(root) or {}
-    for mat, qty_per in recipe.items():
-        if qty_per <= 0:
-            continue
-        _closure_demand(mat, multiplier * qty_per, game_data, out, sub_visited)
 
 
 def inventory_profile(
@@ -65,7 +47,7 @@ def inventory_profile(
     roots.extend(target_gear)
     roots.extend(target_tools)
     for root in roots:
-        _closure_demand(root, 1, game_data, profile, frozenset())
+        closure_demand(root, 1, game_data, profile, frozenset())
 
     # Active items-task: size to the remaining task quantity so the whole
     # remaining batch of inputs is protected (mirrors bank_selection's task
@@ -73,7 +55,7 @@ def inventory_profile(
     if state.task_type == "items" and state.task_code:
         remaining = max(0, state.task_total - state.task_progress)
         if remaining > 0:
-            _closure_demand(state.task_code, remaining, game_data, profile,
-                            frozenset())
+            closure_demand(state.task_code, remaining, game_data, profile,
+                           frozenset())
 
     return profile
