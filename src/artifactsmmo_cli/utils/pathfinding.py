@@ -57,12 +57,21 @@ def calculate_path(start_x: int, start_y: int, end_x: int, end_y: int) -> PathRe
     if start_x == end_x and start_y == end_y:
         return PathResult(steps=[], total_distance=0, estimated_time=0)
 
-    steps = []
+    steps: list[PathStep] = []
     current_x, current_y = start_x, start_y
+
+    # Calculate total distance (Manhattan distance)
+    total_distance = abs(end_x - start_x) + abs(end_y - start_y)
 
     # Calculate path step by step
     # Move diagonally when possible, then move in remaining direction
     while current_x != end_x or current_y != end_y:
+        # Liveness guard: every iteration moves both axes toward the target,
+        # so a path can never need more than total_distance steps (Chebyshev
+        # <= Manhattan). More iterations means the step logic diverged and
+        # the loop would otherwise grow `steps` without bound.
+        if len(steps) >= total_distance:
+            raise RuntimeError("pathfinding diverged: step did not approach target")  # pragma: no cover
         next_x, next_y = current_x, current_y
 
         # Move towards target X coordinate
@@ -79,9 +88,6 @@ def calculate_path(start_x: int, start_y: int, end_x: int, end_y: int) -> PathRe
 
         steps.append(PathStep(next_x, next_y))
         current_x, current_y = next_x, next_y
-
-    # Calculate total distance (Manhattan distance)
-    total_distance = abs(end_x - start_x) + abs(end_y - start_y)
 
     # Estimate time: assume 5 seconds per move (including cooldown)
     estimated_time = len(steps) * 5
