@@ -24,6 +24,17 @@ during the Phase-6 recon batch:
   or future caller. Post-fix `is_applicable` also requires
   `self.slot ∈ ITEM_TYPE_TO_SLOTS[stats.type_]`.
 
+  **2026-06-10 extension — code-already-worn gate (HTTP 485).** The server
+  rejects equipping an item code already worn in ANOTHER slot ("This item is
+  already equipped"). Without the gate the planner projects a second copy of
+  an already-worn consumable into the empty sibling utility slot, the equip
+  485s with state unchanged, and the identical plan re-derives every cycle
+  (the Robby utility2 livelock). `isApplicable` now also requires
+  `¬ wornElsewhere`: no OTHER slot holds this item code. Keying on code (not
+  slot-group occupancy) keeps two DIFFERENT codes across sibling slots legal,
+  and exempting the target slot itself keeps own-slot re-equip (utility
+  stacking) governed by the inventory clause alone.
+
 * **Target E — WorldState property invariants (regression-locks).**
   Three properties on the planner state class:
     * `inventory_used = Σ inventory.values()`,
@@ -110,10 +121,16 @@ structure ItemStats where
   level : Nat
   deriving Repr, DecidableEq
 
-/-- Minimal state projection: the planner-relevant fields. -/
+/-- Minimal state projection: the planner-relevant fields. `equipment` is the
+worn-gear map as (slot, itemCode) pairs — only occupied slots appear (the
+Python `state.equipment` maps empty slots to `None`, which can never equal a
+real item code, so omitting them is faithful). `itemCode` is the candidate
+item's code (`self.code`). -/
 structure EquipState where
   invQty : Nat       -- inventory count of the candidate code
   charLevel : Nat
+  itemCode : Nat     -- the candidate code being equipped (`self.code`)
+  equipment : List (Nat × Nat)  -- occupied (slot, code) pairs
   deriving Repr, DecidableEq
 
 /-- Slot table: `ITEM_TYPE_TO_SLOTS` in `equip.py`. A type maps to the list
@@ -121,7 +138,14 @@ of equipment-slot codes (also modeled as `Nat`) it can occupy. Unknown types
 return `[]`. -/
 def SlotTable : Type := Nat → List Nat
 
-/-- Post-fix `is_applicable`. -/
+/-- The HTTP-485 clause: the candidate code is already worn in some slot
+OTHER than the target slot. Mirrors
+`any(equipped == self.code for slot, equipped in state.equipment.items()
+     if slot != self.slot)` in `equip.py`. -/
+def wornElsewhere (equipment : List (Nat × Nat)) (itemCode slot : Nat) : Bool :=
+  equipment.any (fun p => p.2 == itemCode && p.1 != slot)
+
+/-- Post-fix `is_applicable` (2026-06-10: plus the code-already-worn gate). -/
 def isApplicable (st : EquipState) (stats : Option ItemStats) (slot : Nat)
     (tbl : SlotTable) : Bool :=
   match stats with
@@ -129,6 +153,7 @@ def isApplicable (st : EquipState) (stats : Option ItemStats) (slot : Nat)
   | some s =>
     decide (0 < st.invQty) &&
       decide (slot ∈ tbl s.itemType) &&
+      !wornElsewhere st.equipment st.itemCode slot &&
       decide (s.level ≤ st.charLevel)
 
 /-- Slot/type contract: a passing precondition implies the slot is a valid
@@ -141,7 +166,7 @@ theorem isApplicable_imp_slot_in_table
   unfold isApplicable at h
   cases stats with
   | none => simp at h
-  | some s => simp at h; exact ⟨s, rfl, h.1.2⟩
+  | some s => simp at h; exact ⟨s, rfl, h.1.1.2⟩
 
 /-- Inventory contract: a passing precondition implies the code is held. -/
 theorem isApplicable_imp_inv_pos
@@ -151,7 +176,20 @@ theorem isApplicable_imp_inv_pos
   unfold isApplicable at h
   cases stats with
   | none => simp at h
-  | some s => simp at h; exact h.1.1
+  | some s => simp at h; exact h.1.1.1
+
+/-- HTTP-485 contract: a passing precondition implies the candidate code is
+NOT already worn in another slot — so the planner can never emit the
+server-doomed second-copy equip (the Robby utility2 livelock). -/
+theorem isApplicable_imp_not_worn_elsewhere
+    (st : EquipState) (stats : Option ItemStats) (slot : Nat) (tbl : SlotTable) :
+    isApplicable st stats slot tbl = true →
+      wornElsewhere st.equipment st.itemCode slot = false := by
+  intro h
+  unfold isApplicable at h
+  cases stats with
+  | none => simp at h
+  | some s => simp at h; exact h.1.2
 
 /-- Level contract: a passing precondition implies the character meets the
 level requirement. -/
@@ -164,6 +202,16 @@ theorem isApplicable_imp_level_ge
   cases stats with
   | none => simp at h
   | some s => simp at h; exact ⟨s, rfl, h.2⟩
+
+/-- Code-already-worn regression-pin: when the candidate code is worn in a
+different slot, the precondition refuses — even with inventory, level, and
+slot/type all fine. -/
+theorem isApplicable_worn_elsewhere_refused
+    (st : EquipState) (s : ItemStats) (slot : Nat) (tbl : SlotTable)
+    (hworn : wornElsewhere st.equipment st.itemCode slot = true) :
+    isApplicable st (some s) slot tbl = false := by
+  unfold isApplicable
+  simp [hworn]
 
 /-- Mismatched-slot regression-pin: a verified-bug input (helmet slot for a
 ring) is now refused, even when level + inventory are fine. -/
@@ -181,11 +229,12 @@ theorem isApplicable_no_stats_refused
     isApplicable st none slot tbl = false := by
   unfold isApplicable; rfl
 
-/-- Boundary witness: matched slot + held inventory + met level ⇒ accepted. -/
+/-- Boundary witness: matched slot + held inventory + met level + nothing
+worn ⇒ accepted. -/
 theorem isApplicable_boundary_witness :
     let tbl : SlotTable := fun t => if t = 7 then [3, 4] else []
     let s : ItemStats := { itemType := 7, level := 1 }
-    let st : EquipState := { invQty := 1, charLevel := 1 }
+    let st : EquipState := { invQty := 1, charLevel := 1, itemCode := 42, equipment := [] }
     isApplicable st (some s) 3 tbl = true := by decide
 
 /-- Pre-fix bug counter-example: ring (`itemType = 7`, slots `{ring1, ring2} =
@@ -194,8 +243,40 @@ ok), post-fix refuses. -/
 theorem isApplicable_ring_into_helmet_refused :
     let tbl : SlotTable := fun t => if t = 7 then [3, 4] else []
     let s : ItemStats := { itemType := 7, level := 1 }
-    let st : EquipState := { invQty := 1, charLevel := 1 }
+    let st : EquipState := { invQty := 1, charLevel := 1, itemCode := 42, equipment := [] }
     isApplicable st (some s) 9 tbl = false := by decide
+
+/-- 2026-06-10 livelock counter-example (the Robby trace): utility
+(`itemType = 9`, slots `{utility1, utility2} = {112, 113}`), the code (42)
+already worn in utility1 (112), second copy targeted at the EMPTY utility2
+(113) — pre-fix accepted (inv + slot + level ok), the server 485s forever;
+post-fix refuses. -/
+theorem isApplicable_same_code_sibling_refused :
+    let tbl : SlotTable := fun t => if t = 9 then [112, 113] else []
+    let s : ItemStats := { itemType := 9, level := 1 }
+    let st : EquipState :=
+      { invQty := 1, charLevel := 1, itemCode := 42, equipment := [(112, 42)] }
+    isApplicable st (some s) 113 tbl = false := by decide
+
+/-- Legality witness promised by the gate's comment: a DIFFERENT code (7)
+worn in utility1 does not block code 42 from the sibling utility2 — the gate
+keys on item code, not slot-group occupancy. -/
+theorem isApplicable_different_code_sibling_accepted :
+    let tbl : SlotTable := fun t => if t = 9 then [112, 113] else []
+    let s : ItemStats := { itemType := 9, level := 1 }
+    let st : EquipState :=
+      { invQty := 1, charLevel := 1, itemCode := 42, equipment := [(112, 7)] }
+    isApplicable st (some s) 113 tbl = true := by decide
+
+/-- Own-slot exemption witness: the code already worn in the TARGET slot
+itself (utility stacking / re-equip) is not "worn elsewhere"; with a spare
+copy in inventory the precondition still accepts. -/
+theorem isApplicable_own_slot_reequip_accepted :
+    let tbl : SlotTable := fun t => if t = 9 then [112, 113] else []
+    let s : ItemStats := { itemType := 9, level := 1 }
+    let st : EquipState :=
+      { invQty := 1, charLevel := 1, itemCode := 42, equipment := [(112, 42)] }
+    isApplicable st (some s) 112 tbl = true := by decide
 
 /-! ## Target E — WorldState property invariants. -/
 

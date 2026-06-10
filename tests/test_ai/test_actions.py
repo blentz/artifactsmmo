@@ -612,6 +612,51 @@ class TestEquipAction:
         gd = make_game_data(item_stats={"copper_dagger": stats})
         assert action.is_applicable(state, gd) is False
 
+    def test_not_applicable_when_code_already_equipped_in_sibling_slot(self):
+        """The server forbids a single item code occupying two slots at once
+        (HTTP 485 "This item is already equipped"). With small_health_potion
+        already in utility1, equipping a second copy into the empty utility2
+        is non-executable; is_applicable must reject it so the planner never
+        emits the doomed equip (the Robby utility2 livelock, trace 20260610)."""
+        action = EquipAction(code="small_health_potion", slot="utility2_slot")
+        stats = ItemStats(code="small_health_potion", level=1, type_="utility")
+        state = make_state(
+            inventory={"small_health_potion": 1},
+            equipment={**make_state().equipment, "utility1_slot": "small_health_potion"},
+            level=5,
+        )
+        gd = make_game_data(item_stats={"small_health_potion": stats})
+        assert action.is_applicable(state, gd) is False
+
+    def test_applicable_when_different_code_in_sibling_slot(self):
+        """Two DIFFERENT consumables across the utility slots is legal, so a
+        distinct code into the empty sibling slot stays applicable (the guard
+        keys on item code, not slot-group occupancy)."""
+        action = EquipAction(code="small_health_potion", slot="utility2_slot")
+        stats = ItemStats(code="small_health_potion", level=1, type_="utility")
+        state = make_state(
+            inventory={"small_health_potion": 1},
+            equipment={**make_state().equipment, "utility1_slot": "antidote"},
+            level=5,
+        )
+        gd = make_game_data(item_stats={"small_health_potion": stats})
+        assert action.is_applicable(state, gd) is True
+
+    def test_applicable_when_same_code_in_its_own_target_slot(self):
+        """Equipping a code into the slot ALREADY holding that code (utility
+        re-stock / stacking) is exempt from the already-worn guard (`slot !=
+        self.slot` in equip.py); it stays governed by the pre-existing
+        inventory/level gates, so with a spare copy held it is applicable."""
+        action = EquipAction(code="small_health_potion", slot="utility1_slot")
+        stats = ItemStats(code="small_health_potion", level=1, type_="utility")
+        state = make_state(
+            inventory={"small_health_potion": 1},
+            equipment={**make_state().equipment, "utility1_slot": "small_health_potion"},
+            level=5,
+        )
+        gd = make_game_data(item_stats={"small_health_potion": stats})
+        assert action.is_applicable(state, gd) is True
+
 
 def _consumable_stats(code: str = "cooked_chicken", hp_restore: int = 80) -> dict[str, ItemStats]:
     return {code: ItemStats(code=code, level=1, type_="consumable", hp_restore=hp_restore)}

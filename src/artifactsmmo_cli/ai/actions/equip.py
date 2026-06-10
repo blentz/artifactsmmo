@@ -62,6 +62,17 @@ class EquipAction(Action):
         # caller could produce a non-executable plan.
         if self.slot not in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):
             return False
+        # A single item code occupies at most one slot at a time: the server
+        # rejects equipping a code already worn elsewhere with HTTP 485 ("This
+        # item is already equipped"). Without this gate the planner happily
+        # plans a second copy into an empty sibling slot (e.g. small_health_potion
+        # already in utility1 -> utility2), the equip 485s, state is unchanged,
+        # and the identical plan re-derives every cycle (the Robby utility2
+        # livelock). Keying on code (not slot) keeps two DIFFERENT consumables
+        # across the utility slots legal.
+        if any(equipped == self.code for slot, equipped in state.equipment.items()
+               if slot != self.slot):
+            return False
         return state.level >= stats.level
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:

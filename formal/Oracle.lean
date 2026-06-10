@@ -1401,7 +1401,9 @@ def runInventoryProfile (args : Array Json) : Json :=
 /-- Compute one phase7_invariants result. Three sub-queries:
 * `0` = baseValue: `[0, totalNeeded, effectiveNum, effectiveDen]` → `{value_num, value_den}`
 * `1` = isApplicable: `[1, invQty, charLevel, hasStats(0/1), itemType, level,
-  slot, nSlots, slot0, slot1, ...]` → `{applicable: Bool}`
+  slot, nSlots, slot0, slot1, ..., itemCode, nEquip, eqSlot0, eqCode0, ...]`
+  → `{applicable: Bool}` (the trailing itemCode/equipment encode the
+  2026-06-10 code-already-worn gate; only OCCUPIED slots are listed)
 * `2` = WS invariants: `[2, query, nInv, code0, qty0, …, invMax, hp, maxHp]`
   where query=0 emits inventoryUsed, query=1 emits inventoryFree,
   query=2 emits hpPercent (as num/den).
@@ -1425,7 +1427,15 @@ def runPhase7Invariants (args : Array Json) : Json :=
     let slots : List Nat := (List.range nSlots).map (fun k => (intArg args (8 + k)).toNat)
     let tbl : Formal.Phase7Invariants.SlotTable := fun t =>
       if t = itemType then slots else []
-    let st : Formal.Phase7Invariants.EquipState := { invQty := invQty, charLevel := charLevel }
+    let base := 8 + nSlots
+    let itemCode := (intArg args base).toNat
+    let nEquip := (intArg args (base + 1)).toNat
+    let equipment : List (Nat × Nat) :=
+      (List.range nEquip).map (fun k =>
+        ((intArg args (base + 2 + 2*k)).toNat, (intArg args (base + 3 + 2*k)).toNat))
+    let st : Formal.Phase7Invariants.EquipState :=
+      { invQty := invQty, charLevel := charLevel,
+        itemCode := itemCode, equipment := equipment }
     let stats : Option Formal.Phase7Invariants.ItemStats :=
       if hasStats then some { itemType := itemType, level := level } else none
     let app := Formal.Phase7Invariants.isApplicable st stats slot tbl

@@ -2080,6 +2080,22 @@ EQUIP_MUTATIONS = [
     ("equip: invert slot/type check (use 'in' instead of 'not in')",
      "        if self.slot not in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):",
      "        if self.slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):"),
+    # Drop the code-already-worn gate: resurrects the 2026-06-10 Robby
+    # utility2 livelock (second copy of a worn consumable plans into the
+    # empty sibling slot, the server 485s, the plan re-derives forever).
+    ("equip: drop code-already-worn gate (resurrects 485 utility2 livelock)",
+     "        if any(equipped == self.code for slot, equipped in state.equipment.items()\n"
+     "               if slot != self.slot):\n"
+     "            return False\n",
+     ""),
+    # Key the gate on sibling-slot OCCUPANCY instead of item code: any worn
+    # item in another slot would block the equip, outlawing the legal
+    # two-different-consumables loadout the gate's comment promises.
+    ("equip: worn gate keys on slot occupancy instead of code",
+     "        if any(equipped == self.code for slot, equipped in state.equipment.items()\n"
+     "               if slot != self.slot):",
+     "        if any(equipped is not None for slot, equipped in state.equipment.items()\n"
+     "               if slot != self.slot):"),
 ]
 # Target F: store_warmup_core warmup gates.
 STORE_WARMUP_MUTATIONS = [

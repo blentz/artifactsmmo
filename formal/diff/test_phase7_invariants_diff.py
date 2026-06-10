@@ -13,8 +13,11 @@ Pins three contracts surfaced during the Phase-6 recon:
   Pre-fix `is_applicable` only checked inventory + level. A slot/type mismatch
   (e.g. ring code into helmet slot) projected successfully but failed on the
   server. Post-fix adds the `slot ∈ ITEM_TYPE_TO_SLOTS[stats.type_]` gate.
-  Differential: the Lean `isApplicable` agrees with the Python on every
-  combination of (inventory, level, slot, type, table).
+  2026-06-10 extension: the code-already-worn gate (HTTP 485 "This item is
+  already equipped") — a code worn in ANOTHER slot refuses; a DIFFERENT code
+  in a sibling slot and own-slot re-equip stay legal (the Robby utility2
+  livelock fix). Differential: the Lean `isApplicable` agrees with the Python
+  on every combination of (inventory, level, slot, type, table, equipment).
 
 * **Target E — WorldState property regression-locks.**
   Pin `inventory_used`, `inventory_free`, and the `hp_percent` div-zero guard.
@@ -37,13 +40,14 @@ def _mkstate(
     hp: int = 100,
     max_hp: int = 100,
     bank_items: dict[str, int] | None = None,
+    equipment: dict[str, str | None] | None = None,
 ) -> WorldState:
     return WorldState(
         character="probe", level=level, xp=0, max_xp=10, hp=hp, max_hp=max_hp, gold=0,
         skills={}, x=0, y=0,
         inventory=dict(inventory or {}),
         inventory_max=inventory_max,
-        equipment={},
+        equipment=dict(equipment or {}),
         cooldown_expires=None,
         task_code=None, task_type=None,
         task_progress=0, task_total=0,
@@ -160,8 +164,10 @@ def test_equip_level_short_refused():
     assert action.is_applicable(state, gd) is False
 
 
-# A 4-arg model: (inv, level, slot, type). The Lean tbl is constructed from
-# ITEM_TYPE_TO_SLOTS for the queried type.
+# The Lean model inputs: (inv, level, slot, type, equipment). The Lean tbl is
+# constructed from ITEM_TYPE_TO_SLOTS for the queried type; equipment is the
+# worn (slot, code) map with only OCCUPIED slots encoded (Python's None-valued
+# empty slots can never equal a real item code).
 _TYPE_TO_INT = {"weapon": 0, "shield": 1, "helmet": 2, "body_armor": 3,
                 "leg_armor": 4, "boots": 5, "ring": 6, "amulet": 7,
                 "artifact": 8, "utility": 9, "bag": 10, "rune": 11}
@@ -172,6 +178,63 @@ _SLOT_TO_INT = {
     "artifact1_slot": 109, "artifact2_slot": 110, "artifact3_slot": 111,
     "utility1_slot": 112, "utility2_slot": 113, "bag_slot": 114, "rune_slot": 115,
 }
+_CODE_TO_INT = {"probe_item": 500, "other_item": 501}
+
+
+def _equip_args(
+    inv_qty: int, char_level: int, item_level: int, item_type: str, slot: str,
+    code: str, equipment: dict[str, str | None],
+) -> list[int]:
+    """Encode one isApplicable probe as oracle args (sub-query 1)."""
+    slot_ints = [_SLOT_TO_INT[s] for s in ITEM_TYPE_TO_SLOTS.get(item_type, [])]
+    pairs: list[int] = []
+    for eq_slot, eq_code in equipment.items():
+        if eq_code is not None:
+            pairs.extend([_SLOT_TO_INT[eq_slot], _CODE_TO_INT[eq_code]])
+    return [1, inv_qty, char_level, 1, _TYPE_TO_INT[item_type], item_level,
+            _SLOT_TO_INT[slot], len(slot_ints), *slot_ints,
+            _CODE_TO_INT[code], len(pairs) // 2, *pairs]
+
+
+def test_equip_code_worn_elsewhere_refused():
+    """2026-06-10 regression-pin (the Robby utility2 livelock): the candidate
+    code already worn in utility1 refuses a second copy into the empty
+    utility2 — pre-fix this projected through and 485'd forever."""
+    gd = _mk_gd_with_item("probe_item", "utility", level=1)
+    state = _mkstate(inventory={"probe_item": 1}, level=1,
+                     equipment={"utility1_slot": "probe_item"})
+    action = EquipAction(code="probe_item", slot="utility2_slot")
+    assert action.is_applicable(state, gd) is False
+    args = _equip_args(1, 1, 1, "utility", "utility2_slot", "probe_item",
+                       {"utility1_slot": "probe_item"})
+    assert run_oracle("phase7_invariants", [args])[0]["applicable"] is False
+
+
+def test_equip_different_code_sibling_accepted():
+    """Boundary witness promised by the gate's comment: a DIFFERENT code in
+    the sibling utility slot does not block the equip."""
+    gd = _mk_gd_with_item("probe_item", "utility", level=1)
+    state = _mkstate(inventory={"probe_item": 1}, level=1,
+                     equipment={"utility1_slot": "other_item"})
+    action = EquipAction(code="probe_item", slot="utility2_slot")
+    assert action.is_applicable(state, gd) is True
+    args = _equip_args(1, 1, 1, "utility", "utility2_slot", "probe_item",
+                       {"utility1_slot": "other_item"})
+    assert run_oracle("phase7_invariants", [args])[0]["applicable"] is True
+
+
+def test_equip_own_slot_reequip_accepted():
+    """Own-slot exemption: the code worn in the TARGET slot itself (utility
+    stacking / re-equip) is not 'worn elsewhere'; with a spare copy held the
+    precondition still accepts."""
+    gd = _mk_gd_with_item("probe_item", "utility", level=1)
+    state = _mkstate(inventory={"probe_item": 1}, level=1,
+                     equipment={"utility1_slot": "probe_item"})
+    action = EquipAction(code="probe_item", slot="utility1_slot")
+    assert action.is_applicable(state, gd) is True
+    args = _equip_args(1, 1, 1, "utility", "utility1_slot", "probe_item",
+                       {"utility1_slot": "probe_item"})
+    assert run_oracle("phase7_invariants", [args])[0]["applicable"] is True
 
 
 @settings(max_examples=200, deadline=None)
@@ -181,20 +244,20 @@ _SLOT_TO_INT = {
     item_level=st.integers(min_value=1, max_value=20),
     item_type=st.sampled_from(list(_TYPE_TO_INT.keys())),
     slot=st.sampled_from(list(_SLOT_TO_INT.keys())),
+    equipment=st.dictionaries(
+        keys=st.sampled_from(list(_SLOT_TO_INT.keys())),
+        values=st.sampled_from([None, "probe_item", "other_item"]),
+        max_size=4,
+    ),
 )
-def test_equip_matches_lean(inv_qty, char_level, item_level, item_type, slot):
+def test_equip_matches_lean(inv_qty, char_level, item_level, item_type, slot, equipment):
     code = "probe_item"
     gd = _mk_gd_with_item(code, item_type, level=item_level)
     inv = {code: inv_qty} if inv_qty > 0 else {}
-    state = _mkstate(inventory=inv, level=char_level)
+    state = _mkstate(inventory=inv, level=char_level, equipment=equipment)
     action = EquipAction(code=code, slot=slot)
     py = action.is_applicable(state, gd)
-    valid_slots = ITEM_TYPE_TO_SLOTS.get(item_type, [])
-    type_int = _TYPE_TO_INT[item_type]
-    slot_int = _SLOT_TO_INT[slot]
-    slot_ints = [_SLOT_TO_INT[s] for s in valid_slots]
-    n_slots = len(slot_ints)
-    args = [1, inv_qty, char_level, 1, type_int, item_level, slot_int, n_slots, *slot_ints]
+    args = _equip_args(inv_qty, char_level, item_level, item_type, slot, code, equipment)
     lean = run_oracle("phase7_invariants", [args])[0]
     assert py == lean["applicable"]
 
