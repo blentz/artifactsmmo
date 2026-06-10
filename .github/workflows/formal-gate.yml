@@ -77,7 +77,9 @@ jobs:
           cd "$GITHUB_WORKSPACE" && uv run pytest formal/diff/ -q --no-cov \
             --ignore=formal/diff/test_game_data_fixture_diff.py
       - name: Mutation tests
-        timeout-minutes: 40
+        # The full suite runs ~36 min locally and slower on CI hardware;
+        # 40 min silently truncated it (continue-on-error hid the timeout).
+        timeout-minutes: 55
         continue-on-error: true
         run: uv run python formal/diff/mutate.py
       - name: OpenAPI conformance (strict)
