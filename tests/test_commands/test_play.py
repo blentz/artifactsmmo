@@ -1,5 +1,7 @@
 """Tests for the play command (GOAP AI player wiring)."""
 
+import sqlite3
+import threading
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -8,6 +10,7 @@ import typer
 from typer.testing import CliRunner
 
 from artifactsmmo_cli.ai.file_tracer import FileTracer
+from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.null_tracer import NullTracer
 from artifactsmmo_cli.commands.play import default_learn_db_path, play
 
@@ -180,6 +183,40 @@ class TestPlayCommandWiring:
                 mock_store.close.assert_called_once_with()
 
 
+class FakeWatchApp:
+    """Minimal WatchApp stand-in: run() blocks until exit() like Textual,
+    call_from_thread executes the callback inline (callers are other
+    threads), and exit calls are recorded for assertions."""
+
+    def __init__(self, character: str | None = None, game_data=None) -> None:
+        self._done = threading.Event()
+        self.exit_calls: list[tuple[tuple, dict]] = []
+
+    def update_snapshot(self, snap) -> None:
+        """No-op observer target (handed to ThreadSafeBridge)."""
+
+    def call_from_thread(self, callback, *args, **kwargs):
+        return callback(*args, **kwargs)
+
+    def exit(self, *args, **kwargs) -> None:
+        self.exit_calls.append((args, kwargs))
+        self._done.set()
+
+    def run(self) -> None:
+        # Block like Textual's app.run; the timeout keeps a regressed
+        # (never-exiting) implementation from hanging the test run.
+        self._done.wait(timeout=10)
+
+
+class FakeTornDownApp(FakeWatchApp):
+    """A WatchApp whose thread-safe channel is already unusable — Textual's
+    call_from_thread raises RuntimeError once the app is no longer running."""
+
+    def call_from_thread(self, callback, *args, **kwargs):
+        self._done.set()  # let run() return; the channel itself is dead
+        raise RuntimeError("App is not running")
+
+
 class TestRunWithTui:
     """Test the TUI worker-thread wiring via the --tui flag."""
 
@@ -228,6 +265,163 @@ class TestRunWithTui:
                 # The Textual app runs on the main thread (not player.run directly).
                 mock_app.run.assert_called_once_with()
                 mock_player.run.assert_not_called()
+
+    def test_tui_worker_crash_exits_app_and_records_crash(self, runner):
+        """A worker-thread crash must not die silently (2026-06-10 incident:
+        bare daemon thread died, TUI ghosted for hours, exit_reason lied
+        "normal"). threading.excepthook captures it, the app is told to exit
+        with a fatal message, the traceback is re-raised on the main thread
+        after teardown, and the session ends with exit_reason=crash."""
+        fake_app = FakeWatchApp()
+        hook_before = threading.excepthook
+        with patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls:
+            mock_player = Mock()
+            mock_player.run.side_effect = RuntimeError("485 aftermath boom")
+            mock_player_cls.return_value = mock_player
+            with (
+                patch("artifactsmmo_cli.commands.play.ClientManager"),
+                patch("artifactsmmo_cli.commands.play.GameData"),
+                patch("artifactsmmo_cli.commands.play.WatchApp", return_value=fake_app),
+                patch("artifactsmmo_cli.commands.play.ThreadSafeBridge"),
+                patch("artifactsmmo_cli.commands.play.LearningStore") as mock_store_cls,
+            ):
+                mock_store = Mock()
+                mock_store_cls.return_value = mock_store
+
+                result = runner.invoke(app, ["hero", "--tui"])
+
+                # The crash propagated out of play() (visible, non-zero exit).
+                assert result.exit_code != 0
+                assert isinstance(result.exception, RuntimeError)
+                assert "485 aftermath boom" in str(result.exception)
+                # The app was torn down via its thread-safe channel with a
+                # fatal message.
+                assert len(fake_app.exit_calls) == 1
+                _, exit_kwargs = fake_app.exit_calls[0]
+                assert exit_kwargs["return_code"] == 1
+                assert "crashed" in exit_kwargs["message"]
+                # The traceback is printed AFTER Textual teardown.
+                assert "Bot worker thread for 'hero' crashed" in result.output
+                # The session recorded the truthful exit reason.
+                mock_store.end_session.assert_called_once_with(exit_reason="crash")
+                mock_store.close.assert_called_once_with()
+        # The process-global hook was restored.
+        assert threading.excepthook is hook_before
+
+    def test_tui_worker_crash_records_crash_in_real_store(self, runner, tmp_path):
+        """Pin the 2026-06-10 observed shape end-to-end on real sqlite: the
+        worker records cycles (the session row exists), then dies mid-run.
+        Pre-fix the sessions row kept its defaults (cycle_count=0,
+        exit_reason=None) while the TUI ghosted and was then closed as
+        exit_reason='normal' on quit; post-fix the app exits immediately and
+        the row records exit_reason='crash' with the true cycle count."""
+        db_path = tmp_path / "learn.db"
+        fake_app = FakeWatchApp()
+        with patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls:
+            mock_player = Mock()
+            mock_player_cls.return_value = mock_player
+
+            def crash_run():
+                store = mock_player_cls.call_args.kwargs["history"]
+                for i in range(2):
+                    store.record_cycle(Cycle(
+                        ts=f"2026-06-10T12:49:3{6 + i}+00:00",
+                        session_id="overwritten", cycle_index=i,
+                        character="overwritten",
+                        outcome="error:already_equipped",
+                    ))
+                raise RuntimeError("worker died mid-run")
+
+            mock_player.run.side_effect = crash_run
+            with (
+                patch("artifactsmmo_cli.commands.play.ClientManager"),
+                patch("artifactsmmo_cli.commands.play.GameData"),
+                patch("artifactsmmo_cli.commands.play.WatchApp", return_value=fake_app),
+                patch("artifactsmmo_cli.commands.play.ThreadSafeBridge"),
+            ):
+                result = runner.invoke(
+                    app, ["hero", "--tui", "--learn", "--learn-db", str(db_path)]
+                )
+
+        assert result.exit_code != 0
+        assert isinstance(result.exception, RuntimeError)
+        conn = sqlite3.connect(db_path)
+        rows = conn.execute(
+            "SELECT exit_reason, cycle_count, ended_at FROM sessions"
+        ).fetchall()
+        conn.close()
+        assert len(rows) == 1
+        exit_reason, cycle_count, ended_at = rows[0]
+        assert exit_reason == "crash"
+        assert cycle_count == 2
+        assert ended_at is not None
+
+    def test_tui_worker_crash_with_app_already_torn_down(self, runner):
+        """If the app's thread-safe channel is already dead (RuntimeError from
+        call_from_thread), the crash is still recorded and re-raised — the
+        notification is best-effort, the propagation is not."""
+        fake_app = FakeTornDownApp()
+        with patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls:
+            mock_player = Mock()
+            mock_player.run.side_effect = RuntimeError("crash with dead app")
+            mock_player_cls.return_value = mock_player
+            with (
+                patch("artifactsmmo_cli.commands.play.ClientManager"),
+                patch("artifactsmmo_cli.commands.play.GameData"),
+                patch("artifactsmmo_cli.commands.play.WatchApp", return_value=fake_app),
+                patch("artifactsmmo_cli.commands.play.ThreadSafeBridge"),
+                patch("artifactsmmo_cli.commands.play.LearningStore") as mock_store_cls,
+            ):
+                mock_store = Mock()
+                mock_store_cls.return_value = mock_store
+
+                result = runner.invoke(app, ["hero", "--tui"])
+
+                assert result.exit_code != 0
+                assert isinstance(result.exception, RuntimeError)
+                assert "crash with dead app" in str(result.exception)
+                assert fake_app.exit_calls == []  # the channel was dead
+                mock_store.end_session.assert_called_once_with(exit_reason="crash")
+
+    def test_tui_foreign_thread_exception_is_delegated(self, runner):
+        """The supervision hook only claims the bot worker's exceptions; an
+        unrelated thread's crash is delegated to the previous hook and the
+        session still ends normally when the user quits."""
+        fake_app = FakeWatchApp()
+        delegated: list[threading.ExceptHookArgs] = []
+        with patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls:
+            mock_player = Mock()
+
+            def run_with_rogue_thread():
+                def rogue():
+                    raise ValueError("not the bot's failure")
+                t = threading.Thread(target=rogue, daemon=True)
+                t.start()
+                t.join()
+                fake_app.exit()  # the user quits the TUI normally
+
+            mock_player.run.side_effect = run_with_rogue_thread
+            mock_player_cls.return_value = mock_player
+            with (
+                patch("artifactsmmo_cli.commands.play.ClientManager"),
+                patch("artifactsmmo_cli.commands.play.GameData"),
+                patch("artifactsmmo_cli.commands.play.WatchApp", return_value=fake_app),
+                patch("artifactsmmo_cli.commands.play.ThreadSafeBridge"),
+                patch("artifactsmmo_cli.commands.play.LearningStore") as mock_store_cls,
+            ):
+                mock_store = Mock()
+                mock_store_cls.return_value = mock_store
+                hook_before = threading.excepthook
+                threading.excepthook = delegated.append
+                try:
+                    result = runner.invoke(app, ["hero", "--tui"])
+                finally:
+                    threading.excepthook = hook_before
+
+                assert result.exit_code == 0
+                assert len(delegated) == 1
+                assert isinstance(delegated[0].exc_value, ValueError)
+                mock_store.end_session.assert_called_once_with(exit_reason="normal")
 
 
 class TestPlayCallableDirect:

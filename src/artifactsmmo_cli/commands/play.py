@@ -1,6 +1,8 @@
 """Play command: run the GOAP AI player."""
 
+import contextlib
 import threading
+import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -79,7 +81,18 @@ def play(
 
 
 def _run_with_tui(player: GamePlayer, character: str) -> None:
-    """Spawn the bot in a worker thread; run the Textual app on main thread."""
+    """Spawn the bot in a worker thread; run the Textual app on main thread.
+
+    Worker-thread failure is supervised via ``threading.excepthook``: a bare
+    daemon thread dies SILENTLY, leaving the TUI ghosted (frozen panes, no
+    error) and the session exit unrecorded — the 2026-06-10 Robby incident
+    (worker died at 12:49Z, TUI sat ghosted until 18:29Z, exit_reason lied
+    "normal"). The hook receives every uncaught worker exception without an
+    ``except`` clause, records it, and tears the TUI down; the captured
+    exception is re-raised on the main thread AFTER Textual has restored the
+    real terminal, so the traceback is visible and play() records
+    exit_reason="crash".
+    """
     # Preload game_data on the main thread so the map can render the first
     # frame before the bot has done a cycle.
     client = ClientManager().client
@@ -90,5 +103,36 @@ def _run_with_tui(player: GamePlayer, character: str) -> None:
 
     # Daemon thread so the process exits cleanly when the TUI quits.
     bot_thread = threading.Thread(target=player.run, daemon=True)
-    bot_thread.start()
-    app.run()
+
+    crashes: list[BaseException] = []
+    previous_hook = threading.excepthook
+
+    def _bot_excepthook(hook_args: threading.ExceptHookArgs) -> None:
+        if hook_args.thread is not bot_thread or hook_args.exc_value is None:
+            previous_hook(hook_args)
+            return
+        crashes.append(hook_args.exc_value)
+        # Fatal notification through the app's thread-safe channel: exit with
+        # a message Textual prints after teardown. Best-effort — Textual's
+        # call_from_thread raises RuntimeError when the app is not running
+        # (already torn down / user quit first); the crash is still recorded
+        # and re-raised below either way.
+        with contextlib.suppress(RuntimeError):
+            app.call_from_thread(
+                app.exit,
+                return_code=1,
+                message=f"Bot worker thread crashed: {hook_args.exc_value!r}",
+            )
+
+    threading.excepthook = _bot_excepthook
+    try:
+        bot_thread.start()
+        app.run()
+    finally:
+        threading.excepthook = previous_hook
+    if crashes:
+        # Print on the real terminal (after the alternate screen is gone),
+        # then re-raise so play()'s finally records exit_reason="crash".
+        print(f"Bot worker thread for {character!r} crashed; traceback:")
+        traceback.print_exception(crashes[0])
+        raise crashes[0]
