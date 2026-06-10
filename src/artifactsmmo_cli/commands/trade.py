@@ -216,8 +216,6 @@ def buy_from_ge(
         cli_response = handle_api_response(response, f"Bought {quantity} items from GE order {order_id}")
         if cli_response.success:
             console.print(format_success_message(cli_response.message or "Purchase completed"))
-        elif cli_response.cooldown_remaining:
-            console.print(format_cooldown_message(cli_response.cooldown_remaining))
         else:
             console.print(format_error_message(cli_response.error or "Purchase failed"))
             raise typer.Exit(1)
@@ -259,8 +257,6 @@ def sell_on_ge(
         )
         if cli_response.success:
             console.print(format_success_message(cli_response.message or "Sell order created"))
-        elif cli_response.cooldown_remaining:
-            console.print(format_cooldown_message(cli_response.cooldown_remaining))
         else:
             console.print(format_error_message(cli_response.error or "Sell order failed"))
             raise typer.Exit(1)
@@ -331,8 +327,6 @@ def cancel_ge_order(
         cli_response = handle_api_response(response, f"Cancelled GE order {order_id}")
         if cli_response.success:
             console.print(format_success_message(cli_response.message or "Order cancelled"))
-        elif cli_response.cooldown_remaining:
-            console.print(format_cooldown_message(cli_response.cooldown_remaining))
         else:
             console.print(format_error_message(cli_response.error or "Cancel failed"))
             raise typer.Exit(1)

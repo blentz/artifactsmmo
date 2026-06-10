@@ -55,8 +55,6 @@ def craft_item(
         cli_response = handle_api_response(response, f"Crafted {quantity}x {item_code}")
         if cli_response.success:
             console.print(format_success_message(cli_response.message or "Crafting completed"))
-        elif cli_response.cooldown_remaining:
-            console.print(format_cooldown_message(cli_response.cooldown_remaining))
         else:
             console.print(format_error_message(cli_response.error or "Crafting failed"))
             raise typer.Exit(1)
@@ -90,8 +88,6 @@ def recycle_item(
         cli_response = handle_api_response(response, f"Recycled {quantity}x {item_code}")
         if cli_response.success:
             console.print(format_success_message(cli_response.message or "Recycling completed"))
-        elif cli_response.cooldown_remaining:
-            console.print(format_cooldown_message(cli_response.cooldown_remaining))
         else:
             console.print(format_error_message(cli_response.error or "Recycling failed"))
             raise typer.Exit(1)

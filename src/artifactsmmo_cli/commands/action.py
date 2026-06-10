@@ -197,8 +197,6 @@ def move_character(
         cli_response = handle_api_response(response, f"Moved {character} to ({x}, {y})")
         if cli_response.success:
             console.print(format_success_message(cli_response.message or "Move completed"))
-        elif cli_response.cooldown_remaining:
-            console.print(format_cooldown_message(cli_response.cooldown_remaining))
         else:
             console.print(format_error_message(cli_response.error or "Move failed"))
             raise typer.Exit(1)
@@ -229,8 +227,6 @@ def fight_monster(character: str = typer.Argument(..., help="Character name")) -
                 console.print(format_combat_result(fight_data["fight"]))
             else:
                 console.print(format_success_message(cli_response.message or "Combat completed"))
-        elif cli_response.cooldown_remaining:
-            console.print(format_cooldown_message(cli_response.cooldown_remaining))
         else:
             console.print(format_error_message(cli_response.error or "Combat failed"))
             raise typer.Exit(1)
@@ -261,8 +257,6 @@ def gather_resource(character: str = typer.Argument(..., help="Character name"))
                 console.print(format_gathering_result(gather_data["details"]))
             else:
                 console.print(format_success_message(cli_response.message or "Gathering completed"))
-        elif cli_response.cooldown_remaining:
-            console.print(format_cooldown_message(cli_response.cooldown_remaining))
         else:
             console.print(format_error_message(cli_response.error or "Gathering failed"))
             raise typer.Exit(1)
@@ -288,8 +282,6 @@ def rest_character(character: str = typer.Argument(..., help="Character name")) 
         cli_response = handle_api_response(response, f"{character} is resting")
         if cli_response.success:
             console.print(format_success_message(cli_response.message or "Rest completed"))
-        elif cli_response.cooldown_remaining:
-            console.print(format_cooldown_message(cli_response.cooldown_remaining))
         else:
             console.print(format_error_message(cli_response.error or "Rest failed"))
             raise typer.Exit(1)
@@ -325,8 +317,6 @@ def equip_item(
         cli_response = handle_api_response(response, f"Equipped {item_code} on {character}")
         if cli_response.success:
             console.print(format_success_message(cli_response.message or "Item equipped"))
-        elif cli_response.cooldown_remaining:
-            console.print(format_cooldown_message(cli_response.cooldown_remaining))
         else:
             console.print(format_error_message(cli_response.error or "Equip failed"))
             raise typer.Exit(1)
@@ -360,8 +350,6 @@ def unequip_item(
         cli_response = handle_api_response(response, f"Unequipped {slot} from {character}")
         if cli_response.success:
             console.print(format_success_message(cli_response.message or "Item unequipped"))
-        elif cli_response.cooldown_remaining:
-            console.print(format_cooldown_message(cli_response.cooldown_remaining))
         else:
             console.print(format_error_message(cli_response.error or "Unequip failed"))
             raise typer.Exit(1)
@@ -395,8 +383,6 @@ def use_item(
         cli_response = handle_api_response(response, f"Used {quantity}x {item_code}")
         if cli_response.success:
             console.print(format_success_message(cli_response.message or "Item used"))
-        elif cli_response.cooldown_remaining:
-            console.print(format_cooldown_message(cli_response.cooldown_remaining))
         else:
             console.print(format_error_message(cli_response.error or "Use item failed"))
             raise typer.Exit(1)

@@ -100,26 +100,6 @@ class TestTradeCommands:
             assert "Cancelled GE order order123" in result.stdout
             mock_api.assert_called_once()
 
-    def test_cooldown_handling(self, runner, stub_api):
-        """Test cooldown handling in trade commands.
-
-        NOTE: handle_api_response never produces a cooldown CLIResponse (cooldowns
-        arrive as 499 errors through handle_api_error), so the command's
-        response-cooldown branch is only reachable by patching the helper.
-        """
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_ge_buy_item_my_name_action_grandexchange_buy_post.sync"
-        ) as mock_api:
-            mock_api.return_value = Mock(status_code=200)
-
-            with patch("artifactsmmo_cli.commands.trade.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, cooldown_remaining=30, error=None)
-
-                result = runner.invoke(app, ["ge-buy", "testchar", "order123", "5"])
-
-                assert result.exit_code == 0
-                assert "cooldown" in result.stdout.lower()
-
     def test_api_error_handling(self, runner, stub_api):
         """Test API error handling in trade commands."""
         with patch(
@@ -550,21 +530,6 @@ class TestTradeCommands:
         assert MISSING in output
         assert "100 gold" in output
 
-    def test_ge_sell_cooldown_response(self, runner, stub_api):
-        """Test GE sell command with cooldown response (dead branch, see above)."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_ge_create_sell_order_my_name_action_grandexchange_create_sell_order_post.sync"
-        ) as mock_api:
-            mock_api.return_value = Mock(status_code=200)
-
-            with patch("artifactsmmo_cli.commands.trade.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, cooldown_remaining=15, error=None)
-
-                result = runner.invoke(app, ["ge-sell", "testchar", "iron_ore", "10", "100"])
-
-                assert result.exit_code == 0
-                assert "cooldown" in result.stdout.lower()
-
     def test_ge_sell_api_error_cooldown(self, runner, stub_api):
         """Test GE sell command exception path with cooldown."""
         with patch(
@@ -619,21 +584,6 @@ class TestTradeCommands:
 
             assert result.exit_code == 0
             assert "No orders found" in result.stdout
-
-    def test_ge_cancel_cooldown_response(self, runner, stub_api):
-        """Test GE cancel command with cooldown response (dead branch, see above)."""
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_ge_cancel_order_my_name_action_grandexchange_cancel_post.sync"
-        ) as mock_api:
-            mock_api.return_value = Mock(status_code=200)
-
-            with patch("artifactsmmo_cli.commands.trade.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, cooldown_remaining=10, error=None)
-
-                result = runner.invoke(app, ["ge-cancel", "testchar", "order123"])
-
-                assert result.exit_code == 0
-                assert "cooldown" in result.stdout.lower()
 
     def test_ge_cancel_api_error_cooldown(self, runner, stub_api):
         """Test GE cancel command exception path with cooldown."""

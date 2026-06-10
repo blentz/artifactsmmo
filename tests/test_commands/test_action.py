@@ -37,21 +37,6 @@ class TestMoveCommand:
         assert result.exit_code == 0
         assert "Moved testchar to (5, 10)" in result.stdout
 
-    def test_move_with_cooldown(self, runner, stub_api):
-        """Test move command with cooldown.
-
-        NOTE: handle_api_response never produces a cooldown CLIResponse (cooldowns
-        arrive as 499 errors through handle_api_error), so the command's
-        response-cooldown branch is only reachable by patching the helper.
-        """
-        with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            mock_handle.return_value = Mock(success=False, cooldown_remaining=30, message=None, error=None)
-
-            result = runner.invoke(app, ["move", "testchar", "5", "10"])
-
-            assert result.exit_code == 0
-            assert "cooldown" in result.stdout
-
     def test_move_error(self, runner, stub_api):
         """Test move command with error."""
         stub_api.action_move.return_value = api_error(490, "Invalid location")
@@ -137,16 +122,6 @@ class TestFightCommand:
         assert result.exit_code == 0
         assert "testchar engaged in combat" in result.stdout
 
-    def test_fight_with_cooldown(self, runner, stub_api):
-        """Test fight command with cooldown (dead response-cooldown branch, see move)."""
-        with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            mock_handle.return_value = Mock(success=False, cooldown_remaining=20, message=None, error=None)
-
-            result = runner.invoke(app, ["fight", "testchar"])
-
-            assert result.exit_code == 0
-            assert "cooldown" in result.stdout
-
     def test_fight_error(self, runner, stub_api):
         """Test fight command with error."""
         stub_api.action_fight.return_value = api_error(598, "No monster found")
@@ -192,16 +167,6 @@ class TestGatherCommand:
         assert result.exit_code == 0
         assert "testchar gathered resources" in result.stdout
 
-    def test_gather_with_cooldown(self, runner, stub_api):
-        """Test gather command with cooldown (dead response-cooldown branch, see move)."""
-        with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            mock_handle.return_value = Mock(success=False, cooldown_remaining=25, message=None, error=None)
-
-            result = runner.invoke(app, ["gather", "testchar"])
-
-            assert result.exit_code == 0
-            assert "cooldown" in result.stdout
-
     def test_gather_error(self, runner, stub_api):
         """Test gather command with error."""
         stub_api.action_gathering.return_value = api_error(598, "No resources found")
@@ -246,16 +211,6 @@ class TestRestCommand:
 
         assert result.exit_code == 0
         assert "testchar is resting" in result.stdout
-
-    def test_rest_with_cooldown(self, runner, stub_api):
-        """Test rest command with cooldown (dead response-cooldown branch, see move)."""
-        with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            mock_handle.return_value = Mock(success=False, cooldown_remaining=10, message=None, error=None)
-
-            result = runner.invoke(app, ["rest", "testchar"])
-
-            assert result.exit_code == 0
-            assert "cooldown" in result.stdout
 
     def test_rest_error(self, runner, stub_api):
         """Test rest command with error."""
@@ -312,16 +267,6 @@ class TestEquipCommand:
         assert "Equipped arrow on testchar" in result.stdout
         assert stub_api.action_equip_item.call_args.kwargs["body"].quantity == 50
 
-    def test_equip_with_cooldown(self, runner, stub_api):
-        """Test equip command with cooldown (dead response-cooldown branch, see move)."""
-        with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            mock_handle.return_value = Mock(success=False, cooldown_remaining=5, message=None, error=None)
-
-            result = runner.invoke(app, ["equip", "testchar", "sword", "weapon"])
-
-            assert result.exit_code == 0
-            assert "cooldown" in result.stdout
-
     def test_equip_error(self, runner, stub_api):
         """Test equip command with error."""
         stub_api.action_equip_item.return_value = api_error(404, "Item not found")
@@ -377,16 +322,6 @@ class TestUnequipCommand:
         assert "Unequipped utility1 from testchar" in result.stdout
         assert stub_api.action_unequip_item.call_args.kwargs["body"].quantity == 25
 
-    def test_unequip_with_cooldown(self, runner, stub_api):
-        """Test unequip command with cooldown (dead response-cooldown branch, see move)."""
-        with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            mock_handle.return_value = Mock(success=False, cooldown_remaining=3, message=None, error=None)
-
-            result = runner.invoke(app, ["unequip", "testchar", "weapon"])
-
-            assert result.exit_code == 0
-            assert "cooldown" in result.stdout
-
     def test_unequip_error(self, runner, stub_api):
         """Test unequip command with error."""
         stub_api.action_unequip_item.return_value = api_error(491, "No item equipped")
@@ -440,16 +375,6 @@ class TestUseCommand:
 
         assert result.exit_code == 0
         assert "Used 3x potion" in result.stdout
-
-    def test_use_with_cooldown(self, runner, stub_api):
-        """Test use command with cooldown (dead response-cooldown branch, see move)."""
-        with patch("artifactsmmo_cli.commands.action.handle_api_response") as mock_handle:
-            mock_handle.return_value = Mock(success=False, cooldown_remaining=8, message=None, error=None)
-
-            result = runner.invoke(app, ["use", "testchar", "potion"])
-
-            assert result.exit_code == 0
-            assert "cooldown" in result.stdout
 
     def test_use_error(self, runner, stub_api):
         """Test use command with error."""

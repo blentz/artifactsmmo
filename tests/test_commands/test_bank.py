@@ -161,24 +161,6 @@ class TestDepositGoldCommand:
             assert result.exit_code == 0
             assert "Deposited 100 gold" in result.stdout
 
-    def test_deposit_gold_with_cooldown(self, runner, stub_api):
-        """Test deposit gold command with cooldown.
-
-        NOTE: handle_api_response never produces a cooldown CLIResponse (cooldowns
-        arrive as 499 errors through handle_api_error), so the command's
-        response-cooldown branch is only reachable by patching the helper.
-        """
-        with patch(DEPOSIT_GOLD_SYNC) as mock_api:
-            mock_api.return_value = Mock(status_code=200)
-
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, cooldown_remaining=10, message=None, error=None)
-
-                result = runner.invoke(app, ["deposit-gold", "testchar", "100"])
-
-                assert result.exit_code == 0
-                assert "cooldown" in result.stdout
-
     def test_deposit_gold_error(self, runner, stub_api):
         """Test deposit gold command with error."""
         with patch(DEPOSIT_GOLD_SYNC) as mock_api:
@@ -268,19 +250,6 @@ class TestWithdrawGoldCommand:
             assert result.exit_code == 0
             assert "Withdrew 50 gold" in result.stdout
 
-    def test_withdraw_gold_with_cooldown(self, runner, stub_api):
-        """Test withdraw gold command with cooldown (dead response-cooldown branch)."""
-        with patch(WITHDRAW_GOLD_SYNC) as mock_api:
-            mock_api.return_value = Mock(status_code=200)
-
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, cooldown_remaining=8, message=None, error=None)
-
-                result = runner.invoke(app, ["withdraw-gold", "testchar", "50"])
-
-                assert result.exit_code == 0
-                assert "cooldown" in result.stdout
-
     def test_withdraw_gold_error(self, runner, stub_api):
         """Test withdraw gold command with error."""
         with patch(WITHDRAW_GOLD_SYNC) as mock_api:
@@ -319,19 +288,6 @@ class TestDepositItemCommand:
 
             assert result.exit_code == 0
             assert "Deposited 10x iron_ore" in result.stdout
-
-    def test_deposit_item_with_cooldown(self, runner, stub_api):
-        """Test deposit item command with cooldown (dead response-cooldown branch)."""
-        with patch(DEPOSIT_ITEM_SYNC) as mock_api:
-            mock_api.return_value = Mock(status_code=200)
-
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, cooldown_remaining=5, message=None, error=None)
-
-                result = runner.invoke(app, ["deposit-item", "testchar", "iron_ore", "10"])
-
-                assert result.exit_code == 0
-                assert "cooldown" in result.stdout
 
     def test_deposit_item_error(self, runner, stub_api):
         """Test deposit item command with error."""
@@ -372,19 +328,6 @@ class TestWithdrawItemCommand:
             assert result.exit_code == 0
             assert "Withdrew 5x copper_ore" in result.stdout
 
-    def test_withdraw_item_with_cooldown(self, runner, stub_api):
-        """Test withdraw item command with cooldown (dead response-cooldown branch)."""
-        with patch(WITHDRAW_ITEM_SYNC) as mock_api:
-            mock_api.return_value = Mock(status_code=200)
-
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, cooldown_remaining=12, message=None, error=None)
-
-                result = runner.invoke(app, ["withdraw-item", "testchar", "copper_ore", "5"])
-
-                assert result.exit_code == 0
-                assert "cooldown" in result.stdout
-
     def test_withdraw_item_error(self, runner, stub_api):
         """Test withdraw item command with error."""
         with patch(WITHDRAW_ITEM_SYNC) as mock_api:
@@ -423,19 +366,6 @@ class TestExpandCommand:
 
             assert result.exit_code == 0
             assert "Bank expansion purchased" in result.stdout
-
-    def test_expand_with_cooldown(self, runner, stub_api):
-        """Test expand command with cooldown (dead response-cooldown branch)."""
-        with patch(EXPAND_SYNC) as mock_api:
-            mock_api.return_value = Mock(status_code=200)
-
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, cooldown_remaining=20, message=None, error=None)
-
-                result = runner.invoke(app, ["expand", "testchar"])
-
-                assert result.exit_code == 0
-                assert "cooldown" in result.stdout
 
     def test_expand_error(self, runner, stub_api):
         """Test expand command with error."""
@@ -533,24 +463,6 @@ class TestBulkOperations:
             assert success
             assert error is None
             assert cooldown is None
-
-    def test_execute_single_deposit_cooldown(self, stub_api):
-        """Test single deposit operation with cooldown.
-
-        NOTE: handle_api_response never produces a cooldown CLIResponse, so the
-        in-band cooldown branch is only reachable by patching the helper.
-        """
-        with patch(DEPOSIT_ITEM_SYNC) as mock_api:
-            mock_api.return_value = Mock(status_code=200)
-
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, cooldown_remaining=5, error=None)
-
-                success, error, cooldown = execute_single_deposit("testchar", "iron_ore", 10)
-
-                assert not success
-                assert error is None
-                assert cooldown == 5
 
     def test_execute_single_deposit_error(self, stub_api):
         """Test single deposit operation with error."""
@@ -1065,23 +977,6 @@ class TestHelperFunctions:
             assert success is True
             assert error is None
             assert cooldown is None
-
-    def test_execute_single_withdraw_cooldown(self, stub_api):
-        """Test execute_single_withdraw cooldown path.
-
-        NOTE: handle_api_response never produces a cooldown CLIResponse, so the
-        in-band cooldown branch is only reachable by patching the helper.
-        """
-        with patch(WITHDRAW_ITEM_SYNC) as mock_api:
-            mock_api.return_value = Mock(status_code=200)
-
-            with patch("artifactsmmo_cli.commands.bank.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, cooldown_remaining=9, error=None)
-
-                success, error, cooldown = execute_single_withdraw("testchar", "iron_ore", 10)
-                assert success is False
-                assert error is None
-                assert cooldown == 9
 
     def test_execute_single_withdraw_error(self, stub_api):
         """Test execute_single_withdraw error path."""

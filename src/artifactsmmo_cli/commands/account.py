@@ -86,26 +86,28 @@ def show_logs(
             response = get_all_characters_logs_my_logs_get.sync(client=client, page=page, size=size)
             title = "All Character Logs"
 
+        # The API returns a flat DataPage[LogSchema]; handle_api_response already
+        # unwraps the page's .data, so cli_response.data is the list of logs.
         cli_response = handle_api_response(response)
-        if cli_response.success and cli_response.data:
+        if cli_response.success:
             logs = cli_response.data
-            if hasattr(logs, "data") and logs.data:
+            if logs:
                 headers = ["Character", "Type", "Description", "Content", "Cooldown", "Created"]
                 rows = []
-                for log in logs.data:
+                for log in logs:
                     # Truncate long descriptions and content
-                    description = getattr(log, "description", "")
+                    description = log.description
                     if len(description) > 30:
                         description = description[:27] + "..."
 
-                    content = str(getattr(log, "content", ""))
+                    content = str(log.content)
                     if len(content) > 20:
                         content = content[:17] + "..."
 
                     rows.append(
                         [
                             str(display_field(log, "character")),
-                            str(display_field(log, "type")),
+                            str(display_field(log, "type_")),
                             description,
                             content,
                             str(display_field(log, "cooldown")),

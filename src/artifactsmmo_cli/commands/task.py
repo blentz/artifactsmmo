@@ -46,8 +46,6 @@ def accept_new_task(character: str = typer.Argument(..., help="Character name"))
         cli_response = handle_api_response(response, f"{character} accepted a new task")
         if cli_response.success:
             console.print(format_success_message(cli_response.message or "New task accepted"))
-        elif cli_response.cooldown_remaining:
-            console.print(format_cooldown_message(cli_response.cooldown_remaining))
         else:
             console.print(format_error_message(cli_response.error or "Failed to accept task"))
             raise typer.Exit(1)
@@ -78,8 +76,6 @@ def complete_task(character: str = typer.Argument(..., help="Character name")) -
         cli_response = handle_api_response(response, f"{character} completed task")
         if cli_response.success:
             console.print(format_success_message(cli_response.message or "Task completed"))
-        elif cli_response.cooldown_remaining:
-            console.print(format_cooldown_message(cli_response.cooldown_remaining))
         else:
             console.print(format_error_message(cli_response.error or "Failed to complete task"))
             raise typer.Exit(1)
@@ -110,8 +106,6 @@ def exchange_task(character: str = typer.Argument(..., help="Character name")) -
         cli_response = handle_api_response(response, f"{character} exchanged task")
         if cli_response.success:
             console.print(format_success_message(cli_response.message or "Task exchanged"))
-        elif cli_response.cooldown_remaining:
-            console.print(format_cooldown_message(cli_response.cooldown_remaining))
         else:
             console.print(format_error_message(cli_response.error or "Failed to exchange task"))
             raise typer.Exit(1)
@@ -149,8 +143,6 @@ def trade_task_items(
         cli_response = handle_api_response(response, f"{character} traded {quantity}x {item_code}")
         if cli_response.success:
             console.print(format_success_message(cli_response.message or f"Traded {quantity}x {item_code}"))
-        elif cli_response.cooldown_remaining:
-            console.print(format_cooldown_message(cli_response.cooldown_remaining))
         else:
             console.print(format_error_message(cli_response.error or "Failed to trade task items"))
             raise typer.Exit(1)
@@ -181,8 +173,6 @@ def cancel_task(character: str = typer.Argument(..., help="Character name")) -> 
         cli_response = handle_api_response(response, f"{character} cancelled task")
         if cli_response.success:
             console.print(format_success_message(cli_response.message or "Task cancelled"))
-        elif cli_response.cooldown_remaining:
-            console.print(format_cooldown_message(cli_response.cooldown_remaining))
         else:
             console.print(format_error_message(cli_response.error or "Failed to cancel task"))
             raise typer.Exit(1)

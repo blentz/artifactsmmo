@@ -137,26 +137,6 @@ class TestCraftCommands:
             assert result.exit_code == 0
             assert "—" in result.stdout
 
-    def test_cooldown_handling(self, runner, stub_api):
-        """Test cooldown handling in craft commands.
-
-        NOTE: handle_api_response never produces a cooldown CLIResponse (cooldowns
-        arrive as 499 errors through handle_api_error), so the command's
-        response-cooldown branch is only reachable by patching the helper.
-        """
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_crafting_my_name_action_crafting_post.sync"
-        ) as mock_api:
-            mock_api.return_value = Mock(status_code=200)
-
-            with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, cooldown_remaining=45, error=None)
-
-                result = runner.invoke(app, ["craft", "testchar", "iron_sword"])
-
-                assert result.exit_code == 0
-                assert "cooldown" in result.stdout.lower()
-
     def test_craft_error_response(self, runner, stub_api):
         """Test craft command with error response."""
         with patch(
@@ -411,25 +391,6 @@ class TestCraftCommands:
 
 class TestCraftUncoveredBranches:
     """Drive the remaining craft/recycle/preview/recipes branches."""
-
-    def test_recycle_cooldown_response(self, runner, stub_api):
-        """Recycle shows a cooldown message when the response carries cooldown (line 94).
-
-        NOTE: handle_api_response never produces a cooldown CLIResponse, so this
-        dead branch is only reachable by patching the helper.
-        """
-        with patch(
-            "artifactsmmo_api_client.api.my_characters.action_recycling_my_name_action_recycling_post.sync"
-        ) as mock_api:
-            mock_api.return_value = Mock(status_code=200)
-
-            with patch("artifactsmmo_cli.commands.craft.handle_api_response") as mock_handle:
-                mock_handle.return_value = Mock(success=False, cooldown_remaining=42, error=None)
-
-                result = runner.invoke(app, ["recycle", "testchar", "iron_sword"])
-
-                assert result.exit_code == 0
-                assert "42" in result.stdout
 
     def test_recycle_api_exception_no_cooldown(self, runner, stub_api):
         """Recycle except-branch with no cooldown prints the error (line 104)."""

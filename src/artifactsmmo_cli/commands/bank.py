@@ -162,8 +162,6 @@ def execute_single_deposit(character: str, item_code: str, quantity: int) -> tup
 
         if cli_response.success:
             return True, None, None
-        elif cli_response.cooldown_remaining:
-            return False, None, cli_response.cooldown_remaining
         else:
             return False, cli_response.error or "Deposit failed", None
 
@@ -189,8 +187,6 @@ def execute_single_withdraw(character: str, item_code: str, quantity: int) -> tu
 
         if cli_response.success:
             return True, None, None
-        elif cli_response.cooldown_remaining:
-            return False, None, cli_response.cooldown_remaining
         else:
             return False, cli_response.error or "Withdrawal failed", None
 
@@ -266,8 +262,6 @@ def deposit_gold(
         cli_response = handle_api_response(response, f"Deposited {amount} gold")
         if cli_response.success:
             console.print(format_success_message(cli_response.message or "Gold deposited"))
-        elif cli_response.cooldown_remaining:
-            console.print(format_cooldown_message(cli_response.cooldown_remaining))
         else:
             console.print(format_error_message(cli_response.error or "Deposit failed"))
             raise typer.Exit(1)
@@ -301,8 +295,6 @@ def withdraw_gold(
         cli_response = handle_api_response(response, f"Withdrew {amount} gold")
         if cli_response.success:
             console.print(format_success_message(cli_response.message or "Gold withdrawn"))
-        elif cli_response.cooldown_remaining:
-            console.print(format_cooldown_message(cli_response.cooldown_remaining))
         else:
             console.print(format_error_message(cli_response.error or "Withdrawal failed"))
             raise typer.Exit(1)
@@ -338,8 +330,6 @@ def deposit_item(
         cli_response = handle_api_response(response, f"Deposited {quantity}x {item_code}")
         if cli_response.success:
             console.print(format_success_message(cli_response.message or "Item deposited"))
-        elif cli_response.cooldown_remaining:
-            console.print(format_cooldown_message(cli_response.cooldown_remaining))
         else:
             console.print(format_error_message(cli_response.error or "Deposit failed"))
             raise typer.Exit(1)
@@ -375,8 +365,6 @@ def withdraw_item(
         cli_response = handle_api_response(response, f"Withdrew {quantity}x {item_code}")
         if cli_response.success:
             console.print(format_success_message(cli_response.message or "Item withdrawn"))
-        elif cli_response.cooldown_remaining:
-            console.print(format_cooldown_message(cli_response.cooldown_remaining))
         else:
             console.print(format_error_message(cli_response.error or "Withdrawal failed"))
             raise typer.Exit(1)
@@ -403,8 +391,6 @@ def buy_expansion(character: str = typer.Argument(..., help="Character name")) -
         cli_response = handle_api_response(response, "Bank expansion purchased")
         if cli_response.success:
             console.print(format_success_message(cli_response.message or "Bank expanded"))
-        elif cli_response.cooldown_remaining:
-            console.print(format_cooldown_message(cli_response.cooldown_remaining))
         else:
             console.print(format_error_message(cli_response.error or "Expansion failed"))
             raise typer.Exit(1)
