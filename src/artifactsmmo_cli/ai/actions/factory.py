@@ -69,6 +69,7 @@ def build_actions(
 
     # Craft, equip, and withdraw actions carry workshop/bank locations
     materials_to_withdraw: dict[str, int] = {}
+    unit_withdraw_codes: set[str] = set()
     for item_code, recipe in game_data.crafting_recipes.items():
         stats = game_data.item_stats(item_code)
         if stats is None:
@@ -81,6 +82,7 @@ def build_actions(
             # Allow withdrawing the crafted item from bank to equip it
             actions.append(WithdrawItemAction(
                 code=item_code, quantity=1, bank_location=bank, accessible=bank_accessible))
+            unit_withdraw_codes.add(item_code)
             for mat_code, mat_qty in recipe.items():
                 if mat_qty > materials_to_withdraw.get(mat_code, 0):
                     materials_to_withdraw[mat_code] = mat_qty
@@ -132,6 +134,33 @@ def build_actions(
     for mat_code, mat_qty in materials_to_withdraw.items():
         actions.append(WithdrawItemAction(
             code=mat_code, quantity=mat_qty, bank_location=bank, accessible=bank_accessible))
+
+    # Residual-extraction withdraws: one x1 WithdrawItemAction per material.
+    # The batched quantities above (full-chain xN, per-craft xn) strand bank
+    # stock below the smallest batch: bank 28 copper_ore with only
+    # Withdraw(copper_ore x10/x80) available leaves 8 ore unreachable, and
+    # bank 1 copper_bar with only Withdraw(copper_bar x6) leaves the bar
+    # unreachable. The goal layer's bank-aware gather pruning
+    # (shopping_list.fully_covered_materials, used by GatherMaterialsGoal /
+    # UpgradeEquipmentGoal.relevant_actions) credits bank stock at UNIT
+    # granularity when it prunes the gather, so "net deficit 0" must imply
+    # "every credited unit is withdrawable" or the pruning removes the sole
+    # path to a needed item and breaks planner admissibility (trace
+    # 2026-06-09 cycle-64: inv 22 ore + bank {ore: 28, bar: 1} → net 0 →
+    # gather pruned → reachable ore 42 < 60 → 9-node plan failure). A x1
+    # withdraw makes every banked unit extractable while keeping the action
+    # count bounded (at most one extra action per material — no per-quantity
+    # ladders); planner cost still prefers the batched withdraws, so x1
+    # chains appear in plans only when residues are actually needed.
+    for mat_code, mat_qty in materials_to_withdraw.items():
+        unit_exists = (
+            mat_qty == 1                              # full-chain withdraw is already x1
+            or per_craft_withdraws.get(mat_code) == 1  # per-craft withdraw is already x1
+            or mat_code in unit_withdraw_codes         # equippable input: equip-withdraw x1 above
+        )
+        if not unit_exists:
+            actions.append(WithdrawItemAction(
+                code=mat_code, quantity=1, bank_location=bank, accessible=bank_accessible))
 
     # Allow withdrawing task coins from bank for exchange
     actions.append(WithdrawItemAction(
