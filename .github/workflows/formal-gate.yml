@@ -70,6 +70,8 @@ jobs:
         run: bash formal/gate/check_axioms.sh
       - name: Role manifest
         run: cd formal && lake env lean Formal/Manifest.lean >/dev/null && echo "manifest OK"
+      - name: Extraction drift (Python -> Lean)
+        run: bash formal/gate/check_extraction.sh
       - name: Differential tests (Python<->Lean)
         timeout-minutes: 25
         run: |

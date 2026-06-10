@@ -14,6 +14,7 @@ echo "== (a'') no sorry/admit =="; bash "$HERE/gate/check_no_sorry.sh"
 echo "== (b) axiom lint =="; bash "$HERE/gate/check_axioms.sh"
 echo "== (b') role manifest =="; ( cd "$HERE" && lake env lean Formal/Manifest.lean >/dev/null && echo "manifest OK" )
 echo "== (b'') proof-concept index =="; bash "$HERE/gate/check_proof_concept_index.sh"
+echo "== (b''') extraction drift =="; bash "$HERE/gate/check_extraction.sh"
 echo "== (d) differential =="; ( cd "$HERE" && lake build oracle ); ( cd "$ROOT" && uv run pytest formal/diff/ -q --no-cov --ignore=formal/diff/test_game_data_fixture_diff.py )
 echo "== (c) mutation =="; ( cd "$ROOT" && uv run python formal/diff/mutate.py )
 echo "ALL GATE PARTS PASSED"

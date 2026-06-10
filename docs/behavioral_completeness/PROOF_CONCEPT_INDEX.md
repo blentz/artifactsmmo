@@ -67,6 +67,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | StuckDetector | core | safety |
 | TaskDecision | tasks | dominance, monotonicity |
 | TaskFeasibility | tasks, crafting | reachability, safety |
+| TaskReservation | tasks, crafting, items | safety |
 | TaskTradeReadyPriority | tasks | safety, totality |
 | TieredSelection | core, planner | totality, dominance |
 | UpgradeSelection | items, characters | dominance |

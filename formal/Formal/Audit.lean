@@ -815,3 +815,9 @@ open Formal.WeightedRemaining in
 #print axioms Formal.Liveness.ItemsTaskRun.obtain_then_trades_reach
 #print axioms Formal.Liveness.ItemsTaskRun.obtain_then_trades_reach_exists
 #print axioms Formal.Liveness.ItemsTaskRun.held_accounts
+#print axioms Extracted.Bridges.nearest_tile_bridge
+#print axioms Extracted.Bridges.combat_picker_bridge
+#print axioms Extracted.Bridges.npc_buy_is_applicable_bridge
+#print axioms Extracted.Bridges.npc_buy_apply_delta
+#print axioms Extracted.Bridges.npc_buy_apply_bridge
+#print axioms Extracted.Bridges.npc_buy_is_applicable_divergence_outside_wf

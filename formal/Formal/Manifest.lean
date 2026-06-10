@@ -844,3 +844,14 @@ open Formal.PriorityBand
 #check @Formal.Liveness.ItemsTaskRun.obtain_then_trades_reach        -- reachability
 #check @Formal.Liveness.ItemsTaskRun.obtain_then_trades_reach_exists -- reachability
 #check @Formal.Liveness.ItemsTaskRun.held_accounts                   -- safety (non-vacuity: items conserved)
+
+-- Extracted-model bridges (mechanical extraction P1, docs/PLAN_mechanical_extraction.md):
+-- Formal/Extracted/* definitions are GENERATED from the Python pure cores by
+-- scripts/extract_lean.py; these hand-written bridges prove them equal to the
+-- hand models, so every hand theorem transfers and Python drift turns the gate red.
+#check @Extracted.Bridges.nearest_tile_bridge                         -- extracted = hand, pointwise
+#check @Extracted.Bridges.combat_picker_bridge                        -- extracted ∘ encode = encode ∘ hand
+#check @Extracted.Bridges.npc_buy_is_applicable_bridge                -- pointwise under used ≤ cap (hwf)
+#check @Extracted.Bridges.npc_buy_apply_delta                         -- dict update mints exactly +quantity
+#check @Extracted.Bridges.npc_buy_apply_bridge                        -- commutes with slot-projection apply
+#check @Extracted.Bridges.npc_buy_is_applicable_divergence_outside_wf -- honest boundary pin (used > cap)

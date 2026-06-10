@@ -16,7 +16,7 @@ def nearest_tile(
     """Return the tile minimizing `(manhattan_distance, x, y)` from the origin, or
     `None` if `tiles` is empty. The lex tie-break on `(x, y)` makes the winner unique
     and deterministic across plan-time and execute-time callers."""
-    if not tiles:
+    if len(tiles) == 0:
         return None
     return min(
         tiles,
