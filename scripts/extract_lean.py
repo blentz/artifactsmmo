@@ -1,4 +1,4 @@
-"""Mechanical Python -> Lean 4 extractor (v1) for the pure decision cores.
+"""Mechanical Python -> Lean 4 extractor (v3) for the pure decision cores.
 
 Per docs/PLAN_mechanical_extraction.md: the Lean models gating the planner are
 MECHANICALLY EXTRACTED from the Python pure-core modules, so the generated
@@ -7,34 +7,76 @@ gate (`--check` mode + formal/gate/check_extraction.sh). Hand-written bridge
 lemmas in formal/Formal/Extracted/Bridges.lean prove each extracted definition
 equal to the pre-existing hand model, transferring the hand theorems.
 
-V1 SUBSET (anything else is REJECTED loudly, naming the construct + line):
+V3 SUBSET (anything else is REJECTED loudly, naming the construct + line):
 
-  types       int -> Int, bool -> Bool, str -> String, X | None / Optional[X]
-              -> Option, tuple[..] -> Prod, list/Sequence -> List,
-              dict/Mapping[k, v] -> List (k x v) + emitted lookup helpers,
-              frozenset|list unions -> List (set-semantics caveat below),
-              Callable[[A..], R] -> plain function argument.
-  exprs       int/bool literals, None, + - * (Int), // -> Int.fdiv,
-              % -> Int.fmod, comparisons (chained ok) -> decide (..),
-              and/or/not -> && || !, max/min(a, b), abs -> _intAbs,
+  types       int -> Int, bool -> Bool, str -> String,
+              fractions.Fraction -> Rat (exact rationals on both sides),
+              X | None / Optional[X] -> Option, tuple[..] -> Prod,
+              list/Sequence -> List, dict/Mapping[k, v] -> List (k x v)
+              + emitted lookup helpers (str keys, any mapped value type),
+              set[X]/frozenset|list unions -> List (set-semantics caveat
+              below), Callable[[A..], R] -> plain function argument,
+              registry-declared OPAQUE types (e.g. `Goal`, `Action`) ->
+              implicit `{X : Type}` binders (payload only: carried,
+              passed to Callable params, never inspected),
+              registry-declared frozen @dataclass -> Lean `structure`
+              (parameterised by the opaque types its fields mention;
+              field reads -> projections; construction is out of subset
+              until a core needs it).
+  exprs       int/bool literals, None, {} (only where the dict type is
+              pinned: an annotated assignment or a dict.get default),
+              + (Int or Rat), - * (Int), // -> Int.fdiv, % -> Int.fmod,
+              comparisons (chained ok) -> decide (..), and/or/not ->
+              && || !, max/min(a, b) (Int or Rat), abs -> _intAbs,
               len -> Int.ofNat (List.length ..), d.get(k, default) ->
               _dictGetD, dict(d) -> identity copy, tuple construction,
               constant tuple indexing -> Prod projections, calls to
-              Callable parameters, lambda (only as a min/max key),
-              `A if X is not None else B`.
+              Callable parameters or to PREVIOUSLY-extracted module
+              functions, lambda (only as a min/max key),
+              `A if X is not None else B`, `A if c else None` ->
+              `if c then some A else none`, a set comprehension
+              `{elt for k, v in d.items() if cond}` -> List.map over
+              List.filter (dict keys are unique, so the list IS the set),
+              a list comprehension `[elt for x in xs if cond]` ->
+              List.map over List.filter, `any(expr for x in xs)` ->
+              List.any, `next((x for x in xs if cond), None)` -> _find,
+              `next((i for i, x in enumerate(xs) if cond), None)` ->
+              _findIdx (Int index), struct field access `c.field` ->
+              projection, `==`/`!=` between `Optional[T]` and `T`
+              (T = int/str) -> `decide (opt = some plain)` (Python:
+              `None == t` is False, `some s == t` is `s == t`).
   stmts       assignment (let), annotated assignment, dict-subscript
               assignment -> _dictSet, early return, if/elif with
-              always-returning bodies, for-with-single-accumulator ->
-              List.foldl, `continue` inside loops.
+              always-returning bodies, plain fall-through `if` ->
+              `(if c then <body+rest> else <rest>)` (rest duplicated),
+              for-with-single-accumulator -> List.foldl (iterable: a
+              list value or d.items()), FIRST-MATCH for loops (a body
+              whose paths only `continue` or `return`, no cross-
+              iteration state) -> _findSome with `return e` as `some e`,
+              `continue` inside loops.
+  recursion   FUEL-BOUNDED self-recursion only: the function's first
+              parameter is `fuel: int`, the body opens with
+              `if fuel <= 0: return <base>`, and every self-call passes
+              `fuel - 1` first (no other read of `fuel` is allowed).
+              Emitted as a two-arm `Nat` pattern match (`| 0 ..` /
+              `| fuel + 1 ..`) so Lean recursion is STRUCTURAL on the
+              fuel — exactly the hand models' fuel idiom. External
+              callers' Int fuel is bridged with `Int.toNat` (Python
+              `fuel <= 0` <-> Lean fuel 0).
 
-  REJECTED    while, try/except, with, raise, assert, classes,
-              comprehensions/generators, float literals or annotations,
-              str methods (any attribute except dict .get), recursion,
-              break, return inside a loop, *args/**kwargs/defaults,
-              decorators, missing type annotations, iteration over a
-              set-typed value (only min/max with an injective total key
-              may consume one), bare reads of an Optional variable inside
-              an unwrap context, Lean reserved words as identifiers.
+  REJECTED    while, try/except, with, raise, assert, behavioural
+              classes (only registered frozen dataclasses), generator /
+              dict comprehensions outside the shapes above, float
+              literals or annotations, str methods (any attribute except
+              dict .get, dict .items and struct fields), recursion
+              without the fuel discipline, mutual recursion, break,
+              return inside an accumulator loop, *args/**kwargs/defaults,
+              decorators (except @dataclass on registered structures),
+              missing type annotations, iteration over a set-typed value
+              (only min/max with an injective total key may consume one),
+              bare reads of a TUPLE-typed Optional inside its unwrap
+              context (subscript it; non-tuple unwraps read as the
+              binder), Lean reserved words as identifiers.
 
 EARLY-RETURN STRATEGY: a statement block is translated to ONE Lean
 expression by recursing on the statement list. `x = e` becomes
@@ -57,6 +99,25 @@ Option binding stays visible in the untaken branch:
   A if X is not None else B    =>  (match X with
                                     | some X_k => A[X[i] -> X_k.proj]
                                     | none => B)
+  if X is None or Y is None:   =>  (match X with
+      <always-exits body>           | none => <body>
+                                    | some X_k =>
+                                      (match Y with
+                                       | none => <body>
+                                       | some Y_k => <rest, both unwrapped>))
+  if X is not None and COND:   =>  (match X with
+      <body>                        | some X_k => (if COND[unwrapped]
+                                                   then <body + rest>
+                                                   else <rest>)
+                                    | none => <rest>)
+
+A non-exiting `if X is not None:` body falls into the same `match` with
+`<body + rest>` in the `some` arm. A FIRST-MATCH loop body is translated
+with `return e` as `some e` and `continue`/fall-off-the-end as `none`;
+the loop becomes `match _findSome (fun x => <body>) xs with | some r => r
+| none => <rest>` (sound because Python `return` exits the function; the
+extractor verifies no loop-assigned name is read before assignment in the
+body or anywhere after the loop).
 
 When the declared return type is Optional[T], `return None` emits `none`
 and a T-valued `return e` emits `some e`; an expression already typed
@@ -110,17 +171,21 @@ class ExtractionError(Exception):
 
 @dataclass(frozen=True)
 class LType:
-    """A Lean type in the v1 image: Int | Bool | String | Option t | Tuple
-    (flat component list, rendered right-nested) | List t | Dict k v
-    (rendered List (k x v)) | Fn (args.., ret)."""
+    """A Lean type in the extraction image: Int | Bool | String | Rat |
+    Option t | Tuple (flat component list, rendered right-nested) | List t |
+    Dict k v (rendered List (k x v)) | Fn (args.., ret) | Var (an opaque
+    type parameter, `name`) | Struct (a registered dataclass, `name`,
+    args = its instantiated type parameters)."""
 
     kind: str
     args: tuple["LType", ...] = ()
+    name: str = ""
 
 
 T_INT = LType("Int")
 T_BOOL = LType("Bool")
 T_STRING = LType("String")
+T_RAT = LType("Rat")
 
 
 def t_option(t: LType) -> LType:
@@ -133,16 +198,34 @@ def t_list(t: LType) -> LType:
 
 @dataclass(frozen=True)
 class ModuleSpec:
-    """Registry entry: one Python source module -> one generated Lean file."""
+    """Registry entry: one Python source module -> one generated Lean file.
+
+    `opaque_types` are Python class names mapped to implicit `{X : Type}`
+    binders (pure payload). `structures` are frozen-dataclass names emitted
+    as Lean `structure`s (in declaration order, before the functions)."""
 
     source: str
     output: str
     core_name: str
     functions: tuple[str, ...]
+    opaque_types: tuple[str, ...] = ()
+    structures: tuple[str, ...] = ()
+
+
+@dataclass
+class TypeEnv:
+    """Per-module type environment: the registry-declared opaque type
+    parameters and the extracted structures (name -> (fields, type params))."""
+
+    opaque: tuple[str, ...] = ()
+    structs: dict[str, tuple[tuple[tuple[str, LType], ...], tuple[str, ...]]] = field(
+        default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
-# Registry (v1: the Tier-1 pure cores).
+# Registry (P1: the Tier-1 trio; P2a: priority_band + shopping_list).
+# `functions` order is the emission order: a function may only call functions
+# emitted BEFORE it (plus fuel-bounded self-recursion).
 # ---------------------------------------------------------------------------
 MODULES: tuple[ModuleSpec, ...] = (
     ModuleSpec(
@@ -163,13 +246,34 @@ MODULES: tuple[ModuleSpec, ...] = (
         core_name="NpcBuyCore",
         functions=("npc_buy_is_applicable_pure", "npc_buy_apply_pure"),
     ),
+    ModuleSpec(
+        source="src/artifactsmmo_cli/ai/priority_band.py",
+        output=f"{GENERATED_DIR}/PriorityBand.lean",
+        core_name="PriorityBand",
+        functions=("clamp_into_band",),
+    ),
+    ModuleSpec(
+        source="src/artifactsmmo_cli/ai/shopping_list.py",
+        output=f"{GENERATED_DIR}/ShoppingList.lean",
+        core_name="ShoppingList",
+        functions=("_expand", "shopping_list", "fully_covered_materials"),
+    ),
+    ModuleSpec(
+        source="src/artifactsmmo_cli/ai/arbiter_select.py",
+        output=f"{GENERATED_DIR}/ArbiterSelect.lean",
+        core_name="ArbiterSelect",
+        functions=("_precedes", "select_pure"),
+        opaque_types=("Goal", "Action"),
+        structures=("Candidate",),
+    ),
 )
 
 
 @dataclass
 class Ctx:
-    """Per-function translation context (vars/unwraps/setlike are scoped by
-    copying at branch points; helpers and the fresh counter are shared)."""
+    """Per-function translation context (vars/unwraps/setlike/aliases are
+    scoped by copying at branch points; helpers, the module signature table
+    and the fresh counter are shared)."""
 
     src: str
     fn_name: str
@@ -179,17 +283,38 @@ class Ctx:
     unwraps: dict[str, tuple[str, LType]]
     helpers: set[str]
     loop_acc: str | None = None
+    # First-match loop mode: `loop_acc` is the literal Lean `none` and
+    # `return e` emits `some e` (the loop is a `_findSome`).
+    loop_first: bool = False
     fresh: list[int] = field(default_factory=lambda: [0])
+    # Fuel-bounded recursion: True inside the `fuel + 1` arm of a fueled
+    # function; rec_params are its parameter types EXCLUDING the fuel.
+    fueled: bool = False
+    rec_params: tuple[LType, ...] = ()
+    # Signatures of module functions already emitted: name -> (param types
+    # excluding any fuel, return type, fueled?). Shared (read-only) so a later
+    # function can call an earlier one.
+    module_sigs: dict[str, tuple[tuple[LType, ...], LType, bool]] = field(default_factory=dict)
+    # Comprehension binders: Python name -> (rendered Lean code, type).
+    aliases: dict[str, tuple[str, LType]] = field(default_factory=dict)
+    # Module type environment (opaque type params + structures). Shared.
+    tenv: TypeEnv = field(default_factory=TypeEnv)
 
 
-def branch(ctx: Ctx, loop_acc: str | None = None) -> Ctx:
+def branch(ctx: Ctx, loop_acc: str | None = None,
+           loop_first: bool | None = None) -> Ctx:
     """A child scope: copied bindings, SHARED helper set + fresh counter."""
     return Ctx(
         src=ctx.src, fn_name=ctx.fn_name, ret=ctx.ret,
         vars=dict(ctx.vars), setlike=set(ctx.setlike),
         unwraps=dict(ctx.unwraps), helpers=ctx.helpers,
         loop_acc=ctx.loop_acc if loop_acc is None else loop_acc,
+        loop_first=ctx.loop_first if loop_first is None else loop_first,
         fresh=ctx.fresh,
+        fueled=ctx.fueled, rec_params=ctx.rec_params,
+        module_sigs=ctx.module_sigs,
+        aliases=dict(ctx.aliases),
+        tenv=ctx.tenv,
     )
 
 
@@ -208,8 +333,14 @@ def check_ident(src: str, node: ast.AST, name: str) -> str:
 # Type rendering / annotation parsing.
 # ---------------------------------------------------------------------------
 def render_type(t: LType) -> str:
-    if t.kind in ("Int", "Bool", "String"):
+    if t.kind in ("Int", "Bool", "String", "Rat"):
         return t.kind
+    if t.kind == "Var":
+        return t.name
+    if t.kind == "Struct":
+        if not t.args:
+            return t.name
+        return t.name + " " + " ".join(render_atom(a) for a in t.args)
     if t.kind == "Option":
         return f"Option {render_atom(t.args[0])}"
     if t.kind == "List":
@@ -225,12 +356,14 @@ def render_type(t: LType) -> str:
 
 
 def render_atom(t: LType) -> str:
-    if t.kind in ("Int", "Bool", "String", "Tuple", "Fn"):
+    if t.kind in ("Int", "Bool", "String", "Rat", "Tuple", "Fn", "Var"):
+        return render_type(t)
+    if t.kind == "Struct" and not t.args:
         return render_type(t)
     return f"({render_type(t)})"
 
 
-def parse_annotation(src: str, node: ast.expr) -> tuple[LType, bool]:
+def parse_annotation(env: TypeEnv, src: str, node: ast.expr) -> tuple[LType, bool]:
     """Parse an annotation -> (LType, setlike). Rejects anything unmapped."""
     if isinstance(node, ast.Name):
         if node.id == "int":
@@ -239,8 +372,16 @@ def parse_annotation(src: str, node: ast.expr) -> tuple[LType, bool]:
             return T_BOOL, False
         if node.id == "str":
             return T_STRING, False
+        if node.id == "Fraction":
+            return T_RAT, False
         if node.id == "float":
             reject(src, node, "float annotation")
+        if node.id in env.opaque:
+            return LType("Var", name=node.id), False
+        if node.id in env.structs:
+            _, params = env.structs[node.id]
+            return LType("Struct", tuple(LType("Var", name=p) for p in params),
+                         name=node.id), False
         reject(src, node, f"type annotation {node.id!r}")
     if isinstance(node, ast.Constant) and node.value is None:
         reject(src, node, "bare None annotation outside a union")
@@ -248,7 +389,7 @@ def parse_annotation(src: str, node: ast.expr) -> tuple[LType, bool]:
         members = _flatten_union(node)
         non_none = [m for m in members if not (isinstance(m, ast.Constant) and m.value is None)]
         has_none = len(non_none) < len(members)
-        parsed = [parse_annotation(src, m) for m in non_none]
+        parsed = [parse_annotation(env, src, m) for m in non_none]
         base, setlike = parsed[0]
         for other, oset in parsed[1:]:
             if other != base:
@@ -260,32 +401,49 @@ def parse_annotation(src: str, node: ast.expr) -> tuple[LType, bool]:
     if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name):
         head = node.value.id
         if head == "Optional":
-            inner, setlike = parse_annotation(src, node.slice)
+            inner, setlike = parse_annotation(env, src, node.slice)
             return t_option(inner), setlike
         if head == "tuple":
             if not isinstance(node.slice, ast.Tuple):
                 reject(src, node, "non-tuple subscript on tuple[..]")
-            comps = [parse_annotation(src, e)[0] for e in node.slice.elts]
+            comps = [parse_annotation(env, src, e)[0] for e in node.slice.elts]
             return LType("Tuple", tuple(comps)), False
         if head in ("list", "Sequence"):
-            return t_list(parse_annotation(src, node.slice)[0]), False
+            return t_list(parse_annotation(env, src, node.slice)[0]), False
         if head == "frozenset" or head == "set":
-            return t_list(parse_annotation(src, node.slice)[0]), True
+            return t_list(parse_annotation(env, src, node.slice)[0]), True
         if head in ("dict", "Mapping"):
             if not isinstance(node.slice, ast.Tuple) or len(node.slice.elts) != 2:
                 reject(src, node, "dict annotation without key/value pair")
-            k = parse_annotation(src, node.slice.elts[0])[0]
-            v = parse_annotation(src, node.slice.elts[1])[0]
+            k = parse_annotation(env, src, node.slice.elts[0])[0]
+            v = parse_annotation(env, src, node.slice.elts[1])[0]
             return LType("Dict", (k, v)), False
         if head == "Callable":
             if not isinstance(node.slice, ast.Tuple) or len(node.slice.elts) != 2 \
                     or not isinstance(node.slice.elts[0], ast.List):
                 reject(src, node, "Callable annotation without [[args], ret]")
-            args = [parse_annotation(src, a)[0] for a in node.slice.elts[0].elts]
-            ret = parse_annotation(src, node.slice.elts[1])[0]
+            args = [parse_annotation(env, src, a)[0] for a in node.slice.elts[0].elts]
+            ret = parse_annotation(env, src, node.slice.elts[1])[0]
             return LType("Fn", (*args, ret)), False
         reject(src, node, f"type annotation {head!r}[..]")
     reject(src, node, f"type annotation node {type(node).__name__}")
+
+
+def _collect_type_vars(t: LType, acc: list[str]) -> None:
+    """Opaque type-parameter names occurring in `t`, first-occurrence order."""
+    if t.kind == "Var" and t.name not in acc:
+        acc.append(t.name)
+    for a in t.args:
+        _collect_type_vars(a, acc)
+
+
+def _subst_type_vars(t: LType, mapping: dict[str, LType]) -> LType:
+    """Substitute opaque type parameters (used to instantiate struct fields)."""
+    if t.kind == "Var":
+        return mapping.get(t.name, t)
+    if t.args:
+        return LType(t.kind, tuple(_subst_type_vars(a, mapping) for a in t.args), t.name)
+    return t
 
 
 def _flatten_union(node: ast.expr) -> list[ast.expr]:
@@ -297,7 +455,8 @@ def _flatten_union(node: ast.expr) -> list[ast.expr]:
 # ---------------------------------------------------------------------------
 # Emitted helper definitions (fixed bodies, fixed ordering).
 # ---------------------------------------------------------------------------
-HELPER_ORDER = ("_intAbs", "_dictGetD", "_dictSet", "_lexLt3", "_minByKey3")
+HELPER_ORDER = ("_intAbs", "_dictGetD", "_dictSet", "_find", "_findIdxFrom",
+                "_findIdx", "_findSome", "_lexLt3", "_minByKey3")
 
 HELPER_DEFS = {
     "_intAbs": (
@@ -306,8 +465,8 @@ HELPER_DEFS = {
     ),
     "_dictGetD": (
         "/-- Python `dict.get(k, default)` over an insertion-ordered association list:\n"
-        "first matching value, else the default. -/\n"
-        "def _dictGetD (m : List (String × Int)) (k : String) (d : Int) : Int :=\n"
+        "first matching value, else the default (value-polymorphic). -/\n"
+        "def _dictGetD {α : Type} (m : List (String × α)) (k : String) (d : α) : α :=\n"
         "  match m with\n"
         "  | [] => d\n"
         "  | (k', v) :: rest => if k' == k then v else _dictGetD rest k d"
@@ -315,11 +474,44 @@ HELPER_DEFS = {
     "_dictSet": (
         "/-- Python `d[k] = v` over an insertion-ordered association list: replace the\n"
         "first matching entry in place, else append — every other entry is preserved\n"
-        "bit-for-bit, mirroring dict update semantics. -/\n"
-        "def _dictSet (m : List (String × Int)) (k : String) (v : Int) : List (String × Int) :=\n"
+        "bit-for-bit, mirroring dict update semantics (value-polymorphic). -/\n"
+        "def _dictSet {α : Type} (m : List (String × α)) (k : String) (v : α) : List (String × α) :=\n"
         "  match m with\n"
         "  | [] => [(k, v)]\n"
         "  | (k', v') :: rest => if k' == k then (k', v) :: rest else (k', v') :: _dictSet rest k v"
+    ),
+    "_find": (
+        "/-- Python `next((x for x in xs if p(x)), None)`: the first element\n"
+        "satisfying `p`, else `none` (value-polymorphic). -/\n"
+        "def _find {α : Type} (p : α → Bool) (xs : List α) : Option α :=\n"
+        "  match xs with\n"
+        "  | [] => none\n"
+        "  | x :: rest => if p x then some x else _find p rest"
+    ),
+    "_findIdxFrom": (
+        "/-- Index search from a running offset — the recursion behind `_findIdx`. -/\n"
+        "def _findIdxFrom {α : Type} (p : α → Bool) (i : Int) (xs : List α) : Option Int :=\n"
+        "  match xs with\n"
+        "  | [] => none\n"
+        "  | x :: rest => if p x then some i else _findIdxFrom p (i + 1) rest"
+    ),
+    "_findIdx": (
+        "/-- Python `next((i for i, x in enumerate(xs) if p(x)), None)`: the index of\n"
+        "the first element satisfying `p`, else `none` (value-polymorphic). -/\n"
+        "def _findIdx {α : Type} (p : α → Bool) (xs : List α) : Option Int :=\n"
+        "  _findIdxFrom p 0 xs"
+    ),
+    "_findSome": (
+        "/-- A Python `for` loop whose body only `continue`s or `return`s: the first\n"
+        "iteration producing `some` wins; `none` falls through to the code after the\n"
+        "loop (value-polymorphic). -/\n"
+        "def _findSome {α β : Type} (f : α → Option β) (xs : List α) : Option β :=\n"
+        "  match xs with\n"
+        "  | [] => none\n"
+        "  | x :: rest =>\n"
+        "    match f x with\n"
+        "    | some r => some r\n"
+        "    | none => _findSome f rest"
     ),
     "_lexLt3": (
         "/-- Strict lexicographic `<` on a 3-component Int key — the order Python's\n"
@@ -366,8 +558,13 @@ def emit_expr(ctx: Ctx, e: ast.expr) -> tuple[str, LType]:
         reject(src, e, f"literal {type(e.value).__name__}")
     if isinstance(e, ast.Name):
         name = check_ident(src, e, e.id)
+        if name in ctx.aliases:
+            return ctx.aliases[name]
         if name in ctx.unwraps:
-            reject(src, e, f"bare read of Optional {name!r} inside its unwrap context (subscript it)")
+            binder, inner = ctx.unwraps[name]
+            if inner.kind == "Tuple":
+                reject(src, e, f"bare read of Optional {name!r} inside its unwrap context (subscript it)")
+            return binder, inner
         if name not in ctx.vars:
             reject(src, e, f"unbound name {name!r}")
         return name, ctx.vars[name]
@@ -390,6 +587,8 @@ def emit_expr(ctx: Ctx, e: ast.expr) -> tuple[str, LType]:
     if isinstance(e, ast.BinOp):
         a, ta = emit_expr(ctx, e.left)
         b, tb = emit_expr(ctx, e.right)
+        if isinstance(e.op, ast.Add) and ta == T_RAT and tb == T_RAT:
+            return f"({a} + {b})", T_RAT
         if ta != T_INT or tb != T_INT:
             reject(src, e, "arithmetic on non-int operands")
         if isinstance(e.op, ast.Add):
@@ -423,16 +622,33 @@ def emit_expr(ctx: Ctx, e: ast.expr) -> tuple[str, LType]:
         c, tc = emit_expr(ctx, e.test)
         if tc != T_BOOL:
             reject(src, e, "conditional-expression test is not bool")
+        if is_none_const(e.orelse):
+            # `A if c else None` -> `if c then some A else none`.
+            a, ta = emit_expr(ctx, e.body)
+            return f"(if {c} then (some {a}) else none)", t_option(ta)
         a, ta = emit_expr(ctx, e.body)
         b, tb = emit_expr(ctx, e.orelse)
         if ta != tb:
             reject(src, e, "conditional-expression branches of distinct types")
         return f"(if {c} then {a} else {b})", ta
-    if isinstance(e, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
+    if isinstance(e, ast.SetComp):
+        return emit_set_comp(ctx, e)
+    if isinstance(e, ast.ListComp):
+        return emit_list_comp(ctx, e)
+    if isinstance(e, (ast.DictComp, ast.GeneratorExp)):
         reject(src, e, "comprehension/generator expression")
     if isinstance(e, ast.Lambda):
         reject(src, e, "lambda outside a min/max key position")
     if isinstance(e, ast.Attribute):
+        if isinstance(e.ctx, ast.Load):
+            val, tv = emit_expr(ctx, e.value)
+            if tv.kind == "Struct":
+                fields, params = ctx.tenv.structs[tv.name]
+                mapping = dict(zip(params, tv.args, strict=True))
+                for fname, ftype in fields:
+                    if fname == e.attr:
+                        return f"({val}.{e.attr})", _subst_type_vars(ftype, mapping)
+                reject(src, e, f"unknown field .{e.attr} on structure {tv.name!r}")
         reject(src, e, f"attribute access .{e.attr} (str/list methods are out of subset)")
     reject(src, e, f"expression node {type(e).__name__}")
 
@@ -451,6 +667,17 @@ def emit_compare(ctx: Ctx, e: ast.Compare) -> tuple[str, LType]:
     for i, op in enumerate(e.ops):
         a, ta = emit_expr(ctx, operands[i])
         b, tb = emit_expr(ctx, operands[i + 1])
+        if isinstance(op, (ast.Eq, ast.NotEq)) and ta != tb:
+            # Python `t == opt` where opt: Optional[T] — False on None,
+            # plain equality on some. Lean: `decide (opt = some t)`.
+            if ta.kind == "Option" and ta.args[0] == tb and tb in (T_INT, T_STRING):
+                core = f"(decide ({a} = some {b}))"
+            elif tb.kind == "Option" and tb.args[0] == ta and ta in (T_INT, T_STRING):
+                core = f"(decide ({b} = some {a}))"
+            else:
+                reject(src, e, "comparison between distinct types")
+            parts.append(core if isinstance(op, ast.Eq) else f"(!{core})")
+            continue
         if ta != tb:
             reject(src, e, "comparison between distinct types")
         if isinstance(op, (ast.Lt, ast.LtE, ast.Gt, ast.GtE)):
@@ -502,14 +729,23 @@ def emit_call(ctx: Ctx, e: ast.Call) -> tuple[str, LType]:
             d, td = emit_expr(ctx, e.func.value)
             if td.kind != "Dict":
                 reject(src, e, ".get on a non-dict value")
-            if td.args != (T_STRING, T_INT):
-                reject(src, e, "dict helpers are monomorphic over (str, int) in v1")
+            if td.args[0] != T_STRING:
+                reject(src, e, "dict helpers require str keys")
             if len(e.args) != 2 or e.keywords:
                 reject(src, e, "dict.get without an explicit default")
             k, tk = emit_expr(ctx, e.args[0])
-            dflt, tdflt = emit_expr(ctx, e.args[1])
-            if tk != td.args[0] or tdflt != td.args[1]:
-                reject(src, e, "dict.get key/default type mismatch")
+            if tk != td.args[0]:
+                reject(src, e, "dict.get key type mismatch")
+            default = e.args[1]
+            if isinstance(default, ast.Dict) and not default.keys:
+                # `{}` default: the dict's value type pins the empty literal.
+                if td.args[1].kind != "Dict":
+                    reject(src, e, "empty-dict default on a non-dict-valued dict")
+                dflt = "[]"
+            else:
+                dflt, tdflt = emit_expr(ctx, default)
+                if tdflt != td.args[1]:
+                    reject(src, e, "dict.get default type mismatch")
             ctx.helpers.add("_dictGetD")
             return f"(_dictGetD {d} {k} {dflt})", td.args[1]
         reject(src, e, f"method call .{e.func.attr}(..)")
@@ -517,9 +753,13 @@ def emit_call(ctx: Ctx, e: ast.Call) -> tuple[str, LType]:
         reject(src, e, "call of a non-name")
     fname = e.func.id
     if fname == ctx.fn_name:
-        reject(src, e, "recursion (v2)")
+        return emit_recursive_call(ctx, e, fname)
     if fname in ("min", "max"):
         return emit_min_max(ctx, e, fname)
+    if fname == "next":
+        return emit_next(ctx, e)
+    if fname == "any":
+        return emit_any(ctx, e)
     if fname == "abs":
         if len(e.args) != 1 or e.keywords:
             reject(src, e, "abs with unexpected arguments")
@@ -554,7 +794,227 @@ def emit_call(ctx: Ctx, e: ast.Call) -> tuple[str, LType]:
                 reject(src, e, f"argument type mismatch in call to {fname!r}")
             rendered.append(arg_code)
         return "(" + " ".join([fname, *rendered]) + ")", ret
+    if fname in ctx.module_sigs:
+        return emit_module_call(ctx, e, fname)
     reject(src, e, f"call to {fname!r}")
+
+
+def emit_recursive_call(ctx: Ctx, e: ast.Call, fname: str) -> tuple[str, LType]:
+    """A fuel-bounded self-call: `f(fuel - 1, args..)` inside the `fuel + 1`
+    arm becomes `(f fuel args..)` — structural recursion on the Nat fuel."""
+    src = ctx.src
+    if not ctx.fueled:
+        reject(src, e, "recursion without the fuel discipline (leading `fuel: int` + guard)")
+    if e.keywords or len(e.args) != len(ctx.rec_params) + 1:
+        reject(src, e, f"recursive call arity mismatch for {fname!r}")
+    first = e.args[0]
+    if not (isinstance(first, ast.BinOp) and isinstance(first.op, ast.Sub)
+            and isinstance(first.left, ast.Name) and first.left.id == "fuel"
+            and isinstance(first.right, ast.Constant)
+            and not isinstance(first.right.value, bool) and first.right.value == 1):
+        reject(src, e, "recursive call whose first argument is not exactly `fuel - 1`")
+    rendered = [fname, "fuel"]
+    for arg_node, want in zip(e.args[1:], ctx.rec_params, strict=True):
+        arg_code, got = emit_expr(ctx, arg_node)
+        if got != want:
+            reject(src, e, f"argument type mismatch in recursive call to {fname!r}")
+        rendered.append(arg_code)
+    return "(" + " ".join(rendered) + ")", ctx.ret
+
+
+def emit_module_call(ctx: Ctx, e: ast.Call, fname: str) -> tuple[str, LType]:
+    """A call to a PREVIOUSLY-extracted function of the same module. A fueled
+    callee's leading Int fuel is bridged with `Int.toNat` (Python's `fuel <= 0`
+    base case is exactly Lean fuel 0)."""
+    src = ctx.src
+    params, ret, fueled = ctx.module_sigs[fname]
+    if e.keywords:
+        reject(src, e, f"keyword arguments in call to {fname!r}")
+    args = list(e.args)
+    rendered = [fname]
+    if fueled:
+        if len(args) != len(params) + 1:
+            reject(src, e, f"call arity mismatch for fueled {fname!r}")
+        fuel_code, fuel_t = emit_expr(ctx, args[0])
+        if fuel_t != T_INT:
+            reject(src, e, f"fuel argument to {fname!r} is not int")
+        rendered.append(f"(Int.toNat {fuel_code})")
+        args = args[1:]
+    elif len(args) != len(params):
+        reject(src, e, f"call arity mismatch for {fname!r}")
+    for arg_node, want in zip(args, params, strict=True):
+        arg_code, got = emit_expr(ctx, arg_node)
+        if got != want:
+            reject(src, e, f"argument type mismatch in call to {fname!r}")
+        rendered.append(arg_code)
+    return "(" + " ".join(rendered) + ")", ret
+
+
+def emit_set_comp(ctx: Ctx, e: ast.SetComp) -> tuple[str, LType]:
+    """`{elt for k, v in d.items() if cond}` -> `List.map` over `List.filter`.
+    Dict keys are unique and insertion-ordered, so the produced list IS the set
+    (set-semantics caveat: consumers must be order-independent)."""
+    src = ctx.src
+    if len(e.generators) != 1:
+        reject(src, e, "set comprehension with multiple generators")
+    gen = e.generators[0]
+    if gen.is_async:
+        reject(src, e, "async comprehension")
+    if len(gen.ifs) > 1:
+        reject(src, e, "set comprehension with multiple conditions")
+    dname, kt, vt = match_dict_items(ctx, e, gen.iter)
+    if not (isinstance(gen.target, ast.Tuple) and len(gen.target.elts) == 2
+            and all(isinstance(t, ast.Name) for t in gen.target.elts)):
+        reject(src, e, "set comprehension target must be a `k, v` pair over d.items()")
+    knode, vnode = gen.target.elts
+    assert isinstance(knode, ast.Name) and isinstance(vnode, ast.Name)
+    if "_kv" in ctx.vars or "_kv" in ctx.aliases:
+        reject(src, e, "identifier `_kv` collides with the comprehension binder")
+    child = branch(ctx)
+    child.aliases[check_ident(src, knode, knode.id)] = ("(_kv.1)", kt)
+    child.aliases[check_ident(src, vnode, vnode.id)] = ("(_kv.2)", vt)
+    seq = dname
+    if gen.ifs:
+        cond, tc = emit_expr(child, gen.ifs[0])
+        if tc != T_BOOL:
+            reject(src, e, "set comprehension condition is not bool")
+        seq = f"(List.filter (fun _kv => {cond}) {dname})"
+    elt, te = emit_expr(child, e.elt)
+    return f"(List.map (fun _kv => {elt}) {seq})", t_list(te)
+
+
+def _list_generator(ctx: Ctx, where: ast.expr, gen: ast.comprehension,
+                    max_ifs: int) -> tuple[str, LType]:
+    """Validate a single list-valued comprehension generator; returns the
+    rendered sequence + element type (the caller binds the target)."""
+    src = ctx.src
+    if gen.is_async:
+        reject(src, where, "async comprehension")
+    if len(gen.ifs) > max_ifs:
+        reject(src, where, "comprehension with too many conditions")
+    if isinstance(gen.iter, ast.Name) and gen.iter.id in ctx.setlike:
+        reject(src, where, "comprehension over a set-typed value (order-dependent)")
+    seq, tseq = emit_expr(ctx, gen.iter)
+    if tseq.kind != "List":
+        reject(src, where, "comprehension over a non-sequence")
+    return seq, tseq.args[0]
+
+
+def emit_list_comp(ctx: Ctx, e: ast.ListComp) -> tuple[str, LType]:
+    """`[elt for x in xs if cond]` -> `List.map` over `List.filter`."""
+    src = ctx.src
+    if len(e.generators) != 1:
+        reject(src, e, "list comprehension with multiple generators")
+    gen = e.generators[0]
+    if not isinstance(gen.target, ast.Name):
+        reject(src, e, "list comprehension target must be a single name")
+    seq, elem = _list_generator(ctx, e, gen, max_ifs=1)
+    binder = check_ident(src, gen.target, gen.target.id)
+    child = branch(ctx)
+    child.vars[binder] = elem
+    bind = f"(fun ({binder} : {render_type(elem)}) =>"
+    if gen.ifs:
+        cond, tc = emit_expr(child, gen.ifs[0])
+        if tc != T_BOOL:
+            reject(src, e, "list comprehension condition is not bool")
+        seq = f"(List.filter {bind} {cond}) {seq})"
+    elt, te = emit_expr(child, e.elt)
+    return f"(List.map {bind} {elt}) {seq})", t_list(te)
+
+
+def emit_next(ctx: Ctx, e: ast.Call) -> tuple[str, LType]:
+    """`next((x for x in xs if cond), None)` -> `_find`;
+    `next((i for i, x in enumerate(xs) if cond), None)` -> `_findIdx`."""
+    src = ctx.src
+    if len(e.args) != 2 or e.keywords or not isinstance(e.args[0], ast.GeneratorExp) \
+            or not is_none_const(e.args[1]):
+        reject(src, e, "next(..) outside the `next((.. for .. in ..), None)` shapes")
+    gen_exp = e.args[0]
+    if len(gen_exp.generators) != 1:
+        reject(src, e, "next(..) generator with multiple `for` clauses")
+    gen = gen_exp.generators[0]
+    if len(gen.ifs) != 1:
+        reject(src, e, "next(..) generator without exactly one condition")
+    # Index shape: `next((i for i, x in enumerate(xs) if cond), None)`.
+    if isinstance(gen.iter, ast.Call) and isinstance(gen.iter.func, ast.Name) \
+            and gen.iter.func.id == "enumerate":
+        it = gen.iter
+        if len(it.args) != 1 or it.keywords:
+            reject(src, e, "enumerate with unexpected arguments")
+        if isinstance(it.args[0], ast.Name) and it.args[0].id in ctx.setlike:
+            reject(src, e, "enumerate over a set-typed value (order-dependent)")
+        seq, tseq = emit_expr(ctx, it.args[0])
+        if tseq.kind != "List":
+            reject(src, e, "enumerate over a non-sequence")
+        elem = tseq.args[0]
+        if not (isinstance(gen.target, ast.Tuple) and len(gen.target.elts) == 2
+                and all(isinstance(t, ast.Name) for t in gen.target.elts)):
+            reject(src, e, "enumerate target must be an `i, x` pair")
+        inode, xnode = gen.target.elts
+        assert isinstance(inode, ast.Name) and isinstance(xnode, ast.Name)
+        if not (isinstance(gen_exp.elt, ast.Name) and gen_exp.elt.id == inode.id):
+            reject(src, e, "next(.. enumerate ..) element must be the index")
+        binder = check_ident(src, xnode, xnode.id)
+        child = branch(ctx)
+        child.vars[binder] = elem
+        cond, tc = emit_expr(child, gen.ifs[0])
+        if tc != T_BOOL:
+            reject(src, e, "next(..) condition is not bool")
+        ctx.helpers.add("_findIdxFrom")
+        ctx.helpers.add("_findIdx")
+        return (f"(_findIdx (fun ({binder} : {render_type(elem)}) => {cond}) {seq})",
+                t_option(T_INT))
+    # Element shape: `next((x for x in xs if cond), None)`.
+    if not isinstance(gen.target, ast.Name):
+        reject(src, e, "next(..) target must be a single name")
+    seq, elem = _list_generator(ctx, e, gen, max_ifs=1)
+    if not (isinstance(gen_exp.elt, ast.Name) and gen_exp.elt.id == gen.target.id):
+        reject(src, e, "next(..) element must be the iteration variable")
+    binder = check_ident(src, gen.target, gen.target.id)
+    child = branch(ctx)
+    child.vars[binder] = elem
+    cond, tc = emit_expr(child, gen.ifs[0])
+    if tc != T_BOOL:
+        reject(src, e, "next(..) condition is not bool")
+    ctx.helpers.add("_find")
+    return (f"(_find (fun ({binder} : {render_type(elem)}) => {cond}) {seq})",
+            t_option(elem))
+
+
+def emit_any(ctx: Ctx, e: ast.Call) -> tuple[str, LType]:
+    """`any(expr for x in xs)` -> `List.any xs (fun x => expr)`."""
+    src = ctx.src
+    if len(e.args) != 1 or e.keywords or not isinstance(e.args[0], ast.GeneratorExp):
+        reject(src, e, "any(..) outside the `any(expr for x in xs)` shape")
+    gen_exp = e.args[0]
+    if len(gen_exp.generators) != 1:
+        reject(src, e, "any(..) generator with multiple `for` clauses")
+    gen = gen_exp.generators[0]
+    if not isinstance(gen.target, ast.Name):
+        reject(src, e, "any(..) target must be a single name")
+    seq, elem = _list_generator(ctx, e, gen, max_ifs=0)
+    binder = check_ident(src, gen.target, gen.target.id)
+    child = branch(ctx)
+    child.vars[binder] = elem
+    body, tb = emit_expr(child, gen_exp.elt)
+    if tb != T_BOOL:
+        reject(src, e, "any(..) element is not bool")
+    return (f"(List.any {seq} (fun ({binder} : {render_type(elem)}) => {body}))",
+            T_BOOL)
+
+
+def match_dict_items(ctx: Ctx, where: ast.AST, it: ast.expr) -> tuple[str, LType, LType]:
+    """Require `it` to be `<dict-variable>.items()`; return (name, key t, value t)."""
+    src = ctx.src
+    if not (isinstance(it, ast.Call) and isinstance(it.func, ast.Attribute)
+            and it.func.attr == "items" and not it.args and not it.keywords
+            and isinstance(it.func.value, ast.Name)):
+        reject(src, where, "iteration source must be a list value or `d.items()`")
+    dname = it.func.value.id
+    if dname not in ctx.vars or ctx.vars[dname].kind != "Dict":
+        reject(src, where, f".items() on non-dict {dname!r}")
+    dt = ctx.vars[dname]
+    return dname, dt.args[0], dt.args[1]
 
 
 def emit_min_max(ctx: Ctx, e: ast.Call, fname: str) -> tuple[str, LType]:
@@ -562,9 +1022,9 @@ def emit_min_max(ctx: Ctx, e: ast.Call, fname: str) -> tuple[str, LType]:
     if len(e.args) == 2 and not e.keywords:
         a, ta = emit_expr(ctx, e.args[0])
         b, tb = emit_expr(ctx, e.args[1])
-        if ta != T_INT or tb != T_INT:
-            reject(src, e, f"{fname}(a, b) on non-int operands")
-        return f"({fname} {a} {b})", T_INT
+        if ta != tb or ta not in (T_INT, T_RAT):
+            reject(src, e, f"{fname}(a, b) operands must both be int or both Fraction")
+        return f"({fname} {a} {b})", ta
     if len(e.args) == 1 and len(e.keywords) == 1 and e.keywords[0].arg == "key":
         if fname != "min":
             reject(src, e, "max(.., key=..) is not used by any v1 core; only min is emitted")
@@ -644,6 +1104,29 @@ def match_is_not_none(test: ast.expr) -> str | None:
     return None
 
 
+def match_is_none(test: ast.expr) -> str | None:
+    """`X is None` -> X (a plain variable), else None."""
+    if isinstance(test, ast.Compare) and len(test.ops) == 1 \
+            and isinstance(test.ops[0], ast.Is) and is_none_const(test.comparators[0]) \
+            and isinstance(test.left, ast.Name):
+        return test.left.id
+    return None
+
+
+def match_is_not_none_and(test: ast.expr) -> tuple[str, ast.expr] | None:
+    """`X is not None and COND..` -> (X, COND..), else None."""
+    if isinstance(test, ast.BoolOp) and isinstance(test.op, ast.And) \
+            and len(test.values) >= 2:
+        x = match_is_not_none(test.values[0])
+        if x is not None:
+            if len(test.values) == 2:
+                return x, test.values[1]
+            residual = ast.BoolOp(op=ast.And(), values=test.values[1:])
+            ast.copy_location(residual, test)
+            return x, residual
+    return None
+
+
 def match_is_none_or(test: ast.expr) -> tuple[str, ast.expr] | None:
     """`X is None or COND` -> (X, COND), else None."""
     if isinstance(test, ast.BoolOp) and isinstance(test.op, ast.Or) and len(test.values) == 2:
@@ -681,12 +1164,37 @@ def emit_return_value(ctx: Ctx, node: ast.stmt, value: ast.expr | None) -> str:
         if ctx.ret.kind != "Option":
             reject(ctx.src, node, "return None from a non-Optional function")
         return "none"
+    if isinstance(value, ast.Tuple) and ctx.ret.kind == "Tuple" \
+            and len(value.elts) == len(ctx.ret.args):
+        comps = [_emit_component(ctx, node, elt, want)
+                 for elt, want in zip(value.elts, ctx.ret.args, strict=True)]
+        return "(" + ", ".join(comps) + ")"
     code, got = emit_expr(ctx, value)
     if got == ctx.ret:
         return code
     if ctx.ret.kind == "Option" and ctx.ret.args[0] == got:
         return f"(some {code})"
     reject(ctx.src, node, f"return type mismatch ({render_type(got)} vs {render_type(ctx.ret)})")
+
+
+def _emit_component(ctx: Ctx, node: ast.stmt, e: ast.expr, want: LType) -> str:
+    """One component of a returned tuple, coerced into its declared slot
+    (Python lets `T`/None/`[]` flow into `Optional[T]`/`list[..]` slots)."""
+    if is_none_const(e):
+        if want.kind != "Option":
+            reject(ctx.src, node, "None returned into a non-Optional tuple slot")
+        return "none"
+    if isinstance(e, ast.List) and not e.elts:
+        if want.kind != "List":
+            reject(ctx.src, node, "empty list returned into a non-list tuple slot")
+        return "[]"
+    code, got = emit_expr(ctx, e)
+    if got == want:
+        return code
+    if want.kind == "Option" and want.args[0] == got:
+        return f"(some {code})"
+    reject(ctx.src, node,
+           f"tuple-slot type mismatch ({render_type(got)} into {render_type(want)})")
 
 
 def emit_block(ctx: Ctx, stmts: list[ast.stmt], indent: int) -> str:
@@ -699,7 +1207,7 @@ def emit_block(ctx: Ctx, stmts: list[ast.stmt], indent: int) -> str:
     s, rest = stmts[0], stmts[1:]
 
     if isinstance(s, ast.Return):
-        if ctx.loop_acc is not None:
+        if ctx.loop_acc is not None and not ctx.loop_first:
             reject(src, s, "return inside a loop body")
         if rest:
             reject(src, s, "unreachable statements after return")
@@ -710,8 +1218,12 @@ def emit_block(ctx: Ctx, stmts: list[ast.stmt], indent: int) -> str:
                 binder, child = unwrap_var(ctx, s, x)
                 a = emit_return_value(child, s, s.value.body)
                 b = emit_return_value(ctx, s, s.value.orelse)
-                return (f"(match {x} with\n{pad}| some {binder} => {a}\n{pad}| none => {b})")
-        return emit_return_value(ctx, s, s.value)
+                code = (f"(match {x} with\n{pad}| some {binder} => {a}\n{pad}| none => {b})")
+                return f"(some {code})" if ctx.loop_first else code
+        val = emit_return_value(ctx, s, s.value)
+        # First-match loop mode: Python `return e` exits the function; the
+        # `_findSome` body signals it as `some e`.
+        return f"(some {val})" if ctx.loop_first else val
 
     if isinstance(s, ast.Continue):
         if ctx.loop_acc is None:
@@ -724,11 +1236,15 @@ def emit_block(ctx: Ctx, stmts: list[ast.stmt], indent: int) -> str:
         if not isinstance(s.target, ast.Name) or s.value is None:
             reject(src, s, "annotated assignment without a simple target/value")
         name = check_ident(src, s.target, s.target.id)
-        declared, setlike = parse_annotation(src, s.annotation)
+        declared, setlike = parse_annotation(ctx.tenv, src, s.annotation)
         if is_none_const(s.value):
             if declared.kind != "Option":
                 reject(src, s, "None assigned into a non-Optional annotation")
             code = "none"
+        elif isinstance(s.value, ast.Dict) and not s.value.keys:
+            if declared.kind != "Dict":
+                reject(src, s, "empty dict literal into a non-dict annotation")
+            code = "[]"
         else:
             val, got = emit_expr(ctx, s.value)
             code = coerce_assign(ctx, s, declared, val, got)
@@ -786,8 +1302,8 @@ def emit_dict_set(ctx: Ctx, s: ast.Assign, target: ast.Subscript,
     if name not in ctx.vars or ctx.vars[name].kind != "Dict":
         reject(src, s, "subscript assignment to a non-dict")
     dt = ctx.vars[name]
-    if dt.args != (T_STRING, T_INT):
-        reject(src, s, "dict helpers are monomorphic over (str, int) in v1")
+    if dt.args[0] != T_STRING:
+        reject(src, s, "dict helpers require str keys")
     k, tk = emit_expr(ctx, target.slice)
     v, tv = emit_expr(ctx, s.value)
     if tk != dt.args[0] or tv != dt.args[1]:
@@ -804,10 +1320,18 @@ def emit_for(ctx: Ctx, s: ast.For, rest: list[ast.stmt], indent: int) -> str:
         reject(src, s, "for/else")
     if isinstance(s.iter, ast.Name) and s.iter.id in ctx.setlike:
         reject(src, s, "iteration over a set-typed value (order-dependent)")
-    seq, tseq = emit_expr(ctx, s.iter)
-    if tseq.kind != "List":
-        reject(src, s, "for over a non-sequence")
-    elem = tseq.args[0]
+    if isinstance(s.iter, ast.Call):
+        # `for k, v in d.items():` — the dict IS its insertion-ordered pair list.
+        dname, kt, vt = match_dict_items(ctx, s, s.iter)
+        seq = dname
+        elem = LType("Tuple", (kt, vt))
+    else:
+        seq, tseq = emit_expr(ctx, s.iter)
+        if tseq.kind != "List":
+            reject(src, s, "for over a non-sequence")
+        elem = tseq.args[0]
+    if any(isinstance(n, ast.Return) for st in s.body for n in ast.walk(st)):
+        return emit_for_first_match(ctx, s, rest, indent, seq, elem)
     assigned = sorted({n.id for n in ast.walk(s) if isinstance(n, ast.Name)
                        and isinstance(n.ctx, ast.Store)} - _target_names(s.target))
     if len(assigned) != 1:
@@ -815,7 +1339,7 @@ def emit_for(ctx: Ctx, s: ast.For, rest: list[ast.stmt], indent: int) -> str:
     acc = assigned[0]
     if acc not in ctx.vars:
         reject(src, s, f"loop accumulator {acc!r} is not bound before the loop")
-    body_ctx = branch(ctx, loop_acc=acc)
+    body_ctx = branch(ctx, loop_acc=acc, loop_first=False)
     if isinstance(s.target, ast.Name):
         binder = check_ident(src, s, s.target.id)
         body_ctx.vars[binder] = elem
@@ -843,23 +1367,112 @@ def _target_names(target: ast.expr) -> set[str]:
     return {n.id for n in ast.walk(target) if isinstance(n, ast.Name)}
 
 
+def emit_for_first_match(ctx: Ctx, s: ast.For, rest: list[ast.stmt], indent: int,
+                         seq: str, elem: LType) -> str:
+    """A loop whose body `return`s: translated to `_findSome` (first `some`
+    wins; `continue`/fall-off-the-end is `none`). Sound iff the body carries no
+    cross-iteration state and nothing after the loop reads its locals — both
+    verified below."""
+    src = ctx.src
+    pad = " " * indent
+    if ctx.loop_acc is not None:
+        reject(src, s, "return-exiting loop nested inside another loop")
+    if not isinstance(s.target, ast.Name):
+        reject(src, s, "first-match loop target must be a single name")
+    for st0 in s.body:
+        for n0 in ast.walk(st0):
+            if isinstance(n0, ast.Subscript) and isinstance(n0.ctx, ast.Store):
+                reject(src, st0, "dict mutation inside a return-exiting loop "
+                                 "(cross-iteration state)")
+    stored = {n.id for st in s.body for n in ast.walk(st)
+              if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)} \
+        - {s.target.id}
+    _check_no_carry(src, s.body, stored, set())
+    for st in rest:
+        for n in ast.walk(st):
+            if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load) and n.id in stored:
+                reject(src, st, f"loop-local {n.id!r} read after a return-exiting loop")
+    binder = check_ident(src, s, s.target.id)
+    body_ctx = branch(ctx, loop_acc="none", loop_first=True)
+    body_ctx.vars[binder] = elem
+    body = emit_block(body_ctx, s.body, indent + 4)
+    ctx.helpers.add("_findSome")
+    res = fresh_binder(ctx, "_r")
+    cont = emit_block(branch(ctx), rest, indent + 2)
+    return (f"(match (_findSome\n"
+            f"{pad}    (fun ({binder} : {render_type(elem)}) =>\n"
+            f"{pad}      {body})\n"
+            f"{pad}    {seq}) with\n"
+            f"{pad}| some {res} => {res}\n"
+            f"{pad}| none =>\n{pad}  {cont})")
+
+
+def _check_no_carry(src: str, stmts: list[ast.stmt], stored: set[str],
+                    assigned: set[str]) -> None:
+    """Reject any read of a loop-assigned name before its assignment on the
+    same path — such a read would carry state across iterations in Python but
+    see the OUTER binding in the `_findSome` lambda."""
+    def check_loads(node: ast.AST) -> None:
+        for n in ast.walk(node):
+            if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load) \
+                    and n.id in stored and n.id not in assigned:
+                reject(src, n, f"loop-local {n.id!r} read before assignment "
+                               "(cross-iteration state in a return-exiting loop)")
+    for st in stmts:
+        if isinstance(st, ast.If):
+            check_loads(st.test)
+            _check_no_carry(src, st.body, stored, set(assigned))
+            _check_no_carry(src, st.orelse, stored, set(assigned))
+            continue
+        if isinstance(st, ast.Assign):
+            check_loads(st.value)
+            for t in st.targets:
+                assigned |= _target_names(t)
+            continue
+        if isinstance(st, ast.AnnAssign):
+            if st.value is not None:
+                check_loads(st.value)
+            assigned |= _target_names(st.target)
+            continue
+        check_loads(st)
+
+
 def emit_if(ctx: Ctx, s: ast.If, rest: list[ast.stmt], indent: int) -> str:
     src = ctx.src
     pad = " " * indent
 
-    # Pattern A: `if X is not None: <always-exits body>`.
+    # Pattern A: `if X is not None: <body>`. An always-exiting body keeps the
+    # `some`-arm to itself; a fall-through body carries the continuation into
+    # the `some` arm (the unwrap is still sound there: X IS some).
     x = match_is_not_none(s.test)
     if x is not None and not s.orelse:
-        if not always_exits(ctx, s.body):
-            reject(src, s, "`if X is not None` body that does not always return")
         binder, child = unwrap_var(ctx, s, x)
-        body = emit_block(child, s.body, indent + 2)
+        body_stmts = s.body if always_exits(ctx, s.body) else s.body + rest
+        body = emit_block(child, body_stmts, indent + 2)
         cont = emit_block(branch(ctx), rest, indent + 2)
         return (f"(match {x} with\n{pad}| some {binder} =>\n{pad}  {body}\n"
                 f"{pad}| none =>\n{pad}  {cont})")
 
-    # Pattern B: `if X is None or COND: <body>` (body + continuation in both arms).
+    # Pattern D: `if X is None or Y is None: <always-exits body>` — a nested
+    # double-unwrap; the continuation runs with BOTH variables unwrapped.
     none_or = match_is_none_or(s.test)
+    if none_or is not None and not s.orelse:
+        xname, cond = none_or
+        y = match_is_none(cond)
+        if y is not None and always_exits(ctx, s.body):
+            body1 = emit_block(branch(ctx), s.body, indent + 2)
+            binder_x, child_x = unwrap_var(ctx, s, xname)
+            body2 = emit_block(branch(child_x), s.body, indent + 4)
+            binder_y, child_xy = unwrap_var(child_x, s, y)
+            cont = emit_block(child_xy, rest, indent + 4)
+            return (f"(match {xname} with\n"
+                    f"{pad}| none =>\n{pad}  {body1}\n"
+                    f"{pad}| some {binder_x} =>\n"
+                    f"{pad}  (match {y} with\n"
+                    f"{pad}  | none =>\n{pad}    {body2}\n"
+                    f"{pad}  | some {binder_y} =>\n{pad}    {cont}))")
+
+    # Pattern B: `if X is None or COND: <body>` (body + continuation in both arms).
     if none_or is not None and not s.orelse:
         xname, cond = none_or
         binder, child = unwrap_var(ctx, s, xname)
@@ -873,6 +1486,26 @@ def emit_if(ctx: Ctx, s: ast.If, rest: list[ast.stmt], indent: int) -> str:
                 f"{pad}| some {binder} =>\n"
                 f"{pad}  (if {cond_code}\n{pad}   then\n{pad}    {taken2}\n"
                 f"{pad}   else\n{pad}    {skipped}))")
+
+    # Pattern E: `if X is not None and COND: <body>` — unwrap X, test COND in
+    # the unwrap scope; the taken arm carries the continuation (still under
+    # the unwrap) unless the body always exits.
+    nn_and = match_is_not_none_and(s.test)
+    if nn_and is not None and not s.orelse:
+        xname, residual = nn_and
+        binder, child = unwrap_var(ctx, s, xname)
+        cond_code, tc = emit_expr(child, residual)
+        if tc != T_BOOL:
+            reject(src, s, "Optional-guard residual condition is not bool")
+        taken_stmts = s.body if always_exits(ctx, s.body) else s.body + rest
+        taken = emit_block(branch(child), taken_stmts, indent + 4)
+        skipped = emit_block(branch(ctx), rest, indent + 4)
+        skipped2 = emit_block(branch(ctx), rest, indent + 4)
+        return (f"(match {xname} with\n"
+                f"{pad}| some {binder} =>\n"
+                f"{pad}  (if {cond_code}\n{pad}   then\n{pad}    {taken}\n"
+                f"{pad}   else\n{pad}    {skipped})\n"
+                f"{pad}| none =>\n{pad}    {skipped2})")
 
     cond_code, tc = emit_expr(ctx, s.test)
     if tc != T_BOOL:
@@ -890,8 +1523,8 @@ def emit_if(ctx: Ctx, s: ast.If, rest: list[ast.stmt], indent: int) -> str:
         return f"(if {cond_code}\n{pad} then\n{pad}  {body}\n{pad} else\n{pad}  {alt})"
 
     # Accumulator-update body: `if c: acc = e` (loop mode only).
-    if ctx.loop_acc is not None and not s.orelse and len(s.body) == 1 \
-            and isinstance(s.body[0], ast.Assign):
+    if ctx.loop_acc is not None and not ctx.loop_first and not s.orelse \
+            and len(s.body) == 1 and isinstance(s.body[0], ast.Assign):
         a = s.body[0]
         if len(a.targets) == 1 and isinstance(a.targets[0], ast.Name) \
                 and a.targets[0].id == ctx.loop_acc:
@@ -900,13 +1533,21 @@ def emit_if(ctx: Ctx, s: ast.If, rest: list[ast.stmt], indent: int) -> str:
             return (f"let {ctx.loop_acc} := (if {cond_code} then {code} else {ctx.loop_acc})\n"
                     f"{pad}" + emit_block(ctx, rest, indent))
 
+    # General fall-through `if c: <body>`: both arms re-emit the continuation.
+    if not s.orelse:
+        taken = emit_block(branch(ctx), s.body + rest, indent + 2)
+        skipped = emit_block(branch(ctx), rest, indent + 2)
+        return (f"(if {cond_code}\n{pad} then\n{pad}  {taken}\n"
+                f"{pad} else\n{pad}  {skipped})")
+
     reject(src, s, "if statement outside the supported translation patterns")
 
 
 # ---------------------------------------------------------------------------
 # Function / module extraction.
 # ---------------------------------------------------------------------------
-def extract_function(src: str, fd: ast.FunctionDef, helpers: set[str]) -> str:
+def extract_function(env: TypeEnv, src: str, fd: ast.FunctionDef, helpers: set[str],
+                     module_sigs: dict[str, tuple[tuple[LType, ...], LType, bool]]) -> str:
     if fd.decorator_list:
         reject(src, fd, "decorated function")
     a = fd.args
@@ -914,27 +1555,142 @@ def extract_function(src: str, fd: ast.FunctionDef, helpers: set[str]) -> str:
         reject(src, fd, "defaults/*args/**kwargs/keyword-only parameters")
     if fd.returns is None:
         reject(src, fd, "missing return annotation")
-    ret, _ = parse_annotation(src, fd.returns)
-    params: list[tuple[str, LType]] = []
-    ctx = Ctx(src=src, fn_name=fd.name, ret=ret, vars={}, setlike=set(),
-              unwraps={}, helpers=helpers)
+    ret, _ = parse_annotation(env, src, fd.returns)
+    params: list[tuple[str, LType, bool]] = []
     for arg in a.args:
         if arg.annotation is None:
             reject(src, arg, f"missing annotation on parameter {arg.arg!r}")
-        t, setlike = parse_annotation(src, arg.annotation)
-        name = check_ident(src, arg, arg.arg)
-        params.append((name, t))
-        ctx.vars[name] = t
-        if setlike:
-            ctx.setlike.add(name)
+        t, setlike = parse_annotation(env, src, arg.annotation)
+        params.append((check_ident(src, arg, arg.arg), t, setlike))
     body = list(fd.body)
     if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) \
             and isinstance(body[0].value.value, str):
         body = body[1:]  # docstring
+    if _is_recursive(fd):
+        return extract_fueled_function(env, src, fd, ret, params, body, helpers, module_sigs)
+    ctx = Ctx(src=src, fn_name=fd.name, ret=ret, vars={}, setlike=set(),
+              unwraps={}, helpers=helpers, module_sigs=module_sigs, tenv=env)
+    for name, t, setlike in params:
+        ctx.vars[name] = t
+        if setlike:
+            ctx.setlike.add(name)
     expr = emit_block(ctx, body, 2)
-    sig = " ".join(f"({n} : {render_type(t)})" for n, t in params)
+    tvars: list[str] = []
+    for _, t, _ in params:
+        _collect_type_vars(t, tvars)
+    _collect_type_vars(ret, tvars)
+    binders = "".join(f"{{{v} : Type}} " for v in env.opaque if v in tvars)
+    sig = " ".join(f"({n} : {render_type(t)})" for n, t, _ in params)
+    module_sigs[fd.name] = (tuple(t for _, t, _ in params), ret, False)
     return (f"/-- Extracted from `{fd.name}` (line {fd.lineno}). -/\n"
-            f"def {fd.name} {sig} :\n    {render_type(ret)} :=\n  {expr}")
+            f"def {fd.name} {binders}{sig} :\n    {render_type(ret)} :=\n  {expr}")
+
+
+def _is_recursive(fd: ast.FunctionDef) -> bool:
+    return any(isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+               and n.func.id == fd.name for n in ast.walk(fd))
+
+
+def _is_fuel_guard(s: ast.stmt) -> bool:
+    """`if fuel <= 0: return <expr>` (no else) — the mandatory base case."""
+    return (isinstance(s, ast.If) and not s.orelse
+            and isinstance(s.test, ast.Compare)
+            and isinstance(s.test.left, ast.Name) and s.test.left.id == "fuel"
+            and len(s.test.ops) == 1 and isinstance(s.test.ops[0], ast.LtE)
+            and isinstance(s.test.comparators[0], ast.Constant)
+            and not isinstance(s.test.comparators[0].value, bool)
+            and s.test.comparators[0].value == 0
+            and len(s.body) == 1 and isinstance(s.body[0], ast.Return))
+
+
+def extract_fueled_function(env: TypeEnv, src: str, fd: ast.FunctionDef, ret: LType,
+                            params: list[tuple[str, LType, bool]], body: list[ast.stmt],
+                            helpers: set[str],
+                            module_sigs: dict[str, tuple[tuple[LType, ...], LType, bool]]) -> str:
+    """A fuel-bounded recursive function -> a two-arm `Nat` pattern match.
+
+    The Python `fuel <= 0` guard IS the `| 0` arm; the rest of the body is the
+    `| fuel + 1` arm in which the binder `fuel` already denotes the decremented
+    value, so every self-call `f(fuel - 1, ..)` renders as `f fuel ..` —
+    STRUCTURAL recursion the Lean termination checker accepts, exactly the
+    hand models' fuel idiom. `fuel` is not otherwise bound: any stray read is
+    rejected as an unbound name.
+    """
+    if not params or params[0][0] != "fuel" or params[0][1] != T_INT:
+        reject(src, fd, "recursive function without a leading `fuel: int` parameter")
+    tvars: list[str] = []
+    for _, t, _ in params:
+        _collect_type_vars(t, tvars)
+    _collect_type_vars(ret, tvars)
+    if tvars:
+        reject(src, fd, "opaque type parameters in a fuel-recursive function")
+    rest = params[1:]
+    if not body or not _is_fuel_guard(body[0]):
+        reject(src, fd, "recursive function must open with `if fuel <= 0: return <base>`")
+    guard = body[0]
+    assert isinstance(guard, ast.If)
+    base_ret = guard.body[0]
+    base_ctx = Ctx(src=src, fn_name=fd.name, ret=ret,
+                   vars={n: t for n, t, _ in rest},
+                   setlike={n for n, _, s in rest if s},
+                   unwraps={}, helpers=helpers, module_sigs=module_sigs, tenv=env)
+    base_expr = emit_block(base_ctx, [base_ret], 4)
+    base_reads = {n.id for n in ast.walk(base_ret)
+                  if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)}
+    binders0 = ", ".join(n if n in base_reads else "_" for n, _, _ in rest)
+    succ_ctx = Ctx(src=src, fn_name=fd.name, ret=ret,
+                   vars={n: t for n, t, _ in rest},
+                   setlike={n for n, _, s in rest if s},
+                   unwraps={}, helpers=helpers, module_sigs=module_sigs, tenv=env,
+                   fueled=True, rec_params=tuple(t for _, t, _ in rest))
+    succ_ctx.fresh = base_ctx.fresh  # one counter per function
+    succ_expr = emit_block(succ_ctx, body[1:], 4)
+    binders1 = ", ".join(n for n, _, _ in rest)
+    arrow = " → ".join(["Nat", *(render_atom(t) for _, t, _ in rest), render_atom(ret)])
+    module_sigs[fd.name] = (tuple(t for _, t, _ in rest), ret, True)
+    return (f"/-- Extracted from `{fd.name}` (line {fd.lineno}; the Python `fuel <= 0` guard\n"
+            f"is the `Nat` fuel-zero arm — recursion is structural on the fuel). -/\n"
+            f"def {fd.name} :\n    {arrow}\n"
+            f"  | 0, {binders0} =>\n    {base_expr}\n"
+            f"  | fuel + 1, {binders1} =>\n    {succ_expr}")
+
+
+def extract_structure(env: TypeEnv, src: str, cd: ast.ClassDef) -> str:
+    """A registered frozen @dataclass -> a Lean `structure`, parameterised by
+    the opaque type parameters its fields mention (declaration order)."""
+    is_dataclass = any(
+        (isinstance(d, ast.Name) and d.id == "dataclass")
+        or (isinstance(d, ast.Call) and isinstance(d.func, ast.Name)
+            and d.func.id == "dataclass")
+        for d in cd.decorator_list)
+    if not is_dataclass:
+        reject(src, cd, f"registered structure {cd.name!r} without @dataclass")
+    if cd.bases or cd.keywords:
+        reject(src, cd, "dataclass with base classes")
+    name = check_ident(src, cd, cd.name)
+    body = list(cd.body)
+    if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) \
+            and isinstance(body[0].value.value, str):
+        body = body[1:]  # docstring
+    fields: list[tuple[str, LType]] = []
+    for st in body:
+        if not (isinstance(st, ast.AnnAssign) and isinstance(st.target, ast.Name)
+                and st.value is None):
+            reject(src, st, "non-field statement in a registered dataclass")
+        t, setlike = parse_annotation(env, src, st.annotation)
+        if setlike:
+            reject(src, st, "set-typed dataclass field")
+        fields.append((check_ident(src, st.target, st.target.id), t))
+    tvars: list[str] = []
+    for _, t in fields:
+        _collect_type_vars(t, tvars)
+    params = tuple(p for p in env.opaque if p in tvars)
+    env.structs[name] = (tuple(fields), params)
+    param_str = "".join(f" ({p} : Type)" for p in params)
+    lines = [f"/-- Extracted from `@dataclass {name}` (line {cd.lineno}). -/",
+             f"structure {name}{param_str} where"]
+    lines.extend(f"  {fname} : {render_type(ftype)}" for fname, ftype in fields)
+    return "\n".join(lines)
 
 
 def extract_module(spec: ModuleSpec) -> str:
@@ -942,12 +1698,22 @@ def extract_module(spec: ModuleSpec) -> str:
     text = path.read_text()
     digest = hashlib.sha256(text.encode()).hexdigest()
     tree = ast.parse(text, filename=spec.source)
+    env = TypeEnv(opaque=spec.opaque_types)
+    classes = {n.name: n for n in tree.body if isinstance(n, ast.ClassDef)}
+    missing_structs = [s for s in spec.structures if s not in classes]
+    if missing_structs:
+        raise ExtractionError(
+            f"{spec.source}: registered structures not found: {missing_structs}")
+    struct_blocks = [extract_structure(env, spec.source, classes[s])
+                     for s in spec.structures]
     by_name = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
     missing = [f for f in spec.functions if f not in by_name]
     if missing:
         raise ExtractionError(f"{spec.source}: registered functions not found: {missing}")
     helpers: set[str] = set()
-    defs = [extract_function(spec.source, by_name[f], helpers) for f in spec.functions]
+    module_sigs: dict[str, tuple[tuple[LType, ...], LType, bool]] = {}
+    defs = [extract_function(env, spec.source, by_name[f], helpers, module_sigs)
+            for f in spec.functions]
     helper_blocks = [HELPER_DEFS[h] for h in HELPER_ORDER if h in helpers]
     parts = [
         f"-- GENERATED from {spec.source} (sha256: {digest}) — DO NOT EDIT",
@@ -955,7 +1721,7 @@ def extract_module(spec: ModuleSpec) -> str:
         "",
         f"namespace Extracted.{spec.core_name}",
         "",
-        "\n\n".join(helper_blocks + defs),
+        "\n\n".join(helper_blocks + struct_blocks + defs),
         "",
         f"end Extracted.{spec.core_name}",
         "",

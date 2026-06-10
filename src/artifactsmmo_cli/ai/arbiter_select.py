@@ -81,7 +81,7 @@ def select_pure(
             if not guard_precedes:
                 plan = try_plan(committed_cand.goal)
                 tried_repr = committed_repr
-                if plan:
+                if len(plan) > 0:
                     return committed_cand.goal, plan, committed_repr
 
     for cand in candidates:
@@ -92,7 +92,7 @@ def select_pure(
         if is_satisfied(cand.goal):
             continue
         plan = try_plan(cand.goal)
-        if plan:
+        if len(plan) > 0:
             new_committed = cand.repr_ if cand.is_means else None
             return cand.goal, plan, new_committed
 

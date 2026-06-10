@@ -67,3 +67,12 @@ def test_monotonic_more_bank_never_increases_net():
     more = shopping_list("copper_dagger", 1, _RECIPES, {"copper_ore": 60})
     for item in set(less) | set(more):
         assert more.get(item, 0) <= less.get(item, 0)
+
+
+def test_cyclic_recipe_terminates_with_fuel():
+    """A cyclic recipe graph (impossible in live game data) terminates via the
+    fuel bound instead of overflowing the stack: each level expands once per
+    available fuel (len(recipes) + 1 levels), then stops. Pins the fuel guard
+    the extracted Lean model's Nat recursion mirrors."""
+    net = shopping_list("loop", 1, {"loop": {"loop": 1}}, {})
+    assert net == {"loop": 2}

@@ -297,9 +297,10 @@ open Formal.PriorityBand
 #check @Formal.ShoppingList.credit_plus_deficit         -- reconstruction: credit + deficit = requirement
 #check @Formal.ShoppingList.deficit_antitone            -- monotonicity (node): ↑holdings ⇒ ≤ deficit
 #check @Formal.ShoppingList.deficit_zero_iff_covered    -- withdraw-don't-gather predicate: net 0 ⇔ covered
-#check @Formal.ShoppingList.rawReq_le_naive             -- dominance: bank-credited work ≤ naive work
-#check @Formal.ShoppingList.rawReq_antitone_owned       -- monotonicity (tree): ↑bank ⇒ ≤ remaining work
-#check @Formal.ShoppingList.touched_covered_singleton   -- short-circuit: covered item prunes its subtree
+#check @Formal.ShoppingList.shoppingList_eq_work        -- reconstruction (graph): net raw total = threaded work
+#check @Formal.ShoppingList.shoppingList_raw_le_naive   -- dominance: bank-credited work ≤ naive work
+#check @Formal.ShoppingList.shoppingList_raw_antitone_owned -- monotonicity (graph): ↑bank ⇒ ≤ remaining work
+#check @Formal.ShoppingList.shoppingList_covered_singleton  -- short-circuit: covered item prunes its subtree
 -- MonsterDropSelection required roles (expected-kills lex-argmin monster-drop selection):
 #check @Formal.MonsterDropSelection.select_some_iff_nonempty          -- totality/no-deadlock: none ⇔ empty
 #check @Formal.MonsterDropSelection.select_mem                        -- winner is a real candidate
@@ -855,3 +856,27 @@ open Formal.PriorityBand
 #check @Extracted.Bridges.npc_buy_apply_delta                         -- dict update mints exactly +quantity
 #check @Extracted.Bridges.npc_buy_apply_bridge                        -- commutes with slot-projection apply
 #check @Extracted.Bridges.npc_buy_is_applicable_divergence_outside_wf -- honest boundary pin (used > cap)
+
+-- Extracted-model bridges (mechanical extraction P2a, completed in P2c):
+-- priority_band (Rat) and shopping_list (fuel-bounded recursion). The P2a
+-- shopping_list bridge was HONESTLY PARTIAL (the then-hand-model credited a
+-- constant `owned` per node, Python consumes a threaded dict — divergent on
+-- DAG recipes); P2c aligned the hand model to the consume semantics (Python
+-- is the spec) and the bridge is now a UNIVERSAL pointwise equality — the
+-- P2a weaker finite pins are superseded and deleted.
+#check @Extracted.Bridges.priority_band_bridge                        -- extracted = hand (rfl, over Rat)
+#check @Extracted.Bridges.priority_band_below_survival                -- survival safety on the extracted def
+#check @Extracted.Bridges.shopping_expand_bridge                      -- extracted _expand = hand expand, ∀ inputs
+#check @Extracted.Bridges.shopping_list_bridge                        -- extracted = hand net, ∀ inputs (DAGs incl.)
+#check @Extracted.Bridges.shopping_fully_covered_bridge               -- extracted withdraw set = hand, ∀ inputs
+#check @Extracted.Bridges.shopping_raw_node_bridge                    -- per-node credit = hand `deficit`
+#check @Extracted.Bridges.shopping_covered_short_circuit_bridge       -- covered ⇒ subtree never expanded
+
+-- Extracted-model bridge (mechanical extraction P2b): arbiter_select — THE
+-- most-pinned decision function (objective-committed arbitration, worth
+-- suppression, sticky preemption). FULL commuting square: for every injective
+-- id embedding f : Nat → String (Goal := Nat, Action := Unit, plan = [()] iff
+-- plannable), extracted ∘ encode = encOut ∘ hand — no wellformedness
+-- precondition; every Formal.ArbiterSelect safety theorem transfers.
+#check @Extracted.Bridges.arbiter_select_bridge                       -- extracted ∘ encode = encOut ∘ hand
+#check @Extracted.Bridges.select_pure_guard_wins_extracted            -- sticky-safety on the extracted def

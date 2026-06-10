@@ -4,16 +4,16 @@
 namespace Extracted.NpcBuyCore
 
 /-- Python `dict.get(k, default)` over an insertion-ordered association list:
-first matching value, else the default. -/
-def _dictGetD (m : List (String × Int)) (k : String) (d : Int) : Int :=
+first matching value, else the default (value-polymorphic). -/
+def _dictGetD {α : Type} (m : List (String × α)) (k : String) (d : α) : α :=
   match m with
   | [] => d
   | (k', v) :: rest => if k' == k then v else _dictGetD rest k d
 
 /-- Python `d[k] = v` over an insertion-ordered association list: replace the
 first matching entry in place, else append — every other entry is preserved
-bit-for-bit, mirroring dict update semantics. -/
-def _dictSet (m : List (String × Int)) (k : String) (v : Int) : List (String × Int) :=
+bit-for-bit, mirroring dict update semantics (value-polymorphic). -/
+def _dictSet {α : Type} (m : List (String × α)) (k : String) (v : α) : List (String × α) :=
   match m with
   | [] => [(k, v)]
   | (k', v') :: rest => if k' == k then (k', v) :: rest else (k', v') :: _dictSet rest k v

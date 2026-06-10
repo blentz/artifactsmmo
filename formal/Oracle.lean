@@ -1037,18 +1037,21 @@ def runGatherSelection (args : Array Json) : Json :=
   Json.mkObj [("selected", Json.num selected)]
 
 /-- Compute one shopping_list result using the SAME proved
-`Formal.ShoppingList.rawReq` (the total raw gather work the bank-aware net list
-implies).
+`Formal.ShoppingList.shoppingList` (threaded-consume semantics, P2c — and via
+the universal `Extracted.Bridges.shopping_list_bridge` also exactly the
+mechanically extracted Python image).
 
 args layout (all Nat ≥ 0):
 * `[0]`                  nRecipe (number of `(item, sub, qty)` triples)
 * `[1 .. 3*nRecipe]`     the triples, flat: item0 sub0 qty0 ...
 * next: nOwned, then `(item, qty)` owned pairs flat
-* next: queryItem, queryQty, fuel
+* next: queryItem, queryQty
 
-Emits the Lean `rawReq owned r fuel queryItem queryQty` — compared against the
-Python `sum of net deficits over raw-leaf items` from the live `shopping_list`
-(equal for tree recipes, which the diff test generates). -/
+Item codes are Nats on the wire; the model's String items are `toString code`.
+The fuel is seeded internally with `recipes.length + 1`, exactly like the
+Python `shopping_list`. Emits the raw-leaf work `netSumRaw` of the net
+(compared against the Python sum of net deficits over raw-leaf items) and the
+sorted net keys (compared against `sorted(net.keys())`). -/
 def runShoppingList (args : Array Json) : Json :=
   let g := fun i => (intArg args i).toNat
   let nRecipe := g 0
@@ -1061,15 +1064,19 @@ def runShoppingList (args : Array Json) : Json :=
   let p2 := p1 + 1 + 2*nOwned
   let queryItem := g p2
   let queryQty := g (p2 + 1)
-  let fuel := g (p2 + 2)
-  let r : Formal.ShoppingList.Recipe :=
-    fun item => (triples.filter (fun t => decide (t.1 = item))).map (fun t => (t.2.1, t.2.2))
-  let owned := tableLookup ownedPairs 0
-  let keys := (Formal.ShoppingList.touched owned r fuel queryItem queryQty).mergeSort (· ≤ ·)
-    |>.eraseDups
+  let parents := (triples.map (fun t => t.1)).eraseDups
+  let recipes : Formal.ShoppingList.Recipes :=
+    parents.map (fun it =>
+      (toString it,
+       (triples.filter (fun t => decide (t.1 = it))).map
+         (fun t => (toString t.2.1, Int.ofNat t.2.2))))
+  let owned : Formal.ShoppingList.Dict Int :=
+    ownedPairs.map (fun kv => (toString kv.1, Int.ofNat kv.2))
+  let net := Formal.ShoppingList.shoppingList (toString queryItem)
+    (Int.ofNat queryQty) recipes owned
+  let keys := (net.map (fun kv => (kv.1.toNat?).getD 0)).mergeSort (· ≤ ·)
   let keysJson := Json.arr ((keys.map (fun n => Json.num (Int.ofNat n))).toArray)
-  Json.mkObj [("raw_work",
-      Json.num (Int.ofNat (Formal.ShoppingList.rawReq owned r fuel queryItem queryQty))),
+  Json.mkObj [("raw_work", Json.num (Formal.ShoppingList.netSumRaw recipes net)),
     ("keys", keysJson)]
 
 /-- Compute one gather_step_target result using the SAME proved

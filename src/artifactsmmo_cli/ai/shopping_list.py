@@ -25,7 +25,13 @@ reconstruction properties are mirrored in
 `formal/Formal/ShoppingList.lean`.
 
 Kept pure (plain dicts, no GameData/WorldState) so the differential harness can
-execute it against the Lean oracle, exactly like `min_gathers`.
+execute it against the Lean oracle, exactly like `min_gathers`. The recursion is
+FUEL-BOUNDED (mechanical-extraction P2): `_expand` threads an explicit `fuel`
+that `shopping_list` seeds with `len(recipes) + 1`, which an acyclic recipe
+graph can never exhaust (every expansion path visits distinct craftables), so
+the bound is unreachable on real data — it exists so the extracted Lean model
+(`formal/Formal/Extracted/ShoppingList.lean`) recurses structurally on a `Nat`
+fuel, exactly like the hand model `Formal.ShoppingList.rawReq`.
 """
 
 from collections.abc import Mapping
@@ -49,21 +55,32 @@ def shopping_list(
     a positive net is the remaining gather/craft work for that item.
     """
     net: dict[str, int] = {}
-    _expand(item, qty, recipes, dict(owned), net)
-    return net
+    state = _expand(len(recipes) + 1, item, qty, recipes, (dict(owned), net))
+    return state[1]
 
 
 def _expand(
+    fuel: int,
     item: str,
     qty: int,
     recipes: Mapping[str, dict[str, int]],
-    owned: dict[str, int],
-    net: dict[str, int],
-) -> None:
+    state: tuple[dict[str, int], dict[str, int]],
+) -> tuple[dict[str, int], dict[str, int]]:
+    """Expand one node of the recipe tree over the `(owned, net)` state pair.
+
+    `fuel` bounds the recursion structurally (the Lean model's `Nat` fuel):
+    unreachable on acyclic recipes given the `len(recipes) + 1` seed, and a
+    cyclic recipe terminates with a truncated net instead of overflowing the
+    stack.
+    """
+    if fuel <= 0:
+        return state
+    owned = state[0]
+    net = state[1]
     # Credit held copies of this exact item first (inventory + bank).
-    have = owned.get(item, 0)
-    used = min(have, qty)
-    owned[item] = have - used
+    held = owned.get(item, 0)
+    used = min(held, qty)
+    owned[item] = held - used
     deficit = qty - used
     # Record the net for this item (0 when fully covered). Record even a 0 so the
     # caller sees the full closure and can offer the withdraw for covered items.
@@ -71,14 +88,16 @@ def _expand(
     if deficit <= 0:
         # Fully covered by holdings: SHORT-CIRCUIT — do not expand the subtree.
         # The banked copies are withdrawn, so no sub-material work is needed.
-        return
-    recipe = recipes.get(item) or {}
-    if not recipe:
+        return (owned, net)
+    recipe = recipes.get(item, {})
+    if len(recipe) == 0:
         # Raw material: the deficit is gathered directly, nothing below.
-        return
+        return (owned, net)
     # Craftable with a deficit: recurse into each material for the deficit only.
+    state = (owned, net)
     for material, per_unit in recipe.items():
-        _expand(material, per_unit * deficit, recipes, owned, net)
+        state = _expand(fuel - 1, material, per_unit * deficit, recipes, state)
+    return state
 
 
 def fully_covered_materials(

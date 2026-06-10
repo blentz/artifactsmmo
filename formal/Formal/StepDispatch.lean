@@ -227,11 +227,16 @@ The fix routes to the strategy's DEEPEST actionable `step` (the raw base
 material) — a FLAT gather (`minGathers == qty`) that plans within budget and makes
 incremental progress.
 
-We model `minGathers` exactly as `min_gathers.py`/`ShoppingList.rawReq`: credit
-the item's holdings, then for the deficit gather it (raw: empty recipe) or recurse
-into the sub-recipe at `per_unit * deficit`. `Recipe`/`deficit` are reused from
-ShoppingList's shape (redeclared here to keep StepDispatch self-contained and
-mathlib-free). -/
+We model `minGathers` as `min_gathers.py`'s recursion shape (the pre-P2c
+`ShoppingList.rawReq` idiom): credit the item's holdings, then for the deficit
+gather it (raw: empty recipe) or recurse into the sub-recipe at
+`per_unit * deficit`. KNOWN SCOPE (P2c finding, docs/PLAN_mechanical_extraction.md):
+this hand model credits a CONSTANT `owned` function per node while
+`min_gathers.py` consumes a threaded copy — the two agree on TREE recipes (the
+domain its differential generator samples) and diverge on DAG recipes, the same
+fidelity gap closed for ShoppingList in P2c; aligning `minGathers` to consume
+semantics is tracked there as follow-up. `Recipe`/`deficit` are redeclared here
+to keep StepDispatch self-contained and mathlib-free. -/
 
 /-- A recipe environment: item → its `(sub_mat, per_unit)` ingredient list. -/
 abbrev Recipe := Nat → List (Nat × Nat)

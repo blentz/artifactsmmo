@@ -2041,19 +2041,40 @@ example : ∀ (qty h₁ h₂ : Nat), h₁ ≤ h₂ →
 example : ∀ (qty «have» : Nat),
     Formal.ShoppingList.deficit qty «have» = 0 ↔ qty ≤ «have» :=
   @Formal.ShoppingList.deficit_zero_iff_covered
--- rawReq_le_naive: DOMINANCE — bank-credited work ≤ naive (gather-everything) work.
-example : ∀ (owned : Nat → Nat) (r : Formal.ShoppingList.Recipe) (fuel item qty : Nat),
-    Formal.ShoppingList.rawReq owned r fuel item qty ≤ Formal.ShoppingList.naiveReq r fuel item qty :=
-  fun owned r fuel item qty => Formal.ShoppingList.rawReq_le_naive owned r fuel item qty
--- rawReq_antitone_owned: MONOTONICITY — more bank stock ⇒ ≤ remaining work.
-example : ∀ (r : Formal.ShoppingList.Recipe) (o₁ o₂ : Nat → Nat),
-    (∀ i, o₁ i ≤ o₂ i) → ∀ fuel item qty,
-    Formal.ShoppingList.rawReq o₂ r fuel item qty ≤ Formal.ShoppingList.rawReq o₁ r fuel item qty :=
-  fun r o₁ o₂ hle fuel item qty => Formal.ShoppingList.rawReq_antitone_owned r o₁ o₂ hle fuel item qty
--- touched_covered_singleton: SHORT-CIRCUIT — covered item prunes its subtree (only itself touched).
-example : ∀ (owned : Nat → Nat) (r : Formal.ShoppingList.Recipe) (fuel item qty : Nat),
-    qty ≤ owned item → Formal.ShoppingList.touched owned r (fuel + 1) item qty = [item] :=
-  @Formal.ShoppingList.touched_covered_singleton
+-- shoppingList_eq_work: RECONSTRUCTION (graph) — the net's raw-leaf total IS the
+-- threaded consume-work (consume semantics, P2c).
+example : ∀ (item : String) (qty : Int) (recipes : Formal.ShoppingList.Recipes)
+    (owned : Formal.ShoppingList.Dict Int),
+    Formal.ShoppingList.netSumRaw recipes
+        (Formal.ShoppingList.shoppingList item qty recipes owned)
+      = (Formal.ShoppingList.work (recipes.length + 1) item qty recipes owned).2 :=
+  @Formal.ShoppingList.shoppingList_eq_work
+-- shoppingList_raw_le_naive: DOMINANCE — bank-credited work ≤ naive (gather-everything) work.
+example : ∀ (item : String) (qty : Int) (recipes : Formal.ShoppingList.Recipes)
+    (owned : Formal.ShoppingList.Dict Int),
+    Formal.ShoppingList.RecipesNonneg recipes → Formal.ShoppingList.OwnedNonneg owned →
+    Formal.ShoppingList.netSumRaw recipes
+        (Formal.ShoppingList.shoppingList item qty recipes owned)
+      ≤ Formal.ShoppingList.netSumRaw recipes
+        (Formal.ShoppingList.shoppingList item qty recipes []) :=
+  @Formal.ShoppingList.shoppingList_raw_le_naive
+-- shoppingList_raw_antitone_owned: MONOTONICITY — more bank stock ⇒ ≤ remaining work.
+example : ∀ (item : String) (qty : Int) (recipes : Formal.ShoppingList.Recipes)
+    (o₁ o₂ : Formal.ShoppingList.Dict Int),
+    Formal.ShoppingList.RecipesNonneg recipes → Formal.ShoppingList.OwnedLe o₂ o₁ →
+    Formal.ShoppingList.OwnedNonneg o₁ → Formal.ShoppingList.OwnedNonneg o₂ →
+    Formal.ShoppingList.netSumRaw recipes
+        (Formal.ShoppingList.shoppingList item qty recipes o₁)
+      ≤ Formal.ShoppingList.netSumRaw recipes
+        (Formal.ShoppingList.shoppingList item qty recipes o₂) :=
+  @Formal.ShoppingList.shoppingList_raw_antitone_owned
+-- shoppingList_covered_singleton: SHORT-CIRCUIT — covered item prunes its subtree
+-- (the net is the single (item, 0) entry).
+example : ∀ (item : String) (qty : Int) (recipes : Formal.ShoppingList.Recipes)
+    (owned : Formal.ShoppingList.Dict Int),
+    qty ≤ Formal.ShoppingList.getD owned item 0 →
+    Formal.ShoppingList.shoppingList item qty recipes owned = [(item, 0)] :=
+  @Formal.ShoppingList.shoppingList_covered_singleton
 
 /-! ### MonsterDropSelection role contracts (expected-kills lex-argmin monster-drop). -/
 

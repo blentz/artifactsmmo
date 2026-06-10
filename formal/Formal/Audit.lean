@@ -725,11 +725,18 @@ open Formal.WeightedRemaining in
 #print axioms Formal.ShoppingList.deficit_le_qty
 #print axioms Formal.ShoppingList.deficit_antitone
 #print axioms Formal.ShoppingList.deficit_zero_iff_covered
-#print axioms Formal.ShoppingList.rawReq_mono_qty
-#print axioms Formal.ShoppingList.rawReq_le_naive
-#print axioms Formal.ShoppingList.rawReq_antitone_owned
-#print axioms Formal.ShoppingList.naiveReq_raw
-#print axioms Formal.ShoppingList.touched_covered_singleton
+#print axioms Formal.ShoppingList.getD_setD
+#print axioms Formal.ShoppingList.netSumRaw_setD
+#print axioms Formal.ShoppingList.work_zero
+#print axioms Formal.ShoppingList.work_mono
+#print axioms Formal.ShoppingList.expand_eq_work
+#print axioms Formal.ShoppingList.shoppingList_eq_work
+#print axioms Formal.ShoppingList.shoppingList_raw_le_naive
+#print axioms Formal.ShoppingList.shoppingList_raw_antitone_owned
+#print axioms Formal.ShoppingList.shoppingList_raw_mono_qty
+#print axioms Formal.ShoppingList.shoppingList_raw_no_holdings
+#print axioms Formal.ShoppingList.shoppingList_covered_singleton
+#print axioms Formal.ShoppingList.fullyCovered_covered_singleton
 -- MonsterDropSelection (expected-kills lex-argmin monster-drop selection)
 #print axioms Formal.MonsterDropSelection.select_some_iff_nonempty
 #print axioms Formal.MonsterDropSelection.select_mem
@@ -821,3 +828,12 @@ open Formal.WeightedRemaining in
 #print axioms Extracted.Bridges.npc_buy_apply_delta
 #print axioms Extracted.Bridges.npc_buy_apply_bridge
 #print axioms Extracted.Bridges.npc_buy_is_applicable_divergence_outside_wf
+#print axioms Extracted.Bridges.priority_band_bridge
+#print axioms Extracted.Bridges.priority_band_below_survival
+#print axioms Extracted.Bridges.shopping_expand_bridge
+#print axioms Extracted.Bridges.shopping_list_bridge
+#print axioms Extracted.Bridges.shopping_fully_covered_bridge
+#print axioms Extracted.Bridges.shopping_raw_node_bridge
+#print axioms Extracted.Bridges.shopping_covered_short_circuit_bridge
+#print axioms Extracted.Bridges.arbiter_select_bridge
+#print axioms Extracted.Bridges.select_pure_guard_wins_extracted

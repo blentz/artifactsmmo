@@ -752,12 +752,12 @@ ARBITER_SELECT_MUTATIONS = [
      "            if not guard_precedes:\n"
      "                plan = try_plan(committed_cand.goal)\n"
      "                tried_repr = committed_repr\n"
-     "                if plan:\n"
+     "                if len(plan) > 0:\n"
      "                    return committed_cand.goal, plan, committed_repr",
      "            if True:\n"
      "                plan = try_plan(committed_cand.goal)\n"
      "                tried_repr = committed_repr\n"
-     "                if plan:\n"
+     "                if len(plan) > 0:\n"
      "                    return committed_cand.goal, plan, committed_repr"),
     # sticky always wins: skip the walk entirely if committed is found. Even
     # when committed is not plannable, the function returns None instead of
@@ -766,7 +766,7 @@ ARBITER_SELECT_MUTATIONS = [
      "            if not guard_precedes:\n"
      "                plan = try_plan(committed_cand.goal)\n"
      "                tried_repr = committed_repr\n"
-     "                if plan:\n"
+     "                if len(plan) > 0:\n"
      "                    return committed_cand.goal, plan, committed_repr",
      "            plan = try_plan(committed_cand.goal)\n"
      "            return committed_cand.goal, plan, committed_repr"),
@@ -779,8 +779,8 @@ ARBITER_SELECT_MUTATIONS = [
     # walk's plannable check inverted: returns first NON-plannable goal,
     # corrupting the band-order first-plannable contract.
     ("arbiter_select: walk plannable check inverted (if plan -> if not plan)",
-     "        plan = try_plan(cand.goal)\n        if plan:\n",
-     "        plan = try_plan(cand.goal)\n        if not plan:\n"),
+     "        plan = try_plan(cand.goal)\n        if len(plan) > 0:\n",
+     "        plan = try_plan(cand.goal)\n        if len(plan) == 0:\n"),
     # drop the is_means commitment guard: a guard win wrongly sets new_committed
     # to the guard's repr (commitment should clear on guard wins).
     ("arbiter_select: commit on guard win (drop is_means guard)",
@@ -1292,7 +1292,7 @@ SHOPPING_LIST_MUTATIONS = [
     # Drop the holdings credit: `used = 0` so the bank is never credited; the net
     # becomes the full naive requirement and any owned>0 case diverges.
     ("shopping_list: drop holdings credit (used = 0)",
-     "    used = min(have, qty)",
+     "    used = min(held, qty)",
      "    used = 0"),
     # Wrong-sign deficit: `qty + used` instead of `qty - used` over-counts work.
     ("shopping_list: deficit qty - used -> qty + used",
@@ -1305,14 +1305,14 @@ SHOPPING_LIST_MUTATIONS = [
      "    if deficit <= 0:\n"
      "        # Fully covered by holdings: SHORT-CIRCUIT — do not expand the subtree.\n"
      "        # The banked copies are withdrawn, so no sub-material work is needed.\n"
-     "        return",
+     "        return (owned, net)",
      "    if False:\n"
-     "        return"),
+     "        return (owned, net)"),
     # Ignore the credit in the recursion: expand at `per_unit * qty` instead of
     # `per_unit * deficit`, so partial-bank cases over-count the sub-material work.
     ("shopping_list: recurse on qty not deficit (ignore credit downstream)",
-     "        _expand(material, per_unit * deficit, recipes, owned, net)",
-     "        _expand(material, per_unit * qty, recipes, owned, net)"),
+     "        state = _expand(fuel - 1, material, per_unit * deficit, recipes, state)",
+     "        state = _expand(fuel - 1, material, per_unit * qty, recipes, state)"),
 ]
 
 

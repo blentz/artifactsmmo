@@ -44,7 +44,11 @@ import Formal.NpcBuyInventory
 import Formal.Extracted.CombatPicker
 import Formal.Extracted.NearestTile
 import Formal.Extracted.NpcBuyCore
+import Formal.Extracted.PriorityBand
+import Formal.Extracted.ShoppingList
+import Formal.Extracted.ArbiterSelect
 import Formal.Extracted.Bridges
+import Formal.Extracted.Bridges2
 import Formal.InventoryChainSafe
 import Formal.Contracts
 import Formal.ActionCostNonneg

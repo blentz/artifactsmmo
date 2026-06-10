@@ -1,17 +1,23 @@
 """The live `shopping_list` (Python) must agree with
-`Formal.ShoppingList.rawReq` (Lean) on the TOTAL raw gather work the bank-aware
-net list implies, over random TREE recipes with random holdings.
+`Formal.ShoppingList.shoppingList` (Lean) on the TOTAL raw gather work the
+bank-aware net list implies AND on the net's key set, over random DAG recipes
+with random holdings.
 
-Faithfulness: the Lean `rawReq` credits each item's holdings at its node and
-threads `owned` to siblings; the Python `_expand` consumes a shared mutable
-`owned` depth-first. The two coincide exactly when every item is credited at most
-once — i.e. on TREE recipes where each non-root item is the sub-material of a
-single parent (no shared sub-materials, no cycles). The generator below produces
-exactly such trees (strictly increasing child indices, each child claimed by one
-parent), so the comparison drives the SAME function on both sides.
+Faithfulness (P2c): BOTH sides thread (and consume) the `owned` dict
+depth-first — the Lean hand model was aligned to the Python consume semantics
+in extraction P2c, and `Extracted.Bridges.shopping_list_bridge` proves the
+mechanically extracted image equal to it universally. The pre-P2c hand model
+credited a CONSTANT `owned` function per node instead; that model agreed with
+Python on TREE recipes only, and THIS suite's generator then only built trees
+(each child claimed by a single parent), which MASKED the divergence: on a
+DAG-shaped recipe (one raw material under two parents — the shape real gear
+recipes have) the constant model double-credited shared stock where Python
+consumes it. The generator now builds DAGs (shared sub-materials across
+branches), so any constant-credit regression diverges here.
 
-The compared quantity is the total raw work = sum of the live `shopping_list`
-net over RAW-LEAF items (items with no recipe), which equals `rawReq` for trees.
+The compared quantities are the total raw work (sum of the live
+`shopping_list` net over RAW-LEAF items, = Lean `netSumRaw`) and the sorted
+net keys.
 """
 import random
 
@@ -21,31 +27,24 @@ from hypothesis import strategies as st
 from artifactsmmo_cli.ai.shopping_list import shopping_list
 from formal.diff.oracle_client import run_oracle
 
-# Item universe: 0..N-1. Index i may only have sub-materials j > i (acyclic),
-# and each j is the sub of at most one parent (tree).
+# Item universe: 0..N-1. Index i may only have sub-materials j > i (acyclic).
 _N = 6
-_FUEL = 12  # > tree depth
 
 
-def _make_tree(seed: int) -> dict[int, dict[int, int]]:
-    """Build a random tree recipe over items 0..N-1: each child claimed by one
-    parent, children strictly greater than parent (acyclic). Some items are
-    raw (no recipe)."""
+def _make_dag(seed: int) -> dict[int, dict[int, int]]:
+    """Build a random DAG recipe over items 0..N-1: children strictly greater
+    than the parent (acyclic), and a child may be claimed by MULTIPLE parents
+    (shared sub-materials — the consume-semantics discriminator). Some items
+    are raw (no recipe)."""
     rng = random.Random(seed)
     recipes: dict[int, dict[int, int]] = {}
-    claimed: set[int] = set()
     for item in range(_N):
-        # Candidate children: greater indices not yet claimed.
-        free = [j for j in range(item + 1, _N) if j not in claimed]
-        rng.shuffle(free)
-        k = rng.randint(0, min(2, len(free)))  # 0..2 sub-materials
+        pool = list(range(item + 1, _N))
+        rng.shuffle(pool)
+        k = rng.randint(0, min(2, len(pool)))  # 0..2 sub-materials
         if k == 0:
             continue  # raw item
-        recipe: dict[int, int] = {}
-        for j in free[:k]:
-            recipe[j] = rng.randint(1, 4)  # per-unit qty
-            claimed.add(j)
-        recipes[item] = recipe
+        recipes[item] = {j: rng.randint(1, 4) for j in pool[:k]}
     return recipes
 
 
@@ -68,7 +67,7 @@ def _oracle_args(recipes: dict, owned: dict, item: int, qty: int) -> list[int]:
     for code, q in owned.items():
         owned_pairs.extend([code, q])
         no += 1
-    return [n, *triples, no, *owned_pairs, item, qty, _FUEL]
+    return [n, *triples, no, *owned_pairs, item, qty]
 
 
 @settings(max_examples=300, deadline=None)
@@ -78,7 +77,7 @@ def _oracle_args(recipes: dict, owned: dict, item: int, qty: int) -> list[int]:
     owned_seed=st.integers(min_value=0, max_value=10_000),
 )
 def test_raw_work_matches_lean(seed, qty, owned_seed):
-    recipes = _make_tree(seed)
+    recipes = _make_dag(seed)
     rng = random.Random(owned_seed)
     owned = {i: rng.randint(0, 12) for i in range(_N) if rng.random() < 0.6}
     item = 0  # root
@@ -95,16 +94,60 @@ def test_raw_work_matches_lean(seed, qty, owned_seed):
 )
 def test_net_keys_match_lean(seed, qty, owned_seed):
     """The SET of items the net dict records (its keys) must match the Lean
-    `touched` model. This pins the SHORT-CIRCUIT: a fully-covered intermediate's
+    net keys. This pins the SHORT-CIRCUIT: a fully-covered intermediate's
     sub-materials must NOT appear (they are withdrawn, the subtree is pruned).
     The raw-work metric alone can't see this (a covered subtree adds 0 work)."""
-    recipes = _make_tree(seed)
+    recipes = _make_dag(seed)
     rng = random.Random(owned_seed)
     owned = {i: rng.randint(0, 12) for i in range(_N) if rng.random() < 0.6}
     net = shopping_list(0, qty, recipes, owned)
     py_keys = sorted(net.keys())
     lean = run_oracle("shopping_list", [_oracle_args(recipes, owned, 0, qty)])[0]
     assert lean["keys"] == py_keys, (recipes, owned, qty, py_keys, lean["keys"])
+
+
+def test_dag_double_credit_witness():
+    """THE P2a model-fidelity witness (documented in Extracted/Bridges.lean,
+    closed in P2c): two gear parts (1 and 2) each need 2 of the same ore (3);
+    2 banked ore cover only ONE branch. Consume semantics (Python = spec =
+    new Lean model): the first branch consumes the 2 ore, the second gathers
+    2 -> raw work 2. The pre-P2c constant-credit hand model credited the same
+    2 ore under BOTH parents -> raw work 0 (double credit). Tree-only
+    generation masked this; this pin keeps the divergence closed."""
+    recipes = {0: {1: 1, 2: 1}, 1: {3: 2}, 2: {3: 2}}
+    owned = {3: 2}
+    py = _raw_leaf_work(0, 1, recipes, owned)
+    lean = run_oracle("shopping_list", [_oracle_args(recipes, owned, 0, 1)])[0]
+    assert py == 2  # consume: one branch covered, the other gathers 2
+    assert lean["raw_work"] == 2
+    assert lean["keys"] == sorted(shopping_list(0, 1, recipes, owned).keys())
+
+
+def test_dag_diamond_one_path_covered():
+    """Diamond DAG: item 0 -> {a=1, b=2}, a -> {ore}, b -> {ore}, with owned
+    ore covering exactly one path. Consume: raw work 1 (the constant-credit
+    model said 0). All four items stay in the net closure (no spurious
+    short-circuit of the uncovered branch)."""
+    recipes = {0: {1: 1, 2: 1}, 1: {3: 1}, 2: {3: 1}}
+    owned = {3: 1}
+    py = _raw_leaf_work(0, 1, recipes, owned)
+    lean = run_oracle("shopping_list", [_oracle_args(recipes, owned, 0, 1)])[0]
+    assert py == 1
+    assert lean["raw_work"] == 1
+    assert lean["keys"] == [0, 1, 2, 3]
+
+
+def test_partial_bank_partial_credit():
+    """Mutation separator (mirrors the retired Lean pin shopping_pin_partial_bank):
+    2 banked bars + 20 banked ore leave exactly 20 ore of raw work. Kills
+    `used = 0` (gives 60), `qty + used` (over-counts) and `per_unit * qty`
+    (gives 40) deterministically."""
+    recipes = {0: {1: 6}, 1: {2: 10}}  # dagger <- bar x6 <- ore x10
+    owned = {1: 2, 2: 20}
+    py = _raw_leaf_work(0, 1, recipes, owned)
+    lean = run_oracle("shopping_list", [_oracle_args(recipes, owned, 0, 1)])[0]
+    assert py == 20
+    assert lean["raw_work"] == 20
 
 
 def test_short_circuit_prunes_covered_subtree():
