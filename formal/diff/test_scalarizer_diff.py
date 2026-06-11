@@ -1,4 +1,4 @@
-"""Differential test: the real Python `scalar_yield_pure` / `coins_spent_from_delta`
+"""Differential test: the real Python `scalar_yield_exact` / `coins_spent_from_delta`
 must agree with the proved Lean `scalarYield` / `coinsSpent`.
 
 The Lean model works in EXACT RATIONAL arithmetic (`Rat`, no scaling), because the
@@ -11,23 +11,29 @@ total_coins_spent` is a fractional ratio. So the scalar the bot actually compare
            + gold / gold_per_xp
            + tasks_coins * coin_value / gold_per_xp
 
-over the RATIONALS. We exercise that real fractional domain directly: every numeric
-input is an exact `fractions.Fraction` (denominators 1..6, so genuinely non-integer
-values appear), and we call `scalar_yield_pure` with `Fraction` weights
-(char_scalar = 1, baseline = 1/5, relevant = 2, gold_per_xp = 100) so EVERY operation
-inside the core stays exact (a Fraction `*`/`/` is exact; there is no float coercion).
-The Lean oracle reconstructs each input as an exact `Rat` from a (numerator,
-denominator) pair and emits the scalar's exact numerator/denominator, which we compare
-to the Python `Fraction` result EXACTLY. No `<1e-3` slack, no integer-only rejection.
+over the RATIONALS.
 
-Production still passes the float constants `0.2` etc. to the same generic core; that
-behavior is unchanged — only this differential test substitutes exact `Fraction`
-weights to verify the rational identity bit-for-bit.
+EXACT BRIDGE (P3c): the decision arithmetic now lives in `scalar_yield_exact`,
+a Fraction-only core mechanically extracted to Lean and bridged against the
+hand model (`Extracted.Bridges.scalar_yield_bridge`). This suite invokes the
+exact core directly with exact `fractions.Fraction` inputs (denominators 1..6,
+so genuinely non-integer values appear) and exact rational weights
+(char_scalar = 1, baseline = 1/5, relevant = 2, gold_per_xp = 100), and
+compares to the Lean Rat oracle's numerator/denominator EXACTLY. No `<1e-3`
+slack, no integer-only rejection, no float coercion anywhere in the core.
+
+THE FLOAT BOUNDARY: production (`scalarizer.scalar_yield`) calls the public
+`scalar_yield_pure` wrapper with float constants 0.2/2.0/100.0/1.0. P3c made
+that wrapper convert EVERY input to Fraction exactly (`Fraction(float)` is the
+exact binary expansion), run the SAME exact core, and round ONCE — `float()` —
+at the end. That conversion is the trusted seam OUTSIDE the proved core
+(documented in `Extracted/Bridges5.lean`); `test_float_boundary_wrapper`
+samples it: the wrapper must equal `float(scalar_yield_exact(lifted inputs))`.
 
 Sign/range reality: char_xp/skill_xp deltas ≥ 0 and tasks_coins ≥ 0 (XP and drop
 counts never go negative in this game), gold ranges over NEGATIVES too (a cycle can
 spend gold), coin_value ≥ 0 (a ratio of non-negatives; DEFAULT 5 ≥ 0). Zeros and ties
-are included. We also assert the proved PROPERTIES hold on the fractional Python side
+are included. We also assert the proved PROPERTIES hold on the exact Python side
 (monotonicity bumps never decrease the scalar, relevant ≥ baseline) and the
 coin-inversion identity (over Int counts).
 """
@@ -35,11 +41,15 @@ from fractions import Fraction
 
 from hypothesis import given, settings, strategies as st
 
-from artifactsmmo_cli.ai.learning.scalar_core import coins_spent_from_delta, scalar_yield_pure
+from artifactsmmo_cli.ai.learning.scalar_core import (
+    coins_spent_from_delta,
+    scalar_yield_exact,
+    scalar_yield_pure,
+)
 from formal.diff.oracle_client import run_oracle
 
-# Production constants as EXACT rationals (the core is generic in its weights;
-# production passes the float forms 0.2/2.0/100.0/1.0 — same values).
+# Production constants as EXACT rationals (production passes the float forms
+# 0.2/2.0/100.0/1.0 through the wrapper — same values, exactly lifted).
 BASELINE_W = Fraction(1, 5)
 RELEVANT_W = Fraction(2)
 GOLD_PER_XP = Fraction(100)
@@ -48,13 +58,12 @@ DEFAULT_COIN_VALUE = Fraction(5)
 
 
 def _py_scalar(char_xp, level, skill_terms, active_set, gold, tasks_coins, coin_value):
-    """Exact Fraction value of `scalar_yield_pure` (no float coercion anywhere)."""
+    """Exact Fraction value of `scalar_yield_exact` (no float anywhere)."""
     skill_xp = {name: Fraction(xp) for name, xp, _active in skill_terms}
-    val = scalar_yield_pure(
-        Fraction(char_xp), level, skill_xp, active_set,
+    val = scalar_yield_exact(
+        Fraction(char_xp), level, skill_xp, frozenset(active_set),
         Fraction(gold), Fraction(tasks_coins), Fraction(coin_value),
-        baseline_w=BASELINE_W, relevant_w=RELEVANT_W,
-        gold_per_xp=GOLD_PER_XP, char_scalar=CHAR_SCALAR,
+        BASELINE_W, RELEVANT_W, GOLD_PER_XP, CHAR_SCALAR,
     )
     assert isinstance(val, Fraction), val  # stayed exact, no float crept in
     return val
@@ -120,6 +129,31 @@ def test_python_matches_lean(char_xp, level, gold, tasks_coins, coin_value, skil
     py = _py_scalar(char_xp, level, skill_terms, active_set, gold, tasks_coins, coin_value)
     lean = _lean_scalar(char_xp, level, gold, tasks_coins, coin_value, skill_terms, active_set)
     assert py == lean
+
+
+@settings(max_examples=100)
+@given(
+    char_xp=_frac_charxp,
+    level=st.integers(min_value=0, max_value=50),
+    gold=_frac_gold,
+    tasks_coins=_frac_tcoins,
+    coin_value=_frac_cv,
+    skill_terms=_skill_terms,
+)
+def test_float_boundary_wrapper(char_xp, level, gold, tasks_coins, coin_value, skill_terms):
+    """SAMPLE the trusted float seam: the public wrapper (float API the
+    production scalarizer calls) equals `float(exact core)` on the same
+    lifted inputs — one rounding at the boundary, nothing else."""
+    active_set = {name for name, _xp, active in skill_terms if active}
+    exact = _py_scalar(char_xp, level, skill_terms, active_set, gold, tasks_coins, coin_value)
+    wrapper = scalar_yield_pure(
+        char_xp, level,
+        {name: xp for name, xp, _active in skill_terms},
+        active_set, gold, tasks_coins, coin_value,
+        baseline_w=BASELINE_W, relevant_w=RELEVANT_W,
+        gold_per_xp=GOLD_PER_XP, char_scalar=CHAR_SCALAR,
+    )
+    assert wrapper == float(exact)
 
 
 @settings(max_examples=200)

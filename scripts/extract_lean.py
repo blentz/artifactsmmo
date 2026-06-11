@@ -1,4 +1,4 @@
-"""Mechanical Python -> Lean 4 extractor (v3) for the pure decision cores.
+"""Mechanical Python -> Lean 4 extractor (v6) for the pure decision cores.
 
 Per docs/PLAN_mechanical_extraction.md: the Lean models gating the planner are
 MECHANICALLY EXTRACTED from the Python pure-core modules, so the generated
@@ -7,7 +7,7 @@ gate (`--check` mode + formal/gate/check_extraction.sh). Hand-written bridge
 lemmas in formal/Formal/Extracted/Bridges.lean prove each extracted definition
 equal to the pre-existing hand model, transferring the hand theorems.
 
-V3 SUBSET (anything else is REJECTED loudly, naming the construct + line):
+V6 SUBSET (anything else is REJECTED loudly, naming the construct + line):
 
   types       int -> Int, bool -> Bool, str -> String,
               fractions.Fraction -> Rat (exact rationals on both sides),
@@ -23,16 +23,51 @@ V3 SUBSET (anything else is REJECTED loudly, naming the construct + line):
               (parameterised by the opaque types its fields mention;
               field reads -> projections; construction is out of subset
               until a core needs it).
-  exprs       int/bool literals, None, {} (only where the dict type is
-              pinned: an annotated assignment or a dict.get default),
-              + (Int or Rat), - * (Int), // -> Int.fdiv, % -> Int.fmod,
-              comparisons (chained ok) -> decide (..), and/or/not ->
-              && || !, max/min(a, b) (Int or Rat), abs -> _intAbs,
+  exprs       int/bool literals, str literals (printable ASCII without
+              quote/backslash), None, {} (only where the dict type is
+              pinned: an annotated assignment, a dict.get default, or a
+              dict-returning `return {}`),
+              + (Int, Rat, or List concatenation -> ++), - (Int),
+              * (Int or Rat), / (Rat only -> Rat division), // -> Int.fdiv,
+              % -> Int.fmod
+              (CAVEAT: Lean's Int.fdiv/fmod AND Rat division are total
+              with divisor 0 -> 0 where Python raises ZeroDivisionError;
+              cores must keep divisors nonzero by construction, e.g.
+              recipe quantities >= 1, gold_per_xp = 100),
+              non-empty list literals [a, b, ..] of a uniform element
+              type (a starred segment `[*xs, v]` splices -> xs ++ [v],
+              the append-copy idiom), xs[i] on a list[int] with an int
+              index -> _nthInt
+              (CAVEAT: total — out-of-range reads 0 and a negative index
+              clamps to 0 where Python raises/wraps; extracted cores keep
+              indices in range by construction),
+              sorted(xs) on list[int] -> _sortInt (insertion sort;
+              sorting an int multiset is order-independent, so it agrees
+              with Python's stable Timsort on every input),
+              list(reversed(xs)) -> List.reverse,
+              Fraction(a) / Fraction(a, b) over ints -> mkRat a 1 /
+              mkRat a b (both normalize identically; CAVEAT: mkRat a 0
+              = 0 where Python Fraction(a, 0) raises — denominators are
+              non-zero literals by construction),
+              `x in xs` where xs is a list/frozenset of str or int ->
+              List.contains (membership is order-independent, so
+              set-typed operands are safe),
+              comparisons (chained ok) -> decide (..), and/or/not
+              -> && || !, max/min(a, b) (Int or Rat) and n-ary
+              max/min(a, b, c, ..) (Int; right-nested two-arg, value-equal
+              to Python's first-maximal pick), abs -> _intAbs,
               len -> Int.ofNat (List.length ..), d.get(k, default) ->
               _dictGetD, dict(d) -> identity copy, tuple construction,
               constant tuple indexing -> Prod projections, calls to
-              Callable parameters or to PREVIOUSLY-extracted module
-              functions, lambda (only as a min/max key),
+              Callable parameters, to PREVIOUSLY-extracted functions of
+              the same module, or to registry-declared `imports` from
+              EARLIER-registered modules (emitted fully qualified, e.g.
+              `Extracted.RecipeClosure._raw_units`, with the matching
+              `import Formal.Extracted.<Core>` header lines; a fueled
+              callee's Int fuel is bridged with `Int.toNat`),
+              registry-declared module-level int CONSTANTS (emitted as
+              `def NAME : Int := ..` and readable from every function),
+              lambda (only as a min/max key),
               `A if X is not None else B`, `A if c else None` ->
               `if c then some A else none`, a set comprehension
               `{elt for k, v in d.items() if cond}` -> List.map over
@@ -45,14 +80,17 @@ V3 SUBSET (anything else is REJECTED loudly, naming the construct + line):
               projection, `==`/`!=` between `Optional[T]` and `T`
               (T = int/str) -> `decide (opt = some plain)` (Python:
               `None == t` is False, `some s == t` is `s == t`).
-  stmts       assignment (let), annotated assignment, dict-subscript
-              assignment -> _dictSet, early return, if/elif with
+  stmts       assignment (let), annotated assignment (a tuple literal
+              value is coerced componentwise into the declared tuple
+              type, so `([], None, None)` pins empty-list/None slots),
+              dict-subscript assignment -> _dictSet, early return, if/elif with
               always-returning bodies, plain fall-through `if` ->
               `(if c then <body+rest> else <rest>)` (rest duplicated),
               for-with-single-accumulator -> List.foldl (iterable: a
               list value or d.items()), FIRST-MATCH for loops (a body
               whose paths only `continue` or `return`, no cross-
-              iteration state) -> _findSome with `return e` as `some e`,
+              iteration state; target a name OR a tuple of names) ->
+              _findSome with `return e` as `some e`,
               `continue` inside loops.
   recursion   FUEL-BOUNDED self-recursion only: the function's first
               parameter is `fuel: int`, the body opens with
@@ -70,7 +108,11 @@ V3 SUBSET (anything else is REJECTED loudly, naming the construct + line):
               literals or annotations, str methods (any attribute except
               dict .get, dict .items and struct fields), recursion
               without the fuel discipline, mutual recursion, break,
-              return inside an accumulator loop, *args/**kwargs/defaults,
+              return inside an accumulator loop, *args/**kwargs,
+              parameter defaults OTHER than int literals / registered int
+              constants (allowed defaults are IGNORED: default application
+              happens at Python call sites outside the extraction boundary;
+              the Lean def takes every parameter explicitly),
               decorators (except @dataclass on registered structures),
               missing type annotations, iteration over a set-typed value
               (only min/max with an injective total key may consume one),
@@ -105,6 +147,9 @@ Option binding stays visible in the untaken branch:
                                       (match Y with
                                        | none => <body>
                                        | some Y_k => <rest, both unwrapped>))
+  if X is None:                =>  (match X with
+      <always-exits body>           | none => <body>
+                                    | some X_k => <rest, X unwrapped>)
   if X is not None and COND:   =>  (match X with
       <body>                        | some X_k => (if COND[unwrapped]
                                                    then <body + rest>
@@ -202,7 +247,10 @@ class ModuleSpec:
 
     `opaque_types` are Python class names mapped to implicit `{X : Type}`
     binders (pure payload). `structures` are frozen-dataclass names emitted
-    as Lean `structure`s (in declaration order, before the functions)."""
+    as Lean `structure`s (in declaration order, before the functions).
+    `constants` are module-level int constants emitted as `def NAME : Int`.
+    `imports` are function names of EARLIER-registered modules this module's
+    cores may call (emitted fully qualified, with matching import lines)."""
 
     source: str
     output: str
@@ -210,6 +258,8 @@ class ModuleSpec:
     functions: tuple[str, ...]
     opaque_types: tuple[str, ...] = ()
     structures: tuple[str, ...] = ()
+    constants: tuple[str, ...] = ()
+    imports: tuple[str, ...] = ()
 
 
 @dataclass
@@ -223,9 +273,13 @@ class TypeEnv:
 
 
 # ---------------------------------------------------------------------------
-# Registry (P1: the Tier-1 trio; P2a: priority_band + shopping_list).
-# `functions` order is the emission order: a function may only call functions
-# emitted BEFORE it (plus fuel-bounded self-recursion).
+# Registry (P1: the Tier-1 trio; P2a: priority_band + shopping_list; P2b:
+# arbiter_select; P3a: the recipe family; P3b: inventory_caps; P3c: the
+# exact-Fraction learning cores). `functions`
+# order is the emission
+# order: a function may only call functions emitted BEFORE it (plus
+# fuel-bounded self-recursion); `imports` may only name functions of modules
+# registered BEFORE this one.
 # ---------------------------------------------------------------------------
 MODULES: tuple[ModuleSpec, ...] = (
     ModuleSpec(
@@ -266,6 +320,59 @@ MODULES: tuple[ModuleSpec, ...] = (
         opaque_types=("Goal", "Action"),
         structures=("Candidate",),
     ),
+    ModuleSpec(
+        source="src/artifactsmmo_cli/ai/recipe_closure.py",
+        output=f"{GENERATED_DIR}/RecipeClosure.lean",
+        core_name="RecipeClosure",
+        functions=("_closure_visited", "_raw_units", "_closure_demand",
+                   "recipe_closure_pure"),
+    ),
+    ModuleSpec(
+        source="src/artifactsmmo_cli/ai/task_batch.py",
+        output=f"{GENERATED_DIR}/TaskBatch.lean",
+        core_name="TaskBatch",
+        functions=("task_batch_size_pure",),
+        constants=("BATCH_CAP", "_MIN_FREE_SLOTS"),
+        imports=("_raw_units", "_closure_visited"),
+    ),
+    ModuleSpec(
+        source="src/artifactsmmo_cli/ai/task_reservation.py",
+        output=f"{GENERATED_DIR}/TaskReservation.lean",
+        core_name="TaskReservation",
+        functions=("task_reserved_demand_pure", "consumes_reserved_pure"),
+        imports=("_closure_demand",),
+    ),
+    ModuleSpec(
+        source="src/artifactsmmo_cli/ai/inventory_caps.py",
+        output=f"{GENERATED_DIR}/InventoryCaps.lean",
+        core_name="InventoryCaps",
+        functions=("overstock_excess", "_is_dominated_pure",
+                   "_task_chain_demand_pure",
+                   "useful_quantity_cap_excl_equipped_pure",
+                   "useful_quantity_cap_pure"),
+        constants=("DISCARD_WATERMARK_NUM", "DISCARD_WATERMARK_DEN",
+                   "EQUIPPABLE_KEEP", "CONSUMABLE_KEEP"),
+    ),
+    ModuleSpec(
+        source="src/artifactsmmo_cli/ai/learning/cycles_for_progress_core.py",
+        output=f"{GENERATED_DIR}/CyclesForProgress.lean",
+        core_name="CyclesForProgress",
+        functions=("_strict_step", "_satisfy_step", "_median_exact",
+                   "cycles_for_progress_exact"),
+        structures=("CycleRow",),
+    ),
+    ModuleSpec(
+        source="src/artifactsmmo_cli/ai/learning/scalar_core.py",
+        output=f"{GENERATED_DIR}/ScalarCore.lean",
+        core_name="ScalarCore",
+        functions=("scalar_yield_exact", "coins_spent_from_delta"),
+    ),
+    ModuleSpec(
+        source="src/artifactsmmo_cli/ai/min_gathers.py",
+        output=f"{GENERATED_DIR}/MinGathers.lean",
+        core_name="MinGathers",
+        functions=("_min_gathers", "min_gathers"),
+    ),
 )
 
 
@@ -295,6 +402,11 @@ class Ctx:
     # excluding any fuel, return type, fueled?). Shared (read-only) so a later
     # function can call an earlier one.
     module_sigs: dict[str, tuple[tuple[LType, ...], LType, bool]] = field(default_factory=dict)
+    # Signatures of registry-declared imports from EARLIER-registered modules:
+    # name -> (core name, param types excluding any fuel, return type,
+    # fueled?). Shared (read-only); calls render fully qualified.
+    import_sigs: dict[str, tuple[str, tuple[LType, ...], LType, bool]] = field(
+        default_factory=dict)
     # Comprehension binders: Python name -> (rendered Lean code, type).
     aliases: dict[str, tuple[str, LType]] = field(default_factory=dict)
     # Module type environment (opaque type params + structures). Shared.
@@ -313,6 +425,7 @@ def branch(ctx: Ctx, loop_acc: str | None = None,
         fresh=ctx.fresh,
         fueled=ctx.fueled, rec_params=ctx.rec_params,
         module_sigs=ctx.module_sigs,
+        import_sigs=ctx.import_sigs,
         aliases=dict(ctx.aliases),
         tenv=ctx.tenv,
     )
@@ -456,7 +569,8 @@ def _flatten_union(node: ast.expr) -> list[ast.expr]:
 # Emitted helper definitions (fixed bodies, fixed ordering).
 # ---------------------------------------------------------------------------
 HELPER_ORDER = ("_intAbs", "_dictGetD", "_dictSet", "_find", "_findIdxFrom",
-                "_findIdx", "_findSome", "_lexLt3", "_minByKey3")
+                "_findIdx", "_findSome", "_lexLt3", "_minByKey3",
+                "_sortIntInsert", "_sortInt", "_nthIntNat", "_nthInt")
 
 HELPER_DEFS = {
     "_intAbs": (
@@ -532,6 +646,33 @@ HELPER_DEFS = {
         "  | h :: t =>\n"
         "    some (List.foldl (fun best x => if _lexLt3 (key x) (key best) then x else best) h t)"
     ),
+    "_sortIntInsert": (
+        "/-- Insert into an ascending-sorted list — the inner step of `_sortInt`. -/\n"
+        "def _sortIntInsert (x : Int) : List Int → List Int\n"
+        "  | [] => [x]\n"
+        "  | y :: ys => if x ≤ y then x :: y :: ys else y :: _sortIntInsert x ys"
+    ),
+    "_sortInt": (
+        "/-- Python `sorted` over ints (insertion sort). Sorting a multiset of ints is\n"
+        "order-independent, so this agrees with Python's stable Timsort on every input. -/\n"
+        "def _sortInt : List Int → List Int\n"
+        "  | [] => []\n"
+        "  | x :: xs => _sortIntInsert x (_sortInt xs)"
+    ),
+    "_nthIntNat": (
+        "/-- Element at a Nat index, default 0 past the end (the recursion behind\n"
+        "`_nthInt`). -/\n"
+        "def _nthIntNat : List Int → Nat → Int\n"
+        "  | [], _ => 0\n"
+        "  | x :: _, 0 => x\n"
+        "  | _ :: xs, n + 1 => _nthIntNat xs n"
+    ),
+    "_nthInt": (
+        "/-- Python `xs[i]` on a list of ints. TOTAL: an out-of-range index reads 0 and\n"
+        "a negative index clamps to 0 where Python raises/wraps — extracted cores keep\n"
+        "indices in range by construction. -/\n"
+        "def _nthInt (xs : List Int) (i : Int) : Int := _nthIntNat xs i.toNat"
+    ),
 }
 
 
@@ -553,6 +694,11 @@ def emit_expr(ctx: Ctx, e: ast.expr) -> tuple[str, LType]:
             return (f"({e.value})" if e.value < 0 else str(e.value)), T_INT
         if isinstance(e.value, float):
             reject(src, e, "float literal")
+        if isinstance(e.value, str):
+            if any(c in '"\\' or not 32 <= ord(c) < 127 for c in e.value):
+                reject(src, e, "string literal outside printable ASCII "
+                               "(or containing a quote/backslash)")
+            return f'"{e.value}"', T_STRING
         if e.value is None:
             reject(src, e, "None outside a return/annotated-assignment position")
         reject(src, e, f"literal {type(e.value).__name__}")
@@ -572,6 +718,40 @@ def emit_expr(ctx: Ctx, e: ast.expr) -> tuple[str, LType]:
         elts = [emit_expr(ctx, x) for x in e.elts]
         code = "(" + ", ".join(p[0] for p in elts) + ")"
         return code, LType("Tuple", tuple(p[1] for p in elts))
+    if isinstance(e, ast.List):
+        # Non-empty list literal; `*xs` splices a list segment, so
+        # `[*xs, v]` is Python's append-copy idiom -> `(xs ++ [v])`.
+        if not e.elts:
+            reject(src, e, "empty list literal outside a pinned position "
+                           "(annotated assignment / return slot)")
+        parts_l: list[str] = []
+        pending: list[str] = []
+        elem_t: LType | None = None
+        for elt in e.elts:
+            if isinstance(elt, ast.Starred):
+                val, tv = emit_expr(ctx, elt.value)
+                if tv.kind != "List":
+                    reject(src, e, "starred non-list inside a list literal")
+                if elem_t is None:
+                    elem_t = tv.args[0]
+                elif tv.args[0] != elem_t:
+                    reject(src, e, "list literal with mixed element types")
+                if pending:
+                    parts_l.append("[" + ", ".join(pending) + "]")
+                    pending = []
+                parts_l.append(val)
+            else:
+                val, tv = emit_expr(ctx, elt)
+                if elem_t is None:
+                    elem_t = tv
+                elif tv != elem_t:
+                    reject(src, e, "list literal with mixed element types")
+                pending.append(val)
+        if pending:
+            parts_l.append("[" + ", ".join(pending) + "]")
+        assert elem_t is not None
+        code = parts_l[0] if len(parts_l) == 1 else "(" + " ++ ".join(parts_l) + ")"
+        return code, t_list(elem_t)
     if isinstance(e, ast.UnaryOp):
         if isinstance(e.op, ast.Not):
             a, t = emit_expr(ctx, e.operand)
@@ -589,6 +769,18 @@ def emit_expr(ctx: Ctx, e: ast.expr) -> tuple[str, LType]:
         b, tb = emit_expr(ctx, e.right)
         if isinstance(e.op, ast.Add) and ta == T_RAT and tb == T_RAT:
             return f"({a} + {b})", T_RAT
+        if isinstance(e.op, ast.Add) and ta.kind == "List" and tb == ta:
+            # Python list concatenation -> List append.
+            return f"({a} ++ {b})", ta
+        if isinstance(e.op, ast.Mult) and ta == T_RAT and tb == T_RAT:
+            return f"({a} * {b})", T_RAT
+        if isinstance(e.op, ast.Div):
+            # True division is Rat-only (CAVEAT: Lean's Rat division is total
+            # with divisor 0 -> 0 where Python raises ZeroDivisionError;
+            # divisors stay non-zero by construction).
+            if ta != T_RAT or tb != T_RAT:
+                reject(src, e, "true division on non-Fraction operands")
+            return f"({a} / {b})", T_RAT
         if ta != T_INT or tb != T_INT:
             reject(src, e, "arithmetic on non-int operands")
         if isinstance(e.op, ast.Add):
@@ -667,6 +859,15 @@ def emit_compare(ctx: Ctx, e: ast.Compare) -> tuple[str, LType]:
     for i, op in enumerate(e.ops):
         a, ta = emit_expr(ctx, operands[i])
         b, tb = emit_expr(ctx, operands[i + 1])
+        if isinstance(op, ast.In):
+            # Membership is order-independent, so set-typed (frozenset image)
+            # operands are safe here.
+            if tb.kind != "List" or tb.args[0] != ta or ta not in (T_STRING, T_INT):
+                reject(src, e, "`in` outside str/int membership in a list/set")
+            parts.append(f"(List.contains {b} {a})")
+            continue
+        if isinstance(op, ast.NotIn):
+            reject(src, e, "`not in` (use `x in xs` under `not`/`else`)")
         if isinstance(op, (ast.Eq, ast.NotEq)) and ta != tb:
             # Python `t == opt` where opt: Optional[T] — False on None,
             # plain equality on some. Lean: `decide (opt = some t)`.
@@ -711,6 +912,15 @@ def emit_subscript(ctx: Ctx, e: ast.Subscript) -> tuple[str, LType]:
         binder, t = base, ctx.vars[base]
     else:
         reject(src, e, f"subscript of unbound name {base!r}")
+    if t.kind == "List" and t.args[0] == T_INT:
+        # Python `xs[i]` on a list[int] — emitted total helper (out-of-range
+        # reads 0, negative clamps to 0; callers keep indices in range).
+        idx, ti = emit_expr(ctx, e.slice)
+        if ti != T_INT:
+            reject(src, e, "list index is not an int")
+        ctx.helpers.add("_nthIntNat")
+        ctx.helpers.add("_nthInt")
+        return f"(_nthInt {binder} {idx})", T_INT
     if t.kind != "Tuple":
         reject(src, e, f"subscript of non-tuple {base!r} ({t.kind}; dict reads use .get)")
     if not isinstance(e.slice, ast.Constant) or not isinstance(e.slice.value, int):
@@ -782,6 +992,48 @@ def emit_call(ctx: Ctx, e: ast.Call) -> tuple[str, LType]:
         if ta.kind != "Dict":
             reject(src, e, "dict(..) copy of a non-dict")
         return a, ta
+    if fname == "sorted":
+        # Sorting an int multiset is order-independent (so a set-typed
+        # argument would also be safe): the emitted insertion sort agrees
+        # with Python's stable Timsort on every input.
+        if len(e.args) != 1 or e.keywords:
+            reject(src, e, "sorted with unexpected arguments")
+        a, ta = emit_expr(ctx, e.args[0])
+        if ta != t_list(T_INT):
+            reject(src, e, "sorted over a non-list[int]")
+        ctx.helpers.add("_sortIntInsert")
+        ctx.helpers.add("_sortInt")
+        return f"(_sortInt {a})", ta
+    if fname == "list":
+        # `list(reversed(xs))` -> List.reverse (Python's reversed sequence,
+        # materialized). Anything else under `list(..)` is out of subset.
+        if len(e.args) == 1 and not e.keywords and isinstance(e.args[0], ast.Call) \
+                and isinstance(e.args[0].func, ast.Name) and e.args[0].func.id == "reversed":
+            inner = e.args[0]
+            if len(inner.args) != 1 or inner.keywords:
+                reject(src, e, "reversed with unexpected arguments")
+            if isinstance(inner.args[0], ast.Name) and inner.args[0].id in ctx.setlike:
+                reject(src, e, "reversed over a set-typed value (order-dependent)")
+            a, ta = emit_expr(ctx, inner.args[0])
+            if ta.kind != "List":
+                reject(src, e, "reversed over a non-sequence")
+            return f"(List.reverse {a})", ta
+        reject(src, e, "list(..) outside the `list(reversed(xs))` shape")
+    if fname == "Fraction":
+        # fractions.Fraction over ints -> mkRat (both normalize identically).
+        # CAVEAT: `mkRat a 0 = 0` where Python `Fraction(a, 0)` raises —
+        # denominators are non-zero by construction (literal 2 in the median).
+        if e.keywords or len(e.args) not in (1, 2):
+            reject(src, e, "Fraction(..) outside the 1/2-int-argument shapes")
+        rendered_args: list[str] = []
+        for arg_node in e.args:
+            arg_code, got = emit_expr(ctx, arg_node)
+            if got != T_INT:
+                reject(src, e, "Fraction(..) argument is not an int")
+            rendered_args.append(arg_code)
+        if len(rendered_args) == 1:
+            return f"(mkRat {rendered_args[0]} 1)", T_RAT
+        return f"(mkRat {rendered_args[0]} {rendered_args[1]})", T_RAT
     if fname in ctx.vars and ctx.vars[fname].kind == "Fn":
         ft = ctx.vars[fname]
         params, ret = ft.args[:-1], ft.args[-1]
@@ -796,6 +1048,8 @@ def emit_call(ctx: Ctx, e: ast.Call) -> tuple[str, LType]:
         return "(" + " ".join([fname, *rendered]) + ")", ret
     if fname in ctx.module_sigs:
         return emit_module_call(ctx, e, fname)
+    if fname in ctx.import_sigs:
+        return emit_import_call(ctx, e, fname)
     reject(src, e, f"call to {fname!r}")
 
 
@@ -832,6 +1086,34 @@ def emit_module_call(ctx: Ctx, e: ast.Call, fname: str) -> tuple[str, LType]:
         reject(src, e, f"keyword arguments in call to {fname!r}")
     args = list(e.args)
     rendered = [fname]
+    if fueled:
+        if len(args) != len(params) + 1:
+            reject(src, e, f"call arity mismatch for fueled {fname!r}")
+        fuel_code, fuel_t = emit_expr(ctx, args[0])
+        if fuel_t != T_INT:
+            reject(src, e, f"fuel argument to {fname!r} is not int")
+        rendered.append(f"(Int.toNat {fuel_code})")
+        args = args[1:]
+    elif len(args) != len(params):
+        reject(src, e, f"call arity mismatch for {fname!r}")
+    for arg_node, want in zip(args, params, strict=True):
+        arg_code, got = emit_expr(ctx, arg_node)
+        if got != want:
+            reject(src, e, f"argument type mismatch in call to {fname!r}")
+        rendered.append(arg_code)
+    return "(" + " ".join(rendered) + ")", ret
+
+
+def emit_import_call(ctx: Ctx, e: ast.Call, fname: str) -> tuple[str, LType]:
+    """A call to a registry-declared import from an EARLIER-registered module,
+    rendered fully qualified (`Extracted.<Core>.<fname>`). A fueled callee's
+    leading Int fuel is bridged with `Int.toNat`, like same-module calls."""
+    src = ctx.src
+    core, params, ret, fueled = ctx.import_sigs[fname]
+    if e.keywords:
+        reject(src, e, f"keyword arguments in call to {fname!r}")
+    args = list(e.args)
+    rendered = [f"Extracted.{core}.{fname}"]
     if fueled:
         if len(args) != len(params) + 1:
             reject(src, e, f"call arity mismatch for fueled {fname!r}")
@@ -1025,6 +1307,15 @@ def emit_min_max(ctx: Ctx, e: ast.Call, fname: str) -> tuple[str, LType]:
         if ta != tb or ta not in (T_INT, T_RAT):
             reject(src, e, f"{fname}(a, b) operands must both be int or both Fraction")
         return f"({fname} {a} {b})", ta
+    if len(e.args) >= 3 and not e.keywords:
+        parts_n = [emit_expr(ctx, arg) for arg in e.args]
+        if any(t != T_INT for _, t in parts_n):
+            reject(src, e, f"{fname}(a, b, ..) operands must all be int")
+        # Python n-ary min/max over ints == right-nested two-arg (value-equal).
+        code = parts_n[-1][0]
+        for part, _ in reversed(parts_n[:-1]):
+            code = f"({fname} {part} {code})"
+        return code, T_INT
     if len(e.args) == 1 and len(e.keywords) == 1 and e.keywords[0].arg == "key":
         if fname != "min":
             reject(src, e, "max(.., key=..) is not used by any v1 core; only min is emitted")
@@ -1164,6 +1455,11 @@ def emit_return_value(ctx: Ctx, node: ast.stmt, value: ast.expr | None) -> str:
         if ctx.ret.kind != "Option":
             reject(ctx.src, node, "return None from a non-Optional function")
         return "none"
+    if isinstance(value, ast.Dict) and not value.keys:
+        # `return {}` — the declared dict return type pins the empty literal.
+        if ctx.ret.kind != "Dict":
+            reject(ctx.src, node, "empty dict returned from a non-dict function")
+        return "[]"
     if isinstance(value, ast.Tuple) and ctx.ret.kind == "Tuple" \
             and len(value.elts) == len(ctx.ret.args):
         comps = [_emit_component(ctx, node, elt, want)
@@ -1245,6 +1541,13 @@ def emit_block(ctx: Ctx, stmts: list[ast.stmt], indent: int) -> str:
             if declared.kind != "Dict":
                 reject(src, s, "empty dict literal into a non-dict annotation")
             code = "[]"
+        elif isinstance(s.value, ast.Tuple) and declared.kind == "Tuple" \
+                and len(s.value.elts) == len(declared.args):
+            # A tuple literal coerced componentwise into the declared tuple
+            # type (`([], None, None)`: the annotation pins each slot).
+            comps = [_emit_component(ctx, s, elt, want)
+                     for elt, want in zip(s.value.elts, declared.args, strict=True)]
+            code = "(" + ", ".join(comps) + ")"
         else:
             val, got = emit_expr(ctx, s.value)
             code = coerce_assign(ctx, s, declared, val, got)
@@ -1377,8 +1680,10 @@ def emit_for_first_match(ctx: Ctx, s: ast.For, rest: list[ast.stmt], indent: int
     pad = " " * indent
     if ctx.loop_acc is not None:
         reject(src, s, "return-exiting loop nested inside another loop")
-    if not isinstance(s.target, ast.Name):
-        reject(src, s, "first-match loop target must be a single name")
+    is_tuple_target = isinstance(s.target, ast.Tuple) \
+        and all(isinstance(t, ast.Name) for t in s.target.elts)
+    if not isinstance(s.target, ast.Name) and not is_tuple_target:
+        reject(src, s, "first-match loop target must be a name or a tuple of names")
     for st0 in s.body:
         for n0 in ast.walk(st0):
             if isinstance(n0, ast.Subscript) and isinstance(n0.ctx, ast.Store):
@@ -1386,22 +1691,38 @@ def emit_for_first_match(ctx: Ctx, s: ast.For, rest: list[ast.stmt], indent: int
                                  "(cross-iteration state)")
     stored = {n.id for st in s.body for n in ast.walk(st)
               if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)} \
-        - {s.target.id}
+        - _target_names(s.target)
     _check_no_carry(src, s.body, stored, set())
     for st in rest:
         for n in ast.walk(st):
             if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load) and n.id in stored:
                 reject(src, st, f"loop-local {n.id!r} read after a return-exiting loop")
-    binder = check_ident(src, s, s.target.id)
     body_ctx = branch(ctx, loop_acc="none", loop_first=True)
-    body_ctx.vars[binder] = elem
-    body = emit_block(body_ctx, s.body, indent + 4)
+    if isinstance(s.target, ast.Name):
+        binder = check_ident(src, s, s.target.id)
+        body_ctx.vars[binder] = elem
+        body = emit_block(body_ctx, s.body, indent + 4)
+        lam = (f"(fun ({binder} : {render_type(elem)}) =>\n"
+               f"{pad}      {body})")
+    else:
+        assert isinstance(s.target, ast.Tuple)
+        if elem.kind != "Tuple" or len(elem.args) != len(s.target.elts):
+            reject(src, s, "loop target arity mismatch with element tuple")
+        names = [check_ident(src, s, t.id) for t in s.target.elts
+                 if isinstance(t, ast.Name)]
+        body_ctx.vars["_x"] = elem
+        unpack = ""
+        for i, (nm, ft) in enumerate(zip(names, elem.args, strict=True)):
+            body_ctx.vars[nm] = ft
+            unpack += f"let {nm} := ({proj('_x', i, len(elem.args))})\n{pad}      "
+        body = emit_block(body_ctx, s.body, indent + 4)
+        lam = (f"(fun (_x : {render_type(elem)}) =>\n"
+               f"{pad}      {unpack}{body})")
     ctx.helpers.add("_findSome")
     res = fresh_binder(ctx, "_r")
     cont = emit_block(branch(ctx), rest, indent + 2)
     return (f"(match (_findSome\n"
-            f"{pad}    (fun ({binder} : {render_type(elem)}) =>\n"
-            f"{pad}      {body})\n"
+            f"{pad}    {lam}\n"
             f"{pad}    {seq}) with\n"
             f"{pad}| some {res} => {res}\n"
             f"{pad}| none =>\n{pad}  {cont})")
@@ -1452,6 +1773,16 @@ def emit_if(ctx: Ctx, s: ast.If, rest: list[ast.stmt], indent: int) -> str:
         cont = emit_block(branch(ctx), rest, indent + 2)
         return (f"(match {x} with\n{pad}| some {binder} =>\n{pad}  {body}\n"
                 f"{pad}| none =>\n{pad}  {cont})")
+
+    # Pattern F: `if X is None: <always-exits body>` — the continuation runs
+    # with X unwrapped (it IS some there).
+    xn = match_is_none(s.test)
+    if xn is not None and not s.orelse and always_exits(ctx, s.body):
+        binder, child = unwrap_var(ctx, s, xn)
+        body = emit_block(branch(ctx), s.body, indent + 2)
+        cont = emit_block(child, rest, indent + 2)
+        return (f"(match {xn} with\n{pad}| none =>\n{pad}  {body}\n"
+                f"{pad}| some {binder} =>\n{pad}  {cont})")
 
     # Pattern D: `if X is None or Y is None: <always-exits body>` — a nested
     # double-unwrap; the continuation runs with BOTH variables unwrapped.
@@ -1547,12 +1878,26 @@ def emit_if(ctx: Ctx, s: ast.If, rest: list[ast.stmt], indent: int) -> str:
 # Function / module extraction.
 # ---------------------------------------------------------------------------
 def extract_function(env: TypeEnv, src: str, fd: ast.FunctionDef, helpers: set[str],
-                     module_sigs: dict[str, tuple[tuple[LType, ...], LType, bool]]) -> str:
+                     module_sigs: dict[str, tuple[tuple[LType, ...], LType, bool]],
+                     import_sigs: dict[str, tuple[str, tuple[LType, ...], LType, bool]],
+                     consts: dict[str, LType]) -> str:
     if fd.decorator_list:
         reject(src, fd, "decorated function")
     a = fd.args
-    if a.vararg or a.kwarg or a.kwonlyargs or a.posonlyargs or a.defaults or a.kw_defaults:
-        reject(src, fd, "defaults/*args/**kwargs/keyword-only parameters")
+    if a.vararg or a.kwarg or a.kwonlyargs or a.posonlyargs or a.kw_defaults:
+        reject(src, fd, "*args/**kwargs/keyword-only parameters")
+    # Parameter defaults are allowed only for int literals / registered int
+    # constants, and are IGNORED: default application happens at Python call
+    # sites outside the extraction boundary, so the Lean def takes every
+    # parameter explicitly (extracted call sites must pass full arity).
+    for default in a.defaults:
+        if isinstance(default, ast.Constant) and isinstance(default.value, int) \
+                and not isinstance(default.value, bool):
+            continue
+        if isinstance(default, ast.Name) and default.id in consts:
+            continue
+        reject(src, default,
+               "parameter default outside int literals / registered constants")
     if fd.returns is None:
         reject(src, fd, "missing return annotation")
     ret, _ = parse_annotation(env, src, fd.returns)
@@ -1567,9 +1912,11 @@ def extract_function(env: TypeEnv, src: str, fd: ast.FunctionDef, helpers: set[s
             and isinstance(body[0].value.value, str):
         body = body[1:]  # docstring
     if _is_recursive(fd):
-        return extract_fueled_function(env, src, fd, ret, params, body, helpers, module_sigs)
-    ctx = Ctx(src=src, fn_name=fd.name, ret=ret, vars={}, setlike=set(),
-              unwraps={}, helpers=helpers, module_sigs=module_sigs, tenv=env)
+        return extract_fueled_function(env, src, fd, ret, params, body, helpers,
+                                       module_sigs, import_sigs, consts)
+    ctx = Ctx(src=src, fn_name=fd.name, ret=ret, vars=dict(consts), setlike=set(),
+              unwraps={}, helpers=helpers, module_sigs=module_sigs,
+              import_sigs=import_sigs, tenv=env)
     for name, t, setlike in params:
         ctx.vars[name] = t
         if setlike:
@@ -1606,7 +1953,9 @@ def _is_fuel_guard(s: ast.stmt) -> bool:
 def extract_fueled_function(env: TypeEnv, src: str, fd: ast.FunctionDef, ret: LType,
                             params: list[tuple[str, LType, bool]], body: list[ast.stmt],
                             helpers: set[str],
-                            module_sigs: dict[str, tuple[tuple[LType, ...], LType, bool]]) -> str:
+                            module_sigs: dict[str, tuple[tuple[LType, ...], LType, bool]],
+                            import_sigs: dict[str, tuple[str, tuple[LType, ...], LType, bool]],
+                            consts: dict[str, LType]) -> str:
     """A fuel-bounded recursive function -> a two-arm `Nat` pattern match.
 
     The Python `fuel <= 0` guard IS the `| 0` arm; the rest of the body is the
@@ -1631,17 +1980,19 @@ def extract_fueled_function(env: TypeEnv, src: str, fd: ast.FunctionDef, ret: LT
     assert isinstance(guard, ast.If)
     base_ret = guard.body[0]
     base_ctx = Ctx(src=src, fn_name=fd.name, ret=ret,
-                   vars={n: t for n, t, _ in rest},
+                   vars={**consts, **{n: t for n, t, _ in rest}},
                    setlike={n for n, _, s in rest if s},
-                   unwraps={}, helpers=helpers, module_sigs=module_sigs, tenv=env)
+                   unwraps={}, helpers=helpers, module_sigs=module_sigs,
+                   import_sigs=import_sigs, tenv=env)
     base_expr = emit_block(base_ctx, [base_ret], 4)
     base_reads = {n.id for n in ast.walk(base_ret)
                   if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)}
     binders0 = ", ".join(n if n in base_reads else "_" for n, _, _ in rest)
     succ_ctx = Ctx(src=src, fn_name=fd.name, ret=ret,
-                   vars={n: t for n, t, _ in rest},
+                   vars={**consts, **{n: t for n, t, _ in rest}},
                    setlike={n for n, _, s in rest if s},
-                   unwraps={}, helpers=helpers, module_sigs=module_sigs, tenv=env,
+                   unwraps={}, helpers=helpers, module_sigs=module_sigs,
+                   import_sigs=import_sigs, tenv=env,
                    fueled=True, rec_params=tuple(t for _, t, _ in rest))
     succ_ctx.fresh = base_ctx.fresh  # one counter per function
     succ_expr = emit_block(succ_ctx, body[1:], 4)
@@ -1693,7 +2044,34 @@ def extract_structure(env: TypeEnv, src: str, cd: ast.ClassDef) -> str:
     return "\n".join(lines)
 
 
-def extract_module(spec: ModuleSpec) -> str:
+def _extract_constants(spec: ModuleSpec, tree: ast.Module) -> tuple[list[str], dict[str, LType]]:
+    """Registry-declared module-level int constants -> Lean `def NAME : Int`
+    blocks (in registry order) + the constant type environment."""
+    assigns: dict[str, ast.Assign] = {}
+    for stmt_node in tree.body:
+        if isinstance(stmt_node, ast.Assign) and len(stmt_node.targets) == 1 \
+                and isinstance(stmt_node.targets[0], ast.Name):
+            assigns[stmt_node.targets[0].id] = stmt_node
+    blocks: list[str] = []
+    consts: dict[str, LType] = {}
+    for name in spec.constants:
+        cnode = assigns.get(name)
+        if cnode is None:
+            raise ExtractionError(f"{spec.source}: registered constant {name!r} not found")
+        value = cnode.value
+        if not (isinstance(value, ast.Constant) and isinstance(value.value, int)
+                and not isinstance(value.value, bool)):
+            reject(spec.source, cnode, f"registered constant {name!r} without an int literal value")
+        check_ident(spec.source, cnode, name)
+        rendered = f"({value.value})" if value.value < 0 else str(value.value)
+        blocks.append(f"/-- Extracted module constant `{name}` (line {cnode.lineno}). -/\n"
+                      f"def {name} : Int := {rendered}")
+        consts[name] = T_INT
+    return blocks, consts
+
+
+def extract_module(spec: ModuleSpec,
+                   global_sigs: dict[str, tuple[str, tuple[LType, ...], LType, bool]]) -> str:
     path = ROOT / spec.source
     text = path.read_text()
     digest = hashlib.sha256(text.encode()).hexdigest()
@@ -1706,22 +2084,39 @@ def extract_module(spec: ModuleSpec) -> str:
             f"{spec.source}: registered structures not found: {missing_structs}")
     struct_blocks = [extract_structure(env, spec.source, classes[s])
                      for s in spec.structures]
+    const_blocks, consts = _extract_constants(spec, tree)
     by_name = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
     missing = [f for f in spec.functions if f not in by_name]
     if missing:
         raise ExtractionError(f"{spec.source}: registered functions not found: {missing}")
+    missing_imports = [f for f in spec.imports if f not in global_sigs]
+    if missing_imports:
+        raise ExtractionError(
+            f"{spec.source}: registered imports not extracted by an earlier module: "
+            f"{missing_imports}")
+    import_sigs = {f: global_sigs[f] for f in spec.imports}
     helpers: set[str] = set()
     module_sigs: dict[str, tuple[tuple[LType, ...], LType, bool]] = {}
-    defs = [extract_function(env, spec.source, by_name[f], helpers, module_sigs)
+    defs = [extract_function(env, spec.source, by_name[f], helpers, module_sigs,
+                             import_sigs, consts)
             for f in spec.functions]
+    for fname, (fparams, fret, ffueled) in module_sigs.items():
+        if fname in global_sigs:
+            raise ExtractionError(
+                f"{spec.source}: extracted function name {fname!r} collides with "
+                f"module {global_sigs[fname][0]}")
+        global_sigs[fname] = (spec.core_name, fparams, fret, ffueled)
     helper_blocks = [HELPER_DEFS[h] for h in HELPER_ORDER if h in helpers]
+    import_cores = sorted({global_sigs[f][0] for f in spec.imports})
+    import_lines = [f"import Formal.Extracted.{core}" for core in import_cores]
     parts = [
         f"-- GENERATED from {spec.source} (sha256: {digest}) — DO NOT EDIT",
         "-- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).",
+        *import_lines,
         "",
         f"namespace Extracted.{spec.core_name}",
         "",
-        "\n\n".join(helper_blocks + struct_blocks + defs),
+        "\n\n".join(helper_blocks + struct_blocks + const_blocks + defs),
         "",
         f"end Extracted.{spec.core_name}",
         "",
@@ -1736,8 +2131,9 @@ def main(argv: list[str]) -> int:
                         help="regenerate in memory and fail (exit 1) on any drift from disk")
     args = parser.parse_args(argv)
     drift = False
+    global_sigs: dict[str, tuple[str, tuple[LType, ...], LType, bool]] = {}
     for spec in MODULES:
-        generated = extract_module(spec)
+        generated = extract_module(spec, global_sigs)
         out = ROOT / spec.output
         if args.check:
             on_disk = out.read_text() if out.exists() else ""

@@ -11,9 +11,12 @@ from artifactsmmo_cli.ai.goals.discard_overstock import (
 from artifactsmmo_cli.ai.inventory_caps import (
     BATCH_BUFFER,
     CONSUMABLE_KEEP,
+    _is_dominated_pure,
     _is_equippable_dominated,
+    _task_chain_demand_pure,
     overstocked_items,
     useful_quantity_cap,
+    useful_quantity_cap_excl_equipped,
 )
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 from tests.test_ai.fixtures import make_state
@@ -662,3 +665,51 @@ class TestDominanceEdgeCases:
         # junk has cap 0 (no recipe/task use) but qty 0 -> skipped entirely.
         state = make_state(inventory={"junk": 0})
         assert overstocked_items(state, gd) == {}
+
+
+class TestPureCores:
+    """P3b pure-core seams: the fuel-bounded chain demand and the
+    extracted-from wrappers (mechanical extraction, Bridges4.lean)."""
+
+    def test_chain_demand_pure_fuel_zero_base(self):
+        """The fuel-0 base case answers 0 (unreachable from the wrappers:
+        the `len(recipes) + 1` seed exceeds every path, which marks a
+        distinct key per recursing frame — pinned in Lean as
+        `chain_demand_fuel_zero`)."""
+        assert _task_chain_demand_pure(0, "a", "b", 5, {}, {}) == 0
+
+    def test_chain_demand_pure_visited_blocks_revisit(self):
+        """A root already in the per-path visited map contributes 0 (the
+        cycle guard — pinned in Lean as `chain_demand_visited_blocked`)."""
+        recipes = {"b": {"a": 1}}
+        assert _task_chain_demand_pure(3, "a", "b", 5, recipes, {"b": 1}) == 0
+
+    def test_chain_demand_pure_target_hit_returns_quantity(self):
+        """target == root short-circuits to the demanded quantity before the
+        visited guard (pinned in Lean as `chain_demand_target_self`)."""
+        assert _task_chain_demand_pure(1, "a", "a", 7, {}, {"a": 1}) == 7
+
+    def test_excl_equipped_wrapper_omits_equipped_floor(self):
+        """`useful_quantity_cap_excl_equipped` is the cap WITHOUT the
+        equipped floor: an equipped no-demand item caps at 0 (the full cap
+        floors it at 1)."""
+        gd = GameData()
+        gd._item_stats = {
+            "trinket": ItemStats(code="trinket", level=1, type_="resource"),
+        }
+        gd._crafting_recipes = {}
+        state = make_state(equipment={"weapon_slot": "trinket"})
+        assert useful_quantity_cap_excl_equipped("trinket", state, gd) == 0
+        assert useful_quantity_cap("trinket", state, gd) == 1
+
+    def test_is_dominated_pure_threshold_boundary(self):
+        """The dominance fold credits only fully-qualifying peers and
+        compares the total to the slot count once (order-independent; the
+        hand model's `isDominatedBy`)."""
+        # One criterion false anywhere -> no credit.
+        assert _is_dominated_pure([(False, True, True, 5)], 1) is False
+        assert _is_dominated_pure([(True, False, True, 5)], 1) is False
+        assert _is_dominated_pure([(True, True, False, 5)], 1) is False
+        # Credits sum across peers; threshold is >=.
+        assert _is_dominated_pure([(True, True, True, 1), (True, True, True, 1)], 2) is True
+        assert _is_dominated_pure([(True, True, True, 1)], 2) is False

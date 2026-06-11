@@ -3,10 +3,40 @@
 Caps are pragmatic: max recipe demand × batch buffer, plus task demand, plus a
 safety floor for items currently in use. Anything held over the cap is wasted
 inventory space.
+
+PURE CORES (mechanical-extraction P3b): the cap/overstock decisions are pure
+functions over plain data (scalar state fields, a `recipes` mapping, per-peer
+dominance verdicts) so they can be mechanically extracted to Lean
+(`formal/Formal/Extracted/InventoryCaps.lean`) and bridged against the hand
+models `formal/Formal/InventoryCaps.lean` / `formal/Formal/InventoryProfile.lean`.
+The public wrappers preserve the original GameData/WorldState-taking API
+exactly, reading the accessors and forwarding.
+
+The recipe-chain recursion is FUEL-BOUNDED (the recipe_closure precedent):
+`_task_chain_demand_pure` threads an explicit `fuel` seeded with
+`len(recipes) + 1`, which no input can exhaust — every recursing frame marks a
+DISTINCT key in its per-path visited map first, so recursion depth never
+exceeds `len(recipes) + 1` even on cyclic recipe graphs. Visited sets are
+insertion-ordered `dict[str, int]` membership maps (`code -> 1`): the
+extracted image is an association list, and all reads go through
+order-independent `dict.get`.
+
+EXACT VALUE SEAM (P3c, closing the P3b float-boundary note): `_equip_value`
+now returns `int` — every summand (attack, resistance, hp_restore) is an int,
+so the strictly-higher dominance criterion is EXACT integer arithmetic with no
+float seam. It still stays OUTSIDE the extracted core as data plumbing
+(`_is_equippable_dominated` evaluates each peer's criteria into plain bools
+and hands `_is_dominated_pure` the verdict list, exactly the hand model's
+`Peer` encoding — the hand model has always taken the verdicts as Bools).
+The tiers-side `tiers/equip_value.equip_value` (augmented combat formula) and
+the wider float-typed equipment-scoring system are deliberately NOT cascaded —
+see the P3c scope note in docs/PLAN_mechanical_extraction.md.
 """
 
+from collections.abc import Mapping, Sequence
+
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
-from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 BATCH_BUFFER = 5
@@ -41,7 +71,8 @@ def overstock_excess(
     watermark_den: int = DISCARD_WATERMARK_DEN,
 ) -> int:
     """Pure space-driven overstock decision (proved in
-    formal/Formal/InventoryProfile.lean as `overstockExcess`).
+    formal/Formal/InventoryProfile.lean as `overstockExcess`; mechanically
+    extracted to formal/Formal/Extracted/InventoryCaps.lean and bridged).
 
     An item is overstock only when the bag is under real space pressure
     (`used / cap >= watermark_num / watermark_den`, compared by exact integer
@@ -103,6 +134,26 @@ ACTION_CONSUMABLES_CAP = {
 }
 
 
+def _is_dominated_pure(peers: Sequence[tuple[bool, bool, bool, int]],
+                       slot_count: int) -> bool:
+    """Pure core of the dominance walk (the hand model's `Peer` fold,
+    formal/Formal/InventoryCaps.lean `isDominatedBy`): each peer carries its
+    three criteria verdicts (fits-all-slots, strictly-higher equip value,
+    covers-skill-effects) plus its owned count; the item is DOMINATED when
+    the qualifying peers' summed owned count meets or exceeds `slot_count`.
+
+    Order-independent by construction (a commutative sum compared to the
+    threshold once, at the end): the wrapper iterates an unordered candidate
+    SET, and with the production-invariant non-negative owned counts the
+    original prefix-sum early return computed exactly this total-sum
+    threshold — the full sum is the faithful deterministic semantics."""
+    dominator_owned = 0
+    for fits, higher, covers, owned in peers:
+        if fits and higher and covers:
+            dominator_owned = dominator_owned + owned
+    return dominator_owned >= slot_count
+
+
 def useful_quantity_cap(
     item_code: str, state: WorldState, game_data: GameData,
     batch_buffer: int = BATCH_BUFFER, safety_floor: int = SAFETY_FLOOR,
@@ -118,11 +169,8 @@ def useful_quantity_cap(
     """
     # Equipped items: never count below 1
     equipped = {code for code in state.equipment.values() if code}
-    if item_code in equipped:
-        return max(1, useful_quantity_cap_excl_equipped(item_code, state, game_data,
-                                                          batch_buffer, safety_floor))
-    return useful_quantity_cap_excl_equipped(item_code, state, game_data,
-                                              batch_buffer, safety_floor)
+    return _cap_from_state(item_code, state, game_data, batch_buffer,
+                           safety_floor, item_code in equipped)
 
 
 def _is_equippable_dominated(item_code: str, state: WorldState,
@@ -143,6 +191,11 @@ def _is_equippable_dominated(item_code: str, state: WorldState,
     dominate a copper_ring while the bot still needs a second ring to
     wear. The summed owned count (inventory + bank + equipped) of
     qualifying peers must be >= len(slots_for_type).
+
+    This wrapper evaluates each candidate peer's three criteria (the
+    strictly-higher test goes through the exact int-typed `_equip_value`;
+    the per-peer GameData stats reads keep it outside the extracted core)
+    and hands the verdict list to the extracted `_is_dominated_pure` fold.
     """
     stats = game_data.item_stats(item_code)
     if stats is None:
@@ -150,7 +203,6 @@ def _is_equippable_dominated(item_code: str, state: WorldState,
     slots = ITEM_TYPE_TO_SLOTS.get(stats.type_, [])
     if not slots:
         return False
-    slot_count = len(slots)
     my_value = _equip_value(stats)
     my_effects = stats.skill_effects or {}
     candidates: set[str] = set(state.inventory)
@@ -160,17 +212,15 @@ def _is_equippable_dominated(item_code: str, state: WorldState,
     candidates.discard(item_code)
     equipped_codes = [c for c in state.equipment.values() if c is not None]
     bank_items = state.bank_items or {}
-    dominator_owned = 0
+    peers: list[tuple[bool, bool, bool, int]] = []
     for peer_code in candidates:
         peer = game_data.item_stats(peer_code)
         if peer is None:
             continue
         peer_slots = ITEM_TYPE_TO_SLOTS.get(peer.type_, [])
         # Peer must fit every slot this item fits (so it can substitute everywhere).
-        if not all(s in peer_slots for s in slots):
-            continue
-        if _equip_value(peer) <= my_value:
-            continue
+        fits = all(s in peer_slots for s in slots)
+        higher = _equip_value(peer) > my_value
         # Peer must cover this item's skill_effects (else dropping a tool
         # in favor of a higher-attack weapon would silently lose a skill
         # bonus the bot relies on). Skill effect values are NEGATIVE
@@ -179,60 +229,66 @@ def _is_equippable_dominated(item_code: str, state: WorldState,
         # skill key contributes 0, which fails the abs comparison and
         # disqualifies the peer as a dominator for tool roles.
         peer_effects = peer.skill_effects or {}
-        if any(abs(peer_effects.get(skill, 0)) < abs(magnitude)
-               for skill, magnitude in my_effects.items()):
-            continue
+        covers = not any(abs(peer_effects.get(skill, 0)) < abs(magnitude)
+                         for skill, magnitude in my_effects.items())
         peer_count = (
             state.inventory.get(peer_code, 0)
             + bank_items.get(peer_code, 0)
             + sum(1 for c in equipped_codes if c == peer_code)
         )
-        dominator_owned += peer_count
-        if dominator_owned >= slot_count:
-            return True
-    return False
+        peers.append((fits, higher, covers, peer_count))
+    return _is_dominated_pure(peers, len(slots))
 
 
-def _equip_value(stats: object) -> float:
-    """Inline mirror of `tiers/equip_value.equip_value` — kept local here
-    to avoid a tiers→inventory_caps import cycle. Same formula:
-    attack + resistance + hp_restore."""
-    attack = sum(stats.attack.values()) if stats.attack else 0  # type: ignore[attr-defined]
-    resistance = sum(stats.resistance.values()) if stats.resistance else 0  # type: ignore[attr-defined]
-    hp = getattr(stats, "hp_restore", 0)
-    return float(attack + resistance + hp)
+def _equip_value(stats: ItemStats) -> int:
+    """Dominance-gate equip value: attack + resistance + hp_restore — kept
+    local here to avoid a tiers→inventory_caps import cycle (historically a
+    mirror of `tiers/equip_value.equip_value`, which has since grown the
+    augmented combat formula). EXACT integer arithmetic (P3c): every summand
+    is an int, so the strictly-higher comparison feeding the dominance Bool
+    is exact — the former `float(...)` wrapper added only an inexact-typed
+    seam over identical values (ints are exact in float far beyond any
+    reachable stat magnitude)."""
+    attack = sum(stats.attack.values()) if stats.attack else 0
+    resistance = sum(stats.resistance.values()) if stats.resistance else 0
+    hp = stats.hp_restore
+    return attack + resistance + hp
 
 
-def _task_chain_demand(target_item: str, root_item: str, root_qty: int,
-                        game_data: GameData,
-                        visited: frozenset[str] | None = None) -> int:
+def _task_chain_demand_pure(fuel: int, target_item: str, root_item: str,
+                            root_qty: int, recipes: Mapping[str, dict[str, int]],
+                            visited: dict[str, int]) -> int:
     """Recursive count of `target_item` needed to craft `root_qty` of
     `root_item`. Returns 0 when target isn't reachable from root via the
-    recipe chain. Cycle-safe via `visited` frozenset path tracking — without
-    it a self-referential recipe (e.g. recycle loops) would recurse forever.
-
-    Used to compute how many copies of a mid-chain material the bot still
-    needs to complete the active items-task without re-gathering."""
-    if visited is None:
-        visited = frozenset()
+    recipe chain. Cycle-safe via the `visited` membership map (PER-PATH:
+    each child walk gets a copy extended with `root_item`) — without it a
+    self-referential recipe (e.g. recycle loops) would recurse forever.
+    Fuel-bounded for the extracted Lean image; the `len(recipes) + 1` seed
+    is unreachable (every recursing frame marks a distinct key first)."""
+    if fuel <= 0:
+        return 0
     if target_item == root_item:
         return root_qty
-    if root_item in visited:
+    if visited.get(root_item, 0) == 1:
         return 0
-    recipe = game_data.crafting_recipe(root_item) or {}
-    sub = visited | {root_item}
-    return sum(
-        _task_chain_demand(target_item, mat, qty_per * root_qty, game_data, sub)
-        for mat, qty_per in recipe.items()
-    )
+    recipe = recipes.get(root_item, {})
+    sub = dict(visited)
+    sub[root_item] = 1
+    total = 0
+    for mat, qty_per in recipe.items():
+        total = total + _task_chain_demand_pure(fuel - 1, target_item, mat,
+                                                qty_per * root_qty, recipes, sub)
+    return total
 
 
-def useful_quantity_cap_excl_equipped(
-    item_code: str, state: WorldState, game_data: GameData,
-    batch_buffer: int = BATCH_BUFFER, safety_floor: int = SAFETY_FLOOR,
+def useful_quantity_cap_excl_equipped_pure(
+    item_code: str, recipe_max: int, batch_buffer: int, safety_floor: int,
+    task_type: str, task_code: str, task_total: int, task_progress: int,
+    recipes: Mapping[str, dict[str, int]], action_cap: int,
+    is_equippable: bool, is_dominated: bool, hp_restore: int,
 ) -> int:
-    """useful_quantity_cap without the equipped-floor adjustment."""
-    recipe_max = game_data.max_recipe_demand(item_code)
+    """Pure core of `useful_quantity_cap_excl_equipped` over plain data:
+    the max of the five cap components (hand model `capExclWith`)."""
     recipe_cap = recipe_max * batch_buffer if recipe_max > 0 else 0
     if recipe_max > 0:
         recipe_cap = max(recipe_cap, safety_floor)
@@ -247,14 +303,13 @@ def useful_quantity_cap_excl_equipped(
     # protected the chain; DiscardOverstock must apply the same discipline
     # or the two caps diverge and one or the other wastes resources.
     task_cap = 0
-    if state.task_type == "items" and state.task_code:
-        remaining = max(0, state.task_total - state.task_progress)
+    if task_type == "items" and task_code != "":
+        remaining = max(0, task_total - task_progress)
         if remaining > 0:
-            task_cap = _task_chain_demand(item_code, state.task_code,
-                                           remaining, game_data)
-
-    # Action-consumed items (e.g. tasks_coin for TaskExchange)
-    action_cap = ACTION_CONSUMABLES_CAP.get(item_code, 0)
+            no_visited: dict[str, int] = {}
+            task_cap = _task_chain_demand_pure(len(recipes) + 1, item_code,
+                                               task_code, remaining, recipes,
+                                               no_visited)
 
     # Equippable items: keep one of each for the equipment optimizer's
     # candidate pool — unless this code is DOMINATED by another owned
@@ -265,14 +320,60 @@ def useful_quantity_cap_excl_equipped(
     # first, instead of one-of-each-blindly.
     equippable_cap = 0
     consumable_cap = 0
-    stats = game_data.item_stats(item_code)
-    if stats is not None:
-        if ITEM_TYPE_TO_SLOTS.get(stats.type_) and not _is_equippable_dominated(item_code, state, game_data):
-            equippable_cap = EQUIPPABLE_KEEP
-        if stats.hp_restore > 0:
-            consumable_cap = CONSUMABLE_KEEP
+    if is_equippable and not is_dominated:
+        equippable_cap = EQUIPPABLE_KEEP
+    if hp_restore > 0:
+        consumable_cap = CONSUMABLE_KEEP
 
     return max(recipe_cap, task_cap, action_cap, equippable_cap, consumable_cap)
+
+
+def useful_quantity_cap_pure(
+    item_code: str, recipe_max: int, batch_buffer: int, safety_floor: int,
+    task_type: str, task_code: str, task_total: int, task_progress: int,
+    recipes: Mapping[str, dict[str, int]], action_cap: int,
+    is_equippable: bool, is_dominated: bool, hp_restore: int,
+    equipped: bool,
+) -> int:
+    """Pure core of `useful_quantity_cap`: the equipped floor of 1 on top of
+    the five-component max (hand model `capWith`)."""
+    base = useful_quantity_cap_excl_equipped_pure(
+        item_code, recipe_max, batch_buffer, safety_floor,
+        task_type, task_code, task_total, task_progress,
+        recipes, action_cap, is_equippable, is_dominated, hp_restore)
+    if equipped:
+        return max(1, base)
+    return base
+
+
+def _cap_from_state(item_code: str, state: WorldState, game_data: GameData,
+                    batch_buffer: int, safety_floor: int, equipped: bool) -> int:
+    """Assemble the plain-data inputs of `useful_quantity_cap_pure` from the
+    GameData/WorldState accessors (the impure shell of the cap decision)."""
+    is_equippable = False
+    is_dominated = False
+    hp_restore = 0
+    stats = game_data.item_stats(item_code)
+    if stats is not None:
+        if ITEM_TYPE_TO_SLOTS.get(stats.type_):
+            is_equippable = True
+            is_dominated = _is_equippable_dominated(item_code, state, game_data)
+        hp_restore = stats.hp_restore
+    return useful_quantity_cap_pure(
+        item_code, game_data.max_recipe_demand(item_code), batch_buffer,
+        safety_floor, state.task_type or "", state.task_code or "",
+        state.task_total, state.task_progress, game_data.crafting_recipes,
+        ACTION_CONSUMABLES_CAP.get(item_code, 0),
+        is_equippable, is_dominated, hp_restore, equipped)
+
+
+def useful_quantity_cap_excl_equipped(
+    item_code: str, state: WorldState, game_data: GameData,
+    batch_buffer: int = BATCH_BUFFER, safety_floor: int = SAFETY_FLOOR,
+) -> int:
+    """useful_quantity_cap without the equipped-floor adjustment."""
+    return _cap_from_state(item_code, state, game_data, batch_buffer,
+                           safety_floor, False)
 
 
 def overstocked_items(

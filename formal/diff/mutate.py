@@ -43,6 +43,7 @@ CYCLES_FOR_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" 
 GATHER_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gather_apply_core.py"
 GATHER_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_selection.py"
 SHOPPING_LIST_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "shopping_list.py"
+MIN_GATHERS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "min_gathers.py"
 GATHER_STEP_TARGET_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_step_target.py"
 MONSTER_DROP_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "monster_drop_selection.py"
 CRAFT_VS_BUY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_vs_buy.py"
@@ -137,20 +138,24 @@ TASK_BATCH_MUTATIONS = [
      "    return max(1, min(remaining, fit, BATCH_CAP))",
      "    return max(1, min(remaining, fit))"),
     # off-by-one on remaining (use task_total instead of task_total - progress).
+    # P3a re-anchor: the read moved into the pure core (plain scalars).
     ("task_batch: off-by-one remaining (+1)",
-     "    remaining = state.task_total - state.task_progress",
-     "    remaining = state.task_total - state.task_progress + 1"),
+     "    remaining = task_total - task_progress",
+     "    remaining = task_total - task_progress + 1"),
 ]
 
 
 # inventory_caps mutations -- old strings matched to current inventory_caps.py text.
 INVENTORY_CAPS_MUTATIONS = [
     # drop the equipped floor: equipped items no longer guaranteed >= 1.
+    # P3b re-anchor: the floor moved into the pure core (useful_quantity_cap_pure).
     ("inventory_caps: drop equipped max(1, ...) floor",
-     "        return max(1, useful_quantity_cap_excl_equipped(item_code, state, game_data,\n"
-     "                                                          batch_buffer, safety_floor))",
-     "        return useful_quantity_cap_excl_equipped(item_code, state, game_data,\n"
-     "                                                          batch_buffer, safety_floor)"),
+     "    if equipped:\n"
+     "        return max(1, base)\n"
+     "    return base",
+     "    if equipped:\n"
+     "        return base\n"
+     "    return base"),
     # drop the safety-floor clamp: demanded items can fall below safety_floor.
     ("inventory_caps: drop safety-floor clamp",
      "        recipe_cap = max(recipe_cap, safety_floor)",
@@ -373,24 +378,32 @@ SKILL_XP_CURVE_MUTATIONS = [
 ]
 
 
-# recipe_closure mutations -- old strings matched to current recipe_closure.py text.
+# recipe_closure mutations -- old strings matched to current recipe_closure.py text
+# (P3a re-anchor: the cores are the fueled pure functions `_closure_visited` /
+# `_raw_units`. The closure DFS's own visited guard became OUTPUT-equivalent
+# under the fuel bound — every original call-tree path still runs with the same
+# per-path fuel, so dropping it only re-explores — a genuinely equivalent
+# mutant; the cyclic-safety-guard mutation therefore targets `_raw_units`,
+# where the revisit short-circuit IS value-bearing: revisit -> 1).
 RECIPE_CLOSURE_MUTATIONS = [
-    # drop the visited guard in recipe_closure: revisits no longer short-circuit
-    # (cyclic graphs would loop forever / over-collect). Replace the early return
-    # with a no-op so the function over-explores (and diverges on cycles).
-    ("recipe_closure: drop visited guard (no early return on revisit)",
-     "        if material in visited:\n            return\n        visited.add(material)",
-     "        visited.add(material)"),
+    # drop the visited guard in _raw_units: revisits no longer cost 1, so cyclic
+    # recipes multiply around the loop until the fuel truncates (wrong totals;
+    # the pinned cyclic case yields 12 instead of 6).
+    ("recipe_closure: drop visited guard (no revisit short-circuit)",
+     "    if visited.get(item, 0) == 1:\n        return 1\n    recipe = recipes.get(item, {})",
+     "    recipe = recipes.get(item, {})"),
     # omit a recipe edge: recurse only into the FIRST sub-material, missing the
     # rest of the closure (incomplete craftable_mats / needed_resources).
     ("recipe_closure: omit recipe edges (recurse first sub only)",
-     "            for sub_mat in recipe:\n                collect(sub_mat)",
-     "            for sub_mat in list(recipe)[:1]:\n                collect(sub_mat)"),
-    # alter the qty factor in raw_material_units: drop the qty multiplier so
-    # quantities no longer multiply down the tree (wrong units total).
+     "    for sub_mat, _qty in recipe.items():\n"
+     "        visited = _closure_visited(fuel - 1, sub_mat, recipes, visited)",
+     "    for sub_mat, _qty in list(recipe.items())[:1]:\n"
+     "        visited = _closure_visited(fuel - 1, sub_mat, recipes, visited)"),
+    # alter the qty factor in _raw_units: drop the qty multiplier so quantities
+    # no longer multiply down the tree (wrong units total).
     ("raw_material_units: drop qty factor (qty * units -> units)",
-     "    return sum(qty * raw_material_units(game_data, sub, deeper) for sub, qty in recipe.items())",
-     "    return sum(raw_material_units(game_data, sub, deeper) for sub, qty in recipe.items())"),
+     "        total = total + qty * _raw_units(fuel - 1, sub, recipes, deeper)",
+     "        total = total + _raw_units(fuel - 1, sub, recipes, deeper)"),
 ]
 
 
@@ -691,10 +704,13 @@ SCALAR_CORE_MUTATIONS = [
      "    return received - delta_inv_used",
      "    return delta_inv_used - received"),
     # swap relevant/baseline weights: active skills now weighted 0.2 and inactive
-    # 2.0, inverting the weight-dominance the scalar relies on.
+    # 2.0, inverting the weight-dominance the scalar relies on (P3c: the
+    # selection moved inline into the exact core's fold).
     ("scalar_core: swap relevant/baseline weight",
-     "        weight = relevant_w if skill_name in active_skills else baseline_w",
-     "        weight = baseline_w if skill_name in active_skills else relevant_w"),
+     "        skill_xp_component = skill_xp_component + delta * (\n"
+     "            relevant_w if skill_name in active_skills else baseline_w)",
+     "        skill_xp_component = skill_xp_component + delta * (\n"
+     "            baseline_w if skill_name in active_skills else relevant_w)"),
     # gold sign flip: gold component subtracted instead of added (+gold -> -gold).
     ("scalar_core: gold component sign flip (+ -> -)",
      "    gold_component = gold / gold_per_xp",
@@ -703,16 +719,15 @@ SCALAR_CORE_MUTATIONS = [
     ("scalar_core: drop coin component (coin_value -> 0)",
      "    coin_component = tasks_coins * coin_value / gold_per_xp",
      "    coin_component = tasks_coins * 0 / gold_per_xp"),
-    # Byte-equivalence kill: seed the skill-xp accumulator with 0.0 instead of
-    # integer 0, forcing every subsequent term into float and breaking the
-    # exact-Fraction identity the diff test pins (Fraction + float -> TypeError
-    # under strict isinstance(val, Fraction) assertion, or a float result that
-    # disagrees bit-for-bit with the Lean Rat oracle on inputs with denominators
-    # that aren't powers of two).
-    ("scalar_core: float-seed skill_xp_component (breaks byte-equivalence on Fraction inputs)",
-     "    skill_xp_component: Any = 0\n"
+    # Byte-equivalence kill: seed the skill-xp accumulator with float 0.0
+    # instead of Fraction(0), contaminating the exact core into float
+    # arithmetic. The diff test pins the EXACT Fraction identity against the
+    # Lean Rat oracle (and asserts the result IS a Fraction), so any input
+    # with a non-dyadic denominator (1/3, 1/5, ...) kills it.
+    ("scalar_core: float-seed skill_xp_component (breaks the exact-Fraction core)",
+     "    skill_xp_component = Fraction(0)\n"
      "    for skill_name, delta in skill_xp.items():",
-     "    skill_xp_component: Any = 0.0\n"
+     "    skill_xp_component = 0.0\n"
      "    for skill_name, delta in skill_xp.items():"),
 ]
 
@@ -1054,19 +1069,21 @@ COMBAT_PICKER_MUTATIONS = [
 TASK_RESERVATION_MUTATIONS = [
     # Mutation 1: flip <= to < on the surplus boundary — owned == demand would
     # count as surplus and the step eats the exact remaining task need.
+    # (P3a re-anchor: the comparison lives in the pure core, reading the demand
+    # through dict.get — values are >= 1 on present keys, so get == subscript.)
     ("task_reservation: surplus boundary <= becomes <",
-     "        if 0 < owned <= demand[item]:\n",
-     "        if 0 < owned < demand[item]:\n"),
+     "        if 0 < owned <= demand.get(item, 0):\n",
+     "        if 0 < owned < demand.get(item, 0):\n"),
     # Mutation 2: drop the remaining-multiplication — demand = closure x 1, so
     # any pooled stock above ONE unit reads as surplus and gets eaten.
     ("task_reservation: demand = closure x 1 (drop remaining scaling)",
-     "    closure_demand(state.task_code, remaining, game_data, demand, frozenset())\n",
-     "    closure_demand(state.task_code, 1, game_data, demand, frozenset())\n"),
+     "    demand = _closure_demand(len(recipes) + 1, task_code, remaining, recipes,\n",
+     "    demand = _closure_demand(len(recipes) + 1, task_code, 1, recipes,\n"),
     # Mutation 3: ignore the items-task gate — monster/skill tasks would
     # reserve materials they never consume, starving the gear chain.
     ("task_reservation: ignore task_type gate",
-     "    if state.task_type != \"items\" or not state.task_code:\n",
-     "    if not state.task_code:\n"),
+     "    if task_type != \"items\" or task_code == \"\":\n",
+     "    if task_code == \"\":\n"),
 ]
 
 
@@ -1176,25 +1193,29 @@ CYCLES_FOR_PROGRESS_MUTATIONS = [
     # fire (the satisfy interval would no longer appear in the median).
     ("cycles_for_progress: drop the satisfy append loop",
      "    for cycle in chrono:\n"
-     "        if cycle.cycles_to_satisfy is not None and cycle.cycles_to_satisfy > 0:\n"
-     "            intervals.append(cycle.cycles_to_satisfy)\n",
+     "        intervals = _satisfy_step(intervals, cycle)\n",
      ""),
-    # Flip `is not None` to `is None` in the satisfy gate: the recorded
-    # `cycles_to_satisfy` values are SKIPPED and the (sparse) None-rows would
-    # blow up on the `> 0` check (TypeError). Hypothesis quickly produces a
-    # row with `cycles_to_satisfy = None`.
-    ("cycles_for_progress: satisfy gate is not None -> is None",
-     "        if cycle.cycles_to_satisfy is not None and cycle.cycles_to_satisfy > 0:",
-     "        if cycle.cycles_to_satisfy is None and cycle.cycles_to_satisfy > 0:"),
-    # Off-by-one on the strict-increase predicate: `>` becomes `>=`. A flat
-    # `task_progress` row now also counts as a strict increase, inflating the
-    # interval count. The general diff test fires whenever progress holds
-    # steady for any chronological pair.
+    # Flip the satisfy gate's None check: the recorded `cycles_to_satisfy`
+    # values are SKIPPED (returned untouched) and the (sparse) None-rows fall
+    # through to the `<= 0` comparison (TypeError). Hypothesis quickly
+    # produces a row with `cycles_to_satisfy = None` AND a positive reading.
+    ("cycles_for_progress: satisfy gate is None -> is not None",
+     "    cts = cycle.cycles_to_satisfy\n"
+     "    if cts is None:\n"
+     "        return intervals",
+     "    cts = cycle.cycles_to_satisfy\n"
+     "    if cts is not None:\n"
+     "        return intervals"),
+    # Off-by-one on the strict-increase predicate (P3c: the inverted early
+    # return `tp <= prev` weakens to `tp < prev`, the same semantic mutant as
+    # the historical `>` -> `>=`). A flat `task_progress` row now also counts
+    # as a strict increase, inflating the interval count. The general diff
+    # test fires whenever progress holds steady for any chronological pair.
     ("cycles_for_progress: strict-increase > -> >= (off-by-one predicate)",
-     "        if (prev_progress is not None and cycle.task_progress is not None\n"
-     "                and cycle.task_progress > prev_progress):",
-     "        if (prev_progress is not None and cycle.task_progress is not None\n"
-     "                and cycle.task_progress >= prev_progress):"),
+     "    if tp <= prev_progress:\n"
+     "        return (intervals, last_progress_at, tp)",
+     "    if tp < prev_progress:\n"
+     "        return (intervals, last_progress_at, tp)"),
 ]
 
 
@@ -1319,6 +1340,39 @@ SHOPPING_LIST_MUTATIONS = [
     ("shopping_list: recurse on qty not deficit (ignore credit downstream)",
      "        state = _expand(fuel - 1, material, per_unit * deficit, recipes, state)",
      "        state = _expand(fuel - 1, material, per_unit * qty, recipes, state)"),
+]
+
+
+# min_gathers mutations (P3d) -- each breaks the threaded-CONSUME gather
+# lower bound so the routed (code, qty) diverges from the Lean `gatherTarget`
+# oracle (which calls the proved `minGathersCount`).
+# Killed by formal/diff/test_gather_step_target_diff.py.
+MIN_GATHERS_MUTATIONS = [
+    # Never credit holdings: every node pays its full quantity -> a covered
+    # chain looks unreachable. Killed by test_reachable_root_keeps_root
+    # (cost 480 instead of 0 would route to the step).
+    ("min_gathers: never credit holdings (used = 0)",
+     "    used = min(held, qty)",
+     "    used = 0"),
+    # Never CONSUME the credited stock -- the pre-P3d constant-credit hand
+    # model regression: shared stock double-credited under every parent on a
+    # DAG. Killed by test_dag_double_credit_witness_routes_to_step (cost 0
+    # instead of 1 would keep the root).
+    ("min_gathers: never consume credited stock (constant credit)",
+     "    owned[item] = held - used",
+     "    owned[item] = held"),
+    # Recurse at the UNCREDITED quantity: the node's own credit is ignored
+    # below it. Killed by test_partial_credit_keeps_root (cost 80 instead of
+    # 50 would route to the step).
+    ("min_gathers: recurse at uncredited quantity (per_unit * qty)",
+     "        state = _min_gathers(fuel - 1, material, per_unit * remaining, recipes, state)",
+     "        state = _min_gathers(fuel - 1, material, per_unit * qty, recipes, state)"),
+    # A raw leaf contributes nothing: every chain costs 0 -> everything looks
+    # reachable. Killed by test_unreachable_root_routes_to_step (cost 0
+    # instead of 480 would keep the root).
+    ("min_gathers: raw leaf contributes nothing",
+     "        return (total + remaining, owned)",
+     "        return (total, owned)"),
 ]
 
 
@@ -2495,6 +2549,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_gather_selection_diff.py", survivors)
     run_group(SHOPPING_LIST_SRC, SHOPPING_LIST_MUTATIONS,
               "formal/diff/test_shopping_list_diff.py", survivors)
+    run_group(MIN_GATHERS_SRC, MIN_GATHERS_MUTATIONS,
+              "formal/diff/test_gather_step_target_diff.py", survivors)
     run_group(GATHER_STEP_TARGET_SRC, GATHER_STEP_TARGET_MUTATIONS,
               "formal/diff/test_gather_step_target_diff.py", survivors)
     run_group(MONSTER_DROP_SELECTION_SRC, MONSTER_DROP_SELECTION_MUTATIONS,

@@ -1,4 +1,5 @@
 -- @concept: core, planner @property: totality, safety, reachability
+import Formal.ShoppingList
 
 /-!
 # Formal.StepDispatch
@@ -227,57 +228,100 @@ The fix routes to the strategy's DEEPEST actionable `step` (the raw base
 material) — a FLAT gather (`minGathers == qty`) that plans within budget and makes
 incremental progress.
 
-We model `minGathers` as `min_gathers.py`'s recursion shape (the pre-P2c
-`ShoppingList.rawReq` idiom): credit the item's holdings, then for the deficit
-gather it (raw: empty recipe) or recurse into the sub-recipe at
-`per_unit * deficit`. KNOWN SCOPE (P2c finding, docs/PLAN_mechanical_extraction.md):
-this hand model credits a CONSTANT `owned` function per node while
-`min_gathers.py` consumes a threaded copy — the two agree on TREE recipes (the
-domain its differential generator samples) and diverge on DAG recipes, the same
-fidelity gap closed for ShoppingList in P2c; aligning `minGathers` to consume
-semantics is tracked there as follow-up. `Recipe`/`deficit` are redeclared here
-to keep StepDispatch self-contained and mathlib-free. -/
+CONSUME SEMANTICS (P3d, docs/PLAN_mechanical_extraction.md): `min_gathers.py`
+THREADS a `(total, owned)` state through the recursion and CONSUMES holdings
+as it credits them — a unit credited under one parent is NOT available to a
+sibling branch. The pre-P3d hand model credited a CONSTANT `owned` function at
+every node instead; the two agree on TREE recipes but the constant model
+DOUBLE-CREDITS shared stock on DAG-shaped recipes (the same fidelity gap
+closed for ShoppingList in P2c). Python's consume accounting is the spec, so
+this model mirrors `_min_gathers` statement-for-statement on the shared
+extracted encoding (`Formal.ShoppingList.Dict`/`Recipes`/`getD`/`setD`:
+String items, Int quantities, insertion-ordered association lists;
+fuel-structural recursion seeded `len(recipes) + 1`).
+`formal/Formal/Extracted/Bridges6.lean` proves the mechanically extracted
+image (`Formal/Extracted/MinGathers.lean`) equal to this model UNIVERSALLY. -/
 
-/-- A recipe environment: item → its `(sub_mat, per_unit)` ingredient list. -/
-abbrev Recipe := Nat → List (Nat × Nat)
+open Formal.ShoppingList (Dict Recipes getD setD)
 
-/-- Per-node deficit after crediting `have` held copies (truncated `Nat.sub`). -/
-def gdeficit (qty «have» : Nat) : Nat := qty - «have»
+/-- Add the gathers for one `(item, qty)` node to the threaded
+`(total, owned)` state: credit (and CONSUME) the held copies of `item`, then
+gather the remainder (raw: empty/absent recipe) or recurse into the
+sub-recipe at `per_unit * remaining`. Out of fuel ⇒ account the node's whole
+quantity as raw (conservatively LARGE — a cyclic recipe is uncraftable, so
+the unreachability gate stays sound; unreachable on acyclic recipes at the
+`minGathersCount` seeding). Mirrors `_min_gathers` statement-for-statement. -/
+def minGathers : Nat → String → Int → Recipes → Int × Dict Int → Int × Dict Int
+  | 0, _, qty, _, state => (state.1 + qty, state.2)
+  | fuel + 1, item, qty, recipes, state =>
+    let total := state.1
+    let owned := state.2
+    let held := getD owned item 0
+    let used := min held qty
+    let owned := setD owned item (held - used)
+    let remaining := qty - used
+    if remaining ≤ 0 then (total, owned)
+    else
+      let recipe := getD recipes item []
+      if recipe.length = 0 then (total + remaining, owned)
+      else recipe.foldl
+        (fun state mat => minGathers fuel mat.1 (mat.2 * remaining) recipes state)
+        (total, owned)
 
-mutual
-  /-- Lower bound on gathers to obtain `qty` of `item` crediting `owned`.
-  Mirrors `min_gathers`/`rawReq`: out of fuel ⇒ account the deficit as raw. -/
-  def minGathers (owned : Nat → Nat) (r : Recipe) : Nat → Nat → Nat → Nat
-    | 0, _, qty => qty
-    | fuel + 1, item, qty =>
-      match r item with
-      | []   => gdeficit qty (owned item)
-      | mats => sumGathers owned r fuel mats (gdeficit qty (owned item))
-  /-- Sum sub-material gathers at `per_unit * deficit`. -/
-  def sumGathers (owned : Nat → Nat) (r : Recipe) (fuel : Nat) :
-      List (Nat × Nat) → Nat → Nat
-    | [], _ => 0
-    | (sub, per) :: rest, d => minGathers owned r fuel sub (per * d) + sumGathers owned r fuel rest d
-end
+/-- The gather lower bound for `qty` of `item` crediting (and consuming)
+`owned` — the Python `min_gathers`, fuel seeded with `len(recipes) + 1`. -/
+def minGathersCount (item : String) (qty : Int) (recipes : Recipes)
+    (owned : Dict Int) : Int :=
+  (minGathers (recipes.length + 1) item qty recipes (0, owned)).1
 
-/-- A RAW item (empty recipe) at positive fuel: `minGathers == deficit == qty`
-when nothing is owned — the FLAT gather cost the deepest-step route relies on. -/
-theorem minGathers_raw (owned : Nat → Nat) (r : Recipe) (item qty fuel : Nat)
-    (hraw : r item = []) :
-    minGathers owned r (fuel + 1) item qty = gdeficit qty (owned item) := by
-  simp [minGathers, hraw]
+/-- `minGathers` at `fuel + 1`, zeta-expanded (the shape the proofs case on). -/
+theorem minGathers_succ (fuel : Nat) (item : String) (qty : Int)
+    (recipes : Recipes) (total : Int) (owned : Dict Int) :
+    minGathers (fuel + 1) item qty recipes (total, owned) =
+      if qty - min (getD owned item 0) qty ≤ 0 then
+        (total, setD owned item (getD owned item 0 - min (getD owned item 0) qty))
+      else if (getD recipes item []).length = 0 then
+        (total + (qty - min (getD owned item 0) qty),
+         setD owned item (getD owned item 0 - min (getD owned item 0) qty))
+      else
+        (getD recipes item []).foldl
+          (fun state mat =>
+            minGathers fuel mat.1 (mat.2 * (qty - min (getD owned item 0) qty))
+              recipes state)
+          (total, setD owned item (getD owned item 0 - min (getD owned item 0) qty)) :=
+  rfl
 
-/-- A RAW item with no holdings: `minGathers == qty` exactly (flat). -/
-theorem minGathers_raw_unowned (r : Recipe) (item qty fuel : Nat)
-    (hraw : r item = []) :
-    minGathers (fun _ => 0) r (fuel + 1) item qty = qty := by
-  rw [minGathers_raw _ r item qty fuel hraw]; simp [gdeficit]
+/-- A RAW item (empty/absent recipe) at positive fuel from a zero running
+total: the gather count is exactly the per-node `Nat.sub` deficit
+`Formal.ShoppingList.deficit qty held` — the FLAT gather cost the
+deepest-step route relies on. -/
+theorem minGathers_raw (fuel : Nat) (item : String) (qty held : Nat)
+    (recipes : Recipes) (owned : Dict Int)
+    (hraw : (getD recipes item []).length = 0)
+    (hheld : getD owned item 0 = (held : Int)) :
+    (minGathers (fuel + 1) item (qty : Int) recipes (0, owned)).1
+      = ((Formal.ShoppingList.deficit qty held : Nat) : Int) := by
+  rw [minGathers_succ, hheld]
+  unfold Formal.ShoppingList.deficit
+  by_cases hc : (qty : Int) - min (held : Int) (qty : Int) ≤ 0
+  · rw [if_pos hc]; show (0 : Int) = _; omega
+  · rw [if_neg hc, if_pos hraw]; show (0 : Int) + _ = _; omega
+
+/-- A RAW item with no holdings: the gather count is exactly `qty` (flat). -/
+theorem minGathers_raw_unowned (fuel : Nat) (item : String) (qty : Nat)
+    (recipes : Recipes) (hraw : (getD recipes item []).length = 0) :
+    (minGathers (fuel + 1) item (qty : Int) recipes (0, [])).1 = (qty : Int) := by
+  rw [minGathers_raw fuel item qty 0 recipes [] hraw rfl]
+  unfold Formal.ShoppingList.deficit
+  omega
 
 /-- The pure routing decision, mirroring `gather_step_target`:
-route to the root when its gather cost fits the budget, else the deepest step. -/
-def gatherTarget (owned : Nat → Nat) (r : Recipe) (fuel : Nat)
-    (rootItem stepItem stepQty equipMaxDepth : Nat) : Nat × Nat :=
-  if minGathers owned r fuel rootItem 1 ≤ equipMaxDepth then (rootItem, 1)
+route to the root when its gather cost fits the budget, else the deepest step.
+Like the Python, the cost is the SEEDED `minGathersCount` (`min_gathers`
+copies `owned` and seeds the fuel internally). -/
+def gatherTarget (recipes : Recipes) (owned : Dict Int) (rootItem stepItem : String)
+    (stepQty equipMaxDepth : Int) : String × Int :=
+  if minGathersCount rootItem 1 recipes owned ≤ equipMaxDepth then (rootItem, 1)
   else (stepItem, stepQty)
 
 /-- SOUNDNESS (route-only-when-over-budget): the deeper `step` is chosen ONLY
@@ -285,41 +329,72 @@ when the root's gather cost STRICTLY exceeds the equippable depth budget. So a
 depth-reachable root is never abandoned — exactly the Piece-C honesty bar
 (no false-infeasible that drops a doable objective). -/
 theorem gatherTarget_step_only_when_root_over_budget
-    (owned : Nat → Nat) (r : Recipe) (fuel rootItem stepItem stepQty equipMaxDepth : Nat)
-    (h : gatherTarget owned r fuel rootItem stepItem stepQty equipMaxDepth = (stepItem, stepQty))
+    (recipes : Recipes) (owned : Dict Int) (rootItem stepItem : String)
+    (stepQty equipMaxDepth : Int)
+    (h : gatherTarget recipes owned rootItem stepItem stepQty equipMaxDepth
+      = (stepItem, stepQty))
     (hne : (stepItem, stepQty) ≠ (rootItem, 1)) :
-    equipMaxDepth < minGathers owned r fuel rootItem 1 := by
+    equipMaxDepth < minGathersCount rootItem 1 recipes owned := by
   unfold gatherTarget at h
-  by_cases hb : minGathers owned r fuel rootItem 1 ≤ equipMaxDepth
+  by_cases hb : minGathersCount rootItem 1 recipes owned ≤ equipMaxDepth
   · rw [if_pos hb] at h; exact absurd h hne.symm
-  · exact Nat.lt_of_not_le hb
+  · omega
 
 /-- SOUNDNESS (root-kept-when-feasible): when the root's gather cost fits the
 budget the decision keeps the root target (the caller plans the short craft+equip
 chain). -/
 theorem gatherTarget_root_when_feasible
-    (owned : Nat → Nat) (r : Recipe) (fuel rootItem stepItem stepQty equipMaxDepth : Nat)
-    (h : minGathers owned r fuel rootItem 1 ≤ equipMaxDepth) :
-    gatherTarget owned r fuel rootItem stepItem stepQty equipMaxDepth = (rootItem, 1) := by
+    (recipes : Recipes) (owned : Dict Int) (rootItem stepItem : String)
+    (stepQty equipMaxDepth : Int)
+    (h : minGathersCount rootItem 1 recipes owned ≤ equipMaxDepth) :
+    gatherTarget recipes owned rootItem stepItem stepQty equipMaxDepth
+      = (rootItem, 1) := by
   unfold gatherTarget; simp [h]
 
-/-- SOUNDNESS (never-harder): when the deepest `step` is a RAW leaf with no
-holdings, the routed target's gather cost (`stepQty`) is NOT larger than the root
-gather cost we declined — routing trades DOWN to a flatter sub-target, never up to
-a harder one. Pins that the fix can't pick a worse target than the root.
+/-- SOUNDNESS (never-harder): when the deepest `step` is a RAW leaf, the routed
+target's gather cost is NOT larger than the root gather cost we declined —
+routing trades DOWN to a flatter sub-target, never up to a harder one. Pins
+that the fix can't pick a worse target than the root.
 
-Hypotheses: the step is the root's transitive base (`stepQty ≤
-minGathers(root)`, which holds because the deepest step's quantity is the
-expanded raw requirement) and we are in the over-budget branch. -/
+Hypotheses: non-negative step holdings and quantity (production invariants —
+counts and expanded requirements), and the step is the root's transitive base
+(`stepQty ≤ minGathersCount(root)`, which holds because the deepest step's
+quantity is the expanded raw requirement). -/
 theorem gatherTarget_step_not_harder_than_root
-    (owned : Nat → Nat) (r : Recipe) (fuel rootItem stepItem stepQty : Nat)
-    (hstep : r stepItem = [])
-    (hcost : stepQty ≤ minGathers owned r fuel rootItem 1)
-    (hfuel : 0 < fuel) :
-    minGathers owned r fuel stepItem stepQty ≤ minGathers owned r fuel rootItem 1 := by
-  obtain ⟨n, rfl⟩ := Nat.exists_eq_add_of_lt hfuel
-  rw [Nat.zero_add] at hcost ⊢
-  rw [minGathers_raw owned r stepItem stepQty n hstep]
-  exact Nat.le_trans (Nat.sub_le _ _) hcost
+    (recipes : Recipes) (owned : Dict Int) (rootItem stepItem : String)
+    (stepQty : Int)
+    (hstep : (getD recipes stepItem []).length = 0)
+    (hheld : 0 ≤ getD owned stepItem 0)
+    (hq : 0 ≤ stepQty)
+    (hcost : stepQty ≤ minGathersCount rootItem 1 recipes owned) :
+    minGathersCount stepItem stepQty recipes owned
+      ≤ minGathersCount rootItem 1 recipes owned := by
+  refine Int.le_trans ?_ hcost
+  unfold minGathersCount
+  rw [minGathers_succ]
+  by_cases hc : stepQty - min (getD owned stepItem 0) stepQty ≤ 0
+  · rw [if_pos hc]; show (0 : Int) ≤ stepQty; omega
+  · rw [if_neg hc, if_pos hstep]
+    show (0 : Int) + (stepQty - min (getD owned stepItem 0) stepQty) ≤ stepQty
+    omega
+
+/-- DAG consume-accounting witness (the P2c ShoppingList finding, closed for
+`min_gathers` in P3d): two gear parts share the same ore; 2 banked ore cover
+only ONE branch. The pre-P3d constant-credit model counted 0 gathers (the ore
+credited under BOTH parents); the consume model — like Python — counts 2. -/
+example :
+    minGathersCount "sword" 1
+        [("sword", [("a", 1), ("b", 1)]), ("a", [("ore", 2)]), ("b", [("ore", 2)])]
+        [("ore", 2)]
+      = 2 := by decide
+
+/-- DAG diamond witness: both paths need 2 of the shared raw `m`; the 2 held
+units cover the FIRST path only, leaving 2 real gathers (constant credit said
+0). -/
+example :
+    minGathersCount "root" 1
+        [("root", [("x", 1), ("y", 1)]), ("x", [("m", 2)]), ("y", [("m", 2)])]
+        [("m", 2)]
+      = 2 := by decide
 
 end Formal.StepDispatch

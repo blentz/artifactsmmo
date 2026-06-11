@@ -8,10 +8,13 @@ agree with the proved Lean `cap` / `overstock`.
 * equippable: `ITEM_TYPE_TO_SLOTS.get(stats.type_)` truthy
 plus the equipped floor (`code in state.equipment.values()`).
 
-We control all of them exactly to isolate the max/floor clamp against Lean:
-* `max_recipe_demand` is monkeypatched to return the chosen `recipe_demand`.
-* `item_stats` is monkeypatched to return a stub whose `type_` is equippable
-  ("weapon") or not ("resource"), matching the chosen `equippable` flag.
+We control all of them exactly to isolate the max/floor clamp against Lean,
+through a REAL GameData (P3b de-monkeypatch — the no-mock rule):
+* a one-recipe world `END ← recipe_demand × code` realizes any
+  `max_recipe_demand(code) == recipe_demand` (empty catalog for demand 0).
+* a real ItemStats catalog entry whose `type_` is equippable ("weapon") or
+  not ("resource") matches the chosen `equippable` flag; `hp_restore`
+  drives the consumable cap.
 * The item code is chosen as `tasks_coin` (action_cap 9) or `"X"` (action_cap 0).
 * The WorldState carries the items-task demand and the equipment so the Python
   task_cap and equipped floor match the Lean inputs.
@@ -19,11 +22,12 @@ We control all of them exactly to isolate the max/floor clamp against Lean:
 For the OVERSTOCK side, the inventory holds `qty` of the code; the Python
 `overstocked_items` excess (or absence) must equal the Lean `overstock`.
 """
-from hypothesis import given, settings, strategies as st
-from pytest import MonkeyPatch
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 import artifactsmmo_cli.ai.inventory_caps as ic_mod
-from artifactsmmo_cli.ai.game_data import ItemStats
+from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from formal.diff.oracle_client import run_oracle
 
@@ -60,8 +64,16 @@ def _make_state(code: str, task_remaining: int, equipped: bool, qty: int) -> Wor
     )
 
 
-class _FakeGameData:
-    pass
+def _gd(code: str, recipe_demand: int, stats: ItemStats) -> GameData:
+    """A REAL GameData whose catalog realizes the chosen per-item inputs:
+    `max_recipe_demand(code) == recipe_demand` via a one-recipe world
+    `END ← recipe_demand × code` (no recipe at all for demand 0), and
+    `item_stats(code) == stats`."""
+    gd = GameData()
+    if recipe_demand > 0:
+        gd._crafting_recipes = {"END": {code: recipe_demand}}
+    gd._item_stats = {code: stats}
+    return gd
 
 
 @settings(max_examples=300)
@@ -94,32 +106,26 @@ def test_python_matches_lean(recipe_demand, equippable, use_coin, is_healing,
     stats = ItemStats(code=code, level=1, type_=item_type,
                        hp_restore=hp_restore_val)
 
-    with MonkeyPatch.context() as mp:
-        mp.setattr(_FakeGameData, "max_recipe_demand",
-                   lambda self, c: recipe_demand, raising=False)
-        mp.setattr(_FakeGameData, "item_stats",
-                   lambda self, c: stats, raising=False)
-        game_data = _FakeGameData()
-        state = _make_state(code, task_remaining, equipped, qty)
-        py_cap = ic_mod.useful_quantity_cap(code, state, game_data,
-                                            batch_buffer, safety_floor)
-        py_over = ic_mod.overstocked_items(state, game_data,
-                                           batch_buffer, safety_floor)
+    game_data = _gd(code, recipe_demand, stats)
+    state = _make_state(code, task_remaining, equipped, qty)
+    py_cap = ic_mod.useful_quantity_cap(code, state, game_data,
+                                        batch_buffer, safety_floor)
+    py_over = ic_mod.overstocked_items(state, game_data,
+                                       batch_buffer, safety_floor)
 
-        # Compute the per-component values Python would feed to the Lean
-        # model: equippable_cap and consumable_cap come from the same
-        # predicates Python applies in `useful_quantity_cap_excl_equipped`.
-        # ITEM_TYPE_TO_SLOTS check matches the production wrapper.
-        from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
-        equippable_cap = (
-            ic_mod.EQUIPPABLE_KEEP
-            if (stats.type_ and ITEM_TYPE_TO_SLOTS.get(stats.type_)
-                and not ic_mod._is_equippable_dominated(code, state, game_data))
-            else 0
-        )
-        consumable_cap = (
-            ic_mod.CONSUMABLE_KEEP if stats.hp_restore > 0 else 0
-        )
+    # Compute the per-component values Python would feed to the Lean
+    # model: equippable_cap and consumable_cap come from the same
+    # predicates Python applies in `useful_quantity_cap_excl_equipped`.
+    # ITEM_TYPE_TO_SLOTS check matches the production wrapper.
+    equippable_cap = (
+        ic_mod.EQUIPPABLE_KEEP
+        if (stats.type_ and ITEM_TYPE_TO_SLOTS.get(stats.type_)
+            and not ic_mod._is_equippable_dominated(code, state, game_data))
+        else 0
+    )
+    consumable_cap = (
+        ic_mod.CONSUMABLE_KEEP if stats.hp_restore > 0 else 0
+    )
 
     lean = run_oracle(
         "inventory_caps",
@@ -151,15 +157,12 @@ def test_safety_floor_binds_against_lean():
     # recipe_demand=1, batch_buffer=1 -> raw recipe_cap=1; safety_floor=3 floors it to 3.
     # No task/action/equippable/equipped components -> cap == recipe_cap == 3.
     stats = ItemStats(code=code, level=1, type_="resource")
-    with MonkeyPatch.context() as mp:
-        mp.setattr(_FakeGameData, "max_recipe_demand", lambda self, c: 1, raising=False)
-        mp.setattr(_FakeGameData, "item_stats", lambda self, c: stats, raising=False)
-        game_data = _FakeGameData()
-        # qty=2 sits between raw recipe_cap (1) and the floored cap (3): with the
-        # floor, qty 2 <= cap 3 -> NOT overstocked; without it, cap 1 -> overstock 1.
-        state = _make_state(code, task_remaining=0, equipped=False, qty=2)
-        py_cap = ic_mod.useful_quantity_cap(code, state, game_data, 1, 3)
-        py_over = ic_mod.overstocked_items(state, game_data, 1, 3)
+    game_data = _gd(code, 1, stats)
+    # qty=2 sits between raw recipe_cap (1) and the floored cap (3): with the
+    # floor, qty 2 <= cap 3 -> NOT overstocked; without it, cap 1 -> overstock 1.
+    state = _make_state(code, task_remaining=0, equipped=False, qty=2)
+    py_cap = ic_mod.useful_quantity_cap(code, state, game_data, 1, 3)
+    py_over = ic_mod.overstocked_items(state, game_data, 1, 3)
 
     lean = run_oracle("inventory_caps", [[1, 3, 1, 0, 0, 0, 0, 0, 2]])[0]
     assert py_cap == 3
@@ -174,16 +177,13 @@ def test_equipped_floor_binds_against_lean():
     miss)."""
     code = "X"
     stats = ItemStats(code=code, level=1, type_="resource")  # not equippable
-    with MonkeyPatch.context() as mp:
-        mp.setattr(_FakeGameData, "max_recipe_demand", lambda self, c: 0, raising=False)
-        mp.setattr(_FakeGameData, "item_stats", lambda self, c: stats, raising=False)
-        game_data = _FakeGameData()
-        # equipped, no recipe/task/action/equippable demand, qty=1:
-        # with the floor, cap=1 -> qty 1 <= 1 -> NOT overstocked;
-        # without it, cap=0 -> overstock 1.
-        state = _make_state(code, task_remaining=0, equipped=True, qty=1)
-        py_cap = ic_mod.useful_quantity_cap(code, state, game_data)
-        py_over = ic_mod.overstocked_items(state, game_data)
+    game_data = _gd(code, 0, stats)
+    # equipped, no recipe/task/action/equippable demand, qty=1:
+    # with the floor, cap=1 -> qty 1 <= 1 -> NOT overstocked;
+    # without it, cap=0 -> overstock 1.
+    state = _make_state(code, task_remaining=0, equipped=True, qty=1)
+    py_cap = ic_mod.useful_quantity_cap(code, state, game_data)
+    py_over = ic_mod.overstocked_items(state, game_data)
 
     lean = run_oracle("inventory_caps", [[5, 3, 0, 0, 0, 0, 0, 1, 1]])[0]
     assert py_cap == 1
@@ -247,13 +247,10 @@ def test_consumable_cap_value_matches_lean(hp_restore):
 def test_equip_cap_from_peers_matches_lean(is_equippable, slot_count, peers):
     """Lean's `equipCapFromPeers` proves the dominance algorithm: a candidate
     is dominated when qualifying-peer owned count meets/exceeds slotCount.
-    Replicate the algorithm in Python, then compare cap outputs."""
-    # Python mirror of dominatorOwned + isDominatedBy + equipCapValue.
-    dominator_owned = 0
-    for fits, higher, covers, owned in peers:
-        if fits and higher and covers:
-            dominator_owned += owned
-    is_dominated = dominator_owned >= slot_count
+    Run the REAL production core `_is_dominated_pure` (P3b: the function
+    `_is_equippable_dominated` feeds with evaluated criteria, mechanically
+    extracted and bridged via `dominated_bridge`), then compare cap outputs."""
+    is_dominated = ic_mod._is_dominated_pure(peers, slot_count)
     py_cap = (
         ic_mod.EQUIPPABLE_KEEP
         if (is_equippable and not is_dominated) else 0

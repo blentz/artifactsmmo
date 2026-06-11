@@ -60,3 +60,19 @@ def test_does_not_mutate_caller_owned():
     recipes = {"copper_boots": {"copper_bar": 8}, "copper_bar": {"copper_ore": 10}}
     min_gathers("copper_boots", 1, recipes=recipes, owned=owned)
     assert owned == {"copper_bar": 3}, "must not consume the caller's dict"
+
+
+def test_shared_stock_consumed_not_double_credited():
+    # P3d DAG witness: two parts share the same ore; 2 held ore cover only ONE
+    # branch (consume semantics) — a constant credit would wrongly say 0.
+    recipes = {"sword": {"a": 1, "b": 1}, "a": {"ore": 2}, "b": {"ore": 2}}
+    assert min_gathers("sword", 1, recipes=recipes, owned={"ore": 2}) == 2
+
+
+def test_cyclic_recipe_terminates_with_conservative_bound():
+    # A cyclic recipe is uncraftable; the fuel bound (len(recipes) + 1)
+    # terminates the recursion and accounts the remaining need as raw —
+    # conservatively LARGE, so the `min_gathers > max_depth` skip gate stays
+    # sound (the pre-P3d recursion raised RecursionError here).
+    recipes = {"a": {"a": 1}}
+    assert min_gathers("a", 5, recipes=recipes, owned={}) == 5

@@ -7,9 +7,9 @@ agree with the proved Lean oracle over random finite recipe graphs.
 recursively sums `qty * units(sub)` with a visited guard making revisits / raw
 items cost 1 (cyclic-safe).
 
-We use integer item/resource codes (the model uses `Nat`) and a controlled fake
-GameData exposing only `_crafting_recipes` and `_resource_drops`. The same
-recipe graph is encoded for the Lean oracle (flat int args). We assert:
+We use integer item/resource codes (the model uses `Nat`) and a real GameData
+carrying only `crafting_recipes` and `resource_drops`. The same recipe graph is
+encoded for the Lean oracle (flat int args). We assert:
 * `needed_resources` sets match,
 * `craftable_mats` sets match,
 * `raw_material_units(query)` values match,
@@ -19,21 +19,16 @@ import random
 
 from hypothesis import given, settings, strategies as st
 
+from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.recipe_closure import raw_material_units, recipe_closure
 from formal.diff.oracle_client import run_oracle
 
 
-class _FakeGameData:
-    def __init__(self, recipes: dict[int, dict[int, int]], drops: dict[int, int]):
-        self._crafting_recipes = {str(k): {str(s): q for s, q in v.items()} for k, v in recipes.items()}
-        self._resource_drops = {str(r): str(d) for r, d in drops.items()}
-
-    def crafting_recipe(self, code: str) -> dict[str, int] | None:
-        return self._crafting_recipes.get(code)
-
-    @property
-    def resource_drops(self) -> dict[str, str]:
-        return self._resource_drops
+def _gd(recipes: dict[int, dict[int, int]], drops: dict[int, int]) -> GameData:
+    gd = GameData()
+    gd._crafting_recipes = {str(k): {str(s): q for s, q in v.items()} for k, v in recipes.items()}
+    gd._resource_drops = {str(r): str(d) for r, d in drops.items()}
+    return gd
 
 
 def _encode_args(recipes: dict[int, dict[int, int]], drops: dict[int, int],
@@ -52,7 +47,7 @@ def _encode_args(recipes: dict[int, dict[int, int]], drops: dict[int, int],
 
 
 def _run(recipes, drops, roots, query, fuel):
-    gd = _FakeGameData(recipes, drops)
+    gd = _gd(recipes, drops)
     needed, craft = recipe_closure(gd, [str(x) for x in roots])
     py_needed = sorted(int(x) for x in needed)
     py_craft = sorted(int(x) for x in craft)

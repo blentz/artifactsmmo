@@ -1080,7 +1080,10 @@ def runShoppingList (args : Array Json) : Json :=
     ("keys", keysJson)]
 
 /-- Compute one gather_step_target result using the SAME proved
-`Formal.StepDispatch.gatherTarget` (which calls `Formal.StepDispatch.minGathers`).
+`Formal.StepDispatch.gatherTarget` (which calls
+`Formal.StepDispatch.minGathersCount` — the threaded-CONSUME gather lower
+bound, P3d; the fuel is seeded internally with `len(recipes) + 1`, exactly
+like the Python `min_gathers`).
 
 This is the Piece-C feasibility router: a depth-unreachable equippable root
 (min_gathers(root) > equipMaxDepth) routes the GatherMaterials goal to the
@@ -1090,7 +1093,7 @@ args layout (all Nat ≥ 0), same recipe/owned prefix as shopping_list:
 * `[0]`                  nRecipe (number of `(item, sub, qty)` triples)
 * `[1 .. 3*nRecipe]`     the triples, flat: item0 sub0 qty0 ...
 * next: nOwned, then `(item, qty)` owned pairs flat
-* next: rootItem, stepItem, stepQty, equipMaxDepth, fuel
+* next: rootItem, stepItem, stepQty, equipMaxDepth
 
 Emits the routed `{"code": _, "qty": _}` — compared against the Python
 `gather_step_target`. -/
@@ -1108,13 +1111,19 @@ def runGatherStepTarget (args : Array Json) : Json :=
   let stepItem := g (p2 + 1)
   let stepQty := g (p2 + 2)
   let equipMaxDepth := g (p2 + 3)
-  let fuel := g (p2 + 4)
-  let r : Formal.StepDispatch.Recipe :=
-    fun item => (triples.filter (fun t => decide (t.1 = item))).map (fun t => (t.2.1, t.2.2))
-  let owned := tableLookup ownedPairs 0
+  let parents := (triples.map (fun t => t.1)).eraseDups
+  let recipes : Formal.ShoppingList.Recipes :=
+    parents.map (fun it =>
+      (toString it,
+       (triples.filter (fun t => decide (t.1 = it))).map
+         (fun t => (toString t.2.1, Int.ofNat t.2.2))))
+  let owned : Formal.ShoppingList.Dict Int :=
+    ownedPairs.map (fun kv => (toString kv.1, Int.ofNat kv.2))
   let (code, qty) :=
-    Formal.StepDispatch.gatherTarget owned r fuel rootItem stepItem stepQty equipMaxDepth
-  Json.mkObj [("code", Json.num (Int.ofNat code)), ("qty", Json.num (Int.ofNat qty))]
+    Formal.StepDispatch.gatherTarget recipes owned (toString rootItem)
+      (toString stepItem) (Int.ofNat stepQty) (Int.ofNat equipMaxDepth)
+  Json.mkObj [("code", Json.num (Int.ofNat ((code.toNat?).getD 0))),
+    ("qty", Json.num qty)]
 
 /-- Compute one monster_drop_selection result using the SAME proved
 `Formal.MonsterDropSelection.selectMonsterForDrop`.

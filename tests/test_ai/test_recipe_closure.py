@@ -1,7 +1,13 @@
 """Tests for recipe_closure — the gather/craft action scope for producing items."""
 
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.recipe_closure import raw_material_units, recipe_closure
+from artifactsmmo_cli.ai.recipe_closure import (
+    _closure_demand,
+    _closure_visited,
+    _raw_units,
+    raw_material_units,
+    recipe_closure,
+)
 
 
 def _gd(recipes, drops):
@@ -87,3 +93,41 @@ def test_raw_material_units_unknown_is_one():
 def test_raw_material_units_cyclic_terminates():
     gd = _gd({"a": {"b": 1}, "b": {"a": 1}}, {})
     assert raw_material_units(gd, "a") == 1   # cycle guard returns 1 on revisit
+
+
+# ---------------------------------------------------------------------------
+# Fuel discipline of the pure cores (mechanical-extraction P3a). The fuel
+# bound `len(recipes) + 1` is UNREACHABLE through the public wrappers (every
+# recursing frame marks a distinct recipe key first), so the base cases are
+# pinned directly: fuel 0 returns the accumulator/unit unchanged, and a
+# cyclic graph at the wrapper's seeding still terminates with the visited
+# guard (never the fuel guard) deciding the values.
+# ---------------------------------------------------------------------------
+
+
+def test_pure_cores_fuel_zero_base_cases():
+    recipes = {"a": {"b": 2}, "b": {"a": 3}}
+    visited = {"seed": 1}
+    assert _closure_visited(0, "a", recipes, dict(visited)) == visited
+    assert _raw_units(0, "a", recipes, dict(visited)) == 1
+    out = {"seed": 4}
+    assert _closure_demand(0, "a", 5, recipes, dict(visited), dict(out)) == out
+
+
+def test_cyclic_recipe_terminates_via_visited_guard_not_fuel():
+    # a <-> b cycle: the wrapper seeds fuel len(recipes) + 1 = 3; the visited
+    # guard fires first on every path, so doubling the fuel changes nothing.
+    recipes = {"a": {"b": 2}, "b": {"a": 3}}
+    gd = _gd(recipes, {"rock_a": "a", "rock_b": "b"})
+    resources, craftable = recipe_closure(gd, ["a"])
+    assert resources == {"rock_a", "rock_b"}
+    assert craftable == {"a", "b"}
+    # units(a) = 2 * units(b, {a}) = 2 * (3 * units(a, {a,b}) = 1) = 6
+    assert raw_material_units(gd, "a") == 6
+    assert _raw_units(6, "a", recipes, {}) == _raw_units(3, "a", recipes, {}) == 6
+    assert _closure_visited(6, "a", recipes, {}) == _closure_visited(3, "a", recipes, {})
+    # demand: a recorded at 1, b at 1*2; the cycle edge back to a is cut by
+    # the per-path visited guard (a is on the path), at any adequate fuel.
+    assert (_closure_demand(6, "a", 1, recipes, {}, {})
+            == _closure_demand(3, "a", 1, recipes, {}, {})
+            == {"a": 1, "b": 2})

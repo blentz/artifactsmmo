@@ -880,3 +880,88 @@ open Formal.PriorityBand
 -- precondition; every Formal.ArbiterSelect safety theorem transfers.
 #check @Extracted.Bridges.arbiter_select_bridge                       -- extracted ∘ encode = encOut ∘ hand
 #check @Extracted.Bridges.select_pure_guard_wins_extracted            -- sticky-safety on the extracted def
+
+-- Extracted-model bridges (mechanical extraction P3a): the recipe family —
+-- recipe_closure / task_batch / task_reservation, hoisted to pure cores over
+-- plain data (GameData reads moved to thin wrappers). Bridges quantify over
+-- an injective code embedding f : Nat → String (dict lookups are keyed by
+-- codes). task_batch and task_reservation are FULL bridges; recipe_closure's
+-- DFS is universally SOUND against the least-fixpoint spec `Reachable`, with
+-- the completeness direction kernel-pinned on the registered mutation graphs
+-- (diamond/cycle/chain) and covered by the 240-case differential oracle.
+#check @Extracted.Bridges.task_batch_bridge                           -- extracted = hand batchSize at eMats/eHeld
+#check @Extracted.Bridges.task_batch_bridge_none                      -- no-code branch = batchSize false
+#check @Extracted.Bridges.task_batch_ge_one_extracted                 -- floor-at-1 safety on the extracted def
+#check @Extracted.Bridges.closure_demand_bridge                       -- threaded dict = hand closureDemand (DemRel)
+#check @Extracted.Bridges.reserved_demand_bridge                      -- reserved map corresponds, ∀ ctx/graph
+#check @Extracted.Bridges.consumes_reserved_bridge                    -- suppression predicate = hand, ∀ inputs
+#check @Extracted.Bridges.task_reservation_done_inert_extracted       -- task done ⇒ inert (transferred contract)
+#check @Extracted.Bridges.trace_helmet_deferred_extracted             -- production trace pin (deferred)
+#check @Extracted.Bridges.trace_surplus_allowed_extracted             -- production trace pin (surplus passes)
+#check @Extracted.Bridges.trace_done_allowed_extracted                -- production trace pin (done passes)
+#check @Extracted.Bridges.raw_units_bridge                            -- extracted units = hand rawUnitsAux, ∀ inputs
+#check @Extracted.Bridges.closure_visited_sound                       -- DFS keys ⊆ Reachable (soundness, ∀ graphs)
+#check @Extracted.Bridges.recipe_closure_pure_sound                   -- outputs sound: isCraftable / isNeeded
+#check @Extracted.Bridges.closure_pin_diamond                         -- completeness pin (diamond graph)
+#check @Extracted.Bridges.closure_pin_diamond_matches_hand            -- hand craftable/needed agree (diamond)
+#check @Extracted.Bridges.raw_units_pin_diamond                       -- units 31 on both sides (diamond)
+#check @Extracted.Bridges.closure_pin_cycle                           -- completeness pin (cycle terminates)
+#check @Extracted.Bridges.closure_pin_cycle_matches_hand              -- hand craftable/needed agree (cycle)
+#check @Extracted.Bridges.raw_units_pin_cycle                         -- units 6 on both sides (cycle)
+#check @Extracted.Bridges.closure_pin_chain                           -- completeness pin (chain depth)
+#check @Extracted.Bridges.closure_pin_chain_matches_hand              -- hand craftable/needed agree (chain)
+
+-- Extracted-model bridges (mechanical extraction P3b): inventory_caps — the
+-- per-item useful-quantity cap (recipe/task/action/equippable/consumable
+-- components + equipped floor), the dominance fold gating EQUIPPABLE_KEEP,
+-- and the LIVE space-driven overstock core `overstock_excess` (spec
+-- 2026-06-07), all generated from src/artifactsmmo_cli/ai/inventory_caps.py
+-- and proved against the hand models (Formal/Extracted/Bridges4.lean).
+#check @Extracted.Bridges.overstock_excess_bridge                     -- extracted = hand overstockExcess, ∀ inputs
+#check @Extracted.Bridges.overstock_profile_protection_extracted      -- held ≤ target ⇒ never shed (transferred)
+#check @Extracted.Bridges.overstock_below_watermark_extracted         -- free slots ⇒ no overstock (transferred)
+#check @Extracted.Bridges.dominated_bridge                            -- extracted fold = hand isDominatedBy, ∀ peers
+#check @Extracted.Bridges.equip_cap_from_peers_extracted              -- dominance verdict → equipCapFromPeers
+#check @Extracted.Bridges.cap_excl_bridge                             -- extracted = hand capExclWith at eTaskCap
+#check @Extracted.Bridges.cap_bridge                                  -- extracted = hand capWith (equipped floor)
+#check @Extracted.Bridges.cap_equipped_ge_one_extracted               -- equipped ⇒ cap ≥ 1 (transferred safety)
+#check @Extracted.Bridges.cap_safety_floor_extracted                  -- recipe demand ⇒ cap ≥ safety floor
+#check @Extracted.Bridges.chain_demand_fuel_zero                      -- chain demand fuel-0 base case
+#check @Extracted.Bridges.chain_demand_target_self                    -- task item demands exactly remaining
+#check @Extracted.Bridges.chain_demand_visited_blocked                -- cycle guard: revisit contributes 0
+#check @Extracted.Bridges.chain_pin_cycle                             -- self-referential recipe terminates (0)
+#check @Extracted.Bridges.chain_pin_ash                               -- ash_plank→ash_wood 1:1 trace pin (10)
+
+-- Extracted-model bridges (mechanical extraction P3c): the exact-Fraction
+-- learning cores — cycles_for_progress (dual-signal median) and the scalar
+-- yield, generated from src/artifactsmmo_cli/ai/learning/
+-- {cycles_for_progress_core, scalar_core}.py and proved against the hand
+-- models (Formal/Extracted/Bridges5.lean). The Python float wrappers convert
+-- to Fraction EXACTLY and round ONCE at the boundary — that conversion is the
+-- documented trusted seam OUTSIDE these bridges (sampled by the diff suites).
+-- P2c-class fidelity finding fixed this wave: the hand strictIntervalsAux now
+-- RESETS on a `none` task_progress reading (the Python semantics).
+#check @Extracted.Bridges.cycles_for_progress_bridge                  -- extracted = hand, ∀ streams/warm-ups
+#check @Extracted.Bridges.cycles_median_bridge                        -- exact sorted-median = hand medianQ, ∀ lists
+#check @Extracted.Bridges.cycles_sort_bridge                          -- emitted insertion sort = hand insSortInt
+#check @Extracted.Bridges.cycles_nth_bridge                           -- emitted nth = hand nthInt (default 0)
+#check @Extracted.Bridges.cycles_strict_fold_bridge                   -- strict fold = hand stream (None RESETS)
+#check @Extracted.Bridges.cycles_satisfy_fold_bridge                  -- satisfy fold = hand stream (> 0 gate)
+#check @Extracted.Bridges.cycles_median_concat_extracted              -- verdict-(b) dual-signal contract (transferred)
+#check @Extracted.Bridges.cycles_warmup_blocks_extracted              -- warm-up gate ⇒ none (transferred)
+#check @Extracted.Bridges.scalar_yield_bridge                         -- extracted = hand scalarYield, ∀ rational inputs
+#check @Extracted.Bridges.scalar_yield_mono_gold_extracted            -- gold monotonicity (transferred)
+#check @Extracted.Bridges.coins_spent_bridge                          -- extracted = hand coinsSpent (rfl)
+#check @Extracted.Bridges.coins_spent_inverts_extracted               -- inversion identity (transferred)
+
+-- Extracted-model bridge (mechanical extraction P3d): min_gathers — the
+-- planner's gather lower bound (the is_plannable unreachability gate and the
+-- Piece-C gather_step_target router decide on it), generated from
+-- src/artifactsmmo_cli/ai/min_gathers.py and proved against the hand model
+-- (Formal/Extracted/Bridges6.lean). P2c-class fidelity finding fixed this
+-- wave: Formal.StepDispatch.minGathers now THREADS and CONSUMES the owned
+-- dict (the Python semantics) — the constant-credit model double-credited
+-- shared stock on DAG recipes.
+#check @Extracted.Bridges.min_gathers_node_bridge                     -- extracted = hand, ∀ fuel/state (DAGs incl.)
+#check @Extracted.Bridges.min_gathers_bridge                          -- extracted API = hand minGathersCount
+#check @Extracted.Bridges.min_gathers_raw_unowned_extracted           -- flat raw gather cost (transferred)

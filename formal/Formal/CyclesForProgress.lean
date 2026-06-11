@@ -11,6 +11,9 @@ sub-streams are concatenated:
   * STRICT-INCREASE intervals: distances `cycle_index - last_progress_at`
     between cycles where `task_progress` strictly increased over the
     previous cycle. Models the wall-clock spacing of progress ticks.
+    A `none` reading RESETS the detector (Python overwrites
+    `prev_progress` on every iteration) — see the P3c fidelity note on
+    `strictIntervalsAux`.
   * SATISFY intervals: the raw `cycles_to_satisfy` value (cycles since
     the goal was FIRST selected) at each cycle that recorded one and is
     strictly positive. Models the wall-clock duration of a full goal
@@ -53,7 +56,17 @@ structure CycleRow where
   deriving Repr
 
 /-- Auxiliary for STRICT-INCREASE intervals, threading the rolling state
-`(prevProgress, lastProgressAt)`. -/
+`(prevProgress, lastProgressAt)`.
+
+MODEL-FIDELITY FIX (P3c, 2026-06-10): the Python loop executes
+`prev_progress = cycle.task_progress` on EVERY iteration, so a `None`
+`task_progress` reading RESETS the strict-increase detector (`prevProgress`
+becomes `none`, and the next reading has no previous value to strictly
+exceed). This model previously KEPT the old `prevProgress` through a `none`
+row — divergent on streams that MIX `none` and `some` readings (the
+differential generator only produced all-`none` or all-`some` streams, which
+masked it; the P2c tree-only-domain gap class). Python is the spec; the
+`none` arm now threads `none`. -/
 def strictIntervalsAux : Option Int → Option Int → List CycleRow → List Int
   | _, _, [] => []
   | prevProgress, lastProgressAt, c :: rest =>
@@ -68,7 +81,7 @@ def strictIntervalsAux : Option Int → Option Int → List CycleRow → List In
       else
         strictIntervalsAux (some tp) lastProgressAt rest
     | _, some tp => strictIntervalsAux (some tp) lastProgressAt rest
-    | _, none => strictIntervalsAux prevProgress lastProgressAt rest
+    | _, none => strictIntervalsAux none lastProgressAt rest
 
 /-- STRICT-INCREASE intervals over a chronological row stream. -/
 def strictIntervals (rows : List CycleRow) : List Int :=
@@ -298,7 +311,7 @@ theorem strictIntervals_pos
         | none =>
           rw [htp] at hx
           simp at hx
-          exact ih (some p) lastAt hLast_shrunk hRestMono x hx
+          exact ih none lastAt hLast_shrunk hRestMono x hx
         | some tp =>
           rw [htp] at hx
           simp at hx
@@ -381,6 +394,28 @@ example :
     let r2 : CycleRow := { cycleIndex := 2, taskProgress := some 2,
                             cyclesToSatisfy := some 3 }
     cyclesForProgressPure (revList [r0, r1, r2]) 3 = none := by
+  decide
+
+/-- RESET-SEMANTICS witness (the P3c model-fidelity fix): a `none`
+`task_progress` reading RESETS the strict-increase detector. Chronological
+progress readings `some 0, none, some 5, some 7` produce NO strict interval
+(the `none` row clears `prevProgress`; `some 5` re-seeds it; `7 > 5` is the
+FIRST strict increase after the reset, so `lastProgressAt` is only seeded,
+nothing is appended). The pre-fix model kept `prevProgress = some 0` through
+the `none` row and wrongly emitted `[1]`. With a satisfy reading 9 on the
+final row, the median is 9 — exactly what the Python core computes
+(verified: `cycles_for_progress_pure` returns 9.0 on this stream). -/
+example :
+    let r0 : CycleRow := { cycleIndex := 0, taskProgress := some 0,
+                            cyclesToSatisfy := none }
+    let r1 : CycleRow := { cycleIndex := 1, taskProgress := none,
+                            cyclesToSatisfy := none }
+    let r2 : CycleRow := { cycleIndex := 2, taskProgress := some 5,
+                            cyclesToSatisfy := none }
+    let r3 : CycleRow := { cycleIndex := 3, taskProgress := some 7,
+                            cyclesToSatisfy := some 9 }
+    strictIntervals [r0, r1, r2, r3] = []
+      ∧ cyclesForProgressPure (revList [r0, r1, r2, r3]) 1 = some 9 := by
   decide
 
 /-- A 6-row witness with one strict-increase interval (= 2) and one

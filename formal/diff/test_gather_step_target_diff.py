@@ -6,11 +6,12 @@ root recipe (which explodes the planner).
 
 Both sides compute `min_gathers(root, 1, recipes, owned)` and compare it to
 `equip_max_depth`: ≤ ⇒ keep the root target `(root, 1)`; > ⇒ route to
-`(step, step_qty)`. Faithfulness: the Lean `minGathers` credits each item's
-holdings at its node and threads `owned` to siblings; the Python `min_gathers`
-consumes a shared mutable `owned` depth-first. The two coincide exactly on TREE
-recipes (each non-root item the sub of a single parent, no cycles) — the same
-generator shape as test_shopping_list_diff.
+`(step, step_qty)`. Faithfulness (P3d): BOTH sides thread and CONSUME the
+`owned` holdings depth-first — the Lean `minGathers` was aligned to the Python
+consume semantics, closing the P2c-class constant-credit gap — so the generator
+samples DAG recipes (a child may be claimed by MULTIPLE parents), the exact
+domain where the pre-P3d constant-credit model double-credited shared stock.
+The DAG double-credit and diamond witnesses are pinned deterministically.
 """
 import random
 
@@ -22,32 +23,28 @@ from artifactsmmo_cli.ai.min_gathers import min_gathers
 from formal.diff.oracle_client import run_oracle
 
 _N = 6
-_FUEL = 12  # > tree depth
 
 
-def _make_tree(seed: int) -> dict[int, dict[int, int]]:
-    """Random TREE recipe over items 0..N-1 (each child claimed by one parent,
-    children strictly greater — acyclic). Item 0 is the root equippable."""
+def _make_dag(seed: int) -> dict[int, dict[int, int]]:
+    """Random DAG recipe over items 0..N-1 (children strictly greater —
+    acyclic — and a child may be claimed by MULTIPLE parents: the shape that
+    distinguishes consume from constant-credit accounting). Item 0 is the
+    root equippable."""
     rng = random.Random(seed)
     recipes: dict[int, dict[int, int]] = {}
-    claimed: set[int] = set()
     for item in range(_N):
-        free = [j for j in range(item + 1, _N) if j not in claimed]
+        free = list(range(item + 1, _N))
         rng.shuffle(free)
-        k = rng.randint(0, min(2, len(free)))
+        k = rng.randint(0, min(3, len(free)))
         if k == 0:
             continue
-        recipe: dict[int, int] = {}
-        for j in free[:k]:
-            recipe[j] = rng.randint(1, 4)
-            claimed.add(j)
-        recipes[item] = recipe
+        recipes[item] = {j: rng.randint(1, 4) for j in free[:k]}
     return recipes
 
 
 def _raw_leaf(recipes: dict[int, dict[int, int]]) -> int:
     """A raw-leaf item code (no recipe) to use as the deepest step; falls back to
-    the highest index (always a leaf in the increasing-index tree)."""
+    the highest index (always a leaf in the increasing-index DAG)."""
     for i in range(_N - 1, -1, -1):
         if not recipes.get(i):
             return i
@@ -66,7 +63,7 @@ def _oracle_args(recipes, owned, root, step, step_qty, max_depth) -> list[int]:
     for code, q in owned.items():
         owned_pairs.extend([code, q])
         no += 1
-    return [n, *triples, no, *owned_pairs, root, step, step_qty, max_depth, _FUEL]
+    return [n, *triples, no, *owned_pairs, root, step, step_qty, max_depth]
 
 
 @settings(max_examples=400, deadline=None)
@@ -77,7 +74,7 @@ def _oracle_args(recipes, owned, root, step, step_qty, max_depth) -> list[int]:
     max_depth=st.integers(min_value=0, max_value=200),
 )
 def test_routed_target_matches_lean(seed, owned_seed, step_qty, max_depth):
-    recipes = _make_tree(seed)
+    recipes = _make_dag(seed)
     rng = random.Random(owned_seed)
     owned = {i: rng.randint(0, 12) for i in range(_N) if rng.random() < 0.5}
     root = 0
@@ -92,7 +89,9 @@ def test_routed_target_matches_lean(seed, owned_seed, step_qty, max_depth):
 
 
 def test_unreachable_root_routes_to_step():
-    """Deep from-scratch chain (480 ore) over budget -> route to the raw step."""
+    """Deep from-scratch chain (480 ore) over budget -> route to the raw step.
+    Deterministic kill for the raw-leaf-contributes-nothing mutant (cost 0
+    would keep the root)."""
     recipes = {0: {1: 6}, 1: {2: 8}, 2: {3: 10}}  # boots<-bar6<-ironbar8<-ore10
     owned: dict[int, int] = {}
     py = gather_step_target(0, 3, 480, recipes, owned, 15)
@@ -102,7 +101,9 @@ def test_unreachable_root_routes_to_step():
 
 
 def test_reachable_root_keeps_root():
-    """Holdings cover the chain -> root cost 0 <= budget -> keep (root, 1)."""
+    """Holdings cover the chain -> root cost 0 <= budget -> keep (root, 1).
+    Deterministic kill for the never-credit (`used = 0`) mutant (cost 480
+    would route to the step)."""
     recipes = {0: {1: 6}, 1: {2: 8}, 2: {3: 10}}
     owned = {1: 6}  # 6 of item-1 cover the root recipe -> 0 gathers
     assert min_gathers(0, 1, recipes, owned) == 0
@@ -120,4 +121,48 @@ def test_boundary_at_budget_keeps_root():
     py = gather_step_target(0, 1, 15, recipes, owned, 15)
     assert py == (0, 1)
     lean = run_oracle("gather_step_target", [_oracle_args(recipes, owned, 0, 1, 15, 15)])[0]
+    assert (lean["code"], lean["qty"]) == py
+
+
+def test_dag_double_credit_witness_routes_to_step():
+    """THE P3d divergence witness: two parents share the raw material 3; the
+    single held unit covers only ONE branch, so the consume cost is 1 > 0 and
+    BOTH sides route to the step. The pre-P3d constant-credit model counted 0
+    (the held unit credited under both parents) and would have kept the root —
+    the deterministic kill for the never-consume (`owned[item] = held`)
+    mutant."""
+    recipes = {0: {1: 1, 2: 1}, 1: {3: 1}, 2: {3: 1}}
+    owned = {3: 1}
+    assert min_gathers(0, 1, recipes, owned) == 1
+    py = gather_step_target(0, 3, 1, recipes, owned, 0)
+    assert py == (3, 1)
+    lean = run_oracle("gather_step_target", [_oracle_args(recipes, owned, 0, 3, 1, 0)])[0]
+    assert (lean["code"], lean["qty"]) == py
+
+
+def test_dag_diamond_one_path_covered():
+    """Diamond: both paths need 2 of the shared raw 3; the 2 held units cover
+    the FIRST path only -> consume cost 2 (constant credit said 0). Budget 1
+    sits strictly between, so the routing decision itself separates the two
+    accountings on both sides."""
+    recipes = {0: {1: 1, 2: 1}, 1: {3: 2}, 2: {3: 2}}
+    owned = {3: 2}
+    assert min_gathers(0, 1, recipes, owned) == 2
+    py = gather_step_target(0, 3, 2, recipes, owned, 1)
+    assert py == (3, 2)
+    lean = run_oracle("gather_step_target", [_oracle_args(recipes, owned, 0, 3, 2, 1)])[0]
+    assert (lean["code"], lean["qty"]) == py
+
+
+def test_partial_credit_keeps_root():
+    """Partially held intermediate: 3 of 8 bars held -> only the 5-bar deficit
+    expands (cost 50 <= 60 -> keep root). Deterministic kill for the
+    ignore-credit-in-recursion (`per_unit * qty`) mutant (cost 80 would route
+    to the step)."""
+    recipes = {0: {1: 8}, 1: {2: 10}}
+    owned = {1: 3}
+    assert min_gathers(0, 1, recipes, owned) == 50
+    py = gather_step_target(0, 2, 50, recipes, owned, 60)
+    assert py == (0, 1)
+    lean = run_oracle("gather_step_target", [_oracle_args(recipes, owned, 0, 2, 50, 60)])[0]
     assert (lean["code"], lean["qty"]) == py
