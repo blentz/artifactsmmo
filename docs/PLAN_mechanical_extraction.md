@@ -48,6 +48,19 @@ generators, float, string methods, recursion (v2), match.
 - **P3**: Tier-3/4 — requires refactors in src (float→Fraction in cores; GameData reads hoisted
   to plain-data params), done per-core with full gates.
 - **Policy** (standing, in memory): every NEW pure core ships with an extracted model from day one.
+- **P4 (the deferred ledger from P1-P3)**:
+  - **P4a — equipment-scoring exact-arithmetic migration**: tiers/equip_value.py and its float
+    consumers (tiers/objective.py, tiers/strategy.py gains, tiers/prerequisite_graph.py,
+    goals/progression.py, goals/upgrade_selection.py) move from float to exact arithmetic
+    (int where summands are ints, Fraction where division appears). HONESTY NOTE: float→exact
+    in RANKING comparisons may flip near-ties — exact is the spec going forward; behavior is
+    NOT byte-identical by definition; diff oracles re-pinned exactly (tolerances removed where
+    the model is rational); trace behavior may shift marginally and that is the point.
+  - **P4b — extract the equipment-scoring cores** unlocked by P4a (equipment/scoring.py,
+    tiers/equip_value.py; bridges to the EquipmentScoring/LoadoutProjection hand models).
+  - **P4c — recipe_closure completeness invariant**: prove fuel = len(recipes)+1 suffices
+    (every recursing frame marks a distinct key), upgrade the kernel-pinned completeness to a
+    universal theorem, drop the pins.
 
 ## Session log
 - 2026-06-10: plan created; survey complete; P1 build launched.
@@ -560,3 +573,166 @@ generators, float, string methods, recursion (v2), match.
   cyclic-recipe termination. Gates green: lake build + oracle, no-sorry,
   axiom gate, extraction `--check` ×13, gather_step_target diff suite (DAG
   domain), full pytest 100%, mypy strict (src + extractor), ruff.
+- 2026-06-11: **P4c COMPLETE** (recipe_closure completeness: kernel pins →
+  universal theorem; Lean-only, zero Python changes). The never-exhausts-fuel
+  invariant is formalized in Extracted/Bridges3.lean over the extracted defs:
+  `unmarkedKeys recipes v` (recipe entries whose key is unmarked in the
+  threaded visited dict) is THE fuel measure — every recursing frame of
+  `_closure_visited` first marks a previously-unmarked recipe key
+  (`unmarkedKeys_strict`), marks only grow (`closure_visited_msub` /
+  `MSub`), so the measure strictly decreases down every recursion path and
+  the wrapper seed `len(recipes)+1` strictly dominates it at every state
+  (`eFuel_sufficient`) — the fuel-0 arm is unreachable on frames with work
+  pending. `closure_visited_complete` (fuel induction outside, child-list
+  fold induction inside, the P3a bridge idiom): with fuel above the measure
+  the DFS marks its root AND leaves every newly marked key children-closed;
+  the roots fold (`roots_fold_complete`) yields a `MarkedClosed` dict
+  containing every root, and `Reachable` induction transfers EVERY
+  spec-reachable item into the marked set
+  (`closure_visited_marks_reachable`). Output completeness
+  `recipe_closure_pure_complete` (isCraftable ⇒ in craftables, isNeeded ⇒ in
+  needed) and the combined iff `recipe_closure_pure_spec` (output membership
+  ⟺ isCraftable / isNeeded, ∀ graph/drops/roots, same injective-embedding
+  framing as the soundness theorems). PINS: the six `closure_pin_*`
+  completeness pins (diamond/cycle/chain + matches_hand, plus their `pinF` /
+  chain fixtures) are SUPERSEDED and dropped; `raw_units_pin_diamond` /
+  `raw_units_pin_cycle` KEPT — they pin exact numeric quantity outputs
+  (31; 6 vs the mutant's 12) that the universal set-membership statement
+  does not, and the mutation suite cites them. mutate.py recipe_closure
+  anchors and the diff test are UNCHANGED (mutants killed by the Python
+  diff suite, which still passes). Wired: Manifest #check (+5 new, −6 pins),
+  Audit #print axioms (same), Bridges3 module docstring updated. Gates
+  green: lake build + oracle, no-sorry, axiom gate (safety ⊆ kernel three),
+  extraction `--check` ×13, recipe_closure diff suite 3/3. P4 remainder:
+  P4a/P4b (equipment scoring, concurrent separate task).
+- 2026-06-11: **P4a COMPLETE** (equipment scoring float → EXACT arithmetic;
+  the P3c deferred cascade). TYPE DECISIONS (int where all summands int,
+  Fraction where division/blending appears):
+  - `tiers/equip_value.py`: `equip_value`/`tool_value` → **int** (every
+    summand is an int ItemStats field; the `float()` wrappers added
+    nothing; the Lean `EquipValueAugmented.equipValue : Int` hand model now
+    matches the Python type, not just its values). `equipment/scoring.py`
+    was ALREADY exact int (prior phase) — untouched.
+  - `tiers/prerequisite_graph.py`: best-weapon tuple → `tuple[int, str]`.
+  - `goals/upgrade_selection.py`: `UpgradeCandidate.value` → **int**; key
+    tuples all-int. Hand model `UpgradeSelection.lean` was already Int.
+  - `goals/progression.py`: `_upgrade_value` → int. The float `-inf`
+    missing-stats sentinel (`_value_of`) RETIRED: `_value_candidate` yields
+    NO candidate when stats are missing (`best_by_value` already treats
+    None as always-loses). Verdict parity everywhere except the
+    production-unreachable both-sides-missing corner (was the inv pick,
+    now None) — pinned by updated coverage tests citing P4a. Goal.value()
+    bands (35/51) stay float — goal-priority API, not equipment scoring.
+  - `tiers/objective.py`: gear_gaps → `dict[str, int]`; ObjectiveGap
+    fractions → **Fraction** (integer gap / integer denominator, exact).
+  - `tiers/objective_completion.py` + `tiers/personality.py`: pure-core
+    annotations + `category_weight` → Fraction (BalancedPersonality →
+    Fraction(1)); bodies unchanged (mutation anchors preserved).
+  - `tiers/strategy.py`: the WHOLE ranking pipeline → **Fraction** (priors
+    2/5, 3/5, 3/10; CHAR_GAP_PER_LEVEL 3/50 — 0.06 was never a real
+    double; GEAR_EQUIP_SCALE 20; STICKY 3/2; urgency 2; XP_RATE_REFERENCE
+    10); gear gain `max(0, equip_value − current)` exact int before the
+    Fraction normalisation; the learned float yield lifted ONCE via
+    `Fraction(y.char_xp)` (P3c boundary idiom). RootScore score fields →
+    Fraction with a `to_dict` float conversion (trace-only JSON seam,
+    never read back). CRITICAL_HP_FRACTION stays float (hp guard, out of
+    scope).
+  - `tiers/strategy_blend.py`: balancing/blend_weight/learned_blend →
+    Fraction (BALANCE_K = 1/4 etc.); `blend_weight`'s `n / 20` float
+    rounding GONE (20 not a power of two — the one genuinely inexact op).
+  - `tiers/decide_key.py`: `neg_final` → Fraction (exact lex sort).
+  HONESTY (the plan's note, measured): 200k-pair randomized old-vs-new
+  sweep: **0 strict order inversions**; 92 float-STRICT pairs are now
+  EXACT TIES (witness: gather 2/5·1/5·3/2 vs consumable 3/10·1/5·2 — both
+  3/25; float said 0.12000000000000002 > 0.12 by rounding noise; exact
+  ties fall to the documented effort/repr tiebreaks); 38 sticky-gate
+  boundary comparisons shift. NO pinned diff-oracle decision flipped (all
+  suites green with their verdict assertions unmodified).
+  DIFF ORACLES re-pinned exact: strategy_blend now compares the PRODUCTION
+  `balancing` Fraction to the Lean Rat oracle directly (the
+  `_balancing_fraction` local mirror deleted; float-exactness caveats
+  gone; constants pin sharpened to Fraction); objective diff drops the
+  `int(equip_value(...))` / `int(sum(gear_gaps))` boundary casts and adds
+  exact `Fraction(num, den)` pins for all three gap fractions;
+  upgrade_selection diff drops the `float(value)` / `int(c.value)` lifts;
+  weighted_remaining diff's `type: ignore[arg-type]`s removed (annotations
+  now match the exact domain). equipment_scoring + loadout_projection
+  diffs were already bit-exact int — untouched. NO Lean changes needed:
+  every hand model (EquipValueAugmented, UpgradeSelection, Objective,
+  StrategyBlend, WeightedRemaining, DecideKey, RankingComposition) was
+  already Int/Rat.
+  MUTATE.PY: 2 strategy_blend anchors re-anchored (slope flip on the new
+  `raw = 1 + ...` text; `BALANCE_K = Fraction(1, 4)` → `Fraction(1)`, same
+  0.25→1.0 intent) + 1 NEW byte-equivalence mutant (float-seed balancing
+  `1 → 1.0`, the scalar_core idiom) with a deterministic isinstance kill
+  added to the threshold-identity diff test; all three verified killed
+  in-memory (mutate.py NOT run). All 267 anchors across 89 groups verified
+  to match source exactly once + parse. Every other group (objective,
+  strategy traversal, upgrade_selection, weighted_remaining, scoring,
+  progression, decide_key) anchors on unchanged lines.
+  Gates green: full pytest 3116/100%, mypy strict (201 files), ruff
+  src+tests (formal/diff at its pre-existing 100-error unlinted baseline),
+  lake build + oracle, no-sorry, axiom gate, extraction `--check` ×13
+  byte-identical (none of the touched files are extracted modules — that
+  is P4b). Scoped diff suites green: equipment_scoring, loadout_projection,
+  upgrade_selection, objective, strategy_blend, arbiter_select,
+  weighted_remaining, decide_key, prerequisite_graph, strategy_traversal,
+  goal_system_value, goal_value_band_safety, realizable_loadout.
+  P4b (extract the now-exact equip cores) unlocked.
+- 2026-06-11: **P4b COMPLETE — P4 FULLY CLOSED** (extract the exact
+  equipment-scoring cores; registry 13 → 15 modules, two files: scoring.py
+  and equip_value.py each get their own generated module).
+  ENCODING DECISIONS (hoist-to-plain-params, the P3a wrapper pattern; the
+  hand models' input shapes drove every choice):
+  - `equipment/scoring.py`: new pure cores `weapon_score_raw_pure` /
+    `weapon_score_pure` / `gather_score_pure` / `armor_score_pure`; the
+    public functions became thin wrappers (signatures unchanged). The
+    ItemStats reads (`weapon.attack`, `.subtype`, `.skill_effects`,
+    `armor.resistance`) hoist to plain dict/str params; the module-level
+    `ELEMENTS` tuple hoists to a `list[str]` parameter (wrapper passes
+    `list(ELEMENTS)`) — the hand `WScore`/`AScore` fix `elements` as a
+    concrete list, so the bridge instantiates the parametric extracted def
+    at the encoded element list. Loop bodies rewritten single-accumulator
+    (`score = score + ...`) to fit the v6 subset.
+  - `tiers/equip_value.py`: new pure cores `equip_value_pure` (seven plain
+    params: six summed ints + subtype — EXACTLY the hand RawStats + isTool
+    shape, the wrapper hoists the dict-value sums) and `tool_value_pure`
+    (the wrapper keeps the redundant empty-dict fast path).
+  EXTRACTOR: registry-only extension (+2 ModuleSpecs appended; ZERO new
+  constructs — the v6 subset already covered every shape); prior 13 modules
+  regenerate byte-identically (`--check` ×15 OK).
+  BRIDGES (Formal/Extracted/Bridges7.lean, all FULL universal, no sorry,
+  axioms ⊆ kernel three): element-keyed score bridges are universal over an
+  arbitrary INJECTIVE `Int→String` element embedding (the CombatPicker
+  precedent): `weapon_score_raw_bridge` (= hand WScore), `armor_score_bridge`
+  (= AScore), `weapon_score_bridge` (= PurposeRouting.combatScore with
+  isTool = `subtype == "tool"`), `equip_value_bridge` (= EquipValueAugmented
+  .equipValue, pointwise over ALL stats — the wrapper's already-summed
+  encoding matches the hand RawStats directly). `tool_value_pure` has no
+  standalone hand model (disclosed): its bridge is the CROSS-CORE duality
+  `tool_value_abs_gather` (= |gather_score_pure|, definitional) +
+  `tool_value_neg_gather_on_tools` (tool domain: max tool_value ≡ min
+  gather_score — the upgrade ranking and the gather picker agree).
+  TRANSFERRED hand theorems onto the extracted defs:
+  `weapon_score_raw_nonneg_extracted` (THE clamp theorem),
+  `weapon_score_strict_extracted` + `weapon_score_tiebreak_extracted`
+  (strict-order protection + the fishing_net invariant),
+  `pickslot_no_downgrade_extracted` (pickSlot instantiated at the extracted
+  score), `gather_pick_optimal_extracted` (pickGatherSlot_score_optimal at
+  the extracted gather score), `gather_score_absent_zero`,
+  `equip_value_strict_extracted` + `equip_value_tiebreak_extracted`.
+  MUTATE.PY: 2 equipment_scoring anchors re-anchored onto the pure-core
+  lines (clamp drop; armor float-rescale — same intents; the wrappers
+  delegate so mutants still flow into the diff oracle); both verified
+  killed in-memory (clamp: 0 vs -100 at res=120; rescale: 21 vs 0.21);
+  all 267 anchors across 89 (src, group) pairs verified to match exactly
+  once + parse (mutate.py NOT run). Coverage: one new unit test pins the
+  `weapon_score_raw` wrapper + the composite `2*raw + bonus` identity.
+  Wired: Formal.lean (+3 imports), Manifest #check (+15), Audit #print
+  axioms (+15). Gates green: lake build + oracle, no-sorry, safety +
+  liveness axiom gates, no-orphan (149 modules), extraction `--check` ×15
+  byte-identical, full pytest 3117/100%, mypy strict (202 files), ruff,
+  scoped diff suites (equipment_scoring, loadout_projection, objective,
+  upgrade_selection, realizable_loadout). With P4a + P4c already closed,
+  the P4 deferred ledger is EMPTY — every pure decision core registered to
+  date ships with an extracted, bridge-proved Lean model.

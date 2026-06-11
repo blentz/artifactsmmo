@@ -886,9 +886,10 @@ open Formal.PriorityBand
 -- plain data (GameData reads moved to thin wrappers). Bridges quantify over
 -- an injective code embedding f : Nat → String (dict lookups are keyed by
 -- codes). task_batch and task_reservation are FULL bridges; recipe_closure's
--- DFS is universally SOUND against the least-fixpoint spec `Reachable`, with
--- the completeness direction kernel-pinned on the registered mutation graphs
--- (diamond/cycle/chain) and covered by the 240-case differential oracle.
+-- DFS is universally SOUND against the least-fixpoint spec `Reachable` AND
+-- (P4c) universally COMPLETE: the never-exhausts-fuel invariant (`unmarkedKeys`
+-- strictly decreases per recursing frame; seed |recipes|+1 dominates it) makes
+-- output membership EXACTLY isCraftable/isNeeded for every graph.
 #check @Extracted.Bridges.task_batch_bridge                           -- extracted = hand batchSize at eMats/eHeld
 #check @Extracted.Bridges.task_batch_bridge_none                      -- no-code branch = batchSize false
 #check @Extracted.Bridges.task_batch_ge_one_extracted                 -- floor-at-1 safety on the extracted def
@@ -902,14 +903,13 @@ open Formal.PriorityBand
 #check @Extracted.Bridges.raw_units_bridge                            -- extracted units = hand rawUnitsAux, ∀ inputs
 #check @Extracted.Bridges.closure_visited_sound                       -- DFS keys ⊆ Reachable (soundness, ∀ graphs)
 #check @Extracted.Bridges.recipe_closure_pure_sound                   -- outputs sound: isCraftable / isNeeded
-#check @Extracted.Bridges.closure_pin_diamond                         -- completeness pin (diamond graph)
-#check @Extracted.Bridges.closure_pin_diamond_matches_hand            -- hand craftable/needed agree (diamond)
+#check @Extracted.Bridges.eFuel_sufficient                            -- seed |recipes|+1 dominates the fuel measure
+#check @Extracted.Bridges.closure_visited_complete                    -- never-exhausts-fuel invariant (P4c, ∀ graphs)
+#check @Extracted.Bridges.closure_visited_marks_reachable             -- every Reachable item is marked (completeness)
+#check @Extracted.Bridges.recipe_closure_pure_complete                -- outputs complete: isCraftable / isNeeded
+#check @Extracted.Bridges.recipe_closure_pure_spec                    -- combined iff: output ⟺ spec (P4c, ∀ graphs)
 #check @Extracted.Bridges.raw_units_pin_diamond                       -- units 31 on both sides (diamond)
-#check @Extracted.Bridges.closure_pin_cycle                           -- completeness pin (cycle terminates)
-#check @Extracted.Bridges.closure_pin_cycle_matches_hand              -- hand craftable/needed agree (cycle)
 #check @Extracted.Bridges.raw_units_pin_cycle                         -- units 6 on both sides (cycle)
-#check @Extracted.Bridges.closure_pin_chain                           -- completeness pin (chain depth)
-#check @Extracted.Bridges.closure_pin_chain_matches_hand              -- hand craftable/needed agree (chain)
 
 -- Extracted-model bridges (mechanical extraction P3b): inventory_caps — the
 -- per-item useful-quantity cap (recipe/task/action/equippable/consumable
@@ -965,3 +965,27 @@ open Formal.PriorityBand
 #check @Extracted.Bridges.min_gathers_node_bridge                     -- extracted = hand, ∀ fuel/state (DAGs incl.)
 #check @Extracted.Bridges.min_gathers_bridge                          -- extracted API = hand minGathersCount
 #check @Extracted.Bridges.min_gathers_raw_unowned_extracted           -- flat raw gather cost (transferred)
+
+-- Extracted-model bridges (mechanical extraction P4b): the exact
+-- equipment-scoring cores unlocked by P4a, generated from
+-- src/artifactsmmo_cli/ai/equipment/scoring.py and
+-- src/artifactsmmo_cli/ai/tiers/equip_value.py and proved against the hand
+-- models (Formal/Extracted/Bridges7.lean). The element-keyed score bridges
+-- are universal over an arbitrary INJECTIVE Int→String element embedding
+-- (the CombatPicker code-embedding precedent); equip_value is a FULL
+-- pointwise universal (the wrapper hoists the dict-value sums to the
+-- already-summed ints the hand RawStats model takes).
+#check @Extracted.Bridges.weapon_score_raw_bridge                     -- extracted = hand WScore, ∀ profiles/embeddings
+#check @Extracted.Bridges.armor_score_bridge                          -- extracted = hand AScore (no clamp), ∀ profiles
+#check @Extracted.Bridges.weapon_score_bridge                         -- extracted composite = combatScore (isTool = subtype)
+#check @Extracted.Bridges.weapon_score_raw_nonneg_extracted           -- THE clamp theorem (transferred)
+#check @Extracted.Bridges.weapon_score_strict_extracted               -- strict WScore order survives tiebreaker (transferred)
+#check @Extracted.Bridges.weapon_score_tiebreak_extracted             -- fishing_net invariant: non-tool wins ties (transferred)
+#check @Extracted.Bridges.pickslot_no_downgrade_extracted             -- per-slot pick never downgrades (transferred)
+#check @Extracted.Bridges.gather_score_absent_zero                    -- no skill entry ⇒ score 0 (docstring contract)
+#check @Extracted.Bridges.gather_pick_optimal_extracted               -- gather pick minimizes extracted score (transferred)
+#check @Extracted.Bridges.equip_value_bridge                          -- extracted = hand equipValue, ∀ stats (FULL universal)
+#check @Extracted.Bridges.equip_value_strict_extracted                -- strict raw order survives tiebreaker (transferred)
+#check @Extracted.Bridges.equip_value_tiebreak_extracted              -- non-tool outranks raw-tied tool (transferred)
+#check @Extracted.Bridges.tool_value_abs_gather                       -- tool_value = |gather_score| (cross-core duality)
+#check @Extracted.Bridges.tool_value_neg_gather_on_tools              -- tool domain: max tool_value ≡ min gather_score

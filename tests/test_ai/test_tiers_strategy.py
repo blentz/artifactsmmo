@@ -1,3 +1,5 @@
+from fractions import Fraction
+
 import pytest
 from sqlmodel import Session
 
@@ -119,8 +121,9 @@ def test_personality_reweighting_changes_choice():
     state = make_state(level=1, skills=skill_levels)
 
     class SkillFirst:
-        def category_weight(self, category: str) -> float:
-            return 10.0 if category == "skills" else 1.0
+        def category_weight(self, category: str) -> Fraction:
+            # P4a: Personality.category_weight returns exact Fractions.
+            return Fraction(10) if category == "skills" else Fraction(1)
 
     assert root_category(StrategyEngine(obj, BalancedPersonality()).decide(state, gd).chosen_root) == "char_level"
     assert root_category(StrategyEngine(obj, SkillFirst()).decide(state, gd).chosen_root) == "skills"

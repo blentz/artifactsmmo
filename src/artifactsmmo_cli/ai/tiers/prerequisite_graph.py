@@ -29,7 +29,7 @@ def combat_capable(state: WorldState, game_data: GameData) -> bool:
 def best_attainable_weapon(game_data: GameData) -> str | None:
     """Highest equip_value weapon in the item table (ties broken by code), or
     None when there are no weapons."""
-    best: tuple[float, str] | None = None
+    best: tuple[int, str] | None = None  # P4a: equip_value is exact int
     for code, stats in game_data.all_item_stats.items():
         if stats.type_ != "weapon":
             continue

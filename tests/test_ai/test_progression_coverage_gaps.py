@@ -95,12 +95,20 @@ class TestCommittedReadiness:
         assert goal._find_upgrade(state, gd) is None
 
 
-class TestValueOf:
-    def test_value_of_none_is_negative_infinity(self):
-        """A None pick has -inf value so any real pick beats it in
-        _best_by_value tie-breaking."""
+class TestValueCandidate:
+    def test_none_pick_yields_no_candidate(self):
+        """P4a (exact arithmetic): the float ``-inf`` sentinel is gone.
+        A None pick yields no candidate, so `best_by_value` treats it as
+        the always-loses side — same verdict the -inf value produced."""
         goal = UpgradeEquipmentGoal()
-        assert goal._value_of(None, GameData()) == -float("inf")
+        assert goal._value_candidate(None, GameData()) is None
+
+    def test_missing_stats_pick_yields_no_candidate(self):
+        """P4a: a pick whose item_stats are missing also yields no candidate
+        (previously a -inf-valued candidate). Production-unreachable: both
+        finders only emit picks whose stats resolved."""
+        goal = UpgradeEquipmentGoal()
+        assert goal._value_candidate(("ghost_item", "weapon_slot"), GameData()) is None
 
 
 class TestInventoryUpgradeSkipsZeroQty:

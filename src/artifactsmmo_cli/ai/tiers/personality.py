@@ -12,6 +12,7 @@ witness: `weightedRemaining_zero_not_complete_witness`). Implementers MUST
 return `category_weight(c) > 0` for every category. `BalancedPersonality`
 satisfies this trivially (all weights = 1.0)."""
 
+from fractions import Fraction
 from typing import Protocol
 
 from artifactsmmo_cli.ai.tiers.objective import ObjectiveGap
@@ -26,17 +27,17 @@ class Personality(Protocol):
     CONTRACT: `category_weight(c) > 0` for every `c in CATEGORIES` (see module
     docstring + the Lean strict-positivity equivalence)."""
 
-    def category_weight(self, category: str) -> float: ...
+    def category_weight(self, category: str) -> Fraction: ...
 
 
 class BalancedPersonality:
     """Weights every gap category equally — the default 'well-rounded' player."""
 
-    def category_weight(self, category: str) -> float:
-        return 1.0
+    def category_weight(self, category: str) -> Fraction:
+        return Fraction(1)
 
 
-def weighted_remaining(gap: ObjectiveGap, personality: Personality) -> float:
+def weighted_remaining(gap: ObjectiveGap, personality: Personality) -> Fraction:
     """Single scalar of remaining work (0 when the objective is complete UNDER
     strictly-positive category weights — see module docstring), summing each
     category's normalised fraction times its personality weight. P3's frontier

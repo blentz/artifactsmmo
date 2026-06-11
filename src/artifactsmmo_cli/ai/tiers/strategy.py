@@ -2,6 +2,7 @@
 actionable subgoal. Pure; P3a runs it in shadow (traced, not enacted)."""
 
 from dataclasses import asdict, dataclass, field
+from fractions import Fraction
 
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData
@@ -33,14 +34,19 @@ from artifactsmmo_cli.ai.world_state import WorldState
 # not depend on goals/ (which P3c retires); P3c unifies the source.
 CRITICAL_HP_FRACTION = 0.25
 
-PRIOR_CHAR_LEVEL = 1.0
-PRIOR_COMBAT_GEAR = 1.0
-PRIOR_UTILITY_GEAR = 0.4
-PRIOR_COMBAT_CRAFT_SKILL = 0.6
-PRIOR_GATHER_SKILL = 0.4
-PRIOR_CONSUMABLE_SKILL = 0.3
-SKILL_MARGINAL = 0.2
-CHAR_MARGINAL = 1.0
+# P4a: all score constants are exact Fractions — the ranking pipeline
+# (_base_prior * _marginal * _balancing, the learned blend, the sticky
+# dominance test and the decide sort key) computes over exact rationals, no float
+# rounding. Near-ties that float arithmetic happened to (un)equalize now
+# resolve exactly; exact is the spec.
+PRIOR_CHAR_LEVEL = Fraction(1)
+PRIOR_COMBAT_GEAR = Fraction(1)
+PRIOR_UTILITY_GEAR = Fraction(2, 5)
+PRIOR_COMBAT_CRAFT_SKILL = Fraction(3, 5)
+PRIOR_GATHER_SKILL = Fraction(2, 5)
+PRIOR_CONSUMABLE_SKILL = Fraction(3, 10)
+SKILL_MARGINAL = Fraction(1, 5)
+CHAR_MARGINAL = Fraction(1)
 """Base char-level marginal (multiplier on PRIOR_CHAR_LEVEL=1.0). The
 DYNAMIC marginal applied at `_marginal` scales upward with the gap
 between current state.level and the root's target — see `_marginal`."""
@@ -55,7 +61,7 @@ roots (matching the user's request to grind monsters when the bot is
 behind) while the long-haul root yields to the bootstrap so the
 e27779e stand-down doesn't trigger on the LONG step.level."""
 
-CHAR_GAP_PER_LEVEL = 0.06
+CHAR_GAP_PER_LEVEL = Fraction(3, 50)
 """Per-level urgency for char-level roots WITHIN the reachable horizon.
 For a bootstrap gap of 2: bonus = (10 - 2) × 0.06 = 0.48 →
 marginal = 1.48 → value = PRIOR_CHAR_LEVEL × 1.48 = 1.48, beating
@@ -64,14 +70,14 @@ under-leveled. For gaps outside the horizon: bonus = 0, marginal stays
 at CHAR_MARGINAL (1.0), and long-haul char-level roots compete on
 equal footing with combat gear (also PRIOR_COMBAT_GEAR = 1.0)."""
 
-GEAR_EQUIP_SCALE = 20.0
+GEAR_EQUIP_SCALE = Fraction(20)
 """Normalizes gear equip-value gain to ~[0,1]; tune so a first-tier upgrade ~0.7-0.9."""
-BALANCE_K = 0.25
+BALANCE_K = Fraction(1, 4)
 BALANCE_THRESHOLD = 2
-BALANCE_MIN = 0.5
-BALANCE_MAX = 2.0
-STICKY_DOMINANCE_RATIO = 1.5
-PRIOR_RELEVANT_TOOL = 1.1
+BALANCE_MIN = Fraction(1, 2)
+BALANCE_MAX = Fraction(2)
+STICKY_DOMINANCE_RATIO = Fraction(3, 2)
+PRIOR_RELEVANT_TOOL = Fraction(11, 10)
 """Active-task tool boost: a target_tools item whose skill_effects match
 the bot's currently-active gathering skill (state.task_code resolved via
 `game_data.active_gathering_skills`) gets this prior, BEATING
@@ -81,7 +87,7 @@ PRIOR_UTILITY_GEAR=0.4 * marginal=0=0 (or PRIOR_UTILITY_GEAR*0.25
 fallback=0.1) and the bot never crafted any tool despite hours of
 gathering. Fix shipped after trace cycle 760 evidence of static
 0.1 tool scoring."""
-COMBAT_READINESS_URGENCY = 2.0
+COMBAT_READINESS_URGENCY = Fraction(2)
 """Multiplier applied to the combat-enabling weapon root's marginal while the
 character is not combat-capable (combat_monster is None). Sized to lift the weapon
 root above competing gear/tool/skill/char roots so it becomes chosen_root — the
@@ -100,9 +106,9 @@ _COMBAT_CRAFT_SKILLS = frozenset({"weaponcrafting", "gearcrafting", "jewelrycraf
 _GATHER_SKILLS = frozenset({"mining", "woodcutting", "fishing"})
 _CONSUMABLE_CRAFT_SKILLS = frozenset({"alchemy", "cooking"})
 
-LEARN_W_MAX = 0.5
+LEARN_W_MAX = Fraction(1, 2)
 LEARN_SAMPLE_FULL = 20
-XP_RATE_REFERENCE = 10.0
+XP_RATE_REFERENCE = Fraction(10)
 """Observed char-XP/cycle that normalizes to 1.0; tune to a strong grind rate."""
 
 
@@ -221,14 +227,20 @@ def is_reachable(root: MetaGoal, state: WorldState, game_data: GameData,
 class RootScore:
     root_repr: str
     category: str
-    contribution: float
+    contribution: Fraction
     cost: int
-    score: float
+    score: Fraction
     step_repr: str
     instrumental: bool = False
 
     def to_dict(self) -> dict[str, object]:
-        return asdict(self)
+        # P4a float boundary: scores are exact Fractions internally; the trace
+        # record stays JSON-numeric by converting ONCE here (trace-only seam,
+        # never read back into decisions).
+        d = asdict(self)
+        d["contribution"] = float(self.contribution)
+        d["score"] = float(self.score)
+        return d
 
 
 @dataclass(frozen=True)
@@ -270,7 +282,7 @@ class StrategyEngine:
     objective: CharacterObjective
     personality: Personality
 
-    def _base_prior(self, root: MetaGoal) -> float:
+    def _base_prior(self, root: MetaGoal) -> Fraction:
         category = root_category(root)
         weight = self.personality.category_weight(category)
         if isinstance(root, ReachCharLevel):
@@ -283,16 +295,16 @@ class StrategyEngine:
             elif root.skill in _CONSUMABLE_CRAFT_SKILLS:
                 tier = PRIOR_CONSUMABLE_SKILL
             else:
-                tier = 0.0   # unknown skill — no prior, scores zero
+                tier = Fraction(0)   # unknown skill — no prior, scores zero
         elif isinstance(root, ObtainItem):
             slot = next((s for s, c in self.objective.target_gear.items() if c == root.code), None)
             tier = PRIOR_COMBAT_GEAR if slot in _COMBAT_GEAR_SLOTS else PRIOR_UTILITY_GEAR
         else:
-            tier = 0.0
+            tier = Fraction(0)
         return tier * weight
 
     def _marginal(self, root: MetaGoal, state: WorldState, game_data: GameData,
-                  combat_monster: str | None = None) -> float:
+                  combat_monster: str | None = None) -> Fraction:
         if isinstance(root, ReachCharLevel):
             # Inverse-gap char-level urgency: smaller gaps (the bootstrap
             # root `ReachCharLevel(state.level + 2)`) score HIGHER than the
@@ -317,37 +329,39 @@ class StrategyEngine:
         if isinstance(root, ObtainItem):
             stats = game_data.item_stats(root.code)
             if stats is None:
-                return 0.0
+                return Fraction(0)
             slot = next((s for s, c in self.objective.target_gear.items() if c == root.code), None)
             current_code = state.equipment.get(slot) if slot is not None else None
             current_stats = game_data.item_stats(current_code) if current_code else None
-            current_value = equip_value(current_stats) if current_stats is not None else 0.0
-            gain = max(0.0, equip_value(stats) - current_value)
-            marginal = min(1.0, gain / GEAR_EQUIP_SCALE)
+            current_value = equip_value(current_stats) if current_stats is not None else 0
+            # P4a: equip_value is an exact int — the gain is exact integer
+            # arithmetic; the normalisation divides into an exact Fraction.
+            gain = max(0, equip_value(stats) - current_value)
+            marginal = min(Fraction(1), gain / GEAR_EQUIP_SCALE)
             # Combat-readiness urgency: a weapon-slot upgrade is the binding
             # objective while the character cannot fight at all.
             if combat_monster is None and slot == "weapon_slot":
-                marginal = max(marginal, 1.0) * COMBAT_READINESS_URGENCY
+                marginal = max(marginal, Fraction(1)) * COMBAT_READINESS_URGENCY
             return marginal
-        return 0.0
+        return Fraction(0)
 
-    def _balancing(self, root: MetaGoal, state: WorldState) -> float:
+    def _balancing(self, root: MetaGoal, state: WorldState) -> Fraction:
         if not isinstance(root, ReachSkillLevel):
-            return 1.0
+            return Fraction(1)
         levels = list(state.skills.values())
         leader = max(levels) if levels else 0
         current = state.skills.get(root.skill, 0)
         return _balancing_pure(leader, current)
 
     def _relevant_tool_value(self, root: MetaGoal, state: WorldState,
-                             game_data: GameData) -> float:
+                             game_data: GameData) -> Fraction:
         """Active-task tool boost. Returns PRIOR_RELEVANT_TOOL when the
         root is a target_tools item whose skill matches the current
         task's active gathering skill; else 0. Combined with `_value`
         via max so the boost can't accidentally suppress a higher-scored
         baseline."""
         if not isinstance(root, ObtainItem):
-            return 0.0
+            return Fraction(0)
         # Find the gathering skill this tool would boost (the target_tools
         # entry maps skill → code; reverse the lookup).
         skill_for_tool = next(
@@ -355,31 +369,34 @@ class StrategyEngine:
             None,
         )
         if skill_for_tool is None:
-            return 0.0
+            return Fraction(0)
         active = game_data.active_gathering_skills(
             state.task_code, state.crafting_target,
         )
         if skill_for_tool not in active:
-            return 0.0
+            return Fraction(0)
         category = root_category(root)
         weight = self.personality.category_weight(category)
         return PRIOR_RELEVANT_TOOL * weight
 
     def _value(self, root: MetaGoal, state: WorldState, game_data: GameData,
-               combat_monster: str | None = None) -> float:
+               combat_monster: str | None = None) -> Fraction:
         base = (self._base_prior(root)
                 * self._marginal(root, state, game_data, combat_monster)
                 * self._balancing(root, state))
         return max(base, self._relevant_tool_value(root, state, game_data))
 
-    def _learned_blend(self, root: MetaGoal, value: float,
-                       history: LearningStore | None, combat_monster: str | None) -> float:
+    def _learned_blend(self, root: MetaGoal, value: Fraction,
+                       history: LearningStore | None, combat_monster: str | None) -> Fraction:
         if not (isinstance(root, ReachCharLevel) and history is not None and combat_monster):
             return value
         y = expected_yield_per_cycle(f"FarmMonster({combat_monster})", history)
         if y.sample_count <= 0:
             return value
-        normalized = min(1.0, max(0.0, y.char_xp / XP_RATE_REFERENCE))
+        # P4a: lift the observed float yield EXACTLY (Fraction(float) is the
+        # exact binary expansion — the P3c boundary idiom); everything after
+        # the lift is exact rational arithmetic.
+        normalized = min(Fraction(1), max(Fraction(0), Fraction(y.char_xp) / XP_RATE_REFERENCE))
         w = blend_weight(y.sample_count)
         return _learned_blend_pure(value, normalized, w)
 
@@ -398,7 +415,7 @@ class StrategyEngine:
         an inferior gear objective momentarily wins).
         """
         interrupt = "restore_hp" if state.hp_percent < CRITICAL_HP_FRACTION else None
-        candidates: list[tuple[MetaGoal, MetaGoal, float, int, float]] = []   # root, step, final, effort, pre
+        candidates: list[tuple[MetaGoal, MetaGoal, Fraction, int, Fraction]] = []   # root, step, final, effort, pre
         for root in objective_roots(self.objective, state):
             if root.is_satisfied(state, game_data):
                 continue

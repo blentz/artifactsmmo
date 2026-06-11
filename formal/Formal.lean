@@ -54,12 +54,15 @@ import Formal.Extracted.InventoryCaps
 import Formal.Extracted.CyclesForProgress
 import Formal.Extracted.ScalarCore
 import Formal.Extracted.MinGathers
+import Formal.Extracted.EquipmentScoring
+import Formal.Extracted.EquipValue
 import Formal.Extracted.Bridges
 import Formal.Extracted.Bridges2
 import Formal.Extracted.Bridges3
 import Formal.Extracted.Bridges4
 import Formal.Extracted.Bridges5
 import Formal.Extracted.Bridges6
+import Formal.Extracted.Bridges7
 import Formal.InventoryChainSafe
 import Formal.Contracts
 import Formal.ActionCostNonneg

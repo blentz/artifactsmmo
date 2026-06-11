@@ -28,7 +28,7 @@ class UpgradeCandidate:
     """A single equipment-upgrade pick, pre-resolved from game_data."""
 
     item_code: str
-    value: float        # equip_value (attack + resistance + hp_restore; integer-valued)
+    value: int          # equip_value (exact int since P4a; was float-typed before)
     level: int
     craft_level: int
     relevant: bool      # relevant tool/skill for the active task
@@ -49,13 +49,13 @@ def best_by_value(inv: UpgradeCandidate | None,
     return inv if inv.value >= craft.value else craft
 
 
-def craftable_key(c: UpgradeCandidate) -> tuple[int, int, float, int, str]:
+def craftable_key(c: UpgradeCandidate) -> tuple[int, int, int, int, str]:
     """Lexicographic sort key for craftable candidates:
     (relevant, fills_empty, value, -craft_level, item_code)."""
     return (int(c.relevant), int(c.fills_empty), c.value, -c.craft_level, c.item_code)
 
 
-def inventory_key(c: UpgradeCandidate) -> tuple[int, float, int, str]:
+def inventory_key(c: UpgradeCandidate) -> tuple[int, int, int, str]:
     """Lexicographic sort key for inventory candidates:
     (relevant, value, level, item_code)."""
     return (int(c.relevant), c.value, c.level, c.item_code)

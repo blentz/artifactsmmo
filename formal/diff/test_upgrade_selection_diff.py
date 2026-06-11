@@ -9,9 +9,11 @@ extracted, store-free heart of `UpgradeEquipmentGoal`'s upgrade ranking:
 * `best_by_key(cands, key)`: deterministic argmax over `craftable_key` /
   `inventory_key` (lexicographic; item_code, not slot, is the final field).
 
-The Lean oracle models `value` as an exact `Int` (equip_value is integer-valued:
-attack + resistance + hp_restore are all ints), and the item_code as `str(code)`
-so the String tiebreak matches Python's string ordering on the SAME codes.
+The Lean oracle models `value` as an exact `Int`; since P4a the Python
+`UpgradeCandidate.value` IS an exact int (equip_value returns int), so the two
+sides share the same exact domain — no float lift anywhere. The item_code is
+`str(code)` so the String tiebreak matches Python's string ordering on the
+SAME codes.
 
 We generate candidate lists whose item codes CAN repeat (the real finders emit
 one candidate per (item_code, slot), so the same item appears once per slot — the
@@ -41,17 +43,18 @@ _BOOL = st.booleans()
 
 def _cand(code: int, value: int, level: int, craft: int, rel: bool, fills: bool) -> UpgradeCandidate:
     # item_code is str(code) on BOTH sides, so the string tiebreak is identical.
-    return UpgradeCandidate(item_code=str(code), value=float(value), level=level,
+    # P4a: value is an exact int end-to-end (no float lift).
+    return UpgradeCandidate(item_code=str(code), value=value, level=level,
                             craft_level=craft, relevant=rel, fills_empty=fills)
 
 
 def _block(c: UpgradeCandidate) -> list[int]:
-    return [int(c.item_code), int(c.value), c.level, c.craft_level,
+    return [int(c.item_code), c.value, c.level, c.craft_level,
             1 if c.relevant else 0, 1 if c.fills_empty else 0]
 
 
 def _chosen(result: UpgradeCandidate | None) -> tuple[str, int] | None:
-    return None if result is None else (result.item_code, int(result.value))
+    return None if result is None else (result.item_code, result.value)
 
 
 def _oracle_chosen(d: dict) -> tuple[str, int] | None:

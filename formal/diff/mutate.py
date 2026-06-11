@@ -269,17 +269,23 @@ SCORING_MUTATIONS = [
      "        improves = True"),
     # drop the weapon clamp: max(0, 100 - res) -> (100 - res), letting a
     # high-resistance monster make a strong weapon score NEGATIVE (so a weak weapon
-    # could be preferred / scores go below 0).
-    ("equipment_scoring: drop weapon clamp max(0, 100 - res_pct)",
-     "        score += atk * max(0, 100 - res_pct)",
-     "        score += atk * (100 - res_pct)"),
+    # could be preferred / scores go below 0). P4b re-anchor: the formula moved
+    # into the extracted pure core `weapon_score_raw_pure`; the `weapon_score_raw`
+    # wrapper delegates, so the mutant still flows into the diff comparison.
+    ("equipment_scoring: drop weapon clamp max(0, 100 - res)",
+     "        score = score + attack.get(elem, 0)"
+     " * max(0, 100 - monster_resistance.get(elem, 0))",
+     "        score = score + attack.get(elem, 0)"
+     " * (100 - monster_resistance.get(elem, 0))"),
     # Byte-equivalence kill: divide armor_score by 100, turning the exact integer
     # surrogate into a float that no longer matches the Lean integer model
     # byte-for-byte. The diff test asserts py_score == lean_score as integers;
-    # this mutation makes py a float and breaks the int identity.
+    # this mutation makes py a float and breaks the int identity. P4b re-anchor:
+    # the formula moved into the extracted pure core `armor_score_pure` (same
+    # mutation intent; the `armor_score` wrapper delegates).
     ("equipment_scoring: armor_score float-rescale (breaks byte-equivalence)",
-     "        score += mon_atk * armor_res_pct",
-     "        score += mon_atk * armor_res_pct / 100.0"),
+     "        score = score + monster_attack.get(elem, 0) * resistance.get(elem, 0)",
+     "        score = score + monster_attack.get(elem, 0) * resistance.get(elem, 0) / 100.0"),
 ]
 
 
@@ -908,21 +914,29 @@ STRATEGY_BLEND_MUTATIONS = [
     # (leader - current) breaks; at gap = 4 the python is < 1 and the lean is
     # > 1 — the diff fires for any gap ≠ 2.
     ("strategy_blend: balancing slope sign flip (+ K -> - K)",
-     "    raw = 1.0 + BALANCE_K * (leader - current - BALANCE_THRESHOLD)",
-     "    raw = 1.0 - BALANCE_K * (leader - current - BALANCE_THRESHOLD)"),
+     "    raw = 1 + BALANCE_K * (leader - current - BALANCE_THRESHOLD)",
+     "    raw = 1 - BALANCE_K * (leader - current - BALANCE_THRESHOLD)"),
     # drop the lower band clamp: max(BALANCE_MIN, ...) -> the inner min only.
     # A skill far ahead of the leader now produces a multiplier below 0.5 (and
     # possibly negative). The proved lower bound + threshold tests both fire.
     ("strategy_blend: drop lower band clamp (max -> bare inner min)",
      "    return max(BALANCE_MIN, min(BALANCE_MAX, raw))",
      "    return min(BALANCE_MAX, raw)"),
-    # swap BALANCE_K 0.25 -> 1.0: multiplier amplification per gap-unit is 4x
+    # swap BALANCE_K 1/4 -> 1: multiplier amplification per gap-unit is 4x
     # too strong; clamp kicks in much sooner (essentially everywhere) and the
     # threshold identity (gap=2 ⇒ 1.0) is preserved BUT the gap=4 → 1.5 test
-    # and the hypothesis-driven mid-band values fail.
-    ("strategy_blend: BALANCE_K 0.25 -> 1.0",
-     "BALANCE_K = 0.25",
-     "BALANCE_K = 1.0"),
+    # and the hypothesis-driven mid-band values fail. (P4a re-anchor: the
+    # constant is an exact Fraction now; same semantic intent as 0.25 -> 1.0.)
+    ("strategy_blend: BALANCE_K 1/4 -> 1",
+     "BALANCE_K = Fraction(1, 4)",
+     "BALANCE_K = Fraction(1)"),
+    # P4a byte-equivalence kill: contaminate the exact-Fraction core with a
+    # float literal seed (1 -> 1.0). `1.0 + Fraction` is a float, so mid-band
+    # (unclamped) results stop being Fractions — the diff test asserts the
+    # production result IS a Fraction equal bit-for-bit to the Lean Rat.
+    ("strategy_blend: float-seed balancing (breaks the exact-Fraction core)",
+     "    raw = 1 + BALANCE_K * (leader - current - BALANCE_THRESHOLD)",
+     "    raw = 1.0 + BALANCE_K * (leader - current - BALANCE_THRESHOLD)"),
     # learned_blend: flip (1 - w) to w. Now blend = w*value + w*normalized,
     # destroying the convex combination. The convex-bound / warm-up tests fire.
     ("strategy_blend: learned_blend (1 - w) -> w (drop the complement)",

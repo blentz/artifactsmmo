@@ -43,13 +43,26 @@ extracted definitions equal to the hand models through the encoding.
 
 * `closure_visited_sound` — every key the extracted closure DFS marks is
   `Formal.RecipeClosure.Reachable` (the least-fixpoint spec): the extracted
-  closure never over-collects, for EVERY graph. The COMPLETENESS direction
-  (every reachable item is marked, i.e. the threaded-DFS analogue of the hand
-  `satN` completeness) is NOT proved universally — it needs a formalized
-  never-exhausts-fuel invariant for the threaded visited set (deferred, like
-  the hand model handled it for `rawUnitsAux` only); it is pinned here by
-  kernel-checked finite witnesses on the registered mutation graphs
-  (diamond, cycle, chain) and covered by the 240-case differential oracle.
+  closure never over-collects, for EVERY graph.
+
+* `closure_visited_complete` / `recipe_closure_pure_complete` /
+  `recipe_closure_pure_spec` (P4c) — the COMPLETENESS direction, now
+  UNIVERSAL. The never-exhausts-fuel invariant is the `unmarkedKeys`
+  measure (recipe entries whose key is still unmarked in the threaded
+  visited dict): every recursing frame first marks a previously-unmarked
+  recipe key, marks only grow along the thread, so the measure strictly
+  decreases down every recursion path; the wrapper seed `|recipes| + 1`
+  strictly dominates it at every entry state (`eFuel_sufficient`), so the
+  fuel-0 base case is unreachable on every frame with work pending. With
+  fuel above the measure the DFS marks its root and leaves every newly
+  marked key children-closed (`closure_visited_complete`); folding over the
+  roots yields a `MarkedClosed` dict containing the roots, and every
+  spec-`Reachable` item is marked (`closure_visited_marks_reachable`).
+  `recipe_closure_pure_spec` combines this with soundness into the exact
+  iff: output membership ⟺ `isCraftable` / `isNeeded`, for EVERY graph,
+  drop table and root set. The former kernel pins on the mutation graphs
+  (`closure_pin_*`) are superseded and dropped; the `_raw_units` quantity
+  pins stay (they pin exact numeric outputs the mutation suite cites).
 
 Multiplier-1 honesty note: `consumes_reserved_pure` reads reserved-key
 presence as `demand.get(r, 0) != 0` where the original Python read `r in
@@ -1511,15 +1524,490 @@ theorem recipe_closure_pure_sound (f : Nat → String)
       rw [← this]
       exact hreachj
 
-/-! ### Completeness pins for the closure DFS (kernel-checked finite
-witnesses on the registered mutation graphs; the universal completeness
-direction is deferred — see the module docstring). Each pin states the
-extracted output exactly AND pins the hand model's `craftableList` /
-`neededList` to the same sets through an explicit embedding. -/
+/-! ### Completeness of the closure DFS (P4c): the never-exhausts-fuel
+invariant, formalized over the extracted defs.
 
-private def pinF : Nat → String := fun n =>
-  if n = 0 then "0" else if n = 1 then "1" else if n = 2 then "2"
-  else if n = 3 then "3" else if n = 100 then "100" else if n = 101 then "101" else ""
+Why the wrapper seed `len(recipes) + 1` suffices: a frame of
+`_closure_visited` recurses only when its material was UNMARKED in the
+threaded visited dict AND has a nonempty recipe — so before recursing it
+marks a previously-unmarked recipe key. Marks are never erased along the
+thread, so the count of recipe entries whose key is still unmarked
+(`unmarkedKeys`) strictly decreases on every recursive descent; it starts
+≤ `|recipes|`, so seeded fuel `|recipes| + 1` strictly dominates it at every
+state and the fuel-0 base case is never reached on a frame with work to do.
+`closure_visited_complete` packages this: with fuel above the measure, the
+DFS marks its root and leaves every newly marked key children-closed. The
+roots fold then yields a fully `MarkedClosed` visited dict containing every
+root, and `Formal.RecipeClosure.Reachable` (the least fixpoint) transfers
+EVERY reachable item into the marked set — completeness, for EVERY graph. -/
+
+/-- A key is marked (membership value 1) in an extracted visited dict. -/
+def Marked (v : List (String × Int)) (k : String) : Prop :=
+  Extracted.RecipeClosure._dictGetD v k 0 = 1
+
+instance (v : List (String × Int)) (k : String) : Decidable (Marked v k) := by
+  unfold Marked
+  infer_instance
+
+/-- Mark-set inclusion between visited dicts (the threaded dict only grows). -/
+def MSub (v v' : List (String × Int)) : Prop :=
+  ∀ k, Marked v k → Marked v' k
+
+/-- Every recipe child of `k` is marked in `res`. -/
+def ChildrenMarked (recipes : List (String × List (String × Int)))
+    (res : List (String × Int)) (k : String) : Prop :=
+  ∀ c q, (c, q) ∈ Extracted.RecipeClosure._dictGetD recipes k [] → Marked res c
+
+/-- Every marked key is children-closed — the saturation property of the
+final visited dict that makes the marked set a fixpoint. -/
+def MarkedClosed (recipes : List (String × List (String × Int)))
+    (v : List (String × Int)) : Prop :=
+  ∀ k, Marked v k → ChildrenMarked recipes v k
+
+/-- THE FUEL MEASURE: recipe entries whose key is still unmarked. Every
+recursing frame marks a distinct recipe key first, so this strictly
+decreases along every recursion path. -/
+def unmarkedKeys (recipes : List (String × List (String × Int)))
+    (v : List (String × Int)) : Nat :=
+  recipes.countP (fun e => decide (¬ Extracted.RecipeClosure._dictGetD v e.1 0 = 1))
+
+private theorem marked_dictSet_self (v : List (String × Int)) (k : String) :
+    Marked (Extracted.RecipeClosure._dictSet v k 1) k := by
+  unfold Marked
+  rw [dictGetD_dictSet, if_pos rfl]
+
+private theorem msub_dictSet (v : List (String × Int)) (k : String) :
+    MSub v (Extracted.RecipeClosure._dictSet v k 1) := by
+  intro k' hk'
+  unfold Marked at hk' ⊢
+  rw [dictGetD_dictSet]
+  by_cases h : k' = k
+  · rw [if_pos h]
+  · rw [if_neg h]
+    exact hk'
+
+private theorem marked_dictSet_inv (v : List (String × Int)) (k k' : String)
+    (h : Marked (Extracted.RecipeClosure._dictSet v k 1) k') :
+    k' = k ∨ Marked v k' := by
+  by_cases hk : k' = k
+  · exact Or.inl hk
+  · refine Or.inr ?_
+    unfold Marked at h ⊢
+    rw [dictGetD_dictSet, if_neg hk] at h
+    exact h
+
+/-- A marked key is present in the dict (its read differs from the default). -/
+private theorem marked_keyIn (m : List (String × Int)) (k : String)
+    (h : Marked m k) : keyIn m k := by
+  unfold Marked at h
+  exact keyIn_of_getD_ne m k 0 (by rw [h]; decide)
+
+/-- Children-walk monotonicity, GIVEN node-level monotonicity at the same
+fuel (the `foldl_children_mono` pattern). -/
+private theorem foldl_closure_msub (fuel : Nat)
+    (recipes : List (String × List (String × Int)))
+    (ihf : ∀ (root : String) (v : List (String × Int)),
+      MSub v (Extracted.RecipeClosure._closure_visited fuel root recipes v)) :
+    ∀ (l : List (String × Int)) (v : List (String × Int)),
+      MSub v (List.foldl
+        (fun visited _x =>
+          Extracted.RecipeClosure._closure_visited fuel (_x.1) recipes visited)
+        v l) := by
+  intro l
+  induction l with
+  | nil => intro v k hk; exact hk
+  | cons x rest ihl =>
+    intro v
+    rw [List.foldl_cons]
+    intro k hk
+    exact ihl _ k (ihf x.1 v k hk)
+
+/-- The closure DFS only grows the mark set (threaded-dict monotonicity),
+for EVERY fuel, root, graph and visited state. -/
+theorem closure_visited_msub :
+    ∀ (fuel : Nat) (root : String) (recipes : List (String × List (String × Int)))
+      (v : List (String × Int)),
+      MSub v (Extracted.RecipeClosure._closure_visited fuel root recipes v) := by
+  intro fuel
+  induction fuel with
+  | zero => intro root recipes v k hk; exact hk
+  | succ fuel ihf =>
+    intro root recipes v
+    simp only [Extracted.RecipeClosure._closure_visited]
+    by_cases hg : (decide ((Extracted.RecipeClosure._dictGetD v root 0) = 1)) = true
+    · rw [if_pos hg]
+      intro k hk
+      exact hk
+    · rw [if_neg hg]
+      intro k hk
+      exact foldl_closure_msub fuel recipes (fun r w => ihf r recipes w)
+        (Extracted.RecipeClosure._dictGetD recipes root [])
+        (Extracted.RecipeClosure._dictSet v root 1) k (msub_dictSet v root k hk)
+
+/-- Marks only grow ⇒ the unmarked-recipe-key measure only shrinks. -/
+private theorem unmarkedKeys_le_of_msub (recipes : List (String × List (String × Int)))
+    (v v' : List (String × Int)) (h : MSub v v') :
+    unmarkedKeys recipes v' ≤ unmarkedKeys recipes v := by
+  unfold unmarkedKeys
+  apply List.countP_mono_left
+  intro e _ he
+  simp only [decide_eq_true_eq] at he ⊢
+  intro hm
+  exact he (h e.1 hm)
+
+/-- Marking a present, previously-unmarked recipe key strictly shrinks the
+measure — the heart of the never-exhausts-fuel argument: every recursing
+frame performs exactly this mark before descending. -/
+private theorem unmarkedKeys_strict (recipes : List (String × List (String × Int)))
+    (v : List (String × Int)) (root : String) (l : List (String × Int))
+    (hmem : (root, l) ∈ recipes)
+    (hroot : ¬ Extracted.RecipeClosure._dictGetD v root 0 = 1) :
+    unmarkedKeys recipes (Extracted.RecipeClosure._dictSet v root 1)
+      < unmarkedKeys recipes v := by
+  unfold unmarkedKeys
+  induction recipes with
+  | nil => exact absurd hmem (List.not_mem_nil)
+  | cons e rest ih =>
+    rw [List.countP_cons, List.countP_cons]
+    have hmono : rest.countP (fun e => decide (¬ Extracted.RecipeClosure._dictGetD
+          (Extracted.RecipeClosure._dictSet v root 1) e.1 0 = 1))
+        ≤ rest.countP (fun e => decide (¬ Extracted.RecipeClosure._dictGetD v e.1 0 = 1)) := by
+      apply List.countP_mono_left
+      intro x _ hx
+      simp only [decide_eq_true_eq] at hx ⊢
+      intro hm
+      exact hx (msub_dictSet v root x.1 hm)
+    by_cases he : e.1 = root
+    · have h1 : (decide (¬ Extracted.RecipeClosure._dictGetD
+          (Extracted.RecipeClosure._dictSet v root 1) e.1 0 = 1)) = false := by
+        rw [he, dictGetD_dictSet, if_pos rfl]
+        decide
+      have h2 : (decide (¬ Extracted.RecipeClosure._dictGetD v e.1 0 = 1)) = true := by
+        rw [he]
+        exact decide_eq_true hroot
+      rw [h1, h2, if_neg Bool.false_ne_true, if_pos rfl]
+      have := hmono
+      omega
+    · have hag : (decide (¬ Extracted.RecipeClosure._dictGetD
+            (Extracted.RecipeClosure._dictSet v root 1) e.1 0 = 1))
+          = (decide (¬ Extracted.RecipeClosure._dictGetD v e.1 0 = 1)) := by
+        rw [dictGetD_dictSet, if_neg he]
+      have hmem' : (root, l) ∈ rest := by
+        rcases List.mem_cons.mp hmem with h' | h'
+        · exact absurd (show e.1 = root by rw [← h']) he
+        · exact h'
+      rw [hag]
+      exact Nat.add_lt_add_right (ih hmem') _
+
+/-- THE SEED DOMINATES THE MEASURE: the Python wrapper's fuel seed
+`len(recipes) + 1` (`eFuel`) strictly exceeds the unmarked-recipe-key count
+at every visited state — fuel sufficiency at every seeded call. -/
+theorem eFuel_sufficient (recipes : List (String × List (String × Int)))
+    (v : List (String × Int)) :
+    unmarkedKeys recipes v < eFuel recipes := by
+  have h1 : unmarkedKeys recipes v ≤ recipes.length := by
+    unfold unmarkedKeys
+    apply List.countP_le_length
+  have h2 : eFuel recipes = recipes.length + 1 := rfl
+  omega
+
+/-- Children-walk completeness, GIVEN the node-level invariant at the same
+fuel (fuel induction outside, list induction here): the fold marks every
+listed child and leaves all newly marked keys children-closed. -/
+private theorem foldl_closure_complete (fuel : Nat)
+    (recipes : List (String × List (String × Int)))
+    (ihf : ∀ (root : String) (v : List (String × Int)),
+      unmarkedKeys recipes v < fuel →
+      Marked (Extracted.RecipeClosure._closure_visited fuel root recipes v) root
+      ∧ ∀ k, Marked (Extracted.RecipeClosure._closure_visited fuel root recipes v) k →
+          ¬ Marked v k →
+          ChildrenMarked recipes
+            (Extracted.RecipeClosure._closure_visited fuel root recipes v) k) :
+    ∀ (l : List (String × Int)) (v : List (String × Int)),
+      unmarkedKeys recipes v < fuel →
+      (∀ x ∈ l, Marked
+        (List.foldl
+          (fun visited _x =>
+            Extracted.RecipeClosure._closure_visited fuel (_x.1) recipes visited)
+          v l) x.1)
+      ∧ ∀ k, Marked
+          (List.foldl
+            (fun visited _x =>
+              Extracted.RecipeClosure._closure_visited fuel (_x.1) recipes visited)
+            v l) k →
+          ¬ Marked v k →
+          ChildrenMarked recipes
+            (List.foldl
+              (fun visited _x =>
+                Extracted.RecipeClosure._closure_visited fuel (_x.1) recipes visited)
+              v l) k := by
+  intro l
+  induction l with
+  | nil =>
+    intro v _
+    refine ⟨?_, ?_⟩
+    · intro x hx
+      exact absurd hx (List.not_mem_nil)
+    · intro k hk hnk
+      exact absurd hk hnk
+  | cons x rest ihl =>
+    intro v hv
+    rw [List.foldl_cons]
+    have hx := ihf x.1 v hv
+    have hmsub1 : MSub v (Extracted.RecipeClosure._closure_visited fuel x.1 recipes v) :=
+      closure_visited_msub fuel x.1 recipes v
+    have hv1 : unmarkedKeys recipes
+        (Extracted.RecipeClosure._closure_visited fuel x.1 recipes v) < fuel :=
+      Nat.lt_of_le_of_lt (unmarkedKeys_le_of_msub recipes v _ hmsub1) hv
+    have hrest := ihl (Extracted.RecipeClosure._closure_visited fuel x.1 recipes v) hv1
+    have hmsubR : MSub (Extracted.RecipeClosure._closure_visited fuel x.1 recipes v)
+        (List.foldl
+          (fun visited _x =>
+            Extracted.RecipeClosure._closure_visited fuel (_x.1) recipes visited)
+          (Extracted.RecipeClosure._closure_visited fuel x.1 recipes v) rest) :=
+      foldl_closure_msub fuel recipes
+        (fun r w => closure_visited_msub fuel r recipes w) rest _
+    refine ⟨?_, ?_⟩
+    · intro y hy
+      rcases List.mem_cons.mp hy with rfl | hy'
+      · exact hmsubR y.1 hx.1
+      · exact hrest.1 y hy'
+    · intro k hk hnk
+      by_cases hk1 : Marked (Extracted.RecipeClosure._closure_visited fuel x.1 recipes v) k
+      · intro c q hcq
+        exact hmsubR c (hx.2 k hk1 hnk c q hcq)
+      · exact hrest.2 k hk hk1
+
+/-- THE NEVER-EXHAUSTS-FUEL INVARIANT: with fuel strictly above the
+unmarked-recipe-key measure, the closure DFS (a) marks its root and (b)
+leaves every key it newly marks children-closed in its result — for EVERY
+root, graph and visited state. Every recursing frame marks a distinct
+recipe key first (`unmarkedKeys_strict`), so the recursive calls again have
+sufficient fuel and the fuel-0 base case is never reached with work
+pending. -/
+theorem closure_visited_complete :
+    ∀ (fuel : Nat) (root : String) (recipes : List (String × List (String × Int)))
+      (v : List (String × Int)),
+      unmarkedKeys recipes v < fuel →
+      Marked (Extracted.RecipeClosure._closure_visited fuel root recipes v) root
+      ∧ ∀ k, Marked (Extracted.RecipeClosure._closure_visited fuel root recipes v) k →
+          ¬ Marked v k →
+          ChildrenMarked recipes
+            (Extracted.RecipeClosure._closure_visited fuel root recipes v) k := by
+  intro fuel
+  induction fuel with
+  | zero =>
+    intro root recipes v hfuel
+    exact absurd hfuel (Nat.not_lt_zero _)
+  | succ fuel ihf =>
+    intro root recipes v hfuel
+    simp only [Extracted.RecipeClosure._closure_visited]
+    by_cases hg : (decide ((Extracted.RecipeClosure._dictGetD v root 0) = 1)) = true
+    · rw [if_pos hg]
+      refine ⟨of_decide_eq_true hg, ?_⟩
+      intro k hk hnk
+      exact absurd hk hnk
+    · rw [if_neg hg]
+      have hroot : ¬ Extracted.RecipeClosure._dictGetD v root 0 = 1 := fun hc =>
+        hg (decide_eq_true hc)
+      cases hrcp : Extracted.RecipeClosure._dictGetD recipes root [] with
+      | nil =>
+        rw [List.foldl_nil]
+        refine ⟨marked_dictSet_self v root, ?_⟩
+        intro k hk hnk
+        rcases marked_dictSet_inv v root k hk with rfl | hm
+        · intro c q hcq
+          rw [hrcp] at hcq
+          exact absurd hcq (List.not_mem_nil)
+        · exact absurd hm hnk
+      | cons p ps =>
+        obtain ⟨rl, hrl⟩ : keyIn recipes root :=
+          keyIn_of_getD_ne recipes root [] (by rw [hrcp]; intro hc; cases hc)
+        have hdec := unmarkedKeys_strict recipes v root rl hrl hroot
+        have hlt : unmarkedKeys recipes (Extracted.RecipeClosure._dictSet v root 1)
+            < fuel := by omega
+        have hfold := foldl_closure_complete fuel recipes (fun r w => ihf r recipes w)
+          (p :: ps) (Extracted.RecipeClosure._dictSet v root 1) hlt
+        have hmsub : MSub (Extracted.RecipeClosure._dictSet v root 1)
+            (List.foldl
+              (fun visited _x =>
+                Extracted.RecipeClosure._closure_visited fuel (_x.1) recipes visited)
+              (Extracted.RecipeClosure._dictSet v root 1) (p :: ps)) :=
+          foldl_closure_msub fuel recipes
+            (fun r w => closure_visited_msub fuel r recipes w) (p :: ps) _
+        refine ⟨hmsub root (marked_dictSet_self v root), ?_⟩
+        intro k hk hnk
+        by_cases hkr : k = root
+        · subst hkr
+          intro c q hcq
+          rw [hrcp] at hcq
+          exact hfold.1 (c, q) hcq
+        · refine hfold.2 k hk ?_
+          intro hm
+          rcases marked_dictSet_inv v root k hm with h' | h'
+          · exact hkr h'
+          · exact hnk h'
+
+/-- Roots-fold monotonicity at the wrapper seed. -/
+private theorem roots_fold_msub (recipes : List (String × List (String × Int))) :
+    ∀ (rs : List String) (v : List (String × Int)),
+      MSub v (List.foldl
+        (fun visited root => Extracted.RecipeClosure._closure_visited
+          (Int.toNat ((Int.ofNat (List.length recipes)) + 1)) root recipes visited)
+        v rs) := by
+  intro rs
+  induction rs with
+  | nil => intro v k hk; exact hk
+  | cons r rest ihl =>
+    intro v
+    rw [List.foldl_cons]
+    intro k hk
+    exact ihl _ k (closure_visited_msub _ r recipes v k hk)
+
+/-- Roots fold at the wrapper seed: starting from a marked-closed dict, the
+result marks every root and is marked-closed — the marked set is a fixpoint
+containing the roots. -/
+private theorem roots_fold_complete (recipes : List (String × List (String × Int))) :
+    ∀ (rs : List String) (v : List (String × Int)),
+      MarkedClosed recipes v →
+      (∀ s ∈ rs, Marked
+        (List.foldl
+          (fun visited root => Extracted.RecipeClosure._closure_visited
+            (Int.toNat ((Int.ofNat (List.length recipes)) + 1)) root recipes visited)
+          v rs) s)
+      ∧ MarkedClosed recipes
+          (List.foldl
+            (fun visited root => Extracted.RecipeClosure._closure_visited
+              (Int.toNat ((Int.ofNat (List.length recipes)) + 1)) root recipes visited)
+            v rs) := by
+  intro rs
+  induction rs with
+  | nil =>
+    intro v hcl
+    exact ⟨fun s hs => absurd hs (List.not_mem_nil), hcl⟩
+  | cons r rest ihl =>
+    intro v hcl
+    rw [List.foldl_cons]
+    have hc := closure_visited_complete (Int.toNat ((Int.ofNat (List.length recipes)) + 1))
+      r recipes v (eFuel_sufficient recipes v)
+    have hmsub1 : MSub v (Extracted.RecipeClosure._closure_visited
+        (Int.toNat ((Int.ofNat (List.length recipes)) + 1)) r recipes v) :=
+      closure_visited_msub _ r recipes v
+    have hcl1 : MarkedClosed recipes (Extracted.RecipeClosure._closure_visited
+        (Int.toNat ((Int.ofNat (List.length recipes)) + 1)) r recipes v) := by
+      intro k hk
+      by_cases hkv : Marked v k
+      · intro c q hcq
+        exact hmsub1 c (hcl k hkv c q hcq)
+      · exact hc.2 k hk hkv
+    obtain ⟨hmarks, hclR⟩ := ihl _ hcl1
+    refine ⟨?_, hclR⟩
+    intro s hs
+    rcases List.mem_cons.mp hs with rfl | hs'
+    · exact roots_fold_msub recipes rest _ s hc.1
+    · exact hmarks s hs'
+
+/-- COMPLETENESS of the closure marking (P4c): through any injective
+encoding, EVERY spec-`Reachable` item is marked in the visited dict the
+extracted `recipe_closure_pure` builds at the wrapper seed `|recipes| + 1`
+— the converse of `closure_visited_sound`, now universal. -/
+theorem closure_visited_marks_reachable (f : Nat → String)
+    (hf : ∀ {a b : Nat}, f a = f b → a = b)
+    (es : List (Nat × List (Nat × Nat))) (roots : List Nat)
+    {i : Nat} (hreach : Formal.RecipeClosure.Reachable (rOf es) roots i) :
+    Marked
+      (List.foldl
+        (fun visited root => Extracted.RecipeClosure._closure_visited
+          (Int.toNat ((Int.ofNat (List.length (encRecipes f es))) + 1)) root
+          (encRecipes f es) visited)
+        [] (roots.map f))
+      (f i) := by
+  have hnil : MarkedClosed (encRecipes f es) [] := by
+    intro k hk
+    exact absurd (show (0 : Int) = 1 from hk) (by decide)
+  obtain ⟨hmarks, hclosed⟩ := roots_fold_complete (encRecipes f es) (roots.map f) [] hnil
+  induction hreach with
+  | root hm => exact hmarks _ (List.mem_map_of_mem hm)
+  | @step item child hi hc ih =>
+    obtain ⟨p, hp, hpc⟩ := List.mem_map.mp hc
+    subst hpc
+    have hmem : ((f p.1, Int.ofNat p.2) : String × Int)
+        ∈ Extracted.RecipeClosure._dictGetD (encRecipes f es) (f item) [] := by
+      rw [recipes_getD f hf es item]
+      show ((f p.1, Int.ofNat p.2) : String × Int)
+        ∈ (rOf es item).map (fun e => (f e.1, Int.ofNat e.2))
+      exact List.mem_map_of_mem hp
+    exact hclosed (f item) ih (f p.1) (Int.ofNat p.2) hmem
+
+/-- COMPLETENESS of the extracted `recipe_closure_pure` outputs (P4c — the
+formerly kernel-pinned direction, now universal): every `isCraftable` item
+appears among the reported craftables and every `isNeeded` resource among
+the reported needed resources — for EVERY encoded graph, drop table and
+root set. -/
+theorem recipe_closure_pure_complete (f : Nat → String)
+    (hf : ∀ {a b : Nat}, f a = f b → a = b)
+    (es : List (Nat × List (Nat × Nat))) (roots : List Nat)
+    (ds : List (Nat × Nat)) :
+    (∀ i, Formal.RecipeClosure.isCraftable (rOf es) roots i
+      → f i ∈ (Extracted.RecipeClosure.recipe_closure_pure (roots.map f)
+          (encRecipes f es) (encAssoc f f ds)).2)
+    ∧ (∀ res, Formal.RecipeClosure.isNeeded (rOf es) roots ds res
+      → f res ∈ (Extracted.RecipeClosure.recipe_closure_pure (roots.map f)
+          (encRecipes f es) (encAssoc f f ds)).1) := by
+  unfold Extracted.RecipeClosure.recipe_closure_pure
+  simp only []
+  constructor
+  · rintro i ⟨hreach, hne⟩
+    have hm := closure_visited_marks_reachable f hf es roots hreach
+    obtain ⟨w, hw⟩ := marked_keyIn _ _ hm
+    refine List.mem_map.mpr ⟨(f i, w), List.mem_filter.mpr ⟨hw, ?_⟩, rfl⟩
+    show (decide ((Int.ofNat (List.length (Extracted.RecipeClosure._dictGetD
+        (encRecipes f es) (f i) []))) > 0)) = true
+    rw [recipes_getD f hf es i]
+    cases hr : rOf es i with
+    | nil => exact absurd hr hne
+    | cons a as =>
+      refine decide_eq_true ?_
+      show (Int.ofNat (List.length (encRcp f (a :: as)))) > 0
+      simp only [encRcp, encAssoc, List.length_map, List.length_cons,
+        Int.ofNat_eq_natCast]
+      omega
+  · rintro res ⟨drop, hmemd, hreach⟩
+    have hm := closure_visited_marks_reachable f hf es roots hreach
+    refine List.mem_map.mpr ⟨(f res, f drop), List.mem_filter.mpr ⟨?_, ?_⟩, rfl⟩
+    · show ((f res, f drop) : String × String) ∈ ds.map (fun e => (f e.1, f e.2))
+      exact List.mem_map_of_mem hmemd
+    · exact decide_eq_true hm
+
+/-- EXACT SPEC of the extracted `recipe_closure_pure` — soundness and
+completeness combined (the P3a-deferred direction now universal): through
+any injective encoding, craftable-output membership is EXACTLY
+`isCraftable` and needed-output membership EXACTLY `isNeeded`, for EVERY
+graph, drop table and root set. -/
+theorem recipe_closure_pure_spec (f : Nat → String)
+    (hf : ∀ {a b : Nat}, f a = f b → a = b)
+    (es : List (Nat × List (Nat × Nat))) (roots : List Nat)
+    (ds : List (Nat × Nat)) :
+    (∀ s, s ∈ (Extracted.RecipeClosure.recipe_closure_pure (roots.map f)
+          (encRecipes f es) (encAssoc f f ds)).2
+      ↔ ∃ i, f i = s ∧ Formal.RecipeClosure.isCraftable (rOf es) roots i)
+    ∧ (∀ s, s ∈ (Extracted.RecipeClosure.recipe_closure_pure (roots.map f)
+          (encRecipes f es) (encAssoc f f ds)).1
+      ↔ ∃ res, f res = s ∧ Formal.RecipeClosure.isNeeded (rOf es) roots ds res) := by
+  obtain ⟨hs2, hs1⟩ := recipe_closure_pure_sound f hf es roots ds
+  obtain ⟨hc2, hc1⟩ := recipe_closure_pure_complete f hf es roots ds
+  refine ⟨fun s => ⟨hs2 s, ?_⟩, fun s => ⟨hs1 s, ?_⟩⟩
+  · rintro ⟨i, rfl, hcraft⟩
+    exact hc2 i hcraft
+  · rintro ⟨res, rfl, hneed⟩
+    exact hc1 res hneed
+
+/-! ### Quantity pins (kernel-evaluated): exact `_raw_units` outputs on the
+registered mutation graphs — the numeric anchors the mutation suite cites
+(diamond 31; cycle 6, where the dropped-visited-guard mutant yields 12).
+The closure COMPLETENESS pins that used to live here (`closure_pin_*`) were
+superseded by the universal `recipe_closure_pure_spec` above (P4c) and
+dropped. -/
 
 /-- Diamond: 0 ← {1 x2, 2 x3}; 1 ← 3 x5; 2 ← 3 x7; resource 100 drops 3. -/
 private def pinRecipesDiamond : List (String × List (String × Int)) :=
@@ -1529,61 +2017,24 @@ private def pinRDiamond : Formal.RecipeClosure.Recipe := fun i =>
   if i = 0 then [(1, 2), (2, 3)] else if i = 1 then [(3, 5)]
   else if i = 2 then [(3, 7)] else []
 
-theorem closure_pin_diamond :
-    Extracted.RecipeClosure.recipe_closure_pure ["0"] pinRecipesDiamond [("100", "3")]
-      = (["100"], ["0", "1", "2"]) := by decide
-
-theorem closure_pin_diamond_matches_hand :
-    ((Formal.RecipeClosure.neededList pinRDiamond [0] [(100, 3)] 8).map pinF = ["100"])
-      ∧ ((Formal.RecipeClosure.craftableList pinRDiamond [0] 8).map pinF
-          = ["0", "1", "2"]) := by decide
-
 /-- The diamond quantity math agrees end-to-end: 2·5 + 3·7 = 31. -/
 theorem raw_units_pin_diamond :
     Extracted.RecipeClosure._raw_units 4 "0" pinRecipesDiamond []
       = Int.ofNat (Formal.RecipeClosure.rawUnits pinRDiamond 4 0)
       ∧ Extracted.RecipeClosure._raw_units 4 "0" pinRecipesDiamond [] = 31 := by decide
 
-/-- Cycle: 0 ← 1 x2; 1 ← 0 x3; resources 100/101 drop 0/1. The DFS must
-terminate and capture both items (the registered visited-guard mutant
-diverges here; the omit-edges mutant loses item 1). -/
+/-- Cycle: 0 ← 1 x2; 1 ← 0 x3 (the registered visited-guard mutant diverges
+here: dropping the `_raw_units` revisit short-circuit yields 12, not 6). -/
 private def pinRecipesCycle : List (String × List (String × Int)) :=
   [("0", [("1", 2)]), ("1", [("0", 3)])]
 
 private def pinRCycle : Formal.RecipeClosure.Recipe := fun i =>
   if i = 0 then [(1, 2)] else if i = 1 then [(0, 3)] else []
 
-theorem closure_pin_cycle :
-    Extracted.RecipeClosure.recipe_closure_pure ["0"] pinRecipesCycle
-      [("100", "0"), ("101", "1")]
-      = (["100", "101"], ["0", "1"]) := by decide
-
-theorem closure_pin_cycle_matches_hand :
-    ((Formal.RecipeClosure.neededList pinRCycle [0] [(100, 0), (101, 1)] 8).map pinF
-        = ["100", "101"])
-      ∧ ((Formal.RecipeClosure.craftableList pinRCycle [0] 8).map pinF = ["0", "1"]) := by
-  decide
-
 /-- Cyclic quantity math: units(0) = 2 · (3 · 1) = 6 on both sides. -/
 theorem raw_units_pin_cycle :
     Extracted.RecipeClosure._raw_units 3 "0" pinRecipesCycle []
       = Int.ofNat (Formal.RecipeClosure.rawUnits pinRCycle 3 0)
       ∧ Extracted.RecipeClosure._raw_units 3 "0" pinRecipesCycle [] = 6 := by decide
-
-/-- Chain: 0 ← 1 x1; 1 ← 2 x4; resource 100 drops 2 (the deep-edge case). -/
-private def pinRecipesChain : List (String × List (String × Int)) :=
-  [("0", [("1", 1)]), ("1", [("2", 4)])]
-
-private def pinRChain : Formal.RecipeClosure.Recipe := fun i =>
-  if i = 0 then [(1, 1)] else if i = 1 then [(2, 4)] else []
-
-theorem closure_pin_chain :
-    Extracted.RecipeClosure.recipe_closure_pure ["0"] pinRecipesChain [("100", "2")]
-      = (["100"], ["0", "1"]) := by decide
-
-theorem closure_pin_chain_matches_hand :
-    ((Formal.RecipeClosure.neededList pinRChain [0] [(100, 2)] 8).map pinF = ["100"])
-      ∧ ((Formal.RecipeClosure.craftableList pinRChain [0] 8).map pinF = ["0", "1"]) := by
-  decide
 
 end Extracted.Bridges

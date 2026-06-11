@@ -25,12 +25,14 @@ depend on `GameData` / `WorldState` / `SelectionContext`), but the repr of the
 resulting Goal — the IDENTITY the strategy commits to — is a pure function of
 the enum kind, captured here.
 """
+from fractions import Fraction
+
 from artifactsmmo_cli.ai.tiers.guards import GuardKind
 from artifactsmmo_cli.ai.tiers.means import MeansKind
 
 
-def decide_key(neg_final: float, effort: int, root_repr: str
-               ) -> tuple[float, int, str]:
+def decide_key(neg_final: Fraction, effort: int, root_repr: str
+               ) -> tuple[Fraction, int, str]:
     """The sort key tuple `decide` builds: `(-final, effort, root_repr)`.
 
     Lower tuple sorts FIRST: smaller `-final` (= higher `final`) wins, ties
@@ -41,6 +43,9 @@ def decide_key(neg_final: float, effort: int, root_repr: str
     The third field is the GENUINE last tiebreak: in production every distinct
     candidate root has a distinct `repr` (different MetaGoal types/codes), so
     no two candidates with distinct roots can tie under the full lex key.
+
+    P4a: `neg_final` is an exact `Fraction` (strategy scores are exact
+    rationals) — lexicographic comparison is exact, no float near-ties.
     """
     return (neg_final, effort, root_repr)
 

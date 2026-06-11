@@ -3,7 +3,36 @@
 from artifactsmmo_cli.ai.game_data import ItemStats
 
 
-def equip_value(stats: ItemStats) -> float:
+def equip_value_pure(attack: int, resistance: int, hp_restore: int, hp_bonus: int,
+                     dmg: int, critical_strike: int, subtype: str) -> int:
+    """PURE CORE (mechanically extracted, P4b): ``2 * raw + nonToolBonus``.
+
+    The ItemStats reads (and the dict-value sums for attack/resistance) are
+    hoisted to plain int parameters by the ``equip_value`` wrapper — the
+    same already-summed shape the hand model takes. Extracted to
+    ``Formal/Extracted/EquipValue.lean``; the bridge proves it equal to the
+    hand ``Formal.EquipValueAugmented.equipValue`` (RawStats + isTool),
+    transferring strict-raw preservation and the non-tool tie-break onto
+    the extracted definition.
+    """
+    raw = (attack + resistance + hp_restore
+           + hp_bonus + dmg + critical_strike)
+    non_tool_bonus = 0 if subtype == "tool" else 1
+    return 2 * raw + non_tool_bonus
+
+
+def tool_value_pure(skill_effects: dict[str, int], skill: str) -> int:
+    """PURE CORE (mechanically extracted, P4b): ``abs(skill_effects[skill])``.
+
+    Definitionally ``|gather_score_pure|`` — the bridge pins the duality:
+    on the tool domain (non-positive effects) maximizing this value is
+    exactly minimizing the gather score the combat-side picker minimizes.
+    """
+    effect = skill_effects.get(skill, 0)
+    return abs(effect)
+
+
+def equip_value(stats: ItemStats) -> int:
     """Combat/utility value of an equippable — ranks combat gear so genuinely
     better items beat alphabetical accidents AND non-tool weapons rank above
     tools that score the same on raw attack. Single source shared by the
@@ -36,19 +65,20 @@ def equip_value(stats: ItemStats) -> float:
     # the armor-pursuit gap. The mixed units (flat hp vs %) are intentional:
     # only ARGMAX ORDERING matters for ranker decisions, and every modeled
     # contributor is positively correlated with combat capability.
-    raw = (attack + resistance + stats.hp_restore
-           + stats.hp_bonus + stats.dmg + stats.critical_strike)
-    non_tool_bonus = 0 if stats.subtype == "tool" else 1
-    return float(2 * raw + non_tool_bonus)
+    # P4a: every summand is an int (ItemStats stats are ints) — the value is
+    # EXACT integer arithmetic, matching the Lean EquipValueAugmented.equipValue
+    # (Int) model directly. The historical float() wrapper added nothing.
+    # P4b: the arithmetic lives in the extracted `equip_value_pure` core.
+    return equip_value_pure(attack, resistance, stats.hp_restore, stats.hp_bonus,
+                            stats.dmg, stats.critical_strike, stats.subtype)
 
 
-def tool_value(stats: ItemStats, skill: str) -> float:
+def tool_value(stats: ItemStats, skill: str) -> int:
     """Tool benefit for a given gathering skill. The API encodes tools as
     `type_="weapon"` with `skill_effects[skill] = -cooldown_reduction_pct`
     (negative because the effect reduces a cost). We score by the absolute
     magnitude — bigger reduction wins. Returns 0 when the item has no
-    effect for this skill."""
+    effect for this skill. P4a: skill_effects values are ints — exact."""
     if not stats.skill_effects:
-        return 0.0
-    effect = stats.skill_effects.get(skill, 0)
-    return float(abs(effect))
+        return 0
+    return tool_value_pure(stats.skill_effects, skill)

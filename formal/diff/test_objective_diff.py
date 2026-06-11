@@ -14,6 +14,7 @@ Integer item/equip-value codes; controlled fake GameData exposing only the field
 these functions read. The same data is encoded for the Lean oracle (flat ints).
 """
 import random
+from fractions import Fraction
 
 from hypothesis import given, settings, strategies as st
 
@@ -196,7 +197,8 @@ def test_best_gear_matches_lean(seed):
         else:
             recipes[c] = {998: 1}  # craft from unknown non-drop -> NOT attainable
             attainable = False
-        val = int(equip_value(item_stats[c]))
+        # P4a: equip_value IS an exact int — no float boundary cast.
+        val = equip_value(item_stats[c])
         lean_items.append((c, val, 1 if attainable else 0))
 
     gd = _FakeGameData(recipes, drops, item_stats)
@@ -237,7 +239,7 @@ def test_gap_matches_lean(seed):
     }
     recipes = {1: {999: 1}}
     drops = {100: 999}
-    target_val = int(equip_value(item_stats[1]))
+    target_val = equip_value(item_stats[1])  # P4a: exact int
 
     # equipped weapon: maybe none, maybe a weaker/stronger item
     have_val = 0
@@ -246,7 +248,7 @@ def test_gap_matches_lean(seed):
         eq = _stats(2, "weapon", rng.randint(0, 12), rng.randint(0, 12), rng.randint(0, 12))
         item_stats[2] = eq
         equipment["weapon_slot"] = "2"
-        have_val = int(equip_value(eq))
+        have_val = equip_value(eq)  # P4a: exact int
 
     gd = _FakeGameData(recipes, drops, item_stats)
     obj = CharacterObjective.from_game_data(gd)
@@ -256,7 +258,8 @@ def test_gap_matches_lean(seed):
     py_char = py_gap.char_level_gap
     py_skill_sum = sum(py_gap.skill_gaps.values())
     py_skill_denom = len(SKILL_NAMES) * gd.max_skill_level
-    py_gear_sum = int(sum(py_gap.gear_gaps.values()))
+    # P4a: gear gaps are exact ints — the sum is an int, no rounding cast.
+    py_gear_sum = sum(py_gap.gear_gaps.values())
     # gear denom = sum of target gear item values (here just the one weapon)
     py_gear_denom = target_val if obj.target_gear.get("weapon_slot") else 0
     py_complete = py_gap.is_complete
@@ -277,6 +280,14 @@ def test_gap_matches_lean(seed):
     assert py_gear_sum == lean["gear_gap_sum"], f"gear gap: {ctx} {lean}"
     assert py_gear_denom == lean["gear_denom"], f"gear denom: {ctx} {lean}"
     assert py_complete == lean["is_complete"], f"complete: {ctx} {lean}"
+    # P4a: the production fractions are EXACT rationals — pin them against the
+    # oracle's integer numerators/denominators with zero tolerance.
+    assert py_gap.char_level_fraction == Fraction(lean["char_gap"], gd.max_character_level)
+    assert py_gap.skills_fraction == Fraction(lean["skill_gap_sum"], lean["skill_denom"])
+    if lean["gear_denom"] > 0:
+        assert py_gap.gear_fraction == Fraction(lean["gear_gap_sum"], lean["gear_denom"])
+    else:
+        assert py_gap.gear_fraction == Fraction(0)
     # integer fraction bound, verified integer-only: 0 <= gap <= denom
     assert 0 <= lean["skill_gap_sum"] <= lean["skill_denom"]
     if lean["gear_denom"] > 0:

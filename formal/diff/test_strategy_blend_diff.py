@@ -1,16 +1,15 @@
 """Differential test: the real Python pure cores `balancing` and `learned_blend`
 must agree with the proved Lean `balancingScaled` and `learnedBlend` exactly.
 
-We use `fractions.Fraction` for `learned_blend` inputs so the comparison is
-BIT-EXACT over ℚ (the Lean model and the Python pure core agree as exact
-rationals; the Python production passes float constants `0.25, 0.5, 2.0,
-1 - w, w` which are exact-representable rationals, but to dodge any float
-round-off in the Hypothesis examples we compute the pure core with `Fraction`
-inputs).
+P4a: the production cores are EXACT `fractions.Fraction` arithmetic. The Lean
+Rat oracle and the production functions are compared bit-exactly with NO float
+mirror and NO tolerance — `balancing` returns the exact rational directly
+(the old `_balancing_fraction` local mirror is gone; the diff now drives the
+production function itself), and `learned_blend` takes/returns Fractions.
 
 For `balancing`, the Lean model is scaled by 4 (over `Int`) and the Python
-formula is `(1 + (1/4) * (leader - current - 2))` clamped to `[0.5, 2.0]`.
-We compare `scaled / 4 == python_result_as_fraction`.
+formula is `(1 + (1/4) * (leader - current - 2))` clamped to `[1/2, 2]`.
+We compare `scaled / 4 == balancing(leader, current)` exactly.
 """
 from fractions import Fraction
 
@@ -27,40 +26,35 @@ from artifactsmmo_cli.ai.tiers.strategy_blend import (
 from formal.diff.oracle_client import run_oracle
 
 
-def _balancing_fraction(leader: int, current: int) -> Fraction:
-    """Exact-rational mirror of `balancing` so we can compare bit-exactly."""
-    raw = Fraction(1) + Fraction(1, 4) * (
-        Fraction(leader) - Fraction(current) - Fraction(BALANCE_THRESHOLD)
-    )
-    lo = Fraction(1, 2)
-    hi = Fraction(2)
-    return max(lo, min(hi, raw))
-
-
 @settings(max_examples=300)
 @given(
     leader=st.integers(min_value=-50, max_value=200),
     current=st.integers(min_value=-50, max_value=200),
 )
 def test_balancing_matches_lean(leader: int, current: int) -> None:
-    py_frac = _balancing_fraction(leader, current)
+    # P4a: the PRODUCTION core is exact Fraction arithmetic — compare it to
+    # the Lean Rat oracle directly, bit-exactly (exact == exact, no mirror).
+    py_frac = balancing(leader, current)
+    assert isinstance(py_frac, Fraction)
     lean = run_oracle("strategy_blend", [[0, leader, current]])[0]
     # Lean returns the scaled-by-4 Int.
     assert Fraction(lean["scaled"], 4) == py_frac
-    # The float core agrees on every input where float is exact (0.25 = 1/4
-    # makes the formula exact at machine doubles for small ints).
-    assert balancing(leader, current) == float(py_frac)
     # The proved band bounds.
-    assert BALANCE_MIN <= float(py_frac) <= BALANCE_MAX
+    assert BALANCE_MIN <= py_frac <= BALANCE_MAX
 
 
 def test_balancing_threshold_identity() -> None:
-    """leader - current = 2 ⇒ multiplier = 1.0 (exactly). Boundary witness."""
+    """leader - current = 2 ⇒ multiplier = 1 (exactly). Boundary witness.
+    The isinstance pin is the DETERMINISTIC kill for the P4a float-seed
+    mutant (`1.0 + ...` contaminates the unclamped mid-band result into
+    a float; at the threshold the result is unclamped)."""
     for leader in range(0, 20):
         current = leader - 2
-        assert balancing(leader, current) == 1.0
+        result = balancing(leader, current)
+        assert result == Fraction(1)
+        assert isinstance(result, Fraction)
         lean = run_oracle("strategy_blend", [[0, leader, current]])[0]
-        assert lean["scaled"] == 4  # = 4 * 1.0
+        assert lean["scaled"] == 4  # = 4 * 1
 
 
 def test_balancing_upper_clamp_against_lean() -> None:
@@ -155,8 +149,9 @@ def test_learned_blend_convex_endpoint_witnesses() -> None:
 def test_balance_constants_unchanged() -> None:
     """Pin the production constants the proof depends on. Any retune must
     update the Lean model (`balanceK`, `balanceThresh`, `balanceMinScaled`,
-    `balanceMaxScaled`) in lockstep."""
-    assert BALANCE_K == 0.25
+    `balanceMaxScaled`) in lockstep. P4a: the constants are exact Fractions
+    (same rational values the float constants always denoted)."""
+    assert Fraction(1, 4) == BALANCE_K
     assert BALANCE_THRESHOLD == 2
-    assert BALANCE_MIN == 0.5
-    assert BALANCE_MAX == 2.0
+    assert Fraction(1, 2) == BALANCE_MIN
+    assert Fraction(2) == BALANCE_MAX

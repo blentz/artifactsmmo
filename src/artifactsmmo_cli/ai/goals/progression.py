@@ -253,11 +253,22 @@ class UpgradeEquipmentGoal(Goal):
     def _value_candidate(self, target: tuple[str, str] | None,
                          game_data: GameData) -> UpgradeCandidate | None:
         """Wrap a (item, slot) pick as a value-only UpgradeCandidate for
-        `best_by_value`. The non-value fields are unused by `best_by_value`."""
+        `best_by_value`. The non-value fields are unused by `best_by_value`.
+
+        P4a (exact arithmetic): the old `_value_of` scored a missing-stats
+        pick as float ``-inf`` so it lost every comparison. With `value: int`
+        the sentinel is gone — a pick whose stats are missing simply yields NO
+        candidate (`None`), which `best_by_value` already treats as the
+        always-loses case. Unreachable in production: both finders only emit
+        picks whose `item_stats` resolved (same `game_data`, deterministic).
+        """
         if target is None:
             return None
+        stats = game_data.item_stats(target[0])
+        if stats is None:
+            return None
         return UpgradeCandidate(
-            item_code=target[0], value=self._value_of(target, game_data),
+            item_code=target[0], value=self._upgrade_value(stats),
             level=0, craft_level=0, relevant=False, fills_empty=False)
 
     def _committed_upgrade_if_ready(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
@@ -274,13 +285,6 @@ class UpgradeEquipmentGoal(Goal):
         if state.inventory.get(item_code, 0) > 0:
             return self._committed_target
         return None
-
-    def _value_of(self, target: tuple[str, str] | None, game_data: GameData) -> float:
-        """Stat value of a (item, slot) pick, or -inf for None."""
-        if target is None:
-            return -float("inf")
-        stats = game_data.item_stats(target[0])
-        return self._upgrade_value(stats) if stats is not None else -float("inf")
 
     def _find_inventory_upgrade(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
         """Best-VALUE upgrade in inventory or bank (bank items need Withdraw first).
@@ -423,9 +427,10 @@ class UpgradeEquipmentGoal(Goal):
         return self._is_upgrade_over_impl(
             item_code, stats, current_code, current_stats, game_data, active_skills)
 
-    def _upgrade_value(self, stats: ItemStats) -> float:
+    def _upgrade_value(self, stats: ItemStats) -> int:
         """Crude combat/utility value of an equippable: total attack +
-        resistance + hp restore. Delegates to the shared tiers.equip_value."""
+        resistance + hp restore. Delegates to the shared tiers.equip_value
+        (exact int since P4a)."""
         return equip_value(stats)
 
     def _is_upgrade_over_impl(

@@ -2,17 +2,15 @@
 `is_complete_pure` must agree with the proved Lean `weightedRemaining` /
 `isComplete`.
 
-The Lean model works in EXACT RATIONAL arithmetic (`Rat`, no scaling); the
-production fractions are deficit / target ratios produced as floats from
-integer numerators / denominators (`objective.py:102-106`) and the personality
-weights are floats returned by `Personality.category_weight` (BalancedPersonality
-returns 1.0). Both are RATIONAL, so we exercise the real fractional domain
-directly: every numeric input is an exact `fractions.Fraction`, and we call
-`weighted_remaining_pure` with `Fraction` tuples so EVERY operation stays exact
-(a Fraction `*`/`+` is exact; no float coercion). The Lean oracle reconstructs
-each input as an exact `Rat` from a (numerator, denominator) pair and emits the
-scalar's exact numerator / denominator, compared to the Python `Fraction` result
-EXACTLY.
+The Lean model works in EXACT RATIONAL arithmetic (`Rat`, no scaling). P4a:
+production now matches — the `ObjectiveGap` fractions are exact `Fraction`
+ratios of integer gaps and `Personality.category_weight` returns `Fraction`
+(BalancedPersonality returns Fraction(1)), so the pure cores are
+Fraction-in/Fraction-out by annotation, not just by duck typing. Every numeric
+input here is an exact `fractions.Fraction` and EVERY operation stays exact.
+The Lean oracle reconstructs each input as an exact `Rat` from a (numerator,
+denominator) pair and emits the scalar's exact numerator / denominator,
+compared to the Python `Fraction` result EXACTLY.
 
 Sign/range reality: production fractions are in `[0, 1]` (deficit ≤ target ≥ 0),
 production weights are STRICTLY POSITIVE under the documented contract (P1 ships
@@ -76,9 +74,9 @@ def test_python_matches_lean_positive(
     # Call the Python pure core with Fraction tuples — every op stays exact.
     # (The production core declares tuple[float, float, float], but the * and +
     # operators on Fraction are exact; type annotations don't affect runtime.)
-    py_scalar = weighted_remaining_pure(weights, fractions_)  # type: ignore[arg-type]
+    py_scalar = weighted_remaining_pure(weights, fractions_)
     assert isinstance(py_scalar, Fraction)
-    py_complete = is_complete_pure(fractions_)  # type: ignore[arg-type]
+    py_complete = is_complete_pure(fractions_)
     lean_scalar, lean_complete = _lean(weights, fractions_)
     assert py_scalar == lean_scalar
     assert py_complete == lean_complete
@@ -99,8 +97,8 @@ def test_zero_iff_complete_under_positivity(
     fractional domain."""
     weights = (w0, w1, w2)
     fractions_ = (f0, f1, f2)
-    py_scalar = weighted_remaining_pure(weights, fractions_)  # type: ignore[arg-type]
-    py_complete = is_complete_pure(fractions_)  # type: ignore[arg-type]
+    py_scalar = weighted_remaining_pure(weights, fractions_)
+    py_complete = is_complete_pure(fractions_)
     assert (py_scalar == 0) == py_complete
 
 
@@ -123,9 +121,9 @@ def test_mono_in_fraction(
     bumped0 = (f0 + bump, f1, f2)
     bumped1 = (f0, f1 + bump, f2)
     bumped2 = (f0, f1, f2 + bump)
-    s_base = weighted_remaining_pure(weights, base)  # type: ignore[arg-type]
+    s_base = weighted_remaining_pure(weights, base)
     for bumped in (bumped0, bumped1, bumped2):
-        s_bumped = weighted_remaining_pure(weights, bumped)  # type: ignore[arg-type]
+        s_bumped = weighted_remaining_pure(weights, bumped)
         assert s_bumped >= s_base
 
 
@@ -161,8 +159,8 @@ def test_bug_teeth_zero_weight_breaks_equivalence(
     fractions_list[zero_idx] = f_zeroed
     w_tup = (weights_list[0], weights_list[1], weights_list[2])
     f_tup = (fractions_list[0], fractions_list[1], fractions_list[2])
-    py_scalar = weighted_remaining_pure(w_tup, f_tup)  # type: ignore[arg-type]
-    py_complete = is_complete_pure(f_tup)  # type: ignore[arg-type]
+    py_scalar = weighted_remaining_pure(w_tup, f_tup)
+    py_complete = is_complete_pure(f_tup)
     assert py_scalar == 0, py_scalar  # zero weight absorbs the nonzero fraction
     assert py_complete is False  # but the objective is NOT complete
     # Lean oracle agrees:

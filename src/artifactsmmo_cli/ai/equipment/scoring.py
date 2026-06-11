@@ -7,6 +7,58 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
+def weapon_score_raw_pure(elements: list[str], attack: dict[str, int],
+                          monster_resistance: dict[str, int]) -> int:
+    """PURE CORE (mechanically extracted, P4b): ``Σ atk * max(0, 100 - res%)``.
+
+    The ItemStats read (``weapon.attack``) and the module-level ``ELEMENTS``
+    tuple are hoisted to plain-data parameters by the ``weapon_score_raw``
+    wrapper, so this body is inside the extraction subset. Extracted to
+    ``Formal/Extracted/EquipmentScoring.lean``; the bridge proves it equal
+    to the hand ``Formal.EquipmentScoring.WScore`` over an injective
+    element encoding, transferring ``weapon_score_nonneg`` (the clamp
+    theorem) onto the extracted definition.
+    """
+    score = 0
+    for elem in elements:
+        score = score + attack.get(elem, 0) * max(0, 100 - monster_resistance.get(elem, 0))
+    return score
+
+
+def weapon_score_pure(elements: list[str], attack: dict[str, int], subtype: str,
+                      monster_resistance: dict[str, int]) -> int:
+    """PURE CORE (mechanically extracted, P4b): ``2 * raw + nonToolBonus``.
+
+    Bridged to the hand ``Formal.PurposeRouting.combatScore`` (strict-raw
+    preservation + the non-tool tie-break, the fishing_net invariant).
+    """
+    non_tool_bonus = 0 if subtype == "tool" else 1
+    return 2 * weapon_score_raw_pure(elements, attack, monster_resistance) + non_tool_bonus
+
+
+def gather_score_pure(skill_effects: dict[str, int], skill: str) -> int:
+    """PURE CORE (mechanically extracted, P4b): the signed per-skill effect.
+
+    Bridged to the hand ``Formal.PurposeRouting.gatherScore`` (the gather
+    picker minimizes it; ``pickGatherSlot_score_optimal`` is restated on
+    this extracted definition).
+    """
+    return skill_effects.get(skill, 0)
+
+
+def armor_score_pure(elements: list[str], resistance: dict[str, int],
+                     monster_attack: dict[str, int]) -> int:
+    """PURE CORE (mechanically extracted, P4b): ``Σ mon_atk * armor_res%``.
+
+    Bridged to the hand ``Formal.EquipmentScoring.AScore`` (no clamp —
+    armor scoring has none) over the same injective element encoding.
+    """
+    score = 0
+    for elem in elements:
+        score = score + monster_attack.get(elem, 0) * resistance.get(elem, 0)
+    return score
+
+
 def weapon_score_raw(weapon: ItemStats, monster_resistance: dict[str, int]) -> int:
     """Raw element-discounted attack surrogate ``Σ atk * max(0, 100 - res%)``.
 
@@ -15,12 +67,7 @@ def weapon_score_raw(weapon: ItemStats, monster_resistance: dict[str, int]) -> i
     tiebreaker on top of this; this raw value is exported for the
     differential gate against the kernel-checked WScore oracle.
     """
-    score = 0
-    for elem in ELEMENTS:
-        atk = weapon.attack.get(elem, 0)
-        res_pct = monster_resistance.get(elem, 0)
-        score += atk * max(0, 100 - res_pct)
-    return score
+    return weapon_score_raw_pure(list(ELEMENTS), weapon.attack, monster_resistance)
 
 
 def weapon_score(weapon: ItemStats, monster_resistance: dict[str, int]) -> int:
@@ -45,8 +92,7 @@ def weapon_score(weapon: ItemStats, monster_resistance: dict[str, int]) -> int:
     fishing_net equipped for combat against slimes despite owning combat
     weapons that scored equal.
     """
-    non_tool_bonus = 0 if weapon.subtype == "tool" else 1
-    return 2 * weapon_score_raw(weapon, monster_resistance) + non_tool_bonus
+    return weapon_score_pure(list(ELEMENTS), weapon.attack, weapon.subtype, monster_resistance)
 
 
 def gather_score(item: ItemStats, skill: str) -> int:
@@ -60,7 +106,7 @@ def gather_score(item: ItemStats, skill: str) -> int:
     score over feasible candidates. A non-gathering item (no skill_effects
     entry for `skill`) returns 0 — every gather tool beats it.
     """
-    return item.skill_effects.get(skill, 0)
+    return gather_score_pure(item.skill_effects, skill)
 
 
 def pick_gather_loadout(
@@ -101,12 +147,7 @@ def armor_score(armor: ItemStats, monster_attack: dict[str, int]) -> int:
     Lean ``AScore`` model — argmax / comparison results are identical to the
     rescaled float form.
     """
-    score = 0
-    for elem in ELEMENTS:
-        mon_atk = monster_attack.get(elem, 0)
-        armor_res_pct = armor.resistance.get(elem, 0)
-        score += mon_atk * armor_res_pct
-    return score
+    return armor_score_pure(list(ELEMENTS), armor.resistance, monster_attack)
 
 
 def _candidates_for_slot(

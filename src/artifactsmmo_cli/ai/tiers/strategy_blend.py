@@ -8,19 +8,27 @@ in `strategy.py` so the SAME formulas can be:
   (`formal/Formal/StrategyBlend.lean`), and
 * refactored in one place without re-stating constants.
 
-Both functions are total over their numeric inputs (no division, no NaN, no
-raised exceptions). The constants below mirror the module-level constants in
+Both functions are total over their numeric inputs (no NaN, no raised
+exceptions; `blend_weight`'s division is by the positive constant
+LEARN_SAMPLE_FULL). The constants below mirror the module-level constants in
 `strategy.py` exactly. The live engine delegates to these helpers.
+
+P4a (exact arithmetic): all values are exact `Fraction`s — the Lean
+`StrategyBlend` Rat model and the Python core now compute the SAME exact
+rationals (the old float core was already exact for `balancing`, dyadic
+constants; `blend_weight`'s `n / 20` was NOT — its float rounding is gone).
 """
 
+from fractions import Fraction
+
 # --- balancing -------------------------------------------------------------
-BALANCE_K = 0.25
+BALANCE_K = Fraction(1, 4)
 BALANCE_THRESHOLD = 2
-BALANCE_MIN = 0.5
-BALANCE_MAX = 2.0
+BALANCE_MIN = Fraction(1, 2)
+BALANCE_MAX = Fraction(2)
 
 
-def balancing(leader: int, current: int) -> float:
+def balancing(leader: int, current: int) -> Fraction:
     """Per-skill balancing multiplier.
 
     `raw = 1 + BALANCE_K * (leader - current - BALANCE_THRESHOLD)` clamped to
@@ -38,16 +46,16 @@ def balancing(leader: int, current: int) -> float:
     other category). See `formal/Formal/StrategyBlend.lean` for the bound /
     monotonicity / identity-at-threshold proofs.
     """
-    raw = 1.0 + BALANCE_K * (leader - current - BALANCE_THRESHOLD)
+    raw = 1 + BALANCE_K * (leader - current - BALANCE_THRESHOLD)
     return max(BALANCE_MIN, min(BALANCE_MAX, raw))
 
 
 # --- learned_blend ---------------------------------------------------------
-LEARN_W_MAX = 0.5
+LEARN_W_MAX = Fraction(1, 2)
 LEARN_SAMPLE_FULL = 20
 
 
-def blend_weight(sample_count: int) -> float:
+def blend_weight(sample_count: int) -> Fraction:
     """Sample-driven blend weight `w ∈ [0, LEARN_W_MAX]`.
 
     Linear ramp `LEARN_W_MAX * min(1, sample_count / LEARN_SAMPLE_FULL)`. With
@@ -60,11 +68,13 @@ def blend_weight(sample_count: int) -> float:
     prior — see `learned_blend` for the convex-bound consequence.
     """
     if sample_count <= 0:
-        return 0.0
-    return LEARN_W_MAX * min(1.0, sample_count / LEARN_SAMPLE_FULL)
+        return Fraction(0)
+    # P4a: exact ramp — the old float `sample_count / 20` rounded (20 is not a
+    # power of two); the Fraction ratio is the spec going forward.
+    return LEARN_W_MAX * min(Fraction(1), Fraction(sample_count, LEARN_SAMPLE_FULL))
 
 
-def learned_blend(value: float, normalized: float, w: float) -> float:
+def learned_blend(value: Fraction, normalized: Fraction, w: Fraction) -> Fraction:
     """Convex blend of the prior `value` with the observed `normalized` signal.
 
     Returns `(1 - w) * value + w * normalized`. With `w ∈ [0, 1]` (production

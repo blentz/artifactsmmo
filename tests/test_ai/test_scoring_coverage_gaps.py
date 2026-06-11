@@ -6,6 +6,8 @@ Covers armor-slot optimization and the empty-slot (no current stats) path.
 from artifactsmmo_cli.ai.equipment.scoring import (
     pick_gather_loadout,
     pick_loadout,
+    weapon_score,
+    weapon_score_raw,
 )
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from tests.test_ai.fixtures import make_state
@@ -196,6 +198,23 @@ class TestMultiSlotContention:
         # weak_ring is the only feasible candidate but scores worse than the
         # equipped (level-gated) high_ring, so high_ring is retained.
         assert loadout["ring1_slot"] == "high_ring"
+
+
+class TestWeaponScoreRawWrapper:
+    def test_raw_wscore_and_composite_relationship(self):
+        """The `weapon_score_raw` wrapper (the diff-gate export) delegates to
+        the extracted pure core: clamp at res > 100 zeroes the term, and the
+        composite `weapon_score` is exactly ``2 * raw + nonToolBonus`` (P4b)."""
+        sword = ItemStats(code="sword", level=1, type_="weapon",
+                          attack={"fire": 5, "earth": 3})
+        net = ItemStats(code="net", level=1, type_="weapon", subtype="tool",
+                        attack={"water": 5})
+        res = {"fire": 120, "earth": 50, "water": 0, "air": 0}
+        # fire term clamps to 0 (res 120 > 100); earth term is 3 * 50.
+        assert weapon_score_raw(sword, res) == 3 * 50
+        assert weapon_score(sword, res) == 2 * (3 * 50) + 1   # non-tool bonus
+        assert weapon_score_raw(net, res) == 5 * 100
+        assert weapon_score(net, res) == 2 * (5 * 100)        # tool: no bonus
 
 
 class TestGatherLoadout:

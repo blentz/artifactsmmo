@@ -7,9 +7,10 @@ category weights from `Personality.category_weight("char_level"/"skills"/"gear")
 then computes Σ w * f. `is_complete` asks all three fractions to be exactly 0.0.
 
 These pure helpers take the (weights, fractions) tuples DIRECTLY so the Lean
-oracle can mirror them bit-for-bit over `Rat` (fed as exact `fractions.Fraction`
-in the differential test). Production behavior is unchanged: `personality.py`
-and `objective.py` call these cores with the same inputs they used inline.
+oracle can mirror them bit-for-bit over `Rat`. P4a: production now feeds exact
+`fractions.Fraction` inputs end-to-end (ObjectiveGap fractions and personality
+weights are Fraction), so the cores compute over ℚ exactly — the differential
+test and production share the same exact domain.
 
 STRICT-POSITIVITY CONTRACT (latent-bug surface, see Lean
 `weightedRemaining_zero_iff_complete_of_positive` + the bug-teeth
@@ -23,11 +24,13 @@ today. The contract is documented in `Personality.category_weight`; no runtime
 assert is added by this refactor (a behavioral change is deferred to an
 explicit decision)."""
 
+from fractions import Fraction
+
 
 def weighted_remaining_pure(
-    weights: tuple[float, float, float],
-    fractions: tuple[float, float, float],
-) -> float:
+    weights: tuple[Fraction, Fraction, Fraction],
+    fractions: tuple[Fraction, Fraction, Fraction],
+) -> Fraction:
     """Σ_i weights[i] * fractions[i] over the three Tier-1 categories
     (char_level, skills, gear), in that order."""
     return (weights[0] * fractions[0]
@@ -35,7 +38,7 @@ def weighted_remaining_pure(
             + weights[2] * fractions[2])
 
 
-def is_complete_pure(fractions: tuple[float, float, float]) -> bool:
+def is_complete_pure(fractions: tuple[Fraction, Fraction, Fraction]) -> bool:
     """The objective is complete iff EVERY category fraction is exactly 0.0."""
     return (fractions[0] == 0.0
             and fractions[1] == 0.0

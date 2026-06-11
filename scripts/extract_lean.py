@@ -275,7 +275,8 @@ class TypeEnv:
 # ---------------------------------------------------------------------------
 # Registry (P1: the Tier-1 trio; P2a: priority_band + shopping_list; P2b:
 # arbiter_select; P3a: the recipe family; P3b: inventory_caps; P3c: the
-# exact-Fraction learning cores). `functions`
+# exact-Fraction learning cores; P4b: the exact equipment-scoring cores
+# unlocked by P4a). `functions`
 # order is the emission
 # order: a function may only call functions emitted BEFORE it (plus
 # fuel-bounded self-recursion); `imports` may only name functions of modules
@@ -372,6 +373,19 @@ MODULES: tuple[ModuleSpec, ...] = (
         output=f"{GENERATED_DIR}/MinGathers.lean",
         core_name="MinGathers",
         functions=("_min_gathers", "min_gathers"),
+    ),
+    ModuleSpec(
+        source="src/artifactsmmo_cli/ai/equipment/scoring.py",
+        output=f"{GENERATED_DIR}/EquipmentScoring.lean",
+        core_name="EquipmentScoring",
+        functions=("weapon_score_raw_pure", "weapon_score_pure",
+                   "gather_score_pure", "armor_score_pure"),
+    ),
+    ModuleSpec(
+        source="src/artifactsmmo_cli/ai/tiers/equip_value.py",
+        output=f"{GENERATED_DIR}/EquipValue.lean",
+        core_name="EquipValue",
+        functions=("equip_value_pure", "tool_value_pure"),
     ),
 )
 

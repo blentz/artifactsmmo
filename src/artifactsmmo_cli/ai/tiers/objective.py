@@ -5,6 +5,7 @@ ObjectiveGap), following the cycle_snapshot.py GoalRankEntry/GoalAttempt
 precedent."""
 
 from dataclasses import dataclass, field
+from fractions import Fraction
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.game_data import _GATHERING_SKILLS, GameData
@@ -29,14 +30,18 @@ def is_attainable(code: str, game_data: GameData, _path: frozenset[str] = frozen
 @dataclass(frozen=True)
 class ObjectiveGap:
     """Distance from a state to the Tier-1 objective. Positive gaps only;
-    fractions normalise unlike units into [0, 1] for personality weighting."""
+    fractions normalise unlike units into [0, 1] for personality weighting.
+
+    P4a: gear gaps are exact ints (equip_value deltas); the normalised
+    fractions are exact `Fraction` ratios of those integer gaps — no float
+    rounding anywhere in the objective gap."""
 
     char_level_gap: int
     skill_gaps: dict[str, int]
-    gear_gaps: dict[str, float]
-    char_level_fraction: float
-    skills_fraction: float
-    gear_fraction: float
+    gear_gaps: dict[str, int]
+    char_level_fraction: Fraction
+    skills_fraction: Fraction
+    gear_fraction: Fraction
 
     @property
     def is_complete(self) -> bool:
@@ -71,7 +76,7 @@ class CharacterObjective:
     @classmethod
     def from_game_data(cls, game_data: GameData) -> "CharacterObjective":
         target_skill_levels = {s: game_data.max_skill_level for s in SKILL_NAMES}
-        by_type: dict[str, list[tuple[float, str]]] = {}
+        by_type: dict[str, list[tuple[int, str]]] = {}
         for code, stats in game_data.all_item_stats.items():
             if stats.type_ not in ITEM_TYPE_TO_SLOTS:
                 continue
@@ -104,11 +109,11 @@ class CharacterObjective:
             _game_data=game_data,
         )
 
-    def _item_value(self, code: str | None) -> float:
+    def _item_value(self, code: str | None) -> int:
         if not code:
-            return 0.0
+            return 0
         stats = self._game_data.item_stats(code)
-        return equip_value(stats) if stats is not None else 0.0
+        return equip_value(stats) if stats is not None else 0
 
     def gap(self, state: WorldState) -> ObjectiveGap:
         char_level_gap = max(0, self.target_char_level - state.level)
@@ -117,20 +122,21 @@ class CharacterObjective:
             for skill, target in self.target_skill_levels.items()
             if max(0, target - state.skills.get(skill, 1)) > 0
         }
-        gear_gaps: dict[str, float] = {}
-        gear_target_total = 0.0
+        gear_gaps: dict[str, int] = {}
+        gear_target_total = 0
         for slot, target_code in self.target_gear.items():
             target_val = self._item_value(target_code)
             gear_target_total += target_val
-            deficit = max(0.0, target_val - self._item_value(state.equipment.get(slot)))
+            deficit = max(0, target_val - self._item_value(state.equipment.get(slot)))
             if deficit > 0:
                 gear_gaps[slot] = deficit
 
-        char_level_fraction = char_level_gap / self.target_char_level
+        # P4a: exact rational fractions (integer gap / integer denominator).
+        char_level_fraction = Fraction(char_level_gap, self.target_char_level)
         skills_denom = len(SKILL_NAMES) * self._game_data.max_skill_level
-        skills_fraction = sum(skill_gaps.values()) / skills_denom
-        gear_fraction = (sum(gear_gaps.values()) / gear_target_total
-                         if gear_target_total > 0 else 0.0)
+        skills_fraction = Fraction(sum(skill_gaps.values()), skills_denom)
+        gear_fraction = (Fraction(sum(gear_gaps.values()), gear_target_total)
+                         if gear_target_total > 0 else Fraction(0))
         return ObjectiveGap(
             char_level_gap=char_level_gap,
             skill_gaps=skill_gaps,
