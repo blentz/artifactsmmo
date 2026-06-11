@@ -117,6 +117,11 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #print axioms Formal.StuckDetector.detect_osc_over_noprog
 #print axioms Formal.StuckDetector.noprog_threshold
 #print axioms Formal.StuckDetector.osc_threshold
+#print axioms Formal.StuckDetector.osc_requires_round_trips
+#print axioms Formal.StuckDetector.osc_requires_failures
+#print axioms Formal.StuckDetector.clean_switch_no_fire
+#print axioms Formal.StuckDetector.mostly_productive_no_fire
+#print axioms Formal.StuckDetector.genuine_flap_fires
 #print axioms Formal.StuckDetector.frozen_threshold
 #print axioms Formal.StuckDetector.ack_suppression_noprog
 #print axioms Formal.StuckDetector.ack_suppression_frozen
@@ -255,17 +260,23 @@ open Formal.WeightedRemaining in
 #print axioms Formal.RealizableLoadout.regression_buggy_output_not_realizable
 #print axioms Formal.RealizableLoadout.empty_loadout_realizable
 #print axioms Formal.RealizableLoadout.isRealizable_mono_inv
--- Phase-15 disclosed-gap closure: full pick_loadout algorithm.
+-- Phase-15 disclosed-gap closure: full pick_loadout algorithm
+-- (revised 2026-06-11: one-slot-per-code + zero-score empty-fill suppression).
 #print axioms Formal.RealizableLoadout.pickLoadout_realizable
+#print axioms Formal.RealizableLoadout.pickLoadout_one_slot_per_code
 #print axioms Formal.RealizableLoadout.pickSlotStep_no_downgrade
 #print axioms Formal.RealizableLoadout.pickSlotStep_optimal
+#print axioms Formal.RealizableLoadout.pickSlotStep_empty_fill_positive
+#print axioms Formal.RealizableLoadout.pickSlotStep_empty_zero_stays_empty
 #print axioms Formal.RealizableLoadout.pickLoadout_deterministic
 #print axioms Formal.RealizableLoadout.pickLoadout_extensional
+#print axioms Formal.RealizableLoadout.pickLoadout_485_copper_ring_regression
+#print axioms Formal.RealizableLoadout.pickLoadout_zero_score_no_fill
 #print axioms Formal.RealizableLoadout.pickLoadout_ring_pair_regression
 #print axioms Formal.RealizableLoadout.pickLoadout_cannot_produce_buggy_output
 #print axioms Formal.RealizableLoadout.pickLoadout_empty
-#print axioms Formal.RealizableLoadout.pickLoadoutAux_claimSafe
-#print axioms Formal.RealizableLoadout.pickSlotStep_demand_delta
+#print axioms Formal.RealizableLoadout.pickLoadoutAux_bound
+#print axioms Formal.RealizableLoadout.pickSlotStep_cases
 #print axioms Formal.ApplyBaseline.moveApply_preserves_baseline
 #print axioms Formal.ApplyBaseline.moveSemanticApply_preserves_baseline
 #print axioms Formal.ApplyBaseline.mapTransitionApply_preserves_baseline

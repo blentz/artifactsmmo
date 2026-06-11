@@ -257,16 +257,16 @@ SCORING_MUTATIONS = [
     ("equipment_scoring: drop level filter in _candidates_for_slot",
      "        if stats is None or state.level < stats.level:",
      "        if stats is None:"),
-    # drop the no-downgrade guard: force `improves = True` so the selector
+    # drop the no-downgrade guard: force the swap branch so the selector
     # always swaps to the argmax candidate even when it is strictly WORSE than
-    # the equipped item. After the multi-slot claim refactor the same property
-    # lives in the shared `improves` flag used by both weapon and armor slots.
-    ("equipment_scoring: drop no-downgrade guard (improves forced True)",
-     "        if slot == \"weapon_slot\":\n"
-     "            improves = weapon_score(best, monster_res) > weapon_score(current_stats, monster_res)\n"
-     "        else:\n"
-     "            improves = armor_score(best, monster_atk) > armor_score(current_stats, monster_atk)",
-     "        improves = True"),
+    # the equipped item. 2026-06-11 re-anchor: the per-slot `improves` flag
+    # collapsed into the shared `best_score > current_score` comparison when
+    # pick_loadout moved to the one-slot-per-code projected-result rule.
+    ("equipment_scoring: drop no-downgrade guard (swap forced True)",
+     "        if best_score > current_score:\n"
+     "            result[slot] = best.code",
+     "        if True:\n"
+     "            result[slot] = best.code"),
     # drop the weapon clamp: max(0, 100 - res) -> (100 - res), letting a
     # high-resistance monster make a strong weapon score NEGATIVE (so a weak weapon
     # could be preferred / scores go below 0). P4b re-anchor: the formula moved
@@ -289,75 +289,63 @@ SCORING_MUTATIONS = [
 ]
 
 
-# realizable_loadout mutations -- target the claimed-codes accumulator in
-# scoring.pick_loadout (the multi-slot bug fix). Each mutation breaks the
-# realizability invariant `is_realizable(pick_loadout(...), inv, equip)`,
-# killed by formal/diff/test_realizable_loadout_diff.py.
+# realizable_loadout mutations -- target the ONE-SLOT-PER-CODE projected-result
+# rule in scoring.pick_loadout (2026-06-11 re-anchor: the claimed-codes
+# accumulator is gone — the server refuses to equip a code already worn in ANY
+# slot with HTTP 485, regardless of spare copies, so feasibility is now a scan
+# of the projected result). Each mutation breaks realizability, the dup-free
+# (one-slot-per-code) property, or the empty-fill/no-downgrade rules, killed
+# by formal/diff/test_realizable_loadout_diff.py.
 REALIZABLE_LOADOUT_MUTATIONS = [
-    # Drop the claimed-codes feasibility filter: every candidate is feasible
-    # regardless of how many copies have already been claimed by peer slots.
-    # Resurrects the original bug — multi-slot peers (ring1/ring2, etc.) all
-    # pick the same scarce code.
-    ("realizable_loadout: drop claimed-codes feasibility filter",
+    # THE 485 RULE, mutation 1: drop the one-slot-per-code feasibility filter
+    # entirely — every type/level candidate is feasible. Resurrects BOTH bugs:
+    # the original multi-slot duplicate (one copy, two slots) and the
+    # 2026-06-10/11 livelock (worn copper_ring + spare copy assigned to ring2,
+    # server 485s, identical plan re-derives forever). Killed by the dup-free
+    # property and the 485 trace fixture.
+    ("realizable_loadout: drop one-slot-per-code feasibility filter",
      "        feasible: list[ItemStats] = [\n"
-     "            cand for cand in candidates if _effective_available(cand.code) >= 1\n"
+     "            cand for cand in candidates if not _in_result_elsewhere(cand.code, slot)\n"
      "        ]",
      "        feasible: list[ItemStats] = list(candidates)"),
-    # Drop the claim increment on a SWAP-TO-BEST decision: a code can be
-    # selected by every slot in sequence because no slot ever records its
-    # claim. The is_applicable / first slot still sees `>= 1` feasibility,
-    # but downstream peers see the same `>= 1` because nothing was claimed.
-    ("realizable_loadout: drop _claim(best.code) on improve-swap",
-     "        if improves:\n"
-     "            result[slot] = best.code\n"
-     "            _claim(best.code)",
-     "        if improves:\n"
+    # THE 485 RULE, mutation 2: scan the ORIGINAL equipment instead of the
+    # projected result. Earlier slots' fresh assignments are no longer
+    # forbidden for later slots, so two empty sibling slots can both take the
+    # same single inventory copy. Killed by the dup-free property (and the
+    # realizability invariant when only one copy is owned).
+    ("realizable_loadout: feasibility scans equipment instead of projected result",
+     "    def _in_result_elsewhere(code: str, slot: str) -> bool:\n"
+     "        return any(worn == code for s, worn in result.items() if s != slot)",
+     "    def _in_result_elsewhere(code: str, slot: str) -> bool:\n"
+     "        return any(worn == code for s, worn in state.equipment.items() if s != slot)"),
+    # Zero-score empty-fill suppression off-by-strictness: `<= 0` -> `< 0`
+    # fills an empty slot with a zero-score item, burning the code's one legal
+    # slot for no benefit. Killed by the empty-fill strict-positivity property
+    # and its deterministic dual fixture.
+    ("realizable_loadout: zero-score empty-fill suppression (<= 0 -> < 0)",
+     "            if current_code is None and best_score <= 0:",
+     "            if current_code is None and best_score < 0:"),
+    # No-downgrade strictness: `>` -> `>=` swaps on a plain score TIE,
+    # violating Property 2 (a filled slot swaps ONLY on a STRICT improvement;
+    # Lean `pickSlotStep_no_downgrade`). Killed by the deterministic tie-keep
+    # fixture and the strict no-downgrade property.
+    ("realizable_loadout: no-downgrade strictness (> -> >=)",
+     "        if best_score > current_score:\n"
+     "            result[slot] = best.code",
+     "        if best_score >= current_score:\n"
      "            result[slot] = best.code"),
-    # Make `_effective_available` ignore the claim count entirely: the
-    # feasibility check degenerates to raw ownership, so peer slots see
-    # the same physical item as available again. (Bypasses the accumulator.)
-    ("realizable_loadout: _effective_available ignores claimed_codes",
-     "    def _effective_available(code: str) -> int:\n"
-     "        return ownership(code, state.inventory, state.equipment) - claimed_codes.get(code, 0)",
-     "    def _effective_available(code: str) -> int:\n"
-     "        return ownership(code, state.inventory, state.equipment)"),
-    # Phase-15 new mutation A: drop the no-downgrade strict-improvement check
-    # in pick_loadout. Swap to best regardless of whether it beats current,
-    # violating Property 2 (no-downgrade). The Lean theorem
-    # `pickSlotStep_no_downgrade` forbids this except via the stolen-current
-    # branch; an unconditional swap fires on plain ties / regressions.
-    ("realizable_loadout: drop no-downgrade strict-improvement check",
-     "        if slot == \"weapon_slot\":\n"
-     "            improves = weapon_score(best, monster_res) > weapon_score(current_stats, monster_res)\n"
-     "        else:\n"
-     "            improves = armor_score(best, monster_atk) > armor_score(current_stats, monster_atk)\n"
-     "        if improves:",
-     "        if slot == \"weapon_slot\":\n"
-     "            improves = weapon_score(best, monster_res) > weapon_score(current_stats, monster_res)\n"
-     "        else:\n"
-     "            improves = armor_score(best, monster_atk) > armor_score(current_stats, monster_atk)\n"
-     "        if True:"),
-    # Phase-15 new mutation B: drop the _claim(current_code) on the keep-current
-    # branch (when current ties or beats best and is still available). Peer
-    # slots then see the current code as physically unspoken-for and can
-    # duplicate it, violating Property 1 (output realizability).
-    ("realizable_loadout: drop _claim(current_code) on keep-current",
-     "        elif current_code is not None and _effective_available(current_code) >= 1:\n"
-     "            _claim(current_code)",
-     "        elif current_code is not None and _effective_available(current_code) >= 1:\n"
-     "            pass"),
-    # Phase-15 new mutation C: swap weapon_score and armor_score per slot.
-    # weapon_slot uses armor_score (defense-oriented) and the rest use
-    # weapon_score (offense-oriented). Violates Property 3 (per-slot
-    # argmax under the SLOT-CORRECT score function); the Lean `pickSlotStep_optimal`
-    # is parameterised by a score function, so this mutation flips the
-    # operational meaning of the choice on multi-element monsters.
+    # Swap weapon_score and armor_score per slot: weapon_slot uses armor_score
+    # (defense-oriented) and the rest use weapon_score (offense-oriented).
+    # Violates Property 3 (per-slot argmax under the SLOT-CORRECT score
+    # function; Lean `pickSlotStep_optimal` is parameterised by the score).
+    # 2026-06-11 re-anchor: the `if slot == "weapon_slot":` dispatch became
+    # the hoisted `weapon` flag.
     ("realizable_loadout: swap weapon_score and armor_score per slot",
-     "        if slot == \"weapon_slot\":\n"
+     "        if weapon:\n"
      "            best = max(feasible, key=lambda s: weapon_score(s, monster_res))\n"
      "        else:\n"
      "            best = max(feasible, key=lambda s: armor_score(s, monster_atk))",
-     "        if slot == \"weapon_slot\":\n"
+     "        if weapon:\n"
      "            best = max(feasible, key=lambda s: armor_score(s, monster_atk))\n"
      "        else:\n"
      "            best = max(feasible, key=lambda s: weapon_score(s, monster_res))"),
@@ -609,10 +597,25 @@ STUCK_DETECTOR_MUTATIONS = [
     # threshold off-by-one: frozen window requires len < 10 -> len < 9, so a 9-record
     # window wrongly satisfies the length gate (fires one record early).
     ("stuck_detector: frozen threshold off-by-one (count=10 -> 9)",
-     "        window = self._recent_since(cutoff, count=10)\n"
-     "        if len(window) < 10:",
-     "        window = self._recent_since(cutoff, count=9)\n"
-     "        if len(window) < 9:"),
+     "        window = self._recent_since(cutoff, count=STATE_FROZEN_WINDOW)\n"
+     "        if len(window) < STATE_FROZEN_WINDOW:",
+     "        window = self._recent_since(cutoff, count=STATE_FROZEN_WINDOW - 1)\n"
+     "        if len(window) < STATE_FROZEN_WINDOW - 1:"),
+    # drop the round-trip requirement: the switch gate goes vacuous, so a single
+    # clean goal switch (7xA+1xB, the 2026-06-10 false-positive trace) wrongly
+    # fires osc again whenever the failure gate also passes.
+    ("stuck_detector: osc drop round-trip requirement (switches < min -> < 0)",
+     "        if switches < OSC_MIN_SWITCHES:\n"
+     "            return False",
+     "        if switches < 0:\n"
+     "            return False"),
+    # drop the failure requirement: productive alternation (e.g. gather/deposit
+    # loops, or a failure-free A/B flap) wrongly fires osc again.
+    ("stuck_detector: osc drop failure requirement (failures >= min -> >= 0)",
+     "        failures = sum(1 for r in window if not r.succeeded)\n"
+     "        return failures >= OSC_MIN_FAILURES",
+     "        failures = sum(1 for r in window if not r.succeeded)\n"
+     "        return failures >= 0"),
     # _recent_since index off-by-one: start_idx + i becomes start_idx + i + 1, so a
     # boundary record at exactly the cutoff is wrongly excluded (the window-boundary
     # case lands the kept length on 10/4/8, so this flips the verdict). Pins the math.

@@ -20,7 +20,7 @@ from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer, _format_plan
-from artifactsmmo_cli.ai.recovery import StuckSignal
+from artifactsmmo_cli.ai.recovery import StuckExit, StuckSignal
 from artifactsmmo_cli.ai.tiers import ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
@@ -1269,14 +1269,17 @@ class TestHandleStuckExtended:
         assert cleared == ["bank"]
         assert player._recovery_level[StuckSignal.NO_PROGRESS] == 2
 
-    def test_no_progress_level3_exits(self):
+    def test_no_progress_level3_raises_stuck_exit(self):
+        """L3 is an honest terminal path: StuckExit (recorded as
+        exit_reason='stuck_exit' at the play() boundary), NOT SystemExit."""
         player = GamePlayer(character="hero")
         player._recovery_level[StuckSignal.NO_PROGRESS] = 2
 
-        with pytest.raises(SystemExit) as exc_info:
+        with pytest.raises(StuckExit) as exc_info:
             player._handle_stuck(StuckSignal.NO_PROGRESS, client=None)
 
-        assert exc_info.value.code == 2
+        assert exc_info.value.signal == StuckSignal.NO_PROGRESS
+        assert not isinstance(exc_info.value, SystemExit)
 
 
 class TestBuildGoalsExtended:

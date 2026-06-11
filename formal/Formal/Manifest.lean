@@ -175,7 +175,12 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.StuckDetector.detect_frozen_wins       -- frozen check ⇒ frozen (even if osc/noprog fire)
 #check @Formal.StuckDetector.detect_osc_over_noprog   -- osc beats noprog when frozen false
 #check @Formal.StuckDetector.noprog_threshold         -- noprog ↔ last-4 full ∧ all <no_plan>
-#check @Formal.StuckDetector.osc_threshold            -- osc ↔ last-8 full ∧ exactly 2 distinct goals
+#check @Formal.StuckDetector.osc_threshold            -- osc ↔ last-8 full ∧ 2 distinct ∧ ≥3 switches ∧ ≥2 failures
+#check @Formal.StuckDetector.osc_requires_round_trips -- <3 goal switches ⇒ osc can NEVER fire (clean-switch safe)
+#check @Formal.StuckDetector.osc_requires_failures    -- <2 failures ⇒ osc can NEVER fire (productive flap safe)
+#check @Formal.StuckDetector.clean_switch_no_fire     -- 2026-06-10 trace: 7×A+1×B clean switch ⇒ none
+#check @Formal.StuckDetector.mostly_productive_no_fire -- 7 ok + 1 failing other ⇒ none
+#check @Formal.StuckDetector.genuine_flap_fires       -- failing A→B→A→B… ⇒ osc
 #check @Formal.StuckDetector.frozen_threshold         -- frozen ↔ last-10 full ∧ some state ≥ 5
 #check @Formal.StuckDetector.ack_suppression_noprog   -- post-ack noprog window empty
 #check @Formal.StuckDetector.ack_suppression_frozen   -- post-ack frozen window empty
@@ -398,17 +403,23 @@ open Formal.PriorityBand
 #check @Formal.RealizableLoadout.regression_buggy_output_not_realizable -- anti-witness: pre-fix output (both rings = B) is NOT realizable
 #check @Formal.RealizableLoadout.empty_loadout_realizable               -- edge: empty loadout is vacuously realizable
 #check @Formal.RealizableLoadout.isRealizable_mono_inv                  -- monotone: more inventory preserves realizability
--- Phase-15 disclosed-gap closure: full pick_loadout algorithm modeled.
+-- Phase-15 disclosed-gap closure: full pick_loadout algorithm modeled
+-- (revised 2026-06-11: one-slot-per-code + zero-score empty-fill suppression).
 #check @Formal.RealizableLoadout.pickLoadout_realizable                  -- Property 1: every pickLoadout output is realizable
-#check @Formal.RealizableLoadout.pickSlotStep_no_downgrade               -- Property 2: per-slot swap never decreases score (modulo stolen-current branch)
-#check @Formal.RealizableLoadout.pickSlotStep_optimal                    -- Property 3: per-slot choice is argmax of post-claim feasible candidates
+#check @Formal.RealizableLoadout.pickLoadout_one_slot_per_code           -- Property 1b: dup-free equipment ⇒ dup-free output (HTTP 485 unreachable)
+#check @Formal.RealizableLoadout.pickSlotStep_no_downgrade               -- Property 2: a filled slot swaps ONLY on strict score improvement (unconditional)
+#check @Formal.RealizableLoadout.pickSlotStep_optimal                    -- Property 3: per-slot choice is argmax of the feasible candidate set
+#check @Formal.RealizableLoadout.pickSlotStep_empty_fill_positive        -- Property 3b: empty slot filled ⇒ strictly positive score
+#check @Formal.RealizableLoadout.pickSlotStep_empty_zero_stays_empty     -- Property 3b dual: best feasible scores ≤ 0 ⇒ empty slot stays empty
 #check @Formal.RealizableLoadout.pickLoadout_deterministic               -- Property 4: pure-function determinism (no dict iteration)
 #check @Formal.RealizableLoadout.pickLoadout_extensional                 -- determinism: equal inputs ⇒ equal outputs
-#check @Formal.RealizableLoadout.pickLoadout_ring_pair_regression        -- non-vacuity: literal ring-pair case yields realizable output
+#check @Formal.RealizableLoadout.pickLoadout_485_copper_ring_regression  -- trace-lock: worn copper_ring + spare copy ⇒ ring2 stays EMPTY (485 livelock)
+#check @Formal.RealizableLoadout.pickLoadout_zero_score_no_fill          -- trace-lock: zero-score candidate never fills an empty slot
+#check @Formal.RealizableLoadout.pickLoadout_ring_pair_regression        -- non-vacuity: ring-pair attractor keeps a realizable loadout at zero swap cost
 #check @Formal.RealizableLoadout.pickLoadout_cannot_produce_buggy_output -- anti-regression: bug output unreachable from algorithm
 #check @Formal.RealizableLoadout.pickLoadout_empty                       -- edge: empty slots ⇒ empty loadout
-#check @Formal.RealizableLoadout.pickLoadoutAux_claimSafe                -- helper: fold preserves claim safety
-#check @Formal.RealizableLoadout.pickSlotStep_demand_delta               -- helper: each step claim delta is 0/1 per code
+#check @Formal.RealizableLoadout.pickLoadoutAux_bound                    -- helper: generic per-code budget bound over the fold
+#check @Formal.RealizableLoadout.pickSlotStep_cases                      -- helper: each step keeps, drops, or assigns a feasible fresh code
 -- InventoryChainSafe required roles (REAL BUGS #7-#11: four chain_safe instantiations + TaskCancel coin):
 #check @Formal.InventoryChainSafe.isApplicableK_imp_free_ge       -- template: passing precondition ⇒ k ≤ free
 #check @Formal.InventoryChainSafe.applyK_inventory_safe           -- template: per-step safety

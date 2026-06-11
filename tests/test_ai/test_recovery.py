@@ -83,26 +83,108 @@ class TestStateFrozenDetection:
 
 
 class TestGoalOscillation:
-    def test_fires_on_strict_ABAB(self):
+    """Genuine-oscillation semantics: exactly 2 distinct goals AND >= 3
+    adjacent switches (two A->B->A round-trips) AND >= 2 failed cycles."""
+
+    def test_fires_on_strict_ABAB_with_failures(self):
         det = StuckDetector()
         for i in range(8):
             name = "GoalA" if i % 2 == 0 else "GoalB"
-            det.record(make_record(goal_name=name, state_key=(i, 0, 5, (), (), None, 0, False)))
+            det.record(make_record(goal_name=name, succeeded=False,
+                                   state_key=(i, 0, 5, (), (), None, 0, False)))
         assert det.detect() == StuckSignal.GOAL_OSCILLATION
 
-    def test_fires_on_AABBAABB(self):
+    def test_fires_on_AABBAABB_with_failures(self):
         det = StuckDetector()
         pattern = ["GoalA", "GoalA", "GoalB", "GoalB", "GoalA", "GoalA", "GoalB", "GoalB"]
         for i, name in enumerate(pattern):
-            det.record(make_record(goal_name=name, state_key=(i, 0, 5, (), (), None, 0, False)))
+            det.record(make_record(goal_name=name, succeeded=False,
+                                   state_key=(i, 0, 5, (), (), None, 0, False)))
+        assert det.detect() == StuckSignal.GOAL_OSCILLATION
+
+    def test_fires_with_exactly_two_failures(self):
+        """The failure gate is >= 2: alternation with exactly 2 failed cycles fires."""
+        det = StuckDetector()
+        for i in range(8):
+            name = "GoalA" if i % 2 == 0 else "GoalB"
+            det.record(make_record(goal_name=name, succeeded=(i >= 2),
+                                   state_key=(i, 0, 5, (), (), None, 0, False)))
         assert det.detect() == StuckSignal.GOAL_OSCILLATION
 
     def test_no_fire_with_3_distinct_goals(self):
         det = StuckDetector()
         for i in range(8):
             name = ["GoalA", "GoalB", "GoalC"][i % 3]
-            det.record(make_record(goal_name=name, state_key=(i, 0, 5, (), (), None, 0, False)))
+            det.record(make_record(goal_name=name, succeeded=False,
+                                   state_key=(i, 0, 5, (), (), None, 0, False)))
         assert det.detect() is None
+
+    def test_no_fire_on_clean_goal_switch_trace_2026_06_10(self):
+        """Trace-locked replay: the -160206 session windows at cycles 20/30/46
+        were 7x GrindCharacterXP + 1x TaskExchange, all productive — a benign
+        goal switch that false-fired GOAL_OSCILLATION and escalated to
+        SystemExit(2). One switch, zero failures: must NOT fire."""
+        det = StuckDetector()
+        goals = ["GrindCharacterXP(chicken)"] * 7 + ["TaskExchange"]
+        for i, name in enumerate(goals):
+            det.record(make_record(goal_name=name, succeeded=True,
+                                   state_key=(i, 0, 5, (), (), None, 0, False)))
+        assert det.detect() is None
+
+    def test_no_fire_on_mostly_productive_window(self):
+        """7 productive cycles + 1 failing other-goal cycle (the
+        7-productive+1-other false-positive class from the same traces)."""
+        det = StuckDetector()
+        for i in range(7):
+            det.record(make_record(goal_name="GoalA", succeeded=True,
+                                   state_key=(i, 0, 5, (), (), None, 0, False)))
+        det.record(make_record(goal_name="GoalB", succeeded=False,
+                               state_key=(7, 0, 5, (), (), None, 0, False)))
+        assert det.detect() is None
+
+    def test_no_fire_on_failure_free_alternation(self):
+        """Productive A/B alternation (e.g. gather/deposit loop) is not a
+        livelock: switches pass but the failure gate must block."""
+        det = StuckDetector()
+        for i in range(8):
+            name = "GoalA" if i % 2 == 0 else "GoalB"
+            det.record(make_record(goal_name=name, succeeded=True,
+                                   state_key=(i, 0, 5, (), (), None, 0, False)))
+        assert det.detect() is None
+
+    def test_no_fire_on_single_switch_with_failures(self):
+        """AAAABBBB all failing: 2 distinct goals + failures but only one
+        switch — no round-trip, so it is goal CHANGE, not oscillation."""
+        det = StuckDetector()
+        for i in range(8):
+            name = "GoalA" if i < 4 else "GoalB"
+            det.record(make_record(goal_name=name, succeeded=False,
+                                   state_key=(i, 0, 5, (), (), None, 0, False)))
+        assert det.detect() is None
+
+    def test_no_fire_on_single_round_trip(self):
+        """A->B->A once (2 switches) with failures: one excursion-and-return
+        can be legitimate replanning; two round-trips (3 switches) required."""
+        det = StuckDetector()
+        goals = ["GoalA"] * 3 + ["GoalB"] * 3 + ["GoalA"] * 2
+        for i, name in enumerate(goals):
+            det.record(make_record(goal_name=name, succeeded=False,
+                                   state_key=(i, 0, 5, (), (), None, 0, False)))
+        assert det.detect() is None
+
+    def test_single_goal_repeated_failure_caught_by_state_frozen(self):
+        """Trace-locked replay of the 2026-06-10 livelock the oscillation fix
+        must NOT mask: OptimizeLoadout failing every cycle under the SAME goal
+        with the state frozen in place. A single goal can never satisfy the
+        2-distinct oscillation gate, but STATE_FROZEN still protects (and is
+        the honest signal class for that livelock)."""
+        det = StuckDetector()
+        frozen_key = (3, 4, 27, (), (), None, 0, False)
+        for _ in range(10):
+            det.record(make_record(goal_name="GrindCharacterXP(blue_slime)",
+                                   action_name="OptimizeLoadout(blue_slime)",
+                                   succeeded=False, state_key=frozen_key))
+        assert det.detect() == StuckSignal.STATE_FROZEN
 
 
 class TestNoProgress:

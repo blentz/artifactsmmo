@@ -867,14 +867,45 @@ example : ∀ (d : Formal.StuckDetector.Detector),
           (Formal.StuckDetector.recentSince d d.ackNoprog
             Formal.StuckDetector.noprogThreshold).all (fun r => r.noPlan) = true) :=
   @Formal.StuckDetector.noprog_threshold
--- osc_threshold: osc ↔ post-ack last-8 window full (= 8) ∧ EXACTLY 2 distinct goals.
+-- osc_threshold: osc ↔ post-ack last-8 window full (= 8) ∧ EXACTLY 2 distinct
+-- goals ∧ ≥ 3 adjacent goal switches (genuine alternation) ∧ ≥ 2 failures
+-- (failure-driven flapping). Genuine-oscillation semantics, 2026-06-10.
 example : ∀ (d : Formal.StuckDetector.Detector),
     Formal.StuckDetector.checkGoalOscillation d = true
       ↔ ((Formal.StuckDetector.recentSince d d.ackOsc
             Formal.StuckDetector.oscThreshold).length = Formal.StuckDetector.oscThreshold ∧
           (Formal.StuckDetector.distinctGoals (Formal.StuckDetector.recentSince d d.ackOsc
-            Formal.StuckDetector.oscThreshold)).length = 2) :=
+            Formal.StuckDetector.oscThreshold)).length = 2 ∧
+          Formal.StuckDetector.switches ((Formal.StuckDetector.recentSince d d.ackOsc
+            Formal.StuckDetector.oscThreshold).map Formal.StuckDetector.Rec.goal)
+            ≥ Formal.StuckDetector.oscSwitchMin ∧
+          Formal.StuckDetector.failures (Formal.StuckDetector.recentSince d d.ackOsc
+            Formal.StuckDetector.oscThreshold) ≥ Formal.StuckDetector.oscFailureMin) :=
   @Formal.StuckDetector.osc_threshold
+-- osc_requires_round_trips: < 3 goal switches in the window ⇒ osc can NEVER
+-- fire (a clean goal switch is provably not oscillation, for ALL inputs).
+example : ∀ (d : Formal.StuckDetector.Detector),
+    Formal.StuckDetector.switches ((Formal.StuckDetector.recentSince d d.ackOsc
+      Formal.StuckDetector.oscThreshold).map Formal.StuckDetector.Rec.goal)
+      < Formal.StuckDetector.oscSwitchMin →
+    Formal.StuckDetector.checkGoalOscillation d = false :=
+  @Formal.StuckDetector.osc_requires_round_trips
+-- osc_requires_failures: < 2 failed cycles in the window ⇒ osc can NEVER fire
+-- (productive alternation is provably not a livelock, for ALL inputs).
+example : ∀ (d : Formal.StuckDetector.Detector),
+    Formal.StuckDetector.failures (Formal.StuckDetector.recentSince d d.ackOsc
+      Formal.StuckDetector.oscThreshold) < Formal.StuckDetector.oscFailureMin →
+    Formal.StuckDetector.checkGoalOscillation d = false :=
+  @Formal.StuckDetector.osc_requires_failures
+-- trace regressions (2026-06-10): clean switch / mostly-productive ⇒ none;
+-- genuine failing flap ⇒ osc.
+example : Formal.StuckDetector.detect Formal.StuckDetector.cleanSwitchTrace = none :=
+  Formal.StuckDetector.clean_switch_no_fire
+example : Formal.StuckDetector.detect Formal.StuckDetector.mostlyProductiveTrace = none :=
+  Formal.StuckDetector.mostly_productive_no_fire
+example : Formal.StuckDetector.detect Formal.StuckDetector.genuineFlapTrace
+    = some Formal.StuckDetector.Signal.osc :=
+  Formal.StuckDetector.genuine_flap_fires
 -- frozen_threshold: frozen ↔ post-ack last-10 window full (= 10) ∧ some state ≥ 5.
 example : ∀ (d : Formal.StuckDetector.Detector),
     Formal.StuckDetector.checkStateFrozen d = true
@@ -1806,44 +1837,78 @@ example : ∀ (i : Formal.WinnableCascade.CascadeInputs) (p : String),
     i.pathWinnable = true :=
   @Formal.WinnableCascade.path_result_was_winnable
 
-/-! ### RealizableLoadout (Phase-15): full `pick_loadout` algorithm pins. -/
+/-! ### RealizableLoadout (Phase-15, revised 2026-06-11): full `pick_loadout`
+algorithm pins — one-slot-per-code feasibility + zero-score empty-fill
+suppression. -/
 
-/-- Property 1 — output realizability. -/
+/-- Property 1 — output realizability (under record/equipment consistency:
+Python builds both from `state.equipment`). -/
 example : ∀ (inv : Formal.RealizableLoadout.Inventory)
             (equip : Formal.RealizableLoadout.SlotList)
             (slots : List Formal.RealizableLoadout.ScoredSlot),
+    (∀ c, Formal.RealizableLoadout.slotCount c
+        (slots.map (fun s => s.slot.current))
+      ≤ Formal.RealizableLoadout.ownership c inv equip) →
     Formal.RealizableLoadout.isRealizable
       (Formal.RealizableLoadout.pickLoadout inv equip slots) inv equip :=
   @Formal.RealizableLoadout.pickLoadout_realizable
 
-/-- Property 2 — per-slot no-downgrade (modulo stolen-current branch). -/
+/-- Property 1b — ONE SLOT PER CODE (485-safety): duplicate-free worn
+equipment (server-guaranteed) gives a duplicate-free output loadout, so no
+equip in the two-pass execute can hit HTTP 485 "already equipped". -/
+example : ∀ (inv : Formal.RealizableLoadout.Inventory)
+            (equip : Formal.RealizableLoadout.SlotList)
+            (slots : List Formal.RealizableLoadout.ScoredSlot),
+    Formal.RealizableLoadout.dupFree (slots.map (fun s => s.slot.current)) →
+    Formal.RealizableLoadout.dupFree
+      (Formal.RealizableLoadout.pickLoadout inv equip slots) :=
+  @Formal.RealizableLoadout.pickLoadout_one_slot_per_code
+
+/-- Property 2 — per-slot no-downgrade, now STRICT and UNCONDITIONAL (the
+stolen-current downgrade branch no longer exists). -/
 example : ∀ (inv : Formal.RealizableLoadout.Inventory)
             (equip : Formal.RealizableLoadout.SlotList)
             (rec : Formal.RealizableLoadout.SlotRecord)
             (score : Formal.RealizableLoadout.Code → Int)
-            (claimed : Formal.RealizableLoadout.Code → Nat)
+            (assigned laterCurs : List Formal.RealizableLoadout.SlotVal)
             (cur r : Formal.RealizableLoadout.Code),
     rec.current = some cur →
-    (Formal.RealizableLoadout.pickSlotStep inv equip rec score claimed).1 = some r →
+    Formal.RealizableLoadout.pickSlotStep inv equip rec score assigned laterCurs
+      = some r →
     cur ≠ r →
-    score cur ≤ score r ∨ ¬ (1 ≤ Formal.RealizableLoadout.effAvail cur inv equip claimed) :=
+    score cur < score r :=
   @Formal.RealizableLoadout.pickSlotStep_no_downgrade
 
-/-- Property 3 — per-slot optimality (argmax over post-claim feasible). -/
+/-- Property 3 — per-slot optimality (argmax over the feasible candidates:
+owned AND not already placed elsewhere in the projected result). -/
 example : ∀ (inv : Formal.RealizableLoadout.Inventory)
             (equip : Formal.RealizableLoadout.SlotList)
             (rec : Formal.RealizableLoadout.SlotRecord)
             (score : Formal.RealizableLoadout.Code → Int)
-            (claimed : Formal.RealizableLoadout.Code → Nat)
+            (assigned laterCurs : List Formal.RealizableLoadout.SlotVal)
             (f : Formal.RealizableLoadout.Code) (fs : List Formal.RealizableLoadout.Code),
-    rec.candidates.filter
-        (fun c => decide (1 ≤ Formal.RealizableLoadout.effAvail c inv equip claimed))
+    Formal.RealizableLoadout.feasibleCands rec inv equip assigned laterCurs
       = f :: fs →
     ∀ r,
-    (Formal.RealizableLoadout.pickSlotStep inv equip rec score claimed).1 = some r →
+    Formal.RealizableLoadout.pickSlotStep inv equip rec score assigned laterCurs
+      = some r →
     (∀ cur, rec.current = some cur → cur ≠ r) →
     r = Formal.RealizableLoadout.argmaxByCode score f fs :=
   @Formal.RealizableLoadout.pickSlotStep_optimal
+
+/-- Property 3b — zero-score empty-fill suppression: an empty slot is filled
+only at a strictly positive score. -/
+example : ∀ (inv : Formal.RealizableLoadout.Inventory)
+            (equip : Formal.RealizableLoadout.SlotList)
+            (rec : Formal.RealizableLoadout.SlotRecord)
+            (score : Formal.RealizableLoadout.Code → Int)
+            (assigned laterCurs : List Formal.RealizableLoadout.SlotVal)
+            (r : Formal.RealizableLoadout.Code),
+    rec.current = none →
+    Formal.RealizableLoadout.pickSlotStep inv equip rec score assigned laterCurs
+      = some r →
+    0 < score r :=
+  @Formal.RealizableLoadout.pickSlotStep_empty_fill_positive
 
 /-- Property 4 — determinism (pure function of inputs). -/
 example : ∀ (inv : Formal.RealizableLoadout.Inventory)
@@ -1853,6 +1918,19 @@ example : ∀ (inv : Formal.RealizableLoadout.Inventory)
     Formal.RealizableLoadout.pickLoadout inv equip slots₁ =
       Formal.RealizableLoadout.pickLoadout inv equip slots₂ :=
   @Formal.RealizableLoadout.pickLoadout_extensional
+
+/-- THE 2026-06-10/11 485 livelock regression: worn copper_ring + spare copy
+⇒ ring2 stays EMPTY. -/
+example :
+    Formal.RealizableLoadout.pickLoadout
+      (fun c => if c = "copper_ring" then 1 else 0)
+      [some "copper_ring", none]
+      [{ slot := { current := some "copper_ring", candidates := ["copper_ring"] },
+         scoreFn := fun _ => 5 },
+       { slot := { current := none, candidates := ["copper_ring"] },
+         scoreFn := fun _ => 5 }]
+      = [some "copper_ring", none] :=
+  Formal.RealizableLoadout.pickLoadout_485_copper_ring_regression
 
 /-! ### GoalValueBands role contracts (Phase-17).
 

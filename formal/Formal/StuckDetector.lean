@@ -31,12 +31,13 @@ Lean core only — no mathlib.
 namespace Formal.StuckDetector
 
 /-- One cycle record. `state` and `goal` are abstract codes (`Nat`); `noPlan` is
-`true` iff `action_name == "<no_plan>"` (the only action property the detector
-reads). Mirrors the relevant fields of `CycleRecord`. -/
+`true` iff `action_name == "<no_plan>"`; `ok` mirrors `CycleRecord.succeeded`
+(the oscillation check counts failures). Mirrors the fields the detector reads. -/
 structure Rec where
   state : Nat
   goal : Nat
   noPlan : Bool
+  ok : Bool
   deriving DecidableEq, Repr
 
 /-- The three stuck-state signals. Precedence: `frozen > osc > noprog`. -/
@@ -92,6 +93,24 @@ def stateCount (s : Nat) (w : List Rec) : Nat :=
 def distinctGoals (w : List Rec) : List Nat :=
   (w.map Rec.goal).eraseDups
 
+/-- Adjacent goal switches: the number of positions `i` with
+`goals[i] ≠ goals[i+1]`. Mirrors
+`sum(1 for a, b in pairwise(goals) if a != b)`. -/
+def switches : List Nat → Nat
+  | a :: b :: rest => (if a = b then 0 else 1) + switches (b :: rest)
+  | _ => 0
+
+/-- Failed cycles in a window (`succeeded == False`). -/
+def failures (w : List Rec) : Nat :=
+  (w.filter (fun r => !r.ok)).length
+
+/-- Genuine-oscillation gates (mirror `OSC_MIN_SWITCHES` / `OSC_MIN_FAILURES`):
+≥ 3 adjacent switches means the 2-goal sequence leaves-and-returns at least
+twice (two overlapping A→B→A round-trips); ≥ 2 failures means the flapping is
+failure-driven, not a benign switch in a productive window. -/
+def oscSwitchMin : Nat := 3
+def oscFailureMin : Nat := 2
+
 /-- `_check_no_progress`: window of last-4 post-(noprog-ack), `len = 4` AND every
 record is the `<no_plan>` sentinel. -/
 def checkNoProgress (d : Detector) : Bool :=
@@ -99,10 +118,15 @@ def checkNoProgress (d : Detector) : Bool :=
   decide (w.length = noprogThreshold) && w.all (fun r => r.noPlan)
 
 /-- `_check_goal_oscillation`: window of last-8 post-(osc-ack), `len = 8` AND
-EXACTLY 2 distinct goals. -/
+EXACTLY 2 distinct goals AND ≥ `oscSwitchMin` adjacent goal switches (genuine
+alternation) AND ≥ `oscFailureMin` failed cycles (failure-driven flapping).
+The 2026-06-10 false-positive family (7×A+1×B clean switch; mostly-productive
+windows) fails the switch/failure gates and can no longer fire. -/
 def checkGoalOscillation (d : Detector) : Bool :=
   let w := recentSince d d.ackOsc oscThreshold
   decide (w.length = oscThreshold) && decide ((distinctGoals w).length = 2)
+    && decide (switches (w.map Rec.goal) ≥ oscSwitchMin)
+    && decide (failures w ≥ oscFailureMin)
 
 /-- `_check_state_frozen`: window of last-10 post-(frozen-ack), `len = 10` AND
 some state recurs `≥ 5`. -/
@@ -184,14 +208,83 @@ theorem noprog_threshold (d : Detector) :
   unfold checkNoProgress
   simp only [Bool.and_eq_true, decide_eq_true_eq]
 
-/-- **osc_threshold**: osc fires IFF the post-ack last-8 window has 8 records with
-EXACTLY 2 distinct goals. -/
+/-- **osc_threshold**: osc fires IFF the post-ack last-8 window has 8 records,
+EXACTLY 2 distinct goals, ≥ `oscSwitchMin` adjacent goal switches AND
+≥ `oscFailureMin` failures. (Genuine-oscillation semantics, 2026-06-10.) -/
 theorem osc_threshold (d : Detector) :
     checkGoalOscillation d = true
       ↔ ((recentSince d d.ackOsc oscThreshold).length = oscThreshold ∧
-          (distinctGoals (recentSince d d.ackOsc oscThreshold)).length = 2) := by
+          (distinctGoals (recentSince d d.ackOsc oscThreshold)).length = 2 ∧
+          switches ((recentSince d d.ackOsc oscThreshold).map Rec.goal) ≥ oscSwitchMin ∧
+          failures (recentSince d d.ackOsc oscThreshold) ≥ oscFailureMin) := by
   unfold checkGoalOscillation
-  simp only [Bool.and_eq_true, decide_eq_true_eq]
+  simp only [Bool.and_eq_true, decide_eq_true_eq, and_assoc]
+
+/-- **osc_requires_round_trips**: a window whose goal sequence has fewer than
+`oscSwitchMin` adjacent switches can NEVER fire osc, no matter how it fails.
+This is the 2026-06-10 clean-switch regression (7×GrindCharacterXP then
+1×TaskExchange = 1 switch) proved impossible for ALL inputs. -/
+theorem osc_requires_round_trips (d : Detector)
+    (h : switches ((recentSince d d.ackOsc oscThreshold).map Rec.goal) < oscSwitchMin) :
+    checkGoalOscillation d = false := by
+  cases hc : checkGoalOscillation d
+  · rfl
+  · obtain ⟨-, -, hsw, -⟩ := (osc_threshold d).mp hc
+    omega
+
+/-- **osc_requires_failures**: a window with fewer than `oscFailureMin` failed
+cycles can NEVER fire osc — productive alternation between two goals (e.g.
+gather/deposit loops) is not a livelock. -/
+theorem osc_requires_failures (d : Detector)
+    (h : failures (recentSince d d.ackOsc oscThreshold) < oscFailureMin) :
+    checkGoalOscillation d = false := by
+  cases hc : checkGoalOscillation d
+  · rfl
+  · obtain ⟨-, -, -, hfail⟩ := (osc_threshold d).mp hc
+    omega
+
+/-! ### Trace-locked regressions (2026-06-10 sessions, replayed exactly)
+
+Goal codes: 0 = GrindCharacterXP, 1 = TaskExchange / other. States distinct
+per cycle (the bot was acting), so frozen cannot fire and `detect` reflects
+the oscillation verdict alone. -/
+
+/-- The benign window that false-fired at cycles 20/30/46 of the `-160206`
+session: 7 productive Grind cycles then 1 productive TaskExchange — a clean
+goal switch (1 switch, 0 failures). -/
+def cleanSwitchTrace : Detector :=
+  { history :=
+      [⟨0, 0, false, true⟩, ⟨1, 0, false, true⟩, ⟨2, 0, false, true⟩,
+       ⟨3, 0, false, true⟩, ⟨4, 0, false, true⟩, ⟨5, 0, false, true⟩,
+       ⟨6, 0, false, true⟩, ⟨7, 1, false, true⟩],
+    counter := 8, ackFrozen := 0, ackOsc := 0, ackNoprog := 0 }
+
+/-- **clean_switch_no_fire**: the clean-switch trace window must NOT fire. -/
+theorem clean_switch_no_fire : detect cleanSwitchTrace = none := by decide
+
+/-- A mostly-productive window: 7 ok cycles of one goal and a single failing
+cycle of another (the 7-productive+1-other false-positive class). -/
+def mostlyProductiveTrace : Detector :=
+  { history :=
+      [⟨0, 0, false, true⟩, ⟨1, 0, false, true⟩, ⟨2, 0, false, true⟩,
+       ⟨3, 0, false, true⟩, ⟨4, 0, false, true⟩, ⟨5, 0, false, true⟩,
+       ⟨6, 0, false, true⟩, ⟨7, 1, false, false⟩],
+    counter := 8, ackFrozen := 0, ackOsc := 0, ackNoprog := 0 }
+
+/-- **mostly_productive_no_fire**: one failing odd cycle in a productive
+window must NOT fire. -/
+theorem mostly_productive_no_fire : detect mostlyProductiveTrace = none := by decide
+
+/-- Genuine failure-driven flapping: A→B→A→B… with every cycle failing. -/
+def genuineFlapTrace : Detector :=
+  { history :=
+      [⟨0, 0, false, false⟩, ⟨1, 1, false, false⟩, ⟨2, 0, false, false⟩,
+       ⟨3, 1, false, false⟩, ⟨4, 0, false, false⟩, ⟨5, 1, false, false⟩,
+       ⟨6, 0, false, false⟩, ⟨7, 1, false, false⟩],
+    counter := 8, ackFrozen := 0, ackOsc := 0, ackNoprog := 0 }
+
+/-- **genuine_flap_fires**: real failure-driven oscillation still fires. -/
+theorem genuine_flap_fires : detect genuineFlapTrace = some Signal.osc := by decide
 
 /-- **frozen_threshold**: frozen fires IFF the post-ack last-10 window has 10
 records and SOME state recurs ≥ 5. -/

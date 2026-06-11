@@ -50,7 +50,13 @@ from artifactsmmo_cli.ai.null_tracer import NullTracer
 from artifactsmmo_cli.ai.planner import GOAPPlanner, _state_key
 from artifactsmmo_cli.ai.player_helpers import delete_cost as _delete_cost  # noqa: F401  (test import target)
 from artifactsmmo_cli.ai.player_helpers import format_plan as _format_plan
-from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckSignal
+from artifactsmmo_cli.ai.recovery import (
+    SIGNAL_WINDOWS,
+    CycleRecord,
+    StuckDetector,
+    StuckExit,
+    StuckSignal,
+)
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
 from artifactsmmo_cli.ai.tiers import (
@@ -99,6 +105,15 @@ class GamePlayer:
         self._suppressed_goals: dict[str, int] = {}
         self._actions_since_full_refresh: int = 0
         self._recovery_level: dict[StuckSignal, int] = {}
+        # Escalation decay bookkeeping (see _record_cycle/_handle_stuck): per
+        # signal, the current and the maximum run of CONSECUTIVE
+        # counter-evidence cycles observed since that signal last fired. When
+        # the max run reaches the signal's own detection window, prior
+        # escalation history is stale and resets (trace 2026-06-10: 67
+        # productive cycles between L2 and L3 bought nothing; L3 then exited).
+        self._healthy_streak: dict[StuckSignal, int] = {s: 0 for s in StuckSignal}
+        self._max_healthy_streak: dict[StuckSignal, int] = {s: 0 for s in StuckSignal}
+        self._prev_cycle_state_key: tuple[object, ...] | None = None
         self._last_goal_name: str | None = None
         self.tracer: Tracer = tracer or NullTracer()
         self._cycle_counter: int = 0
@@ -325,7 +340,7 @@ class GamePlayer:
                 if not plan or selected_goal is None:
                     print(f"[{self._now()}] No plan found — waiting 5s")
                     # Record no-plan cycle for NO_PROGRESS detection
-                    self._detector.record(self._make_cycle_record(
+                    self._record_cycle(self._make_cycle_record(
                         goal_name="<none>",
                         action_name="<no_plan>",
                         planned_depth=0,
@@ -441,7 +456,7 @@ class GamePlayer:
                 outcome_for_stuck = (
                     outcome == "ok" or outcome == "error:cooldown"
                 )
-                self._detector.record(self._make_cycle_record(
+                self._record_cycle(self._make_cycle_record(
                     goal_name=repr(selected_goal),
                     action_name=repr(action),
                     planned_depth=len(plan),
@@ -793,8 +808,49 @@ class GamePlayer:
         self.tracer.write_cycle(record)
         self._cycle_counter += 1
 
+    def _record_cycle(self, record: CycleRecord) -> None:
+        """Record one cycle for stuck detection AND track per-signal
+        counter-evidence streaks for escalation decay.
+
+        A cycle is counter-evidence for a signal when it refutes that signal's
+        stuck hypothesis: a real plan refutes NO_PROGRESS, a succeeded action
+        refutes GOAL_OSCILLATION (the flap is failure-driven), and a CHANGED
+        state key refutes STATE_FROZEN (frozen loops can "succeed" while the
+        state stays put, so success alone proves nothing there).
+        """
+        self._detector.record(record)
+        counter_evidence = {
+            StuckSignal.NO_PROGRESS: record.action_name != "<no_plan>",
+            StuckSignal.GOAL_OSCILLATION: record.succeeded,
+            StuckSignal.STATE_FROZEN: (
+                self._prev_cycle_state_key is not None
+                and record.state_key != self._prev_cycle_state_key
+            ),
+        }
+        self._prev_cycle_state_key = record.state_key
+        for sig, healthy in counter_evidence.items():
+            if healthy:
+                self._healthy_streak[sig] += 1
+                if self._healthy_streak[sig] > self._max_healthy_streak[sig]:
+                    self._max_healthy_streak[sig] = self._healthy_streak[sig]
+            else:
+                self._healthy_streak[sig] = 0
+
     def _handle_stuck(self, signal: StuckSignal, client: AuthenticatedClient) -> None:
         """Apply recovery action for a stuck signal at its current escalation level."""
+        # Escalation decay: N = the signal's own detection window. A full
+        # window of CONSECUTIVE counter-evidence since the last fire is
+        # exactly the span the detector itself would call healthy, so any
+        # earlier escalation history is stale — reset to L0 before counting
+        # this fire. A genuine livelock can never produce such a span: the
+        # refill window that re-fires the signal necessarily contains the
+        # evidence (failures / no-plans / frozen states) that breaks the
+        # streak. Trace 2026-06-10: 67 productive cycles between L2 and L3
+        # must clear history; this does (67 >= 8).
+        if self._max_healthy_streak.get(signal, 0) >= SIGNAL_WINDOWS[signal]:
+            self._recovery_level[signal] = 0
+        self._max_healthy_streak[signal] = 0
+        self._healthy_streak[signal] = 0
         level = self._recovery_level.get(signal, 0) + 1
         self._recovery_level[signal] = level
 
@@ -839,8 +895,9 @@ class GamePlayer:
                     self._suppressed_goals[name] = suppress_cycles
                 print(f"[{self._now()}] [recovery] GOAL_OSCILLATION L2: suppressing {distinct} for 15 cycles")
             else:
-                print(f"[{self._now()}] [recovery] GOAL_OSCILLATION L3: exiting (manual intervention)")
-                raise SystemExit(2)
+                print(f"[{self._now()}] [recovery] GOAL_OSCILLATION L3: recovery exhausted — "
+                      "stopping run (manual intervention)")
+                raise StuckExit(signal)
 
         elif signal == StuckSignal.NO_PROGRESS:
             if level == 1:
@@ -851,8 +908,9 @@ class GamePlayer:
                 self.state = self._fetch_world_state(client)
                 self._blockers.clear("bank")
             else:
-                print(f"[{self._now()}] [recovery] NO_PROGRESS L3: exiting (manual intervention)")
-                raise SystemExit(2)
+                print(f"[{self._now()}] [recovery] NO_PROGRESS L3: recovery exhausted — "
+                      "stopping run (manual intervention)")
+                raise StuckExit(signal)
 
         self._detector.acknowledge(signal)
 

@@ -13,6 +13,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.null_tracer import NullTracer
 from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.recovery import StuckExit
 from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.tui.app import WatchApp
@@ -86,6 +87,14 @@ def play(
         else:
             player.run()
         exit_reason = "normal"
+    except StuckExit as exc:
+        # Honest terminal path: stuck recovery exhausted its escalation
+        # ladder. This is a deliberate, clean stop — NOT a crash — so the
+        # session records exit_reason="stuck_exit" (trace 2026-06-10: the
+        # old SystemExit(2) here was recorded as "crash").
+        exit_reason = "stuck_exit"
+        print(f"Bot for {character!r} stopped: {exc} — manual intervention needed")
+        raise typer.Exit(code=2) from exc
     except KeyboardInterrupt:
         exit_reason = "keyboard_interrupt"
         raise
@@ -130,13 +139,14 @@ def _run_with_tui(player: GamePlayer, character: str) -> None:
         # a message Textual prints after teardown. Best-effort — Textual's
         # call_from_thread raises RuntimeError when the app is not running
         # (already torn down / user quit first); the crash is still recorded
-        # and re-raised below either way.
+        # and re-raised below either way. A StuckExit is a deliberate stop,
+        # not a crash — say so honestly.
+        if isinstance(hook_args.exc_value, StuckExit):
+            message = f"Bot stopped: {hook_args.exc_value}"
+        else:
+            message = f"Bot worker thread crashed: {hook_args.exc_value!r}"
         with contextlib.suppress(RuntimeError):
-            app.call_from_thread(
-                app.exit,
-                return_code=1,
-                message=f"Bot worker thread crashed: {hook_args.exc_value!r}",
-            )
+            app.call_from_thread(app.exit, return_code=1, message=message)
 
     threading.excepthook = _bot_excepthook
     try:
@@ -146,7 +156,11 @@ def _run_with_tui(player: GamePlayer, character: str) -> None:
         threading.excepthook = previous_hook
     if crashes:
         # Print on the real terminal (after the alternate screen is gone),
-        # then re-raise so play()'s finally records exit_reason="crash".
-        print(f"Bot worker thread for {character!r} crashed; traceback:")
-        traceback.print_exception(crashes[0])
+        # then re-raise so play() records the honest exit_reason: "stuck_exit"
+        # for a deliberate StuckExit stop, "crash" for everything else.
+        if isinstance(crashes[0], StuckExit):
+            print(f"Bot for {character!r} stopped: {crashes[0]}")
+        else:
+            print(f"Bot worker thread for {character!r} crashed; traceback:")
+            traceback.print_exception(crashes[0])
         raise crashes[0]

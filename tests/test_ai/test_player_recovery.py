@@ -4,8 +4,16 @@ import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.player import GamePlayer
-from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckSignal
+from artifactsmmo_cli.ai.recovery import CycleRecord, StuckDetector, StuckExit, StuckSignal
 from tests.test_ai.fixtures import make_state
+
+
+def _cycle(goal: str = "GoalA", action: str = "X", succeeded: bool = True,
+           state_key: tuple = (0, 0, 5, (), (), None, 0, False)) -> CycleRecord:
+    return CycleRecord(
+        state_key=state_key, goal_name=goal, action_name=action,
+        planned_depth=1, planner_timed_out=False, succeeded=succeeded,
+    )
 
 
 def test_player_has_detector_after_init():
@@ -172,22 +180,168 @@ def test_handle_stuck_no_progress_level1_triggers_refresh():
     assert player._recovery_level[StuckSignal.NO_PROGRESS] == 1
 
 
-def test_handle_stuck_goal_oscillation_level3_exits():
-    """Level 3 of GOAL_OSCILLATION exits with SystemExit(2) — unrecoverable.
-    Requires failing history so the recovery handler reaches the L3 branch
-    instead of the early-return when no failing goals exist."""
+def test_handle_stuck_goal_oscillation_level3_raises_stuck_exit():
+    """Level 3 of GOAL_OSCILLATION raises StuckExit (NOT SystemExit) — the
+    honest terminal path the play() boundary records as exit_reason=
+    'stuck_exit'. Requires failing history so the recovery handler reaches
+    the L3 branch instead of the early-return when no failing goals exist."""
     player = GamePlayer(character="testchar")
     for i in range(8):
-        player._detector.record(CycleRecord(
+        player._record_cycle(CycleRecord(
             state_key=(i, 0, 5, (), (), None, 0, False),
             goal_name="GoalA" if i % 2 == 0 else "GoalB",
             action_name="X", planned_depth=1,
             planner_timed_out=False, succeeded=False,
         ))
     player._recovery_level[StuckSignal.GOAL_OSCILLATION] = 2
-    with pytest.raises(SystemExit) as exc_info:
+    with pytest.raises(StuckExit) as exc_info:
         player._handle_stuck(StuckSignal.GOAL_OSCILLATION, client=None)
-    assert exc_info.value.code == 2
+    assert exc_info.value.signal == StuckSignal.GOAL_OSCILLATION
+    assert not isinstance(exc_info.value, SystemExit)
+
+
+def test_handle_stuck_no_progress_level3_raises_stuck_exit():
+    """NO_PROGRESS L3 takes the same honest terminal path."""
+    player = GamePlayer(character="testchar")
+    player._recovery_level[StuckSignal.NO_PROGRESS] = 2
+    with pytest.raises(StuckExit) as exc_info:
+        player._handle_stuck(StuckSignal.NO_PROGRESS, client=None)
+    assert exc_info.value.signal == StuckSignal.NO_PROGRESS
+
+
+class TestEscalationDecay:
+    """_recovery_level[signal] decays: a full detection window (8 for
+    GOAL_OSCILLATION) of CONSECUTIVE counter-evidence since the signal last
+    fired resets escalation to L0 before the next fire counts. Trace
+    2026-06-10: 67 productive cycles between L2 and L3 bought nothing and L3
+    raised SystemExit(2)."""
+
+    def _flap_window(self, player: GamePlayer, start: int) -> None:
+        """Record a genuine failing A/B flap window (would fire osc)."""
+        for i in range(8):
+            player._record_cycle(_cycle(
+                goal="GoalA" if i % 2 == 0 else "GoalB", succeeded=False,
+                state_key=(start + i, 0, 5, (), (), None, 0, False),
+            ))
+
+    def test_productive_run_resets_oscillation_escalation(self):
+        """L2, then 8+ productive cycles, then a fire → L1, not L3."""
+        player = GamePlayer(character="testchar")
+        player._recovery_level[StuckSignal.GOAL_OSCILLATION] = 2
+        for i in range(10):  # 10 consecutive productive cycles >= window 8
+            player._record_cycle(_cycle(
+                goal="GoalA", succeeded=True,
+                state_key=(i, 0, 5, (), (), None, 0, False)))
+        self._flap_window(player, start=100)
+        player._handle_stuck(StuckSignal.GOAL_OSCILLATION, client=None)
+        assert player._recovery_level[StuckSignal.GOAL_OSCILLATION] == 1
+
+    def test_sixty_seven_productive_cycles_clear_history(self):
+        """Trace-locked: the 67 productive cycles between L2 and L3 in the
+        2026-06-10 session must clear escalation history."""
+        player = GamePlayer(character="testchar")
+        player._recovery_level[StuckSignal.GOAL_OSCILLATION] = 2
+        for i in range(67):
+            player._record_cycle(_cycle(
+                goal="GrindCharacterXP(chicken)", succeeded=True,
+                state_key=(i, 0, 5, (), (), None, 0, False)))
+        self._flap_window(player, start=100)
+        player._handle_stuck(StuckSignal.GOAL_OSCILLATION, client=None)
+        assert player._recovery_level[StuckSignal.GOAL_OSCILLATION] == 1
+
+    def test_failing_refill_does_not_decay(self):
+        """A genuine livelock refill window (all failures) provides no
+        counter-evidence: L2 escalates to L3 and raises StuckExit."""
+        player = GamePlayer(character="testchar")
+        player._recovery_level[StuckSignal.GOAL_OSCILLATION] = 2
+        self._flap_window(player, start=0)  # refill is itself the evidence
+        with pytest.raises(StuckExit):
+            player._handle_stuck(StuckSignal.GOAL_OSCILLATION, client=None)
+
+    def test_short_productive_run_does_not_decay(self):
+        """Fewer than window-size consecutive successes is not a full window
+        of counter-evidence — escalation history is kept."""
+        player = GamePlayer(character="testchar")
+        player._recovery_level[StuckSignal.GOAL_OSCILLATION] = 2
+        for i in range(7):  # one short of the 8-cycle window
+            player._record_cycle(_cycle(
+                goal="GoalA", succeeded=True,
+                state_key=(i, 0, 5, (), (), None, 0, False)))
+        self._flap_window(player, start=100)
+        with pytest.raises(StuckExit):
+            player._handle_stuck(StuckSignal.GOAL_OSCILLATION, client=None)
+
+    def test_interrupted_successes_do_not_accumulate(self):
+        """The counter-evidence run must be CONSECUTIVE: successes split by a
+        failure never reach the window size, so no decay."""
+        player = GamePlayer(character="testchar")
+        player._recovery_level[StuckSignal.GOAL_OSCILLATION] = 2
+        for i in range(20):  # 4 ok, 1 fail, repeated: max streak 4 < 8
+            player._record_cycle(_cycle(
+                goal="GoalA", succeeded=(i % 5 != 4),
+                state_key=(i, 0, 5, (), (), None, 0, False)))
+        self._flap_window(player, start=100)
+        with pytest.raises(StuckExit):
+            player._handle_stuck(StuckSignal.GOAL_OSCILLATION, client=None)
+
+    def test_streak_resets_when_signal_fires(self):
+        """Each fire consumes the streak bookkeeping: decay-then-fire leaves
+        the NEXT fire without counter-evidence unless a fresh full window
+        accumulates."""
+        player = GamePlayer(character="testchar")
+        player._recovery_level[StuckSignal.GOAL_OSCILLATION] = 2
+        for i in range(10):
+            player._record_cycle(_cycle(
+                goal="GoalA", succeeded=True,
+                state_key=(i, 0, 5, (), (), None, 0, False)))
+        self._flap_window(player, start=100)
+        player._handle_stuck(StuckSignal.GOAL_OSCILLATION, client=None)
+        assert player._recovery_level[StuckSignal.GOAL_OSCILLATION] == 1
+        # Second fire immediately after another failing window: no decay.
+        self._flap_window(player, start=200)
+        player._handle_stuck(StuckSignal.GOAL_OSCILLATION, client=None)
+        assert player._recovery_level[StuckSignal.GOAL_OSCILLATION] == 2
+
+    def test_no_progress_decay_counts_planned_cycles(self):
+        """NO_PROGRESS counter-evidence is 'a real plan existed', regardless
+        of outcome: 4+ consecutive planned cycles reset its escalation."""
+        player = GamePlayer(character="testchar")
+        player._recovery_level[StuckSignal.NO_PROGRESS] = 2
+        for i in range(4):  # planned but FAILED cycles still refute no-plan
+            player._record_cycle(_cycle(
+                goal="GoalA", action="X", succeeded=False,
+                state_key=(i, 0, 5, (), (), None, 0, False)))
+        player._fetch_world_state = lambda c: player.state  # type: ignore
+        player.state = make_state()
+        player._handle_stuck(StuckSignal.NO_PROGRESS, client=None)
+        assert player._recovery_level[StuckSignal.NO_PROGRESS] == 1
+
+    def test_state_frozen_decay_requires_changing_states(self):
+        """STATE_FROZEN counter-evidence is a CHANGED state key — succeeding
+        actions that leave the state frozen prove nothing, so no decay."""
+        player = GamePlayer(character="testchar")
+        player._recovery_level[StuckSignal.STATE_FROZEN] = 1
+        frozen_key = (1, 1, 5, (), (), None, 0, False)
+        for _ in range(12):  # succeeded=True but the state never changes
+            player._record_cycle(_cycle(goal="GoalA", succeeded=True,
+                                        state_key=frozen_key))
+        player._last_goal_name = "GoalA"
+        player._handle_stuck(StuckSignal.STATE_FROZEN, client=None)
+        assert player._recovery_level[StuckSignal.STATE_FROZEN] == 2
+
+    def test_state_frozen_decay_on_changing_states(self):
+        """10+ consecutive state CHANGES since the last fire reset frozen
+        escalation."""
+        player = GamePlayer(character="testchar")
+        player.game_data = GameData()
+        player.state = make_state()
+        player._fetch_world_state = lambda c: player.state  # type: ignore
+        player._recovery_level[StuckSignal.STATE_FROZEN] = 1
+        for i in range(12):  # 11 consecutive changes >= window 10
+            player._record_cycle(_cycle(goal="GoalA", succeeded=True,
+                                        state_key=(i, 0, 5, (), (), None, 0, False)))
+        player._handle_stuck(StuckSignal.STATE_FROZEN, client=None)
+        assert player._recovery_level[StuckSignal.STATE_FROZEN] == 1
 
 
 def test_cooldown_outcome_does_not_count_as_failure_for_stuck_detection():

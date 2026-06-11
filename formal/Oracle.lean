@@ -602,11 +602,12 @@ args layout (all Nat ≥ 0):
 * `[2]`            ackOsc cutoff
 * `[3]`            ackNoprog cutoff
 * `[4]`            n (history length)
-* `[5 .. 5+3n-1]`  n records flat: state0 goal0 noPlan0(0/1) state1 ...
+* `[5 .. 5+4n-1]`  n records flat: state0 goal0 noPlan0(0/1) ok0(0/1) state1 ...
   (oldest first, mirroring `list(deque)`)
 
-Emits the `detect()` verdict ("frozen"/"osc"/"noprog"/"none") and the three
-window lengths (to pin `_recent_since`'s index arithmetic). -/
+Emits the `detect()` verdict ("frozen"/"osc"/"noprog"/"none"), the three
+window lengths (to pin `_recent_since`'s index arithmetic), and the osc
+switch/failure counts (to pin the genuine-oscillation gates). -/
 def runStuckDetector (args : Array Json) : Json :=
   let g := fun i => (intArg args i).toNat
   let counter := g 0
@@ -616,7 +617,8 @@ def runStuckDetector (args : Array Json) : Json :=
   let n := g 4
   let history : List Formal.StuckDetector.Rec :=
     (List.range n).map (fun k =>
-      { state := g (5 + 3*k), goal := g (6 + 3*k), noPlan := g (7 + 3*k) != 0 })
+      { state := g (5 + 4*k), goal := g (6 + 4*k), noPlan := g (7 + 4*k) != 0,
+        ok := g (8 + 4*k) != 0 })
   let d : Formal.StuckDetector.Detector :=
     { history := history, counter := counter,
       ackFrozen := ackFrozen, ackOsc := ackOsc, ackNoprog := ackNoprog }
@@ -631,10 +633,17 @@ def runStuckDetector (args : Array Json) : Json :=
     Formal.StuckDetector.oscThreshold).length
   let noprogLen := (Formal.StuckDetector.recentSince d ackNoprog
     Formal.StuckDetector.noprogThreshold).length
+  let oscWindow := Formal.StuckDetector.recentSince d ackOsc
+    Formal.StuckDetector.oscThreshold
+  let oscSwitches := Formal.StuckDetector.switches
+    (oscWindow.map Formal.StuckDetector.Rec.goal)
+  let oscFailures := Formal.StuckDetector.failures oscWindow
   Json.mkObj [("detect", Json.str verdict),
     ("frozen_window_len", Json.num (Int.ofNat frozenLen)),
     ("osc_window_len", Json.num (Int.ofNat oscLen)),
-    ("noprog_window_len", Json.num (Int.ofNat noprogLen))]
+    ("noprog_window_len", Json.num (Int.ofNat noprogLen)),
+    ("osc_switches", Json.num (Int.ofNat oscSwitches)),
+    ("osc_failures", Json.num (Int.ofNat oscFailures))]
 
 /-- Read a rational field from a flat Int arg list as a (numerator, denominator)
 pair starting at index `i`. The Python diff feeds EXACT `fractions.Fraction`

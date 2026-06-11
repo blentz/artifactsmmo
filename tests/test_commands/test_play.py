@@ -15,6 +15,8 @@ from typer.testing import CliRunner
 from artifactsmmo_cli.ai.file_tracer import FileTracer
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.null_tracer import NullTracer
+from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.recovery import CycleRecord, StuckExit, StuckSignal
 from artifactsmmo_cli.commands.play import default_learn_db_path, play
 
 # `play` is a plain command function registered directly on the root app in
@@ -231,6 +233,57 @@ class TestPlayCommandWiring:
                 mock_store.end_session.assert_called_once_with(exit_reason="keyboard_interrupt")
                 mock_store.close.assert_called_once_with()
 
+    def test_stuck_exit_records_stuck_exit_reason_in_real_store(self, runner, tmp_path):
+        """Honest terminal path on real sqlite: the stuck handler's L3
+        StuckExit (raised by the REAL GamePlayer._handle_stuck, not a stub
+        exception) stops the run cleanly and the session row records
+        exit_reason='stuck_exit' — NOT 'crash' (the 2026-06-10 lie where
+        the detector's SystemExit(2) was filed as a crash)."""
+        db_path = tmp_path / "learn.db"
+        # A real player whose recovery state sits at L2 with a genuine
+        # failing-flap window: the next fire escalates to L3 -> StuckExit.
+        real_player = GamePlayer(character="hero")
+        for i in range(8):
+            real_player._record_cycle(CycleRecord(
+                state_key=(i, 0, 5, (), (), None, 0, False),
+                goal_name="GoalA" if i % 2 == 0 else "GoalB",
+                action_name="X", planned_depth=1,
+                planner_timed_out=False, succeeded=False,
+            ))
+        real_player._recovery_level[StuckSignal.GOAL_OSCILLATION] = 2
+
+        with patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls:
+            mock_player = Mock()
+
+            def stuck_run():
+                # The bot played real cycles (the session row exists), then
+                # the detector's escalation ladder ran out.
+                store = mock_player_cls.call_args.kwargs["history"]
+                store.record_cycle(Cycle(
+                    ts="2026-06-10T16:02:06+00:00",
+                    session_id="overwritten", cycle_index=0,
+                    character="overwritten", outcome="error:fight_lost",
+                ))
+                real_player._handle_stuck(StuckSignal.GOAL_OSCILLATION, client=None)
+
+            mock_player.run.side_effect = stuck_run
+            mock_player_cls.return_value = mock_player
+
+            result = runner.invoke(
+                app, ["hero", "--learn", "--learn-db", str(db_path)])
+
+        # Deliberate stop: exit code 2 via typer.Exit, no crash traceback.
+        assert result.exit_code == 2
+        assert "stopped" in result.output
+        assert "manual intervention" in result.output
+        conn = sqlite3.connect(db_path)
+        rows = conn.execute("SELECT exit_reason, ended_at FROM sessions").fetchall()
+        conn.close()
+        assert len(rows) == 1
+        exit_reason, ended_at = rows[0]
+        assert exit_reason == "stuck_exit"
+        assert ended_at is not None
+
 
 class FakeWatchApp:
     """Minimal WatchApp stand-in: run() blocks until exit() like Textual,
@@ -404,6 +457,45 @@ class TestRunWithTui:
         assert exit_reason == "crash"
         assert cycle_count == 2
         assert ended_at is not None
+
+    def test_tui_worker_stuck_exit_tears_down_and_records_stuck_exit(self, runner):
+        """A worker StuckExit is supervised like a crash (the TUI must not
+        ghost) but reported honestly: the app exits with a 'stopped' (not
+        'crashed') message, no traceback is dumped, and the session ends
+        with exit_reason='stuck_exit' and exit code 2."""
+        fake_app = FakeWatchApp()
+        hook_before = threading.excepthook
+        with patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls:
+            mock_player = Mock()
+            mock_player.run.side_effect = StuckExit(StuckSignal.GOAL_OSCILLATION)
+            mock_player_cls.return_value = mock_player
+            with (
+                patch("artifactsmmo_cli.commands.play.ClientManager"),
+                patch("artifactsmmo_cli.commands.play.GameData"),
+                patch("artifactsmmo_cli.commands.play.WatchApp", return_value=fake_app),
+                patch("artifactsmmo_cli.commands.play.ThreadSafeBridge"),
+                patch("artifactsmmo_cli.commands.play.LearningStore") as mock_store_cls,
+            ):
+                mock_store = Mock()
+                mock_store_cls.return_value = mock_store
+
+                result = runner.invoke(app, ["hero", "--tui"])
+
+                assert result.exit_code == 2
+                # The app was torn down through the thread-safe channel with
+                # an honest "stopped" message (not "crashed").
+                assert len(fake_app.exit_calls) == 1
+                _, exit_kwargs = fake_app.exit_calls[0]
+                assert "Bot stopped" in exit_kwargs["message"]
+                assert "crashed" not in exit_kwargs["message"]
+                assert "stuck recovery exhausted" in exit_kwargs["message"]
+                # Post-teardown terminal output: honest stop, no traceback.
+                assert "Bot for 'hero' stopped" in result.output
+                assert "crashed; traceback" not in result.output
+                # The session recorded the truthful exit reason.
+                mock_store.end_session.assert_called_once_with(exit_reason="stuck_exit")
+                mock_store.close.assert_called_once_with()
+        assert threading.excepthook is hook_before
 
     def test_tui_worker_crash_with_app_already_torn_down(self, runner):
         """If the app's thread-safe channel is already dead (RuntimeError from
