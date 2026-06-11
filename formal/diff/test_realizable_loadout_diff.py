@@ -10,8 +10,13 @@ character owned only one copy.
 This test pins the realizability invariant under randomized inputs (Hypothesis,
 ≥200 examples on the formal profile) plus the exact ring1=A + ring2=B +
 inventory={} counterexample from the bug report as a regression anchor. The
-post-fix `pick_loadout` threads a `claimed_codes` accumulator across slot
-picks; the invariant is the contract that accumulator establishes.
+post-fix `pick_loadout` enforces the server's ONE-SLOT-PER-CODE rule (HTTP 485
+"This item is already equipped"): a candidate code already placed in the
+projected result at any OTHER slot — kept there or assigned by an earlier
+slot — is infeasible, regardless of spare copies owned. The invariant follows:
+a freshly-assigned code appears exactly once and is owned; kept codes are
+bounded by the worn count (Lean: `pickLoadout_realizable`,
+`pickLoadout_one_slot_per_code`).
 
 The headline property: `is_realizable(pick_loadout(...), inv, equip) == True`
 ALWAYS. `OptimizeLoadoutAction.apply` asserts a per-slot consequence of this
@@ -245,11 +250,15 @@ def test_ownership_counts_inventory_and_equipped():
 
 # ---- Phase-15: the full pick_loadout algorithm differential ----
 #
-# These tests stress the four properties proved in Lean:
-# 1. Output realizability (subsumes the existing property test above).
-# 2. Per-slot no-downgrade (modulo the documented stolen-current branch).
-# 3. Per-slot optimality (argmax of post-claim feasible candidates).
-# 4. Determinism (pure function of inputs — no dict iteration leakage).
+# These tests stress the properties proved in Lean:
+# 1.  Output realizability (subsumes the existing property test above).
+# 1b. One slot per code: dup-free equipment ⇒ dup-free output (HTTP 485
+#     unreachable; `pickLoadout_one_slot_per_code`).
+# 2.  Per-slot no-downgrade, STRICT and unconditional (`pickSlotStep_no_downgrade`).
+# 3.  Per-slot optimality (argmax of the feasible candidate set).
+# 3b. Empty slots fill only at strictly positive score
+#     (`pickSlotStep_empty_fill_positive` / `pickSlotStep_empty_zero_stays_empty`).
+# 4.  Determinism (pure function of inputs — no dict iteration leakage).
 
 
 def _candidate_pool(state: WorldState, gd: _FakeGameData,
@@ -340,10 +349,12 @@ def test_pick_loadout_deterministic_no_dict_leak(item_types, item_levels, item_a
 def test_pick_loadout_no_downgrade_or_stolen(item_types, item_levels, item_atks,
                                               item_ress, mon_atk, mon_res, level,
                                               inv_counts, equip_picks):
-    """Property 2 (no-downgrade). For every slot where pick_loadout returns a
-    code different from the current code, EITHER the new code's score beats or
-    ties the current code's score OR the current code was stolen (the loadout
-    has demand for it elsewhere that consumes the only physical copy)."""
+    """Property 2 (no-downgrade), now STRICT and UNCONDITIONAL. For every slot
+    where pick_loadout returns a code different from the current code (both
+    with stats), the new code's score STRICTLY beats the current code's score.
+    The old "stolen current" escape is gone: the one-slot-per-code rule means
+    no peer slot can ever take a code that is still current here (Lean:
+    `pickSlotStep_no_downgrade`)."""
     table = {
         code: ItemStats(
             code=code, level=lvl, type_=ty,
@@ -365,10 +376,8 @@ def test_pick_loadout_no_downgrade_or_stolen(item_types, item_levels, item_atks,
         current = state.equipment.get(slot)
         if chosen is None or chosen == current:
             continue
-        # Either chosen beats/ties current's score, or current was "stolen"
-        # by a peer slot (demand for current in loadout > inventory-only copies).
         if current is None:
-            continue  # filling an empty slot is always allowed
+            continue  # empty-slot fills are pinned by the 3b positivity property
         current_stats = gd.item_stats(current)
         chosen_stats = gd.item_stats(chosen)
         if current_stats is None or chosen_stats is None:
@@ -379,14 +388,7 @@ def test_pick_loadout_no_downgrade_or_stolen(item_types, item_levels, item_atks,
         else:
             cur_score = armor_score(current_stats, monster_atk)
             new_score = armor_score(chosen_stats, monster_atk)
-        if new_score >= cur_score:
-            continue
-        # Downgrade branch: only allowed if current was stolen elsewhere in loadout.
-        demand_for_current = sum(1 for v in loadout.values() if v == current)
-        inv_only = state.inventory.get(current, 0)
-        equipped_count = sum(1 for v in state.equipment.values() if v == current)
-        own = inv_only + equipped_count
-        assert demand_for_current > own - 1, {
+        assert new_score > cur_score, {
             "slot": slot, "current": current, "chosen": chosen,
             "cur_score": cur_score, "new_score": new_score,
             "loadout": loadout, "inventory": dict(state.inventory),
@@ -415,12 +417,10 @@ def test_pick_loadout_optimal_among_feasible(item_types, item_levels, item_atks,
                                               item_ress, mon_atk, mon_res, level,
                                               inv_counts, equip_picks):
     """Property 3 (optimality). For every slot whose `chosen` code is not the
-    retained current, the chosen code's score must equal the max score over the
-    candidate pool that fits the slot AND is available (the pre-claim pool is
-    a relaxation; the post-claim pool is tighter — the chosen code's score must
-    at least match the max over the post-claim pool by argmax monotonicity).
-    We verify: if a swap occurs and current is NOT stolen, score(chosen) ≥ max
-    score over (candidates - claimed-by-earlier-better-priority slots)."""
+    retained current, the chosen code must come from the slot's type-and-level
+    candidate pool (the feasible set is a one-slot-per-code restriction of
+    this pool, so pool membership is a sound relaxation; the per-slot argmax
+    itself is pinned by Lean `pickSlotStep_optimal`)."""
     table = {
         code: ItemStats(
             code=code, level=lvl, type_=ty,
@@ -477,6 +477,220 @@ def test_pick_loadout_weapon_slot_uses_weapon_score_not_armor_score():
                         equipment={"weapon_slot": None})
     loadout = pick_loadout("mon", state, gd)
     assert loadout["weapon_slot"] == "WHIGH", loadout
+
+
+def _dedupe_equipment(equipment: dict[str, str | None]) -> dict[str, str | None]:
+    """Keep the FIRST slot wearing each code, blank later repeats — the server
+    maintains one-slot-per-code on worn equipment, so dup-free inputs are the
+    only realizable ones (the Lean `hdup` hypothesis)."""
+    seen: set[str] = set()
+    out: dict[str, str | None] = {}
+    for slot in sorted(equipment):
+        code = equipment[slot]
+        if code is not None and code in seen:
+            out[slot] = None
+            continue
+        if code is not None:
+            seen.add(code)
+        out[slot] = code
+    return out
+
+
+@settings(max_examples=250, deadline=None)
+@given(
+    item_types=st.lists(st.sampled_from(_TYPES), min_size=len(_CODES), max_size=len(_CODES)),
+    item_levels=st.lists(st.integers(min_value=1, max_value=5),
+                         min_size=len(_CODES), max_size=len(_CODES)),
+    item_atks=st.lists(st.lists(_VAL, min_size=len(ELEMENTS), max_size=len(ELEMENTS)),
+                       min_size=len(_CODES), max_size=len(_CODES)),
+    item_ress=st.lists(st.lists(_RES, min_size=len(ELEMENTS), max_size=len(ELEMENTS)),
+                       min_size=len(_CODES), max_size=len(_CODES)),
+    mon_atk=st.lists(_VAL, min_size=len(ELEMENTS), max_size=len(ELEMENTS)),
+    mon_res=st.lists(_RES, min_size=len(ELEMENTS), max_size=len(ELEMENTS)),
+    level=st.integers(min_value=1, max_value=5),
+    inv_counts=st.lists(st.integers(min_value=0, max_value=2),
+                        min_size=len(_CODES), max_size=len(_CODES)),
+    equip_picks=st.lists(st.sampled_from([*_CODES, None]),
+                         min_size=len(_ALL_SLOTS), max_size=len(_ALL_SLOTS)),
+)
+def test_pick_loadout_one_slot_per_code(item_types, item_levels, item_atks,
+                                        item_ress, mon_atk, mon_res, level,
+                                        inv_counts, equip_picks):
+    """Property 1b (ONE SLOT PER CODE / 485-safety, Lean
+    `pickLoadout_one_slot_per_code`). Given dup-free current equipment (the
+    server guarantee), NO code may occupy two slots of the output — even when
+    SPARE COPIES are owned. Plain realizability is too weak here: with one
+    worn + one spare copy, a duplicate sibling-slot assignment is "owned" yet
+    the server refuses it with HTTP 485 (the 2026-06-10/11 OptimizeLoadout
+    livelock). This is the property that kills the ownership-count mutants."""
+    table = {
+        code: ItemStats(
+            code=code, level=lvl, type_=ty,
+            attack={e: a for e, a in zip(ELEMENTS, atk, strict=True)},
+            resistance={e: r for e, r in zip(ELEMENTS, res, strict=True)},
+        )
+        for code, ty, lvl, atk, res in zip(
+            _CODES, item_types, item_levels, item_atks, item_ress, strict=True)
+    }
+    monster_atk = {e: v for e, v in zip(ELEMENTS, mon_atk, strict=True)}
+    monster_res = {e: v for e, v in zip(ELEMENTS, mon_res, strict=True)}
+    inventory = {c: n for c, n in zip(_CODES, inv_counts, strict=True) if n > 0}
+    equipment = _dedupe_equipment(
+        {s: c for s, c in zip(_ALL_SLOTS, equip_picks, strict=True)})
+    gd = _FakeGameData(table, monster_atk, monster_res)
+    state = _make_state(level, inventory, equipment)
+    loadout = pick_loadout("mon", state, gd)
+    counts: dict[str, int] = {}
+    for code in loadout.values():
+        if code is not None:
+            counts[code] = counts.get(code, 0) + 1
+    dups = {c: n for c, n in counts.items() if n > 1}
+    assert not dups, {
+        "dups": dups, "loadout": loadout,
+        "inventory": dict(state.inventory), "equipment": dict(state.equipment),
+    }
+
+
+@settings(max_examples=250, deadline=None)
+@given(
+    item_types=st.lists(st.sampled_from(_TYPES), min_size=len(_CODES), max_size=len(_CODES)),
+    item_levels=st.lists(st.integers(min_value=1, max_value=5),
+                         min_size=len(_CODES), max_size=len(_CODES)),
+    item_atks=st.lists(st.lists(_VAL, min_size=len(ELEMENTS), max_size=len(ELEMENTS)),
+                       min_size=len(_CODES), max_size=len(_CODES)),
+    item_ress=st.lists(st.lists(_RES, min_size=len(ELEMENTS), max_size=len(ELEMENTS)),
+                       min_size=len(_CODES), max_size=len(_CODES)),
+    mon_atk=st.lists(_VAL, min_size=len(ELEMENTS), max_size=len(ELEMENTS)),
+    mon_res=st.lists(_RES, min_size=len(ELEMENTS), max_size=len(ELEMENTS)),
+    level=st.integers(min_value=1, max_value=5),
+    inv_counts=st.lists(st.integers(min_value=0, max_value=2),
+                        min_size=len(_CODES), max_size=len(_CODES)),
+    equip_picks=st.lists(st.sampled_from([*_CODES, None]),
+                         min_size=len(_ALL_SLOTS), max_size=len(_ALL_SLOTS)),
+)
+def test_pick_loadout_empty_fill_strictly_positive(item_types, item_levels,
+                                                   item_atks, item_ress,
+                                                   mon_atk, mon_res, level,
+                                                   inv_counts, equip_picks):
+    """Property 3b (Lean `pickSlotStep_empty_fill_positive`). Every slot that
+    goes from EMPTY to FILLED carries a strictly positive score against the
+    target monster: a zero-score equip buys nothing and burns the code's one
+    legal slot."""
+    table = {
+        code: ItemStats(
+            code=code, level=lvl, type_=ty,
+            attack={e: a for e, a in zip(ELEMENTS, atk, strict=True)},
+            resistance={e: r for e, r in zip(ELEMENTS, res, strict=True)},
+        )
+        for code, ty, lvl, atk, res in zip(
+            _CODES, item_types, item_levels, item_atks, item_ress, strict=True)
+    }
+    monster_atk = {e: v for e, v in zip(ELEMENTS, mon_atk, strict=True)}
+    monster_res = {e: v for e, v in zip(ELEMENTS, mon_res, strict=True)}
+    inventory = {c: n for c, n in zip(_CODES, inv_counts, strict=True) if n > 0}
+    equipment: dict[str, str | None] = {s: c for s, c in
+                                         zip(_ALL_SLOTS, equip_picks, strict=True)}
+    gd = _FakeGameData(table, monster_atk, monster_res)
+    state = _make_state(level, inventory, equipment)
+    loadout = pick_loadout("mon", state, gd)
+    for slot, chosen in loadout.items():
+        if state.equipment.get(slot) is not None or chosen is None:
+            continue
+        stats = gd.item_stats(chosen)
+        assert stats is not None
+        if slot == "weapon_slot":
+            score = weapon_score(stats, monster_res)
+        else:
+            score = armor_score(stats, monster_atk)
+        assert score > 0, {
+            "slot": slot, "chosen": chosen, "score": score, "loadout": loadout,
+            "inventory": dict(state.inventory), "equipment": dict(state.equipment),
+        }
+
+
+def test_485_trace_worn_ring_spare_copy_leaves_sibling_empty():
+    """THE 2026-06-10/11 485-LIVELOCK TRACE (deterministic mutation anchor):
+    copper_ring worn in ring1 + a SECOND copper_ring in inventory. The server
+    refuses to equip a code already worn in any slot (HTTP 485) regardless of
+    copies owned, so ring2 must stay EMPTY. Ownership-count feasibility (the
+    pre-fix algorithm) assigned ring2 := copper_ring and livelocked every
+    OptimizeLoadout cycle. Lean: `pickLoadout_485_copper_ring_regression`."""
+    table = {
+        "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
+                                 resistance={"fire": 10}),
+    }
+    monster_atk = {"fire": 50, "earth": 0, "water": 0, "air": 0}
+    monster_res = {"fire": 0, "earth": 0, "water": 0, "air": 0}
+    gd = _FakeGameData(table, monster_atk, monster_res)
+    state = _make_state(level=1, inventory={"copper_ring": 1},
+                        equipment={"ring1_slot": "copper_ring", "ring2_slot": None})
+    loadout = pick_loadout("mon", state, gd)
+    assert loadout["ring1_slot"] == "copper_ring", loadout
+    assert loadout["ring2_slot"] is None, loadout
+
+
+def test_zero_score_candidate_leaves_empty_slot_empty():
+    """Property 3b dual (deterministic; Lean `pickSlotStep_empty_zero_stays_empty`):
+    the only candidate for an empty slot scores 0 against this monster (its
+    resistances are all irrelevant) — the slot stays empty."""
+    table = {
+        "water_ring": ItemStats(code="water_ring", level=1, type_="ring",
+                                resistance={"water": 20}),
+    }
+    monster_atk = {"fire": 50, "earth": 0, "water": 0, "air": 0}
+    monster_res = {"fire": 0, "earth": 0, "water": 0, "air": 0}
+    gd = _FakeGameData(table, monster_atk, monster_res)
+    state = _make_state(level=1, inventory={"water_ring": 1},
+                        equipment={"ring1_slot": None, "ring2_slot": None})
+    loadout = pick_loadout("mon", state, gd)
+    assert loadout["ring1_slot"] is None, loadout
+    assert loadout["ring2_slot"] is None, loadout
+
+
+def test_score_tie_keeps_current_no_swap():
+    """Property 2 deterministic anchor: a candidate that TIES the current
+    item's score must NOT displace it (strict `>` only). Kills the `>` → `>=`
+    no-downgrade mutant without relying on Hypothesis finding a tie. The worn
+    high_ring is LEVEL-GATED out of the candidate pool, so the sole feasible
+    candidate is the tying beta_ring — the argmax is forced to a non-current
+    code and only the strictness of the comparison decides the swap."""
+    table = {
+        # Worn but above the player's level: not a candidate, still scored.
+        "high_ring": ItemStats(code="high_ring", level=10, type_="ring",
+                               resistance={"fire": 20}),
+        "beta_ring": ItemStats(code="beta_ring", level=1, type_="ring",
+                               resistance={"fire": 20}),  # exact score tie
+    }
+    monster_atk = {"fire": 50, "earth": 0, "water": 0, "air": 0}
+    monster_res = {"fire": 0, "earth": 0, "water": 0, "air": 0}
+    gd = _FakeGameData(table, monster_atk, monster_res)
+    state = _make_state(level=1, inventory={"beta_ring": 1},
+                        equipment={"ring1_slot": "high_ring", "ring2_slot": None})
+    loadout = pick_loadout("mon", state, gd)
+    assert loadout["ring1_slot"] == "high_ring", loadout
+    # The tying beta_ring is a DIFFERENT code, so it legitimately fills ring2.
+    assert loadout["ring2_slot"] == "beta_ring", loadout
+
+
+def test_single_copy_fills_only_one_empty_sibling_slot():
+    """Deterministic dup-free anchor: ONE inventory copy of a positive-score
+    ring with BOTH ring slots empty fills exactly one slot. An earlier slot's
+    fresh assignment lives in the projected result and forbids the code for
+    the later sibling — kills the mutant that scans the original equipment
+    (where the code appears nowhere) instead of the projected result."""
+    table = {
+        "solo_ring": ItemStats(code="solo_ring", level=1, type_="ring",
+                               resistance={"fire": 10}),
+    }
+    monster_atk = {"fire": 50, "earth": 0, "water": 0, "air": 0}
+    monster_res = {"fire": 0, "earth": 0, "water": 0, "air": 0}
+    gd = _FakeGameData(table, monster_atk, monster_res)
+    state = _make_state(level=1, inventory={"solo_ring": 1},
+                        equipment={"ring1_slot": None, "ring2_slot": None})
+    loadout = pick_loadout("mon", state, gd)
+    filled = [s for s in ("ring1_slot", "ring2_slot") if loadout[s] == "solo_ring"]
+    assert len(filled) == 1, loadout
+    assert is_realizable(loadout, state.inventory, state.equipment), loadout
 
 
 def test_pick_loadout_armor_slot_uses_armor_score_not_weapon_score():

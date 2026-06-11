@@ -129,12 +129,14 @@ class TestInventoryUpgradeSkipsZeroQty:
         assert goal._find_inventory_upgrade(state, gd) == ("copper_dagger", "weapon_slot")
 
 
-class TestCraftableFillsSecondMultiSlot:
-    def test_second_ring_slot_craftable_when_same_ring_equipped(self):
-        """A multi-slot item equipped in ONE slot is still craftable for its
-        empty second slot. copper_ring in ring1 must not block crafting another
-        copper_ring for the empty ring2 — per-slot _is_upgrade_over decides
-        (same item over ring1 -> not an upgrade; empty ring2 -> upgrade)."""
+class TestWornCodeNeverASiblingSlotTarget:
+    def test_no_second_ring_craft_target_when_same_ring_worn(self):
+        """THE 2026-06-10/11 485-LIVELOCK TRACE LOCK (gear-target derivation):
+        a copper_ring worn in ring1 must NOT make ring2 a craft target for a
+        second copper_ring. The server's one-slot-per-code rule (HTTP 485)
+        means that crafted ring could never be equipped — pre-fix the goal
+        committed to exactly this target and its final EquipAction was
+        forever inapplicable."""
         gd = GameData()
         gd._item_stats = {
             "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
@@ -147,7 +149,47 @@ class TestCraftableFillsSecondMultiSlot:
             inventory={},
             equipment={"ring1_slot": "copper_ring", "ring2_slot": None},
         )
-        assert goal._find_craftable_upgrade_target(state, gd) == ("copper_ring", "ring2_slot")
+        assert goal._find_craftable_upgrade_target(state, gd) is None
+
+    def test_different_code_still_targets_the_sibling_slot(self):
+        """One-slot-per-code only forbids the SAME code: a different craftable
+        ring remains a valid target for the empty ring2."""
+        gd = GameData()
+        gd._item_stats = {
+            "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
+                                     crafting_skill="jewelrycrafting", crafting_level=1),
+            "iron_ring": ItemStats(code="iron_ring", level=1, type_="ring",
+                                   crafting_skill="jewelrycrafting", crafting_level=1),
+        }
+        gd._crafting_recipes = {
+            "copper_ring": {"copper_bar": 6},
+            "iron_ring": {"iron_bar": 6},
+        }
+        goal = UpgradeEquipmentGoal()
+        state = make_state(
+            level=5, skills={"jewelrycrafting": 1},
+            inventory={},
+            equipment={"ring1_slot": "copper_ring", "ring2_slot": None},
+        )
+        assert goal._find_craftable_upgrade_target(state, gd) == ("iron_ring", "ring2_slot")
+
+    def test_no_inventory_upgrade_into_sibling_slot_for_worn_code(self):
+        """The inventory-upgrade path obeys the same rule: a spare copy of the
+        worn copper_ring in inventory is NOT an upgrade target for ring2 (it
+        can never be equipped there), so no gear target is derived at all."""
+        gd = GameData()
+        gd._item_stats = {
+            "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
+                                     crafting_skill="jewelrycrafting", crafting_level=1),
+        }
+        gd._crafting_recipes = {}
+        goal = UpgradeEquipmentGoal()
+        state = make_state(
+            level=5,
+            inventory={"copper_ring": 1},
+            equipment={"ring1_slot": "copper_ring", "ring2_slot": None},
+        )
+        assert goal._find_inventory_upgrade(state, gd) is None
 
     def test_no_recraft_when_both_multi_slots_filled(self):
         """When both ring slots already hold the item, there is no empty slot to

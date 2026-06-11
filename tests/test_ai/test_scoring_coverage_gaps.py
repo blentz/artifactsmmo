@@ -95,8 +95,8 @@ def _gd_rings() -> GameData:
 class TestMultiSlotContention:
     def test_keeps_current_ring_on_score_tie(self):
         """When the argmax candidate ties the current ring on armor_score, the
-        swap is NOT taken (strict `>` improvement) and the current code is
-        re-claimed (lines 230-231)."""
+        swap is NOT taken (strict `>` improvement) and the slot keeps its
+        current code."""
         gd = _gd_rings()
         # ring1 holds alpha_ring; beta_ring (equal score) is in inventory.
         # The argmax may surface beta_ring, but it doesn't strictly improve, so
@@ -108,49 +108,102 @@ class TestMultiSlotContention:
         )
         loadout = pick_loadout("yellow_slime", state, gd)
         assert loadout["ring1_slot"] == "alpha_ring"
-        # ring2 (empty current) then takes the unclaimed beta_ring.
+        # ring2 (empty current) then takes beta_ring — it sits nowhere else
+        # in the projected result, so it is feasible there.
         assert loadout["ring2_slot"] == "beta_ring"
 
-    def test_slot_falls_back_to_none_when_last_copy_stolen(self):
-        """A single physical alpha_ring shared across both ring slots: ring1
-        claims it; ring2 has no feasible candidate and no remaining copy of its
-        own code -> falls back to None (lines 205-206)."""
+    def test_worn_ring_never_stolen_by_sibling_empty_slot(self):
+        """ONE SLOT PER CODE (server HTTP 485): a code worn in ring2 is in the
+        projected result at another slot, so it is INFEASIBLE for the empty
+        ring1 — the old "steal the last copy" shuffle is gone. ring1 has no
+        feasible candidate and stays empty; ring2 keeps its ring."""
         gd = _gd_rings()
         # Exactly ONE physical alpha_ring, equipped on ring2, nothing in
-        # inventory -> ownership(alpha_ring) == 1.
+        # inventory -> alpha_ring sits in the projected result at ring2.
         state = make_state(
             level=1,
             inventory={},
             equipment={"ring1_slot": None, "ring2_slot": "alpha_ring"},
         )
         loadout = pick_loadout("yellow_slime", state, gd)
-        # ring1 (empty) claims the single alpha_ring; ring2's alpha_ring copy is
-        # gone and it has no other candidate -> None.
-        assert loadout["ring1_slot"] == "alpha_ring"
-        assert loadout["ring2_slot"] is None
+        assert loadout["ring1_slot"] is None
+        assert loadout["ring2_slot"] == "alpha_ring"
 
-    def test_downgrade_taken_when_current_code_stolen(self):
-        """ring2's current alpha_ring is stolen by ring1, but a worse feasible
-        weak_ring remains -> ring2 downgrades rather than emptying (233-237)."""
+    def test_sibling_empty_slot_takes_a_different_code_only(self):
+        """The worn alpha_ring is infeasible for the empty ring1 (one slot per
+        code), but a DIFFERENT code in inventory is fair game: ring1 fills
+        with weak_ring; ring2 keeps the better alpha_ring (no swap-shuffle)."""
         gd = _gd_rings()
         state = make_state(
             level=1,
             # One spare weak_ring in inventory; the single alpha_ring is only
-            # equipped on ring2 (ownership 1).
+            # equipped on ring2.
             inventory={"weak_ring": 1},
             equipment={"ring1_slot": None, "ring2_slot": "alpha_ring"},
         )
         loadout = pick_loadout("yellow_slime", state, gd)
-        # ring1 swaps in the single alpha_ring (best). ring2's alpha_ring is
-        # consumed; weak_ring remains feasible -> ring2 downgrades to weak_ring.
-        assert loadout["ring1_slot"] == "alpha_ring"
-        assert loadout["ring2_slot"] == "weak_ring"
+        # ring1's feasible pool excludes the worn alpha_ring; weak_ring scores
+        # 8 * 5 = 40 > 0 against the earth attacker, so it fills the slot.
+        assert loadout["ring1_slot"] == "weak_ring"
+        assert loadout["ring2_slot"] == "alpha_ring"
+
+    def test_485_trace_spare_copy_never_fills_sibling_slot(self):
+        """THE 2026-06-10/11 485-LIVELOCK TRACE LOCK: copper_ring worn in
+        ring1 plus a SECOND copper_ring in inventory must NOT be assigned to
+        ring2. The server refuses to equip a code already worn in any slot
+        (HTTP 485 "This item is already equipped") no matter how many copies
+        are owned; the old ownership-count feasibility livelocked every
+        OptimizeLoadout cycle on exactly this state."""
+        gd = GameData()
+        gd._item_stats = {
+            "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
+                                     resistance={"earth": 10}),
+        }
+        gd._monster_attack = {
+            "yellow_slime": {"earth": 8, "fire": 0, "water": 0, "air": 0},
+        }
+        gd._monster_resistance = {
+            "yellow_slime": {"earth": 0, "fire": 0, "water": 0, "air": 0},
+        }
+        state = make_state(
+            level=1,
+            inventory={"copper_ring": 1},
+            equipment={"ring1_slot": "copper_ring", "ring2_slot": None},
+        )
+        loadout = pick_loadout("yellow_slime", state, gd)
+        assert loadout["ring1_slot"] == "copper_ring"
+        assert loadout["ring2_slot"] is None
+
+    def test_zero_score_candidate_never_fills_empty_slot(self):
+        """An empty slot is only filled at a STRICTLY POSITIVE score: a ring
+        whose resistances are irrelevant to this monster (score 0) stays in
+        inventory rather than burning its one legal slot on a no-op equip."""
+        gd = GameData()
+        gd._item_stats = {
+            # water resistance vs an earth-only attacker -> armor_score == 0.
+            "water_ring": ItemStats(code="water_ring", level=1, type_="ring",
+                                    resistance={"water": 20}),
+        }
+        gd._monster_attack = {
+            "yellow_slime": {"earth": 8, "fire": 0, "water": 0, "air": 0},
+        }
+        gd._monster_resistance = {
+            "yellow_slime": {"earth": 0, "fire": 0, "water": 0, "air": 0},
+        }
+        state = make_state(
+            level=1,
+            inventory={"water_ring": 1},
+            equipment={"ring1_slot": None, "ring2_slot": None},
+        )
+        loadout = pick_loadout("yellow_slime", state, gd)
+        assert loadout["ring1_slot"] is None
+        assert loadout["ring2_slot"] is None
 
 
     def test_keeps_level_gated_current_when_no_feasible_candidate(self):
         """A slot's current item is above the player's level (so it's filtered
         out of the candidate pool) yet still physically owned -> the slot keeps
-        it via the no-feasible / current-available claim (line 204)."""
+        it (the no-feasible branch leaves the slot as-is)."""
         gd = GameData()
         gd._item_stats = {
             # Equipped ring requires level 10; player is level 1, so it is NOT a
@@ -176,7 +229,7 @@ class TestMultiSlotContention:
         """The equipped ring is level-gated out of the candidate pool, but a
         weaker (still-owned, in-level) ring IS feasible. Since that candidate
         does not improve on the equipped ring, the slot keeps its current item
-        (lines 230-231) deterministically — no score-tie involved."""
+        deterministically — no score-tie involved."""
         gd = GameData()
         gd._item_stats = {
             "high_ring": ItemStats(code="high_ring", level=10, type_="ring",

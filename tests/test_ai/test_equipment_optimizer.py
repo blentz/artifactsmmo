@@ -4,7 +4,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
+from artifactsmmo_cli.ai.constants import ERROR_CODE_ALREADY_EQUIPPED
 from artifactsmmo_cli.ai.equipment.scoring import (
     armor_score,
     pick_loadout,
@@ -306,6 +308,64 @@ class TestOptimizeLoadoutAction:
         MockUn.assert_not_called()
         MockEq.assert_called_once_with(code="fishing_net", slot="weapon_slot")
         assert result.equipment["weapon_slot"] == "fishing_net"
+
+    def test_execute_unequip_only_swap_skips_equip_pass(self):
+        """A swap plan that EMPTIES a slot (new_code None) is fully handled by
+        the unequip pass; the equip pass skips it. The swap-plan dict format
+        carries `str | None` values, so execute must support the None shape
+        even though the current pick_loadout never empties a worn slot."""
+        gd = _gd_with_combat_items()
+        state = make_state(
+            level=1, inventory={},
+            equipment={"weapon_slot": "wooden_stick"},
+        )
+        action = OptimizeLoadoutAction(target_monster_code="yellow_slime", game_data=gd)
+        client = MagicMock()
+        unequipped = make_state(
+            level=1, inventory={"wooden_stick": 1},
+            equipment={"weapon_slot": None},
+        )
+
+        with patch("artifactsmmo_cli.ai.actions.optimize_loadout.pick_loadout",
+                   return_value={"weapon_slot": None}):
+            with patch("artifactsmmo_cli.ai.actions.optimize_loadout.UnequipAction") as MockUn:
+                MockUn.return_value.execute.return_value = unequipped
+                with patch("artifactsmmo_cli.ai.actions.optimize_loadout.EquipAction") as MockEq:
+                    result = action.execute(state, client)
+
+        MockUn.assert_called_once_with(slot="weapon_slot")
+        MockEq.assert_not_called()
+        assert result.equipment["weapon_slot"] is None
+        assert result.inventory["wooden_stick"] == 1
+
+    def test_execute_records_refusal_when_equip_inapplicable_after_divergence(self):
+        """Live-divergence safety: if the post-unequip state no longer admits a
+        planned equip (here the unequip response LOST the incoming fishing_net
+        from inventory), execute must not burn the API call on a guaranteed
+        refusal — it skips the doomed equip and reports the cycle through the
+        standard failure channel as ApiActionError(485), which the player maps
+        to the recorded outcome "error:already_equipped" and a state refresh."""
+        gd = _gd_with_combat_items()
+        state = make_state(
+            level=1, inventory={"fishing_net": 1},
+            equipment={"weapon_slot": "wooden_stick"},
+        )
+        action = OptimizeLoadoutAction(target_monster_code="yellow_slime", game_data=gd)
+        client = MagicMock()
+        # Diverged: the unequip returned wooden_stick but fishing_net VANISHED,
+        # so the REAL EquipAction.is_applicable gate fails pre-flight.
+        diverged = make_state(
+            level=1, inventory={"wooden_stick": 1},
+            equipment={"weapon_slot": None},
+        )
+
+        with patch("artifactsmmo_cli.ai.actions.optimize_loadout.UnequipAction") as MockUn:
+            MockUn.return_value.execute.return_value = diverged
+            with pytest.raises(ApiActionError) as exc_info:
+                action.execute(state, client)
+
+        assert exc_info.value.code == ERROR_CODE_ALREADY_EQUIPPED
+        assert "fishing_net->weapon_slot" in exc_info.value.message
 
     def test_execute_requires_game_data(self):
         state = make_state(level=1)

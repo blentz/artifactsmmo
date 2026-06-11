@@ -6,9 +6,11 @@ from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
 
+from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
+from artifactsmmo_cli.ai.constants import ERROR_CODE_ALREADY_EQUIPPED
 from artifactsmmo_cli.ai.equipment.scoring import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -77,6 +79,14 @@ class OptimizeLoadoutAction(Action):
                     f"OptimizeLoadout.apply: cur=0 for {new_code} — "
                     "pick_loadout produced an impossible (non-realizable) loadout"
                 )
+                # ONE SLOT PER CODE (server HTTP 485): equipping a code that is
+                # still worn in another slot is refused by the server regardless
+                # of spare copies. pick_loadout enforces this at plan time; the
+                # projection mirrors it as a contract assertion.
+                assert all(worn != new_code for worn in new_equipment.values()), (
+                    f"OptimizeLoadout.apply: {new_code} is still worn in another "
+                    "slot — pick_loadout violated the one-slot-per-code rule"
+                )
                 if cur <= 1:
                     del new_inventory[new_code]
                 else:
@@ -100,12 +110,38 @@ class OptimizeLoadoutAction(Action):
         if self.game_data is None:
             raise RuntimeError("OptimizeLoadoutAction requires game_data; pass it via __init__")
         swaps = self._swap_plan(state, self.game_data)
-        for slot, new_code in swaps.items():
-            old_code = state.equipment.get(slot)
-            if old_code is not None:
+        # Two-pass, mirroring apply(): unequip EVERY outgoing slot first, then
+        # equip the incoming items. Interleaving unequip/equip per slot could
+        # equip a code while a later swap slot still wears it (server HTTP 485
+        # one-slot-per-code rule); after the full unequip pass every displaced
+        # copy is back in inventory and no incoming code is worn anywhere.
+        for slot in swaps:
+            if state.equipment.get(slot) is not None:
                 state = UnequipAction(slot=slot).execute(state, client)
-            if new_code is not None:
-                state = EquipAction(code=new_code, slot=slot).execute(state, client)
+        refused: list[str] = []
+        for slot, new_code in swaps.items():
+            if new_code is None:
+                continue
+            equip = EquipAction(code=new_code, slot=slot)
+            if not equip.is_applicable(state, self.game_data):
+                # Unreachable in practice: pick_loadout's one-slot-per-code
+                # feasibility plus the unequip pass guarantee applicability.
+                # If live server state diverged (e.g. an unequip response
+                # changed the inventory), skip the doomed equip instead of
+                # burning the API call on a guaranteed refusal; finish the
+                # remaining swaps and report the action as failed afterward.
+                refused.append(f"{new_code}->{slot}")
+                continue
+            state = equip.execute(state, client)
+        if refused:
+            # Report through the standard failure channel (the player maps
+            # ApiActionError(485) to the recorded outcome
+            # "error:already_equipped" and refreshes state) instead of raising
+            # a raw error mid-swap or pretending the cycle succeeded.
+            raise ApiActionError(
+                ERROR_CODE_ALREADY_EQUIPPED,
+                f"OptimizeLoadout refused pre-flight: {', '.join(refused)}",
+            )
         return state
 
     def __repr__(self) -> str:

@@ -286,6 +286,16 @@ class UpgradeEquipmentGoal(Goal):
             return self._committed_target
         return None
 
+    @staticmethod
+    def _worn_in_other_slot(item_code: str, slot: str, state: WorldState) -> bool:
+        """One slot per code (server HTTP 485): a code worn in ANY other slot
+        can never be equipped into `slot`, regardless of copies owned. Such a
+        (item, slot) pair is not a valid upgrade target — pre-fix the goal
+        derived ring2_slot targets for a code already worn in ring1_slot and
+        committed to an upgrade whose final EquipAction is forever
+        inapplicable. A DIFFERENT code of the same type stays targetable."""
+        return any(worn == item_code for s, worn in state.equipment.items() if s != slot)
+
     def _find_inventory_upgrade(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
         """Best-VALUE upgrade in inventory or bank (bank items need Withdraw first).
 
@@ -307,6 +317,8 @@ class UpgradeEquipmentGoal(Goal):
             relevant = bool(active and any(s in active for s in stats.skill_effects))
             value = self._upgrade_value(stats)
             for slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):
+                if self._worn_in_other_slot(item_code, slot, state):
+                    continue
                 current = state.equipment.get(slot)
                 current_stats = game_data.item_stats(current) if current else None
                 if not self._is_upgrade_over(item_code, stats, current, current_stats, game_data, active):
@@ -340,11 +352,14 @@ class UpgradeEquipmentGoal(Goal):
         for item_code in game_data.crafting_recipes:
             # Skip only if a copy is already in inventory/bank waiting to equip —
             # otherwise the bot re-crafts duplicates of an item it already holds
-            # (the inventory-upgrade path equips that copy). Being EQUIPPED does
-            # NOT skip: a multi-slot item (e.g. a ring in ring1) can still fill
-            # its empty second slot. The per-slot _is_upgrade_over below handles
-            # equipped slots — the same item over an occupied slot is not an
-            # upgrade, while an empty slot of the same type stays craftable.
+            # (the inventory-upgrade path equips that copy). A code WORN in a
+            # slot is handled per-slot below: the server's one-slot-per-code
+            # rule (HTTP 485) means a worn code can never fill a sibling slot
+            # (e.g. copper_ring in ring1 can NOT also go into ring2 no matter
+            # how many copies exist), so `_worn_in_other_slot` drops those slot
+            # targets and `_is_upgrade_over` rejects the code's own slot — a
+            # second copy of a worn item is never a craft target. A DIFFERENT
+            # code of the same type remains a valid sibling-slot target.
             if (
                 state.inventory.get(item_code, 0) > 0
                 or bank.get(item_code, 0) > 0
@@ -361,6 +376,8 @@ class UpgradeEquipmentGoal(Goal):
             relevant_tool = bool(active and any(s in active for s in stats.skill_effects))
             value = self._upgrade_value(stats)
             for slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):
+                if self._worn_in_other_slot(item_code, slot, state):
+                    continue
                 current = state.equipment.get(slot)
                 current_stats = game_data.item_stats(current) if current else None
                 if not self._is_upgrade_over(item_code, stats, current, current_stats, game_data):

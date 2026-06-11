@@ -2,7 +2,6 @@
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.equipment.elements import ELEMENTS
-from artifactsmmo_cli.ai.equipment.realizable_loadout import ownership
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -173,12 +172,14 @@ def _candidates_for_slot(
 
 
 def _ordered_slots() -> list[str]:
-    """Deterministic slot iteration order for the claimed-codes accumulator.
+    """Deterministic slot iteration order for the one-slot-per-code rule.
 
     Iteration order MATTERS: when two multi-slot peers (e.g. ring1_slot,
     ring2_slot) compete for the same scarce item code, the slot visited first
-    claims it. We sort by (type-group, slot-name) so the order is stable across
-    runs and matches the natural left-to-right convention of multi-slot types.
+    takes it (the code then sits in the projected result and is infeasible for
+    every later slot). We sort by (type-group, slot-name) so the order is
+    stable across runs and matches the natural left-to-right convention of
+    multi-slot types.
     """
     seen: set[str] = set()
     out: list[str] = []
@@ -195,17 +196,30 @@ def pick_loadout(
 ) -> dict[str, str | None]:
     """Best {slot: item_code | None} loadout from owned items against `monster_code`.
 
-    Each slot is optimized in a deterministic order with a CLAIMED-CODES
-    accumulator: an item code C can only be picked for a slot if its remaining
-    ownership (inventory[C] + slots currently holding C) exceeds the number of
-    times it has already been claimed by earlier slots in the iteration. This
-    prevents the multi-slot bug where ring1_slot and ring2_slot would both pick
-    the same physical item when only one copy exists.
+    Each slot is optimized in a deterministic order against the PROJECTED
+    RESULT, enforcing the server's ONE-SLOT-PER-CODE rule (HTTP 485 "This item
+    is already equipped"): an item code C is infeasible for slot S whenever C
+    already sits in the projected result at any OTHER slot — kept there or
+    newly assigned by an earlier iteration. Owning a second physical copy does
+    NOT legalize a duplicate: the server refuses to equip a code that is worn
+    anywhere, so e.g. a spare copper_ring can never go into ring2_slot while
+    ring1_slot wears copper_ring (the 2026-06-10 OptimizeLoadout 485 livelock).
+    Iteration order matters — `result` starts as a copy of `state.equipment`,
+    so at slot S the "other slots" are earlier slots' final picks plus later
+    slots' current items. A code DISPLACED by an earlier swap (no longer in the
+    result anywhere) is legal to re-assign: the two-pass execute unequips every
+    outgoing slot before any equip.
+
+    The realizability invariant (`equipment/realizable_loadout.is_realizable`)
+    follows directly: a newly-assigned code appears exactly once in the result
+    and is owned (>= 1); kept codes are bounded by the worn count.
+
+    Empty slots are only filled by a candidate whose score is strictly
+    positive: a zero-score equip buys nothing against this monster and burns
+    the code's single legal slot.
 
     Slots whose feasible argmax does not strictly beat their current item keep
-    the current item (and that current code is claimed). Slots that swap claim
-    the new code. Slots where every candidate is exhausted by prior claims
-    fall back to the current equipment (a no-op).
+    the current item. Slots with no feasible candidate stay as-is.
 
     Caller compares with `state.equipment` to find the swap delta.
     """
@@ -213,67 +227,46 @@ def pick_loadout(
     monster_res = game_data.monster_resistance(monster_code)
 
     result: dict[str, str | None] = dict(state.equipment)
-    claimed_codes: dict[str, int] = {}
 
-    def _effective_available(code: str) -> int:
-        return ownership(code, state.inventory, state.equipment) - claimed_codes.get(code, 0)
-
-    def _claim(code: str | None) -> None:
-        if code is None:
-            return  # pragma: no cover — call sites always pass non-None; defensive guard
-        claimed_codes[code] = claimed_codes.get(code, 0) + 1
+    def _in_result_elsewhere(code: str, slot: str) -> bool:
+        return any(worn == code for s, worn in result.items() if s != slot)
 
     for slot in _ordered_slots():
         candidates = _candidates_for_slot(slot, state, game_data)
         current_code = state.equipment.get(slot)
 
-        # Filter candidates by remaining (unclaimed) ownership. NO exception
-        # for the current code: if a peer slot earlier "swapped TO" the current
-        # code, this slot's current copy has been spoken for and is no longer
-        # physically available here. Treat current code identically to every
-        # other candidate.
+        # ONE SLOT PER CODE: drop every candidate whose code the projected
+        # result already places at another slot (kept or assigned earlier).
         feasible: list[ItemStats] = [
-            cand for cand in candidates if _effective_available(cand.code) >= 1
+            cand for cand in candidates if not _in_result_elsewhere(cand.code, slot)
         ]
-
         if not feasible:
-            # No feasible candidate at all — leave the slot as-is. If current
-            # code is still physically available, claim it. Otherwise the slot
-            # is effectively empty (peer slot stole the last copy); fall back
-            # to None.
-            if current_code is not None and _effective_available(current_code) >= 1:
-                _claim(current_code)
-            else:
-                result[slot] = None
+            # Nothing equippable here — leave the slot as-is. The current item
+            # (if any) is always retainable: it is worn HERE, and the duplicate
+            # rule prevents any other slot from having taken its code.
             continue
 
-        if slot == "weapon_slot":
+        weapon = slot == "weapon_slot"
+        if weapon:
             best = max(feasible, key=lambda s: weapon_score(s, monster_res))
         else:
             best = max(feasible, key=lambda s: armor_score(s, monster_atk))
+        best_score = (weapon_score(best, monster_res) if weapon
+                      else armor_score(best, monster_atk))
 
         if current_code == best.code:
-            _claim(current_code)
             continue
 
         current_stats = game_data.item_stats(current_code) if current_code else None
         if current_stats is None:
+            if current_code is None and best_score <= 0:
+                # Zero-score fill of an empty slot buys nothing against this
+                # monster and burns the code's one legal slot — skip it.
+                continue
             result[slot] = best.code
-            _claim(best.code)
             continue
-        if slot == "weapon_slot":
-            improves = weapon_score(best, monster_res) > weapon_score(current_stats, monster_res)
-        else:
-            improves = armor_score(best, monster_atk) > armor_score(current_stats, monster_atk)
-        if improves:
+        current_score = (weapon_score(current_stats, monster_res) if weapon
+                         else armor_score(current_stats, monster_atk))
+        if best_score > current_score:
             result[slot] = best.code
-            _claim(best.code)
-        elif current_code is not None and _effective_available(current_code) >= 1:
-            _claim(current_code)
-        else:
-            # Current code was stolen by a peer slot's swap. We can't keep it.
-            # Take the best feasible candidate (a downgrade) rather than leave
-            # the slot empty — a downgrade still beats unequipping.
-            result[slot] = best.code
-            _claim(best.code)
     return result
