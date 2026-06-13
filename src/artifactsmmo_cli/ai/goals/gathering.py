@@ -22,7 +22,7 @@ from artifactsmmo_cli.ai.monster_drop_selection import (
 )
 from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.priority_band import clamp_into_band
-from artifactsmmo_cli.ai.recipe_closure import recipe_closure
+from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
 from artifactsmmo_cli.ai.scalar_priority import yield_bonus_for_goal
 from artifactsmmo_cli.ai.shopping_list import fully_covered_materials
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -46,6 +46,14 @@ class GatherMaterialsGoal(Goal):
     def __init__(self, target_item: str, needed: dict[str, int]) -> None:
         self._target_item = target_item
         self._needed = needed  # {material_code: quantity_needed}
+
+    @property
+    def needed(self) -> dict[str, int]:
+        """The accumulation map this goal drives toward. The arbiter merges it
+        into the deposit/discard protection profile while the goal is the
+        resolved objective step (trace 2026-06-11 22:36 cycle 30: discard
+        deleted this goal's own target item)."""
+        return dict(self._needed)
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
@@ -114,6 +122,16 @@ class GatherMaterialsGoal(Goal):
             drop = game_data.resource_drop_item(res)
             if drop is not None:
                 withdrawable.add(drop)
+        # Run-17 trace 2026-06-12 c94: GatherMaterials(feather_coat) was
+        # unplannable with 9 feathers IN THE BANK — feather is a MONSTER drop
+        # (neither craftable nor a resource drop), so the sets above missed it
+        # and Withdraw(feather) never entered a plan. Every material in the
+        # full recipe closure (closure_demand includes such leaf inputs) must
+        # be withdrawable.
+        chain: dict[str, int] = {}
+        for code, qty in self._needed.items():
+            closure_demand(code, qty, game_data, chain, frozenset())
+        withdrawable |= set(chain)
 
         # Bank-aware gather pruning: the shopping_list credits inventory+bank at
         # every recipe level; a chain material with NET 0 is fully covered, so the
@@ -279,15 +297,53 @@ class GatherMaterialsGoal(Goal):
         # for a second fishing_net even though one already sits in the bank
         # (this goal's is_satisfied only tracked the recipe MATERIALS, not the
         # finished item, so it never noticed the banked copy).
-        if state.inventory.get(self._target_item, 0) + bank.get(self._target_item, 0) >= 1:
+        #
+        # Only for FINISHED targets (target not among the needed materials).
+        # When the target IS the needed material — the raw-material form
+        # gather_step_target emits, e.g. GatherMaterials(copper_ore,
+        # {copper_ore: 10}) — one stray ore must not satisfy a request for
+        # ten (trace 2026-06-11 18:10: the routed copper_ore goal was
+        # silently skipped as satisfied all run; zero mining happened).
+        if (self._target_item not in self._needed
+                and state.inventory.get(self._target_item, 0)
+                + bank.get(self._target_item, 0) >= 1):
             return True
         return all(
             state.inventory.get(mat, 0) + bank.get(mat, 0) >= qty
             for mat, qty in self._needed.items()
         )
 
+    def is_plannable(self, state: WorldState, game_data: GameData,
+                     history: LearningStore | None = None) -> bool:
+        """Fail fast when satisfaction requires CRAFTING the target and the
+        crafting skill is below the recipe gate — CraftAction.is_applicable
+        blocks the craft, so no plan exists. Trace 2026-06-11 18:10: the
+        fallback GatherMaterials(feather_coat) (materials owned, gearcrafting
+        2 < 5) burned 97k-99k nodes / the full 90s budget to plan_len 0 on
+        every probe cycle. Materials-only goals (finished target not among
+        `needed`) stay plannable — gathering inputs never needs the gated
+        final craft."""
+        if self._target_item not in self._needed:
+            return True
+        stats = game_data.item_stats(self._target_item)
+        if (stats is None or not stats.crafting_skill
+                or state.skills.get(stats.crafting_skill, 1) >= stats.crafting_level):
+            return True
+        bank = state.bank_items or {}
+        owned = (state.inventory.get(self._target_item, 0)
+                 + bank.get(self._target_item, 0))
+        return owned >= self._needed[self._target_item]
+
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"inventory": self._needed}
 
     def __repr__(self) -> str:
-        return f"GatherMaterials({self._target_item})"
+        # `needed` is part of the goal's IDENTITY: sticky commitment
+        # (arbiter select) and fallback dedupe both key on repr. Omitting it
+        # let GatherMaterials(copper_bar, needed={copper_bar: 5}) — the
+        # committed objective step — collide with the skill-grind craft-one
+        # GatherMaterials(copper_bar, needed={copper_bar: 1}); the sticky
+        # pass then planned the 1-bar variant and the 5-bar objective
+        # silently evaporated at 1/5 bars (trace 2026-06-11 18:46 cycle 15).
+        needed = ",".join(f"{code}:{qty}" for code, qty in sorted(self._needed.items()))
+        return f"GatherMaterials({self._target_item}, {{{needed}}})"

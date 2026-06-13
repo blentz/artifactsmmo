@@ -1,6 +1,9 @@
 """DepositInventoryGoal: deposit bankable inventory to the bank as it fills up."""
 
+import dataclasses
+
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -72,8 +75,20 @@ class DepositInventoryGoal(Goal):
         for `inventory_used == target`, which empirically blows to ~30k nodes
         and times out at the 90s budget (trace 2026-06-04 cycles 760/20/60).
         DepositAllAction already includes the Move-to-bank in its apply, so
-        movement isn't needed as a separate planner step."""
-        return [a for a in actions if "deposit" in a.tags]
+        movement isn't needed as a separate planner step.
+
+        Deposit actions are re-parameterized with this goal's profile_codes so
+        the EXECUTED keep-set matches the one the goal planned with. Run-5
+        trace 2026-06-11 23:05 (cycle 10): the factory-built DepositAll had no
+        profile and banked the active grind chain's 59 ash_wood."""
+        result: list[Action] = []
+        for a in actions:
+            if "deposit" not in a.tags:
+                continue
+            if isinstance(a, DepositAllAction):
+                a = dataclasses.replace(a, profile_codes=self._profile_codes)
+            result.append(a)
+        return result
 
     def __repr__(self) -> str:
         return "DepositInventory"

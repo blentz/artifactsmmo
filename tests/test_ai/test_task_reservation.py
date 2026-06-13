@@ -220,7 +220,7 @@ def test_trace_helmet_step_deferred_pursue_wins_via_bypass(tmp_path):
                          chosen_root=ReachCharLevel(50))
     goal, _plan, tried = _select(state, _gd(), decision, tmp_path, "trace_defer")
     attempted = [str(t["goal"]) for t in tried]
-    assert "GatherMaterials(copper_helmet)" not in attempted, (
+    assert not any(a.startswith("GatherMaterials(copper_helmet") for a in attempted), (
         f"helmet step must be reservation-deferred; goals_tried={attempted}"
     )
     assert repr(goal) == "PursueTask(copper_bar)", f"got {goal!r}"
@@ -234,7 +234,7 @@ def test_trace_surplus_allows_helmet_step(tmp_path):
                          chosen_root=ReachCharLevel(50))
     goal, _plan, _tried = _select(state, _gd(), decision, tmp_path,
                                   "trace_surplus")
-    assert repr(goal) == "GatherMaterials(copper_helmet)", f"got {goal!r}"
+    assert repr(goal) == "GatherMaterials(copper_helmet, {copper_helmet:1})", f"got {goal!r}"
 
 
 def test_leak_fallback_step_also_suppressed(tmp_path):
@@ -248,7 +248,7 @@ def test_leak_fallback_step_also_suppressed(tmp_path):
                          fallback_roots=[None])
     goal, _plan, tried = _select(state, _gd(), decision, tmp_path, "trace_leak")
     attempted = [str(t["goal"]) for t in tried]
-    assert "GatherMaterials(copper_helmet)" not in attempted, (
+    assert not any(a.startswith("GatherMaterials(copper_helmet") for a in attempted), (
         f"fallback-leaked helmet step must be reservation-deferred; "
         f"goals_tried={attempted}"
     )

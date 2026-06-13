@@ -93,6 +93,22 @@ def test_unknown_meta_goal_kind_yields_empty_needs():
     assert needs.is_empty
 
 
+def test_monster_drop_ingredient_is_material_not_buy_only():
+    """Run-17 2026-06-12: feather (chicken drop, the copper_legs_armor /
+    feather_coat ingredient) classified buy-only because _producible_by_self
+    only consulted recipes + resource drops. A monster-drop ingredient is
+    farmable (GatherMaterials emits the proven select_monster_for_drop winner
+    FightAction) — it must be a material need, not buy-only."""
+    gd = _gd()
+    gd._crafting_recipes["iron_sword"] = {"iron_bar": 6, "feather": 2}
+    gd._monster_level = {"chicken": 1}
+    gd._monster_drops = {"chicken": [("feather", 8, 1, 1)]}
+    state = make_state(skills={"weaponcrafting": 1, "mining": 1})
+    needs = objective_needs(ObtainItem("iron_sword"), state, gd)
+    assert "feather" in needs.materials
+    assert "feather" not in needs.buy_only
+
+
 def test_secondary_drop_ingredient_is_material_not_buy_only():
     """A recipe ingredient that is a SECONDARY resource drop (in the full drop
     table but not the primary `_resource_drops`) is gatherable — it must be a

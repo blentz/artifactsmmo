@@ -64,3 +64,27 @@ def test_in_skill_item_without_recipe_is_skipped():
         crafting_skill="weaponcrafting", crafting_level=3)
     state = make_state(skills={"weaponcrafting": 3})
     assert skill_grind_target("weaponcrafting", state, gd) == "wooden_staff"
+
+
+def test_reserved_materials_exclude_recipe():
+    """Trace 2026-06-11 19:22: the grind picked copper_helmet (6 copper_bar)
+    while the committed copper_legs_armor held exactly 5 bars — the grind
+    must not consume the committed objective's recipe inputs."""
+    gd = _gd()
+    # copper_dagger eats copper_bar; with copper_bar reserved, wooden_staff
+    # (ash_plank) must win even though dagger has fewer mats missing.
+    state = make_state(skills={"weaponcrafting": 3},
+                       inventory={"copper_bar": 6})
+    assert skill_grind_target("weaponcrafting", state, gd) == "copper_dagger"
+    assert skill_grind_target(
+        "weaponcrafting", state, gd, reserved=frozenset({"copper_bar"}),
+    ) == "wooden_staff"
+
+
+def test_reserved_can_exhaust_all_recipes():
+    gd = _gd()
+    state = make_state(skills={"weaponcrafting": 10})
+    assert skill_grind_target(
+        "weaponcrafting", state, gd,
+        reserved=frozenset({"copper_bar", "iron_bar", "ash_plank"}),
+    ) is None

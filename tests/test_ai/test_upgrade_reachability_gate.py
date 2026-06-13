@@ -8,7 +8,7 @@ budget. copper_boots from scratch = 8 copper_bar × 10 copper_ore = 80 gathers �
 max_depth 15 — the real Robby first-cycle stall.
 """
 
-from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from tests.test_ai.fixtures import make_state
 
@@ -59,3 +59,50 @@ def test_plannable_when_no_upgrade_target():
     goal = UpgradeEquipmentGoal()  # uncommitted, empty game_data ⇒ no upgrade
     state = make_state(inventory={})
     assert goal.is_plannable(state, GameData()) is True
+
+
+def _gd_skill_gated() -> GameData:
+    """copper_legs_armor needs gearcrafting 5 — the trace 2026-06-11 17:47
+    hijack shape (mats nearly in hand, skill 2 < 5, no plan can exist)."""
+    gd = _gd_boots()
+    gd._item_stats = {
+        "copper_legs_armor": ItemStats(code="copper_legs_armor", level=6,
+                                       type_="leg_armor", resistance={"earth": 6},
+                                       crafting_skill="gearcrafting",
+                                       crafting_level=5),
+    }
+    gd._crafting_recipes = dict(gd._crafting_recipes)
+    gd._crafting_recipes["copper_legs_armor"] = {"copper_bar": 5}
+    return gd
+
+
+def test_not_plannable_when_crafting_skill_below_recipe_level():
+    """Materials in hand but gearcrafting below the recipe gate:
+    CraftAction.is_applicable blocks the final craft, so no plan exists —
+    the goal must yield the step slot instead of planning to exhaustion."""
+    goal = UpgradeEquipmentGoal(committed_target=("copper_legs_armor", "leg_armor_slot"))
+    state = make_state(inventory={"copper_bar": 5},
+                       skills={"gearcrafting": 2, "mining": 3, "woodcutting": 2,
+                               "fishing": 1, "weaponcrafting": 1, "jewelrycrafting": 1,
+                               "cooking": 1, "alchemy": 1})
+    assert goal.is_plannable(state, _gd_skill_gated()) is False
+
+
+def test_plannable_when_crafting_skill_meets_recipe_level():
+    goal = UpgradeEquipmentGoal(committed_target=("copper_legs_armor", "leg_armor_slot"))
+    state = make_state(inventory={"copper_bar": 5},
+                       skills={"gearcrafting": 5, "mining": 3, "woodcutting": 2,
+                               "fishing": 1, "weaponcrafting": 1, "jewelrycrafting": 1,
+                               "cooking": 1, "alchemy": 1})
+    assert goal.is_plannable(state, _gd_skill_gated()) is True
+
+
+def test_skill_gate_skipped_when_target_owned():
+    """Owned-but-unequipped target: only the equip remains, no craft needed —
+    the skill gate must not block the short equip plan."""
+    goal = UpgradeEquipmentGoal(committed_target=("copper_legs_armor", "leg_armor_slot"))
+    state = make_state(inventory={"copper_legs_armor": 1},
+                       skills={"gearcrafting": 2, "mining": 3, "woodcutting": 2,
+                               "fishing": 1, "weaponcrafting": 1, "jewelrycrafting": 1,
+                               "cooking": 1, "alchemy": 1})
+    assert goal.is_plannable(state, _gd_skill_gated()) is True

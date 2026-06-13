@@ -27,13 +27,19 @@ class DepositAllAction(Action):
     bank_location: tuple[int, int] = field(default=(0, 0), repr=False)
     accessible: bool = True  # False when bank is gated behind an unmet achievement (HTTP 496)
     game_data: GameData | None = field(default=None, repr=False)
+    # The active goal's protected item codes. DepositInventoryGoal threads its
+    # own profile_codes in via relevant_actions; run-5 trace 2026-06-11 23:05
+    # (cycle 10) showed the goal planning with the keep-set while the executed
+    # action ignored it — banking all 59 ash_wood the active wooden_shield
+    # grind needed (14 withdraw cycles to recover).
+    profile_codes: frozenset[str] = field(default_factory=frozenset, repr=False)
 
     def _deposits(self, state: WorldState) -> list[tuple[str, int]]:
         """Items to bank this trip (selective + sell-value ordered), or [] when
         no game_data is available (no banking without data)."""
         if self.game_data is None:
             return []
-        return select_bank_deposits(state, self.game_data)
+        return select_bank_deposits(state, self.game_data, self.profile_codes)
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         return self.accessible and bool(self._deposits(state))

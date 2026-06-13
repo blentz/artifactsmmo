@@ -477,6 +477,125 @@ class TestCraftReliefGoalApi:
         assert out[0] is craft
 
 
+class TestStepMaterialRelief:
+    """Run-13 trace 2026-06-12 08:40–08:43 (cycles 92–95): with the gather
+    phase complete (60 ash on hand, plan already at the plank-craft phase)
+    and inventory at 99/110 (90%), the guard ladder spent two bank trips
+    freeing 2 then 1 junk units instead of crafting a plank that frees 9 —
+    the active step goal's chain materials were invisible to relief
+    candidacy (task/gear/tools only). `step_items` must surface them so
+    CRAFT_RELIEF (above DEPOSIT_FULL in the ladder) does its documented
+    craft-before-deposit job."""
+
+    def test_step_items_surface_as_candidates(self):
+        gd = _gd_ash_plank()
+        # 99/110 = 90% pressure; 60 ash = 6 plank crafts of net relief 9.
+        state = make_state(inventory={"ash_wood": 60, "feather": 39},
+                           inventory_max=110)
+        assert craft_relief_candidates(state, gd) == []
+        cands = craft_relief_candidates(
+            state, gd,
+            step_items=frozenset({"ash_plank", "wooden_shield", "ash_wood"}))
+        # Raw gatherables (ash_wood, no recipe) and unknown codes contribute
+        # nothing; the craftable chain intermediate does.
+        assert [c.item_code for c in cands] == ["ash_plank"]
+
+    def test_guard_fires_from_step_profile_before_deposit(self):
+        gd = _gd_ash_plank()
+        state = make_state(inventory={"ash_wood": 60, "feather": 39},
+                           inventory_max=110)
+        assert GuardKind.CRAFT_RELIEF not in active_guards(state, gd, None, _ctx())
+        step_profile = {"wooden_shield": 1, "ash_plank": 6, "ash_wood": 60}
+        guards = active_guards(state, gd, None, _ctx(), step_profile)
+        assert GuardKind.CRAFT_RELIEF in guards
+        # Craft-before-deposit: relief precedes DEPOSIT_FULL in ladder order.
+        if GuardKind.DEPOSIT_FULL in guards:
+            assert (guards.index(GuardKind.CRAFT_RELIEF)
+                    < guards.index(GuardKind.DEPOSIT_FULL))
+
+    def test_map_guard_craft_relief_sees_step_items(self):
+        gd = _gd_ash_plank()
+        state = make_state(inventory={"ash_wood": 60, "feather": 39},
+                           inventory_max=110)
+        goal = map_guard(GuardKind.CRAFT_RELIEF, gd, _ctx(), state,
+                         step_profile={"ash_plank": 6})
+        assert isinstance(goal, CraftReliefGoal)
+        assert goal._target_item == "ash_plank"
+
+
+class TestStepChainProtection:
+    """Run-16 trace 2026-06-12 09:09:33 (cycle 90): one action before the
+    gate-crossing copper_helmet craft, CraftRelief(copper_dagger) — a
+    target_gear candidate — consumed the 6 copper_bars that were the helmet's
+    completed material set (alphabetical tie-break ranked copper_dagger above
+    copper_helmet at equal priority/quantity). The dagger was never equipped;
+    ~35 min of ore work became junk and gearcrafting froze at 406/450. A
+    non-step candidate whose recipe consumes the active step's protected
+    materials must be excluded; step items themselves are exempt (producing
+    them IS the chain)."""
+
+    @staticmethod
+    def _gd() -> GameData:
+        gd = GameData()
+        gd._item_stats = {
+            "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource"),
+            "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource",
+                                    crafting_skill="mining", crafting_level=1),
+            "copper_helmet": ItemStats(code="copper_helmet", level=1, type_="helmet",
+                                       crafting_skill="gearcrafting", crafting_level=1),
+            "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
+                                       crafting_skill="weaponcrafting", crafting_level=1),
+        }
+        gd._crafting_recipes = {
+            "copper_bar": {"copper_ore": 10},
+            "copper_helmet": {"copper_bar": 6},
+            "copper_dagger": {"copper_bar": 6},
+        }
+        gd._workshop_locations = {"mining": (1, 5), "gearcrafting": (3, 1),
+                                  "weaponcrafting": (2, 2)}
+        gd._bank_location = (4, 0)
+        gd._taskmaster_location = (1, 2)
+        fill_monster_stat_defaults(gd)
+        return gd
+
+    def test_non_step_candidate_eating_chain_materials_is_excluded(self):
+        gd = self._gd()
+        # 6 bars (the helmet's full set) + junk to 78/110 = 70.9% pressure.
+        state = make_state(
+            skills={"mining": 9, "gearcrafting": 4, "weaponcrafting": 2,
+                    "woodcutting": 1, "fishing": 1, "jewelrycrafting": 1,
+                    "cooking": 1, "alchemy": 1},
+            inventory={"copper_bar": 6, "feather": 72}, inventory_max=110,
+        )
+        step_items = frozenset({"copper_helmet", "copper_bar", "copper_ore"})
+        cands = craft_relief_candidates(
+            state, gd, target_gear=frozenset({"copper_dagger"}),
+            step_items=step_items)
+        codes = [c.item_code for c in cands]
+        assert "copper_dagger" not in codes, codes
+        # The chain's own craft still surfaces and wins the activation.
+        assert codes and codes[0] == "copper_helmet", codes
+
+    def test_benign_gear_candidate_still_allowed(self):
+        """A target_gear candidate whose recipe does NOT touch the chain's
+        materials keeps its relief candidacy."""
+        gd = self._gd()
+        gd._item_stats["leather_boots"] = ItemStats(
+            code="leather_boots", level=1, type_="boots",
+            crafting_skill="gearcrafting", crafting_level=1)
+        gd._crafting_recipes["leather_boots"] = {"cowhide": 8}
+        state = make_state(
+            skills={"mining": 9, "gearcrafting": 4, "weaponcrafting": 2,
+                    "woodcutting": 1, "fishing": 1, "jewelrycrafting": 1,
+                    "cooking": 1, "alchemy": 1},
+            inventory={"cowhide": 16, "feather": 62}, inventory_max=110,
+        )
+        cands = craft_relief_candidates(
+            state, gd, target_gear=frozenset({"leather_boots"}),
+            step_items=frozenset({"copper_helmet", "copper_bar", "copper_ore"}))
+        assert any(c.item_code == "leather_boots" for c in cands), cands
+
+
 class TestArbiterEndToEnd:
     def test_arbiter_picks_craft_relief_over_deposit_with_batched_craft(self):
         """Full driver path: inv at 86.5%, ash_wood->ash_plank (10:1) ready;

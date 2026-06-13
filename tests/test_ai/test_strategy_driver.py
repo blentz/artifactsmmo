@@ -5,6 +5,8 @@ import pytest
 import artifactsmmo_cli.ai.strategy_driver as sd
 from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
 from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
+from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
@@ -121,6 +123,171 @@ def test_map_guard_gear_review_gathers_when_materials_missing():
     state = make_state(level=4, inventory={}, bank_items={})
     goal = map_guard(GuardKind.GEAR_REVIEW, gd, _ctx(gear_review_active=True), state)
     assert isinstance(goal, GatherMaterialsGoal)
+
+
+def test_map_guard_discard_merges_step_profile():
+    """Run-4 trace 2026-06-11 22:36 (cycle 30): map_guard must hand
+    DiscardOverstock the SAME step-enriched profile the firing predicate used,
+    so the constructed goal cannot delete the active step goal's target item
+    while still shedding genuinely-overstocked items."""
+    gd = GameData()
+    gd._crafting_recipes = {"wooden_shield": {"ash_plank": 6},
+                            "ash_plank": {"ash_wood": 10}}
+    # Both equipped-dup items are capped at 1 under pressure; only the
+    # step-profile-protected shield must survive victim selection.
+    state = make_state(
+        hp=100, max_hp=100,
+        inventory={"wooden_shield": 2, "old_helmet": 2, "ash_wood": 47},
+        inventory_max=60,
+        equipment={"shield_slot": "wooden_shield", "helmet_slot": "old_helmet"},
+        bank_items={},
+    )
+    goal = map_guard(GuardKind.DISCARD_HIGH, gd, _ctx(), state,
+                     step_profile={"wooden_shield": 3})
+    acts = goal.relevant_actions([], state, gd)
+    assert acts, "old_helmet overstock should still produce a discard action"
+    assert any("old_helmet" in repr(a) for a in acts), acts
+    assert all("wooden_shield" not in repr(a) for a in acts), acts
+
+
+def test_select_fallback_equip_not_shadowed_by_dead_upgrade_goal():
+    """Run-18 trace 2026-06-12 17:31-18:33 (cycles 27-98): copper_legs_armor
+    was crafted and sat in inventory for 73 cycles while Robby fought
+    unarmored. The sticky root (feather_coat) mapped to an UNPLANNABLE
+    UpgradeEquipment goal (feathers are monster drops; the goal's
+    relevant_actions drop Fight actions) — and the rank-#1 fallback root's
+    one-action equip goal was DEDUPED AWAY because UpgradeEquipmentGoal's
+    repr was the bare "UpgradeEquipment" for every target. Distinct targets
+    must produce distinct candidates; the live equip must win."""
+    planner = GOAPPlanner()
+    gd = GameData()
+    gd._item_stats = {
+        "copper_legs_armor": ItemStats(code="copper_legs_armor", level=5,
+                                       type_="leg_armor",
+                                       crafting_skill="gearcrafting",
+                                       crafting_level=5),
+        "feather_coat": ItemStats(code="feather_coat", level=5,
+                                  type_="body_armor",
+                                  crafting_skill="gearcrafting",
+                                  crafting_level=5),
+    }
+    gd._crafting_recipes = {
+        "copper_legs_armor": {"copper_bar": 5, "feather": 2},
+        "feather_coat": {"feather": 5, "ash_plank": 2},
+    }
+    gd._workshop_locations = {"gearcrafting": (3, 1)}
+    gd._bank_location = (4, 0)
+    fill_monster_stat_defaults(gd)
+    # Legs OWNED but unequipped; nothing on hand for the feather_coat chain.
+    state = make_state(
+        level=7, hp=150, max_hp=150,
+        skills={"gearcrafting": 5, "mining": 9, "woodcutting": 4},
+        inventory={"copper_legs_armor": 1}, inventory_max=110,
+        equipment={"leg_armor_slot": None, "body_armor_slot": None},
+        bank_items={},
+    )
+    actions = [
+        EquipAction(code="copper_legs_armor", slot="leg_armor_slot"),
+        EquipAction(code="feather_coat", slot="body_armor_slot"),
+        RestAction(),
+    ]
+    decision = _FallbackDecision(
+        chosen_step=ObtainItem("feather_coat", 1),
+        fallback_steps=[ObtainItem("copper_legs_armor", 1)],
+        fallback_roots=[ObtainItem("copper_legs_armor", 1)],
+    )
+    arbiter = StrategyArbiter(planner, history=None)
+    arbiter.set_cycle(0)
+    goal, plan, goals_tried = arbiter.select(decision, state, gd, actions, _ctx())
+    assert isinstance(goal, UpgradeEquipmentGoal), (goal, goals_tried)
+    assert plan and any(isinstance(a, EquipAction)
+                        and a.code == "copper_legs_armor" for a in plan), plan
+
+
+def test_upgrade_equipment_repr_distinguishes_targets():
+    a = UpgradeEquipmentGoal(initial_equipment={},
+                             committed_target=("copper_legs_armor", "leg_armor_slot"))
+    b = UpgradeEquipmentGoal(initial_equipment={},
+                             committed_target=("feather_coat", "body_armor_slot"))
+    probe = UpgradeEquipmentGoal(initial_equipment={})
+    assert repr(a) != repr(b)
+    assert "copper_legs_armor" in repr(a)
+    assert repr(probe) == "UpgradeEquipment"
+
+
+def test_select_deposit_protects_grind_chain_inputs():
+    """Run-5 trace 2026-06-11 23:05 (cycle 10) regression: DEPOSIT_FULL fired
+    at 90% pressure during the wooden_shield grind and DepositAll banked all
+    ~59 ash_wood the in-flight craft chain needed (14 withdraw cycles to pull
+    it back). The step goal's protection profile must include the recipe
+    closure of its missing quantity, and that profile must reach the executed
+    deposit action: junk is banked, the chain's inputs and target are not."""
+    planner = GOAPPlanner()
+    gd = GameData()
+    gd._item_stats = {
+        "wooden_shield": ItemStats(code="wooden_shield", level=1, type_="shield",
+                                   crafting_skill="gearcrafting", crafting_level=1),
+    }
+    gd._crafting_recipes = {"wooden_shield": {"ash_plank": 6},
+                            "ash_plank": {"ash_wood": 10},
+                            "copper_legs_armor": {"copper_bar": 5}}
+    gd._bank_location = (4, 0)
+    fill_monster_stat_defaults(gd)
+    state = make_state(
+        hp=100, max_hp=100,
+        inventory={"wooden_shield": 1, "ash_wood": 59, "junk": 30},
+        inventory_max=100,
+        equipment={"shield_slot": "wooden_shield"},
+        bank_items={},
+        task_code="chicken", task_type="monsters", task_progress=0, task_total=10,
+    )
+    actions = [DepositAllAction(bank_location=(4, 0), game_data=gd)]
+    arbiter = StrategyArbiter(planner, history=None)
+    arbiter.set_cycle(0)
+    decision = _FakeDecision(chosen_step=ReachSkillLevel("gearcrafting", 5))
+    goal, plan, _tried = arbiter.select(decision, state, gd, actions, _ctx())
+    assert isinstance(goal, DepositInventoryGoal), f"expected DepositInventory, got {goal!r}"
+    deposit_actions = [a for a in plan if isinstance(a, DepositAllAction)]
+    assert deposit_actions, plan
+    banked = {c for a in deposit_actions for c, _ in a._deposits(state)}
+    assert "junk" in banked, banked
+    assert "ash_wood" not in banked, banked
+    assert "wooden_shield" not in banked, banked
+
+
+def test_select_discard_does_not_preempt_grind_goal_target():
+    """Run-4 trace 2026-06-11 22:36 (cycle 30) regression: under 85% bag
+    pressure with the gearcrafting grind holding 2 wooden_shields
+    (grind needed = held + 1 = 3, one more equipped), DISCARD_HIGH fired and
+    Delete(wooden_shield×1) won the cycle. The resolved step goal's needed map
+    now rides into the guard profile, so the discard guard must stay silent —
+    DiscardOverstock never enters the candidate list."""
+    planner = GOAPPlanner()
+    gd = GameData()
+    gd._item_stats = {
+        "wooden_shield": ItemStats(code="wooden_shield", level=1, type_="shield",
+                                   crafting_skill="gearcrafting", crafting_level=1),
+    }
+    gd._crafting_recipes = {"wooden_shield": {"ash_plank": 6},
+                            "ash_plank": {"ash_wood": 10},
+                            "copper_legs_armor": {"copper_bar": 5}}
+    fill_monster_stat_defaults(gd)
+    # Monsters-task active so the no-task AcceptTask suppression stays out of
+    # the way (mirrors test_select_returns_objective_step_when_calm).
+    state = make_state(
+        hp=100, max_hp=100,
+        inventory={"wooden_shield": 2, "ash_wood": 49},
+        inventory_max=60,
+        equipment={"shield_slot": "wooden_shield"},
+        bank_items={},
+        task_code="chicken", task_type="monsters", task_progress=0, task_total=10,
+    )
+    arbiter = StrategyArbiter(planner, history=None)
+    arbiter.set_cycle(0)
+    decision = _FakeDecision(chosen_step=ReachSkillLevel("gearcrafting", 5))
+    _goal, _plan, goals_tried = arbiter.select(decision, state, gd, [], _ctx())
+    tried = {str(e["goal"]) for e in goals_tried}
+    assert not any("DiscardOverstock" in r for r in tried), tried
 
 
 def _deep_chain_gd():
@@ -1182,7 +1349,7 @@ class TestPursueTaskEndToEnd:
         assert repr(goal) == "PursueTask(ash_plank)", (
             f"expected PursueTask, got {goal!r}"
         )
-        assert all(gt["goal"] != "GatherMaterials(ash_wood)" for gt in tried), (
+        assert all(not gt["goal"].startswith("GatherMaterials(ash_wood") for gt in tried), (
             f"ash-wood step is REDUNDANT with the task's own chain — should "
             f"be suppressed, but goals_tried={tried}"
         )
@@ -1229,7 +1396,7 @@ class TestPursueTaskEndToEnd:
         # The step is tried (independent chain). Whether it wins depends on
         # whether it plans + position — we only assert that the candidate
         # is no longer SUPPRESSED at construction time.
-        assert any(gt["goal"] == "GatherMaterials(ash_wood)" for gt in tried), (
+        assert any(gt["goal"].startswith("GatherMaterials(ash_wood") for gt in tried), (
             f"ash-wood step is INDEPENDENT of the copper_bar task chain — "
             f"should be allowed to compete, but goals_tried={tried}"
         )
@@ -1284,7 +1451,7 @@ class TestPursueTaskEndToEnd:
             store.close()
 
         attempted = [gt["goal"] for gt in tried]
-        assert "GatherMaterials(copper_bar)" not in attempted, (
+        assert not any(a.startswith("GatherMaterials(copper_bar") for a in attempted), (
             f"trade-ready suppression must drop the fallback GatherMaterials, "
             f"but goals_tried={attempted}"
         )
@@ -1352,6 +1519,90 @@ def test_objective_step_equippable_upgrades_when_materials_in_hand():
     assert isinstance(goal, UpgradeEquipmentGoal)
 
 
+def _gd_skill_gated_chain():
+    """copper_legs_armor needs gearcrafting 5 (Robby has 2) — the trace
+    2026-06-11 18:46 dead-route shape."""
+    gd = GameData()
+    gd._item_stats = {
+        "copper_legs_armor": ItemStats(code="copper_legs_armor", level=6,
+                                       type_="leg_armor",
+                                       crafting_skill="gearcrafting",
+                                       crafting_level=5),
+    }
+    gd._crafting_recipes = {"copper_legs_armor": {"copper_bar": 5},
+                            "copper_bar": {"copper_ore": 10}}
+    return gd
+
+
+def test_objective_step_reachskill_crafts_one_more_when_spare_owned():
+    """Trace 2026-06-11 19:22 born-satisfied bug: Robby owned a spare
+    copper_dagger; needed={copper_dagger: 1} was satisfied at birth and
+    silently skipped — gearcrafting never moved. The grind goal means
+    'craft one MORE': needed = owned + 1."""
+    gd = GameData()
+    gd._item_stats = {
+        "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
+                                   crafting_skill="weaponcrafting", crafting_level=1),
+    }
+    gd._crafting_recipes = {"copper_dagger": {"copper_bar": 6}}
+    state = make_state(skills={"weaponcrafting": 1},
+                       inventory={"copper_dagger": 1, "copper_bar": 6})
+    goal = objective_step_goal(ReachSkillLevel("weaponcrafting", 5), state, gd, _ctx())
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert repr(goal) == "GatherMaterials(copper_dagger, {copper_dagger:2})"
+    assert goal.is_satisfied(state) is False
+
+
+def test_objective_step_reachskill_grind_avoids_committed_root_materials():
+    """The grind serving a skill-gated gear root must not pick a recipe that
+    consumes the root's own inputs (copper_helmet eating the armor's bars)."""
+    gd = GameData()
+    gd._item_stats = {
+        "copper_helmet": ItemStats(code="copper_helmet", level=1, type_="helmet",
+                                   crafting_skill="gearcrafting", crafting_level=1),
+        "wooden_shield": ItemStats(code="wooden_shield", level=1, type_="shield",
+                                   crafting_skill="gearcrafting", crafting_level=1),
+        "copper_legs_armor": ItemStats(code="copper_legs_armor", level=6,
+                                       type_="leg_armor",
+                                       crafting_skill="gearcrafting",
+                                       crafting_level=5),
+    }
+    gd._crafting_recipes = {
+        "copper_helmet": {"copper_bar": 6},
+        "wooden_shield": {"ash_plank": 6},
+        "copper_legs_armor": {"copper_bar": 5, "feather": 2},
+    }
+    state = make_state(skills={"gearcrafting": 2},
+                       inventory={"copper_bar": 5, "feather": 2})
+    goal = objective_step_goal(ReachSkillLevel("gearcrafting", 5), state, gd, _ctx(),
+                               root=ObtainItem("copper_legs_armor", 1))
+    assert isinstance(goal, GatherMaterialsGoal)
+    # copper_helmet (fewest missing) is excluded — its recipe eats the
+    # reserved copper_bar; wooden_shield wins.
+    assert repr(goal) == "GatherMaterials(wooden_shield, {wooden_shield:1})"
+
+
+def test_objective_step_skill_gated_root_plans_literal_step():
+    """Skill-gated root (gearcrafting 2 < 5) with an intermediate step:
+    routing to the ROOT is a dead end (GatherMaterials(root) is rejected by
+    its own skill-gate fail-fast — trace 2026-06-11 18:46 cycles 15-16,
+    0-node dead candidates, objective abandoned at 1/5 bars). The dispatch
+    must plan the LITERAL step instead: its materials are needed regardless,
+    and the skill grind follows once they're in hand."""
+    gd = _gd_skill_gated_chain()
+    state = make_state(level=6, inventory={"copper_ore": 36},
+                       skills={"gearcrafting": 2, "mining": 4, "woodcutting": 1,
+                               "fishing": 1, "weaponcrafting": 1, "jewelrycrafting": 1,
+                               "cooking": 1, "alchemy": 1})
+    goal = objective_step_goal(ObtainItem("copper_bar", 5), state, gd, _ctx(),
+                               root=ObtainItem("copper_legs_armor", 1))
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert repr(goal) == "GatherMaterials(copper_bar, {copper_bar:5})"
+    # And the goal it returns is actually plannable (bars craft on mining).
+    assert goal.is_plannable(state, gd) is True
+    assert goal.is_satisfied(state) is False
+
+
 # ---------------------------------------------------------------------------
 # Skill-gate prioritization (LIV-SKILL-2 deadlock) integration test
 # ---------------------------------------------------------------------------
@@ -1366,7 +1617,7 @@ def test_objective_step_reachskill_returns_craft_one_when_craftable():
     state = make_state(skills={"weaponcrafting": 1})
     goal = objective_step_goal(ReachSkillLevel("weaponcrafting", 5), state, gd, _ctx())
     assert isinstance(goal, GatherMaterialsGoal)
-    assert repr(goal) == "GatherMaterials(copper_dagger)"
+    assert repr(goal) == "GatherMaterials(copper_dagger, {copper_dagger:1})"
 
 
 def test_objective_step_reachskill_falls_back_to_levelskill_when_nothing_craftable():
@@ -1453,7 +1704,7 @@ def test_worth_gate_breaks_sticky_pursue_task(tmp_path):
     finally:
         store.close()
     assert isinstance(goal, GatherMaterialsGoal)
-    assert repr(goal) == "GatherMaterials(copper_dagger)"
+    assert repr(goal) == "GatherMaterials(copper_dagger, {copper_dagger:1})"
 
 
 def test_worth_gate_bypassed_last_resort_selects_task_when_step_unplannable(tmp_path):

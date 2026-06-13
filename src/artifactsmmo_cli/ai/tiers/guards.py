@@ -92,18 +92,32 @@ def _used_fraction(state: WorldState) -> float:
 
 
 def active_profile(state: WorldState, game_data: GameData,
-                   ctx: SelectionContext) -> dict[str, int]:
+                   ctx: SelectionContext,
+                   step_profile: dict[str, int] | None = None) -> dict[str, int]:
     """The active goal's SOFT inventory profile, derived from the
     SelectionContext's long-term gear/tool codes + the committed
     crafting_target + active items-task (spec 2026-06-07). Deposit/discard
-    never bank/delete a profile item below its target."""
-    return inventory_profile(state, game_data,
-                             target_gear=ctx.target_gear,
-                             target_tools=ctx.target_tools)
+    never bank/delete a profile item below its target.
+
+    `step_profile` is the resolved objective-step goal's needed map
+    (item_code -> target_qty), merged at per-code max. Trace 2026-06-11 22:36
+    (cycle 30): DISCARD_HIGH deleted a wooden_shield the active
+    GatherMaterials grind goal was accumulating (held 2, needed 3) because the
+    step goal's targets were invisible to this profile — it only covered
+    crafting_target/gear/tools/task."""
+    profile = inventory_profile(state, game_data,
+                                target_gear=ctx.target_gear,
+                                target_tools=ctx.target_tools)
+    if step_profile:
+        for code, qty in step_profile.items():
+            if qty > profile.get(code, 0):
+                profile[code] = qty
+    return profile
 
 
 def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
-           history: LearningStore | None, ctx: SelectionContext) -> bool:
+           history: LearningStore | None, ctx: SelectionContext,
+           step_profile: dict[str, int] | None = None) -> bool:
     if kind is GuardKind.HP_CRITICAL:
         return state.hp_percent < CRITICAL_HP_FRACTION
     if kind is GuardKind.REST_FOR_COMBAT:
@@ -140,7 +154,8 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
                 and ctx.bank_required_level - state.level <= MAX_ACHIEVABLE_GAP)
     if kind is GuardKind.DISCARD_CRITICAL:
         return (bool(overstocked_items(state, game_data,
-                                       profile=active_profile(state, game_data, ctx)))
+                                       profile=active_profile(state, game_data, ctx,
+                                                              step_profile)))
                 and _used_fraction(state) >= DISCARD_CRITICAL_FRACTION)
     if kind is GuardKind.CRAFT_RELIEF:
         if _used_fraction(state) < CRAFT_RELIEF_FRACTION:
@@ -148,15 +163,17 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
         return bool(craft_relief_candidates(
             state, game_data,
             target_gear=ctx.target_gear, target_tools=ctx.target_tools,
+            step_items=frozenset(step_profile or ()),
         ))
     if kind is GuardKind.DEPOSIT_FULL:
         return (ctx.bank_accessible and _used_fraction(state) >= DEPOSIT_FULL_FRACTION
                 and bool(select_bank_deposits(
                     state, game_data,
-                    frozenset(active_profile(state, game_data, ctx)))))
+                    frozenset(active_profile(state, game_data, ctx, step_profile)))))
     if kind is GuardKind.DISCARD_HIGH:
         return (bool(overstocked_items(state, game_data,
-                                       profile=active_profile(state, game_data, ctx)))
+                                       profile=active_profile(state, game_data, ctx,
+                                                              step_profile)))
                 and _used_fraction(state) >= DISCARD_HIGH_FRACTION)
     if kind is GuardKind.GEAR_REVIEW:
         return ctx.gear_review_active
@@ -164,9 +181,13 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
 
 
 def active_guards(state: WorldState, game_data: GameData,
-                  history: LearningStore | None, ctx: SelectionContext) -> list[GuardKind]:
+                  history: LearningStore | None, ctx: SelectionContext,
+                  step_profile: dict[str, int] | None = None) -> list[GuardKind]:
     """Triggered guards in ladder (preemption) order.
 
     history is accepted for signature parity with future learning-aware guards (currently unused).
+    `step_profile` (the resolved step goal's needed map) joins the
+    deposit/discard protection profile — see `active_profile`.
     """
-    return [k for k in GUARD_ORDER if _fires(k, state, game_data, history, ctx)]
+    return [k for k in GUARD_ORDER
+            if _fires(k, state, game_data, history, ctx, step_profile)]

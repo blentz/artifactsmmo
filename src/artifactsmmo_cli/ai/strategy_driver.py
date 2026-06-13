@@ -34,6 +34,7 @@ from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.recipe_closure import closure_demand
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
 from artifactsmmo_cli.ai.task_reservation import consumes_reserved
@@ -126,6 +127,36 @@ def _reservation_consumption(step_goal: Goal, state: WorldState,
     return None
 
 
+def _step_protection_profile(step_goal: Goal | None, state: WorldState,
+                             game_data: GameData) -> dict[str, int] | None:
+    """The resolved step goal's item->qty protection map for deposit/discard,
+    or None when the step protects nothing.
+
+    A GatherMaterialsGoal contributes its `needed` map PLUS the recipe closure
+    of each needed item's still-missing quantity — the inputs the in-flight
+    craft chain is accumulating. Run-5 trace 2026-06-11 23:05 (cycle 10):
+    protecting only the target wooden_shield let DepositAll bank all ~59
+    ash_wood the chain needed, costing a 14-cycle withdraw round-trip. Only
+    the MISSING quantity's closure is protected (not needed × full closure) so
+    already-held targets don't over-reserve input stock and paralyze deposit.
+    Bank stock counts toward held: banked materials are withdrawable, the
+    protection only has to stop the bag's working set from being banked."""
+    if not isinstance(step_goal, GatherMaterialsGoal):
+        return None
+    profile = dict(step_goal.needed)
+    bank = state.bank_items or {}
+    for code, qty in step_goal.needed.items():
+        missing = qty - state.inventory.get(code, 0) - bank.get(code, 0)
+        if missing <= 0:
+            continue
+        chain: dict[str, int] = {}
+        closure_demand(code, missing, game_data, chain, frozenset())
+        for mat, mat_qty in chain.items():
+            if mat_qty > profile.get(mat, 0):
+                profile[mat] = mat_qty
+    return profile
+
+
 def _materials_in_hand(item: str, state: WorldState, game_data: GameData) -> bool:
     """True if every direct recipe material for `item` is fully covered by
     inventory + bank (so the craft+equip plan is short and reachable)."""
@@ -139,18 +170,26 @@ def _materials_in_hand(item: str, state: WorldState, game_data: GameData) -> boo
 # ---------------------------------------------------------------------------
 
 def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
-              state: WorldState | None = None) -> Goal:
+              state: WorldState | None = None,
+              step_profile: dict[str, int] | None = None) -> Goal:
     """Map a GuardKind to a parameterized Goal instance.
 
     `state` is required for CRAFT_RELIEF (which inspects current inventory
     to pick its craft target); optional otherwise to preserve legacy
-    callers / tests that constructed guards without a state."""
+    callers / tests that constructed guards without a state.
+
+    `step_profile` is the resolved step goal's needed map; it must reach the
+    deposit/discard goals through the SAME `active_profile` merge the firing
+    predicate used (trace 2026-06-11 22:36 cycle 30: DiscardOverstock deleted
+    the active grind goal's own wooden_shield), so predicate and goal stay
+    coherent."""
     if kind is GuardKind.HP_CRITICAL:
         return RestoreHPGoal()
     if kind is GuardKind.REST_FOR_COMBAT:
         return RestoreHPGoal()
     if kind is GuardKind.DISCARD_CRITICAL or kind is GuardKind.DISCARD_HIGH:
-        profile = (active_profile(state, game_data, ctx) if state is not None else None)
+        profile = (active_profile(state, game_data, ctx, step_profile)
+                   if state is not None else None)
         return DiscardOverstockGoal(game_data=game_data, profile=profile)
     if kind is GuardKind.BANK_UNLOCK:
         return UnlockBankGoal(
@@ -161,7 +200,7 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
     if kind is GuardKind.REACH_UNLOCK_LEVEL:
         return ReachUnlockLevelGoal(target_level=ctx.bank_required_level)
     if kind is GuardKind.DEPOSIT_FULL:
-        profile_codes = (frozenset(active_profile(state, game_data, ctx))
+        profile_codes = (frozenset(active_profile(state, game_data, ctx, step_profile))
                          if state is not None else frozenset())
         return DepositInventoryGoal(bank_accessible=ctx.bank_accessible,
                                     game_data=game_data, profile_codes=profile_codes)
@@ -171,6 +210,7 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
         cands = craft_relief_candidates(
             state, game_data,
             target_gear=ctx.target_gear, target_tools=ctx.target_tools,
+            step_items=frozenset(step_profile or ()),
         )
         if not cands:
             raise ValueError("CRAFT_RELIEF mapped but no relief candidate available")
@@ -362,6 +402,24 @@ def objective_step_goal(
                     # Root chain depth-reachable (materials in hand/craftable):
                     # plan the whole craft+equip under one commit.
                     return upgrade
+                # Root craft SKILL-GATED (not a depth problem): the final
+                # craft is blocked until the crafting skill rises, but the
+                # step's materials are needed regardless — plan the literal
+                # step. Routing to the root here is a dead end: the
+                # gather_step_target root-return branch emits
+                # GatherMaterials(root) whose own skill-gate fail-fast
+                # rejects it (trace 2026-06-11 18:46 cycle 15-16: both
+                # gear roots produced 0-node dead candidates and the
+                # arbiter fell through to slime grinding with the bar
+                # objective abandoned at 1/5). Once the materials are in
+                # hand the strategy's actionable_step advances to
+                # ReachSkillLevel(craft_skill, N) and the branch below
+                # grinds the skill.
+                if (root_stats is not None and root_stats.crafting_skill
+                        and state.skills.get(root_stats.crafting_skill, 1)
+                        < root_stats.crafting_level):
+                    return GatherMaterialsGoal(target_item=step.code,
+                                               needed={step.code: step.quantity})
                 # Root chain depth-UNREACHABLE (from-scratch deep recipe). The
                 # old fallback GatherMaterials(root, root's DIRECT recipe) needs a
                 # plan that gathers min_gathers(root) raw units THROUGH the deep
@@ -388,9 +446,24 @@ def objective_step_goal(
         # Route it to crafting ONE shallow in-skill item per cycle; the per-cycle
         # replan grinds the skill incrementally and the step is always plannable.
         # Falls back to LevelSkillGoal only when nothing in-skill is craftable now.
-        craft_one = skill_grind_target(step.skill, state, game_data)
+        #
+        # Two trace-2026-06-11-19:22 guards: (1) the grind must not consume
+        # the committed root's recipe inputs (copper_helmet would have eaten
+        # the 5 bars held for copper_legs_armor); (2) the goal means "craft
+        # one MORE" — needed = owned + 1 — because the XP comes from the
+        # craft ACT. needed={craft_one: 1} with a spare copy in inventory is
+        # born-satisfied, silently skipped, and the skill gate never moves.
+        reserved: frozenset[str] = frozenset()
+        if isinstance(root, ObtainItem):
+            root_recipe = game_data.crafting_recipe(root.code)
+            if root_recipe:
+                reserved = frozenset(root_recipe)
+        craft_one = skill_grind_target(step.skill, state, game_data, reserved=reserved)
         if craft_one is not None:
-            return GatherMaterialsGoal(target_item=craft_one, needed={craft_one: 1})
+            bank = state.bank_items or {}
+            held = state.inventory.get(craft_one, 0) + bank.get(craft_one, 0)
+            return GatherMaterialsGoal(target_item=craft_one,
+                                       needed={craft_one: held + 1})
         current = state.skills.get(step.skill, 0)
         target = min(step.level, current + LEVEL_LOOKAHEAD)
         return LevelSkillGoal(skill_name=step.skill, target_level=target,
@@ -532,12 +605,19 @@ class StrategyArbiter:
         fallback_steps: list[MetaGoal] = getattr(decision, "fallback_steps", [])
         fallback_roots: list[MetaGoal] = getattr(decision, "fallback_roots", [])
 
-        guard_kinds = active_guards(state, game_data, self._history, ctx)
         collect_kinds, discretionary_kinds = active_means(state, game_data, self._history, ctx)
 
         step_goal = self._resolve_step_goal(
             chosen_step, chosen_root, fallback_steps, fallback_roots, state, game_data, ctx)
         step_goal = self._suppress_step_for_task(step_goal, discretionary_kinds, state, game_data)
+
+        # The step goal is resolved BEFORE the guards so its needed map can
+        # join the deposit/discard protection profile. Trace 2026-06-11 22:36
+        # (cycle 30): DISCARD_HIGH deleted a wooden_shield the active
+        # GatherMaterials grind goal (needed = held + 1) was accumulating —
+        # the guard's profile only knew crafting_target/gear/tools/task.
+        step_profile = _step_protection_profile(step_goal, state, game_data)
+        guard_kinds = active_guards(state, game_data, self._history, ctx, step_profile)
 
         # Trace 2026-05-19 (cycles 318-342): with task_code=None, the bot
         # locked into a Gather→Discard loop — meta-objective step
@@ -555,7 +635,7 @@ class StrategyArbiter:
 
         candidates = self._build_candidates(
             guard_kinds, collect_kinds, discretionary_kinds, step_goal,
-            fallback_steps, fallback_roots, state, game_data, ctx)
+            fallback_steps, fallback_roots, state, game_data, ctx, step_profile)
 
         worth_suppressed = self._worth_gate_suppressed(
             objective, chosen_root, discretionary_kinds, state, game_data, ctx)
@@ -674,11 +754,12 @@ class StrategyArbiter:
         state: WorldState,
         game_data: GameData,
         ctx: SelectionContext,
+        step_profile: dict[str, int] | None = None,
     ) -> list[Candidate]:
         """Candidate ordering: guards, collect, step + fallback-step chain, discretionary."""
         candidates: list[Candidate] = []
         for gk in guard_kinds:
-            g = map_guard(gk, game_data, ctx, state)
+            g = map_guard(gk, game_data, ctx, state, step_profile)
             candidates.append(Candidate(goal=g, is_means=False, repr_=repr(g)))
         for mk in collect_kinds:
             g = map_means(mk, game_data, ctx, state)

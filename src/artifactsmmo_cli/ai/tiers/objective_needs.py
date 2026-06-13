@@ -39,17 +39,21 @@ def _owned(code: str, state: WorldState) -> int:
 
 
 def _producible_by_self(code: str, game_data: GameData) -> bool:
-    """Craftable (has a recipe) or gatherable (some resource drops it — primary
+    """Craftable (has a recipe), gatherable (some resource drops it — primary
     OR secondary; `_resource_drops` keeps only the primary, so the full drop
     tables must be consulted too, else a secondary-drop item is mis-read as
-    purchase-only)."""
+    purchase-only), or farmable (some monster drops it — run-17 2026-06-12:
+    feather classified buy-only, distorting the worth gate, while FarmDrops
+    can produce it from chickens)."""
     if game_data.crafting_recipe(code) is not None:
         return True
     if code in game_data.resource_drops.values():
         return True
-    return any(item == code
-               for table in game_data.resource_drops_full.values()
-               for item, *_rest in table)
+    if any(item == code
+           for table in game_data.resource_drops_full.values()
+           for item, *_rest in table):
+        return True
+    return bool(game_data.monsters_dropping(code))
 
 
 def objective_needs(root: MetaGoal, state: WorldState, game_data: GameData) -> NeedSet:

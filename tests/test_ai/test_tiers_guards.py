@@ -166,3 +166,30 @@ def test_gear_review_fires_only_when_ctx_active(make_planner_gd):
     inactive_ctx = driver_ctx(gear_review_active=False)
     assert GuardKind.GEAR_REVIEW in active_guards(state, make_planner_gd, None, active_ctx)
     assert GuardKind.GEAR_REVIEW not in active_guards(state, make_planner_gd, None, inactive_ctx)
+
+
+def test_discard_high_silent_when_step_profile_protects_goal_item():
+    """Trace 2026-06-11 22:36 (run-4 cycle 30): DISCARD_HIGH fired and deleted
+    a wooden_shield while the active step goal
+    GatherMaterials(wooden_shield, {wooden_shield: 3}) was accumulating shields
+    for the gearcrafting grind — the step goal's needed map was invisible to
+    the discard profile (which only covers crafting_target/gear/tools/task).
+    The active step's needed map must join the profile so the guard cannot
+    fire on the goal's own target item."""
+    gd = GameData()
+    gd._crafting_recipes = {"wooden_shield": {"ash_plank": 6},
+                            "ash_plank": {"ash_wood": 10}}
+    # 51/60 used = 0.85 (at DISCARD_HIGH_FRACTION and the overstock watermark);
+    # 1 shield equipped → equipped-code cap 1 < held 2 → 1 shield is overstock.
+    # ash_wood cap = max_recipe_demand(10) x BATCH_BUFFER(5) = 50 ≥ held 49.
+    state = make_state(
+        hp=100, max_hp=100,
+        inventory={"wooden_shield": 2, "ash_wood": 49},
+        inventory_max=60,
+        equipment={"shield_slot": "wooden_shield"},
+        bank_items={},
+    )
+    assert GuardKind.DISCARD_HIGH in active_guards(state, gd, None, _ctx())
+    guards = active_guards(state, gd, None, _ctx(),
+                           step_profile={"wooden_shield": 3})
+    assert GuardKind.DISCARD_HIGH not in guards

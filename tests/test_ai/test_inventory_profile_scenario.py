@@ -18,6 +18,7 @@ Pre-fix this FAILS:
     discard-eligible regardless of free slots.
 """
 
+from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
@@ -107,6 +108,41 @@ def test_ash_wood_not_discarded_with_free_slots():
     relevant = goal.relevant_actions([], full, gd)
     codes = {a.code if hasattr(a, "code") else a.item_code for a in relevant}
     assert "ash_wood" not in codes
+
+
+def test_deposit_all_action_honors_profile_codes():
+    """Run-5 trace 2026-06-11 23:05 (cycle 10): DepositAll banked all ~59
+    ash_wood the active wooden_shield grind needed, forcing a 14-cycle
+    withdraw round-trip. The goal's profile_codes never reached the ACTION —
+    DepositAllAction._deposits called select_bank_deposits without them. The
+    action must honor the same keep-set the goal used to plan."""
+    gd = _fishing_net_gd()
+    state = make_state(inventory={"ash_wood": 8, "junk": 9}, inventory_max=20)
+    unprotected = DepositAllAction(bank_location=(4, 0), game_data=gd)
+    assert "ash_wood" in {c for c, _ in unprotected._deposits(state)}
+    protected = DepositAllAction(bank_location=(4, 0), game_data=gd,
+                                 profile_codes=frozenset({"ash_wood"}))
+    codes = {c for c, _ in protected._deposits(state)}
+    assert "ash_wood" not in codes
+    assert "junk" in codes
+
+
+def test_deposit_goal_injects_profile_into_action():
+    """DepositInventoryGoal must hand its profile_codes to the deposit actions
+    it offers the planner — otherwise the goal plans with the keep-set but the
+    executed DepositAll ignores it (run-5 cycle-10 incoherence)."""
+    gd = _fishing_net_gd()
+    state = make_state(inventory={"ash_wood": 8, "junk": 9}, inventory_max=20)
+    goal = DepositInventoryGoal(game_data=gd,
+                                profile_codes=frozenset({"ash_wood"}))
+    actions = goal.relevant_actions(
+        [DepositAllAction(bank_location=(4, 0), game_data=gd)], state, gd)
+    assert actions, "deposit-tagged action must survive the filter"
+    for act in actions:
+        codes = {c for c, _ in act._deposits(state)}
+        assert "ash_wood" not in codes, (
+            "the goal's profile_codes must reach the executed action"
+        )
 
 
 def test_ash_wood_accumulates_no_oscillation():

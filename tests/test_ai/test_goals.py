@@ -741,6 +741,71 @@ class TestGatherMaterialsGoal:
         state = make_state(inventory={"fishing_net": 1}, bank_items={})
         assert goal.is_satisfied(state) is True
 
+    def test_raw_material_target_not_satisfied_by_single_unit(self):
+        """Trace 2026-06-11 18:10: gather_step_target emits the raw-material
+        form GatherMaterials(copper_ore, {copper_ore: 10}); one stray ore in
+        inventory short-circuited the finished-item rule and the goal was
+        skipped as satisfied all run — zero mining. When the target IS the
+        needed material, the quantity check must govern."""
+        goal = GatherMaterialsGoal(target_item="copper_ore", needed={"copper_ore": 10})
+        state = make_state(inventory={"copper_ore": 1}, bank_items={})
+        assert goal.is_satisfied(state) is False
+
+    def test_raw_material_target_satisfied_at_full_quantity(self):
+        goal = GatherMaterialsGoal(target_item="copper_ore", needed={"copper_ore": 10})
+        state = make_state(inventory={"copper_ore": 4}, bank_items={"copper_ore": 6})
+        assert goal.is_satisfied(state) is True
+
+    def test_not_plannable_when_target_craft_skill_gated(self):
+        """Trace 2026-06-11 18:10: GatherMaterials(feather_coat,
+        {feather_coat: 1}) with gearcrafting 2 < 5 burned the full 90s budget
+        (97k-99k nodes) to plan_len 0 every probe — the gated final craft
+        makes the goal unplannable; fail fast instead."""
+        gd = make_game_data()
+        gd._item_stats["feather_coat"] = ItemStats(
+            code="feather_coat", level=5, type_="body_armor",
+            crafting_skill="gearcrafting", crafting_level=5)
+        goal = GatherMaterialsGoal(target_item="feather_coat", needed={"feather_coat": 1})
+        state = make_state(inventory={}, bank_items={})
+        assert goal.is_plannable(state, gd) is False
+
+    def test_plannable_when_target_craft_skill_met(self):
+        gd = make_game_data()
+        gd._item_stats["feather_coat"] = ItemStats(
+            code="feather_coat", level=5, type_="body_armor",
+            crafting_skill="gearcrafting", crafting_level=5)
+        goal = GatherMaterialsGoal(target_item="feather_coat", needed={"feather_coat": 1})
+        state = make_state(skills={"gearcrafting": 5, "mining": 1, "woodcutting": 1,
+                                   "fishing": 1, "weaponcrafting": 1, "jewelrycrafting": 1,
+                                   "cooking": 1, "alchemy": 1})
+        assert goal.is_plannable(state, gd) is True
+
+    def test_plannable_when_gated_target_already_owned(self):
+        """Owned at full quantity → no craft needed → plannable (equip/withdraw)."""
+        gd = make_game_data()
+        gd._item_stats["feather_coat"] = ItemStats(
+            code="feather_coat", level=5, type_="body_armor",
+            crafting_skill="gearcrafting", crafting_level=5)
+        goal = GatherMaterialsGoal(target_item="feather_coat", needed={"feather_coat": 1})
+        state = make_state(inventory={"feather_coat": 1})
+        assert goal.is_plannable(state, gd) is True
+
+    def test_materials_only_goal_plannable_despite_skill_gate(self):
+        """Finished target not among needed: gathering inputs never performs
+        the gated final craft — must stay plannable."""
+        gd = make_game_data()
+        gd._item_stats["fishing_net"] = ItemStats(
+            code="fishing_net", level=1, type_="weapon",
+            crafting_skill="weaponcrafting", crafting_level=5)
+        goal = GatherMaterialsGoal(target_item="fishing_net", needed={"ash_plank": 6})
+        state = make_state(inventory={})
+        assert goal.is_plannable(state, gd) is True
+
+    def test_plannable_for_uncraftable_raw_target(self):
+        goal = GatherMaterialsGoal(target_item="copper_ore", needed={"copper_ore": 10})
+        state = make_state(inventory={})
+        assert goal.is_plannable(state, make_game_data()) is True
+
     def test_desired_state_returns_needed(self):
         needed = {"copper_ore": 6}
         goal = GatherMaterialsGoal(target_item="copper_dagger", needed=needed)
@@ -749,7 +814,7 @@ class TestGatherMaterialsGoal:
 
     def test_repr(self):
         goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6})
-        assert repr(goal) == "GatherMaterials(copper_dagger)"
+        assert repr(goal) == "GatherMaterials(copper_dagger, {copper_ore:6})"
 
     def test_value_gradient_with_partial_collection(self):
         goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6})
@@ -861,6 +926,91 @@ class TestGatherMaterialsGoal:
             f"got {first_acq!r}; full plan: {[repr(a) for a in plan]}"
         )
         assert first_acq.code == "ash_wood"
+
+    def test_relevant_actions_includes_withdraw_of_banked_monster_drop(self):
+        """Run-17 trace 2026-06-12 c94: GatherMaterials(feather_coat) was
+        unplannable (7,689 nodes, plan_len 0) with 9 feathers IN THE BANK,
+        because the withdrawable set covered only craftable intermediates +
+        needed + RESOURCE drops — feather is a MONSTER drop (chicken), so
+        Withdraw(feather) was filtered out of every plan and both gear roots
+        dead-ended. Monster-drop leaf materials of the chain must be
+        withdrawable."""
+        bank = (4, 0)
+        gd = make_game_data()
+        gd._resource_locations = {"ash_tree": [(6, 1)]}
+        gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
+        gd._resource_drops = {"ash_tree": "ash_wood"}
+        gd._workshop_locations = {"woodcutting": (1, 1), "gearcrafting": (3, 1)}
+        gd._bank_location = bank
+        gd._crafting_recipes = {
+            "ash_plank": {"ash_wood": 10},
+            "feather_coat": {"feather": 5, "ash_plank": 2},
+        }
+        gd._item_stats = {
+            "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource",
+                                   crafting_skill="woodcutting", crafting_level=1),
+            "feather_coat": ItemStats(code="feather_coat", level=5, type_="body_armor",
+                                      crafting_skill="gearcrafting", crafting_level=5),
+        }
+        goal = GatherMaterialsGoal(target_item="feather_coat",
+                                   needed={"feather_coat": 1})
+        state = make_state(
+            level=6,
+            skills={"woodcutting": 4, "gearcrafting": 5, "mining": 9},
+            inventory={"ash_plank": 2}, inventory_max=110,
+            bank_items={"feather": 9},
+        )
+        actions = [
+            WithdrawItemAction(code="feather", quantity=5, bank_location=bank),
+            CraftAction(code="feather_coat", quantity=1, workshop_location=(3, 1)),
+            RestAction(),
+        ]
+        result = goal.relevant_actions(actions, state, gd)
+        repr_set = {repr(a) for a in result}
+        assert any("Withdraw" in r and "feather" in r for r in repr_set), repr_set
+
+    def test_plan_crafts_gear_from_banked_monster_drops(self):
+        """Planner-level run-17 c94 repro: with 9 banked feathers and 2 planks
+        on hand, GatherMaterials(feather_coat) must produce a
+        withdraw → craft plan instead of plan_len 0."""
+        bank = (4, 0)
+        gd = make_game_data()
+        gd._resource_locations = {"ash_tree": [(6, 1)]}
+        gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
+        gd._resource_drops = {"ash_tree": "ash_wood"}
+        gd._workshop_locations = {"woodcutting": (1, 1), "gearcrafting": (3, 1)}
+        gd._bank_location = bank
+        gd._crafting_recipes = {
+            "ash_plank": {"ash_wood": 10},
+            "feather_coat": {"feather": 5, "ash_plank": 2},
+        }
+        gd._item_stats = {
+            "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource",
+                                   crafting_skill="woodcutting", crafting_level=1),
+            "feather_coat": ItemStats(code="feather_coat", level=5, type_="body_armor",
+                                      crafting_skill="gearcrafting", crafting_level=5),
+        }
+        goal = GatherMaterialsGoal(target_item="feather_coat",
+                                   needed={"feather_coat": 1})
+        state = make_state(
+            level=6, x=2, y=0,
+            skills={"woodcutting": 4, "gearcrafting": 5, "mining": 9},
+            inventory={"ash_plank": 2}, inventory_max=110,
+            bank_items={"feather": 9},
+        )
+        actions = [
+            RestAction(),
+            GatherAction(resource_code="ash_tree", locations=frozenset([(6, 1)])),
+            CraftAction(code="ash_plank", quantity=1, workshop_location=(1, 1)),
+            CraftAction(code="feather_coat", quantity=1, workshop_location=(3, 1)),
+            WithdrawItemAction(code="feather", quantity=5, bank_location=bank),
+        ]
+        plan = GOAPPlanner().plan(state, goal, actions, gd, history=None,
+                                  budget_seconds=10.0)
+        assert plan, "planner found no plan for bank-stocked feather_coat"
+        reprs = [repr(a) for a in plan]
+        assert any("Withdraw" in r and "feather" in r for r in reprs), reprs
+        assert any("Craft(feather_coat" in r for r in reprs), reprs
 
     def test_relevant_actions_includes_direct_gather(self):
         gd = make_game_data()
@@ -1338,14 +1488,14 @@ def test_gather_materials_goal_value_penalty_when_slow_to_satisfy():
     try:
         store = LearningStore(db_path=path, character="testchar")
         store.start_session()
+        goal = GatherMaterialsGoal(target_item="copper_boots", needed={"copper_ore": 60})
         for i in range(5):
             store.record_cycle(Cycle(
                 ts=f"2026-05-17T00:00:{i:02d}+00:00",
                 session_id="x", cycle_index=i, character="x", outcome="ok",
-                selected_goal="GatherMaterials(copper_boots)",
+                selected_goal=repr(goal),
                 cycles_to_satisfy=50,
             ))
-        goal = GatherMaterialsGoal(target_item="copper_boots", needed={"copper_ore": 60})
         state = make_state(inventory={}, inventory_max=104, bank_items={})
         gd = make_game_data()
         base = goal.value(state, gd, history=None)

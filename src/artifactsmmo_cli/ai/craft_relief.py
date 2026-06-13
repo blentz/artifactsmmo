@@ -46,8 +46,8 @@ class ReliefCandidate:
     simultaneously-craftable units bounded by the smallest recipe input
     stack, by `cap` (e.g. task remaining, BATCH_CAP), and by the crafts
     needed to push inventory pressure back below CRAFT_RELIEF_FRACTION.
-    `priority_class` orders candidates: 0=task item, 1=target_gear,
-    2=target_tools, 3=other. Lower wins."""
+    `priority_class` orders candidates: 0=task item, 1=target_gear /
+    active-step chain materials, 2=target_tools, 3=other. Lower wins."""
     item_code: str
     quantity: int
     priority_class: int
@@ -95,6 +95,7 @@ def craft_relief_candidates(
     target_gear: frozenset[str] = frozenset(),
     target_tools: frozenset[str] = frozenset(),
     batch_cap: int = 10,
+    step_items: frozenset[str] = frozenset(),
 ) -> list[ReliefCandidate]:
     """Items the bot can craft from inventory NOW that advance an active goal
     AND free inventory units (net relief gate). Gear/tool candidates whose
@@ -122,6 +123,16 @@ def craft_relief_candidates(
         if priority_class > 0 and consumes_reserved(
                 {item_code: 1}, state, game_data):
             return  # would eat the active task's reserved materials.
+        # Run-16 trace 2026-06-12 09:09:33 (cycle 90): CraftRelief(copper_dagger)
+        # — a target_gear candidate — consumed the 6 copper_bars that completed
+        # the helmet grind's material set one action before the craft (the
+        # alphabetical tie-break ranked it above copper_helmet at equal
+        # priority/quantity). A non-step candidate whose recipe consumes the
+        # active step's protected materials destroys chain progress; step
+        # items themselves are exempt — producing them IS the chain.
+        if (priority_class > 0 and item_code not in step_items
+                and any(mat in step_items for mat in recipe)):
+            return
         quantity = min(qty, cap, batch_cap)
         relief_cap = _crafts_to_relieve(state, net)
         if relief_cap is not None:
@@ -136,6 +147,15 @@ def craft_relief_candidates(
     if (state.task_type == "items" and state.task_code
             and state.task_total > 0 and state.task_progress < state.task_total):
         consider(state.task_code, 0, state.task_total - state.task_progress)
+
+    # Active step goal's chain materials. Run-13 trace 2026-06-12 cycles
+    # 92-95: with 60 ash on hand and the plan already at the plank-craft
+    # phase, the ladder took two bank trips (freeing 2 then 1 units) instead
+    # of crafting a plank that frees 9 — relief candidacy only saw
+    # task/gear/tools. Crafting an in-flight chain intermediate is both
+    # pressure relief AND step progress. Sorted for deterministic ordering.
+    for code in sorted(step_items):
+        consider(code, 1, batch_cap)
 
     # Target gear / tools — cap at batch_cap; equip layer only needs 1 of each.
     for code in target_gear:
