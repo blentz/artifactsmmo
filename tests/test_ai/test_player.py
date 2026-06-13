@@ -15,6 +15,7 @@ from sqlmodel import Session, select
 
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.equip import EquipAction
+from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, RootScoreView
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
@@ -1775,3 +1776,22 @@ class TestNotifyObserverCooldown:
         snap = captured[0]
         assert snap.cooldown_remaining > 0
         assert snap.cooldown_remaining <= 12.0
+
+
+def test_snapshot_carries_chosen_root_and_ranking_and_bank(tmp_path):
+    """The cycle snapshot exposes the committed strategy root + ranking + bank
+    for the TUI plan screen."""
+    rv = RootScoreView(root_repr="ObtainItem(code='x', quantity=1)", category="gear", score=2.5)
+    assert rv.root_repr == "ObtainItem(code='x', quantity=1)"
+    assert rv.category == "gear" and rv.score == 2.5
+    # snapshot accepts the new fields
+    snap = CycleSnapshot(
+        cycle_index=1, timestamp="2026-06-13T00:00:00Z", character="hero",
+        x=0, y=0, level=1, xp=0, max_xp=100, hp=10, max_hp=10, gold=0,
+        selected_goal="g", action="a", outcome="ok",
+        chosen_root="ObtainItem(code='x', quantity=1)",
+        strategy_ranking=[rv], bank_items={"copper_ore": 5},
+    )
+    assert snap.chosen_root == "ObtainItem(code='x', quantity=1)"
+    assert snap.strategy_ranking[0].score == 2.5
+    assert snap.bank_items == {"copper_ore": 5}

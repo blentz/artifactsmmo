@@ -77,3 +77,8 @@ class CycleSnapshot(BaseModel):
     goals_tried: list[GoalAttempt] = Field(default_factory=list)
     suppressed_goals: list[str] = Field(default_factory=list)
     path_blocked: bool = False
+
+    # Committed strategy root + ranking + bank, for the TUI plan screen.
+    chosen_root: str | None = None
+    strategy_ranking: list[RootScoreView] = Field(default_factory=list)
+    bank_items: dict[str, int] | None = None

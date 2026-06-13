@@ -37,7 +37,7 @@ from artifactsmmo_cli.ai.constants import (
     ERROR_CODE_COOLDOWN,
     STUCK_DETECTOR_WINDOW,
 )
-from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, GoalAttempt, GoalRankEntry
+from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, GoalAttempt, GoalRankEntry, RootScoreView
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_latch import GearLatch
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -1019,6 +1019,15 @@ class GamePlayer:
             goals_tried=goals_tried,
             suppressed_goals=list(self._suppressed_goals.keys()),
             path_blocked=bool(stats.get("path_blocked", False)),
+            chosen_root=(repr(self._last_decision.chosen_root)
+                         if self._last_decision is not None
+                         and self._last_decision.chosen_root is not None else None),
+            strategy_ranking=[
+                RootScoreView(root_repr=r.root_repr, category=r.category, score=float(r.score))
+                for r in (self._last_decision.ranking if self._last_decision is not None else [])
+            ],
+            bank_items=(dict(self.state.bank_items)
+                        if self.state.bank_items is not None else None),
         )
         self._cycle_observer(snap)
 
