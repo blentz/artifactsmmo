@@ -10,7 +10,7 @@ from artifactsmmo_cli.tui.screens.log_screen import LogScreen
 from artifactsmmo_cli.tui.screens.plan_screen import PlanScreen
 from artifactsmmo_cli.tui.widgets.inventory_pane import InventoryPane
 from artifactsmmo_cli.tui.widgets.log_pane import LogPane
-from artifactsmmo_cli.tui.widgets.map_pane import MapPane
+from artifactsmmo_cli.tui.widgets.map_pane import TILE_H, TILE_W, MapPane
 from artifactsmmo_cli.tui.widgets.status_pane import StatusPane
 
 
@@ -91,8 +91,10 @@ class TestWatchAppCompose:
             m = app.query_one("#map", MapPane)
             assert m.size.height > 1            # more than just the legend line
             rows = str(m.render()).split("\n")
-            assert len(rows) == m.size.height   # full block fills the cell
-            assert len(rows[1]) == m.size.width  # rows span the full cell width
+            tiles_h = (m.size.height - 1) // TILE_H
+            tiles_w = m.size.width // TILE_W
+            assert len(rows) == 1 + tiles_h * TILE_H   # HUD + sprite tile rows
+            assert len(rows[1]) == tiles_w * TILE_W     # rows span the tile grid
 
     async def test_compose_yields_inventory_pane(self):
         app = _make_app()

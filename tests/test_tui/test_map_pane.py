@@ -1,30 +1,19 @@
-"""MapPane viewport rendering tests (mostly app-free; sizing uses run_test)."""
+"""MapPane tile-model viewport tests (mostly app-free; sizing uses run_test)."""
 
 from textual.app import App, ComposeResult
 from textual.geometry import Size
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.tui.glyphs import PLAYER_GLYPH, UNMAPPED_GLYPH, WALKABLE_GLYPH
-from artifactsmmo_cli.tui.widgets.map_pane import VIEWPORT_H, VIEWPORT_W, MapPane
-
-
-def _gd_with_world() -> GameData:
-    gd = GameData()
-    gd._monster_locations = {"chicken": [(2, 0)]}
-    gd._resource_locations = {"ash_tree": [(-1, 0)]}
-    gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
-    gd._bank_location = (4, 1)
-    gd._taskmaster_location = (1, 2)
-    return gd
-
-
-def _snap(x: int, y: int) -> CycleSnapshot:
-    return CycleSnapshot(
-        cycle_index=0, timestamp="2026-05-18T00:00:00Z", character="hero",
-        x=x, y=y, level=1, xp=0, max_xp=100, hp=100, max_hp=100, gold=0,
-        selected_goal="X", action="Y", outcome="ok",
-    )
+from artifactsmmo_cli.tui.glyphs import UNMAPPED_COLOR, WALKABLE_COLOR
+from artifactsmmo_cli.tui.sprites import SpriteCategory
+from artifactsmmo_cli.tui.widgets.map_pane import (
+    FALLBACK_H,
+    FALLBACK_W,
+    TILE_H,
+    TILE_W,
+    MapPane,
+)
 
 
 def _gd_typed() -> GameData:
@@ -41,191 +30,125 @@ def _gd_typed() -> GameData:
     return gd
 
 
-class TestMapPaneRender:
-    def test_index_built_from_game_data(self):
-        gd = _gd_with_world()
-        pane = MapPane(gd)
-        # Monster at (2,0): chicken → ('c', 'red')
-        assert pane._tile_index[(2, 0)] == ("c", "red")
-        # Tree (woodcutting) at (-1,0)
-        assert pane._tile_index[(-1, 0)] == ("T", "green")
-        # Bank → structure box glyph
-        assert pane._tile_index[(4, 1)] == ("╣", "white")
-        # Taskmaster → structure box glyph
-        assert pane._tile_index[(1, 2)] == ("╤", "white")
+def _snap(x: int, y: int) -> CycleSnapshot:
+    return CycleSnapshot(
+        cycle_index=0, timestamp="2026-05-18T00:00:00Z", character="hero",
+        x=x, y=y, level=1, xp=0, max_xp=100, hp=100, max_hp=100, gold=0,
+        selected_goal="X", action="Y", outcome="ok",
+    )
 
-    def test_viewport_dimensions_are_odd(self):
-        """Player must be at exact center → both dims odd."""
-        assert VIEWPORT_W % 2 == 1
-        assert VIEWPORT_H % 2 == 1
 
-    def test_render_shows_player_at_center(self):
-        gd = _gd_with_world()
-        pane = MapPane(gd)
-        pane.update_snapshot(_snap(0, 0))
-        out = pane.render()
-        rendered = str(out)
-        # Player glyph @ must appear in the output
-        assert "@" in rendered
+def _styles(text) -> list[str]:
+    return [span.style for span in text.spans]
 
-    def test_render_includes_world_glyphs_in_view(self):
-        """Player at (0,0); world has monster at (2,0) — should appear in viewport."""
-        gd = _gd_with_world()
-        pane = MapPane(gd)
-        pane.update_snapshot(_snap(0, 0))
-        rendered = str(pane.render())
-        assert "c" in rendered  # monster glyph (chicken → 'c')
-        assert "T" in rendered  # tree
-        assert "╤" in rendered  # taskmaster structure glyph
 
-    def test_body_rows_match_viewport_and_no_trailing_blank(self):
-        """1 header + (VIEWPORT_H-1) map rows = VIEWPORT_H total lines; every map row
-        exactly VIEWPORT_W wide; no trailing blank line."""
-        gd = _gd_with_world()
-        pane = MapPane(gd)
-        pane.update_snapshot(_snap(0, 0))
-        lines = pane.render().plain.split("\n")
-        assert len(lines) == VIEWPORT_H  # 1 header + (VIEWPORT_H-1) map rows, no trailing blank
-        body = lines[1:]
-        assert len(body) == VIEWPORT_H - 1
-        assert all(len(row) == VIEWPORT_W for row in body)
+class TestBuildTileIndex:
+    def test_index_stores_category_and_code(self):
+        idx = MapPane._build_tile_index(_gd_typed())
+        assert idx[(2, 0)] == (SpriteCategory.MONSTER, "green_slime")
+        assert idx[(0, 2)] == (SpriteCategory.MONSTER, "chicken")
+        assert idx[(-1, 0)] == (SpriteCategory.NPC, "archaeologist")
+        assert idx[(4, 1)] == (SpriteCategory.STRUCTURE, "bank")
+        assert idx[(-2, -2)] == (SpriteCategory.STRUCTURE, "grand_exchange")
+        assert idx[(3, 3)] == (SpriteCategory.STRUCTURE, "workshop")
+        assert idx[(1, 2)] == (SpriteCategory.STRUCTURE, "tasks_master")
+        assert idx[(0, -3)] == (SpriteCategory.STRUCTURE, "door")
+        assert idx[(2, 2)] == (SpriteCategory.RESOURCE, "resource_woodcutting")
+
+
+class TestViewportGeometry:
+    def test_row_count_and_width_match_tiles(self):
+        pane = MapPane(_gd_typed())
+        out = pane._render_viewport(_snap(0, 0), 80, 41)
+        lines = out.plain.split("\n")
+        tiles_h = (41 - 1) // TILE_H
+        tiles_w = 80 // TILE_W
+        assert len(lines) == 1 + tiles_h * TILE_H        # 1 HUD + tile rows
+        assert all(len(row) == tiles_w * TILE_W for row in lines[1:])
+
+    def test_height_too_small_is_hud_only(self):
+        pane = MapPane(_gd_typed())
+        lines = pane._render_viewport(_snap(0, 0), 80, 1).plain.split("\n")
+        assert len(lines) == 1                            # HUD only, no tile rows
 
     def test_render_is_no_wrap_and_cropped(self):
-        """The viewport must never wrap; the wide legend should crop, not fold."""
-        gd = _gd_with_world()
-        pane = MapPane(gd)
-        pane.update_snapshot(_snap(0, 0))
-        out = pane.render()
+        pane = MapPane(_gd_typed())
+        out = pane._render_viewport(_snap(0, 0), 80, 41)
         assert out.no_wrap is True
         assert out.overflow == "crop"
 
-    def test_known_empty_tile_renders_walkable_floor(self):
-        """A known tile with no content renders the walkable glyph, not blank void."""
-        gd = _gd_with_world()
+
+class TestLayers:
+    def test_player_sprite_at_center(self):
+        # PLAYER_COLOR (bright_yellow) appears only from the player sprite.
+        pane = MapPane(_gd_typed())
+        out = pane._render_viewport(_snap(0, 0), 80, 41)
+        assert any("bright_yellow" in s for s in _styles(out))
+
+    def test_monster_sprite_in_view(self):
+        # green_slime at (2,0) is in view from (0,0) -> green pixels present.
+        pane = MapPane(_gd_typed())
+        out = pane._render_viewport(_snap(0, 0), 80, 41)
+        assert any("green" in s for s in _styles(out))
+
+    def test_unmapped_tiles_use_void_color(self):
+        gd = GameData()  # nothing known, no content
+        pane = MapPane(gd)
+        out = pane._render_viewport(_snap(0, 0), 80, 41)
+        assert any(UNMAPPED_COLOR in s for s in _styles(out))
+
+    def test_known_empty_tile_uses_floor_color(self):
+        gd = _gd_typed()
         gd._known_tiles = {(1, 0)}  # in view from (0,0), no content there
         pane = MapPane(gd)
-        pane.update_snapshot(_snap(0, 0))
-        assert WALKABLE_GLYPH in pane.render().plain
-
-    def test_unmapped_void_fills_with_faint_glyph(self):
-        """Unexplored cells render a faint glyph, not blank, so the viewport
-        fills the pane instead of floating a strip in black void."""
-        gd = GameData()  # no world data, nothing known
-        pane = MapPane(gd)
-        pane.update_snapshot(_snap(0, 0))
-        body = pane._render_viewport(_snap(0, 0), 41, 21).plain.split("\n")[1:]
-        # Every map cell is non-blank (player glyph + faint void everywhere else).
-        assert all(set(row) <= {UNMAPPED_GLYPH, PLAYER_GLYPH} for row in body)
-        assert " " not in "".join(body)
+        out = pane._render_viewport(_snap(0, 0), 80, 41)
+        assert any(WALKABLE_COLOR in s for s in _styles(out))
 
 
-class TestMapPaneTypedGlyphs:
+class TestHud:
+    def test_hud_shows_coords(self):
+        pane = MapPane(_gd_typed())
+        hud = pane._render_viewport(_snap(3, -4), 80, 41).plain.split("\n")[0]
+        assert "(3,-4)" in hud
+
+    def test_hud_shows_content_under_player(self):
+        # Player standing on the woodcutting resource at (2,2).
+        pane = MapPane(_gd_typed())
+        hud = pane._render_viewport(_snap(2, 2), 80, 41).plain.split("\n")[0]
+        assert "resource_woodcutting" in hud
+
+    def test_hud_no_content_on_empty_tile(self):
+        pane = MapPane(_gd_typed())
+        hud = pane._render_viewport(_snap(9, 9), 80, 41).plain.split("\n")[0]
+        assert hud.strip() == "(9,9)"
+
+
+class TestRenderEntry:
     def test_render_without_snapshot_shows_waiting(self):
-        pane = MapPane(_gd_typed())
-        assert "Waiting" in pane.render().plain
-
-    def test_npc_renders_uppercase_letter(self):
-        idx = MapPane._build_tile_index(_gd_typed())
-        assert idx[(-1, 0)] == ("A", "cyan")
-
-    def test_monster_renders_lowercase_letter(self):
-        idx = MapPane._build_tile_index(_gd_typed())
-        assert idx[(2, 0)] == ("s", "red")
-        assert idx[(0, 2)] == ("c", "red")
-
-    def test_structures_render_box_glyphs(self):
-        idx = MapPane._build_tile_index(_gd_typed())
-        assert idx[(4, 1)] == ("╣", "white")
-        assert idx[(-2, -2)] == ("╠", "white")
-        assert idx[(3, 3)] == ("╬", "white")
-        assert idx[(1, 2)] == ("╤", "white")
-
-    def test_transition_renders_door(self):
-        idx = MapPane._build_tile_index(_gd_typed())
-        assert idx[(0, -3)] == ("+", "magenta")
-
-    def test_resources_unchanged(self):
-        idx = MapPane._build_tile_index(_gd_typed())
-        assert idx[(2, 2)] == ("T", "green")
-
-    def test_legend_uses_category_key(self):
-        gd = _gd_typed()
-        pane = MapPane(gd)
-        pane.update_snapshot(_snap(0, 0))
-        header = pane.render().plain.split("\n")[0]
-        assert "npc" in header and "monster" in header
-        assert "structure" in header and "door" in header
-        assert "M=monster" not in header
-        assert ">=portal" not in header
-
-
-class TestRenderViewportDimensions:
-    def test_fills_exact_dimensions_odd(self):
-        pane = MapPane(_gd_typed())
-        out = pane._render_viewport(_snap(0, 0), 41, 21)
-        lines = out.plain.split("\n")
-        assert len(lines) == 21                       # 1 header + 20 map rows
-        assert all(len(row) == 41 for row in lines[1:])
-
-    def test_fills_exact_dimensions_even(self):
-        pane = MapPane(_gd_typed())
-        out = pane._render_viewport(_snap(0, 0), 40, 20)
-        lines = out.plain.split("\n")
-        assert len(lines) == 20
-        assert all(len(row) == 40 for row in lines[1:])
-
-    def test_player_centered(self):
-        pane = MapPane(_gd_typed())
-        w, h = 41, 21
-        lines = pane._render_viewport(_snap(0, 0), w, h).plain.split("\n")
-        map_h = h - 1
-        player_row = lines[1 + map_h // 2]            # +1 for the header line
-        assert player_row[w // 2] == PLAYER_GLYPH
-
-    def test_height_one_is_header_only(self):
-        pane = MapPane(_gd_typed())
-        lines = pane._render_viewport(_snap(0, 0), 41, 1).plain.split("\n")
-        assert len(lines) == 1                        # header only, no map rows
-
-    def test_world_offset_maps_to_centered_cell(self):
-        # Monster at (2,0); player at (0,0); width 41 -> player col 20,
-        # monster col 20+2 = 22 on the player's row.
-        pane = MapPane(_gd_typed())                   # _gd_typed has green_slime at (2,0)
-        w, h = 41, 21
-        lines = pane._render_viewport(_snap(0, 0), w, h).plain.split("\n")
-        map_h = h - 1
-        assert lines[1 + map_h // 2][w // 2 + 2] == "s"   # green_slime glyph
-
-
-class TestRenderSizing:
-    async def test_render_uses_pane_size(self):
-        # Mount the pane in a real Textual app so the compositor assigns a
-        # REAL 30x12 content size (no patching of the pane's own property).
-        pane = MapPane(_gd_typed())
-        pane.update_snapshot(_snap(0, 0))
-
-        class _Host(App):
-            CSS = "MapPane { width: 30; height: 12; }"
-
-            def compose(self) -> ComposeResult:
-                yield pane
-
-        async with _Host().run_test(size=(80, 24)):
-            assert pane.size == Size(30, 12)
-            lines = pane.render().plain.split("\n")
-        assert len(lines) == 12
-        assert all(len(row) == 30 for row in lines[1:])
+        assert "Waiting" in MapPane(_gd_typed()).render().plain
 
     def test_render_falls_back_when_size_zero(self):
-        # An UNMOUNTED pane really has size (0, 0) — the genuine triggering
-        # state for the fallback path; nothing needs patching.
         pane = MapPane(_gd_typed())
         pane.update_snapshot(_snap(0, 0))
         assert pane.size == Size(0, 0)
         lines = pane.render().plain.split("\n")
-        assert len(lines) == VIEWPORT_H                  # 21 fallback
-        assert all(len(row) == VIEWPORT_W for row in lines[1:])
+        tiles_h = (FALLBACK_H - 1) // TILE_H
+        tiles_w = FALLBACK_W // TILE_W
+        assert len(lines) == 1 + tiles_h * TILE_H
+        assert all(len(row) == tiles_w * TILE_W for row in lines[1:])
 
-    def test_render_no_snapshot_waiting(self):
+    async def test_render_uses_pane_size(self):
         pane = MapPane(_gd_typed())
-        assert "Waiting" in pane.render().plain
+        pane.update_snapshot(_snap(0, 0))
+
+        class _Host(App):
+            CSS = "MapPane { width: 80; height: 41; }"
+
+            def compose(self) -> ComposeResult:
+                yield pane
+
+        async with _Host().run_test(size=(100, 50)):
+            assert pane.size == Size(80, 41)
+            lines = pane.render().plain.split("\n")
+        tiles_h = (41 - 1) // TILE_H
+        assert len(lines) == 1 + tiles_h * TILE_H
