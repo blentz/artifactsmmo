@@ -10,6 +10,7 @@ from artifactsmmo_cli.ai.tiers.prerequisite_graph import (
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
+from tests.test_ai.test_skill_target_curve import _gd_with_recipes
 
 
 def _gd() -> GameData:
@@ -248,3 +249,68 @@ def test_objective_roots_emits_tool_obtainitem_alongside_gear():
     assert ObtainItem("copper_dagger") in roots
     # Tool target — the fix.
     assert ObtainItem("copper_pickaxe") in roots
+
+
+def _near_term_gd():
+    gd = GameData()
+    gd._item_stats = {
+        "copper_armor": ItemStats(code="copper_armor", level=5, type_="body_armor",
+                                  resistance={"earth": 6}),
+        "dragon_armor": ItemStats(code="dragon_armor", level=40, type_="body_armor",
+                                  resistance={"earth": 40}),
+    }
+    gd._crafting_recipes = {c: {"bar": 1} for c in ("copper_armor", "dragon_armor")}
+    gd._resource_drops = {"rocks": "bar"}
+    gd._resource_skill = {"rocks": ("mining", 1)}
+    return gd
+
+
+def test_objective_roots_emits_near_term_gear_with_state():
+    """With state supplied, the best usable-at-level upgrade per slot joins
+    the root set alongside the (unreachable-at-low-level) BiS targets.
+    Pre-fix trace 2026-06-11: no gear root survived is_reachable at level 6,
+    so the gear category starved and armor slots stayed empty for 148
+    fights."""
+    obj = CharacterObjective.from_game_data(_near_term_gd())
+    state = make_state(level=5)
+    roots = objective_roots(obj, state)
+    assert ObtainItem("copper_armor") in roots   # near-term, usable now
+    assert ObtainItem("dragon_armor") in roots   # BiS stays
+
+
+def test_objective_roots_dedupes_near_term_and_bis_overlap():
+    """When the near-term pick IS the BiS item (high level), one root only."""
+    gd = _near_term_gd()
+    obj = CharacterObjective.from_game_data(gd)
+    state = make_state(level=40)
+    roots = objective_roots(obj, state)
+    assert roots.count(ObtainItem("dragon_armor")) == 1
+
+
+def test_objective_roots_no_near_term_without_state():
+    """Backward compat: stateless callers get no near-term roots."""
+    obj = CharacterObjective.from_game_data(_near_term_gd())
+    roots = objective_roots(obj)
+    assert ObtainItem("copper_armor") not in roots
+
+
+def test_objective_roots_emits_below_curve_skill_root():
+    """Recipe-aware curve: at char 7 a weaponcrafting recipe at craft_level 5
+    (item_level 5, in-window) sets the curve target to 5. With the skill at 2
+    (below curve), objective_roots emits ReachSkillLevel(weaponcrafting, 5) so
+    the skill catches up before the gear commit forces a freeze (run-7)."""
+    gd = _gd_with_recipes()
+    obj = CharacterObjective.from_game_data(gd)
+    state = make_state(level=7, skills={"weaponcrafting": 2})
+    roots = objective_roots(obj, state)
+    assert ReachSkillLevel("weaponcrafting", 5) in roots
+
+
+def test_objective_roots_omits_at_curve_skill_root():
+    """Already at the curve target (weaponcrafting 5, target 5) → no near-term
+    curve root for that skill; it's not below the curve."""
+    gd = _gd_with_recipes()
+    obj = CharacterObjective.from_game_data(gd)
+    state = make_state(level=7, skills={"weaponcrafting": 5})
+    roots = objective_roots(obj, state)
+    assert ReachSkillLevel("weaponcrafting", 5) not in roots

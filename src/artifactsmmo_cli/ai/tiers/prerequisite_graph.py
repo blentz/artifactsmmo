@@ -142,8 +142,29 @@ def objective_roots(
         for skill in _CRAFTING_BOOTSTRAP_SKILLS:
             if state.skills.get(skill, 1) < _CRAFT_BOOTSTRAP_TARGET:
                 roots.append(ReachSkillLevel(skill, _CRAFT_BOOTSTRAP_TARGET))
+        # Recipe-aware near-term skill curve: hold each crafting skill high
+        # enough to craft gear up to char_level + LOOKAHEAD, so the next tier is
+        # ready just-in-time instead of a catch-up freeze (run-7 finding; spec
+        # docs/superpowers/specs/2026-06-13-recipe-aware-skill-scheduling-design.md).
+        for skill, target in objective.near_term_skill_targets(state).items():
+            if state.skills.get(skill, 1) < target:
+                roots.append(ReachSkillLevel(skill, target))
+        # Near-term gear: best usable-at-level upgrade per slot. The BiS
+        # target_gear roots below are unreachable at low level (filtered by
+        # is_reachable), which left the gear category with no live candidate —
+        # the 2026-06-11 gear-starvation treadmill. See
+        # CharacterObjective.near_term_gear.
+        roots.extend(ObtainItem(code)
+                     for code in objective.near_term_gear(state).values())
     roots.extend(ReachSkillLevel(skill, level)
                  for skill, level in objective.target_skill_levels.items())
     roots.extend(ObtainItem(code) for code in objective.target_gear.values())
     roots.extend(ObtainItem(code) for code in objective.target_tools.values())
-    return roots
+    # A near-term target can coincide with a BiS/tool target; one root each.
+    seen: set[MetaGoal] = set()
+    deduped: list[MetaGoal] = []
+    for root in roots:
+        if root not in seen:
+            seen.add(root)
+            deduped.append(root)
+    return deduped
