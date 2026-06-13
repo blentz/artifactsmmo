@@ -43,9 +43,10 @@ def _obtain_chain(code: str, qty: int, inventory: dict[str, int],
 
     memo: dict[str, int] = {}
     items = sorted(total, key=lambda c: (_depth(c, recipes, memo), c))
-    # deepest item with remaining work = the leaf being worked now
+    # SHALLOWEST item with remaining work = what's being acquired NOW (work
+    # proceeds raw -> up the recipe; you gather the leaf before crafting above it).
     pending = [c for c in items if net.get(c, 0) > 0]
-    active = max(pending, key=lambda c: (_depth(c, recipes, memo), c)) if pending else None
+    active = min(pending, key=lambda c: (_depth(c, recipes, memo), c)) if pending else None
 
     t = Table(box=None, padding=(0, 2), show_header=False)
     t.add_column("v")

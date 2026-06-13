@@ -49,8 +49,11 @@ def test_active_leaf_marked_now():
         ranking=[], inventory={"copper_ore": 42}, bank=None, game_data=_gd(),
         projected_cycles_to_max=None,
     ))
-    # deepest item with remaining need is copper_ore -> marked now
-    assert "now" in out
+    # the SHALLOWEST pending item (copper_ore, being gathered now) gets the
+    # marker — NOT the final copper_boots craft that can't start yet.
+    line = next(ln for ln in out.splitlines() if "now" in ln)
+    assert "copper_ore" in line
+    assert "copper_boots" not in line
 
 
 def test_bank_credited_in_have():
