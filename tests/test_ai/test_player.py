@@ -11,7 +11,7 @@ from artifactsmmo_api_client.models.achievement_type import AchievementType
 from artifactsmmo_api_client.models.error_response_schema import ErrorResponseSchema
 from artifactsmmo_api_client.models.error_schema import ErrorSchema
 from artifactsmmo_api_client.types import UNSET
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.equip import EquipAction
@@ -61,6 +61,60 @@ class TestGamePlayerInit:
         player = GamePlayer(character="hero", verbose=True, dry_run=True)
         assert player.verbose is True
         assert player.dry_run is True
+
+
+class TestDryRunDoesNotPersistLearning:
+    """Dry-run cycles are SIMULATED (action.apply, no real cooldown). Persisting
+    them into the learning store poisons action_cost: a Fight recorded with
+    actual_cooldown_seconds=0 makes cheapest_path's xp_per_cycle = xpk/max(0,1)
+    = xpk explode, locking the grind onto whatever monster got a 0-cost row
+    (live Robby 2026-06-12: green_slime 29/50 zero-cost rows from dry-run
+    probes beat higher-XP blue_slime). Observed costs must come ONLY from real
+    execution."""
+
+    def test_record_learning_cycle_is_noop_in_dry_run(self, tmp_path):
+        store = LearningStore(db_path=str(tmp_path / "dry.db"), character="hero")
+        try:
+            store.start_session()
+            player = GamePlayer(character="hero", dry_run=True, history=store)
+            prev = make_state(level=5)
+            new = make_state(level=5, xp=prev.xp + 10)
+            player._record_learning_cycle(
+                prev_state=prev, new_state=new,
+                action_repr="Fight(green_slime)", action_class="FightAction",
+                outcome="ok", selected_goal="GrindCharacterXP(green_slime)",
+                predicted_cost=0.0, actual_cooldown_seconds=0.0,
+                planner_nodes=1, planner_depth=1, planner_timed_out=False,
+                plan_len=1,
+            )
+            with Session(store._engine) as s:
+                rows = list(s.exec(select(Cycle).where(
+                    Cycle.action_repr == "Fight(green_slime)")))
+            assert rows == [], "dry-run must not persist a learning cycle"
+        finally:
+            store.close()
+
+    def test_record_learning_cycle_persists_when_not_dry_run(self, tmp_path):
+        store = LearningStore(db_path=str(tmp_path / "real.db"), character="hero")
+        try:
+            store.start_session()
+            player = GamePlayer(character="hero", dry_run=False, history=store)
+            prev = make_state(level=5)
+            new = make_state(level=5, xp=prev.xp + 10)
+            player._record_learning_cycle(
+                prev_state=prev, new_state=new,
+                action_repr="Fight(green_slime)", action_class="FightAction",
+                outcome="ok", selected_goal="GrindCharacterXP(green_slime)",
+                predicted_cost=0.0, actual_cooldown_seconds=49.0,
+                planner_nodes=1, planner_depth=1, planner_timed_out=False,
+                plan_len=1,
+            )
+            with Session(store._engine) as s:
+                rows = list(s.exec(select(Cycle).where(
+                    Cycle.action_repr == "Fight(green_slime)")))
+            assert len(rows) == 1
+        finally:
+            store.close()
 
 
 class TestBuildActions:
@@ -437,6 +491,75 @@ class TestFetchWorldState:
         with patch("artifactsmmo_cli.ai.player.get_character", return_value=None):
             with pytest.raises(RuntimeError):
                 player._fetch_world_state(client)
+
+
+class TestFullRefreshNetworkResilience:
+    def test_bank_sync_timeout_keeps_prior_view_and_retries(self):
+        """Run-9 trace 2026-06-12 01:14:37: a ReadTimeout on GET /my/bank
+        inside the periodic _full_refresh escaped all handling and killed the
+        process 23 min into the run (the action-execution path catches
+        httpx.HTTPError; the refresh path did not). A transient bank/pending
+        sync failure must keep the carried-over bank view and leave the
+        refresh counter unreset so the next cycle retries the refresh."""
+        player = GamePlayer(character="hero")
+        client = MagicMock()
+        player._actions_since_full_refresh = 20
+        # _fetch_world_state carries bank_items over from the prior state.
+        fetched = make_state(bank_items={"ash_wood": 59})
+        with patch.object(player, "_fetch_world_state", return_value=fetched):
+            with patch("artifactsmmo_cli.ai.player.get_bank_items",
+                       side_effect=httpx.ReadTimeout("The read operation timed out")):
+                player._full_refresh(client)
+        assert player.state is fetched
+        assert player.state.bank_items == {"ash_wood": 59}
+        # Counter NOT reset — the next _maybe_periodic_refresh retries.
+        assert player._actions_since_full_refresh == 20
+
+    def test_pending_sync_timeout_also_tolerated(self):
+        """Same guarantee when the failure comes from the pending-items sync
+        (the second call inside the refresh)."""
+        player = GamePlayer(character="hero")
+        client = MagicMock()
+        player._actions_since_full_refresh = 20
+        fetched = make_state(bank_items={"ash_wood": 59})
+        bank_items_result = MagicMock()
+        bank_items_result.data = []
+        bank_details_result = MagicMock()
+        bank_details_result.data = MagicMock()
+        bank_details_result.data.gold = 0
+        bank_details_result.data.slots = 50
+        with patch.object(player, "_fetch_world_state", return_value=fetched):
+            with patch("artifactsmmo_cli.ai.player.get_bank_items",
+                       return_value=bank_items_result):
+                with patch("artifactsmmo_cli.ai.player.get_bank_details",
+                           return_value=bank_details_result):
+                    with patch("artifactsmmo_cli.ai.player.get_pending_items",
+                               side_effect=httpx.ConnectError("no route")):
+                        player._full_refresh(client)
+        assert player._actions_since_full_refresh == 20
+
+    def test_successful_refresh_resets_counter(self):
+        player = GamePlayer(character="hero")
+        client = MagicMock()
+        player._actions_since_full_refresh = 20
+        fetched = make_state()
+        bank_items_result = MagicMock()
+        bank_items_result.data = []
+        bank_details_result = MagicMock()
+        bank_details_result.data = MagicMock()
+        bank_details_result.data.gold = 0
+        bank_details_result.data.slots = 50
+        pending_result = MagicMock()
+        pending_result.data = []
+        with patch.object(player, "_fetch_world_state", return_value=fetched):
+            with patch("artifactsmmo_cli.ai.player.get_bank_items",
+                       return_value=bank_items_result):
+                with patch("artifactsmmo_cli.ai.player.get_bank_details",
+                           return_value=bank_details_result):
+                    with patch("artifactsmmo_cli.ai.player.get_pending_items",
+                               return_value=pending_result):
+                        player._full_refresh(client)
+        assert player._actions_since_full_refresh == 0
 
 
 class TestSyncBank:

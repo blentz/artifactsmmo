@@ -699,11 +699,25 @@ class GamePlayer:
         return replace(state, pending_items=pending)
 
     def _full_refresh(self, client: AuthenticatedClient) -> None:
-        """Force a complete state refresh: character, bank, pending items."""
+        """Force a complete state refresh: character, bank, pending items.
+
+        Bank/pending sync tolerates transport failures: run-9 trace 2026-06-12
+        01:14:37, a ReadTimeout on GET /my/bank inside the periodic refresh
+        escaped all handling and killed the process 23 min into the run (the
+        action path catches httpx.HTTPError; this path did not). On failure
+        the carried-over bank view stays and the counter is NOT reset, so the
+        next cycle retries the refresh. _fetch_world_state retries internally;
+        _sync_bank/_sync_pending have no handling of their own — this is their
+        single handling level."""
         self.state = self._fetch_world_state(client)
         if self.state is not None:
-            self.state = self._sync_bank(client, self.state)
-            self.state = self._sync_pending(client, self.state)
+            try:
+                self.state = self._sync_bank(client, self.state)
+                self.state = self._sync_pending(client, self.state)
+            except httpx.HTTPError as e:
+                print(f"[{self._now()}] Bank/pending refresh network error: {e!r} "
+                      "— keeping prior bank view; retrying next cycle")
+                return
         self._actions_since_full_refresh = 0
 
     def _maybe_periodic_refresh(self, client: AuthenticatedClient) -> None:
@@ -1264,8 +1278,18 @@ class GamePlayer:
         plan_len: int,
         cycles_to_satisfy: int | None = None,
     ) -> None:
-        """Build a Cycle row and persist via LearningStore. No-op when history is None."""
-        if self.history is None:
+        """Build a Cycle row and persist via LearningStore. No-op when history is
+        None or in dry_run.
+
+        Dry-run cycles are SIMULATED (action.apply, no real cooldown), so their
+        actual_cooldown_seconds is 0 and their state deltas are projections, not
+        observations. Persisting them poisons the learned cost model: a Fight
+        stored with cooldown 0 makes cheapest_path's xp_per_cycle = xpk/max(0,1)
+        = xpk blow up, locking the grind onto whatever monster collected the
+        zero-cost rows (live Robby 2026-06-12: 29/50 zero-cost green_slime rows
+        from dry-run probes out-ranked higher-XP blue_slime). Observed costs
+        must come ONLY from real execution."""
+        if self.history is None or self.dry_run:
             return
         drops = self._compute_drops(prev_state, new_state)
         # Per-skill XP delta. Sparse: only skills whose XP changed appear.
