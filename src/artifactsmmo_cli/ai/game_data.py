@@ -634,179 +634,223 @@ class GameData:
         data._load_bank_metadata(client)
         return data
 
-    def _load_bank_metadata(self, client: AuthenticatedClient) -> None:
-        """Fetch bank capacity and next expansion cost."""
+    def _fetch_bank(self, client: AuthenticatedClient):
+        """Fetch the single bank-details schema object, or None when absent."""
         result = get_bank_details(client=client)
         if result is None or not hasattr(result, "data") or result.data is None:
-            return
-        self._bank_capacity = result.data.slots
-        self._next_expansion_cost = result.data.next_expansion_cost
+            return None
+        return result.data
 
-    def _load_maps(self, client: AuthenticatedClient) -> None:
-        """Fetch all map tiles and build content location indexes."""
+    def _build_bank(self, item) -> None:
+        """Set bank capacity and next expansion cost from the bank schema object."""
+        if item is None:
+            return
+        self._bank_capacity = item.slots
+        self._next_expansion_cost = item.next_expansion_cost
+
+    def _load_bank_metadata(self, client: AuthenticatedClient) -> None:
+        """Fetch bank capacity and next expansion cost."""
+        self._build_bank(self._fetch_bank(client))
+
+    def _fetch_maps(self, client: AuthenticatedClient) -> list:
+        """Page all overworld map tiles; return the list of schema objects."""
+        out: list = []
         page = 1
         while True:
             result = get_all_maps(client=client, layer=MapLayer.OVERWORLD, page=page, size=100)
             if result is None or not result.data:
                 break
-
-            for tile in result.data:
-                loc = (tile.x, tile.y)
-                self._known_tiles.add(loc)
-
-                transition = tile.interactions.transition
-                if not isinstance(transition, Unset) and transition is not None:
-                    self._transition_tiles.add(loc)
-
-                content = tile.interactions.content
-                if isinstance(content, Unset) or content is None:
-                    continue
-
-                ct = content.type_
-                code = content.code
-
-                if ct == MapContentType.MONSTER:
-                    self._monster_locations.setdefault(code, []).append(loc)
-                elif ct == MapContentType.RESOURCE:
-                    self._resource_locations.setdefault(code, []).append(loc)
-                elif ct == MapContentType.BANK:
-                    # Prefer an OPEN bank. Some banks are achievement-gated
-                    # (e.g. the desert-island bank needs `secure_the_island`);
-                    # moving to one returns HTTP 496 and the bot wrongly records
-                    # a global "bank locked" blocker. Latch onto an unconditional
-                    # bank and only fall back to a gated one if none is open.
-                    if self._bank_tile_open(tile):
-                        self._bank_location = loc
-                        self._bank_location_open = True
-                    elif not self._bank_location_open:
-                        self._bank_location = loc
-                elif ct == MapContentType.TASKS_MASTER:
-                    self._taskmaster_location = loc
-                elif ct == MapContentType.GRAND_EXCHANGE:
-                    self._grand_exchange_location = loc
-                elif ct == MapContentType.NPC:
-                    self._npc_locations[code] = loc
-                elif ct == MapContentType.WORKSHOP:
-                    # code is workshop identifier — match to crafting skills by substring
-                    for skill in ("mining", "woodcutting", "weaponcrafting", "gearcrafting",
-                                  "jewelrycrafting", "cooking", "alchemy", "fishing"):
-                        if skill in code:
-                            self._workshop_locations[skill] = loc
-                            break
-
+            out.extend(result.data)
             if len(result.data) < 100:
                 break
             page += 1
+        return out
 
-    def _load_items(self, client: AuthenticatedClient) -> None:
-        """Fetch all items and build stats + recipe indexes."""
+    def _build_maps(self, tiles: list) -> None:
+        """Build content location indexes from map tile schema objects."""
+        for tile in tiles:
+            loc = (tile.x, tile.y)
+            self._known_tiles.add(loc)
+
+            transition = tile.interactions.transition
+            if not isinstance(transition, Unset) and transition is not None:
+                self._transition_tiles.add(loc)
+
+            content = tile.interactions.content
+            if isinstance(content, Unset) or content is None:
+                continue
+
+            ct = content.type_
+            code = content.code
+
+            if ct == MapContentType.MONSTER:
+                self._monster_locations.setdefault(code, []).append(loc)
+            elif ct == MapContentType.RESOURCE:
+                self._resource_locations.setdefault(code, []).append(loc)
+            elif ct == MapContentType.BANK:
+                # Prefer an OPEN bank. Some banks are achievement-gated
+                # (e.g. the desert-island bank needs `secure_the_island`);
+                # moving to one returns HTTP 496 and the bot wrongly records
+                # a global "bank locked" blocker. Latch onto an unconditional
+                # bank and only fall back to a gated one if none is open.
+                if self._bank_tile_open(tile):
+                    self._bank_location = loc
+                    self._bank_location_open = True
+                elif not self._bank_location_open:
+                    self._bank_location = loc
+            elif ct == MapContentType.TASKS_MASTER:
+                self._taskmaster_location = loc
+            elif ct == MapContentType.GRAND_EXCHANGE:
+                self._grand_exchange_location = loc
+            elif ct == MapContentType.NPC:
+                self._npc_locations[code] = loc
+            elif ct == MapContentType.WORKSHOP:
+                # code is workshop identifier — match to crafting skills by substring
+                for skill in ("mining", "woodcutting", "weaponcrafting", "gearcrafting",
+                              "jewelrycrafting", "cooking", "alchemy", "fishing"):
+                    if skill in code:
+                        self._workshop_locations[skill] = loc
+                        break
+
+    def _load_maps(self, client: AuthenticatedClient) -> None:
+        """Fetch all map tiles and build content location indexes."""
+        self._build_maps(self._fetch_maps(client))
+
+    def _fetch_items(self, client: AuthenticatedClient) -> list:
+        """Page all items; return the list of schema objects."""
+        out: list = []
         page = 1
         while True:
             result = get_all_items(client=client, page=page, size=100)
             if result is None or not result.data:
                 break
-
-            for item in result.data:
-                stats = ItemStats(code=item.code, level=item.level, type_=item.type_)
-                self._item_stats[item.code] = stats
-                # OpenAPI conformance fields (Item 14 remediation).
-                # tradeable: server is authoritative; defensive
-                # `getattr` with default True preserves legacy behavior
-                # when an older client lacks the field.
-                stats.tradeable = bool(getattr(item, "tradeable", True))
-                subtype = getattr(item, "subtype", "")
-                if isinstance(subtype, Unset):
-                    subtype = ""
-                stats.subtype = str(subtype or "")
-                raw_conditions = getattr(item, "conditions", None)
-                if raw_conditions is not None and not isinstance(raw_conditions, Unset):
-                    for cond in raw_conditions:
-                        code = getattr(cond, "code", None)
-                        value = getattr(cond, "value", None)
-                        if code is not None and value is not None:
-                            stats.conditions.append((str(code), int(value)))
-
-                if not isinstance(item.effects, Unset) and item.effects:
-                    for effect in item.effects:
-                        if effect.code == "heal":
-                            stats.hp_restore = effect.value
-                        elif effect.code.startswith("attack_"):
-                            elem = effect.code[len("attack_"):]
-                            stats.attack[elem] = effect.value
-                        elif effect.code.startswith("res_"):
-                            elem = effect.code[len("res_"):]
-                            stats.resistance[elem] = effect.value
-                        elif effect.code == "dmg":
-                            stats.dmg = effect.value
-                        elif effect.code.startswith("dmg_"):
-                            stats.dmg_elements[effect.code[len("dmg_"):]] = effect.value
-                        elif effect.code == "critical_strike":
-                            stats.critical_strike = effect.value
-                        elif effect.code == "initiative":
-                            stats.initiative = effect.value
-                        elif effect.code == "hp":
-                            stats.hp_bonus = effect.value
-                        elif effect.code in _GATHERING_SKILLS:
-                            # Tool bonus for a gather skill (e.g. axe → woodcutting).
-                            # Game encodes as cooldown reduction (negative value = faster);
-                            # store as-is so callers can compare magnitudes.
-                            stats.skill_effects[effect.code] = effect.value
-
-                if not isinstance(item.craft, Unset) and item.craft is not None:
-                    craft = item.craft
-                    if not isinstance(craft.skill, Unset) and craft.skill is not None:
-                        stats.crafting_skill = craft.skill.value
-                    if not isinstance(craft.level, Unset) and craft.level is not None:
-                        stats.crafting_level = craft.level
-
-                    if not isinstance(craft.items, Unset) and craft.items:
-                        recipe: dict[str, int] = {}
-                        for mat in craft.items:
-                            recipe[mat.code] = mat.quantity
-                        self._crafting_recipes[item.code] = recipe
-
+            out.extend(result.data)
             if len(result.data) < 100:
                 break
             page += 1
+        return out
 
-    def _load_resources(self, client: AuthenticatedClient) -> None:
-        """Fetch all resources and build skill requirement and drop item indexes."""
+    def _build_items(self, items: list) -> None:
+        """Build stats + recipe indexes from item schema objects."""
+        for item in items:
+            stats = ItemStats(code=item.code, level=item.level, type_=item.type_)
+            self._item_stats[item.code] = stats
+            # OpenAPI conformance fields (Item 14 remediation).
+            # tradeable: server is authoritative; defensive
+            # `getattr` with default True preserves legacy behavior
+            # when an older client lacks the field.
+            stats.tradeable = bool(getattr(item, "tradeable", True))
+            subtype = getattr(item, "subtype", "")
+            if isinstance(subtype, Unset):
+                subtype = ""
+            stats.subtype = str(subtype or "")
+            raw_conditions = getattr(item, "conditions", None)
+            if raw_conditions is not None and not isinstance(raw_conditions, Unset):
+                for cond in raw_conditions:
+                    code = getattr(cond, "code", None)
+                    value = getattr(cond, "value", None)
+                    if code is not None and value is not None:
+                        stats.conditions.append((str(code), int(value)))
+
+            if not isinstance(item.effects, Unset) and item.effects:
+                for effect in item.effects:
+                    if effect.code == "heal":
+                        stats.hp_restore = effect.value
+                    elif effect.code.startswith("attack_"):
+                        elem = effect.code[len("attack_"):]
+                        stats.attack[elem] = effect.value
+                    elif effect.code.startswith("res_"):
+                        elem = effect.code[len("res_"):]
+                        stats.resistance[elem] = effect.value
+                    elif effect.code == "dmg":
+                        stats.dmg = effect.value
+                    elif effect.code.startswith("dmg_"):
+                        stats.dmg_elements[effect.code[len("dmg_"):]] = effect.value
+                    elif effect.code == "critical_strike":
+                        stats.critical_strike = effect.value
+                    elif effect.code == "initiative":
+                        stats.initiative = effect.value
+                    elif effect.code == "hp":
+                        stats.hp_bonus = effect.value
+                    elif effect.code in _GATHERING_SKILLS:
+                        # Tool bonus for a gather skill (e.g. axe → woodcutting).
+                        # Game encodes as cooldown reduction (negative value = faster);
+                        # store as-is so callers can compare magnitudes.
+                        stats.skill_effects[effect.code] = effect.value
+
+            if not isinstance(item.craft, Unset) and item.craft is not None:
+                craft = item.craft
+                if not isinstance(craft.skill, Unset) and craft.skill is not None:
+                    stats.crafting_skill = craft.skill.value
+                if not isinstance(craft.level, Unset) and craft.level is not None:
+                    stats.crafting_level = craft.level
+
+                if not isinstance(craft.items, Unset) and craft.items:
+                    recipe: dict[str, int] = {}
+                    for mat in craft.items:
+                        recipe[mat.code] = mat.quantity
+                    self._crafting_recipes[item.code] = recipe
+
+    def _load_items(self, client: AuthenticatedClient) -> None:
+        """Fetch all items and build stats + recipe indexes."""
+        self._build_items(self._fetch_items(client))
+
+    def _fetch_resources(self, client: AuthenticatedClient) -> list:
+        """Page all resources; return the list of schema objects."""
+        out: list = []
         page = 1
         while True:
             result = get_all_resources(client=client, page=page, size=100)
             if result is None or not result.data:
                 break
-
-            for res in result.data:
-                self._resource_skill[res.code] = (res.skill.value, res.level)
-                # Pick the primary drop: most common (lowest rate value = 1/rate)
-                if res.drops:
-                    self._resource_drops[res.code] = min(res.drops, key=lambda d: d.rate).code
-                    self._resource_drops_full[res.code] = [
-                        (d.code, d.rate, d.min_quantity, d.max_quantity) for d in res.drops
-                    ]
-
+            out.extend(result.data)
             if len(result.data) < 100:
                 break
             page += 1
+        return out
 
-    def _load_npcs(self, client: AuthenticatedClient) -> None:
-        """Fetch all NPC items and build buy and sell stock indexes."""
+    def _build_resources(self, resources: list) -> None:
+        """Build skill requirement and drop item indexes from resource schema objects."""
+        for res in resources:
+            self._resource_skill[res.code] = (res.skill.value, res.level)
+            # Pick the primary drop: most common (lowest rate value = 1/rate)
+            if res.drops:
+                self._resource_drops[res.code] = min(res.drops, key=lambda d: d.rate).code
+                self._resource_drops_full[res.code] = [
+                    (d.code, d.rate, d.min_quantity, d.max_quantity) for d in res.drops
+                ]
+
+    def _load_resources(self, client: AuthenticatedClient) -> None:
+        """Fetch all resources and build skill requirement and drop item indexes."""
+        self._build_resources(self._fetch_resources(client))
+
+    def _fetch_npcs(self, client: AuthenticatedClient) -> list:
+        """Page all NPC items; return the list of schema objects."""
+        out: list = []
         page = 1
         while True:
             result = get_all_npc_items(client=client, page=page, size=100)
             if result is None or not result.data:
                 break
-            for entry in result.data:
-                buy_price = entry.buy_price
-                if not isinstance(buy_price, Unset) and buy_price is not None:
-                    self._npc_stock.setdefault(entry.npc, {})[entry.code] = buy_price
-                sell_price = entry.sell_price
-                if not isinstance(sell_price, Unset) and sell_price is not None:
-                    self._npc_sell_prices.setdefault(entry.npc, {})[entry.code] = sell_price
+            out.extend(result.data)
             if len(result.data) < 100:
                 break
             page += 1
+        return out
+
+    def _build_npcs(self, entries: list) -> None:
+        """Build buy and sell stock indexes from NPC item schema objects."""
+        for entry in entries:
+            buy_price = entry.buy_price
+            if not isinstance(buy_price, Unset) and buy_price is not None:
+                self._npc_stock.setdefault(entry.npc, {})[entry.code] = buy_price
+            sell_price = entry.sell_price
+            if not isinstance(sell_price, Unset) and sell_price is not None:
+                self._npc_sell_prices.setdefault(entry.npc, {})[entry.code] = sell_price
+
+    def _load_npcs(self, client: AuthenticatedClient) -> None:
+        """Fetch all NPC items and build buy and sell stock indexes."""
+        self._build_npcs(self._fetch_npcs(client))
 
     def _load_ge_orders(self, client: AuthenticatedClient) -> None:
         """Index, per item, the highest-price OPEN BUY order and the lowest-price
@@ -853,78 +897,96 @@ class GameData:
                 break
             page += 1
 
-    def _load_events(self, client: AuthenticatedClient) -> None:
+    def _fetch_events(self, client: AuthenticatedClient) -> list:
+        """Page all events; return the list of schema objects."""
+        out: list = []
+        page = 1
+        while True:
+            result = get_all_events(client=client, page=page, size=100)
+            if result is None or not result.data:
+                break
+            out.extend(result.data)
+            if len(result.data) < 100:
+                break
+            page += 1
+        return out
+
+    def _build_events(self, events: list) -> None:
         """Index event NPCs (code -> event code, code -> fixed spawn tile) from the catalog.
 
         Event merchants never appear in get_all_maps; their fixed spawn tile lives
         only in the events catalog, and they exist on the map only while their event
         is active.
         """
-        page = 1
-        while True:
-            result = get_all_events(client=client, page=page, size=100)
-            if result is None or not result.data:
-                break
-            for ev in result.data:
-                if ev.content.type_ != MapContentType.NPC:
-                    continue
-                npc_code = ev.content.code
-                self._npc_event_code[npc_code] = ev.code
-                if ev.maps:
-                    first = ev.maps[0]
-                    self._event_npc_spawns[npc_code] = (first.x, first.y)
-            if len(result.data) < 100:
-                break
-            page += 1
+        for ev in events:
+            if ev.content.type_ != MapContentType.NPC:
+                continue
+            npc_code = ev.content.code
+            self._npc_event_code[npc_code] = ev.code
+            if ev.maps:
+                first = ev.maps[0]
+                self._event_npc_spawns[npc_code] = (first.x, first.y)
 
-    def _load_monsters(self, client: AuthenticatedClient) -> None:
-        """Fetch all monsters and build level index."""
+    def _load_events(self, client: AuthenticatedClient) -> None:
+        """Fetch all events and index event NPCs."""
+        self._build_events(self._fetch_events(client))
+
+    def _fetch_monsters(self, client: AuthenticatedClient) -> list:
+        """Page all monsters; return the list of schema objects."""
+        out: list = []
         page = 1
         while True:
             result = get_all_monsters(client=client, page=page, size=100)
             if result is None or not result.data:
                 break
-
-            for mon in result.data:
-                self._monster_level[mon.code] = mon.level
-                self._monster_hp[mon.code] = mon.hp
-                self._monster_type[mon.code] = (
-                    mon.type_.value if hasattr(mon.type_, "value") else str(mon.type_ or "normal")
-                )
-                self._monster_attack[mon.code] = {
-                    elem: getattr(mon, f"attack_{elem}", 0) for elem in ("fire", "earth", "water", "air")
-                }
-                self._monster_resistance[mon.code] = {
-                    elem: getattr(mon, f"res_{elem}", 0) for elem in ("fire", "earth", "water", "air")
-                }
-                self._monster_critical_strike[mon.code] = mon.critical_strike
-                self._monster_initiative[mon.code] = mon.initiative
-                # OpenAPI conformance fields (Item 14 remediation).
-                # Defensive getattr keeps older API clients green.
-                min_gold = getattr(mon, "min_gold", 0)
-                max_gold = getattr(mon, "max_gold", 0)
-                if isinstance(min_gold, Unset):
-                    min_gold = 0
-                if isinstance(max_gold, Unset):
-                    max_gold = 0
-                self._monster_min_gold[mon.code] = int(min_gold or 0)
-                self._monster_max_gold[mon.code] = int(max_gold or 0)
-                raw_drops = getattr(mon, "drops", None)
-                if raw_drops is not None and not isinstance(raw_drops, Unset):
-                    drops: list[tuple[str, int, int, int]] = []
-                    for d in raw_drops:
-                        drop_code = getattr(d, "code", None)
-                        rate = getattr(d, "rate", None)
-                        min_q = getattr(d, "min_quantity", None)
-                        max_q = getattr(d, "max_quantity", None)
-                        if drop_code is not None and rate is not None:
-                            drops.append((
-                                str(drop_code), int(rate),
-                                int(min_q if min_q is not None else 1),
-                                int(max_q if max_q is not None else 1),
-                            ))
-                    self._monster_drops[mon.code] = drops
-
+            out.extend(result.data)
             if len(result.data) < 100:
                 break
             page += 1
+        return out
+
+    def _build_monsters(self, monsters: list) -> None:
+        """Build level, stat, and drop indexes from monster schema objects."""
+        for mon in monsters:
+            self._monster_level[mon.code] = mon.level
+            self._monster_hp[mon.code] = mon.hp
+            self._monster_type[mon.code] = (
+                mon.type_.value if hasattr(mon.type_, "value") else str(mon.type_ or "normal")
+            )
+            self._monster_attack[mon.code] = {
+                elem: getattr(mon, f"attack_{elem}", 0) for elem in ("fire", "earth", "water", "air")
+            }
+            self._monster_resistance[mon.code] = {
+                elem: getattr(mon, f"res_{elem}", 0) for elem in ("fire", "earth", "water", "air")
+            }
+            self._monster_critical_strike[mon.code] = mon.critical_strike
+            self._monster_initiative[mon.code] = mon.initiative
+            # OpenAPI conformance fields (Item 14 remediation).
+            # Defensive getattr keeps older API clients green.
+            min_gold = getattr(mon, "min_gold", 0)
+            max_gold = getattr(mon, "max_gold", 0)
+            if isinstance(min_gold, Unset):
+                min_gold = 0
+            if isinstance(max_gold, Unset):
+                max_gold = 0
+            self._monster_min_gold[mon.code] = int(min_gold or 0)
+            self._monster_max_gold[mon.code] = int(max_gold or 0)
+            raw_drops = getattr(mon, "drops", None)
+            if raw_drops is not None and not isinstance(raw_drops, Unset):
+                drops: list[tuple[str, int, int, int]] = []
+                for d in raw_drops:
+                    drop_code = getattr(d, "code", None)
+                    rate = getattr(d, "rate", None)
+                    min_q = getattr(d, "min_quantity", None)
+                    max_q = getattr(d, "max_quantity", None)
+                    if drop_code is not None and rate is not None:
+                        drops.append((
+                            str(drop_code), int(rate),
+                            int(min_q if min_q is not None else 1),
+                            int(max_q if max_q is not None else 1),
+                        ))
+                self._monster_drops[mon.code] = drops
+
+    def _load_monsters(self, client: AuthenticatedClient) -> None:
+        """Fetch all monsters and build level index."""
+        self._build_monsters(self._fetch_monsters(client))

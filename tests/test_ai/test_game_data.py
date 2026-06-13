@@ -1190,3 +1190,20 @@ def test_item_load_conditions_and_unset_subtype(monkeypatch):
     assert stats.subtype == ""
     assert stats.conditions == [("character_level", 10), ("mining_level", 5)]
     assert stats.tradeable is True
+
+
+class TestGameDataFetchBuildSplit:
+    def test_fetch_maps_returns_element_objects(self):
+        gd = GameData()
+        tile = make_map_tile(1, 0, "monster", "chicken")
+        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=make_page([tile])):
+            out = gd._fetch_maps(MagicMock())
+        assert out == [tile]   # _fetch_* returns the schema objects, un-built
+
+    def test_load_maps_is_fetch_then_build(self):
+        # the existing wrapper still indexes correctly (build over fetched objects)
+        gd = GameData()
+        tile = make_map_tile(2, 3, "resource", "copper")
+        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=make_page([tile])):
+            gd._load_maps(MagicMock())
+        assert gd._resource_locations == {"copper": [(2, 3)]}
