@@ -93,3 +93,15 @@ def test_header_and_eta_and_alternatives():
     assert "ETA" in out and "18" in out
     assert "ALTERNATIVES" in out and "ReachCharLevel" in out and "1.48" in out
     # the committed root is NOT repeated in the alternatives list
+
+
+def test_pursue_task_line():
+    out = _text(build_plan_summary(
+        "PursueTask(task_code='cook_beef')", [], {}, None, _gd(), None,
+        task_code="cook_beef", task_progress=3, task_total=10))
+    assert "Task cook_beef" in out and "3/10" in out
+
+
+def test_unrecognized_root_falls_back_to_plain_plan_line():
+    out = _text(build_plan_summary("MysteryRoot(x=1)", [], {}, None, _gd(), None))
+    assert "Plan:" in out and "MysteryRoot" in out
