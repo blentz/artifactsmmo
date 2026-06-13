@@ -22,6 +22,9 @@ def _progression_gd() -> GameData:
         for lvl in range(1, 6)
     }
     gd._crafting_recipes = {f"wc_t{lvl}": {"bar": 1} for lvl in range(1, 6)}
+    # `bar` is a gatherable resource drop -> every wc_t* is obtainable (the
+    # grind-target obtainability filter only excludes un-gettable chains).
+    gd._resource_drops = {"bar_rocks": "bar"}
     return gd
 
 
