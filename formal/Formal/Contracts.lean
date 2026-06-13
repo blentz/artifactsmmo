@@ -7,6 +7,7 @@ import Formal.InventoryProfile
 import Formal.PredictWin
 import Formal.LoadoutProjection
 import Formal.EquipmentScoring
+import Formal.SkillTargetCurve
 import Formal.SkillXpCurve
 import Formal.RecipeClosure
 import Formal.TaskFeasibility
@@ -349,10 +350,30 @@ example : ∀ (score : Item → Int) (playerLevel : Int) (current : Option Item)
     candidates playerLevel items = [] →
     pickSlot score playerLevel current items = current :=
   @pickslot_no_candidates_keeps
--- weapon_score_nonneg: nonneg per-element attacks ⇒ WScore ≥ 0 (the clamp earns this)
+-- weapon_score_nonneg: nonneg per-element attacks + nonneg crit ⇒ WScore ≥ 0
+-- (the clamp earns the sum's sign; 0 ≤ crit keeps the (200 + crit) factor positive)
 example : ∀ (item : Item) (monsterRes : ElemStats),
-    (∀ e ∈ elements, 0 ≤ elemGet item.attack e) → 0 ≤ WScore item monsterRes :=
+    (∀ e ∈ elements, 0 ≤ elemGet item.attack e) → 0 ≤ item.crit →
+    0 ≤ WScore item monsterRes :=
   @weapon_score_nonneg
+
+/-! ### SkillTargetCurve role contracts.
+
+`Item`/`skillCurveTarget` clash with `EquipmentScoring.Item` (opened above); we
+fully-qualify the `SkillTargetCurve` names. The `hmax : 0 ≤ maxSkill` hypothesis
+is load-bearing — a negative clamp ceiling would invert the order. -/
+
+-- curve_le_max: target never exceeds maxSkill (given 0 ≤ maxSkill)
+example : ∀ (skill charLevel lookahead maxSkill : Int)
+    (items : List Formal.SkillTargetCurve.Item), 0 ≤ maxSkill →
+    Formal.SkillTargetCurve.skillCurveTarget skill charLevel lookahead maxSkill items ≤ maxSkill :=
+  @Formal.SkillTargetCurve.curve_le_max
+-- curve_monotone_in_char_level: higher char level never lowers the target
+example : ∀ (skill l1 l2 lookahead maxSkill : Int)
+    (items : List Formal.SkillTargetCurve.Item), l1 ≤ l2 → 0 ≤ maxSkill →
+    Formal.SkillTargetCurve.skillCurveTarget skill l1 lookahead maxSkill items
+      ≤ Formal.SkillTargetCurve.skillCurveTarget skill l2 lookahead maxSkill items :=
+  @Formal.SkillTargetCurve.curve_monotone_in_char_level
 
 /-! ### SkillXpCurve role contracts. -/
 
