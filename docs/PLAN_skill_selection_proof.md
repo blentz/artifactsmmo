@@ -1,6 +1,16 @@
 # PLAN: formally prove recipe-aware skill-grind selection (same-skill invariant)
 
-Status: OPEN 2026-06-13. Phase 0 (proof boundary) set; Phases 1-5 to do.
+Status: CLOSED 2026-06-13 — IMPLEMENTED + PROVEN + GATED on branch
+`fix/skill-selection-same-skill`. Pure core `skill_grind_selection_pure`
+extracted to `Formal/Extracted/SkillGrindSelection.lean`; four role theorems
+kernel-checked in `Formal/SkillGrindSelection.lean` (`grind_same_skill`,
+`grind_in_level`, `grind_obtainable`, `grind_actionable`; axioms ⊆ {propext,
+Quot.sound}); `Contracts.lean` + `Manifest.lean` pins; oracle arm + differential
+(`test_skill_grind_selection_diff.py`, 400 examples; full diff suite 502 passed);
+mutation gate OK with all 4 anchors KILLED — including the load-bearing
+"drop same-skill guard" cross-skill mutant. pytest 3263 @ 100% cov. Live-verified
+the original defect is fixed (weaponcrafting grinds fishing_net, plan_len 57).
+Adversarial review: differential calls the live core; theorems non-vacuous.
 
 ## The defect (live, trace 2026-06-13 13:38 cycles 15-23)
 
@@ -10,13 +20,22 @@ score 2.4). weaponcrafting `skill_xp` stays 0 though **6 weaponcrafting recipes
 are craftable at level 1** (copper_dagger, wooden_staff, copper_axe,
 apprentice_gloves, copper_pickaxe, fishing_net).
 
-Root cause: `objective_step_goal(ReachSkillLevel(skill,N))` returns EITHER
-`GatherMaterials(skill_grind_target(skill))` OR `LevelSkillGoal(skill)` — never
-both. When the `GatherMaterials` path is **unplannable** (the chosen craft item's
-materials can't be gathered in budget this cycle), the arbiter (`select` keeps
-only the first *plannable* candidate) discards it and falls through to the **next
-root's step** — a DIFFERENT skill's grind. There is no *same-skill* fallback, so
-the committed objective is silently abandoned cross-skill.
+Root cause (CONFIRMED by live reproduction 2026-06-13, Robby weaponcrafting 1):
+`skill_grind_target("weaponcrafting")` returns **wooden_staff** (recipe
+`{wooden_stick:1, ash_wood:4}`). `wooden_stick` has NO recipe and is not
+gatherable → the `GatherMaterials(wooden_staff)` goal GOAP-fails (`plan_len 0`),
+though the cheap `is_plannable` skill-gate check returns True. `skill_grind_target`
+ranks by `(-mats_missing, craft_level, code)` — fewest MISSING materials — so it
+prefers wooden_staff (some inputs on hand) over the OBTAINABLE copper_dagger
+(`copper_bar ← copper_ore`, gatherable, GOAP plan_len 57). It never checks the
+recipe inputs are reachable. THEN the arbiter (`select` keeps the first plannable
+candidate) discards the un-planning weaponcrafting goal and falls to the next
+root's step — the gearcrafting grind (wooden_shield, plans fine). No same-skill
+fallback, so the committed objective is silently abandoned cross-skill.
+
+TWO compounding defects: (1) selection picks an unobtainable in-skill target;
+(2) the arbiter falls cross-skill when the committed skill's grind can't plan.
+"Proper action" therefore means **same-skill AND obtainable**.
 
 ## Proof boundary (Phase 0 decision — "same-skill invariant")
 
