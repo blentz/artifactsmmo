@@ -129,12 +129,13 @@ def runLoadoutProjection (args : Array Json) : Json :=
   let slots := toSlots rest
   Json.mkObj [("projected", Json.num (projectedField current slots))]
 
-/-- Build a model `Item` from a flat 11-int block:
-`[code, level, fits(0/1), atk0..atk3, res0..res3]`. Element keys are 0..3. -/
+/-- Build a model `Item` from a flat 12-int block:
+`[code, level, fits(0/1), atk0..atk3, res0..res3, crit]`. Element keys are 0..3. -/
 def itemFromBlock (b : Nat → Int) : Item :=
   { code := b 0, level := b 1, fits := b 2 != 0,
     attack := [(0, b 3), (1, b 4), (2, b 5), (3, b 6)],
-    resistance := [(0, b 7), (1, b 8), (2, b 9), (3, b 10)] }
+    resistance := [(0, b 7), (1, b 8), (2, b 9), (3, b 10)],
+    crit := b 11 }
 
 /-- Build an `ElemStats` (monster atk OR res) from 4 ints at offset `o`. -/
 def elemFromArgs (args : Array Json) (o : Nat) : ElemStats :=
@@ -147,8 +148,8 @@ args layout:
 * 1:        scoreKind (0 = weapon, 1 = armor)
 * 2..5:     monster element stats (resistance for weapon, attack for armor)
 * 6:        currentPresent (0/1)
-* 7..17:    current item block (11 ints; ignored when currentPresent = 0)
-* 18..:     candidate item blocks, 11 ints each
+* 7..18:    current item block (12 ints; ignored when currentPresent = 0)
+* 19..:     candidate item blocks, 12 ints each
 
 Emits the picked item's CODE (or -1 = none / leave-as-is), its SCORE, the MAX
 feasible score, and the current item's score (for the no-downgrade assertion). -/
@@ -161,10 +162,10 @@ def runEquipmentScoring (args : Array Json) : Json :=
   let curPresent := intArg args 6 != 0
   let current : Option Item :=
     if curPresent then some (itemFromBlock (fun i => intArg args (7 + i))) else none
-  -- candidate blocks start at 18, 11 ints each
-  let nCand := (args.size - 18) / 11
+  -- candidate blocks start at 19, 12 ints each
+  let nCand := (args.size - 19) / 12
   let items : List Item :=
-    (List.range nCand).map (fun k => itemFromBlock (fun i => intArg args (18 + k * 11 + i)))
+    (List.range nCand).map (fun k => itemFromBlock (fun i => intArg args (19 + k * 12 + i)))
   let picked := pickSlot score playerLevel current items
   let pickedCode : Int := match picked with | some it => it.code | none => -1
   let pickedScore : Int := match picked with | some it => score it | none => 0
@@ -175,6 +176,30 @@ def runEquipmentScoring (args : Array Json) : Json :=
   let curScore : Int := match current with | some it => score it | none => 0
   Json.mkObj [("picked_code", Json.num pickedCode), ("picked_score", Json.num pickedScore),
     ("max_score", Json.num maxScore), ("cur_score", Json.num curScore)]
+
+/-- Compute one skill_target_curve result using the proved `skillCurveTarget`.
+
+args layout (Ints):
+* `[0]`   charLevel
+* `[1]`   lookahead
+* `[2]`   maxSkill
+* `[3]`   skill (interned to a small Int by the diff side)
+* then 4-int item blocks: `[craftSkill, craftLevel, itemLevel, gearRelevant(0/1)]`
+
+Emits `{"target": Int}` — the recipe-aware curve target for `skill`. -/
+def runSkillTargetCurve (args : Array Json) : Json :=
+  let charLevel := intArg args 0
+  let lookahead := intArg args 1
+  let maxSkill := intArg args 2
+  let skill := intArg args 3
+  let nItems := (args.size - 4) / 4
+  let items : List Formal.SkillTargetCurve.Item :=
+    (List.range nItems).map (fun k =>
+      { craftSkill := intArg args (4 + k*4), craftLevel := intArg args (5 + k*4),
+        itemLevel := intArg args (6 + k*4),
+        gearRelevant := intArg args (7 + k*4) != 0 })
+  Json.mkObj [("target",
+    Json.num (Formal.SkillTargetCurve.skillCurveTarget skill charLevel lookahead maxSkill items))]
 
 /-- Compute one skill_xp_curve result using the SAME proved defs.
 
@@ -1703,6 +1728,8 @@ def runOne (item : Json) : Json :=
     runLoadoutProjection args
   else if kind == "equipment_scoring" then
     runEquipmentScoring args
+  else if kind == "skill_target_curve" then
+    runSkillTargetCurve args
   else if kind == "skill_xp_curve" then
     runSkillXpCurve args
   else if kind == "recipe_closure" then
