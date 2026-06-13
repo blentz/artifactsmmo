@@ -307,6 +307,8 @@ class TestThreeByThreeLayout:
             map_pane = app.query_one("#map", MapPane)
             inv_pane = app.query_one("#inv")
             log_pane = app.query_one("#log")
+            status_pane = app.query_one("#status")
+            # --- size-based checks (kept) ---
             # Map occupies the wide right block: wider than the left column inv.
             assert map_pane.size.width > inv_pane.size.width
             # Map spans both top rows: taller than the single-row inventory.
@@ -314,4 +316,24 @@ class TestThreeByThreeLayout:
             # Log is the full-width bottom strip, ~5 lines.
             assert log_pane.size.width > map_pane.size.width
             assert log_pane.size.height <= 7
+            # --- absolute cell-position checks ---
+            # These pin the auto-flow yield order in compose(): Textual 6.1.0
+            # has no column:/row: placement props, so panes land in cells purely
+            # by DOM order. A reorder of status/map/inv/log would move regions and
+            # fail these, whereas the size checks above would still pass.
+            #
+            # status: top-left (col1, row1).
+            assert status_pane.region.x == 0
+            # map: wide RIGHT block spanning both top rows.
+            assert map_pane.region.x >= status_pane.region.right  # right of left col
+            assert map_pane.region.y == status_pane.region.y       # top aligns row1
+            assert map_pane.region.bottom > inv_pane.region.y      # spans past row1
+            # inv: left column, row 2 (directly under status).
+            assert inv_pane.region.x == status_pane.region.x
+            assert inv_pane.region.y > status_pane.region.y
+            # log: full-width bottom row, under both columns.
+            assert log_pane.region.x == status_pane.region.x
+            assert log_pane.region.right >= map_pane.region.right
+            assert log_pane.region.y > map_pane.region.y
+            assert log_pane.region.height <= 7
             await pilot.pause()
