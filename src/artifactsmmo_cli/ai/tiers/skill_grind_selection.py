@@ -30,6 +30,21 @@ class GrindCandidate:
     obtainable: bool
 
 
+def _beats(c: GrindCandidate, best: GrindCandidate | None) -> bool:
+    """True when feasible `c` strictly precedes `best` in the selection order
+    `(-mats_missing, craft_level)`: fewest missing materials first, then highest
+    craft level. A None `best` (no incumbent) is always beaten. A full tie keeps
+    the incumbent (first-seen in candidate order) — deterministic without a
+    string tie-break."""
+    if best is None:
+        return True
+    if c.mats_missing != best.mats_missing:
+        return c.mats_missing < best.mats_missing
+    if c.craft_level != best.craft_level:
+        return c.craft_level > best.craft_level
+    return False
+
+
 def skill_grind_selection_pure(
     skill: str, current_level: int, candidates: list[GrindCandidate],
 ) -> str:
@@ -38,16 +53,11 @@ def skill_grind_selection_pure(
 
     Considers ONLY candidates that are same-skill (`craft_skill == skill`),
     in-level (`craft_level <= current_level`), and `obtainable`. Among those,
-    returns the max by `(-mats_missing, craft_level, code)` — fewest missing
-    materials first, then highest craft level (more XP), then code for
-    determinism. Returns "" iff no candidate qualifies."""
-    best_code = ""
-    best_key: tuple[int, int, str] | None = None
+    returns the `_beats`-maximal candidate's code. Returns "" iff none qualify."""
+    best: GrindCandidate | None = None
     for c in candidates:
         if c.craft_skill != skill or c.craft_level > current_level or not c.obtainable:
             continue
-        key = (-c.mats_missing, c.craft_level, c.code)
-        if best_key is None or key > best_key:
-            best_key = key
-            best_code = c.code
-    return best_code
+        if _beats(c, best):
+            best = c
+    return best.code if best is not None else ""
