@@ -47,7 +47,7 @@ Data flow is unchanged: `GameData` startup index → `MapPane.update_snapshot(sn
 
 **`src/artifactsmmo_cli/tui/sprite_registry.py`** — one behavioral class `SpriteRegistry`.
 - `sprite_for(code: str, category: SpriteCategory) -> Sprite`: curated lookup; on miss, calls the procedural generator.
-- Procedural generator: builds a generic category-tinted silhouette (fixed body shape per category) and stamps the **first letter of `code`** into the sprite body so distinct unknown codes stay visually distinct. Deterministic for a given `code` (no RNG / no `Math.random`-style nondeterminism). Mirrors today's `monster_glyph` first-letter fallback.
+- Procedural generator: builds a generic category-tinted silhouette (fixed body shape per category) and overlays a **deterministic 2-tone marking pattern** derived from a stable checksum of `code` (sum of byte values — NOT Python's salted `hash()`), so distinct unknown codes stay visually distinct. Deterministic across processes. A legible letter at 8px needs a 3×5 micro-font and is cramped anyway; a marking pattern distinguishes codes with far less machinery. (Letter micro-font deferred — future enhancement alongside animation.)
 
 **`src/artifactsmmo_cli/tui/half_block.py`** — one behavioral class `HalfBlockCompositor`.
 - `compose(sprite: Sprite, terrain_color: str) -> tuple[Text, Text, Text, Text]`: pairs pixel rows (0,1)(2,3)(4,5)(6,7); for each of the 8 columns emits `▀` styled `fg(top) on bg(bottom)`; transparent pixel resolves to `terrain_color`. Returns the 4 char-rows as Rich `Text`.
@@ -112,7 +112,7 @@ In `tests/`, using the real test suite (no "simple" throwaway tests, no mocking 
 
 1. **`sprites.py` integrity** — parametrized over every curated sprite: asserts 8 rows × 8 chars and every non-`.` palette key is defined. Asserts the import-time validator raises on a malformed fixture sprite.
 2. **`HalfBlockCompositor`** — known sprite + known terrain color → exact expected sequence of `▀` segments with fg/bg styles; transparent pixel resolves to terrain color; memoization returns the identical cached object.
-3. **`SpriteRegistry`** — curated code returns the curated sprite; unknown code returns a deterministic tinted silhouette containing the code's first letter; same code twice returns equal sprites.
+3. **`SpriteRegistry`** — curated code returns the curated sprite; unknown code returns a deterministic tinted silhouette with a checksum-derived marking; same code twice returns the identical cached sprite; two codes with different checksums differ.
 4. **`MapPane._render_viewport`** — viewport tile-range math (correct tile count for a given size), player tile centered, content placed at the correct tile, floor vs. void terrain fill chosen correctly, HUD line content. Asserted via Rich `Text` segment inspection — no real terminal required.
 
 ## Performance
