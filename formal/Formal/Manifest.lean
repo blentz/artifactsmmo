@@ -94,6 +94,11 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 -- SkillTargetCurve required roles (recipe-aware skill-target curve over Int):
 #check @Formal.SkillTargetCurve.curve_le_max               -- target ≤ maxSkill (given 0 ≤ maxSkill)
 #check @Formal.SkillTargetCurve.curve_monotone_in_char_level -- ↑char level never lowers the target
+-- SkillGrindSelection required roles (recipe-aware skill-grind target selector):
+#check @Formal.SkillGrindSelection.grind_same_skill -- non-empty result is a same-skill candidate
+#check @Formal.SkillGrindSelection.grind_in_level   -- selected candidate is in level
+#check @Formal.SkillGrindSelection.grind_obtainable -- selected candidate is obtainable
+#check @Formal.SkillGrindSelection.grind_actionable -- feasible non-empty candidate ⇒ non-empty result
 -- SkillXpCurve required roles:
 #check @required_xp_observed       -- observed level ⇒ required_xp = stored xp
 #check @required_xp_zero           -- no data ∨ no level below ⇒ 0

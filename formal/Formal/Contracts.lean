@@ -8,6 +8,7 @@ import Formal.PredictWin
 import Formal.LoadoutProjection
 import Formal.EquipmentScoring
 import Formal.SkillTargetCurve
+import Formal.SkillGrindSelection
 import Formal.SkillXpCurve
 import Formal.RecipeClosure
 import Formal.TaskFeasibility
@@ -374,6 +375,50 @@ example : ∀ (skill l1 l2 lookahead maxSkill : Int)
     Formal.SkillTargetCurve.skillCurveTarget skill l1 lookahead maxSkill items
       ≤ Formal.SkillTargetCurve.skillCurveTarget skill l2 lookahead maxSkill items :=
   @Formal.SkillTargetCurve.curve_monotone_in_char_level
+
+/-! ### SkillGrindSelection role contracts.
+
+The recipe-aware skill-grind target selector: a non-empty selected code ALWAYS
+belongs to a same-skill ∧ in-level ∧ obtainable candidate (the cross-skill
+outcome is unrepresentable at the selection layer), and a feasible candidate with
+a non-empty code forces a non-empty result. Names fully qualified to avoid `open`
+clashes; binder order matches each theorem signature. -/
+
+-- grind_same_skill: a non-empty selected code is a candidate whose craft_skill
+-- is the committed skill -- NO cross-skill selection, ever.
+example : ∀ (skill : String) (level : Int)
+    (cands : List Extracted.SkillGrindSelection.GrindCandidate),
+    Extracted.SkillGrindSelection.skill_grind_selection_pure skill level cands ≠ "" →
+    ∃ c, c ∈ cands
+      ∧ c.code = Extracted.SkillGrindSelection.skill_grind_selection_pure skill level cands
+      ∧ c.craft_skill = skill :=
+  @Formal.SkillGrindSelection.grind_same_skill
+-- grind_in_level: the selected candidate is craftable at the current level.
+example : ∀ (skill : String) (level : Int)
+    (cands : List Extracted.SkillGrindSelection.GrindCandidate),
+    Extracted.SkillGrindSelection.skill_grind_selection_pure skill level cands ≠ "" →
+    ∃ c, c ∈ cands
+      ∧ c.code = Extracted.SkillGrindSelection.skill_grind_selection_pure skill level cands
+      ∧ c.craft_level ≤ level :=
+  @Formal.SkillGrindSelection.grind_in_level
+-- grind_obtainable: the selected candidate is obtainable (recipe reachable).
+example : ∀ (skill : String) (level : Int)
+    (cands : List Extracted.SkillGrindSelection.GrindCandidate),
+    Extracted.SkillGrindSelection.skill_grind_selection_pure skill level cands ≠ "" →
+    ∃ c, c ∈ cands
+      ∧ c.code = Extracted.SkillGrindSelection.skill_grind_selection_pure skill level cands
+      ∧ c.obtainable = true :=
+  @Formal.SkillGrindSelection.grind_obtainable
+-- grind_actionable: a feasible candidate with a non-empty code forces a
+-- non-empty result (the selector never returns "" while an actionable in-skill
+-- craft exists).
+example : ∀ (skill : String) (level : Int)
+    (cands : List Extracted.SkillGrindSelection.GrindCandidate)
+    (c : Extracted.SkillGrindSelection.GrindCandidate), c ∈ cands →
+    Formal.SkillGrindSelection.feasible skill level c →
+    (∀ d ∈ cands, d.code ≠ "") →
+    Extracted.SkillGrindSelection.skill_grind_selection_pure skill level cands ≠ "" :=
+  @Formal.SkillGrindSelection.grind_actionable
 
 /-! ### SkillXpCurve role contracts. -/
 

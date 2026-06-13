@@ -21,6 +21,7 @@ LEVEL_SKILL_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "lev
 SCORING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "scoring.py"
 SKILL_XP_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "skill_xp_curve.py"
 SKILL_TARGET_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "skill_target_curve.py"
+SKILL_GRIND_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "skill_grind_selection.py"
 ACTION_FACTORY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "factory.py"
 RECIPE_CLOSURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recipe_closure.py"
 TASK_FEASIBILITY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_feasibility.py"
@@ -401,6 +402,38 @@ SKILL_TARGET_CURVE_MUTATIONS = [
     ("skill_target_curve: running max becomes running min",
      "                and it.craft_level > best):\n",
      "                and it.craft_level < best):\n"),
+]
+
+
+# skill_grind_selection mutations -- pure-core anchors for
+# skill_grind_selection_pure (the recipe-aware skill-grind target selector).
+# Each substring is copied verbatim from skill_grind_selection.py (indentation
+# included) so the mutation applies unambiguously; killed by the differential
+# test formal/diff/test_skill_grind_selection_diff.py, which encodes the four
+# role theorems (grind_same_skill / grind_in_level / grind_obtainable /
+# grind_actionable) from formal/Formal/SkillGrindSelection.lean.
+SKILL_GRIND_SELECTION_MUTATIONS = [
+    # THE LOAD-BEARING ONE: drop the same-skill guard -- selection may return a
+    # CROSS-SKILL item, the exact failure grind_same_skill forbids. The diff
+    # MUST kill this.
+    ("skill_grind_selection: drop same-skill guard",
+     "        if c.craft_skill != skill or c.craft_level > current_level or not c.obtainable:\n",
+     "        if c.craft_level > current_level or not c.obtainable:\n"),
+    # drop the obtainable guard -- an unobtainable item can win, violating
+    # grind_obtainable (the live weaponcrafting bug).
+    ("skill_grind_selection: drop obtainable guard",
+     "        if c.craft_skill != skill or c.craft_level > current_level or not c.obtainable:\n",
+     "        if c.craft_skill != skill or c.craft_level > current_level:\n"),
+    # drop the in-level guard -- an over-level item can win, violating
+    # grind_in_level.
+    ("skill_grind_selection: drop in-level guard",
+     "        if c.craft_skill != skill or c.craft_level > current_level or not c.obtainable:\n",
+     "        if c.craft_skill != skill or not c.obtainable:\n"),
+    # flip the fewest-missing ordering in _beats -- breaks the (-mats_missing,
+    # craft_level) selection order; killed by the diff's tie/ordering cases.
+    ("skill_grind_selection: _beats fewest-missing flip",
+     "        return c.mats_missing < best.mats_missing\n",
+     "        return c.mats_missing > best.mats_missing\n"),
 ]
 
 
@@ -2554,6 +2587,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_skill_xp_curve_diff.py", survivors)
     run_group(SKILL_TARGET_CURVE_SRC, SKILL_TARGET_CURVE_MUTATIONS,
               "formal/diff/test_skill_target_curve_diff.py", survivors)
+    run_group(SKILL_GRIND_SELECTION_SRC, SKILL_GRIND_SELECTION_MUTATIONS,
+              "formal/diff/test_skill_grind_selection_diff.py", survivors)
     run_group(RECIPE_CLOSURE_SRC, RECIPE_CLOSURE_MUTATIONS,
               "formal/diff/test_recipe_closure_diff.py", survivors)
     run_group(TASK_FEASIBILITY_SRC, TASK_FEASIBILITY_MUTATIONS,
