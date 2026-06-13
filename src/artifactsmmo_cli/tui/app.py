@@ -22,43 +22,38 @@ class WatchApp(App[None]):
     CSS = """
     Screen {
         layout: grid;
-        grid-size: 2 2;
-        grid-columns: 1fr 2fr;
-        grid-rows: 1fr 1fr;
+        grid-size: 3 3;
+        grid-columns: 1fr 2fr 2fr;
+        grid-rows: 1fr 1fr 7;
     }
-    /* The bare `Screen` grid above also matches the pushed modals; reset them
-       to a full-screen vertical layout. This rule must live in the app
-       stylesheet (not the modals' DEFAULT_CSS) because app CSS outranks a
-       screen's DEFAULT_CSS regardless of selector specificity. */
+    /* The bare `Screen` grid above also matches pushed modals; reset them to a
+       full-screen vertical layout. App CSS outranks a screen's DEFAULT_CSS. */
     #character-modal, #log-modal, #plan-modal {
         layout: vertical;
     }
+    /* Textual has no explicit cell-placement (`column`/`row`) props: cells are
+       auto-flowed in DOM order, so compose() yields status, map, inv, log to
+       land them in the intended cells. status -> (col1,row1); map spans
+       cols2-3 x rows1-2; inv -> (col1,row2); log spans all of row3. */
     #status {
-        column-span: 1;
-        row-span: 1;
         border: solid white;
         padding: 0 1;
     }
     #map {
-        column-span: 1;
-        row-span: 1;
+        column-span: 2;
+        row-span: 2;
         border: solid white;
         padding: 0 1;
-        /* Fill the cell; the map renderer sizes its grid from self.size, and a
-           Static defaults to height:auto, which would collapse to the 1-line
-           legend and draw no map rows. */
+        /* Fill the cell so the renderer sizes its grid from self.size. */
         width: 1fr;
         height: 1fr;
     }
     #inv {
-        column-span: 1;
-        row-span: 1;
         border: solid white;
         padding: 0 1;
     }
     #log {
-        column-span: 1;
-        row-span: 1;
+        column-span: 3;
         border: solid white;
         padding: 0 1;
     }

@@ -298,3 +298,20 @@ class TestWatchAppModals:
             # Do NOT call update_snapshot — _last_snapshot is None
             await pilot.press("p")
             assert not isinstance(app.screen, PlanScreen)
+
+
+class TestThreeByThreeLayout:
+    async def test_map_spans_wide_right_block_and_log_is_full_width(self):
+        app = WatchApp("hero", GameData())
+        async with app.run_test(size=(120, 45)) as pilot:
+            map_pane = app.query_one("#map", MapPane)
+            inv_pane = app.query_one("#inv")
+            log_pane = app.query_one("#log")
+            # Map occupies the wide right block: wider than the left column inv.
+            assert map_pane.size.width > inv_pane.size.width
+            # Map spans both top rows: taller than the single-row inventory.
+            assert map_pane.size.height > inv_pane.size.height
+            # Log is the full-width bottom strip, ~5 lines.
+            assert log_pane.size.width > map_pane.size.width
+            assert log_pane.size.height <= 7
+            await pilot.pause()
