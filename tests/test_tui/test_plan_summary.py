@@ -60,3 +60,36 @@ def test_bank_credited_in_have():
         game_data=_gd(), projected_cycles_to_max=None,
     ))
     assert "60/60" in out   # 20 inv + 40 bank covers the 60 needed
+
+
+def test_none_root_empty_state():
+    out = _text(build_plan_summary(None, [], {}, None, _gd(), None))
+    assert "No committed objective" in out
+
+
+def test_reach_char_level_line():
+    out = _text(build_plan_summary(
+        "ReachCharLevel(level=3)", [], {}, None, _gd(), None,
+        ))
+    assert "char XP" in out and "L3" in out
+
+
+def test_reach_skill_level_line():
+    out = _text(build_plan_summary("ReachSkillLevel(skill='gearcrafting', level=5)",
+                                   [], {}, None, _gd(), None))
+    assert "gearcrafting" in out and "L5" in out
+
+
+def test_header_and_eta_and_alternatives():
+    ranking = [
+        RootScoreView(root_repr="ObtainItem(code='copper_boots', quantity=1)",
+                      category="gear", score=2.5),
+        RootScoreView(root_repr="ReachCharLevel(level=3)", category="char_level", score=1.48),
+    ]
+    out = _text(build_plan_summary(
+        "ObtainItem(code='copper_boots', quantity=1)", ranking,
+        {"copper_ore": 42}, None, _gd(), 18.0))
+    assert "COMMITTED" in out and "copper_boots" in out
+    assert "ETA" in out and "18" in out
+    assert "ALTERNATIVES" in out and "ReachCharLevel" in out and "1.48" in out
+    # the committed root is NOT repeated in the alternatives list
