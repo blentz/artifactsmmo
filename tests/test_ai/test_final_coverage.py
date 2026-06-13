@@ -20,6 +20,20 @@ from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
 
 
+class _NoopCache:
+    """Stand-in for GameDataCache: no disk, no URL parsing. read() always misses
+    (so load fetches the patched-empty loaders); write() is a no-op."""
+
+    def __init__(self, *a, **k):
+        pass
+
+    def read(self, ttl_minutes, now=None):
+        return None
+
+    def write(self, raw_pages, now=None):
+        return None
+
+
 def make_gd(**kwargs) -> GameData:
     gd = GameData()
     gd._monster_locations = kwargs.get("monster_locs", {})
@@ -235,6 +249,7 @@ class TestPlayerRunVerboseAndExecute:
                                       with patch("artifactsmmo_cli.ai.game_data.get_ge_orders",
                                                  return_value=MagicMock(data=[])):
                                         with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None):
+                                          with patch("artifactsmmo_cli.ai.game_data.GameDataCache", _NoopCache):
                                             with patch.object(player, "_fetch_world_state", return_value=initial_state):
                                                 with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
                                                     with patch.object(player, "_maybe_periodic_refresh"):
@@ -276,6 +291,7 @@ class TestPlayerRunVerboseAndExecute:
                                       with patch("artifactsmmo_cli.ai.game_data.get_ge_orders",
                                                  return_value=MagicMock(data=[])):
                                         with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None):
+                                          with patch("artifactsmmo_cli.ai.game_data.GameDataCache", _NoopCache):
                                             with patch.object(player, "_fetch_world_state", return_value=initial_state):
                                                 with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
                                                     with patch.object(player, "_maybe_periodic_refresh"):

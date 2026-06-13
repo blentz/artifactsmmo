@@ -1274,6 +1274,55 @@ def test_force_refresh_bypasses_read(monkeypatch, tmp_path):
     assert cache.reads == 0 and cache.writes == 1
 
 
+def test_cold_load_survives_cache_write_oserror(monkeypatch, tmp_path, capsys):
+    """A failed cache write (disk full / permissions) must NOT crash load(): the
+    fetched data is already in hand, so load swallows the OSError, logs it, and
+    still returns a fully-built GameData (the next start simply re-fetches)."""
+    ge = _stub_fetch_build(monkeypatch)
+
+    class _WriteFailsCache(_RecordingCache):
+        def write(self, raw_pages, now=None):
+            raise OSError("disk full")
+
+    cache = _WriteFailsCache(tmp_path, seeded=None)  # cold miss → fetch → write (raises)
+    gd = GameData.load(client=MagicMock(), ttl_minutes=30, cache=cache)
+    assert isinstance(gd, GameData)
+    assert cache.reads == 1
+    assert ge["n"] == 1  # GE still fetched live; build pipeline ran to completion
+    assert "cache write failed" in capsys.readouterr().out
+
+
+def test_build_bank_none_is_noop():
+    """_build_bank(None) leaves bank metadata untouched (the cold-load 'no bank'
+    branch and the warm-load BankSchema-None branch both pass None here)."""
+    gd = GameData()
+    gd._build_bank(None)
+    assert gd._bank_capacity == 0
+    assert gd._next_expansion_cost == 0
+
+
+def test_fetch_bank_returns_none_when_no_data(monkeypatch):
+    """_fetch_bank returns None when the API yields no result or a dataless one,
+    and the schema object when data is present."""
+    gd = GameData()
+
+    monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_bank_details", lambda client: None)
+    assert gd._fetch_bank(client=None) is None
+
+    monkeypatch.setattr(
+        "artifactsmmo_cli.ai.game_data.get_bank_details",
+        lambda client: SimpleNamespace(data=None),
+    )
+    assert gd._fetch_bank(client=None) is None
+
+    bank_obj = SimpleNamespace(slots=30, next_expansion_cost=1000)
+    monkeypatch.setattr(
+        "artifactsmmo_cli.ai.game_data.get_bank_details",
+        lambda client: SimpleNamespace(data=bank_obj),
+    )
+    assert gd._fetch_bank(client=None) is bank_obj
+
+
 def _make_event_npc(code, npc_code, x, y) -> EventSchema:
     return EventSchema(
         name=code,
