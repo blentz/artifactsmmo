@@ -314,3 +314,32 @@ def test_objective_roots_omits_at_curve_skill_root():
     state = make_state(level=7, skills={"weaponcrafting": 5})
     roots = objective_roots(obj, state)
     assert ReachSkillLevel("weaponcrafting", 5) not in roots
+
+
+def test_objective_roots_curve_root_above_bootstrap_isolates_curve_code():
+    """Isolation test: the curve emission is the ONLY producer of a
+    ReachSkillLevel target ABOVE the _CRAFT_BOOTSTRAP_TARGET=5 floor.
+
+    The two sibling curve tests above both assert target 5, which the
+    existing craft-bootstrap (target always exactly 5) also emits — so they
+    pass even with the curve block deleted. This test discriminates: a
+    weaponcrafting recipe at craft_level 8 (item_level 8) puts the curve
+    target at 8 for a char-7 player (7 + SKILL_CURVE_LOOKAHEAD=3 = 10 >= 8,
+    in-window). The bootstrap can never emit target 8 — only the curve code
+    produces ReachSkillLevel(weaponcrafting, 8). Verified to FAIL with the
+    curve-emission block commented out and PASS with it restored."""
+    gd = GameData()
+    gd._item_stats = {
+        "steel_sword": ItemStats(code="steel_sword", level=8, type_="weapon",
+                                 crafting_skill="weaponcrafting", crafting_level=8),
+        "water_bow": ItemStats(code="water_bow", level=5, type_="weapon",
+                               crafting_skill="weaponcrafting", crafting_level=5),
+    }
+    obj = CharacterObjective.from_game_data(gd)
+    # char 7: window item_level <= 10; steel_sword (item_level 8) qualifies,
+    # max craft_level in window = 8. Skill at 2 is below the curve target 8.
+    state = make_state(level=7, skills={"weaponcrafting": 2})
+    roots = objective_roots(obj, state)
+    assert ReachSkillLevel("weaponcrafting", 8) in roots, (
+        f"curve target 8 (above bootstrap floor 5) not emitted; got {roots}"
+    )
