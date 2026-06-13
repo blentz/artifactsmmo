@@ -37,7 +37,11 @@ def skill_curve_target_pure(
     the max craft_level over gear-relevant `items` of this skill whose
     item_level <= char_level + lookahead, clamped to [1, max_skill_level].
     Returns 0 when no qualifying recipe exists (skill not scheduled)."""
-    best = 0
+    # Annotated so the mechanical Lean extraction pins `best : Int` at the seed:
+    # the value first flows into the polymorphic `decide (best <= 0)` clamp,
+    # which leaves the type unconstrained (and the kernel stuck) if the emitted
+    # `let best := 0` carries no annotation. (extract_lean.py AnnAssign branch.)
+    best: int = 0
     for it in items:
         if (it.gear_relevant and it.craft_skill == skill
                 and it.item_level <= char_level + lookahead
