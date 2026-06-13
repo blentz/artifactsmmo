@@ -133,6 +133,29 @@ class TestPlayCommandWiring:
             assert kwargs["verbose"] is True
             assert kwargs["dry_run"] is True
 
+    def test_game_data_ttl_threaded_from_config(self, runner):
+        """The GamePlayer is constructed with the config's game_data_ttl_minutes
+        and refresh_game_data defaults to False."""
+        with patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls:
+            mock_player_cls.return_value = Mock()
+
+            result = runner.invoke(app, ["hero"])
+
+            assert result.exit_code == 0
+            kwargs = mock_player_cls.call_args.kwargs
+            assert kwargs["game_data_ttl_minutes"] == 30
+            assert kwargs["refresh_game_data"] is False
+
+    def test_refresh_game_data_flag_forwarded(self, runner):
+        """--refresh-game-data reaches the GamePlayer as refresh_game_data=True."""
+        with patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls:
+            mock_player_cls.return_value = Mock()
+
+            result = runner.invoke(app, ["hero", "--refresh-game-data"])
+
+            assert result.exit_code == 0
+            assert mock_player_cls.call_args.kwargs["refresh_game_data"] is True
+
     def test_trace_creates_file_tracer_with_default_path(self, runner):
         """--trace builds a FileTracer with the generated default path."""
         with patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls:
@@ -349,8 +372,10 @@ class TestRunWithTui:
                 result = runner.invoke(app, ["hero", "--tui"])
 
                 assert result.exit_code == 0
-                # Game data preloaded on the main thread from the live client.
-                mock_game_data.load.assert_called_once_with(mock_client)
+                # Game data preloaded on the main thread from the live client,
+                # threaded with the cache TTL and refresh flag.
+                mock_game_data.load.assert_called_once_with(
+                    mock_client, ttl_minutes=30, force_refresh=False)
                 assert mock_player.game_data is loaded_data
                 # App created with the character and preloaded data.
                 mock_watch_app_cls.assert_called_once_with(

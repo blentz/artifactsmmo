@@ -58,3 +58,9 @@ def test_config_custom_values():
     assert config.api_base_url == "https://custom.api.com"
     assert config.timeout == 60
     assert config.debug is True
+
+
+def test_config_default_game_data_ttl_is_30():
+    """The static-game-data cache TTL defaults to 30 minutes."""
+    cfg = Config(token="t")
+    assert cfg.game_data_ttl_minutes == 30

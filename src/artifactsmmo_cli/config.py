@@ -13,6 +13,10 @@ class Config(BaseModel):
     api_base_url: str = Field(default="https://api.artifactsmmo.com", description="API base URL")
     timeout: int = Field(default=30, description="API timeout in seconds")
     debug: bool = Field(default=False, description="Enable debug output")
+    game_data_ttl_minutes: int = Field(
+        default=30,
+        description="Minutes to reuse the cached static game data before re-fetching",
+    )
 
     @classmethod
     def from_token_file(cls, token_path: Path | None = None) -> "Config":

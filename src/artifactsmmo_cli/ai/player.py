@@ -88,10 +88,14 @@ class GamePlayer:
         tracer: Tracer | None = None,
         history: LearningStore | None = None,
         cycle_observer: "Callable[[CycleSnapshot], None] | None" = None,
+        game_data_ttl_minutes: int = 30,
+        refresh_game_data: bool = False,
     ) -> None:
         self.character = character
         self.verbose = verbose
         self.dry_run = dry_run
+        self._game_data_ttl_minutes = game_data_ttl_minutes
+        self._refresh_game_data = refresh_game_data
         self.planner = GOAPPlanner()
         self._arbiter = StrategyArbiter(self.planner, history)
         self._last_decision: StrategyDecision | None = None
@@ -214,7 +218,11 @@ class GamePlayer:
         client = client_manager.client
 
         print(f"[{self._now()}] Loading game data...")
-        self.game_data = GameData.load(client)
+        self.game_data = GameData.load(
+            client,
+            ttl_minutes=self._game_data_ttl_minutes,
+            force_refresh=self._refresh_game_data,
+        )
         # Build the Tier-3 strategy engine once (shadow mode — traced only).
         self._objective = CharacterObjective.from_game_data(self.game_data)
         self._strategy = StrategyEngine(self._objective, BalancedPersonality())

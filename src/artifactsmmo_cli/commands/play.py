@@ -16,6 +16,7 @@ from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.recovery import StuckExit
 from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.client_manager import ClientManager
+from artifactsmmo_cli.config import Config
 from artifactsmmo_cli.tui.app import WatchApp
 from artifactsmmo_cli.tui.observer import ThreadSafeBridge
 from artifactsmmo_cli.utils.mutation_lock import check_mutation_lock, default_lock_path
@@ -39,6 +40,9 @@ def play(
                                          help="Learning DB path (default: ~/.cache/artifactsmmo/learning.db)"),
     tui: bool = typer.Option(False, "--tui",
                               help="Run with a live TUI watcher (Textual). Bot runs in a worker thread."),
+    refresh_game_data: bool = typer.Option(
+        False, "--refresh-game-data",
+        help="Ignore the cached static game data and re-fetch from the API"),
 ) -> None:
     """Run the autonomous GOAP AI player for one character."""
     # Mutate<->play interlock: formal/diff/mutate.py live-writes mutants into
@@ -53,6 +57,8 @@ def play(
         raise typer.Exit(code=2)
     if lock.state == "stale":
         print(f"Warning: stale mutation lockfile at {lock_path} ({lock.detail}); continuing")
+
+    config = Config.from_token_file()
 
     tracer: Tracer = NullTracer()
     if trace:
@@ -79,11 +85,13 @@ def play(
     player = GamePlayer(
         character=character, verbose=verbose, dry_run=dry_run,
         tracer=tracer, history=store,
+        game_data_ttl_minutes=config.game_data_ttl_minutes,
+        refresh_game_data=refresh_game_data,
     )
     exit_reason = "crash"
     try:
         if tui:
-            _run_with_tui(player, character)
+            _run_with_tui(player, character, config.game_data_ttl_minutes, refresh_game_data)
         else:
             player.run()
         exit_reason = "normal"
@@ -103,7 +111,10 @@ def play(
         store.close()
 
 
-def _run_with_tui(player: GamePlayer, character: str) -> None:
+def _run_with_tui(
+    player: GamePlayer, character: str,
+    game_data_ttl_minutes: int = 30, refresh_game_data: bool = False,
+) -> None:
     """Spawn the bot in a worker thread; run the Textual app on main thread.
 
     Worker-thread failure is supervised via ``threading.excepthook``: a bare
@@ -119,7 +130,8 @@ def _run_with_tui(player: GamePlayer, character: str) -> None:
     # Preload game_data on the main thread so the map can render the first
     # frame before the bot has done a cycle.
     client = ClientManager().client
-    player.game_data = GameData.load(client)
+    player.game_data = GameData.load(
+        client, ttl_minutes=game_data_ttl_minutes, force_refresh=refresh_game_data)
     app = WatchApp(character=character, game_data=player.game_data)
     bridge = ThreadSafeBridge(app, app.update_snapshot)
     player.set_cycle_observer(bridge.notify)

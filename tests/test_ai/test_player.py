@@ -62,6 +62,18 @@ class TestGamePlayerInit:
         assert player.verbose is True
         assert player.dry_run is True
 
+    def test_game_data_cache_controls_default(self):
+        player = GamePlayer(character="hero")
+        assert player._game_data_ttl_minutes == 30
+        assert player._refresh_game_data is False
+
+    def test_game_data_cache_controls_threaded(self):
+        player = GamePlayer(
+            character="hero", game_data_ttl_minutes=45, refresh_game_data=True
+        )
+        assert player._game_data_ttl_minutes == 45
+        assert player._refresh_game_data is True
+
 
 class TestDryRunDoesNotPersistLearning:
     """Dry-run cycles are SIMULATED (action.apply, no real cooldown). Persisting
