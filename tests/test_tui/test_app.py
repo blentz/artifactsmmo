@@ -7,6 +7,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.tui.app import WatchApp
 from artifactsmmo_cli.tui.screens.character_screen import CharacterScreen
 from artifactsmmo_cli.tui.screens.log_screen import LogScreen
+from artifactsmmo_cli.tui.screens.plan_screen import PlanScreen
 from artifactsmmo_cli.tui.widgets.inventory_pane import InventoryPane
 from artifactsmmo_cli.tui.widgets.log_pane import LogPane
 from artifactsmmo_cli.tui.widgets.map_pane import MapPane
@@ -53,6 +54,11 @@ class TestWatchAppStaticProperties:
         bindings = WatchApp.BINDINGS
         keys = [b[0] if isinstance(b, tuple) else b.key for b in bindings]
         assert "q" in keys
+
+    def test_p_binding_present(self):
+        bindings = WatchApp.BINDINGS
+        keys = [b[0] if isinstance(b, tuple) else b.key for b in bindings]
+        assert "p" in keys
 
     def test_stores_character(self):
         app = _make_app("warrior")
@@ -249,3 +255,44 @@ class TestWatchAppModals:
             # Do NOT call update_snapshot — _last_snapshot is None
             await pilot.press("c")
             assert not isinstance(app.screen, CharacterScreen)
+
+    @pytest.mark.asyncio
+    async def test_p_toggles_plan_screen(self):
+        app = _make_app()
+        async with app.run_test() as pilot:
+            app.update_snapshot(_snap())
+            await pilot.press("p")
+            assert isinstance(app.screen, PlanScreen)
+            await pilot.press("p")
+            assert not isinstance(app.screen, PlanScreen)
+
+    @pytest.mark.asyncio
+    async def test_plan_screen_update_snapshot_while_open(self):
+        """app.update_snapshot while PlanScreen is on top dispatches to it."""
+        app = _make_app()
+        async with app.run_test() as pilot:
+            app.update_snapshot(_snap(level=1))
+            await pilot.press("p")
+            assert isinstance(app.screen, PlanScreen)
+            app.update_snapshot(_snap(level=9))
+            assert app.screen._snapshot.level == 9
+
+    @pytest.mark.asyncio
+    async def test_action_toggle_plan_pops_when_screen_is_plan(self):
+        """action_toggle_plan() pops PlanScreen directly."""
+        app = _make_app()
+        async with app.run_test():
+            app.update_snapshot(_snap())
+            await app.push_screen(PlanScreen(app._last_snapshot, app._game_data))
+            assert isinstance(app.screen, PlanScreen)
+            app.action_toggle_plan()
+            assert not isinstance(app.screen, PlanScreen)
+
+    @pytest.mark.asyncio
+    async def test_p_no_op_without_snapshot(self):
+        """Pressing 'p' with no snapshot does not push a PlanScreen (elif guard)."""
+        app = _make_app()
+        async with app.run_test() as pilot:
+            # Do NOT call update_snapshot — _last_snapshot is None
+            await pilot.press("p")
+            assert not isinstance(app.screen, PlanScreen)

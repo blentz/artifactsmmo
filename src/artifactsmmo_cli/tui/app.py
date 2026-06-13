@@ -9,6 +9,7 @@ from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.tui.screens.character_screen import CharacterScreen
 from artifactsmmo_cli.tui.screens.log_screen import LogScreen
+from artifactsmmo_cli.tui.screens.plan_screen import PlanScreen
 from artifactsmmo_cli.tui.widgets.inventory_pane import InventoryPane
 from artifactsmmo_cli.tui.widgets.log_pane import LogPane
 from artifactsmmo_cli.tui.widgets.map_pane import MapPane
@@ -29,7 +30,7 @@ class WatchApp(App[None]):
        to a full-screen vertical layout. This rule must live in the app
        stylesheet (not the modals' DEFAULT_CSS) because app CSS outranks a
        screen's DEFAULT_CSS regardless of selector specificity. */
-    #character-modal, #log-modal {
+    #character-modal, #log-modal, #plan-modal {
         layout: vertical;
     }
     #status {
@@ -69,6 +70,7 @@ class WatchApp(App[None]):
         ("q", "quit", "Quit"),
         ("c", "toggle_character", "Character"),
         ("l", "toggle_log", "Log"),
+        ("p", "toggle_plan", "Plan"),
     ]
 
     def __init__(self, character: str, game_data: GameData) -> None:
@@ -100,7 +102,7 @@ class WatchApp(App[None]):
         self.query_one("#inv", InventoryPane).update_snapshot(snap)
         self.query_one("#log", LogPane).update_snapshot(snap)
         top = self.screen
-        if isinstance(top, (CharacterScreen, LogScreen)):
+        if isinstance(top, (CharacterScreen, LogScreen, PlanScreen)):
             top.update_snapshot(snap)
 
     def action_toggle_character(self) -> None:
@@ -114,3 +116,9 @@ class WatchApp(App[None]):
             self.pop_screen()
         else:
             self.push_screen(LogScreen(self._recent_snapshots))
+
+    def action_toggle_plan(self) -> None:
+        if isinstance(self.screen, PlanScreen):
+            self.pop_screen()
+        elif self._last_snapshot is not None:
+            self.push_screen(PlanScreen(self._last_snapshot, self._game_data))
