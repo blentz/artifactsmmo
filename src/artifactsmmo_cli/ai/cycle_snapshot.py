@@ -3,6 +3,14 @@
 from pydantic import BaseModel, Field
 
 
+class RootScoreView(BaseModel):
+    """Compact view of a ranked strategy root for the TUI plan screen."""
+
+    root_repr: str
+    category: str
+    score: float
+
+
 class GoalRankEntry(BaseModel):
     """One row in the per-cycle goal-priority ladder."""
 
