@@ -88,7 +88,7 @@ theorem weapon_score_raw_bridge (enc : Int → String)
     (monsterRes : Formal.EquipmentScoring.ElemStats) :
     Extracted.EquipmentScoring.weapon_score_raw_pure
         (Formal.EquipmentScoring.elements.map enc)
-        (encElem enc item.attack) (encElem enc monsterRes)
+        (encElem enc item.attack) item.crit (encElem enc monsterRes)
       = Formal.EquipmentScoring.WScore item monsterRes := by
   simp only [Extracted.EquipmentScoring.weapon_score_raw_pure,
              Formal.EquipmentScoring.WScore, Formal.EquipmentScoring.wTerm,
@@ -127,7 +127,7 @@ theorem weapon_score_bridge (enc : Int → String)
     (hTool : ci.isTool = (subtype == "tool")) :
     Extracted.EquipmentScoring.weapon_score_pure
         (Formal.EquipmentScoring.elements.map enc)
-        (encElem enc ci.base.attack) subtype (encElem enc monsterRes)
+        (encElem enc ci.base.attack) subtype ci.base.crit (encElem enc monsterRes)
       = Formal.PurposeRouting.combatScore monsterRes ci := by
   unfold Extracted.EquipmentScoring.weapon_score_pure
     Formal.PurposeRouting.combatScore Formal.PurposeRouting.nonToolBonus
@@ -143,12 +143,13 @@ theorem weapon_score_raw_nonneg_extracted (enc : Int → String)
     (item : Formal.EquipmentScoring.Item)
     (monsterRes : Formal.EquipmentScoring.ElemStats)
     (hatk : ∀ e ∈ Formal.EquipmentScoring.elements,
-        0 ≤ Formal.EquipmentScoring.elemGet item.attack e) :
+        0 ≤ Formal.EquipmentScoring.elemGet item.attack e)
+    (hcrit : 0 ≤ item.crit) :
     0 ≤ Extracted.EquipmentScoring.weapon_score_raw_pure
         (Formal.EquipmentScoring.elements.map enc)
-        (encElem enc item.attack) (encElem enc monsterRes) := by
+        (encElem enc item.attack) item.crit (encElem enc monsterRes) := by
   rw [weapon_score_raw_bridge enc hinj item monsterRes]
-  exact Formal.EquipmentScoring.weapon_score_nonneg item monsterRes hatk
+  exact Formal.EquipmentScoring.weapon_score_nonneg item monsterRes hatk hcrit
 
 /-- TRANSFERRED (`combatScore_strict_of_strict_wscore`): any strict raw
 WScore ordering survives the +0/+1 tiebreaker in the extracted composite
@@ -161,10 +162,10 @@ theorem weapon_score_strict_extracted (enc : Int → String)
       < Formal.EquipmentScoring.WScore b monsterRes) :
     Extracted.EquipmentScoring.weapon_score_pure
         (Formal.EquipmentScoring.elements.map enc)
-        (encElem enc a.attack) subA (encElem enc monsterRes)
+        (encElem enc a.attack) subA a.crit (encElem enc monsterRes)
       < Extracted.EquipmentScoring.weapon_score_pure
         (Formal.EquipmentScoring.elements.map enc)
-        (encElem enc b.attack) subB (encElem enc monsterRes) := by
+        (encElem enc b.attack) subB b.crit (encElem enc monsterRes) := by
   rw [weapon_score_bridge enc hinj ⟨a, subA == "tool"⟩ monsterRes subA rfl,
       weapon_score_bridge enc hinj ⟨b, subB == "tool"⟩ monsterRes subB rfl]
   exact Formal.PurposeRouting.combatScore_strict_of_strict_wscore
@@ -182,10 +183,11 @@ theorem weapon_score_tiebreak_extracted (enc : Int → String)
       = Formal.EquipmentScoring.WScore nonToolItem monsterRes) :
     Extracted.EquipmentScoring.weapon_score_pure
         (Formal.EquipmentScoring.elements.map enc)
-        (encElem enc toolItem.attack) "tool" (encElem enc monsterRes)
+        (encElem enc toolItem.attack) "tool" toolItem.crit (encElem enc monsterRes)
       < Extracted.EquipmentScoring.weapon_score_pure
         (Formal.EquipmentScoring.elements.map enc)
-        (encElem enc nonToolItem.attack) subN (encElem enc monsterRes) := by
+        (encElem enc nonToolItem.attack) subN nonToolItem.crit
+        (encElem enc monsterRes) := by
   rw [weapon_score_bridge enc hinj ⟨toolItem, true⟩ monsterRes "tool" (by simp),
       weapon_score_bridge enc hinj ⟨nonToolItem, false⟩ monsterRes subN
         (by simp [hN])]
@@ -203,14 +205,14 @@ theorem pickslot_no_downgrade_extracted (enc : Int → String)
     ∃ r, Formal.EquipmentScoring.pickSlot
         (fun i => Extracted.EquipmentScoring.weapon_score_raw_pure
           (Formal.EquipmentScoring.elements.map enc)
-          (encElem enc i.attack) (encElem enc monsterRes))
+          (encElem enc i.attack) i.crit (encElem enc monsterRes))
         playerLevel (some cur) items = some r ∧
       Extracted.EquipmentScoring.weapon_score_raw_pure
           (Formal.EquipmentScoring.elements.map enc)
-          (encElem enc cur.attack) (encElem enc monsterRes)
+          (encElem enc cur.attack) cur.crit (encElem enc monsterRes)
         ≤ Extracted.EquipmentScoring.weapon_score_raw_pure
           (Formal.EquipmentScoring.elements.map enc)
-          (encElem enc r.attack) (encElem enc monsterRes) :=
+          (encElem enc r.attack) r.crit (encElem enc monsterRes) :=
   Formal.EquipmentScoring.pickslot_no_downgrade _ playerLevel cur items
 
 /-- The extracted gather score of an item with NO entry for the skill is 0

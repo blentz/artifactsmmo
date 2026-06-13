@@ -92,6 +92,48 @@ class TestWeaponScore:
         # And the difference is EXACTLY 1 (the nonToolBonus).
         assert weapon_score(weapon_5atk, zero_res) - weapon_score(tool_5atk, zero_res) == 1
 
+    def test_crit_flips_order_against_resisted_element(self):
+        """Run-18 live mis-pick 2026-06-12: vs green_slime (res_air 25)
+        copper_pickaxe (earth 5, tool, crit 0) out-scored copper_dagger
+        (air 6, crit 35) because weapon_score had NO critical_strike term,
+        while predict_win models crit as raw × (1 + crit/100 × 0.5) — the
+        loadout picker and the win predictor disagreed about the same
+        quantity. Exact surrogate: raw × (200 + crit).
+        pickaxe 500×200=100,000 < dagger 450×235=105,750."""
+        green_slime_res = {"fire": 0, "earth": 0, "water": 0, "air": 25}
+        pickaxe = ItemStats(code="copper_pickaxe", level=1, type_="weapon",
+                            subtype="tool", attack={"earth": 5},
+                            skill_effects={"mining": -10})
+        dagger = ItemStats(code="copper_dagger", level=1, type_="weapon",
+                           attack={"air": 6}, critical_strike=35)
+        assert weapon_score(dagger, green_slime_res) > \
+               weapon_score(pickaxe, green_slime_res)
+
+    def test_pick_loadout_swaps_tool_for_crit_weapon(self):
+        """pick_loadout-level run-18 repro: pickaxe equipped, dagger in
+        inventory -> the weapon slot delta must be the dagger."""
+        gd = GameData()
+        gd._item_stats = {
+            "copper_pickaxe": ItemStats(code="copper_pickaxe", level=1,
+                                        type_="weapon", subtype="tool",
+                                        attack={"earth": 5},
+                                        skill_effects={"mining": -10}),
+            "copper_dagger": ItemStats(code="copper_dagger", level=1,
+                                       type_="weapon", attack={"air": 6},
+                                       critical_strike=35),
+        }
+        gd._monster_attack = {"green_slime": {"fire": 0, "earth": 0,
+                                              "water": 0, "air": 12}}
+        gd._monster_resistance = {"green_slime": {"fire": 0, "earth": 0,
+                                                  "water": 0, "air": 25}}
+        state = make_state(
+            level=7,
+            equipment=_equipment_with("copper_pickaxe"),
+            inventory={"copper_dagger": 2},
+        )
+        result = pick_loadout("green_slime", state, gd)
+        assert result["weapon_slot"] == "copper_dagger", result
+
 
 def _equipment_with(weapon_slot: str | None) -> dict[str, str | None]:
     return {

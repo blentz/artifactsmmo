@@ -43,14 +43,16 @@ def elemGet (s : ElemStats) (e : Int) : Int :=
   | some kv => kv.2
   | none => 0
 
-/-- A model item: integer code, level, per-element attack and resistance, and a
-`fits` flag that abstracts "this item's type maps to the slot under study"
+/-- A model item: integer code, level, per-element attack and resistance, the
+critical-strike percentage, and a `fits` flag that abstracts "this item's type
+maps to the slot under study"
 (Python `slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, [])`). -/
 structure Item where
   code : Int
   level : Int
   attack : ElemStats
   resistance : ElemStats
+  crit : Int
   fits : Bool
 deriving Repr, DecidableEq
 
@@ -61,10 +63,16 @@ def elements : List Int := [0, 1, 2, 3]
 the Python float `max(0.0, 1 - res/100)`; here `res` is the MONSTER's resistance. -/
 def wTerm (atk monRes : Int) : Int := atk * max 0 (100 - monRes)
 
-/-- `WScore = Σ_elem atk(elem) * max(0, 100 - monsterRes(elem))`
-(= 100 × `weapon_score`, the order-preserving integer surrogate). -/
+/-- `WScore = (Σ_elem atk(elem) * max(0, 100 - monsterRes(elem))) * (200 + crit)`
+— the order-preserving integer surrogate of predict_win's expected per-hit
+damage. The `(200 + crit)` factor is the expected critical-strike multiplier
+`1 + crit/100 * 0.5 = (200 + crit)/200` (combat._expected_hit) scaled by 200 to
+stay in ℤ. Without it the loadout picker and the win predictor disagreed about
+the same quantity (run-18 2026-06-12: crit-0 tool out-scored a crit-35 weapon
+against a resisting monster). -/
 def WScore (item : Item) (monsterRes : ElemStats) : Int :=
   (elements.map (fun e => wTerm (elemGet item.attack e) (elemGet monsterRes e))).sum
+    * (200 + item.crit)
 
 /-- Per-element armor surrogate term: `monAtk * armorRes` (NO clamp — the float
 `armor_score` has none). -/
@@ -281,19 +289,25 @@ theorem sum_nonneg_of_terms (l : List Int) (h : ∀ x ∈ l, 0 ≤ x) : 0 ≤ l.
     omega
 
 /-- `weapon_score_nonneg`: `WScore ≥ 0` whenever every per-element attack is
-nonnegative (which item attacks always are). This is THE theorem the clamp earns —
-a non-clamped surrogate (`Σ atk * (100 - res)`) could go NEGATIVE when a monster's
-resistance exceeds 100, which would let `pick_loadout` prefer a strictly worse
-weapon. The `max(0, …)` clamp makes the surrogate monotone and nonnegative. -/
+nonnegative AND the crit percentage is nonnegative (which item stats always
+are). This is THE theorem the clamp earns — a non-clamped surrogate
+(`Σ atk * (100 - res)`) could go NEGATIVE when a monster's resistance exceeds
+100, which would let `pick_loadout` prefer a strictly worse weapon. The
+`max(0, …)` clamp makes the element sum monotone and nonnegative, and
+`0 ≤ crit` keeps the `(200 + crit)` factor positive. -/
 theorem weapon_score_nonneg (item : Item) (monsterRes : ElemStats)
-    (hatk : ∀ e ∈ elements, 0 ≤ elemGet item.attack e) :
+    (hatk : ∀ e ∈ elements, 0 ≤ elemGet item.attack e)
+    (hcrit : 0 ≤ item.crit) :
     0 ≤ WScore item monsterRes := by
   unfold WScore
-  apply sum_nonneg_of_terms
-  intro x hx
-  rw [List.mem_map] at hx
-  obtain ⟨e, he, hxe⟩ := hx
-  rw [← hxe]
-  exact wTerm_nonneg _ _ (hatk e he)
+  have hsum : 0 ≤ (elements.map
+      (fun e => wTerm (elemGet item.attack e) (elemGet monsterRes e))).sum := by
+    apply sum_nonneg_of_terms
+    intro x hx
+    rw [List.mem_map] at hx
+    obtain ⟨e, he, hxe⟩ := hx
+    rw [← hxe]
+    exact wTerm_nonneg _ _ (hatk e he)
+  exact Int.mul_nonneg hsum (by omega)
 
 end Formal.EquipmentScoring

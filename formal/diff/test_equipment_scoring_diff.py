@@ -83,12 +83,12 @@ def _elem_block(stats: ItemStats | None, which: str) -> list[int]:
 
 
 def _item_block(code_id: int, stats: ItemStats | None, slot: str) -> list[int]:
-    """11-int Lean Item block: [code, level, fits, atk0..3, res0..3]."""
+    """12-int Lean Item block: [code, level, fits, atk0..3, res0..3, crit]."""
     if stats is None:
-        return [code_id, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        return [code_id, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     fits = 1 if slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []) else 0
     return [code_id, stats.level, fits, *_elem_block(stats, "attack"),
-            *_elem_block(stats, "resistance")]
+            *_elem_block(stats, "resistance"), stats.critical_strike]
 
 
 def _py_score(stats: ItemStats, slot: str, monster_atk: dict, monster_res: dict) -> int:
@@ -194,20 +194,25 @@ _TYPES = ["weapon", "body_armor"]
                        min_size=len(_ITEM_CODES), max_size=len(_ITEM_CODES)),
     item_ress=st.lists(st.lists(_RES, min_size=len(ELEMENTS), max_size=len(ELEMENTS)),
                        min_size=len(_ITEM_CODES), max_size=len(_ITEM_CODES)),
+    item_crits=st.lists(st.integers(min_value=0, max_value=100),
+                        min_size=len(_ITEM_CODES), max_size=len(_ITEM_CODES)),
     inv_pick=st.lists(st.booleans(), min_size=len(_ITEM_CODES), max_size=len(_ITEM_CODES)),
     equip_w=st.sampled_from([*_ITEM_CODES, None]),
     equip_b=st.sampled_from([*_ITEM_CODES, None]),
 )
 def test_python_matches_lean(mon_atk, mon_res, level, item_types, item_levels,
-                             item_atks, item_ress, inv_pick, equip_w, equip_b):
+                             item_atks, item_ress, item_crits, inv_pick,
+                             equip_w, equip_b):
     table = {
         code: ItemStats(
             code=code, level=lvl, type_=ty,
             attack={e: a for e, a in zip(ELEMENTS, atk, strict=True)},
             resistance={e: r for e, r in zip(ELEMENTS, res, strict=True)},
+            critical_strike=crit,
         )
-        for code, ty, lvl, atk, res in zip(
-            _ITEM_CODES, item_types, item_levels, item_atks, item_ress, strict=True)
+        for code, ty, lvl, atk, res, crit in zip(
+            _ITEM_CODES, item_types, item_levels, item_atks, item_ress,
+            item_crits, strict=True)
     }
     monster_atk = {e: v for e, v in zip(ELEMENTS, mon_atk, strict=True)}
     monster_res = {e: v for e, v in zip(ELEMENTS, mon_res, strict=True)}

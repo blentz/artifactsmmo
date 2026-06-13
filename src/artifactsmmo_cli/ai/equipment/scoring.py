@@ -7,12 +7,24 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 
 def weapon_score_raw_pure(elements: list[str], attack: dict[str, int],
+                          critical_strike: int,
                           monster_resistance: dict[str, int]) -> int:
-    """PURE CORE (mechanically extracted, P4b): ``Σ atk * max(0, 100 - res%)``.
+    """PURE CORE (mechanically extracted, P4b): ``(Σ atk * max(0, 100 -
+    res%)) * (200 + crit)``.
 
-    The ItemStats read (``weapon.attack``) and the module-level ``ELEMENTS``
-    tuple are hoisted to plain-data parameters by the ``weapon_score_raw``
-    wrapper, so this body is inside the extraction subset. Extracted to
+    The crit factor is the exact-integer form of predict_win's expected
+    critical-strike multiplier ``1 + crit/100 * 0.5 = (200 + crit)/200``
+    (combat._expected_hit), scaled by 200 to stay in ℤ. Without it the
+    loadout picker and the win predictor disagreed about the same
+    quantity — run-18 trace 2026-06-12: vs green_slime (res_air 25)
+    copper_pickaxe (earth 5, crit 0) out-scored copper_dagger (air 6,
+    crit 35) and Robby ground slimes bare-handed-with-a-pickaxe at
+    180/230 HP loss per fight.
+
+    The ItemStats reads (``weapon.attack``, ``weapon.critical_strike``)
+    and the module-level ``ELEMENTS`` tuple are hoisted to plain-data
+    parameters by the ``weapon_score_raw`` wrapper, so this body is
+    inside the extraction subset. Extracted to
     ``Formal/Extracted/EquipmentScoring.lean``; the bridge proves it equal
     to the hand ``Formal.EquipmentScoring.WScore`` over an injective
     element encoding, transferring ``weapon_score_nonneg`` (the clamp
@@ -21,10 +33,11 @@ def weapon_score_raw_pure(elements: list[str], attack: dict[str, int],
     score = 0
     for elem in elements:
         score = score + attack.get(elem, 0) * max(0, 100 - monster_resistance.get(elem, 0))
-    return score
+    return score * (200 + critical_strike)
 
 
 def weapon_score_pure(elements: list[str], attack: dict[str, int], subtype: str,
+                      critical_strike: int,
                       monster_resistance: dict[str, int]) -> int:
     """PURE CORE (mechanically extracted, P4b): ``2 * raw + nonToolBonus``.
 
@@ -32,7 +45,8 @@ def weapon_score_pure(elements: list[str], attack: dict[str, int], subtype: str,
     preservation + the non-tool tie-break, the fishing_net invariant).
     """
     non_tool_bonus = 0 if subtype == "tool" else 1
-    return 2 * weapon_score_raw_pure(elements, attack, monster_resistance) + non_tool_bonus
+    return 2 * weapon_score_raw_pure(elements, attack, critical_strike,
+                                     monster_resistance) + non_tool_bonus
 
 
 def gather_score_pure(skill_effects: dict[str, int], skill: str) -> int:
@@ -59,14 +73,16 @@ def armor_score_pure(elements: list[str], resistance: dict[str, int],
 
 
 def weapon_score_raw(weapon: ItemStats, monster_resistance: dict[str, int]) -> int:
-    """Raw element-discounted attack surrogate ``Σ atk * max(0, 100 - res%)``.
+    """Raw crit-augmented attack surrogate ``(Σ atk * max(0, 100 - res%)) *
+    (200 + crit)``.
 
     BIT-EQUIVALENT to the Lean ``EquipmentScoring.WScore`` (no subtype
     augmentation). The composite ``weapon_score`` adds the non-tool
     tiebreaker on top of this; this raw value is exported for the
     differential gate against the kernel-checked WScore oracle.
     """
-    return weapon_score_raw_pure(list(ELEMENTS), weapon.attack, monster_resistance)
+    return weapon_score_raw_pure(list(ELEMENTS), weapon.attack,
+                                 weapon.critical_strike, monster_resistance)
 
 
 def weapon_score(weapon: ItemStats, monster_resistance: dict[str, int]) -> int:
@@ -91,7 +107,8 @@ def weapon_score(weapon: ItemStats, monster_resistance: dict[str, int]) -> int:
     fishing_net equipped for combat against slimes despite owning combat
     weapons that scored equal.
     """
-    return weapon_score_pure(list(ELEMENTS), weapon.attack, weapon.subtype, monster_resistance)
+    return weapon_score_pure(list(ELEMENTS), weapon.attack, weapon.subtype,
+                             weapon.critical_strike, monster_resistance)
 
 
 def gather_score(item: ItemStats, skill: str) -> int:

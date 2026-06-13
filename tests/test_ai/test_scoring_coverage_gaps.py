@@ -263,11 +263,12 @@ class TestWeaponScoreRawWrapper:
         net = ItemStats(code="net", level=1, type_="weapon", subtype="tool",
                         attack={"water": 5})
         res = {"fire": 120, "earth": 50, "water": 0, "air": 0}
-        # fire term clamps to 0 (res 120 > 100); earth term is 3 * 50.
-        assert weapon_score_raw(sword, res) == 3 * 50
-        assert weapon_score(sword, res) == 2 * (3 * 50) + 1   # non-tool bonus
-        assert weapon_score_raw(net, res) == 5 * 100
-        assert weapon_score(net, res) == 2 * (5 * 100)        # tool: no bonus
+        # fire term clamps to 0 (res 120 > 100); earth term is 3 * 50; both
+        # items have crit 0, so the crit factor is exactly 200.
+        assert weapon_score_raw(sword, res) == 3 * 50 * 200
+        assert weapon_score(sword, res) == 2 * (3 * 50 * 200) + 1   # non-tool bonus
+        assert weapon_score_raw(net, res) == 5 * 100 * 200
+        assert weapon_score(net, res) == 2 * (5 * 100 * 200)        # tool: no bonus
 
 
 class TestGatherLoadout:
