@@ -81,6 +81,11 @@ def runPredictWin (g : Nat → Int) : Json :=
 /-- Read an Int field (defaulting to 0) from a JSON array of Ints. -/
 def intArg (xs : Array Json) (i : Nat) : Int := (xs[i]!.getInt?).toOption.getD 0
 
+/-- Read a String field (defaulting to "") from a JSON array. The diff side
+encodes strings directly as `Json.str`, so this reads the REAL string (no
+interning), letting the oracle call String-keyed extracted cores unchanged. -/
+def strArg (xs : Array Json) (i : Nat) : String := (xs[i]!.getStr?).toOption.getD ""
+
 /-- Evaluate the `equipCapValue` predicate-level model in Lean.
     args layout (2 ints): equippable(0/1), dominated(0/1).
     Returns the Lean-computed `equippableCap` component. -/
@@ -1695,6 +1700,36 @@ def runTaskReservation (args : Array Json) : Json :=
         Json.bool (Formal.TaskReservation.hasKey demand q))).toArray))
     ]
 
+/-- Compute one skill_grind_selection result using the SAME mechanically
+extracted `Extracted.SkillGrindSelection.skill_grind_selection_pure`.
+
+args layout (mixed String/Int):
+* `[0]`  skill          (String)
+* `[1]`  current_level  (Int)
+* then candidate blocks of 5:
+  `code(String), craft_skill(String), craft_level(Int), mats_missing(Int),
+   obtainable(0/1 Int)`
+
+Strings are read directly via `strArg` (the diff side packs them as JSON
+strings), so the extracted String-keyed `craft_skill == skill` / `code`
+comparisons run unchanged. Emits the chosen in-skill item `{"code": String}`
+(`""` when none qualifies). -/
+def runSkillGrindSelection (args : Array Json) : Json :=
+  let skill := strArg args 0
+  let currentLevel := intArg args 1
+  let nCand := (args.size - 2) / 5
+  let candidates : List Extracted.SkillGrindSelection.GrindCandidate :=
+    (List.range nCand).map (fun k =>
+      let base := 2 + 5 * k
+      { code := strArg args base,
+        craft_skill := strArg args (base + 1),
+        craft_level := intArg args (base + 2),
+        mats_missing := intArg args (base + 3),
+        obtainable := intArg args (base + 4) != 0 })
+  let result := Extracted.SkillGrindSelection.skill_grind_selection_pure
+    skill currentLevel candidates
+  Json.mkObj [("code", Json.str result)]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -1830,6 +1865,8 @@ def runOne (item : Json) : Json :=
     runItemsTaskRun args
   else if kind == "task_reservation" then
     runTaskReservation args
+  else if kind == "skill_grind_selection" then
+    runSkillGrindSelection args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 
