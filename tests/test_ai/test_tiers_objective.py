@@ -1,6 +1,11 @@
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainable
+from artifactsmmo_cli.ai.tiers.objective import (
+    CharacterObjective,
+    is_attainable,
+    is_attainable_now,
+)
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
 
@@ -187,3 +192,172 @@ def test_tools_default_empty_for_backward_compat_constructor():
         _game_data=gd,
     )
     assert obj.target_tools == {}
+
+
+def _gd_near_term() -> GameData:
+    """Catalog with a usable low-level armor tier and an endgame BiS tier."""
+    gd = GameData()
+    gd._item_stats = {
+        "copper_armor": ItemStats(code="copper_armor", level=5, type_="body_armor",
+                                  resistance={"earth": 6}),
+        "iron_armor": ItemStats(code="iron_armor", level=10, type_="body_armor",
+                                resistance={"earth": 12}),
+        "dragon_armor": ItemStats(code="dragon_armor", level=40, type_="body_armor",
+                                  resistance={"earth": 40}),
+        "copper_helmet": ItemStats(code="copper_helmet", level=5, type_="helmet",
+                                   resistance={"air": 4}),
+        "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring", attack={"fire": 2}),
+        "silver_ring": ItemStats(code="silver_ring", level=5, type_="ring", attack={"fire": 4}),
+        "drop_only_boots": ItemStats(code="drop_only_boots", level=1, type_="boots",
+                                     resistance={"water": 3}),
+    }
+    gd._crafting_recipes = {
+        c: {"bar": 1}
+        for c in ("copper_armor", "iron_armor", "dragon_armor", "copper_helmet",
+                  "copper_ring", "silver_ring")
+    }
+    gd._resource_drops = {"rocks": "bar"}
+    gd._resource_skill = {"rocks": ("mining", 1)}
+    return gd
+
+
+def test_near_term_gear_picks_best_usable_at_level():
+    """Level 5: copper_armor (usable) wins body_armor_slot; iron (10) and
+    dragon (40) are over-level and excluded."""
+    obj = CharacterObjective.from_game_data(_gd_near_term())
+    state = make_state(level=5)
+    targets = obj.near_term_gear(state)
+    assert targets["body_armor_slot"] == "copper_armor"
+    assert targets["helmet_slot"] == "copper_helmet"
+
+
+def test_near_term_gear_respects_level_gate():
+    """Level 12: iron_armor becomes the near-term pick over copper."""
+    obj = CharacterObjective.from_game_data(_gd_near_term())
+    targets = obj.near_term_gear(make_state(level=12))
+    assert targets["body_armor_slot"] == "iron_armor"
+
+
+def test_near_term_gear_requires_strict_upgrade():
+    """A slot already holding the best usable item gets no target."""
+    obj = CharacterObjective.from_game_data(_gd_near_term())
+    state = make_state(level=5, equipment={"body_armor_slot": "copper_armor"})
+    targets = obj.near_term_gear(state)
+    assert "body_armor_slot" not in targets
+
+
+def test_near_term_gear_skips_unattainable_items():
+    """drop_only_boots has no recipe and no resource drop → unattainable →
+    boots slot has no near-term target."""
+    obj = CharacterObjective.from_game_data(_gd_near_term())
+    targets = obj.near_term_gear(make_state(level=5))
+    assert "boots_slot" not in targets
+
+
+def test_near_term_gear_fills_paired_ring_slots():
+    """Top-2 usable rings fill ring1/ring2 (silver > copper at level 5)."""
+    obj = CharacterObjective.from_game_data(_gd_near_term())
+    targets = obj.near_term_gear(make_state(level=5))
+    assert targets["ring1_slot"] == "silver_ring"
+    assert targets["ring2_slot"] == "copper_ring"
+
+
+def _gd_drop_recipes() -> GameData:
+    """Armor recipes that include MONSTER DROPS — the real low-level shape
+    (copper_armor needs wool, life_amulet needs feather). chicken is winnable
+    and located; dragon is unwinnable (huge stats)."""
+    gd = GameData()
+    gd._item_stats = {
+        "feather_coat": ItemStats(code="feather_coat", level=5, type_="body_armor",
+                                  resistance={"air": 5}),
+        "dragon_helm": ItemStats(code="dragon_helm", level=5, type_="helmet",
+                                 resistance={"fire": 8}),
+        "stick": ItemStats(code="stick", level=1, type_="weapon", attack={"air": 5}),
+    }
+    gd._crafting_recipes = {
+        "feather_coat": {"feather": 5, "bar": 1},
+        "dragon_helm": {"dragon_scale": 2},
+    }
+    gd._resource_drops = {"rocks": "bar"}
+    gd._resource_skill = {"rocks": ("mining", 1)}
+    gd._monster_level = {"chicken": 1, "dragon": 40}
+    gd._monster_hp = {"chicken": 10, "dragon": 99999}
+    gd._monster_attack = {"dragon": {"fire": 9999}}
+    fill_monster_stat_defaults(gd)
+    gd._monster_drops = {
+        "chicken": [("feather", 10, 1, 2)],
+        "dragon": [("dragon_scale", 10, 1, 1)],
+    }
+    gd._monster_locations = {"chicken": [(0, 1)], "dragon": [(9, 9)]}
+    return gd
+
+
+def test_is_attainable_now_accepts_winnable_monster_drop_chain():
+    """Trace 2026-06-11 17:21 inert-fix bug: copper_armor (wool from a
+    trivially-winnable monster) was rejected by the gathering-only
+    is_attainable, leaving zero armor roots. The state-aware predicate must
+    accept craft chains bottoming out in winnable, located monster drops."""
+    gd = _gd_drop_recipes()
+    state = make_state(level=5, attack={"air": 5})   # sheet attack → chicken winnable
+    assert is_attainable_now("feather_coat", state, gd) is True
+    targets = CharacterObjective.from_game_data(gd).near_term_gear(state)
+    assert targets["body_armor_slot"] == "feather_coat"
+
+
+def test_is_attainable_now_rejects_unwinnable_monster_drop():
+    """dragon_scale only drops from an unbeatable monster → dragon_helm is
+    NOT a near-term target (self-unlocks later as gear/level improve)."""
+    gd = _gd_drop_recipes()
+    state = make_state(level=5, attack={"air": 5})
+    assert is_attainable_now("dragon_helm", state, gd) is False
+    targets = CharacterObjective.from_game_data(gd).near_term_gear(state)
+    assert "helmet_slot" not in targets
+
+
+def test_is_attainable_now_requires_known_spawn():
+    """A winnable dropper with no known map location does not count
+    (mirrors strategy._producible's spawn-location gate)."""
+    gd = _gd_drop_recipes()
+    gd._monster_locations = {"dragon": [(9, 9)]}   # chicken spawn unknown
+    state = make_state(level=5, attack={"air": 5})
+    assert is_attainable_now("feather_coat", state, gd) is False
+
+
+def test_is_attainable_now_cycle_safe():
+    gd = GameData()
+    gd._crafting_recipes = {"a": {"a": 1}}
+    assert is_attainable_now("a", make_state(), gd) is False
+
+
+def _gd_with_recipes() -> GameData:
+    gd = GameData()
+    gd._item_stats = {
+        "water_bow": ItemStats(code="water_bow", level=5, type_="weapon",
+                               crafting_skill="weaponcrafting", crafting_level=5),
+        "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
+                                   crafting_skill="weaponcrafting", crafting_level=1),
+        "cooked_beef": ItemStats(code="cooked_beef", level=1, type_="consumable",
+                                 crafting_skill="cooking", crafting_level=1),
+    }
+    return gd
+
+
+def test_near_term_skill_targets_uses_curve():
+    """CharacterObjective.near_term_skill_targets delegates to the proven curve:
+    at char 7, water_bow (weaponcrafting/5, item_level 5) is in-window, so the
+    target to hold is 5; the cooking consumable is not gear-relevant."""
+    obj = CharacterObjective.from_game_data(_gd_with_recipes())
+    state = make_state(level=7)
+    targets = obj.near_term_skill_targets(state)
+    assert targets["weaponcrafting"] == 5
+    assert "cooking" not in targets
+
+
+def test_is_attainable_now_judges_winnability_at_full_hp():
+    """A transiently-damaged character (hp 1) must not lose its gear
+    targets: strategic attainability rests first (G3 winnable_at_max_hp).
+    Live repro 2026-06-11 18:46+: Robby at 31/175 post-fight had every
+    armor root evaporate and chosen_root flipped to a 0.24 skill root."""
+    gd = _gd_drop_recipes()
+    state = make_state(level=5, attack={"air": 5}, hp=1, max_hp=150)
+    assert is_attainable_now("feather_coat", state, gd) is True

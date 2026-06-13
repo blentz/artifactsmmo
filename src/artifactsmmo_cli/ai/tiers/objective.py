@@ -4,13 +4,15 @@ Two tightly-coupled frozen models in one file (CharacterObjective produces
 ObjectiveGap), following the cycle_snapshot.py GoalRankEntry/GoalAttempt
 precedent."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import _GATHERING_SKILLS, GameData
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value, tool_value
 from artifactsmmo_cli.ai.tiers.objective_completion import is_complete_pure
+from artifactsmmo_cli.ai.tiers.skill_target_curve import skill_target_curve
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, SKILL_NAMES, WorldState
 
 
@@ -25,6 +27,41 @@ def is_attainable(code: str, game_data: GameData, _path: frozenset[str] = frozen
         sub_path = _path | {code}
         return all(is_attainable(mat, game_data, sub_path) for mat in recipe)
     return code in game_data.resource_drops.values()
+
+
+def is_attainable_now(code: str, state: WorldState, game_data: GameData,
+                      _path: frozenset[str] = frozenset()) -> bool:
+    """State-aware producibility for NEAR-TERM targets: the craft chain
+    bottoms out in gatherables OR drops from a winnable monster with a known
+    spawn — the same leaf semantics as the strategy tier's `_producible`.
+
+    `is_attainable` is the wrong gate for near-term gear: every armor a
+    low-level character can wear crafts from monster drops (copper_armor
+    needs wool, copper_legs_armor needs feather, life_amulet needs feather +
+    red_slimeball), so the gathering-only closure rejected ALL of them and
+    the 2026-06-11 near-term-gear fix was inert (trace 17:21: three empty
+    slots, zero armor roots). Drops from monsters the character can't beat
+    yet stay excluded — those targets self-unlock as gear/level improve.
+
+    Winnability is judged AT FULL HP: this is a strategic "can the
+    character ever farm this" question and rest is always available, so a
+    transiently-damaged character must not see its gear targets evaporate
+    (predict_win at hp=31/175 fails every monster, which flipped
+    chosen_root on every post-fight cycle). Matches the G3 Lean model
+    (`winnable_at_max_hp`). Tactical fight entry keeps current-HP
+    semantics in predict_win itself. Cycle-safe."""
+    recipe = game_data.crafting_recipe(code)
+    if recipe is not None:
+        if code in _path:
+            return False
+        sub_path = _path | {code}
+        return all(is_attainable_now(mat, state, game_data, sub_path) for mat in recipe)
+    if code in game_data.resource_drops.values():
+        return True
+    rested = replace(state, hp=state.max_hp)
+    return any(is_winnable(rested, game_data, monster_code)
+               and game_data.monster_locations(monster_code)
+               for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(code))
 
 
 @dataclass(frozen=True)
@@ -108,6 +145,43 @@ class CharacterObjective:
             target_tools=target_tools,
             _game_data=game_data,
         )
+
+    def near_term_gear(self, state: WorldState) -> dict[str, str]:
+        """Best usable-NOW upgrade per equipment slot: highest equip_value
+        attainable item with `stats.level <= state.level` that strictly beats
+        the currently-equipped value (empty slot counts as 0).
+
+        The perfect-sheet `target_gear` is endgame BiS, which at low character
+        level is unreachable (drops from unwinnable monsters) and gets filtered
+        out of the Tier-2 ranking — leaving NO gear root at all, so the
+        kernel-proved empty-slot dominance (Formal.GearPolicy
+        `armor_strictly_dominates_empty_slot`) had no candidate to act on.
+        Trace 2026-06-11 16:42: level 6, body/leg/amulet slots empty, 148
+        consecutive fights at -72.8 HP each. These near-term targets are the
+        live roots that premise needs."""
+        by_type: dict[str, list[tuple[int, str]]] = {}
+        for code, stats in self._game_data.all_item_stats.items():
+            if stats.type_ not in ITEM_TYPE_TO_SLOTS or stats.level > state.level:
+                continue
+            value = equip_value(stats)
+            if value > 0:
+                by_type.setdefault(stats.type_, []).append((value, code))
+        targets: dict[str, str] = {}
+        for type_, items in by_type.items():
+            slots = [s for s in ITEM_TYPE_TO_SLOTS[type_] if s in EQUIPMENT_SLOTS]
+            ranked = sorted(items, key=lambda vc: (-vc[0], vc[1]))
+            attainable = [(value, code) for (value, code) in ranked
+                          if is_attainable_now(code, state, self._game_data)]
+            for slot, (value, code) in zip(slots, attainable, strict=False):
+                if value > self._item_value(state.equipment.get(slot)):
+                    targets[slot] = code
+        return targets
+
+    def near_term_skill_targets(self, state: WorldState) -> dict[str, int]:
+        """Recipe-aware skill curve: {craft_skill: target_level} the bot should
+        hold at the current char level so gear recipes unlock just-in-time.
+        Thin delegation to the proven skill_target_curve core."""
+        return skill_target_curve(state.level, state, self._game_data)
 
     def _item_value(self, code: str | None) -> int:
         if not code:
