@@ -148,3 +148,4 @@ import Formal.Liveness.RichApplyConsistency
 import Formal.Liveness.LearningStoreBridge
 import Formal.Liveness.MetaGoalDispatch
 import Formal.Liveness.StateFieldGapSemantics
+import Formal.SkillTargetCurve
