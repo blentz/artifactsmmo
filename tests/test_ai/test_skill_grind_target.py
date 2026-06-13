@@ -140,3 +140,14 @@ def test_cyclic_recipe_is_not_obtainable():
     gd._crafting_recipes = {"cyc_a": {"cyc_b": 1}, "cyc_b": {"cyc_a": 1}}
     state = make_state(skills={"weaponcrafting": 1})
     assert skill_grind_target("weaponcrafting", state, gd) is None
+
+
+def test_craft_level_breaks_tie_when_materials_equal():
+    """Two feasible items with EQUAL missing materials (both fully on hand) ->
+    the higher craft_level wins (more XP). Exercises the craft_level tie-break."""
+    gd = _gd()
+    # copper_dagger (lvl1, copper_bar:6) and wooden_staff (lvl3, ash_plank:4)
+    # both have 0 missing -> tie on mats -> wooden_staff (higher level) wins.
+    state = make_state(skills={"weaponcrafting": 3},
+                       inventory={"copper_bar": 6, "ash_plank": 4})
+    assert skill_grind_target("weaponcrafting", state, gd) == "wooden_staff"
