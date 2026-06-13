@@ -20,11 +20,19 @@ from artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get import s
 from artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get import sync as get_bank_details
 from artifactsmmo_api_client.api.np_cs.get_all_npcs_items_npcs_items_get import sync as get_all_npc_items
 from artifactsmmo_api_client.api.resources.get_all_resources_resources_get import sync as get_all_resources
+from artifactsmmo_api_client.models.bank_schema import BankSchema
+from artifactsmmo_api_client.models.event_schema import EventSchema
 from artifactsmmo_api_client.models.ge_order_type import GEOrderType
+from artifactsmmo_api_client.models.item_schema import ItemSchema
 from artifactsmmo_api_client.models.map_content_type import MapContentType
 from artifactsmmo_api_client.models.map_layer import MapLayer
+from artifactsmmo_api_client.models.map_schema import MapSchema
+from artifactsmmo_api_client.models.monster_schema import MonsterSchema
+from artifactsmmo_api_client.models.npc_item import NPCItem
+from artifactsmmo_api_client.models.resource_schema import ResourceSchema
 from artifactsmmo_api_client.types import Unset
 
+from artifactsmmo_cli.ai.game_data_cache import GameDataCache
 from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS, ItemCatalog, ItemStats
 from artifactsmmo_cli.ai.location_catalog import LocationCatalog
 from artifactsmmo_cli.ai.monster_catalog import MonsterCatalog
@@ -621,17 +629,67 @@ class GameData:
         return self.world.taskmaster_tile
 
     @classmethod
-    def load(cls, client: AuthenticatedClient) -> "GameData":
-        """Load all game data from the API. Paginates until all data is fetched."""
+    def load(
+        cls,
+        client: AuthenticatedClient,
+        ttl_minutes: int = 30,
+        force_refresh: bool = False,
+        cache: "GameDataCache | None" = None,
+    ) -> "GameData":
+        """Build GameData. Reuse the disk cache for the STATIC loaders when fresh
+        (< ttl_minutes); else fetch from the API and rewrite it. GE orders are
+        ALWAYS fetched live (the market order book changes constantly).
+
+        _fetch_* return schema OBJECTS; the cache stores their .to_dict()s; a warm
+        load reconstructs schemas via .from_dict(). _build_* always sees schema
+        objects, so its logic (and the legacy _load_* tests) are unchanged."""
         data = cls()
-        data._load_maps(client)
-        data._load_items(client)
-        data._load_resources(client)
-        data._load_monsters(client)
-        data._load_npcs(client)
-        data._load_events(client)
+        if cache is None:
+            cache = GameDataCache(api_base_url=client._base_url)
+        raw = None if force_refresh else cache.read(ttl_minutes)
+        if raw is None:
+            fetched = {
+                "maps": data._fetch_maps(client),
+                "items": data._fetch_items(client),
+                "resources": data._fetch_resources(client),
+                "monsters": data._fetch_monsters(client),
+                "npcs": data._fetch_npcs(client),
+                "events": data._fetch_events(client),
+                "bank": data._fetch_bank(client),
+            }
+            raw = {
+                k: (
+                    [o.to_dict() for o in v]
+                    if isinstance(v, list)
+                    else (v.to_dict() if v is not None else None)
+                )
+                for k, v in fetched.items()
+            }
+            try:
+                cache.write(raw)
+            except OSError as e:
+                # Data is already in hand; a failed cache write must not crash the
+                # run — the next start simply re-fetches.
+                print(f"[game_data] cache write failed: {e}")
+            objs = fetched
+        else:
+            objs = {
+                "maps": [MapSchema.from_dict(d) for d in raw["maps"]],
+                "items": [ItemSchema.from_dict(d) for d in raw["items"]],
+                "resources": [ResourceSchema.from_dict(d) for d in raw["resources"]],
+                "monsters": [MonsterSchema.from_dict(d) for d in raw["monsters"]],
+                "npcs": [NPCItem.from_dict(d) for d in raw["npcs"]],
+                "events": [EventSchema.from_dict(d) for d in raw["events"]],
+                "bank": BankSchema.from_dict(raw["bank"]) if raw["bank"] is not None else None,
+            }
+        data._build_maps(objs["maps"])
+        data._build_items(objs["items"])
+        data._build_resources(objs["resources"])
+        data._build_monsters(objs["monsters"])
+        data._build_npcs(objs["npcs"])
+        data._build_events(objs["events"])
+        data._build_bank(objs["bank"])
         data._load_ge_orders(client)
-        data._load_bank_metadata(client)
         return data
 
     def _fetch_bank(self, client: AuthenticatedClient):

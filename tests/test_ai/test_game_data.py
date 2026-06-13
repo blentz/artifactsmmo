@@ -13,6 +13,7 @@ from artifactsmmo_api_client.models.static_data_page_event_schema import StaticD
 from artifactsmmo_api_client.types import UNSET
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.game_data_cache import GameDataCache
 from artifactsmmo_cli.ai.player import GamePlayer
 
 
@@ -680,8 +681,9 @@ def test_grand_exchange_location_accessor():
 
 
 class TestGameDataLoad:
-    def test_load_calls_all_sub_loaders(self):
+    def test_load_calls_all_sub_loaders(self, tmp_path):
         client = MagicMock()
+        cache = GameDataCache("https://api.artifactsmmo.com", cache_dir=tmp_path)
         empty_page = make_page([])
         with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=empty_page):
             with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=empty_page):
@@ -691,7 +693,7 @@ class TestGameDataLoad:
                             with patch("artifactsmmo_cli.ai.game_data.get_all_events", return_value=empty_page):
                                 with patch("artifactsmmo_cli.ai.game_data.get_ge_orders", return_value=empty_page):
                                     with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None):
-                                        gd = GameData.load(client)
+                                        gd = GameData.load(client, cache=cache)
         assert isinstance(gd, GameData)
 
 
@@ -1207,3 +1209,94 @@ class TestGameDataFetchBuildSplit:
         with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=make_page([tile])):
             gd._load_maps(MagicMock())
         assert gd._resource_locations == {"copper": [(2, 3)]}
+
+
+_STATIC = ("maps", "items", "resources", "monsters", "npcs", "events")
+
+
+class _RecordingCache(GameDataCache):
+    def __init__(self, tmp_path, seeded=None):
+        super().__init__("https://api.artifactsmmo.com", cache_dir=tmp_path)
+        self.reads = 0
+        self.writes = 0
+        self._seeded = seeded
+
+    def read(self, ttl_minutes, now=None):
+        self.reads += 1
+        return self._seeded
+
+    def write(self, raw_pages, now=None):
+        self.writes += 1
+        self._seeded = raw_pages
+
+
+def _stub_fetch_build(monkeypatch):
+    """Stub every _fetch_* to return empty (so serialize/deserialize loops are
+    no-ops) and _build_*/_load_ge_orders to recorders. Returns the GE counter."""
+    for name in _STATIC:
+        monkeypatch.setattr(GameData, f"_fetch_{name}", lambda self, client: [])
+        monkeypatch.setattr(GameData, f"_build_{name}", lambda self, items: None)
+    monkeypatch.setattr(GameData, "_fetch_bank", lambda self, client: None)
+    monkeypatch.setattr(GameData, "_build_bank", lambda self, item: None)
+    ge = {"n": 0}
+    monkeypatch.setattr(
+        GameData, "_load_ge_orders", lambda self, client: ge.__setitem__("n", ge["n"] + 1)
+    )
+    return ge
+
+
+def test_cold_load_fetches_and_writes(monkeypatch, tmp_path):
+    ge = _stub_fetch_build(monkeypatch)
+    cache = _RecordingCache(tmp_path, seeded=None)  # miss
+    GameData.load(client=MagicMock(), ttl_minutes=30, cache=cache)
+    assert cache.reads == 1 and cache.writes == 1
+    assert ge["n"] == 1  # GE always live
+
+
+def test_warm_load_skips_fetch_uses_cache(monkeypatch, tmp_path):
+    ge = _stub_fetch_build(monkeypatch)
+    seeded = {k: [] for k in _STATIC} | {"bank": None}
+    cache = _RecordingCache(tmp_path, seeded=seeded)  # hit
+    monkeypatch.setattr(
+        GameData,
+        "_fetch_maps",
+        lambda self, client: (_ for _ in ()).throw(AssertionError("fetched on warm hit")),
+    )
+    GameData.load(client=MagicMock(), ttl_minutes=30, cache=cache)
+    assert cache.reads == 1 and cache.writes == 0
+    assert ge["n"] == 1  # GE STILL fetched live on a warm hit
+
+
+def test_force_refresh_bypasses_read(monkeypatch, tmp_path):
+    _stub_fetch_build(monkeypatch)
+    cache = _RecordingCache(tmp_path, seeded={k: [] for k in _STATIC} | {"bank": None})
+    GameData.load(client=MagicMock(), ttl_minutes=30, force_refresh=True, cache=cache)
+    assert cache.reads == 0 and cache.writes == 1
+
+
+def _make_event_npc(code, npc_code, x, y) -> EventSchema:
+    return EventSchema(
+        name=code,
+        code=code,
+        content=EventContentSchema(type_=MapContentType.NPC, code=npc_code),
+        maps=[EventMapSchema(map_id=1, x=x, y=y, layer="overworld", skin="s")],
+        duration=60,
+        rate=1500,
+    )
+
+
+def test_warm_and_cold_events_build_equal(monkeypatch, tmp_path):
+    """A real EventSchema fetched cold (built from the object) and warm
+    (built from from_dict(to_dict(...))) must index identically."""
+    ev = _make_event_npc(code="gold_merchant", npc_code="merchant", x=5, y=6)  # real EventSchema
+    monkeypatch.setattr(GameData, "_fetch_events", lambda self, client: [ev])
+    for name in ("maps", "items", "resources", "monsters", "npcs"):
+        monkeypatch.setattr(GameData, f"_fetch_{name}", lambda self, client: [])
+    monkeypatch.setattr(GameData, "_fetch_bank", lambda self, client: None)
+    monkeypatch.setattr(GameData, "_load_ge_orders", lambda self, client: None)
+    cache = _RecordingCache(tmp_path, seeded=None)
+    cold = GameData.load(client=MagicMock(), ttl_minutes=30, cache=cache)  # writes cache
+    warm = GameData.load(client=MagicMock(), ttl_minutes=30, cache=cache)  # from_dict path
+    assert cold._npc_event_code == warm._npc_event_code
+    assert cold._event_npc_spawns == warm._event_npc_spawns
+    assert warm._event_npc_spawns  # non-empty -> the round-trip really happened
