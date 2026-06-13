@@ -15,6 +15,7 @@ from artifactsmmo_cli.ai.tiers.strategy import (
     BALANCE_MAX,
     BALANCE_MIN,
     CHAR_MARGINAL,
+    EMPTY_SLOT_URGENCY,
     GEAR_EQUIP_SCALE,
     LEARN_SAMPLE_FULL,
     LEARN_W_MAX,
@@ -25,6 +26,7 @@ from artifactsmmo_cli.ai.tiers.strategy import (
     PRIOR_GATHER_SKILL,
     PRIOR_UTILITY_GEAR,
     SKILL_MARGINAL,
+    STICKY_DOMINANCE_RATIO,
     XP_RATE_REFERENCE,
     StrategyEngine,
     actionable_step,
@@ -36,6 +38,7 @@ from artifactsmmo_cli.ai.tiers.strategy import (
 )
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
+from tests.test_ai.test_skill_target_curve import _gd_with_recipes
 
 
 def _gd() -> GameData:
@@ -108,16 +111,19 @@ def test_decide_hp_interrupt_flag_only():
 
 
 def test_personality_reweighting_changes_choice():
-    # Gear-free world so only char-level vs skills compete.
-    # Skills: alchemy=5 (leader), others=1 → laggards get balancing boost (raw=1.5).
-    # BalancedPersonality: char_level=1.0 > weaponcrafting=0.6*0.2*1.5=0.18 → char wins.
-    # SkillFirst (10x weight): weaponcrafting=0.6*0.2*1.5*10=1.8 > 1.0 → skill wins.
+    # Gear-free world so only char-level vs endgame skills compete. All crafting
+    # skills sit AT the near-term bootstrap target (5) so the gap-proportional
+    # catch-up boost is inert (gap 0) — this isolates the char-vs-skill
+    # personality comparison on the flat endgame-50 marginal, as intended.
+    # Skills: alchemy=9 (leader), laggards at 5 → balancing raw=1.5 (gap 4).
+    # BalancedPersonality: char_level=1.48 > skill=0.6*0.2*1.5=0.18 → char wins.
+    # SkillFirst (10x weight): skill=0.6*0.2*1.5*10=1.8 > 1.48 → skill wins.
     gd = GameData()
     gd._monster_level = {"chicken": 1}  # char level reachable (combat-capable)
     fill_monster_stat_defaults(gd)
     obj = CharacterObjective.from_game_data(gd)
-    skill_levels = {s: 1 for s in obj.target_skill_levels}
-    skill_levels["alchemy"] = 5  # make alchemy the leader so others are laggards
+    skill_levels = {s: 5 for s in obj.target_skill_levels}
+    skill_levels["alchemy"] = 9  # leader, putting laggards 4 behind (balancing boost)
     state = make_state(level=1, skills=skill_levels)
 
     class SkillFirst:
@@ -333,22 +339,24 @@ class TestBalancing:
 class TestBasePrior:
     def test_char_and_skill_family_priors(self):
         eng = _eng(GameData())
-        assert eng._base_prior(ReachCharLevel(50)) == PRIOR_CHAR_LEVEL
-        assert eng._base_prior(ReachSkillLevel("weaponcrafting", 50)) == PRIOR_COMBAT_CRAFT_SKILL
-        assert eng._base_prior(ReachSkillLevel("mining", 50)) == PRIOR_GATHER_SKILL
-        assert eng._base_prior(ReachSkillLevel("alchemy", 50)) == PRIOR_CONSUMABLE_SKILL
+        gd, st = GameData(), make_state()
+        assert eng._base_prior(ReachCharLevel(50), st, gd) == PRIOR_CHAR_LEVEL
+        assert eng._base_prior(ReachSkillLevel("weaponcrafting", 50), st, gd) == PRIOR_COMBAT_CRAFT_SKILL
+        assert eng._base_prior(ReachSkillLevel("mining", 50), st, gd) == PRIOR_GATHER_SKILL
+        assert eng._base_prior(ReachSkillLevel("alchemy", 50), st, gd) == PRIOR_CONSUMABLE_SKILL
 
     def test_unknown_skill_prior_is_zero(self):
         eng = _eng(GameData())
-        assert eng._base_prior(ReachSkillLevel("tailoring", 50)) == 0.0   # not a known skill
+        assert eng._base_prior(ReachSkillLevel("tailoring", 50), make_state(), GameData()) == 0.0   # not a known skill
 
     def test_gear_prior_combat_vs_utility(self):
         gd = GameData()
         gd._item_stats = {"copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon"),
                           "small_potion": ItemStats(code="small_potion", level=1, type_="utility")}
         eng = _eng(gd, target_gear={"weapon_slot": "copper_dagger", "utility1_slot": "small_potion"})
-        assert eng._base_prior(ObtainItem("copper_dagger")) == PRIOR_COMBAT_GEAR
-        assert eng._base_prior(ObtainItem("small_potion")) == PRIOR_UTILITY_GEAR
+        st = make_state()
+        assert eng._base_prior(ObtainItem("copper_dagger"), st, gd) == PRIOR_COMBAT_GEAR
+        assert eng._base_prior(ObtainItem("small_potion"), st, gd) == PRIOR_UTILITY_GEAR
 
 
 class TestMarginal:
@@ -397,8 +405,15 @@ class TestAntiDegeneracy:
                            skills={"alchemy": 5, "mining": 3, "woodcutting": 1, "fishing": 1,
                                    "weaponcrafting": 1, "gearcrafting": 1, "jewelrycrafting": 1, "cooking": 1})
         d = eng.decide(state, gd)
-        assert root_category(d.chosen_root) in ("gear", "char_level")
+        # Anti-degeneracy: the runaway LEADING skill (alchemy=5, endgame-50 root)
+        # must never be chosen. Gear, char level, or a LAGGING craft-skill
+        # catch-up root (a below-bootstrap skill, the recipe-aware interleave)
+        # may win — but never the already-leading skill.
         assert d.chosen_root != ReachSkillLevel("alchemy", 50)
+        assert d.chosen_root != ReachSkillLevel("alchemy", 5)
+        # if a skill root wins, it is a lagging catch-up, not the leader
+        if root_category(d.chosen_root) == "skills":
+            assert state.skills.get(d.chosen_root.skill, 1) < state.skills["alchemy"]
 
     def test_lagging_skill_outranks_leader(self):
         gd = GameData()
@@ -417,7 +432,8 @@ class TestValueComposition:
         state = make_state(skills={"alchemy": 5, "cooking": 1, "mining": 1, "woodcutting": 1,
                                    "fishing": 1, "weaponcrafting": 1, "gearcrafting": 1, "jewelrycrafting": 1})
         root = ReachSkillLevel("alchemy", 50)
-        expected = eng._base_prior(root) * eng._marginal(root, state, GameData()) * eng._balancing(root, state)
+        expected = (eng._base_prior(root, state, GameData())
+                    * eng._marginal(root, state, GameData()) * eng._balancing(root, state))
         assert eng._value(root, state, GameData()) == expected
 
 
@@ -761,3 +777,157 @@ def test_decide_returns_a_root_when_combat_capable():
     state = make_state(level=4, skills={"weaponcrafting": 1, "mining": 1})
     d = eng.decide(state, gd, history=None, combat_monster="chicken")
     assert d.chosen_root is not None
+
+
+class TestEmptySlotUrgency:
+    """Runtime bridge for Formal.GearPolicy.armor_strictly_dominates_empty_slot:
+    a usable-at-level armor filling an EMPTY combat slot must outrank the
+    char-level bootstrap (1.48) even through sticky commitment (x 3/2)."""
+
+    def _gd(self):
+        gd = GameData()
+        gd._item_stats = {
+            "copper_armor": ItemStats(code="copper_armor", level=5, type_="body_armor",
+                                      resistance={"earth": 6}),
+            "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
+                                       attack={"air": 6}),
+        }
+        gd._crafting_recipes = {c: {"bar": 1} for c in ("copper_armor", "copper_dagger")}
+        gd._resource_drops = {"rocks": "bar"}
+        gd._resource_skill = {"rocks": ("mining", 1)}
+        return gd
+
+    def test_empty_armor_slot_beats_char_bootstrap_through_sticky(self):
+        gd = self._gd()
+        obj = CharacterObjective.from_game_data(gd)
+        eng = StrategyEngine(obj, BalancedPersonality())
+        state = make_state(level=6, equipment={"weapon_slot": "copper_dagger"})
+        d = eng.decide(state, gd, combat_monster="chicken",
+                       last_chosen_root=repr(ReachCharLevel(8)))
+        assert d.chosen_root == ObtainItem("copper_armor")
+        ranking = {r.root_repr: r.score for r in d.ranking}
+        armor = ranking["ObtainItem(code='copper_armor', quantity=1)"]
+        assert armor == EMPTY_SLOT_URGENCY            # prior 1 x max(m,1)x5/2 x bal 1
+        assert armor > STICKY_DOMINANCE_RATIO * Fraction(37, 25)   # > 3/2 x 1.48
+
+    def test_no_urgency_when_slot_filled(self):
+        gd = self._gd()
+        obj = CharacterObjective.from_game_data(gd)
+        eng = StrategyEngine(obj, BalancedPersonality())
+        # Crafting skills held AT the bootstrap target (5) so the recipe-aware
+        # catch-up roots are inert (gap 0) — this isolates the empty-slot-urgency
+        # behaviour under test from the skill-curve interleave.
+        state = make_state(
+            level=6,
+            skills={"mining": 3, "woodcutting": 2, "fishing": 1, "cooking": 1,
+                    "alchemy": 1, "weaponcrafting": 5, "gearcrafting": 5,
+                    "jewelrycrafting": 5},
+            equipment={"weapon_slot": "copper_dagger",
+                       "body_armor_slot": "copper_armor"})
+        d = eng.decide(state, gd, combat_monster="chicken")
+        ranking = {r.root_repr: r.score for r in d.ranking}
+        # Slot filled with the item itself → root satisfied, out of ranking.
+        assert "ObtainItem(code='copper_armor', quantity=1)" not in ranking
+        # No empty-slot urgency; char bootstrap takes over.
+        assert d.chosen_root == ReachCharLevel(8)
+
+    def test_no_urgency_for_over_level_item(self):
+        gd = self._gd()
+        gd._item_stats["copper_armor"] = ItemStats(
+            code="copper_armor", level=20, type_="body_armor", resistance={"earth": 6})
+        obj = CharacterObjective.from_game_data(gd)
+        eng = StrategyEngine(obj, BalancedPersonality())
+        state = make_state(level=6, equipment={"weapon_slot": "copper_dagger"})
+        m = eng._marginal(ObtainItem("copper_armor"), state, gd, combat_monster="chicken")
+        gain = Fraction(equip_value(gd.item_stats("copper_armor")))
+        assert m == min(Fraction(1), gain / GEAR_EQUIP_SCALE)   # plain marginal, no boost
+
+    def test_gear_slot_resolution_prefers_weakest_ring(self):
+        gd = self._gd()
+        # Three rings: BiS top-2 = silver + bronze (target_gear ring1/ring2);
+        # copper_ring stays OUTSIDE target_gear → exercises type fallback.
+        gd._item_stats["silver_ring"] = ItemStats(
+            code="silver_ring", level=5, type_="ring", attack={"fire": 4})
+        gd._item_stats["bronze_ring"] = ItemStats(
+            code="bronze_ring", level=3, type_="ring", attack={"fire": 3})
+        gd._item_stats["copper_ring"] = ItemStats(
+            code="copper_ring", level=1, type_="ring", attack={"fire": 2})
+        gd._crafting_recipes.update(
+            {c: {"bar": 1} for c in ("silver_ring", "bronze_ring", "copper_ring")})
+        obj = CharacterObjective.from_game_data(gd)
+        assert "copper_ring" not in obj.target_gear.values()
+        eng = StrategyEngine(obj, BalancedPersonality())
+        state = make_state(level=6, equipment={"weapon_slot": "copper_dagger",
+                                               "ring1_slot": "silver_ring"})
+        # ring2 (absent → empty, value 0) is weaker than ring1 (silver) →
+        # the upgrade would fill ring2_slot.
+        assert eng._gear_slot("copper_ring", state, gd) == "ring2_slot"
+
+    def test_gear_slot_none_for_unknown_item(self):
+        gd = self._gd()
+        obj = CharacterObjective.from_game_data(gd)
+        eng = StrategyEngine(obj, BalancedPersonality())
+        assert eng._gear_slot("no_such_item", make_state(), gd) is None
+
+    def test_gear_slot_none_for_unequippable_type(self):
+        gd = self._gd()
+        gd._item_stats["copper_ore"] = ItemStats(code="copper_ore", level=1, type_="resource")
+        obj = CharacterObjective.from_game_data(gd)
+        eng = StrategyEngine(obj, BalancedPersonality())
+        assert eng._gear_slot("copper_ore", make_state(), gd) is None
+
+    def test_gear_slot_none_for_target_tools(self):
+        gd = self._gd()
+        gd._item_stats["copper_pickaxe"] = ItemStats(
+            code="copper_pickaxe", level=1, type_="weapon", skill_effects={"mining": -1})
+        gd._crafting_recipes["copper_pickaxe"] = {"bar": 1}
+        obj = CharacterObjective.from_game_data(gd)
+        eng = StrategyEngine(obj, BalancedPersonality())
+        state = make_state(level=6)
+        assert eng._gear_slot("copper_pickaxe", state, gd) is None
+
+
+def _engine_with_recipes() -> tuple[StrategyEngine, GameData]:
+    """Engine over a game with a weaponcrafting recipe at craft_level 5 (water_bow,
+    item_level 5), so the near-term skill curve target for weaponcrafting is 5 at
+    char level 7. Mirrors the production from_game_data construction used by the
+    other strategy tests."""
+    gd = _gd_with_recipes()
+    obj = CharacterObjective.from_game_data(gd)
+    return StrategyEngine(obj, BalancedPersonality()), gd
+
+
+class TestGapProportionalSkillMarginal:
+    def test_skill_root_marginal_gap_proportional(self):
+        # gap 1 (current 4) vs gap 3 (current 2) -> larger gap, larger marginal.
+        eng, gd = _engine_with_recipes()
+        s1 = make_state(level=7, skills={"weaponcrafting": 4, "woodcutting": 4})
+        s3 = make_state(level=7, skills={"weaponcrafting": 2, "woodcutting": 4})
+        root = ReachSkillLevel("weaponcrafting", 5)
+        m1 = eng._marginal(root, s1, gd)
+        m3 = eng._marginal(root, s3, gd)
+        assert m3 > m1
+
+    def test_endgame_skill_root_stays_flat(self):
+        eng, gd = _engine_with_recipes()
+        state = make_state(level=7, skills={"weaponcrafting": 2})
+        endgame = ReachSkillLevel("weaponcrafting", gd.max_skill_level)
+        assert eng._marginal(endgame, state, gd) == SKILL_MARGINAL
+
+    def test_far_behind_skill_root_outranks_char_bootstrap(self):
+        # The run-7 scenario: char 7, weaponcrafting 2, curve target 5 (gap 3).
+        # The skill root's value must beat the level+2 char bootstrap (so the
+        # skill rises BEFORE the gear commit forces a freeze).
+        eng, gd = _engine_with_recipes()
+        state = make_state(level=7, skills={"weaponcrafting": 2, "woodcutting": 8})
+        skill_root = ReachSkillLevel("weaponcrafting", 5)
+        char_boot = ReachCharLevel(state.level + 2)
+        assert eng._value(skill_root, state, gd) > eng._value(char_boot, state, gd)
+
+    def test_near_curve_skill_root_loses_to_char_bootstrap(self):
+        # gap 1 must NOT hijack leveling.
+        eng, gd = _engine_with_recipes()
+        state = make_state(level=7, skills={"weaponcrafting": 4, "woodcutting": 4})
+        skill_root = ReachSkillLevel("weaponcrafting", 5)
+        char_boot = ReachCharLevel(state.level + 2)
+        assert eng._value(skill_root, state, gd) < eng._value(char_boot, state, gd)

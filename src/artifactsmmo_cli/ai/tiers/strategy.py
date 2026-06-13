@@ -4,6 +4,7 @@ actionable subgoal. Pure; P3a runs it in shadow (traced, not enacted)."""
 from dataclasses import asdict, dataclass, field
 from fractions import Fraction
 
+from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.projections import expected_yield_per_cycle
@@ -28,7 +29,7 @@ from artifactsmmo_cli.ai.tiers.strategy_blend import (
 from artifactsmmo_cli.ai.tiers.strategy_blend import (
     learned_blend as _learned_blend_pure,
 )
-from artifactsmmo_cli.ai.world_state import WorldState
+from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, WorldState
 
 # Mirrors RestoreHPGoal.CRITICAL_HP_FRACTION. Kept local so the tiers layer does
 # not depend on goals/ (which P3c retires); P3c unifies the source.
@@ -46,6 +47,15 @@ PRIOR_COMBAT_CRAFT_SKILL = Fraction(3, 5)
 PRIOR_GATHER_SKILL = Fraction(2, 5)
 PRIOR_CONSUMABLE_SKILL = Fraction(3, 10)
 SKILL_MARGINAL = Fraction(1, 5)
+SKILL_GAP_PER_LEVEL = Fraction(1)
+"""Per-level catch-up boost on a NEAR-TERM (below-endgame) skill root's
+marginal. With PRIOR_COMBAT_CRAFT_SKILL=3/5 and balancing 1: gap 1 → marginal 1.2,
+gap 2 → 2.2, gap 3 → 3.2. Calibrated against the run-7 freeze: a gap-3 craft skill
+behind the leader (balancing 2.0) must out-rank the level+2 char bootstrap
+(value 1.48), while a gap-1 skill even with the leader (balancing 0.5) must not."""
+SKILL_GAP_CAP = 3
+"""Cap on the boosted gap so a large near-term deficit can't dominate every
+other category; matches CHAR_REACHABLE_HORIZON's bounding role for char level."""
 CHAR_MARGINAL = Fraction(1)
 """Base char-level marginal (multiplier on PRIOR_CHAR_LEVEL=1.0). The
 DYNAMIC marginal applied at `_marginal` scales upward with the gap
@@ -93,6 +103,15 @@ character is not combat-capable (combat_monster is None). Sized to lift the weap
 root above competing gear/tool/skill/char roots so it becomes chosen_root — the
 binding objective that unblocks combat. Switches off once a weapon makes the bot
 combat-capable (no permanent override of the long-term objective)."""
+EMPTY_SLOT_URGENCY = Fraction(5, 2)
+"""Multiplier on the marginal of a combat-gear root that would fill an EMPTY
+slot with an item usable at the current character level. Runtime bridge for
+the kernel-proved `Formal.GearPolicy.armor_strictly_dominates_empty_slot` —
+the proof needs a live armor candidate to dominate, and before near_term_gear
+none existed. Sized to beat the char-level bootstrap THROUGH the sticky
+commitment: bootstrap scores 1.48 and sticky holds unless the challenger
+exceeds STICKY_DOMINANCE_RATIO (3/2) x 1.48 = 2.22; 5/2 = 2.5 > 2.22.
+Switches off the moment the slot is filled (root satisfied → removed)."""
 """Tier-2 sticky-commitment threshold. The previous cycle's chosen_root is
 kept unless a new top candidate's score strictly exceeds
 `STICKY_DOMINANCE_RATIO * sticky_score`. Matches Tier-3 means-tier
@@ -282,7 +301,35 @@ class StrategyEngine:
     objective: CharacterObjective
     personality: Personality
 
-    def _base_prior(self, root: MetaGoal) -> Fraction:
+    def _gear_slot(self, code: str, state: WorldState,
+                   game_data: GameData) -> str | None:
+        """The equipment slot an ObtainItem root targets. target_gear keeps
+        its explicit slot mapping; target_tools stay slot-less (the dedicated
+        tool-value axis, never slot-scored); anything else — the near-term
+        gear roots — resolves by item type to the WEAKEST currently-equipped
+        candidate slot (the slot the upgrade would actually fill)."""
+        slot = next((s for s, c in self.objective.target_gear.items() if c == code), None)
+        if slot is not None:
+            return slot
+        if code in self.objective.target_tools.values():
+            return None
+        stats = game_data.item_stats(code)
+        if stats is None:
+            return None
+        slots = [s for s in ITEM_TYPE_TO_SLOTS.get(stats.type_, [])
+                 if s in EQUIPMENT_SLOTS]
+        if not slots:
+            return None
+
+        def _current_value(s: str) -> int:
+            current = state.equipment.get(s)
+            current_stats = game_data.item_stats(current) if current else None
+            return equip_value(current_stats) if current_stats is not None else 0
+
+        return min(slots, key=lambda s: (_current_value(s), slots.index(s)))
+
+    def _base_prior(self, root: MetaGoal, state: WorldState,
+                    game_data: GameData) -> Fraction:
         category = root_category(root)
         weight = self.personality.category_weight(category)
         if isinstance(root, ReachCharLevel):
@@ -297,7 +344,7 @@ class StrategyEngine:
             else:
                 tier = Fraction(0)   # unknown skill — no prior, scores zero
         elif isinstance(root, ObtainItem):
-            slot = next((s for s, c in self.objective.target_gear.items() if c == root.code), None)
+            slot = self._gear_slot(root.code, state, game_data)
             tier = PRIOR_COMBAT_GEAR if slot in _COMBAT_GEAR_SLOTS else PRIOR_UTILITY_GEAR
         else:
             tier = Fraction(0)
@@ -325,12 +372,21 @@ class StrategyEngine:
             bonus = reach * CHAR_GAP_PER_LEVEL
             return CHAR_MARGINAL + bonus
         if isinstance(root, ReachSkillLevel):
-            return SKILL_MARGINAL
+            # Endgame skill-50 roots stay flat/long-horizon; only NEAR-TERM
+            # recipe-curve roots (target below max) get the catch-up boost,
+            # scaled by how far the skill trails its curve target and capped so
+            # it cannot swamp every other category (run-7 just-in-time skilling).
+            if root.level >= game_data.max_skill_level:
+                return SKILL_MARGINAL
+            current = state.skills.get(root.skill, 1)
+            gap = max(0, root.level - current)
+            boost = min(gap, SKILL_GAP_CAP) * SKILL_GAP_PER_LEVEL
+            return SKILL_MARGINAL + boost
         if isinstance(root, ObtainItem):
             stats = game_data.item_stats(root.code)
             if stats is None:
                 return Fraction(0)
-            slot = next((s for s, c in self.objective.target_gear.items() if c == root.code), None)
+            slot = self._gear_slot(root.code, state, game_data)
             current_code = state.equipment.get(slot) if slot is not None else None
             current_stats = game_data.item_stats(current_code) if current_code else None
             current_value = equip_value(current_stats) if current_stats is not None else 0
@@ -342,6 +398,15 @@ class StrategyEngine:
             # objective while the character cannot fight at all.
             if combat_monster is None and slot == "weapon_slot":
                 marginal = max(marginal, Fraction(1)) * COMBAT_READINESS_URGENCY
+            # Empty-slot urgency: filling an empty combat slot with a
+            # usable-at-level item dominates grinding (GearPolicy bridge —
+            # see EMPTY_SLOT_URGENCY). Excludes weapon_slot: the weapon has
+            # its own combat-readiness path above, and tools (type
+            # "weapon") must not ride this boost into the slot.
+            elif (slot in _COMBAT_GEAR_SLOTS and slot != "weapon_slot"
+                    and current_code is None
+                    and stats.level <= state.level and gain > 0):
+                marginal = max(marginal, Fraction(1)) * EMPTY_SLOT_URGENCY
             return marginal
         return Fraction(0)
 
@@ -381,7 +446,7 @@ class StrategyEngine:
 
     def _value(self, root: MetaGoal, state: WorldState, game_data: GameData,
                combat_monster: str | None = None) -> Fraction:
-        base = (self._base_prior(root)
+        base = (self._base_prior(root, state, game_data)
                 * self._marginal(root, state, game_data, combat_monster)
                 * self._balancing(root, state))
         return max(base, self._relevant_tool_value(root, state, game_data))
