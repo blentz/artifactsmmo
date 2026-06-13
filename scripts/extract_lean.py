@@ -387,6 +387,13 @@ MODULES: tuple[ModuleSpec, ...] = (
         core_name="EquipValue",
         functions=("equip_value_pure", "tool_value_pure"),
     ),
+    ModuleSpec(
+        source="src/artifactsmmo_cli/ai/tiers/skill_target_curve.py",
+        output=f"{GENERATED_DIR}/SkillTargetCurve.lean",
+        core_name="SkillTargetCurve",
+        functions=("skill_curve_target_pure",),
+        structures=("SkillItem",),
+    ),
 )
 
 
