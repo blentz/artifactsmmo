@@ -17,7 +17,7 @@ from artifactsmmo_cli.ai.goals.upgrade_selection import (
 )
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.min_gathers import min_gathers
-from artifactsmmo_cli.ai.recipe_closure import recipe_closure
+from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
 from artifactsmmo_cli.ai.shopping_list import fully_covered_materials
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -122,6 +122,19 @@ class UpgradeEquipmentGoal(Goal):
             owned[code] = owned.get(code, 0) + qty
         if owned.get(item, 0) > 0:
             return True
+        # Crafting-skill gate: the target is not owned, so the FINAL craft
+        # must be performed, and CraftAction.is_applicable blocks it while
+        # the skill is below the recipe level — no plan can exist. Without
+        # this check the goal hijacked the arbiter's step slot and planned
+        # to exhaustion every cycle (trace 2026-06-11 17:47: gearcrafting
+        # 2 < 5 for copper_legs_armor; 486-887 nodes, plan_len 0, then
+        # fall-through to grinding — the one ore gathered at cycle 0
+        # flipped min_gathers under max_depth and shut off the productive
+        # GatherMaterials route for the rest of the run).
+        stats = game_data.item_stats(item)
+        if (stats is not None and stats.crafting_skill
+                and state.skills.get(stats.crafting_skill, 1) < stats.crafting_level):
+            return False
         return min_gathers(item, 1, game_data.crafting_recipes, owned) <= self.max_depth
 
     def relevant_actions(self, actions: list[Action], state: WorldState,
@@ -168,6 +181,16 @@ class UpgradeEquipmentGoal(Goal):
             drop = game_data.resource_drop_item(res)
             if drop is not None:
                 withdrawable.add(drop)
+        # Run-18 trace 2026-06-12 20:23: UpgradeEquipment(feather_coat) was
+        # unplannable every cycle (111 nodes, plan_len 0) with the deficit
+        # feather IN THE BANK — feather is a MONSTER drop (neither craftable
+        # nor a resource drop), so the sets above missed it and
+        # Withdraw(feather) never entered a plan. Every material in the full
+        # recipe closure must be withdrawable (same defect fixed in
+        # GatherMaterialsGoal for run-17 c94).
+        chain: dict[str, int] = {}
+        closure_demand(target_item, 1, game_data, chain, frozenset())
+        withdrawable |= set(chain)
         # Materials the bank+inventory fully cover — withdraw them, don't gather.
         owned: dict[str, int] = dict(state.inventory)
         for code, qty in (state.bank_items or {}).items():
@@ -488,4 +511,16 @@ class UpgradeEquipmentGoal(Goal):
         return False
 
     def __repr__(self) -> str:
+        # The committed target is part of the goal's identity. Run-18 trace
+        # 2026-06-12 (cycles 27-98): the bare "UpgradeEquipment" repr made the
+        # arbiter's fallback dedup collapse the rank-#1 root's ONE-ACTION
+        # equip goal (copper_legs_armor, owned and unequipped) into the sticky
+        # root's UNPLANNABLE one (feather_coat, drop-gated) — the crafted legs
+        # sat in inventory for 73 cycles of unarmored fights. Repr collisions
+        # also poisoned sticky commitment, DoomedMemo, and learned-cost keys
+        # across targets. The probe form (no committed target) keeps the bare
+        # repr.
+        if self._committed_target is not None:
+            item, slot = self._committed_target
+            return f"UpgradeEquipment({item}->{slot})"
         return "UpgradeEquipment"

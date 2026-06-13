@@ -158,3 +158,80 @@ def test_planner_admissible_gather_path_when_no_bank():
     assert plan, "expected a reachable gather-based plan"
     assert any(isinstance(a, GatherAction) for a in plan)
     assert repr(plan[-1]) == "Equip(tin_blade->weapon_slot)"
+
+
+# ---- monster-drop chain materials (run-18 trace 2026-06-12 20:23) ----
+
+
+def _feather_gd() -> GameData:
+    gd = GameData()
+    gd._item_stats = {
+        "feather_coat": ItemStats(code="feather_coat", level=5, type_="body_armor",
+                                  crafting_skill="gearcrafting", crafting_level=5),
+        "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource",
+                               crafting_skill="woodcutting", crafting_level=1),
+    }
+    gd._crafting_recipes = {
+        "feather_coat": {"feather": 5, "ash_plank": 2},
+        "ash_plank": {"ash_wood": 10},
+    }
+    gd._resource_drops = {"ash_tree": "ash_wood"}
+    gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
+    gd._resource_locations = {"ash_tree": [(6, 1)]}
+    gd._workshop_locations = {"gearcrafting": (3, 1), "woodcutting": (1, 1)}
+    gd._bank_location = (4, 0)
+    return gd
+
+
+def test_withdraw_of_banked_monster_drop_is_kept():
+    """Run-18 trace 2026-06-12 20:23: UpgradeEquipment(feather_coat ->
+    body_armor_slot) was unplannable EVERY cycle (111 nodes, plan_len 0) with
+    4 feathers in inventory and 3 in the bank — the withdrawable set covered
+    only craftable intermediates + the target + RESOURCE drops, and feather is
+    a MONSTER drop (chicken). The identical defect was already fixed in
+    GatherMaterialsGoal (run-17 c94); every material in the full recipe
+    closure must be withdrawable here too."""
+    gd = _feather_gd()
+    goal = UpgradeEquipmentGoal(
+        initial_equipment={"body_armor_slot": None},
+        committed_target=("feather_coat", "body_armor_slot"))
+    state = make_state(
+        equipment={"body_armor_slot": None},
+        skills={"gearcrafting": 5, "woodcutting": 4},
+        inventory={"feather": 4, "ash_plank": 3}, inventory_max=112,
+        bank_items={"feather": 3},
+    )
+    actions = [
+        WithdrawItemAction(code="feather", quantity=1, bank_location=(4, 0)),
+        CraftAction(code="feather_coat", quantity=1, workshop_location=(3, 1)),
+        EquipAction(code="feather_coat", slot="body_armor_slot"),
+    ]
+    kept = goal.relevant_actions(actions, state, gd)
+    assert any(isinstance(a, WithdrawItemAction) and a.code == "feather"
+               for a in kept), {repr(a) for a in kept}
+
+
+def test_planner_crafts_gear_from_banked_monster_drop():
+    """Planner-level run-18 repro: 4/5 feathers in inventory, 1 short, 3 in
+    the bank, planks on hand, skill met -> withdraw(feather) -> craft ->
+    equip, not plan_len 0."""
+    gd = _feather_gd()
+    goal = UpgradeEquipmentGoal(
+        initial_equipment={"body_armor_slot": None},
+        committed_target=("feather_coat", "body_armor_slot"))
+    state = make_state(
+        x=3, y=-2,
+        equipment={"body_armor_slot": None},
+        skills={"gearcrafting": 5, "woodcutting": 4},
+        inventory={"feather": 4, "ash_plank": 3}, inventory_max=112,
+        bank_items={"feather": 3},
+    )
+    actions = [
+        WithdrawItemAction(code="feather", quantity=1, bank_location=(4, 0)),
+        CraftAction(code="feather_coat", quantity=1, workshop_location=(3, 1)),
+        EquipAction(code="feather_coat", slot="body_armor_slot"),
+    ]
+    plan = GOAPPlanner().plan(state, goal, actions, gd)
+    assert plan, "expected withdraw->craft->equip plan for bank-stocked feather_coat"
+    assert any(isinstance(a, WithdrawItemAction) and a.code == "feather" for a in plan)
+    assert repr(plan[-1]) == "Equip(feather_coat->body_armor_slot)"
