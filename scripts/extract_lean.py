@@ -394,6 +394,13 @@ MODULES: tuple[ModuleSpec, ...] = (
         functions=("skill_curve_target_pure",),
         structures=("SkillItem",),
     ),
+    ModuleSpec(
+        source="src/artifactsmmo_cli/ai/tiers/skill_grind_selection.py",
+        output=f"{GENERATED_DIR}/SkillGrindSelection.lean",
+        core_name="SkillGrindSelection",
+        functions=("_beats", "skill_grind_selection_pure"),
+        structures=("GrindCandidate",),
+    ),
 )
 
 
