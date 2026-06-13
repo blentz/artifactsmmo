@@ -231,6 +231,7 @@ def test_select_deposit_protects_grind_chain_inputs():
     gd._crafting_recipes = {"wooden_shield": {"ash_plank": 6},
                             "ash_plank": {"ash_wood": 10},
                             "copper_legs_armor": {"copper_bar": 5}}
+    gd._resource_drops = {"ash_tree": "ash_wood"}
     gd._bank_location = (4, 0)
     fill_monster_stat_defaults(gd)
     state = make_state(
@@ -271,6 +272,7 @@ def test_select_discard_does_not_preempt_grind_goal_target():
     gd._crafting_recipes = {"wooden_shield": {"ash_plank": 6},
                             "ash_plank": {"ash_wood": 10},
                             "copper_legs_armor": {"copper_bar": 5}}
+    gd._resource_drops = {"ash_tree": "ash_wood"}
     fill_monster_stat_defaults(gd)
     # Monsters-task active so the no-task AcceptTask suppression stays out of
     # the way (mirrors test_select_returns_objective_step_when_calm).
@@ -1545,6 +1547,7 @@ def test_objective_step_reachskill_crafts_one_more_when_spare_owned():
                                    crafting_skill="weaponcrafting", crafting_level=1),
     }
     gd._crafting_recipes = {"copper_dagger": {"copper_bar": 6}}
+    gd._resource_drops = {"copper_rocks": "copper_bar"}
     state = make_state(skills={"weaponcrafting": 1},
                        inventory={"copper_dagger": 1, "copper_bar": 6})
     goal = objective_step_goal(ReachSkillLevel("weaponcrafting", 5), state, gd, _ctx())
@@ -1572,6 +1575,7 @@ def test_objective_step_reachskill_grind_avoids_committed_root_materials():
         "wooden_shield": {"ash_plank": 6},
         "copper_legs_armor": {"copper_bar": 5, "feather": 2},
     }
+    gd._resource_drops = {"ash_rocks": "ash_plank", "copper_rocks": "copper_bar"}
     state = make_state(skills={"gearcrafting": 2},
                        inventory={"copper_bar": 5, "feather": 2})
     goal = objective_step_goal(ReachSkillLevel("gearcrafting", 5), state, gd, _ctx(),
@@ -1614,6 +1618,7 @@ def test_objective_step_reachskill_returns_craft_one_when_craftable():
                                    crafting_skill="weaponcrafting", crafting_level=1),
     }
     gd._crafting_recipes = {"copper_dagger": {"copper_bar": 6}}
+    gd._resource_drops = {"copper_rocks": "copper_bar"}
     state = make_state(skills={"weaponcrafting": 1})
     goal = objective_step_goal(ReachSkillLevel("weaponcrafting", 5), state, gd, _ctx())
     assert isinstance(goal, GatherMaterialsGoal)
