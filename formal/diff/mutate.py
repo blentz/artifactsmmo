@@ -20,6 +20,7 @@ GATHERING_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "ga
 LEVEL_SKILL_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "level_skill.py"
 SCORING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "scoring.py"
 SKILL_XP_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "skill_xp_curve.py"
+SKILL_TARGET_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "skill_target_curve.py"
 ACTION_FACTORY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "factory.py"
 RECIPE_CLOSURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recipe_closure.py"
 TASK_FEASIBILITY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_feasibility.py"
@@ -277,6 +278,14 @@ SCORING_MUTATIONS = [
      " * max(0, 100 - monster_resistance.get(elem, 0))",
      "        score = score + attack.get(elem, 0)"
      " * (100 - monster_resistance.get(elem, 0))"),
+    # drop the crit factor: the expected critical-strike multiplier
+    # (200 + crit) is what makes the loadout picker agree with predict_win's
+    # damage model (run-18 2026-06-12: without it a crit-0 tool out-scored a
+    # crit-35 weapon and Robby ground slimes with a pickaxe). Killed by the
+    # crit-bearing Hypothesis cases in test_equipment_scoring_diff.py.
+    ("equipment_scoring: drop crit factor (200 + critical_strike)",
+     "    return score * (200 + critical_strike)",
+     "    return score"),
     # Byte-equivalence kill: divide armor_score by 100, turning the exact integer
     # surrogate into a float that no longer matches the Lean integer model
     # byte-for-byte. The diff test asserts py_score == lean_score as integers;
@@ -369,6 +378,29 @@ SKILL_XP_CURVE_MUTATIONS = [
     ("skill_xp_curve: total drops last term (range -1)",
      "        return sum(self.required_xp(lvl) for lvl in range(current_level, target_level))",
      "        return sum(self.required_xp(lvl) for lvl in range(current_level, target_level - 1))"),
+]
+
+
+# skill_target_curve mutations -- pure-core anchors for skill_curve_target_pure.
+# Each substring is copied verbatim from skill_target_curve.py (indentation
+# included) so the mutation applies unambiguously; killed by the differential
+# test formal/diff/test_skill_target_curve_diff.py (mirrors the equipment_scoring
+# pure-core anchors).
+SKILL_TARGET_CURVE_MUTATIONS = [
+    # drop the lookahead window widening -- items that should be in range are
+    # excluded, lowering targets the diff test catches.
+    ("skill_target_curve: drop +lookahead window",
+     "                and it.item_level <= char_level + lookahead\n",
+     "                and it.item_level <= char_level\n"),
+    # drop the max-skill clamp -- a malformed craft_level > max leaks through;
+    # diff catches the unclamped value.
+    ("skill_target_curve: drop max_skill clamp",
+     "    if best > max_skill_level:\n        return max_skill_level\n",
+     "    if False:\n        return max_skill_level\n"),
+    # flip the running-max compare to <, under-targeting.
+    ("skill_target_curve: running max becomes running min",
+     "                and it.craft_level > best):\n",
+     "                and it.craft_level < best):\n"),
 ]
 
 
@@ -2520,6 +2552,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_realizable_loadout_diff.py", survivors)
     run_group(SKILL_XP_CURVE_SRC, SKILL_XP_CURVE_MUTATIONS,
               "formal/diff/test_skill_xp_curve_diff.py", survivors)
+    run_group(SKILL_TARGET_CURVE_SRC, SKILL_TARGET_CURVE_MUTATIONS,
+              "formal/diff/test_skill_target_curve_diff.py", survivors)
     run_group(RECIPE_CLOSURE_SRC, RECIPE_CLOSURE_MUTATIONS,
               "formal/diff/test_recipe_closure_diff.py", survivors)
     run_group(TASK_FEASIBILITY_SRC, TASK_FEASIBILITY_MUTATIONS,
