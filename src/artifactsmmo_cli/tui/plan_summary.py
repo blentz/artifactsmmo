@@ -2,6 +2,7 @@
 with have/need progress. Reuses closure_demand/shopping_list; no planning logic."""
 
 import re
+from collections.abc import Mapping
 
 from rich.console import Group, RenderableType
 from rich.table import Table
@@ -18,7 +19,7 @@ _CHARLVL_RE = re.compile(r"ReachCharLevel\(level=(\d+)\)")
 _SKILL_RE = re.compile(r"ReachSkillLevel\(skill='([^']+)', level=(\d+)\)")
 
 
-def _depth(code: str, recipes: dict, memo: dict[str, int]) -> int:
+def _depth(code: str, recipes: Mapping[str, dict[str, int]], memo: dict[str, int]) -> int:
     """Recipe depth: raw item = 0, craftable = 1 + max(input depth). Cycle-safe
     via memo seeded to 0 before recursion."""
     if code in memo:
@@ -75,7 +76,8 @@ def _category_of(root_repr: str, ranking: list[RootScoreView]) -> tuple[str, flo
     return "?", None
 
 
-def _body(chosen_root: str, inventory, bank, game_data,
+def _body(chosen_root: str, inventory: dict[str, int], bank: dict[str, int] | None,
+          game_data: GameData,
           path_next_action: str | None, snap_xp: tuple[int, int],
           skill_xp: dict[str, int], task: tuple[str | None, int, int]) -> RenderableType:
     m = _OBTAIN_RE.search(chosen_root)

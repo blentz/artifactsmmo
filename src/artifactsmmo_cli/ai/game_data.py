@@ -10,6 +10,7 @@ logic and delegates everything else.
 from collections.abc import Mapping
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
+from typing import Any
 
 from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.events.get_all_events_events_get import sync as get_all_events
@@ -647,8 +648,12 @@ class GameData:
         if cache is None:
             cache = GameDataCache(api_base_url=client._base_url)
         raw = None if force_refresh else cache.read(ttl_minutes)
+        # Heterogeneous string-keyed bundle of schema objects (lists per page, plus
+        # the lone bank schema or None); the same shape the cache round-trips as
+        # JSON, so its values are genuinely per-key heterogeneous -> Any.
+        objs: dict[str, Any]
         if raw is None:
-            fetched = {
+            fetched: dict[str, Any] = {
                 "maps": data._fetch_maps(client),
                 "items": data._fetch_items(client),
                 "resources": data._fetch_resources(client),
@@ -692,14 +697,14 @@ class GameData:
         data._load_ge_orders(client)
         return data
 
-    def _fetch_bank(self, client: AuthenticatedClient):
+    def _fetch_bank(self, client: AuthenticatedClient) -> BankSchema | None:
         """Fetch the single bank-details schema object, or None when absent."""
         result = get_bank_details(client=client)
         if result is None or not hasattr(result, "data") or result.data is None:
             return None
         return result.data
 
-    def _build_bank(self, item) -> None:
+    def _build_bank(self, item: BankSchema | None) -> None:
         """Set bank capacity and next expansion cost from the bank schema object."""
         if item is None:
             return
@@ -710,9 +715,9 @@ class GameData:
         """Fetch bank capacity and next expansion cost."""
         self._build_bank(self._fetch_bank(client))
 
-    def _fetch_maps(self, client: AuthenticatedClient) -> list:
+    def _fetch_maps(self, client: AuthenticatedClient) -> list[MapSchema]:
         """Page all overworld map tiles; return the list of schema objects."""
-        out: list = []
+        out: list[MapSchema] = []
         page = 1
         while True:
             result = get_all_maps(client=client, layer=MapLayer.OVERWORLD, page=page, size=100)
@@ -724,7 +729,7 @@ class GameData:
             page += 1
         return out
 
-    def _build_maps(self, tiles: list) -> None:
+    def _build_maps(self, tiles: list[MapSchema]) -> None:
         """Build content location indexes from map tile schema objects."""
         for tile in tiles:
             loc = (tile.x, tile.y)
@@ -774,9 +779,9 @@ class GameData:
         """Fetch all map tiles and build content location indexes."""
         self._build_maps(self._fetch_maps(client))
 
-    def _fetch_items(self, client: AuthenticatedClient) -> list:
+    def _fetch_items(self, client: AuthenticatedClient) -> list[ItemSchema]:
         """Page all items; return the list of schema objects."""
-        out: list = []
+        out: list[ItemSchema] = []
         page = 1
         while True:
             result = get_all_items(client=client, page=page, size=100)
@@ -788,7 +793,7 @@ class GameData:
             page += 1
         return out
 
-    def _build_items(self, items: list) -> None:
+    def _build_items(self, items: list[ItemSchema]) -> None:
         """Build stats + recipe indexes from item schema objects."""
         for item in items:
             stats = ItemStats(code=item.code, level=item.level, type_=item.type_)
@@ -853,9 +858,9 @@ class GameData:
         """Fetch all items and build stats + recipe indexes."""
         self._build_items(self._fetch_items(client))
 
-    def _fetch_resources(self, client: AuthenticatedClient) -> list:
+    def _fetch_resources(self, client: AuthenticatedClient) -> list[ResourceSchema]:
         """Page all resources; return the list of schema objects."""
-        out: list = []
+        out: list[ResourceSchema] = []
         page = 1
         while True:
             result = get_all_resources(client=client, page=page, size=100)
@@ -867,7 +872,7 @@ class GameData:
             page += 1
         return out
 
-    def _build_resources(self, resources: list) -> None:
+    def _build_resources(self, resources: list[ResourceSchema]) -> None:
         """Build skill requirement and drop item indexes from resource schema objects."""
         for res in resources:
             self._resource_skill[res.code] = (res.skill.value, res.level)
@@ -882,9 +887,9 @@ class GameData:
         """Fetch all resources and build skill requirement and drop item indexes."""
         self._build_resources(self._fetch_resources(client))
 
-    def _fetch_npcs(self, client: AuthenticatedClient) -> list:
+    def _fetch_npcs(self, client: AuthenticatedClient) -> list[NPCItem]:
         """Page all NPC items; return the list of schema objects."""
-        out: list = []
+        out: list[NPCItem] = []
         page = 1
         while True:
             result = get_all_npc_items(client=client, page=page, size=100)
@@ -896,7 +901,7 @@ class GameData:
             page += 1
         return out
 
-    def _build_npcs(self, entries: list) -> None:
+    def _build_npcs(self, entries: list[NPCItem]) -> None:
         """Build buy and sell stock indexes from NPC item schema objects."""
         for entry in entries:
             buy_price = entry.buy_price
@@ -955,9 +960,9 @@ class GameData:
                 break
             page += 1
 
-    def _fetch_events(self, client: AuthenticatedClient) -> list:
+    def _fetch_events(self, client: AuthenticatedClient) -> list[EventSchema]:
         """Page all events; return the list of schema objects."""
-        out: list = []
+        out: list[EventSchema] = []
         page = 1
         while True:
             result = get_all_events(client=client, page=page, size=100)
@@ -969,7 +974,7 @@ class GameData:
             page += 1
         return out
 
-    def _build_events(self, events: list) -> None:
+    def _build_events(self, events: list[EventSchema]) -> None:
         """Index event NPCs (code -> event code, code -> fixed spawn tile) from the catalog.
 
         Event merchants never appear in get_all_maps; their fixed spawn tile lives
@@ -989,9 +994,9 @@ class GameData:
         """Fetch all events and index event NPCs."""
         self._build_events(self._fetch_events(client))
 
-    def _fetch_monsters(self, client: AuthenticatedClient) -> list:
+    def _fetch_monsters(self, client: AuthenticatedClient) -> list[MonsterSchema]:
         """Page all monsters; return the list of schema objects."""
-        out: list = []
+        out: list[MonsterSchema] = []
         page = 1
         while True:
             result = get_all_monsters(client=client, page=page, size=100)
@@ -1003,7 +1008,7 @@ class GameData:
             page += 1
         return out
 
-    def _build_monsters(self, monsters: list) -> None:
+    def _build_monsters(self, monsters: list[MonsterSchema]) -> None:
         """Build level, stat, and drop indexes from monster schema objects."""
         for mon in monsters:
             self._monster_level[mon.code] = mon.level

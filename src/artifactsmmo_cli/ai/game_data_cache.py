@@ -5,10 +5,16 @@ import json
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 CACHE_VERSION = 1
 """Bump when the raw-page schema changes; an old version reads as a miss."""
+
+RawPages = dict[str, Any]
+"""A page map: name -> JSON-shaped payload (a list of serialized schemas, a single
+serialized schema, or None for an absent bank). Values are genuinely heterogeneous
+untyped JSON (json.loads / .to_dict() output), hence Any."""
 
 
 class GameDataCache:
@@ -21,7 +27,7 @@ class GameDataCache:
         base = cache_dir if cache_dir is not None else Path.home() / ".cache" / "artifactsmmo"
         self.path = base / f"gamedata-{host}.json"
 
-    def read(self, ttl_minutes: int, now: datetime | None = None) -> dict | None:
+    def read(self, ttl_minutes: int, now: datetime | None = None) -> RawPages | None:
         now = now or datetime.now(tz=timezone.utc)
         try:
             raw = json.loads(self.path.read_text())
@@ -34,7 +40,7 @@ class GameDataCache:
         except (OSError, json.JSONDecodeError, KeyError, ValueError):
             return None
 
-    def write(self, raw_pages: dict, now: datetime | None = None) -> None:
+    def write(self, raw_pages: RawPages, now: datetime | None = None) -> None:
         now = now or datetime.now(tz=timezone.utc)
         payload = {"version": CACHE_VERSION, "fetched_at": now.isoformat(), **raw_pages}
         self.path.parent.mkdir(parents=True, exist_ok=True)

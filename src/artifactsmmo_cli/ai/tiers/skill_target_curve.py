@@ -65,7 +65,7 @@ def skill_target_curve(
     """Impure wrapper: {craft_skill: curve_target} over all crafting skills with
     a qualifying gear-relevant recipe. Hoists SkillItem tuples from game_data."""
     items: list[SkillItem] = []
-    for code, stats in game_data.all_item_stats.items():
+    for _code, stats in game_data.all_item_stats.items():
         if not stats.crafting_skill:
             continue
         gear_relevant = (stats.type_ in ITEM_TYPE_TO_SLOTS
