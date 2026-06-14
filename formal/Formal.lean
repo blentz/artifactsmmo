@@ -64,6 +64,8 @@ import Formal.Extracted.Bridges5
 import Formal.Extracted.Bridges6
 import Formal.Extracted.Bridges7
 import Formal.Extracted.Bridges8
+import Formal.Extracted.SkillTargetCurve
+import Formal.Extracted.SkillGrindSelection
 import Formal.InventoryChainSafe
 import Formal.Contracts
 import Formal.ActionCostNonneg

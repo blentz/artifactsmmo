@@ -1,3 +1,4 @@
+-- @concept: crafting, planner @property: safety, monotonicity
 /- Hand model of skill_curve_target_pure. Skill keys are Int (String bridged
 later, EquipmentScoring precedent). Mirrors the extracted List.foldl. Core only. -/
 namespace Formal.SkillTargetCurve
