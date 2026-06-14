@@ -2,11 +2,34 @@
 
 from artifactsmmo_cli.tui.sprite_registry import SpriteRegistry
 from artifactsmmo_cli.tui.sprites import (
+    ALCHEMY_SPRITE,
+    BLUE_SLIME_SPRITE,
+    CHICKEN_SPRITE,
+    COW_SPRITE,
+    CULTIST_WIZARD_SPRITE,
+    FISHING_SPRITE,
+    FLYING_SNAKE_SPRITE,
+    GRAND_EXCHANGE_SPRITE,
     GREEN_SLIME_SPRITE,
     MARK_COLOR,
     MARK_KEY,
+    MINING_SPRITE,
+    OWLBEAR_SPRITE,
+    PIG_SPRITE,
     PLAYER_SPRITE,
+    RED_SLIME_SPRITE,
+    RUNE_VENDOR_SPRITE,
+    SAND_SNAKE_SPRITE,
+    SANDWHISPER_TRADER_SPRITE,
+    SHEEP_SPRITE,
+    SPIDER_SPRITE,
     SpriteCategory,
+    TAILOR_SPRITE,
+    TASKS_MASTER_SPRITE,
+    TASKS_TRADER_SPRITE,
+    WOLF_SPRITE,
+    WORKSHOP_SPRITE,
+    YELLOW_SLIME_SPRITE,
     validate_sprite,
 )
 
@@ -56,10 +79,6 @@ def test_empty_code_fallback_has_no_marks():
 
 def test_b1_structures_and_resources_are_curated():
     reg = SpriteRegistry()
-    from artifactsmmo_cli.tui.sprites import (
-        GRAND_EXCHANGE_SPRITE, WORKSHOP_SPRITE, TASKS_MASTER_SPRITE,
-        MINING_SPRITE, FISHING_SPRITE, ALCHEMY_SPRITE,
-    )
     assert reg.sprite_for("grand_exchange", SpriteCategory.STRUCTURE) is GRAND_EXCHANGE_SPRITE
     assert reg.sprite_for("workshop", SpriteCategory.STRUCTURE) is WORKSHOP_SPRITE
     assert reg.sprite_for("tasks_master", SpriteCategory.STRUCTURE) is TASKS_MASTER_SPRITE
@@ -70,12 +89,21 @@ def test_b1_structures_and_resources_are_curated():
 
 def test_b2_npcs_are_curated():
     reg = SpriteRegistry()
-    from artifactsmmo_cli.tui.sprites import (
-        TAILOR_SPRITE, CULTIST_WIZARD_SPRITE, RUNE_VENDOR_SPRITE,
-        SANDWHISPER_TRADER_SPRITE, TASKS_TRADER_SPRITE,
-    )
     assert reg.sprite_for("tailor", SpriteCategory.NPC) is TAILOR_SPRITE
     assert reg.sprite_for("cultist_wizard", SpriteCategory.NPC) is CULTIST_WIZARD_SPRITE
     assert reg.sprite_for("rune_vendor", SpriteCategory.NPC) is RUNE_VENDOR_SPRITE
     assert reg.sprite_for("sandwhisper_trader", SpriteCategory.NPC) is SANDWHISPER_TRADER_SPRITE
     assert reg.sprite_for("tasks_trader", SpriteCategory.NPC) is TASKS_TRADER_SPRITE
+
+
+def test_b3_beasts_are_curated():
+    reg = SpriteRegistry()
+    cases = {
+        "blue_slime": BLUE_SLIME_SPRITE, "red_slime": RED_SLIME_SPRITE,
+        "yellow_slime": YELLOW_SLIME_SPRITE, "chicken": CHICKEN_SPRITE,
+        "cow": COW_SPRITE, "pig": PIG_SPRITE, "sheep": SHEEP_SPRITE,
+        "wolf": WOLF_SPRITE, "owlbear": OWLBEAR_SPRITE, "spider": SPIDER_SPRITE,
+        "flying_snake": FLYING_SNAKE_SPRITE, "sand_snake": SAND_SNAKE_SPRITE,
+    }
+    for code, sprite in cases.items():
+        assert reg.sprite_for(code, SpriteCategory.MONSTER) is sprite

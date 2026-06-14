@@ -22,3 +22,4 @@ SKIN = "#fce0b0"       # flesh
 TUNIC = "#3465a4"      # blue cloth
 WATER = "#2a7fb8"      # water surface
 BREW = "#75507b"       # alchemy / cloth purple
+PINK = "#f5a9b8"       # snouts / noses (cow, pig)

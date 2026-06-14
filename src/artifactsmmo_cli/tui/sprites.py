@@ -15,7 +15,7 @@ from artifactsmmo_cli.tui.glyphs import (
 )
 from artifactsmmo_cli.tui.palette import (
     AMBER, BARK, BLOOD, BONE, BREW, COPPER, DOORWOOD, GOLD, INK, KHAKI,
-    LEAF, SKIN, SLATE, STEEL, STONE, TUNIC, WATER,
+    LEAF, PINK, SKIN, SLATE, STEEL, STONE, TUNIC, WATER,
 )
 
 SPRITE_SIZE = 8
@@ -290,7 +290,73 @@ ALCHEMY_SPRITE = Sprite(
     palette={"o": INK, "b": BREW},
 )
 
-MONSTER_SPRITES: dict[str, Sprite] = {"green_slime": GREEN_SLIME_SPRITE}
+_SLIME_ROWS = (
+    "..oooo..",
+    ".oggggo.",
+    "oggggggo",
+    "ogeggego",
+    "oggggggo",
+    "oggggggo",
+    ".oggggo.",
+    "..oooo..",
+)
+
+BLUE_SLIME_SPRITE = Sprite(rows=_SLIME_ROWS, palette={"o": INK, "g": TUNIC, "e": INK})
+RED_SLIME_SPRITE = Sprite(rows=_SLIME_ROWS, palette={"o": INK, "g": BLOOD, "e": INK})
+YELLOW_SLIME_SPRITE = Sprite(rows=_SLIME_ROWS, palette={"o": INK, "g": GOLD, "e": INK})
+
+CHICKEN_SPRITE = Sprite(
+    rows=("...ro...", "..owwo..", "..owweo.", ".owwwwyo", ".owwwwwo", ".owwwwwo", "..oy.yo.", "...o.o.."),
+    palette={"o": INK, "w": BONE, "r": BLOOD, "y": AMBER, "e": INK},
+)
+COW_SPRITE = Sprite(
+    rows=("..o..o..", ".owwwwo.", "owwwwwwo", "oweewweo", "owsppswo", "owwwwwwo", ".ow..wo.", ".oo..oo."),
+    palette={"o": INK, "w": BONE, "e": INK, "s": BARK, "p": PINK},
+)
+PIG_SPRITE = Sprite(
+    rows=("..oooo..", ".oppppo.", ".opeepo.", ".oppppo.", ".opnnpo.", ".oppppo.", ".op..po.", ".oo..oo."),
+    palette={"o": INK, "p": PINK, "e": INK, "n": BARK},
+)
+SHEEP_SPRITE = Sprite(
+    rows=("..oooo..", ".owwwwo.", "owwwwwwo", "owwwwwwo", ".offffo.", ".ofeefo.", "..o..o..", "........"),
+    palette={"o": INK, "w": BONE, "f": SLATE, "e": INK},
+)
+WOLF_SPRITE = Sprite(
+    rows=("..o..o..", ".owwwwo.", ".oweewo.", ".owwwwo.", "owwwwwwo", "owwwwwwo", ".ow..wo.", ".oo..oo."),
+    palette={"o": INK, "w": STONE, "e": AMBER},
+)
+OWLBEAR_SPRITE = Sprite(
+    rows=("..o..o..", ".obbbbo.", ".obaabo.", ".obaabo.", "obbbbbbo", "obbbbbbo", ".ob..bo.", ".oo..oo."),
+    palette={"o": INK, "b": BARK, "a": AMBER},
+)
+SPIDER_SPRITE = Sprite(
+    rows=("o..oo..o", ".oo..oo.", "..oooo..", ".obbbbo.", ".obeebo.", ".obbbbo.", ".oo..oo.", "o..oo..o"),
+    palette={"o": INK, "b": SLATE, "e": BLOOD},
+)
+FLYING_SNAKE_SPRITE = Sprite(
+    rows=("..oooo..", ".ogeego.", ".oggggo.", "woggggow", ".oggggo.", "..oggo..", "...oo...", "........"),
+    palette={"o": INK, "g": LEAF, "e": INK, "w": AMBER},
+)
+SAND_SNAKE_SPRITE = Sprite(
+    rows=("..oooo..", ".oaeeao.", ".oaaaao.", ".oaaaao.", "...oaao.", "..oaao..", ".oaao...", "..oo...."),
+    palette={"o": INK, "a": AMBER, "e": INK},
+)
+
+MONSTER_SPRITES: dict[str, Sprite] = {
+    "green_slime": GREEN_SLIME_SPRITE,
+    "blue_slime": BLUE_SLIME_SPRITE,
+    "red_slime": RED_SLIME_SPRITE,
+    "yellow_slime": YELLOW_SLIME_SPRITE,
+    "chicken": CHICKEN_SPRITE,
+    "cow": COW_SPRITE,
+    "pig": PIG_SPRITE,
+    "sheep": SHEEP_SPRITE,
+    "wolf": WOLF_SPRITE,
+    "owlbear": OWLBEAR_SPRITE,
+    "spider": SPIDER_SPRITE,
+    "flying_snake": FLYING_SNAKE_SPRITE,
+    "sand_snake": SAND_SNAKE_SPRITE,
+}
 NPC_SPRITES: dict[str, Sprite] = {
     "archaeologist": ARCHAEOLOGIST_SPRITE,
     "tailor": TAILOR_SPRITE,
@@ -347,6 +413,18 @@ CATEGORY_FALLBACK_COLOR: dict[SpriteCategory, str] = {
 ALL_CURATED_SPRITES: dict[str, Sprite] = {
     "player": PLAYER_SPRITE,
     "green_slime": GREEN_SLIME_SPRITE,
+    "blue_slime": BLUE_SLIME_SPRITE,
+    "red_slime": RED_SLIME_SPRITE,
+    "yellow_slime": YELLOW_SLIME_SPRITE,
+    "chicken": CHICKEN_SPRITE,
+    "cow": COW_SPRITE,
+    "pig": PIG_SPRITE,
+    "sheep": SHEEP_SPRITE,
+    "wolf": WOLF_SPRITE,
+    "owlbear": OWLBEAR_SPRITE,
+    "spider": SPIDER_SPRITE,
+    "flying_snake": FLYING_SNAKE_SPRITE,
+    "sand_snake": SAND_SNAKE_SPRITE,
     "bank": BANK_SPRITE,
     "door": DOOR_SPRITE,
     "resource_woodcutting": WOODCUTTING_SPRITE,
