@@ -107,10 +107,14 @@ cycle. Tasks/gold/skill-XP are means to that end, not first-class goals.
   needed to craft the active `ash_plank` task) aren't discarded
   prematurely.
 - **CraftRelief circuit breaker**: when inventory pressure crosses 70%
-  AND any task / target-gear / target-tool item is craftable from
-  current inventory, a `CRAFT_RELIEF` guard preempts the
-  deposit/discard ladder and crafts that item instead — converting raw
-  materials into goal progress rather than banking or deleting them.
+  AND the active items-task deliverable or an in-flight step's
+  intermediate material is craftable from current inventory, a
+  `CRAFT_RELIEF` guard preempts the deposit/discard ladder and crafts
+  that intermediate instead — converting raw materials into goal
+  progress rather than banking or deleting them. It never assembles
+  end-stage gear/tools; final equipment assembly is left to the gear
+  goals (so relief can't burn an objective's materials on an
+  off-objective equippable).
 - **Equippable goal semantics**: meta-objective `ObtainItem` for items
   with an equipment slot requires the item to actually be EQUIPPED, not
   just owned. Crafting a `wooden_shield` without equipping it no

@@ -162,7 +162,6 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
             return False
         return bool(craft_relief_candidates(
             state, game_data,
-            target_gear=ctx.target_gear, target_tools=ctx.target_tools,
             step_items=frozenset(step_profile or ()),
         ))
     if kind is GuardKind.DEPOSIT_FULL:

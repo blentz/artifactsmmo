@@ -209,7 +209,6 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
             raise ValueError("CRAFT_RELIEF guard requires a state to pick a target")
         cands = craft_relief_candidates(
             state, game_data,
-            target_gear=ctx.target_gear, target_tools=ctx.target_tools,
             step_items=frozenset(step_profile or ()),
         )
         if not cands:
