@@ -270,7 +270,8 @@ open Formal.WeightedRemaining in
 #print axioms Formal.RealizableLoadout.pickSlotStep_empty_zero_stays_empty
 #print axioms Formal.RealizableLoadout.pickLoadout_deterministic
 #print axioms Formal.RealizableLoadout.pickLoadout_extensional
-#print axioms Formal.RealizableLoadout.pickLoadout_485_copper_ring_regression
+#print axioms Formal.RealizableLoadout.pickLoadout_dual_ring_fills_when_two_owned
+#print axioms Formal.RealizableLoadout.pickLoadout_single_ring_no_dup_fill
 #print axioms Formal.RealizableLoadout.pickLoadout_zero_score_no_fill
 #print axioms Formal.RealizableLoadout.pickLoadout_ring_pair_regression
 #print axioms Formal.RealizableLoadout.pickLoadout_cannot_produce_buggy_output

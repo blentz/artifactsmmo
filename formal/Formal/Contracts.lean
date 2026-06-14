@@ -1909,54 +1909,65 @@ suppression. -/
 
 /-- Property 1 — output realizability (under record/equipment consistency:
 Python builds both from `state.equipment`). -/
-example : ∀ (inv : Formal.RealizableLoadout.Inventory)
+example : ∀ (dupAllowed : Formal.RealizableLoadout.Code → Bool)
+            (inv : Formal.RealizableLoadout.Inventory)
             (equip : Formal.RealizableLoadout.SlotList)
             (slots : List Formal.RealizableLoadout.ScoredSlot),
     (∀ c, Formal.RealizableLoadout.slotCount c
         (slots.map (fun s => s.slot.current))
       ≤ Formal.RealizableLoadout.ownership c inv equip) →
     Formal.RealizableLoadout.isRealizable
-      (Formal.RealizableLoadout.pickLoadout inv equip slots) inv equip :=
+      (Formal.RealizableLoadout.pickLoadout dupAllowed inv equip slots) inv equip :=
   @Formal.RealizableLoadout.pickLoadout_realizable
 
-/-- Property 1b — ONE SLOT PER CODE (485-safety): duplicate-free worn
-equipment (server-guaranteed) gives a duplicate-free output loadout, so no
-equip in the two-pass execute can hit HTTP 485 "already equipped". -/
-example : ∀ (inv : Formal.RealizableLoadout.Inventory)
+/-- Property 1b — DUP-FREE-EXCEPT (485-safety, relaxed 2026-06-14): worn
+equipment dup-free on non-ring codes (server-guaranteed) gives an output
+dup-free on non-ring codes, so no NON-RING equip in the two-pass execute can
+hit HTTP 485 "already equipped". Ring-type (dup-allowed) codes may now fill a
+second slot, but only up to physical ownership (`capOf`), which needs the
+currents-consistency hypothesis. -/
+example : ∀ (dupAllowed : Formal.RealizableLoadout.Code → Bool)
+            (inv : Formal.RealizableLoadout.Inventory)
             (equip : Formal.RealizableLoadout.SlotList)
             (slots : List Formal.RealizableLoadout.ScoredSlot),
-    Formal.RealizableLoadout.dupFree (slots.map (fun s => s.slot.current)) →
-    Formal.RealizableLoadout.dupFree
-      (Formal.RealizableLoadout.pickLoadout inv equip slots) :=
+    (∀ c, Formal.RealizableLoadout.slotCount c
+        (slots.map (fun s => s.slot.current))
+      ≤ Formal.RealizableLoadout.ownership c inv equip) →
+    Formal.RealizableLoadout.dupFreeExcept dupAllowed
+      (slots.map (fun s => s.slot.current)) →
+    Formal.RealizableLoadout.dupFreeExcept dupAllowed
+      (Formal.RealizableLoadout.pickLoadout dupAllowed inv equip slots) :=
   @Formal.RealizableLoadout.pickLoadout_one_slot_per_code
 
 /-- Property 2 — per-slot no-downgrade, now STRICT and UNCONDITIONAL (the
 stolen-current downgrade branch no longer exists). -/
-example : ∀ (inv : Formal.RealizableLoadout.Inventory)
+example : ∀ (dupAllowed : Formal.RealizableLoadout.Code → Bool)
+            (inv : Formal.RealizableLoadout.Inventory)
             (equip : Formal.RealizableLoadout.SlotList)
             (rec : Formal.RealizableLoadout.SlotRecord)
             (score : Formal.RealizableLoadout.Code → Int)
             (assigned laterCurs : List Formal.RealizableLoadout.SlotVal)
             (cur r : Formal.RealizableLoadout.Code),
     rec.current = some cur →
-    Formal.RealizableLoadout.pickSlotStep inv equip rec score assigned laterCurs
+    Formal.RealizableLoadout.pickSlotStep dupAllowed inv equip rec score assigned laterCurs
       = some r →
     cur ≠ r →
     score cur < score r :=
   @Formal.RealizableLoadout.pickSlotStep_no_downgrade
 
 /-- Property 3 — per-slot optimality (argmax over the feasible candidates:
-owned AND not already placed elsewhere in the projected result). -/
-example : ∀ (inv : Formal.RealizableLoadout.Inventory)
+owned AND not already placed at its cap in the projected result). -/
+example : ∀ (dupAllowed : Formal.RealizableLoadout.Code → Bool)
+            (inv : Formal.RealizableLoadout.Inventory)
             (equip : Formal.RealizableLoadout.SlotList)
             (rec : Formal.RealizableLoadout.SlotRecord)
             (score : Formal.RealizableLoadout.Code → Int)
             (assigned laterCurs : List Formal.RealizableLoadout.SlotVal)
             (f : Formal.RealizableLoadout.Code) (fs : List Formal.RealizableLoadout.Code),
-    Formal.RealizableLoadout.feasibleCands rec inv equip assigned laterCurs
+    Formal.RealizableLoadout.feasibleCands dupAllowed rec inv equip assigned laterCurs
       = f :: fs →
     ∀ r,
-    Formal.RealizableLoadout.pickSlotStep inv equip rec score assigned laterCurs
+    Formal.RealizableLoadout.pickSlotStep dupAllowed inv equip rec score assigned laterCurs
       = some r →
     (∀ cur, rec.current = some cur → cur ≠ r) →
     r = Formal.RealizableLoadout.argmaxByCode score f fs :=
@@ -1964,39 +1975,56 @@ example : ∀ (inv : Formal.RealizableLoadout.Inventory)
 
 /-- Property 3b — zero-score empty-fill suppression: an empty slot is filled
 only at a strictly positive score. -/
-example : ∀ (inv : Formal.RealizableLoadout.Inventory)
+example : ∀ (dupAllowed : Formal.RealizableLoadout.Code → Bool)
+            (inv : Formal.RealizableLoadout.Inventory)
             (equip : Formal.RealizableLoadout.SlotList)
             (rec : Formal.RealizableLoadout.SlotRecord)
             (score : Formal.RealizableLoadout.Code → Int)
             (assigned laterCurs : List Formal.RealizableLoadout.SlotVal)
             (r : Formal.RealizableLoadout.Code),
     rec.current = none →
-    Formal.RealizableLoadout.pickSlotStep inv equip rec score assigned laterCurs
+    Formal.RealizableLoadout.pickSlotStep dupAllowed inv equip rec score assigned laterCurs
       = some r →
     0 < score r :=
   @Formal.RealizableLoadout.pickSlotStep_empty_fill_positive
 
 /-- Property 4 — determinism (pure function of inputs). -/
-example : ∀ (inv : Formal.RealizableLoadout.Inventory)
+example : ∀ (dupAllowed : Formal.RealizableLoadout.Code → Bool)
+            (inv : Formal.RealizableLoadout.Inventory)
             (equip : Formal.RealizableLoadout.SlotList)
             (slots₁ slots₂ : List Formal.RealizableLoadout.ScoredSlot),
     slots₁ = slots₂ →
-    Formal.RealizableLoadout.pickLoadout inv equip slots₁ =
-      Formal.RealizableLoadout.pickLoadout inv equip slots₂ :=
+    Formal.RealizableLoadout.pickLoadout dupAllowed inv equip slots₁ =
+      Formal.RealizableLoadout.pickLoadout dupAllowed inv equip slots₂ :=
   @Formal.RealizableLoadout.pickLoadout_extensional
 
-/-- THE 2026-06-10/11 485 livelock regression: worn copper_ring + spare copy
-⇒ ring2 stays EMPTY. -/
+/-- THE 2026-06-14 DUAL-RING regression: 2 copper_rings owned + dup-allowed
+⇒ ring2 FILLS (server HTTP 200). -/
 example :
     Formal.RealizableLoadout.pickLoadout
+      (fun c => c = "copper_ring")
       (fun c => if c = "copper_ring" then 1 else 0)
       [some "copper_ring", none]
       [{ slot := { current := some "copper_ring", candidates := ["copper_ring"] },
          scoreFn := fun _ => 5 },
        { slot := { current := none, candidates := ["copper_ring"] },
          scoreFn := fun _ => 5 }]
+      = [some "copper_ring", some "copper_ring"] :=
+  Formal.RealizableLoadout.pickLoadout_dual_ring_fills_when_two_owned
+
+/-- THE REALIZABILITY BOUNDARY: 1 copper_ring owned + dup-allowed ⇒ ring2 stays
+EMPTY (no over-fill past physical ownership). -/
+example :
+    Formal.RealizableLoadout.pickLoadout
+      (fun c => c = "copper_ring")
+      (fun _ => 0)
+      [some "copper_ring", none]
+      [{ slot := { current := some "copper_ring", candidates := ["copper_ring"] },
+         scoreFn := fun _ => 5 },
+       { slot := { current := none, candidates := ["copper_ring"] },
+         scoreFn := fun _ => 5 }]
       = [some "copper_ring", none] :=
-  Formal.RealizableLoadout.pickLoadout_485_copper_ring_regression
+  Formal.RealizableLoadout.pickLoadout_single_ring_no_dup_fill
 
 /-! ### GoalValueBands role contracts (Phase-17).
 
