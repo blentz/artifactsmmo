@@ -485,6 +485,19 @@ def objective_step_goal(
                 rec = game_data.crafting_recipe(reserving_root.code)
                 if rec:
                     reserved_codes.update(rec)
+        # Harden (trace 2026-06-14 015425: 400 copper_rocks gathered -> 6
+        # copper_helmet + 1 copper_ring, 0 copper_boots). The (root,
+        # committed_root) reservation above protects gear ONLY while the gear
+        # item is a committed root. When the arbiter commits to a SKILL-GRIND
+        # root (a ReachSkillLevel, no recipe), neither root reserves anything
+        # and the grind crafts a throwaway copper_helmet that eats the gear
+        # objective's copper_bar. Reserve the recipe materials of the committed
+        # OBJECTIVE gear/tools (carried in ctx) regardless of which root is
+        # committed, so a skill-grind can never cannibalize objective gear mats.
+        for gear_code in ctx.target_gear | ctx.target_tools:
+            rec = game_data.crafting_recipe(gear_code)
+            if rec:
+                reserved_codes.update(rec)
         reserved = frozenset(reserved_codes)
         craft_one = skill_grind_target(step.skill, state, game_data, reserved=reserved)
         if craft_one is not None:
