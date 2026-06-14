@@ -370,6 +370,7 @@ def objective_step_goal(
     game_data: GameData,
     ctx: SelectionContext,
     root: MetaGoal | None = None,
+    committed_root: MetaGoal | None = None,
 ) -> Goal | None:
     """Map the strategy's chosen step to a Goal.
 
@@ -446,6 +447,26 @@ def objective_step_goal(
         # replan grinds the skill incrementally and the step is always plannable.
         # Falls back to LevelSkillGoal only when nothing in-skill is craftable now.
         #
+        # Grind-by-committed-item (trace 2026-06-14: 10 copper_helmets, 0
+        # copper_boots): when the COMMITTED objective root is a gear craft of
+        # THIS skill, crafting that gear levels the skill itself — so suppress
+        # the throwaway grind entirely and let the committed gear root's own
+        # step do the craft. Otherwise the grind picks the cheapest in-skill
+        # item (copper_helmet, fewest missing mats once the boots root has
+        # pooled copper_bar) and burns the committed root's materials, with a
+        # needed=held+1 ramp that never terminates until the skill levels.
+        if isinstance(committed_root, ObtainItem):
+            committed_stats = game_data.item_stats(committed_root.code)
+            if (committed_stats is not None
+                    and committed_stats.crafting_skill == step.skill
+                    and committed_stats.crafting_level <= state.skills.get(step.skill, 1)):
+                # Committed item is craftable NOW at this skill (only material-
+                # gated, not skill-gated): crafting it levels the skill, so the
+                # throwaway grind is wasteful. Suppress and let the committed
+                # root's own step craft it. (When the committed item is itself
+                # skill-GATED — craft_level above current — the grind is the
+                # legitimate bootstrap and is NOT suppressed.)
+                return None
         # Two trace-2026-06-11-19:22 guards: (1) the grind must not consume
         # the committed root's recipe inputs (copper_helmet would have eaten
         # the 5 bars held for copper_legs_armor); (2) the goal means "craft
@@ -634,7 +655,8 @@ class StrategyArbiter:
 
         candidates = self._build_candidates(
             guard_kinds, collect_kinds, discretionary_kinds, step_goal,
-            fallback_steps, fallback_roots, state, game_data, ctx, step_profile)
+            fallback_steps, fallback_roots, state, game_data, ctx, step_profile,
+            chosen_root=chosen_root)
 
         worth_suppressed = self._worth_gate_suppressed(
             objective, chosen_root, discretionary_kinds, state, game_data, ctx)
@@ -671,19 +693,22 @@ class StrategyArbiter:
         # copper_dagger sat in inventory. An owned-but-unequipped target
         # is a ONE-action win (EquipAction) vs a multi-cycle GatherMaterials
         # chain; the ready-to-equip path is always preferable.
-        step_goal = objective_step_goal(chosen_step, state, game_data, ctx, root=chosen_root)
+        step_goal = objective_step_goal(chosen_step, state, game_data, ctx,
+                                        root=chosen_root, committed_root=chosen_root)
         if step_goal is not None:
             return step_goal
         # First pass: prefer UpgradeEquipmentGoal (one-step equip).
         for idx, alt in enumerate(fallback_steps):
             alt_root = fallback_roots[idx] if idx < len(fallback_roots) else None
-            candidate = objective_step_goal(alt, state, game_data, ctx, root=alt_root)
+            candidate = objective_step_goal(alt, state, game_data, ctx, root=alt_root,
+                                          committed_root=chosen_root)
             if isinstance(candidate, UpgradeEquipmentGoal):
                 return candidate
         # Second pass: any non-None goal in ranking order.
         for idx, alt in enumerate(fallback_steps):
             alt_root = fallback_roots[idx] if idx < len(fallback_roots) else None
-            candidate = objective_step_goal(alt, state, game_data, ctx, root=alt_root)
+            candidate = objective_step_goal(alt, state, game_data, ctx, root=alt_root,
+                                          committed_root=chosen_root)
             if candidate is not None:
                 return candidate
         return None
@@ -754,6 +779,7 @@ class StrategyArbiter:
         game_data: GameData,
         ctx: SelectionContext,
         step_profile: dict[str, int] | None = None,
+        chosen_root: MetaGoal | None = None,
     ) -> list[Candidate]:
         """Candidate ordering: guards, collect, step + fallback-step chain, discretionary."""
         candidates: list[Candidate] = []
@@ -778,7 +804,8 @@ class StrategyArbiter:
             added_reprs.add(r)
         for idx, alt in enumerate(fallback_steps):
             alt_root = fallback_roots[idx] if idx < len(fallback_roots) else None
-            alt_goal = objective_step_goal(alt, state, game_data, ctx, root=alt_root)
+            alt_goal = objective_step_goal(alt, state, game_data, ctx, root=alt_root,
+                                          committed_root=chosen_root)
             # Route every fallback-alt step goal through the SAME task
             # suppression as the top step (reservation + redundancy +
             # trade-ready). Pre-fix these were re-appended UNSUPPRESSED, so a

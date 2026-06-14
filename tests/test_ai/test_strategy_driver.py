@@ -663,6 +663,65 @@ def test_objective_step_reach_skill_level_bounds_to_current_plus_lookahead():
     assert g._initial_skill_xp == 99
 
 
+def _gd_copper_gear() -> GameData:
+    """copper_boots + copper_helmet (both gearcrafting, 8/6 copper_bar) +
+    copper_dagger (weaponcrafting, 6 copper_bar). 6 bar on hand makes the
+    helmet/dagger the cheapest grind craft while boots (needs 8) is not yet
+    craftable — the 2026-06-14 '10 helmets, 0 boots' setup."""
+    gd = GameData()
+    gd._item_stats = {
+        "copper_boots": ItemStats(code="copper_boots", level=1, type_="boots",
+                                  crafting_skill="gearcrafting", crafting_level=1),
+        "copper_helmet": ItemStats(code="copper_helmet", level=1, type_="helmet",
+                                   crafting_skill="gearcrafting", crafting_level=1),
+        "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
+                                   crafting_skill="weaponcrafting", crafting_level=1),
+        "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"copper_boots": {"copper_bar": 8},
+                            "copper_helmet": {"copper_bar": 6},
+                            "copper_dagger": {"copper_bar": 6}}
+    gd._resource_drops = {"copper_rocks": "copper_bar"}  # copper_bar obtainable
+    return gd
+
+
+def test_skill_grind_suppressed_when_committed_root_is_same_skill_craft():
+    """B (2026-06-14): a gearcrafting skill-grind fallback must NOT craft a
+    throwaway gearcrafting item (copper_helmet) while the committed root is a
+    same-skill gear craft (copper_boots). Crafting the committed boots levels
+    gearcrafting itself, so the throwaway grind is suppressed (None) and the
+    boots root's own step does the work — no helmets eating boots' copper_bar."""
+    gd = _gd_copper_gear()
+    state = make_state(level=5, skills={"gearcrafting": 1},
+                       inventory={"copper_bar": 6})
+    skill_step = ReachSkillLevel("gearcrafting", 5)
+    boots_root = ObtainItem("copper_boots", 1)
+    # No committed gear root: the throwaway grind picks copper_helmet.
+    g_unguarded = objective_step_goal(skill_step, state, gd, _ctx(), root=skill_step)
+    assert isinstance(g_unguarded, GatherMaterialsGoal)
+    assert g_unguarded._target_item == "copper_helmet"
+    # Committed boots root is the SAME skill (gearcrafting): grind suppressed.
+    g = objective_step_goal(skill_step, state, gd, _ctx(),
+                            root=skill_step, committed_root=boots_root)
+    assert g is None
+
+
+def test_skill_grind_not_suppressed_for_cross_skill_committed_root():
+    """Scope of B: only the SAME-skill case is suppressed. A weaponcrafting
+    grind while committed to a gearcrafting boots root is a different skill, so
+    it still produces its grind goal (documents the cross-skill residual —
+    that craft can still consume the committed root's copper_bar)."""
+    gd = _gd_copper_gear()
+    state = make_state(level=5, skills={"weaponcrafting": 1},
+                       inventory={"copper_bar": 6})
+    skill_step = ReachSkillLevel("weaponcrafting", 5)
+    boots_root = ObtainItem("copper_boots", 1)  # gearcrafting, not weaponcrafting
+    g = objective_step_goal(skill_step, state, gd, _ctx(),
+                            root=skill_step, committed_root=boots_root)
+    assert isinstance(g, GatherMaterialsGoal)
+    assert g._target_item == "copper_dagger"
+
+
 def test_objective_step_reach_char_level_with_monster():
     step = ReachCharLevel(10)
     g = objective_step_goal(step, make_state(xp=50), _gd(), _ctx(combat_monster="chicken"))
