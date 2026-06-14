@@ -154,11 +154,11 @@ def objective_roots(
         # is_reachable), which left the gear category with no live candidate —
         # the 2026-06-11 gear-starvation treadmill. See
         # CharacterObjective.near_term_gear.
-        roots.extend(ObtainItem(code)
-                     for code in objective.near_term_gear(state).values())
+        roots.extend(ObtainItem(code, slot=slot)
+                     for slot, code in objective.near_term_gear(state).items())
     roots.extend(ReachSkillLevel(skill, level)
                  for skill, level in objective.target_skill_levels.items())
-    roots.extend(ObtainItem(code) for code in objective.target_gear.values())
+    roots.extend(ObtainItem(code, slot=slot) for slot, code in objective.target_gear.items())
     roots.extend(ObtainItem(code) for code in objective.target_tools.values())
     # A near-term target can coincide with a BiS/tool target; one root each.
     seen: set[MetaGoal] = set()

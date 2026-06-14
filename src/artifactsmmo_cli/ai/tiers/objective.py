@@ -16,6 +16,30 @@ from artifactsmmo_cli.ai.tiers.skill_target_curve import skill_target_curve
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, SKILL_NAMES, WorldState
 
 
+_DUPLICATE_FILL_TYPES = frozenset({"ring"})
+"""Multi-slot equip types whose empty slots are filled by repeating the best
+attainable item. Rings only: the game lets you wear two identical rings, so when
+fewer distinct rings are attainable than ring slots, double up the best.
+Artifacts are unique (the game rejects duplicates) and utility consumables stay
+distinct, so their remaining slots are left untargeted."""
+
+
+def _slot_assignments(type_: str, slots: list[str],
+                      attainable: list[tuple[int, str]]) -> list[tuple[str, int, str]]:
+    """(slot, value, code) for each slot: ranked attainable assigned in order,
+    then for rings any remaining slots filled by repeating the best attainable."""
+    out: list[tuple[str, int, str]] = []
+    for i, slot in enumerate(slots):
+        if i < len(attainable):
+            value, code = attainable[i]
+        elif type_ in _DUPLICATE_FILL_TYPES and attainable:
+            value, code = attainable[0]
+        else:
+            continue
+        out.append((slot, value, code))
+    return out
+
+
 def is_attainable(code: str, game_data: GameData, _path: frozenset[str] = frozenset()) -> bool:
     """True when the item is producible in principle (at max progression): its
     craft chain bottoms out in gatherables, with no drop-only/unknown component.
@@ -124,7 +148,7 @@ class CharacterObjective:
             ranked = sorted(items, key=lambda vc: (-vc[0], vc[1]))
             attainable = [(value, code) for (value, code) in ranked
                           if is_attainable(code, game_data)]
-            for slot, (_value, code) in zip(slots, attainable, strict=False):
+            for slot, _value, code in _slot_assignments(type_, slots, attainable):
                 target_gear[slot] = code
         # Tools: best per gathering skill by tool_value (skill_effects magnitude).
         # Tie-break by item code for determinism. Filter to attainable items.
@@ -172,7 +196,7 @@ class CharacterObjective:
             ranked = sorted(items, key=lambda vc: (-vc[0], vc[1]))
             attainable = [(value, code) for (value, code) in ranked
                           if is_attainable_now(code, state, self._game_data)]
-            for slot, (value, code) in zip(slots, attainable, strict=False):
+            for slot, value, code in _slot_assignments(type_, slots, attainable):
                 if value > self._item_value(state.equipment.get(slot)):
                     targets[slot] = code
         return targets

@@ -50,6 +50,8 @@ from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext
 from artifactsmmo_cli.ai.tiers.means import MeansKind
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
+from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
@@ -1834,3 +1836,78 @@ def test_no_objective_keeps_committed_pursue_task(tmp_path):
     finally:
         store.close()
     assert repr(goal) == repr(pursue)  # committed task kept (sticky), no worth gate
+
+
+def test_equip_step_uses_root_slot_for_second_ring():
+    """A slot-tagged ring2 gear root equips copper_ring into ring2_slot (not the
+    type's first slot), so a 2nd copper_ring fills the empty second ring slot."""
+    gd = GameData()
+    gd._item_stats = {"copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
+                                               attack={"fire": 2})}
+    gd._crafting_recipes = {"copper_ring": {"bar": 1}}
+    gd._resource_drops = {"rocks": "bar"}
+    # ring1 already worn; a spare copper_ring in inventory to equip into ring2.
+    state = make_state(level=5, inventory={"copper_ring": 1},
+                       equipment={"ring1_slot": "copper_ring"})
+    step = ObtainItem("copper_ring", slot="ring2_slot")
+    g = objective_step_goal(step, state, gd, _ctx(), root=step)
+    assert isinstance(g, UpgradeEquipmentGoal)
+    assert g._committed_target == ("copper_ring", "ring2_slot")
+
+
+def test_arbiter_equips_second_ring_into_empty_slot():
+    """Reported 2026-06-14: copper_ring worn in ring1, spare in inventory, ring2
+    empty -> the spare is ACTUALLY equippable into ring2_slot and the projected
+    result wears copper_ring in BOTH ring slots. Before the 2026-06-14 carve-out
+    the one-slot-per-code guard rejected this and the dual-ring feature was inert
+    (this asserted only that the root was chosen); the live server returns HTTP
+    200 for a duplicate ring."""
+    gd = GameData()
+    gd._item_stats = {"copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
+                                               attack={"fire": 6})}
+    gd._crafting_recipes = {"copper_ring": {"bar": 1}}
+    gd._resource_drops = {"rocks": "bar"}
+    gd._resource_skill = {"rocks": ("mining", 1)}
+    obj = CharacterObjective.from_game_data(gd)
+    state = make_state(level=5, inventory={"copper_ring": 1},
+                       equipment={"ring1_slot": "copper_ring"})
+    # The arbiter targets the empty ring2 slot...
+    eng = StrategyEngine(obj, BalancedPersonality())
+    d = eng.decide(state, gd)
+    assert d.chosen_root == ObtainItem("copper_ring", slot="ring2_slot")
+    # ...and the equip is ACTUALLY applicable + lands the ring in ring2_slot.
+    # (This is what was inert before the guard carve-out — it must FAIL on the
+    # pre-2026-06-14 guard and PASS now.)
+    equip = EquipAction(code="copper_ring", slot="ring2_slot")
+    assert equip.is_applicable(state, gd) is True
+    result = equip.apply(state, gd)
+    assert result.equipment["ring2_slot"] == "copper_ring"
+    assert result.equipment["ring1_slot"] == "copper_ring"
+
+
+def test_second_ring_not_equippable_without_a_spare():
+    """Realizability boundary (mirrors Lean pickLoadout_single_ring_no_dup_fill):
+    copper_ring worn in ring1 with NO spare in inventory -> the 2nd-slot equip is
+    NOT applicable. The rings carve-out must not produce an unrealizable double-
+    equip when only one copy is owned."""
+    gd = GameData()
+    gd._item_stats = {"copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
+                                               attack={"fire": 6})}
+    state = make_state(level=5, inventory={},
+                       equipment={"ring1_slot": "copper_ring"})
+    equip = EquipAction(code="copper_ring", slot="ring2_slot")
+    assert equip.is_applicable(state, gd) is False
+
+
+def test_non_ring_keeps_one_slot_per_code():
+    """The carve-out is rings-only: a non-ring code worn in one slot is still
+    NOT equippable into a sibling slot (server HTTP 485) even with spare copies —
+    e.g. a 2nd small_health_potion into utility2 while utility1 wears it. Proves
+    the relaxation did not over-broaden past DUPLICATE_SLOT_TYPES."""
+    gd = GameData()
+    gd._item_stats = {"small_health_potion": ItemStats(
+        code="small_health_potion", level=1, type_="utility")}
+    state = make_state(level=5, inventory={"small_health_potion": 5},
+                       equipment={"utility1_slot": "small_health_potion"})
+    equip = EquipAction(code="small_health_potion", slot="utility2_slot")
+    assert equip.is_applicable(state, gd) is False

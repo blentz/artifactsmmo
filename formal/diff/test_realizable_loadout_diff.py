@@ -10,13 +10,16 @@ character owned only one copy.
 This test pins the realizability invariant under randomized inputs (Hypothesis,
 ≥200 examples on the formal profile) plus the exact ring1=A + ring2=B +
 inventory={} counterexample from the bug report as a regression anchor. The
-post-fix `pick_loadout` enforces the server's ONE-SLOT-PER-CODE rule (HTTP 485
-"This item is already equipped"): a candidate code already placed in the
-projected result at any OTHER slot — kept there or assigned by an earlier
-slot — is infeasible, regardless of spare copies owned. The invariant follows:
-a freshly-assigned code appears exactly once and is owned; kept codes are
-bounded by the worn count (Lean: `pickLoadout_realizable`,
-`pickLoadout_one_slot_per_code`).
+post-fix `pick_loadout` enforces a per-code OCCUPANCY CAP: a candidate code
+already placed in the projected result at its cap in OTHER slots is infeasible.
+The cap is 1 for every type EXCEPT duplicate-allowed types (rings — server
+returns HTTP 200 on a 2nd copy, probe 2026-06-14), whose cap is physical
+ownership. So non-ring codes keep the strict server ONE-SLOT-PER-CODE rule
+(HTTP 485 "This item is already equipped") regardless of spare copies, while a
+ring may fill two slots only when a 2nd copy is owned. The invariant follows:
+a code is assigned to a further slot only while its projected count is below
+ownership, so demand never exceeds ownership (Lean: `pickLoadout_realizable`,
+`pickLoadout_one_slot_per_code` → dupFreeExcept).
 
 The headline property: `is_realizable(pick_loadout(...), inv, equip) == True`
 ALWAYS. `OptimizeLoadoutAction.apply` asserts a per-slot consequence of this
@@ -26,7 +29,7 @@ assertion's gating contract.
 """
 from hypothesis import given, settings, strategies as st
 
-from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.equipment.elements import ELEMENTS
 from artifactsmmo_cli.ai.equipment.realizable_loadout import is_realizable, ownership
@@ -252,8 +255,9 @@ def test_ownership_counts_inventory_and_equipped():
 #
 # These tests stress the properties proved in Lean:
 # 1.  Output realizability (subsumes the existing property test above).
-# 1b. One slot per code: dup-free equipment ⇒ dup-free output (HTTP 485
-#     unreachable; `pickLoadout_one_slot_per_code`).
+# 1b. Dup-free-except-rings: dup-free equipment ⇒ output dup-free on non-ring
+#     codes (HTTP 485 unreachable for them); rings may duplicate up to ownership
+#     (`pickLoadout_one_slot_per_code` → dupFreeExcept).
 # 2.  Per-slot no-downgrade, STRICT and unconditional (`pickSlotStep_no_downgrade`).
 # 3.  Per-slot optimality (argmax of the feasible candidate set).
 # 3b. Empty slots fill only at strictly positive score
@@ -513,16 +517,20 @@ def _dedupe_equipment(equipment: dict[str, str | None]) -> dict[str, str | None]
     equip_picks=st.lists(st.sampled_from([*_CODES, None]),
                          min_size=len(_ALL_SLOTS), max_size=len(_ALL_SLOTS)),
 )
-def test_pick_loadout_one_slot_per_code(item_types, item_levels, item_atks,
-                                        item_ress, mon_atk, mon_res, level,
-                                        inv_counts, equip_picks):
-    """Property 1b (ONE SLOT PER CODE / 485-safety, Lean
-    `pickLoadout_one_slot_per_code`). Given dup-free current equipment (the
-    server guarantee), NO code may occupy two slots of the output — even when
-    SPARE COPIES are owned. Plain realizability is too weak here: with one
-    worn + one spare copy, a duplicate sibling-slot assignment is "owned" yet
-    the server refuses it with HTTP 485 (the 2026-06-10/11 OptimizeLoadout
-    livelock). This is the property that kills the ownership-count mutants."""
+def test_pick_loadout_dup_free_except_rings(item_types, item_levels, item_atks,
+                                            item_ress, mon_atk, mon_res, level,
+                                            inv_counts, equip_picks):
+    """Property 1b (DUP-FREE-EXCEPT / 485-safety, Lean
+    `pickLoadout_one_slot_per_code` → dupFreeExcept). Given dup-free current
+    equipment (the server guarantee), no NON-DUP code may occupy two slots of
+    the output — even when SPARE COPIES are owned. Plain realizability is too
+    weak for non-dup codes: with one worn + one spare copy, a duplicate
+    sibling-slot assignment is "owned" yet the server refuses it with HTTP 485
+    (the 2026-06-10/11 OptimizeLoadout livelock). Duplicate-allowed types
+    (rings) MAY occupy two slots, but only up to physical ownership — so the
+    output stays realizable. This pins BOTH halves: it kills the ownership-count
+    mutants for non-dup codes AND the over-broad-carve-out mutant (a ring beyond
+    ownership) via the realizability check."""
     table = {
         code: ItemStats(
             code=code, level=lvl, type_=ty,
@@ -544,10 +552,22 @@ def test_pick_loadout_one_slot_per_code(item_types, item_levels, item_atks,
     for code in loadout.values():
         if code is not None:
             counts[code] = counts.get(code, 0) + 1
-    dups = {c: n for c, n in counts.items() if n > 1}
-    assert not dups, {
-        "dups": dups, "loadout": loadout,
+    # Non-dup codes: STRICTLY one slot (server HTTP 485). Duplicate-allowed
+    # (ring) codes are exempt from the strict rule — they are bounded instead by
+    # ownership, asserted via realizability below.
+    nondup_dups = {
+        c: n for c, n in counts.items()
+        if n > 1 and table[c].type_ not in DUPLICATE_SLOT_TYPES
+    }
+    assert not nondup_dups, {
+        "nondup_dups": nondup_dups, "loadout": loadout,
         "inventory": dict(state.inventory), "equipment": dict(state.equipment),
+    }
+    # Dup-allowed codes never exceed physical ownership (the cap that keeps the
+    # carve-out realizable).
+    assert is_realizable(loadout, state.inventory, state.equipment), {
+        "loadout": loadout, "inventory": dict(state.inventory),
+        "equipment": dict(state.equipment),
     }
 
 
@@ -608,13 +628,13 @@ def test_pick_loadout_empty_fill_strictly_positive(item_types, item_levels,
         }
 
 
-def test_485_trace_worn_ring_spare_copy_leaves_sibling_empty():
-    """THE 2026-06-10/11 485-LIVELOCK TRACE (deterministic mutation anchor):
-    copper_ring worn in ring1 + a SECOND copper_ring in inventory. The server
-    refuses to equip a code already worn in any slot (HTTP 485) regardless of
-    copies owned, so ring2 must stay EMPTY. Ownership-count feasibility (the
-    pre-fix algorithm) assigned ring2 := copper_ring and livelocked every
-    OptimizeLoadout cycle. Lean: `pickLoadout_485_copper_ring_regression`."""
+def test_dual_ring_fills_sibling_when_two_owned():
+    """THE 2026-06-14 DUAL-RING TRACE (deterministic mutation anchor, FLIPPED
+    from the old 485 livelock): copper_ring worn in ring1 + a SECOND copper_ring
+    in inventory (ownership 2). The live-server probe returned HTTP 200 for a
+    duplicate ring, so ring2 now FILLS with the spare. Lean:
+    `pickLoadout_dual_ring_fills_when_two_owned`. Kills the mutant that drops the
+    dup-allowed carve-out (it would leave ring2 empty, the old behavior)."""
     table = {
         "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
                                  resistance={"fire": 10}),
@@ -626,7 +646,30 @@ def test_485_trace_worn_ring_spare_copy_leaves_sibling_empty():
                         equipment={"ring1_slot": "copper_ring", "ring2_slot": None})
     loadout = pick_loadout("mon", state, gd)
     assert loadout["ring1_slot"] == "copper_ring", loadout
+    assert loadout["ring2_slot"] == "copper_ring", loadout
+    assert is_realizable(loadout, state.inventory, state.equipment), loadout
+
+
+def test_single_ring_no_spare_leaves_sibling_empty():
+    """THE REALIZABILITY BOUNDARY (deterministic mutation anchor; Lean
+    `pickLoadout_single_ring_no_dup_fill`): copper_ring worn in ring1 with NO
+    spare in inventory (ownership 1). The dup-allowed carve-out is capped at
+    physical ownership, so ring2 must stay EMPTY — a 2nd-slot assignment would
+    be unrealizable. Kills the mutant that ignores the ownership cap for rings
+    (an uncapped carve-out would fill ring2 here from a single owned copy)."""
+    table = {
+        "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
+                                 resistance={"fire": 10}),
+    }
+    monster_atk = {"fire": 50, "earth": 0, "water": 0, "air": 0}
+    monster_res = {"fire": 0, "earth": 0, "water": 0, "air": 0}
+    gd = _FakeGameData(table, monster_atk, monster_res)
+    state = _make_state(level=1, inventory={},
+                        equipment={"ring1_slot": "copper_ring", "ring2_slot": None})
+    loadout = pick_loadout("mon", state, gd)
+    assert loadout["ring1_slot"] == "copper_ring", loadout
     assert loadout["ring2_slot"] is None, loadout
+    assert is_realizable(loadout, state.inventory, state.equipment), loadout
 
 
 def test_zero_score_candidate_leaves_empty_slot_empty():

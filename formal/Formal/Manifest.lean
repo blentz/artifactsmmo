@@ -414,14 +414,15 @@ open Formal.PriorityBand
 -- Phase-15 disclosed-gap closure: full pick_loadout algorithm modeled
 -- (revised 2026-06-11: one-slot-per-code + zero-score empty-fill suppression).
 #check @Formal.RealizableLoadout.pickLoadout_realizable                  -- Property 1: every pickLoadout output is realizable
-#check @Formal.RealizableLoadout.pickLoadout_one_slot_per_code           -- Property 1b: dup-free equipment ⇒ dup-free output (HTTP 485 unreachable)
+#check @Formal.RealizableLoadout.pickLoadout_one_slot_per_code           -- Property 1b: dup-free-except equipment ⇒ dup-free-except output (HTTP 485 unreachable for non-ring codes)
 #check @Formal.RealizableLoadout.pickSlotStep_no_downgrade               -- Property 2: a filled slot swaps ONLY on strict score improvement (unconditional)
 #check @Formal.RealizableLoadout.pickSlotStep_optimal                    -- Property 3: per-slot choice is argmax of the feasible candidate set
 #check @Formal.RealizableLoadout.pickSlotStep_empty_fill_positive        -- Property 3b: empty slot filled ⇒ strictly positive score
 #check @Formal.RealizableLoadout.pickSlotStep_empty_zero_stays_empty     -- Property 3b dual: best feasible scores ≤ 0 ⇒ empty slot stays empty
 #check @Formal.RealizableLoadout.pickLoadout_deterministic               -- Property 4: pure-function determinism (no dict iteration)
 #check @Formal.RealizableLoadout.pickLoadout_extensional                 -- determinism: equal inputs ⇒ equal outputs
-#check @Formal.RealizableLoadout.pickLoadout_485_copper_ring_regression  -- trace-lock: worn copper_ring + spare copy ⇒ ring2 stays EMPTY (485 livelock)
+#check @Formal.RealizableLoadout.pickLoadout_dual_ring_fills_when_two_owned -- trace-lock: 2 copper_rings owned + dup-allowed ⇒ ring2 FILLS (server HTTP 200, 2026-06-14)
+#check @Formal.RealizableLoadout.pickLoadout_single_ring_no_dup_fill     -- realizability boundary: 1 copper_ring owned ⇒ ring2 stays EMPTY (no over-fill past ownership)
 #check @Formal.RealizableLoadout.pickLoadout_zero_score_no_fill          -- trace-lock: zero-score candidate never fills an empty slot
 #check @Formal.RealizableLoadout.pickLoadout_ring_pair_regression        -- non-vacuity: ring-pair attractor keeps a realizable loadout at zero swap cost
 #check @Formal.RealizableLoadout.pickLoadout_cannot_produce_buggy_output -- anti-regression: bug output unreachable from algorithm
@@ -482,10 +483,13 @@ open Formal.PriorityBand
 #check @Formal.Phase7Invariants.isApplicable_imp_slot_in_table
 #check @Formal.Phase7Invariants.isApplicable_imp_inv_pos
 #check @Formal.Phase7Invariants.isApplicable_imp_level_ge
+#check @Formal.Phase7Invariants.isApplicable_imp_not_worn_elsewhere
 #check @Formal.Phase7Invariants.isApplicable_slot_mismatch_refused
 #check @Formal.Phase7Invariants.isApplicable_no_stats_refused
 #check @Formal.Phase7Invariants.isApplicable_boundary_witness
 #check @Formal.Phase7Invariants.isApplicable_ring_into_helmet_refused
+#check @Formal.Phase7Invariants.isApplicable_dup_allowed_worn_elsewhere_accepted
+#check @Formal.Phase7Invariants.isApplicable_dup_allowed_no_spare_refused
 #check @Formal.Phase7Invariants.inventoryUsed_nonneg
 #check @Formal.Phase7Invariants.inventoryUsed_eq_sum
 #check @Formal.Phase7Invariants.inventoryFree_eq_diff

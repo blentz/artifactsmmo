@@ -8,7 +8,7 @@ from artifactsmmo_api_client import AuthenticatedClient
 
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.base import Action
-from artifactsmmo_cli.ai.actions.equip import EquipAction
+from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, EquipAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.constants import ERROR_CODE_ALREADY_EQUIPPED
 from artifactsmmo_cli.ai.equipment.scoring import pick_loadout
@@ -79,11 +79,19 @@ class OptimizeLoadoutAction(Action):
                     f"OptimizeLoadout.apply: cur=0 for {new_code} — "
                     "pick_loadout produced an impossible (non-realizable) loadout"
                 )
-                # ONE SLOT PER CODE (server HTTP 485): equipping a code that is
-                # still worn in another slot is refused by the server regardless
-                # of spare copies. pick_loadout enforces this at plan time; the
-                # projection mirrors it as a contract assertion.
-                assert all(worn != new_code for worn in new_equipment.values()), (
+                # ONE SLOT PER CODE (server HTTP 485) — except dup-allowed types
+                # (rings, HTTP 200 on a duplicate). For a non-dup code, equipping
+                # one still worn in another slot is refused by the server
+                # regardless of spare copies; pick_loadout enforces this at plan
+                # time and the projection mirrors it as a contract assertion.
+                # Rings may be worn in two slots up to ownership — the cur>=1
+                # check above already guards realizability for them.
+                new_stats = game_data.item_stats(new_code)
+                dup_allowed = (new_stats is not None
+                               and new_stats.type_ in DUPLICATE_SLOT_TYPES)
+                assert dup_allowed or all(
+                    worn != new_code for worn in new_equipment.values()
+                ), (
                     f"OptimizeLoadout.apply: {new_code} is still worn in another "
                     "slot — pick_loadout violated the one-slot-per-code rule"
                 )

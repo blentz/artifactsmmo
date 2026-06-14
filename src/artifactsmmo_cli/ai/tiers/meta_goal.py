@@ -49,12 +49,24 @@ class ReachSkillLevel:
         return state.skills.get(self.skill, 1) >= self.level
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class ObtainItem:
     code: str
     quantity: int = 1
+    slot: str | None = None
+
+    def __repr__(self) -> str:
+        if self.slot is not None:
+            return (f"ObtainItem(code={self.code!r}, quantity={self.quantity}, "
+                    f"slot={self.slot!r})")
+        return f"ObtainItem(code={self.code!r}, quantity={self.quantity})"
 
     def is_satisfied(self, state: WorldState, game_data: GameData) -> bool:
+        # Per-slot gear root: satisfied iff THIS slot holds the code, so the
+        # objective can target the same item in multiple slots (two copper_rings
+        # in ring1_slot + ring2_slot). slot=None keeps the legacy semantics below.
+        if self.slot is not None:
+            return state.equipment.get(self.slot) == self.code
         # Equippable items: owning isn't the end-state — the meta-objective
         # is to WEAR them. Trace 2026-06-05T03:37: Robby crafted wooden_shield
         # but never equipped it; root dropped from candidates because owned >=
@@ -63,14 +75,9 @@ class ObtainItem:
         # EXCEPT TOOLS (subtype='tool', e.g. copper_pickaxe, copper_axe,
         # fishing_net): owning is the goal because tools ROTATE through
         # weapon_slot per the active gathering task (OptimizeLoadout swaps
-        # the right tool in per-fight / per-gather). Trace 2026-06-06
-        # session 01:24: Robby owned copper_pickaxe + copper_axe but wore
-        # fishing_net; ObtainItem(copper_pickaxe) stayed unsatisfied →
-        # ranked #1 → its step (UpgradeEquipmentGoal) short-circuited →
-        # bootstrap ReachCharLevel(5) never reached, zero fights in 278
-        # cycles. Recipe-input codes (ash_plank, copper_bar, ash_wood) stay
-        # on the owned-count rule — they're consumed by crafts and never
-        # enter equipment.
+        # the right tool in per-fight / per-gather). Recipe-input codes
+        # (ash_plank, copper_bar, ash_wood) stay on the owned-count rule —
+        # they're consumed by crafts and never enter equipment.
         stats = game_data.item_stats(self.code)
         if stats is not None and ITEM_TYPE_TO_SLOTS.get(stats.type_):
             if stats.subtype == "tool":

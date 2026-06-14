@@ -1,3 +1,4 @@
+-- @concept: crafting, planner @property: safety, totality
 /-
 Role theorems for `skill_grind_selection_pure` (the recipe-aware skill-grind
 target selector). Proved DIRECTLY on the extracted def (String-keyed in both

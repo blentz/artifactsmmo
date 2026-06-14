@@ -147,13 +147,13 @@ class TestMultiSlotContention:
         assert loadout["ring1_slot"] == "weak_ring"
         assert loadout["ring2_slot"] == "alpha_ring"
 
-    def test_485_trace_spare_copy_never_fills_sibling_slot(self):
-        """THE 2026-06-10/11 485-LIVELOCK TRACE LOCK: copper_ring worn in
-        ring1 plus a SECOND copper_ring in inventory must NOT be assigned to
-        ring2. The server refuses to equip a code already worn in any slot
-        (HTTP 485 "This item is already equipped") no matter how many copies
-        are owned; the old ownership-count feasibility livelocked every
-        OptimizeLoadout cycle on exactly this state."""
+    def test_dual_ring_spare_copy_fills_sibling_slot(self):
+        """THE 2026-06-14 DUAL-RING TRACE LOCK (flipped from the old 485
+        livelock): copper_ring worn in ring1 plus a SECOND copper_ring in
+        inventory (ownership 2) — the spare IS assigned to ring2. The live
+        server returns HTTP 200 for a duplicate ring (probe 2026-06-14), so the
+        rings carve-out fills the sibling up to physical ownership. Lean:
+        `pickLoadout_dual_ring_fills_when_two_owned`."""
         gd = GameData()
         gd._item_stats = {
             "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
@@ -172,7 +172,7 @@ class TestMultiSlotContention:
         )
         loadout = pick_loadout("yellow_slime", state, gd)
         assert loadout["ring1_slot"] == "copper_ring"
-        assert loadout["ring2_slot"] is None
+        assert loadout["ring2_slot"] == "copper_ring"
 
     def test_zero_score_candidate_never_fills_empty_slot(self):
         """An empty slot is only filled at a STRICTLY POSITIVE score: a ring

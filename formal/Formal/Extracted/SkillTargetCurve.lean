@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/tiers/skill_target_curve.py (sha256: 028a19915f635c9a9fd290992687e4bfbb21cbcd6b1d169e0dcef23563e1f6fa) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/tiers/skill_target_curve.py (sha256: f01b969bab01d6ce076cc68f14d9ca01b50c36a977b34e4025d7770b305fbba9) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.SkillTargetCurve

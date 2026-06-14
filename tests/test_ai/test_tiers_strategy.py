@@ -526,11 +526,11 @@ class TestGearGatedSkillInheritsValue:
                                    "fishing": 1, "gearcrafting": 1, "jewelrycrafting": 1, "cooking": 1})
         d = eng.decide(state, gd)
         gear_rs = next((rs for rs in d.ranking
-                        if rs.root_repr == "ObtainItem(code='copper_dagger', quantity=1)"), None)
+                        if rs.root_repr == "ObtainItem(code='copper_dagger', quantity=1, slot='weapon_slot')"), None)
         assert gear_rs is not None
         assert gear_rs.step_repr == "ReachSkillLevel(skill='weaponcrafting', level=3)"
         # value inherited from the gear root, not the skill's standalone 0.2 prior
-        assert gear_rs.score == eng._value(ObtainItem("copper_dagger"), state, gd)
+        assert gear_rs.score == eng._value(ObtainItem("copper_dagger", slot="weapon_slot"), state, gd)
 
 
 class TestStickyCommitment:
@@ -808,9 +808,9 @@ class TestEmptySlotUrgency:
         state = make_state(level=6, equipment={"weapon_slot": "copper_dagger"})
         d = eng.decide(state, gd, combat_monster="chicken",
                        last_chosen_root=repr(ReachCharLevel(8)))
-        assert d.chosen_root == ObtainItem("copper_armor")
+        assert d.chosen_root == ObtainItem("copper_armor", slot="body_armor_slot")
         ranking = {r.root_repr: r.score for r in d.ranking}
-        armor = ranking["ObtainItem(code='copper_armor', quantity=1)"]
+        armor = ranking["ObtainItem(code='copper_armor', quantity=1, slot='body_armor_slot')"]
         assert armor == EMPTY_SLOT_URGENCY            # prior 1 x max(m,1)x5/2 x bal 1
         assert armor > STICKY_DOMINANCE_RATIO * Fraction(37, 25)   # > 3/2 x 1.48
 
@@ -831,7 +831,7 @@ class TestEmptySlotUrgency:
         d = eng.decide(state, gd, combat_monster="chicken")
         ranking = {r.root_repr: r.score for r in d.ranking}
         # Slot filled with the item itself → root satisfied, out of ranking.
-        assert "ObtainItem(code='copper_armor', quantity=1)" not in ranking
+        assert "ObtainItem(code='copper_armor', quantity=1, slot='body_armor_slot')" not in ranking
         # No empty-slot urgency; char bootstrap takes over.
         assert d.chosen_root == ReachCharLevel(8)
 
@@ -1010,3 +1010,20 @@ class TestGearedCharBoost:
         state = make_state(level=6, equipment={"body_armor_slot": "copper_armor"})
         m = eng._marginal(ReachCharLevel(8), state, gd, combat_monster=None)
         assert m == CHAR_MARGINAL + 8 * CHAR_GAP_PER_LEVEL          # 1.48
+
+
+def test_second_ring_root_scored_against_its_own_empty_slot():
+    """With ring1 filled and ring2 empty, the ring1 root is satisfied while the
+    slot-tagged ring2 root scores its OWN empty slot (positive marginal) so it's
+    pursued — not read as satisfied off ring1."""
+    gd = GameData()
+    gd._item_stats = {"copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
+                                               attack={"fire": 6})}
+    gd._crafting_recipes = {"copper_ring": {"bar": 1}}
+    gd._resource_drops = {"rocks": "bar"}
+    gd._resource_skill = {"rocks": ("mining", 1)}
+    eng = StrategyEngine(CharacterObjective.from_game_data(gd), BalancedPersonality())
+    state = make_state(level=5, equipment={"ring1_slot": "copper_ring"})
+    ring2 = ObtainItem("copper_ring", slot="ring2_slot")
+    assert not ring2.is_satisfied(state, gd)
+    assert eng._marginal(ring2, state, gd) > 0

@@ -57,11 +57,14 @@ We prove:
   * `ownership_counts_equipped`: every slot currently holding C contributes
     exactly 1 to ownership (the +1 per equipped occurrence).
   * `pickLoadout_realizable`: the modeled algorithm's output is realizable.
-  * `pickLoadout_one_slot_per_code`: duplicate-free current equipment (the
-    server guarantees this) yields a duplicate-free output — every code is
-    worn in at most ONE slot, so the two-pass execute can never 485.
-  * `pickLoadout_485_copper_ring_regression`: the literal trace bug case
-    (worn copper_ring + spare copy) leaves ring2 EMPTY.
+  * `pickLoadout_one_slot_per_code`: current equipment dup-free on NON-RING
+    codes yields an output dup-free on non-ring codes — every non-ring code is
+    worn in at most ONE slot, so the two-pass execute can never 485 on them.
+    Ring-type (dup-allowed) codes may fill a 2nd slot, bounded by ownership.
+  * `pickLoadout_dual_ring_fills_when_two_owned`: 2 owned copper_rings +
+    dup-allowed ⇒ ring2 fills (server HTTP 200, probed 2026-06-14).
+  * `pickLoadout_single_ring_no_dup_fill`: 1 owned ⇒ ring2 stays EMPTY (the
+    realizability boundary; we never over-fill past physical ownership).
 
 Lean core only — no mathlib. `Nat` arithmetic via `omega`/`simp`; lists via
 fold/induction.
@@ -326,10 +329,11 @@ We prove:
 * `pickLoadout_realizable` — the output is realizable against `(inv, equip)`,
   given the slot-records' currents are consistent with the equipment (Python
   initializes both from `state.equipment`).
-* `pickLoadout_one_slot_per_code` — duplicate-free currents (the server
-  guarantees worn equipment never repeats a code) give a duplicate-free
-  output: no code occupies two slots, so no equip in the two-pass execute
-  can hit HTTP 485.
+* `pickLoadout_one_slot_per_code` — currents dup-free on NON-RING codes (the
+  server refuses a duplicate non-ring equip) give an output dup-free on
+  non-ring codes: no such code occupies two slots, so no non-ring equip in the
+  two-pass execute can hit HTTP 485. Ring-type codes may fill a 2nd slot up to
+  ownership (server HTTP 200, probed 2026-06-14).
 * `pickSlotStep_no_downgrade` — every swap of a filled slot is a STRICT score
   improvement (the old "stolen current" downgrade branch no longer exists).
 * `pickSlotStep_optimal` — an assigned value is the argmax over the feasible
@@ -337,7 +341,8 @@ We prove:
 * `pickSlotStep_empty_fill_positive` / `pickSlotStep_empty_zero_stays_empty`
   — the zero-score empty-fill suppression, both directions.
 * `pickLoadout_deterministic` / `pickLoadout_extensional` — purity.
-* `pickLoadout_485_copper_ring_regression` — the literal trace bug case. -/
+* `pickLoadout_dual_ring_fills_when_two_owned` / `pickLoadout_single_ring_no_dup_fill`
+  — the dual-ring fill (when owned) and its realizability boundary. -/
 
 /-- A slot's input to the algorithm: its current equipment value and the list
 of type-and-level-feasible candidate codes (from `_candidates_for_slot`). -/
@@ -346,22 +351,35 @@ structure SlotRecord where
   candidates : List Code
 deriving Inhabited
 
+/-- Per-code occupancy CAP. For dup-allowed codes (ring-type), a code may
+occupy as many slots as physically OWNED (`ownership` = inventory + worn);
+for everyone else exactly one slot. Live server probe (2026-06-14) proved a
+2nd identical `copper_ring` is accepted (HTTP 200), but ONLY up to ownership —
+you can wear 2 rings iff you own 2, else the output is unrealizable. -/
+def capOf (dupAllowed : Code → Bool) (inv : Inventory) (equip : SlotList)
+    (code : Code) : Nat :=
+  if dupAllowed code then ownership code inv equip else 1
+
 /-- A code is FORBIDDEN for the slot under consideration iff the projected
-result already holds it at another slot: among the earlier slots' assigned
-values or among the later slots' current values. Mirrors the Python
-`_in_result_elsewhere` scan of the `result` dict (the slot's OWN current is
-excluded — it is at this slot, not another). -/
-def forbiddenIn (code : Code) (assigned laterCurs : List SlotVal) : Bool :=
-  (assigned ++ laterCurs).any (fun v => decide (v = some code))
+result already holds it AT ITS CAP: the combined count across the earlier
+slots' assigned values and the later slots' current values has reached
+`capOf`. Mirrors the Python `_in_result_elsewhere` scan of the `result` dict,
+generalized to a per-code cap (the slot's OWN current is excluded — it is at
+this slot, not another). For non-dup codes `capOf = 1`, so this is exactly the
+old "already present anywhere else" rule (`slotCount ≥ 1`). -/
+def forbiddenIn (dupAllowed : Code → Bool) (inv : Inventory) (equip : SlotList)
+    (code : Code) (assigned laterCurs : List SlotVal) : Bool :=
+  decide (capOf dupAllowed inv equip code ≤ slotCount code (assigned ++ laterCurs))
 
 /-- The feasible candidates for a slot: owned (`1 ≤ ownership` — Python's
 `_candidates_for_slot` only emits items from the owned pool; the model's
 candidates are arbitrary so the conjunct is explicit) and not forbidden by
 the one-slot-per-code rule. -/
-def feasibleCands (rec : SlotRecord) (inv : Inventory) (equip : SlotList)
-    (assigned laterCurs : List SlotVal) : List Code :=
+def feasibleCands (dupAllowed : Code → Bool) (rec : SlotRecord) (inv : Inventory)
+    (equip : SlotList) (assigned laterCurs : List SlotVal) : List Code :=
   rec.candidates.filter (fun c =>
-    decide (1 ≤ ownership c inv equip) && !(forbiddenIn c assigned laterCurs))
+    decide (1 ≤ ownership c inv equip)
+      && !(forbiddenIn dupAllowed inv equip c assigned laterCurs))
 
 /-- Argmax of a nonempty list under integer score, left-fold; ties keep the
 EARLIER element (Python `max(.., key=..)` semantics). -/
@@ -420,32 +438,43 @@ theorem argmaxByCode_ge (score : Code → Int) (best : Code) (xs : List Code) :
           omega
         · exact ih best y (List.mem_cons_of_mem _ hrest)
 
+/-- For non-dup codes the generalized `forbiddenIn` agrees with the old
+"already present anywhere else" rule: `capOf = 1`, so forbidden iff
+`slotCount ≥ 1`. The cap form is the source of truth; this lemma documents
+backward compatibility. -/
+theorem forbiddenIn_nondup (dupAllowed : Code → Bool) (inv : Inventory)
+    (equip : SlotList) (c : Code) (assigned laterCurs : List SlotVal)
+    (hnd : dupAllowed c = false) :
+    forbiddenIn dupAllowed inv equip c assigned laterCurs
+      = decide (1 ≤ slotCount c (assigned ++ laterCurs)) := by
+  unfold forbiddenIn capOf
+  rw [hnd]
+  simp
+
 /-- Membership in the feasible list yields both feasibility conjuncts. -/
-theorem mem_feasible_props (rec : SlotRecord) (inv : Inventory) (equip : SlotList)
+theorem mem_feasible_props (dupAllowed : Code → Bool) (rec : SlotRecord)
+    (inv : Inventory) (equip : SlotList)
     (assigned laterCurs : List SlotVal) (c : Code)
-    (h : c ∈ feasibleCands rec inv equip assigned laterCurs) :
-    1 ≤ ownership c inv equip ∧ forbiddenIn c assigned laterCurs = false := by
+    (h : c ∈ feasibleCands dupAllowed rec inv equip assigned laterCurs) :
+    1 ≤ ownership c inv equip
+      ∧ forbiddenIn dupAllowed inv equip c assigned laterCurs = false := by
   unfold feasibleCands at h
   have hp := (List.mem_filter.mp h).2
   simp only [Bool.and_eq_true, decide_eq_true_eq, Bool.not_eq_true'] at hp
   exact hp
 
-/-- A non-forbidden code is absent from BOTH the assigned prefix and the
-later currents — the projected result holds it nowhere else. -/
-theorem not_mem_of_not_forbidden (c : Code) (assigned laterCurs : List SlotVal)
-    (h : forbiddenIn c assigned laterCurs = false) :
-    some c ∉ assigned ∧ some c ∉ laterCurs := by
-  constructor
-  · intro hm
-    have : forbiddenIn c assigned laterCurs = true :=
-      List.any_eq_true.mpr ⟨some c, List.mem_append.mpr (Or.inl hm), by simp⟩
-    rw [h] at this
-    cases this
-  · intro hm
-    have : forbiddenIn c assigned laterCurs = true :=
-      List.any_eq_true.mpr ⟨some c, List.mem_append.mpr (Or.inr hm), by simp⟩
-    rw [h] at this
-    cases this
+/-- A non-forbidden code has room under its cap: the combined count across the
+assigned prefix and the later currents is STRICTLY below `capOf`, so one more
+copy still fits. `forbiddenIn = false` means `¬ (capOf ≤ slotCount)`, i.e.
+`slotCount < capOf`, i.e. `slotCount + 1 ≤ capOf`. -/
+theorem slotCount_add_one_le_capOf_of_not_forbidden (dupAllowed : Code → Bool)
+    (inv : Inventory) (equip : SlotList) (c : Code)
+    (assigned laterCurs : List SlotVal)
+    (h : forbiddenIn dupAllowed inv equip c assigned laterCurs = false) :
+    slotCount c (assigned ++ laterCurs) + 1 ≤ capOf dupAllowed inv equip c := by
+  unfold forbiddenIn at h
+  rw [decide_eq_false_iff_not] at h
+  omega
 
 /-- One step of the multi-slot fold: choose this slot's result value given the
 already-assigned prefix and the later slots' current values. Mirrors the body
@@ -453,10 +482,10 @@ of the `for slot in _ordered_slots()` loop in `pick_loadout`:
 * no feasible candidate → keep the slot as-is;
 * empty slot → fill with the argmax ONLY at a strictly positive score;
 * filled slot → swap to the argmax only on a STRICT score improvement. -/
-def pickSlotStep (inv : Inventory) (equip : SlotList)
+def pickSlotStep (dupAllowed : Code → Bool) (inv : Inventory) (equip : SlotList)
     (rec : SlotRecord) (score : Code → Int)
     (assigned laterCurs : List SlotVal) : SlotVal :=
-  match feasibleCands rec inv equip assigned laterCurs with
+  match feasibleCands dupAllowed rec inv equip assigned laterCurs with
   | [] => rec.current
   | f :: fs =>
       let best := argmaxByCode score f fs
@@ -475,40 +504,42 @@ structure ScoredSlot where
 /-- The full fold: process slots left-to-right, threading the assigned prefix.
 The later slots' currents are recomputed per step from the remaining list,
 mirroring the Python `result` dict (assigned prefix + untouched currents). -/
-def pickLoadoutAux (inv : Inventory) (equip : SlotList) :
+def pickLoadoutAux (dupAllowed : Code → Bool) (inv : Inventory) (equip : SlotList) :
     List ScoredSlot → List SlotVal → List SlotVal
   | [], _ => []
   | sl :: rest, assigned =>
-    pickSlotStep inv equip sl.slot sl.scoreFn assigned
+    pickSlotStep dupAllowed inv equip sl.slot sl.scoreFn assigned
         (rest.map (fun s => s.slot.current))
-      :: pickLoadoutAux inv equip rest
-          (assigned ++ [pickSlotStep inv equip sl.slot sl.scoreFn assigned
+      :: pickLoadoutAux dupAllowed inv equip rest
+          (assigned ++ [pickSlotStep dupAllowed inv equip sl.slot sl.scoreFn assigned
               (rest.map (fun s => s.slot.current))])
 
 /-- Top-level pick: deterministic on the input list, no dict iteration anywhere. -/
-def pickLoadout (inv : Inventory) (equip : SlotList)
+def pickLoadout (dupAllowed : Code → Bool) (inv : Inventory) (equip : SlotList)
     (slots : List ScoredSlot) : SlotList :=
-  pickLoadoutAux inv equip slots []
+  pickLoadoutAux dupAllowed inv equip slots []
 
 /-! ### Step case analysis: keep, drop, or a feasible fresh assignment. -/
 
 /-- Every step result is the kept current, `none`, or a FEASIBLE fresh code
 (owned and absent from the rest of the projected result). -/
-theorem pickSlotStep_cases (inv : Inventory) (equip : SlotList)
-    (rec : SlotRecord) (score : Code → Int)
+theorem pickSlotStep_cases (dupAllowed : Code → Bool) (inv : Inventory)
+    (equip : SlotList) (rec : SlotRecord) (score : Code → Int)
     (assigned laterCurs : List SlotVal) :
-    pickSlotStep inv equip rec score assigned laterCurs = rec.current ∨
-    pickSlotStep inv equip rec score assigned laterCurs = none ∨
-    ∃ c, pickSlotStep inv equip rec score assigned laterCurs = some c ∧
-      1 ≤ ownership c inv equip ∧ forbiddenIn c assigned laterCurs = false := by
+    pickSlotStep dupAllowed inv equip rec score assigned laterCurs = rec.current ∨
+    pickSlotStep dupAllowed inv equip rec score assigned laterCurs = none ∨
+    ∃ c, pickSlotStep dupAllowed inv equip rec score assigned laterCurs = some c ∧
+      1 ≤ ownership c inv equip
+        ∧ forbiddenIn dupAllowed inv equip c assigned laterCurs = false := by
   unfold pickSlotStep
-  cases hfm : feasibleCands rec inv equip assigned laterCurs with
+  cases hfm : feasibleCands dupAllowed rec inv equip assigned laterCurs with
   | nil => left; rfl
   | cons f fs =>
     have h_mem : argmaxByCode score f fs ∈ f :: fs := argmaxByCode_mem score f fs
-    have h_in : argmaxByCode score f fs ∈ feasibleCands rec inv equip assigned laterCurs := by
+    have h_in : argmaxByCode score f fs
+        ∈ feasibleCands dupAllowed rec inv equip assigned laterCurs := by
       rw [hfm]; exact h_mem
-    have hprops := mem_feasible_props rec inv equip assigned laterCurs _ h_in
+    have hprops := mem_feasible_props dupAllowed rec inv equip assigned laterCurs _ h_in
     cases hcur : rec.current with
     | none =>
       by_cases hpos : 0 < score (argmaxByCode score f fs)
@@ -527,18 +558,19 @@ theorem pickSlotStep_cases (inv : Inventory) (equip : SlotList)
 /-! ### The generic demand bound (instantiates to realizability AND 485-safety). -/
 
 /-- Generic fold bound: let `B` be any per-code budget that admits every owned
-code (`1 ≤ ownership c → 1 ≤ B c`). If the combined per-code count across the
-assigned prefix and the remaining slots' currents respects `B`, then so does
-the combined count of the prefix and the fold's output. The two headline
-instantiations: `B = ownership` (realizability) and `B = 1` with dup-free
-currents (one slot per code / 485-safety). -/
-theorem pickLoadoutAux_bound (inv : Inventory) (equip : SlotList) (B : Code → Nat)
-    (hB : ∀ c, 1 ≤ ownership c inv equip → 1 ≤ B c) :
+code's cap (`1 ≤ ownership c → capOf c ≤ B c`). If the combined per-code count
+across the assigned prefix and the remaining slots' currents respects `B`, then
+so does the combined count of the prefix and the fold's output. The two
+headline instantiations: `B = ownership` (realizability, via `capOf ≤ ownership`)
+and `B = capOf` with cap-respecting currents (dup-free-except / 485-safety). -/
+theorem pickLoadoutAux_bound (dupAllowed : Code → Bool) (inv : Inventory)
+    (equip : SlotList) (B : Code → Nat)
+    (hB2 : ∀ c, 1 ≤ ownership c inv equip → capOf dupAllowed inv equip c ≤ B c) :
     ∀ (slots : List ScoredSlot) (assigned : List SlotVal),
     (∀ c, slotCount c assigned
         + slotCount c (slots.map (fun s => s.slot.current)) ≤ B c) →
     ∀ c, slotCount c assigned
-        + slotCount c (pickLoadoutAux inv equip slots assigned) ≤ B c := by
+        + slotCount c (pickLoadoutAux dupAllowed inv equip slots assigned) ≤ B c := by
   intro slots
   induction slots with
   | nil =>
@@ -549,9 +581,9 @@ theorem pickLoadoutAux_bound (inv : Inventory) (equip : SlotList) (B : Code → 
   | cons sl rest ih =>
     intro assigned h c
     simp only [pickLoadoutAux]
-    generalize hv : pickSlotStep inv equip sl.slot sl.scoreFn assigned
+    generalize hv : pickSlotStep dupAllowed inv equip sl.slot sl.scoreFn assigned
         (rest.map (fun s => s.slot.current)) = v
-    have hstep := pickSlotStep_cases inv equip sl.slot sl.scoreFn assigned
+    have hstep := pickSlotStep_cases dupAllowed inv equip sl.slot sl.scoreFn assigned
         (rest.map (fun s => s.slot.current))
     rw [hv] at hstep
     -- The shifted hypothesis for the recursive call at `assigned ++ [v]`.
@@ -570,13 +602,14 @@ theorem pickLoadoutAux_bound (inv : Inventory) (equip : SlotList) (B : Code → 
       · rw [he]
         by_cases hde : e = d
         · subst hde
-          have hnm := not_mem_of_not_forbidden e assigned _ hforb
-          have h0a : slotCount e assigned = 0 :=
-            slotCount_eq_zero_of_not_mem _ _ hnm.1
-          have h0l : slotCount e (rest.map (fun s => s.slot.current)) = 0 :=
-            slotCount_eq_zero_of_not_mem _ _ hnm.2
-          have h1 : 1 ≤ B e := hB e hown
-          simp [h0a, h0l, h1]
+          -- Room under the cap: slotCount(assigned++laterCurs) + 1 ≤ capOf e ≤ B e.
+          have hroom := slotCount_add_one_le_capOf_of_not_forbidden
+            dupAllowed inv equip e assigned _ hforb
+          rw [slotCount_append] at hroom
+          have hcap : capOf dupAllowed inv equip e ≤ B e := hB2 e hown
+          have heq1 : (if (some e : SlotVal) = some e then 1 else 0) = 1 := by simp
+          rw [heq1]
+          omega
         · have hne : (some e : SlotVal) ≠ some d := by
             intro hh; injection hh with hh; exact hde hh
           simp only [hne, if_false]
@@ -591,50 +624,83 @@ realizable, provided the slot-records' current values are consistent with the
 equipment (per-code, the records never claim more worn copies than the
 equipment holds — Python initializes BOTH from `state.equipment`, where the
 records' currents are a per-slot restriction of the equipment values). -/
-theorem pickLoadout_realizable (inv : Inventory) (equip : SlotList)
-    (slots : List ScoredSlot)
+theorem pickLoadout_realizable (dupAllowed : Code → Bool) (inv : Inventory)
+    (equip : SlotList) (slots : List ScoredSlot)
     (hcons : ∀ c, slotCount c (slots.map (fun s => s.slot.current))
         ≤ ownership c inv equip) :
-    isRealizable (pickLoadout inv equip slots) inv equip := by
+    isRealizable (pickLoadout dupAllowed inv equip slots) inv equip := by
   intro c
   have h0 : ∀ d, slotCount d ([] : SlotList)
       + slotCount d (slots.map (fun s => s.slot.current)) ≤ ownership d inv equip := by
     intro d
     rw [slotCount_nil]
     simpa using hcons d
-  have := pickLoadoutAux_bound inv equip (fun d => ownership d inv equip)
-      (fun _ hd => hd) slots [] h0 c
+  -- B = ownership; the cap is always ≤ ownership: dup ⇒ capOf = ownership,
+  -- non-dup ⇒ capOf = 1 ≤ ownership (from the owned hypothesis).
+  have hB2 : ∀ d, 1 ≤ ownership d inv equip →
+      capOf dupAllowed inv equip d ≤ ownership d inv equip := by
+    intro d hd
+    unfold capOf
+    by_cases hdup : dupAllowed d = true
+    · simp [hdup]
+    · simp only [Bool.not_eq_true] at hdup
+      simp [hdup, hd]
+  have := pickLoadoutAux_bound dupAllowed inv equip (fun d => ownership d inv equip)
+      hB2 slots [] h0 c
   rw [slotCount_nil] at this
   unfold pickLoadout demand
   omega
 
 /-- A slot list is duplicate-free per code: no code occupies two slots. The
-SERVER maintains this on worn equipment (one slot per code, HTTP 485). -/
+SERVER maintains this on worn equipment for NON-ring codes (one slot per code,
+HTTP 485). Kept for any other users. -/
 def dupFree (sl : SlotList) : Prop := ∀ c, slotCount c sl ≤ 1
 
-/-- **HEADLINE Property 1b (One Slot Per Code / 485-safety)**: duplicate-free
-current equipment yields a duplicate-free output loadout. No code is picked
-for two slots — combined with the two-pass execute (unequip all outgoing
-first), every equip targets a code worn NOWHERE, so the server's HTTP 485
-("This item is already equipped") is unreachable. This is the theorem the
-2026-06-10/11 copper_ring livelock was missing: ownership-count feasibility
-admitted `{ring1: copper_ring (kept), ring2: copper_ring (spare copy)}`,
-which is dup-free-violating and server-rejected. -/
-theorem pickLoadout_one_slot_per_code (inv : Inventory) (equip : SlotList)
-    (slots : List ScoredSlot)
-    (hdup : dupFree (slots.map (fun s => s.slot.current))) :
-    dupFree (pickLoadout inv equip slots) := by
-  intro c
+/-- A slot list is duplicate-free EXCEPT for dup-allowed (ring-type) codes:
+every non-dup code occupies at most one slot. This is the relaxed invariant
+after the 2026-06-14 server probe proved a 2nd identical ring is accepted —
+non-ring codes still 485 on a duplicate, so they stay ≤ 1. -/
+def dupFreeExcept (dupAllowed : Code → Bool) (sl : SlotList) : Prop :=
+  ∀ c, dupAllowed c = false → slotCount c sl ≤ 1
+
+/-- **HEADLINE Property 1b (Dup-Free-Except / 485-safety)**: current
+equipment that is duplicate-free on non-dup codes yields an output loadout
+that is duplicate-free on non-dup codes. No NON-RING code is picked for two
+slots — combined with the two-pass execute (unequip all outgoing first), every
+non-ring equip targets a code worn NOWHERE, so the server's HTTP 485 ("This
+item is already equipped") is unreachable for those. RING-type codes may now
+fill a second slot, but ONLY up to physical ownership (enforced by `capOf`),
+which the server accepts (HTTP 200, probed 2026-06-14). The dup-code case needs
+the currents-consistency hypothesis `hcons` (rings are bounded by ownership);
+this is HONEST — it mirrors reality. -/
+theorem pickLoadout_one_slot_per_code (dupAllowed : Code → Bool) (inv : Inventory)
+    (equip : SlotList) (slots : List ScoredSlot)
+    (hcons : ∀ c, slotCount c (slots.map (fun s => s.slot.current))
+        ≤ ownership c inv equip)
+    (hdup : dupFreeExcept dupAllowed (slots.map (fun s => s.slot.current))) :
+    dupFreeExcept dupAllowed (pickLoadout dupAllowed inv equip slots) := by
+  intro c hc
+  -- Instantiate the fold bound with B = capOf. hB2 obligation is le_refl.
   have h0 : ∀ d, slotCount d ([] : SlotList)
-      + slotCount d (slots.map (fun s => s.slot.current)) ≤ 1 := by
+      + slotCount d (slots.map (fun s => s.slot.current))
+        ≤ capOf dupAllowed inv equip d := by
     intro d
-    rw [slotCount_nil]
-    simpa using hdup d
-  have := pickLoadoutAux_bound inv equip (fun _ => 1)
-      (fun _ _ => Nat.le_refl 1) slots [] h0 c
-  rw [slotCount_nil] at this
+    rw [slotCount_nil, Nat.zero_add]
+    unfold capOf
+    by_cases hdup_d : dupAllowed d = true
+    · simp only [hdup_d, if_true]
+      exact hcons d
+    · simp only [Bool.not_eq_true] at hdup_d
+      simp only [hdup_d]
+      exact hdup d hdup_d
+  have := pickLoadoutAux_bound dupAllowed inv equip (fun d => capOf dupAllowed inv equip d)
+      (fun _ _ => Nat.le_refl _) slots [] h0 c
+  rw [slotCount_nil, Nat.zero_add] at this
+  -- For the non-dup code c, capOf c = 1, so the bound gives slotCount ≤ 1.
+  have hcap : capOf dupAllowed inv equip c = 1 := by unfold capOf; simp [hc]
   unfold pickLoadout
-  omega
+  rw [hcap] at this
+  exact this
 
 /-! ### Property 2 (No-Downgrade, now UNCONDITIONAL). -/
 
@@ -644,15 +710,15 @@ branch when a peer slot stole the current code; under the one-slot-per-code
 rule no peer slot can ever take a code that is still current here (it is in
 the projected result), so the stolen-current branch no longer exists and the
 guarantee is strict and unconditional. -/
-theorem pickSlotStep_no_downgrade (inv : Inventory) (equip : SlotList)
-    (rec : SlotRecord) (score : Code → Int)
+theorem pickSlotStep_no_downgrade (dupAllowed : Code → Bool) (inv : Inventory)
+    (equip : SlotList) (rec : SlotRecord) (score : Code → Int)
     (assigned laterCurs : List SlotVal) (cur r : Code)
     (h_cur : rec.current = some cur)
-    (h_res : pickSlotStep inv equip rec score assigned laterCurs = some r)
+    (h_res : pickSlotStep dupAllowed inv equip rec score assigned laterCurs = some r)
     (h_ne : cur ≠ r) :
     score cur < score r := by
   unfold pickSlotStep at h_res
-  cases hfm : feasibleCands rec inv equip assigned laterCurs with
+  cases hfm : feasibleCands dupAllowed rec inv equip assigned laterCurs with
   | nil =>
     rw [hfm, h_cur] at h_res
     simp at h_res
@@ -675,13 +741,13 @@ theorem pickSlotStep_no_downgrade (inv : Inventory) (equip : SlotList)
 /-- **Property 3 (Optimality)**: when the step assigns a value that is not the
 kept current, it is the argmax of the feasible candidate set under the slot's
 score. -/
-theorem pickSlotStep_optimal (inv : Inventory) (equip : SlotList)
-    (rec : SlotRecord) (score : Code → Int)
+theorem pickSlotStep_optimal (dupAllowed : Code → Bool) (inv : Inventory)
+    (equip : SlotList) (rec : SlotRecord) (score : Code → Int)
     (assigned laterCurs : List SlotVal)
     (f : Code) (fs : List Code)
-    (h_feas : feasibleCands rec inv equip assigned laterCurs = f :: fs)
+    (h_feas : feasibleCands dupAllowed rec inv equip assigned laterCurs = f :: fs)
     (r : Code)
-    (h_res : pickSlotStep inv equip rec score assigned laterCurs = some r)
+    (h_res : pickSlotStep dupAllowed inv equip rec score assigned laterCurs = some r)
     (h_not_kept_cur : ∀ cur, rec.current = some cur → cur ≠ r) :
     r = argmaxByCode score f fs := by
   unfold pickSlotStep at h_res
@@ -711,14 +777,14 @@ theorem pickSlotStep_optimal (inv : Inventory) (equip : SlotList)
 /-- An empty slot is FILLED only at a strictly positive score: equipping a
 zero-score item buys nothing against the target monster and burns the code's
 single legal slot. -/
-theorem pickSlotStep_empty_fill_positive (inv : Inventory) (equip : SlotList)
-    (rec : SlotRecord) (score : Code → Int)
+theorem pickSlotStep_empty_fill_positive (dupAllowed : Code → Bool) (inv : Inventory)
+    (equip : SlotList) (rec : SlotRecord) (score : Code → Int)
     (assigned laterCurs : List SlotVal) (r : Code)
     (h_cur : rec.current = none)
-    (h_res : pickSlotStep inv equip rec score assigned laterCurs = some r) :
+    (h_res : pickSlotStep dupAllowed inv equip rec score assigned laterCurs = some r) :
     0 < score r := by
   unfold pickSlotStep at h_res
-  cases hfm : feasibleCands rec inv equip assigned laterCurs with
+  cases hfm : feasibleCands dupAllowed rec inv equip assigned laterCurs with
   | nil =>
     rw [hfm, h_cur] at h_res
     cases h_res
@@ -731,15 +797,15 @@ theorem pickSlotStep_empty_fill_positive (inv : Inventory) (equip : SlotList)
     · simp [hpos] at h_res
 
 /-- Dual: an empty slot whose best feasible candidate scores ≤ 0 stays empty. -/
-theorem pickSlotStep_empty_zero_stays_empty (inv : Inventory) (equip : SlotList)
-    (rec : SlotRecord) (score : Code → Int)
+theorem pickSlotStep_empty_zero_stays_empty (dupAllowed : Code → Bool) (inv : Inventory)
+    (equip : SlotList) (rec : SlotRecord) (score : Code → Int)
     (assigned laterCurs : List SlotVal)
     (h_cur : rec.current = none)
-    (h_zero : ∀ f fs, feasibleCands rec inv equip assigned laterCurs = f :: fs →
+    (h_zero : ∀ f fs, feasibleCands dupAllowed rec inv equip assigned laterCurs = f :: fs →
         score (argmaxByCode score f fs) ≤ 0) :
-    pickSlotStep inv equip rec score assigned laterCurs = none := by
+    pickSlotStep dupAllowed inv equip rec score assigned laterCurs = none := by
   unfold pickSlotStep
-  cases hfm : feasibleCands rec inv equip assigned laterCurs with
+  cases hfm : feasibleCands dupAllowed rec inv equip assigned laterCurs with
   | nil => exact h_cur
   | cons f fs =>
     have hz := h_zero f fs hfm
@@ -755,31 +821,50 @@ nondeterministic ordering. The Python `_ordered_slots()` helper produces the
 SORTED slot list once; this theorem is the Lean-side guarantee that the
 modeled fold ALONE determines the output (no hidden state). -/
 theorem pickLoadout_deterministic
-    (inv : Inventory) (equip : SlotList)
+    (dupAllowed : Code → Bool) (inv : Inventory) (equip : SlotList)
     (slots : List ScoredSlot) :
-    pickLoadout inv equip slots = pickLoadout inv equip slots :=
+    pickLoadout dupAllowed inv equip slots = pickLoadout dupAllowed inv equip slots :=
   rfl
 
 /-- **Determinism corollary**: equal slot-input lists give equal outputs. Pins
 that ordering is the ONLY source of nondeterminism, and the Python sort
 eliminates it. -/
 theorem pickLoadout_extensional
-    (inv : Inventory) (equip : SlotList)
+    (dupAllowed : Code → Bool) (inv : Inventory) (equip : SlotList)
     (slots₁ slots₂ : List ScoredSlot)
     (h : slots₁ = slots₂) :
-    pickLoadout inv equip slots₁ = pickLoadout inv equip slots₂ := by
+    pickLoadout dupAllowed inv equip slots₁ = pickLoadout dupAllowed inv equip slots₂ := by
   rw [h]
 
 /-! ### Non-vacuity: the literal trace bugs, run through the algorithm. -/
 
-/-- **THE 2026-06-10/11 485 LIVELOCK CASE**: copper_ring worn in ring1_slot,
-a SECOND copper_ring in inventory, ring2_slot empty. Ownership-count
-feasibility (2 copies owned) would assign ring2 := copper_ring; the server
-refuses with HTTP 485 and the identical plan re-derives every cycle. The
-fixed algorithm leaves ring2 EMPTY — copper_ring sits in the projected result
-at ring1 (kept), so it is infeasible for ring2 even at a positive score. -/
-theorem pickLoadout_485_copper_ring_regression :
-    pickLoadout (fun c => if c = "copper_ring" then 1 else 0)
+/-- **THE 2026-06-14 DUAL-RING CASE (post server-probe)**: copper_ring worn in
+ring1_slot, a SECOND copper_ring in inventory (ownership = 2), ring2_slot empty,
+copper_ring marked dup-allowed (ring-type). The live server returned HTTP 200
+for a 2nd identical ring, so the relaxed algorithm now FILLS ring2 with the
+spare copper_ring — `capOf copper_ring = ownership = 2`, so a second slot is
+under cap. Output: both ring slots hold copper_ring. This is realizable
+(2 owned, 2 worn). -/
+theorem pickLoadout_dual_ring_fills_when_two_owned :
+    pickLoadout (fun c => c = "copper_ring")
+      (fun c => if c = "copper_ring" then 1 else 0)
+      [some "copper_ring", none]
+      [{ slot := { current := some "copper_ring", candidates := ["copper_ring"] },
+         scoreFn := fun _ => 5 },
+       { slot := { current := none, candidates := ["copper_ring"] },
+         scoreFn := fun _ => 5 }]
+      = [some "copper_ring", some "copper_ring"] := by
+  decide
+
+/-- **THE REALIZABILITY BOUNDARY (anti-over-fill)**: copper_ring worn in
+ring1_slot, NONE in inventory (ownership = 1), ring2_slot empty, copper_ring
+dup-allowed. Even though duplicates are now allowed in principle, `capOf
+copper_ring = ownership = 1` so the single worn copy already fills the cap and
+ring2 stays EMPTY. We DON'T over-fill beyond what is owned — the dual-ring fill
+is bounded by physical ownership, keeping the output realizable. -/
+theorem pickLoadout_single_ring_no_dup_fill :
+    pickLoadout (fun c => c = "copper_ring")
+      (fun _ => 0)
       [some "copper_ring", none]
       [{ slot := { current := some "copper_ring", candidates := ["copper_ring"] },
          scoreFn := fun _ => 5 },
@@ -792,7 +877,7 @@ theorem pickLoadout_485_copper_ring_regression :
 scores 0 against the target stays empty (a ring with no relevant resistance
 must not be equipped just because the slot is empty). -/
 theorem pickLoadout_zero_score_no_fill :
-    pickLoadout (fun c => if c = "Z" then 1 else 0)
+    pickLoadout (fun _ => false) (fun c => if c = "Z" then 1 else 0)
       [none]
       [{ slot := { current := none, candidates := ["Z"] },
          scoreFn := fun _ => 0 }]
@@ -806,7 +891,7 @@ is processed, so ring1 keeps A and ring2 keeps B. The kept loadout wears the
 same item multiset as the old `[B, A]` shuffle at ZERO swap cost, and it is
 realizable. -/
 theorem pickLoadout_ring_pair_regression :
-    pickLoadout (fun _ => 0) [some "A", some "B"]
+    pickLoadout (fun _ => false) (fun _ => 0) [some "A", some "B"]
       [{ slot := { current := some "A", candidates := ["A", "B"] },
          scoreFn := fun c => if c = "B" then 100 else 0 },
        { slot := { current := some "B", candidates := ["A", "B"] },
@@ -821,7 +906,7 @@ theorem pickLoadout_ring_pair_regression :
 the concrete run returns `[A, B]`, and `[B, B]` is not even realizable
 (`regression_buggy_output_not_realizable`). -/
 theorem pickLoadout_cannot_produce_buggy_output :
-    pickLoadout (fun _ => 0) [some "A", some "B"]
+    pickLoadout (fun _ => false) (fun _ => 0) [some "A", some "B"]
       [{ slot := { current := some "A", candidates := ["A", "B"] },
          scoreFn := fun c => if c = "B" then 100 else 0 },
        { slot := { current := some "B", candidates := ["A", "B"] },
@@ -831,7 +916,7 @@ theorem pickLoadout_cannot_produce_buggy_output :
 
 /-- **Empty-slots edge**: `pickLoadout` on no slots yields the empty loadout. -/
 theorem pickLoadout_empty
-    (inv : Inventory) (equip : SlotList) :
-    pickLoadout inv equip [] = [] := rfl
+    (dupAllowed : Code → Bool) (inv : Inventory) (equip : SlotList) :
+    pickLoadout dupAllowed inv equip [] = [] := rfl
 
 end Formal.RealizableLoadout

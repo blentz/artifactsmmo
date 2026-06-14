@@ -361,3 +361,49 @@ def test_is_attainable_now_judges_winnability_at_full_hp():
     gd = _gd_drop_recipes()
     state = make_state(level=5, attack={"air": 5}, hp=1, max_hp=150)
     assert is_attainable_now("feather_coat", state, gd) is True
+
+
+def test_ring_slots_duplicate_fill_when_one_attainable():
+    """Only copper_ring attainable -> BOTH ring slots target it (you can wear
+    two identical rings) instead of leaving ring2_slot untargeted."""
+    gd = GameData()
+    gd._item_stats = {
+        "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring", attack={"fire": 2}),
+        "iron_sword": ItemStats(code="iron_sword", level=1, type_="weapon", attack={"fire": 5}),
+    }
+    gd._crafting_recipes = {"copper_ring": {"bar": 1}, "iron_sword": {"bar": 1}}
+    gd._resource_drops = {"rocks": "bar"}
+    gd._resource_skill = {"rocks": ("mining", 1)}
+    obj = CharacterObjective.from_game_data(gd)
+    assert obj.target_gear["ring1_slot"] == "copper_ring"
+    assert obj.target_gear["ring2_slot"] == "copper_ring"
+
+
+def test_artifact_slots_not_duplicate_filled():
+    """Artifacts are unique (game rejects duplicates): one attainable artifact
+    fills only artifact1_slot — duplicate-fill is rings-only."""
+    gd = GameData()
+    gd._item_stats = {"ancient_relic": ItemStats(code="ancient_relic", level=1,
+                                                  type_="artifact", attack={"fire": 3})}
+    gd._crafting_recipes = {"ancient_relic": {"bar": 1}}
+    gd._resource_drops = {"rocks": "bar"}
+    gd._resource_skill = {"rocks": ("mining", 1)}
+    obj = CharacterObjective.from_game_data(gd)
+    assert obj.target_gear["artifact1_slot"] == "ancient_relic"
+    assert "artifact2_slot" not in obj.target_gear
+    assert "artifact3_slot" not in obj.target_gear
+
+
+def test_near_term_gear_duplicate_fills_empty_second_ring():
+    """near_term_gear: ring1 already holds copper_ring, ring2 empty, only
+    copper_ring attainable-now -> ring2_slot also targets copper_ring."""
+    gd = GameData()
+    gd._item_stats = {"copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
+                                               attack={"fire": 2})}
+    gd._crafting_recipes = {"copper_ring": {"bar": 1}}
+    gd._resource_drops = {"rocks": "bar"}
+    gd._resource_skill = {"rocks": ("mining", 1)}
+    obj = CharacterObjective.from_game_data(gd)
+    state = make_state(level=5, equipment={"ring1_slot": "copper_ring"})
+    nt = obj.near_term_gear(state)
+    assert nt.get("ring2_slot") == "copper_ring"  # empty 2nd ring slot still targeted

@@ -387,7 +387,8 @@ def objective_step_goal(
         stats = game_data.item_stats(step.code)
         slots = ITEM_TYPE_TO_SLOTS.get(stats.type_) if stats is not None else None
         if slots:
-            return _equippable_goal(step.code, slots[0], state, game_data)
+            dest_slot = step.slot if step.slot is not None else slots[0]
+            return _equippable_goal(step.code, dest_slot, state, game_data)
         # Intermediate step: if the chain root is an equippable, plan
         # against the root directly. UpgradeEquipmentGoal's planner
         # walks the recipe chain (craft intermediates + final + equip)
@@ -396,8 +397,9 @@ def objective_step_goal(
             root_stats = game_data.item_stats(root.code)
             root_slots = ITEM_TYPE_TO_SLOTS.get(root_stats.type_) if root_stats is not None else None
             if root_slots:
+                dest_slot = root.slot if root.slot is not None else root_slots[0]
                 upgrade = UpgradeEquipmentGoal(initial_equipment=state.equipment,
-                                               committed_target=(root.code, root_slots[0]))
+                                               committed_target=(root.code, dest_slot))
                 if upgrade.is_plannable(state, game_data):
                     # Root chain depth-reachable (materials in hand/craftable):
                     # plan the whole craft+equip under one commit.

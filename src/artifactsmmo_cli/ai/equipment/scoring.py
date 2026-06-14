@@ -1,7 +1,8 @@
 """Score equipment against a monster's element profile and pick the best loadout."""
 
-from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.equipment.elements import ELEMENTS
+from artifactsmmo_cli.ai.equipment.realizable_loadout import ownership
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -214,13 +215,17 @@ def pick_loadout(
     """Best {slot: item_code | None} loadout from owned items against `monster_code`.
 
     Each slot is optimized in a deterministic order against the PROJECTED
-    RESULT, enforcing the server's ONE-SLOT-PER-CODE rule (HTTP 485 "This item
-    is already equipped"): an item code C is infeasible for slot S whenever C
-    already sits in the projected result at any OTHER slot — kept there or
-    newly assigned by an earlier iteration. Owning a second physical copy does
-    NOT legalize a duplicate: the server refuses to equip a code that is worn
-    anywhere, so e.g. a spare copper_ring can never go into ring2_slot while
-    ring1_slot wears copper_ring (the 2026-06-10 OptimizeLoadout 485 livelock).
+    RESULT, enforcing a per-code OCCUPANCY CAP: an item code C is infeasible for
+    slot S once the projected result already holds C at its cap in OTHER slots —
+    kept there or newly assigned by an earlier iteration. The cap is 1 for every
+    type EXCEPT duplicate-allowed types (rings), whose cap is physical
+    `ownership(C)`. So a non-ring code keeps the strict server ONE-SLOT-PER-CODE
+    rule (HTTP 485 "This item is already equipped"), while a spare copper_ring
+    MAY fill ring2_slot while ring1_slot wears copper_ring — but only when a 2nd
+    copy is owned (live-server probe 2026-06-14: a duplicate ring returns HTTP
+    200; without a 2nd copy the cap-1-per-owned-copy rule leaves ring2 empty,
+    avoiding the inverse of the 2026-06-10 485 livelock — an unrealizable
+    double-equip).
     Iteration order matters — `result` starts as a copy of `state.equipment`,
     so at slot S the "other slots" are earlier slots' final picks plus later
     slots' current items. A code DISPLACED by an earlier swap (no longer in the
@@ -228,8 +233,10 @@ def pick_loadout(
     outgoing slot before any equip.
 
     The realizability invariant (`equipment/realizable_loadout.is_realizable`)
-    follows directly: a newly-assigned code appears exactly once in the result
-    and is owned (>= 1); kept codes are bounded by the worn count.
+    follows directly: a code is assigned to a further slot only while the
+    projected count is below `ownership(C)`, so total demand never exceeds
+    ownership. Mirrors Formal.RealizableLoadout (capOf / pickLoadout_realizable
+    + pickLoadout_one_slot_per_code → dupFreeExcept).
 
     Empty slots are only filled by a candidate whose score is strictly
     positive: a zero-score equip buys nothing against this monster and burns
@@ -245,17 +252,35 @@ def pick_loadout(
 
     result: dict[str, str | None] = dict(state.equipment)
 
-    def _in_result_elsewhere(code: str, slot: str) -> bool:
-        return any(worn == code for s, worn in result.items() if s != slot)
+    def _dup_allowed(code: str) -> bool:
+        stats = game_data.item_stats(code)
+        return stats is not None and stats.type_ in DUPLICATE_SLOT_TYPES
+
+    def _forbidden(code: str, slot: str) -> bool:
+        # ONE SLOT PER CODE, generalized to a per-code occupancy CAP: a code is
+        # forbidden for `slot` once the projected result already holds it at its
+        # cap in OTHER slots. cap = physical ownership for duplicate-allowed
+        # types (rings — server returns HTTP 200 on a 2nd copy, probe
+        # 2026-06-14), else 1 (every other code keeps the strict HTTP 485 rule).
+        # For non-dup codes cap=1, so `worn_elsewhere >= 1` is exactly the old
+        # "present elsewhere" membership test. Mirrors
+        # Formal.RealizableLoadout.forbiddenIn (capOf) — the kernel-proved
+        # dupFreeExcept / realizability invariant.
+        worn_elsewhere = sum(
+            1 for s, worn in result.items() if s != slot and worn == code
+        )
+        cap = (ownership(code, state.inventory, state.equipment)
+               if _dup_allowed(code) else 1)
+        return worn_elsewhere >= cap
 
     for slot in _ordered_slots():
         candidates = _candidates_for_slot(slot, state, game_data)
         current_code = state.equipment.get(slot)
 
-        # ONE SLOT PER CODE: drop every candidate whose code the projected
-        # result already places at another slot (kept or assigned earlier).
+        # ONE SLOT PER CODE (rings: up to ownership): drop every candidate whose
+        # code the projected result already places at its cap in other slots.
         feasible: list[ItemStats] = [
-            cand for cand in candidates if not _in_result_elsewhere(cand.code, slot)
+            cand for cand in candidates if not _forbidden(cand.code, slot)
         ]
         if not feasible:
             # Nothing equippable here — leave the slot as-is. The current item
