@@ -52,3 +52,17 @@ def test_empty_code_fallback_has_no_marks():
     reg = SpriteRegistry()
     sprite = reg.sprite_for("", SpriteCategory.MONSTER)  # checksum 0 -> no marks
     assert all(MARK_KEY not in row for row in sprite.rows)
+
+
+def test_b1_structures_and_resources_are_curated():
+    reg = SpriteRegistry()
+    from artifactsmmo_cli.tui.sprites import (
+        GRAND_EXCHANGE_SPRITE, WORKSHOP_SPRITE, TASKS_MASTER_SPRITE,
+        MINING_SPRITE, FISHING_SPRITE, ALCHEMY_SPRITE,
+    )
+    assert reg.sprite_for("grand_exchange", SpriteCategory.STRUCTURE) is GRAND_EXCHANGE_SPRITE
+    assert reg.sprite_for("workshop", SpriteCategory.STRUCTURE) is WORKSHOP_SPRITE
+    assert reg.sprite_for("tasks_master", SpriteCategory.STRUCTURE) is TASKS_MASTER_SPRITE
+    assert reg.sprite_for("resource_mining", SpriteCategory.RESOURCE) is MINING_SPRITE
+    assert reg.sprite_for("resource_fishing", SpriteCategory.RESOURCE) is FISHING_SPRITE
+    assert reg.sprite_for("resource_alchemy", SpriteCategory.RESOURCE) is ALCHEMY_SPRITE

@@ -14,7 +14,8 @@ from artifactsmmo_cli.tui.glyphs import (
     STRUCTURE_COLOR,
 )
 from artifactsmmo_cli.tui.palette import (
-    BARK, DOORWOOD, GOLD, INK, KHAKI, LEAF, SKIN, STONE, TUNIC,
+    AMBER, BARK, BLOOD, BONE, BREW, COPPER, DOORWOOD, GOLD, INK, KHAKI,
+    LEAF, SKIN, SLATE, STEEL, STONE, TUNIC, WATER,
 )
 
 SPRITE_SIZE = 8
@@ -135,10 +136,105 @@ ARCHAEOLOGIST_SPRITE = Sprite(
     palette={"o": INK, "b": BARK, "s": SKIN, "e": INK, "k": KHAKI},
 )
 
+GRAND_EXCHANGE_SPRITE = Sprite(
+    rows=(
+        "oooooooo",
+        "oawawawo",
+        "oooooooo",
+        "osssssso",
+        "osgssgso",
+        "osssssso",
+        "ossddsso",
+        "oooooooo",
+    ),
+    palette={"o": INK, "a": BLOOD, "w": BONE, "s": STONE, "g": GOLD, "d": DOORWOOD},
+)
+
+WORKSHOP_SPRITE = Sprite(
+    rows=(
+        "oooooooo",
+        "obbbbbbo",
+        "obbbbbbo",
+        "oooooooo",
+        "osaaaaso",
+        "ossaasso",
+        "osaaaaso",
+        "oooooooo",
+    ),
+    palette={"o": INK, "b": BARK, "a": STEEL, "s": STONE},
+)
+
+TASKS_MASTER_SPRITE = Sprite(
+    rows=(
+        "oooooooo",
+        "owwwwwwo",
+        "owllllwo",
+        "owllllwo",
+        "owllllwo",
+        "oooooooo",
+        ".ob..bo.",
+        ".oo..oo.",
+    ),
+    palette={"o": INK, "w": BONE, "l": SLATE, "b": BARK},
+)
+
+MINING_SPRITE = Sprite(
+    rows=(
+        "........",
+        "..oooo..",
+        ".osccso.",
+        "osssssso",
+        "oscsscso",
+        "osssssso",
+        ".oosso..",
+        "........",
+    ),
+    palette={"o": INK, "s": SLATE, "c": COPPER},
+)
+
+FISHING_SPRITE = Sprite(
+    rows=(
+        "........",
+        "..oooo..",
+        ".owwwwo.",
+        "owwffwwo",
+        "owffffwo",
+        "owwffwwo",
+        ".owwwwo.",
+        "..oooo..",
+    ),
+    palette={"o": INK, "w": WATER, "f": AMBER},
+)
+
+ALCHEMY_SPRITE = Sprite(
+    rows=(
+        "...oo...",
+        "...oo...",
+        "..o..o..",
+        ".o....o.",
+        ".obbbbo.",
+        ".obbbbo.",
+        ".obbbbo.",
+        "..oooo..",
+    ),
+    palette={"o": INK, "b": BREW},
+)
+
 MONSTER_SPRITES: dict[str, Sprite] = {"green_slime": GREEN_SLIME_SPRITE}
 NPC_SPRITES: dict[str, Sprite] = {"archaeologist": ARCHAEOLOGIST_SPRITE}
-STRUCTURE_SPRITES: dict[str, Sprite] = {"bank": BANK_SPRITE, "door": DOOR_SPRITE}
-RESOURCE_SPRITES: dict[str, Sprite] = {"resource_woodcutting": WOODCUTTING_SPRITE}
+STRUCTURE_SPRITES: dict[str, Sprite] = {
+    "bank": BANK_SPRITE,
+    "door": DOOR_SPRITE,
+    "grand_exchange": GRAND_EXCHANGE_SPRITE,
+    "workshop": WORKSHOP_SPRITE,
+    "tasks_master": TASKS_MASTER_SPRITE,
+}
+RESOURCE_SPRITES: dict[str, Sprite] = {
+    "resource_woodcutting": WOODCUTTING_SPRITE,
+    "resource_mining": MINING_SPRITE,
+    "resource_fishing": FISHING_SPRITE,
+    "resource_alchemy": ALCHEMY_SPRITE,
+}
 
 CURATED_BY_CATEGORY: dict[SpriteCategory, dict[str, Sprite]] = {
     SpriteCategory.MONSTER: MONSTER_SPRITES,
@@ -178,6 +274,12 @@ ALL_CURATED_SPRITES: dict[str, Sprite] = {
     "door": DOOR_SPRITE,
     "resource_woodcutting": WOODCUTTING_SPRITE,
     "archaeologist": ARCHAEOLOGIST_SPRITE,
+    "grand_exchange": GRAND_EXCHANGE_SPRITE,
+    "workshop": WORKSHOP_SPRITE,
+    "tasks_master": TASKS_MASTER_SPRITE,
+    "resource_mining": MINING_SPRITE,
+    "resource_fishing": FISHING_SPRITE,
+    "resource_alchemy": ALCHEMY_SPRITE,
 }
 
 for _name, _sprite in ALL_CURATED_SPRITES.items():
