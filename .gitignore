@@ -85,3 +85,6 @@ logs.txt
 
 # Mutate<->play interlock lockfile (formal/diff/mutate.py)
 .mutation-run.lock
+
+# Brainstorming visual-companion scratch
+.superpowers/
