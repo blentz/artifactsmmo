@@ -483,10 +483,13 @@ open Formal.PriorityBand
 #check @Formal.Phase7Invariants.isApplicable_imp_slot_in_table
 #check @Formal.Phase7Invariants.isApplicable_imp_inv_pos
 #check @Formal.Phase7Invariants.isApplicable_imp_level_ge
+#check @Formal.Phase7Invariants.isApplicable_imp_not_worn_elsewhere
 #check @Formal.Phase7Invariants.isApplicable_slot_mismatch_refused
 #check @Formal.Phase7Invariants.isApplicable_no_stats_refused
 #check @Formal.Phase7Invariants.isApplicable_boundary_witness
 #check @Formal.Phase7Invariants.isApplicable_ring_into_helmet_refused
+#check @Formal.Phase7Invariants.isApplicable_dup_allowed_worn_elsewhere_accepted
+#check @Formal.Phase7Invariants.isApplicable_dup_allowed_no_spare_refused
 #check @Formal.Phase7Invariants.inventoryUsed_nonneg
 #check @Formal.Phase7Invariants.inventoryUsed_eq_sum
 #check @Formal.Phase7Invariants.inventoryFree_eq_diff

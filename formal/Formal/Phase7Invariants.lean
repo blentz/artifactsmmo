@@ -145,22 +145,29 @@ OTHER than the target slot. Mirrors
 def wornElsewhere (equipment : List (Nat × Nat)) (itemCode slot : Nat) : Bool :=
   equipment.any (fun p => p.2 == itemCode && p.1 != slot)
 
-/-- Post-fix `is_applicable` (2026-06-10: plus the code-already-worn gate). -/
+/-- Post-fix `is_applicable` (2026-06-10: plus the code-already-worn gate;
+2026-06-14: duplicate-allowed types exempt from the worn-elsewhere gate).
+`dupAllowed` is true when the CANDIDATE item's type is duplicate-allowed
+(rings). Mirrors `stats.type_ not in DUPLICATE_SLOT_TYPES and any(...)` in
+`equip.py`: a dup-allowed candidate is NOT blocked by being worn elsewhere
+(the inventory clause already requires a physical spare copy); every other
+type keeps the strict one-slot-per-code gate. -/
 def isApplicable (st : EquipState) (stats : Option ItemStats) (slot : Nat)
-    (tbl : SlotTable) : Bool :=
+    (tbl : SlotTable) (dupAllowed : Bool) : Bool :=
   match stats with
   | none => false
   | some s =>
     decide (0 < st.invQty) &&
       decide (slot ∈ tbl s.itemType) &&
-      !wornElsewhere st.equipment st.itemCode slot &&
+      (dupAllowed || !wornElsewhere st.equipment st.itemCode slot) &&
       decide (s.level ≤ st.charLevel)
 
 /-- Slot/type contract: a passing precondition implies the slot is a valid
 equip-target for the item's type. -/
 theorem isApplicable_imp_slot_in_table
-    (st : EquipState) (stats : Option ItemStats) (slot : Nat) (tbl : SlotTable) :
-    isApplicable st stats slot tbl = true →
+    (st : EquipState) (stats : Option ItemStats) (slot : Nat) (tbl : SlotTable)
+    (dupAllowed : Bool) :
+    isApplicable st stats slot tbl dupAllowed = true →
       ∃ s, stats = some s ∧ slot ∈ tbl s.itemType := by
   intro h
   unfold isApplicable at h
@@ -170,32 +177,44 @@ theorem isApplicable_imp_slot_in_table
 
 /-- Inventory contract: a passing precondition implies the code is held. -/
 theorem isApplicable_imp_inv_pos
-    (st : EquipState) (stats : Option ItemStats) (slot : Nat) (tbl : SlotTable) :
-    isApplicable st stats slot tbl = true → 0 < st.invQty := by
+    (st : EquipState) (stats : Option ItemStats) (slot : Nat) (tbl : SlotTable)
+    (dupAllowed : Bool) :
+    isApplicable st stats slot tbl dupAllowed = true → 0 < st.invQty := by
   intro h
   unfold isApplicable at h
   cases stats with
   | none => simp at h
   | some s => simp at h; exact h.1.1.1
 
-/-- HTTP-485 contract: a passing precondition implies the candidate code is
-NOT already worn in another slot — so the planner can never emit the
-server-doomed second-copy equip (the Robby utility2 livelock). -/
+/-- HTTP-485 contract (2026-06-14 relaxed for duplicate-allowed types): for a
+NON-dup-allowed candidate (`dupAllowed = false`), a passing precondition still
+implies the candidate code is NOT already worn in another slot — so the planner
+can never emit the server-doomed second-copy equip (the Robby utility2
+livelock). At `dupAllowed = false` this recovers the original guarantee; for
+dup-allowed candidates (rings) the worn-elsewhere gate is intentionally lifted
+(a 2nd identical ring into the sibling slot returns HTTP 200, probe
+2026-06-14), so no such conclusion is claimed there. -/
 theorem isApplicable_imp_not_worn_elsewhere
-    (st : EquipState) (stats : Option ItemStats) (slot : Nat) (tbl : SlotTable) :
-    isApplicable st stats slot tbl = true →
+    (st : EquipState) (stats : Option ItemStats) (slot : Nat) (tbl : SlotTable)
+    (dupAllowed : Bool) :
+    isApplicable st stats slot tbl dupAllowed = true →
+      dupAllowed = false →
       wornElsewhere st.equipment st.itemCode slot = false := by
-  intro h
+  intro h hdup
   unfold isApplicable at h
   cases stats with
   | none => simp at h
-  | some s => simp at h; exact h.1.2
+  | some s =>
+    subst hdup
+    simp at h
+    exact h.1.2
 
 /-- Level contract: a passing precondition implies the character meets the
 level requirement. -/
 theorem isApplicable_imp_level_ge
-    (st : EquipState) (stats : Option ItemStats) (slot : Nat) (tbl : SlotTable) :
-    isApplicable st stats slot tbl = true →
+    (st : EquipState) (stats : Option ItemStats) (slot : Nat) (tbl : SlotTable)
+    (dupAllowed : Bool) :
+    isApplicable st stats slot tbl dupAllowed = true →
       ∃ s, stats = some s ∧ s.level ≤ st.charLevel := by
   intro h
   unfold isApplicable at h
@@ -209,7 +228,7 @@ slot/type all fine. -/
 theorem isApplicable_worn_elsewhere_refused
     (st : EquipState) (s : ItemStats) (slot : Nat) (tbl : SlotTable)
     (hworn : wornElsewhere st.equipment st.itemCode slot = true) :
-    isApplicable st (some s) slot tbl = false := by
+    isApplicable st (some s) slot tbl false = false := by
   unfold isApplicable
   simp [hworn]
 
@@ -218,15 +237,15 @@ ring) is now refused, even when level + inventory are fine. -/
 theorem isApplicable_slot_mismatch_refused
     (st : EquipState) (s : ItemStats) (slot : Nat) (tbl : SlotTable)
     (_hinv : 0 < st.invQty) (_hlvl : s.level ≤ st.charLevel)
-    (hslot : slot ∉ tbl s.itemType) :
-    isApplicable st (some s) slot tbl = false := by
+    (hslot : slot ∉ tbl s.itemType) (dupAllowed : Bool) :
+    isApplicable st (some s) slot tbl dupAllowed = false := by
   unfold isApplicable
   simp [hslot]
 
 /-- No-stats refused: missing item stats refuses. -/
 theorem isApplicable_no_stats_refused
-    (st : EquipState) (slot : Nat) (tbl : SlotTable) :
-    isApplicable st none slot tbl = false := by
+    (st : EquipState) (slot : Nat) (tbl : SlotTable) (dupAllowed : Bool) :
+    isApplicable st none slot tbl dupAllowed = false := by
   unfold isApplicable; rfl
 
 /-- Boundary witness: matched slot + held inventory + met level + nothing
@@ -235,7 +254,7 @@ theorem isApplicable_boundary_witness :
     let tbl : SlotTable := fun t => if t = 7 then [3, 4] else []
     let s : ItemStats := { itemType := 7, level := 1 }
     let st : EquipState := { invQty := 1, charLevel := 1, itemCode := 42, equipment := [] }
-    isApplicable st (some s) 3 tbl = true := by decide
+    isApplicable st (some s) 3 tbl false = true := by decide
 
 /-- Pre-fix bug counter-example: ring (`itemType = 7`, slots `{ring1, ring2} =
 {3, 4}`) attempted into helmet (`slot = 9`) — pre-fix accepted (inv + level
@@ -244,7 +263,7 @@ theorem isApplicable_ring_into_helmet_refused :
     let tbl : SlotTable := fun t => if t = 7 then [3, 4] else []
     let s : ItemStats := { itemType := 7, level := 1 }
     let st : EquipState := { invQty := 1, charLevel := 1, itemCode := 42, equipment := [] }
-    isApplicable st (some s) 9 tbl = false := by decide
+    isApplicable st (some s) 9 tbl false = false := by decide
 
 /-- 2026-06-10 livelock counter-example (the Robby trace): utility
 (`itemType = 9`, slots `{utility1, utility2} = {112, 113}`), the code (42)
@@ -256,7 +275,7 @@ theorem isApplicable_same_code_sibling_refused :
     let s : ItemStats := { itemType := 9, level := 1 }
     let st : EquipState :=
       { invQty := 1, charLevel := 1, itemCode := 42, equipment := [(112, 42)] }
-    isApplicable st (some s) 113 tbl = false := by decide
+    isApplicable st (some s) 113 tbl false = false := by decide
 
 /-- Legality witness promised by the gate's comment: a DIFFERENT code (7)
 worn in utility1 does not block code 42 from the sibling utility2 — the gate
@@ -266,7 +285,7 @@ theorem isApplicable_different_code_sibling_accepted :
     let s : ItemStats := { itemType := 9, level := 1 }
     let st : EquipState :=
       { invQty := 1, charLevel := 1, itemCode := 42, equipment := [(112, 7)] }
-    isApplicable st (some s) 113 tbl = true := by decide
+    isApplicable st (some s) 113 tbl false = true := by decide
 
 /-- Own-slot exemption witness: the code already worn in the TARGET slot
 itself (utility stacking / re-equip) is not "worn elsewhere"; with a spare
@@ -276,7 +295,28 @@ theorem isApplicable_own_slot_reequip_accepted :
     let s : ItemStats := { itemType := 9, level := 1 }
     let st : EquipState :=
       { invQty := 1, charLevel := 1, itemCode := 42, equipment := [(112, 42)] }
-    isApplicable st (some s) 112 tbl = true := by decide
+    isApplicable st (some s) 112 tbl false = true := by decide
+
+/-- 2026-06-14 ring carve-out witness: a duplicate-allowed candidate (ring,
+`dupAllowed = true`) whose code is already worn in the sibling slot is NOT
+blocked — with a physical spare copy held it is accepted (server returns HTTP
+200 for a 2nd identical ring). Mirrors `RealizableLoadout`'s ownership-capped
+duplicate allowance and `equip.py`'s `DUPLICATE_SLOT_TYPES` exemption. -/
+theorem isApplicable_dup_allowed_worn_elsewhere_accepted :
+    let tbl : SlotTable := fun t => if t = 6 then [106, 107] else []
+    let s : ItemStats := { itemType := 6, level := 1 }
+    let st : EquipState :=
+      { invQty := 1, charLevel := 1, itemCode := 42, equipment := [(106, 42)] }
+    isApplicable st (some s) 107 tbl true = true := by decide
+
+/-- And the inventory gate still bites for a dup-allowed candidate: no spare
+copy held ⇒ refused even though the worn-elsewhere gate is lifted. -/
+theorem isApplicable_dup_allowed_no_spare_refused :
+    let tbl : SlotTable := fun t => if t = 6 then [106, 107] else []
+    let s : ItemStats := { itemType := 6, level := 1 }
+    let st : EquipState :=
+      { invQty := 0, charLevel := 1, itemCode := 42, equipment := [(106, 42)] }
+    isApplicable st (some s) 107 tbl true = false := by decide
 
 /-! ## Target E — WorldState property invariants. -/
 

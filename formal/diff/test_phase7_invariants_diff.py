@@ -26,7 +26,11 @@ from fractions import Fraction
 
 from hypothesis import given, settings, strategies as st
 
-from artifactsmmo_cli.ai.actions.equip import EquipAction, ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.actions.equip import (
+    DUPLICATE_SLOT_TYPES,
+    EquipAction,
+    ITEM_TYPE_TO_SLOTS,
+)
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -193,7 +197,8 @@ def _equip_args(
             pairs.extend([_SLOT_TO_INT[eq_slot], _CODE_TO_INT[eq_code]])
     return [1, inv_qty, char_level, 1, _TYPE_TO_INT[item_type], item_level,
             _SLOT_TO_INT[slot], len(slot_ints), *slot_ints,
-            _CODE_TO_INT[code], len(pairs) // 2, *pairs]
+            _CODE_TO_INT[code], len(pairs) // 2, *pairs,
+            int(item_type in DUPLICATE_SLOT_TYPES)]
 
 
 def test_equip_code_worn_elsewhere_refused():
@@ -235,6 +240,36 @@ def test_equip_own_slot_reequip_accepted():
     args = _equip_args(1, 1, 1, "utility", "utility1_slot", "probe_item",
                        {"utility1_slot": "probe_item"})
     assert run_oracle("phase7_invariants", [args])[0]["applicable"] is True
+
+
+def test_equip_ring_worn_elsewhere_with_spare_accepted():
+    """2026-06-14 ring carve-out: a 2nd identical ring (dup-allowed type) whose
+    code is already worn in ring1 is NOT blocked from ring2 — the live probe
+    proved the server returns HTTP 200. The inventory clause requires a spare,
+    which is present (inv_qty 1), so both Python and the Lean oracle accept."""
+    gd = _mk_gd_with_item("probe_item", "ring", level=1)
+    state = _mkstate(inventory={"probe_item": 1}, level=1,
+                     equipment={"ring1_slot": "probe_item"})
+    action = EquipAction(code="probe_item", slot="ring2_slot")
+    assert action.is_applicable(state, gd) is True
+    args = _equip_args(1, 1, 1, "ring", "ring2_slot", "probe_item",
+                       {"ring1_slot": "probe_item"})
+    assert run_oracle("phase7_invariants", [args])[0]["applicable"] is True
+
+
+def test_equip_ring_worn_elsewhere_no_spare_refused():
+    """The ring carve-out lifts only the worn-elsewhere gate, not the inventory
+    gate: with NO spare copy held (inv_qty 0) the equip is refused by both
+    Python and the Lean oracle — the realizability cap (a physical spare must
+    exist) still bites, mirroring Formal.RealizableLoadout's ownership cap."""
+    gd = _mk_gd_with_item("probe_item", "ring", level=1)
+    state = _mkstate(inventory={}, level=1,
+                     equipment={"ring1_slot": "probe_item"})
+    action = EquipAction(code="probe_item", slot="ring2_slot")
+    assert action.is_applicable(state, gd) is False
+    args = _equip_args(0, 1, 1, "ring", "ring2_slot", "probe_item",
+                       {"ring1_slot": "probe_item"})
+    assert run_oracle("phase7_invariants", [args])[0]["applicable"] is False
 
 
 @settings(max_examples=200, deadline=None)

@@ -1724,32 +1724,44 @@ example : ∀ (totalEffective : Rat) (totalNeeded : Int),
     0 ≤ Formal.Phase7Invariants.baseValue totalNeeded totalEffective :=
   @Formal.Phase7Invariants.baseValue_nonneg
 
--- Target D: passing precondition ⇒ slot ∈ table[itemType].
+-- Target D: passing precondition ⇒ slot ∈ table[itemType] (dupAllowed threaded).
 example : ∀ (st : Formal.Phase7Invariants.EquipState)
     (stats : Option Formal.Phase7Invariants.ItemStats) (slot : Nat)
-    (tbl : Formal.Phase7Invariants.SlotTable),
-    Formal.Phase7Invariants.isApplicable st stats slot tbl = true →
+    (tbl : Formal.Phase7Invariants.SlotTable) (dupAllowed : Bool),
+    Formal.Phase7Invariants.isApplicable st stats slot tbl dupAllowed = true →
       ∃ s, stats = some s ∧ slot ∈ tbl s.itemType :=
   @Formal.Phase7Invariants.isApplicable_imp_slot_in_table
--- Target D: passing precondition ⇒ inventory has code.
+-- Target D: passing precondition ⇒ inventory has code (dupAllowed threaded).
 example : ∀ (st : Formal.Phase7Invariants.EquipState)
     (stats : Option Formal.Phase7Invariants.ItemStats) (slot : Nat)
-    (tbl : Formal.Phase7Invariants.SlotTable),
-    Formal.Phase7Invariants.isApplicable st stats slot tbl = true → 0 < st.invQty :=
+    (tbl : Formal.Phase7Invariants.SlotTable) (dupAllowed : Bool),
+    Formal.Phase7Invariants.isApplicable st stats slot tbl dupAllowed = true →
+      0 < st.invQty :=
   @Formal.Phase7Invariants.isApplicable_imp_inv_pos
--- Target D: passing precondition ⇒ level requirement met.
+-- Target D: passing precondition ⇒ level requirement met (dupAllowed threaded).
 example : ∀ (st : Formal.Phase7Invariants.EquipState)
     (stats : Option Formal.Phase7Invariants.ItemStats) (slot : Nat)
-    (tbl : Formal.Phase7Invariants.SlotTable),
-    Formal.Phase7Invariants.isApplicable st stats slot tbl = true →
+    (tbl : Formal.Phase7Invariants.SlotTable) (dupAllowed : Bool),
+    Formal.Phase7Invariants.isApplicable st stats slot tbl dupAllowed = true →
       ∃ s, stats = some s ∧ s.level ≤ st.charLevel :=
   @Formal.Phase7Invariants.isApplicable_imp_level_ge
--- Target D: slot mismatch ⇒ refused (the load-bearing Phase-7 gate).
+-- Target D (2026-06-14 relaxed): for a NON-dup-allowed candidate, a passing
+-- precondition still implies the code is NOT worn elsewhere. At dupAllowed=false
+-- this recovers the original HTTP-485 guarantee; the ring carve-out lifts it.
+example : ∀ (st : Formal.Phase7Invariants.EquipState)
+    (stats : Option Formal.Phase7Invariants.ItemStats) (slot : Nat)
+    (tbl : Formal.Phase7Invariants.SlotTable) (dupAllowed : Bool),
+    Formal.Phase7Invariants.isApplicable st stats slot tbl dupAllowed = true →
+      dupAllowed = false →
+      Formal.Phase7Invariants.wornElsewhere st.equipment st.itemCode slot = false :=
+  @Formal.Phase7Invariants.isApplicable_imp_not_worn_elsewhere
+-- Target D: slot mismatch ⇒ refused (the load-bearing Phase-7 gate; for any dup flag).
 example : ∀ (st : Formal.Phase7Invariants.EquipState)
     (s : Formal.Phase7Invariants.ItemStats) (slot : Nat)
     (tbl : Formal.Phase7Invariants.SlotTable),
     0 < st.invQty → s.level ≤ st.charLevel → slot ∉ tbl s.itemType →
-    Formal.Phase7Invariants.isApplicable st (some s) slot tbl = false :=
+    ∀ (dupAllowed : Bool),
+    Formal.Phase7Invariants.isApplicable st (some s) slot tbl dupAllowed = false :=
   @Formal.Phase7Invariants.isApplicable_slot_mismatch_refused
 
 -- Target E: inventory_used = Σ qty (bookkeeping equality).

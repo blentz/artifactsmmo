@@ -2246,19 +2246,32 @@ EQUIP_MUTATIONS = [
     # Drop the code-already-worn gate: resurrects the 2026-06-10 Robby
     # utility2 livelock (second copy of a worn consumable plans into the
     # empty sibling slot, the server 485s, the plan re-derives forever).
+    # Killed by test_equip_code_worn_elsewhere_refused (utility).
     ("equip: drop code-already-worn gate (resurrects 485 utility2 livelock)",
-     "        if any(equipped == self.code for slot, equipped in state.equipment.items()\n"
-     "               if slot != self.slot):\n"
+     "        if stats.type_ not in DUPLICATE_SLOT_TYPES and any(\n"
+     "            equipped == self.code\n"
+     "            for slot, equipped in state.equipment.items()\n"
+     "            if slot != self.slot\n"
+     "        ):\n"
      "            return False\n",
      ""),
     # Key the gate on sibling-slot OCCUPANCY instead of item code: any worn
     # item in another slot would block the equip, outlawing the legal
     # two-different-consumables loadout the gate's comment promises.
+    # Killed by test_equip_different_code_sibling_accepted.
     ("equip: worn gate keys on slot occupancy instead of code",
-     "        if any(equipped == self.code for slot, equipped in state.equipment.items()\n"
-     "               if slot != self.slot):",
-     "        if any(equipped is not None for slot, equipped in state.equipment.items()\n"
-     "               if slot != self.slot):"),
+     "            equipped == self.code\n"
+     "            for slot, equipped in state.equipment.items()",
+     "            equipped is not None\n"
+     "            for slot, equipped in state.equipment.items()"),
+    # Drop the RINGS carve-out: re-apply the worn gate to ALL types, so a
+    # legal 2nd ring (server HTTP 200) is wrongly refused — resurrects the
+    # inert dual-ring bug. Killed by test_equip_ring_worn_elsewhere_with_spare_accepted.
+    ("equip: drop rings carve-out (worn gate fires for all types)",
+     "        if stats.type_ not in DUPLICATE_SLOT_TYPES and any(\n"
+     "            equipped == self.code\n",
+     "        if any(\n"
+     "            equipped == self.code\n"),
 ]
 # Target F: store_warmup_core warmup gates.
 STORE_WARMUP_MUTATIONS = [
