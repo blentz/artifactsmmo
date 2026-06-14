@@ -72,8 +72,26 @@ Pure model/logic; no API data. No defaulting over missing data, no `except Excep
 - Tests asserting the gear-root set from `target_gear` update to the slot-tagged emission.
 - Existing equippable-goal / formal-bridge tests run the `slot=None` path and must stay green unchanged (they assert the membership semantics, which `slot=None` preserves).
 
+## Addendum 2026-06-14 — the one-slot-per-code guard must be narrowed (post-implementation discovery)
+
+The per-slot roots (Tasks 1–4, branch `feat/per-slot-gear`) are correct but **inert in production**: a pre-existing guard blocks the terminal equip. `EquipAction.is_applicable` (`actions/equip.py`), `OptimizeLoadoutAction`/`pick_loadout` (`actions/optimize_loadout.py`), and the **kernel-proved `RealizableLoadout`/`EquipmentScoring` model** (`equipment/scoring.py` + `formal/`) enforce ONE-SLOT-PER-CODE (commit `dcde76c`, citing server HTTP 485 "already equipped") — so `EquipAction(copper_ring, ring2_slot)` while `ring1_slot` wears copper_ring is rejected and `ring2` is pursued-forever-never-equipped.
+
+**Live-server probe (2026-06-14, character Robby):** equipping a 2nd `copper_ring` into `ring2_slot` with `ring1_slot` already wearing one returned **HTTP 200** — the server ALLOWS duplicate rings. The one-slot-per-code guard is therefore **over-broad** (likely generalized from the documented utility/`small_health_potion` 485 case). Confirmed per-type rule (evidence-grounded; utility/artifact not empirically probeable at Robby's level):
+
+- **ring** → duplicates allowed (probe: 200).
+- **utility** → keep one-slot-per-code (documented `small_health_potion` utility1→utility2 485).
+- **artifact** → keep one-slot-per-code (no evidence; conventionally unique).
+
+So `_DUPLICATE_SLOT_TYPES = {"ring"}` (matches the objective layer's `_DUPLICATE_FILL_TYPES`).
+
+### Additional components (extend the feature)
+
+5. **Narrow the guard, rings-only** — `EquipAction.is_applicable`, `pick_loadout`/`OptimizeLoadoutAction`, and `equipment/scoring.py`: the one-slot-per-code rejection applies only when the item's type is NOT in `_DUPLICATE_SLOT_TYPES`. Rings may occupy two slots; all other codes keep the rule (the real 485 cases).
+6. **Update the Lean `RealizableLoadout`/`EquipmentScoring` model + proof in lockstep** (`formal/`) — the proven invariant becomes "one slot per code EXCEPT duplicate-allowed types (ring)". This is a **formal-development** task: the differential/mutation gate must still pass, the extracted `scoring.py` regenerated (sha header), and no proof weakened beyond the rings carve-out. Drive via the formal-development skill.
+7. **Honest integration test** — replace the assertion-light `test_arbiter_equips_second_ring_into_empty_slot` (asserts only that the root is *chosen*) with one that builds the plan AND asserts `EquipAction(copper_ring, ring2_slot).is_applicable` is True / the executed result leaves `ring2_slot == copper_ring`. It must fail before the guard fix and pass after.
+
 ## Out of scope (YAGNI)
 
-- Artifact/utility duplication (rings only).
+- Artifact/utility duplication (rings only — utility/artifact keep one-slot-per-code).
 - Quantity-aware `ObtainItem` model (rejected in favor of per-slot).
-- Any change to which item is best per slot (ranking/equip_value unchanged); this only adds slot identity + the rings dup-fill.
+- Any change to which item is best per slot (ranking/equip_value unchanged); this adds slot identity + rings dup-fill + the rings carve-out in the one-slot-per-code invariant.
