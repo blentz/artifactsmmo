@@ -247,9 +247,9 @@ def test_objective_roots_emits_tool_obtainitem_alongside_gear():
     gd._resource_skill = {"rocks": ("mining", 1)}
     obj = CharacterObjective.from_game_data(gd)
     roots = objective_roots(obj)
-    # Combat target.
-    assert ObtainItem("copper_dagger") in roots
-    # Tool target — the fix.
+    # Combat target — slot-tagged (weapon → weapon_slot).
+    assert ObtainItem("copper_dagger", slot="weapon_slot") in roots
+    # Tool target — slot-less (tools rotate through weapon_slot per task).
     assert ObtainItem("copper_pickaxe") in roots
 
 
@@ -276,8 +276,8 @@ def test_objective_roots_emits_near_term_gear_with_state():
     obj = CharacterObjective.from_game_data(_near_term_gd())
     state = make_state(level=5)
     roots = objective_roots(obj, state)
-    assert ObtainItem("copper_armor") in roots   # near-term, usable now
-    assert ObtainItem("dragon_armor") in roots   # BiS stays
+    assert ObtainItem("copper_armor", slot="body_armor_slot") in roots   # near-term, usable now
+    assert ObtainItem("dragon_armor", slot="body_armor_slot") in roots   # BiS stays
 
 
 def test_objective_roots_dedupes_near_term_and_bis_overlap():
@@ -286,7 +286,7 @@ def test_objective_roots_dedupes_near_term_and_bis_overlap():
     obj = CharacterObjective.from_game_data(gd)
     state = make_state(level=40)
     roots = objective_roots(obj, state)
-    assert roots.count(ObtainItem("dragon_armor")) == 1
+    assert roots.count(ObtainItem("dragon_armor", slot="body_armor_slot")) == 1
 
 
 def test_objective_roots_no_near_term_without_state():
@@ -345,3 +345,20 @@ def test_objective_roots_curve_root_above_bootstrap_isolates_curve_code():
     assert ReachSkillLevel("weaponcrafting", 8) in roots, (
         f"curve target 8 (above bootstrap floor 2) not emitted; got {roots}"
     )
+
+
+def test_gear_roots_are_slot_tagged_and_distinct_per_ring_slot():
+    """Two ring slots both wanting copper_ring -> two DISTINCT slot-tagged
+    gear roots (so ring2 isn't deduped/satisfied off ring1)."""
+    gd = GameData()
+    gd._item_stats = {"copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
+                                               attack={"fire": 2})}
+    gd._crafting_recipes = {"copper_ring": {"bar": 1}}
+    gd._resource_drops = {"rocks": "bar"}
+    gd._resource_skill = {"rocks": ("mining", 1)}
+    obj = CharacterObjective.from_game_data(gd)
+    roots = objective_roots(obj)
+    ring_roots = [r for r in roots
+                  if isinstance(r, ObtainItem) and r.code == "copper_ring"]
+    assert ObtainItem("copper_ring", slot="ring1_slot") in ring_roots
+    assert ObtainItem("copper_ring", slot="ring2_slot") in ring_roots
