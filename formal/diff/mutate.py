@@ -299,35 +299,56 @@ SCORING_MUTATIONS = [
 ]
 
 
-# realizable_loadout mutations -- target the ONE-SLOT-PER-CODE projected-result
-# rule in scoring.pick_loadout (2026-06-11 re-anchor: the claimed-codes
-# accumulator is gone — the server refuses to equip a code already worn in ANY
-# slot with HTTP 485, regardless of spare copies, so feasibility is now a scan
-# of the projected result). Each mutation breaks realizability, the dup-free
-# (one-slot-per-code) property, or the empty-fill/no-downgrade rules, killed
-# by formal/diff/test_realizable_loadout_diff.py.
+# realizable_loadout mutations -- target the per-code OCCUPANCY-CAP rule in
+# scoring.pick_loadout (2026-06-14 re-anchor: the one-slot-per-code filter is
+# now ownership-capped — cap=1 for non-dup codes, cap=ownership for
+# duplicate-allowed types (rings), so a ring fills a 2nd slot only up to
+# physical ownership). Each mutation breaks realizability, the dup-free-except
+# property, the dual-ring / no-over-fill anchors, or the empty-fill/no-downgrade
+# rules, killed by formal/diff/test_realizable_loadout_diff.py.
 REALIZABLE_LOADOUT_MUTATIONS = [
-    # THE 485 RULE, mutation 1: drop the one-slot-per-code feasibility filter
-    # entirely — every type/level candidate is feasible. Resurrects BOTH bugs:
-    # the original multi-slot duplicate (one copy, two slots) and the
-    # 2026-06-10/11 livelock (worn copper_ring + spare copy assigned to ring2,
-    # server 485s, identical plan re-derives forever). Killed by the dup-free
-    # property and the 485 trace fixture.
-    ("realizable_loadout: drop one-slot-per-code feasibility filter",
+    # THE CAP RULE, mutation 1: drop the feasibility filter entirely — every
+    # type/level candidate is feasible. Resurrects the multi-slot duplicate
+    # (one copy, two slots, unrealizable) and the non-ring 485 livelock (a
+    # duplicate utility/non-dup code in a sibling slot). Killed by the
+    # dup-free-except property + realizability.
+    ("realizable_loadout: drop occupancy-cap feasibility filter",
      "        feasible: list[ItemStats] = [\n"
-     "            cand for cand in candidates if not _in_result_elsewhere(cand.code, slot)\n"
+     "            cand for cand in candidates if not _forbidden(cand.code, slot)\n"
      "        ]",
      "        feasible: list[ItemStats] = list(candidates)"),
-    # THE 485 RULE, mutation 2: scan the ORIGINAL equipment instead of the
-    # projected result. Earlier slots' fresh assignments are no longer
-    # forbidden for later slots, so two empty sibling slots can both take the
-    # same single inventory copy. Killed by the dup-free property (and the
-    # realizability invariant when only one copy is owned).
-    ("realizable_loadout: feasibility scans equipment instead of projected result",
-     "    def _in_result_elsewhere(code: str, slot: str) -> bool:\n"
-     "        return any(worn == code for s, worn in result.items() if s != slot)",
-     "    def _in_result_elsewhere(code: str, slot: str) -> bool:\n"
-     "        return any(worn == code for s, worn in state.equipment.items() if s != slot)"),
+    # THE CAP RULE, mutation 2: scan the ORIGINAL equipment instead of the
+    # projected result. Earlier slots' fresh assignments are no longer counted
+    # for later slots, so two empty sibling slots can both take the same single
+    # inventory copy. Killed by the dup-free-except property / realizability.
+    ("realizable_loadout: occupancy scan uses equipment instead of projected result",
+     "        worn_elsewhere = sum(\n"
+     "            1 for s, worn in result.items() if s != slot and worn == code\n"
+     "        )",
+     "        worn_elsewhere = sum(\n"
+     "            1 for s, worn in state.equipment.items() if s != slot and worn == code\n"
+     "        )"),
+    # CARVE-OUT mutation A: dup-allowed is ALWAYS true — every type gets the
+    # ownership cap, so a non-ring code owned twice (e.g. a utility) fills two
+    # sibling slots, resurrecting the 485 bug for non-dup types. Killed by the
+    # dup-free-except property (non-ring codes must stay strictly one-slot).
+    ("realizable_loadout: dup-allowed carve-out over-broad (always True)",
+     "        return stats is not None and stats.type_ in DUPLICATE_SLOT_TYPES",
+     "        return True"),
+    # CARVE-OUT mutation B: rings UNCAPPED (cap 99 ignores ownership) — a single
+    # owned ring fills BOTH ring slots, an unrealizable double-equip. Killed by
+    # the single-ring-no-spare boundary anchor + realizability.
+    ("realizable_loadout: ring cap ignores ownership (uncapped)",
+     "        cap = (ownership(code, state.inventory, state.equipment)\n"
+     "               if _dup_allowed(code) else 1)",
+     "        cap = (99\n"
+     "               if _dup_allowed(code) else 1)"),
+    # CARVE-OUT mutation C: cap comparison off-by-one (>= -> >) — a non-dup code
+    # already worn once (count 1, cap 1) is no longer forbidden, so it takes a
+    # 2nd slot. Killed by the dup-free-except property.
+    ("realizable_loadout: occupancy-cap off-by-one (>= -> >)",
+     "        return worn_elsewhere >= cap",
+     "        return worn_elsewhere > cap"),
     # Zero-score empty-fill suppression off-by-strictness: `<= 0` -> `< 0`
     # fills an empty slot with a zero-score item, burning the code's one legal
     # slot for no benefit. Killed by the empty-fill strict-positivity property

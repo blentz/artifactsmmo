@@ -38,6 +38,15 @@ ITEM_TYPE_TO_SLOTS: dict[str, list[str]] = {
     "utility": ["utility1_slot", "utility2_slot"],
 }
 
+# Item types whose code may legally occupy MORE THAN ONE slot, up to physical
+# ownership. Live-server probe 2026-06-14 (character Robby): a 2nd identical
+# copper_ring equipped into ring2_slot returned HTTP 200 — the server allows
+# duplicate rings. Every other type keeps the strict one-slot-per-code rule
+# (HTTP 485 "already equipped"; documented utility small_health_potion case).
+# Shared with `equipment/scoring.py` (pick_loadout cap) and matches the
+# objective layer's `_DUPLICATE_FILL_TYPES`.
+DUPLICATE_SLOT_TYPES: frozenset[str] = frozenset({"ring"})
+
 
 @dataclass
 class EquipAction(Action):
@@ -62,16 +71,24 @@ class EquipAction(Action):
         # caller could produce a non-executable plan.
         if self.slot not in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):
             return False
-        # A single item code occupies at most one slot at a time: the server
-        # rejects equipping a code already worn elsewhere with HTTP 485 ("This
-        # item is already equipped"). Without this gate the planner happily
-        # plans a second copy into an empty sibling slot (e.g. small_health_potion
-        # already in utility1 -> utility2), the equip 485s, state is unchanged,
-        # and the identical plan re-derives every cycle (the Robby utility2
-        # livelock). Keying on code (not slot) keeps two DIFFERENT consumables
-        # across the utility slots legal.
-        if any(equipped == self.code for slot, equipped in state.equipment.items()
-               if slot != self.slot):
+        # ONE SLOT PER CODE — except duplicate-allowed types (rings). For a
+        # non-dup code the server rejects equipping a code already worn
+        # elsewhere with HTTP 485 ("This item is already equipped"). Without
+        # this gate the planner plans a second copy into an empty sibling slot
+        # (e.g. small_health_potion already in utility1 -> utility2), the equip
+        # 485s, state is unchanged, and the identical plan re-derives every cycle
+        # (the Robby utility2 livelock). Keying on code (not slot) keeps two
+        # DIFFERENT consumables across the utility slots legal.
+        #
+        # Rings are EXEMPT: a 2nd identical ring into the sibling slot returns
+        # HTTP 200 (probe 2026-06-14). The inventory check above already requires
+        # a physical spare copy, so a dup-allowed equip is realizable (mirrors
+        # Formal.RealizableLoadout: dup-allowed codes are capped at ownership).
+        if stats.type_ not in DUPLICATE_SLOT_TYPES and any(
+            equipped == self.code
+            for slot, equipped in state.equipment.items()
+            if slot != self.slot
+        ):
             return False
         return state.level >= stats.level
 
