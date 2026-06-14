@@ -25,6 +25,8 @@ from artifactsmmo_cli.ai.tiers.strategy import (
     PRIOR_CONSUMABLE_SKILL,
     PRIOR_GATHER_SKILL,
     PRIOR_UTILITY_GEAR,
+    SKILL_GAP_CAP,
+    SKILL_GAP_PER_LEVEL,
     SKILL_MARGINAL,
     STICKY_DOMINANCE_RATIO,
     XP_RATE_REFERENCE,
@@ -931,3 +933,30 @@ class TestGapProportionalSkillMarginal:
         skill_root = ReachSkillLevel("weaponcrafting", 5)
         char_boot = ReachCharLevel(state.level + 2)
         assert eng._value(skill_root, state, gd) < eng._value(char_boot, state, gd)
+
+    def test_skill_marginal_capped_at_gap_cap(self):
+        """A large gap is clamped to SKILL_GAP_CAP (1.5): marginal tops out at
+        SKILL_MARGINAL + 1.5 = 1.7 no matter how far behind the curve target."""
+        eng, gd = _engine_with_recipes()
+        state = make_state(level=10, skills={"weaponcrafting": 1})
+        root = ReachSkillLevel("weaponcrafting", 9)  # gap 8, clamped to 1.5
+        assert eng._marginal(root, state, gd) == (
+            SKILL_MARGINAL + SKILL_GAP_CAP * SKILL_GAP_PER_LEVEL)
+
+    def test_moderate_gap_balanced_skill_loses_to_gear_and_char(self):
+        """Trace 2026-06-13: char 3, crafting skills all ~3 (no runaway leader),
+        curve target 5 (gap 2). With SKILL_GAP_CAP lowered to 1.5 the general
+        skill root no longer out-ranks combat gear or the level+2 char
+        bootstrap — general skill-XP grinding is a low-priority backstop."""
+        eng, gd = _engine_with_recipes()
+        state = make_state(
+            level=3,
+            skills={"weaponcrafting": 3, "gearcrafting": 3,
+                    "jewelrycrafting": 3, "woodcutting": 3},
+        )
+        skill_root = ReachSkillLevel("weaponcrafting", 5)
+        char_boot = ReachCharLevel(state.level + 2)
+        skill_v = eng._value(skill_root, state, gd)
+        assert skill_v < eng._value(char_boot, state, gd)
+        gear_root = ObtainItem(code="water_bow", quantity=1)
+        assert skill_v < eng._value(gear_root, state, gd)

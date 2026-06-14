@@ -50,12 +50,18 @@ SKILL_MARGINAL = Fraction(1, 5)
 SKILL_GAP_PER_LEVEL = Fraction(1)
 """Per-level catch-up boost on a NEAR-TERM (below-endgame) skill root's
 marginal. With PRIOR_COMBAT_CRAFT_SKILL=3/5 and balancing 1: gap 1 → marginal 1.2,
-gap 2 → 2.2, gap 3 → 3.2. Calibrated against the run-7 freeze: a gap-3 craft skill
-behind the leader (balancing 2.0) must out-rank the level+2 char bootstrap
-(value 1.48), while a gap-1 skill even with the leader (balancing 0.5) must not."""
-SKILL_GAP_CAP = 3
-"""Cap on the boosted gap so a large near-term deficit can't dominate every
-other category; matches CHAR_REACHABLE_HORIZON's bounding role for char level."""
+gap ≥ 1.5 → marginal 1.7 (capped by SKILL_GAP_CAP). General skill-XP grinding is
+deliberately a low-priority backstop: at typical balancing (~1) a near-term skill
+root scores ~0.6×1.7×1 ≈ 1.0, below combat gear and the level+2 char bootstrap
+(1.48). A specific gear's skill requirement is still driven by that gear's
+ObtainItem closure (the prereq-chain), and a badly-lagging skill is still lifted
+by the balancing multiplier — this only stops general grinding from out-ranking
+the real objectives."""
+SKILL_GAP_CAP = Fraction(3, 2)
+"""Cap on the boosted gap so general near-term skill roots can't dominate gear /
+char. Lowered from 3 to 1.5 on 2026-06-14: skill-leveling was over-weighting to
+the recipe-curve target (e.g. ranking ReachSkillLevel(...,5) above committed
+gear). 1.5 is a starting calibration."""
 CHAR_MARGINAL = Fraction(1)
 """Base char-level marginal (multiplier on PRIOR_CHAR_LEVEL=1.0). The
 DYNAMIC marginal applied at `_marginal` scales upward with the gap
@@ -380,7 +386,7 @@ class StrategyEngine:
                 return SKILL_MARGINAL
             current = state.skills.get(root.skill, 1)
             gap = max(0, root.level - current)
-            boost = min(gap, SKILL_GAP_CAP) * SKILL_GAP_PER_LEVEL
+            boost = min(Fraction(gap), SKILL_GAP_CAP) * SKILL_GAP_PER_LEVEL
             return SKILL_MARGINAL + boost
         if isinstance(root, ObtainItem):
             stats = game_data.item_stats(root.code)
