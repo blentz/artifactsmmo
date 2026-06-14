@@ -50,6 +50,8 @@ from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext
 from artifactsmmo_cli.ai.tiers.means import MeansKind
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
+from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
@@ -1834,3 +1836,38 @@ def test_no_objective_keeps_committed_pursue_task(tmp_path):
     finally:
         store.close()
     assert repr(goal) == repr(pursue)  # committed task kept (sticky), no worth gate
+
+
+def test_equip_step_uses_root_slot_for_second_ring():
+    """A slot-tagged ring2 gear root equips copper_ring into ring2_slot (not the
+    type's first slot), so a 2nd copper_ring fills the empty second ring slot."""
+    gd = GameData()
+    gd._item_stats = {"copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
+                                               attack={"fire": 2})}
+    gd._crafting_recipes = {"copper_ring": {"bar": 1}}
+    gd._resource_drops = {"rocks": "bar"}
+    # ring1 already worn; a spare copper_ring in inventory to equip into ring2.
+    state = make_state(level=5, inventory={"copper_ring": 1},
+                       equipment={"ring1_slot": "copper_ring"})
+    step = ObtainItem("copper_ring", slot="ring2_slot")
+    g = objective_step_goal(step, state, gd, _ctx(), root=step)
+    assert isinstance(g, UpgradeEquipmentGoal)
+    assert g._committed_target == ("copper_ring", "ring2_slot")
+
+
+def test_arbiter_equips_second_ring_into_empty_slot():
+    """Reported 2026-06-14: copper_ring worn in ring1, spare in inventory, ring2
+    empty -> the arbiter's chosen goal equips the spare into ring2_slot."""
+    gd = GameData()
+    gd._item_stats = {"copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
+                                               attack={"fire": 6})}
+    gd._crafting_recipes = {"copper_ring": {"bar": 1}}
+    gd._resource_drops = {"rocks": "bar"}
+    gd._resource_skill = {"rocks": ("mining", 1)}
+    obj = CharacterObjective.from_game_data(gd)
+    state = make_state(level=5, inventory={"copper_ring": 1},
+                       equipment={"ring1_slot": "copper_ring"})
+    eng = StrategyEngine(obj, BalancedPersonality())
+    d = eng.decide(state, gd)
+    # ring2 root is the live gear target; its step is the equip into ring2_slot.
+    assert d.chosen_root == ObtainItem("copper_ring", slot="ring2_slot")

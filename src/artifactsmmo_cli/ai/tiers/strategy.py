@@ -343,6 +343,15 @@ class StrategyEngine:
 
         return min(slots, key=lambda s: (_current_value(s), slots.index(s)))
 
+    def _root_slot(self, root: MetaGoal, state: WorldState,
+                   game_data: GameData) -> str | None:
+        """The slot a gear root scores against: the root's explicit slot when it
+        carries one (per-slot gear roots), else the code's target_gear slot."""
+        if isinstance(root, ObtainItem) and root.slot is not None:
+            return root.slot
+        code = root.code if isinstance(root, ObtainItem) else ""
+        return self._gear_slot(code, state, game_data)
+
     def _base_prior(self, root: MetaGoal, state: WorldState,
                     game_data: GameData) -> Fraction:
         category = root_category(root)
@@ -359,7 +368,7 @@ class StrategyEngine:
             else:
                 tier = Fraction(0)   # unknown skill — no prior, scores zero
         elif isinstance(root, ObtainItem):
-            slot = self._gear_slot(root.code, state, game_data)
+            slot = self._root_slot(root, state, game_data)
             tier = PRIOR_COMBAT_GEAR if slot in _COMBAT_GEAR_SLOTS else PRIOR_UTILITY_GEAR
         else:
             tier = Fraction(0)
@@ -427,7 +436,7 @@ class StrategyEngine:
             stats = game_data.item_stats(root.code)
             if stats is None:
                 return Fraction(0)
-            slot = self._gear_slot(root.code, state, game_data)
+            slot = self._root_slot(root, state, game_data)
             current_code = state.equipment.get(slot) if slot is not None else None
             current_stats = game_data.item_stats(current_code) if current_code else None
             current_value = equip_value(current_stats) if current_stats is not None else 0

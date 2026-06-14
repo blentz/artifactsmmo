@@ -1010,3 +1010,20 @@ class TestGearedCharBoost:
         state = make_state(level=6, equipment={"body_armor_slot": "copper_armor"})
         m = eng._marginal(ReachCharLevel(8), state, gd, combat_monster=None)
         assert m == CHAR_MARGINAL + 8 * CHAR_GAP_PER_LEVEL          # 1.48
+
+
+def test_second_ring_root_scored_against_its_own_empty_slot():
+    """With ring1 filled and ring2 empty, the ring1 root is satisfied while the
+    slot-tagged ring2 root scores its OWN empty slot (positive marginal) so it's
+    pursued — not read as satisfied off ring1."""
+    gd = GameData()
+    gd._item_stats = {"copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
+                                               attack={"fire": 6})}
+    gd._crafting_recipes = {"copper_ring": {"bar": 1}}
+    gd._resource_drops = {"rocks": "bar"}
+    gd._resource_skill = {"rocks": ("mining", 1)}
+    eng = StrategyEngine(CharacterObjective.from_game_data(gd), BalancedPersonality())
+    state = make_state(level=5, equipment={"ring1_slot": "copper_ring"})
+    ring2 = ObtainItem("copper_ring", slot="ring2_slot")
+    assert not ring2.is_satisfied(state, gd)
+    assert eng._marginal(ring2, state, gd) > 0
