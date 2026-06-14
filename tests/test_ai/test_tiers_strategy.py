@@ -14,6 +14,8 @@ from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
 from artifactsmmo_cli.ai.tiers.strategy import (
     BALANCE_MAX,
     BALANCE_MIN,
+    CHAR_GAP_PER_LEVEL,
+    CHAR_GAP_PER_LEVEL_GEARED,
     CHAR_MARGINAL,
     EMPTY_SLOT_URGENCY,
     GEAR_EQUIP_SCALE,
@@ -960,3 +962,51 @@ class TestGapProportionalSkillMarginal:
         assert skill_v < eng._value(char_boot, state, gd)
         gear_root = ObtainItem(code="water_bow", quantity=1)
         assert skill_v < eng._value(gear_root, state, gd)
+
+
+class TestGearedCharBoost:
+    """Char-leveling out-ranks general skill grinding (≈2.04) ONLY once the bot
+    is combat-capable AND every fillable combat armor slot is equipped — bump
+    only after the empty armor slots are filled (2026-06-14). While an armor
+    slot is empty or the bot can't fight, char stays at the base rate (1.48) so
+    gear/weapon urgency wins first."""
+
+    @staticmethod
+    def _gd() -> GameData:
+        gd = GameData()
+        gd._item_stats = {
+            "copper_armor": ItemStats(code="copper_armor", level=2,
+                                      type_="body_armor", resistance={"earth": 6}),
+            "bar": ItemStats(code="bar", level=1, type_="resource"),
+        }
+        gd._crafting_recipes = {"copper_armor": {"bar": 1}}
+        gd._resource_drops = {"rocks": "bar"}
+        gd._resource_skill = {"rocks": ("mining", 1)}
+        gd._monster_level = {"chicken": 1}
+        fill_monster_stat_defaults(gd)
+        return gd
+
+    def _eng(self, gd: GameData) -> StrategyEngine:
+        return StrategyEngine(CharacterObjective.from_game_data(gd),
+                              BalancedPersonality())
+
+    def test_base_rate_while_armor_slot_empty(self):
+        gd = self._gd()
+        eng = self._eng(gd)
+        state = make_state(level=6)  # body_armor_slot empty, copper_armor usable
+        m = eng._marginal(ReachCharLevel(8), state, gd, combat_monster="chicken")
+        assert m == CHAR_MARGINAL + 8 * CHAR_GAP_PER_LEVEL          # 1.48
+
+    def test_boosted_when_armor_filled_and_combat_capable(self):
+        gd = self._gd()
+        eng = self._eng(gd)
+        state = make_state(level=6, equipment={"body_armor_slot": "copper_armor"})
+        m = eng._marginal(ReachCharLevel(8), state, gd, combat_monster="chicken")
+        assert m == CHAR_MARGINAL + 8 * CHAR_GAP_PER_LEVEL_GEARED   # 2.25
+
+    def test_base_rate_when_not_combat_capable_even_if_armored(self):
+        gd = self._gd()
+        eng = self._eng(gd)
+        state = make_state(level=6, equipment={"body_armor_slot": "copper_armor"})
+        m = eng._marginal(ReachCharLevel(8), state, gd, combat_monster=None)
+        assert m == CHAR_MARGINAL + 8 * CHAR_GAP_PER_LEVEL          # 1.48

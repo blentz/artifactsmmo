@@ -78,13 +78,22 @@ behind) while the long-haul root yields to the bootstrap so the
 e27779e stand-down doesn't trigger on the LONG step.level."""
 
 CHAR_GAP_PER_LEVEL = Fraction(3, 50)
-"""Per-level urgency for char-level roots WITHIN the reachable horizon.
-For a bootstrap gap of 2: bonus = (10 - 2) × 0.06 = 0.48 →
-marginal = 1.48 → value = PRIOR_CHAR_LEVEL × 1.48 = 1.48, beating
-PRIOR_RELEVANT_TOOL (1.1) so GrindCharacterXP fires when the bot is
-under-leveled. For gaps outside the horizon: bonus = 0, marginal stays
-at CHAR_MARGINAL (1.0), and long-haul char-level roots compete on
-equal footing with combat gear (also PRIOR_COMBAT_GEAR = 1.0)."""
+"""Per-level urgency for char-level roots WITHIN the reachable horizon,
+used WHILE a combat armor slot is still empty (gear-first). For a bootstrap
+gap of 2: bonus = (10 - 2) × 0.06 = 0.48 → marginal = 1.48 → value = 1.48,
+beating PRIOR_RELEVANT_TOOL (1.1) so GrindCharacterXP fires when the bot is
+under-leveled — but staying below the empty-slot armor urgency (2.5 / sticky
+×3/2 = 2.22) so filling an empty combat slot still wins. For gaps outside the
+horizon: bonus = 0, marginal stays at CHAR_MARGINAL (1.0)."""
+
+CHAR_GAP_PER_LEVEL_GEARED = Fraction(5, 32)
+"""Per-level char-level urgency once every fillable combat ARMOR slot is
+equipped (`_has_empty_armor_slot` is False). For a bootstrap gap of 2:
+bonus = (10 - 2) × 5/32 = 1.25 → marginal = 2.25 → value = 2.25, so
+character leveling out-ranks general skill-XP grinding (≈2.04) once the bot
+is geared. While an armor slot is still empty the lower CHAR_GAP_PER_LEVEL
+applies, preserving the empty-slot-armor-dominates invariant without touching
+EMPTY_SLOT_URGENCY (2026-06-14, surgical: bump only after slots are filled)."""
 
 GEAR_EQUIP_SCALE = Fraction(20)
 """Normalizes gear equip-value gain to ~[0,1]; tune so a first-tier upgrade ~0.7-0.9."""
@@ -356,6 +365,23 @@ class StrategyEngine:
             tier = Fraction(0)
         return tier * weight
 
+    def _has_empty_armor_slot(self, state: WorldState, game_data: GameData) -> bool:
+        """True when a combat ARMOR slot the objective targets is empty and its
+        target item is usable at the current level. Excludes weapon_slot — an
+        empty/unusable weapon is covered by the combat-capability gate
+        (combat_monster is None). Gates the char-level boost: while such a slot
+        remains, leveling stays at the lower rate so empty-slot armor wins;
+        once equipped, char leveling rises above general skill grinding."""
+        for slot, code in self.objective.target_gear.items():
+            if slot == "weapon_slot" or slot not in _COMBAT_GEAR_SLOTS:
+                continue
+            if state.equipment.get(slot) is not None:
+                continue
+            stats = game_data.item_stats(code)
+            if stats is not None and stats.level <= state.level:
+                return True
+        return False
+
     def _marginal(self, root: MetaGoal, state: WorldState, game_data: GameData,
                   combat_monster: str | None = None) -> Fraction:
         if isinstance(root, ReachCharLevel):
@@ -375,7 +401,16 @@ class StrategyEngine:
             # walk.
             gap = max(0, root.level - state.level)
             reach = max(0, CHAR_REACHABLE_HORIZON - gap)
-            bonus = reach * CHAR_GAP_PER_LEVEL
+            # Gear-first: the char-leveling boost (out-ranking skill grind)
+            # applies only once the bot is combat-ready AND every fillable
+            # combat armor slot is equipped. While not combat-capable
+            # (combat_monster is None — weapon-readiness path) or any armor slot
+            # is still empty, the lower rate keeps leveling below weapon /
+            # empty-slot-armor urgency so those get filled first.
+            geared = (combat_monster is not None
+                      and not self._has_empty_armor_slot(state, game_data))
+            per_level = CHAR_GAP_PER_LEVEL_GEARED if geared else CHAR_GAP_PER_LEVEL
+            bonus = reach * per_level
             return CHAR_MARGINAL + bonus
         if isinstance(root, ReachSkillLevel):
             # Endgame skill-50 roots stay flat/long-horizon; only NEAR-TERM
