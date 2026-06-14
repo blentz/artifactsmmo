@@ -153,3 +153,77 @@ class TestRenderEntry:
             lines = pane.render().plain.split("\n")
         tiles_h = (41 - 1) // TILE_H
         assert len(lines) == 1 + tiles_h * TILE_H
+
+
+class TestGlideAnimation:
+    def test_center_override_hud_shows_center_coords(self):
+        pane = MapPane(_gd_typed())
+        hud = pane._render_viewport(_snap(0, 0), 80, 41, (5, -3)).plain.split("\n")[0]
+        assert hud.startswith("(5,-3)")
+
+    def test_center_override_hud_shows_content_at_center(self):
+        # _gd_typed has the woodcutting resource at (2,2).
+        pane = MapPane(_gd_typed())
+        hud = pane._render_viewport(_snap(0, 0), 80, 41, (2, 2)).plain.split("\n")[0]
+        assert "resource_woodcutting" in hud
+
+    def test_first_snapshot_no_animation(self):
+        pane = MapPane(_gd_typed())
+        pane.update_snapshot(_snap(0, 0))
+        assert pane._anim_frames == []
+
+    def test_move_builds_glide_frames(self):
+        pane = MapPane(_gd_typed())
+        pane.update_snapshot(_snap(0, 0))
+        pane.update_snapshot(_snap(3, 0))
+        assert pane._anim_frames == [(1, 0), (2, 0), (3, 0)]
+        assert pane._anim_index == 0
+
+    def test_no_move_clears_animation(self):
+        pane = MapPane(_gd_typed())
+        pane.update_snapshot(_snap(0, 0))
+        pane.update_snapshot(_snap(2, 0))
+        pane.update_snapshot(_snap(2, 0))      # same tile -> no glide
+        assert pane._anim_frames == []
+
+    def test_midglide_new_move_retargets(self):
+        pane = MapPane(_gd_typed())
+        pane.update_snapshot(_snap(0, 0))
+        pane.update_snapshot(_snap(5, 0))
+        pane._tick()                            # advance one frame
+        pane.update_snapshot(_snap(5, 3))       # new move from (5,0)
+        assert pane._anim_frames == [(5, 1), (5, 2), (5, 3)]
+        assert pane._anim_index == 0
+
+    def test_tick_advances_then_settles(self):
+        pane = MapPane(_gd_typed())
+        pane.update_snapshot(_snap(0, 0))
+        pane.update_snapshot(_snap(2, 0))       # frames [(1,0),(2,0)]
+        assert pane._anim_index == 0
+        pane._tick()
+        assert pane._anim_index == 1
+        pane._tick()                            # at last frame -> stop
+        assert pane._anim_frames == []
+        assert pane._anim_timer is None
+
+    def test_render_centers_on_glide_then_snap(self):
+        pane = MapPane(_gd_typed())
+        pane.update_snapshot(_snap(0, 0))
+        pane.update_snapshot(_snap(2, 0))
+        assert pane.render().plain.split("\n")[0].startswith("(1,0)")   # frame 0
+        pane._tick()
+        pane._tick()                            # settle
+        assert pane.render().plain.split("\n")[0].startswith("(2,0)")   # snap
+
+    async def test_timer_created_when_mounted_and_unmount_cancels(self):
+        pane = MapPane(_gd_typed())
+        pane.update_snapshot(_snap(0, 0))
+
+        class _Host(App):
+            def compose(self) -> ComposeResult:
+                yield pane
+
+        async with _Host().run_test(size=(90, 45)):
+            pane.update_snapshot(_snap(4, 0))   # mounted -> real timer created
+            assert pane._anim_timer is not None
+        assert pane._anim_timer is None         # on_unmount -> _stop_anim

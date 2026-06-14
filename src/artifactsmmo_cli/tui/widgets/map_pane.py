@@ -5,6 +5,7 @@ from typing import Any
 from rich.text import Text
 from textual.events import Resize
 from textual.reactive import reactive
+from textual.timer import Timer
 from textual.widgets import Static
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
@@ -13,11 +14,14 @@ from artifactsmmo_cli.tui.glyphs import UNMAPPED_COLOR, WALKABLE_COLOR
 from artifactsmmo_cli.tui.half_block import HalfBlockCompositor
 from artifactsmmo_cli.tui.sprite_registry import SpriteRegistry
 from artifactsmmo_cli.tui.sprites import BLANK_SPRITE, PLAYER_SPRITE, Sprite, SpriteCategory
+from artifactsmmo_cli.tui.path_interpolate import glide_path
 
 TILE_W = 8   # chars per tile column (8 pixels wide)
 TILE_H = 4   # char-rows per tile (8 pixels tall, 2 px per char-row)
 FALLBACK_W = 80
 FALLBACK_H = 41
+MAX_ANIM_STEPS = 12       # cap glide frames so big jumps still finish fast
+ANIM_FRAME_SECONDS = 0.05  # ~50ms/frame -> <= ~600ms total, well inside the move cooldown
 
 _SKILL_TO_RESOURCE_KEY = {
     "woodcutting": "resource_woodcutting",
@@ -40,6 +44,9 @@ class MapPane(Static):
         self._known_tiles = game_data.known_tiles
         self._registry = SpriteRegistry()
         self._compositor = HalfBlockCompositor()
+        self._anim_frames: list[tuple[int, int]] = []
+        self._anim_index = 0
+        self._anim_timer: Timer | None = None
 
     @staticmethod
     def _build_tile_index(gd: GameData) -> dict[tuple[int, int], TileContent]:
@@ -72,7 +79,32 @@ class MapPane(Static):
         return index
 
     def update_snapshot(self, snap: CycleSnapshot) -> None:
+        prior = self.snapshot
         self.snapshot = snap
+        self._stop_anim()
+        if prior is not None and (prior.x, prior.y) != (snap.x, snap.y):
+            self._anim_frames = glide_path((prior.x, prior.y), (snap.x, snap.y), MAX_ANIM_STEPS)
+            self._anim_index = 0
+            if self.is_mounted:
+                self._anim_timer = self.set_interval(ANIM_FRAME_SECONDS, self._tick)
+        self.refresh()
+
+    def _stop_anim(self) -> None:
+        if self._anim_timer is not None:
+            self._anim_timer.stop()
+            self._anim_timer = None
+        self._anim_frames = []
+        self._anim_index = 0
+
+    def _tick(self) -> None:
+        if self._anim_index >= len(self._anim_frames) - 1:
+            self._stop_anim()
+        else:
+            self._anim_index += 1
+        self.refresh()
+
+    def on_unmount(self) -> None:
+        self._stop_anim()
 
     def render(self) -> Text:
         snap = self.snapshot
@@ -80,14 +112,15 @@ class MapPane(Static):
             return Text("Waiting for first cycle...")
         width = self.size.width or FALLBACK_W
         height = self.size.height or FALLBACK_H
-        return self._render_viewport(snap, width, height)
+        center = self._anim_frames[self._anim_index] if self._anim_frames else None
+        return self._render_viewport(snap, width, height, center)
 
     def on_resize(self, event: Resize) -> None:
         self.refresh()
 
-    def _hud_line(self, snap: CycleSnapshot) -> str:
-        content = self._tile_index.get((snap.x, snap.y))
-        coords = f"({snap.x},{snap.y})"
+    def _hud_line(self, cx: int, cy: int) -> str:
+        content = self._tile_index.get((cx, cy))
+        coords = f"({cx},{cy})"
         if content is None:
             return coords
         return f"{coords} · {content[1]}"
@@ -102,14 +135,20 @@ class MapPane(Static):
         category, code = content
         return self._registry.sprite_for(code, category), WALKABLE_COLOR
 
-    def _render_viewport(self, snap: CycleSnapshot, width: int, height: int) -> Text:
+    def _render_viewport(
+        self,
+        snap: CycleSnapshot,
+        width: int,
+        height: int,
+        center: tuple[int, int] | None = None,
+    ) -> Text:
         tiles_w = width // TILE_W
         tiles_h = (height - 1) // TILE_H
         half_w = tiles_w // 2
         half_h = tiles_h // 2
-        cx, cy = snap.x, snap.y
+        cx, cy = center if center is not None else (snap.x, snap.y)
         text = Text(no_wrap=True, overflow="crop")
-        text.append(self._hud_line(snap), style="dim")
+        text.append(self._hud_line(cx, cy), style="dim")
         for trow in range(tiles_h):
             text.append("\n")
             sublines = [Text(no_wrap=True, overflow="crop") for _ in range(TILE_H)]
