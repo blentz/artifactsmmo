@@ -456,7 +456,11 @@ noncomputable def applyActionKind : ActionKind → State → State
       match s.moveTarget with
       | some (tx, ty) => { s with posX := tx, posY := ty }
       | none => s
-  -- All other 6 kinds: no-op (see module docstring; future phases will
+  -- RecycleAction (recycle.py): consumes the surplus gear, clearing the
+  -- recyclable-surplus signal (single-action semantics, like .npcSell clears
+  -- sellable). Sufficient to flip `recycleSurplusFires` off post-recycle.
+  | .recycle, s => { s with recyclableSurplusNonempty := false }
+  -- All other 5 kinds: no-op (see module docstring; future phases will
   -- replace each with its specific semantics).
   | _, s => s
 

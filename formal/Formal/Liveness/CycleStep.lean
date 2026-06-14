@@ -131,6 +131,7 @@ noncomputable def planFor : MeansKind → State → Plan
   | .acceptTask       , _ => [.acceptTask]
   | .taskExchange     , _ => [.taskExchange]
   | .sellIdle         , _ => [.npcSell]
+  | .recycleSurplus   , _ => [.recycle]
   | .bankExpand       , _ => [.buyBankExpansion]
   | .wait             , _ => [.wait]
 
@@ -496,6 +497,20 @@ theorem cycleStep_progress_or_waits
                   = false := rfl
     have hpre' : s.sellableInventoryNonempty = false := by
       have : (applyActionKind .npcSell s).sellableInventoryNonempty = false := hpost
+      rw [heq] at this; exact this
+    rw [hpre] at hpre'; cases hpre'
+  | recycleSurplus =>
+    left
+    have hcs : cycleStep s = applyActionKind .recycle s := by
+      unfold cycleStep; rw [hk]; rfl
+    rw [hcs]
+    simp only [fires, recycleSurplusFires, Bool.and_eq_true] at hfires
+    have hpre : s.recyclableSurplusNonempty = true := hfires.2
+    intro heq
+    have hpost : ({s with recyclableSurplusNonempty := false} : State).recyclableSurplusNonempty
+                  = false := rfl
+    have hpre' : s.recyclableSurplusNonempty = false := by
+      have : (applyActionKind .recycle s).recyclableSurplusNonempty = false := hpost
       rw [heq] at this; exact this
     rw [hpre] at hpre'; cases hpre'
   | bankExpand =>

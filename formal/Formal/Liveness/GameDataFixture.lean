@@ -2225,6 +2225,7 @@ noncomputable def fixtureFreshState : State where
   selectBankDepositsNonempty := false
   pendingItemsNonempty := false
   sellableInventoryNonempty := false
+  recyclableSurplusNonempty := false
   taskCoinsTotal := 0
   taskExchangeMinCoins := 1
   lowYieldCancelFires := false

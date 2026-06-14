@@ -681,6 +681,9 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
     | sellIdle =>
       show (applyActionKind .npcSell s).level ≥ s.level
       simp [applyActionKind]
+    | recycleSurplus =>
+      show (applyActionKind .recycle s).level ≥ s.level
+      simp [applyActionKind]
     | bankExpand =>
       show (applyActionKind .buyBankExpansion s).level ≥ s.level
       simp [applyActionKind]
@@ -1044,6 +1047,7 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
       omega
   -- Out-of-scope kinds: ruled out by hmem.
   | completeTask    => exfalso; revert hmem; unfold progressMeans; decide
+  | recycleSurplus  => exfalso; revert hmem; unfold progressMeans; decide
   | lowYieldCancel  => exfalso; revert hmem; unfold progressMeans; decide
   | taskCancel      => exfalso; revert hmem; unfold progressMeans; decide
   | pursueTask      => exfalso; revert hmem; unfold progressMeans; decide

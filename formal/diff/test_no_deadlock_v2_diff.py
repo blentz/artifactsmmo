@@ -441,8 +441,8 @@ def test_ladder_has_21_entries() -> None:
     breaker between DISCARD_CRITICAL and DEPOSIT_FULL) + REST_FOR_COMBAT
     (after HP_CRITICAL) + GEAR_REVIEW (lowest-priority guard, after
     DISCARD_HIGH). Lean side mirrors via
-    MeansKind.allInLadderOrder.length = 21."""
-    assert len(ALL_IN_LADDER_ORDER) == 21
+    MeansKind.allInLadderOrder.length = 22."""
+    assert len(ALL_IN_LADDER_ORDER) == 22
 
 
 def test_no_task_state_acceptTask_fires() -> None:

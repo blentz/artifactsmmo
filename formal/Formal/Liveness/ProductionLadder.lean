@@ -253,6 +253,14 @@ def sellIdleFires (s : State) : Bool :=
                < SELL_PRESSURE_NUM * s.inventoryMax))
   && s.sellableInventoryNonempty
 
+/-- RECYCLE_SURPLUS. Mirrors `means.py::_fires(RECYCLE_SURPLUS, …)`:
+      used/max < 0.85 ∧ recyclable_surplus nonempty -/
+def recycleSurplusFires (s : State) : Bool :=
+  (decide (s.inventoryMax = 0)
+   || decide (SELL_PRESSURE_DEN * s.inventoryUsed
+               < SELL_PRESSURE_NUM * s.inventoryMax))
+  && s.recyclableSurplusNonempty
+
 /-- WAIT. Mirrors `means.py:115-119`: the last-resort fallback fires
     unconditionally. Position-last in `allInLadderOrder` ensures every
     other means is tried first. -/
@@ -303,6 +311,7 @@ noncomputable def fires (k : MeansKind) (s : State) : Bool :=
   | .acceptTask       => acceptTaskFires s
   | .taskExchange     => taskExchangeFires s
   | .sellIdle         => sellIdleFires s
+  | .recycleSurplus   => recycleSurplusFires s
   | .bankExpand       => bankExpandFires s
   | .wait             => waitFires s
 

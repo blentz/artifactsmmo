@@ -129,6 +129,9 @@ structure State where
   pendingItemsNonempty : Bool
   /-- `_has_sellable(state, game_data)` (means.py:54-58). -/
   sellableInventoryNonempty : Bool
+  /-- `recyclable_surplus(state, game_data, …)` nonempty (recycle_surplus.py): a
+      craftable surplus gear item can be recycled for materials (2026-06-14). -/
+  recyclableSurplusNonempty : Bool
   /-- `_tasks_coin_total(state)` (means.py:61-62): inventory + bank. -/
   taskCoinsTotal : Nat
   /-- ctx — `SelectionContext.task_exchange_min_coins` (guards.py:30). -/

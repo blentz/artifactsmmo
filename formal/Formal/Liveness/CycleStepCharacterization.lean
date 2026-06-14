@@ -143,6 +143,10 @@ theorem cycleStep_xp_level_preserved_when_no_fight_no_complete (s : State)
       show (applyActionKind .npcSell s).level = s.level
             ∧ (applyActionKind .npcSell s).xp = s.xp
       exact ⟨rfl, rfl⟩
+    | recycleSurplus =>
+      show (applyActionKind .recycle s).level = s.level
+            ∧ (applyActionKind .recycle s).xp = s.xp
+      exact ⟨rfl, rfl⟩
     | bankExpand =>
       show (applyActionKind .buyBankExpansion s).level = s.level
             ∧ (applyActionKind .buyBankExpansion s).xp = s.xp

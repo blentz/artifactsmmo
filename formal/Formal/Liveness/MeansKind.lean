@@ -73,6 +73,7 @@ inductive MeansKind where
   | acceptTask          -- ACCEPT_TASK,        means.py:94
   | taskExchange        -- TASK_EXCHANGE,      means.py:97
   | sellIdle            -- SELL_IDLE,          means.py:100
+  | recycleSurplus      -- RECYCLE_SURPLUS,    means.py (2026-06-14)
   | bankExpand          -- BANK_EXPAND,        means.py:103
   -- Last-resort fallback (Phase 20e-v2 step 1, means.py:32, means.py:115)
   | wait                -- WAIT,               always fires
@@ -86,10 +87,10 @@ def allInLadderOrder : List MeansKind :=
    .discardCritical, .craftRelief, .depositFull, .discardHigh, .gearReview,
    .claimPending, .completeTask, .sellPressured, .lowYieldCancel, .taskCancel,
    .objectiveStep,
-   .pursueTask, .acceptTask, .taskExchange, .sellIdle, .bankExpand,
+   .pursueTask, .acceptTask, .taskExchange, .sellIdle, .recycleSurplus, .bankExpand,
    .wait]
 
-/-- Sanity: 21 constructors. -/
-example : allInLadderOrder.length = 21 := by decide
+/-- Sanity: 22 constructors. -/
+example : allInLadderOrder.length = 22 := by decide
 
 end Formal.Liveness.MeansKind
