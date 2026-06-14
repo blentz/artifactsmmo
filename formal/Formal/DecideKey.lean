@@ -181,6 +181,7 @@ inductive MeansKind where
   | acceptTask
   | taskExchange
   | sellIdle
+  | recycleSurplus  -- 2026-06-14: proactive recycle of surplus craftable gear
   | bankExpand
   | wait  -- Phase 20e-v2: always-firing sentinel sentinel (production fix
           -- src/.../tiers/means.py:WAIT). Closes the StrategyArbiter
@@ -213,6 +214,7 @@ def goalReprOfMeans : MeansKind → String
   | .pursueTask      => "PursueTask"
   | .acceptTask      => "AcceptTask"
   | .taskExchange    => "TaskExchange"
+  | .recycleSurplus  => "RecycleSurplus"
   | .bankExpand      => "ExpandBank"
   | .wait            => "Wait"
 

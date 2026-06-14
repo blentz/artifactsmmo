@@ -27,6 +27,7 @@ from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.pursue_task import PursueTaskGoal
 from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
+from artifactsmmo_cli.ai.goals.recycle_surplus import RecycleSurplusGoal
 from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal, tasks_coin_total
@@ -255,6 +256,9 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
         return CompleteTaskGoal()
     if kind is MeansKind.SELL_PRESSURED or kind is MeansKind.SELL_IDLE:
         return SellInventoryGoal(bank_accessible=ctx.bank_accessible)
+    if kind is MeansKind.RECYCLE_SURPLUS:
+        return RecycleSurplusGoal(game_data=game_data,
+                                  protected_codes=ctx.target_gear | ctx.target_tools)
     if kind is MeansKind.LOW_YIELD_CANCEL:
         return LowYieldCancelGoal()
     if kind is MeansKind.TASK_CANCEL:
