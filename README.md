@@ -137,42 +137,42 @@ cycle. Tasks/gold/skill-XP are means to that end, not first-class goals.
 
 ### TUI watcher
 
-The four-pane Textual interface shows live state without changing the
-bot's behavior:
+A four-pane Textual interface (3×3 grid) shows live state without
+changing the bot's behavior — status and inventory stacked on the left,
+a large map spanning the right, and a full-width log strip along the
+bottom:
 
 ```
-┌────────────────┬─────────────────────────┐
-│ Status         │ Map (NetHack-inspired)  │
-│  L3 HP:[█▓ ]   │  ......T...c..          │
-│  XP:[██ ]      │  ......@....            │
-│  Gold: 335     │  ......╣..+             │
-│  Path → L50    │                         │
-│  next: chicken │                         │
-├────────────────┼─────────────────────────┤
-│ Inventory      │ Log                     │
-│  50 copper_ore │ 21:06 c1 RestoreHP   ok │
-│  23 ash_wood   │ 21:08 c2 Fight       ok │
-│  ...           │ ...                     │
-└────────────────┴─────────────────────────┘
+┌────────┬────────────────────────┐
+│ Status │                        │
+│ L3 HP  │   Map — 8×8 sprite      │
+│ XP     │   tiles, player-        │
+├────────┤   centered             │
+│ Inv    │                        │
+├────────┴────────────────────────┤
+│ Log  21:08 c2 Fight          ok │
+└──────────────────────────────────┘
 ```
 
-Map glyphs are typed and colored by category:
+The map renders each tile as an **8×8 sprite** drawn with Unicode
+half-block characters (`▀` — two color pixels per cell), centered on the
+player. Sprites are outline-only pixel art composited over the terrain
+color, defined as pure data in `tui/palette.py` (shared hex palette) and
+`tui/sprites.py` (the tileset):
 
-- `@` you (yellow).
-- **NPCs** — uppercase letter, cyan: `A` archaeologist, `C` cultist
-  wizard, `R` rune vendor, `S` sandwhisper trader, `T` tailor, `K` tasks
-  trader.
-- **Monsters** — lowercase letter by family, red: `s` slime (all
-  variants), `c` chicken, `g` goblin, `w` wolf, `k` skeleton, … .
-- **Structures** — box-drawing glyphs, white: `╣` bank, `╠` grand
-  exchange, `╬` workshop, `╤` taskmaster.
-- **Doors** (map transitions) — `+`, magenta.
-- **Resources** — `T` tree, `*` ore, `~` fish, `%` plant.
+- player, 30 monsters, 6 NPCs, structures (bank, grand exchange,
+  workshop, taskmaster), resources (tree / ore / fish / herb), and doors.
+- Any code the API exposes without a curated sprite falls back to a
+  deterministic, category-tinted silhouette — so the map never breaks as
+  the game adds content; new sprites just ship as more data.
 
-Categories are colored distinctly, so glyphs that share a letter (tailor
-`T` cyan vs the woodcutting-resource `T` green) stay readable. Unknown
-codes from the API fall back to their first letter — uppercase for NPCs,
-lowercase for monsters. Quit with `q` or `Ctrl+C`.
+Preview the whole tileset in the terminal without launching the game:
+
+```sh
+uv run python scripts/preview_sprites.py
+```
+
+Quit the watcher with `q` or `Ctrl+C`.
 
 ## Design docs
 
@@ -184,6 +184,8 @@ Architecture, design rationale, and implementation plans live under
 - `specs/2026-05-17-autoregressive-planning-design.md` — learning store
 - `specs/2026-05-18-strategic-reasoning-design.md` — Phase G (per-cycle scoring)
 - `specs/2026-05-18-max-level-objective-design.md` — root objective
+- `specs/2026-06-13-tui-map-sprites-design.md` — half-block sprite map + 3×3 layout
+- `specs/2026-06-13-improved-sprites-design.md` — outline-only sprite tileset
 - `plans/...` — task-by-task implementation plans for each spec
 
 ## Project status
