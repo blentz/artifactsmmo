@@ -987,7 +987,8 @@ def runDecideKey (args : Array Json) : Json :=
       | 6 => .acceptTask
       | 7 => .taskExchange
       | 8 => .sellIdle
-      | 9 => .bankExpand
+      | 9 => .recycleSurplus
+      | 10 => .bankExpand
       | _ => .wait
     Json.mkObj [("repr", Json.str (Formal.DecideKey.goalReprOfMeans k))]
 

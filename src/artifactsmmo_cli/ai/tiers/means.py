@@ -10,6 +10,7 @@ from enum import Enum
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.projections import low_yield_cancel_fires
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.task_decision import PIVOT, PURSUE, task_decision
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
@@ -28,6 +29,7 @@ class MeansKind(Enum):
     ACCEPT_TASK = "accept_task"
     TASK_EXCHANGE = "task_exchange"
     SELL_IDLE = "sell_idle"
+    RECYCLE_SURPLUS = "recycle_surplus"
     BANK_EXPAND = "bank_expand"
     WAIT = "wait"
 
@@ -44,6 +46,7 @@ DISCRETIONARY_ORDER: tuple[MeansKind, ...] = (
     MeansKind.ACCEPT_TASK,
     MeansKind.TASK_EXCHANGE,
     MeansKind.SELL_IDLE,
+    MeansKind.RECYCLE_SURPLUS,
     MeansKind.BANK_EXPAND,
     MeansKind.WAIT,
 )
@@ -139,6 +142,14 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
 
     if kind is MeansKind.SELL_IDLE:
         return _used_fraction(state) < SELL_PRESSURE_FRACTION and _has_sellable(state, game_data)
+
+    if kind is MeansKind.RECYCLE_SURPLUS:
+        # Idle/low-pressure only: recovered materials need room to land (under
+        # pressure the deposit/discard guards handle space). Fires when surplus
+        # craftable gear (not the committed objective) can be recycled for mats.
+        return (_used_fraction(state) < SELL_PRESSURE_FRACTION
+                and bool(recyclable_surplus(
+                    state, game_data, ctx.target_gear | ctx.target_tools)))
 
     if kind is MeansKind.BANK_EXPAND:
         if not ctx.bank_accessible:

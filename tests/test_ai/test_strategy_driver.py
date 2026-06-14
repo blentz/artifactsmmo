@@ -732,6 +732,33 @@ def test_cross_skill_grind_reserves_committed_root_materials():
     assert not (isinstance(g, GatherMaterialsGoal) and g._target_item == "copper_dagger")
 
 
+def test_grind_reserves_objective_gear_when_committed_root_is_skill_root():
+    """Harden 2026-06-14 (proven trace 015425: 400 copper_rocks gathered ->
+    6 copper_helmet + 1 copper_ring, 0 copper_boots): when the arbiter commits
+    to a SKILL-GRIND root (a ReachSkillLevel, which has no recipe) rather than
+    the gear ObtainItem, the committed gear OBJECTIVE's materials must STILL be
+    reserved from the grind. Otherwise the gearcrafting grind crafts a throwaway
+    copper_helmet and cannibalizes the copper_boots objective's copper_bar.
+    `ctx.target_gear` carries the committed gear even when it is not the root."""
+    gd = _gd_copper_gear()
+    state = make_state(level=5, skills={"gearcrafting": 1},
+                       inventory={"copper_bar": 6})
+    skill_step = ReachSkillLevel("gearcrafting", 5)
+    # Without the objective-gear reservation: the grind freely crafts the
+    # copper_bar-eating copper_helmet (the regression).
+    g_unguarded = objective_step_goal(skill_step, state, gd, _ctx(),
+                                      root=skill_step, committed_root=skill_step)
+    assert isinstance(g_unguarded, GatherMaterialsGoal)
+    assert g_unguarded._target_item == "copper_helmet"
+    # With the committed gear in ctx.target_gear: copper_bar reserved -> the
+    # grind must NOT craft any copper_bar item (no boots-cannibalizing helmet).
+    g = objective_step_goal(skill_step, state, gd,
+                            _ctx(target_gear=frozenset({"copper_boots"})),
+                            root=skill_step, committed_root=skill_step)
+    assert not (isinstance(g, GatherMaterialsGoal)
+                and g._target_item in {"copper_helmet", "copper_ring", "copper_dagger"})
+
+
 def test_objective_step_reach_char_level_with_monster():
     step = ReachCharLevel(10)
     g = objective_step_goal(step, make_state(xp=50), _gd(), _ctx(combat_monster="chicken"))

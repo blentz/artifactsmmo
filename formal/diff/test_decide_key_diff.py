@@ -134,8 +134,9 @@ _MEANS_INDEX = {
     MeansKind.ACCEPT_TASK: 6,
     MeansKind.TASK_EXCHANGE: 7,
     MeansKind.SELL_IDLE: 8,
-    MeansKind.BANK_EXPAND: 9,
-    MeansKind.WAIT: 10,  # Phase 20e-v2 step 1: always-firing sentinel.
+    MeansKind.RECYCLE_SURPLUS: 9,  # 2026-06-14: proactive recycle surplus gear.
+    MeansKind.BANK_EXPAND: 10,
+    MeansKind.WAIT: 11,  # Phase 20e-v2 step 1: always-firing sentinel.
 }
 
 
