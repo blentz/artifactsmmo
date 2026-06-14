@@ -120,7 +120,7 @@ cycle. Tasks/gold/skill-XP are means to that end, not first-class goals.
   CraftRelief all consider `WithdrawItemAction` for their recipe-chain
   inputs, so banked materials get withdrawn instead of re-gathered
   when a goal needs them.
-- **Craft-skill bootstrap**: a small `ReachSkillLevel(skill, 5)` root
+- **Craft-skill bootstrap**: a small `ReachSkillLevel(skill, 2)` root
   is added for `weaponcrafting` / `gearcrafting` / `jewelrycrafting`
   whenever the character is at the level-1 floor, so the planner has
   a low-effort competitor for skill XP and the gear-craft loop can

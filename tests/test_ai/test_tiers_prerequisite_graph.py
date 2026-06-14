@@ -129,7 +129,7 @@ def test_objective_roots_adds_craft_bootstrap_when_skill_at_floor():
     progress.
 
     Fix: when a crafting skill is at the level-1 floor, objective_roots
-    (with state) prepends ReachSkillLevel(skill, 5) — gap-4 effort, much
+    (with state) prepends ReachSkillLevel(skill, 2) — gap-1 effort, much
     more likely to win ranking and give LevelSkillGoal an actual cycle to
     fire."""
     gd = _gd()
@@ -138,7 +138,7 @@ def test_objective_roots_adds_craft_bootstrap_when_skill_at_floor():
     state = make_state(skills={s: 1 for s in SKILL_NAMES})
     roots = objective_roots(obj, state)
     for skill in ("weaponcrafting", "gearcrafting", "jewelrycrafting"):
-        assert ReachSkillLevel(skill, 5) in roots, (
+        assert ReachSkillLevel(skill, 2) in roots, (
             f"missing craft-bootstrap root for {skill}; got {roots}"
         )
 
@@ -183,17 +183,19 @@ def test_objective_roots_omits_char_level_bootstrap_near_target():
 
 
 def test_objective_roots_omits_craft_bootstrap_when_skill_above_floor():
-    """Once a crafting skill is above the bootstrap target (>=5), the small
-    bootstrap root drops out and the long-haul ReachSkillLevel(skill, 50)
+    """Once a crafting skill is at or above the bootstrap target (>=2), the
+    small bootstrap root drops out and the long-haul ReachSkillLevel(skill, 50)
     root takes over without competition from the bootstrap."""
     gd = _gd()
     obj = CharacterObjective.from_game_data(gd)
-    state = make_state(skills={"weaponcrafting": 6, "gearcrafting": 5,
+    # weaponcrafting above target, gearcrafting exactly at target (boundary),
+    # jewelrycrafting still on the level-1 floor.
+    state = make_state(skills={"weaponcrafting": 6, "gearcrafting": 2,
                                 "jewelrycrafting": 1})
     roots = objective_roots(obj, state)
-    assert ReachSkillLevel("weaponcrafting", 5) not in roots
-    assert ReachSkillLevel("gearcrafting", 5) not in roots
-    assert ReachSkillLevel("jewelrycrafting", 5) in roots  # still at floor
+    assert ReachSkillLevel("weaponcrafting", 2) not in roots
+    assert ReachSkillLevel("gearcrafting", 2) not in roots
+    assert ReachSkillLevel("jewelrycrafting", 2) in roots  # still at floor
 
 
 def test_objective_roots_backward_compat_without_state():
@@ -318,11 +320,11 @@ def test_objective_roots_omits_at_curve_skill_root():
 
 def test_objective_roots_curve_root_above_bootstrap_isolates_curve_code():
     """Isolation test: the curve emission is the ONLY producer of a
-    ReachSkillLevel target ABOVE the _CRAFT_BOOTSTRAP_TARGET=5 floor.
+    ReachSkillLevel target ABOVE the _CRAFT_BOOTSTRAP_TARGET=2 floor.
 
-    The two sibling curve tests above both assert target 5, which the
-    existing craft-bootstrap (target always exactly 5) also emits — so they
-    pass even with the curve block deleted. This test discriminates: a
+    The craft-bootstrap only ever emits its fixed target (2); any
+    ReachSkillLevel target above 2 (other than the level-50 long-haul root)
+    can only come from the recipe-aware curve. This test discriminates: a
     weaponcrafting recipe at craft_level 8 (item_level 8) puts the curve
     target at 8 for a char-7 player (7 + SKILL_CURVE_LOOKAHEAD=3 = 10 >= 8,
     in-window). The bootstrap can never emit target 8 — only the curve code
@@ -341,5 +343,5 @@ def test_objective_roots_curve_root_above_bootstrap_isolates_curve_code():
     state = make_state(level=7, skills={"weaponcrafting": 2})
     roots = objective_roots(obj, state)
     assert ReachSkillLevel("weaponcrafting", 8) in roots, (
-        f"curve target 8 (above bootstrap floor 5) not emitted; got {roots}"
+        f"curve target 8 (above bootstrap floor 2) not emitted; got {roots}"
     )

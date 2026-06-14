@@ -79,14 +79,14 @@ def prerequisites(node: MetaGoal, state: WorldState, game_data: GameData) -> lis
     return []  # ReachSkillLevel → leaf (materials enter via ObtainItem chains)
 
 
-_CRAFT_BOOTSTRAP_TARGET = 5
+_CRAFT_BOOTSTRAP_TARGET = 2
 """Bootstrap target level for crafting skills (weaponcrafting / gearcrafting /
 jewelrycrafting). The full-objective ReachSkillLevel(skill, 50) root has a
 gap-50 effort proxy and consistently loses Tier-2 ranking to small-effort gear
 chains — but those gear chains then stall because crafting them requires the
 very skill XP the bot never bothers to grind. A small bootstrap root with
-gap 4 (from starting skill 1) ranks competitively, gives LevelSkillGoal a
-real chance to fire, and unlocks the gear chain by lifting the skill above
+gap 1 (from starting skill 1) ranks competitively, gives LevelSkillGoal a
+real chance to fire, and unlocks the gear chain by lifting the skill off
 the level-1 floor. Removed automatically once the skill reaches the target
 (then the level-50 root takes over)."""
 
