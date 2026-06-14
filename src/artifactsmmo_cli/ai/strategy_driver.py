@@ -473,11 +473,19 @@ def objective_step_goal(
         # one MORE" — needed = owned + 1 — because the XP comes from the
         # craft ACT. needed={craft_one: 1} with a spare copy in inventory is
         # born-satisfied, silently skipped, and the skill gate never moves.
-        reserved: frozenset[str] = frozenset()
-        if isinstance(root, ObtainItem):
-            root_recipe = game_data.crafting_recipe(root.code)
-            if root_recipe:
-                reserved = frozenset(root_recipe)
+        # Reserve the recipe materials of BOTH this candidate's own root AND the
+        # committed objective root, so a CROSS-skill grind (e.g. jewelrycrafting
+        # copper_ring) can't consume the committed gear root's copper_bar
+        # (trace 2026-06-14: ring grind ramped held+1 eating boots' bars while
+        # committed to copper_boots). Same-skill cannibalization is already
+        # suppressed above; this covers the cross-skill fallback path.
+        reserved_codes: set[str] = set()
+        for reserving_root in (root, committed_root):
+            if isinstance(reserving_root, ObtainItem):
+                rec = game_data.crafting_recipe(reserving_root.code)
+                if rec:
+                    reserved_codes.update(rec)
+        reserved = frozenset(reserved_codes)
         craft_one = skill_grind_target(step.skill, state, game_data, reserved=reserved)
         if craft_one is not None:
             bank = state.bank_items or {}

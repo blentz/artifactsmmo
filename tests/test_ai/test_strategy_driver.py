@@ -676,11 +676,14 @@ def _gd_copper_gear() -> GameData:
                                    crafting_skill="gearcrafting", crafting_level=1),
         "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
                                    crafting_skill="weaponcrafting", crafting_level=1),
+        "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
+                                 crafting_skill="jewelrycrafting", crafting_level=1),
         "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource"),
     }
     gd._crafting_recipes = {"copper_boots": {"copper_bar": 8},
                             "copper_helmet": {"copper_bar": 6},
-                            "copper_dagger": {"copper_bar": 6}}
+                            "copper_dagger": {"copper_bar": 6},
+                            "copper_ring": {"copper_bar": 6}}
     gd._resource_drops = {"copper_rocks": "copper_bar"}  # copper_bar obtainable
     return gd
 
@@ -706,20 +709,25 @@ def test_skill_grind_suppressed_when_committed_root_is_same_skill_craft():
     assert g is None
 
 
-def test_skill_grind_not_suppressed_for_cross_skill_committed_root():
-    """Scope of B: only the SAME-skill case is suppressed. A weaponcrafting
-    grind while committed to a gearcrafting boots root is a different skill, so
-    it still produces its grind goal (documents the cross-skill residual —
-    that craft can still consume the committed root's copper_bar)."""
+def test_cross_skill_grind_reserves_committed_root_materials():
+    """Cross-skill grind must not eat the committed gear root's materials
+    (2026-06-14: a jewelrycrafting/weaponcrafting grind crafted copper_ring/
+    copper_dagger from the copper_bar a committed copper_boots root was pooling).
+    The committed root's recipe materials are reserved across ALL skills, so the
+    cross-skill grind does not craft a copper_bar item."""
     gd = _gd_copper_gear()
-    state = make_state(level=5, skills={"weaponcrafting": 1},
+    state = make_state(level=5, skills={"weaponcrafting": 1, "jewelrycrafting": 1},
                        inventory={"copper_bar": 6})
     skill_step = ReachSkillLevel("weaponcrafting", 5)
-    boots_root = ObtainItem("copper_boots", 1)  # gearcrafting, not weaponcrafting
+    boots_root = ObtainItem("copper_boots", 1)  # gearcrafting, recipe {copper_bar:8}
+    # Without a committed gear root: the grind freely crafts copper_dagger.
+    g_unguarded = objective_step_goal(skill_step, state, gd, _ctx(), root=skill_step)
+    assert isinstance(g_unguarded, GatherMaterialsGoal)
+    assert g_unguarded._target_item == "copper_dagger"
+    # With the committed boots root: copper_bar reserved -> dagger not crafted.
     g = objective_step_goal(skill_step, state, gd, _ctx(),
                             root=skill_step, committed_root=boots_root)
-    assert isinstance(g, GatherMaterialsGoal)
-    assert g._target_item == "copper_dagger"
+    assert not (isinstance(g, GatherMaterialsGoal) and g._target_item == "copper_dagger")
 
 
 def test_objective_step_reach_char_level_with_monster():
