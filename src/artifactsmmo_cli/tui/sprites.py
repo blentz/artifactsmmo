@@ -14,7 +14,7 @@ from artifactsmmo_cli.tui.glyphs import (
     STRUCTURE_COLOR,
 )
 from artifactsmmo_cli.tui.palette import (
-    AMBER, BARK, BLOOD, BONE, BREW, COPPER, DOORWOOD, GOBLIN_SKIN, GOLD, INK, KHAKI,
+    AMBER, BARK, BLOOD, BONE, BREW, COPPER, DOORWOOD, EMBER, GOBLIN_SKIN, GOLD, INK, KHAKI,
     LEAF, OGRE_SKIN, ORC_SKIN, PINK, SKIN, SLATE, STEEL, STONE, TUNIC, WATER,
 )
 
@@ -374,6 +374,42 @@ CULTIST_ACOLYTE_SPRITE = Sprite(
     rows=("..oooo..", ".obbbbo.", ".obeebo.", ".obbbbo.", "..oooo..", ".obbbbo.", ".ob..bo.", ".oo..oo."),
     palette={"o": INK, "b": BREW, "e": BLOOD},
 )
+SKELETON_SPRITE = Sprite(
+    rows=("..oooo..", ".owwwwo.", ".oweewo.", ".owwwwo.", "..oooo..", ".owwwwo.", ".ow..wo.", ".oo..oo."),
+    palette={"o": INK, "w": BONE, "e": INK},
+)
+DEATH_KNIGHT_SPRITE = Sprite(
+    rows=("..oooo..", ".oaaaao.", ".oaeeao.", ".oaaaao.", "..oooo..", ".oaaaao.", ".oa..ao.", ".oo..oo."),
+    palette={"o": INK, "a": SLATE, "e": BLOOD},
+)
+VAMPIRE_SPRITE = Sprite(
+    rows=("..oooo..", ".ohhhho.", ".owrrwo.", ".owwwwo.", "..oooo..", ".orrrro.", ".or..ro.", ".oo..oo."),
+    palette={"o": INK, "h": SLATE, "w": BONE, "r": BLOOD},
+)
+HELLHOUND_SPRITE = Sprite(
+    rows=("..o..o..", ".obbbbo.", ".obeebo.", ".obbbbo.", "obbbbbbo", "obbbbbbo", ".ob..bo.", ".oo..oo."),
+    palette={"o": INK, "b": SLATE, "e": EMBER},
+)
+CURSED_TREE_SPRITE = Sprite(
+    rows=("..oooo..", ".oddddo.", "oddeeddo", "oddddddo", ".oddddo.", "..otto..", "..otto..", "..oooo.."),
+    palette={"o": INK, "d": SLATE, "e": BLOOD, "t": BARK},
+)
+MUSHMUSH_SPRITE = Sprite(
+    rows=("..oooo..", ".orrrro.", "orrwwrro", ".orrrro.", "..oooo..", ".owwwwo.", ".oweewo.", ".oo..oo."),
+    palette={"o": INK, "r": BLOOD, "w": BONE, "e": INK},
+)
+DESERT_SCORPION_SPRITE = Sprite(
+    rows=("o..aa..o", ".oaaaao.", ".oaeeao.", ".oaaaao.", "o.aaaa.o", ".oaaaao.", "...aa...", "....aat."),
+    palette={"o": INK, "a": AMBER, "e": INK, "t": BLOOD},
+)
+SANDWARDEN_SPRITE = Sprite(
+    rows=("..oooo..", ".okkkko.", ".okeeko.", ".okkkko.", "okkkkkko", "okkkkkko", ".ok..ko.", ".oo..oo."),
+    palette={"o": INK, "k": KHAKI, "e": AMBER},
+)
+KING_SLIME_SPRITE = Sprite(
+    rows=(".o....o.", ".oGGGGo.", "oggggggo", "ogeggego", "oggggggo", "oggggggo", ".oggggo.", "..oooo.."),
+    palette={"o": INK, "G": GOLD, "g": BREW, "e": INK},
+)
 
 MONSTER_SPRITES: dict[str, Sprite] = {
     "green_slime": GREEN_SLIME_SPRITE,
@@ -397,6 +433,15 @@ MONSTER_SPRITES: dict[str, Sprite] = {
     "imp": IMP_SPRITE,
     "highwayman": HIGHWAYMAN_SPRITE,
     "cultist_acolyte": CULTIST_ACOLYTE_SPRITE,
+    "skeleton": SKELETON_SPRITE,
+    "death_knight": DEATH_KNIGHT_SPRITE,
+    "vampire": VAMPIRE_SPRITE,
+    "hellhound": HELLHOUND_SPRITE,
+    "cursed_tree": CURSED_TREE_SPRITE,
+    "mushmush": MUSHMUSH_SPRITE,
+    "desert_scorpion": DESERT_SCORPION_SPRITE,
+    "sandwarden": SANDWARDEN_SPRITE,
+    "king_slime": KING_SLIME_SPRITE,
 }
 NPC_SPRITES: dict[str, Sprite] = {
     "archaeologist": ARCHAEOLOGIST_SPRITE,
@@ -489,6 +534,15 @@ ALL_CURATED_SPRITES: dict[str, Sprite] = {
     "imp": IMP_SPRITE,
     "highwayman": HIGHWAYMAN_SPRITE,
     "cultist_acolyte": CULTIST_ACOLYTE_SPRITE,
+    "skeleton": SKELETON_SPRITE,
+    "death_knight": DEATH_KNIGHT_SPRITE,
+    "vampire": VAMPIRE_SPRITE,
+    "hellhound": HELLHOUND_SPRITE,
+    "cursed_tree": CURSED_TREE_SPRITE,
+    "mushmush": MUSHMUSH_SPRITE,
+    "desert_scorpion": DESERT_SCORPION_SPRITE,
+    "sandwarden": SANDWARDEN_SPRITE,
+    "king_slime": KING_SLIME_SPRITE,
 }
 
 for _name, _sprite in ALL_CURATED_SPRITES.items():

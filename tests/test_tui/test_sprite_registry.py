@@ -8,18 +8,24 @@ from artifactsmmo_cli.tui.sprites import (
     COW_SPRITE,
     CULTIST_ACOLYTE_SPRITE,
     CULTIST_WIZARD_SPRITE,
+    CURSED_TREE_SPRITE,
     CYCLOPS_SPRITE,
+    DEATH_KNIGHT_SPRITE,
+    DESERT_SCORPION_SPRITE,
     FISHING_SPRITE,
     FLYING_SNAKE_SPRITE,
     GOBLIN_SPRITE,
     GOBLIN_WOLFRIDER_SPRITE,
     GRAND_EXCHANGE_SPRITE,
     GREEN_SLIME_SPRITE,
+    HELLHOUND_SPRITE,
     HIGHWAYMAN_SPRITE,
     IMP_SPRITE,
+    KING_SLIME_SPRITE,
     MARK_COLOR,
     MARK_KEY,
     MINING_SPRITE,
+    MUSHMUSH_SPRITE,
     OGRE_SPRITE,
     ORC_SPRITE,
     OWLBEAR_SPRITE,
@@ -29,12 +35,15 @@ from artifactsmmo_cli.tui.sprites import (
     RUNE_VENDOR_SPRITE,
     SAND_SNAKE_SPRITE,
     SANDWHISPER_TRADER_SPRITE,
+    SANDWARDEN_SPRITE,
     SHEEP_SPRITE,
+    SKELETON_SPRITE,
     SPIDER_SPRITE,
     SpriteCategory,
     TAILOR_SPRITE,
     TASKS_MASTER_SPRITE,
     TASKS_TRADER_SPRITE,
+    VAMPIRE_SPRITE,
     WOLF_SPRITE,
     WORKSHOP_SPRITE,
     YELLOW_SLIME_SPRITE,
@@ -67,8 +76,8 @@ def test_fallback_is_cached_identical():
 
 def test_fallback_marking_differs_by_code():
     reg = SpriteRegistry()
-    a = reg.sprite_for("dragon", SpriteCategory.MONSTER)    # checksum 630
-    b = reg.sprite_for("troll", SpriteCategory.MONSTER)     # checksum 539
+    a = reg.sprite_for("dragon", SpriteCategory.MONSTER)    # checksum 635
+    b = reg.sprite_for("troll", SpriteCategory.MONSTER)     # checksum 557
     assert a.rows != b.rows
 
 
@@ -124,6 +133,19 @@ def test_b4_humanoids_are_curated():
         "orc": ORC_SPRITE, "ogre": OGRE_SPRITE, "cyclops": CYCLOPS_SPRITE,
         "imp": IMP_SPRITE, "highwayman": HIGHWAYMAN_SPRITE,
         "cultist_acolyte": CULTIST_ACOLYTE_SPRITE,
+    }
+    for code, sprite in cases.items():
+        assert reg.sprite_for(code, SpriteCategory.MONSTER) is sprite
+
+
+def test_b5_undead_and_special_are_curated():
+    reg = SpriteRegistry()
+    cases = {
+        "skeleton": SKELETON_SPRITE, "death_knight": DEATH_KNIGHT_SPRITE,
+        "vampire": VAMPIRE_SPRITE, "hellhound": HELLHOUND_SPRITE,
+        "cursed_tree": CURSED_TREE_SPRITE, "mushmush": MUSHMUSH_SPRITE,
+        "desert_scorpion": DESERT_SCORPION_SPRITE, "sandwarden": SANDWARDEN_SPRITE,
+        "king_slime": KING_SLIME_SPRITE,
     }
     for code, sprite in cases.items():
         assert reg.sprite_for(code, SpriteCategory.MONSTER) is sprite
