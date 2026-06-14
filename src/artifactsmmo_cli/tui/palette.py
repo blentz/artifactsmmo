@@ -23,3 +23,6 @@ TUNIC = "#3465a4"      # blue cloth
 WATER = "#2a7fb8"      # water surface
 BREW = "#75507b"       # alchemy / cloth purple
 PINK = "#f5a9b8"       # snouts / noses (cow, pig)
+GOBLIN_SKIN = "#73a946"  # goblin green
+ORC_SKIN = "#5a7d3a"     # orc dark olive
+OGRE_SKIN = "#8aa37b"    # ogre grey-green
