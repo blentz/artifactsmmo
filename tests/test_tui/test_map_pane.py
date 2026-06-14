@@ -6,6 +6,7 @@ from textual.geometry import Size
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.tui.glyphs import UNMAPPED_COLOR, WALKABLE_COLOR
+from artifactsmmo_cli.tui.palette import LEAF, SKIN
 from artifactsmmo_cli.tui.sprites import SpriteCategory
 from artifactsmmo_cli.tui.widgets.map_pane import (
     FALLBACK_H,
@@ -80,16 +81,16 @@ class TestViewportGeometry:
 
 class TestLayers:
     def test_player_sprite_at_center(self):
-        # PLAYER_COLOR (bright_yellow) appears only from the player sprite.
+        # SKIN (flesh tone) appears only from the player sprite.
         pane = MapPane(_gd_typed())
         out = pane._render_viewport(_snap(0, 0), 80, 41)
-        assert any("bright_yellow" in s for s in _styles(out))
+        assert any(SKIN in s for s in _styles(out))
 
     def test_monster_sprite_in_view(self):
-        # green_slime at (2,0) is in view from (0,0) -> green pixels present.
+        # green_slime at (2,0) is in view from (0,0) -> LEAF pixels present.
         pane = MapPane(_gd_typed())
         out = pane._render_viewport(_snap(0, 0), 80, 41)
-        assert any("green" in s for s in _styles(out))
+        assert any(LEAF in s for s in _styles(out))
 
     def test_unmapped_tiles_use_void_color(self):
         gd = GameData()  # nothing known, no content

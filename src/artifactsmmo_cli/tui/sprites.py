@@ -9,11 +9,12 @@ from dataclasses import dataclass
 from enum import Enum
 
 from artifactsmmo_cli.tui.glyphs import (
-    DOOR_COLOR,
     MONSTER_COLOR,
     NPC_COLOR,
-    PLAYER_COLOR,
     STRUCTURE_COLOR,
+)
+from artifactsmmo_cli.tui.palette import (
+    BARK, DOORWOOD, GOLD, INK, KHAKI, LEAF, SKIN, STONE, TUNIC,
 )
 
 SPRITE_SIZE = 8
@@ -52,86 +53,86 @@ BLANK_SPRITE = Sprite(rows=(TRANSPARENT * SPRITE_SIZE,) * SPRITE_SIZE, palette={
 
 PLAYER_SPRITE = Sprite(
     rows=(
-        "..####..",
-        ".######.",
-        ".#e##e#.",
-        ".######.",
-        "..####..",
-        ".#.##.#.",
-        "..#..#..",
-        "..#..#..",
+        "..oooo..",
+        ".oyyyyo.",
+        ".oeyyeo.",
+        ".oyyyyo.",
+        "..oooo..",
+        ".obbbbo.",
+        ".ob..bo.",
+        ".oo..oo.",
     ),
-    palette={"#": PLAYER_COLOR, "e": "black"},
+    palette={"o": INK, "y": SKIN, "e": INK, "b": TUNIC},
 )
 
 GREEN_SLIME_SPRITE = Sprite(
     rows=(
-        "........",
-        "..####..",
-        ".######.",
-        "########",
-        "#e####e#",
-        "########",
-        ".######.",
-        "........",
+        "..oooo..",
+        ".oggggo.",
+        "oggggggo",
+        "ogeggego",
+        "oggggggo",
+        "oggggggo",
+        ".oggggo.",
+        "..oooo..",
     ),
-    palette={"#": "green", "e": "black"},
+    palette={"o": INK, "g": LEAF, "e": INK},
 )
 
 BANK_SPRITE = Sprite(
     rows=(
-        "########",
-        "#dddddd#",
-        "#d####d#",
-        "#d####d#",
-        "#d####d#",
-        "#d####d#",
-        "#dddddd#",
-        "########",
+        "oooooooo",
+        "oyyyyyyo",
+        "oooooooo",
+        "osssssso",
+        "ossddsso",
+        "ossddsso",
+        "ossddsso",
+        "oooooooo",
     ),
-    palette={"#": STRUCTURE_COLOR, "d": "yellow"},
+    palette={"o": INK, "y": GOLD, "s": STONE, "d": DOORWOOD},
 )
 
 DOOR_SPRITE = Sprite(
     rows=(
-        "..####..",
-        ".#dddd#.",
-        ".#dddd#.",
-        ".#dddd#.",
-        ".#dddd#.",
-        ".#dddd#.",
-        ".#dd#d#.",
-        ".######.",
+        "..oooo..",
+        ".oddddo.",
+        ".oddddo.",
+        ".oddddo.",
+        ".odddko.",
+        ".oddddo.",
+        ".oddddo.",
+        "..oooo..",
     ),
-    palette={"#": STRUCTURE_COLOR, "d": DOOR_COLOR},
+    palette={"o": INK, "d": DOORWOOD, "k": GOLD},
 )
 
 WOODCUTTING_SPRITE = Sprite(
     rows=(
-        "...##...",
-        "..####..",
-        ".######.",
-        "..####..",
-        "...##...",
-        "...tt...",
-        "...tt...",
-        "...tt...",
+        "..oooo..",
+        ".oggggo.",
+        "oggggggo",
+        "oggggggo",
+        ".oggggo.",
+        "..otto..",
+        "..otto..",
+        "..oooo..",
     ),
-    palette={"#": "green", "t": "yellow"},
+    palette={"o": INK, "g": LEAF, "t": BARK},
 )
 
 ARCHAEOLOGIST_SPRITE = Sprite(
     rows=(
-        "..####..",
-        ".######.",
-        ".#e##e#.",
-        ".######.",
-        "..####..",
-        ".#####..",
-        "..#.#...",
-        "..#.#...",
+        "..oooo..",
+        ".obbbbo.",
+        ".osssso.",
+        ".oseeso.",
+        ".osssso.",
+        "..oooo..",
+        ".okkkko.",
+        ".ok..ko.",
     ),
-    palette={"#": NPC_COLOR, "e": "black"},
+    palette={"o": INK, "b": BARK, "s": SKIN, "e": INK, "k": KHAKI},
 )
 
 MONSTER_SPRITES: dict[str, Sprite] = {"green_slime": GREEN_SLIME_SPRITE}

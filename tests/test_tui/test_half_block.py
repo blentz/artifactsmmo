@@ -1,6 +1,7 @@
 """HalfBlockCompositor: sprite -> 4 half-block Text rows, memoized."""
 
 from artifactsmmo_cli.tui.half_block import HALF_BLOCK, HalfBlockCompositor
+from artifactsmmo_cli.tui.palette import LEAF
 from artifactsmmo_cli.tui.sprites import BLANK_SPRITE, GREEN_SLIME_SPRITE
 
 
@@ -23,8 +24,8 @@ def test_opaque_pixel_uses_palette_color():
     comp = HalfBlockCompositor()
     rows = comp.compose(GREEN_SLIME_SPRITE, "grey50")
     styles = [span.style for row in rows for span in row.spans]
-    # The slime body is green; at least one half-block carries a green pixel.
-    assert any("green" in style for style in styles)
+    # The slime body uses the LEAF palette color (hex), not the ANSI name.
+    assert any(LEAF in style for style in styles)
 
 
 def test_memoized_same_args_returns_identical_object():
