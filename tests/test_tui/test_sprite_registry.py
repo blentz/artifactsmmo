@@ -66,3 +66,16 @@ def test_b1_structures_and_resources_are_curated():
     assert reg.sprite_for("resource_mining", SpriteCategory.RESOURCE) is MINING_SPRITE
     assert reg.sprite_for("resource_fishing", SpriteCategory.RESOURCE) is FISHING_SPRITE
     assert reg.sprite_for("resource_alchemy", SpriteCategory.RESOURCE) is ALCHEMY_SPRITE
+
+
+def test_b2_npcs_are_curated():
+    reg = SpriteRegistry()
+    from artifactsmmo_cli.tui.sprites import (
+        TAILOR_SPRITE, CULTIST_WIZARD_SPRITE, RUNE_VENDOR_SPRITE,
+        SANDWHISPER_TRADER_SPRITE, TASKS_TRADER_SPRITE,
+    )
+    assert reg.sprite_for("tailor", SpriteCategory.NPC) is TAILOR_SPRITE
+    assert reg.sprite_for("cultist_wizard", SpriteCategory.NPC) is CULTIST_WIZARD_SPRITE
+    assert reg.sprite_for("rune_vendor", SpriteCategory.NPC) is RUNE_VENDOR_SPRITE
+    assert reg.sprite_for("sandwhisper_trader", SpriteCategory.NPC) is SANDWHISPER_TRADER_SPRITE
+    assert reg.sprite_for("tasks_trader", SpriteCategory.NPC) is TASKS_TRADER_SPRITE

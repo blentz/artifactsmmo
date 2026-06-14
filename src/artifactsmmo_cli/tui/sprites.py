@@ -136,6 +136,76 @@ ARCHAEOLOGIST_SPRITE = Sprite(
     palette={"o": INK, "b": BARK, "s": SKIN, "e": INK, "k": KHAKI},
 )
 
+TAILOR_SPRITE = Sprite(
+    rows=(
+        "..oooo..",
+        ".osssso.",
+        ".oseeso.",
+        ".osssso.",
+        "..oooo..",
+        ".ommmmo.",
+        ".om..mo.",
+        ".oo..oo.",
+    ),
+    palette={"o": INK, "s": SKIN, "e": INK, "m": BREW},
+)
+
+CULTIST_WIZARD_SPRITE = Sprite(
+    rows=(
+        "...oo...",
+        "..ohho..",
+        ".ohhhho.",
+        ".osssso.",
+        ".oseeso.",
+        "..oooo..",
+        ".obbbbo.",
+        ".ob..bo.",
+    ),
+    palette={"o": INK, "h": SLATE, "s": SKIN, "e": INK, "b": BREW},
+)
+
+RUNE_VENDOR_SPRITE = Sprite(
+    rows=(
+        "..oooo..",
+        ".osssso.",
+        ".oseeso.",
+        ".osssso.",
+        "..oooo..",
+        ".otggto.",
+        ".ot..to.",
+        ".oo..oo.",
+    ),
+    palette={"o": INK, "s": SKIN, "e": INK, "t": TUNIC, "g": GOLD},
+)
+
+SANDWHISPER_TRADER_SPRITE = Sprite(
+    rows=(
+        "..oooo..",
+        ".okkkko.",
+        ".oseeso.",
+        ".osssso.",
+        "..oooo..",
+        ".oaaaao.",
+        ".oa..ao.",
+        ".oo..oo.",
+    ),
+    palette={"o": INK, "k": KHAKI, "s": SKIN, "e": INK, "a": AMBER},
+)
+
+TASKS_TRADER_SPRITE = Sprite(
+    rows=(
+        "..oooo..",
+        ".osssso.",
+        ".oseeso.",
+        ".osssso.",
+        "..oooo..",
+        ".okkkko.",
+        ".okwwko.",
+        ".oo..oo.",
+    ),
+    palette={"o": INK, "s": SKIN, "e": INK, "k": KHAKI, "w": BONE},
+)
+
 GRAND_EXCHANGE_SPRITE = Sprite(
     rows=(
         "oooooooo",
@@ -221,7 +291,14 @@ ALCHEMY_SPRITE = Sprite(
 )
 
 MONSTER_SPRITES: dict[str, Sprite] = {"green_slime": GREEN_SLIME_SPRITE}
-NPC_SPRITES: dict[str, Sprite] = {"archaeologist": ARCHAEOLOGIST_SPRITE}
+NPC_SPRITES: dict[str, Sprite] = {
+    "archaeologist": ARCHAEOLOGIST_SPRITE,
+    "tailor": TAILOR_SPRITE,
+    "cultist_wizard": CULTIST_WIZARD_SPRITE,
+    "rune_vendor": RUNE_VENDOR_SPRITE,
+    "sandwhisper_trader": SANDWHISPER_TRADER_SPRITE,
+    "tasks_trader": TASKS_TRADER_SPRITE,
+}
 STRUCTURE_SPRITES: dict[str, Sprite] = {
     "bank": BANK_SPRITE,
     "door": DOOR_SPRITE,
@@ -280,6 +357,11 @@ ALL_CURATED_SPRITES: dict[str, Sprite] = {
     "resource_mining": MINING_SPRITE,
     "resource_fishing": FISHING_SPRITE,
     "resource_alchemy": ALCHEMY_SPRITE,
+    "tailor": TAILOR_SPRITE,
+    "cultist_wizard": CULTIST_WIZARD_SPRITE,
+    "rune_vendor": RUNE_VENDOR_SPRITE,
+    "sandwhisper_trader": SANDWHISPER_TRADER_SPRITE,
+    "tasks_trader": TASKS_TRADER_SPRITE,
 }
 
 for _name, _sprite in ALL_CURATED_SPRITES.items():
