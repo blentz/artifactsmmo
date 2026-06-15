@@ -28,17 +28,18 @@ real spawn state**. Everything else in the chain is done:
 `GlobalInvariants s` (LevelFiftyReachable.lean:57) requires, at EVERY state
 reachable from `s` via `cycleStepN`:
 
-- **O5.1 — hnowait**: `productionLadder (cycleStepN k s) ≠ some .wait` ∀k. The
-  planner never falls through to WAIT while < 50 — a PRODUCTIVE means always
-  fires. The conditional form `productionLadder_total_under_invariants` exists;
-  discharging the condition is the work. DEPENDS ON: a winnable monster (or a
-  productive gather/craft) is available at every level-<50 state.
-  `CombatTargetExistence.pickWinnable_some_of_exists` is proved CONDITIONALLY on
-  "∃ winnable monster" — so this needs a GAME-DATA fact: *at every level < 50 the
-  monster table contains a stat-winnable monster*. Per the liveness axiom policy
-  ([[project_liveness_axiom_split]]) that is a new named server axiom needing
-  user signoff + an openapi-spec citation, OR a derivation from the cached
-  monster table. **This is a decision point, not just a proof.**
+- **O5.1 — hnowait — DONE 2026-06-15** (`Formal/Liveness/NoWait.lean`,
+  `productionLadder_ne_wait`). UNCONDITIONAL, axioms {propext, Quot.sound} (NOT
+  even LIV-001). The original worry (needs a combat-existence game-data axiom)
+  turned out UNNECESSARY: hnowait holds from the TASK LIFECYCLE alone. The three
+  task means are phase-total — `acceptTaskFires = (phase=none)`,
+  `pursueTaskFires = (phase ∈ {accepted,inProgress})`,
+  `completeTaskFires = (phase=complete)` — so for EVERY state one fires, and all
+  three sit before `.wait` in `allInLadderOrder`. The first firing means is
+  therefore never `.wait`: the bot always has a task move (accept/pursue/complete)
+  and is never idle. This is the HONEST no-deadlock the user demanded, replacing
+  the vacuous `productionLadder_total` (which was satisfied by `.wait` itself).
+  No game-data axiom needed.
 
 - **O5.2 — hfightFires**: `∀ N, ∃ k ≥ N, productionLadder (cycleStepN k s) ∈
   {bankUnlock, reachUnlockLevel}`. The trajectory drives FIGHTS infinitely often.
@@ -78,15 +79,18 @@ reachable from `s` via `cycleStepN`:
   `K ≤ 49 × max_per_cycle_K` could be derived from the LIV-003 small axioms
   (lowYieldSampleThreshold, taskPoolFinite). Nice-to-have, not load-bearing.
 
-## Recommended sequence
-1. **O5.3** (cheap, no new axioms) — discharge hperc/hex/hbe; shrinks
-   `GlobalInvariants` to {hnowait, hfightFires}. Good warm-up, immediate win.
-2. **O5.1** (foundational) — FIRST a DECISION on the game-data combat-existence
-   axiom (introduce named `winnableMonsterExistsBelow50` with openapi citation, or
-   derive from the monster table). Then discharge hnowait.
-3. **O5.2** (the crux) — the fight-fairness theorem. Largest effort.
-4. **O5.4** — extend the cycle-step diff to bind the select side.
-5. **O5.5** — optional closed-form K.
+## Progress / remaining (updated 2026-06-15)
+- **O5.1 hnowait — DONE** (unconditional, task-lifecycle; no axiom). Replaces the
+  vacuous `productionLadder_total` (`.wait` fall-through).
+- **O5.3 hex/hbe — DONE** (config-positivity invariance).
+- `GlobalInvariants` now reduces to just **{hperc, hfightFires}** + 2 spawn facts.
+- **O5.3 hperc — open** — perception invariant `xp < xpToNextLevel level` inducted
+  across the trajectory + `level < 50 / bankRequiredLevel ≤ 50`.
+- **O5.2 hfightFires — open, the crux** — fight-fairness: now that a productive
+  means ALWAYS fires (hnowait), the remaining gap is that it is INFINITELY OFTEN a
+  fight (the only char-XP source), not endless accept/pursue/gather. The
+  combat-existence catalog derivation (user's choice) plugs in HERE, not at hnowait.
+- **O5.4 model faithfulness — open.**  **O5.5 closed-form K — optional.**
 
 ## Decision needed from the user before O5.1
 The combat-existence fact (a winnable monster exists at every level < 50) is a

@@ -39,6 +39,7 @@ import Formal.Liveness.ItemsTaskRun
 import Formal.Liveness.GameDataFixture
 import Formal.Liveness.LevelFiftyReachable
 import Formal.Liveness.ReducedReachability
+import Formal.Liveness.NoWait
 import Formal.Liveness.LifecycleBound
 import Formal.Liveness.LifecycleBound2
 import Formal.Liveness.LifecycleBound3
@@ -276,7 +277,14 @@ open Formal.Liveness.LevelFiftyReachable
 #print axioms ai_reaches_level_fifty
 #print axioms ai_reaches_level_fifty_from_spawn
 
--- Obligation-5 O5.3 increment: hex/hbe discharged from spawn config-positivity.
+-- Obligation-5 O5.1: hnowait discharged HONESTLY (a task means always fires
+-- before .wait; NOT the .wait fall-through).
+open Formal.Liveness.NoWait in
+#print axioms task_means_always_fires
+open Formal.Liveness.NoWait in
+#print axioms productionLadder_ne_wait
+-- Obligation-5: hnowait + hex/hbe discharged; GlobalInvariants reduced to
+-- {hperc, hfightFires} + spawn config-positivity.
 open Formal.Liveness.ReducedReachability in
 #print axioms ai_reaches_level_fifty_config_positive
 

@@ -1,5 +1,6 @@
 import Formal.Liveness.LevelFiftyReachable
 import Formal.Liveness.GameDataInvariance
+import Formal.Liveness.NoWait
 
 /-! # Obligation-5 increment: discharge hex / hbe from spawn config-positivity
 
@@ -29,14 +30,17 @@ open Formal.Liveness.ProductionLadder
 open Formal.Liveness.CycleStep
 open Formal.Liveness.CumulativeProgress
 
-/-- **hex/hbe discharged.** Level-50 reachability needing only spawn
+/-- **hnowait + hex + hbe discharged.** Level-50 reachability needing only spawn
 config-positivity (`taskExchangeMinCoins > 0`, `nextExpansionCost > 0`) in place
-of the trajectory-quantified `hex`/`hbe` fields of `GlobalInvariants`. The other
-three obligations (`hnowait`, `hperc`, `hfightFires`) are passed through
-unchanged. -/
+of THREE of the five `GlobalInvariants` fields:
+- `hnowait` is now UNCONDITIONAL — `NoWait.productionLadder_ne_wait` proves a task
+  means (accept / pursue / complete) always fires before `.wait`, so the ladder is
+  never reduced to waiting (the HONEST no-deadlock, not the `.wait` fall-through).
+- `hex` / `hbe` follow from spawn config-positivity via `GameDataInvariance`
+  (those fields are `cycleStepN`-invariant).
+Only `hperc` and `hfightFires` remain as runtime hypotheses. -/
 theorem ai_reaches_level_fifty_config_positive (s : State)
     (htec : s.taskExchangeMinCoins > 0) (hnec : s.nextExpansionCost > 0)
-    (hnowait : ∀ k, productionLadder (cycleStepN k s) ≠ some .wait)
     (hperc : ∀ k k', productionLadder (cycleStepN k s) = some k' →
               (k' = .bankUnlock ∨ k' = .reachUnlockLevel) →
               (cycleStepN k s).xp < xpToNextLevel (cycleStepN k s).level
@@ -46,7 +50,7 @@ theorem ai_reaches_level_fifty_config_positive (s : State)
         ∨ productionLadder (cycleStepN k s) = some .reachUnlockLevel) :
     ∃ k, (cycleStepN k s).level ≥ 50 :=
   ai_reaches_level_fifty s
-    { hnowait := hnowait
+    { hnowait := fun k => Formal.Liveness.NoWait.productionLadder_ne_wait (cycleStepN k s)
       hex := fun k _ => hex_propagation s htec k
       hbe := fun k _ => hbe_propagation s hnec k
       hperc := hperc
