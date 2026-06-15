@@ -12,6 +12,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.buy_source_venue import BuyVenue, choose_buy_venue
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.craft_vs_buy import GOLD_RESERVE, Method, acquisition_method
+from artifactsmmo_cli.ai.goals.gather_plannable_core import gather_plannable_pure
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_selection import GatherCandidate, select_gather_source
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -324,15 +325,16 @@ class GatherMaterialsGoal(Goal):
         `needed`) stay plannable — gathering inputs never needs the gated
         final craft."""
         if self._target_item not in self._needed:
-            return True
+            return gather_plannable_pure(False, False, 0, 0, 0, 0)
         stats = game_data.item_stats(self._target_item)
-        if (stats is None or not stats.crafting_skill
-                or state.skills.get(stats.crafting_skill, 1) >= stats.crafting_level):
-            return True
+        if stats is None or not stats.crafting_skill:
+            return gather_plannable_pure(True, False, 0, 0, 0, 0)
         bank = state.bank_items or {}
         owned = (state.inventory.get(self._target_item, 0)
                  + bank.get(self._target_item, 0))
-        return owned >= self._needed[self._target_item]
+        return gather_plannable_pure(
+            True, True, state.skills.get(stats.crafting_skill, 1),
+            stats.crafting_level, owned, self._needed[self._target_item])
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"inventory": self._needed}

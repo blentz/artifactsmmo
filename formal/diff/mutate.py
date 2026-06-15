@@ -101,6 +101,11 @@ MEASURE_SRC = ROOT / "formal" / "sim" / "measure.py"
 # Phase-22b — cycle-loop mirror (Python port of Formal.Liveness.CycleStep).
 CYCLE_STEP_SRC = ROOT / "formal" / "sim" / "cycle_step.py"
 
+# Skill-gate fast-fail + doomed-memo (2026-06-15 feather_coat CPU-peg fix).
+GATHER_PLANNABLE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "gather_plannable_core.py"
+DOOMED_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "doomed_memo.py"
+STRATEGY_DRIVER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "strategy_driver.py"
+
 # (description, old, new) -- old strings matched to the actual current pathfinding.py text.
 MUTATIONS = [
     # step direction: invert the X step toward target
@@ -1263,6 +1268,49 @@ def run_diff(test_path: str) -> int:
     ).returncode
 
 
+# Killed by formal/diff/test_skill_gate_fastfail_diff.py (binds gather_plannable_pure
+# to the proved Formal.SkillGateFastFail.isPlannable).
+GATHER_PLANNABLE_MUTATIONS = [
+    ("gather_plannable: drop the owned-fallback (always plannable when gated)",
+     "    return owned >= needed",
+     "    return True"),
+    ("gather_plannable: skill gate off-by-one (>= becomes >)",
+     "    if not has_craft_gate or cur_level >= craft_level:",
+     "    if not has_craft_gate or cur_level > craft_level:"),
+    ("gather_plannable: owned-fallback off-by-one (>= becomes >)",
+     "    return owned >= needed",
+     "    return owned > needed"),
+]
+
+# Killed by formal/diff/test_doomed_memo_diff.py (binds DoomedMemo._ttl / is_doomed
+# to the proved Formal.DoomedMemo.ttl / isDoomed).
+DOOMED_MEMO_MUTATIONS = [
+    ("doomed_memo: drop exponential backoff (window stays at base)",
+     "        return min(self._base_retry << (failures - 1), self._max_retry)",
+     "        return min(self._base_retry, self._max_retry)"),
+    ("doomed_memo: ttl shift off-by-one (failures-1 becomes failures)",
+     "        return min(self._base_retry << (failures - 1), self._max_retry)",
+     "        return min(self._base_retry << failures, self._max_retry)"),
+    ("doomed_memo: drop signature invalidation (skip even when plannability moved)",
+     "        if sig != plannability_signature(state):\n            return False",
+     "        if False:\n            return False"),
+    ("doomed_memo: window off-by-one (< becomes <=)",
+     "        return cycle - set_at < self._ttl(failures)",
+     "        return cycle - set_at <= self._ttl(failures)"),
+]
+
+# Killed by tests/test_ai/test_strategy_driver_tiered.py (the cheap-pass conclusive
+# marking policy — the feather_coat re-explosion fix).
+STRATEGY_DRIVER_MUTATIONS = [
+    ("strategy_driver: cheap pass marks on timeout too (drops the conclusive gate)",
+     "        elif mark_on_timeout or not timed_out:",
+     "        elif mark_on_timeout or timed_out:"),
+    ("strategy_driver: clear requires BOTH guard and plan (drops plan-clears)",
+     "        if r in guard_reprs or plan:",
+     "        if r in guard_reprs and plan:"),
+]
+
+
 def run_group(src: Path, mutations, test_path: str, survivors: list) -> None:
     orig = src.read_text()
     try:
@@ -1282,6 +1330,7 @@ def run_group(src: Path, mutations, test_path: str, survivors: list) -> None:
 
 
 _ALL_SRCS = [
+    GATHER_PLANNABLE_CORE_SRC, DOOMED_MEMO_SRC, STRATEGY_DRIVER_SRC,
     SRC, TASK_BATCH_SRC, INVENTORY_CAPS_SRC, COMBAT_SRC, PROJECTION_SRC, SCORING_SRC,
     SKILL_XP_CURVE_SRC, RECIPE_CLOSURE_SRC, TASK_FEASIBILITY_SRC, PREREQUISITE_GRAPH_SRC,
     OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, STUCK_DETECTOR_SRC,
@@ -2883,6 +2932,12 @@ def _run_all_groups() -> int:
     # P0 2026-06-09 — items-task material reservation differential.
     run_group(TASK_RESERVATION_SRC, TASK_RESERVATION_MUTATIONS,
               "formal/diff/test_task_reservation_diff.py", survivors)
+    run_group(GATHER_PLANNABLE_CORE_SRC, GATHER_PLANNABLE_MUTATIONS,
+              "formal/diff/test_skill_gate_fastfail_diff.py", survivors)
+    run_group(DOOMED_MEMO_SRC, DOOMED_MEMO_MUTATIONS,
+              "formal/diff/test_doomed_memo_diff.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, STRATEGY_DRIVER_MUTATIONS,
+              "tests/test_ai/test_strategy_driver_tiered.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

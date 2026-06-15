@@ -1830,6 +1830,27 @@ def runCannibalize (args : Array Json) : Json :=
   Json.mkObj [("cannibalize", Json.bool (Formal.GrindLadder.cannibalizeModel (intArg args 0) rcs))]
 
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
+-- DoomedMemo: re-probe window ttl(base, maxR, failures).
+def runDoomedTtl (args : Array Json) : Json :=
+  let r := Formal.DoomedMemo.ttl (intArg args 0).toNat (intArg args 1).toNat (intArg args 2).toNat
+  Json.mkObj [("ttl", Json.num (Int.ofNat r))]
+
+-- DoomedMemo: is_doomed decision. args = [base, maxR, sig0, setAt, failures, sig, cycle]
+-- (signatures modeled as Int — isDoomed only compares them for equality).
+def runDoomedIsDoomed (args : Array Json) : Json :=
+  let d := Formal.DoomedMemo.isDoomed (σ := Int)
+    (intArg args 0).toNat (intArg args 1).toNat (intArg args 2)
+    (intArg args 3).toNat (intArg args 4).toNat (intArg args 5) (intArg args 6).toNat
+  Json.mkObj [("doomed", Json.bool d)]
+
+-- SkillGateFastFail: is_plannable fast-fail.
+-- args = [targetInNeeded(0/1), hasGate(0/1), curLevel, craftLevel, owned, needed]
+def runGatherPlannable (args : Array Json) : Json :=
+  let p := Formal.SkillGateFastFail.isPlannable
+    (intArg args 0 != 0) (intArg args 1 != 0)
+    (intArg args 2).toNat (intArg args 3).toNat (intArg args 4).toNat (intArg args 5).toNat
+  Json.mkObj [("plannable", Json.bool p)]
+
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
   let args := ((item.getObjValD "args" |>.getArr?).toOption.getD #[])
@@ -1976,6 +1997,12 @@ def runOne (item : Json) : Json :=
     runCannibalize args
   else if kind == "monster_drop_apply" then
     runMonsterDropApply args
+  else if kind == "doomed_ttl" then
+    runDoomedTtl args
+  else if kind == "doomed_is_doomed" then
+    runDoomedIsDoomed args
+  else if kind == "gather_plannable" then
+    runGatherPlannable args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

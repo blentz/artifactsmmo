@@ -157,3 +157,5 @@ import Formal.Extracted.SkillStepDispatch
 import Formal.SkillStepDispatch
 import Formal.GrindLadder
 import Formal.MonsterDropApply
+import Formal.DoomedMemo
+import Formal.SkillGateFastFail

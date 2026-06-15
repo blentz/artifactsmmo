@@ -4,6 +4,7 @@ A scripted planner returns a plan for a goal only when given >= its required
 budget, letting us assert pass behavior deterministically."""
 from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
+from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.strategy_driver import CHEAP_BUDGET_SECONDS as CHEAP
@@ -25,9 +26,15 @@ class _ScriptedPlanner:
         r = repr(goal)
         self.budgets.append((r, budget_seconds))
         if r in self.cheap_ok:
+            self.last_stats.timed_out = False
             return [WaitAction()]
         if r in self.full_only and budget_seconds is None:
+            self.last_stats.timed_out = False
             return [WaitAction()]
+        # No plan. A `full_only` goal at the CHEAP budget timed out (it needs more
+        # budget — a deterministic exhaustive search that finished empty could
+        # never plan with more time); anything else exhausted the space.
+        self.last_stats.timed_out = r in self.full_only and budget_seconds is not None
         return []
 
 
@@ -89,6 +96,69 @@ def test_wait_selected_when_nothing_plans():
     goal, plan, _ = a.select(_FakeDecision(chosen_step=None), state, _make_planner_gd(), [], _ctx())
     assert isinstance(goal, WaitGoal)
     assert len(plan) == 1 and isinstance(plan[0], WaitAction)
+
+
+def test_cheap_pass_memoizes_conclusively_failed_goal_passed_over_in_walk():
+    """The feather_coat 99%-CPU peg: a goal that EXHAUSTS the search (no plan,
+    timed_out=False) in the cheap walk must be memoized even though a LATER goal
+    wins cheaply (so escalation never runs). Pre-fix only the full pass marked, so
+    a passed-over exhausted goal re-exploded every cycle. `_record_attempt` with
+    mark_on_timeout=False marks it conclusively."""
+    a = _arbiter_with(_ScriptedPlanner(cheap_ok=set(), full_only=set()))
+    state = make_state(task_code=None, task_total=0)
+    goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
+    # Conclusive cheap failure (search exhausted, NOT a budget timeout).
+    a._record_attempt(goal, [], timed_out=False, state=state,
+                      guard_reprs=set(), mark_on_timeout=False)
+    assert a._memo.is_doomed(repr(goal), state, 1), \
+        "an exhausted cheap-pass failure must be memoized (the feather_coat fix)"
+
+
+def test_cheap_pass_timeout_is_not_memoized_so_it_can_escalate():
+    """A cheap-budget TIMEOUT is inconclusive — more budget may find a plan — so
+    the cheap pass must NOT memoize it; it has to remain available for the
+    full-budget escalation pass."""
+    a = _arbiter_with(_ScriptedPlanner(cheap_ok=set(), full_only=set()))
+    state = make_state(task_code=None, task_total=0)
+    goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
+    a._record_attempt(goal, [], timed_out=True, state=state,
+                      guard_reprs=set(), mark_on_timeout=False)
+    assert not a._memo.is_doomed(repr(goal), state, 1), \
+        "a cheap-pass timeout must stay retryable (escalation), not be memoized"
+
+
+def test_full_pass_memoizes_on_timeout():
+    """The full (last-resort) pass keeps the pre-existing behavior: mark on ANY
+    no-plan, timeout included — a full-budget timeout is the pragmatic backoff
+    trigger (the exponential window re-probes later)."""
+    a = _arbiter_with(_ScriptedPlanner(cheap_ok=set(), full_only=set()))
+    state = make_state(task_code=None, task_total=0)
+    goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
+    a._record_attempt(goal, [], timed_out=True, state=state,
+                      guard_reprs=set(), mark_on_timeout=True)
+    assert a._memo.is_doomed(repr(goal), state, 1)
+
+
+def test_record_attempt_clears_memo_on_success():
+    """A found plan clears any prior doomed mark (the goal became plannable)."""
+    a = _arbiter_with(_ScriptedPlanner(cheap_ok=set(), full_only=set()))
+    state = make_state(task_code=None, task_total=0)
+    goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
+    a._memo.mark(repr(goal), state, 0)
+    assert a._memo.is_doomed(repr(goal), state, 1)
+    a._record_attempt(goal, [WaitAction()], timed_out=False, state=state,
+                      guard_reprs=set(), mark_on_timeout=False)
+    assert not a._memo.is_doomed(repr(goal), state, 1)
+
+
+def test_record_attempt_never_memoizes_a_guard():
+    """Guards always get the full budget and bypass the memo — never marked."""
+    a = _arbiter_with(_ScriptedPlanner(cheap_ok=set(), full_only=set()))
+    state = make_state(task_code=None, task_total=0)
+    goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
+    a._record_attempt(goal, [], timed_out=False, state=state,
+                      guard_reprs={repr(goal)}, mark_on_timeout=True)
+    assert not a._memo.is_doomed(repr(goal), state, 1)
 
 
 def test_plans_short_circuits_wait_goal_without_invoking_planner():

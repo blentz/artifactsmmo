@@ -20,6 +20,8 @@ import Formal.TaskTradeReadyPriority
 import Formal.WithdrawSetExpansion
 import Formal.RecycleProtection
 import Formal.BankExpansionTiming
+import Formal.DoomedMemo
+import Formal.SkillGateFastFail
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
@@ -1026,3 +1028,20 @@ open Formal.PriorityBand
 #check @Extracted.Bridges.equip_value_tiebreak_extracted              -- non-tool outranks raw-tied tool (transferred)
 #check @Extracted.Bridges.tool_value_abs_gather                       -- tool_value = |gather_score| (cross-core duality)
 #check @Extracted.Bridges.tool_value_neg_gather_on_tools              -- tool domain: max tool_value ≡ min gather_score
+
+-- DoomedMemo required roles (exponential-backoff no-plan memo;
+-- src/artifactsmmo_cli/ai/doomed_memo.py + plannability_signature.py):
+#check @Formal.DoomedMemo.ttl_base                  -- first failure window = min base maxR
+#check @Formal.DoomedMemo.ttl_le_max                -- cap: window ≤ maxR ∀ failures
+#check @Formal.DoomedMemo.window_doubles            -- geometric: uncapped window ×2 per failure
+#check @Formal.DoomedMemo.ttl_monotone             -- more failures never shrink the window
+#check @Formal.DoomedMemo.isDoomed_sig_change      -- new signature ⇒ not doomed (re-probe)
+#check @Formal.DoomedMemo.isDoomed_window          -- doomed ⇔ inside ttl window (same sig)
+#check @Formal.DoomedMemo.isDoomed_expires         -- liveness: window elapsed ⇒ not doomed
+#check @Formal.DoomedMemo.escalation_grows_window  -- same-sig re-mark never shrinks window
+
+-- SkillGateFastFail required roles (GatherMaterialsGoal.is_plannable;
+-- src/artifactsmmo_cli/ai/goals/gathering.py:316-335):
+#check @Formal.SkillGateFastFail.applyStep_gate_closed  -- gate closed ⇒ step is a no-op on owned
+#check @Formal.SkillGateFastFail.runPlan_gate_closed    -- gate closed ⇒ owned invariant ∀ plan
+#check @Formal.SkillGateFastFail.fastfail_sound         -- fast-fail fires ⇒ ∀ plan owned < needed

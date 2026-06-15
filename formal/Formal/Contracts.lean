@@ -10,6 +10,8 @@ import Formal.EquipmentScoring
 import Formal.SkillTargetCurve
 import Formal.SkillGrindSelection
 import Formal.SkillStepDispatch
+import Formal.DoomedMemo
+import Formal.SkillGateFastFail
 import Formal.GrindLadder
 import Formal.MonsterDropApply
 import Formal.SkillXpCurve
@@ -2704,3 +2706,41 @@ example : ∀ (s : Formal.Liveness.ItemsTaskRun.RunState),
           (List.replicate (s.total - s.progress) Formal.Liveness.ItemsTaskRun.trade)).progress
           = s.total :=
   @Formal.Liveness.ItemsTaskRun.held_accounts
+
+-- ─── DoomedMemo (exponential-backoff no-plan memo) anti-weakening pins ───
+-- cap: the re-probe window NEVER exceeds maxR (weakening to maxR+1 fails here).
+example : ∀ (base maxR failures : Nat),
+    Formal.DoomedMemo.ttl base maxR failures ≤ maxR :=
+  @Formal.DoomedMemo.ttl_le_max
+-- geometric: the uncapped window EXACTLY doubles per consecutive failure (f ≥ 1).
+example : ∀ (base f : Nat), 1 ≤ f →
+    base <<< ((f + 1) - 1) = 2 * (base <<< (f - 1)) :=
+  @Formal.DoomedMemo.window_doubles
+-- monotone: more failures never shrink the window.
+example : ∀ (base maxR : Nat) {f1 f2 : Nat}, f1 ≤ f2 →
+    Formal.DoomedMemo.ttl base maxR f1 ≤ Formal.DoomedMemo.ttl base maxR f2 :=
+  @Formal.DoomedMemo.ttl_monotone
+-- signature change ⇒ not doomed (the memo never suppresses a moved precondition).
+example : ∀ {σ : Type} [inst : DecidableEq σ] (base maxR : Nat) (sig0 : σ)
+    (setAt failures : Nat) (sig : σ) (cycle : Nat), sig ≠ sig0 →
+    Formal.DoomedMemo.isDoomed base maxR sig0 setAt failures sig cycle = false :=
+  @Formal.DoomedMemo.isDoomed_sig_change
+-- liveness: once the window elapses the goal is re-probed (never a permanent skip).
+example : ∀ {σ : Type} [inst : DecidableEq σ] (base maxR : Nat) (sig0 : σ)
+    (setAt failures : Nat) (sig : σ) (cycle : Nat),
+    Formal.DoomedMemo.ttl base maxR failures ≤ cycle - setAt →
+    Formal.DoomedMemo.isDoomed base maxR sig0 setAt failures sig cycle = false :=
+  @Formal.DoomedMemo.isDoomed_expires
+
+-- ─── SkillGateFastFail (GatherMaterialsGoal.is_plannable) anti-weakening pins ───
+-- gate closed ⇒ owned count invariant across the ENTIRE plan.
+example : ∀ (owned : Nat) (plan : List Formal.SkillGateFastFail.Step),
+    Formal.SkillGateFastFail.runPlan false owned plan = owned :=
+  @Formal.SkillGateFastFail.runPlan_gate_closed
+-- SOUNDNESS: fast-fail fires ⇒ EVERY plan leaves owned strictly below needed
+-- (the pruned goal is genuinely unreachable; weakening `< needed` to `≤ needed`
+-- fails to elaborate against the proven `<`).
+example : ∀ (targetInNeeded hasGate : Bool) (curLevel craftLevel owned needed : Nat),
+    Formal.SkillGateFastFail.isPlannable targetInNeeded hasGate curLevel craftLevel owned needed = false →
+    ∀ plan, Formal.SkillGateFastFail.runPlan (decide (craftLevel ≤ curLevel)) owned plan < needed :=
+  @Formal.SkillGateFastFail.fastfail_sound

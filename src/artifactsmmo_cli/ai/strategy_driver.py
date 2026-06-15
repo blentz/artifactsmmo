@@ -622,6 +622,11 @@ class StrategyArbiter:
         self.goals_tried: list[dict[str, object]] = []
         self._memo = DoomedMemo()
         self._cycle = 0
+        # Whether the most recent `_plans` call ended in a budget TIMEOUT (vs an
+        # EXHAUSTIVE search or a definitive is_plannable=False / WaitGoal result).
+        # The cheap pass only memoizes CONCLUSIVE no-plans, so a cheap timeout
+        # still escalates instead of being skipped. See `_record_attempt`.
+        self._last_timed_out: bool = False
 
     def set_cycle(self, cycle: int) -> None:
         """Player calls this each cycle so the memo's re-probe window advances."""
@@ -645,6 +650,7 @@ class StrategyArbiter:
         """
         if isinstance(goal, WaitGoal):
             wait_plan: list[Action] = [WaitAction()]
+            self._last_timed_out = False
             self.goals_tried.append({
                 "goal": repr(goal),
                 "nodes": 0,
@@ -660,6 +666,9 @@ class StrategyArbiter:
         # UpgradeEquipment(copper_boots) — 80 gathers vs max_depth 15 — from
         # stalling the first cycle.
         if not goal.is_plannable(state, game_data, self._history):
+            # A proven-unplannable goal is a CONCLUSIVE no-plan (not a timeout):
+            # the cheap pass may safely memoize it.
+            self._last_timed_out = False
             self.goals_tried.append({
                 "goal": repr(goal),
                 "nodes": 0,
@@ -671,6 +680,7 @@ class StrategyArbiter:
         plan = self._planner.plan(state, goal, actions, game_data, self._history,
                                   budget_seconds=budget_seconds)
         stats = self._planner.last_stats
+        self._last_timed_out = stats.timed_out
         self.goals_tried.append({
             "goal": repr(goal),
             "nodes": stats.nodes_explored,
@@ -678,6 +688,24 @@ class StrategyArbiter:
             "timed_out": stats.timed_out,
             "plan_len": len(plan),
         })
+        return plan
+
+    def _record_attempt(self, goal: Goal, plan: list[Action], timed_out: bool,
+                        state: WorldState, guard_reprs: set[str], *,
+                        mark_on_timeout: bool) -> list[Action]:
+        """Update the doomed-memo from one planning attempt and return `plan`.
+
+        - A found plan (or a guard goal) CLEARS any prior doomed mark.
+        - A no-plan result MARKS the goal doomed when it is conclusive: always for
+          the full pass (`mark_on_timeout=True`), but only on an EXHAUSTIVE search
+          (`not timed_out`) for the cheap pass, so a cheap-budget timeout stays
+          available for the full-budget escalation instead of being skipped.
+        Guards bypass the memo entirely (they always get the full budget)."""
+        r = repr(goal)
+        if r in guard_reprs or plan:
+            self._memo.clear(r)
+        elif mark_on_timeout or not timed_out:
+            self._memo.mark(r, state, self._cycle)
         return plan
 
     def select(
@@ -975,17 +1003,23 @@ class StrategyArbiter:
         def try_plan_cheap(goal: Goal) -> list[Action]:
             if _skip(goal):
                 return []
-            return self._plans(goal, state, game_data, actions, _budget_for(goal, cheap=True))
+            plan = self._plans(goal, state, game_data, actions, _budget_for(goal, cheap=True))
+            # Cheap pass: memoize only a CONCLUSIVE no-plan (search exhausted, not a
+            # budget timeout). A cheap timeout stays unmemoized so it can escalate.
+            # This is the feather_coat 99%-CPU fix: a doomed goal passed over in the
+            # cheap walk (because a LATER goal plans) is now recorded instead of
+            # re-exploding every cycle (the full pass that used to mark it never ran).
+            return self._record_attempt(goal, plan, self._last_timed_out, state,
+                                        guard_reprs, mark_on_timeout=False)
 
         def try_plan_full(goal: Goal) -> list[Action]:
             if _skip(goal):
                 return []
             plan = self._plans(goal, state, game_data, actions, _budget_for(goal, cheap=False))
-            if not plan and repr(goal) not in guard_reprs:
-                self._memo.mark(repr(goal), state, self._cycle)
-            else:
-                self._memo.clear(repr(goal))
-            return plan
+            # Full (last-resort) pass: mark on ANY no-plan, timeout included — the
+            # pragmatic backoff trigger (the exponential window re-probes later).
+            return self._record_attempt(goal, plan, self._last_timed_out, state,
+                                        guard_reprs, mark_on_timeout=True)
 
         def satisfied(goal: Goal) -> bool:
             return goal.is_satisfied(state)

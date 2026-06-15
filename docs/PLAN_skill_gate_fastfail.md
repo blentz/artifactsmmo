@@ -1,8 +1,83 @@
 # PLAN: Skill-gate fast-fail + cheap-pass no-plan memo
 
-**Status:** scoped, not started
+**Status:** in progress — proof expansion (DoomedMemo + is_plannable)
 **Branch:** `feat/prove-fight-drops` (or a fresh branch off it)
 **Trigger:** Robby pegged 99% CPU 2026-06-15. Diagnosis below.
+
+---
+
+## 0. CORRECTION (2026-06-15, after game-data + code verification)
+
+Initial diagnosis blamed a missing skill-gate fast-fail. WRONG, corrected:
+
+- `GatherMaterialsGoal.is_plannable` (gathering.py:316-335) **already implements**
+  the terminal skill-gate fast-fail — added 2026-06-11 for this exact feather_coat
+  case. It is currently **UNPROVEN** (no formal/ component).
+- Recipe chain (game-data verified): feather_coat←gearcrafting 5 (feather×5 +
+  ash_plank×2); feather←chicken drop; ash_plank←woodcutting **1**; ash_wood←gathered.
+  **No intermediate is gated above the bot's skills.** So a closure-wide gate check
+  would NOT have fired on 06-15 either.
+- On 06-15 `is_plannable` returned True (237K nodes prove the gate was *passed*) ⇒
+  gearcrafting was **≥5, gate OPEN**. feather_coat was doomed for a DEEPER reason
+  (most likely inventory-cap interleaving: 25 raw mats vs 20 free slots → no
+  simultaneously-satisfying state → 237K-node exhaustion, plan_len 0).
+- **The actual CPU-peg cause is Fix B alone:** `try_plan_cheap` searches feather_coat
+  (expensive, genuinely doomed) every cycle and NEVER `mark`s it (only `try_plan_full`
+  marks, and it never runs because the cheap pass succeeds via iron_bar). The
+  exponential-backoff `DoomedMemo` stays starved → re-explosion forever.
+
+**Proof-expansion scope chosen (user, "Both"):** prove BOTH the DoomedMemo backoff
+state machine (the real fix + the requested exponential backoff) AND the existing
+terminal is_plannable skill-gate soundness. See §9.
+
+---
+
+## 9. FORMAL EXPANSION — theorem roles per component
+
+Existing relevant proofs: `TieredSelection.lean` proves `memo_skip_sound` /
+`wait_only_when_no_full` etc. but treats `skip` as an ABSTRACT predicate with the
+no-plan contract as a hypothesis. `PlannerDepthBound.lean` proves length-based
+unplannability (`reachable_not_satisfying_when_lb_exceeds_depth`). Neither models
+the concrete backoff arithmetic nor the skill-gate predicate. Two NEW core-only
+components (no Mathlib — safety/decision):
+
+### Component: `DoomedMemo.lean` (mirrors doomed_memo.py + plannability_signature.py)
+Computable defs: `ttl base maxR failures`, `marked` (failure-count update),
+`isDoomed sig0 setAt failures sig cycle`. Theorem roles:
+- **base** — `ttl b m 1 = min b m` (first failure = base window).
+- **geometric** — `ttl b m (n+1)` uncapped doubles: `b <<< n = 2 * (b <<< (n-1))` for n≥1; window grows ×2 per consecutive failure until cap. (the requested "exponential backoff")
+- **cap** — `ttl b m f ≤ m` (∀ f). Window never exceeds max_retry.
+- **monotone** — `f1 ≤ f2 → ttl b m f1 ≤ ttl b m f2`.
+- **sig-invalidates** — `sig ≠ sig0 → isDoomed … = false` (new plannability ⇒ re-probe; soundness).
+- **window** — `sig = sig0 → (isDoomed = true ↔ cycle - setAt < ttl …)`.
+- **eventually-retries (liveness)** — `cycle - setAt ≥ ttl … → isDoomed = false` (never a permanent skip).
+- **escalates** — consecutive same-sig `mark` increments failures ⇒ ttl non-decreasing.
+
+### Component: `SkillGateFastFail.lean` (mirrors GatherMaterialsGoal.is_plannable)
+Computable def `isPlannable targetInNeeded hasCraftGate curLevel craftLevel owned needed`.
+Abstract acquisition model: target is craft-acquired; the only owned-increasing
+action is the gated `craft` (requires `curLevel ≥ craftLevel`); skill constant
+in-plan (the invariant `CraftAction.is_applicable` relies on — gates on base
+`state.skills`, not projected xp; verified crafting.py:46-47). Theorem roles:
+- **gate-blocks-craft** — `curLevel < craftLevel → craft not applicable` (∀ state on plan).
+- **owned-invariant** — `curLevel < craftLevel ∧ owned0 < needed → ∀ action seq, ownedₙ < needed` (craft never fires ⇒ owned never rises).
+- **soundness (headline)** — `isPlannable = false → no satisfying plan exists` (goal `owned ≥ needed` unreachable). i.e. the fast-fail NEVER prunes a reachable goal.
+- **completeness-guard / non-vacuity** — witnesses: gate-open ⇒ isPlannable True; already-owned ⇒ True; materials-only (target∉needed) ⇒ True (regression: don't prune the feather raw-drop case).
+
+### Gate wiring (both components)
+- Extract pure cores: `doomed_memo.py` ttl/isDoomed already pure (call directly);
+  add `is_plannable_core(target_in_needed, has_gate, cur, req, owned, needed)` pure
+  fn in gathering.py (or a `*_core.py`) the diff test calls.
+- `Oracle.lean`: add `runDoomedMemo` + `runSkillGateFastFail` dispatch arms.
+- `formal/diff/`: `test_doomed_memo_diff.py`, `test_skill_gate_fastfail_diff.py`
+  (Hypothesis over random failures/cycles/sigs and gate/owned/level tuples).
+- `mutate.py`: `DOOMED_MEMO_MUTATIONS` (drop backoff, drop sig-check, ttl off-by-one),
+  `IS_PLANNABLE_MUTATIONS` (drop gate, `<` vs `>` on level, drop owned-fallback).
+- `Manifest.lean`: `#check @` each role theorem. `Contracts.lean`: exact-statement
+  type-pins per role.
+- `README.md`: two new roster rows.
+- Code change (the actual fix): `try_plan_cheap` marks no-plan non-guard failures
+  into `_memo` (TDD: tests/.../test_strategy_driver.py).
 
 ---
 

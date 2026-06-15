@@ -193,6 +193,37 @@ Extended the sweep into actions / learning store / equipment. Outcomes:
 - **Regression trace-locks flipped to the new truth**: `pickLoadout_485_copper_ring_regression` → `pickLoadout_dual_ring_fills_when_two_owned` (2 owned ⇒ ring2 fills, matches the probe) **plus a new boundary** `pickLoadout_single_ring_no_dup_fill` (1 owned ⇒ ring2 stays empty — no unrealizable over-fill). Impl mirror in `scoring.py::pick_loadout` (shared `DUPLICATE_SLOT_TYPES` with `equip.py`/`optimize_loadout.py`); differential + 5 mutation anchors (drop filter, scan-equipment, over-broad carve-out, uncapped ring, cap off-by-one) updated. Axioms unchanged (no new axioms; core-only safety). 0 new bugs — a probe-driven invariant correction.
 - **Also fixed PRE-EXISTING gate defects** inherited from the SkillGrind extraction commits (`2f848f7`, `196e04d`), which had left `main` gate-red (masked at the `(a')` orphan check): (1) `Formal.Extracted.SkillTargetCurve` / `Formal.Extracted.SkillGrindSelection` were imported only transitively — added the two DIRECT imports to `Formal.lean` so they are gated; (2) the hand modules `Formal.SkillTargetCurve` / `Formal.SkillGrindSelection` were referenced in `Manifest.lean` but carried no `@concept/@property` header tag — added the tags (`crafting, planner` × `safety, monotonicity` / `safety, totality`) and regenerated `PROOF_CONCEPT_INDEX.md`. Gate parts `(a')` orphan and `(b'')` proof-concept-index now pass.
 
+### In progress — DoomedMemo + SkillGateFastFail (2026-06-15)
+
+Two NEW core-only components added to address the 2026-06-15 99%-CPU peg
+(`GatherMaterials(feather_coat)` re-explored ~237K dead nodes every cycle — root
+cause + plan in `docs/PLAN_skill_gate_fastfail.md`). **Proof half COMPLETE; NOT yet
+full roster citizens** — the differential test + mutation coverage every roster row
+requires are the next phase, so these are deliberately NOT counted in the 41/41
+headline (honesty: a row is only "done" with a real-Python differential + killed
+mutants).
+
+- `DoomedMemo.lean` — the exponential-backoff no-plan memo
+  (`src/artifactsmmo_cli/ai/doomed_memo.py` + `plannability_signature.py`). Proves
+  `ttl_base`, `ttl_le_max` (cap), `window_doubles` (geometric ×2 per failure),
+  `ttl_monotone`, `isDoomed_sig_change` (new plannability ⇒ re-probe),
+  `isDoomed_window`, `isDoomed_expires` (LIVENESS: window elapses ⇒ never a
+  permanent skip), `escalation_grows_window`. Complements
+  `TieredSelection.memo_skip_sound` (which assumed an abstract `skip`; this proves
+  the concrete backoff arithmetic that DECIDES `skip`).
+- `SkillGateFastFail.lean` — `GatherMaterialsGoal.is_plannable` (`gathering.py:316-335`).
+  Models owned-count dynamics under the skill gate; proves `applyStep_gate_closed`,
+  `runPlan_gate_closed` (owned invariant under a closed gate ∀ plan), and the
+  headline `fastfail_sound` (fast-fail fires ⇒ every plan leaves owned < needed ⇒
+  the pruned goal is genuinely unreachable — pruning discards nothing).
+
+Both kernel-checked (axioms = {propext, Quot.sound}), rostered in `Manifest.lean`,
+statement-pinned in `Contracts.lean`. REMAINING (Phase 3 of the plan): `Oracle.lean`
+dispatch arms + `formal/diff/test_doomed_memo_diff.py` /
+`test_skill_gate_fastfail_diff.py` + `mutate.py` anchors + `Audit.lean` `#print
+axioms`, and the actual code fix (`try_plan_cheap` marks no-plan non-guard failures
+into `_memo`) with unit tests.
+
 Design docs: `docs/superpowers/specs/2026-05-26-lean-formal-verification-design.md` (gate architecture),
 `docs/superpowers/specs/2026-05-27-lean-decision-logic-design.md` (decision-logic expansion). The retired
 TLA+/PlusPy predecessor: `docs/postmortems/2026-05-26-tlaplus-pluspy-formal-verification.md`.

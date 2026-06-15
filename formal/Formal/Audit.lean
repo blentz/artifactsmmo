@@ -912,3 +912,14 @@ open Formal.WeightedRemaining in
 #print axioms Extracted.Bridges.equip_value_tiebreak_extracted
 #print axioms Extracted.Bridges.tool_value_abs_gather
 #print axioms Extracted.Bridges.tool_value_neg_gather_on_tools
+#print axioms Formal.DoomedMemo.ttl_base
+#print axioms Formal.DoomedMemo.ttl_le_max
+#print axioms Formal.DoomedMemo.window_doubles
+#print axioms Formal.DoomedMemo.ttl_monotone
+#print axioms Formal.DoomedMemo.isDoomed_sig_change
+#print axioms Formal.DoomedMemo.isDoomed_window
+#print axioms Formal.DoomedMemo.isDoomed_expires
+#print axioms Formal.DoomedMemo.escalation_grows_window
+#print axioms Formal.SkillGateFastFail.applyStep_gate_closed
+#print axioms Formal.SkillGateFastFail.runPlan_gate_closed
+#print axioms Formal.SkillGateFastFail.fastfail_sound

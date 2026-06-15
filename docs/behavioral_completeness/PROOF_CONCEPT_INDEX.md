@@ -22,6 +22,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | CycleInvariants | characters, combat | safety, monotonicity |
 | CyclesForProgress | characters | reachability, monotonicity |
 | DecideKey | core, planner | dominance, totality |
+| DoomedMemo | core, planner | monotonicity, safety, reachability |
 | EquipValueAugmented | items, characters | dominance, monotonicity |
 | EventWindow | events | totality, safety, dominance, monotonicity, reachability |
 | FallbackChain | core, planner | totality, dominance |
@@ -32,6 +33,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | GearPolicy | items, characters | dominance, safety |
 | GoalSystem | core, planner | safety |
 | GoalValueBands | core, planner | safety, monotonicity |
+| GrindLadder | crafting, planner | liveness, safety |
 | GuardCoverage | core | no-deadlock, safety |
 | InventoryChainSafe | bank, items | safety |
 | InventoryProfile | bank, items, crafting | safety |
@@ -40,6 +42,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | Liveness.ItemsTaskTermination | tasks, crafting, bank | safety, totality |
 | LivenessChain | combat, monsters | reachability, no-deadlock |
 | LowYieldCancel | tasks | safety, monotonicity |
+| MonsterDropApply | combat, planner | liveness, safety |
 | MonsterDropSelection | monsters | dominance, monotonicity, totality, reachability |
 | MultiCycleLiveness | characters, combat | reachability, monotonicity |
 | NearestTile | maps | safety, dominance, totality, monotonicity |
@@ -60,7 +63,9 @@ concept tag, or a concept with no module, is a traceability gap.
 | RecycleProtection | items, crafting | safety |
 | Scalarizer | core | monotonicity |
 | ShoppingList | resources | dominance, monotonicity, safety, totality |
+| SkillGateFastFail | core, planner | safety, totality |
 | SkillGrindSelection | crafting, planner | safety, totality |
+| SkillStepDispatch | crafting, planner | safety, liveness |
 | SkillTargetCurve | crafting, planner | safety, monotonicity |
 | StepDispatch | core, planner | totality, safety, reachability |
 | StoreWarmup | core | safety |
