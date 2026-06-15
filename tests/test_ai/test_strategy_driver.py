@@ -877,6 +877,69 @@ def test_grind_skips_owned_same_skill_target_gear():
     assert g._target_item == "copper_boots"
 
 
+def test_grind_cannibalizes_when_all_skill_targets_owned():
+    """Last-resort: when ≥1 of EVERY craftable-now in-skill item is already owned
+    (no unowned target left to skill up on) and the objective is still skill-
+    gated, the grind re-crafts an owned item (cannibalizing reserved copper_bar)
+    rather than freezing. copper_helmet is owned, gearcrafting still 1<5, and its
+    only recipe input is reserved -> grind it again to keep leveling."""
+    gd = GameData()
+    gd._item_stats = {
+        "copper_legs_armor": ItemStats(code="copper_legs_armor", level=5,
+                                       type_="leg_armor", crafting_skill="gearcrafting",
+                                       crafting_level=5),
+        "copper_helmet": ItemStats(code="copper_helmet", level=1, type_="helmet",
+                                   crafting_skill="gearcrafting", crafting_level=1),
+        "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"copper_legs_armor": {"copper_bar": 5},
+                            "copper_helmet": {"copper_bar": 6}}
+    gd._resource_drops = {"copper_rocks": "copper_bar"}
+    # copper_helmet (the only in-skill craftable) is owned -> no unowned target.
+    state = make_state(level=8, skills={"gearcrafting": 1},
+                       inventory={"copper_helmet": 1}, bank_items={})
+    skill_step = ReachSkillLevel("gearcrafting", 5)
+    legs_root = ObtainItem("copper_legs_armor", 1, slot="leg_armor_slot")
+    g = objective_step_goal(
+        skill_step, state, gd,
+        _ctx(target_gear=frozenset({"copper_legs_armor", "copper_helmet"})),
+        root=legs_root, committed_root=legs_root)
+    assert isinstance(g, GatherMaterialsGoal), f"expected cannibalizing grind, got {g!r}"
+    assert g._target_item == "copper_helmet"
+    assert g._needed == {"copper_helmet": 2}  # held(1) + 1: craft one more
+
+
+def test_grind_no_cannibalize_while_unowned_target_exists():
+    """Cannibalization is gated on ALL targets owned: while an unowned same-skill
+    target remains, the grind crafts THAT (non-consuming dual progress), not a
+    re-craft. copper_boots unowned -> grind boots, not re-craft owned helmet."""
+    gd = GameData()
+    gd._item_stats = {
+        "copper_legs_armor": ItemStats(code="copper_legs_armor", level=5,
+                                       type_="leg_armor", crafting_skill="gearcrafting",
+                                       crafting_level=5),
+        "copper_helmet": ItemStats(code="copper_helmet", level=1, type_="helmet",
+                                   crafting_skill="gearcrafting", crafting_level=1),
+        "copper_boots": ItemStats(code="copper_boots", level=1, type_="boots",
+                                  crafting_skill="gearcrafting", crafting_level=1),
+        "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"copper_legs_armor": {"copper_bar": 5},
+                            "copper_helmet": {"copper_bar": 6},
+                            "copper_boots": {"copper_bar": 6}}
+    gd._resource_drops = {"copper_rocks": "copper_bar"}
+    state = make_state(level=8, skills={"gearcrafting": 1},
+                       inventory={"copper_helmet": 1}, bank_items={})
+    g = objective_step_goal(
+        ReachSkillLevel("gearcrafting", 5), state, gd,
+        _ctx(target_gear=frozenset({"copper_legs_armor", "copper_helmet", "copper_boots"})),
+        root=ObtainItem("copper_legs_armor", 1, slot="leg_armor_slot"),
+        committed_root=ObtainItem("copper_legs_armor", 1, slot="leg_armor_slot"))
+    assert isinstance(g, GatherMaterialsGoal)
+    assert g._target_item == "copper_boots"
+    assert g._needed == {"copper_boots": 1}  # unowned target, fresh craft
+
+
 def test_objective_step_reach_char_level_with_monster():
     step = ReachCharLevel(10)
     g = objective_step_goal(step, make_state(xp=50), _gd(), _ctx(combat_monster="chicken"))

@@ -202,20 +202,36 @@ def _skill_dispatch_candidates(
     cannibalization — so it must not be blocked by the very reservation that
     protects its own materials. The unowned guard avoids re-grinding a target
     already in hand (the '6 helmets, 0 boots' over-craft); throwaway (non-target)
-    in-skill items stay reservation-blocked."""
+    in-skill items stay reservation-blocked.
+
+    LAST-RESORT CANNIBALIZATION: a `ReachSkillLevel` grind is always skill-gated
+    (we are here only because the objective needs a higher skill). When we
+    already own ≥1 of EVERY craftable-now in-skill item — no unowned target left
+    to skill up on — the FULL pass finds nothing and we would freeze. In that
+    narrow corner only, free the RELAXED pass entirely so it may re-craft (eat a
+    reserved material) to keep leveling. The full pass still respects every
+    reservation, so cannibalization happens solely when there is genuinely no
+    non-consuming option left."""
     equipped = [c for c in state.equipment.values() if c is not None]
+
+    def owned(code: str) -> bool:
+        return owned_count_pure(state.inventory, state.bank_items, equipped, code) >= 1
+
+    raw = build_grind_candidates(skill, state, game_data)
+    feasible = [gc for gc in raw if gc.craft_level <= current_level and gc.obtainable]
+    cannibalize = bool(feasible) and all(owned(gc.code) for gc in feasible)
     out: list[DispatchCandidate] = []
-    for gc in build_grind_candidates(skill, state, game_data):
+    for gc in raw:
         recipe = game_data.crafting_recipe(gc.code) or {}
         exempt = (gc.code in objective_targets
                   and gc.craft_level <= current_level
-                  and owned_count_pure(state.inventory, state.bank_items,
-                                       equipped, gc.code) < 1)
+                  and not owned(gc.code))
         out.append(DispatchCandidate(
             code=gc.code, craft_skill=gc.craft_skill, craft_level=gc.craft_level,
             mats_missing=gc.mats_missing, obtainable=gc.obtainable,
             uses_reserved_full=(not exempt) and any(m in reserved_full for m in recipe),
-            uses_reserved_relaxed=(not exempt) and any(m in reserved_relaxed for m in recipe),
+            uses_reserved_relaxed=(not exempt) and (not cannibalize)
+            and any(m in reserved_relaxed for m in recipe),
         ))
     return out
 
