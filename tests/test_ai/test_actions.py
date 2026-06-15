@@ -263,6 +263,30 @@ class TestFightAction:
         new_state = action.apply(state, gd)
         assert new_state.task_progress == 3
 
+    def test_apply_adds_monster_drops_to_inventory(self):
+        """Fight must model the loot drop so the planner can plan
+        "fight chicken -> feather" (GatherMaterials over a monster-drop material).
+        Without it, GatherMaterials(feather) explored 21868 nodes / plan_len 0 and
+        the bot fell to char-grind forever (trace 2026-06-14 230824)."""
+        action = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]))
+        state = make_state(x=0, y=0, hp=100, max_hp=100, level=1,
+                           inventory={}, inventory_max=20)
+        gd = make_game_data(monster_locs={"chicken": [(1, 0)]}, monster_levels={"chicken": 1})
+        gd._monster_drops = {"chicken": [("feather", 5, 1, 1), ("raw_chicken", 3, 1, 1)]}
+        new_state = action.apply(state, gd)
+        assert new_state.inventory.get("feather") == 1
+        assert new_state.inventory.get("raw_chicken") == 1
+
+    def test_apply_does_not_overflow_inventory_with_drops(self):
+        """Drops past capacity are not minted (used never exceeds max)."""
+        action = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]))
+        state = make_state(x=0, y=0, hp=100, max_hp=100, level=1,
+                           inventory={"junk": 19}, inventory_max=20)
+        gd = make_game_data(monster_locs={"chicken": [(1, 0)]}, monster_levels={"chicken": 1})
+        gd._monster_drops = {"chicken": [("feather", 5, 1, 1), ("raw_chicken", 3, 1, 1)]}
+        new_state = action.apply(state, gd)
+        assert new_state.inventory_used <= new_state.inventory_max
+
     def test_execute_raises_on_fight_loss(self):
         """FightAction.execute must surface API-reported loss as a RuntimeError.
 

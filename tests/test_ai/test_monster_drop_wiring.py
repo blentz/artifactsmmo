@@ -11,6 +11,7 @@ winner FightAction (structurally identical to the existing GatherSelection narro
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
@@ -33,6 +34,26 @@ def _winnable_state(**overrides) -> object:
                 attack={"fire": 30}, initiative=50)
     base.update(overrides)
     return make_state(**base)
+
+
+def test_gather_feather_plans_via_fighting_chicken() -> None:
+    """End-to-end: with FightAction.apply modelling the drop, GatherMaterials over
+    a monster-drop material (feather <- chicken) is plannable as a sequence of
+    fights. Before the apply fix this explored thousands of nodes and returned []
+    (trace 2026-06-14 230824: GatherMaterials(feather) plan_len 0, 21868 nodes),
+    so the bot could never obtain feather and fell to char-grind."""
+    gd = GameData()
+    gd._monster_level = {"chicken": 1}
+    gd._monster_drops = {"chicken": [("feather", 8, 1, 1)]}
+    gd._monster_locations = {"chicken": [(0, 1)]}
+    fill_monster_stat_defaults(gd)
+    gd._monster_hp = {"chicken": 10}
+    state = _winnable_state(inventory={}, inventory_max=50)
+    actions = [FightAction(monster_code="chicken", locations=frozenset({(0, 1)}))]
+    goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 2})
+    plan = GOAPPlanner().plan(state, goal, actions, gd, budget_seconds=10.0)
+    assert plan, "GatherMaterials(feather) must be plannable via fighting chicken"
+    assert any(isinstance(a, FightAction) for a in plan)
 
 
 def _gd_two_droppers() -> GameData:

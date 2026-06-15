@@ -11,6 +11,7 @@ from artifactsmmo_api_client.models.fight_result import FightResult
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.cost_core import learned_cost_pure
+from artifactsmmo_cli.ai.actions.gather_apply_core import GatherInv, gather_apply_pure
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.equipment.scoring import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
@@ -80,12 +81,27 @@ class FightAction(Action):
             if state.task_type == "monsters" and state.task_code == self.monster_code
             else state.task_progress
         )
+        # Model the loot: a kill yields the monster's drops, so the planner can
+        # plan "fight chicken -> feather" for a GatherMaterials over a monster-drop
+        # material. Without this, GatherMaterials(feather) was unplannable (the
+        # fight made no progress toward the drop) and the bot fell to char-grind
+        # forever (trace 2026-06-14 230824). One unit of each drop per kill
+        # (optimistic; the per-cycle replan corrects for actual rates), capped at
+        # inventory_max via the proved gather core so the planner never mints past
+        # capacity. inventory is NOT a baseline-contract field (ApplyBaseline).
+        inv = GatherInv(used=state.inventory_used, cap=state.inventory_max,
+                        item_count=state.inventory)
+        for drop_code, _rate, _mn, _mx in game_data.monster_drops(self.monster_code):
+            if inv.used >= inv.cap:
+                break
+            inv = gather_apply_pure(inv, drop_code)
         return dataclasses.replace(
             state,
             xp=state.xp + 10,
             hp=new_hp,
             x=dest[0],
             y=dest[1],
+            inventory=dict(inv.item_count),
             cooldown_expires=None,
             task_progress=new_progress,
             task_lifecycle_phase=derive_task_lifecycle_phase(
