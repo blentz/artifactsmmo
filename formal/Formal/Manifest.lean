@@ -110,6 +110,9 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.GrindLadder.flags_cannibalize         -- cannibalize ⇒ relaxed flag false
 #check @Formal.GrindLadder.grind_when_unowned_target -- feasible unowned target ⇒ grind (never freeze)
 #check @Formal.GrindLadder.grind_when_all_owned      -- all feasible owned + cannibalize ⇒ grind
+-- MonsterDropApply required roles (Fight.apply drop loop reachability):
+#check @Formal.MonsterDropApply.applyDrops_monotone  -- a kill never decreases any item count
+#check @Formal.MonsterDropApply.fight_drop_reachable -- room ⇒ a dropped item's count rises ≥ 1
 -- SkillXpCurve required roles:
 #check @required_xp_observed       -- observed level ⇒ required_xp = stored xp
 #check @required_xp_zero           -- no data ∨ no level below ⇒ 0

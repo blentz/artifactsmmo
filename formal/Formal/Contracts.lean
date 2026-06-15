@@ -11,6 +11,7 @@ import Formal.SkillTargetCurve
 import Formal.SkillGrindSelection
 import Formal.SkillStepDispatch
 import Formal.GrindLadder
+import Formal.MonsterDropApply
 import Formal.SkillXpCurve
 import Formal.RecipeClosure
 import Formal.TaskFeasibility
@@ -498,6 +499,22 @@ example : ∀ (skill : String) (cl : Int) (cs : String) (clv : Int)
     (∀ r ∈ rcs, r.code ≠ "") →
     (Formal.GrindLadder.dispatchFromRaw skill cl cs clv rf rr rcs).1 = "grind" :=
   @Formal.GrindLadder.grind_when_all_owned
+
+/-! ### MonsterDropApply reachability contracts.
+
+The monster-drop loop in Fight.apply: a kill never decreases any item count, and
+with room for the loot a dropped item's projected count strictly rises (so a
+`needed:N` goal over a monster drop is reachable by fighting). -/
+
+-- applyDrops_monotone: drops never decrease any item count.
+example : ∀ (k : String) (drops : List String) (inv : Formal.MonsterDropApply.Inv),
+    inv.counts k ≤ (Formal.MonsterDropApply.applyDrops inv drops).counts k :=
+  @Formal.MonsterDropApply.applyDrops_monotone
+-- fight_drop_reachable: with room for the loot, a dropped item's count rises ≥ 1.
+example : ∀ (inv : Formal.MonsterDropApply.Inv) (drops : List String) (x : String),
+    inv.used + drops.length ≤ inv.cap → x ∈ drops →
+    inv.counts x + 1 ≤ (Formal.MonsterDropApply.applyDrops inv drops).counts x :=
+  @Formal.MonsterDropApply.fight_drop_reachable
 
 /-! ### SkillXpCurve role contracts. -/
 

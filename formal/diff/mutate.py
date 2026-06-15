@@ -1408,6 +1408,29 @@ GATHER_APPLY_MUTATIONS = [
 ]
 
 
+# monster_drop_apply mutations -- the Fight.apply drop loop in gather_apply_core.py.
+# Killed by formal/diff/test_monster_drop_apply_diff.py, which binds
+# apply_monster_drops_pure to Formal.MonsterDropApply.applyDrops -- the SAME def
+# the reachability theorems (applyDrops_monotone / fight_drop_reachable) prove.
+MONSTER_DROP_APPLY_MUTATIONS = [
+    # Drop the cap-break: drops mint past inventory_max, breaking the
+    # never-exceed-cap projection. The diff's used-near-cap cases catch it.
+    ("monster_drop_apply: drop cap-break",
+     "        if inv.used >= inv.cap:\n            break\n",
+     "        if False:\n            break\n"),
+    # Break boundary >= -> >: at exactly full (used == cap) the loop should stop
+    # but now mints one more.
+    ("monster_drop_apply: break boundary >= to >",
+     "        if inv.used >= inv.cap:\n",
+     "        if inv.used > inv.cap:\n"),
+    # Skip the mint: the kill yields no loot, so a needed drop's count never
+    # rises -- violates fight_drop_reachable (the goal becomes unreachable).
+    ("monster_drop_apply: skip the mint",
+     "        inv = gather_apply_pure(inv, drop_item)\n",
+     "        inv = inv\n"),
+]
+
+
 # task_trade_core mutations -- old strings matched to current task_trade_core.py.
 # Each perturbs the live held↔progress trade transition so the Python result
 # diverges from the proven `quantity`-fold `ItemsTaskRun.trade` oracle. Killed by
@@ -2734,6 +2757,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_cycles_for_progress_diff.py", survivors)
     run_group(GATHER_APPLY_SRC, GATHER_APPLY_MUTATIONS,
               "formal/diff/test_gather_apply_diff.py", survivors)
+    run_group(GATHER_APPLY_SRC, MONSTER_DROP_APPLY_MUTATIONS,
+              "formal/diff/test_monster_drop_apply_diff.py", survivors)
     run_group(GATHER_SELECTION_SRC, GATHER_SELECTION_MUTATIONS,
               "formal/diff/test_gather_selection_diff.py", survivors)
     run_group(SHOPPING_LIST_SRC, SHOPPING_LIST_MUTATIONS,

@@ -59,11 +59,10 @@ owned ⇒ free the relaxed pass) — currently UNPROVEN impure hoisting in
   throwaway whose mats are all relaxed-reserved still freezes. The two theorems
   state exactly the cases the ladder guarantees; the gap is documented, not hidden.
 
-### B. Fight-drop reachability (closes obligation 4, monster drops) — NEXT INCREMENT (open)
-`FightAction.apply` now adds the monster's drops via the proved `gather_apply_pure`.
-NOTE: `GatherApply.lean` models only the slot-count `Inv` (no per-key counts), so
-this needs a NEW per-key inventory model + a fold lemma over the drop loop — a
-fresh component, not a reuse. Deferred to its own session.
+### B. Fight-drop reachability (closes obligation 4, monster drops) — DONE 2026-06-15
+Component 41 `MonsterDropApply` shipped: extracted `apply_monster_drops_pure`;
+per-key `Inv` model; proved `applyDrops_monotone` + `fight_drop_reachable`;
+Manifest + Contracts pins; differential (400 examples); 3 mutants killed.
 
 - **Lean** theorem `fight_apply_increments_drop` (over the gather-core composition):
   fighting a monster that drops item X, with inventory not full, yields

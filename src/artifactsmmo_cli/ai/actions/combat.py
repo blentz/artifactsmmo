@@ -11,7 +11,10 @@ from artifactsmmo_api_client.models.fight_result import FightResult
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.cost_core import learned_cost_pure
-from artifactsmmo_cli.ai.actions.gather_apply_core import GatherInv, gather_apply_pure
+from artifactsmmo_cli.ai.actions.gather_apply_core import (
+    GatherInv,
+    apply_monster_drops_pure,
+)
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.equipment.scoring import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
@@ -91,10 +94,8 @@ class FightAction(Action):
         # capacity. inventory is NOT a baseline-contract field (ApplyBaseline).
         inv = GatherInv(used=state.inventory_used, cap=state.inventory_max,
                         item_count=state.inventory)
-        for drop_code, _rate, _mn, _mx in game_data.monster_drops(self.monster_code):
-            if inv.used >= inv.cap:
-                break
-            inv = gather_apply_pure(inv, drop_code)
+        drops = tuple(d for d, _rate, _mn, _mx in game_data.monster_drops(self.monster_code))
+        inv = apply_monster_drops_pure(inv, drops)
         return dataclasses.replace(
             state,
             xp=state.xp + 10,

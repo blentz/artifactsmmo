@@ -1783,6 +1783,21 @@ def runSkillStepDispatch (args : Array Json) : Json :=
     skill currentLevel committedSkill committedLevel candidates
   Json.mkObj [("kind", Json.str result.1), ("code", Json.str result.2)]
 
+/-- Compute `apply_monster_drops_pure` via `Formal.MonsterDropApply.applyDrops`
+from an EMPTY initial inventory. args: `[used, cap, n_drops, n_query]` then the
+drop code strings then the query code strings. Emits `{"used": Nat,
+"counts": [Nat...]}` (the post count for each query key). -/
+def runMonsterDropApply (args : Array Json) : Json :=
+  let nDrops := (intArg args 2).toNat
+  let nQuery := (intArg args 3).toNat
+  let drops := (List.range nDrops).map (fun i => strArg args (4 + i))
+  let query := (List.range nQuery).map (fun i => strArg args (4 + nDrops + i))
+  let inv : Formal.MonsterDropApply.Inv :=
+    { used := (intArg args 0).toNat, cap := (intArg args 1).toNat, counts := fun _ => 0 }
+  let out := Formal.MonsterDropApply.applyDrops inv drops
+  Json.mkObj [("used", Json.num (Int.ofNat out.used)),
+              ("counts", Json.arr ((query.map (fun k => Json.num (Int.ofNat (out.counts k)))).toArray))]
+
 /-- Compute `dispatch_candidate_flags` via `Formal.GrindLadder.flagsFor`.
 args: `[cl, craft_level, is_target(0/1), owned(0/1), cann(0/1), n_mats, n_rf,
 n_rr]` then the mats / reserved_full / reserved_relaxed code strings in that
@@ -1959,6 +1974,8 @@ def runOne (item : Json) : Json :=
     runCandidateFlags args
   else if kind == "cannibalize" then
     runCannibalize args
+  else if kind == "monster_drop_apply" then
+    runMonsterDropApply args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

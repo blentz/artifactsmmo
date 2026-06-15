@@ -55,3 +55,17 @@ def gather_apply_pure(inv: GatherInv, drop_item: str) -> GatherInv:
     new_counts = dict(inv.item_count)
     new_counts[drop_item] = new_counts.get(drop_item, 0) + 1
     return replace(inv, used=inv.used + 1, item_count=new_counts)
+
+
+def apply_monster_drops_pure(inv: GatherInv, drops: tuple[str, ...]) -> GatherInv:
+    """Mint one of each `drops` code into the inventory, BREAKING when full so the
+    planner never mints past `cap`. Models the loot a kill yields (the planner's
+    projected state for `FightAction.apply`). Proved in
+    formal/Formal/MonsterDropApply.lean: counts never decrease (monotone), and
+    when every drop fits (`used + len(drops) <= cap`) each drop's count rises by
+    its multiplicity — so a `needed:N` goal over a monster drop is reachable."""
+    for drop_item in drops:
+        if inv.used >= inv.cap:
+            break
+        inv = gather_apply_pure(inv, drop_item)
+    return inv
