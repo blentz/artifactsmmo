@@ -38,6 +38,7 @@ import Formal.Liveness.ItemsTaskTermination
 import Formal.Liveness.ItemsTaskRun
 import Formal.Liveness.GameDataFixture
 import Formal.Liveness.LevelFiftyReachable
+import Formal.Liveness.ReducedReachability
 import Formal.Liveness.LifecycleBound
 import Formal.Liveness.LifecycleBound2
 import Formal.Liveness.LifecycleBound3
@@ -274,6 +275,10 @@ open Formal.Liveness.LevelFiftyReachable
 #print axioms ai_reaches_level_fifty_aux
 #print axioms ai_reaches_level_fifty
 #print axioms ai_reaches_level_fifty_from_spawn
+
+-- Obligation-5 O5.3 increment: hex/hbe discharged from spawn config-positivity.
+open Formal.Liveness.ReducedReachability in
+#print axioms ai_reaches_level_fifty_config_positive
 
 -- Item 1a: LifecycleBound — refined taskCancelFires gated on
 -- taskFeasibleProjected. Lifecycle reaches .complete under feasibility.
