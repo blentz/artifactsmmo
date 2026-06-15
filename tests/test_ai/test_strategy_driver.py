@@ -815,6 +815,68 @@ def test_skill_grind_ignores_non_craftable_target_objective():
     assert g._target_item == "copper_helmet"
 
 
+def test_grind_crafts_unowned_same_skill_target_gear():
+    """Robby 2026-06-14 230824: committed copper_legs_armor (gearcrafting-5,
+    gated) never advanced gearcrafting because every craftable-now grind item
+    (copper_helmet/boots) is ITSELF a committed per-slot target whose copper_bar
+    is reserved -> dispatch NO_GRIND -> frozen. An unowned, same-skill,
+    craftable-now TARGET gear item is objective progress (fills the slot AND
+    levels the skill), so it must be grindable despite the reservation."""
+    gd = GameData()
+    gd._item_stats = {
+        "copper_legs_armor": ItemStats(code="copper_legs_armor", level=5,
+                                       type_="leg_armor", crafting_skill="gearcrafting",
+                                       crafting_level=5),
+        "copper_helmet": ItemStats(code="copper_helmet", level=1, type_="helmet",
+                                   crafting_skill="gearcrafting", crafting_level=1),
+        "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource"),
+        "feather": ItemStats(code="feather", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"copper_legs_armor": {"copper_bar": 5, "feather": 2},
+                            "copper_helmet": {"copper_bar": 6}}
+    gd._resource_drops = {"copper_rocks": "copper_bar", "feather_spot": "feather"}
+    state = make_state(level=8, skills={"gearcrafting": 1}, inventory={}, bank_items={})
+    skill_step = ReachSkillLevel("gearcrafting", 5)
+    legs_root = ObtainItem("copper_legs_armor", 1, slot="leg_armor_slot")
+    g = objective_step_goal(
+        skill_step, state, gd,
+        _ctx(target_gear=frozenset({"copper_legs_armor", "copper_helmet"})),
+        root=legs_root, committed_root=legs_root)
+    assert isinstance(g, GatherMaterialsGoal), f"expected grind, got {g!r}"
+    assert g._target_item == "copper_helmet"
+
+
+def test_grind_skips_owned_same_skill_target_gear():
+    """An already-OWNED same-skill target is not re-grinded (no over-craft of the
+    cheapest target — the 2026-06-14 015425 '6 helmets, 0 boots' failure). With
+    copper_helmet owned, the grind moves to the unowned copper_boots."""
+    gd = GameData()
+    gd._item_stats = {
+        "copper_legs_armor": ItemStats(code="copper_legs_armor", level=5,
+                                       type_="leg_armor", crafting_skill="gearcrafting",
+                                       crafting_level=5),
+        "copper_helmet": ItemStats(code="copper_helmet", level=1, type_="helmet",
+                                   crafting_skill="gearcrafting", crafting_level=1),
+        "copper_boots": ItemStats(code="copper_boots", level=1, type_="boots",
+                                  crafting_skill="gearcrafting", crafting_level=1),
+        "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"copper_legs_armor": {"copper_bar": 5},
+                            "copper_helmet": {"copper_bar": 6},
+                            "copper_boots": {"copper_bar": 6}}
+    gd._resource_drops = {"copper_rocks": "copper_bar"}
+    state = make_state(level=8, skills={"gearcrafting": 1},
+                       inventory={"copper_helmet": 1}, bank_items={})
+    skill_step = ReachSkillLevel("gearcrafting", 5)
+    legs_root = ObtainItem("copper_legs_armor", 1, slot="leg_armor_slot")
+    g = objective_step_goal(
+        skill_step, state, gd,
+        _ctx(target_gear=frozenset({"copper_legs_armor", "copper_helmet", "copper_boots"})),
+        root=legs_root, committed_root=legs_root)
+    assert isinstance(g, GatherMaterialsGoal)
+    assert g._target_item == "copper_boots"
+
+
 def test_objective_step_reach_char_level_with_monster():
     step = ReachCharLevel(10)
     g = objective_step_goal(step, make_state(xp=50), _gd(), _ctx(combat_monster="chicken"))

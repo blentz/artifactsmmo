@@ -55,6 +55,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.objective_needs import objective_needs
+from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
 from artifactsmmo_cli.ai.tiers.skill_grind_target import build_grind_candidates
 from artifactsmmo_cli.ai.tiers.skill_step_dispatch import (
     DispatchCandidate,
@@ -188,18 +189,33 @@ def _gated_behind_skill(code: str, skill: str, current_level: int,
 def _skill_dispatch_candidates(
     skill: str, state: WorldState, game_data: GameData,
     reserved_full: set[str], reserved_relaxed: set[str],
+    current_level: int, objective_targets: frozenset[str],
 ) -> list[DispatchCandidate]:
     """Hoist in-skill grind candidates with the two reserved-set membership
     flags the proved dispatch core consumes (relaxed ⊆ full, so a candidate
-    whose recipe avoids `reserved_full` also avoids `reserved_relaxed`)."""
+    whose recipe avoids `reserved_full` also avoids `reserved_relaxed`).
+
+    Reservation EXEMPTION (trace 2026-06-14 230824): a candidate that is itself
+    an unowned, craftable-now committed OBJECTIVE target (in `objective_targets`)
+    is exempt from the reserved flags. Crafting it advances BOTH a gear slot and
+    the grinding skill — it is objective progress, never throwaway
+    cannibalization — so it must not be blocked by the very reservation that
+    protects its own materials. The unowned guard avoids re-grinding a target
+    already in hand (the '6 helmets, 0 boots' over-craft); throwaway (non-target)
+    in-skill items stay reservation-blocked."""
+    equipped = [c for c in state.equipment.values() if c is not None]
     out: list[DispatchCandidate] = []
     for gc in build_grind_candidates(skill, state, game_data):
         recipe = game_data.crafting_recipe(gc.code) or {}
+        exempt = (gc.code in objective_targets
+                  and gc.craft_level <= current_level
+                  and owned_count_pure(state.inventory, state.bank_items,
+                                       equipped, gc.code) < 1)
         out.append(DispatchCandidate(
             code=gc.code, craft_skill=gc.craft_skill, craft_level=gc.craft_level,
             mats_missing=gc.mats_missing, obtainable=gc.obtainable,
-            uses_reserved_full=any(m in reserved_full for m in recipe),
-            uses_reserved_relaxed=any(m in reserved_relaxed for m in recipe),
+            uses_reserved_full=(not exempt) and any(m in reserved_full for m in recipe),
+            uses_reserved_relaxed=(not exempt) and any(m in reserved_relaxed for m in recipe),
         ))
     return out
 
@@ -518,8 +534,9 @@ def objective_step_goal(
             reserved_full.update(rec)
             if not _gated_behind_skill(code, step.skill, current, game_data):
                 reserved_relaxed.update(rec)
-        candidates = _skill_dispatch_candidates(step.skill, state, game_data,
-                                                reserved_full, reserved_relaxed)
+        candidates = _skill_dispatch_candidates(
+            step.skill, state, game_data, reserved_full, reserved_relaxed,
+            current, ctx.target_gear | ctx.target_tools)
         decision = skill_step_dispatch_pure(step.skill, current,
                                             committed_skill, committed_level, candidates)
         if decision.kind == "grind":
