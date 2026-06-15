@@ -28,8 +28,8 @@ from artifactsmmo_cli.ai.tiers.skill_grind_selection import (
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
-def _obtainable(code: str, state: WorldState, game_data: GameData,
-                visited: frozenset[str]) -> bool:
+def is_obtainable(code: str, state: WorldState, game_data: GameData,
+                  visited: frozenset[str]) -> bool:
     """Recursive reachability: an item is obtainable when it is a gatherable
     resource drop, a winnable+locatable monster drop, OR craftable with EVERY
     recipe input recursively obtainable. A craftable item whose chain bottoms out
@@ -44,12 +44,15 @@ def _obtainable(code: str, state: WorldState, game_data: GameData,
                    and game_data.monster_locations(monster_code)
                    for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(code))
     nxt = visited | {code}
-    return all(_obtainable(mat, state, game_data, nxt) for mat in recipe)
+    return all(is_obtainable(mat, state, game_data, nxt) for mat in recipe)
 
 
-def skill_grind_target(skill: str, state: WorldState, game_data: GameData,
-                       reserved: frozenset[str] = frozenset()) -> str | None:
-    current = state.skills.get(skill, 0)
+def build_grind_candidates(skill: str, state: WorldState,
+                           game_data: GameData) -> list[GrindCandidate]:
+    """Hoist every in-skill craftable into a `GrindCandidate` (mats_missing
+    against inventory+bank, recursive obtainability). No reservation filter —
+    callers apply their own (single-set `skill_grind_target`, two-set
+    `skill_step_dispatch`)."""
     bank = state.bank_items or {}
     candidates: list[GrindCandidate] = []
     for code, stats in game_data.all_item_stats.items():
@@ -57,8 +60,6 @@ def skill_grind_target(skill: str, state: WorldState, game_data: GameData,
             continue
         recipe = game_data.crafting_recipe(code)
         if not recipe:
-            continue
-        if any(mat in reserved for mat in recipe):
             continue
         mats_missing = sum(
             max(0, qty - state.inventory.get(mat, 0) - bank.get(mat, 0))
@@ -69,7 +70,16 @@ def skill_grind_target(skill: str, state: WorldState, game_data: GameData,
             craft_skill=stats.crafting_skill,
             craft_level=stats.crafting_level,
             mats_missing=mats_missing,
-            obtainable=_obtainable(code, state, game_data, frozenset()),
+            obtainable=is_obtainable(code, state, game_data, frozenset()),
         ))
-    chosen = skill_grind_selection_pure(skill, current, candidates)
+    return candidates
+
+
+def skill_grind_target(skill: str, state: WorldState, game_data: GameData,
+                       reserved: frozenset[str] = frozenset()) -> str | None:
+    candidates = [
+        c for c in build_grind_candidates(skill, state, game_data)
+        if not any(mat in reserved for mat in (game_data.crafting_recipe(c.code) or {}))
+    ]
+    chosen = skill_grind_selection_pure(skill, state.skills.get(skill, 0), candidates)
     return chosen or None

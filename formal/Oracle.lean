@@ -1737,6 +1737,52 @@ def runSkillGrindSelection (args : Array Json) : Json :=
     skill currentLevel candidates
   Json.mkObj [("code", Json.str result)]
 
+/-- Compute one combine_dispatch result via the EXTRACTED
+`Extracted.SkillStepDispatch.combine_dispatch_pure` directly (arbitrary pick
+strings, exercising the full-preference branch the wrapper short-circuits).
+
+args: `[skill, current_level, committed_skill, committed_level, full_pick,
+relaxed_pick]`. Emits `{"kind": String, "code": String}`. -/
+def runCombineDispatch (args : Array Json) : Json :=
+  let result := Extracted.SkillStepDispatch.combine_dispatch_pure
+    (strArg args 0) (intArg args 1) (strArg args 2) (intArg args 3)
+    (strArg args 4) (strArg args 5)
+  Json.mkObj [("kind", Json.str result.1), ("code", Json.str result.2)]
+
+/-- Compute one skill_step_dispatch result via the hand model
+`Formal.SkillStepDispatch.dispatch` (filter → proved selection → extracted
+combine). Mirrors the real `skill_step_dispatch_pure`.
+
+args layout (mixed String/Int):
+* `[0]` skill            (String)
+* `[1]` current_level    (Int)
+* `[2]` committed_skill  (String, "" = none)
+* `[3]` committed_level  (Int)
+* then candidate blocks of 7:
+  `code(String), craft_skill(String), craft_level(Int), mats_missing(Int),
+   obtainable(0/1), uses_reserved_full(0/1), uses_reserved_relaxed(0/1)`
+
+Emits `{"kind": String, "code": String}`. -/
+def runSkillStepDispatch (args : Array Json) : Json :=
+  let skill := strArg args 0
+  let currentLevel := intArg args 1
+  let committedSkill := strArg args 2
+  let committedLevel := intArg args 3
+  let nCand := (args.size - 4) / 7
+  let candidates : List Formal.SkillStepDispatch.DC :=
+    (List.range nCand).map (fun k =>
+      let base := 4 + 7 * k
+      { code := strArg args base,
+        craft_skill := strArg args (base + 1),
+        craft_level := intArg args (base + 2),
+        mats_missing := intArg args (base + 3),
+        obtainable := intArg args (base + 4) != 0,
+        uses_reserved_full := intArg args (base + 5) != 0,
+        uses_reserved_relaxed := intArg args (base + 6) != 0 })
+  let result := Formal.SkillStepDispatch.dispatch
+    skill currentLevel committedSkill committedLevel candidates
+  Json.mkObj [("kind", Json.str result.1), ("code", Json.str result.2)]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -1874,6 +1920,10 @@ def runOne (item : Json) : Json :=
     runTaskReservation args
   else if kind == "skill_grind_selection" then
     runSkillGrindSelection args
+  else if kind == "skill_step_dispatch" then
+    runSkillStepDispatch args
+  else if kind == "combine_dispatch" then
+    runCombineDispatch args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

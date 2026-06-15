@@ -644,25 +644,22 @@ def test_objective_step_intermediate_reachable_root_keeps_upgrade():
     assert g._committed_target == ("wooden_shield", "shield_slot")
 
 
-def test_objective_step_reach_skill_level():
+def test_objective_step_reach_skill_no_craftable_returns_none():
+    """A ReachSkillLevel step for a skill with NO in-skill craftable (mining is a
+    gathering skill; _gd has only gearcrafting recipes) yields NO_GRIND -> None.
+    The objective path no longer constructs the explosive full-level
+    LevelSkillGoal; gathering skills level via the bot's ambient gathering
+    (skill_gates.py). See docs/PLAN_skill_step_dispatch_proof.md."""
     step = ReachSkillLevel("mining", 10)
-    # make_state() has mining level 3; target should be bounded to 3+LEVEL_LOOKAHEAD=6
     state = make_state(skills={"mining": 3}, skill_xp={"mining": 42})
-    g = objective_step_goal(step, state, _gd(), _ctx())
-    assert isinstance(g, LevelSkillGoal)
-    assert g._skill_name == "mining"
-    assert g._target_level == 6, f"expected target_level==6 (current+LEVEL_LOOKAHEAD), got {g._target_level}"
-    assert g._initial_skill_xp == 42, f"expected initial_skill_xp==42, got {g._initial_skill_xp}"
+    assert objective_step_goal(step, state, _gd(), _ctx()) is None
 
 
-def test_objective_step_reach_skill_level_bounds_to_current_plus_lookahead():
-    """objective_step_goal must bound ReachSkillLevel target to current+LEVEL_LOOKAHEAD."""
+def test_objective_step_reach_skill_no_inskill_recipe_returns_none():
+    """Likewise alchemy: no in-skill craftable in _gd -> None (not LevelSkillGoal)."""
     step = ReachSkillLevel("alchemy", 50)
     state = make_state(skills={"alchemy": 1}, skill_xp={"alchemy": 99})
-    g = objective_step_goal(step, state, _gd(), _ctx())
-    assert isinstance(g, LevelSkillGoal)
-    assert g._target_level == 4, f"expected 4 (1+3), got {g._target_level}"
-    assert g._initial_skill_xp == 99
+    assert objective_step_goal(step, state, _gd(), _ctx()) is None
 
 
 def _gd_copper_gear() -> GameData:
@@ -757,6 +754,65 @@ def test_grind_reserves_objective_gear_when_committed_root_is_skill_root():
                             root=skill_step, committed_root=skill_step)
     assert not (isinstance(g, GatherMaterialsGoal)
                 and g._target_item in {"copper_helmet", "copper_ring", "copper_dagger"})
+
+
+def _gd_copper_gated_legs() -> GameData:
+    """copper_legs_armor is gearcrafting-5 (SKILL-GATED above current) and shares
+    copper_bar with the in-level grind craftable copper_helmet (gearcrafting-1).
+    Reproduces Robby trace 2026-06-14 192617: the committed copper_legs_armor
+    objective reserved copper_bar, starving the only gearcrafting grind craft."""
+    gd = GameData()
+    gd._item_stats = {
+        "copper_legs_armor": ItemStats(code="copper_legs_armor", level=5,
+                                       type_="leg_armor", crafting_skill="gearcrafting",
+                                       crafting_level=5),
+        "copper_helmet": ItemStats(code="copper_helmet", level=1, type_="helmet",
+                                   crafting_skill="gearcrafting", crafting_level=1),
+        "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource"),
+        "feather": ItemStats(code="feather", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"copper_legs_armor": {"copper_bar": 5, "feather": 2},
+                            "copper_helmet": {"copper_bar": 6}}
+    gd._resource_drops = {"copper_rocks": "copper_bar", "feather_spot": "feather"}
+    return gd
+
+
+def test_skill_gated_objective_does_not_reserve_grind_materials():
+    """A committed gear objective that is SKILL-GATED behind the very skill being
+    grinded (copper_legs_armor needs gearcrafting 5, current 1) must NOT reserve
+    its materials from the grind — the grind toward that skill is the objective's
+    own legitimate bootstrap. Reserving copper_bar here self-locks: the bar held
+    for copper_legs_armor is the bar the grind must spend to reach gearcrafting 5
+    and unlock it. With the materials freed, the grind crafts copper_helmet
+    instead of falling through to the un-plannable LevelSkillGoal (trace
+    2026-06-14 192617: 25/25 LevelSkill(gearcrafting->5) planner timeouts)."""
+    gd = _gd_copper_gated_legs()
+    state = make_state(level=5, skills={"gearcrafting": 1},
+                       inventory={"copper_bar": 6})
+    skill_step = ReachSkillLevel("gearcrafting", 5)
+    legs_root = ObtainItem("copper_legs_armor", 1, slot="leg_armor_slot")
+    g = objective_step_goal(skill_step, state, gd,
+                            _ctx(target_gear=frozenset({"copper_legs_armor"})),
+                            root=skill_step, committed_root=legs_root)
+    assert isinstance(g, GatherMaterialsGoal), f"expected grind goal, got {g!r}"
+    assert g._target_item == "copper_helmet"
+
+
+def test_skill_grind_ignores_non_craftable_target_objective():
+    """A target objective with no recipe (e.g. a gatherable/dropped tool input)
+    contributes nothing to the reservation set — it is skipped, not crashed on,
+    and the grind proceeds normally."""
+    gd = _gd_copper_gated_legs()
+    # `raw_relic` is a target objective with no crafting recipe.
+    gd._item_stats["raw_relic"] = ItemStats(code="raw_relic", level=1, type_="resource")
+    state = make_state(level=5, skills={"gearcrafting": 1},
+                       inventory={"copper_bar": 6})
+    skill_step = ReachSkillLevel("gearcrafting", 5)
+    g = objective_step_goal(skill_step, state, gd,
+                            _ctx(target_tools=frozenset({"raw_relic"})),
+                            root=skill_step, committed_root=skill_step)
+    assert isinstance(g, GatherMaterialsGoal)
+    assert g._target_item == "copper_helmet"
 
 
 def test_objective_step_reach_char_level_with_monster():
@@ -1264,13 +1320,27 @@ class TestLevelLookahead:
         assert LEVEL_LOOKAHEAD == 3
 
     def test_skill_step_targets_current_plus_lookahead(self):
-        state = make_state(skills={"weaponcrafting": 1})
-        goal = objective_step_goal(ReachSkillLevel("weaponcrafting", 50), state, GameData(), _ctx())
+        # Bounding lives on the PURSUE_TASK skill-gated path (objective path no
+        # longer builds LevelSkillGoal). Task requires weaponcrafting 50, current
+        # 1 -> target bounded to current+LEVEL_LOOKAHEAD=4.
+        gd = GameData()
+        gd._item_stats["copper_bar"] = ItemStats(
+            code="copper_bar", type_="resource", level=1,
+            crafting_skill="weaponcrafting", crafting_level=50)
+        state = make_state(task_code="copper_bar", task_type="items",
+                           task_total=20, task_progress=0, skills={"weaponcrafting": 1})
+        goal = map_means(MeansKind.PURSUE_TASK, gd, _ctx(), state)
         assert repr(goal) == "LevelSkill(weaponcrafting->4)"   # min(50, 1+3)
 
-    def test_skill_step_caps_at_step_level(self):
-        state = make_state(skills={"weaponcrafting": 48})
-        goal = objective_step_goal(ReachSkillLevel("weaponcrafting", 50), state, GameData(), _ctx())
+    def test_skill_step_caps_at_required_level(self):
+        # current+LEVEL_LOOKAHEAD overshoots the gate -> cap at the required level.
+        gd = GameData()
+        gd._item_stats["copper_bar"] = ItemStats(
+            code="copper_bar", type_="resource", level=1,
+            crafting_skill="weaponcrafting", crafting_level=50)
+        state = make_state(task_code="copper_bar", task_type="items",
+                           task_total=20, task_progress=0, skills={"weaponcrafting": 48})
+        goal = map_means(MeansKind.PURSUE_TASK, gd, _ctx(), state)
         assert repr(goal) == "LevelSkill(weaponcrafting->50)"   # min(50, 48+3)
 
 
@@ -1721,7 +1791,12 @@ def test_objective_step_reachskill_returns_craft_one_when_craftable():
     assert repr(goal) == "GatherMaterials(copper_dagger, {copper_dagger:1})"
 
 
-def test_objective_step_reachskill_falls_back_to_levelskill_when_nothing_craftable():
+def test_objective_step_reachskill_returns_none_when_nothing_craftable_now():
+    """Only an out-of-level recipe exists (iron_dagger needs weaponcrafting 10,
+    current 1) -> no level-appropriate item to grind -> NO_GRIND -> None. The
+    objective path no longer falls to the explosive full-level LevelSkillGoal
+    (trace 2026-06-14 192617: 25/25 planner timeouts). The arbiter advances to
+    the next-best root instead."""
     gd = GameData()
     gd._item_stats = {
         "iron_dagger": ItemStats(code="iron_dagger", level=10, type_="weapon",
@@ -1730,7 +1805,7 @@ def test_objective_step_reachskill_falls_back_to_levelskill_when_nothing_craftab
     gd._crafting_recipes = {"iron_dagger": {"iron_bar": 6}}
     state = make_state(skills={"weaponcrafting": 1})  # nothing craftable at level 1
     goal = objective_step_goal(ReachSkillLevel("weaponcrafting", 5), state, gd, _ctx())
-    assert isinstance(goal, LevelSkillGoal)
+    assert goal is None
 
 
 class _TrivialPlanner:

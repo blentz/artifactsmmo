@@ -9,6 +9,7 @@ import Formal.LoadoutProjection
 import Formal.EquipmentScoring
 import Formal.SkillTargetCurve
 import Formal.SkillGrindSelection
+import Formal.SkillStepDispatch
 import Formal.SkillXpCurve
 import Formal.RecipeClosure
 import Formal.TaskFeasibility
@@ -419,6 +420,54 @@ example : ∀ (skill : String) (level : Int)
     (∀ d ∈ cands, d.code ≠ "") →
     Extracted.SkillGrindSelection.skill_grind_selection_pure skill level cands ≠ "" :=
   @Formal.SkillGrindSelection.grind_actionable
+
+/-! ### SkillStepDispatch role contracts.
+
+The reservation-aware grind/suppress/no-grind routing over the proved selection.
+Binder order matches each theorem signature. -/
+
+-- suppress_correct: SUPPRESS iff the committed item is same-skill craftable now.
+example : ∀ (skill : String) (cl : Int) (cs : String) (clv : Int)
+    (cands : List Formal.SkillStepDispatch.DC),
+    (Formal.SkillStepDispatch.dispatch skill cl cs clv cands).1 = "suppress"
+      ↔ (cs = skill ∧ clv ≤ cl) :=
+  @Formal.SkillStepDispatch.suppress_correct
+-- full_preference: when NOT suppressed and the FULL pass picks, the result is
+-- exactly that full pick.
+example : ∀ (skill : String) (cl : Int) (cs : String) (clv : Int)
+    (cands : List Formal.SkillStepDispatch.DC), ¬ (cs = skill ∧ clv ≤ cl) →
+    Extracted.SkillGrindSelection.skill_grind_selection_pure skill cl
+        (Formal.SkillStepDispatch.fullList cands) ≠ "" →
+    Formal.SkillStepDispatch.dispatch skill cl cs clv cands
+      = ("grind", Extracted.SkillGrindSelection.skill_grind_selection_pure skill cl
+          (Formal.SkillStepDispatch.fullList cands)) :=
+  @Formal.SkillStepDispatch.full_preference
+-- reservation_safety: a FULL-pass grind code belongs to a candidate whose
+-- uses_reserved_full flag is false (never eats a reserved objective material).
+example : ∀ (skill : String) (cl : Int) (cs : String) (clv : Int)
+    (cands : List Formal.SkillStepDispatch.DC), ¬ (cs = skill ∧ clv ≤ cl) →
+    Extracted.SkillGrindSelection.skill_grind_selection_pure skill cl
+        (Formal.SkillStepDispatch.fullList cands) ≠ "" →
+    ∃ c, c ∈ cands ∧ c.uses_reserved_full = false
+      ∧ c.code = (Formal.SkillStepDispatch.dispatch skill cl cs clv cands).2 :=
+  @Formal.SkillStepDispatch.reservation_safety
+-- forward_progress: NOT suppressed + a feasible RELAXED candidate (non-empty
+-- codes) ⇒ a "grind" decision (never the dead NO_GRIND fallback).
+example : ∀ (skill : String) (cl : Int) (cs : String) (clv : Int)
+    (cands : List Formal.SkillStepDispatch.DC), ¬ (cs = skill ∧ clv ≤ cl) →
+    ∀ (c : Formal.SkillStepDispatch.DC), c ∈ cands → c.uses_reserved_relaxed = false →
+    Formal.SkillStepDispatch.feasibleDC skill cl c →
+    (∀ d ∈ Formal.SkillStepDispatch.relaxedList cands, d.code ≠ "") →
+    (Formal.SkillStepDispatch.dispatch skill cl cs clv cands).1 = "grind" :=
+  @Formal.SkillStepDispatch.forward_progress
+-- grind_valid: a "grind" decision's code is a same-skill, in-level, obtainable
+-- candidate.
+example : ∀ (skill : String) (cl : Int) (cs : String) (clv : Int)
+    (cands : List Formal.SkillStepDispatch.DC),
+    (Formal.SkillStepDispatch.dispatch skill cl cs clv cands).1 = "grind" →
+    ∃ c, c ∈ cands ∧ c.code = (Formal.SkillStepDispatch.dispatch skill cl cs clv cands).2
+      ∧ Formal.SkillStepDispatch.feasibleDC skill cl c :=
+  @Formal.SkillStepDispatch.grind_valid
 
 /-! ### SkillXpCurve role contracts. -/
 

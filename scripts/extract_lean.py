@@ -401,6 +401,12 @@ MODULES: tuple[ModuleSpec, ...] = (
         functions=("_beats", "skill_grind_selection_pure"),
         structures=("GrindCandidate",),
     ),
+    ModuleSpec(
+        source="src/artifactsmmo_cli/ai/tiers/skill_step_dispatch.py",
+        output=f"{GENERATED_DIR}/SkillStepDispatch.lean",
+        core_name="SkillStepDispatch",
+        functions=("combine_dispatch_pure",),
+    ),
 )
 
 

@@ -99,6 +99,12 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.SkillGrindSelection.grind_in_level   -- selected candidate is in level
 #check @Formal.SkillGrindSelection.grind_obtainable -- selected candidate is obtainable
 #check @Formal.SkillGrindSelection.grind_actionable -- feasible non-empty candidate ⇒ non-empty result
+-- SkillStepDispatch required roles (reservation-aware grind/suppress/no-grind routing):
+#check @Formal.SkillStepDispatch.suppress_correct    -- SUPPRESS iff committed same-skill craftable-now
+#check @Formal.SkillStepDispatch.full_preference     -- full pass picks ⇒ that pick is the result
+#check @Formal.SkillStepDispatch.reservation_safety  -- a full-pass grind code never uses a reserved mat
+#check @Formal.SkillStepDispatch.forward_progress    -- feasible relaxed candidate ⇒ never NO_GRIND
+#check @Formal.SkillStepDispatch.grind_valid         -- a grind code is a feasible candidate
 -- SkillXpCurve required roles:
 #check @required_xp_observed       -- observed level ⇒ required_xp = stored xp
 #check @required_xp_zero           -- no data ∨ no level below ⇒ 0

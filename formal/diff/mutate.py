@@ -22,6 +22,7 @@ SCORING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "scoring.
 SKILL_XP_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "skill_xp_curve.py"
 SKILL_TARGET_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "skill_target_curve.py"
 SKILL_GRIND_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "skill_grind_selection.py"
+SKILL_STEP_DISPATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "skill_step_dispatch.py"
 ACTION_FACTORY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "factory.py"
 RECIPE_CLOSURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recipe_closure.py"
 TASK_FEASIBILITY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_feasibility.py"
@@ -455,6 +456,36 @@ SKILL_GRIND_SELECTION_MUTATIONS = [
     ("skill_grind_selection: _beats fewest-missing flip",
      "        return c.mats_missing < best.mats_missing\n",
      "        return c.mats_missing > best.mats_missing\n"),
+]
+
+
+# skill_step_dispatch mutations -- anchors for the EXTRACTED combine_dispatch_pure
+# (the reservation-aware grind/suppress/no-grind combiner). Killed by the
+# differential test formal/diff/test_skill_step_dispatch_diff.py, which encodes
+# the role theorems (suppress_correct / full_preference / forward_progress /
+# grind_valid) from formal/Formal/SkillStepDispatch.lean. The combine-direct case
+# feeds BOTH picks non-empty so the full-preference branch is exercised (the
+# pipeline wrapper short-circuits it).
+SKILL_STEP_DISPATCH_MUTATIONS = [
+    # drop the suppress guard -- never suppresses, violating suppress_correct.
+    ("skill_step_dispatch: drop suppress guard",
+     "    if committed_skill == skill and committed_level <= current_level:\n",
+     "    if False:\n"),
+    # suppress boundary <= -> < -- a craftable-now committed item at the exact
+    # current level no longer suppresses; violates suppress_correct.
+    ("skill_step_dispatch: suppress boundary <= to <",
+     "    if committed_skill == skill and committed_level <= current_level:\n",
+     "    if committed_skill == skill and committed_level < current_level:\n"),
+    # flip the full/relaxed preference -- prefers the relaxed pick, violating
+    # full_preference (reservation honored only when forced to relax).
+    ("skill_step_dispatch: full-preference flip",
+     '    pick = full_pick if full_pick != "" else relaxed_pick\n',
+     '    pick = relaxed_pick if relaxed_pick != "" else full_pick\n'),
+    # always-grind -- returns ("grind", "") when both passes are empty, violating
+    # the NO_GRIND contract (grind_valid would have no candidate).
+    ("skill_step_dispatch: drop no-grind guard",
+     '    if pick != "":\n',
+     "    if True:\n"),
 ]
 
 
@@ -2623,6 +2654,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_skill_target_curve_diff.py", survivors)
     run_group(SKILL_GRIND_SELECTION_SRC, SKILL_GRIND_SELECTION_MUTATIONS,
               "formal/diff/test_skill_grind_selection_diff.py", survivors)
+    run_group(SKILL_STEP_DISPATCH_SRC, SKILL_STEP_DISPATCH_MUTATIONS,
+              "formal/diff/test_skill_step_dispatch_diff.py", survivors)
     run_group(RECIPE_CLOSURE_SRC, RECIPE_CLOSURE_MUTATIONS,
               "formal/diff/test_recipe_closure_diff.py", survivors)
     run_group(TASK_FEASIBILITY_SRC, TASK_FEASIBILITY_MUTATIONS,
