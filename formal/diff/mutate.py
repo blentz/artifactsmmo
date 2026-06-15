@@ -2039,6 +2039,7 @@ APPLY_FIGHT_MUTATIONS = [
         "            hp=new_hp,\n"
         "            x=dest[0],\n"
         "            y=dest[1],\n"
+        "            inventory=dict(inv.item_count),\n"
         "            cooldown_expires=None,\n"
         "            task_progress=new_progress,\n"
         "            task_lifecycle_phase=derive_task_lifecycle_phase(\n"
