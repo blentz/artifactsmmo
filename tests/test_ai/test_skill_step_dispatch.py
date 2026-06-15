@@ -4,9 +4,62 @@ formal/Formal/Extracted/SkillStepDispatch.lean)."""
 from artifactsmmo_cli.ai.tiers.skill_step_dispatch import (
     DispatchCandidate,
     DispatchDecision,
+    FlagInputs,
+    cannibalize_pure,
     combine_dispatch_pure,
+    dispatch_candidate_flags,
     skill_step_dispatch_pure,
 )
+
+
+def _fi(code="x", recipe=("copper_bar",), level=1, obtainable=True,
+        is_target=False, owned=False):
+    return FlagInputs(code=code, recipe_mats=tuple(recipe), craft_level=level,
+                      obtainable=obtainable, is_target=is_target, owned=owned)
+
+
+def test_flags_unowned_target_is_exempt():
+    """An unowned, in-level target is exempt: both reserved flags false even
+    though its recipe input is reserved."""
+    c = _fi(recipe=("copper_bar",), is_target=True, owned=False)
+    assert dispatch_candidate_flags(
+        c, 1, frozenset({"copper_bar"}), frozenset({"copper_bar"}), False) == (False, False)
+
+
+def test_flags_owned_target_not_exempt():
+    """An OWNED target is not exempt — its reserved mats block it (no over-craft)."""
+    c = _fi(recipe=("copper_bar",), is_target=True, owned=True)
+    assert dispatch_candidate_flags(
+        c, 1, frozenset({"copper_bar"}), frozenset({"copper_bar"}), False) == (True, True)
+
+
+def test_flags_nontarget_reserved():
+    """A non-target throwaway is reservation-blocked by its mats."""
+    c = _fi(recipe=("copper_bar",), is_target=False)
+    assert dispatch_candidate_flags(
+        c, 1, frozenset({"copper_bar"}), frozenset({"copper_bar"}), False) == (True, True)
+
+
+def test_flags_cannibalize_frees_relaxed():
+    """Under cannibalization the relaxed flag is false (full still reserved)."""
+    c = _fi(recipe=("copper_bar",), is_target=False)
+    assert dispatch_candidate_flags(
+        c, 1, frozenset({"copper_bar"}), frozenset({"copper_bar"}), True) == (True, False)
+
+
+def test_cannibalize_true_when_all_feasible_owned():
+    cands = [_fi(code="a", owned=True), _fi(code="b", owned=True)]
+    assert cannibalize_pure(1, cands) is True
+
+
+def test_cannibalize_false_when_unowned_feasible_exists():
+    cands = [_fi(code="a", owned=True), _fi(code="b", owned=False)]
+    assert cannibalize_pure(1, cands) is False
+
+
+def test_cannibalize_false_when_no_feasible():
+    cands = [_fi(code="a", owned=True, level=10)]  # out of level -> not feasible
+    assert cannibalize_pure(1, cands) is False
 
 
 def _c(code, level=1, missing=0, obtainable=True, full=False, relaxed=False):

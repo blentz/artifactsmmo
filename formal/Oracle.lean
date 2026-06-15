@@ -1783,6 +1783,37 @@ def runSkillStepDispatch (args : Array Json) : Json :=
     skill currentLevel committedSkill committedLevel candidates
   Json.mkObj [("kind", Json.str result.1), ("code", Json.str result.2)]
 
+/-- Compute `dispatch_candidate_flags` via `Formal.GrindLadder.flagsFor`.
+args: `[cl, craft_level, is_target(0/1), owned(0/1), cann(0/1), n_mats, n_rf,
+n_rr]` then the mats / reserved_full / reserved_relaxed code strings in that
+order. Emits `{"full": Bool, "relaxed": Bool}`. -/
+def runCandidateFlags (args : Array Json) : Json :=
+  let cl := intArg args 0
+  let nMats := (intArg args 5).toNat
+  let nRf := (intArg args 6).toNat
+  let nRr := (intArg args 7).toNat
+  let mats := (List.range nMats).map (fun i => strArg args (8 + i))
+  let rf := (List.range nRf).map (fun i => strArg args (8 + nMats + i))
+  let rr := (List.range nRr).map (fun i => strArg args (8 + nMats + nRf + i))
+  let rc : Formal.GrindLadder.RC :=
+    { code := "x", craft_skill := "s", craft_level := intArg args 1, mats_missing := 0,
+      obtainable := true, is_target := intArg args 2 != 0, owned := intArg args 3 != 0,
+      recipe_mats := mats }
+  let f := Formal.GrindLadder.flagsFor rc cl rf rr (intArg args 4 != 0)
+  Json.mkObj [("full", Json.bool f.1), ("relaxed", Json.bool f.2)]
+
+/-- Compute `cannibalize_pure` via `Formal.GrindLadder.cannibalizeModel`.
+args: `[cl, n]` then per candidate `[craft_level, obtainable(0/1), owned(0/1)]`.
+Emits `{"cannibalize": Bool}`. -/
+def runCannibalize (args : Array Json) : Json :=
+  let n := (intArg args 1).toNat
+  let rcs : List Formal.GrindLadder.RC := (List.range n).map (fun k =>
+    let b := 2 + 3 * k
+    { code := "c", craft_skill := "s", craft_level := intArg args b, mats_missing := 0,
+      obtainable := intArg args (b + 1) != 0, is_target := false,
+      owned := intArg args (b + 2) != 0, recipe_mats := [] })
+  Json.mkObj [("cannibalize", Json.bool (Formal.GrindLadder.cannibalizeModel (intArg args 0) rcs))]
+
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
@@ -1924,6 +1955,10 @@ def runOne (item : Json) : Json :=
     runSkillStepDispatch args
   else if kind == "combine_dispatch" then
     runCombineDispatch args
+  else if kind == "candidate_flags" then
+    runCandidateFlags args
+  else if kind == "cannibalize" then
+    runCannibalize args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

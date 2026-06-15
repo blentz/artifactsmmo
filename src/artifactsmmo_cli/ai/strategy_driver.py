@@ -59,6 +59,9 @@ from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
 from artifactsmmo_cli.ai.tiers.skill_grind_target import build_grind_candidates
 from artifactsmmo_cli.ai.tiers.skill_step_dispatch import (
     DispatchCandidate,
+    FlagInputs,
+    cannibalize_pure,
+    dispatch_candidate_flags,
     skill_step_dispatch_pure,
 )
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
@@ -218,20 +221,22 @@ def _skill_dispatch_candidates(
         return owned_count_pure(state.inventory, state.bank_items, equipped, code) >= 1
 
     raw = build_grind_candidates(skill, state, game_data)
-    feasible = [gc for gc in raw if gc.craft_level <= current_level and gc.obtainable]
-    cannibalize = bool(feasible) and all(owned(gc.code) for gc in feasible)
+    flag_inputs = [
+        FlagInputs(code=gc.code,
+                   recipe_mats=tuple(game_data.crafting_recipe(gc.code) or {}),
+                   craft_level=gc.craft_level, obtainable=gc.obtainable,
+                   is_target=gc.code in objective_targets, owned=owned(gc.code))
+        for gc in raw
+    ]
+    cannibalize = cannibalize_pure(current_level, flag_inputs)
+    rf, rr = frozenset(reserved_full), frozenset(reserved_relaxed)
     out: list[DispatchCandidate] = []
-    for gc in raw:
-        recipe = game_data.crafting_recipe(gc.code) or {}
-        exempt = (gc.code in objective_targets
-                  and gc.craft_level <= current_level
-                  and not owned(gc.code))
+    for gc, fi in zip(raw, flag_inputs):
+        uses_full, uses_relaxed = dispatch_candidate_flags(fi, current_level, rf, rr, cannibalize)
         out.append(DispatchCandidate(
             code=gc.code, craft_skill=gc.craft_skill, craft_level=gc.craft_level,
             mats_missing=gc.mats_missing, obtainable=gc.obtainable,
-            uses_reserved_full=(not exempt) and any(m in reserved_full for m in recipe),
-            uses_reserved_relaxed=(not exempt) and (not cannibalize)
-            and any(m in reserved_relaxed for m in recipe),
+            uses_reserved_full=uses_full, uses_reserved_relaxed=uses_relaxed,
         ))
     return out
 

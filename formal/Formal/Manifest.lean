@@ -105,6 +105,11 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.SkillStepDispatch.reservation_safety  -- a full-pass grind code never uses a reserved mat
 #check @Formal.SkillStepDispatch.forward_progress    -- feasible relaxed candidate ⇒ never NO_GRIND
 #check @Formal.SkillStepDispatch.grind_valid         -- a grind code is a feasible candidate
+-- GrindLadder required roles (reservation-flag computation + grind liveness):
+#check @Formal.GrindLadder.flags_exempt              -- unowned in-level target ⇒ both flags false
+#check @Formal.GrindLadder.flags_cannibalize         -- cannibalize ⇒ relaxed flag false
+#check @Formal.GrindLadder.grind_when_unowned_target -- feasible unowned target ⇒ grind (never freeze)
+#check @Formal.GrindLadder.grind_when_all_owned      -- all feasible owned + cannibalize ⇒ grind
 -- SkillXpCurve required roles:
 #check @required_xp_observed       -- observed level ⇒ required_xp = stored xp
 #check @required_xp_zero           -- no data ∨ no level below ⇒ 0

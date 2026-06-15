@@ -489,6 +489,40 @@ SKILL_STEP_DISPATCH_MUTATIONS = [
 ]
 
 
+# grind_ladder mutations -- anchors for dispatch_candidate_flags / cannibalize_pure
+# (the reservation-flag hoisting). Killed by formal/diff/test_grind_ladder_diff.py,
+# which binds them to Formal.GrindLadder.flagsFor / cannibalizeModel -- the SAME
+# defs the liveness theorems (grind_when_unowned_target / grind_when_all_owned)
+# are proved over. Same source file as the combine mutations above.
+GRIND_LADDER_MUTATIONS = [
+    # drop the target exemption -- a target's mats are no longer freed, so the
+    # grind freezes (the 2026-06-14 230824 regression); flags diverge from Lean.
+    ("grind_ladder: drop exempt guard",
+     "    exempt = c.is_target and c.craft_level <= current_level and not c.owned\n",
+     "    exempt = False\n"),
+    # exempt OWNED instead of unowned -- re-grinds owned targets (over-craft) and
+    # withholds the exemption from unowned ones.
+    ("grind_ladder: exempt owned instead of unowned",
+     "    exempt = c.is_target and c.craft_level <= current_level and not c.owned\n",
+     "    exempt = c.is_target and c.craft_level <= current_level and c.owned\n"),
+    # relaxed pass ignores cannibalize -- never frees the relaxed reservation, so
+    # the all-owned corner freezes instead of cannibalizing.
+    ("grind_ladder: relaxed ignores cannibalize",
+     "    uses_relaxed = ((not exempt) and (not cannibalize)\n",
+     "    uses_relaxed = ((not exempt) and (True)\n"),
+    # flip the cannibalize ownership test -- fires cannibalization while unowned
+    # items remain (and withholds it when all owned).
+    ("grind_ladder: cannibalize ownership flip",
+     "    return len(feasible) > 0 and not any(not c.owned for c in feasible)\n",
+     "    return len(feasible) > 0 and any(not c.owned for c in feasible)\n"),
+    # drop the obtainable filter in the feasible set -- an unobtainable item wrongly
+    # counts toward the all-owned cannibalize decision.
+    ("grind_ladder: cannibalize drop obtainable filter",
+     "                if c.craft_level <= current_level and c.obtainable]\n",
+     "                if c.craft_level <= current_level]\n"),
+]
+
+
 # recipe_closure mutations -- old strings matched to current recipe_closure.py text
 # (P3a re-anchor: the cores are the fueled pure functions `_closure_visited` /
 # `_raw_units`. The closure DFS's own visited guard became OUTPUT-equivalent
@@ -2656,6 +2690,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_skill_grind_selection_diff.py", survivors)
     run_group(SKILL_STEP_DISPATCH_SRC, SKILL_STEP_DISPATCH_MUTATIONS,
               "formal/diff/test_skill_step_dispatch_diff.py", survivors)
+    run_group(SKILL_STEP_DISPATCH_SRC, GRIND_LADDER_MUTATIONS,
+              "formal/diff/test_grind_ladder_diff.py", survivors)
     run_group(RECIPE_CLOSURE_SRC, RECIPE_CLOSURE_MUTATIONS,
               "formal/diff/test_recipe_closure_diff.py", survivors)
     run_group(TASK_FEASIBILITY_SRC, TASK_FEASIBILITY_MUTATIONS,

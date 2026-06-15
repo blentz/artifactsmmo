@@ -43,6 +43,45 @@ class DispatchCandidate:
 
 
 @dataclass(frozen=True)
+class FlagInputs:
+    """Per-candidate inputs for the reservation-flag computation (the grind
+    ladder). `recipe_mats` are the candidate's recipe input codes; `is_target` =
+    the candidate is a committed objective gear/tool; `owned` = ≥1 already held."""
+    code: str
+    recipe_mats: tuple[str, ...]
+    craft_level: int
+    obtainable: bool
+    is_target: bool
+    owned: bool
+
+
+def cannibalize_pure(current_level: int, candidates: list[FlagInputs]) -> bool:
+    """LAST-RESORT predicate: every craftable-now, obtainable candidate is already
+    owned — no unowned target left to skill up on. In that corner the relaxed pass
+    is freed so the grind re-crafts an owned item rather than freezing."""
+    feasible = [c for c in candidates
+                if c.craft_level <= current_level and c.obtainable]
+    return len(feasible) > 0 and not any(not c.owned for c in feasible)
+
+
+def dispatch_candidate_flags(
+    c: FlagInputs, current_level: int,
+    reserved_full: frozenset[str], reserved_relaxed: frozenset[str],
+    cannibalize: bool,
+) -> tuple[bool, bool]:
+    """Compute (uses_reserved_full, uses_reserved_relaxed) for one grind
+    candidate. An unowned, craftable-now TARGET is exempt (crafting it is
+    objective progress — both flags false). Otherwise the flags mark whether the
+    recipe touches a reserved material; the relaxed flag additionally clears under
+    `cannibalize`. See formal/Formal/GrindLadder.lean."""
+    exempt = c.is_target and c.craft_level <= current_level and not c.owned
+    uses_full = (not exempt) and any(m in reserved_full for m in c.recipe_mats)
+    uses_relaxed = ((not exempt) and (not cannibalize)
+                    and any(m in reserved_relaxed for m in c.recipe_mats))
+    return (uses_full, uses_relaxed)
+
+
+@dataclass(frozen=True)
 class DispatchDecision:
     """`kind` ∈ {"suppress", "grind", "no_grind"}; `code` is the grind target
     when `kind == "grind"`, else ""."""

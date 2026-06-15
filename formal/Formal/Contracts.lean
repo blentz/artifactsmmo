@@ -10,6 +10,7 @@ import Formal.EquipmentScoring
 import Formal.SkillTargetCurve
 import Formal.SkillGrindSelection
 import Formal.SkillStepDispatch
+import Formal.GrindLadder
 import Formal.SkillXpCurve
 import Formal.RecipeClosure
 import Formal.TaskFeasibility
@@ -468,6 +469,35 @@ example : ∀ (skill : String) (cl : Int) (cs : String) (clv : Int)
     ∃ c, c ∈ cands ∧ c.code = (Formal.SkillStepDispatch.dispatch skill cl cs clv cands).2
       ∧ Formal.SkillStepDispatch.feasibleDC skill cl c :=
   @Formal.SkillStepDispatch.grind_valid
+
+/-! ### GrindLadder liveness contracts.
+
+The reservation-flag computation over raw candidates, and the two corners where
+the grind ladder guarantees it never freezes (an unowned in-skill target is
+always grindable; once all feasible items are owned the grind cannibalizes). -/
+
+-- grind_when_unowned_target: NOT suppressed + a feasible, unowned, in-skill
+-- TARGET (non-empty codes) ⇒ "grind".
+example : ∀ (skill : String) (cl : Int) (cs : String) (clv : Int)
+    (rf rr : List String) (rcs : List Formal.GrindLadder.RC),
+    ¬ (cs = skill ∧ clv ≤ cl) →
+    ∀ (rc : Formal.GrindLadder.RC), rc ∈ rcs →
+    Formal.GrindLadder.feasibleRC skill cl rc →
+    rc.is_target = true → rc.owned = false →
+    (∀ r ∈ rcs, r.code ≠ "") →
+    (Formal.GrindLadder.dispatchFromRaw skill cl cs clv rf rr rcs).1 = "grind" :=
+  @Formal.GrindLadder.grind_when_unowned_target
+-- grind_when_all_owned: NOT suppressed + a feasible candidate + cannibalization
+-- active (≥1 of every feasible item owned) ⇒ "grind" (the never-freeze backstop).
+example : ∀ (skill : String) (cl : Int) (cs : String) (clv : Int)
+    (rf rr : List String) (rcs : List Formal.GrindLadder.RC),
+    ¬ (cs = skill ∧ clv ≤ cl) →
+    ∀ (rc : Formal.GrindLadder.RC), rc ∈ rcs →
+    Formal.GrindLadder.feasibleRC skill cl rc →
+    Formal.GrindLadder.cannibalizeModel cl rcs = true →
+    (∀ r ∈ rcs, r.code ≠ "") →
+    (Formal.GrindLadder.dispatchFromRaw skill cl cs clv rf rr rcs).1 = "grind" :=
+  @Formal.GrindLadder.grind_when_all_owned
 
 /-! ### SkillXpCurve role contracts. -/
 
