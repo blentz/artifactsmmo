@@ -203,6 +203,32 @@ bound lemmas + the cycle-step diff — bounded and mechanical, but it MUST build
 green at each step (kernel-gated), not a fatigued ram-through. This is the
 genuine remaining CORE of obligation 5.
 
+### Increment 1 landed (2026-06-16) — keystone + faithful field
+
+- **`State.objectiveStepIsFight : Bool := false`** added (Measure.lean) — the
+  discriminant for "the objective tier's emitted step leads with a Fight"
+  (production `ReachCharLevel` meta-goal / combat objectives). Default keeps every
+  existing proof green (free; full build 6199 jobs).
+- **`Formal/Liveness/PerceptionInvariant.lean` (NEW, PROVEN)** — the keystone.
+  `XpInBand s := s.level < 50 → s.xp < xpToNextLevel s.level` is `cycleStep`- and
+  `cycleStepN`-PRESERVED (`applyActionKind_preserves_XpInBand` over all action
+  kinds; `.fight`/`.completeTask` rollover both preserve via LIV-001 positivity),
+  and holds at spawn (`spawn_XpInBand`). This discharges the fight-progress
+  perception invariant `hperc` as a from-spawn consequence — mirroring how
+  `GameDataInvariance` discharged hex/hbe — instead of a threaded `hperc'`
+  hypothesis. Axioms {propext, Quot.sound, xpToNextLevel(_pos)}; liveness axiom
+  check OK; wired into Formal.lean + LivenessAudit.
+- **Why keystone:** the `objectiveStep`-fight measure-decrease (the actual routing,
+  Increment 2) needs exactly `xp < xpToNextLevel level` to show `+10` xp shrinks the
+  xp-distance. With the invariant free-from-spawn, Increment 2 replicates the
+  existing `reachUnlockLevel` argument with NO new runtime obligation.
+- **NOT yet done (Increment 2):** the `planFor .objectiveStep` routing itself
+  (conditional on `objectiveStepIsFight`) + the `progressMeans_decreases_…`
+  objectiveStep-fight case (discharge `hperc` via `cycleStepN_preserves_XpInBand`)
+  + reformulated `hfightFires`. Drafted this session, then REVERTED to keep the
+  build green (the measure-decrease threading is the focused next step). The
+  capstone disclosure below still stands until Increment 2 lands.
+
 ### Status surfaced in code (2026-06-16)
 `LevelFiftyReachable.lean` now carries a ⚠ HONEST SCOPE DISCLOSURE at the
 `hfightFires` field AND in the module docstring: the capstone is currently

@@ -151,6 +151,22 @@ structure State where
       StrategyArbiter inserts the StepGoal candidate iff the objective
       tier yields a plannable step). -/
   objectiveStepFires : Bool
+  /-- O5.2 (2026-06-16): whether the objective tier's emitted step LEADS
+      WITH A FIGHT — i.e. the committed objective is a combat/char-leveling
+      goal whose first planned action is `Fight`. Production: the
+      `ReachCharLevel` meta-goal (`tiers/meta_goal.py::ReachCharLevel`,
+      satisfied when `state.level ≥ target`) and monster-task / combat
+      objectives dispatch a plan led by `FightAction`. This is the model's
+      ONLY faithful general char-XP-leveling path: `.fight` grants +10 char
+      xp + rollover, and OBJECTIVE_STEP sits at ladder idx 14 (before the
+      discretionary task means), so unlike a discretionary-tail grind means
+      it can actually be SELECTED.
+
+      Defaults to `false` — every legacy fixture/proof keeps the no-op
+      `objectiveStep` semantics (`planFor .objectiveStep = [.objectiveStep]`).
+      A diff harness must assert this Bool matches "the objective-tier plan's
+      head action is Fight" in production. -/
+  objectiveStepIsFight : Bool := false
   /-- OPAQUE: production's CRAFT_RELIEF guard firing predicate. Mirrors
       `tiers/guards.py::_fires(GuardKind.CRAFT_RELIEF, …)`: fires when
       `_used_fraction(state) ≥ CRAFT_RELIEF_FRACTION (0.70)` AND

@@ -40,6 +40,7 @@ import Formal.Liveness.GameDataFixture
 import Formal.Liveness.LevelFiftyReachable
 import Formal.Liveness.ReducedReachability
 import Formal.Liveness.NoWait
+import Formal.Liveness.PerceptionInvariant
 import Formal.Liveness.LifecycleBound
 import Formal.Liveness.LifecycleBound2
 import Formal.Liveness.LifecycleBound3
@@ -520,3 +521,14 @@ open Formal.Liveness.ItemsTaskRun
 #print axioms obtain_then_trades_reach
 #print axioms obtain_then_trades_reach_exists
 #print axioms held_accounts
+
+-- O5.2 keystone (2026-06-16): the perception invariant `xp < xpToNextLevel level`
+-- (while level<50) is `cycleStep`-preserved, so a single spawn fact propagates to
+-- every reachable state — the honest discharge mechanism for the fight-progress
+-- `hperc` hypothesis (mirrors GameDataInvariance's hex/hbe discharge). Unblocks
+-- routing a general char-leveling fight through `objectiveStep` (O5.2).
+open Formal.Liveness.PerceptionInvariant
+#print axioms applyActionKind_preserves_XpInBand
+#print axioms cycleStep_preserves_XpInBand
+#print axioms cycleStepN_preserves_XpInBand
+#print axioms spawn_XpInBand
