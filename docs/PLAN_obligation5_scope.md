@@ -132,3 +132,47 @@ property of the SERVER's monster table, not of our code. Options:
 O5.3 — the three perception/precondition invariant lemmas. Self-contained, no new
 axioms, shrinks the headline hypothesis, and warms up the cycleStep/measure
 machinery before the hard O5.1/O5.2 work.
+
+## O5.2 reformulation — DEFINITIVE finding + model-extension design (2026-06-15)
+
+Deeper than "hfightFires is unprovable": the liveness MODEL is fundamentally
+incomplete for general leveling.
+
+- The ONLY level-advancing transition is `Plan.applyActionKind .fight` (+10 xp,
+  rollover). `planFor` yields `.fight` ONLY from `bankUnlock` / `reachUnlockLevel`
+  (bank-bootstrap; stop firing once the bank is unlocked).
+- `completeTask`'s rollover is DEAD: `Measure.taskCompleteXpEstimate := 0` (items
+  tasks award no char XP), so `xp + 0 ≥ xpToNextLevel` never holds under the
+  perception invariant — the code says so at Measure.lean:400-405.
+- `objectiveStep` apply is a no-op (`{ s with objectiveStepFires := false }`).
+- There is NO grindCharacterXP / reachCharLevel / combat-farm means in
+  `allInLadderOrder` (22 means; none is general combat-leveling).
+
+⇒ Post-bank-bootstrap the model has NO way to gain char XP. `ai_reaches_level_fifty`
+is vacuous on `hfightFires` (which cannot hold). For a HONEST level-50 theorem the
+model must gain a faithful general combat-leveling means.
+
+### Model-extension design (the reformulation — multi-session, INVASIVE)
+1. Add a `grindCharacterXP` MeansKind to `allInLadderOrder` (→ 23; updates every
+   `decide`/`cases`-over-the-list lemma + the `length = 22` sanity). Firing:
+   `grindCharacterXpFires s := decide (s.level < 50) && <winnable monster exists>` —
+   the winnable-exists part is the catalog derivation (user's choice: derive from
+   the cached monster table, NOT an axiom).
+2. Semantics: `planFor .grindCharacterXP = [.fight]`; `applyActionKind .fight`
+   already does +10 / rollover (no new apply branch).
+3. Reformulate the leveling obligation: replace `hfightFires` with
+   `grindFires : ∀ N, ∃ k ≥ N, productionLadder (cycleStepN k s) ∈
+   {grindCharacterXP, bankUnlock, reachUnlockLevel}`, and DISCHARGE it — while
+   `level < 50` a winnable monster exists (catalog) so `grindCharacterXpFires`
+   holds, so it (or an earlier means) fires; "infinitely often" follows because
+   the firing condition `level < 50` persists until the goal is met.
+4. Re-route `lifecycle_progress_from_bounds_proven` to accept the grind means.
+5. Diff binding (O5.4): bind `grindCharacterXpFires` + the `productionLadder` select
+   to production (the cycle-step diff currently binds only `applyActionKind`).
+
+INVASIVE — a 23rd constructor ripples through ~40 liveness modules' decide-based
+enumeration lemmas. It is the genuine remaining CORE of obligation 5 and deserves a
+fresh focused session (adding an enum constructor mid-fatigue risks silent breakage
+in the many `cases k` proofs). Recommended first implementation brick: the catalog
+derivation of "a winnable monster exists at every level < 50" (self-contained,
+feeds step 1's firing predicate), then the enum extension.
