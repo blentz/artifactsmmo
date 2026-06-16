@@ -44,6 +44,7 @@ import Formal.Liveness.PerceptionInvariant
 import Formal.Liveness.FightFairness
 import Formal.Liveness.BlockerQuieting
 import Formal.Liveness.BlockerMonotone
+import Formal.Liveness.BlockerSettled
 import Formal.Liveness.LifecycleBound
 import Formal.Liveness.LifecycleBound2
 import Formal.Liveness.LifecycleBound3
@@ -582,3 +583,14 @@ open Formal.Liveness.BlockerMonotone
 #print axioms restForCombat_quiet_forever
 #print axioms bankUnlock_quiet_forever
 #print axioms reachUnlockLevel_quiet_forever
+
+-- O5.2 Settled state (2026-06-16): breaks the task-phase/composition circularity.
+-- A self-preserving Settled state has all 14 blockers quiet ⇒ objectiveStep selected
+-- ⇒ cycle is a fight ⇒ Settled preserved. So a single Settled state discharges
+-- CombatObjectiveFairlyScheduled and level-50 reachability; only "reach a Settled
+-- state" (the transient) remains.
+open Formal.Liveness.BlockerSettled
+#print axioms Settled_blockers_quiet
+#print axioms Settled_cycleStep
+#print axioms combatScheduled_of_settled
+#print axioms ai_reaches_level_fifty_of_settled

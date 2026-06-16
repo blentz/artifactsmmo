@@ -359,23 +359,36 @@ have permanent quieting. Full build 6205 jobs green; axiom check OK.
 `level ≥ bankRequiredLevel` the `level < bankRequiredLevel` conjunct fails forever.
 **11 of 14** blockers permanently quieted. Full build 6205 jobs green; check OK.
 
-### Remaining — the COUPLED core (3 task-phase blockers + composition)
+### Increment 10 landed (2026-06-16) — the COUPLING RESOLVED via a `Settled` state
 
-The last 3 blockers — `completeTask`, `taskCancel`, `lowYieldCancel` — are NOT
-independent monotonicity lemmas. Their firing reads `taskLifecyclePhase`, which is
-NOT monotone (acceptTask none→accepted, taskTrade →complete, completeTask/taskCancel
-→none). They settle only if `objectiveStep` is SELECTED (so it preempts the
-phase-advancing `pursueTask`/`acceptTask` at idx 15/16) — but objectiveStep is
-selected only when ALL blockers (these included) are quiet. So the task-phase
-quieting and the `∃K`-all-quiet composition are CIRCULARLY COUPLED through selection:
-they need a single joint argument (priority-ordered: once idx 0–13 are quiet,
-objectiveStep is selected, phase freezes, the task-phase blockers stay quiet),
-NOT 3 more independent lemmas. This is the genuine remaining hard core of
-`BlockersQuietInfinitelyOften`; 11/14 are independently discharged, the coupled
-remainder is honestly scoped. (Note: `CombatPersistent` gives the objectiveStep
-PREDICATE, not selection — the joint argument must supply selection from the 11
-quieted blockers + the task settling.)
-- **`BlockersQuietInfinitelyOften` from spawn — original framing (now well-reduced).**
+`Formal/Liveness/BlockerSettled.lean` (NEW, proven) breaks the task-phase /
+composition circularity with a SELF-PRESERVING `Settled` state bundling all 14
+clearing conditions (6 flags false, hp=maxHp, bankAccessible, level≥bankRequiredLevel,
+phase=.none, objectiveStepFires, objectiveStepIsFight):
+- **`Settled_blockers_quiet`** — at a `Settled` state ALL 14 blockers are quiet
+  (`fin_cases` over `objectiveStepBlockers`, each from the matching field).
+- **`Settled_productionLadder`** — therefore `objectiveStep` is SELECTED (combat
+  objective fires + all blockers quiet → the increment-4 selection lemma).
+- **`Settled_cycleStep`** — so the cycle is a `.fight`, which preserves EVERY
+  `Settled` field (fight touches only level/xp/bankAccessible/actionsAttempted;
+  level≥bankRequiredLevel survives as level is non-decreasing; bankAccessible stays
+  true; phase untouched). `Settled` is `cycleStep`-invariant.
+- **`combatScheduled_of_settled`** — a single `Settled` state ⇒
+  `CombatObjectiveFairlyScheduled` (invariance ⇒ combat fires+unblocked at every k).
+- **`ai_reaches_level_fifty_of_settled`** — config-positivity + `Settled` ⇒
+  `∃ k, level ≥ 50`. The ENTIRE hfightFires/blocker-transience tower collapses to
+  ONE hypothesis: the trajectory reaches a `Settled` state.
+Axioms standard + LIV-001; in the audit; full build 6207 jobs green; check OK.
+
+### Remaining — REACH a Settled state (the transient) + O5.4
+- **Reach `Settled`** — `∃K, Settled (cycleStepN K s)` from spawn. This IS the
+  transient (drive each clearing condition true once: discard overstock, deposit,
+  sell, claim, rest, unlock bank, reach unlock level, park the task at .none, commit
+  a combat objective). The per-blocker one-step quieting (incr 6) + monotonicity
+  (incr 7–9) show each condition, once true, STAYS true; reaching them is the
+  bounded warm-up. Now a clean self-contained goal (no circularity).
+- **O5.4 diff binding** — bind `objectiveStepIsFight` (and the opaque flags) to
+  production + the `productionLadder` select + the perception-refresh faithfulness.
   In-model each of the 14 `objectiveStepBlockers` clears its own firing flag on its
   `planFor` action (deleteItem→¬overstock, depositAll→¬deposits, npcSell→¬sellable,
   completeTask→task cleared, bootstrap fights retire on unlock) and nothing re-arms
