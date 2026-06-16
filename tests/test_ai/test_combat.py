@@ -26,6 +26,18 @@ def _record_losses(store: LearningStore, action_repr: str, n: int) -> None:
         ))
 
 
+def _record_mixed(store: LearningStore, action_repr: str, wins: int, losses: int) -> None:
+    """Record `wins` won + `losses` lost fights so success_rate = wins/(wins+losses)."""
+    store.start_session()
+    i = 0
+    for outcome in ["ok"] * wins + ["error:fight_lost"] * losses:
+        store.record_cycle(Cycle(
+            ts=f"2026-05-25T00:00:{i:02d}+00:00", session_id="x", cycle_index=i,
+            character="x", outcome=outcome, action_repr=action_repr,
+        ))
+        i += 1
+
+
 def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob"):
     gd = GameData()
     gd._monster_hp = {code: hp}
@@ -85,6 +97,30 @@ def test_is_winnable_no_veto_below_sample_threshold(tmp_path):
     gd = _gd(hp=30, attack={"fire": 5}, initiative=10)
     store = LearningStore(db_path=str(tmp_path / "l.db"), character="h")
     _record_losses(store, "Fight(mob)", MIN_WIN_SAMPLES - 1)
+    assert is_winnable(state, gd, "mob", store) is True
+    store.close()
+
+
+def test_is_winnable_vetoes_high_but_imperfect_winrate(tmp_path):
+    """A monster won only ~80% of observed fights (lost >10%) is vetoed even though
+    the stat prediction says win. The cooldown + death cost of marginal fights
+    outweighs the XP — the blue_slime trace bug (13% loss from full HP, bot kept
+    grinding it). Inert at the old 0.5 threshold; caught now."""
+    state = make_state(max_hp=100, attack={"fire": 30}, initiative=50)
+    gd = _gd(hp=30, attack={"fire": 5}, initiative=10)  # predict_win -> True
+    store = LearningStore(db_path=str(tmp_path / "l.db"), character="h")
+    _record_mixed(store, "Fight(mob)", wins=8, losses=2)  # 80% < threshold
+    assert is_winnable(state, gd, "mob", store) is False
+    store.close()
+
+
+def test_is_winnable_keeps_reliable_winner(tmp_path):
+    """A reliably-won monster (95%) is NOT vetoed — the threshold deselects only
+    genuinely costly targets, it does not starve the bot of winnable combat."""
+    state = make_state(max_hp=100, attack={"fire": 30}, initiative=50)
+    gd = _gd(hp=30, attack={"fire": 5}, initiative=10)
+    store = LearningStore(db_path=str(tmp_path / "l.db"), character="h")
+    _record_mixed(store, "Fight(mob)", wins=19, losses=1)  # 95% >= threshold
     assert is_winnable(state, gd, "mob", store) is True
     store.close()
 

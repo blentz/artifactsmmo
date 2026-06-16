@@ -18,9 +18,10 @@ Initial diagnosis blamed a missing skill-gate fast-fail. WRONG, corrected:
   **No intermediate is gated above the bot's skills.** So a closure-wide gate check
   would NOT have fired on 06-15 either.
 - On 06-15 `is_plannable` returned True (237K nodes prove the gate was *passed*) ⇒
-  gearcrafting was **≥5, gate OPEN**. feather_coat was doomed for a DEEPER reason
-  (most likely inventory-cap interleaving: 25 raw mats vs 20 free slots → no
-  simultaneously-satisfying state → 237K-node exhaustion, plan_len 0).
+  gearcrafting was **≥5, gate OPEN**. feather_coat was doomed for a DEEPER reason —
+  a deep-recipe search failure (the planner could not assemble feather×5 + ash_plank×2
+  within the search). NOT inventory-cap interleaving: the 06-15 trace shows inventory
+  was never near-full (20 free slots every cycle), correcting an earlier guess here.
 - **The actual CPU-peg cause is Fix B alone:** `try_plan_cheap` searches feather_coat
   (expensive, genuinely doomed) every cycle and NEVER `mark`s it (only `try_plan_full`
   marks, and it never runs because the cheap pass succeeds via iron_bar). The

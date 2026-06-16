@@ -16,8 +16,17 @@ from artifactsmmo_cli.ai.world_state import ELEMENTS, WorldState
 MAX_TURNS = 100
 """A fight unresolved by turn 100 is a loss (documented combat cap)."""
 
-WIN_RATE_THRESHOLD = 0.5
-"""Below this observed Fight success rate, the learned-loss veto fires."""
+WIN_RATE_THRESHOLD = 0.9
+"""Below this observed Fight success rate, the learned-loss veto fires. Set high
+(0.9) because `predict_win` is an EXPECTED-value verdict: a marginal monster the
+formula calls winnable can still lose ~10-15% to combat variance (crits), and each
+loss burns a fight cooldown for zero progress and risks death. Trace 2026-06-15:
+the bot ground blue_slime (won 87% from FULL HP, lost 13%) for 200+ cycles because
+the old 0.5 threshold only vetoed monsters lost MORE than half the time. Vetoing
+sub-0.9 win rates redirects the target picker to a reliably-winnable monster
+(green_slime, 0% loss in the same trace). Runtime-only: the veto is applied where
+`history` is passed (target selection), NOT in the stat-only planning gates, so it
+does not perturb Fight-for-drops reachability."""
 
 MIN_WIN_SAMPLES = 5
 """Observed fights required before the loss veto overrides the stat prediction.
