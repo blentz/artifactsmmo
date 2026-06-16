@@ -43,6 +43,7 @@ import Formal.Liveness.NoWait
 import Formal.Liveness.PerceptionInvariant
 import Formal.Liveness.FightFairness
 import Formal.Liveness.BlockerQuieting
+import Formal.Liveness.BlockerMonotone
 import Formal.Liveness.LifecycleBound
 import Formal.Liveness.LifecycleBound2
 import Formal.Liveness.LifecycleBound3
@@ -564,3 +565,16 @@ open Formal.Liveness.BlockerQuieting
 #print axioms restForCombat_quiet_after_firing
 #print axioms hpCritical_quiet_after_firing
 #print axioms bankUnlock_quiet_after_firing
+
+-- O5.2 blocker PERMANENT quieting (2026-06-16): the 6 opaque flags are only ever
+-- cleared (never re-armed) by applyActionKind, so once false they stay false along
+-- cycleStepN — lifting one-step quieting to "the blocker never fires again". 7 of
+-- the 14 blockers handled to permanent quieting.
+open Formal.Liveness.BlockerMonotone
+#print axioms discardCritical_quiet_forever
+#print axioms discardHigh_quiet_forever
+#print axioms depositFull_quiet_forever
+#print axioms gearReview_quiet_forever
+#print axioms claimPending_quiet_forever
+#print axioms sellPressured_quiet_forever
+#print axioms craftRelief_quiet_forever

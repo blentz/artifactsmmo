@@ -332,16 +332,30 @@ These are the building blocks: combined with flag/field MONOTONICITY (no
 `applyActionKind` re-arms the opaque flags / hp / level / bankAccessible) they bound
 total blocker firings.
 
-### Remaining (the assembly + O5.4)
-- **`BlockersQuietInfinitelyOften` ASSEMBLY (unproven).** Lift one-step quieting to
-  finite-total-firing via flag-monotonicity (prove `<flag> = false` is
-  `cycleStep`-preserved — uniform `cases` over `applyActionKind`, none sets it true),
-  then "all blockers eventually permanently quiet ⇒ quiet ∞-often". The 3
-  task-phase blockers (completeTask/taskCancel/lowYieldCancel) re-arm only via the
-  task lifecycle, bounded under `CombatPersistent` (objectiveStep preempts pursueTask
-  so the task never re-completes). Still a multi-lemma assembly; the per-blocker
-  mechanism is now DONE.
-- **`BlockersQuietInfinitelyOften` from spawn — original framing (now reduced).**
+### Increment 7 landed (2026-06-16) — PERMANENT quieting via flag monotonicity
+
+`Formal/Liveness/BlockerMonotone.lean` (NEW, proven): the 6 opaque blocker flags
+are only ever cleared (never re-armed) by `applyActionKind` — verified against
+`Plan.lean` — so once `false` they stay `false` along `cycleStepN`
+(`<flag>_false_cycleStepN`, uniform `cases`-over-actions like the `XpInBand`
+keystone). Hence `<blocker>_quiet_forever`: once the flag clears, the blocker NEVER
+fires again — for **7 of 14** blockers (discardCritical, discardHigh, depositFull,
+gearReview, claimPending, sellPressured, craftRelief). Axioms standard + LIV-001; in
+the audit; full build 6205 jobs green; check OK.
+
+### Remaining (finish the assembly + O5.4)
+- **Permanent quieting for the other blockers:** hp-restore (hpCritical,
+  restForCombat — `hp` monotone toward `maxHp`, never reduced in-model); bootstrap
+  (bankUnlock — `bankAccessible` monotone true-ward; reachUnlockLevel — `level`
+  monotone up, gap ≤ 5); task-phase (completeTask, taskCancel, lowYieldCancel —
+  re-arm only via the task lifecycle, bounded under `CombatPersistent` because
+  objectiveStep preempts pursueTask so the task never re-completes). Same
+  monotonicity pattern, except the 3 task-phase need the CombatPersistent coupling.
+- **Final composition:** "each blocker eventually permanently quiet ⇒ ∃K all quiet
+  for k≥K ⇒ `BlockersQuietInfinitelyOften`." Needs the per-blocker "flag is
+  eventually false" (it fires at most once via one-step quieting + monotonicity,
+  then stays clear) assembled across all 14, then `∃K`.
+- **`BlockersQuietInfinitelyOften` from spawn — original framing (now well-reduced).**
   In-model each of the 14 `objectiveStepBlockers` clears its own firing flag on its
   `planFor` action (deleteItem→¬overstock, depositAll→¬deposits, npcSell→¬sellable,
   completeTask→task cleared, bootstrap fights retire on unlock) and nothing re-arms
