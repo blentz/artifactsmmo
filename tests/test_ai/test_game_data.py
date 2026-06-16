@@ -403,6 +403,23 @@ class TestGameDataLoadItems:
         assert s.wisdom == 25
         assert s.prospecting == 25
 
+    def test_loads_inventory_space_from_bag(self):
+        """A bag's `inventory_space` parses into ItemStats so the value model sees
+        it → the bag gets equipped (server raises inventory_max)."""
+        gd = GameData()
+        item = MagicMock()
+        item.code = "backpack"
+        item.level = 10
+        item.type_ = "bag"
+        item.craft = UNSET
+        eff = MagicMock()
+        eff.code = "inventory_space"
+        eff.value = 35
+        item.effects = [eff]
+        with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=make_page([item])):
+            gd._load_items(MagicMock())
+        assert gd.item_stats("backpack").inventory_space == 35
+
 
 class TestGameDataLoadResources:
     def test_loads_skill_requirement(self):

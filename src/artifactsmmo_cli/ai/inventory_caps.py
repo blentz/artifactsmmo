@@ -255,7 +255,8 @@ def _equip_value(stats: ItemStats) -> int:
     attack = sum(stats.attack.values()) if stats.attack else 0
     resistance = sum(stats.resistance.values()) if stats.resistance else 0
     hp = stats.hp_restore
-    return attack + resistance + hp + stats.hp_bonus + stats.wisdom + stats.prospecting
+    return (attack + resistance + hp + stats.hp_bonus + stats.wisdom
+            + stats.prospecting + stats.inventory_space)
 
 
 def _task_chain_demand_pure(fuel: int, target_item: str, root_item: str,

@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/equipment/scoring.py (sha256: 880bd5cff5c3b9d82aabdda13d4142e2cfd5e002b19750718d1368ac2cb92e23) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/equipment/scoring.py (sha256: 619230ee4cb0dd35b84b4ebc618467297bdccabafc9a702af92f2fc2e52be725) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.EquipmentScoring
@@ -33,7 +33,7 @@ def gather_score_pure (skill_effects : List (String × Int)) (skill : String) :
   (_dictGetD skill_effects skill 0)
 
 /-- Extracted from `armor_score_pure` (line 63). -/
-def armor_score_pure (elements : List String) (resistance : List (String × Int)) (monster_attack : List (String × Int)) (hp_bonus : Int) (wisdom : Int) (prospecting : Int) :
+def armor_score_pure (elements : List String) (resistance : List (String × Int)) (monster_attack : List (String × Int)) (hp_bonus : Int) (wisdom : Int) (prospecting : Int) (inventory_space : Int) :
     Int :=
   let score := 0
   let score := List.foldl
@@ -41,6 +41,6 @@ def armor_score_pure (elements : List String) (resistance : List (String × Int)
       let score := (score + ((_dictGetD monster_attack elem 0) * (_dictGetD resistance elem 0)))
       score)
     score elements
-  (((score + hp_bonus) + wisdom) + prospecting)
+  ((((score + hp_bonus) + wisdom) + prospecting) + inventory_space)
 
 end Extracted.EquipmentScoring

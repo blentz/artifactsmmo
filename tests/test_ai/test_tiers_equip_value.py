@@ -23,6 +23,13 @@ def test_values_utility_stats_wisdom_prospecting_hp_bonus():
     assert equip_value(art) == 151
 
 
+def test_values_inventory_space_so_bags_are_pursued():
+    """A bag's only stat is inventory_space (backpack=+35) → raw 35 → 2*35+1 = 71.
+    Was valued 0 (inventory_space dropped) → never equipped; now a valued upgrade."""
+    bag = ItemStats(code="backpack", level=10, type_="bag", inventory_space=35)
+    assert equip_value(bag) == 71
+
+
 def test_nontool_strictly_beats_tool_on_raw_tie():
     """Spec mirror of PurposeRouting.combatScore_tiebreaks_nontool_over_tool."""
     weapon = ItemStats(code="w", level=1, type_="weapon", attack={"earth": 5})

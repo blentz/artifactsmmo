@@ -794,6 +794,8 @@ open Formal.PriorityBand
 #check @Formal.EquipValueAugmented.rawSum_mono_in_dmg
 #check @Formal.EquipValueAugmented.rawSum_mono_in_wisdom        -- utility: value monotone in wisdom
 #check @Formal.EquipValueAugmented.rawSum_mono_in_prospecting   -- utility: value monotone in prospecting
+#check @Formal.EquipValueAugmented.rawSum_mono_in_inventorySpace -- bags: value monotone in inventory_space
+#check @Formal.EquipValueAugmented.backpack_value              -- bag witness: inventory_space 35 → 71
 #check @Formal.EquipValueAugmented.equipValue_nontool_zero_eq_one
 #check @Formal.EquipValueAugmented.equipValue_tool_zero_eq_zero
 #check @Formal.EquipValueAugmented.copper_dagger_strictly_outranks_fishing_net

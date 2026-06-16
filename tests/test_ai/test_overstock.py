@@ -34,6 +34,9 @@ def test_equip_value_counts_utility_stats_so_artifact_not_discarded():
     # A combat peer with a small attack no longer out-values it.
     weak = ItemStats(code="w", level=1, type_="weapon", attack={"fire": 10})
     assert _equip_value(art) > _equip_value(weak)
+    # A bag's inventory_space also counts → not valued 0 / discarded.
+    bag = ItemStats(code="backpack", level=10, type_="bag", inventory_space=35)
+    assert _equip_value(bag) == 35
 
 
 def _gd_with_sap_recipes() -> GameData:

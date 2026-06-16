@@ -40,11 +40,12 @@ structure RawStats where
   crit         : Int
   wisdom       : Int
   prospecting  : Int
+  inventorySpace : Int
 deriving Repr, DecidableEq
 
 def rawSum (s : RawStats) : Int :=
   s.attack + s.resistance + s.hpRestore + s.hpBonus + s.dmg + s.crit
-    + s.wisdom + s.prospecting
+    + s.wisdom + s.prospecting + s.inventorySpace
 
 def nonToolBonus (isTool : Bool) : Int := if isTool then 0 else 1
 
@@ -87,6 +88,10 @@ theorem rawSum_mono_in_prospecting (s : RawStats) (p' : Int) (h : s.prospecting 
     rawSum s ≤ rawSum { s with prospecting := p' } := by
   unfold rawSum; simp; omega
 
+theorem rawSum_mono_in_inventorySpace (s : RawStats) (i' : Int) (h : s.inventorySpace ≤ i') :
+    rawSum s ≤ rawSum { s with inventorySpace := i' } := by
+  unfold rawSum; simp; omega
+
 /-! ## Strict-order preservation. -/
 
 /-- 2x factor preserves strict rawSum inequalities through the +0/+1
@@ -120,7 +125,7 @@ theorem equipValue_tiebreaks_nontool_over_tool
 
 def zeroStats : RawStats :=
   { attack := 0, resistance := 0, hpRestore := 0,
-    hpBonus := 0, dmg := 0, crit := 0, wisdom := 0, prospecting := 0 }
+    hpBonus := 0, dmg := 0, crit := 0, wisdom := 0, prospecting := 0, inventorySpace := 0 }
 
 theorem rawSum_zero_at_zeroStats : rawSum zeroStats = 0 := by
   unfold rawSum zeroStats
@@ -149,28 +154,28 @@ The actual values that bit the bot in trace 2026-06-06 12:28: -/
 /-- copper_boots had hp_bonus=10, all else 0. raw=10, augmented=21. -/
 theorem copper_boots_value :
     equipValue { attack := 0, resistance := 0, hpRestore := 0,
-                 hpBonus := 10, dmg := 0, crit := 0, wisdom := 0, prospecting := 0 } false = 21 := by
+                 hpBonus := 10, dmg := 0, crit := 0, wisdom := 0, prospecting := 0, inventorySpace := 0 } false = 21 := by
   unfold equipValue rawSum nonToolBonus
   decide
 
 /-- copper_helmet: hp_bonus=20, dmg=3. raw=23, augmented=47. -/
 theorem copper_helmet_value :
     equipValue { attack := 0, resistance := 0, hpRestore := 0,
-                 hpBonus := 20, dmg := 3, crit := 0, wisdom := 0, prospecting := 0 } false = 47 := by
+                 hpBonus := 20, dmg := 3, crit := 0, wisdom := 0, prospecting := 0, inventorySpace := 0 } false = 47 := by
   unfold equipValue rawSum nonToolBonus
   decide
 
 /-- copper_dagger: attack=6 (air), crit=35. raw=41, augmented=83. -/
 theorem copper_dagger_value :
     equipValue { attack := 6, resistance := 0, hpRestore := 0,
-                 hpBonus := 0, dmg := 0, crit := 35, wisdom := 0, prospecting := 0 } false = 83 := by
+                 hpBonus := 0, dmg := 0, crit := 35, wisdom := 0, prospecting := 0, inventorySpace := 0 } false = 83 := by
   unfold equipValue rawSum nonToolBonus
   decide
 
 /-- fishing_net: attack=5 (water), subtype=tool. raw=5, augmented=10. -/
 theorem fishing_net_value :
     equipValue { attack := 5, resistance := 0, hpRestore := 0,
-                 hpBonus := 0, dmg := 0, crit := 0, wisdom := 0, prospecting := 0 } true = 10 := by
+                 hpBonus := 0, dmg := 0, crit := 0, wisdom := 0, prospecting := 0, inventorySpace := 0 } true = 10 := by
   unfold equipValue rawSum nonToolBonus
   decide
 
@@ -179,16 +184,27 @@ raw=75, augmented=151. The trace bug: valued 0 before wisdom/prospecting were
 modeled → discarded; now a high-value non-tool. -/
 theorem novice_guide_value :
     equipValue { attack := 0, resistance := 0, hpRestore := 0,
-                 hpBonus := 25, dmg := 0, crit := 0, wisdom := 25, prospecting := 25 } false = 151 := by
+                 hpBonus := 25, dmg := 0, crit := 0, wisdom := 25, prospecting := 25,
+                 inventorySpace := 0 } false = 151 := by
+  unfold equipValue rawSum nonToolBonus
+  decide
+
+/-- backpack bag: inventory_space 35, no combat stats. raw=35, augmented=71. Was
+valued 0 (inventory_space dropped) → never equipped; now a valued upgrade so the
+bot equips bags and the server raises inventory capacity. -/
+theorem backpack_value :
+    equipValue { attack := 0, resistance := 0, hpRestore := 0,
+                 hpBonus := 0, dmg := 0, crit := 0, wisdom := 0, prospecting := 0,
+                 inventorySpace := 35 } false = 71 := by
   unfold equipValue rawSum nonToolBonus
   decide
 
 /-- copper_dagger strictly outranks fishing_net. The trace bug closure. -/
 theorem copper_dagger_strictly_outranks_fishing_net :
     equipValue { attack := 5, resistance := 0, hpRestore := 0,
-                 hpBonus := 0, dmg := 0, crit := 0, wisdom := 0, prospecting := 0 } true <
+                 hpBonus := 0, dmg := 0, crit := 0, wisdom := 0, prospecting := 0, inventorySpace := 0 } true <
     equipValue { attack := 6, resistance := 0, hpRestore := 0,
-                 hpBonus := 0, dmg := 0, crit := 35, wisdom := 0, prospecting := 0 } false := by
+                 hpBonus := 0, dmg := 0, crit := 35, wisdom := 0, prospecting := 0, inventorySpace := 0 } false := by
   unfold equipValue rawSum nonToolBonus
   decide
 

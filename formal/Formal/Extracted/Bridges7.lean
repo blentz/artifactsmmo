@@ -105,12 +105,12 @@ theorem armor_score_bridge (enc : Int → String)
     (hinj : ∀ a b : Int, enc a = enc b → a = b)
     (item : Formal.EquipmentScoring.Item)
     (monsterAtk : Formal.EquipmentScoring.ElemStats)
-    (hpBonus wisdom prospecting : Int)
-    (hflat : item.flatUtil = hpBonus + wisdom + prospecting) :
+    (hpBonus wisdom prospecting inventorySpace : Int)
+    (hflat : item.flatUtil = hpBonus + wisdom + prospecting + inventorySpace) :
     Extracted.EquipmentScoring.armor_score_pure
         (Formal.EquipmentScoring.elements.map enc)
         (encElem enc item.resistance) (encElem enc monsterAtk)
-        hpBonus wisdom prospecting
+        hpBonus wisdom prospecting inventorySpace
       = Formal.EquipmentScoring.AScore item monsterAtk := by
   simp only [Extracted.EquipmentScoring.armor_score_pure,
              Formal.EquipmentScoring.AScore, Formal.EquipmentScoring.aTerm,
@@ -263,12 +263,12 @@ equals the hand `Formal.EquipValueAugmented.equipValue` on every stat
 profile, with `isTool` the Python `subtype == "tool"` test. The wrapper
 hoists the ItemStats dict-value sums to the already-summed ints the hand
 model takes, so the two encodings coincide directly. -/
-theorem equip_value_bridge (attack resistance hpRestore hpBonus dmg crit wisdom prospecting : Int)
+theorem equip_value_bridge (attack resistance hpRestore hpBonus dmg crit wisdom prospecting inventorySpace : Int)
     (subtype : String) :
     Extracted.EquipValue.equip_value_pure
-        attack resistance hpRestore hpBonus dmg crit wisdom prospecting subtype
+        attack resistance hpRestore hpBonus dmg crit wisdom prospecting inventorySpace subtype
       = Formal.EquipValueAugmented.equipValue
-        ⟨attack, resistance, hpRestore, hpBonus, dmg, crit, wisdom, prospecting⟩
+        ⟨attack, resistance, hpRestore, hpBonus, dmg, crit, wisdom, prospecting, inventorySpace⟩
         (subtype == "tool") := by
   unfold Extracted.EquipValue.equip_value_pure
     Formal.EquipValueAugmented.equipValue Formal.EquipValueAugmented.rawSum
@@ -283,9 +283,9 @@ theorem equip_value_strict_extracted
     (hStrict : Formal.EquipValueAugmented.rawSum s
       < Formal.EquipValueAugmented.rawSum t) :
     Extracted.EquipValue.equip_value_pure
-        s.attack s.resistance s.hpRestore s.hpBonus s.dmg s.crit s.wisdom s.prospecting subS
+        s.attack s.resistance s.hpRestore s.hpBonus s.dmg s.crit s.wisdom s.prospecting s.inventorySpace subS
       < Extracted.EquipValue.equip_value_pure
-        t.attack t.resistance t.hpRestore t.hpBonus t.dmg t.crit t.wisdom t.prospecting subT := by
+        t.attack t.resistance t.hpRestore t.hpBonus t.dmg t.crit t.wisdom t.prospecting t.inventorySpace subT := by
   rw [equip_value_bridge, equip_value_bridge]
   exact Formal.EquipValueAugmented.equipValue_strict_of_strict_raw
     s t (subS == "tool") (subT == "tool") hStrict
@@ -299,9 +299,9 @@ theorem equip_value_tiebreak_extracted
     (hTie : Formal.EquipValueAugmented.rawSum s
       = Formal.EquipValueAugmented.rawSum t) :
     Extracted.EquipValue.equip_value_pure
-        s.attack s.resistance s.hpRestore s.hpBonus s.dmg s.crit s.wisdom s.prospecting "tool"
+        s.attack s.resistance s.hpRestore s.hpBonus s.dmg s.crit s.wisdom s.prospecting s.inventorySpace "tool"
       < Extracted.EquipValue.equip_value_pure
-        t.attack t.resistance t.hpRestore t.hpBonus t.dmg t.crit t.wisdom t.prospecting subT := by
+        t.attack t.resistance t.hpRestore t.hpBonus t.dmg t.crit t.wisdom t.prospecting t.inventorySpace subT := by
   rw [equip_value_bridge, equip_value_bridge]
   have hTool : ("tool" == "tool") = true := by simp
   have hNon : (subT == "tool") = false := by simpa using hN

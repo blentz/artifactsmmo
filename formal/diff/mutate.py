@@ -104,11 +104,14 @@ CYCLE_STEP_SRC = ROOT / "formal" / "sim" / "cycle_step.py"
 EQUIP_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "equip_value.py"
 GAME_DATA_PARSE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "game_data.py"
 
-# Restore-family consumable parsing (stat-audit fix #3).
+# Effect-parser coverage (stat-audit fixes).
 RESTORE_FAMILY_MUTATIONS = [
     ("game_data: drop restore-family hp_restore mapping (restore/splash potions invisible)",
      '                    if effect.code in ("heal", "restore", "splash_restore"):',
      '                    if effect.code in ("heal",):'),
+    ("game_data: drop inventory_space parse (bags' capacity stat invisible)",
+     '                    elif effect.code == "inventory_space":',
+     '                    elif effect.code == "inventory_space_disabled":'),
 ]
 
 # Skill-gate fast-fail + doomed-memo (2026-06-15 feather_coat CPU-peg fix).
@@ -1333,19 +1336,31 @@ STRATEGY_DRIVER_MUTATIONS = [
 # Utility-stat valuation (2026-06-15 novice_guide discard fix). hp_bonus/wisdom/
 # prospecting must count so artifacts are scored, equipped, and not discarded.
 ARMOR_UTILITY_MUTATIONS = [
-    ("armor_score: drop flat utility (hp_bonus+wisdom+prospecting) — artifacts score 0",
-     "    return score + hp_bonus + wisdom + prospecting",
+    ("armor_score: drop flat utility (hp_bonus+wisdom+prospecting+inventory_space) — artifacts/bags score 0",
+     "    return score + hp_bonus + wisdom + prospecting + inventory_space",
      "    return score"),
+    ("armor_score: drop inventory_space — bags score 0, never equipped",
+     "    return score + hp_bonus + wisdom + prospecting + inventory_space",
+     "    return score + hp_bonus + wisdom + prospecting"),
 ]
 EQUIP_VALUE_UTILITY_MUTATIONS = [
-    ("equip_value: drop wisdom+prospecting from raw — utility gear undervalued",
-     "           + hp_bonus + dmg + critical_strike + wisdom + prospecting)",
+    ("equip_value: drop wisdom+prospecting+inventory_space from raw — utility gear/bags undervalued",
+     "           + hp_bonus + dmg + critical_strike + wisdom + prospecting + inventory_space)",
      "           + hp_bonus + dmg + critical_strike)"),
+    ("equip_value: drop inventory_space from raw — bags undervalued",
+     "           + hp_bonus + dmg + critical_strike + wisdom + prospecting + inventory_space)",
+     "           + hp_bonus + dmg + critical_strike + wisdom + prospecting)"),
 ]
 EQUIP_VALUE_DOMINANCE_MUTATIONS = [
-    ("dominance _equip_value: drop utility (hp_bonus+wisdom+prospecting) — artifact valued 0",
-     "    return attack + resistance + hp + stats.hp_bonus + stats.wisdom + stats.prospecting",
+    ("dominance _equip_value: drop utility (hp_bonus+wisdom+prospecting+inventory_space) — artifact/bag valued 0",
+     "    return (attack + resistance + hp + stats.hp_bonus + stats.wisdom\n"
+     "            + stats.prospecting + stats.inventory_space)",
      "    return attack + resistance + hp"),
+    ("dominance _equip_value: drop inventory_space — bag valued 0",
+     "    return (attack + resistance + hp + stats.hp_bonus + stats.wisdom\n"
+     "            + stats.prospecting + stats.inventory_space)",
+     "    return (attack + resistance + hp + stats.hp_bonus + stats.wisdom\n"
+     "            + stats.prospecting)"),
 ]
 
 
