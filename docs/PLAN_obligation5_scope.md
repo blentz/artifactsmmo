@@ -408,6 +408,30 @@ Axioms standard + LIV-001; in the audit; full build 6207 jobs green; check OK.
   obligation, now a THEOREM not an assertion. Axioms standard + LIV-001; full build
   6211 jobs green; check OK.
 
+### Increment 13 landed (2026-06-16) — warm-up brick 1: `MechCleared` invariant
+
+`Formal/Liveness/WarmupCleared.lean` (NEW, proven): `MechCleared` bundles the NINE
+`cycleStep`-monotone clearing conditions (6 opaque flags + hp=maxHp + bankAccessible
++ level≥bankRequiredLevel — the `Settled` core minus phase + perception).
+`MechCleared_cycleStep`/`_cycleStepN` prove it invariant by composing the incr 7–9
+monotonicity lemmas; `settled_of_mechCleared` bridges `MechCleared` + phase=.none +
+perception ⇒ `Settled`. Axioms standard + LIV-001; full build 6213 jobs green.
+
+**FINDING (the warm-up's real shape): `Settled.phaseNone` is STRONGER than needed
+and not always reachable.** Under `MechCleared` + perception:
+- A FEASIBLE accepted task parks at `phase=.accepted` forever — `pursueTask`(idx15)
+  is preempted by `objectiveStep`(idx14), so the task never advances to `.complete`,
+  so `completeTask` never fires to clear it to `.none`. The bot STILL levels
+  (objectiveStep fights every cycle) — so `phase=.none` is unnecessary.
+- `lowYieldCancel` can ARM at `phase=.inProgress` (the fight bumps `actionsAttempted`
+  past the threshold), so a naive "task-blockers quiet" is not fight-invariant at
+  inProgress.
+⇒ the reachable warm-up target is a WEAKER invariant: `MechCleared` + the 3
+task-phase blockers quiet, with `phase ∈ {none, accepted+feasible}` (NOT inProgress).
+That predicate IS fight-invariant (phase unchanged by fight; quiet preserved) and
+reachable. Next brick: define it, re-run the selection→fight→invariant chain (mirrors
+`BlockerSettled` but task-quiet instead of phaseNone), then reach it from spawn.
+
 ### Remaining — REACH a Settled state from an ARBITRARY spawn (the transient) + O5.4
 - **Reach `Settled`** — `∃K, Settled (cycleStepN K s)` from spawn. This IS the
   transient (drive each clearing condition true once: discard overstock, deposit,

@@ -47,6 +47,7 @@ import Formal.Liveness.BlockerMonotone
 import Formal.Liveness.BlockerSettled
 import Formal.Liveness.SettledWitness
 import Formal.Liveness.SettledReach
+import Formal.Liveness.WarmupCleared
 import Formal.Liveness.LifecycleBound
 import Formal.Liveness.LifecycleBound2
 import Formal.Liveness.LifecycleBound3
@@ -612,3 +613,10 @@ open Formal.Liveness.SettledWitness
 open Formal.Liveness.SettledReach
 #print axioms reach_fifty_of_eventually_settled
 #print axioms Settled_unreachable_without_perception
+
+-- O5.2 warm-up brick 1 (2026-06-16): MechCleared bundles the 9 cycleStep-monotone
+-- clearing conditions (the Settled core sans phase + perception); proven invariant by
+-- composing the incr 7-9 monotonicity lemmas, and bridged to Settled.
+open Formal.Liveness.WarmupCleared
+#print axioms MechCleared_cycleStep
+#print axioms settled_of_mechCleared
