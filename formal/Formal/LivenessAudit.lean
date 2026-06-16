@@ -542,3 +542,5 @@ open Formal.Liveness.FightFairness
 #print axioms productionLadder_eq_objectiveStep_of_unblocked
 #print axioms hfightFires_of_combat_scheduled
 #print axioms ai_reaches_level_fifty_from_fair_combat
+#print axioms combat_scheduled_of_persistent_and_quiet
+#print axioms ai_reaches_level_fifty_from_persistent_combat

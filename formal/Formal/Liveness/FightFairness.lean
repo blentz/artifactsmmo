@@ -103,6 +103,46 @@ theorem hfightFires_of_combat_scheduled (s : State)
   refine ⟨k, hkN, Or.inr (Or.inr ⟨?_, hisf⟩)⟩
   exact productionLadder_eq_objectiveStep_of_unblocked (cycleStepN k s) hfire hblock
 
+/-! ## Transience decomposition — splitting the fairness obligation
+
+`CombatObjectiveFairlyScheduled` bundles two SEPARATE concerns. We split them so
+the planner-behaviour part and the pure-scheduling part can be discharged
+independently:
+
+- **`CombatPersistent`** — a PLANNER property: while the trajectory runs, the
+  committed objective is a combat one (`objectiveStepFires ∧ objectiveStepIsFight`).
+  This is a runtime obligation about goal selection (the perception-driven
+  `ReachCharLevel` meta-goal stays active while underleveled); it is opaque to the
+  pure `cycleStep` mechanics and so is an honest hypothesis.
+
+- **`BlockersQuietInfinitelyOften`** — a pure SCHEDULING property: infinitely
+  often, none of the 14 higher-priority means fires. This is the transience core:
+  each blocker's `planFor` action CLEARS its own firing condition (e.g.
+  `deleteItem` clears overstock, `depositAll` clears the deposit set, `npcSell`
+  clears the sellable set, `completeTask` clears the task, the bootstrap fights
+  retire on unlock), and in the model nothing re-arms it. Honest disclosure: that
+  "nothing re-arms it" leans on the model abstracting away the perception refresh
+  (which, in the real bot, IS what re-arms guards) — so this is an in-model
+  transience; binding it to the refreshing bot is the O5.4 faithfulness question. -/
+def CombatPersistent (s : State) : Prop :=
+  ∀ k, fires .objectiveStep (cycleStepN k s) = true
+        ∧ (cycleStepN k s).objectiveStepIsFight = true
+
+/-- Pure scheduling: the higher-priority means are all quiet infinitely often. -/
+def BlockersQuietInfinitelyOften (s : State) : Prop :=
+  ∀ N, ∃ k ≥ N, ∀ b ∈ objectiveStepBlockers, fires b (cycleStepN k s) = false
+
+/-- **Transience reduction.** A persistently-combat objective that is unblocked
+    infinitely often IS fairly scheduled. Splits `CombatObjectiveFairlyScheduled`
+    into the planner obligation (`CombatPersistent`) and the scheduling obligation
+    (`BlockersQuietInfinitelyOften`). -/
+theorem combat_scheduled_of_persistent_and_quiet (s : State)
+    (hcp : CombatPersistent s) (hq : BlockersQuietInfinitelyOften s) :
+    CombatObjectiveFairlyScheduled s := by
+  intro N
+  obtain ⟨k, hkN, hquiet⟩ := hq N
+  exact ⟨k, hkN, (hcp k).1, (hcp k).2, hquiet⟩
+
 /-- **End-to-end level-50 reachability from the fairness obligation.** Composes
     the fairness reduction with `ai_reaches_level_fifty_config_positive`: from
     spawn config-positivity (`taskExchangeMinCoins`, `nextExpansionCost` > 0 — both
@@ -120,5 +160,17 @@ theorem ai_reaches_level_fifty_from_fair_combat (s : State)
     ∃ k, (cycleStepN k s).level ≥ 50 :=
   Formal.Liveness.ReducedReachability.ai_reaches_level_fifty_config_positive
     s htec hnec (hfightFires_of_combat_scheduled s hfair)
+
+/-- **End-to-end from the split obligations.** Spawn config-positivity + a
+    persistently-combat objective + blockers quiet infinitely often ⇒ level 50.
+    This is the cleanest honest capstone: the two remaining obligations are
+    `CombatPersistent` (planner keeps a combat goal — runtime) and
+    `BlockersQuietInfinitelyOften` (pure in-model scheduling transience). -/
+theorem ai_reaches_level_fifty_from_persistent_combat (s : State)
+    (htec : s.taskExchangeMinCoins > 0) (hnec : s.nextExpansionCost > 0)
+    (hcp : CombatPersistent s) (hq : BlockersQuietInfinitelyOften s) :
+    ∃ k, (cycleStepN k s).level ≥ 50 :=
+  ai_reaches_level_fifty_from_fair_combat s htec hnec
+    (combat_scheduled_of_persistent_and_quiet s hcp hq)
 
 end Formal.Liveness.FightFairness

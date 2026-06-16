@@ -295,15 +295,41 @@ the single satisfiable Prop `CombatObjectiveFairlyScheduled`. The capstone is ho
 conditional reachability on exactly ONE runtime property — "the planner keeps
 fighting via a combat objective."
 
-### Remaining (the deep liveness + O5.4)
-- **Discharge `CombatObjectiveFairlyScheduled` from a concrete spawn** — the
-  blockers-are-transient argument: each of the 14 `objectiveStepBlockers` makes
-  bounded measure/lifecycle progress (guards decrease `extMeasure`; the early task
-  means are lifecycle-bounded), so they cannot block the combat objective forever,
-  AND the planner keeps a combat objective active while level<50. THE genuine
-  remaining liveness core — now a self-contained, well-typed Lean goal.
+### Increment 5 landed (2026-06-16) — transience DECOMPOSITION (reduction proven)
+
+`FightFairness.lean` extended: `CombatObjectiveFairlyScheduled` split into its two
+genuine atoms, with the reduction + a cleaner end-to-end proven:
+- **`CombatPersistent s`** — the PLANNER atom: `objectiveStepFires ∧
+  objectiveStepIsFight` at every trajectory state (the `ReachCharLevel`-driven
+  combat goal stays active). Opaque to `cycleStep` mechanics ⇒ an honest runtime
+  hypothesis.
+- **`BlockersQuietInfinitelyOften s`** — the pure SCHEDULING atom: ∀N ∃k≥N no
+  `objectiveStepBlocker` fires.
+- **`combat_scheduled_of_persistent_and_quiet`** — proven: the two atoms ⇒
+  `CombatObjectiveFairlyScheduled`.
+- **`ai_reaches_level_fifty_from_persistent_combat`** — proven end-to-end: spawn
+  config-positivity + `CombatPersistent` + `BlockersQuietInfinitelyOften` ⇒
+  `∃ k, level ≥ 50`. In the audit; full build 6201 jobs green; axiom check OK.
+
+HONEST: this is the transience REDUCTION, not the transience itself. The deep
+core `BlockersQuietInfinitelyOften`-from-spawn is NOT proven — see below. Not
+faked.
+
+### Remaining (the genuine deep liveness + O5.4)
+- **`BlockersQuietInfinitelyOften` from spawn — THE remaining core (unproven).**
+  In-model each of the 14 `objectiveStepBlockers` clears its own firing flag on its
+  `planFor` action (deleteItem→¬overstock, depositAll→¬deposits, npcSell→¬sellable,
+  completeTask→task cleared, bootstrap fights retire on unlock) and nothing re-arms
+  it, so blocker firings are in-model finite ⇒ eventually-quiet ⇒ quiet ∞-often.
+  But: (a) it is a 14-blocker termination — 9 are in `progressMeans` (decrease
+  `extMeasure`) but 5 are NOT (restForCombat, gearReview, completeTask,
+  lowYieldCancel, taskCancel) and need separate bounding; (b) "nothing re-arms the
+  flag" leans on the model abstracting away the PERCEPTION REFRESH (which in the
+  real bot re-arms guards) — so even the in-model result is an O5.4 faithfulness
+  question. A real multi-session proof; not attempted half-baked.
 - **O5.4 diff binding** — bind `objectiveStepIsFight` to production ("the
-  objective-tier plan's head action is Fight") + the `productionLadder` select.
+  objective-tier plan's head action is Fight") + `productionLadder` select +
+  the perception-refresh faithfulness above.
 
 ### Status surfaced in code (2026-06-16)
 `LevelFiftyReachable.lean` now carries a ⚠ HONEST SCOPE DISCLOSURE at the
