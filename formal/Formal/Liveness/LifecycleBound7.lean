@@ -58,7 +58,9 @@ theorem xp_accumulates_when_level_constant
     (hno : ∀ k, (cycleStepN k s).level = s.level)
     (hfightFires : ∀ N, ∃ k ≥ N,
         productionLadder (cycleStepN k s) = some .bankUnlock
-        ∨ productionLadder (cycleStepN k s) = some .reachUnlockLevel)
+        ∨ productionLadder (cycleStepN k s) = some .reachUnlockLevel
+        ∨ (productionLadder (cycleStepN k s) = some .objectiveStep
+            ∧ (cycleStepN k s).objectiveStepIsFight = true))
     (n : Nat) :
     ∃ k, (cycleStepN k s).xp ≥ s.xp + 10 * n := by
   induction n with
@@ -88,7 +90,7 @@ theorem xp_accumulates_when_level_constant
       rw [hno (k₀ + j), hno k₀]
     -- At k₁, fight ladder fires → cycleStep applies .fight.
     have hk₁eq : cycleStep (cycleStepN k₁ s) = applyActionKind .fight (cycleStepN k₁ s) :=
-      cycleStep_eq_fight_when_fightFires (cycleStepN k₁ s) hk₁fire
+      cycleStep_eq_fight_when_fightCycleFires (cycleStepN k₁ s) hk₁fire
     -- cycleStepN (k₁+1) s = cycleStep (cycleStepN k₁ s).
     have hk₁succ : cycleStepN (k₁+1) s = applyActionKind .fight (cycleStepN k₁ s) := by
       rw [cycleStepN_succ_outer k₁ s, hk₁eq]
@@ -128,7 +130,9 @@ theorem lifecycle_progress_from_bounds_proven
     -- `hlvl` + `hfightFires`. See docs/PLAN_obligation5_scope.md (O5.3-hperc).
     (hfightFires : ∀ N, ∃ k ≥ N,
         productionLadder (cycleStepN' k s) = some .bankUnlock
-        ∨ productionLadder (cycleStepN' k s) = some .reachUnlockLevel) :
+        ∨ productionLadder (cycleStepN' k s) = some .reachUnlockLevel
+        ∨ (productionLadder (cycleStepN' k s) = some .objectiveStep
+            ∧ (cycleStepN' k s).objectiveStepIsFight = true)) :
     ∃ k, (cycleStepN' k s).level > s.level := by
   -- Step 1: replace cycleStepN' with the concrete cycleStepN. Under
   -- the strengthened hzero (universal in s'), they agree at every point.
@@ -144,7 +148,9 @@ theorem lifecycle_progress_from_bounds_proven
   have hfightFiresConc :
       ∀ N, ∃ k ≥ N,
         productionLadder (cycleStepN k s) = some .bankUnlock
-        ∨ productionLadder (cycleStepN k s) = some .reachUnlockLevel := by
+        ∨ productionLadder (cycleStepN k s) = some .reachUnlockLevel
+        ∨ (productionLadder (cycleStepN k s) = some .objectiveStep
+            ∧ (cycleStepN k s).objectiveStepIsFight = true) := by
     intro N
     obtain ⟨k, hkN, hkfire⟩ := hfightFires N
     refine ⟨k, hkN, ?_⟩
@@ -193,7 +199,7 @@ theorem lifecycle_progress_from_bounds_proven
   -- cycleStep at k' applies .fight.
   have hk'eq :
       cycleStep (cycleStepN k' s) = applyActionKind .fight (cycleStepN k' s) :=
-    cycleStep_eq_fight_when_fightFires (cycleStepN k' s) hk'fire
+    cycleStep_eq_fight_when_fightCycleFires (cycleStepN k' s) hk'fire
   -- cycleStepN (k'+1) s = applyActionKind .fight (cycleStepN k' s).
   have hk'succ : cycleStepN (k'+1) s = applyActionKind .fight (cycleStepN k' s) := by
     rw [cycleStepN_succ_outer k' s, hk'eq]

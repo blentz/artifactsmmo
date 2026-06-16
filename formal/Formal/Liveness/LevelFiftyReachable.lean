@@ -27,12 +27,14 @@ NO new axioms. Pure composition of:
 - Phase 23c-3c's cumulative_progress_under_no_wait headline.
 
 Honest scope disclosure:
-- ⚠ The `hfightFires` field of `GlobalInvariants` is currently UNSATISFIABLE
-  for realistic configs (the only fight-producing means retire after a bounded
-  bank bootstrap), so this capstone is VACUOUS on it — a green build that is
-  NOT yet an honest level-50 guarantee. See the field's own comment and
-  docs/PLAN_obligation5_scope.md (O5.2). The structural composition below is
-  correct; the missing piece is a faithful char-XP-leveling means.
+- The `hfightFires` field of `GlobalInvariants` is now SATISFIABLE (O5.2,
+  2026-06-16): besides the bank-bootstrap means (which retire after unlock) it
+  admits a COMBAT OBJECTIVE (`objectiveStep` with `objectiveStepIsFight`, ladder
+  idx 14, fires while `level < 50`) — the faithful general char-leveling path.
+  So this is a real runtime fairness obligation (the planner fights via a combat
+  objective infinitely often until 50), not a vacuous one. Remaining: bind
+  `objectiveStepIsFight` to production via the cycle-step diff (O5.4) and
+  establish the fairness/`hfightFires` for a concrete spawn trajectory.
 - `globalInvariants` bundles the no-wait + non-degeneracy + perception
   hypotheses across ALL iterations starting from s. Establishing this
   for a real spawn state is the runtime obligation; the proof is
@@ -71,31 +73,27 @@ structure GlobalInvariants (s : State) : Prop where
   -- from_bounds_proven` only as an underscore-bound, unused parameter) and is not
   -- unconditionally true (bankUnlock can fire at level ≥ 50). Dropping it
   -- STRENGTHENS the capstone (one fewer runtime obligation).
-  -- ⚠ HONEST SCOPE DISCLOSURE (2026-06-16) — this hypothesis is currently
-  -- UNSATISFIABLE for realistic configs, so the capstone is VACUOUS on it.
-  -- Char XP is granted ONLY by `.fight` (`Plan.applyActionKind .fight`, +10 xp);
-  -- `taskCompleteXpEstimate := 0` is server-faithful (RewardsSchema = {items,
-  -- gold}, NO xp — Measure.lean:385-405), and `.gather` advances only SKILL xp.
-  -- `planFor` emits `.fight` ONLY from `.bankUnlock` / `.reachUnlockLevel`
-  -- (CycleStep.lean:117-118). BOTH retire PERMANENTLY after a bounded bootstrap:
-  --   • `bankUnlockFires` needs `¬bankAccessible`; the unlock fight flips
-  --     `bankAccessible := true` (Plan.lean:304) and NOTHING sets it back.
-  --   • `reachUnlockLevelFires` needs `level < bankRequiredLevel` AND
-  --     `bankRequiredLevel - level ≤ 5` (MAX_ACHIEVABLE_GAP_LV2); `level` never
-  --     decreases and `bankRequiredLevel` is a fixed config, so it fires only in
-  --     a ≤5-level window and stops once `level` reaches `bankRequiredLevel`.
-  -- Hence `∀N ∃k≥N (fight fires)` CANNOT hold once both guards retire — which
-  -- always happens (faithful bank unlocks early, `bankRequiredLevel ≪ 50`). The
-  -- green build is therefore NOT yet an honest level-50 guarantee: it proves
-  -- reachability MODULO a hypothesis the present model can't furnish.
-  -- The fix is a model extension routing char XP through a means that actually
-  -- FIRES while `level < 50` — see docs/PLAN_obligation5_scope.md (O5.2, the
-  -- monster-task-pursuit reformulation). This field stays so the structural
-  -- composition proof (`level_advances_once` ∘ induction) is preserved and the
-  -- remaining obligation is named EXACTLY.
+  -- O5.2 (2026-06-16) — the fight-fairness obligation, now SATISFIABLE.
+  -- Char XP is granted ONLY by `.fight` (`Plan.applyActionKind .fight`, +10 xp;
+  -- `taskCompleteXpEstimate := 0` is server-faithful — RewardsSchema = {items,
+  -- gold}, no xp; `.gather` advances only SKILL xp). The bank-bootstrap means
+  -- (`bankUnlock` / `reachUnlockLevel`) retire permanently after unlock, so a
+  -- bootstrap-ONLY disjunction would be unsatisfiable past the early game (the
+  -- old vacuity). The THIRD disjunct closes it: a COMBAT OBJECTIVE
+  -- (`objectiveStep` with `objectiveStepIsFight`) routes `planFor` to `[.fight]`
+  -- (CycleStep.lean) and sits at ladder idx 14 — BEFORE the discretionary task
+  -- means — so it actually fires while `level < 50` (production: the
+  -- `ReachCharLevel` meta-goal / monster-task combat objectives). This is the
+  -- model's faithful general char-leveling path. The hypothesis is now a REAL
+  -- runtime fairness property — the planner pursues a combat objective infinitely
+  -- often until level 50 — not a vacuous one. See docs/PLAN_obligation5_scope.md
+  -- (O5.2). Faithfulness of `objectiveStepIsFight` to production is the O5.4 diff
+  -- obligation (bind it to "the objective-tier plan's head action is Fight").
   hfightFires : ∀ N, ∃ k ≥ N,
       productionLadder (cycleStepN k s) = some .bankUnlock
       ∨ productionLadder (cycleStepN k s) = some .reachUnlockLevel
+      ∨ (productionLadder (cycleStepN k s) = some .objectiveStep
+          ∧ (cycleStepN k s).objectiveStepIsFight = true)
 
 /-! ## GlobalInvariants preservation -/
 

@@ -53,6 +53,34 @@ theorem cycleStep_eq_fight_when_fightFires (s : State)
   | inl h => exact cycleStep_eq_fight_when_bankUnlock s h
   | inr h => exact cycleStep_eq_fight_when_reachUnlockLevel s h
 
+/-- O5.2 (2026-06-16): when ladder fires `.objectiveStep` AND the objective step
+    is a COMBAT step (`objectiveStepIsFight`), `cycleStep` applies `.fight` — the
+    faithful general char-leveling path (production `ReachCharLevel` meta-goal /
+    combat objectives). `planFor .objectiveStep` routes to `[.fight]`. -/
+theorem cycleStep_eq_fight_when_objectiveStepFight (s : State)
+    (h : productionLadder s = some .objectiveStep)
+    (hf : s.objectiveStepIsFight = true) :
+    cycleStep s = applyActionKind .fight s := by
+  unfold cycleStep
+  rw [h]
+  simp [planFor, hf]
+
+/-- O5.2 combined fight-firing: bank-bootstrap OR a combat objective.
+    This is the SATISFIABLE fight predicate — `objectiveStep`-with-`isFight`
+    fires while `level < 50` (OBJECTIVE_STEP at ladder idx 14, before the
+    discretionary task means), so the leveling trajectory is realizable, unlike
+    the bank-bootstrap-only disjunction (which retires after unlock). -/
+theorem cycleStep_eq_fight_when_fightCycleFires (s : State)
+    (h : productionLadder s = some .bankUnlock
+         ∨ productionLadder s = some .reachUnlockLevel
+         ∨ (productionLadder s = some .objectiveStep
+             ∧ s.objectiveStepIsFight = true)) :
+    cycleStep s = applyActionKind .fight s := by
+  rcases h with h | h | ⟨h, hf⟩
+  · exact cycleStep_eq_fight_when_bankUnlock s h
+  · exact cycleStep_eq_fight_when_reachUnlockLevel s h
+  · exact cycleStep_eq_fight_when_objectiveStepFight s h hf
+
 /-- When ladder doesn't fire `.bankUnlock`/`.reachUnlockLevel`/`.completeTask`
     (and any firing `.objectiveStep` is NOT a combat step), `cycleStep s`
     preserves both `level` and `xp`. Uses the planFor table: every other ladder

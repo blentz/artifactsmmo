@@ -244,14 +244,40 @@ genuine remaining CORE of obligation 5.
   advances level). The perception invariant the fight needs is available free
   from spawn via Increment 1's `cycleStepN_preserves_XpInBand`.
 
-- **NOT yet done (Increment 3 — the capstone wiring):** reformulate
-  `GlobalInvariants.hfightFires` to admit objectiveStep-fight (making it
-  SATISFIABLE, killing the vacuity) + re-route
-  `LifecycleBound7.lifecycle_progress_from_bounds_proven` to advance on
-  objectiveStep-fight, discharging the new fight-fairness via
-  `cycleStepN_preserves_XpInBand`. Until this lands the capstone disclosure below
-  still stands (the headline `ai_reaches_level_fifty` is vacuous on the OLD
-  hfightFires).
+### Increment 3 landed (2026-06-16) — capstone vacuity KILLED
+
+- **`GlobalInvariants.hfightFires` reformulated to the 3-way disjunction**
+  `{bankUnlock, reachUnlockLevel, objectiveStep∧objectiveStepIsFight}`
+  (LevelFiftyReachable.lean). The third disjunct is the combat objective — it
+  FIRES while `level < 50` (idx 14, before the discretionary task means; `.fight`
+  does not clear `objectiveStepFires`, so it can recur), making `hfightFires`
+  **SATISFIABLE**. The capstone `ai_reaches_level_fifty` is no longer vacuous: it
+  is honest conditional reachability — IF the planner fights via a combat
+  objective infinitely often THEN it reaches 50. Disclosure rewritten accordingly
+  (field comment + module docstring).
+- **Fight characterization extended** (CycleStepCharacterization.lean):
+  `cycleStep_eq_fight_when_objectiveStepFight` + the combined
+  `cycleStep_eq_fight_when_fightCycleFires` (3-way). `LifecycleBound7`
+  (`xp_accumulates_when_level_constant`, `lifecycle_progress_from_bounds_proven`)
+  and `ReducedReachability.ai_reaches_level_fifty_config_positive` all widened to
+  the 3-way `hfightFires` and re-routed through the combined lemma.
+- **No keystone needed on the capstone path:** LifecycleBound7's argument is
+  xp-accumulation-by-contradiction (drive xp past `xpToNextLevel` via fights, then
+  rollover), which needs only `hlvl` + `hfightFires` — NOT the perception
+  invariant. Increment 1's `cycleStepN_preserves_XpInBand` remains a valid proven
+  invariant that discharges `hperc` for the alternate cumulative-progress leaf
+  path (Increment 2); it is simply not on the capstone's critical path.
+- Capstone axioms {propext, Classical.choice, Quot.sound, xpToNextLevel(_pos)} =
+  standard + LIV-001; full build 6199 jobs green; liveness axiom check OK.
+
+### Remaining (O5.2 fairness discharge + O5.4)
+- **Discharge `hfightFires` for a concrete spawn trajectory** — prove the planner
+  DOES keep a combat objective active (objectiveStep∧isFight fires) infinitely
+  often until 50. This is the genuine runtime fairness property; the capstone
+  proves reachability MODULO it. (Connects to the guards-are-transient argument:
+  guards each make measure progress so objectiveStep eventually gets its turn.)
+- **O5.4 diff binding** — bind `objectiveStepIsFight` to production ("the
+  objective-tier plan's head action is Fight") + the `productionLadder` select.
 
 ### Status surfaced in code (2026-06-16)
 `LevelFiftyReachable.lean` now carries a ⚠ HONEST SCOPE DISCLOSURE at the

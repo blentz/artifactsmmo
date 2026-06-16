@@ -46,7 +46,9 @@ theorem ai_reaches_level_fifty_config_positive (s : State)
     (htec : s.taskExchangeMinCoins > 0) (hnec : s.nextExpansionCost > 0)
     (hfightFires : ∀ N, ∃ k ≥ N,
         productionLadder (cycleStepN k s) = some .bankUnlock
-        ∨ productionLadder (cycleStepN k s) = some .reachUnlockLevel) :
+        ∨ productionLadder (cycleStepN k s) = some .reachUnlockLevel
+        ∨ (productionLadder (cycleStepN k s) = some .objectiveStep
+            ∧ (cycleStepN k s).objectiveStepIsFight = true)) :
     ∃ k, (cycleStepN k s).level ≥ 50 :=
   ai_reaches_level_fifty s
     { hnowait := fun k => Formal.Liveness.NoWait.productionLadder_ne_wait (cycleStepN k s)
