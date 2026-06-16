@@ -165,5 +165,6 @@ import Formal.Liveness.BlockerQuieting
 import Formal.Liveness.BlockerMonotone
 import Formal.Liveness.BlockerSettled
 import Formal.Liveness.SettledWitness
+import Formal.Liveness.SettledReach
 import Formal.DoomedMemo
 import Formal.SkillGateFastFail

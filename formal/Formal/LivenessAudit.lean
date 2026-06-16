@@ -46,6 +46,7 @@ import Formal.Liveness.BlockerQuieting
 import Formal.Liveness.BlockerMonotone
 import Formal.Liveness.BlockerSettled
 import Formal.Liveness.SettledWitness
+import Formal.Liveness.SettledReach
 import Formal.Liveness.LifecycleBound
 import Formal.Liveness.LifecycleBound2
 import Formal.Liveness.LifecycleBound3
@@ -602,3 +603,12 @@ open Formal.Liveness.BlockerSettled
 open Formal.Liveness.SettledWitness
 #print axioms settledWitness_isSettled
 #print axioms settledWitness_reaches_fifty
+
+-- O5.2 reach frontier (2026-06-16): reach_fifty_of_eventually_settled reduces the
+-- whole obligation to ∃K Settled (config-pos is cycleStepN-invariant). And
+-- Settled_unreachable_without_perception PROVES the O5.4 frontier: the pure model
+-- never sets objectiveStepFires true, so reaching Settled requires perception to
+-- supply the combat objective — not model-producible.
+open Formal.Liveness.SettledReach
+#print axioms reach_fifty_of_eventually_settled
+#print axioms Settled_unreachable_without_perception

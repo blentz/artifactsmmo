@@ -394,11 +394,26 @@ Axioms standard + LIV-001; in the audit; full build 6207 jobs green; check OK.
   non-vacuous payoff of the whole O5.2 arc. Axioms standard + LIV-001; in the audit;
   full build 6209 jobs green; check OK.
 
+### Increment 12 landed (2026-06-16) — the reach frontier + the O5.4 perception proof
+
+`Formal/Liveness/SettledReach.lean` (NEW, proven):
+- **`reach_fifty_of_eventually_settled`** — config-positivity is `cycleStepN`-
+  invariant, so if the trajectory EVER reaches `Settled`, level 50 follows. The whole
+  obligation collapses to the single fact `∃K, Settled (cycleStepN K s)`.
+- **`Settled_unreachable_without_perception`** — PROVEN: in the pure model
+  `objectiveStepFires` is never set `true` by any action (only cleared — verified vs
+  Plan.lean), so if it is `false` at spawn it stays `false` and `Settled` is
+  UNREACHABLE. ⇒ reaching `Settled` REQUIRES perception to commit the combat
+  objective; the model cannot fabricate the planner's goal. The O5.4 select/perception
+  obligation, now a THEOREM not an assertion. Axioms standard + LIV-001; full build
+  6211 jobs green; check OK.
+
 ### Remaining — REACH a Settled state from an ARBITRARY spawn (the transient) + O5.4
 - **Reach `Settled`** — `∃K, Settled (cycleStepN K s)` from spawn. This IS the
   transient (drive each clearing condition true once: discard overstock, deposit,
-  sell, claim, rest, unlock bank, reach unlock level, park the task at .none, commit
-  a combat objective). The per-blocker one-step quieting (incr 6) + monotonicity
+  sell, claim, rest, unlock bank, reach unlock level, park the task at .none) PLUS the
+  perception input objectiveStepFires/IsFight (incr 12 proved this REQUIRES perception
+  — not model-producible). The per-blocker one-step quieting (incr 6) + monotonicity
   (incr 7–9) show each condition, once true, STAYS true; reaching them is the
   bounded warm-up. Now a clean self-contained goal (no circularity).
 - **O5.4 diff binding** — bind `objectiveStepIsFight` (and the opaque flags) to
