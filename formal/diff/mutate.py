@@ -102,6 +102,14 @@ MEASURE_SRC = ROOT / "formal" / "sim" / "measure.py"
 CYCLE_STEP_SRC = ROOT / "formal" / "sim" / "cycle_step.py"
 
 EQUIP_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "equip_value.py"
+GAME_DATA_PARSE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "game_data.py"
+
+# Restore-family consumable parsing (stat-audit fix #3).
+RESTORE_FAMILY_MUTATIONS = [
+    ("game_data: drop restore-family hp_restore mapping (restore/splash potions invisible)",
+     '                    if effect.code in ("heal", "restore", "splash_restore"):',
+     '                    if effect.code in ("heal",):'),
+]
 
 # Skill-gate fast-fail + doomed-memo (2026-06-15 feather_coat CPU-peg fix).
 GATHER_PLANNABLE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "gather_plannable_core.py"
@@ -1361,6 +1369,7 @@ def run_group(src: Path, mutations, test_path: str, survivors: list) -> None:
 
 _ALL_SRCS = [
     GATHER_PLANNABLE_CORE_SRC, DOOMED_MEMO_SRC, STRATEGY_DRIVER_SRC, EQUIP_VALUE_SRC,
+    GAME_DATA_PARSE_SRC,
     SRC, TASK_BATCH_SRC, INVENTORY_CAPS_SRC, COMBAT_SRC, PROJECTION_SRC, SCORING_SRC,
     SKILL_XP_CURVE_SRC, RECIPE_CLOSURE_SRC, TASK_FEASIBILITY_SRC, PREREQUISITE_GRAPH_SRC,
     OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, STUCK_DETECTOR_SRC,
@@ -2977,6 +2986,8 @@ def _run_all_groups() -> int:
               "tests/test_ai/test_tiers_equip_value.py", survivors)
     run_group(INVENTORY_CAPS_SRC, EQUIP_VALUE_DOMINANCE_MUTATIONS,
               "tests/test_ai/test_overstock.py", survivors)
+    run_group(GAME_DATA_PARSE_SRC, RESTORE_FAMILY_MUTATIONS,
+              "tests/test_ai/test_game_data.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

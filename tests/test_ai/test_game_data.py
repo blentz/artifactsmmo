@@ -312,6 +312,28 @@ class TestGameDataLoadItems:
 
         assert gd._item_stats["cooked_chicken"].hp_restore == 25
 
+    def test_loads_hp_restore_from_restore_family_effects(self):
+        """`restore` and `splash_restore` are HP-restoration potion codes (the
+        `heal` of cooked food is just one of several restore codes). They must
+        populate hp_restore so the consumable picker sees those potions as heals
+        — enchanted_health_potion(restore=300) was invisible before."""
+        gd = GameData()
+        for code, eff_code, val in [("enchanted_health_potion", "restore", 300),
+                                    ("enchanted_health_splash_potion", "splash_restore", 400)]:
+            item = MagicMock()
+            item.code = code
+            item.level = 1
+            item.type_ = "consumable"
+            item.craft = UNSET
+            eff = MagicMock()
+            eff.code = eff_code
+            eff.value = val
+            item.effects = [eff]
+            with patch("artifactsmmo_cli.ai.game_data.get_all_items",
+                       return_value=make_page([item])):
+                gd._load_items(MagicMock())
+            assert gd._item_stats[code].hp_restore == val
+
     def test_hp_restore_zero_for_non_heal_effect(self):
         gd = GameData()
         item = MagicMock()

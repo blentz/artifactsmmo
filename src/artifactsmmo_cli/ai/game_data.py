@@ -817,7 +817,13 @@ class GameData:
 
             if not isinstance(item.effects, Unset) and item.effects:
                 for effect in item.effects:
-                    if effect.code == "heal":
+                    if effect.code in ("heal", "restore", "splash_restore"):
+                        # The HP-restoration family: `heal` (cooked food), `restore`
+                        # (potions, e.g. enchanted_health_potion=300), `splash_restore`
+                        # (splash potions). All restore HP on use → one hp_restore field
+                        # so the consumable picker ranks them together. `boost_hp` is
+                        # deliberately excluded — "boost" is a temporary max-HP buff, not
+                        # an instant restore (see docs/PLAN_consumable_effects.md).
                         stats.hp_restore = effect.value
                     elif effect.code.startswith("attack_"):
                         elem = effect.code[len("attack_"):]
