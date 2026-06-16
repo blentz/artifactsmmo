@@ -1299,6 +1299,15 @@ DOOMED_MEMO_MUTATIONS = [
      "        return cycle - set_at <= self._ttl(failures)"),
 ]
 
+# Killed by tests/test_ai/test_combat.py — the learned-veto threshold that stops the
+# bot grinding marginal monsters (blue_slime 13%-loss trace 2026-06-15).
+COMBAT_VETO_MUTATIONS = [
+    ("combat: weaken learned-veto threshold 0.9 -> 0.5 (re-admits marginal monsters)",
+     "WIN_RATE_THRESHOLD = 0.9",
+     "WIN_RATE_THRESHOLD = 0.5"),
+]
+
+
 # Killed by tests/test_ai/test_strategy_driver_tiered.py (the cheap-pass conclusive
 # marking policy — the feather_coat re-explosion fix).
 STRATEGY_DRIVER_MUTATIONS = [
@@ -2939,6 +2948,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_doomed_memo_diff.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, STRATEGY_DRIVER_MUTATIONS,
               "tests/test_ai/test_strategy_driver_tiered.py", survivors)
+    run_group(COMBAT_SRC, COMBAT_VETO_MUTATIONS,
+              "tests/test_ai/test_combat.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1
