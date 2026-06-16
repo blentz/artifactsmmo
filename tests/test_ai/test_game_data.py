@@ -604,6 +604,28 @@ class TestGameDataLoadMonsters:
         assert gd.monster_poison("king_slime") == 0
         assert gd.monster_lifesteal("king_slime") == 0
 
+    def test_loads_monster_burn_from_effect(self):
+        """A monster's `burn` ABILITY (an effect, not a base stat) parses so
+        predict_win sees its percent-of-attack DoT. Absent ⇒ 0."""
+        gd = GameData()
+        monster = MagicMock()
+        monster.code = "imp"
+        monster.level = 25
+        monster.hp = 300
+        monster.critical_strike = 0
+        monster.initiative = 100
+        eff = MagicMock()
+        eff.code = "burn"
+        eff.value = 15
+        monster.effects = [eff]
+        with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=make_page([monster])):
+            gd._load_monsters(MagicMock())
+        assert gd.monster_burn("imp") == 15
+        assert gd.monster_burn("no_such_monster") == 0
+        # burn is independent of the other abilities.
+        assert gd.monster_poison("imp") == 0
+        assert gd.monster_barrier("imp") == 0
+
     def test_stops_on_none_result(self):
         gd = GameData()
         with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=None):

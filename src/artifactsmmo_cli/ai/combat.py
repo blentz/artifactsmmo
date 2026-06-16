@@ -118,10 +118,13 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
     p_atk_sum = sum(p.attack.values())
     # Monster poison is a flat per-turn DoT on the player (applied turn 1, ticks
     # every turn), so it RAISES the player's net death rate — even when the monster
-    # deals no direct damage (raw_monster == 0), poison alone can kill.
+    # deals no direct damage (raw_monster == 0), poison alone can kill. Monster burn
+    # is a percent-of-player-attack DoT, modeled conservatively as flat per-turn (no
+    # decay — an upper bound on the real decaying burn): burn% × p_atk_sum × 100.
     die_step = (50 * raw_monster * (200 + m_crit)
                 - p.critical_strike * player_lifesteal * p_atk_sum
-                + game_data.monster_poison(monster_code) * 10000)
+                + game_data.monster_poison(monster_code) * 10000
+                + game_data.monster_burn(monster_code) * p_atk_sum * 100)
     if die_step <= 0:
         return True  # we out-sustain the monster's damage (poison-inclusive)
     effective_hp = min(state.hp, p.max_hp) if state.hp > 0 else 0

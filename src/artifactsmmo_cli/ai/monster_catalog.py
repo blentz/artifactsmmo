@@ -18,6 +18,7 @@ class MonsterCatalog:
     lifesteal: dict[str, int] = field(default_factory=dict)  # code -> heal-on-crit % (effect; 0 if absent)
     poison: dict[str, int] = field(default_factory=dict)  # code -> flat per-turn DoT (effect; 0 if absent)
     barrier: dict[str, int] = field(default_factory=dict)  # code -> absorbing-shield HP (effect; 0 if absent)
+    burn: dict[str, int] = field(default_factory=dict)  # code -> burn DoT % of player attack (effect; 0 if absent)
     # OpenAPI conformance (Item 14 remediation): monster reward + loot fields.
     drops: dict[str, list[tuple[str, int, int, int]]] = field(default_factory=dict)
     """code -> [(item_code, rate, min_quantity, max_quantity), ...]. Drop rate is
@@ -111,6 +112,12 @@ class MonsterCatalog:
         absent — barrier is an OPTIONAL monster ability (most monsters have none),
         so unlike the always-present combat stats this does not raise."""
         return self.barrier.get(code, 0)
+
+    def monster_burn(self, code: str) -> int:
+        """Burn DoT percent (of player attack) of a monster (the `burn` effect).
+        Returns 0 when absent — burn is an OPTIONAL monster ability (most monsters
+        have none), so unlike the always-present combat stats this does not raise."""
+        return self.burn.get(code, 0)
 
     def monster_initiative(self, code: str) -> int:
         """Initiative (turn-order) stat of a monster. Raises `KeyError` when

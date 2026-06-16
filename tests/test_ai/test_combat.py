@@ -39,7 +39,7 @@ def _record_mixed(store: LearningStore, action_repr: str, wins: int, losses: int
 
 
 def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob", lifesteal=0,
-        poison=0, barrier=0):
+        poison=0, barrier=0, burn=0):
     gd = GameData()
     gd._monster_hp = {code: hp}
     gd._monster_attack = {code: attack or {}}
@@ -49,6 +49,7 @@ def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob", lifestea
     gd._monster_lifesteal = {code: lifesteal}
     gd._monster_poison = {code: poison}
     gd._monster_barrier = {code: barrier}
+    gd._monster_burn = {code: burn}
     return gd
 
 
@@ -113,6 +114,19 @@ def test_predict_win_false_when_barrier_pushes_kill_past_death():
     assert predict_win(state, gd_no, "mob") is True
     gd_bar = _gd(hp=100, attack={"fire": 50}, initiative=10, barrier=100)
     assert predict_win(state, gd_bar, "mob") is False
+
+
+def test_predict_win_false_when_burn_outpaces_the_kill():
+    """Burn dieStep term: a fight the player would WIN on the initiative tiebreak
+    (rtk == rtd == 2) becomes a LOSS once the monster's percent-of-attack burn DoT
+    shortens rounds_to_die. WITHOUT the burn term the bot predicts a win — the
+    mutation gate checks the term flips it. Player Σatk 50, burn 100% ⇒ +5e5/round
+    ⇒ dieStep 1e6 ⇒ rtd 1 < rtk 2 ⇒ loss."""
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    gd_no = _gd(hp=100, attack={"fire": 50}, initiative=10)
+    assert predict_win(state, gd_no, "mob") is True
+    gd_brn = _gd(hp=100, attack={"fire": 50}, initiative=10, burn=100)
+    assert predict_win(state, gd_brn, "mob") is False
 
 
 def test_round_half_up_rounds_half_upward():

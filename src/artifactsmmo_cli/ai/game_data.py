@@ -226,6 +226,14 @@ class GameData:
         self.monsters.barrier = value
 
     @property
+    def _monster_burn(self) -> dict[str, int]:
+        return self.monsters.burn
+
+    @_monster_burn.setter
+    def _monster_burn(self, value: dict[str, int]) -> None:
+        self.monsters.burn = value
+
+    @property
     def _monster_initiative(self) -> dict[str, int]:
         return self.monsters.initiative
 
@@ -468,6 +476,12 @@ class GameData:
         absent). Feeds predict_win: barrier raises the monster's effective HP, so
         the player needs more rounds to kill it."""
         return self.monsters.monster_barrier(code)
+
+    def monster_burn(self, code: str) -> int:
+        """Burn DoT percent (of player attack) of a monster (optional `burn`
+        effect; 0 if absent). Feeds predict_win: burn raises the player's net death
+        rate each turn (modeled conservatively as flat, no decay)."""
+        return self.monsters.monster_burn(code)
 
     def monster_initiative(self, code: str) -> int:
         """Initiative (turn-order) stat of a monster. Raises `KeyError` when
@@ -1082,11 +1096,12 @@ class GameData:
             }
             self._monster_critical_strike[mon.code] = mon.critical_strike
             self._monster_initiative[mon.code] = mon.initiative
-            # Lifesteal, poison and barrier are optional monster abilities carried
-            # in `effects` (most monsters have none). Defensive parse; absent ⇒ 0.
+            # Lifesteal, poison, barrier and burn are optional monster abilities
+            # carried in `effects` (most monsters have none). Defensive parse; ⇒ 0.
             self._monster_lifesteal[mon.code] = 0
             self._monster_poison[mon.code] = 0
             self._monster_barrier[mon.code] = 0
+            self._monster_burn[mon.code] = 0
             mon_effects = getattr(mon, "effects", None)
             if mon_effects and not isinstance(mon_effects, Unset):
                 for effect in mon_effects:
@@ -1096,6 +1111,8 @@ class GameData:
                         self._monster_poison[mon.code] = effect.value
                     elif getattr(effect, "code", None) == "barrier":
                         self._monster_barrier[mon.code] = effect.value
+                    elif getattr(effect, "code", None) == "burn":
+                        self._monster_burn[mon.code] = effect.value
             # OpenAPI conformance fields (Item 14 remediation).
             # Defensive getattr keeps older API clients green.
             min_gold = getattr(mon, "min_gold", 0)
