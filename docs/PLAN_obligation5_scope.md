@@ -92,11 +92,32 @@ reachable from `s` via `cycleStepN`:
   `ai_reaches_level_fifty_config_positive` needs only **spawn config-positivity +
   hfightFires**. So `hfightFires` is the SOLE remaining substantive runtime
   obligation.
-- **O5.2 hfightFires — open, THE CRUX** — fight-fairness: now that a productive
-  means ALWAYS fires (hnowait), the remaining gap is that it is INFINITELY OFTEN a
-  fight-driver (bankUnlock/reachUnlockLevel → combat, the only char-XP source), not
-  endless accept/pursue/gather. The combat-existence catalog derivation (user's
-  choice) plugs in HERE. This is the last substantive piece.
+- **O5.2 hfightFires — open, THE CRUX. Deep-dive 2026-06-15 found the real
+  obstacle (it is bigger than a fairness proof):**
+  - The model advances level ONLY on `.fight` and `.taskTrade` (Plan.applyActionKind
+    rollover branches). `planFor` produces `.fight` ONLY from `bankUnlock` /
+    `reachUnlockLevel`, and `.taskTrade` ONLY from `pursueTask`.
+  - `bankUnlock` fires only while `¬bankAccessible`; `reachUnlockLevel` only while
+    `level < bankRequiredLevel`. Both are BANK-UNLOCK BOOTSTRAP means — they STOP
+    firing once the bank is unlocked, far below level 50. So `hfightFires`
+    (`bankUnlock ∨ reachUnlockLevel` infinitely often) is **NOT TRUE** of any
+    trajectory that unlocks the bank — it is an unprovable hypothesis, and the
+    capstone currently leans on it (conditionally vacuous, like the `.wait` issue).
+  - The FAITHFUL general leveling path is the TASK LOOP: `acceptTask` (phase=none) →
+    `pursueTask` (phase∈{accepted,inProgress}) → `.taskTrade` → level rollover. This
+    is the same task lifecycle that discharged hnowait, and it runs to 50.
+  - **Required work (multi-session):**
+    1. Reformulate the leveling obligation from `hfightFires` to a TASK-LOOP form:
+       the trajectory does a level-advancing `.taskTrade` (via pursueTask) infinitely
+       often. Prove the task-fairness (phase is active infinitely — extends the
+       hnowait task-totality) AND the rollover accumulation (`willLevel` met
+       infinitely: task reward XP accrues past `xpToNextLevel`).
+    2. Re-route `lifecycle_progress_from_bounds_proven` (currently `.fight`-rollover
+       only) to also advance on `.taskTrade`.
+    3. The combat-existence catalog derivation (user's choice) feeds the FIGHT side
+       (monster tasks → fights → reward), grounding the task-reward XP.
+  - This is the genuine intellectual core and overlaps O5.4 (model faithfulness):
+    the model's narrow fight path is itself a faithfulness gap.
 - **O5.4 model faithfulness — open.**  **O5.5 closed-form K — optional.**
 
 ## Decision needed from the user before O5.1
