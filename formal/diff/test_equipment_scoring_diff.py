@@ -92,7 +92,7 @@ def _item_block(code_id: int, stats: ItemStats | None, slot: str) -> list[int]:
     return [code_id, stats.level, fits, *_elem_block(stats, "attack"),
             *_elem_block(stats, "resistance"), stats.critical_strike,
             stats.hp_bonus + stats.wisdom + stats.prospecting + stats.inventory_space
-            + stats.haste]
+            + stats.haste + stats.lifesteal]
 
 
 def _py_score(stats: ItemStats, slot: str, monster_atk: dict, monster_res: dict) -> int:
@@ -319,6 +319,25 @@ def test_haste_armor_scores_its_efficiency_value():
     result = pick_loadout("mon", state, game_data)
     assert result.get("leg_armor_slot") == "haste_legs"
     _check(table, monster_atk, monster_res, 5, inventory, equipment, ["leg_armor_slot"])
+
+
+def test_lifesteal_armor_scores_its_sustain_value():
+    """Lifesteal (heal-on-crit) is folded into the flat-utility armor score. A ring
+    with only lifesteal=15 outscores a plain ring (so the bot equips sustain gear),
+    and Python agrees with the Lean oracle — exercises lifesteal in flatUtil."""
+    table = _table(
+        ItemStats(code="vamp_ring", level=1, type_="ring", lifesteal=15),
+        ItemStats(code="plain_ring", level=1, type_="ring"),
+    )
+    monster_atk = {"fire": 5}
+    monster_res = {"fire": 0}
+    inventory = {"vamp_ring": 1, "plain_ring": 1}
+    equipment = {"ring1_slot": None}
+    game_data = _FakeGameData(table, monster_atk, monster_res)
+    state = _make_state(5, inventory, equipment)
+    result = pick_loadout("mon", state, game_data)
+    assert result.get("ring1_slot") == "vamp_ring"
+    _check(table, monster_atk, monster_res, 5, inventory, equipment, ["ring1_slot"])
 
 
 def test_upgrade_swaps():

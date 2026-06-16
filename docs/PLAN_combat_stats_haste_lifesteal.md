@@ -31,17 +31,33 @@ unlisted → dropped. `predict_win` (`combat.py`) models only attack/resistance/
 ### Parsing + ItemStats
 - `ItemStats` + `haste: int = 0`, `lifesteal: int = 0`; parser maps both codes.
 
-### predict_win (the proven core — heavy)
-- **haste**: model as an attack-frequency multiplier on `_expected_hit` (and the
-  monster side). Per the docs, haste affects turn order/frequency; confirm the exact
-  formula from docs.artifactsmmo.com before encoding. This changes the proven
-  `PredictWin.lean` arithmetic → re-prove (predict_win_eq_sim, monotonicity,
-  maxturns) in lockstep. CAUTION: predict_win gates Fight-for-drops planning — verify
-  the haste model doesn't destabilize reachability (chicken→feather etc.).
-- **lifesteal**: add player heal-per-hit into the rounds-to-die computation (effective
-  HP rises with sustain). Also a `PredictWin.lean` change.
-- Because both touch the proven predict_win formula AND planning, scope carefully;
-  consider doing haste first (broader item coverage), lifesteal second.
+### haste — DONE (a13d7c6)
+Not a predict_win change. Cooldown reduction = efficiency utility, folded into the
+flat-utility value like inventory_space. See the corrected-semantics note above.
+
+### lifesteal — predict_win change (the heavy remaining one)
+Semantics (effect desc): "Restores 15% of total attack of all elements in HP after a
+CRITICAL STRIKE." So per the player's turn the EXPECTED heal is
+`crit% × (lifesteal/100) × total_attack` (crit chance × the 15% × summed attack).
+Model in `predict_win` (combat.py):
+- **Player lifesteal** raises effective survivability: each player turn nets an
+  expected self-heal, so the monster's effective damage-per-turn becomes
+  `monster_hit − expected_player_lifesteal`. Extend `rounds_to_die` accordingly
+  (guard: if effective monster damage ≤ 0, the player never dies → winnable on the
+  damage side, still bounded by MAX_TURNS).
+- **Monster lifesteal** (monsters carry it too, e.g. desert_scorpion=15) raises the
+  monster's effective HP / lowers the player's net kill rate → extend
+  `rounds_to_kill` symmetrically.
+- This changes the proven `PredictWin.lean` arithmetic → re-prove `predict_win_eq_sim`,
+  the monotonicity theorems, `maxturns_sound` in lockstep; update the extracted core +
+  bridge + differential (`test_*predict_win*` / combat diff) + mutations.
+- **CAUTION**: predict_win gates Fight-for-drops planning. Re-run the chicken→feather
+  reachability cases; a stricter/looser predict_win must not break them. Also compose
+  with the 2026-06-15 combat-veto fix ([[project_combat_veto_threshold]]) — lifesteal
+  improving sustain may legitimately re-admit a monster the veto deselected.
+- Also value lifesteal as a combat stat in equip_value/weapon scoring (smaller part).
+- Open question: does crit `total_attack` use the raw or post-resistance attack?
+  Verify from docs before encoding the exact integer formula.
 
 ### Scoring / value
 - Fold `haste`/`lifesteal` into `equip_value` raw + the weapon/armor scores as

@@ -436,6 +436,22 @@ class TestGameDataLoadItems:
             gd._load_items(MagicMock())
         assert gd.item_stats("skullforged_pants").haste == 8
 
+    def test_loads_lifesteal_effect(self):
+        """`lifesteal` (heal-on-crit) parses into ItemStats so the stat is valued."""
+        gd = GameData()
+        item = MagicMock()
+        item.code = "vampiric_rune"
+        item.level = 30
+        item.type_ = "rune"
+        item.craft = UNSET
+        eff = MagicMock()
+        eff.code = "lifesteal"
+        eff.value = 25
+        item.effects = [eff]
+        with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=make_page([item])):
+            gd._load_items(MagicMock())
+        assert gd.item_stats("vampiric_rune").lifesteal == 25
+
 
 class TestGameDataLoadResources:
     def test_loads_skill_requirement(self):

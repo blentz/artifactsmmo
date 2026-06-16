@@ -849,6 +849,8 @@ class GameData:
                         stats.inventory_space = effect.value
                     elif effect.code == "haste":
                         stats.haste = effect.value
+                    elif effect.code == "lifesteal":
+                        stats.lifesteal = effect.value
                     elif effect.code in _GATHERING_SKILLS:
                         # Tool bonus for a gather skill (e.g. axe → woodcutting).
                         # Game encodes as cooldown reduction (negative value = faster);

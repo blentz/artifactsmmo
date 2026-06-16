@@ -40,6 +40,9 @@ def test_equip_value_counts_utility_stats_so_artifact_not_discarded():
     # Haste (cooldown reduction) also counts.
     legs = ItemStats(code="haste_legs", level=1, type_="leg_armor", haste=8)
     assert _equip_value(legs) == 8
+    # Lifesteal (combat sustain) also counts.
+    ring = ItemStats(code="vampiric_ring", level=1, type_="ring", lifesteal=15)
+    assert _equip_value(ring) == 15
 
 
 def _gd_with_sap_recipes() -> GameData:

@@ -5,7 +5,8 @@ from artifactsmmo_cli.ai.game_data import ItemStats
 
 def equip_value_pure(attack: int, resistance: int, hp_restore: int, hp_bonus: int,
                      dmg: int, critical_strike: int, wisdom: int, prospecting: int,
-                     inventory_space: int, haste: int, subtype: str) -> int:
+                     inventory_space: int, haste: int, lifesteal: int,
+                     subtype: str) -> int:
     """PURE CORE (mechanically extracted, P4b): ``2 * raw + nonToolBonus``.
 
     The ItemStats reads (and the dict-value sums for attack/resistance) are
@@ -17,7 +18,8 @@ def equip_value_pure(attack: int, resistance: int, hp_restore: int, hp_bonus: in
     the extracted definition.
     """
     raw = (attack + resistance + hp_restore
-           + hp_bonus + dmg + critical_strike + wisdom + prospecting + inventory_space + haste)
+           + hp_bonus + dmg + critical_strike + wisdom + prospecting + inventory_space + haste
+           + lifesteal)
     non_tool_bonus = 0 if subtype == "tool" else 1
     return 2 * raw + non_tool_bonus
 
@@ -73,7 +75,7 @@ def equip_value(stats: ItemStats) -> int:
     return equip_value_pure(attack, resistance, stats.hp_restore, stats.hp_bonus,
                             stats.dmg, stats.critical_strike, stats.wisdom,
                             stats.prospecting, stats.inventory_space, stats.haste,
-                            stats.subtype)
+                            stats.lifesteal, stats.subtype)
 
 
 def tool_value(stats: ItemStats, skill: str) -> int:

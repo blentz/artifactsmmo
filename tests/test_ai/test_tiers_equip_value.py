@@ -37,6 +37,12 @@ def test_values_haste_efficiency():
     assert equip_value(legs) == 17
 
 
+def test_values_lifesteal_combat_sustain():
+    """Lifesteal (heal-on-crit) is valued as a combat stat: raw 15 → 2*15+1 = 31."""
+    ring = ItemStats(code="vampiric_ring", level=1, type_="ring", lifesteal=15)
+    assert equip_value(ring) == 31
+
+
 def test_nontool_strictly_beats_tool_on_raw_tie():
     """Spec mirror of PurposeRouting.combatScore_tiebreaks_nontool_over_tool."""
     weapon = ItemStats(code="w", level=1, type_="weapon", attack={"earth": 5})
