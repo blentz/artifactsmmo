@@ -60,10 +60,11 @@ structure GlobalInvariants (s : State) : Prop where
               (cycleStepN k s).taskExchangeMinCoins > 0
   hbe : ∀ k, productionLadder (cycleStepN k s) = some .bankExpand →
               (cycleStepN k s).nextExpansionCost > 0
-  hperc : ∀ k k', productionLadder (cycleStepN k s) = some k' →
-                    (k' = .bankUnlock ∨ k' = .reachUnlockLevel) →
-                    (cycleStepN k s).xp < xpToNextLevel (cycleStepN k s).level
-                    ∧ (cycleStepN k s).level < 50
+  -- NOTE (2026-06-15): the former `hperc` perception field was REMOVED — it was
+  -- never consumed by the reachability proof (it reached `lifecycle_progress_
+  -- from_bounds_proven` only as an underscore-bound, unused parameter) and is not
+  -- unconditionally true (bankUnlock can fire at level ≥ 50). Dropping it
+  -- STRENGTHENS the capstone (one fewer runtime obligation).
   -- Item 1g-B cascade: post-XP=0 fix, trajectory must contain
   -- unbounded .fight firings (via .bankUnlock or .reachUnlockLevel)
   -- for level advance to be possible at all. Production observes
@@ -80,7 +81,7 @@ structure GlobalInvariants (s : State) : Prop where
 theorem globalInvariants_step (s : State) (m : Nat)
     (h : GlobalInvariants s) :
     GlobalInvariants (cycleStepN m s) := by
-  refine ⟨?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_⟩
   · intro k
     -- productionLadder (cycleStepN k (cycleStepN m s)) ≠ some .wait
     rw [← cycleStepN_add m k s]
@@ -93,10 +94,6 @@ theorem globalInvariants_step (s : State) (m : Nat)
     rw [← cycleStepN_add m k s] at hk
     rw [← cycleStepN_add m k s]
     exact h.hbe (m + k) hk
-  · intro k k' hk hk'
-    rw [← cycleStepN_add m k s] at hk
-    rw [← cycleStepN_add m k s]
-    exact h.hperc (m + k) k' hk hk'
   · -- Item 1g-B cascade: re-establish hfightFires via prefix shift.
     -- ∀ N, ∃ k ≥ N, fight fires at cycleStepN k (cycleStepN m s).
     -- Use h.hfightFires (N + m) to get j ≥ N+m. Set k := j - m.
@@ -128,7 +125,6 @@ theorem level_advances_once (s : State)
   · exact h.hnowait
   · exact h.hex
   · exact h.hbe
-  · exact h.hperc
   · exact h.hfightFires
 
 /-! ## Level-50 reachability -/

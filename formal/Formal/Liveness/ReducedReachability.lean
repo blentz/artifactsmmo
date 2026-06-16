@@ -30,21 +30,20 @@ open Formal.Liveness.ProductionLadder
 open Formal.Liveness.CycleStep
 open Formal.Liveness.CumulativeProgress
 
-/-- **hnowait + hex + hbe discharged.** Level-50 reachability needing only spawn
-config-positivity (`taskExchangeMinCoins > 0`, `nextExpansionCost > 0`) in place
-of THREE of the five `GlobalInvariants` fields:
+/-- **hnowait + hex + hbe discharged; hperc removed as dead.** Level-50
+reachability needing only spawn config-positivity (`taskExchangeMinCoins > 0`,
+`nextExpansionCost > 0`) plus `hfightFires`:
 - `hnowait` is now UNCONDITIONAL — `NoWait.productionLadder_ne_wait` proves a task
   means (accept / pursue / complete) always fires before `.wait`, so the ladder is
   never reduced to waiting (the HONEST no-deadlock, not the `.wait` fall-through).
 - `hex` / `hbe` follow from spawn config-positivity via `GameDataInvariance`
   (those fields are `cycleStepN`-invariant).
-Only `hperc` and `hfightFires` remain as runtime hypotheses. -/
+- `hperc` was removed from `GlobalInvariants` entirely (unused + not unconditionally
+  true; see LevelFiftyReachable / LifecycleBound7).
+So `hfightFires` is the SOLE remaining runtime obligation (the fight-fairness crux,
+O5.2) — everything else is spawn config-positivity. -/
 theorem ai_reaches_level_fifty_config_positive (s : State)
     (htec : s.taskExchangeMinCoins > 0) (hnec : s.nextExpansionCost > 0)
-    (hperc : ∀ k k', productionLadder (cycleStepN k s) = some k' →
-              (k' = .bankUnlock ∨ k' = .reachUnlockLevel) →
-              (cycleStepN k s).xp < xpToNextLevel (cycleStepN k s).level
-              ∧ (cycleStepN k s).level < 50)
     (hfightFires : ∀ N, ∃ k ≥ N,
         productionLadder (cycleStepN k s) = some .bankUnlock
         ∨ productionLadder (cycleStepN k s) = some .reachUnlockLevel) :
@@ -53,7 +52,6 @@ theorem ai_reaches_level_fifty_config_positive (s : State)
     { hnowait := fun k => Formal.Liveness.NoWait.productionLadder_ne_wait (cycleStepN k s)
       hex := fun k _ => hex_propagation s htec k
       hbe := fun k _ => hbe_propagation s hnec k
-      hperc := hperc
       hfightFires := hfightFires }
 
 end Formal.Liveness.ReducedReachability

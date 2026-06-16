@@ -122,10 +122,10 @@ theorem lifecycle_progress_from_bounds_proven
                   (cycleStepN' k s).taskExchangeMinCoins > 0)
     (_hbe : ∀ k, productionLadder (cycleStepN' k s) = some .bankExpand →
                   (cycleStepN' k s).nextExpansionCost > 0)
-    (_hperc : ∀ k k', productionLadder (cycleStepN' k s) = some k' →
-                       (k' = .bankUnlock ∨ k' = .reachUnlockLevel) →
-                       (cycleStepN' k s).xp < xpToNextLevel (cycleStepN' k s).level
-                       ∧ (cycleStepN' k s).level < 50)
+    -- NOTE (2026-06-15): the former `_hperc` perception hypothesis was REMOVED —
+    -- it was unused in this proof (underscore-bound) AND is not unconditionally
+    -- true (bankUnlock can fire at level ≥ 50). The level advance needs only
+    -- `hlvl` + `hfightFires`. See docs/PLAN_obligation5_scope.md (O5.3-hperc).
     (hfightFires : ∀ N, ∃ k ≥ N,
         productionLadder (cycleStepN' k s) = some .bankUnlock
         ∨ productionLadder (cycleStepN' k s) = some .reachUnlockLevel) :

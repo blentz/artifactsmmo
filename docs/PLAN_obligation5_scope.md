@@ -61,9 +61,13 @@ reachable from `s` via `cycleStepN`:
     positivity ⇒ trajectory positivity ⇒ the conditional hex/hbe hold. No new
     axioms (standard + LIV-001 only); in the liveness axiom probe.
     GlobalInvariants now reduces to {hnowait, hperc, hfightFires} + 2 spawn facts.
-  - **hperc — open.** Needs the maintained perception invariant
-    `xp < xpToNextLevel level` (ApplyXpLevelPreservation has the per-step piece)
-    inducted across the trajectory, plus `level < 50` / `bankRequiredLevel ≤ 50`.
+  - **hperc — DONE 2026-06-15 (removed as DEAD).** Investigation showed hperc was
+    NEVER consumed: it reached `lifecycle_progress_from_bounds_proven` only as an
+    underscore-bound (unused) parameter, and it is not even unconditionally true
+    (bankUnlock can fire at level ≥ 50, where `level < 50` is false). So it was a
+    spurious hypothesis. Removed from `GlobalInvariants` / `globalInvariants_step`
+    / `level_advances_once` / `lifecycle_progress_from_bounds_proven` —
+    STRENGTHENING the capstone (one fewer runtime obligation), no proof faked.
 
 ## Two further gaps beyond `GlobalInvariants`
 
@@ -83,13 +87,16 @@ reachable from `s` via `cycleStepN`:
 - **O5.1 hnowait — DONE** (unconditional, task-lifecycle; no axiom). Replaces the
   vacuous `productionLadder_total` (`.wait` fall-through).
 - **O5.3 hex/hbe — DONE** (config-positivity invariance).
-- `GlobalInvariants` now reduces to just **{hperc, hfightFires}** + 2 spawn facts.
-- **O5.3 hperc — open** — perception invariant `xp < xpToNextLevel level` inducted
-  across the trajectory + `level < 50 / bankRequiredLevel ≤ 50`.
-- **O5.2 hfightFires — open, the crux** — fight-fairness: now that a productive
+- **O5.3 hperc — DONE** (removed as a dead/spurious hypothesis; see above).
+- `GlobalInvariants` is now {hnowait✓, hex✓, hbe✓, hfightFires};
+  `ai_reaches_level_fifty_config_positive` needs only **spawn config-positivity +
+  hfightFires**. So `hfightFires` is the SOLE remaining substantive runtime
+  obligation.
+- **O5.2 hfightFires — open, THE CRUX** — fight-fairness: now that a productive
   means ALWAYS fires (hnowait), the remaining gap is that it is INFINITELY OFTEN a
-  fight (the only char-XP source), not endless accept/pursue/gather. The
-  combat-existence catalog derivation (user's choice) plugs in HERE, not at hnowait.
+  fight-driver (bankUnlock/reachUnlockLevel → combat, the only char-XP source), not
+  endless accept/pursue/gather. The combat-existence catalog derivation (user's
+  choice) plugs in HERE. This is the last substantive piece.
 - **O5.4 model faithfulness — open.**  **O5.5 closed-form K — optional.**
 
 ## Decision needed from the user before O5.1
