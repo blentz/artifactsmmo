@@ -38,14 +38,40 @@ def _record_mixed(store: LearningStore, action_repr: str, wins: int, losses: int
         i += 1
 
 
-def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob"):
+def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob", lifesteal=0):
     gd = GameData()
     gd._monster_hp = {code: hp}
     gd._monster_attack = {code: attack or {}}
     gd._monster_resistance = {code: resist or {}}
     gd._monster_critical_strike = {code: crit}
     gd._monster_initiative = {code: initiative}
+    gd._monster_lifesteal = {code: lifesteal}
     return gd
+
+
+def test_predict_win_false_when_monster_out_heals_via_lifesteal():
+    """killStep ≤ 0: a high-crit/high-lifesteal monster heals more per turn than
+    our weak attack removes → unkillable → not winnable (combat.py:100). The
+    monster's own damage is fully RESISTED, so WITHOUT the lifesteal term the bot
+    would (wrongly) predict a win — that is what the mutation gate checks."""
+    state = make_state(max_hp=200, attack={"fire": 5}, resistance={"fire": 100},
+                       initiative=50)
+    gd = _gd(hp=30, attack={"fire": 200}, crit=50, lifesteal=10)
+    assert predict_win(state, gd, "mob") is False
+
+
+def test_predict_win_true_when_player_out_sustains_via_lifesteal():
+    """dieStep ≤ 0: a high-crit player wearing strong lifesteal gear heals at least
+    as much per turn as the monster deals → we out-sustain → win (combat.py:120).
+    The monster WOULD win the damage race (low player HP), so WITHOUT the lifesteal
+    term the bot predicts a loss — the mutation gate checks the term flips it."""
+    gd = _gd(hp=100, attack={"fire": 5}, crit=0)
+    gd._item_stats = {
+        "vamp": ItemStats(code="vamp", level=1, type_="weapon", lifesteal=100),
+    }
+    state = make_state(hp=10, max_hp=10, attack={"fire": 10}, critical_strike=50,
+                       initiative=50, equipment={"weapon_slot": "vamp"})
+    assert predict_win(state, gd, "mob") is True
 
 
 def test_round_half_up_rounds_half_upward():

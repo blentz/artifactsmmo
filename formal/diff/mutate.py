@@ -249,14 +249,25 @@ PREDICT_WIN_MUTATIONS = [
     ("predict_win: tiebreak <= -> < (player-first)",
      "    return rounds_to_kill <= rounds_to_die if player_first else rounds_to_kill < rounds_to_die",
      "    return rounds_to_kill < rounds_to_die if player_first else rounds_to_kill < rounds_to_die"),
-    # drop the expected critical-strike contribution entirely.
-    ("predict_win: drop crit term in _expected_hit",
-     "    return raw * (1 + (crit / 100) * 0.5)",
-     "    return raw * 1"),
+    # drop the expected critical-strike contribution from the (exact-integer) kill rate.
+    ("predict_win: drop crit term in killStep (200+crit -> 200)",
+     "    kill_step = (50 * raw_player * (200 + p.critical_strike)",
+     "    kill_step = (50 * raw_player * (200 + 0)"),
     # off-by-one in the half-up rounding (ceil-ish): + 0.5 -> + 1.5.
     ("predict_win: round_half_up off-by-one (+0.5 -> +1.5)",
      "    return math.floor(value + 0.5)",
      "    return math.floor(value + 1.5)"),
+]
+
+# Lifesteal terms (heal-on-crit). Killed by the guard tests in test_combat.py
+# (drop the term ⇒ the killStep≤0 / dieStep≤0 guard no longer fires).
+PREDICT_WIN_LIFESTEAL_MUTATIONS = [
+    ("predict_win: drop monster lifesteal term in killStep",
+     "                 - m_crit * game_data.monster_lifesteal(monster_code) * m_atk_sum)",
+     "                 - 0 * game_data.monster_lifesteal(monster_code) * m_atk_sum)"),
+    ("predict_win: drop player lifesteal term in dieStep",
+     "    die_step = 50 * raw_monster * (200 + m_crit) - p.critical_strike * player_lifesteal * p_atk_sum",
+     "    die_step = 50 * raw_monster * (200 + m_crit) - 0 * player_lifesteal * p_atk_sum"),
 ]
 
 
@@ -2811,6 +2822,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_inventory_profile_diff.py", survivors)
     run_group(COMBAT_SRC, PREDICT_WIN_MUTATIONS,
               "formal/diff/test_predict_win_diff.py", survivors)
+    run_group(COMBAT_SRC, PREDICT_WIN_LIFESTEAL_MUTATIONS,
+              "tests/test_ai/test_combat.py", survivors)
     run_group(PROJECTION_SRC, PROJECTION_MUTATIONS,
               "formal/diff/test_loadout_projection_diff.py", survivors)
     run_group(SCORING_SRC, SCORING_MUTATIONS,

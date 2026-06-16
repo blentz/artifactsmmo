@@ -74,7 +74,13 @@ def runPredictWin (g : Nat → Int) : Json :=
   let mCrit := g 26
   let playerMaxHp := g 27
   let playerFirst := g 28 != 0
-  let verdict := predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp playerFirst
+  -- lifesteal extension: [29]=pLifesteal [30]=pAtkSum [31]=mLifesteal [32]=mAtkSum
+  let pLifesteal := g 29
+  let pAtkSum := g 30
+  let mLifesteal := g 31
+  let mAtkSum := g 32
+  let verdict := predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
+    pLifesteal pAtkSum mLifesteal mAtkSum playerFirst
   Json.mkObj [("win", Json.bool verdict), ("raw_player", Json.num rawPlayer),
     ("raw_monster", Json.num rawMonster)]
 

@@ -202,6 +202,14 @@ class GameData:
         self.monsters.critical_strike = value
 
     @property
+    def _monster_lifesteal(self) -> dict[str, int]:
+        return self.monsters.lifesteal
+
+    @_monster_lifesteal.setter
+    def _monster_lifesteal(self, value: dict[str, int]) -> None:
+        self.monsters.lifesteal = value
+
+    @property
     def _monster_initiative(self) -> dict[str, int]:
         return self.monsters.initiative
 
@@ -426,6 +434,12 @@ class GameData:
         """Critical-strike chance % of a monster. Raises `KeyError` when
         unknown — see `monster_attack`."""
         return self.monsters.monster_critical_strike(code)
+
+    def monster_lifesteal(self, code: str) -> int:
+        """Heal-on-crit % of a monster (optional `lifesteal` effect; 0 if absent).
+        Feeds predict_win: a lifesteal monster sustains itself, lowering our net
+        kill rate."""
+        return self.monsters.monster_lifesteal(code)
 
     def monster_initiative(self, code: str) -> int:
         """Initiative (turn-order) stat of a monster. Raises `KeyError` when
@@ -1040,6 +1054,14 @@ class GameData:
             }
             self._monster_critical_strike[mon.code] = mon.critical_strike
             self._monster_initiative[mon.code] = mon.initiative
+            # Lifesteal is an optional monster ability carried in `effects`
+            # (most monsters have none). Defensive parse; absent ⇒ 0.
+            self._monster_lifesteal[mon.code] = 0
+            mon_effects = getattr(mon, "effects", None)
+            if mon_effects and not isinstance(mon_effects, Unset):
+                for effect in mon_effects:
+                    if getattr(effect, "code", None) == "lifesteal":
+                        self._monster_lifesteal[mon.code] = effect.value
             # OpenAPI conformance fields (Item 14 remediation).
             # Defensive getattr keeps older API clients green.
             min_gold = getattr(mon, "min_gold", 0)

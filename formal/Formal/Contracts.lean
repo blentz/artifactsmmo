@@ -257,41 +257,54 @@ example : ∀ (i : Formal.InventoryChainSafe.Inv) (used' wnum wden : Nat),
 
 -- predict_win_eq_sim: closed-form verdict = operational fight-sim verdict
 -- (∀ stat tuples in the modeled domain: crit ≥ 0, HP ≥ 1, with enough sim fuel).
-example : ∀ (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp : Int)
-    (playerFirst : Bool),
-    0 ≤ pCrit → 0 ≤ mCrit → 1 ≤ monsterHp → 1 ≤ playerMaxHp →
+example : ∀ (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
+      pLifesteal pAtkSum mLifesteal mAtkSum : Int) (playerFirst : Bool),
+    1 ≤ monsterHp → 1 ≤ playerMaxHp →
     ∀ (fk fd : Nat),
-      (roundsTo monsterHp rawPlayer pCrit).toNat ≤ fk →
-      (roundsTo playerMaxHp rawMonster mCrit).toNat ≤ fd →
-      predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp playerFirst
+      (ceilDiv (monsterHp*10000) (killStep rawPlayer pCrit mCrit mLifesteal mAtkSum)).toNat ≤ fk →
+      (ceilDiv (playerMaxHp*10000) (dieStep rawMonster mCrit pCrit pLifesteal pAtkSum)).toNat ≤ fd →
+      predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
+        pLifesteal pAtkSum mLifesteal mAtkSum playerFirst
         = (if rawPlayer ≤ 0 then false
            else
-             let rtk := simRounds monsterHp rawPlayer pCrit fk
-             if rtk > maxTurns then false
-             else if rawMonster ≤ 0 then true
+             let ks := killStep rawPlayer pCrit mCrit mLifesteal mAtkSum
+             if ks ≤ 0 then false
              else
-               let rtd := simRounds playerMaxHp rawMonster mCrit fd
-               if playerFirst then rtk ≤ rtd else rtk < rtd) :=
+               let rtk := simRoundsNet monsterHp ks fk
+               if rtk > maxTurns then false
+               else if rawMonster ≤ 0 then true
+               else
+                 let ds := dieStep rawMonster mCrit pCrit pLifesteal pAtkSum
+                 if ds ≤ 0 then true
+                 else
+                   let rtd := simRoundsNet playerMaxHp ds fd
+                   if playerFirst then rtk ≤ rtd else rtk < rtd) :=
   @predict_win_eq_sim
--- maxturns_sound: rounds_to_kill > MAX_TURNS ⇒ ¬win
-example : ∀ (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp : Int)
-    (playerFirst : Bool),
-    0 < rawPlayer → roundsTo monsterHp rawPlayer pCrit > maxTurns →
-    predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp playerFirst = false :=
+-- maxturns_sound: rounds_to_kill > MAX_TURNS ⇒ ¬win (player damages net of lifesteal)
+example : ∀ (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
+      pLifesteal pAtkSum mLifesteal mAtkSum : Int) (playerFirst : Bool),
+    0 < rawPlayer → 0 < killStep rawPlayer pCrit mCrit mLifesteal mAtkSum →
+    ceilDiv (monsterHp*10000) (killStep rawPlayer pCrit mCrit mLifesteal mAtkSum) > maxTurns →
+    predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
+      pLifesteal pAtkSum mLifesteal mAtkSum playerFirst = false :=
   @maxturns_sound
 -- predict_win_mono_player: increasing player raw never flips a win to a loss
-example : ∀ (raw1 raw2 pCrit monsterHp rawMonster mCrit playerMaxHp : Int)
-    (playerFirst : Bool),
+example : ∀ (raw1 raw2 pCrit monsterHp rawMonster mCrit playerMaxHp
+      pLifesteal pAtkSum mLifesteal mAtkSum : Int) (playerFirst : Bool),
     0 ≤ pCrit → 0 < raw1 → raw1 ≤ raw2 → 0 ≤ monsterHp →
-    predictWin raw1 pCrit monsterHp rawMonster mCrit playerMaxHp playerFirst = true →
-    predictWin raw2 pCrit monsterHp rawMonster mCrit playerMaxHp playerFirst = true :=
+    predictWin raw1 pCrit monsterHp rawMonster mCrit playerMaxHp
+      pLifesteal pAtkSum mLifesteal mAtkSum playerFirst = true →
+    predictWin raw2 pCrit monsterHp rawMonster mCrit playerMaxHp
+      pLifesteal pAtkSum mLifesteal mAtkSum playerFirst = true :=
   @predict_win_mono_player
 -- predict_win_mono_monsterhp: decreasing monster HP never flips a win to a loss
-example : ∀ (rawPlayer pCrit monsterHp1 monsterHp2 rawMonster mCrit playerMaxHp : Int)
-    (playerFirst : Bool),
+example : ∀ (rawPlayer pCrit monsterHp1 monsterHp2 rawMonster mCrit playerMaxHp
+      pLifesteal pAtkSum mLifesteal mAtkSum : Int) (playerFirst : Bool),
     0 ≤ pCrit → 0 < rawPlayer → 0 ≤ monsterHp2 → monsterHp2 ≤ monsterHp1 →
-    predictWin rawPlayer pCrit monsterHp1 rawMonster mCrit playerMaxHp playerFirst = true →
-    predictWin rawPlayer pCrit monsterHp2 rawMonster mCrit playerMaxHp playerFirst = true :=
+    predictWin rawPlayer pCrit monsterHp1 rawMonster mCrit playerMaxHp
+      pLifesteal pAtkSum mLifesteal mAtkSum playerFirst = true →
+    predictWin rawPlayer pCrit monsterHp2 rawMonster mCrit playerMaxHp
+      pLifesteal pAtkSum mLifesteal mAtkSum playerFirst = true :=
   @predict_win_mono_monsterhp
 
 /-! ### LoadoutProjection role contracts. -/

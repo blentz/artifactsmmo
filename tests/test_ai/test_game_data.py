@@ -542,6 +542,25 @@ class TestGameDataLoadMonsters:
         assert gd._monster_critical_strike["chicken"] == 5
         assert gd._monster_initiative["chicken"] == 100
 
+    def test_loads_monster_lifesteal_from_effect(self):
+        """A monster's `lifesteal` ABILITY (an effect, not a base stat) parses so
+        predict_win sees its self-sustain. Absent ⇒ 0 (no raise)."""
+        gd = GameData()
+        monster = MagicMock()
+        monster.code = "desert_scorpion"
+        monster.level = 30
+        monster.hp = 500
+        monster.critical_strike = 20
+        monster.initiative = 100
+        eff = MagicMock()
+        eff.code = "lifesteal"
+        eff.value = 15
+        monster.effects = [eff]
+        with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=make_page([monster])):
+            gd._load_monsters(MagicMock())
+        assert gd.monster_lifesteal("desert_scorpion") == 15
+        assert gd.monster_lifesteal("no_such_monster") == 0
+
     def test_stops_on_none_result(self):
         gd = GameData()
         with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=None):

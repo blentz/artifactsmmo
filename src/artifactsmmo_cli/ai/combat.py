@@ -79,25 +79,49 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
     equipment but doesn't refill current hp."""
     loadout = pick_loadout(monster_code, state, game_data)
     p = project_loadout_stats(state, loadout, game_data)
-    player_hit = _expected_hit(
-        p.attack, p.dmg, p.dmg_elements,
-        game_data.monster_resistance(monster_code), p.critical_strike,
+    m_resist = game_data.monster_resistance(monster_code)
+    m_crit = game_data.monster_critical_strike(monster_code)
+    # EXACT INTEGER arithmetic mirroring Formal/PredictWin.lean (×10000 scale, so the
+    # heal `crit% × lifesteal% × Σattack` is exact). `_expected_hit`'s float form is
+    # the same expected per-turn damage; here we keep it integral to match the proof
+    # exactly under the finer lifesteal fractions.
+    raw_player = sum(
+        _element_damage(p.attack.get(e, 0), p.dmg + p.dmg_elements.get(e, 0), m_resist.get(e, 0))
+        for e in ELEMENTS
     )
-    if player_hit <= 0:
+    if raw_player <= 0:
         return False
-    rounds_to_kill = math.ceil(game_data.monster_hp(monster_code) / player_hit)
+    # Monster lifesteal heals it on ITS crit, lowering our NET kill rate.
+    m_attack = game_data.monster_attack(monster_code)
+    m_atk_sum = sum(m_attack.values())
+    kill_step = (50 * raw_player * (200 + p.critical_strike)
+                 - m_crit * game_data.monster_lifesteal(monster_code) * m_atk_sum)
+    if kill_step <= 0:
+        return False  # the monster out-heals our damage — unkillable
+    rounds_to_kill = -(-(game_data.monster_hp(monster_code) * 10000) // kill_step)  # ceil
     if rounds_to_kill > MAX_TURNS:
         return False
-    monster_hit = _expected_hit(
-        game_data.monster_attack(monster_code), 0, {},
-        p.resistance, game_data.monster_critical_strike(monster_code),
+    raw_monster = sum(
+        _element_damage(m_attack.get(e, 0), 0, p.resistance.get(e, 0)) for e in ELEMENTS
     )
-    if monster_hit <= 0:
+    if raw_monster <= 0:
         return True
+    # Player lifesteal heals us on OUR crit, lowering our NET death rate. Sum the
+    # lifesteal of the post-loadout equipment (loadout overrides changed slots).
+    final_equip = dict(state.equipment)
+    final_equip.update(loadout)
+    player_lifesteal = sum(
+        st.lifesteal for code in final_equip.values()
+        if code and (st := game_data.item_stats(code)) is not None
+    )
+    p_atk_sum = sum(p.attack.values())
+    die_step = 50 * raw_monster * (200 + m_crit) - p.critical_strike * player_lifesteal * p_atk_sum
+    if die_step <= 0:
+        return True  # we out-sustain the monster's damage
     effective_hp = min(state.hp, p.max_hp) if state.hp > 0 else 0
     if effective_hp <= 0:
         return False
-    rounds_to_die = math.ceil(effective_hp / monster_hit)
+    rounds_to_die = -(-(effective_hp * 10000) // die_step)  # ceil
     player_first = p.initiative >= game_data.monster_initiative(monster_code)
     return rounds_to_kill <= rounds_to_die if player_first else rounds_to_kill < rounds_to_die
 
