@@ -222,12 +222,36 @@ genuine remaining CORE of obligation 5.
   Increment 2) needs exactly `xp < xpToNextLevel level` to show `+10` xp shrinks the
   xp-distance. With the invariant free-from-spawn, Increment 2 replicates the
   existing `reachUnlockLevel` argument with NO new runtime obligation.
-- **NOT yet done (Increment 2):** the `planFor .objectiveStep` routing itself
-  (conditional on `objectiveStepIsFight`) + the `progressMeans_decreases_…`
-  objectiveStep-fight case (discharge `hperc` via `cycleStepN_preserves_XpInBand`)
-  + reformulated `hfightFires`. Drafted this session, then REVERTED to keep the
-  build green (the measure-decrease threading is the focused next step). The
-  capstone disclosure below still stands until Increment 2 lands.
+### Increment 2 landed (2026-06-16) — the routing + measure-decrease
+
+- **`planFor .objectiveStep s = if s.objectiveStepIsFight then [.fight] else
+  [.objectiveStep]`** (CycleStep.lean) — the model now FIGHTS for a combat
+  objective. Fixed the dependent proofs: `planFor_ne_nil`,
+  `cycleStep_progress_or_waits` (objectiveStep-fight ≠ s via xp+10 / rollover),
+  `CycleStep.cycleStep_level_ge`, and `CycleStepCharacterization` (audited; added
+  an explicit `objectiveStep ⇒ ¬isFight` guard since a combat objective now
+  genuinely advances level/xp).
+- **`progressMeans_decreases_extMeasure_or_advances_level`** — objectiveStep-fight
+  case proven: either level advances (rollover) OR xpDeficit strictly decreases,
+  IDENTICAL to the `reachUnlockLevel` fight argument. `hperc` extended to the
+  3-way disjunction `{bankUnlock, reachUnlockLevel, objectiveStep∧isFight}` and
+  threaded through `cumulative_progress_under_no_wait_restricted` (signature +
+  WF-induction motive + `hperc_succ`). Both are leaf theorems (audited only), so
+  the signature change ripples nowhere else. Full build 6199 jobs green; liveness
+  axiom check OK.
+- ⇒ the model is now genuinely CAPABLE of general char leveling (objectiveStep at
+  ladder idx 14 fires while level<50; the cumulative-progress measure proves it
+  advances level). The perception invariant the fight needs is available free
+  from spawn via Increment 1's `cycleStepN_preserves_XpInBand`.
+
+- **NOT yet done (Increment 3 — the capstone wiring):** reformulate
+  `GlobalInvariants.hfightFires` to admit objectiveStep-fight (making it
+  SATISFIABLE, killing the vacuity) + re-route
+  `LifecycleBound7.lifecycle_progress_from_bounds_proven` to advance on
+  objectiveStep-fight, discharging the new fight-fairness via
+  `cycleStepN_preserves_XpInBand`. Until this lands the capstone disclosure below
+  still stands (the headline `ai_reaches_level_fifty` is vacuous on the OLD
+  hfightFires).
 
 ### Status surfaced in code (2026-06-16)
 `LevelFiftyReachable.lean` now carries a ⚠ HONEST SCOPE DISCLOSURE at the

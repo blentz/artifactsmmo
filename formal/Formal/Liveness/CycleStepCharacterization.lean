@@ -53,17 +53,23 @@ theorem cycleStep_eq_fight_when_fightFires (s : State)
   | inl h => exact cycleStep_eq_fight_when_bankUnlock s h
   | inr h => exact cycleStep_eq_fight_when_reachUnlockLevel s h
 
-/-- When ladder doesn't fire `.bankUnlock`/`.reachUnlockLevel`/`.completeTask`,
-    `cycleStep s` preserves both `level` and `xp`. Uses the planFor table:
-    every other ladder slot maps to an ActionKind that's not `.fight`
-    and not `.completeTask`. -/
+/-- When ladder doesn't fire `.bankUnlock`/`.reachUnlockLevel`/`.completeTask`
+    (and any firing `.objectiveStep` is NOT a combat step), `cycleStep s`
+    preserves both `level` and `xp`. Uses the planFor table: every other ladder
+    slot maps to an ActionKind that's not `.fight` and not `.completeTask`.
+
+    O5.2 (2026-06-16): the `objectiveStep`-is-fight guard is now explicit — a
+    combat objective DOES advance level/xp (the faithful general leveling path),
+    so the "no level/xp change" claim is true exactly when it is a placeholder. -/
 theorem cycleStep_xp_level_preserved_when_no_fight_no_complete (s : State)
     (h : productionLadder s ≠ some .bankUnlock
          ∧ productionLadder s ≠ some .reachUnlockLevel
-         ∧ productionLadder s ≠ some .completeTask) :
+         ∧ productionLadder s ≠ some .completeTask
+         ∧ (productionLadder s = some .objectiveStep →
+              s.objectiveStepIsFight = false)) :
     (cycleStep s).level = s.level ∧ (cycleStep s).xp = s.xp := by
   unfold cycleStep
-  obtain ⟨hbu, hru, hct⟩ := h
+  obtain ⟨hbu, hru, hct, hof⟩ := h
   -- Case-split on productionLadder s; rule out the fight-driving cases.
   cases hpl : productionLadder s with
   | none => exact ⟨rfl, rfl⟩
@@ -124,8 +130,14 @@ theorem cycleStep_xp_level_preserved_when_no_fight_no_complete (s : State)
             ∧ (applyActionKind .taskCancel s).xp = s.xp
       exact ⟨rfl, rfl⟩
     | objectiveStep =>
-      show (applyActionKind .objectiveStep s).level = s.level
-            ∧ (applyActionKind .objectiveStep s).xp = s.xp
+      have hisf' : s.objectiveStepIsFight = false := hof hpl
+      show (match (if s.objectiveStepIsFight then [ActionKind.fight]
+                    else [ActionKind.objectiveStep]) with
+              | [] => s | a :: _ => applyActionKind a s).level = s.level
+            ∧ (match (if s.objectiveStepIsFight then [ActionKind.fight]
+                    else [ActionKind.objectiveStep]) with
+              | [] => s | a :: _ => applyActionKind a s).xp = s.xp
+      rw [if_neg (by simp [hisf'])]
       exact ⟨rfl, rfl⟩
     | pursueTask =>
       show (applyActionKind .taskTrade s).level = s.level

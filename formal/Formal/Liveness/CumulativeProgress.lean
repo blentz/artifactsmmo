@@ -667,8 +667,21 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
       show (applyActionKind .taskCancel s).level ≥ s.level
       simp [applyActionKind]
     | objectiveStep =>
-      show (applyActionKind .objectiveStep s).level ≥ s.level
-      simp [applyActionKind]
+      -- O5.2: planFor .objectiveStep = fight-or-placeholder (defeq to the if);
+      -- both branches preserve level (≥).
+      by_cases hisf : s.objectiveStepIsFight = true
+      · show (match (if s.objectiveStepIsFight then [ActionKind.fight]
+                      else [ActionKind.objectiveStep]) with
+                | [] => s | a :: _ => applyActionKind a s).level ≥ s.level
+        rw [if_pos hisf]
+        show (applyActionKind .fight s).level ≥ s.level
+        simp only [applyActionKind]; split <;> omega
+      · show (match (if s.objectiveStepIsFight then [ActionKind.fight]
+                      else [ActionKind.objectiveStep]) with
+                | [] => s | a :: _ => applyActionKind a s).level ≥ s.level
+        rw [if_neg hisf]
+        show (applyActionKind .objectiveStep s).level ≥ s.level
+        simp [applyActionKind]
     | pursueTask =>
       show (applyActionKind .taskTrade s).level ≥ s.level
       simp [applyActionKind]
@@ -713,7 +726,8 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
     (hmem : k ∈ progressMeans)
     (hex : k = .taskExchange → s.taskExchangeMinCoins > 0)
     (hbe : k = .bankExpand → s.nextExpansionCost > 0)
-    (hperc : k = .bankUnlock ∨ k = .reachUnlockLevel →
+    (hperc : k = .bankUnlock ∨ k = .reachUnlockLevel
+              ∨ (k = .objectiveStep ∧ s.objectiveStepIsFight = true) →
               s.xp < xpToNextLevel s.level ∧ s.level < 50) :
     (cycleStep s).level > s.level
     ∨ ((cycleStep s).level = s.level
@@ -782,7 +796,7 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
     have hcs : cycleStep s = applyActionKind .fight s := by
       unfold cycleStep; rw [hk]; rfl
     rw [hcs]
-    have ⟨hxpInv, _hlvlInv⟩ := hperc (Or.inr rfl)
+    have ⟨hxpInv, _hlvlInv⟩ := hperc (Or.inr (Or.inl rfl))
     by_cases hwill : (decide (s.xp + 10 ≥ xpToNextLevel s.level)
                        && decide (s.level < 50)) = true
     · left
@@ -949,28 +963,67 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
       show b2n false < b2n s.sellableInventoryNonempty
       rw [hpre]; decide
   | objectiveStep =>
-    right
-    have hcs : cycleStep s = applyActionKind .objectiveStep s := by
-      unfold cycleStep; rw [hk]; rfl
-    rw [hcs]
-    simp only [fires, ProductionLadder.objectiveStepFires] at hfires
-    refine ⟨rfl, ?_⟩
-    refine extLt_of_objStep_dec ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_
-    · unfold extMeasure applyActionKind; rfl
-    · unfold extMeasure applyActionKind; rfl
-    · unfold extMeasure applyActionKind; rfl
-    · unfold extMeasure applyActionKind; rfl
-    · unfold extMeasure applyActionKind; rfl
-    · unfold extMeasure applyActionKind; rfl
-    · unfold extMeasure applyActionKind; rfl
-    · unfold extMeasure applyActionKind; rfl
-    · unfold extMeasure applyActionKind; rfl
-    · unfold extMeasure applyActionKind; rfl
-    · unfold extMeasure applyActionKind; rfl
-    · show b2n (({s with objectiveStepFires := false} : State).objectiveStepFires)
-            < b2n s.objectiveStepFires
-      show b2n false < b2n s.objectiveStepFires
-      rw [hfires]; decide
+    by_cases hisf : s.objectiveStepIsFight = true
+    · -- O5.2: combat objective ⇒ FIGHT. Either level advances (rollover) OR
+      -- xpDeficit decreases — identical to the reachUnlockLevel fight argument,
+      -- with the perception invariant supplied by the extended `hperc`.
+      have hcs : cycleStep s = applyActionKind .fight s := by
+        unfold cycleStep; rw [hk]; simp [planFor, hisf]
+      rw [hcs]
+      have ⟨hxpInv, _hlvlInv⟩ := hperc (Or.inr (Or.inr ⟨rfl, hisf⟩))
+      by_cases hwill : (decide (s.xp + 10 ≥ xpToNextLevel s.level)
+                         && decide (s.level < 50)) = true
+      · left
+        have hlvl : (applyActionKind .fight s).level = s.level + 1 := by
+          simp only [applyActionKind]; simp [hwill]
+        rw [hlvl]; omega
+      · right
+        have hwillf : (decide (s.xp + 10 ≥ xpToNextLevel s.level)
+                        && decide (s.level < 50)) = false := by
+          cases hbv : (decide (s.xp + 10 ≥ xpToNextLevel s.level)
+                        && decide (s.level < 50)) with
+          | true  => exact absurd hbv hwill
+          | false => rfl
+        have hxp : (applyActionKind .fight s).xp = s.xp + 10 := by
+          simp only [applyActionKind]; simp [hwillf]
+        have hlvl_eq : (applyActionKind .fight s).level = s.level := by
+          simp only [applyActionKind]; simp [hwillf]
+        refine ⟨hlvl_eq, ?_⟩
+        refine extLt_of_xp_dec ?_ ?_
+        · show 50 - (applyActionKind .fight s).level = 50 - s.level
+          rw [hlvl_eq]
+        · show xpToNextLevel (applyActionKind .fight s).level
+                - (applyActionKind .fight s).xp
+                < xpToNextLevel s.level - s.xp
+          rw [hlvl_eq, hxp]
+          omega
+    · -- Placeholder branch (isFight = false): objectiveStepFires slot decreases.
+      right
+      have hisf' : s.objectiveStepIsFight = false := by
+        cases h : s.objectiveStepIsFight with
+        | true => exact absurd h hisf
+        | false => rfl
+      have hcs : cycleStep s = applyActionKind .objectiveStep s := by
+        unfold cycleStep; rw [hk]; simp [planFor, hisf']
+      rw [hcs]
+      simp only [fires, ProductionLadder.objectiveStepFires] at hfires
+      refine ⟨rfl, ?_⟩
+      refine extLt_of_objStep_dec ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_
+      · unfold extMeasure applyActionKind; rfl
+      · unfold extMeasure applyActionKind; rfl
+      · unfold extMeasure applyActionKind; rfl
+      · unfold extMeasure applyActionKind; rfl
+      · unfold extMeasure applyActionKind; rfl
+      · unfold extMeasure applyActionKind; rfl
+      · unfold extMeasure applyActionKind; rfl
+      · unfold extMeasure applyActionKind; rfl
+      · unfold extMeasure applyActionKind; rfl
+      · unfold extMeasure applyActionKind; rfl
+      · unfold extMeasure applyActionKind; rfl
+      · show b2n (({s with objectiveStepFires := false} : State).objectiveStepFires)
+              < b2n s.objectiveStepFires
+        show b2n false < b2n s.objectiveStepFires
+        rw [hfires]; decide
   | taskExchange =>
     right
     have hcs : cycleStep s = applyActionKind .taskExchange s := by
@@ -1106,7 +1159,9 @@ theorem cumulative_progress_under_no_wait_restricted
     (hrestricted : ∀ k k', productionLadder (cycleStepN k s) = some k' →
                             k' ∈ progressMeans)
     (hperc : ∀ k k', productionLadder (cycleStepN k s) = some k' →
-                      (k' = .bankUnlock ∨ k' = .reachUnlockLevel) →
+                      (k' = .bankUnlock ∨ k' = .reachUnlockLevel
+                        ∨ (k' = .objectiveStep
+                            ∧ (cycleStepN k s).objectiveStepIsFight = true)) →
                       (cycleStepN k s).xp < xpToNextLevel (cycleStepN k s).level
                       ∧ (cycleStepN k s).level < 50) :
     ∃ k, (cycleStepN k s).level > s.level := by
@@ -1129,7 +1184,9 @@ theorem cumulative_progress_under_no_wait_restricted
         (∀ k k', productionLadder (cycleStepN k s') = some k' →
                   k' ∈ progressMeans) →
         (∀ k k', productionLadder (cycleStepN k s') = some k' →
-                  (k' = .bankUnlock ∨ k' = .reachUnlockLevel) →
+                  (k' = .bankUnlock ∨ k' = .reachUnlockLevel
+                    ∨ (k' = .objectiveStep
+                        ∧ (cycleStepN k s').objectiveStepIsFight = true)) →
                   (cycleStepN k s').xp < xpToNextLevel (cycleStepN k s').level
                   ∧ (cycleStepN k s').level < 50) →
         ∃ k, (cycleStepN k s').level > s'.level by
@@ -1145,7 +1202,9 @@ theorem cumulative_progress_under_no_wait_restricted
           (cycleStepN k s').nextExpansionCost > 0) →
     (∀ k k', productionLadder (cycleStepN k s') = some k' → k' ∈ progressMeans) →
     (∀ k k', productionLadder (cycleStepN k s') = some k' →
-              (k' = .bankUnlock ∨ k' = .reachUnlockLevel) →
+              (k' = .bankUnlock ∨ k' = .reachUnlockLevel
+                ∨ (k' = .objectiveStep
+                    ∧ (cycleStepN k s').objectiveStepIsFight = true)) →
               (cycleStepN k s').xp < xpToNextLevel (cycleStepN k s').level
               ∧ (cycleStepN k s').level < 50) →
     ∃ k, (cycleStepN k s').level > s'.level)
@@ -1174,7 +1233,8 @@ theorem cumulative_progress_under_no_wait_restricted
       rw [← hk_eq]; exact hk0'
     have := hbe' 0 hkbe
     simpa [cycleStepN] using this
-  have hperc0 : k0 = .bankUnlock ∨ k0 = .reachUnlockLevel →
+  have hperc0 : k0 = .bankUnlock ∨ k0 = .reachUnlockLevel
+                  ∨ (k0 = .objectiveStep ∧ s'.objectiveStepIsFight = true) →
                   s'.xp < xpToNextLevel s'.level ∧ s'.level < 50 := by
     intro hor
     have := hperc' 0 k0 hk0' hor
@@ -1220,7 +1280,9 @@ theorem cumulative_progress_under_no_wait_restricted
       rw [cycleStepN_succ] at this
       exact this hk
     have hperc_succ : ∀ k k', productionLadder (cycleStepN k (cycleStep s')) = some k' →
-                                (k' = .bankUnlock ∨ k' = .reachUnlockLevel) →
+                                (k' = .bankUnlock ∨ k' = .reachUnlockLevel
+                                  ∨ (k' = .objectiveStep
+                                      ∧ (cycleStepN k (cycleStep s')).objectiveStepIsFight = true)) →
                                 (cycleStepN k (cycleStep s')).xp
                                   < xpToNextLevel (cycleStepN k (cycleStep s')).level
                                 ∧ (cycleStepN k (cycleStep s')).level < 50 := by

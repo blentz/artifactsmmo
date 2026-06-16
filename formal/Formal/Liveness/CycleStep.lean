@@ -126,7 +126,14 @@ noncomputable def planFor : MeansKind → State → Plan
   | .sellPressured    , _ => [.npcSell]
   | .lowYieldCancel   , _ => [.taskCancel]
   | .taskCancel       , _ => [.taskCancel]
-  | .objectiveStep    , _ => [.objectiveStep]
+  | .objectiveStep    , s =>
+      -- O5.2 (2026-06-16): a combat/char-leveling objective dispatches a
+      -- Fight-led plan (production `ReachCharLevel` meta-goal + monster-task /
+      -- combat objectives). When the objective step is a fight, the cycle
+      -- FIGHTS (+10 char xp / rollover via `applyActionKind .fight`) — the
+      -- model's faithful general leveling path. Otherwise the synthetic
+      -- placeholder clears `objectiveStepFires` (legacy default: isFight=false).
+      if s.objectiveStepIsFight then [.fight] else [.objectiveStep]
   | .pursueTask       , _ => [.taskTrade]
   | .acceptTask       , _ => [.acceptTask]
   | .taskExchange     , _ => [.taskExchange]
@@ -137,7 +144,9 @@ noncomputable def planFor : MeansKind → State → Plan
 
 /-- `planFor k s` is always non-empty (single-element). -/
 theorem planFor_ne_nil (k : MeansKind) (s : State) : planFor k s ≠ [] := by
-  cases k <;> simp [planFor]
+  cases k <;> simp only [planFor]
+  case objectiveStep => split <;> simp
+  all_goals simp
 
 /-! ## cycleStep — one cycle's pure transition -/
 
@@ -429,16 +438,43 @@ theorem cycleStep_progress_or_waits
     | inr h => rw [h] at hpre'; cases hpre'
   | objectiveStep =>
     left
-    have hcs : cycleStep s = applyActionKind .objectiveStep s := by
-      unfold cycleStep; rw [hk]; rfl
-    rw [hcs]
-    simp only [fires, ProductionLadder.objectiveStepFires] at hfires
-    intro heq
-    have hpost : ({s with objectiveStepFires := false} : State).objectiveStepFires = false := rfl
-    have hpre' : s.objectiveStepFires = false := by
-      have : (applyActionKind .objectiveStep s).objectiveStepFires = false := hpost
-      rw [heq] at this; exact this
-    rw [hfires] at hpre'; cases hpre'
+    by_cases hisf : s.objectiveStepIsFight = true
+    · -- O5.2: combat objective ⇒ cycle FIGHTS; xp+10 (or level rollover) ≠ s.
+      have hcs : cycleStep s = applyActionKind .fight s := by
+        unfold cycleStep; rw [hk]; simp [planFor, hisf]
+      rw [hcs]
+      intro heq
+      by_cases hwill : (decide (s.xp + 10 ≥ xpToNextLevel s.level)
+                         && decide (s.level < 50)) = true
+      · have hlvl : (applyActionKind .fight s).level = s.level + 1 := by
+          simp only [applyActionKind]; simp [hwill]
+        have hlvl_eq : (applyActionKind .fight s).level = s.level := by rw [heq]
+        omega
+      · have hwillf : (decide (s.xp + 10 ≥ xpToNextLevel s.level)
+                        && decide (s.level < 50)) = false := by
+          cases hbv : (decide (s.xp + 10 ≥ xpToNextLevel s.level)
+                        && decide (s.level < 50)) with
+          | true  => exact absurd hbv hwill
+          | false => rfl
+        have hxp : (applyActionKind .fight s).xp = s.xp + 10 := by
+          simp only [applyActionKind]; simp [hwillf]
+        have hxp_eq : (applyActionKind .fight s).xp = s.xp := by rw [heq]
+        omega
+    · -- Placeholder branch (isFight = false): clears objectiveStepFires.
+      have hisf' : s.objectiveStepIsFight = false := by
+        cases h : s.objectiveStepIsFight with
+        | true => exact absurd h hisf
+        | false => rfl
+      have hcs : cycleStep s = applyActionKind .objectiveStep s := by
+        unfold cycleStep; rw [hk]; simp [planFor, hisf']
+      rw [hcs]
+      simp only [fires, ProductionLadder.objectiveStepFires] at hfires
+      intro heq
+      have hpost : ({s with objectiveStepFires := false} : State).objectiveStepFires = false := rfl
+      have hpre' : s.objectiveStepFires = false := by
+        have : (applyActionKind .objectiveStep s).objectiveStepFires = false := hpost
+        rw [heq] at this; exact this
+      rw [hfires] at hpre'; cases hpre'
   | pursueTask =>
     left
     have hcs : cycleStep s = applyActionKind .taskTrade s := by
