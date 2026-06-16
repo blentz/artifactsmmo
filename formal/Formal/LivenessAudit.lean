@@ -42,6 +42,7 @@ import Formal.Liveness.ReducedReachability
 import Formal.Liveness.NoWait
 import Formal.Liveness.PerceptionInvariant
 import Formal.Liveness.FightFairness
+import Formal.Liveness.BlockerQuieting
 import Formal.Liveness.LifecycleBound
 import Formal.Liveness.LifecycleBound2
 import Formal.Liveness.LifecycleBound3
@@ -544,3 +545,22 @@ open Formal.Liveness.FightFairness
 #print axioms ai_reaches_level_fifty_from_fair_combat
 #print axioms combat_scheduled_of_persistent_and_quiet
 #print axioms ai_reaches_level_fifty_from_persistent_combat
+
+-- O5.2 blocker one-step quieting (2026-06-16): each objectiveStepBlocker's planFor
+-- action clears its own firing condition, so it cannot fire two cycles in a row
+-- (13 of 14; reachUnlockLevel is gap-bounded instead). Building blocks for
+-- BlockersQuietInfinitelyOften.
+open Formal.Liveness.BlockerQuieting
+#print axioms discardCritical_quiet_after_firing
+#print axioms discardHigh_quiet_after_firing
+#print axioms craftRelief_quiet_after_firing
+#print axioms depositFull_quiet_after_firing
+#print axioms gearReview_quiet_after_firing
+#print axioms claimPending_quiet_after_firing
+#print axioms sellPressured_quiet_after_firing
+#print axioms completeTask_quiet_after_firing
+#print axioms taskCancel_quiet_after_firing
+#print axioms lowYieldCancel_quiet_after_firing
+#print axioms restForCombat_quiet_after_firing
+#print axioms hpCritical_quiet_after_firing
+#print axioms bankUnlock_quiet_after_firing

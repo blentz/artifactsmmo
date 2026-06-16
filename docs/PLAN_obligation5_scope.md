@@ -315,8 +315,33 @@ HONEST: this is the transience REDUCTION, not the transience itself. The deep
 core `BlockersQuietInfinitelyOften`-from-spawn is NOT proven — see below. Not
 faked.
 
-### Remaining (the genuine deep liveness + O5.4)
-- **`BlockersQuietInfinitelyOften` from spawn — THE remaining core (unproven).**
+### Increment 6 landed (2026-06-16) — blocker one-step quieting (mechanism proven)
+
+`Formal/Liveness/BlockerQuieting.lean` (NEW, proven): each blocker's `planFor`
+action CLEARS its own firing condition, so it cannot fire two cycles running.
+`<blocker>_quiet_after_firing : productionLadder s = some b ⇒ fires b (cycleStep s)
+= false` for 13 of 14 blockers (all but `reachUnlockLevel`, which is gap-bounded):
+- flag-clearing: discardCritical/discardHigh (deleteItem→¬overstock), craftRelief
+  (craft), depositFull (depositAll), gearReview (optimizeLoadout), claimPending,
+  sellPressured (npcSell);
+- phase-reset: completeTask, taskCancel, lowYieldCancel (→ phase .none);
+- hp-restore: hpCritical, restForCombat (rest→hp=maxHp);
+- bootstrap: bankUnlock (fight flips bankAccessible:=true).
+Axioms standard + LIV-001; in the audit; full build 6203 jobs green; check OK.
+These are the building blocks: combined with flag/field MONOTONICITY (no
+`applyActionKind` re-arms the opaque flags / hp / level / bankAccessible) they bound
+total blocker firings.
+
+### Remaining (the assembly + O5.4)
+- **`BlockersQuietInfinitelyOften` ASSEMBLY (unproven).** Lift one-step quieting to
+  finite-total-firing via flag-monotonicity (prove `<flag> = false` is
+  `cycleStep`-preserved — uniform `cases` over `applyActionKind`, none sets it true),
+  then "all blockers eventually permanently quiet ⇒ quiet ∞-often". The 3
+  task-phase blockers (completeTask/taskCancel/lowYieldCancel) re-arm only via the
+  task lifecycle, bounded under `CombatPersistent` (objectiveStep preempts pursueTask
+  so the task never re-completes). Still a multi-lemma assembly; the per-blocker
+  mechanism is now DONE.
+- **`BlockersQuietInfinitelyOften` from spawn — original framing (now reduced).**
   In-model each of the 14 `objectiveStepBlockers` clears its own firing flag on its
   `planFor` action (deleteItem→¬overstock, depositAll→¬deposits, npcSell→¬sellable,
   completeTask→task cleared, bootstrap fights retire on unlock) and nothing re-arms
