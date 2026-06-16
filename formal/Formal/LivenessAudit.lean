@@ -50,6 +50,7 @@ import Formal.Liveness.SettledReach
 import Formal.Liveness.WarmupCleared
 import Formal.Liveness.Leveling
 import Formal.Liveness.FightReady
+import Formal.Liveness.GearTierLeveling
 import Formal.Liveness.LifecycleBound
 import Formal.Liveness.LifecycleBound2
 import Formal.Liveness.LifecycleBound3
@@ -643,3 +644,12 @@ open Formal.Liveness.FightReady
 #print axioms FightReady_cycleStep
 #print axioms hfightFires_of_fightReady
 #print axioms ai_reaches_level_fifty_of_fightReady
+
+-- O5.2 gear-tier part 2 brick 1 (2026-06-16): WinnableAtEveryLevel (the gear-tier
+-- guarantee — a winnable XP-positive monster exists at every level) grounds combat-
+-- target existence via the proven picker headline, hence grounds objectiveStepFires/
+-- IsFight. The opaque-bool BINDING + the catalog derivation of WinnableAtEveryLevel
+-- are the named O5.4 residual.
+open Formal.Liveness.GearTierLeveling
+#print axioms combatTargetExists_of_gearTier
+#print axioms combatObjective_live_below_fifty

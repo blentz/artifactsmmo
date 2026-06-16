@@ -483,7 +483,27 @@ Axioms standard + LIV-001; in the audit; full build 6217 jobs green; check OK.
 the gear-tier fight-loop throughout, not gated on bank unlock. (`Settled`/`Leveling`
 retained as the stricter post-unlock special case.)
 
-### Remaining — part 2 (gear-tier winnability modeling) + REACH `FightReady` + O5.4
+### Increment 16 landed (2026-06-16) — part 2 brick 1: gear-tier winnability grounding
+
+`Formal/Liveness/GearTierLeveling.lean` (NEW, proven): connects the gear-tier
+guarantee to the combat loop, REUSING the proven picker machinery
+(`CombatTargetExistence.pickWinnableWindowed_some_of_winnable_xp_positive`).
+- `WinnableAtEveryLevel winnable xpPos xs := ∀ L, ∃ m ∈ xs, winnable ∧ xpPos ∧
+  notOverleveled L m` — the gear-tier guarantee (as the bot crafts up the tiers, a
+  beatable XP-positive monster always sits in its window).
+- `combatTargetExists_of_gearTier` / `combatObjective_live_below_fifty` — gear-tier
+  winnability ⇒ the combat picker returns a target at every level ⇒ the objective tier
+  always has a Fight to emit (the grounding for `objectiveStepFires`/`objectiveStepIsFight`).
+Axioms standard + LIV-001; in the audit; full build 6219 jobs green; check OK.
+
+HONEST SCOPE: brick 1 is the clean conceptual hinge (winnability ⇒ combat-target
+exists), built on the already-proven+diff-bound picker. It does NOT yet (a) derive
+`WinnableAtEveryLevel` from the catalog + crafting recipes (the gear-tier CLOSURE), nor
+(b) bind the liveness opaque bools `objectiveStepFires`/`objectiveStepIsFight` to
+"picker returns a Fight target" (the O5.4 cycle-step SELECT differential). Those are
+the genuine remaining part-2 depth.
+
+### Remaining — part 2 depth (catalog/crafting closure + O5.4 select-bind) + REACH `FightReady`
 - **Gear-tier winnability** (user's "both, in order" — part 2): model that a winnable
   monster always exists at each level (via the gear tier the bot can craft), grounding
   `objectiveStepIsFight`/`is_winnable`. Connects the abstract combat objective to the
