@@ -458,7 +458,40 @@ REACHABLE (unlike `Settled`). The remaining mechanical piece is REACH `Leveling`
 - `TaskParked` — the task settles to `.none` or feasible-`.accepted` (lifecycle bounds).
 - perception (`objectiveStepFires`/`IsFight`) — the O5.4 input (proven necessary, incr 12).
 
-### Remaining — REACH a `Leveling` state from an ARBITRARY spawn (the transient) + O5.4
+### Increment 15 landed (2026-06-16) — gear-tier DECOUPLE from bank unlock
+
+USER CORRECTION: bank unlock is LATE (bank monster ~level 44; `reachUnlockLevel`
+fires only within `MAX_ACHIEVABLE_GAP = 5`, i.e. levels 39–43). `Settled`/`Leveling`
+wrongly required `bankAccessible` + `level ≥ bankRequiredLevel`, making the leveling
+steady-state contingent on a level-44 event. Faithful driver = the
+`CharacterObjective` (objectiveStep): target char level 50 + skills 50 + best gear,
+via gather/craft/fight, winnability-gated (gear tiers).
+
+`Formal/Liveness/FightReady.lean` (NEW, proven): `FightReady` = non-fight blockers
+quiet (hp=maxHp + 6 flags false + `TaskParked`) + perception — NO bank/level fields.
+- `productionLadder_fight_of_fightReady` (crux) — with the 12 non-fight blockers
+  quiet and a combat objective firing, the selected means is a FIGHT: the first of
+  `bankUnlock` / `reachUnlockLevel` / `objectiveStep` (all `.fight`). `findSome?`
+  collapse over the explicit ladder.
+- `FightReady_cycleStep` — `.fight` preserves every field (NO level/bank dependence)
+  ⇒ `FightReady` is `cycleStep`-invariant at EVERY level < 50.
+- `hfightFires_of_fightReady` + `ai_reaches_level_fifty_of_fightReady` — config-pos +
+  `FightReady` ⇒ level 50, bank-INDEPENDENT.
+Axioms standard + LIV-001; in the audit; full build 6217 jobs green; check OK.
+
+⇒ The capstone now reaches 50 from any `FightReady` state at ANY level — leveling is
+the gear-tier fight-loop throughout, not gated on bank unlock. (`Settled`/`Leveling`
+retained as the stricter post-unlock special case.)
+
+### Remaining — part 2 (gear-tier winnability modeling) + REACH `FightReady` + O5.4
+- **Gear-tier winnability** (user's "both, in order" — part 2): model that a winnable
+  monster always exists at each level (via the gear tier the bot can craft), grounding
+  `objectiveStepIsFight`/`is_winnable`. Connects the abstract combat objective to the
+  gather→craft→fight tier loop. Partly O5.4.
+- **Reach `FightReady`** from spawn: drive hp/flags/task to quiet (bounded warm-up;
+  monotone once cleared) + perception commits the combat objective.
+
+### (superseded) Remaining — REACH a `Leveling` state — now `FightReady` (bank-independent)
 - **Reach `Settled`** — `∃K, Settled (cycleStepN K s)` from spawn. This IS the
   transient (drive each clearing condition true once: discard overstock, deposit,
   sell, claim, rest, unlock bank, reach unlock level, park the task at .none) PLUS the

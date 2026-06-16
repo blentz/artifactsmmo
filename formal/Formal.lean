@@ -168,5 +168,6 @@ import Formal.Liveness.SettledWitness
 import Formal.Liveness.SettledReach
 import Formal.Liveness.WarmupCleared
 import Formal.Liveness.Leveling
+import Formal.Liveness.FightReady
 import Formal.DoomedMemo
 import Formal.SkillGateFastFail

@@ -49,6 +49,7 @@ import Formal.Liveness.SettledWitness
 import Formal.Liveness.SettledReach
 import Formal.Liveness.WarmupCleared
 import Formal.Liveness.Leveling
+import Formal.Liveness.FightReady
 import Formal.Liveness.LifecycleBound
 import Formal.Liveness.LifecycleBound2
 import Formal.Liveness.LifecycleBound3
@@ -631,3 +632,14 @@ open Formal.Liveness.Leveling
 #print axioms Leveling_cycleStep
 #print axioms combatScheduled_of_leveling
 #print axioms ai_reaches_level_fifty_of_leveling
+
+-- O5.2 gear-tier decouple (2026-06-16): FightReady is the bank-INDEPENDENT leveling
+-- invariant (non-fight blockers quiet + combat objective; NO bankAccessible /
+-- level≥bankRequiredLevel). The selected means is always a FIGHT (bankUnlock /
+-- reachUnlockLevel / objectiveStep), so reach-50 holds at every level<50 via gear-tier
+-- combat, not gated on the level-44 bank unlock.
+open Formal.Liveness.FightReady
+#print axioms productionLadder_fight_of_fightReady
+#print axioms FightReady_cycleStep
+#print axioms hfightFires_of_fightReady
+#print axioms ai_reaches_level_fifty_of_fightReady
