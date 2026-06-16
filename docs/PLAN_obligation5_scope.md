@@ -343,18 +343,24 @@ fires again — for **7 of 14** blockers (discardCritical, discardHigh, depositF
 gearReview, claimPending, sellPressured, craftRelief). Axioms standard + LIV-001; in
 the audit; full build 6205 jobs green; check OK.
 
+### Increment 8 landed (2026-06-16) — hp + bootstrap permanent quieting (10/14)
+
+`BlockerMonotone.lean` extended: `hp = maxHp` is `cycleStep`-monotone (`hp` only
+restored by rest, never reduced) ⇒ `hpCritical_quiet_forever`,
+`restForCombat_quiet_forever`; `bankAccessible = true` is monotone (fight flips it
+true, nothing flips back) ⇒ `bankUnlock_quiet_forever`. Now **10 of 14** blockers
+have permanent quieting. Full build 6205 jobs green; axiom check OK.
+
 ### Remaining (finish the assembly + O5.4)
-- **Permanent quieting for the other blockers:** hp-restore (hpCritical,
-  restForCombat — `hp` monotone toward `maxHp`, never reduced in-model); bootstrap
-  (bankUnlock — `bankAccessible` monotone true-ward; reachUnlockLevel — `level`
-  monotone up, gap ≤ 5); task-phase (completeTask, taskCancel, lowYieldCancel —
-  re-arm only via the task lifecycle, bounded under `CombatPersistent` because
-  objectiveStep preempts pursueTask so the task never re-completes). Same
-  monotonicity pattern, except the 3 task-phase need the CombatPersistent coupling.
-- **Final composition:** "each blocker eventually permanently quiet ⇒ ∃K all quiet
-  for k≥K ⇒ `BlockersQuietInfinitelyOften`." Needs the per-blocker "flag is
-  eventually false" (it fires at most once via one-step quieting + monotonicity,
-  then stays clear) assembled across all 14, then `∃K`.
+- **4 blockers left for permanent quieting:** reachUnlockLevel (`level` monotone up,
+  gap ≤ 5 — fires finitely, not via a single flag); and the 3 task-phase blockers
+  (completeTask, taskCancel, lowYieldCancel) which re-arm via the task lifecycle —
+  bounded only under `CombatPersistent` (objectiveStep preempts pursueTask so the
+  task never re-completes), so they need that coupling.
+- **Final composition:** assemble the per-blocker "fires at most once / eventually
+  permanently quiet" across all 14 into `∃K, ∀ k≥K, no blocker fires` ⇒
+  `BlockersQuietInfinitelyOften`. The combinatorial `∃K` (finite total firings over
+  an infinite trajectory) is the last real step.
 - **`BlockersQuietInfinitelyOften` from spawn — original framing (now well-reduced).**
   In-model each of the 14 `objectiveStepBlockers` clears its own firing flag on its
   `planFor` action (deleteItem→¬overstock, depositAll→¬deposits, npcSell→¬sellable,

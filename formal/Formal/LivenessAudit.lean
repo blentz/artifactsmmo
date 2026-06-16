@@ -578,3 +578,6 @@ open Formal.Liveness.BlockerMonotone
 #print axioms claimPending_quiet_forever
 #print axioms sellPressured_quiet_forever
 #print axioms craftRelief_quiet_forever
+#print axioms hpCritical_quiet_forever
+#print axioms restForCombat_quiet_forever
+#print axioms bankUnlock_quiet_forever

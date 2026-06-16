@@ -238,4 +238,81 @@ theorem craftRelief_quiet_forever (s : State) (h : s.craftReliefFires = false) (
     fires .craftRelief (cycleStepN n s) = false := by
   simp [fires, craftReliefFires, craftReliefFires_false_cycleStepN n s h]
 
+/-! ## hp = maxHp (hpCritical, restForCombat) — `hp` is only restored, never reduced -/
+
+theorem hp_eq_maxHp_apply (a : ActionKind) (s : State) (h : s.hp = s.maxHp) :
+    (applyActionKind a s).hp = (applyActionKind a s).maxHp := by
+  cases a
+  case move => simp only [applyActionKind]; rcases s.moveTarget with _ | ⟨tx, ty⟩ <;> exact h
+  case mapTransition => simp only [applyActionKind]; rcases s.moveTarget with _ | ⟨tx, ty⟩ <;> exact h
+  all_goals first | exact h | (simp [applyActionKind])
+
+theorem hp_eq_maxHp_cycleStep (s : State) (h : s.hp = s.maxHp) :
+    (cycleStep s).hp = (cycleStep s).maxHp := by
+  unfold cycleStep
+  split
+  · exact h
+  · split
+    · exact h
+    · exact hp_eq_maxHp_apply _ s h
+
+theorem hp_eq_maxHp_cycleStepN :
+    ∀ (n : Nat) (s : State), s.hp = s.maxHp → (cycleStepN n s).hp = (cycleStepN n s).maxHp
+  | 0, _, h => h
+  | n + 1, s, h => by
+      rw [cycleStepN_succ]
+      exact hp_eq_maxHp_cycleStepN n (cycleStep s) (hp_eq_maxHp_cycleStep s h)
+
+/-- Once hp is full, `hpCritical` never fires again (`hp/maxHp` is not below the
+    critical fraction when `hp = maxHp`). -/
+theorem hpCritical_quiet_forever (s : State) (h : s.hp = s.maxHp) (n : Nat) :
+    fires .hpCritical (cycleStepN n s) = false := by
+  have he := hp_eq_maxHp_cycleStepN n s h
+  simp only [fires, hpCriticalFires]
+  rcases Nat.eq_zero_or_pos (cycleStepN n s).maxHp with hz | hp
+  · simp [hz]
+  · have : ¬ (CRITICAL_HP_DEN * (cycleStepN n s).hp < CRITICAL_HP_NUM * (cycleStepN n s).maxHp) := by
+      rw [he]; simp only [CRITICAL_HP_DEN, CRITICAL_HP_NUM]; omega
+    simp [this]
+
+/-- Once hp is full, `restForCombat` never fires again (`hp < maxHp` fails). -/
+theorem restForCombat_quiet_forever (s : State) (h : s.hp = s.maxHp) (n : Nat) :
+    fires .restForCombat (cycleStepN n s) = false := by
+  have he := hp_eq_maxHp_cycleStepN n s h
+  simp only [fires, restForCombatFires]
+  have : ¬ ((cycleStepN n s).hp < (cycleStepN n s).maxHp) := by rw [he]; omega
+  simp [this]
+
+/-! ## bankAccessible (bankUnlock) — only ever flipped true, never back -/
+
+theorem bankAccessible_apply (a : ActionKind) (s : State) (h : s.bankAccessible = true) :
+    (applyActionKind a s).bankAccessible = true := by
+  cases a
+  case move => simp only [applyActionKind]; rcases s.moveTarget with _ | ⟨tx, ty⟩ <;> exact h
+  case mapTransition => simp only [applyActionKind]; rcases s.moveTarget with _ | ⟨tx, ty⟩ <;> exact h
+  case fight => simp only [applyActionKind]; simp [h]
+  all_goals exact h
+
+theorem bankAccessible_cycleStep (s : State) (h : s.bankAccessible = true) :
+    (cycleStep s).bankAccessible = true := by
+  unfold cycleStep
+  split
+  · exact h
+  · split
+    · exact h
+    · exact bankAccessible_apply _ s h
+
+theorem bankAccessible_cycleStepN :
+    ∀ (n : Nat) (s : State), s.bankAccessible = true → (cycleStepN n s).bankAccessible = true
+  | 0, _, h => h
+  | n + 1, s, h => by
+      rw [cycleStepN_succ]
+      exact bankAccessible_cycleStepN n (cycleStep s) (bankAccessible_cycleStep s h)
+
+/-- Once the bank is unlocked, `bankUnlock` never fires again (`¬bankAccessible`
+    fails). -/
+theorem bankUnlock_quiet_forever (s : State) (h : s.bankAccessible = true) (n : Nat) :
+    fires .bankUnlock (cycleStepN n s) = false := by
+  simp [fires, bankUnlockFires, bankAccessible_cycleStepN n s h]
+
 end Formal.Liveness.BlockerMonotone
