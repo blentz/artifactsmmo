@@ -98,7 +98,10 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
                  - m_crit * game_data.monster_lifesteal(monster_code) * m_atk_sum)
     if kill_step <= 0:
         return False  # the monster out-heals our damage — unkillable
-    rounds_to_kill = -(-(game_data.monster_hp(monster_code) * 10000) // kill_step)  # ceil
+    # Barrier is an absorbing shield: model it conservatively as extra effective HP
+    # the player must chew through (per-5-turn refresh deferred — first cut flat add).
+    effective_monster_hp = game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code)
+    rounds_to_kill = -(-(effective_monster_hp * 10000) // kill_step)  # ceil
     if rounds_to_kill > MAX_TURNS:
         return False
     raw_monster = sum(

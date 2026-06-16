@@ -582,6 +582,28 @@ class TestGameDataLoadMonsters:
         # poison and lifesteal are independent abilities: a poison monster has 0 lifesteal.
         assert gd.monster_lifesteal("spider") == 0
 
+    def test_loads_monster_barrier_from_effect(self):
+        """A monster's `barrier` ABILITY (an effect, not a base stat) parses so
+        predict_win sees its absorbing shield as extra effective HP. Absent ⇒ 0."""
+        gd = GameData()
+        monster = MagicMock()
+        monster.code = "king_slime"
+        monster.level = 30
+        monster.hp = 800
+        monster.critical_strike = 0
+        monster.initiative = 100
+        eff = MagicMock()
+        eff.code = "barrier"
+        eff.value = 100
+        monster.effects = [eff]
+        with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=make_page([monster])):
+            gd._load_monsters(MagicMock())
+        assert gd.monster_barrier("king_slime") == 100
+        assert gd.monster_barrier("no_such_monster") == 0
+        # barrier is independent of poison/lifesteal: a barrier monster has 0 of each.
+        assert gd.monster_poison("king_slime") == 0
+        assert gd.monster_lifesteal("king_slime") == 0
+
     def test_stops_on_none_result(self):
         gd = GameData()
         with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=None):

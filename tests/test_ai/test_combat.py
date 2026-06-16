@@ -39,7 +39,7 @@ def _record_mixed(store: LearningStore, action_repr: str, wins: int, losses: int
 
 
 def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob", lifesteal=0,
-        poison=0):
+        poison=0, barrier=0):
     gd = GameData()
     gd._monster_hp = {code: hp}
     gd._monster_attack = {code: attack or {}}
@@ -48,6 +48,7 @@ def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob", lifestea
     gd._monster_initiative = {code: initiative}
     gd._monster_lifesteal = {code: lifesteal}
     gd._monster_poison = {code: poison}
+    gd._monster_barrier = {code: barrier}
     return gd
 
 
@@ -99,6 +100,19 @@ def test_predict_win_false_when_poison_kills_a_harmless_monster():
     assert predict_win(state, gd_safe, "mob") is True
     gd_psn = _gd(hp=100, attack={}, initiative=10, poison=100)  # poison alone kills
     assert predict_win(state, gd_psn, "mob") is False
+
+
+def test_predict_win_false_when_barrier_pushes_kill_past_death():
+    """Barrier effective-HP term: a fight the player would WIN on the initiative
+    tiebreak (rtk == rtd == 2) becomes a LOSS once the monster's absorbing barrier
+    raises effective HP and stretches rounds_to_kill. WITHOUT the barrier term the
+    bot predicts a win — the mutation gate checks the term flips it. Player raw 50
+    vs hp 100 ⇒ 2 rounds; barrier 100 ⇒ effective hp 200 ⇒ 8 rounds > 2 ⇒ loss."""
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    gd_no = _gd(hp=100, attack={"fire": 50}, initiative=10)
+    assert predict_win(state, gd_no, "mob") is True
+    gd_bar = _gd(hp=100, attack={"fire": 50}, initiative=10, barrier=100)
+    assert predict_win(state, gd_bar, "mob") is False
 
 
 def test_round_half_up_rounds_half_upward():

@@ -81,8 +81,10 @@ def runPredictWin (g : Nat → Int) : Json :=
   let mAtkSum := g 32
   -- poison extension: [33]=monsterPoison (flat per-turn DoT on the player)
   let monsterPoison := g 33
+  -- barrier extension: [34]=monsterBarrier (absorbing shield ⇒ extra effective HP)
+  let monsterBarrier := g 34
   let verdict := predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-    pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison playerFirst
+    pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier playerFirst
   Json.mkObj [("win", Json.bool verdict), ("raw_player", Json.num rawPlayer),
     ("raw_monster", Json.num rawMonster)]
 

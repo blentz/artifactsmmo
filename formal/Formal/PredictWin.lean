@@ -119,13 +119,17 @@ def dieStep (rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison : Int) : In
   50 * rawMonster * (200 + mCrit) - pCrit * pLifesteal * pAtkSum + monsterPoison * 10000
 
 def predictWin (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-    pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison : Int) (playerFirst : Bool) : Bool :=
+    pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier : Int)
+    (playerFirst : Bool) : Bool :=
   if rawPlayer ≤ 0 then false
   else
     let ks := killStep rawPlayer pCrit mCrit mLifesteal mAtkSum
     if ks ≤ 0 then false                         -- monster out-heals our damage
     else
-      let roundsToKill := ceilDiv (monsterHp * 10000) ks
+      -- Barrier is an absorbing shield: model it conservatively as extra effective
+      -- monster HP the player must chew through before the kill (per-5-turn refresh
+      -- deferred — first cut is a flat add).
+      let roundsToKill := ceilDiv ((monsterHp + monsterBarrier) * 10000) ks
       if roundsToKill > maxTurns then false
       else
         let ds := dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison
@@ -324,13 +328,14 @@ theorem simRoundsNet_eq (hp step : Int) (hstep : 0 < step) (hhp : 1 ≤ hp)
 /-- `maxturns_sound`: `rounds_to_kill > MAX_TURNS ⇒ ¬win` (when the player can
 damage the monster net of its lifesteal, `killStep > 0`). -/
 theorem maxturns_sound (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-    pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison : Int) (playerFirst : Bool)
+    pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier : Int)
+    (playerFirst : Bool)
     (hraw : 0 < rawPlayer)
     (hks : 0 < killStep rawPlayer pCrit mCrit mLifesteal mAtkSum)
-    (hover : ceilDiv (monsterHp * 10000)
+    (hover : ceilDiv ((monsterHp + monsterBarrier) * 10000)
               (killStep rawPlayer pCrit mCrit mLifesteal mAtkSum) > maxTurns) :
     predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison playerFirst = false := by
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier playerFirst = false := by
   unfold predictWin
   rw [if_neg (Int.not_le.mpr hraw)]
   simp only [Int.not_le.mpr hks, if_false]
@@ -342,21 +347,22 @@ net-step fight simulation verdict. Same guard ladder: `rawPlayer ≤ 0`,
 `dieStep ≤ 0` (we out-sustain), initiative tiebreak. The two `ceilDiv` rounds
 are replaced by `simRoundsNet` with sufficient fuel. -/
 theorem predict_win_eq_sim (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-    pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison : Int) (playerFirst : Bool)
-    (hmhp : 1 ≤ monsterHp) (hphp : 1 ≤ playerMaxHp)
+    pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier : Int)
+    (playerFirst : Bool)
+    (hmhp : 1 ≤ monsterHp + monsterBarrier) (hphp : 1 ≤ playerMaxHp)
     (fk fd : Nat)
-    (hfk : (ceilDiv (monsterHp*10000)
+    (hfk : (ceilDiv ((monsterHp + monsterBarrier)*10000)
               (killStep rawPlayer pCrit mCrit mLifesteal mAtkSum)).toNat ≤ fk)
     (hfd : (ceilDiv (playerMaxHp*10000)
               (dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison)).toNat ≤ fd) :
     predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison playerFirst
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier playerFirst
       = (if rawPlayer ≤ 0 then false
          else
            let ks := killStep rawPlayer pCrit mCrit mLifesteal mAtkSum
            if ks ≤ 0 then false
            else
-             let rtk := simRoundsNet monsterHp ks fk
+             let rtk := simRoundsNet (monsterHp + monsterBarrier) ks fk
              if rtk > maxTurns then false
              else
                let ds := dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison
@@ -373,13 +379,13 @@ theorem predict_win_eq_sim (rawPlayer pCrit monsterHp rawMonster mCrit playerMax
     · simp only [hks, if_false]
       have hksp : 0 < killStep rawPlayer pCrit mCrit mLifesteal mAtkSum :=
         Int.not_le.mp hks
-      have hrtk : simRoundsNet monsterHp
+      have hrtk : simRoundsNet (monsterHp + monsterBarrier)
           (killStep rawPlayer pCrit mCrit mLifesteal mAtkSum) fk
-          = ceilDiv (monsterHp * 10000)
+          = ceilDiv ((monsterHp + monsterBarrier) * 10000)
               (killStep rawPlayer pCrit mCrit mLifesteal mAtkSum) :=
-        simRoundsNet_eq monsterHp _ hksp hmhp fk hfk
+        simRoundsNet_eq (monsterHp + monsterBarrier) _ hksp hmhp fk hfk
       rw [hrtk]
-      by_cases hover : ceilDiv (monsterHp * 10000)
+      by_cases hover : ceilDiv ((monsterHp + monsterBarrier) * 10000)
           (killStep rawPlayer pCrit mCrit mLifesteal mAtkSum) > maxTurns
       · simp only [hover, if_true]
       · simp only [hover, if_false]
@@ -455,12 +461,14 @@ theorem roundsTo_antitone_raw (hp raw1 raw2 crit : Int)
 flips a win into a loss. -/
 theorem predict_win_mono_player
     (raw1 raw2 pCrit monsterHp rawMonster mCrit playerMaxHp
-     pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison : Int) (playerFirst : Bool)
+     pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier : Int)
+    (playerFirst : Bool)
     (hpc : 0 ≤ pCrit) (hr1 : 0 < raw1) (hle : raw1 ≤ raw2) (hhp : 0 ≤ monsterHp)
+    (hbar : 0 ≤ monsterBarrier)
     (hwin : predictWin raw1 pCrit monsterHp rawMonster mCrit playerMaxHp
-              pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison playerFirst = true) :
+              pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier playerFirst = true) :
     predictWin raw2 pCrit monsterHp rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison playerFirst = true := by
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier playerFirst = true := by
   have hr2 : 0 < raw2 := by omega
   -- killStep is monotone in rawPlayer: ks1 ≤ ks2.
   have hksle : killStep raw1 pCrit mCrit mLifesteal mAtkSum
@@ -481,18 +489,18 @@ theorem predict_win_mono_player
       Int.not_le.mp hks1
     have hks2p : 0 < killStep raw2 pCrit mCrit mLifesteal mAtkSum := by omega
     rw [if_neg (Int.not_le.mpr hks2p)]
-    -- rounds-to-kill antitone in the divisor: rtk2 ≤ rtk1.
-    have hrtkle : ceilDiv (monsterHp * 10000)
+    -- rounds-to-kill antitone in the divisor: rtk2 ≤ rtk1 (effective HP = hp+barrier).
+    have hrtkle : ceilDiv ((monsterHp + monsterBarrier) * 10000)
           (killStep raw2 pCrit mCrit mLifesteal mAtkSum)
-        ≤ ceilDiv (monsterHp * 10000)
+        ≤ ceilDiv ((monsterHp + monsterBarrier) * 10000)
           (killStep raw1 pCrit mCrit mLifesteal mAtkSum) :=
-      ceilDiv_antitone_divisor _ _ _ (Int.mul_nonneg hhp (by omega)) hks1p hksle
+      ceilDiv_antitone_divisor _ _ _ (Int.mul_nonneg (by omega) (by omega)) hks1p hksle
     -- not over cap (else hwin false).
-    by_cases hover1 : ceilDiv (monsterHp * 10000)
+    by_cases hover1 : ceilDiv ((monsterHp + monsterBarrier) * 10000)
         (killStep raw1 pCrit mCrit mLifesteal mAtkSum) > maxTurns
     · rw [if_pos hover1] at hwin; exact absurd hwin (by decide)
     · rw [if_neg hover1] at hwin
-      have hover2 : ¬ ceilDiv (monsterHp * 10000)
+      have hover2 : ¬ ceilDiv ((monsterHp + monsterBarrier) * 10000)
           (killStep raw2 pCrit mCrit mLifesteal mAtkSum) > maxTurns := by
         omega
       rw [if_neg hover2]
@@ -515,13 +523,14 @@ into a loss. (killStep does not depend on monsterHp, so the kill-rounds numerato
 shrinks while the divisor is fixed.) -/
 theorem predict_win_mono_monsterhp
     (rawPlayer pCrit monsterHp1 monsterHp2 rawMonster mCrit playerMaxHp
-     pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison : Int) (playerFirst : Bool)
+     pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier : Int)
+    (playerFirst : Bool)
     (hpc : 0 ≤ pCrit) (hr : 0 < rawPlayer)
-    (hhp2 : 0 ≤ monsterHp2) (hle : monsterHp2 ≤ monsterHp1)
+    (hhp2 : 0 ≤ monsterHp2) (hle : monsterHp2 ≤ monsterHp1) (hbar : 0 ≤ monsterBarrier)
     (hwin : predictWin rawPlayer pCrit monsterHp1 rawMonster mCrit playerMaxHp
-              pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison playerFirst = true) :
+              pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier playerFirst = true) :
     predictWin rawPlayer pCrit monsterHp2 rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison playerFirst = true := by
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier playerFirst = true := by
   unfold predictWin at hwin ⊢
   rw [if_neg (Int.not_le.mpr hr)] at hwin
   rw [if_neg (Int.not_le.mpr hr)]
@@ -530,23 +539,24 @@ theorem predict_win_mono_monsterhp
   · rw [if_neg hks] at hwin ⊢
     have hksp : 0 < killStep rawPlayer pCrit mCrit mLifesteal mAtkSum :=
       Int.not_le.mp hks
-    -- rounds-to-kill monotone in the numerator (monsterHp): rtk2 ≤ rtk1.
-    have hrtkle : ceilDiv (monsterHp2 * 10000)
+    -- rounds-to-kill monotone in the numerator (effective HP = hp+barrier): rtk2 ≤ rtk1.
+    have hrtkle : ceilDiv ((monsterHp2 + monsterBarrier) * 10000)
           (killStep rawPlayer pCrit mCrit mLifesteal mAtkSum)
-        ≤ ceilDiv (monsterHp1 * 10000)
+        ≤ ceilDiv ((monsterHp1 + monsterBarrier) * 10000)
           (killStep rawPlayer pCrit mCrit mLifesteal mAtkSum) := by
       unfold ceilDiv
       apply fdiv_le_fdiv_of_le _ _ _ hksp
-      · have : 0 ≤ monsterHp2 * 10000 := Int.mul_nonneg hhp2 (by omega)
+      · have : 0 ≤ (monsterHp2 + monsterBarrier) * 10000 :=
+          Int.mul_nonneg (by omega) (by omega)
         omega
-      · have : monsterHp2 * 10000 ≤ monsterHp1 * 10000 :=
-          Int.mul_le_mul_of_nonneg_right hle (by omega)
+      · have : (monsterHp2 + monsterBarrier) * 10000 ≤ (monsterHp1 + monsterBarrier) * 10000 :=
+          Int.mul_le_mul_of_nonneg_right (by omega) (by omega)
         omega
-    by_cases hover1 : ceilDiv (monsterHp1 * 10000)
+    by_cases hover1 : ceilDiv ((monsterHp1 + monsterBarrier) * 10000)
         (killStep rawPlayer pCrit mCrit mLifesteal mAtkSum) > maxTurns
     · rw [if_pos hover1] at hwin; exact absurd hwin (by decide)
     · rw [if_neg hover1] at hwin
-      have hover2 : ¬ ceilDiv (monsterHp2 * 10000)
+      have hover2 : ¬ ceilDiv ((monsterHp2 + monsterBarrier) * 10000)
           (killStep rawPlayer pCrit mCrit mLifesteal mAtkSum) > maxTurns := by
         omega
       rw [if_neg hover2]

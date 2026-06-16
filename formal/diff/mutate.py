@@ -272,6 +272,9 @@ PREDICT_WIN_LIFESTEAL_MUTATIONS = [
     ("predict_win: drop monster poison term in dieStep",
      "                + game_data.monster_poison(monster_code) * 10000)",
      "                + game_data.monster_poison(monster_code) * 0)"),
+    ("predict_win: drop monster barrier term in effective HP",
+     "    effective_monster_hp = game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code)",
+     "    effective_monster_hp = game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code) * 0"),
 ]
 
 
