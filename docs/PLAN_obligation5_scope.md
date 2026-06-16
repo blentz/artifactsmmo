@@ -380,7 +380,21 @@ phase=.none, objectiveStepFires, objectiveStepIsFight):
   ONE hypothesis: the trajectory reaches a `Settled` state.
 Axioms standard + LIV-001; in the audit; full build 6207 jobs green; check OK.
 
-### Remaining — REACH a Settled state (the transient) + O5.4
+### Increment 11 landed (2026-06-16) — `Settled` satisfiable + a GROUNDED capstone
+
+`Formal/Liveness/SettledWitness.lean` (NEW, proven): `settledWitness` = the live
+`fixtureFreshState` with the task parked at `.none` and a combat objective committed.
+- **`settledWitness_isSettled`** — `Settled` is SATISFIABLE (anti-vacuity: the
+  `Settled`-gated capstone is a genuine implication, not vacuously true on `False`).
+- **`settledWitness_reaches_fifty : ∃ k, (cycleStepN k settledWitness).level ≥ 50`** —
+  the witness ALSO discharges spawn config-positivity (`taskExchangeMinCoins = 1`,
+  `nextExpansionCost = 1`), so `ai_reaches_level_fifty_of_settled` closes with NO
+  remaining hypotheses. A CONCRETE, hypothesis-free (modulo only LIV-001) proof that
+  the planner iterates `cycleStep` to level 50 from a real state — the honest,
+  non-vacuous payoff of the whole O5.2 arc. Axioms standard + LIV-001; in the audit;
+  full build 6209 jobs green; check OK.
+
+### Remaining — REACH a Settled state from an ARBITRARY spawn (the transient) + O5.4
 - **Reach `Settled`** — `∃K, Settled (cycleStepN K s)` from spawn. This IS the
   transient (drive each clearing condition true once: discard overstock, deposit,
   sell, claim, rest, unlock bank, reach unlock level, park the task at .none, commit

@@ -45,6 +45,7 @@ import Formal.Liveness.FightFairness
 import Formal.Liveness.BlockerQuieting
 import Formal.Liveness.BlockerMonotone
 import Formal.Liveness.BlockerSettled
+import Formal.Liveness.SettledWitness
 import Formal.Liveness.LifecycleBound
 import Formal.Liveness.LifecycleBound2
 import Formal.Liveness.LifecycleBound3
@@ -594,3 +595,10 @@ open Formal.Liveness.BlockerSettled
 #print axioms Settled_cycleStep
 #print axioms combatScheduled_of_settled
 #print axioms ai_reaches_level_fifty_of_settled
+
+-- O5.2 anti-vacuity (2026-06-16): Settled is satisfiable (settledWitness), and the
+-- witness discharges config-positivity + Settled, giving a CONCRETE hypothesis-free
+-- (modulo LIV-001) level-50 reachability — the non-vacuous payoff of the O5.2 work.
+open Formal.Liveness.SettledWitness
+#print axioms settledWitness_isSettled
+#print axioms settledWitness_reaches_fifty
