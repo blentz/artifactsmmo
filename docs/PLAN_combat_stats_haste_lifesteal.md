@@ -4,15 +4,22 @@
 **Priority:** high — `haste` is on 43 items and skews fight prediction; compounds the
 2026-06-15 combat-margin fix ([[project_combat_veto_threshold]]).
 
+## Corrected semantics (from game-data effect DESCRIPTIONS, authoritative)
+
+- **`haste`** = *"reduces the cooldown of a fight"* — COOLDOWN REDUCTION (faster
+  actions/fights = efficiency), **NOT combat damage**. Server applies it to action
+  cooldowns. So it does **NOT** belong in `predict_win` (fight win/loss is unchanged).
+  It's a UTILITY/efficiency stat → value it like `inventory_space`/`wisdom` (the
+  LIGHTWEIGHT flat-utility lockstep, no proven-core change). The earlier assumption
+  that haste affects damage was WRONG.
+- **`lifesteal`** = *"Restores 15% of total attack in HP after a critical strike"* —
+  heal-on-crit = combat SUSTAIN. This DOES affect `predict_win` (the player's
+  effective HP rises during the fight), so it's the heavier one (proven-core change).
+
 ## Problem
 
-Two combat stats are dropped by the effect parser / not modeled:
-- **`haste`** (43 items, e.g. `skullforged_pants`=8) — extra attacks per turn / faster
-  turn cadence = more damage output. Only in display code, NOT in `ItemStats`,
-  `predict_win`, or the scoring. So haste gear is undervalued AND `predict_win`
-  under-estimates damage for the player (and monsters with haste).
-- **`lifesteal`** (6, e.g. on gear/monsters) — heal-on-hit. Not in src at all.
-  `predict_win` ignores combat sustain → underestimates survivability with lifesteal.
+Both stats are dropped by the effect parser (the novice_guide allowlist gap), so
+haste/lifesteal gear is undervalued, and lifesteal is invisible to `predict_win`.
 
 ## Root cause
 

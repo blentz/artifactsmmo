@@ -420,6 +420,22 @@ class TestGameDataLoadItems:
             gd._load_items(MagicMock())
         assert gd.item_stats("backpack").inventory_space == 35
 
+    def test_loads_haste_effect(self):
+        """`haste` (cooldown reduction) parses into ItemStats so haste gear is valued."""
+        gd = GameData()
+        item = MagicMock()
+        item.code = "skullforged_pants"
+        item.level = 30
+        item.type_ = "leg_armor"
+        item.craft = UNSET
+        eff = MagicMock()
+        eff.code = "haste"
+        eff.value = 8
+        item.effects = [eff]
+        with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=make_page([item])):
+            gd._load_items(MagicMock())
+        assert gd.item_stats("skullforged_pants").haste == 8
+
 
 class TestGameDataLoadResources:
     def test_loads_skill_requirement(self):

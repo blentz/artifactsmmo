@@ -30,6 +30,13 @@ def test_values_inventory_space_so_bags_are_pursued():
     assert equip_value(bag) == 71
 
 
+def test_values_haste_efficiency():
+    """Haste (cooldown reduction) is valued like any utility: raw 8 → 2*8+1 = 17.
+    Was dropped by the parser; now haste gear is pursued."""
+    legs = ItemStats(code="haste_legs", level=1, type_="leg_armor", haste=8)
+    assert equip_value(legs) == 17
+
+
 def test_nontool_strictly_beats_tool_on_raw_tie():
     """Spec mirror of PurposeRouting.combatScore_tiebreaks_nontool_over_tool."""
     weapon = ItemStats(code="w", level=1, type_="weapon", attack={"earth": 5})

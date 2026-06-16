@@ -91,7 +91,8 @@ def _item_block(code_id: int, stats: ItemStats | None, slot: str) -> list[int]:
     fits = 1 if slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []) else 0
     return [code_id, stats.level, fits, *_elem_block(stats, "attack"),
             *_elem_block(stats, "resistance"), stats.critical_strike,
-            stats.hp_bonus + stats.wisdom + stats.prospecting + stats.inventory_space]
+            stats.hp_bonus + stats.wisdom + stats.prospecting + stats.inventory_space
+            + stats.haste]
 
 
 def _py_score(stats: ItemStats, slot: str, monster_atk: dict, monster_res: dict) -> int:
@@ -299,6 +300,25 @@ def test_bag_fills_empty_slot_via_inventory_space():
     result = pick_loadout("mon", state, game_data)
     assert result.get("bag_slot") == "backpack"
     _check(table, monster_atk, monster_res, 10, inventory, equipment, ["bag_slot"])
+
+
+def test_haste_armor_scores_its_efficiency_value():
+    """Haste (cooldown reduction) is a flat-utility stat the armor score now counts.
+    A leg armor with only haste=8 scores 8 (vs a 0-stat peer) and Python agrees with
+    the Lean oracle — exercises haste in flatUtil."""
+    table = _table(
+        ItemStats(code="haste_legs", level=1, type_="leg_armor", haste=8),
+        ItemStats(code="plain_legs", level=1, type_="leg_armor"),
+    )
+    monster_atk = {"fire": 5}
+    monster_res = {"fire": 0}
+    inventory = {"haste_legs": 1, "plain_legs": 1}
+    equipment = {"leg_armor_slot": None}
+    game_data = _FakeGameData(table, monster_atk, monster_res)
+    state = _make_state(5, inventory, equipment)
+    result = pick_loadout("mon", state, game_data)
+    assert result.get("leg_armor_slot") == "haste_legs"
+    _check(table, monster_atk, monster_res, 5, inventory, equipment, ["leg_armor_slot"])
 
 
 def test_upgrade_swaps():

@@ -847,6 +847,8 @@ class GameData:
                         stats.prospecting = effect.value
                     elif effect.code == "inventory_space":
                         stats.inventory_space = effect.value
+                    elif effect.code == "haste":
+                        stats.haste = effect.value
                     elif effect.code in _GATHERING_SKILLS:
                         # Tool bonus for a gather skill (e.g. axe → woodcutting).
                         # Game encodes as cooldown reduction (negative value = faster);

@@ -37,6 +37,9 @@ def test_equip_value_counts_utility_stats_so_artifact_not_discarded():
     # A bag's inventory_space also counts → not valued 0 / discarded.
     bag = ItemStats(code="backpack", level=10, type_="bag", inventory_space=35)
     assert _equip_value(bag) == 35
+    # Haste (cooldown reduction) also counts.
+    legs = ItemStats(code="haste_legs", level=1, type_="leg_armor", haste=8)
+    assert _equip_value(legs) == 8
 
 
 def _gd_with_sap_recipes() -> GameData:

@@ -27,6 +27,7 @@ class ItemStats:
     wisdom: int = 0                                              # +xp gain % (1% per 10 wisdom); utility/artifacts
     prospecting: int = 0                                         # +drop chance % (1% per 10 PP); utility/artifacts
     inventory_space: int = 0                                     # +inventory slots (bags); server raises inventory_max on equip
+    haste: int = 0                                               # +cooldown reduction % on fights (faster actions); efficiency utility
     # OpenAPI conformance (Item 14 drift remediation): every ItemSchema
     # field the bot's decision-making logic touches must round-trip
     # from /v3/items so the planner sees what the server sees.

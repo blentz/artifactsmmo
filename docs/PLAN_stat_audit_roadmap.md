@@ -16,14 +16,19 @@ the next added stat can't slip through silently.
 
 ## Prioritized work items
 
-| # | Stat / item | Count | Impact | Plan |
-|---|---|---|---|---|
-| 1 | `inventory_space` (bags) | 9 | **highest** — equip bags → capacity → kills discard pressure | `PLAN_inventory_space_bags.md` |
-| 2 | `haste` | 43 | combat damage output; skews predict_win | `PLAN_combat_stats_haste_lifesteal.md` |
-| 3 | restore-family (`restore`/`splash_restore`/`boost_hp`) | 8 | heal potions invisible | `PLAN_consumable_effects.md` (Stage 1, cheapest) |
-| 4 | `lifesteal` | 6 | combat sustain in predict_win | `PLAN_combat_stats_haste_lifesteal.md` |
-| 5 | `threat` | 45 | aggro — LOW for a solo bot; defer | (this doc) |
-| 6 | buff potions (`boost_dmg_*`/`boost_res_*`), `antipoison` | ~11 | needs pre-fight-buff / status modeling; defer | `PLAN_consumable_effects.md` (Stage 2/3) |
+| # | Stat / item | Count | Impact | Plan | Status |
+|---|---|---|---|---|---|
+| 1 | `inventory_space` (bags) | 9 | **highest** — equip bags → capacity → kills discard pressure | `PLAN_inventory_space_bags.md` | **DONE** (cd68214) |
+| 2 | `haste` | 43 | combat damage output; skews predict_win | `PLAN_combat_stats_haste_lifesteal.md` | TODO |
+| 3 | restore-family (`restore`/`splash_restore`) | 8 | heal potions invisible | `PLAN_consumable_effects.md` (Stage 1, cheapest) | **DONE** (7fc29bf; boost_hp deferred) |
+| 4 | `lifesteal` | 6 | combat sustain in predict_win | `PLAN_combat_stats_haste_lifesteal.md` | TODO |
+| 5 | `threat` | 45 | aggro — LOW for a solo bot; defer | (this doc) | deferred |
+| 6 | buff potions (`boost_dmg_*`/`boost_res_*`), `antipoison`, `boost_hp` | ~12 | needs pre-fight-buff / status modeling; defer | `PLAN_consumable_effects.md` (Stage 2/3) | deferred |
+
+**Done so far on this branch:** #3 restore-family (parser-only) + #1 bags/inventory_space
+(full equip-value lockstep). Both followed the parse→value→formal-lockstep template.
+**Next:** #2 haste — heavier (touches the proven `predict_win`); verify the haste
+formula from docs.artifactsmmo.com first.
 
 Monster-only ability codes (burn/poison/corrupted/frenzy/berserker_rage/void_drain/
 protective_bubble/reconstitution/vampiric_strike/barrier/shell/guard/healing_aura) are
