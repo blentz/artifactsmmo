@@ -48,6 +48,7 @@ import Formal.Liveness.BlockerSettled
 import Formal.Liveness.SettledWitness
 import Formal.Liveness.SettledReach
 import Formal.Liveness.WarmupCleared
+import Formal.Liveness.Leveling
 import Formal.Liveness.LifecycleBound
 import Formal.Liveness.LifecycleBound2
 import Formal.Liveness.LifecycleBound3
@@ -620,3 +621,13 @@ open Formal.Liveness.SettledReach
 open Formal.Liveness.WarmupCleared
 #print axioms MechCleared_cycleStep
 #print axioms settled_of_mechCleared
+
+-- O5.2 warm-up brick 2 (2026-06-16): Leveling — the REACHABLE steady state
+-- (MechCleared + parked task + perception). Weaker than Settled (no phase=.none, so a
+-- feasible accepted task qualifies), self-preserving via the objectiveStep→fight cycle,
+-- and discharges CombatObjectiveFairlyScheduled + level-50 reachability.
+open Formal.Liveness.Leveling
+#print axioms Leveling_blockers_quiet
+#print axioms Leveling_cycleStep
+#print axioms combatScheduled_of_leveling
+#print axioms ai_reaches_level_fifty_of_leveling

@@ -432,7 +432,33 @@ That predicate IS fight-invariant (phase unchanged by fight; quiet preserved) an
 reachable. Next brick: define it, re-run the selection→fight→invariant chain (mirrors
 `BlockerSettled` but task-quiet instead of phaseNone), then reach it from spawn.
 
-### Remaining — REACH a Settled state from an ARBITRARY spawn (the transient) + O5.4
+### Increment 14 landed (2026-06-16) — warm-up brick 2: the REACHABLE `Leveling` state
+
+`Formal/Liveness/Leveling.lean` (NEW, proven): `Leveling` = `MechCleared` +
+`TaskParked` + perception, where `TaskParked s := phase=.none ∨ (phase=.accepted ∧
+taskFeasibleProjected)`. This is the weaker, REACHABLE steady state superseding
+`Settled` (no `phase=.none` requirement, so a feasible accepted task qualifies — the
+bot levels without ever completing the task). Proven, mirroring `BlockerSettled`:
+- `TaskParked_blockers_quiet` — a parked task keeps completeTask/lowYieldCancel/
+  taskCancel quiet (both disjuncts).
+- `Leveling_blockers_quiet` — all 14 blockers quiet (11 monotone + 3 task).
+- `Leveling_productionLadder` — objectiveStep selected.
+- `TaskParked_fight` + `Leveling_cycleStep` — `.fight` preserves phase &
+  taskFeasibleProjected (and `phase≠inProgress` keeps lowYieldCancel quiet despite the
+  actionsAttempted bump), so `Leveling` is `cycleStep`-invariant.
+- `combatScheduled_of_leveling` + `ai_reaches_level_fifty_of_leveling` — a single
+  `Leveling` state ⇒ `CombatObjectiveFairlyScheduled` ⇒ level 50.
+Axioms standard + LIV-001; in the audit; full build 6215 jobs green; check OK.
+
+⇒ The capstone now reaches level 50 from any `Leveling` state, and `Leveling` is
+REACHABLE (unlike `Settled`). The remaining mechanical piece is REACH `Leveling`:
+- `MechCleared` — the bootstrap (fights to unlock bank + reach unlock level) +
+  inventory clearing (each discretionary blocker fires once, monotone after). Bounded
+  in-model liveness; the per-condition stays-true is proven (incr 7–9).
+- `TaskParked` — the task settles to `.none` or feasible-`.accepted` (lifecycle bounds).
+- perception (`objectiveStepFires`/`IsFight`) — the O5.4 input (proven necessary, incr 12).
+
+### Remaining — REACH a `Leveling` state from an ARBITRARY spawn (the transient) + O5.4
 - **Reach `Settled`** — `∃K, Settled (cycleStepN K s)` from spawn. This IS the
   transient (drive each clearing condition true once: discard overstock, deposit,
   sell, claim, rest, unlock bank, reach unlock level, park the task at .none) PLUS the
