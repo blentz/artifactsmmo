@@ -270,12 +270,38 @@ genuine remaining CORE of obligation 5.
 - Capstone axioms {propext, Classical.choice, Quot.sound, xpToNextLevel(_pos)} =
   standard + LIV-001; full build 6199 jobs green; liveness axiom check OK.
 
-### Remaining (O5.2 fairness discharge + O5.4)
-- **Discharge `hfightFires` for a concrete spawn trajectory** — prove the planner
-  DOES keep a combat objective active (objectiveStep∧isFight fires) infinitely
-  often until 50. This is the genuine runtime fairness property; the capstone
-  proves reachability MODULO it. (Connects to the guards-are-transient argument:
-  guards each make measure progress so objectiveStep eventually gets its turn.)
+### Increment 4 landed (2026-06-16) — fairness REDUCTION + end-to-end capstone
+
+`Formal/Liveness/FightFairness.lean` (NEW, proven) reduces `hfightFires` to ONE
+precise runtime Prop and proves the reduction + an end-to-end theorem:
+- **`productionLadder_eq_objectiveStep_of_unblocked`** — selection mechanics: a
+  firing combat objective with all 14 higher-priority means (`objectiveStepBlockers`,
+  idx 0–13) quiet ⇒ the ladder SELECTS `objectiveStep` (so the cycle fights). Pure
+  `findSome?`-over-`allInLadderOrder` proof (`ladder_split_objectiveStep` by decide).
+- **`CombatObjectiveFairlyScheduled s`** — the EXACT remaining obligation as a Lean
+  Prop: ∀N ∃k≥N the combat objective fires, is combat-typed (`objectiveStepIsFight`),
+  and is unblocked at `cycleStepN k s`.
+- **`hfightFires_of_combat_scheduled`** — discharges the capstone's 3-way
+  `hfightFires` from `CombatObjectiveFairlyScheduled`.
+- **`ai_reaches_level_fifty_from_fair_combat`** — END-TO-END: spawn config-positivity
+  (`taskExchangeMinCoins`, `nextExpansionCost` > 0) + `CombatObjectiveFairlyScheduled`
+  ⇒ `∃ k, level ≥ 50`. Composes the reduction with
+  `ai_reaches_level_fifty_config_positive`. Axioms standard + LIV-001; in the
+  liveness audit; full build 6201 jobs green; axiom check OK.
+
+⇒ Every `GlobalInvariants` component is now discharged or named precisely:
+hnowait (unconditional), hex/hbe (config-invariant), and `hfightFires` reduced to
+the single satisfiable Prop `CombatObjectiveFairlyScheduled`. The capstone is honest
+conditional reachability on exactly ONE runtime property — "the planner keeps
+fighting via a combat objective."
+
+### Remaining (the deep liveness + O5.4)
+- **Discharge `CombatObjectiveFairlyScheduled` from a concrete spawn** — the
+  blockers-are-transient argument: each of the 14 `objectiveStepBlockers` makes
+  bounded measure/lifecycle progress (guards decrease `extMeasure`; the early task
+  means are lifecycle-bounded), so they cannot block the combat objective forever,
+  AND the planner keeps a combat objective active while level<50. THE genuine
+  remaining liveness core — now a self-contained, well-typed Lean goal.
 - **O5.4 diff binding** — bind `objectiveStepIsFight` to production ("the
   objective-tier plan's head action is Fight") + the `productionLadder` select.
 

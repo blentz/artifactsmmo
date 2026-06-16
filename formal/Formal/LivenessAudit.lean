@@ -41,6 +41,7 @@ import Formal.Liveness.LevelFiftyReachable
 import Formal.Liveness.ReducedReachability
 import Formal.Liveness.NoWait
 import Formal.Liveness.PerceptionInvariant
+import Formal.Liveness.FightFairness
 import Formal.Liveness.LifecycleBound
 import Formal.Liveness.LifecycleBound2
 import Formal.Liveness.LifecycleBound3
@@ -532,3 +533,12 @@ open Formal.Liveness.PerceptionInvariant
 #print axioms cycleStep_preserves_XpInBand
 #print axioms cycleStepN_preserves_XpInBand
 #print axioms spawn_XpInBand
+
+-- O5.2 fairness reduction (2026-06-16): hfightFires reduces to the precise runtime
+-- Prop CombatObjectiveFairlyScheduled (a combat objective active+unblocked
+-- infinitely often). Selection mechanics + the reduction + end-to-end level-50
+-- reachability from spawn config-positivity + fairness, all proven.
+open Formal.Liveness.FightFairness
+#print axioms productionLadder_eq_objectiveStep_of_unblocked
+#print axioms hfightFires_of_combat_scheduled
+#print axioms ai_reaches_level_fifty_from_fair_combat
