@@ -581,3 +581,4 @@ open Formal.Liveness.BlockerMonotone
 #print axioms hpCritical_quiet_forever
 #print axioms restForCombat_quiet_forever
 #print axioms bankUnlock_quiet_forever
+#print axioms reachUnlockLevel_quiet_forever

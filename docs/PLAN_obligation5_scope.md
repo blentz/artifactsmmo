@@ -351,16 +351,30 @@ restored by rest, never reduced) ⇒ `hpCritical_quiet_forever`,
 true, nothing flips back) ⇒ `bankUnlock_quiet_forever`. Now **10 of 14** blockers
 have permanent quieting. Full build 6205 jobs green; axiom check OK.
 
-### Remaining (finish the assembly + O5.4)
-- **4 blockers left for permanent quieting:** reachUnlockLevel (`level` monotone up,
-  gap ≤ 5 — fires finitely, not via a single flag); and the 3 task-phase blockers
-  (completeTask, taskCancel, lowYieldCancel) which re-arm via the task lifecycle —
-  bounded only under `CombatPersistent` (objectiveStep preempts pursueTask so the
-  task never re-completes), so they need that coupling.
-- **Final composition:** assemble the per-blocker "fires at most once / eventually
-  permanently quiet" across all 14 into `∃K, ∀ k≥K, no blocker fires` ⇒
-  `BlockersQuietInfinitelyOften`. The combinatorial `∃K` (finite total firings over
-  an infinite trajectory) is the last real step.
+### Increment 9 landed (2026-06-16) — reachUnlockLevel permanent quieting (11/14)
+
+`reachUnlockLevel_quiet_forever` (BlockerMonotone): `level` is `cycleStepN`-monotone
+(`LifecycleBound6.cycleStepN_level_ge`) and `bankRequiredLevel` is invariant (no
+`applyActionKind` assigns it — proved `bankRequiredLevel_cycleStepN`), so once
+`level ≥ bankRequiredLevel` the `level < bankRequiredLevel` conjunct fails forever.
+**11 of 14** blockers permanently quieted. Full build 6205 jobs green; check OK.
+
+### Remaining — the COUPLED core (3 task-phase blockers + composition)
+
+The last 3 blockers — `completeTask`, `taskCancel`, `lowYieldCancel` — are NOT
+independent monotonicity lemmas. Their firing reads `taskLifecyclePhase`, which is
+NOT monotone (acceptTask none→accepted, taskTrade →complete, completeTask/taskCancel
+→none). They settle only if `objectiveStep` is SELECTED (so it preempts the
+phase-advancing `pursueTask`/`acceptTask` at idx 15/16) — but objectiveStep is
+selected only when ALL blockers (these included) are quiet. So the task-phase
+quieting and the `∃K`-all-quiet composition are CIRCULARLY COUPLED through selection:
+they need a single joint argument (priority-ordered: once idx 0–13 are quiet,
+objectiveStep is selected, phase freezes, the task-phase blockers stay quiet),
+NOT 3 more independent lemmas. This is the genuine remaining hard core of
+`BlockersQuietInfinitelyOften`; 11/14 are independently discharged, the coupled
+remainder is honestly scoped. (Note: `CombatPersistent` gives the objectiveStep
+PREDICATE, not selection — the joint argument must supply selection from the 11
+quieted blockers + the task settling.)
 - **`BlockersQuietInfinitelyOften` from spawn — original framing (now well-reduced).**
   In-model each of the 14 `objectiveStepBlockers` clears its own firing flag on its
   `planFor` action (deleteItem→¬overstock, depositAll→¬deposits, npcSell→¬sellable,

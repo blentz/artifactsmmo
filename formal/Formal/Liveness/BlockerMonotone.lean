@@ -1,4 +1,5 @@
 import Formal.Liveness.BlockerQuieting
+import Formal.Liveness.LifecycleBound6
 import Mathlib.Tactic
 
 /-! # BlockerMonotone — permanent quieting of the opaque-flag blockers (O5.2)
@@ -314,5 +315,45 @@ theorem bankAccessible_cycleStepN :
 theorem bankUnlock_quiet_forever (s : State) (h : s.bankAccessible = true) (n : Nat) :
     fires .bankUnlock (cycleStepN n s) = false := by
   simp [fires, bankUnlockFires, bankAccessible_cycleStepN n s h]
+
+/-! ## reachUnlockLevel — `level` monotone up, `bankRequiredLevel` invariant -/
+
+theorem bankRequiredLevel_apply (a : ActionKind) (s : State) :
+    (applyActionKind a s).bankRequiredLevel = s.bankRequiredLevel := by
+  cases a
+  case move => simp only [applyActionKind]; rcases s.moveTarget with _ | ⟨tx, ty⟩ <;> rfl
+  case mapTransition => simp only [applyActionKind]; rcases s.moveTarget with _ | ⟨tx, ty⟩ <;> rfl
+  all_goals rfl
+
+theorem bankRequiredLevel_cycleStep (s : State) :
+    (cycleStep s).bankRequiredLevel = s.bankRequiredLevel := by
+  unfold cycleStep
+  split
+  · rfl
+  · split
+    · rfl
+    · exact bankRequiredLevel_apply _ s
+
+theorem bankRequiredLevel_cycleStepN :
+    ∀ (n : Nat) (s : State), (cycleStepN n s).bankRequiredLevel = s.bankRequiredLevel
+  | 0, _ => rfl
+  | n + 1, s => by
+      rw [cycleStepN_succ, bankRequiredLevel_cycleStepN n (cycleStep s),
+          bankRequiredLevel_cycleStep s]
+
+/-- Once `level` reaches `bankRequiredLevel`, `reachUnlockLevel` never fires again
+    (`level < bankRequiredLevel` fails; `level` only increases, the config is
+    invariant). -/
+theorem reachUnlockLevel_quiet_forever (s : State)
+    (h : s.level ≥ s.bankRequiredLevel) (n : Nat) :
+    fires .reachUnlockLevel (cycleStepN n s) = false := by
+  have hlvl : (cycleStepN n s).level ≥ s.level :=
+    Formal.Liveness.LifecycleBound6.cycleStepN_level_ge s n
+  have hbrl : (cycleStepN n s).bankRequiredLevel = s.bankRequiredLevel :=
+    bankRequiredLevel_cycleStepN n s
+  simp only [fires, reachUnlockLevelFires]
+  have hge : ¬ ((cycleStepN n s).level < (cycleStepN n s).bankRequiredLevel) := by
+    rw [hbrl]; omega
+  simp [hge]
 
 end Formal.Liveness.BlockerMonotone
