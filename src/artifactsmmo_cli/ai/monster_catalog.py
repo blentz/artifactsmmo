@@ -16,6 +16,7 @@ class MonsterCatalog:
     critical_strike: dict[str, int] = field(default_factory=dict)  # code -> crit %
     initiative: dict[str, int] = field(default_factory=dict)  # code -> initiative
     lifesteal: dict[str, int] = field(default_factory=dict)  # code -> heal-on-crit % (effect; 0 if absent)
+    poison: dict[str, int] = field(default_factory=dict)  # code -> flat per-turn DoT (effect; 0 if absent)
     # OpenAPI conformance (Item 14 remediation): monster reward + loot fields.
     drops: dict[str, list[tuple[str, int, int, int]]] = field(default_factory=dict)
     """code -> [(item_code, rate, min_quantity, max_quantity), ...]. Drop rate is
@@ -97,6 +98,12 @@ class MonsterCatalog:
         absent — lifesteal is an OPTIONAL monster ability (most monsters have
         none), so unlike the always-present combat stats this does not raise."""
         return self.lifesteal.get(code, 0)
+
+    def monster_poison(self, code: str) -> int:
+        """Flat per-turn poison DoT of a monster (the `poison` effect). Returns 0
+        when absent — poison is an OPTIONAL monster ability (most monsters have
+        none), so unlike the always-present combat stats this does not raise."""
+        return self.poison.get(code, 0)
 
     def monster_initiative(self, code: str) -> int:
         """Initiative (turn-order) stat of a monster. Raises `KeyError` when

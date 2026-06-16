@@ -104,8 +104,6 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
     raw_monster = sum(
         _element_damage(m_attack.get(e, 0), 0, p.resistance.get(e, 0)) for e in ELEMENTS
     )
-    if raw_monster <= 0:
-        return True
     # Player lifesteal heals us on OUR crit, lowering our NET death rate. Sum the
     # lifesteal of the post-loadout equipment (loadout overrides changed slots).
     final_equip = dict(state.equipment)
@@ -115,9 +113,14 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
         if code and (st := game_data.item_stats(code)) is not None
     )
     p_atk_sum = sum(p.attack.values())
-    die_step = 50 * raw_monster * (200 + m_crit) - p.critical_strike * player_lifesteal * p_atk_sum
+    # Monster poison is a flat per-turn DoT on the player (applied turn 1, ticks
+    # every turn), so it RAISES the player's net death rate — even when the monster
+    # deals no direct damage (raw_monster == 0), poison alone can kill.
+    die_step = (50 * raw_monster * (200 + m_crit)
+                - p.critical_strike * player_lifesteal * p_atk_sum
+                + game_data.monster_poison(monster_code) * 10000)
     if die_step <= 0:
-        return True  # we out-sustain the monster's damage
+        return True  # we out-sustain the monster's damage (poison-inclusive)
     effective_hp = min(state.hp, p.max_hp) if state.hp > 0 else 0
     if effective_hp <= 0:
         return False

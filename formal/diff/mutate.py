@@ -259,15 +259,19 @@ PREDICT_WIN_MUTATIONS = [
      "    return math.floor(value + 1.5)"),
 ]
 
-# Lifesteal terms (heal-on-crit). Killed by the guard tests in test_combat.py
-# (drop the term ⇒ the killStep≤0 / dieStep≤0 guard no longer fires).
+# Lifesteal terms (heal-on-crit) and poison term (per-turn DoT). Killed by the
+# guard / flip tests in test_predict_win_diff.py + test_combat.py (drop a term ⇒
+# the killStep≤0 / dieStep≤0 guard no longer fires, or a poison loss flips win).
 PREDICT_WIN_LIFESTEAL_MUTATIONS = [
     ("predict_win: drop monster lifesteal term in killStep",
      "                 - m_crit * game_data.monster_lifesteal(monster_code) * m_atk_sum)",
      "                 - 0 * game_data.monster_lifesteal(monster_code) * m_atk_sum)"),
     ("predict_win: drop player lifesteal term in dieStep",
-     "    die_step = 50 * raw_monster * (200 + m_crit) - p.critical_strike * player_lifesteal * p_atk_sum",
-     "    die_step = 50 * raw_monster * (200 + m_crit) - 0 * player_lifesteal * p_atk_sum"),
+     "                - p.critical_strike * player_lifesteal * p_atk_sum",
+     "                - 0 * player_lifesteal * p_atk_sum"),
+    ("predict_win: drop monster poison term in dieStep",
+     "                + game_data.monster_poison(monster_code) * 10000)",
+     "                + game_data.monster_poison(monster_code) * 0)"),
 ]
 
 

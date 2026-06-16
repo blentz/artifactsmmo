@@ -113,12 +113,13 @@ def killStep (rawPlayer pCrit mCrit mLifesteal mAtkSum : Int) : Int :=
   50 * rawPlayer * (200 + pCrit) - mCrit * mLifesteal * mAtkSum
 
 /-- Per-round net HP removed from the PLAYER (×10000): monster damage MINUS the
-player's heal-on-crit `pCrit*pLifesteal*pAtkSum`. -/
-def dieStep (rawMonster mCrit pCrit pLifesteal pAtkSum : Int) : Int :=
-  50 * rawMonster * (200 + mCrit) - pCrit * pLifesteal * pAtkSum
+player's heal-on-crit `pCrit*pLifesteal*pAtkSum`, PLUS the monster's flat
+per-turn `monsterPoison` damage-over-time (applied once turn 1, ticks every turn). -/
+def dieStep (rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison : Int) : Int :=
+  50 * rawMonster * (200 + mCrit) - pCrit * pLifesteal * pAtkSum + monsterPoison * 10000
 
 def predictWin (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-    pLifesteal pAtkSum mLifesteal mAtkSum : Int) (playerFirst : Bool) : Bool :=
+    pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison : Int) (playerFirst : Bool) : Bool :=
   if rawPlayer ≤ 0 then false
   else
     let ks := killStep rawPlayer pCrit mCrit mLifesteal mAtkSum
@@ -126,10 +127,9 @@ def predictWin (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
     else
       let roundsToKill := ceilDiv (monsterHp * 10000) ks
       if roundsToKill > maxTurns then false
-      else if rawMonster ≤ 0 then true
       else
-        let ds := dieStep rawMonster mCrit pCrit pLifesteal pAtkSum
-        if ds ≤ 0 then true                       -- we out-sustain the monster
+        let ds := dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison
+        if ds ≤ 0 then true                       -- we out-sustain the monster (poison-inclusive)
         else
           let roundsToDie := ceilDiv (playerMaxHp * 10000) ds
           if playerFirst then roundsToKill ≤ roundsToDie
@@ -324,13 +324,13 @@ theorem simRoundsNet_eq (hp step : Int) (hstep : 0 < step) (hhp : 1 ≤ hp)
 /-- `maxturns_sound`: `rounds_to_kill > MAX_TURNS ⇒ ¬win` (when the player can
 damage the monster net of its lifesteal, `killStep > 0`). -/
 theorem maxturns_sound (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-    pLifesteal pAtkSum mLifesteal mAtkSum : Int) (playerFirst : Bool)
+    pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison : Int) (playerFirst : Bool)
     (hraw : 0 < rawPlayer)
     (hks : 0 < killStep rawPlayer pCrit mCrit mLifesteal mAtkSum)
     (hover : ceilDiv (monsterHp * 10000)
               (killStep rawPlayer pCrit mCrit mLifesteal mAtkSum) > maxTurns) :
     predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum playerFirst = false := by
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison playerFirst = false := by
   unfold predictWin
   rw [if_neg (Int.not_le.mpr hraw)]
   simp only [Int.not_le.mpr hks, if_false]
@@ -342,15 +342,15 @@ net-step fight simulation verdict. Same guard ladder: `rawPlayer ≤ 0`,
 `dieStep ≤ 0` (we out-sustain), initiative tiebreak. The two `ceilDiv` rounds
 are replaced by `simRoundsNet` with sufficient fuel. -/
 theorem predict_win_eq_sim (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-    pLifesteal pAtkSum mLifesteal mAtkSum : Int) (playerFirst : Bool)
+    pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison : Int) (playerFirst : Bool)
     (hmhp : 1 ≤ monsterHp) (hphp : 1 ≤ playerMaxHp)
     (fk fd : Nat)
     (hfk : (ceilDiv (monsterHp*10000)
               (killStep rawPlayer pCrit mCrit mLifesteal mAtkSum)).toNat ≤ fk)
     (hfd : (ceilDiv (playerMaxHp*10000)
-              (dieStep rawMonster mCrit pCrit pLifesteal pAtkSum)).toNat ≤ fd) :
+              (dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison)).toNat ≤ fd) :
     predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum playerFirst
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison playerFirst
       = (if rawPlayer ≤ 0 then false
          else
            let ks := killStep rawPlayer pCrit mCrit mLifesteal mAtkSum
@@ -358,9 +358,8 @@ theorem predict_win_eq_sim (rawPlayer pCrit monsterHp rawMonster mCrit playerMax
            else
              let rtk := simRoundsNet monsterHp ks fk
              if rtk > maxTurns then false
-             else if rawMonster ≤ 0 then true
              else
-               let ds := dieStep rawMonster mCrit pCrit pLifesteal pAtkSum
+               let ds := dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison
                if ds ≤ 0 then true
                else
                  let rtd := simRoundsNet playerMaxHp ds fd
@@ -384,20 +383,17 @@ theorem predict_win_eq_sim (rawPlayer pCrit monsterHp rawMonster mCrit playerMax
           (killStep rawPlayer pCrit mCrit mLifesteal mAtkSum) > maxTurns
       · simp only [hover, if_true]
       · simp only [hover, if_false]
-        by_cases hrm : rawMonster ≤ 0
-        · simp only [hrm, if_true]
-        · simp only [hrm, if_false]
-          by_cases hds : dieStep rawMonster mCrit pCrit pLifesteal pAtkSum ≤ 0
-          · simp only [hds, if_true]
-          · simp only [hds, if_false]
-            have hdsp : 0 < dieStep rawMonster mCrit pCrit pLifesteal pAtkSum :=
-              Int.not_le.mp hds
-            have hrtd : simRoundsNet playerMaxHp
-                (dieStep rawMonster mCrit pCrit pLifesteal pAtkSum) fd
-                = ceilDiv (playerMaxHp * 10000)
-                    (dieStep rawMonster mCrit pCrit pLifesteal pAtkSum) :=
-              simRoundsNet_eq playerMaxHp _ hdsp hphp fd hfd
-            rw [hrtd]
+        by_cases hds : dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison ≤ 0
+        · simp only [hds, if_true]
+        · simp only [hds, if_false]
+          have hdsp : 0 < dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison :=
+            Int.not_le.mp hds
+          have hrtd : simRoundsNet playerMaxHp
+              (dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison) fd
+              = ceilDiv (playerMaxHp * 10000)
+                  (dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison) :=
+            simRoundsNet_eq playerMaxHp _ hdsp hphp fd hfd
+          rw [hrtd]
 
 /-- `ceilDiv` is antitone in its divisor on the nonnegative-numerator domain:
 a larger positive divisor never increases the ceil. -/
@@ -459,12 +455,12 @@ theorem roundsTo_antitone_raw (hp raw1 raw2 crit : Int)
 flips a win into a loss. -/
 theorem predict_win_mono_player
     (raw1 raw2 pCrit monsterHp rawMonster mCrit playerMaxHp
-     pLifesteal pAtkSum mLifesteal mAtkSum : Int) (playerFirst : Bool)
+     pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison : Int) (playerFirst : Bool)
     (hpc : 0 ≤ pCrit) (hr1 : 0 < raw1) (hle : raw1 ≤ raw2) (hhp : 0 ≤ monsterHp)
     (hwin : predictWin raw1 pCrit monsterHp rawMonster mCrit playerMaxHp
-              pLifesteal pAtkSum mLifesteal mAtkSum playerFirst = true) :
+              pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison playerFirst = true) :
     predictWin raw2 pCrit monsterHp rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum playerFirst = true := by
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison playerFirst = true := by
   have hr2 : 0 < raw2 := by omega
   -- killStep is monotone in rawPlayer: ks1 ≤ ks2.
   have hksle : killStep raw1 pCrit mCrit mLifesteal mAtkSum
@@ -501,34 +497,31 @@ theorem predict_win_mono_player
         omega
       rw [if_neg hover2]
       -- the remaining branches are independent of rawPlayer.
-      by_cases hrm : rawMonster ≤ 0
-      · rw [if_pos hrm]
-      · rw [if_neg hrm] at hwin ⊢
-        by_cases hds : dieStep rawMonster mCrit pCrit pLifesteal pAtkSum ≤ 0
-        · rw [if_pos hds]
-        · rw [if_neg hds] at hwin ⊢
-          cases playerFirst with
-          | true =>
-            simp only [if_true] at hwin ⊢
-            have := of_decide_eq_true hwin
-            exact decide_eq_true (by omega)
-          | false =>
-            simp only [Bool.false_eq_true, if_false] at hwin ⊢
-            have := of_decide_eq_true hwin
-            exact decide_eq_true (by omega)
+      by_cases hds : dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison ≤ 0
+      · rw [if_pos hds]
+      · rw [if_neg hds] at hwin ⊢
+        cases playerFirst with
+        | true =>
+          simp only [if_true] at hwin ⊢
+          have := of_decide_eq_true hwin
+          exact decide_eq_true (by omega)
+        | false =>
+          simp only [Bool.false_eq_true, if_false] at hwin ⊢
+          have := of_decide_eq_true hwin
+          exact decide_eq_true (by omega)
 
 /-- `predict_win_mono_monsterhp`: decreasing the monster's HP never flips a win
 into a loss. (killStep does not depend on monsterHp, so the kill-rounds numerator
 shrinks while the divisor is fixed.) -/
 theorem predict_win_mono_monsterhp
     (rawPlayer pCrit monsterHp1 monsterHp2 rawMonster mCrit playerMaxHp
-     pLifesteal pAtkSum mLifesteal mAtkSum : Int) (playerFirst : Bool)
+     pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison : Int) (playerFirst : Bool)
     (hpc : 0 ≤ pCrit) (hr : 0 < rawPlayer)
     (hhp2 : 0 ≤ monsterHp2) (hle : monsterHp2 ≤ monsterHp1)
     (hwin : predictWin rawPlayer pCrit monsterHp1 rawMonster mCrit playerMaxHp
-              pLifesteal pAtkSum mLifesteal mAtkSum playerFirst = true) :
+              pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison playerFirst = true) :
     predictWin rawPlayer pCrit monsterHp2 rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum playerFirst = true := by
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison playerFirst = true := by
   unfold predictWin at hwin ⊢
   rw [if_neg (Int.not_le.mpr hr)] at hwin
   rw [if_neg (Int.not_le.mpr hr)]
@@ -557,20 +550,17 @@ theorem predict_win_mono_monsterhp
           (killStep rawPlayer pCrit mCrit mLifesteal mAtkSum) > maxTurns := by
         omega
       rw [if_neg hover2]
-      by_cases hrm : rawMonster ≤ 0
-      · rw [if_pos hrm]
-      · rw [if_neg hrm] at hwin ⊢
-        by_cases hds : dieStep rawMonster mCrit pCrit pLifesteal pAtkSum ≤ 0
-        · rw [if_pos hds]
-        · rw [if_neg hds] at hwin ⊢
-          cases playerFirst with
-          | true =>
-            simp only [if_true] at hwin ⊢
-            have := of_decide_eq_true hwin
-            exact decide_eq_true (by omega)
-          | false =>
-            simp only [Bool.false_eq_true, if_false] at hwin ⊢
-            have := of_decide_eq_true hwin
-            exact decide_eq_true (by omega)
+      by_cases hds : dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison ≤ 0
+      · rw [if_pos hds]
+      · rw [if_neg hds] at hwin ⊢
+        cases playerFirst with
+        | true =>
+          simp only [if_true] at hwin ⊢
+          have := of_decide_eq_true hwin
+          exact decide_eq_true (by omega)
+        | false =>
+          simp only [Bool.false_eq_true, if_false] at hwin ⊢
+          have := of_decide_eq_true hwin
+          exact decide_eq_true (by omega)
 
 end Formal.PredictWin

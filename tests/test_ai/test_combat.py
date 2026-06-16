@@ -38,7 +38,8 @@ def _record_mixed(store: LearningStore, action_repr: str, wins: int, losses: int
         i += 1
 
 
-def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob", lifesteal=0):
+def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob", lifesteal=0,
+        poison=0):
     gd = GameData()
     gd._monster_hp = {code: hp}
     gd._monster_attack = {code: attack or {}}
@@ -46,6 +47,7 @@ def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob", lifestea
     gd._monster_critical_strike = {code: crit}
     gd._monster_initiative = {code: initiative}
     gd._monster_lifesteal = {code: lifesteal}
+    gd._monster_poison = {code: poison}
     return gd
 
 
@@ -72,6 +74,31 @@ def test_predict_win_true_when_player_out_sustains_via_lifesteal():
     state = make_state(hp=10, max_hp=10, attack={"fire": 10}, critical_strike=50,
                        initiative=50, equipment={"weapon_slot": "vamp"})
     assert predict_win(state, gd, "mob") is True
+
+
+def test_predict_win_false_when_poison_outpaces_the_kill():
+    """dieStep poison term: a fight the player would WIN on the initiative
+    tiebreak (equal rounds) becomes a LOSS once the monster's per-turn poison
+    shortens rounds_to_die. WITHOUT the poison term the bot predicts a win — the
+    mutation gate checks the term flips it. Player raw 50 vs hp 100 ⇒ 2 rounds to
+    kill; symmetric monster ⇒ 2 rounds to die (win, player first); poison 100/turn
+    ⇒ 1 round to die ⇒ loss."""
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    gd_no = _gd(hp=100, attack={"fire": 50}, initiative=10)
+    assert predict_win(state, gd_no, "mob") is True
+    gd_psn = _gd(hp=100, attack={"fire": 50}, initiative=10, poison=100)
+    assert predict_win(state, gd_psn, "mob") is False
+
+
+def test_predict_win_false_when_poison_kills_a_harmless_monster():
+    """Removing the `raw_monster <= 0 => True` shortcut: a monster dealing ZERO
+    direct damage is harmless (win) UNLESS it has poison, which kills over time.
+    Pins that poison-only death is a loss (the old shortcut wrongly said win)."""
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    gd_safe = _gd(hp=100, attack={}, initiative=10)        # no direct damage ⇒ win
+    assert predict_win(state, gd_safe, "mob") is True
+    gd_psn = _gd(hp=100, attack={}, initiative=10, poison=100)  # poison alone kills
+    assert predict_win(state, gd_psn, "mob") is False
 
 
 def test_round_half_up_rounds_half_upward():

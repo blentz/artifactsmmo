@@ -561,6 +561,27 @@ class TestGameDataLoadMonsters:
         assert gd.monster_lifesteal("desert_scorpion") == 15
         assert gd.monster_lifesteal("no_such_monster") == 0
 
+    def test_loads_monster_poison_from_effect(self):
+        """A monster's `poison` ABILITY (an effect, not a base stat) parses so
+        predict_win sees its per-turn DoT. Absent ⇒ 0 (no raise)."""
+        gd = GameData()
+        monster = MagicMock()
+        monster.code = "spider"
+        monster.level = 8
+        monster.hp = 90
+        monster.critical_strike = 0
+        monster.initiative = 100
+        eff = MagicMock()
+        eff.code = "poison"
+        eff.value = 20
+        monster.effects = [eff]
+        with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=make_page([monster])):
+            gd._load_monsters(MagicMock())
+        assert gd.monster_poison("spider") == 20
+        assert gd.monster_poison("no_such_monster") == 0
+        # poison and lifesteal are independent abilities: a poison monster has 0 lifesteal.
+        assert gd.monster_lifesteal("spider") == 0
+
     def test_stops_on_none_result(self):
         gd = GameData()
         with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=None):

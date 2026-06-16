@@ -50,7 +50,7 @@ def _elem_args(attack: dict, dmg_global: int, dmg_elements: dict, resist: dict) 
 
 def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
          m_hp, m_attack, m_resist, m_crit, m_init,
-         p_lifesteal=0, m_lifesteal=0):
+         p_lifesteal=0, m_lifesteal=0, m_poison=0):
     stats = ProjectedStats(
         attack=dict(p_attack), dmg=p_dmg, dmg_elements=dict(p_dmg_elem),
         resistance=dict(p_resist), critical_strike=p_crit, initiative=p_init,
@@ -82,6 +82,9 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
         def monster_lifesteal(self, c):
             return m_lifesteal
 
+        def monster_poison(self, c):
+            return m_poison
+
         def item_stats(self, c):
             return (ItemStats(code=c, level=1, type_="weapon", lifesteal=p_lifesteal)
                     if c == "_ls" else None)
@@ -107,6 +110,7 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
         + _elem_args(m_attack, 0, {}, p_resist)            # monster vs player resist
         + [m_crit, p_max_hp, 1 if p_init >= m_init else 0]
         + [p_lifesteal, p_atk_sum, m_lifesteal, m_atk_sum]
+        + [m_poison]
     )
     lean = run_oracle("predict_win", [args])[0]
     return py, lean
@@ -136,16 +140,19 @@ def test_python_matches_lean(seed):
     # enough to exercise the net-step + the killStep≤0 / dieStep≤0 guards.
     p_lifesteal = rng.choice([0, 0, rng.randint(1, 60)])
     m_lifesteal = rng.choice([0, 0, rng.randint(1, 60)])
+    # Poison: 0 most of the time, non-zero often enough to exercise the per-turn
+    # DoT term in dieStep AND the no-direct-damage (raw_monster==0) poison kill.
+    m_poison = rng.choice([0, 0, rng.randint(1, 100)])
 
     py, lean = _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp,
                     p_init, m_hp, m_attack, m_resist, m_crit, m_init,
-                    p_lifesteal, m_lifesteal)
+                    p_lifesteal, m_lifesteal, m_poison)
     assert py == lean["win"], (
         f"verdict mismatch py={py} lean={lean} "
         f"p_attack={p_attack} p_dmg={p_dmg} p_dmg_elem={p_dmg_elem} "
         f"p_resist={p_resist} p_crit={p_crit} p_max_hp={p_max_hp} p_init={p_init} "
         f"m_hp={m_hp} m_attack={m_attack} m_resist={m_resist} m_crit={m_crit} m_init={m_init} "
-        f"p_lifesteal={p_lifesteal} m_lifesteal={m_lifesteal}"
+        f"p_lifesteal={p_lifesteal} m_lifesteal={m_lifesteal} m_poison={m_poison}"
     )
 
 
@@ -180,3 +187,43 @@ def test_maxturns_loss_binds_against_lean():
                     {}, {}, 0, 0)
     assert py is False
     assert py == lean["win"]
+
+
+def test_poison_flips_winnable_fight_against_lean():
+    """A symmetric fight the player WINS on the initiative tiebreak (rtk == rtd,
+    player first), but the monster's per-turn poison shortens rtd below rtk and
+    flips it to a LOSS. Pins the dieStep poison term against Lean — a mutant that
+    drops `+ monsterPoison*10000` would keep the win and die here."""
+    # Player raw 50, monster hp 100 => rtk = 2. Monster raw 50, player hp 100,
+    # no poison => rtd = 2, player first => win.
+    p = dict(attack={"fire": 50}, dmg=0, dmg_elem={}, resist={}, crit=0,
+             max_hp=100, init=10)
+    m = dict(hp=100, attack={"fire": 50}, resist={}, crit=0, init=10)
+    py_no, lean_no = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
+                          p["crit"], p["max_hp"], p["init"], m["hp"],
+                          m["attack"], m["resist"], m["crit"], m["init"])
+    assert py_no is True
+    assert py_no == lean_no["win"]
+    # poison 100/turn => dieStep gains 1e6 => rtd = 1 < rtk = 2 => loss.
+    py_p, lean_p = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
+                        p["crit"], p["max_hp"], p["init"], m["hp"],
+                        m["attack"], m["resist"], m["crit"], m["init"],
+                        m_poison=100)
+    assert py_p is False
+    assert py_p == lean_p["win"]
+
+
+def test_poison_kills_when_monster_deals_no_direct_damage_against_lean():
+    """A monster with ZERO direct damage but non-zero poison still kills: the
+    old `raw_monster <= 0 => True` shortcut (now removed) would mispredict a win.
+    Pins the removal of that guard — poison-only death is a real loss."""
+    # Monster attack {} => raw_monster 0. Without poison: dieStep <= 0 => win.
+    py_safe, lean_safe = _run({"fire": 50}, 0, {}, {}, 0, 100, 10,
+                              100, {}, {}, 0, 10)
+    assert py_safe is True
+    assert py_safe == lean_safe["win"]
+    # With poison 100/turn: dieStep = 1e6 > 0, rtd = 1 < rtk = 2 => loss.
+    py_psn, lean_psn = _run({"fire": 50}, 0, {}, {}, 0, 100, 10,
+                            100, {}, {}, 0, 10, m_poison=100)
+    assert py_psn is False
+    assert py_psn == lean_psn["win"]
