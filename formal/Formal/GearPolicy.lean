@@ -83,15 +83,19 @@ resistances are both nonnegative (the game-data invariant). Mirrors
 contract). -/
 theorem armor_score_nonneg (item : Item) (monsterAtk : ElemStats)
     (hAtk : ∀ e ∈ elements, 0 ≤ elemGet monsterAtk e)
-    (hRes : ∀ e ∈ elements, 0 ≤ elemGet item.resistance e) :
+    (hRes : ∀ e ∈ elements, 0 ≤ elemGet item.resistance e)
+    (hUtil : 0 ≤ item.flatUtil) :
     0 ≤ AScore item monsterAtk := by
   unfold AScore
-  apply sum_nonneg_of_terms
-  intro x hx
-  rw [List.mem_map] at hx
-  obtain ⟨e, he, hxe⟩ := hx
-  rw [← hxe]
-  exact aTerm_nonneg _ _ (hAtk e he) (hRes e he)
+  have hsum : 0 ≤ (elements.map
+      (fun e => aTerm (elemGet monsterAtk e) (elemGet item.resistance e))).sum := by
+    apply sum_nonneg_of_terms
+    intro x hx
+    rw [List.mem_map] at hx
+    obtain ⟨e, he, hxe⟩ := hx
+    rw [← hxe]
+    exact aTerm_nonneg _ _ (hAtk e he) (hRes e he)
+  omega
 
 /-! ## The empty-slot dominance theorems. -/
 
@@ -102,10 +106,11 @@ slot before any tie-breaker is considered". -/
 theorem armor_weakly_dominates_empty_slot
     (item : Item) (monsterAtk : ElemStats)
     (hAtk : ∀ e ∈ elements, 0 ≤ elemGet monsterAtk e)
-    (hRes : ∀ e ∈ elements, 0 ≤ elemGet item.resistance e) :
+    (hRes : ∀ e ∈ elements, 0 ≤ elemGet item.resistance e)
+    (hUtil : 0 ≤ item.flatUtil) :
     baselineScore ≤ AScore item monsterAtk := by
   rw [baselineScore_def]
-  exact armor_score_nonneg item monsterAtk hAtk hRes
+  exact armor_score_nonneg item monsterAtk hAtk hRes hUtil
 
 /-- **STRICT DOMINANCE**: when at least one element has both a nonzero
 monster attack AND a nonzero armor resistance, the armor STRICTLY improves
@@ -121,7 +126,8 @@ theorem armor_strictly_dominates_empty_slot
     (hAtk : ∀ e ∈ elements, 0 ≤ elemGet monsterAtk e)
     (hRes : ∀ e ∈ elements, 0 ≤ elemGet item.resistance e)
     (hStrictAtk : 0 < elemGet monsterAtk e)
-    (hStrictRes : 0 < elemGet item.resistance e) :
+    (hStrictRes : 0 < elemGet item.resistance e)
+    (hUtil : 0 ≤ item.flatUtil) :
     baselineScore < AScore item monsterAtk := by
   rw [baselineScore_def]
   unfold AScore
@@ -141,7 +147,10 @@ theorem armor_strictly_dominates_empty_slot
   have hTermPos : 0 < aTerm (elemGet monsterAtk e) (elemGet item.resistance e) := by
     unfold aTerm
     exact Int.mul_pos hStrictAtk hStrictRes
-  exact sum_pos_of_mem_pos _ _ hAll hMem hTermPos
+  have hSumPos : 0 < (elements.map
+      (fun e' => aTerm (elemGet monsterAtk e') (elemGet item.resistance e'))).sum :=
+    sum_pos_of_mem_pos _ _ hAll hMem hTermPos
+  omega
 
 /-! ## Monotonicity in resistance.
 
@@ -163,12 +172,18 @@ theorem armor_score_mono_in_resistance
     (a b : Item) (monsterAtk : ElemStats)
     (hAtk : ∀ e ∈ elements, 0 ≤ elemGet monsterAtk e)
     (hLe : ∀ e ∈ elements,
-              elemGet a.resistance e ≤ elemGet b.resistance e) :
+              elemGet a.resistance e ≤ elemGet b.resistance e)
+    (hUtil : a.flatUtil ≤ b.flatUtil) :
     AScore a monsterAtk ≤ AScore b monsterAtk := by
   unfold AScore
-  apply map_sum_le_map_sum
-  intro e he
-  exact aTerm_mono_in_res _ _ _ (hAtk e he) (hLe e he)
+  have hSumLe : (elements.map
+      (fun e => aTerm (elemGet monsterAtk e) (elemGet a.resistance e))).sum ≤
+      (elements.map
+      (fun e => aTerm (elemGet monsterAtk e) (elemGet b.resistance e))).sum := by
+    apply map_sum_le_map_sum
+    intro e he
+    exact aTerm_mono_in_res _ _ _ (hAtk e he) (hLe e he)
+  omega
 
 /-! ## Composition lemma: empty slot + nontrivial armor candidate ⇒
 `pickSlot` returns SOME armor. -/

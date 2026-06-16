@@ -359,6 +359,28 @@ class TestGameDataLoadItems:
         assert s.initiative == 20
         assert s.hp_bonus == 50
 
+    def test_loads_utility_artifact_effects(self):
+        """wisdom + prospecting (artifact utility stats) parse into ItemStats so
+        the value/scoring model sees them — novice_guide regression."""
+        gd = GameData()
+        item = MagicMock()
+        item.code = "novice_guide"
+        item.level = 10
+        item.type_ = "artifact"
+        item.craft = UNSET
+        def eff(code, value):
+            e = MagicMock()
+            e.code = code
+            e.value = value
+            return e
+        item.effects = [eff("hp", 25), eff("wisdom", 25), eff("prospecting", 25)]
+        with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=make_page([item])):
+            gd._load_items(MagicMock())
+        s = gd.item_stats("novice_guide")
+        assert s.hp_bonus == 25
+        assert s.wisdom == 25
+        assert s.prospecting == 25
+
 
 class TestGameDataLoadResources:
     def test_loads_skill_requirement(self):

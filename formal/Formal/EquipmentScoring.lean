@@ -54,6 +54,7 @@ structure Item where
   resistance : ElemStats
   crit : Int
   fits : Bool
+  flatUtil : Int := 0   -- monster-independent utility = hp_bonus + wisdom + prospecting
 deriving Repr, DecidableEq
 
 /-- The 4 game elements as integer keys (fire, earth, water, air). -/
@@ -78,10 +79,14 @@ def WScore (item : Item) (monsterRes : ElemStats) : Int :=
 `armor_score` has none). -/
 def aTerm (monAtk armorRes : Int) : Int := monAtk * armorRes
 
-/-- `AScore = Σ_elem monsterAtk(elem) * armorRes(elem)`
-(= 100 × `armor_score`, the order-preserving integer surrogate). -/
+/-- `AScore = Σ_elem monsterAtk(elem) * armorRes(elem) + flatUtil` — monster-
+relative defense plus the monster-INDEPENDENT flat utility (hp_bonus + wisdom +
+prospecting) the piece grants regardless of target. The flat term makes a
+utility-only artifact (no resistance) score > 0 so pick_loadout fills its slot
+(novice_guide: defense 0 + flatUtil 75). -/
 def AScore (item : Item) (monsterAtk : ElemStats) : Int :=
   (elements.map (fun e => aTerm (elemGet monsterAtk e) (elemGet item.resistance e))).sum
+    + item.flatUtil
 
 /-! ### Feasibility and the per-slot pick. -/
 

@@ -83,12 +83,15 @@ def _elem_block(stats: ItemStats | None, which: str) -> list[int]:
 
 
 def _item_block(code_id: int, stats: ItemStats | None, slot: str) -> list[int]:
-    """12-int Lean Item block: [code, level, fits, atk0..3, res0..3, crit]."""
+    """13-int Lean Item block: [code, level, fits, atk0..3, res0..3, crit, flatUtil].
+    flatUtil = hp_bonus + wisdom + prospecting (the monster-independent utility the
+    armor/artifact score adds; novice_guide: 25+25+25 = 75)."""
     if stats is None:
-        return [code_id, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        return [code_id, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     fits = 1 if slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []) else 0
     return [code_id, stats.level, fits, *_elem_block(stats, "attack"),
-            *_elem_block(stats, "resistance"), stats.critical_strike]
+            *_elem_block(stats, "resistance"), stats.critical_strike,
+            stats.hp_bonus + stats.wisdom + stats.prospecting]
 
 
 def _py_score(stats: ItemStats, slot: str, monster_atk: dict, monster_res: dict) -> int:
@@ -256,6 +259,27 @@ def test_below_level_not_chosen():
     result = pick_loadout("mon", state, game_data)
     assert result["weapon_slot"] == "w_lo"
     _check(table, monster_atk, monster_res, 5, inventory, equipment, ["weapon_slot"])
+
+
+def test_utility_artifact_fills_empty_slot():
+    """A utility-only ARTIFACT (no resistance, hp_bonus+wisdom+prospecting = 75)
+    scores its flatUtil > 0, so pick_loadout fills the empty artifact slot instead
+    of skipping it as a zero-score fill — and Python agrees with the Lean oracle.
+    The novice_guide regression (was valued 0 → never equipped → discarded). Also
+    EXERCISES the flatUtil term so a mutation dropping it is killed."""
+    table = _table(
+        ItemStats(code="novice_guide", level=1, type_="artifact",
+                  hp_bonus=25, wisdom=25, prospecting=25),
+    )
+    monster_atk = {"fire": 5}
+    monster_res = {"fire": 0}
+    inventory = {"novice_guide": 1}
+    equipment = {"artifact1_slot": None}
+    game_data = _FakeGameData(table, monster_atk, monster_res)
+    state = _make_state(10, inventory, equipment)
+    result = pick_loadout("mon", state, game_data)
+    assert result.get("artifact1_slot") == "novice_guide"
+    _check(table, monster_atk, monster_res, 10, inventory, equipment, ["artifact1_slot"])
 
 
 def test_upgrade_swaps():

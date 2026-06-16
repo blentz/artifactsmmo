@@ -101,6 +101,8 @@ MEASURE_SRC = ROOT / "formal" / "sim" / "measure.py"
 # Phase-22b — cycle-loop mirror (Python port of Formal.Liveness.CycleStep).
 CYCLE_STEP_SRC = ROOT / "formal" / "sim" / "cycle_step.py"
 
+EQUIP_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "equip_value.py"
+
 # Skill-gate fast-fail + doomed-memo (2026-06-15 feather_coat CPU-peg fix).
 GATHER_PLANNABLE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "gather_plannable_core.py"
 DOOMED_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "doomed_memo.py"
@@ -1320,6 +1322,25 @@ STRATEGY_DRIVER_MUTATIONS = [
 ]
 
 
+# Utility-stat valuation (2026-06-15 novice_guide discard fix). hp_bonus/wisdom/
+# prospecting must count so artifacts are scored, equipped, and not discarded.
+ARMOR_UTILITY_MUTATIONS = [
+    ("armor_score: drop flat utility (hp_bonus+wisdom+prospecting) — artifacts score 0",
+     "    return score + hp_bonus + wisdom + prospecting",
+     "    return score"),
+]
+EQUIP_VALUE_UTILITY_MUTATIONS = [
+    ("equip_value: drop wisdom+prospecting from raw — utility gear undervalued",
+     "           + hp_bonus + dmg + critical_strike + wisdom + prospecting)",
+     "           + hp_bonus + dmg + critical_strike)"),
+]
+EQUIP_VALUE_DOMINANCE_MUTATIONS = [
+    ("dominance _equip_value: drop utility (hp_bonus+wisdom+prospecting) — artifact valued 0",
+     "    return attack + resistance + hp + stats.hp_bonus + stats.wisdom + stats.prospecting",
+     "    return attack + resistance + hp"),
+]
+
+
 def run_group(src: Path, mutations, test_path: str, survivors: list) -> None:
     orig = src.read_text()
     try:
@@ -1339,7 +1360,7 @@ def run_group(src: Path, mutations, test_path: str, survivors: list) -> None:
 
 
 _ALL_SRCS = [
-    GATHER_PLANNABLE_CORE_SRC, DOOMED_MEMO_SRC, STRATEGY_DRIVER_SRC,
+    GATHER_PLANNABLE_CORE_SRC, DOOMED_MEMO_SRC, STRATEGY_DRIVER_SRC, EQUIP_VALUE_SRC,
     SRC, TASK_BATCH_SRC, INVENTORY_CAPS_SRC, COMBAT_SRC, PROJECTION_SRC, SCORING_SRC,
     SKILL_XP_CURVE_SRC, RECIPE_CLOSURE_SRC, TASK_FEASIBILITY_SRC, PREREQUISITE_GRAPH_SRC,
     OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, STUCK_DETECTOR_SRC,
@@ -2950,6 +2971,12 @@ def _run_all_groups() -> int:
               "tests/test_ai/test_strategy_driver_tiered.py", survivors)
     run_group(COMBAT_SRC, COMBAT_VETO_MUTATIONS,
               "tests/test_ai/test_combat.py", survivors)
+    run_group(SCORING_SRC, ARMOR_UTILITY_MUTATIONS,
+              "formal/diff/test_equipment_scoring_diff.py", survivors)
+    run_group(EQUIP_VALUE_SRC, EQUIP_VALUE_UTILITY_MUTATIONS,
+              "tests/test_ai/test_tiers_equip_value.py", survivors)
+    run_group(INVENTORY_CAPS_SRC, EQUIP_VALUE_DOMINANCE_MUTATIONS,
+              "tests/test_ai/test_overstock.py", survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1

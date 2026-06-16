@@ -241,18 +241,21 @@ def _is_equippable_dominated(item_code: str, state: WorldState,
 
 
 def _equip_value(stats: ItemStats) -> int:
-    """Dominance-gate equip value: attack + resistance + hp_restore — kept
-    local here to avoid a tiers→inventory_caps import cycle (historically a
-    mirror of `tiers/equip_value.equip_value`, which has since grown the
-    augmented combat formula). EXACT integer arithmetic (P3c): every summand
-    is an int, so the strictly-higher comparison feeding the dominance Bool
-    is exact — the former `float(...)` wrapper added only an inexact-typed
-    seam over identical values (ints are exact in float far beyond any
-    reachable stat magnitude)."""
+    """Dominance-gate equip value: attack + resistance + hp_restore + hp_bonus +
+    wisdom + prospecting — kept local here to avoid a tiers→inventory_caps import
+    cycle. EXACT integer arithmetic (P3c): every summand is an int, so the
+    strictly-higher comparison feeding the dominance Bool is exact.
+
+    Includes the flat utility stats (hp_bonus/wisdom/prospecting) so a
+    utility-only ARTIFACT (novice_guide: attack/resistance/hp_restore all 0,
+    wisdom 25, prospecting 25, hp_bonus 25) is no longer valued 0 → no longer
+    trivially dominated → no longer discarded as worthless overstock (the
+    Delete(novice_guide×4) bug, trace 2026-06-15). Mirrors the contributors the
+    augmented `tiers/equip_value.equip_value` ranks on."""
     attack = sum(stats.attack.values()) if stats.attack else 0
     resistance = sum(stats.resistance.values()) if stats.resistance else 0
     hp = stats.hp_restore
-    return attack + resistance + hp
+    return attack + resistance + hp + stats.hp_bonus + stats.wisdom + stats.prospecting
 
 
 def _task_chain_demand_pure(fuel: int, target_item: str, root_item: str,

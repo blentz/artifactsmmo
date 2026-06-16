@@ -61,16 +61,27 @@ def gather_score_pure(skill_effects: dict[str, int], skill: str) -> int:
 
 
 def armor_score_pure(elements: list[str], resistance: dict[str, int],
-                     monster_attack: dict[str, int]) -> int:
-    """PURE CORE (mechanically extracted, P4b): ``Σ mon_atk * armor_res%``.
+                     monster_attack: dict[str, int],
+                     hp_bonus: int, wisdom: int, prospecting: int) -> int:
+    """PURE CORE (mechanically extracted, P4b): ``Σ mon_atk * armor_res% +
+    hp_bonus + wisdom + prospecting``.
 
-    Bridged to the hand ``Formal.EquipmentScoring.AScore`` (no clamp —
-    armor scoring has none) over the same injective element encoding.
+    The leading term is the monster-relative defense (damage reduced per hit).
+    The trailing flat terms are monster-INDEPENDENT utility the piece grants
+    regardless of target — hp (survivability), wisdom (+xp), prospecting
+    (+drops). They make a flat-utility item with no resistance (an ARTIFACT like
+    novice_guide: res 0, hp 25, wisdom 25, prospecting 25 → score 75) pickable
+    instead of scoring 0 and being skipped by pick_loadout's empty-slot >0 gate
+    (and then discarded as worthless). For real armor the defense term dominates;
+    the utility terms tiebreak.
+
+    Bridged to the hand ``Formal.EquipmentScoring.AScore`` over the same
+    injective element encoding.
     """
     score = 0
     for elem in elements:
         score = score + monster_attack.get(elem, 0) * resistance.get(elem, 0)
-    return score
+    return score + hp_bonus + wisdom + prospecting
 
 
 def weapon_score_raw(weapon: ItemStats, monster_resistance: dict[str, int]) -> int:
@@ -159,12 +170,12 @@ def pick_gather_loadout(
 def armor_score(armor: ItemStats, monster_attack: dict[str, int]) -> int:
     """Estimated damage REDUCED per hit by an armor piece. Higher = better defense.
 
-    Returns the EXACT integer surrogate ``Σ mon_atk * armor_res%`` (i.e. 100×
-    the float expression ``Σ mon_atk * armor_res%/100``). BIT-EQUIVALENT to the
-    Lean ``AScore`` model — argmax / comparison results are identical to the
-    rescaled float form.
+    Returns the EXACT integer surrogate ``Σ mon_atk * armor_res% + hp_bonus +
+    wisdom + prospecting`` — monster-relative defense plus flat monster-
+    independent utility. BIT-EQUIVALENT to the Lean ``AScore`` model.
     """
-    return armor_score_pure(list(ELEMENTS), armor.resistance, monster_attack)
+    return armor_score_pure(list(ELEMENTS), armor.resistance, monster_attack,
+                            armor.hp_bonus, armor.wisdom, armor.prospecting)
 
 
 def _candidates_for_slot(

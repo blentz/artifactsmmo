@@ -13,6 +13,16 @@ def test_sums_attack_resistance_hp_restore_with_nontool_bonus():
     assert equip_value(s) == 41.0
 
 
+def test_values_utility_stats_wisdom_prospecting_hp_bonus():
+    """Utility gear/artifacts: wisdom + prospecting + hp_bonus count toward value.
+    novice_guide (hp 25, wisdom 25, prospecting 25, non-tool): raw=75 → 2*75+1=151.
+    Before, valued 0 (wisdom/prospecting dropped) → discarded; now a high-value
+    non-tool the ranker pursues and the discard logic protects."""
+    art = ItemStats(code="novice_guide", level=10, type_="artifact",
+                    hp_bonus=25, wisdom=25, prospecting=25)
+    assert equip_value(art) == 151
+
+
 def test_nontool_strictly_beats_tool_on_raw_tie():
     """Spec mirror of PurposeRouting.combatScore_tiebreaks_nontool_over_tool."""
     weapon = ItemStats(code="w", level=1, type_="weapon", attack={"earth": 5})

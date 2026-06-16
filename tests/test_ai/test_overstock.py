@@ -11,6 +11,7 @@ from artifactsmmo_cli.ai.goals.discard_overstock import (
 from artifactsmmo_cli.ai.inventory_caps import (
     BATCH_BUFFER,
     CONSUMABLE_KEEP,
+    _equip_value,
     _is_dominated_pure,
     _is_equippable_dominated,
     _task_chain_demand_pure,
@@ -20,6 +21,19 @@ from artifactsmmo_cli.ai.inventory_caps import (
 )
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 from tests.test_ai.fixtures import make_state
+
+
+def test_equip_value_counts_utility_stats_so_artifact_not_discarded():
+    """The dominance value includes hp_bonus + wisdom + prospecting, so a
+    utility-only artifact (novice_guide: combat stats 0, wisdom/prospecting/hp 25)
+    is valued 75 — not 0 — and is therefore not trivially dominated and discarded
+    as worthless overstock (the Delete(novice_guide×4) trace bug)."""
+    art = ItemStats(code="novice_guide", level=10, type_="artifact",
+                    hp_bonus=25, wisdom=25, prospecting=25)
+    assert _equip_value(art) == 75
+    # A combat peer with a small attack no longer out-values it.
+    weak = ItemStats(code="w", level=1, type_="weapon", attack={"fire": 10})
+    assert _equip_value(art) > _equip_value(weak)
 
 
 def _gd_with_sap_recipes() -> GameData:

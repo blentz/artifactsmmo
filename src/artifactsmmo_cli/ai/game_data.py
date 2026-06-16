@@ -835,6 +835,10 @@ class GameData:
                         stats.initiative = effect.value
                     elif effect.code == "hp":
                         stats.hp_bonus = effect.value
+                    elif effect.code == "wisdom":
+                        stats.wisdom = effect.value
+                    elif effect.code == "prospecting":
+                        stats.prospecting = effect.value
                     elif effect.code in _GATHERING_SKILLS:
                         # Tool bonus for a gather skill (e.g. axe → woodcutting).
                         # Game encodes as cooldown reduction (negative value = faster);

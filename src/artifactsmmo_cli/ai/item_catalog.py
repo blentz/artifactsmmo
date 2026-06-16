@@ -24,6 +24,8 @@ class ItemStats:
     critical_strike: int = 0                                     # crit chance % bonus
     initiative: int = 0                                          # initiative bonus
     hp_bonus: int = 0                                            # flat max-HP bonus (gear)
+    wisdom: int = 0                                              # +xp gain % (1% per 10 wisdom); utility/artifacts
+    prospecting: int = 0                                         # +drop chance % (1% per 10 PP); utility/artifacts
     # OpenAPI conformance (Item 14 drift remediation): every ItemSchema
     # field the bot's decision-making logic touches must round-trip
     # from /v3/items so the planner sees what the server sees.
