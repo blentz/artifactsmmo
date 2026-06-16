@@ -27,6 +27,12 @@ NO new axioms. Pure composition of:
 - Phase 23c-3c's cumulative_progress_under_no_wait headline.
 
 Honest scope disclosure:
+- ⚠ The `hfightFires` field of `GlobalInvariants` is currently UNSATISFIABLE
+  for realistic configs (the only fight-producing means retire after a bounded
+  bank bootstrap), so this capstone is VACUOUS on it — a green build that is
+  NOT yet an honest level-50 guarantee. See the field's own comment and
+  docs/PLAN_obligation5_scope.md (O5.2). The structural composition below is
+  correct; the missing piece is a faithful char-XP-leveling means.
 - `globalInvariants` bundles the no-wait + non-degeneracy + perception
   hypotheses across ALL iterations starting from s. Establishing this
   for a real spawn state is the runtime obligation; the proof is
@@ -65,11 +71,28 @@ structure GlobalInvariants (s : State) : Prop where
   -- from_bounds_proven` only as an underscore-bound, unused parameter) and is not
   -- unconditionally true (bankUnlock can fire at level ≥ 50). Dropping it
   -- STRENGTHENS the capstone (one fewer runtime obligation).
-  -- Item 1g-B cascade: post-XP=0 fix, trajectory must contain
-  -- unbounded .fight firings (via .bankUnlock or .reachUnlockLevel)
-  -- for level advance to be possible at all. Production observes
-  -- this: the planner ALWAYS pursues bank-unlock and skill-level
-  -- goals when active.
+  -- ⚠ HONEST SCOPE DISCLOSURE (2026-06-16) — this hypothesis is currently
+  -- UNSATISFIABLE for realistic configs, so the capstone is VACUOUS on it.
+  -- Char XP is granted ONLY by `.fight` (`Plan.applyActionKind .fight`, +10 xp);
+  -- `taskCompleteXpEstimate := 0` is server-faithful (RewardsSchema = {items,
+  -- gold}, NO xp — Measure.lean:385-405), and `.gather` advances only SKILL xp.
+  -- `planFor` emits `.fight` ONLY from `.bankUnlock` / `.reachUnlockLevel`
+  -- (CycleStep.lean:117-118). BOTH retire PERMANENTLY after a bounded bootstrap:
+  --   • `bankUnlockFires` needs `¬bankAccessible`; the unlock fight flips
+  --     `bankAccessible := true` (Plan.lean:304) and NOTHING sets it back.
+  --   • `reachUnlockLevelFires` needs `level < bankRequiredLevel` AND
+  --     `bankRequiredLevel - level ≤ 5` (MAX_ACHIEVABLE_GAP_LV2); `level` never
+  --     decreases and `bankRequiredLevel` is a fixed config, so it fires only in
+  --     a ≤5-level window and stops once `level` reaches `bankRequiredLevel`.
+  -- Hence `∀N ∃k≥N (fight fires)` CANNOT hold once both guards retire — which
+  -- always happens (faithful bank unlocks early, `bankRequiredLevel ≪ 50`). The
+  -- green build is therefore NOT yet an honest level-50 guarantee: it proves
+  -- reachability MODULO a hypothesis the present model can't furnish.
+  -- The fix is a model extension routing char XP through a means that actually
+  -- FIRES while `level < 50` — see docs/PLAN_obligation5_scope.md (O5.2, the
+  -- monster-task-pursuit reformulation). This field stays so the structural
+  -- composition proof (`level_advances_once` ∘ induction) is preserved and the
+  -- remaining obligation is named EXACTLY.
   hfightFires : ∀ N, ∃ k ≥ N,
       productionLadder (cycleStepN k s) = some .bankUnlock
       ∨ productionLadder (cycleStepN k s) = some .reachUnlockLevel

@@ -152,27 +152,60 @@ incomplete for general leveling.
 is vacuous on `hfightFires` (which cannot hold). For a HONEST level-50 theorem the
 model must gain a faithful general combat-leveling means.
 
-### Model-extension design (the reformulation — multi-session, INVASIVE)
-1. Add a `grindCharacterXP` MeansKind to `allInLadderOrder` (→ 23; updates every
-   `decide`/`cases`-over-the-list lemma + the `length = 22` sanity). Firing:
-   `grindCharacterXpFires s := decide (s.level < 50) && <winnable monster exists>` —
-   the winnable-exists part is the catalog derivation (user's choice: derive from
-   the cached monster table, NOT an axiom).
-2. Semantics: `planFor .grindCharacterXP = [.fight]`; `applyActionKind .fight`
-   already does +10 / rollover (no new apply branch).
-3. Reformulate the leveling obligation: replace `hfightFires` with
-   `grindFires : ∀ N, ∃ k ≥ N, productionLadder (cycleStepN k s) ∈
-   {grindCharacterXP, bankUnlock, reachUnlockLevel}`, and DISCHARGE it — while
-   `level < 50` a winnable monster exists (catalog) so `grindCharacterXpFires`
-   holds, so it (or an earlier means) fires; "infinitely often" follows because
-   the firing condition `level < 50` persists until the goal is met.
-4. Re-route `lifecycle_progress_from_bounds_proven` to accept the grind means.
-5. Diff binding (O5.4): bind `grindCharacterXpFires` + the `productionLadder` select
-   to production (the cycle-step diff currently binds only `applyActionKind`).
+### ✗ FIRST design (a new `grindCharacterXP` discretionary means) — INVALID
 
-INVASIVE — a 23rd constructor ripples through ~40 liveness modules' decide-based
-enumeration lemmas. It is the genuine remaining CORE of obligation 5 and deserves a
-fresh focused session (adding an enum constructor mid-fatigue risks silent breakage
-in the many `cases k` proofs). Recommended first implementation brick: the catalog
-derivation of "a winnable monster exists at every level < 50" (self-contained,
-feeds step 1's firing predicate), then the enum extension.
+Rejected 2026-06-16. A new means appended to the discretionary tail (before
+`.wait`) would **NEVER be selected**, by the SAME task-totality that discharged
+hnowait: `acceptTask` / `pursueTask` / `completeTask` are phase-total (one fires
+in EVERY state) and sit at ladder idx 10/15/16, AHEAD of the discretionary tail.
+So `productionLadder` always returns a task means (or an earlier-firing guard);
+nothing after `acceptTask` is ever the first firing. A grind means at idx 21 is
+dead on arrival. Placing it as a high-priority GUARD instead (before the task
+means) is unfaithful — production does not preempt all task/productive work to
+grind char levels. ⇒ the leveling means cannot be a NEW ladder entry.
+
+### ✓ CORRECTED design — monster-task pursuit fires `.fight` (rides the task loop)
+
+The faithful gap is narrower and routes through the means that DO fire. In the
+real game a MONSTER-kill task is pursued BY fighting the monster, which grants
+char XP + task progress. The Lean model collapsed `pursueTask` to the ITEMS-task
+case only (`planFor .pursueTask = [.taskTrade]`, no char XP). Fix:
+1. Add a task-type discriminant to `State` (e.g. `taskIsMonster : Bool := false`;
+   default keeps every existing items-task fixture/proof intact — low ripple,
+   `{s with …}` updates unaffected; only full literals need the field).
+2. `planFor .pursueTask s = if s.taskIsMonster then [.fight] else [.taskTrade]`.
+   `.fight` already grants +10 char xp + level rollover (no new apply branch);
+   ALSO bump `taskProgress` on a monster-task fight (mirror FightProgress.
+   fightApply `monsterMatchesTask`).
+3. `acceptTask` sets `taskIsMonster` from the accepted task (model the task pool
+   as carrying monster tasks). Leveling then rides the ALREADY-PROVEN-total task
+   loop: monster tasks accepted infinitely often → pursued via fights → +10 xp
+   each → level 50.
+4. Reformulate `hfightFires` to "a level-advancing `.fight` (via monster-task
+   `pursueTask`) fires infinitely often" and DISCHARGE from task-totality + the
+   xp accumulation accounting; re-route `lifecycle_progress_from_bounds_proven`.
+
+### Remaining FAITHFULNESS obligations (O5.4-adjacent, named honestly)
+- **server task pool contains monster tasks** (so `acceptTask` can set
+  `taskIsMonster`) — derive from the cached task catalog (user's earlier choice:
+  catalog-derived, not an axiom), OR a named server axiom + openapi citation.
+- **a winnable monster exists at every level < 50** — supports model FAITHFULNESS
+  (the modelled always-succeed `.fight` matches a real win). NOTE: NOT on the
+  leveling proof's critical path — the model's `.fight` grants xp
+  unconditionally; winnability is the O5.4 binding question, not O5.2.
+
+### Blast radius (measured 2026-06-16)
+12 files `cases k` over MeansKind, 5 reference `allInLadderOrder`, 16 reference
+`pursueTask`. State is built via `{s with …}` (record update) almost everywhere,
+so the new field is low-ripple. The `planFor .pursueTask` change ripples into
+`PlanExists.plan_exists_for_pursueTask` (PlanExists.lean:676) + the lifecycle
+bound lemmas + the cycle-step diff — bounded and mechanical, but it MUST build
+green at each step (kernel-gated), not a fatigued ram-through. This is the
+genuine remaining CORE of obligation 5.
+
+### Status surfaced in code (2026-06-16)
+`LevelFiftyReachable.lean` now carries a ⚠ HONEST SCOPE DISCLOSURE at the
+`hfightFires` field AND in the module docstring: the capstone is currently
+VACUOUS on `hfightFires` (unsatisfiable post-bootstrap for realistic configs).
+The green build is explicitly NOT yet an honest level-50 guarantee until the
+corrected design lands. No proof faked; the gap is named exactly at the site.
