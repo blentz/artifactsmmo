@@ -626,6 +626,28 @@ class TestGameDataLoadMonsters:
         assert gd.monster_poison("imp") == 0
         assert gd.monster_barrier("imp") == 0
 
+    def test_loads_monster_healing_from_effect(self):
+        """A monster's `healing` ABILITY (an effect, not a base stat) parses so
+        predict_win sees its regen lowering our net kill rate. Absent ⇒ 0."""
+        gd = GameData()
+        monster = MagicMock()
+        monster.code = "cultist_emperor"
+        monster.level = 40
+        monster.hp = 2000
+        monster.critical_strike = 0
+        monster.initiative = 100
+        eff = MagicMock()
+        eff.code = "healing"
+        eff.value = 5
+        monster.effects = [eff]
+        with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=make_page([monster])):
+            gd._load_monsters(MagicMock())
+        assert gd.monster_healing("cultist_emperor") == 5
+        assert gd.monster_healing("no_such_monster") == 0
+        # healing is independent of the other abilities.
+        assert gd.monster_burn("cultist_emperor") == 0
+        assert gd.monster_poison("cultist_emperor") == 0
+
     def test_stops_on_none_result(self):
         gd = GameData()
         with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=None):

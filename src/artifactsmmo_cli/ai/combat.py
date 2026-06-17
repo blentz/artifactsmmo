@@ -94,10 +94,15 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
     # Monster lifesteal heals it on ITS crit, lowering our NET kill rate.
     m_attack = game_data.monster_attack(monster_code)
     m_atk_sum = sum(m_attack.values())
+    # Monster healing is per-turn regen (a % of its HP every 3 turns), modeled
+    # conservatively as the full per-3-turn amount EVERY turn (3× upper bound):
+    # subtract it from the net kill step. A monster we can't out-damage out-heals
+    # itself ⇒ kill_step <= 0 ⇒ unkillable (the guard below).
     kill_step = (50 * raw_player * (200 + p.critical_strike)
-                 - m_crit * game_data.monster_lifesteal(monster_code) * m_atk_sum)
+                 - m_crit * game_data.monster_lifesteal(monster_code) * m_atk_sum
+                 - game_data.monster_healing(monster_code) * game_data.monster_hp(monster_code) * 100)
     if kill_step <= 0:
-        return False  # the monster out-heals our damage — unkillable
+        return False  # the monster out-damages/out-heals us — unkillable
     # Barrier is an absorbing shield: model it conservatively as extra effective HP
     # the player must chew through (per-5-turn refresh deferred — first cut flat add).
     effective_monster_hp = game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code)

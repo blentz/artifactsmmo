@@ -264,8 +264,11 @@ PREDICT_WIN_MUTATIONS = [
 # the killStep≤0 / dieStep≤0 guard no longer fires, or a poison loss flips win).
 PREDICT_WIN_LIFESTEAL_MUTATIONS = [
     ("predict_win: drop monster lifesteal term in killStep",
-     "                 - m_crit * game_data.monster_lifesteal(monster_code) * m_atk_sum)",
-     "                 - 0 * game_data.monster_lifesteal(monster_code) * m_atk_sum)"),
+     "                 - m_crit * game_data.monster_lifesteal(monster_code) * m_atk_sum\n",
+     "                 - 0 * game_data.monster_lifesteal(monster_code) * m_atk_sum\n"),
+    ("predict_win: drop monster healing regen term in killStep",
+     "                 - game_data.monster_healing(monster_code) * game_data.monster_hp(monster_code) * 100)",
+     "                 - game_data.monster_healing(monster_code) * game_data.monster_hp(monster_code) * 0)"),
     ("predict_win: drop player lifesteal term in dieStep",
      "                - p.critical_strike * player_lifesteal * p_atk_sum",
      "                - 0 * player_lifesteal * p_atk_sum"),

@@ -39,7 +39,7 @@ def _record_mixed(store: LearningStore, action_repr: str, wins: int, losses: int
 
 
 def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob", lifesteal=0,
-        poison=0, barrier=0, burn=0):
+        poison=0, barrier=0, burn=0, healing=0):
     gd = GameData()
     gd._monster_hp = {code: hp}
     gd._monster_attack = {code: attack or {}}
@@ -50,6 +50,7 @@ def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob", lifestea
     gd._monster_poison = {code: poison}
     gd._monster_barrier = {code: barrier}
     gd._monster_burn = {code: burn}
+    gd._monster_healing = {code: healing}
     return gd
 
 
@@ -127,6 +128,28 @@ def test_predict_win_false_when_burn_outpaces_the_kill():
     assert predict_win(state, gd_no, "mob") is True
     gd_brn = _gd(hp=100, attack={"fire": 50}, initiative=10, burn=100)
     assert predict_win(state, gd_brn, "mob") is False
+
+
+def test_predict_win_false_when_healing_outpaces_our_damage():
+    """Healing killStep regen-subtract: a fight the player would WIN on the
+    initiative tiebreak (rtk == rtd == 2) becomes a LOSS once the monster's regen
+    shrinks killStep and stretches rounds_to_kill. WITHOUT the healing term the bot
+    predicts a win — the mutation gate checks the term flips it. Monster hp 100,
+    healing 40% ⇒ killStep 5e5 - 4e5 = 1e5 ⇒ rtk 10 > rtd 2 ⇒ loss."""
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    gd_no = _gd(hp=100, attack={"fire": 50}, initiative=10)
+    assert predict_win(state, gd_no, "mob") is True
+    gd_heal = _gd(hp=100, attack={"fire": 50}, initiative=10, healing=40)
+    assert predict_win(state, gd_heal, "mob") is False
+
+
+def test_predict_win_false_when_healing_makes_monster_unkillable():
+    """A monster whose regen meets/exceeds our per-round damage has killStep <= 0 ⇒
+    unkillable ⇒ not winnable (the kill_step<=0 guard). Pins the guard interaction:
+    hp 100, healing 50% ⇒ killStep 5e5 - 5e5 = 0 ⇒ unkillable."""
+    state = make_state(max_hp=1000, attack={"fire": 50}, initiative=50)
+    gd = _gd(hp=100, attack={"fire": 5}, initiative=10, healing=50)
+    assert predict_win(state, gd, "mob") is False
 
 
 def test_round_half_up_rounds_half_upward():

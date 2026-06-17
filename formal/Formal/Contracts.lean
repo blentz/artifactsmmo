@@ -258,16 +258,16 @@ example : ∀ (i : Formal.InventoryChainSafe.Inv) (used' wnum wden : Nat),
 -- predict_win_eq_sim: closed-form verdict = operational fight-sim verdict
 -- (∀ stat tuples in the modeled domain: crit ≥ 0, HP ≥ 1, with enough sim fuel).
 example : ∀ (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn : Int) (playerFirst : Bool),
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing : Int) (playerFirst : Bool),
     1 ≤ monsterHp + monsterBarrier → 1 ≤ playerMaxHp →
     ∀ (fk fd : Nat),
-      (ceilDiv ((monsterHp + monsterBarrier)*10000) (killStep rawPlayer pCrit mCrit mLifesteal mAtkSum)).toNat ≤ fk →
+      (ceilDiv ((monsterHp + monsterBarrier)*10000) (killStepNet rawPlayer pCrit mCrit mLifesteal mAtkSum monsterHp monsterHealing)).toNat ≤ fk →
       (ceilDiv (playerMaxHp*10000) (dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison monsterBurn)).toNat ≤ fd →
       predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-        pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn playerFirst
+        pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing playerFirst
         = (if rawPlayer ≤ 0 then false
            else
-             let ks := killStep rawPlayer pCrit mCrit mLifesteal mAtkSum
+             let ks := killStepNet rawPlayer pCrit mCrit mLifesteal mAtkSum monsterHp monsterHealing
              if ks ≤ 0 then false
              else
                let rtk := simRoundsNet (monsterHp + monsterBarrier) ks fk
@@ -281,29 +281,30 @@ example : ∀ (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
   @predict_win_eq_sim
 -- maxturns_sound: rounds_to_kill > MAX_TURNS ⇒ ¬win (effective HP = monsterHp+barrier)
 example : ∀ (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn : Int) (playerFirst : Bool),
-    0 < rawPlayer → 0 < killStep rawPlayer pCrit mCrit mLifesteal mAtkSum →
-    ceilDiv ((monsterHp + monsterBarrier)*10000) (killStep rawPlayer pCrit mCrit mLifesteal mAtkSum) > maxTurns →
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing : Int) (playerFirst : Bool),
+    0 < rawPlayer → 0 < killStepNet rawPlayer pCrit mCrit mLifesteal mAtkSum monsterHp monsterHealing →
+    ceilDiv ((monsterHp + monsterBarrier)*10000) (killStepNet rawPlayer pCrit mCrit mLifesteal mAtkSum monsterHp monsterHealing) > maxTurns →
     predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn playerFirst = false :=
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing playerFirst = false :=
   @maxturns_sound
 -- predict_win_mono_player: increasing player raw never flips a win to a loss
 example : ∀ (raw1 raw2 pCrit monsterHp rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn : Int) (playerFirst : Bool),
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing : Int) (playerFirst : Bool),
     0 ≤ pCrit → 0 < raw1 → raw1 ≤ raw2 → 0 ≤ monsterHp → 0 ≤ monsterBarrier →
     predictWin raw1 pCrit monsterHp rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn playerFirst = true →
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing playerFirst = true →
     predictWin raw2 pCrit monsterHp rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn playerFirst = true :=
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing playerFirst = true :=
   @predict_win_mono_player
 -- predict_win_mono_monsterhp: decreasing monster HP never flips a win to a loss
 example : ∀ (rawPlayer pCrit monsterHp1 monsterHp2 rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn : Int) (playerFirst : Bool),
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing : Int) (playerFirst : Bool),
     0 ≤ pCrit → 0 < rawPlayer → 0 ≤ monsterHp2 → monsterHp2 ≤ monsterHp1 → 0 ≤ monsterBarrier →
+    0 ≤ monsterHealing →
     predictWin rawPlayer pCrit monsterHp1 rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn playerFirst = true →
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing playerFirst = true →
     predictWin rawPlayer pCrit monsterHp2 rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn playerFirst = true :=
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing playerFirst = true :=
   @predict_win_mono_monsterhp
 
 /-! ### LoadoutProjection role contracts. -/

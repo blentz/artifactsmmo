@@ -234,6 +234,14 @@ class GameData:
         self.monsters.burn = value
 
     @property
+    def _monster_healing(self) -> dict[str, int]:
+        return self.monsters.healing
+
+    @_monster_healing.setter
+    def _monster_healing(self, value: dict[str, int]) -> None:
+        self.monsters.healing = value
+
+    @property
     def _monster_initiative(self) -> dict[str, int]:
         return self.monsters.initiative
 
@@ -482,6 +490,12 @@ class GameData:
         effect; 0 if absent). Feeds predict_win: burn raises the player's net death
         rate each turn (modeled conservatively as flat, no decay)."""
         return self.monsters.monster_burn(code)
+
+    def monster_healing(self, code: str) -> int:
+        """Regen percent (of the monster's HP) of a monster (optional `healing`
+        effect; 0 if absent). Feeds predict_win: healing lowers our net kill rate
+        (subtracted from kill_step; an un-out-damageable healer is unkillable)."""
+        return self.monsters.monster_healing(code)
 
     def monster_initiative(self, code: str) -> int:
         """Initiative (turn-order) stat of a monster. Raises `KeyError` when
@@ -1096,12 +1110,13 @@ class GameData:
             }
             self._monster_critical_strike[mon.code] = mon.critical_strike
             self._monster_initiative[mon.code] = mon.initiative
-            # Lifesteal, poison, barrier and burn are optional monster abilities
-            # carried in `effects` (most monsters have none). Defensive parse; ⇒ 0.
+            # Lifesteal, poison, barrier, burn and healing are optional monster
+            # abilities carried in `effects` (most monsters have none). Parse; ⇒ 0.
             self._monster_lifesteal[mon.code] = 0
             self._monster_poison[mon.code] = 0
             self._monster_barrier[mon.code] = 0
             self._monster_burn[mon.code] = 0
+            self._monster_healing[mon.code] = 0
             mon_effects = getattr(mon, "effects", None)
             if mon_effects and not isinstance(mon_effects, Unset):
                 for effect in mon_effects:
@@ -1113,6 +1128,8 @@ class GameData:
                         self._monster_barrier[mon.code] = effect.value
                     elif getattr(effect, "code", None) == "burn":
                         self._monster_burn[mon.code] = effect.value
+                    elif getattr(effect, "code", None) == "healing":
+                        self._monster_healing[mon.code] = effect.value
             # OpenAPI conformance fields (Item 14 remediation).
             # Defensive getattr keeps older API clients green.
             min_gold = getattr(mon, "min_gold", 0)

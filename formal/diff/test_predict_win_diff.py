@@ -50,7 +50,7 @@ def _elem_args(attack: dict, dmg_global: int, dmg_elements: dict, resist: dict) 
 
 def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
          m_hp, m_attack, m_resist, m_crit, m_init,
-         p_lifesteal=0, m_lifesteal=0, m_poison=0, m_barrier=0, m_burn=0):
+         p_lifesteal=0, m_lifesteal=0, m_poison=0, m_barrier=0, m_burn=0, m_healing=0):
     stats = ProjectedStats(
         attack=dict(p_attack), dmg=p_dmg, dmg_elements=dict(p_dmg_elem),
         resistance=dict(p_resist), critical_strike=p_crit, initiative=p_init,
@@ -91,6 +91,9 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
         def monster_burn(self, c):
             return m_burn
 
+        def monster_healing(self, c):
+            return m_healing
+
         def item_stats(self, c):
             return (ItemStats(code=c, level=1, type_="weapon", lifesteal=p_lifesteal)
                     if c == "_ls" else None)
@@ -116,7 +119,7 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
         + _elem_args(m_attack, 0, {}, p_resist)            # monster vs player resist
         + [m_crit, p_max_hp, 1 if p_init >= m_init else 0]
         + [p_lifesteal, p_atk_sum, m_lifesteal, m_atk_sum]
-        + [m_poison, m_barrier, m_burn]
+        + [m_poison, m_barrier, m_burn, m_healing]
     )
     lean = run_oracle("predict_win", [args])[0]
     return py, lean
@@ -155,17 +158,20 @@ def test_python_matches_lean(seed):
     # Burn: 0 most of the time, non-zero often enough to exercise the percent-of-attack
     # DoT term in dieStep (incl. its interaction with the dieStep<=0 sustain guard).
     m_burn = rng.choice([0, 0, rng.randint(1, 100)])
+    # Healing: 0 most of the time, non-zero often enough to exercise the killStep regen
+    # subtraction (incl. driving killStep <= 0 ⇒ unkillable).
+    m_healing = rng.choice([0, 0, rng.randint(1, 50)])
 
     py, lean = _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp,
                     p_init, m_hp, m_attack, m_resist, m_crit, m_init,
-                    p_lifesteal, m_lifesteal, m_poison, m_barrier, m_burn)
+                    p_lifesteal, m_lifesteal, m_poison, m_barrier, m_burn, m_healing)
     assert py == lean["win"], (
         f"verdict mismatch py={py} lean={lean} "
         f"p_attack={p_attack} p_dmg={p_dmg} p_dmg_elem={p_dmg_elem} "
         f"p_resist={p_resist} p_crit={p_crit} p_max_hp={p_max_hp} p_init={p_init} "
         f"m_hp={m_hp} m_attack={m_attack} m_resist={m_resist} m_crit={m_crit} m_init={m_init} "
         f"p_lifesteal={p_lifesteal} m_lifesteal={m_lifesteal} m_poison={m_poison} "
-        f"m_barrier={m_barrier} m_burn={m_burn}"
+        f"m_barrier={m_barrier} m_burn={m_burn} m_healing={m_healing}"
     )
 
 
@@ -286,3 +292,26 @@ def test_burn_flips_winnable_fight_against_lean():
                             m_burn=100)
     assert py_brn is False
     assert py_brn == lean_brn["win"]
+
+
+def test_healing_flips_winnable_fight_against_lean():
+    """A symmetric fight the player WINS on the initiative tiebreak (rtk == rtd == 2,
+    player first), but the monster's per-turn healing regen shrinks killStep so
+    rounds_to_kill grows past rounds_to_die and flips it to a LOSS. Pins the killStep
+    regen-subtract term against Lean — a mutant that drops it keeps killStep large
+    (win) and dies here. Monster hp 100, healing 40% => killStep 5e5 - 4e5 = 1e5 =>
+    rtk = 10 > rtd = 2 => loss."""
+    p = dict(attack={"fire": 50}, dmg=0, dmg_elem={}, resist={}, crit=0,
+             max_hp=100, init=10)
+    m = dict(hp=100, attack={"fire": 50}, resist={}, crit=0, init=10)
+    py_no, lean_no = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
+                          p["crit"], p["max_hp"], p["init"], m["hp"],
+                          m["attack"], m["resist"], m["crit"], m["init"])
+    assert py_no is True
+    assert py_no == lean_no["win"]
+    py_h, lean_h = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
+                        p["crit"], p["max_hp"], p["init"], m["hp"],
+                        m["attack"], m["resist"], m["crit"], m["init"],
+                        m_healing=40)
+    assert py_h is False
+    assert py_h == lean_h["win"]
