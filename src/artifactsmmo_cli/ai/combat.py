@@ -101,12 +101,17 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
     # Void drain (every 4 turns the monster drains a % of player HP to heal itself,
     # modeled conservatively as the full per-4-turn amount EVERY turn) heals the
     # monster ⇒ subtract its per-turn self-heal from the net kill step.
+    # Protective-bubble grants value% resistance to a rotating element each turn;
+    # modeled conservatively as the bubble always covering the player's damage (value%
+    # reduction every turn) ⇒ reduce killStep by value% of the player-damage term
+    # (= value * raw_player * (200+crit) / 2). // 2 matches the Lean `/ 2` on non-negs.
     kill_step = (50 * raw_player * (200 + p.critical_strike)
                  - m_crit * game_data.monster_lifesteal(monster_code) * m_atk_sum
                  - game_data.monster_healing(monster_code) * game_data.monster_hp(monster_code) * 100
-                 - game_data.monster_void_drain(monster_code) * p.max_hp * 100)
+                 - game_data.monster_void_drain(monster_code) * p.max_hp * 100
+                 - game_data.monster_protective_bubble(monster_code) * raw_player * (200 + p.critical_strike) // 2)
     if kill_step <= 0:
-        return False  # the monster out-damages/out-heals us — unkillable
+        return False  # the monster out-damages/out-heals/out-resists us — unkillable
     # Barrier is an absorbing shield: model it conservatively as extra effective HP
     # the player must chew through (per-5-turn refresh deferred — first cut flat add).
     effective_monster_hp = game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code)

@@ -94,8 +94,10 @@ def runPredictWin (g : Nat → Int) : Json :=
   -- berserker_rage [39] + frenzy [40]: monster +% damage (always-active bound; dieStep)
   let monsterBerserk := g 39
   let monsterFrenzy := g 40
+  -- protective_bubble [41]: % resist on rotating element (conservative always-on; killStep)
+  let monsterBubble := g 41
   let verdict := predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-    pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy playerFirst
+    pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy monsterBubble playerFirst
   Json.mkObj [("win", Json.bool verdict), ("raw_player", Json.num rawPlayer),
     ("raw_monster", Json.num rawMonster)]
 

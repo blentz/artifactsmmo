@@ -258,16 +258,16 @@ example : ∀ (i : Formal.InventoryChainSafe.Inv) (used' wnum wden : Nat),
 -- predict_win_eq_sim: closed-form verdict = operational fight-sim verdict
 -- (∀ stat tuples in the modeled domain: crit ≥ 0, HP ≥ 1, with enough sim fuel).
 example : ∀ (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy : Int) (playerFirst : Bool),
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy monsterBubble : Int) (playerFirst : Bool),
     1 ≤ monsterHp + monsterBarrier → 1 ≤ playerMaxHp →
     ∀ (fk fd : Nat),
-      (ceilDiv ((monsterHp + monsterBarrier)*10000) (killStepNet rawPlayer pCrit mCrit mLifesteal mAtkSum monsterHp monsterHealing playerMaxHp monsterVoidDrain)).toNat ≤ fk →
+      (ceilDiv ((monsterHp + monsterBarrier)*10000) (killStepNet rawPlayer pCrit mCrit mLifesteal mAtkSum monsterHp monsterHealing playerMaxHp monsterVoidDrain monsterBubble)).toNat ≤ fk →
       (ceilDiv (playerMaxHp*10000) (dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison monsterBurn playerMaxHp monsterVoidDrain monsterBerserk monsterFrenzy)).toNat ≤ fd →
       predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-        pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy playerFirst
+        pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy monsterBubble playerFirst
         = (if rawPlayer ≤ 0 then false
            else
-             let ks := killStepNet rawPlayer pCrit mCrit mLifesteal mAtkSum monsterHp monsterHealing playerMaxHp monsterVoidDrain
+             let ks := killStepNet rawPlayer pCrit mCrit mLifesteal mAtkSum monsterHp monsterHealing playerMaxHp monsterVoidDrain monsterBubble
              if ks ≤ 0 then false
              else
                let rtk := simRoundsNet (monsterHp + monsterBarrier) ks fk
@@ -282,30 +282,31 @@ example : ∀ (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
   @predict_win_eq_sim
 -- maxturns_sound: rounds_to_kill > MAX_TURNS ⇒ ¬win (effective HP = monsterHp+barrier)
 example : ∀ (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy : Int) (playerFirst : Bool),
-    0 < rawPlayer → 0 < killStepNet rawPlayer pCrit mCrit mLifesteal mAtkSum monsterHp monsterHealing playerMaxHp monsterVoidDrain →
-    ceilDiv ((monsterHp + monsterBarrier)*10000) (killStepNet rawPlayer pCrit mCrit mLifesteal mAtkSum monsterHp monsterHealing playerMaxHp monsterVoidDrain) > maxTurns →
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy monsterBubble : Int) (playerFirst : Bool),
+    0 < rawPlayer → 0 < killStepNet rawPlayer pCrit mCrit mLifesteal mAtkSum monsterHp monsterHealing playerMaxHp monsterVoidDrain monsterBubble →
+    ceilDiv ((monsterHp + monsterBarrier)*10000) (killStepNet rawPlayer pCrit mCrit mLifesteal mAtkSum monsterHp monsterHealing playerMaxHp monsterVoidDrain monsterBubble) > maxTurns →
     predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy playerFirst = false :=
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy monsterBubble playerFirst = false :=
   @maxturns_sound
 -- predict_win_mono_player: increasing player raw never flips a win to a loss
 example : ∀ (raw1 raw2 pCrit monsterHp rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy : Int) (playerFirst : Bool),
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy monsterBubble : Int) (playerFirst : Bool),
     0 ≤ pCrit → 0 < raw1 → raw1 ≤ raw2 → 0 ≤ monsterHp → 0 ≤ monsterBarrier →
+    0 ≤ monsterBubble → monsterBubble ≤ 100 →
     predictWin raw1 pCrit monsterHp rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy playerFirst = true →
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy monsterBubble playerFirst = true →
     predictWin raw2 pCrit monsterHp rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy playerFirst = true :=
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy monsterBubble playerFirst = true :=
   @predict_win_mono_player
 -- predict_win_mono_monsterhp: decreasing monster HP never flips a win to a loss
 example : ∀ (rawPlayer pCrit monsterHp1 monsterHp2 rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy : Int) (playerFirst : Bool),
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy monsterBubble : Int) (playerFirst : Bool),
     0 ≤ pCrit → 0 < rawPlayer → 0 ≤ monsterHp2 → monsterHp2 ≤ monsterHp1 → 0 ≤ monsterBarrier →
     0 ≤ monsterHealing →
     predictWin rawPlayer pCrit monsterHp1 rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy playerFirst = true →
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy monsterBubble playerFirst = true →
     predictWin rawPlayer pCrit monsterHp2 rawMonster mCrit playerMaxHp
-      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy playerFirst = true :=
+      pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy monsterBubble playerFirst = true :=
   @predict_win_mono_monsterhp
 
 /-! ### LoadoutProjection role contracts. -/

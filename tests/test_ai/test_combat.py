@@ -40,7 +40,7 @@ def _record_mixed(store: LearningStore, action_repr: str, wins: int, losses: int
 
 def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob", lifesteal=0,
         poison=0, barrier=0, burn=0, healing=0, reconstitution=0, void_drain=0,
-        berserker_rage=0, frenzy=0):
+        berserker_rage=0, frenzy=0, protective_bubble=0):
     gd = GameData()
     gd._monster_hp = {code: hp}
     gd._monster_attack = {code: attack or {}}
@@ -56,6 +56,7 @@ def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob", lifestea
     gd._monster_void_drain = {code: void_drain}
     gd._monster_berserker_rage = {code: berserker_rage}
     gd._monster_frenzy = {code: frenzy}
+    gd._monster_protective_bubble = {code: protective_bubble}
     return gd
 
 
@@ -217,6 +218,18 @@ def test_predict_win_false_when_frenzy_boosts_monster_damage():
     assert predict_win(state, gd_no, "mob") is True
     gd_f = _gd(hp=100, attack={"fire": 50}, initiative=10, frenzy=100)
     assert predict_win(state, gd_f, "mob") is False
+
+
+def test_predict_win_false_when_protective_bubble_resists_player():
+    """Protective-bubble's always-on player-damage reduction shrinks killStep, raising
+    rounds_to_kill past rounds_to_die and flipping a won tiebreak to a loss. WITHOUT
+    the term the bot predicts a win; the mutation gate checks it flips. Player raw 50
+    vs hp 100; bubble 50% ⇒ killStep 5e5 - 50*50*200//2=2.5e5 = 2.5e5 ⇒ rtk 4 > rtd 2."""
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    gd_no = _gd(hp=100, attack={"fire": 50}, initiative=10)
+    assert predict_win(state, gd_no, "mob") is True
+    gd_bub = _gd(hp=100, attack={"fire": 50}, initiative=10, protective_bubble=50)
+    assert predict_win(state, gd_bub, "mob") is False
 
 
 def test_round_half_up_rounds_half_upward():

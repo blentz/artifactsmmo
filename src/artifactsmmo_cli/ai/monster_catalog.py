@@ -24,6 +24,7 @@ class MonsterCatalog:
     void_drain: dict[str, int] = field(default_factory=dict)  # code -> drain % of player HP per cycle (effect; 0 if absent)
     berserker_rage: dict[str, int] = field(default_factory=dict)  # code -> +% damage below 25% HP (effect; 0 if absent)
     frenzy: dict[str, int] = field(default_factory=dict)  # code -> +% damage on crit (effect; 0 if absent)
+    protective_bubble: dict[str, int] = field(default_factory=dict)  # code -> % resist on rotating element (effect; 0 if absent)
     # OpenAPI conformance (Item 14 remediation): monster reward + loot fields.
     drops: dict[str, list[tuple[str, int, int, int]]] = field(default_factory=dict)
     """code -> [(item_code, rate, min_quantity, max_quantity), ...]. Drop rate is
@@ -155,6 +156,13 @@ class MonsterCatalog:
         when absent — an OPTIONAL monster ability (most monsters have none), so
         unlike the always-present combat stats this does not raise."""
         return self.frenzy.get(code, 0)
+
+    def monster_protective_bubble(self, code: str) -> int:
+        """Protective-bubble resistance percent of a monster (the
+        `protective_bubble` effect). Returns 0 when absent — an OPTIONAL monster
+        ability (most monsters have none), so unlike the always-present combat stats
+        this does not raise."""
+        return self.protective_bubble.get(code, 0)
 
     def monster_initiative(self, code: str) -> int:
         """Initiative (turn-order) stat of a monster. Raises `KeyError` when

@@ -51,7 +51,7 @@ def _elem_args(attack: dict, dmg_global: int, dmg_elements: dict, resist: dict) 
 def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
          m_hp, m_attack, m_resist, m_crit, m_init,
          p_lifesteal=0, m_lifesteal=0, m_poison=0, m_barrier=0, m_burn=0, m_healing=0,
-         m_recon=0, m_void=0, m_berserk=0, m_frenzy=0):
+         m_recon=0, m_void=0, m_berserk=0, m_frenzy=0, m_bubble=0):
     stats = ProjectedStats(
         attack=dict(p_attack), dmg=p_dmg, dmg_elements=dict(p_dmg_elem),
         resistance=dict(p_resist), critical_strike=p_crit, initiative=p_init,
@@ -107,6 +107,9 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
         def monster_frenzy(self, c):
             return m_frenzy
 
+        def monster_protective_bubble(self, c):
+            return m_bubble
+
         def item_stats(self, c):
             return (ItemStats(code=c, level=1, type_="weapon", lifesteal=p_lifesteal)
                     if c == "_ls" else None)
@@ -132,7 +135,7 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
         + _elem_args(m_attack, 0, {}, p_resist)            # monster vs player resist
         + [m_crit, p_max_hp, 1 if p_init >= m_init else 0]
         + [p_lifesteal, p_atk_sum, m_lifesteal, m_atk_sum]
-        + [m_poison, m_barrier, m_burn, m_healing, m_recon, m_void, m_berserk, m_frenzy]
+        + [m_poison, m_barrier, m_burn, m_healing, m_recon, m_void, m_berserk, m_frenzy, m_bubble]
     )
     lean = run_oracle("predict_win", [args])[0]
     return py, lean
@@ -184,11 +187,14 @@ def test_python_matches_lean(seed):
     # each monster-damage-boost dieStep term (incl. the floor-div // 2 vs Lean / 2).
     m_berserk = rng.choice([0, 0, rng.randint(1, 100)])
     m_frenzy = rng.choice([0, 0, rng.randint(1, 100)])
+    # Protective bubble: 0 most of the time, else a resist % in [1, 100] (the modeled
+    # domain) — exercises the killStep player-damage reduction incl. ks <= 0 at 100%.
+    m_bubble = rng.choice([0, 0, rng.randint(1, 100)])
 
     py, lean = _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp,
                     p_init, m_hp, m_attack, m_resist, m_crit, m_init,
                     p_lifesteal, m_lifesteal, m_poison, m_barrier, m_burn, m_healing, m_recon,
-                    m_void, m_berserk, m_frenzy)
+                    m_void, m_berserk, m_frenzy, m_bubble)
     assert py == lean["win"], (
         f"verdict mismatch py={py} lean={lean} "
         f"p_attack={p_attack} p_dmg={p_dmg} p_dmg_elem={p_dmg_elem} "
@@ -196,7 +202,7 @@ def test_python_matches_lean(seed):
         f"m_hp={m_hp} m_attack={m_attack} m_resist={m_resist} m_crit={m_crit} m_init={m_init} "
         f"p_lifesteal={p_lifesteal} m_lifesteal={m_lifesteal} m_poison={m_poison} "
         f"m_barrier={m_barrier} m_burn={m_burn} m_healing={m_healing} m_recon={m_recon} "
-        f"m_void={m_void} m_berserk={m_berserk} m_frenzy={m_frenzy}"
+        f"m_void={m_void} m_berserk={m_berserk} m_frenzy={m_frenzy} m_bubble={m_bubble}"
     )
 
 
@@ -273,6 +279,26 @@ def test_frenzy_flips_winnable_fight_against_lean():
                         m_frenzy=100)
     assert py_f is False
     assert py_f == lean_f["win"]
+
+
+def test_protective_bubble_flips_winnable_fight_against_lean():
+    """Protective-bubble's always-on player-damage reduction shrinks killStep, raising
+    rounds_to_kill past rounds_to_die and flipping a won tiebreak to a loss. Pins the
+    killStep bubble term (incl. the `/ 2` floor) against Lean. Player raw 50 vs hp 100;
+    bubble 50% => killStep 5e5 - 50*50*200//2=2.5e5 = 2.5e5 => rtk 4 > rtd 2 => loss."""
+    p = dict(attack={"fire": 50}, dmg=0, dmg_elem={}, resist={}, crit=0,
+             max_hp=100, init=10)
+    m = dict(hp=100, attack={"fire": 50}, resist={}, crit=0, init=10)
+    py_no, lean_no = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
+                          p["crit"], p["max_hp"], p["init"], m["hp"],
+                          m["attack"], m["resist"], m["crit"], m["init"])
+    assert py_no is True and py_no == lean_no["win"]
+    py_b, lean_b = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
+                        p["crit"], p["max_hp"], p["init"], m["hp"],
+                        m["attack"], m["resist"], m["crit"], m["init"],
+                        m_bubble=50)
+    assert py_b is False
+    assert py_b == lean_b["win"]
 
 
 def test_maxturns_loss_binds_against_lean():

@@ -712,6 +712,26 @@ class TestGameDataLoadMonsters:
         assert gd.monster_berserker_rage("no_such_monster") == 0
         assert gd.monster_frenzy("no_such_monster") == 0
 
+    def test_loads_monster_protective_bubble_from_effect(self):
+        """A monster's `protective_bubble` ABILITY (an effect, not a base stat) parses
+        so predict_win sees its resist-based player-damage reduction. Absent ⇒ 0."""
+        gd = GameData()
+        monster = MagicMock()
+        monster.code = "goblin_priestess"
+        monster.level = 42
+        monster.hp = 1800
+        monster.critical_strike = 0
+        monster.initiative = 100
+        eff = MagicMock(); eff.code = "protective_bubble"; eff.value = 65
+        monster.effects = [eff]
+        with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=make_page([monster])):
+            gd._load_monsters(MagicMock())
+        assert gd.monster_protective_bubble("goblin_priestess") == 65
+        assert gd.monster_protective_bubble("no_such_monster") == 0
+        # protective_bubble is independent of the other abilities.
+        assert gd.monster_frenzy("goblin_priestess") == 0
+        assert gd.monster_berserker_rage("goblin_priestess") == 0
+
     def test_stops_on_none_result(self):
         gd = GameData()
         with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=None):
