@@ -205,6 +205,20 @@ def test_initiative_tiebreak_binds_against_lean():
     assert py_second == lean_second["win"]
 
 
+def test_round_half_up_boundary_binds_against_lean():
+    """Deterministically pin `_round_half_up` against Lean at a rounding boundary
+    (so the kill does not rely on random Hypothesis coverage). The `+0.5 -> +1.5`
+    mutant adds 1 to every rounding; with monster resistance the output(+1) and
+    blocked(+1) do NOT cancel, dropping raw_player 50 -> 49, which pushes
+    rounds_to_kill 100 -> 103 past MAX_TURNS and flips the verdict True -> False.
+    Player fire 100 vs monster fire-resist 50 => raw 50; monster hp 5000 => exactly
+    100 rounds (= MAX_TURNS, a win); monster deals no damage."""
+    py, lean = _run({"fire": 100}, 0, {}, {}, 0, 1000, 10,
+                    5000, {}, {"fire": 50}, 0, 0)
+    assert py is True
+    assert py == lean["win"]
+
+
 def test_maxturns_loss_binds_against_lean():
     """A monster needing > MAX_TURNS rounds to kill is a loss even though the
     player is unkillable. Pins the MAX_TURNS cap against Lean."""
