@@ -670,6 +670,28 @@ class TestGameDataLoadMonsters:
         assert gd.monster_healing("lich") == 0
         assert gd.monster_barrier("lich") == 0
 
+    def test_loads_monster_void_drain_from_effect(self):
+        """A monster's `void_drain` ABILITY (an effect, not a base stat) parses so
+        predict_win sees its HP drain (player loss + monster self-heal). Absent ⇒ 0."""
+        gd = GameData()
+        monster = MagicMock()
+        monster.code = "duskworm"
+        monster.level = 38
+        monster.hp = 1500
+        monster.critical_strike = 0
+        monster.initiative = 100
+        eff = MagicMock()
+        eff.code = "void_drain"
+        eff.value = 10
+        monster.effects = [eff]
+        with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=make_page([monster])):
+            gd._load_monsters(MagicMock())
+        assert gd.monster_void_drain("duskworm") == 10
+        assert gd.monster_void_drain("no_such_monster") == 0
+        # void_drain is independent of the other abilities.
+        assert gd.monster_reconstitution("duskworm") == 0
+        assert gd.monster_healing("duskworm") == 0
+
     def test_stops_on_none_result(self):
         gd = GameData()
         with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=None):

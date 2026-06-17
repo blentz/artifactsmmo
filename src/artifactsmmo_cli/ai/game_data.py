@@ -250,6 +250,14 @@ class GameData:
         self.monsters.reconstitution = value
 
     @property
+    def _monster_void_drain(self) -> dict[str, int]:
+        return self.monsters.void_drain
+
+    @_monster_void_drain.setter
+    def _monster_void_drain(self, value: dict[str, int]) -> None:
+        self.monsters.void_drain = value
+
+    @property
     def _monster_initiative(self) -> dict[str, int]:
         return self.monsters.initiative
 
@@ -510,6 +518,12 @@ class GameData:
         effect; 0 if absent). Feeds predict_win: if we can't kill the monster
         faster than this period, it fully heals before dying ⇒ unwinnable."""
         return self.monsters.monster_reconstitution(code)
+
+    def monster_void_drain(self, code: str) -> int:
+        """Void-drain percent (of player HP) of a monster (optional `void_drain`
+        effect; 0 if absent). Feeds predict_win: it BOTH raises the player's death
+        rate (drain) and lowers our kill rate (the monster heals by the drain)."""
+        return self.monsters.monster_void_drain(code)
 
     def monster_initiative(self, code: str) -> int:
         """Initiative (turn-order) stat of a monster. Raises `KeyError` when
@@ -1132,6 +1146,7 @@ class GameData:
             self._monster_burn[mon.code] = 0
             self._monster_healing[mon.code] = 0
             self._monster_reconstitution[mon.code] = 0
+            self._monster_void_drain[mon.code] = 0
             mon_effects = getattr(mon, "effects", None)
             if mon_effects and not isinstance(mon_effects, Unset):
                 for effect in mon_effects:
@@ -1147,6 +1162,8 @@ class GameData:
                         self._monster_healing[mon.code] = effect.value
                     elif getattr(effect, "code", None) == "reconstitution":
                         self._monster_reconstitution[mon.code] = effect.value
+                    elif getattr(effect, "code", None) == "void_drain":
+                        self._monster_void_drain[mon.code] = effect.value
             # OpenAPI conformance fields (Item 14 remediation).
             # Defensive getattr keeps older API clients green.
             min_gold = getattr(mon, "min_gold", 0)

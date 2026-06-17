@@ -98,9 +98,13 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
     # conservatively as the full per-3-turn amount EVERY turn (3× upper bound):
     # subtract it from the net kill step. A monster we can't out-damage out-heals
     # itself ⇒ kill_step <= 0 ⇒ unkillable (the guard below).
+    # Void drain (every 4 turns the monster drains a % of player HP to heal itself,
+    # modeled conservatively as the full per-4-turn amount EVERY turn) heals the
+    # monster ⇒ subtract its per-turn self-heal from the net kill step.
     kill_step = (50 * raw_player * (200 + p.critical_strike)
                  - m_crit * game_data.monster_lifesteal(monster_code) * m_atk_sum
-                 - game_data.monster_healing(monster_code) * game_data.monster_hp(monster_code) * 100)
+                 - game_data.monster_healing(monster_code) * game_data.monster_hp(monster_code) * 100
+                 - game_data.monster_void_drain(monster_code) * p.max_hp * 100)
     if kill_step <= 0:
         return False  # the monster out-damages/out-heals us — unkillable
     # Barrier is an absorbing shield: model it conservatively as extra effective HP
@@ -135,7 +139,8 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
     die_step = (50 * raw_monster * (200 + m_crit)
                 - p.critical_strike * player_lifesteal * p_atk_sum
                 + game_data.monster_poison(monster_code) * 10000
-                + game_data.monster_burn(monster_code) * p_atk_sum * 100)
+                + game_data.monster_burn(monster_code) * p_atk_sum * 100
+                + game_data.monster_void_drain(monster_code) * p.max_hp * 100)
     if die_step <= 0:
         return True  # we out-sustain the monster's damage (poison-inclusive)
     effective_hp = min(state.hp, p.max_hp) if state.hp > 0 else 0

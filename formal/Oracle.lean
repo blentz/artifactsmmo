@@ -89,8 +89,10 @@ def runPredictWin (g : Nat → Int) : Json :=
   let monsterHealing := g 36
   -- reconstitution extension: [37]=monsterReconstitution (full-heal period; turn-cap)
   let monsterReconstitution := g 37
+  -- void_drain extension: [38]=monsterVoidDrain (drain % of player HP; dieStep + killStep)
+  let monsterVoidDrain := g 38
   let verdict := predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-    pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing monsterReconstitution playerFirst
+    pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing monsterReconstitution monsterVoidDrain playerFirst
   Json.mkObj [("win", Json.bool verdict), ("raw_player", Json.num rawPlayer),
     ("raw_monster", Json.num rawMonster)]
 

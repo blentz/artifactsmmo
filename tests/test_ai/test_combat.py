@@ -39,7 +39,7 @@ def _record_mixed(store: LearningStore, action_repr: str, wins: int, losses: int
 
 
 def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob", lifesteal=0,
-        poison=0, barrier=0, burn=0, healing=0, reconstitution=0):
+        poison=0, barrier=0, burn=0, healing=0, reconstitution=0, void_drain=0):
     gd = GameData()
     gd._monster_hp = {code: hp}
     gd._monster_attack = {code: attack or {}}
@@ -52,6 +52,7 @@ def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob", lifestea
     gd._monster_burn = {code: burn}
     gd._monster_healing = {code: healing}
     gd._monster_reconstitution = {code: reconstitution}
+    gd._monster_void_drain = {code: void_drain}
     return gd
 
 
@@ -164,6 +165,33 @@ def test_predict_win_false_when_reconstitution_outlasts_our_kill():
     assert predict_win(state, gd_no, "mob") is True
     gd_rec = _gd(hp=100, attack={"fire": 5}, initiative=10, reconstitution=2)
     assert predict_win(state, gd_rec, "mob") is False
+
+
+def test_predict_win_false_when_void_drain_drains_and_heals():
+    """Void drain hits BOTH sides: a fight the player would WIN on the tiebreak
+    (rtk == rtd == 2) becomes a LOSS because the drain heals the monster (killStep
+    down ⇒ rtk up) AND damages the player (dieStep up ⇒ rtd down). WITHOUT either
+    term the bot predicts a win; the mutation gate checks each term flips it. Player
+    hp 100, raw 50 vs hp 100; void 20% ⇒ killStep 3e5 (rtk 4), dieStep 7e5 (rtd 2)."""
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    gd_no = _gd(hp=100, attack={"fire": 50}, initiative=10)
+    assert predict_win(state, gd_no, "mob") is True
+    gd_void = _gd(hp=100, attack={"fire": 50}, initiative=10, void_drain=20)
+    assert predict_win(state, gd_void, "mob") is False
+
+
+def test_predict_win_void_drain_dieStep_term_alone_decides():
+    """Isolate the void-drain dieStep (player-loss) term: a strong player vs a tanky
+    weak-hitting monster, where the killStep void-heal barely moves rounds_to_kill but
+    the dieStep void-loss collapses rounds_to_die below it. Dropping the dieStep term
+    (mutation) leaves rtd large => win, but the real verdict is a loss => kills that
+    mutant deterministically. raw 200 vs hp 1000 => rtk 6 (killStep void 2e6->1.8e6);
+    weak monster raw 5, player hp 100, void 20% => dieStep 5e4->2.5e5 => rtd 4 < 6."""
+    state = make_state(max_hp=100, attack={"fire": 200}, initiative=50)
+    gd_no = _gd(hp=1000, attack={"fire": 5}, initiative=0)
+    assert predict_win(state, gd_no, "mob") is True
+    gd_void = _gd(hp=1000, attack={"fire": 5}, initiative=0, void_drain=20)
+    assert predict_win(state, gd_void, "mob") is False
 
 
 def test_round_half_up_rounds_half_upward():
