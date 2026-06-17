@@ -416,6 +416,16 @@ class GameData:
         achievement gate). Used to drop a stale global bank-lock blocker."""
         return self.world.has_open_bank()
 
+    def teleport_destination(self, item_code: str) -> tuple[int, int] | None:
+        """Destination tile of a teleport consumable (PLAN #6b), or None when the
+        item is not a teleport item OR its destination map is not in the loaded
+        overworld set. The item's `teleport` effect value is a MapSchema.map_id;
+        resolve it to coordinates via the map_id index."""
+        stats = self.item_stats(item_code)
+        if stats is None or stats.teleport_map_id <= 0:
+            return None
+        return self.world.map_location_by_id(stats.teleport_map_id)
+
     @staticmethod
     def _bank_tile_open(tile: object) -> bool:
         """True when a bank tile has no access conditions (open to everyone)."""
@@ -889,6 +899,7 @@ class GameData:
         for tile in tiles:
             loc = (tile.x, tile.y)
             self._known_tiles.add(loc)
+            self.world.map_id_to_loc[tile.map_id] = loc  # teleport destinations resolve map_id -> coords
 
             transition = tile.interactions.transition
             if not isinstance(transition, Unset) and transition is not None:
@@ -1040,6 +1051,12 @@ class GameData:
                         # Game encodes as cooldown reduction (negative value = faster);
                         # store as-is so callers can compare magnitudes.
                         stats.skill_effects[effect.code] = effect.value
+                    elif effect.code == "teleport":
+                        # PLAN #6b: a fast-travel consumable. The effect `value` is the
+                        # destination MapSchema.map_id; TeleportAction resolves it to (x, y)
+                        # via game_data.teleport_destination and lets the planner prefer a
+                        # warp over a long walk.
+                        stats.teleport_map_id = effect.value
                     elif effect.code == "threat":
                         # PLAN #6c carve-out: `threat` is aggro/taunt (pulls a monster's
                         # focus off allies). Irrelevant for a SOLO bot — no allies to

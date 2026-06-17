@@ -252,6 +252,18 @@ class TestGameDataLoadMaps:
             gd._load_maps(MagicMock())
         assert gd._grand_exchange_location == (3, 4)
 
+    def test_indexes_map_id_to_coords(self):
+        """PLAN #6b: each tile's map_id is indexed to its (x, y) so teleport
+        destinations (whose effect value is a map_id) resolve to coordinates."""
+        gd = GameData()
+        spawn = make_map_tile(0, 0, "bank", "bank"); spawn.map_id = 271
+        forest = make_map_tile(7, 13, "resource", "ash_tree"); forest.map_id = 955
+        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=make_page([spawn, forest])):
+            gd._load_maps(MagicMock())
+        assert gd.world.map_location_by_id(271) == (0, 0)
+        assert gd.world.map_location_by_id(955) == (7, 13)
+        assert gd.world.map_location_by_id(999) is None  # unknown map id
+
     def test_stops_on_none_result(self):
         gd = GameData()
         with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=None):
@@ -331,6 +343,42 @@ class TestGameDataLoadItems:
         assert s.combat_buff == 0 and s.hp_bonus == 0 and s.dmg == 0
         assert s.attack == {} and s.resistance == {} and s.dmg_elements == {}
         assert s.lifesteal == 0 and s.antipoison == 0
+
+    def test_teleport_effect_sets_map_id(self):
+        """PLAN #6b: a `teleport` effect records its destination map id and leaks
+        into no combat/value field (it is a travel option, not a stat)."""
+        gd = GameData()
+        item = MagicMock()
+        item.code = "recall_potion"
+        item.level = 1
+        item.type_ = "utility"
+        item.craft = UNSET
+        eff = MagicMock(); eff.code = "teleport"; eff.value = 271
+        item.effects = [eff]
+        with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=make_page([item])):
+            gd._load_items(MagicMock())
+        s = gd._item_stats["recall_potion"]
+        assert s.teleport_map_id == 271
+        # no leak into the decision-making stats.
+        assert s.combat_buff == 0 and s.hp_bonus == 0 and s.hp_restore == 0
+        assert s.attack == {} and s.resistance == {} and s.dmg_elements == {}
+
+    def test_teleport_destination_resolves_and_guards(self):
+        """PLAN #6b accessor: item's teleport_map_id resolves to coords via the
+        map index; None when not a teleport item, unknown item, or unmapped id."""
+        gd = GameData()
+        gd._item_stats = {
+            "recall_potion": ItemStats(code="recall_potion", level=1, type_="utility",
+                                       teleport_map_id=271),
+            "unmapped_potion": ItemStats(code="unmapped_potion", level=1, type_="utility",
+                                         teleport_map_id=88888),
+            "plain_sword": ItemStats(code="plain_sword", level=1, type_="weapon"),
+        }
+        gd.world.map_id_to_loc = {271: (0, 0)}
+        assert gd.teleport_destination("recall_potion") == (0, 0)
+        assert gd.teleport_destination("unmapped_potion") is None  # id not in map index
+        assert gd.teleport_destination("plain_sword") is None      # not a teleport item
+        assert gd.teleport_destination("nonexistent") is None      # unknown item
 
     def test_loads_combat_buff_from_utility_buff_effects(self):
         """Utility-slot combat-buff potions route into the fields the existing
@@ -1092,6 +1140,7 @@ def test_load_maps_captures_transition_tiles(monkeypatch):
         def __init__(self, x, y, transition=None):
             self.x = x
             self.y = y
+            self.map_id = x * 1000 + y  # MapSchema.map_id is a required field
             self.interactions = FakeInteractions(content=None, transition=transition)
 
     class FakeResult:

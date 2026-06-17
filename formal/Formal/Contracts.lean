@@ -1672,6 +1672,11 @@ example : ∀ (s : Formal.ApplyBaseline.WorldStateLean) (i : List (String × Nat
     (p : Option (List (String × String))),
     Formal.ApplyBaseline.preservesBaseline s (Formal.ApplyBaseline.claimApply s i p) :=
   @Formal.ApplyBaseline.claimApply_preserves_baseline
+-- apply-preserves-baseline-teleport: TeleportAction.apply (PLAN #6b) preserves all 8 baseline fields.
+example : ∀ (s : Formal.ApplyBaseline.WorldStateLean) (i : List (String × Nat))
+    (newX newY : Int),
+    Formal.ApplyBaseline.preservesBaseline s (Formal.ApplyBaseline.teleportApply s i newX newY) :=
+  @Formal.ApplyBaseline.teleportApply_preserves_baseline
 -- headline-preserves-baseline: every modeled apply preserves the 8 baseline fields.
 example : ∀ (s : Formal.ApplyBaseline.WorldStateLean) (a : Formal.ApplyBaseline.ModeledApply),
     Formal.ApplyBaseline.preservesBaseline s (a.run s) :=

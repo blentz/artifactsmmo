@@ -38,6 +38,13 @@ class LocationCatalog:
     slots_per_expansion: int = 0  # learned after the first expansion (response delta)
     transition_tiles: set[tuple[int, int]] = field(default_factory=set)
     known_tiles: set[tuple[int, int]] = field(default_factory=set)  # every overworld tile that exists, content or not
+    map_id_to_loc: dict[int, tuple[int, int]] = field(default_factory=dict)  # MapSchema.map_id -> (x, y); resolves teleport destinations
+
+    def map_location_by_id(self, map_id: int) -> tuple[int, int] | None:
+        """Tile (x, y) of a map by its `MapSchema.map_id`, or None if that map
+        is not in the loaded overworld set. Used to resolve a teleport
+        consumable's destination (its effect `value` is a map_id)."""
+        return self.map_id_to_loc.get(map_id)
 
     def workshop_location(self, skill: str) -> tuple[int, int] | None:
         """Location of the workshop for a crafting skill."""

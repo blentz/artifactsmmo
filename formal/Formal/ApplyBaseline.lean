@@ -30,9 +30,9 @@ each Lean apply mirrors this with a record `with`-update touching ONLY the
 fields the Python source mutates. By construction the baseline fields are
 untouched syntactically, and the preservation theorems are 1-line `rfl`-style.
 
-**All 24 actions are modeled below**, grouped by structural family:
+**All 25 actions are modeled below**, grouped by structural family:
 
-  1. **Position-only**: Move, MoveSemantic, MapTransition
+  1. **Position**: Move, MoveSemantic, MapTransition, Teleport (+inventory)
   2. **Inventory-mint**: Gather, NpcBuy, WithdrawGold, WithdrawItem, Claim
   3. **Inventory-consume**: Craft, Recycle, NpcSell, DepositGold, DepositAll,
      UseConsumable, Delete
@@ -138,10 +138,13 @@ private theorem rfl8 : ∀ {α₁ α₂ α₃ α₄ α₅ α₆ α₇ α₈ : Ty
     (a₁ = a₁ ∧ a₂ = a₂ ∧ a₃ = a₃ ∧ a₄ = a₄ ∧ a₅ = a₅ ∧ a₆ = a₆ ∧ a₇ = a₇ ∧ a₈ = a₈) :=
   fun _ _ _ _ _ _ _ _ => ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
-/-! ## Family 1 — Position-only
+/-! ## Family 1 — Position
 
-`MoveAction`, `MoveTo` (`movement_semantic`), `MapTransitionAction`. All three
-mutate ONLY position fields (`x`, `y`) and clear `cooldown_expires`. -/
+`MoveAction`, `MoveTo` (`movement_semantic`), `MapTransitionAction` mutate ONLY
+position fields (`x`, `y`) and clear `cooldown_expires`. `TeleportAction`
+(PLAN #6b) also lives here: it sets position and clears cooldown like the others,
+but additionally decrements the consumed teleport item in `inventory`. None of
+the four touches a baseline stat field. -/
 
 /-- `MoveAction.apply` model: `dataclasses.replace(state, x, y, cooldown_expires=None)`. -/
 def moveApply (s : WorldStateLean) (newX newY : Int) : WorldStateLean :=
@@ -153,6 +156,12 @@ def moveSemanticApply (s : WorldStateLean) (newX newY : Int) : WorldStateLean :=
 
 /-- `MapTransitionAction.apply` model: identity transition (no fields change). -/
 def mapTransitionApply (s : WorldStateLean) : WorldStateLean := s
+
+/-- `TeleportAction.apply` model (PLAN #6b): warp to the consumable's destination
+    — position set, the teleport item decremented in inventory, cooldown cleared. -/
+def teleportApply (s : WorldStateLean) (newInv : List (String × Nat))
+    (newX newY : Int) : WorldStateLean :=
+  { s with x := newX, y := newY, inventory := newInv, cooldown_expires := none }
 
 theorem moveApply_preserves_baseline (s : WorldStateLean) (newX newY : Int) :
     preservesBaseline s (moveApply s newX newY) := by
@@ -167,6 +176,12 @@ theorem moveSemanticApply_preserves_baseline (s : WorldStateLean) (newX newY : I
 theorem mapTransitionApply_preserves_baseline (s : WorldStateLean) :
     preservesBaseline s (mapTransitionApply s) := by
   unfold preservesBaseline mapTransitionApply
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+theorem teleportApply_preserves_baseline (s : WorldStateLean)
+    (i : List (String × Nat)) (newX newY : Int) :
+    preservesBaseline s (teleportApply s i newX newY) := by
+  unfold preservesBaseline teleportApply
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-! ## Family 2 — Inventory-mint
@@ -481,19 +496,21 @@ theorem fightApply_preserves_baseline (s : WorldStateLean) (h : Nat)
   unfold preservesBaseline fightApply
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
-/-! ## Headline: the uniform contract holds across ALL 24 modeled actions.
+/-! ## Headline: the uniform contract holds across ALL 25 modeled actions.
 
-Quantifies over an exhaustive enumeration of the 24 modeled `apply` functions
+Quantifies over an exhaustive enumeration of the 25 modeled `apply` functions
 so a single statement seals the property for every modeled action — closing
 the Phase-4 disclosed gap. -/
 
-/-- Exhaustive enumeration of all 24 modeled apply functions. Each constructor
+/-- Exhaustive enumeration of all 25 modeled apply functions. Each constructor
     packs the action + its arguments. -/
 inductive ModeledApply where
   -- Family 1: position-only
   | move              (newX newY : Int) : ModeledApply
   | moveSemantic      (newX newY : Int) : ModeledApply
   | mapTransition                       : ModeledApply
+  | teleport          (newInv : List (String × Nat))
+                      (newX newY : Int) : ModeledApply
   -- Family 2: inventory-mint
   | gather            (newInv : List (String × Nat))
                       (newDelta : List (String × Int))
@@ -555,6 +572,7 @@ def ModeledApply.run (a : ModeledApply) (s : WorldStateLean) : WorldStateLean :=
   | .move x y                       => moveApply s x y
   | .moveSemantic x y               => moveSemanticApply s x y
   | .mapTransition                  => mapTransitionApply s
+  | .teleport i x y                 => teleportApply s i x y
   | .gather i d x y                 => gatherApply s i d x y
   | .npcBuy g i x y                 => npcBuyApply s g i x y
   | .withdrawGold g bg x y          => withdrawGoldApply s g bg x y
@@ -579,7 +597,7 @@ def ModeledApply.run (a : ModeledApply) (s : WorldStateLean) : WorldStateLean :=
   | .buyBankExpansion g c b x y     => buyBankExpansionApply s g c b x y
   | .fight h i p x y                => fightApply s h i p x y
 
-/-- **HEADLINE — Phase-14 disclosed-gap closure**: every one of the 24 modeled
+/-- **HEADLINE — Phase-14 disclosed-gap closure**: every one of the 25 modeled
     apply transitions preserves the 8-field baseline. -/
 theorem all_actions_preserve_baseline (s : WorldStateLean) (a : ModeledApply) :
     preservesBaseline s (a.run s) := by
@@ -587,6 +605,7 @@ theorem all_actions_preserve_baseline (s : WorldStateLean) (a : ModeledApply) :
   | move x y                      => exact moveApply_preserves_baseline s x y
   | moveSemantic x y              => exact moveSemanticApply_preserves_baseline s x y
   | mapTransition                 => exact mapTransitionApply_preserves_baseline s
+  | teleport i x y                => exact teleportApply_preserves_baseline s i x y
   | gather i d x y                => exact gatherApply_preserves_baseline s i d x y
   | npcBuy g i x y                => exact npcBuyApply_preserves_baseline s g i x y
   | withdrawGold g bg x y         => exact withdrawGoldApply_preserves_baseline s g bg x y

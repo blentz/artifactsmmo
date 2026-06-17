@@ -26,6 +26,7 @@ from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
+from artifactsmmo_cli.ai.actions.teleport import TeleportAction
 from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
@@ -236,6 +237,15 @@ def build_actions(
     # Phase B: bank expansion, transitions, gold management
     actions.append(BuyBankExpansionAction(bank_location=bank, accessible=bank_accessible))
     actions.append(MapTransitionAction())
+    # Teleport consumables (PLAN #6b): one TeleportAction per teleport item whose
+    # destination map resolves to a known tile. The planner's cost search prefers a
+    # warp over a long walk when cheaper; is_applicable gates on actually holding it.
+    for item_code, stats in game_data.all_item_stats.items():
+        if stats.teleport_map_id <= 0:
+            continue
+        dest = game_data.teleport_destination(item_code)
+        if dest is not None:
+            actions.append(TeleportAction(item_code=item_code, dest_x=dest[0], dest_y=dest[1]))
     # Gold deposit/withdraw with typical small quantities; let planner decide
     for q in (50, 100, 500, 1000):
         actions.append(DepositGoldAction(quantity=q, bank_location=bank, accessible=bank_accessible))

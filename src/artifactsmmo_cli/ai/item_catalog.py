@@ -31,6 +31,7 @@ class ItemStats:
     lifesteal: int = 0                                           # heal % of total attack on a crit; combat sustain
     combat_buff: int = 0                                         # summed utility-slot combat-buff value (boost_dmg + antipoison); fight-active potions
     antipoison: int = 0                                          # removes N poison/turn (utility potion); caps monster poison in predict_win (PLAN #3b2)
+    teleport_map_id: int = 0                                     # `teleport` effect value = destination MapSchema.map_id (0 = not a teleport item); PLAN #6b
     # OpenAPI conformance (Item 14 drift remediation): every ItemSchema
     # field the bot's decision-making logic touches must round-trip
     # from /v3/items so the planner sees what the server sees.

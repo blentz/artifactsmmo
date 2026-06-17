@@ -153,6 +153,7 @@ def moveSemanticCost : Nat := 1
 def claimCost : Nat := 1
 def consumableCostFit : Nat := 2
 def consumableCostOverheal : Nat := 100
+def teleportCost : Nat := 20  -- PLAN #6b: flat warp cost (distance-independent); `TeleportAction.cost`
 
 theorem rest_cost_nonneg : 0 ≤ restCost := by simp [restCost]
 theorem equip_cost_nonneg : 0 ≤ equipCost := by simp [equipCost]
@@ -160,6 +161,7 @@ theorem unequip_cost_nonneg : 0 ≤ unequipCost := by simp [unequipCost]
 theorem transition_cost_nonneg : 0 ≤ transitionCost := by simp [transitionCost]
 theorem move_semantic_cost_nonneg : 0 ≤ moveSemanticCost := by simp [moveSemanticCost]
 theorem claim_cost_nonneg : 0 ≤ claimCost := by simp [claimCost]
+theorem teleport_cost_nonneg : 0 ≤ teleportCost := by simp [teleportCost]
 theorem consumable_cost_fit_nonneg : 0 ≤ consumableCostFit := by simp [consumableCostFit]
 theorem consumable_cost_overheal_nonneg : 0 ≤ consumableCostOverheal := by
   simp [consumableCostOverheal]

@@ -65,6 +65,7 @@ APPLY_CLAIM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "claim.
 APPLY_REST_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "rest.py"
 APPLY_FIGHT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "combat.py"
 APPLY_BANK_EXPANSION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "bank_expansion.py"
+APPLY_TELEPORT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "teleport.py"
 WITHDRAW_ITEM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "withdraw_item.py"
 UNEQUIP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "unequip.py"
 TASK_EXCHANGE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "task_exchange.py"
@@ -1468,7 +1469,7 @@ _ALL_SRCS = [
     NPC_BUY_CORE_SRC,
     TASK_TRADE_CORE_SRC,
     APPLY_MOVE_SRC, APPLY_EQUIP_SRC, APPLY_CLAIM_SRC,
-    APPLY_REST_SRC, APPLY_FIGHT_SRC, APPLY_BANK_EXPANSION_SRC,
+    APPLY_REST_SRC, APPLY_FIGHT_SRC, APPLY_BANK_EXPANSION_SRC, APPLY_TELEPORT_SRC,
     WITHDRAW_ITEM_SRC, UNEQUIP_SRC, TASK_EXCHANGE_SRC, TASK_CANCEL_SRC,
     GATHERING_APPLY_SRC, LEVEL_SKILL_GOAL_SRC,
     MONSTER_CATALOG_SRC,
@@ -2144,6 +2145,44 @@ APPLY_REST_MUTATIONS = [
         "            bank_items=state.bank_items, bank_gold=state.bank_gold,\n"
         "            pending_items=state.pending_items, active_events=state.active_events,\n"
         "        )",
+    ),
+]
+
+
+APPLY_TELEPORT_MUTATIONS = [
+    (
+        "apply-baseline-teleport: revert TeleportAction.apply to explicit WorldState(...) dropping baseline",
+        "        return dataclasses.replace(\n"
+        "            state,\n"
+        "            x=self.dest_x,\n"
+        "            y=self.dest_y,\n"
+        "            inventory=new_inventory,\n"
+        "            cooldown_expires=None,\n"
+        "        )",
+        "        return WorldState(\n"
+        "            character=state.character,\n"
+        "            level=state.level, xp=state.xp, max_xp=state.max_xp,\n"
+        "            hp=state.hp, max_hp=state.max_hp, gold=state.gold,\n"
+        "            skills=state.skills, x=self.dest_x, y=self.dest_y,\n"
+        "            inventory=new_inventory, inventory_max=state.inventory_max,\n"
+        "            equipment=state.equipment, cooldown_expires=None,\n"
+        "            task_code=state.task_code, task_type=state.task_type,\n"
+        "            task_progress=state.task_progress, task_total=state.task_total,\n"
+        "            bank_items=state.bank_items, bank_gold=state.bank_gold,\n"
+        "            pending_items=state.pending_items, active_events=state.active_events,\n"
+        "        )",
+    ),
+]
+
+
+# PLAN #6b: teleport cost is a flat constant mirroring Lean teleportCost=20. The
+# cost differential test pins TeleportAction.cost == 20.0; perturbing the constant
+# flips that assertion (gives the const-cost contract teeth on the new action).
+TELEPORT_COST_MUTATIONS = [
+    (
+        "teleport-cost: perturb flat warp cost (20.0 -> 21.0)",
+        "TELEPORT_COST: float = 20.0",
+        "TELEPORT_COST: float = 21.0",
     ),
 ]
 
@@ -2971,6 +3010,10 @@ def _run_all_groups() -> int:
               "formal/diff/test_apply_baseline_diff.py", survivors)
     run_group(APPLY_BANK_EXPANSION_SRC, APPLY_BANK_EXPANSION_MUTATIONS,
               "formal/diff/test_apply_baseline_diff.py", survivors)
+    run_group(APPLY_TELEPORT_SRC, APPLY_TELEPORT_MUTATIONS,
+              "formal/diff/test_apply_baseline_diff.py", survivors)
+    run_group(APPLY_TELEPORT_SRC, TELEPORT_COST_MUTATIONS,
+              "formal/diff/test_action_cost_nonneg_diff.py", survivors)
     run_group(GATHERING_APPLY_SRC, GATHERING_APPLY_MUTATIONS,
               "formal/diff/test_apply_baseline_diff.py", survivors)
     run_group(LEVEL_SKILL_GOAL_SRC, LEVEL_SKILL_GOAL_MUTATIONS,

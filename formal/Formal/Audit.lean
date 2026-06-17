@@ -281,6 +281,7 @@ open Formal.WeightedRemaining in
 #print axioms Formal.ApplyBaseline.moveApply_preserves_baseline
 #print axioms Formal.ApplyBaseline.moveSemanticApply_preserves_baseline
 #print axioms Formal.ApplyBaseline.mapTransitionApply_preserves_baseline
+#print axioms Formal.ApplyBaseline.teleportApply_preserves_baseline
 #print axioms Formal.ApplyBaseline.gatherApply_preserves_baseline
 #print axioms Formal.ApplyBaseline.npcBuyApply_preserves_baseline
 #print axioms Formal.ApplyBaseline.withdrawGoldApply_preserves_baseline

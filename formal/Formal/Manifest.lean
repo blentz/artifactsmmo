@@ -545,10 +545,11 @@ open Formal.PriorityBand
 #check @Formal.StoreWarmup.warmupGatedSuccessRate_off_boundary_default
 #check @Formal.StoreWarmup.warmupGatedSuccessRate_empty_default
 -- ApplyBaseline required roles (REAL BUG #5: silent stat-baseline drop in Action.apply).
--- Phase-14: disclosed gap closed — all 24 concrete Action.apply methods modeled.
+-- Phase-14: disclosed gap closed — all 25 concrete Action.apply methods modeled (PLAN #6b added teleport).
 #check @Formal.ApplyBaseline.moveApply_preserves_baseline             -- Family 1: position-only
 #check @Formal.ApplyBaseline.moveSemanticApply_preserves_baseline
 #check @Formal.ApplyBaseline.mapTransitionApply_preserves_baseline
+#check @Formal.ApplyBaseline.teleportApply_preserves_baseline         -- PLAN #6b: teleport warp (position + inventory)
 #check @Formal.ApplyBaseline.gatherApply_preserves_baseline           -- Family 2: inventory-mint
 #check @Formal.ApplyBaseline.npcBuyApply_preserves_baseline
 #check @Formal.ApplyBaseline.withdrawGoldApply_preserves_baseline

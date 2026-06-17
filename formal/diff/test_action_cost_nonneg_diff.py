@@ -37,6 +37,7 @@ from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
+from artifactsmmo_cli.ai.actions.teleport import TeleportAction
 from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
@@ -156,6 +157,10 @@ def test_constant_actions_nonneg(x, y, dx, dy):
     assert MoveTo(name="bank", destinations=frozenset({(x + dx, y + dy)})).cost(
         s, None, None
     ) == 1.0
+    # PLAN #6b: teleport is a flat, distance-independent constant (mirrors Lean teleportCost=20).
+    assert TeleportAction(
+        item_code="recall_potion", dest_x=x + dx, dest_y=y + dy
+    ).cost(s, None, None) == 20.0
 
 
 @settings(max_examples=200)

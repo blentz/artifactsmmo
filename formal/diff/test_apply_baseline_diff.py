@@ -49,6 +49,7 @@ from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
+from artifactsmmo_cli.ai.actions.teleport import TeleportAction
 from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
@@ -234,6 +235,17 @@ def test_transition() -> None:
     # Identity apply — trivially preserves.
     state = _make_state()
     _assert_preserved(state, MapTransitionAction().apply(state, _make_game_data_basic()))
+
+
+def test_teleport() -> None:
+    # PLAN #6b: warp consumes a potion + moves; the 8 baseline fields survive.
+    state = _make_state(x=5, y=5, inventory={"recall_potion": 2})
+    after = TeleportAction(item_code="recall_potion", dest_x=0, dest_y=0).apply(
+        state, _make_game_data_basic())
+    _assert_preserved(state, after)
+    # Non-vacuous: it actually warped and decremented the potion.
+    assert (after.x, after.y) == (0, 0)
+    assert after.inventory["recall_potion"] == 1
 
 
 def test_accept_task() -> None:
@@ -483,6 +495,15 @@ def test_equip_preserves_baseline_property(bkw) -> None:
 def test_claim_preserves_baseline_property(bkw) -> None:
     state = _make_state(pending_items=(("id1", "gold_ring"),), **bkw)
     after = ClaimPendingItemAction().apply(state, _make_game_data_basic())
+    _assert_preserved(state, after)
+
+
+@given(bkw=_baseline_kwargs())
+@settings(max_examples=200)
+def test_teleport_preserves_baseline_property(bkw) -> None:
+    state = _make_state(x=9, y=9, inventory={"recall_potion": 1}, **bkw)
+    after = TeleportAction(item_code="recall_potion", dest_x=0, dest_y=0).apply(
+        state, _make_game_data_basic())
     _assert_preserved(state, after)
 
 
