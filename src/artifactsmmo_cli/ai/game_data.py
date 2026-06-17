@@ -1040,6 +1040,12 @@ class GameData:
                         # Game encodes as cooldown reduction (negative value = faster);
                         # store as-is so callers can compare magnitudes.
                         stats.skill_effects[effect.code] = effect.value
+                    elif effect.code == "threat":
+                        # PLAN #6c carve-out: `threat` is aggro/taunt (pulls a monster's
+                        # focus off allies). Irrelevant for a SOLO bot — no allies to
+                        # protect — so it is DELIBERATELY not modeled. Handled here so it
+                        # is covered (not silently dropped); revisit if party play lands.
+                        pass
 
             if not isinstance(item.craft, Unset) and item.craft is not None:
                 craft = item.craft

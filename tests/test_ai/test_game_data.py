@@ -312,6 +312,26 @@ class TestGameDataLoadItems:
 
         assert gd._item_stats["cooked_chicken"].hp_restore == 25
 
+    def test_threat_effect_is_carved_out(self):
+        """PLAN #6c: `threat` (aggro/taunt) is deliberately NOT modeled for a solo bot.
+        It parses without error and contributes nothing to any combat/value field —
+        covered (not silently dropped), with no leak into the decision-making stats."""
+        gd = GameData()
+        item = MagicMock()
+        item.code = "amulet_of_the_grand_master"
+        item.level = 35
+        item.type_ = "amulet"
+        item.craft = UNSET
+        eff = MagicMock(); eff.code = "threat"; eff.value = 10
+        item.effects = [eff]
+        with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=make_page([item])):
+            gd._load_items(MagicMock())
+        s = gd._item_stats["amulet_of_the_grand_master"]
+        # threat leaks into nothing: no combat/value contribution.
+        assert s.combat_buff == 0 and s.hp_bonus == 0 and s.dmg == 0
+        assert s.attack == {} and s.resistance == {} and s.dmg_elements == {}
+        assert s.lifesteal == 0 and s.antipoison == 0
+
     def test_loads_combat_buff_from_utility_buff_effects(self):
         """Utility-slot combat-buff potions route into the fields the existing
         projection + predict_win + value pipeline already consume (PLAN #3a/b):
