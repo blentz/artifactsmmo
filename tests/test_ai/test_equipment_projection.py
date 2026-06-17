@@ -38,6 +38,23 @@ def test_hp_bonus_ring_raises_max_hp():
     assert proj.max_hp == 140
 
 
+def test_utility_buff_potion_projects_into_combat_stats():
+    """PLAN #3b: a utility-slot combat-buff potion's effects (parsed into the same
+    dmg_elements/resistance/hp_bonus fields gear uses) project into the fight stats
+    predict_win consumes — boost_dmg raises per-element dmg%, boost_res raises
+    resistance, boost_hp raises max_hp — with NO projection change."""
+    state = make_state(dmg_elements={"fire": 5}, resistance={"water": 0}, max_hp=100,
+                       equipment={"utility1_slot": None})
+    gd = _gd({"fire_boost_potion": ItemStats(
+        code="fire_boost_potion", level=1, type_="utility",
+        dmg_elements={"fire": 20}, resistance={"water": 10}, hp_bonus=250,
+        combat_buff=20)})
+    proj = project_loadout_stats(state, {"utility1_slot": "fire_boost_potion"}, gd)
+    assert proj.dmg_elements["fire"] == 5 + 20   # +20% fire damage → bigger killStep
+    assert proj.resistance["water"] == 0 + 10    # +10% water resist → bigger dieStep
+    assert proj.max_hp == 100 + 250              # +250 HP → more effective HP
+
+
 def test_unknown_new_item_removes_old_contribution():
     # wand (known, fire 7) is equipped and folded into the fire-10 total. Swapping
     # to an unknown item contributes 0 for the new item but still subtracts wand.

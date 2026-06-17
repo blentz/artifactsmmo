@@ -313,10 +313,11 @@ class TestGameDataLoadItems:
         assert gd._item_stats["cooked_chicken"].hp_restore == 25
 
     def test_loads_combat_buff_from_utility_buff_effects(self):
-        """Utility-slot combat-buff potions (boost_dmg_<elem>, boost_res_<elem>,
-        boost_hp, antipoison) are SUMMED into combat_buff so the bot values + equips
-        them (PLAN #3a). An item may carry several (enchanted_boost_potion = all four
-        boost_dmg) — ACCUMULATE. Absent ⇒ 0."""
+        """Utility-slot combat-buff potions route into the fields the existing
+        projection + predict_win + value pipeline already consume (PLAN #3a/b):
+        boost_dmg_<elem> → dmg_elements (+ combat_buff value), boost_res_<elem> →
+        resistance, boost_hp → hp_bonus, antipoison → combat_buff. An item may carry
+        several (enchanted_boost_potion = all four boost_dmg) — ACCUMULATE. Absent ⇒ 0."""
         gd = GameData()
         item = MagicMock()
         item.code = "mixed_buff_potion"
@@ -331,8 +332,15 @@ class TestGameDataLoadItems:
         item.effects = effs
         with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=make_page([item])):
             gd._load_items(MagicMock())
-        # 20 + 20 + 10 + 250 + 30 = 330 (accumulated across all buff effects).
-        assert gd._item_stats["mixed_buff_potion"].combat_buff == 330
+        s = gd._item_stats["mixed_buff_potion"]
+        # boost_dmg (fire 20 + air 20) routes into dmg_elements AND combat_buff;
+        # antipoison 30 → combat_buff; total combat_buff = 20 + 20 + 30 = 70.
+        assert s.combat_buff == 70
+        assert s.dmg_elements == {"fire": 20, "air": 20}
+        # boost_res → resistance (valued + projected, not in combat_buff).
+        assert s.resistance == {"water": 10}
+        # boost_hp → hp_bonus (valued + projected into max_hp).
+        assert s.hp_bonus == 250
         # an item with no buff effects has combat_buff 0.
         plain = MagicMock(); plain.code = "plain"; plain.level = 1
         plain.type_ = "weapon"; plain.craft = UNSET; plain.effects = []

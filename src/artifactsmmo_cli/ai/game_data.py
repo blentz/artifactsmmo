@@ -1006,17 +1006,32 @@ class GameData:
                         stats.haste = effect.value
                     elif effect.code == "lifesteal":
                         stats.lifesteal = effect.value
-                    elif (effect.code.startswith("boost_dmg_")
-                          or effect.code.startswith("boost_res_")
-                          or effect.code == "boost_hp"
-                          or effect.code == "antipoison"):
-                        # Utility-slot combat-buff potions (boost_dmg_<elem>,
-                        # boost_res_<elem>, boost_hp, antipoison): summed into one
-                        # combat-buff value so the bot VALUES + equips them (part a).
-                        # An item may carry several (enchanted_boost_potion = all 4
-                        # boost_dmg), so ACCUMULATE. The exact per-fight effect is
-                        # modeled separately in predict_win (part b). `restore`/
-                        # `splash_restore` are already valued via hp_restore above.
+                    elif effect.code.startswith("boost_dmg_"):
+                        # +% element damage (utility potion). PLAN #3b: route into the
+                        # player's per-element dmg% so project_loadout_stats folds it and
+                        # predict_win's element-damage sum sees the buff (bigger killStep)
+                        # — no predict_win change, it's the same field gear dmg% uses.
+                        # ALSO count it as combat-buff VALUE (dmg_elements is not otherwise
+                        # in equip_value, so this is the only place it's valued). Accumulate.
+                        elem = effect.code[len("boost_dmg_"):]
+                        stats.dmg_elements[elem] = stats.dmg_elements.get(elem, 0) + effect.value
+                        stats.combat_buff += effect.value
+                    elif effect.code.startswith("boost_res_"):
+                        # +% element resistance (utility potion). PLAN #3b: route into the
+                        # player's resistance so projection folds it and predict_win's
+                        # raw_monster (monster dmg vs player resist) drops (bigger dieStep).
+                        # Valued via the resistance term ⇒ NOT also in combat_buff. Accumulate.
+                        elem = effect.code[len("boost_res_"):]
+                        stats.resistance[elem] = stats.resistance.get(elem, 0) + effect.value
+                    elif effect.code == "boost_hp":
+                        # +flat HP for the fight. PLAN #3b: route into hp_bonus so projection
+                        # folds it into max_hp and predict_win's effective HP rises. Valued
+                        # via hp_bonus ⇒ NOT also in combat_buff.
+                        stats.hp_bonus += effect.value
+                    elif effect.code == "antipoison":
+                        # removes N poison/turn. Valued now as combat-buff utility so the bot
+                        # equips antidotes; the predict_win poison-cancel modeling is the
+                        # PLAN #3b restore/antipoison proven-core follow-on. Accumulate.
                         stats.combat_buff += effect.value
                     elif effect.code in _GATHERING_SKILLS:
                         # Tool bonus for a gather skill (e.g. axe → woodcutting).
