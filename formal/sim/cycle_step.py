@@ -100,6 +100,7 @@ MIRROR_PLAN_FOR: dict[LadderMeans, str] = {
     LadderMeans.PURSUE_TASK:        "taskTrade",
     LadderMeans.ACCEPT_TASK:        "acceptTask",
     LadderMeans.TASK_EXCHANGE:      "taskExchange",
+    LadderMeans.MAINTAIN_CONSUMABLES: "craft",  # PLAN #6a: cook/brew a heal
     LadderMeans.SELL_IDLE:          "npcSell",
     LadderMeans.RECYCLE_SURPLUS:    "recycle",
     LadderMeans.BANK_EXPAND:        "buyBankExpansion",

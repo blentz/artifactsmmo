@@ -87,6 +87,7 @@ _MEANS_REPR: dict[MeansKind, str] = {
     MeansKind.TASK_EXCHANGE: "TaskExchange",
     MeansKind.BANK_EXPAND: "ExpandBank",
     MeansKind.WAIT: "Wait",
+    MeansKind.MAINTAIN_CONSUMABLES: "MaintainConsumables",
 }
 
 

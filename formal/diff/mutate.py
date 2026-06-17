@@ -66,6 +66,8 @@ APPLY_REST_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "rest.py
 APPLY_FIGHT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "combat.py"
 APPLY_BANK_EXPANSION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "bank_expansion.py"
 APPLY_TELEPORT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "teleport.py"
+CONSUMABLE_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_supply.py"
+MEANS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "means.py"
 WITHDRAW_ITEM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "withdraw_item.py"
 UNEQUIP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "unequip.py"
 TASK_EXCHANGE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "task_exchange.py"
@@ -1208,6 +1210,10 @@ DECIDE_KEY_MUTATIONS = [
     ("decide_key: PURSUE_TASK repr corrupted",
      "    MeansKind.PURSUE_TASK: \"PursueTask\",",
      "    MeansKind.PURSUE_TASK: \"WRONG\","),
+    # PLAN #6a: the MAINTAIN_CONSUMABLES repr must match the Lean mirror.
+    ("decide_key: MAINTAIN_CONSUMABLES repr corrupted",
+     "    MeansKind.MAINTAIN_CONSUMABLES: \"MaintainConsumables\",",
+     "    MeansKind.MAINTAIN_CONSUMABLES: \"WRONG\","),
 ]
 
 
@@ -1470,6 +1476,7 @@ _ALL_SRCS = [
     TASK_TRADE_CORE_SRC,
     APPLY_MOVE_SRC, APPLY_EQUIP_SRC, APPLY_CLAIM_SRC,
     APPLY_REST_SRC, APPLY_FIGHT_SRC, APPLY_BANK_EXPANSION_SRC, APPLY_TELEPORT_SRC,
+    CONSUMABLE_SUPPLY_SRC, MEANS_SRC,
     WITHDRAW_ITEM_SRC, UNEQUIP_SRC, TASK_EXCHANGE_SRC, TASK_CANCEL_SRC,
     GATHERING_APPLY_SRC, LEVEL_SKILL_GOAL_SRC,
     MONSTER_CATALOG_SRC,
@@ -2183,6 +2190,31 @@ TELEPORT_COST_MUTATIONS = [
         "teleport-cost: perturb flat warp cost (20.0 -> 21.0)",
         "TELEPORT_COST: float = 20.0",
         "TELEPORT_COST: float = 21.0",
+    ),
+]
+
+
+# PLAN #6a: heal-supply maintenance. The floor comparison and the combat-active
+# gate are the load-bearing predicates; each mutation flips a unit-test verdict.
+CONSUMABLE_SUPPLY_MUTATIONS = [
+    (
+        "consumable_supply: stock floor >= becomes > (stock == floor wrongly re-fires)",
+        "    if heal_stock(state, game_data) >= HEAL_STOCK_FLOOR:\n        return False",
+        "    if heal_stock(state, game_data) > HEAL_STOCK_FLOOR:\n        return False",
+    ),
+    (
+        "consumable_supply: weaker-heal filter < becomes <= (drops an equal-strength restock)",
+        "        if stats.hp_restore < floor_restore:\n            continue",
+        "        if stats.hp_restore <= floor_restore:\n            continue",
+    ),
+]
+
+
+MEANS_MAINTAIN_MUTATIONS = [
+    (
+        "means: MAINTAIN_CONSUMABLES drops the combat-active gate (fires when idle)",
+        "        if ctx.combat_monster is None:\n            return False\n        return maintain_consumables_fires(state, game_data)",
+        "        return maintain_consumables_fires(state, game_data)",
     ),
 ]
 
@@ -3014,6 +3046,10 @@ def _run_all_groups() -> int:
               "formal/diff/test_apply_baseline_diff.py", survivors)
     run_group(APPLY_TELEPORT_SRC, TELEPORT_COST_MUTATIONS,
               "formal/diff/test_action_cost_nonneg_diff.py", survivors)
+    run_group(CONSUMABLE_SUPPLY_SRC, CONSUMABLE_SUPPLY_MUTATIONS,
+              "tests/test_ai/test_maintain_consumables.py", survivors)
+    run_group(MEANS_SRC, MEANS_MAINTAIN_MUTATIONS,
+              "tests/test_ai/test_maintain_consumables.py", survivors)
     run_group(GATHERING_APPLY_SRC, GATHERING_APPLY_MUTATIONS,
               "formal/diff/test_apply_baseline_diff.py", survivors)
     run_group(LEVEL_SKILL_GOAL_SRC, LEVEL_SKILL_GOAL_MUTATIONS,

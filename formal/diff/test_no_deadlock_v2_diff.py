@@ -434,15 +434,15 @@ def test_productionLadder_falsifiable_without_objective_step(
 # Sanity / mirror tests
 # ---------------------------------------------------------------------------
 
-def test_ladder_has_21_entries() -> None:
-    """Mirror sanity: Python ladder matches the Lean 21-element list.
+def test_ladder_has_23_entries() -> None:
+    """Mirror sanity: Python ladder matches the Lean 23-element list.
 
-    21 = original 17 + WAIT (Phase 20e-v2) + CRAFT_RELIEF (circuit
+    23 = original 17 + WAIT (Phase 20e-v2) + CRAFT_RELIEF (circuit
     breaker between DISCARD_CRITICAL and DEPOSIT_FULL) + REST_FOR_COMBAT
     (after HP_CRITICAL) + GEAR_REVIEW (lowest-priority guard, after
-    DISCARD_HIGH). Lean side mirrors via
-    MeansKind.allInLadderOrder.length = 22."""
-    assert len(ALL_IN_LADDER_ORDER) == 22
+    DISCARD_HIGH) + MAINTAIN_CONSUMABLES (PLAN #6a, after TASK_EXCHANGE).
+    Lean side mirrors via MeansKind.allInLadderOrder.length = 23."""
+    assert len(ALL_IN_LADDER_ORDER) == 23
 
 
 def test_no_task_state_acceptTask_fires() -> None:

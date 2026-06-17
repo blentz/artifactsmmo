@@ -7,6 +7,7 @@ No Goal-class imports — the driver (StrategyArbiter) maps MeansKind to goals.
 
 from enum import Enum
 
+from artifactsmmo_cli.ai.consumable_supply import maintain_consumables_fires
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.projections import low_yield_cancel_fires
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -32,6 +33,10 @@ class MeansKind(Enum):
     RECYCLE_SURPLUS = "recycle_surplus"
     BANK_EXPAND = "bank_expand"
     WAIT = "wait"
+    # Appended LAST so the DecideKey oracle's index dispatch (0..11) and the diff
+    # test's _MEANS_INDEX stay stable — enum identity is independent of the
+    # DISCRETIONARY_ORDER priority slot below (PLAN #6a).
+    MAINTAIN_CONSUMABLES = "maintain_consumables"
 
 
 COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
@@ -45,6 +50,7 @@ DISCRETIONARY_ORDER: tuple[MeansKind, ...] = (
     MeansKind.PURSUE_TASK,
     MeansKind.ACCEPT_TASK,
     MeansKind.TASK_EXCHANGE,
+    MeansKind.MAINTAIN_CONSUMABLES,  # prep heals for combat before idle housekeeping
     MeansKind.SELL_IDLE,
     MeansKind.RECYCLE_SURPLUS,
     MeansKind.BANK_EXPAND,
@@ -150,6 +156,15 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         return (_used_fraction(state) < SELL_PRESSURE_FRACTION
                 and bool(recyclable_surplus(
                     state, game_data, ctx.target_gear | ctx.target_tools)))
+
+    if kind is MeansKind.MAINTAIN_CONSUMABLES:
+        # Only when combat is the active means (a target is selected): keep a
+        # heal stockpile so the bot cooks/brews instead of resting between
+        # fights. Gated on under-stock + craftable-better-heal (the shared
+        # pure predicate). PLAN #6a.
+        if ctx.combat_monster is None:
+            return False
+        return maintain_consumables_fires(state, game_data)
 
     if kind is MeansKind.BANK_EXPAND:
         if not ctx.bank_accessible:

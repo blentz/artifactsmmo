@@ -25,6 +25,7 @@ from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
 from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.pursue_task import PursueTaskGoal
+from artifactsmmo_cli.ai.goals.maintain_consumables import MaintainConsumablesGoal
 from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
 from artifactsmmo_cli.ai.goals.recycle_surplus import RecycleSurplusGoal
@@ -360,6 +361,8 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
                                 initial_total=tasks_coin_total(state))
     if kind is MeansKind.BANK_EXPAND:
         return ExpandBankGoal(bank_accessible=ctx.bank_accessible, game_data=game_data)
+    if kind is MeansKind.MAINTAIN_CONSUMABLES:
+        return MaintainConsumablesGoal(game_data=game_data)
     if kind is MeansKind.WAIT:
         return WaitGoal()
     raise ValueError(f"Unknown MeansKind: {kind!r}")

@@ -193,6 +193,12 @@ structure State where
       prioritization latch). State-carried Bool — a diff harness asserts
       agreement with `ctx.gear_review_active`. -/
   gearReviewFires : Bool
+  /-- OPAQUE: production's MAINTAIN_CONSUMABLES means firing predicate (PLAN #6a).
+      Mirrors `tiers/means.py::_fires(MAINTAIN_CONSUMABLES, …)`: fires iff combat
+      is the active means AND heal-stock < floor AND a better heal is craftable.
+      State-carried Bool (default false); the production-ladder diff asserts
+      agreement with the real predicate. -/
+  maintainConsumablesFires : Bool := false
   /-- `state.bank_items is not None` (means.py:104). -/
   bankItemsKnown : Bool
   /-- `len(state.bank_items)` when known, else `0` (means.py:108). -/

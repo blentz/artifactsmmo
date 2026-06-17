@@ -137,6 +137,7 @@ noncomputable def planFor : MeansKind → State → Plan
   | .pursueTask       , _ => [.taskTrade]
   | .acceptTask       , _ => [.acceptTask]
   | .taskExchange     , _ => [.taskExchange]
+  | .maintainConsumables , _ => [.craft]  -- PLAN #6a: cook/brew a heal
   | .sellIdle         , _ => [.npcSell]
   | .recycleSurplus   , _ => [.recycle]
   | .bankExpand       , _ => [.buyBankExpansion]
@@ -307,6 +308,20 @@ theorem cycleStep_progress_or_waits
     -- (Plan.lean line ≈387). The post-state's craftableSlots differs from
     -- the pre-state's, hence cycleStep s ≠ s. Mirrors the pursueTask /
     -- bankExpand pattern of "post.field = pre.field + 1 → state changed".
+    left
+    have hcs : cycleStep s = applyActionKind .craft s := by
+      unfold cycleStep; rw [hk]; rfl
+    rw [hcs]
+    intro heq
+    have hpost : (applyActionKind .craft s).craftableSlots
+                  = s.craftableSlots + 1 := by
+      simp [applyActionKind]
+    have hpre' : s.craftableSlots = s.craftableSlots + 1 := by
+      rw [heq] at hpost; exact hpost
+    exact Nat.succ_ne_self _ hpre'.symm
+  | maintainConsumables =>
+    -- PLAN #6a: MAINTAIN_CONSUMABLES plans `.craft` (cook/brew a heal), the same
+    -- shape as CRAFT_RELIEF — craftableSlots advances by +1, so the state changes.
     left
     have hcs : cycleStep s = applyActionKind .craft s := by
       unfold cycleStep; rw [hk]; rfl

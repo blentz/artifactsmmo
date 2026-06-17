@@ -186,6 +186,9 @@ inductive MeansKind where
   | wait  -- Phase 20e-v2: always-firing sentinel sentinel (production fix
           -- src/.../tiers/means.py:WAIT). Closes the StrategyArbiter
           -- deadlock window when no other means fires.
+  | maintainConsumables  -- PLAN #6a: cook/brew heals when combat-active and
+                         -- under-stocked. Appended LAST to keep the oracle's
+                         -- index dispatch (0..11) stable.
 deriving Repr, DecidableEq
 
 /-- TOTAL `match`: every `GuardKind` variant maps to a non-empty repr string.
@@ -217,6 +220,7 @@ def goalReprOfMeans : MeansKind → String
   | .recycleSurplus  => "RecycleSurplus"
   | .bankExpand      => "ExpandBank"
   | .wait            => "Wait"
+  | .maintainConsumables => "MaintainConsumables"
 
 /-! ### Exhaustiveness intent theorems (totality witnesses). -/
 

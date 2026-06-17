@@ -1,6 +1,6 @@
 """Python mirror of `Formal.Liveness.ProductionLadder.productionLadder`.
 
-Walks the 21-element `allInLadderOrder` (GUARD_ORDER ++ COLLECT_REWARD_ORDER
+Walks the 23-element `allInLadderOrder` (GUARD_ORDER ++ COLLECT_REWARD_ORDER
 ++ [OBJECTIVE_STEP] ++ DISCRETIONARY_ORDER) and returns the FIRST means
 whose production `_fires` predicate returns True; None if none fire.
 
@@ -37,7 +37,7 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 
 class LadderMeans(Enum):
-    """Unified 21-entry enum mirroring `Formal.Liveness.MeansKind.MeansKind`."""
+    """Unified 23-entry enum mirroring `Formal.Liveness.MeansKind.MeansKind`."""
 
     HP_CRITICAL = "hp_critical"
     REST_FOR_COMBAT = "rest_for_combat"
@@ -57,6 +57,7 @@ class LadderMeans(Enum):
     PURSUE_TASK = "pursue_task"
     ACCEPT_TASK = "accept_task"
     TASK_EXCHANGE = "task_exchange"
+    MAINTAIN_CONSUMABLES = "maintain_consumables"
     SELL_IDLE = "sell_idle"
     RECYCLE_SURPLUS = "recycle_surplus"
     BANK_EXPAND = "bank_expand"
@@ -82,6 +83,7 @@ ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
     LadderMeans.PURSUE_TASK,
     LadderMeans.ACCEPT_TASK,
     LadderMeans.TASK_EXCHANGE,
+    LadderMeans.MAINTAIN_CONSUMABLES,
     LadderMeans.SELL_IDLE,
     LadderMeans.RECYCLE_SURPLUS,
     LadderMeans.BANK_EXPAND,
@@ -110,6 +112,7 @@ _MEANS_MAP: dict[LadderMeans, MeansKind] = {
     LadderMeans.PURSUE_TASK: MeansKind.PURSUE_TASK,
     LadderMeans.ACCEPT_TASK: MeansKind.ACCEPT_TASK,
     LadderMeans.TASK_EXCHANGE: MeansKind.TASK_EXCHANGE,
+    LadderMeans.MAINTAIN_CONSUMABLES: MeansKind.MAINTAIN_CONSUMABLES,
     LadderMeans.SELL_IDLE: MeansKind.SELL_IDLE,
     LadderMeans.RECYCLE_SURPLUS: MeansKind.RECYCLE_SURPLUS,
     LadderMeans.BANK_EXPAND: MeansKind.BANK_EXPAND,
@@ -142,6 +145,7 @@ assert DISCRETIONARY_ORDER == (
     MeansKind.PURSUE_TASK,
     MeansKind.ACCEPT_TASK,
     MeansKind.TASK_EXCHANGE,
+    MeansKind.MAINTAIN_CONSUMABLES,
     MeansKind.SELL_IDLE,
     MeansKind.RECYCLE_SURPLUS,
     MeansKind.BANK_EXPAND,

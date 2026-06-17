@@ -974,7 +974,7 @@ trailing args).
   ties off-line). For simplicity we emit cmp(a, b) treating reprs as equal
   (the strict-total-order property at the (negFinal, effort) projection).
 * For query 1: `[1]` = GuardKind index 0..8.
-* For query 2: `[1]` = MeansKind index 0..10.
+* For query 2: `[1]` = MeansKind index 0..12.
 
 Emits:
 * query 0: cmp outcome as `"lt" | "eq" | "gt"`.
@@ -1014,7 +1014,8 @@ def runDecideKey (args : Array Json) : Json :=
       | 8 => .sellIdle
       | 9 => .recycleSurplus
       | 10 => .bankExpand
-      | _ => .wait
+      | 11 => .wait
+      | _ => .maintainConsumables
     Json.mkObj [("repr", Json.str (Formal.DecideKey.goalReprOfMeans k))]
 
 /-- Compute one cycles_for_progress result using the SAME proved

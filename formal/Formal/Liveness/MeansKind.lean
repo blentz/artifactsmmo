@@ -11,7 +11,7 @@
                                                    last (lowest-priority guard)
     ++ COLLECT_REWARD_ORDER (5, from `tiers/means.py:35`)
     ++ [OBJECTIVE_STEP] (1)
-    ++ DISCRETIONARY_ORDER (6, from `tiers/means.py:42`)  -- includes WAIT
+    ++ DISCRETIONARY_ORDER (7, from `tiers/means.py:42`)  -- incl MAINTAIN_CONSUMABLES + WAIT
 
   Phase 20e-v2 step 2: a `wait` last-resort means is appended to
   DISCRETIONARY_ORDER, mirroring `MeansKind.WAIT` in
@@ -72,6 +72,8 @@ inductive MeansKind where
   | pursueTask          -- PURSUE_TASK,        means.py:87
   | acceptTask          -- ACCEPT_TASK,        means.py:94
   | taskExchange        -- TASK_EXCHANGE,      means.py:97
+  | maintainConsumables -- MAINTAIN_CONSUMABLES, means.py (PLAN #6a): cook/brew
+                        --                     heals when combat-active + under-stocked
   | sellIdle            -- SELL_IDLE,          means.py:100
   | recycleSurplus      -- RECYCLE_SURPLUS,    means.py (2026-06-14)
   | bankExpand          -- BANK_EXPAND,        means.py:103
@@ -87,10 +89,11 @@ def allInLadderOrder : List MeansKind :=
    .discardCritical, .craftRelief, .depositFull, .discardHigh, .gearReview,
    .claimPending, .completeTask, .sellPressured, .lowYieldCancel, .taskCancel,
    .objectiveStep,
-   .pursueTask, .acceptTask, .taskExchange, .sellIdle, .recycleSurplus, .bankExpand,
+   .pursueTask, .acceptTask, .taskExchange, .maintainConsumables,
+   .sellIdle, .recycleSurplus, .bankExpand,
    .wait]
 
-/-- Sanity: 22 constructors. -/
-example : allInLadderOrder.length = 22 := by decide
+/-- Sanity: 23 constructors. -/
+example : allInLadderOrder.length = 23 := by decide
 
 end Formal.Liveness.MeansKind

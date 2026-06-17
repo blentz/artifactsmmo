@@ -261,6 +261,11 @@ def recycleSurplusFires (s : State) : Bool :=
                < SELL_PRESSURE_NUM * s.inventoryMax))
   && s.recyclableSurplusNonempty
 
+/-- MAINTAIN_CONSUMABLES (PLAN #6a). Mirrors `means.py::_fires(MAINTAIN_CONSUMABLES, …)`:
+    combat-active ∧ heal-stock < floor ∧ a better heal is craftable. Opaque
+    State-carried Bool (see `Measure.State.maintainConsumablesFires`). -/
+def maintainConsumablesFires (s : State) : Bool := s.maintainConsumablesFires
+
 /-- WAIT. Mirrors `means.py:115-119`: the last-resort fallback fires
     unconditionally. Position-last in `allInLadderOrder` ensures every
     other means is tried first. -/
@@ -310,6 +315,7 @@ noncomputable def fires (k : MeansKind) (s : State) : Bool :=
   | .pursueTask       => pursueTaskFires s
   | .acceptTask       => acceptTaskFires s
   | .taskExchange     => taskExchangeFires s
+  | .maintainConsumables => maintainConsumablesFires s
   | .sellIdle         => sellIdleFires s
   | .recycleSurplus   => recycleSurplusFires s
   | .bankExpand       => bankExpandFires s
