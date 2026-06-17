@@ -1029,9 +1029,11 @@ class GameData:
                         # via hp_bonus ⇒ NOT also in combat_buff.
                         stats.hp_bonus += effect.value
                     elif effect.code == "antipoison":
-                        # removes N poison/turn. Valued now as combat-buff utility so the bot
-                        # equips antidotes; the predict_win poison-cancel modeling is the
-                        # PLAN #3b restore/antipoison proven-core follow-on. Accumulate.
+                        # removes N poison/turn. Stored in its own field so predict_win can
+                        # CAP the monster's poison (PLAN #3b2: max(0, poison - antipoison)),
+                        # AND summed into combat_buff so the bot VALUES + equips antidotes.
+                        # Accumulate (an item could carry several).
+                        stats.antipoison += effect.value
                         stats.combat_buff += effect.value
                     elif effect.code in _GATHERING_SKILLS:
                         # Tool bonus for a gather skill (e.g. axe → woodcutting).

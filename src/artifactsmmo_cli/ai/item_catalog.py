@@ -29,7 +29,8 @@ class ItemStats:
     inventory_space: int = 0                                     # +inventory slots (bags); server raises inventory_max on equip
     haste: int = 0                                               # +cooldown reduction % on fights (faster actions); efficiency utility
     lifesteal: int = 0                                           # heal % of total attack on a crit; combat sustain
-    combat_buff: int = 0                                         # summed utility-slot combat-buff value (boost_dmg/res/hp + antipoison); fight-active potions
+    combat_buff: int = 0                                         # summed utility-slot combat-buff value (boost_dmg + antipoison); fight-active potions
+    antipoison: int = 0                                          # removes N poison/turn (utility potion); caps monster poison in predict_win (PLAN #3b2)
     # OpenAPI conformance (Item 14 drift remediation): every ItemSchema
     # field the bot's decision-making logic touches must round-trip
     # from /v3/items so the planner sees what the server sees.

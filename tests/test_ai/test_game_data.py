@@ -341,6 +341,8 @@ class TestGameDataLoadItems:
         assert s.resistance == {"water": 10}
         # boost_hp → hp_bonus (valued + projected into max_hp).
         assert s.hp_bonus == 250
+        # antipoison → its own field (caps monster poison in predict_win) AND combat_buff.
+        assert s.antipoison == 30
         # an item with no buff effects has combat_buff 0.
         plain = MagicMock(); plain.code = "plain"; plain.level = 1
         plain.type_ = "weapon"; plain.craft = UNSET; plain.effects = []

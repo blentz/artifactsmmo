@@ -51,7 +51,7 @@ def _elem_args(attack: dict, dmg_global: int, dmg_elements: dict, resist: dict) 
 def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
          m_hp, m_attack, m_resist, m_crit, m_init,
          p_lifesteal=0, m_lifesteal=0, m_poison=0, m_barrier=0, m_burn=0, m_healing=0,
-         m_recon=0, m_void=0, m_berserk=0, m_frenzy=0, m_bubble=0):
+         m_recon=0, m_void=0, m_berserk=0, m_frenzy=0, m_bubble=0, p_antipoison=0):
     stats = ProjectedStats(
         attack=dict(p_attack), dmg=p_dmg, dmg_elements=dict(p_dmg_elem),
         resistance=dict(p_resist), critical_strike=p_crit, initiative=p_init,
@@ -62,7 +62,7 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
     # the heal formula uses (crit% × lifesteal% × Σattack).
     p_atk_sum = sum(stats.attack.values())
     m_atk_sum = sum(m_attack.values())
-    loadout = {"weapon_slot": "_ls"} if p_lifesteal else {}
+    loadout = {"weapon_slot": "_ls"} if (p_lifesteal or p_antipoison) else {}
 
     class _FakeGameData:
         def monster_hp(self, c):
@@ -111,7 +111,8 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
             return m_bubble
 
         def item_stats(self, c):
-            return (ItemStats(code=c, level=1, type_="weapon", lifesteal=p_lifesteal)
+            return (ItemStats(code=c, level=1, type_="weapon", lifesteal=p_lifesteal,
+                              antipoison=p_antipoison)
                     if c == "_ls" else None)
 
     # Stub state object the test reuses. Lean oracle assumes full HP
@@ -136,6 +137,7 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
         + [m_crit, p_max_hp, 1 if p_init >= m_init else 0]
         + [p_lifesteal, p_atk_sum, m_lifesteal, m_atk_sum]
         + [m_poison, m_barrier, m_burn, m_healing, m_recon, m_void, m_berserk, m_frenzy, m_bubble]
+        + [p_antipoison]
     )
     lean = run_oracle("predict_win", [args])[0]
     return py, lean
@@ -190,11 +192,14 @@ def test_python_matches_lean(seed):
     # Protective bubble: 0 most of the time, else a resist % in [1, 100] (the modeled
     # domain) — exercises the killStep player-damage reduction incl. ks <= 0 at 100%.
     m_bubble = rng.choice([0, 0, rng.randint(1, 100)])
+    # Player antipoison: 0 most of the time, else enough to partially/fully cancel the
+    # monster poison (exercises max(0, poison - antipoison) incl. over-cancel to 0).
+    p_antipoison = rng.choice([0, 0, rng.randint(1, 120)])
 
     py, lean = _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp,
                     p_init, m_hp, m_attack, m_resist, m_crit, m_init,
                     p_lifesteal, m_lifesteal, m_poison, m_barrier, m_burn, m_healing, m_recon,
-                    m_void, m_berserk, m_frenzy, m_bubble)
+                    m_void, m_berserk, m_frenzy, m_bubble, p_antipoison=p_antipoison)
     assert py == lean["win"], (
         f"verdict mismatch py={py} lean={lean} "
         f"p_attack={p_attack} p_dmg={p_dmg} p_dmg_elem={p_dmg_elem} "
@@ -202,7 +207,8 @@ def test_python_matches_lean(seed):
         f"m_hp={m_hp} m_attack={m_attack} m_resist={m_resist} m_crit={m_crit} m_init={m_init} "
         f"p_lifesteal={p_lifesteal} m_lifesteal={m_lifesteal} m_poison={m_poison} "
         f"m_barrier={m_barrier} m_burn={m_burn} m_healing={m_healing} m_recon={m_recon} "
-        f"m_void={m_void} m_berserk={m_berserk} m_frenzy={m_frenzy} m_bubble={m_bubble}"
+        f"m_void={m_void} m_berserk={m_berserk} m_frenzy={m_frenzy} m_bubble={m_bubble} "
+        f"p_antipoison={p_antipoison}"
     )
 
 
@@ -299,6 +305,23 @@ def test_protective_bubble_flips_winnable_fight_against_lean():
                         m_bubble=50)
     assert py_b is False
     assert py_b == lean_b["win"]
+
+
+def test_antipoison_cancels_poison_against_lean():
+    """Player antipoison CAPS the monster's poison DoT: max(0, poison - antipoison).
+    A monster with zero direct damage but poison 100 KILLS via poison (a loss); with
+    antipoison 100 equipped the poison is fully cancelled ⇒ dieStep ≤ 0 ⇒ win. Pins the
+    cap (composing #1 poison with #3b2 antipoison) against Lean. raw 50 vs hp 100, player
+    first, monster deals no direct damage."""
+    py_psn, lean_psn = _run({"fire": 50}, 0, {}, {}, 0, 100, 10,
+                            100, {}, {}, 0, 10, m_poison=100)
+    assert py_psn is False
+    assert py_psn == lean_psn["win"]
+    # antipoison 100 fully cancels poison 100 ⇒ no DoT ⇒ harmless monster ⇒ win.
+    py_anti, lean_anti = _run({"fire": 50}, 0, {}, {}, 0, 100, 10,
+                              100, {}, {}, 0, 10, m_poison=100, p_antipoison=100)
+    assert py_anti is True
+    assert py_anti == lean_anti["win"]
 
 
 def test_maxturns_loss_binds_against_lean():

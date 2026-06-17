@@ -100,6 +100,25 @@ def test_predict_win_false_when_poison_outpaces_the_kill():
     assert predict_win(state, gd_psn, "mob") is False
 
 
+def test_predict_win_antipoison_cancels_monster_poison():
+    """Player antipoison (equipped antidote) CAPS the monster poison DoT at
+    max(0, poison - antipoison) (PLAN #3b2, composes with #1 poison). A no-direct-damage
+    monster with poison 100 kills via poison (loss); equipping an antipoison-100 antidote
+    fully cancels it ⇒ harmless ⇒ win. WITHOUT capping the bot predicts a loss with the
+    antidote — the mutation gate checks the cap flips it."""
+    # No antidote: poison 100 kills the otherwise-harmless monster.
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=50)
+    gd_no = _gd(hp=100, attack={}, initiative=10, poison=100)
+    assert predict_win(state, gd_no, "mob") is False
+    # Equip an antidote (antipoison 100, valued via combat_buff so pick_loadout keeps it):
+    gd_anti = _gd(hp=100, attack={}, initiative=10, poison=100)
+    gd_anti._item_stats = {"antidote": ItemStats(code="antidote", level=1, type_="utility",
+                                                 antipoison=100, combat_buff=100)}
+    state_anti = make_state(max_hp=100, attack={"fire": 50}, initiative=50,
+                            equipment={"utility1_slot": "antidote"})
+    assert predict_win(state_anti, gd_anti, "mob") is True
+
+
 def test_predict_win_false_when_poison_kills_a_harmless_monster():
     """Removing the `raw_monster <= 0 => True` shortcut: a monster dealing ZERO
     direct damage is harmless (win) UNLESS it has poison, which kills over time.

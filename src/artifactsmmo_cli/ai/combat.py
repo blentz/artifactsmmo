@@ -135,6 +135,13 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
         st.lifesteal for code in final_equip.values()
         if code and (st := game_data.item_stats(code)) is not None
     )
+    # Player antipoison (equipped antidote potions) removes N poison/turn, CAPPING the
+    # monster's poison DoT at max(0, poison - antipoison) (PLAN #3b2; composes with #1
+    # poison). Summed over the post-loadout equipment, like lifesteal.
+    player_antipoison = sum(
+        st.antipoison for code in final_equip.values()
+        if code and (st := game_data.item_stats(code)) is not None
+    )
     p_atk_sum = sum(p.attack.values())
     # Monster poison is a flat per-turn DoT on the player (applied turn 1, ticks
     # every turn), so it RAISES the player's net death rate — even when the monster
@@ -147,7 +154,7 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
     # the 50*...*value/100 reduced). Floor (//) matches the Lean `/ 2` on non-negatives.
     die_step = (50 * raw_monster * (200 + m_crit)
                 - p.critical_strike * player_lifesteal * p_atk_sum
-                + game_data.monster_poison(monster_code) * 10000
+                + max(0, game_data.monster_poison(monster_code) - player_antipoison) * 10000
                 + game_data.monster_burn(monster_code) * p_atk_sum * 100
                 + game_data.monster_void_drain(monster_code) * p.max_hp * 100
                 + game_data.monster_berserker_rage(monster_code) * raw_monster * (200 + m_crit) // 2
