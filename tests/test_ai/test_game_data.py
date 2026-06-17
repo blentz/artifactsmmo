@@ -692,6 +692,26 @@ class TestGameDataLoadMonsters:
         assert gd.monster_reconstitution("duskworm") == 0
         assert gd.monster_healing("duskworm") == 0
 
+    def test_loads_monster_berserker_rage_and_frenzy_from_effects(self):
+        """A monster's `berserker_rage` and `frenzy` ABILITIES (effects, not base
+        stats) parse so predict_win sees their damage boosts. Absent ⇒ 0."""
+        gd = GameData()
+        monster = MagicMock()
+        monster.code = "sea_marauder"
+        monster.level = 35
+        monster.hp = 1200
+        monster.critical_strike = 0
+        monster.initiative = 100
+        eff_b = MagicMock(); eff_b.code = "berserker_rage"; eff_b.value = 20
+        eff_f = MagicMock(); eff_f.code = "frenzy"; eff_f.value = 60
+        monster.effects = [eff_b, eff_f]
+        with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=make_page([monster])):
+            gd._load_monsters(MagicMock())
+        assert gd.monster_berserker_rage("sea_marauder") == 20
+        assert gd.monster_frenzy("sea_marauder") == 60
+        assert gd.monster_berserker_rage("no_such_monster") == 0
+        assert gd.monster_frenzy("no_such_monster") == 0
+
     def test_stops_on_none_result(self):
         gd = GameData()
         with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=None):

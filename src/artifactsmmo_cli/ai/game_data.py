@@ -258,6 +258,22 @@ class GameData:
         self.monsters.void_drain = value
 
     @property
+    def _monster_berserker_rage(self) -> dict[str, int]:
+        return self.monsters.berserker_rage
+
+    @_monster_berserker_rage.setter
+    def _monster_berserker_rage(self, value: dict[str, int]) -> None:
+        self.monsters.berserker_rage = value
+
+    @property
+    def _monster_frenzy(self) -> dict[str, int]:
+        return self.monsters.frenzy
+
+    @_monster_frenzy.setter
+    def _monster_frenzy(self, value: dict[str, int]) -> None:
+        self.monsters.frenzy = value
+
+    @property
     def _monster_initiative(self) -> dict[str, int]:
         return self.monsters.initiative
 
@@ -524,6 +540,18 @@ class GameData:
         effect; 0 if absent). Feeds predict_win: it BOTH raises the player's death
         rate (drain) and lowers our kill rate (the monster heals by the drain)."""
         return self.monsters.monster_void_drain(code)
+
+    def monster_berserker_rage(self, code: str) -> int:
+        """Berserker-rage damage-boost percent of a monster (optional
+        `berserker_rage` effect; 0 if absent). Feeds predict_win: modeled as an
+        always-active monster damage boost (raises the player's death rate)."""
+        return self.monsters.monster_berserker_rage(code)
+
+    def monster_frenzy(self, code: str) -> int:
+        """Frenzy damage-boost percent of a monster (optional `frenzy` effect; 0 if
+        absent). Feeds predict_win: modeled as an always-active monster damage boost
+        (raises the player's death rate)."""
+        return self.monsters.monster_frenzy(code)
 
     def monster_initiative(self, code: str) -> int:
         """Initiative (turn-order) stat of a monster. Raises `KeyError` when
@@ -1147,6 +1175,8 @@ class GameData:
             self._monster_healing[mon.code] = 0
             self._monster_reconstitution[mon.code] = 0
             self._monster_void_drain[mon.code] = 0
+            self._monster_berserker_rage[mon.code] = 0
+            self._monster_frenzy[mon.code] = 0
             mon_effects = getattr(mon, "effects", None)
             if mon_effects and not isinstance(mon_effects, Unset):
                 for effect in mon_effects:
@@ -1164,6 +1194,10 @@ class GameData:
                         self._monster_reconstitution[mon.code] = effect.value
                     elif getattr(effect, "code", None) == "void_drain":
                         self._monster_void_drain[mon.code] = effect.value
+                    elif getattr(effect, "code", None) == "berserker_rage":
+                        self._monster_berserker_rage[mon.code] = effect.value
+                    elif getattr(effect, "code", None) == "frenzy":
+                        self._monster_frenzy[mon.code] = effect.value
             # OpenAPI conformance fields (Item 14 remediation).
             # Defensive getattr keeps older API clients green.
             min_gold = getattr(mon, "min_gold", 0)

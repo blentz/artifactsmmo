@@ -22,6 +22,8 @@ class MonsterCatalog:
     healing: dict[str, int] = field(default_factory=dict)  # code -> regen % of monster HP (effect; 0 if absent)
     reconstitution: dict[str, int] = field(default_factory=dict)  # code -> full-heal period in turns (effect; 0 if absent)
     void_drain: dict[str, int] = field(default_factory=dict)  # code -> drain % of player HP per cycle (effect; 0 if absent)
+    berserker_rage: dict[str, int] = field(default_factory=dict)  # code -> +% damage below 25% HP (effect; 0 if absent)
+    frenzy: dict[str, int] = field(default_factory=dict)  # code -> +% damage on crit (effect; 0 if absent)
     # OpenAPI conformance (Item 14 remediation): monster reward + loot fields.
     drops: dict[str, list[tuple[str, int, int, int]]] = field(default_factory=dict)
     """code -> [(item_code, rate, min_quantity, max_quantity), ...]. Drop rate is
@@ -141,6 +143,18 @@ class MonsterCatalog:
         OPTIONAL monster ability (most monsters have none), so unlike the
         always-present combat stats this does not raise."""
         return self.void_drain.get(code, 0)
+
+    def monster_berserker_rage(self, code: str) -> int:
+        """Berserker-rage damage-boost percent of a monster (the `berserker_rage`
+        effect). Returns 0 when absent — an OPTIONAL monster ability (most monsters
+        have none), so unlike the always-present combat stats this does not raise."""
+        return self.berserker_rage.get(code, 0)
+
+    def monster_frenzy(self, code: str) -> int:
+        """Frenzy damage-boost percent of a monster (the `frenzy` effect). Returns 0
+        when absent — an OPTIONAL monster ability (most monsters have none), so
+        unlike the always-present combat stats this does not raise."""
+        return self.frenzy.get(code, 0)
 
     def monster_initiative(self, code: str) -> int:
         """Initiative (turn-order) stat of a monster. Raises `KeyError` when

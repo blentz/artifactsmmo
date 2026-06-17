@@ -39,7 +39,8 @@ def _record_mixed(store: LearningStore, action_repr: str, wins: int, losses: int
 
 
 def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob", lifesteal=0,
-        poison=0, barrier=0, burn=0, healing=0, reconstitution=0, void_drain=0):
+        poison=0, barrier=0, burn=0, healing=0, reconstitution=0, void_drain=0,
+        berserker_rage=0, frenzy=0):
     gd = GameData()
     gd._monster_hp = {code: hp}
     gd._monster_attack = {code: attack or {}}
@@ -53,6 +54,8 @@ def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob", lifestea
     gd._monster_healing = {code: healing}
     gd._monster_reconstitution = {code: reconstitution}
     gd._monster_void_drain = {code: void_drain}
+    gd._monster_berserker_rage = {code: berserker_rage}
+    gd._monster_frenzy = {code: frenzy}
     return gd
 
 
@@ -192,6 +195,28 @@ def test_predict_win_void_drain_dieStep_term_alone_decides():
     assert predict_win(state, gd_no, "mob") is True
     gd_void = _gd(hp=1000, attack={"fire": 5}, initiative=0, void_drain=20)
     assert predict_win(state, gd_void, "mob") is False
+
+
+def test_predict_win_false_when_berserker_rage_boosts_monster_damage():
+    """Berserker-rage's always-active monster-damage boost raises dieStep, flipping a
+    won tiebreak (rtk == rtd == 2) to a loss. frenzy held at 0 so this isolates the
+    berserker term (kills its mutation). Player hp 100, raw 50 vs hp 100; berserk 100%
+    ⇒ dieStep 5e5 + 100*50*200//2=5e5 = 1e6 ⇒ rtd 1 < rtk 2."""
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    gd_no = _gd(hp=100, attack={"fire": 50}, initiative=10)
+    assert predict_win(state, gd_no, "mob") is True
+    gd_b = _gd(hp=100, attack={"fire": 50}, initiative=10, berserker_rage=100)
+    assert predict_win(state, gd_b, "mob") is False
+
+
+def test_predict_win_false_when_frenzy_boosts_monster_damage():
+    """Frenzy's always-active monster-damage boost (same shape as berserker) flips the
+    same won tiebreak to a loss. berserk held at 0 so this isolates the frenzy term."""
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    gd_no = _gd(hp=100, attack={"fire": 50}, initiative=10)
+    assert predict_win(state, gd_no, "mob") is True
+    gd_f = _gd(hp=100, attack={"fire": 50}, initiative=10, frenzy=100)
+    assert predict_win(state, gd_f, "mob") is False
 
 
 def test_round_half_up_rounds_half_upward():

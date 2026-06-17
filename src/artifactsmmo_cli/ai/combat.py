@@ -136,11 +136,17 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
     # deals no direct damage (raw_monster == 0), poison alone can kill. Monster burn
     # is a percent-of-player-attack DoT, modeled conservatively as flat per-turn (no
     # decay — an upper bound on the real decaying burn): burn% × p_atk_sum × 100.
+    # Berserker-rage (+% dmg below 25% HP, permanent) and frenzy (+% dmg on crit)
+    # both raise monster damage; modeled conservatively as ALWAYS active — each adds
+    # value% of the monster's per-turn damage (= value * raw_monster * (200+m_crit) / 2,
+    # the 50*...*value/100 reduced). Floor (//) matches the Lean `/ 2` on non-negatives.
     die_step = (50 * raw_monster * (200 + m_crit)
                 - p.critical_strike * player_lifesteal * p_atk_sum
                 + game_data.monster_poison(monster_code) * 10000
                 + game_data.monster_burn(monster_code) * p_atk_sum * 100
-                + game_data.monster_void_drain(monster_code) * p.max_hp * 100)
+                + game_data.monster_void_drain(monster_code) * p.max_hp * 100
+                + game_data.monster_berserker_rage(monster_code) * raw_monster * (200 + m_crit) // 2
+                + game_data.monster_frenzy(monster_code) * raw_monster * (200 + m_crit) // 2)
     if die_step <= 0:
         return True  # we out-sustain the monster's damage (poison-inclusive)
     effective_hp = min(state.hp, p.max_hp) if state.hp > 0 else 0

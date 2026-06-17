@@ -51,7 +51,7 @@ def _elem_args(attack: dict, dmg_global: int, dmg_elements: dict, resist: dict) 
 def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
          m_hp, m_attack, m_resist, m_crit, m_init,
          p_lifesteal=0, m_lifesteal=0, m_poison=0, m_barrier=0, m_burn=0, m_healing=0,
-         m_recon=0, m_void=0):
+         m_recon=0, m_void=0, m_berserk=0, m_frenzy=0):
     stats = ProjectedStats(
         attack=dict(p_attack), dmg=p_dmg, dmg_elements=dict(p_dmg_elem),
         resistance=dict(p_resist), critical_strike=p_crit, initiative=p_init,
@@ -101,6 +101,12 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
         def monster_void_drain(self, c):
             return m_void
 
+        def monster_berserker_rage(self, c):
+            return m_berserk
+
+        def monster_frenzy(self, c):
+            return m_frenzy
+
         def item_stats(self, c):
             return (ItemStats(code=c, level=1, type_="weapon", lifesteal=p_lifesteal)
                     if c == "_ls" else None)
@@ -126,7 +132,7 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
         + _elem_args(m_attack, 0, {}, p_resist)            # monster vs player resist
         + [m_crit, p_max_hp, 1 if p_init >= m_init else 0]
         + [p_lifesteal, p_atk_sum, m_lifesteal, m_atk_sum]
-        + [m_poison, m_barrier, m_burn, m_healing, m_recon, m_void]
+        + [m_poison, m_barrier, m_burn, m_healing, m_recon, m_void, m_berserk, m_frenzy]
     )
     lean = run_oracle("predict_win", [args])[0]
     return py, lean
@@ -174,11 +180,15 @@ def test_python_matches_lean(seed):
     # Void drain: 0 most of the time, non-zero often enough to exercise BOTH its
     # dieStep (player loss) and killStep (monster self-heal) terms.
     m_void = rng.choice([0, 0, rng.randint(1, 40)])
+    # Berserker-rage / frenzy: 0 most of the time, non-zero often enough to exercise
+    # each monster-damage-boost dieStep term (incl. the floor-div // 2 vs Lean / 2).
+    m_berserk = rng.choice([0, 0, rng.randint(1, 100)])
+    m_frenzy = rng.choice([0, 0, rng.randint(1, 100)])
 
     py, lean = _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp,
                     p_init, m_hp, m_attack, m_resist, m_crit, m_init,
                     p_lifesteal, m_lifesteal, m_poison, m_barrier, m_burn, m_healing, m_recon,
-                    m_void)
+                    m_void, m_berserk, m_frenzy)
     assert py == lean["win"], (
         f"verdict mismatch py={py} lean={lean} "
         f"p_attack={p_attack} p_dmg={p_dmg} p_dmg_elem={p_dmg_elem} "
@@ -186,7 +196,7 @@ def test_python_matches_lean(seed):
         f"m_hp={m_hp} m_attack={m_attack} m_resist={m_resist} m_crit={m_crit} m_init={m_init} "
         f"p_lifesteal={p_lifesteal} m_lifesteal={m_lifesteal} m_poison={m_poison} "
         f"m_barrier={m_barrier} m_burn={m_burn} m_healing={m_healing} m_recon={m_recon} "
-        f"m_void={m_void}"
+        f"m_void={m_void} m_berserk={m_berserk} m_frenzy={m_frenzy}"
     )
 
 
@@ -225,6 +235,44 @@ def test_round_half_up_boundary_binds_against_lean():
                     5000, {}, {"fire": 50}, 0, 0)
     assert py is True
     assert py == lean["win"]
+
+
+def test_berserker_rage_flips_winnable_fight_against_lean():
+    """Berserker-rage's always-active monster-damage boost raises dieStep, flipping a
+    won tiebreak (rtk == rtd == 2) to a loss. Pins the boost term (incl. the `/ 2`
+    floor) against Lean with frenzy held at 0 so it is the sole decider. Player hp 100,
+    raw 50 vs hp 100; berserk 100% => dieStep 5e5 + 100*50*200/2=5e5 = 1e6 => rtd 1 < 2."""
+    p = dict(attack={"fire": 50}, dmg=0, dmg_elem={}, resist={}, crit=0,
+             max_hp=100, init=10)
+    m = dict(hp=100, attack={"fire": 50}, resist={}, crit=0, init=10)
+    py_no, lean_no = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
+                          p["crit"], p["max_hp"], p["init"], m["hp"],
+                          m["attack"], m["resist"], m["crit"], m["init"])
+    assert py_no is True and py_no == lean_no["win"]
+    py_b, lean_b = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
+                        p["crit"], p["max_hp"], p["init"], m["hp"],
+                        m["attack"], m["resist"], m["crit"], m["init"],
+                        m_berserk=100)
+    assert py_b is False
+    assert py_b == lean_b["win"]
+
+
+def test_frenzy_flips_winnable_fight_against_lean():
+    """Frenzy's always-active monster-damage boost (same shape as berserker) flips the
+    same won tiebreak to a loss. Pins the frenzy term against Lean with berserk at 0."""
+    p = dict(attack={"fire": 50}, dmg=0, dmg_elem={}, resist={}, crit=0,
+             max_hp=100, init=10)
+    m = dict(hp=100, attack={"fire": 50}, resist={}, crit=0, init=10)
+    py_no, lean_no = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
+                          p["crit"], p["max_hp"], p["init"], m["hp"],
+                          m["attack"], m["resist"], m["crit"], m["init"])
+    assert py_no is True and py_no == lean_no["win"]
+    py_f, lean_f = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
+                        p["crit"], p["max_hp"], p["init"], m["hp"],
+                        m["attack"], m["resist"], m["crit"], m["init"],
+                        m_frenzy=100)
+    assert py_f is False
+    assert py_f == lean_f["win"]
 
 
 def test_maxturns_loss_binds_against_lean():
