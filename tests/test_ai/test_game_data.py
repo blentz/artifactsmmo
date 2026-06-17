@@ -732,6 +732,26 @@ class TestGameDataLoadMonsters:
         assert gd.monster_frenzy("goblin_priestess") == 0
         assert gd.monster_berserker_rage("goblin_priestess") == 0
 
+    def test_loads_monster_corrupted_from_effect(self):
+        """A monster's `corrupted` ABILITY parses so it is covered (not silently
+        dropped), even though predict_win conservatively ignores it. Absent ⇒ 0."""
+        gd = GameData()
+        monster = MagicMock()
+        monster.code = "corrupted_ogre"
+        monster.level = 36
+        monster.hp = 1400
+        monster.critical_strike = 0
+        monster.initiative = 100
+        eff = MagicMock(); eff.code = "corrupted"; eff.value = 6
+        monster.effects = [eff]
+        with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=make_page([monster])):
+            gd._load_monsters(MagicMock())
+        assert gd.monster_corrupted("corrupted_ogre") == 6
+        assert gd.monster_corrupted("no_such_monster") == 0
+        # corrupted is independent of the other abilities.
+        assert gd.monster_protective_bubble("corrupted_ogre") == 0
+        assert gd.monster_frenzy("corrupted_ogre") == 0
+
     def test_stops_on_none_result(self):
         gd = GameData()
         with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=None):

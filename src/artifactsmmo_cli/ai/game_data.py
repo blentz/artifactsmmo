@@ -282,6 +282,14 @@ class GameData:
         self.monsters.protective_bubble = value
 
     @property
+    def _monster_corrupted(self) -> dict[str, int]:
+        return self.monsters.corrupted
+
+    @_monster_corrupted.setter
+    def _monster_corrupted(self, value: dict[str, int]) -> None:
+        self.monsters.corrupted = value
+
+    @property
     def _monster_initiative(self) -> dict[str, int]:
         return self.monsters.initiative
 
@@ -566,6 +574,13 @@ class GameData:
         `protective_bubble` effect; 0 if absent). Feeds predict_win: modeled as an
         always-on player-damage reduction (lowers our kill rate)."""
         return self.monsters.monster_protective_bubble(code)
+
+    def monster_corrupted(self, code: str) -> int:
+        """Per-hit resistance-reduction percent of a monster (optional `corrupted`
+        effect; 0 if absent). corrupted HELPS the player, so predict_win conservatively
+        does NOT credit it (models pre-corruption minimum damage). Parsed/covered, not
+        used by the win prediction — see monster_catalog.monster_corrupted."""
+        return self.monsters.monster_corrupted(code)
 
     def monster_initiative(self, code: str) -> int:
         """Initiative (turn-order) stat of a monster. Raises `KeyError` when
@@ -1192,6 +1207,7 @@ class GameData:
             self._monster_berserker_rage[mon.code] = 0
             self._monster_frenzy[mon.code] = 0
             self._monster_protective_bubble[mon.code] = 0
+            self._monster_corrupted[mon.code] = 0
             mon_effects = getattr(mon, "effects", None)
             if mon_effects and not isinstance(mon_effects, Unset):
                 for effect in mon_effects:
@@ -1215,6 +1231,10 @@ class GameData:
                         self._monster_frenzy[mon.code] = effect.value
                     elif getattr(effect, "code", None) == "protective_bubble":
                         self._monster_protective_bubble[mon.code] = effect.value
+                    elif getattr(effect, "code", None) == "corrupted":
+                        # corrupted HELPS the player; predict_win conservatively ignores
+                        # it (parsed/covered here so it is not silently dropped).
+                        self._monster_corrupted[mon.code] = effect.value
             # OpenAPI conformance fields (Item 14 remediation).
             # Defensive getattr keeps older API clients green.
             min_gold = getattr(mon, "min_gold", 0)

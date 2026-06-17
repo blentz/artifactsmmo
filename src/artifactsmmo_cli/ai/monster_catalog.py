@@ -25,6 +25,7 @@ class MonsterCatalog:
     berserker_rage: dict[str, int] = field(default_factory=dict)  # code -> +% damage below 25% HP (effect; 0 if absent)
     frenzy: dict[str, int] = field(default_factory=dict)  # code -> +% damage on crit (effect; 0 if absent)
     protective_bubble: dict[str, int] = field(default_factory=dict)  # code -> % resist on rotating element (effect; 0 if absent)
+    corrupted: dict[str, int] = field(default_factory=dict)  # code -> per-hit resist-reduction % (effect; 0 if absent). HELPS the player.
     # OpenAPI conformance (Item 14 remediation): monster reward + loot fields.
     drops: dict[str, list[tuple[str, int, int, int]]] = field(default_factory=dict)
     """code -> [(item_code, rate, min_quantity, max_quantity), ...]. Drop rate is
@@ -163,6 +164,14 @@ class MonsterCatalog:
         ability (most monsters have none), so unlike the always-present combat stats
         this does not raise."""
         return self.protective_bubble.get(code, 0)
+
+    def monster_corrupted(self, code: str) -> int:
+        """Per-hit resistance-reduction percent of a monster (the `corrupted`
+        effect). Returns 0 when absent. corrupted HELPS the player (the monster's
+        resist drops as it is hit), so predict_win deliberately does NOT credit it —
+        it conservatively models the player's pre-corruption (minimum) damage. This
+        accessor exists so the effect is parsed/covered, not silently dropped."""
+        return self.corrupted.get(code, 0)
 
     def monster_initiative(self, code: str) -> int:
         """Initiative (turn-order) stat of a monster. Raises `KeyError` when

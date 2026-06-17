@@ -40,7 +40,7 @@ def _record_mixed(store: LearningStore, action_repr: str, wins: int, losses: int
 
 def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob", lifesteal=0,
         poison=0, barrier=0, burn=0, healing=0, reconstitution=0, void_drain=0,
-        berserker_rage=0, frenzy=0, protective_bubble=0):
+        berserker_rage=0, frenzy=0, protective_bubble=0, corrupted=0):
     gd = GameData()
     gd._monster_hp = {code: hp}
     gd._monster_attack = {code: attack or {}}
@@ -57,6 +57,7 @@ def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob", lifestea
     gd._monster_berserker_rage = {code: berserker_rage}
     gd._monster_frenzy = {code: frenzy}
     gd._monster_protective_bubble = {code: protective_bubble}
+    gd._monster_corrupted = {code: corrupted}
     return gd
 
 
@@ -230,6 +231,18 @@ def test_predict_win_false_when_protective_bubble_resists_player():
     assert predict_win(state, gd_no, "mob") is True
     gd_bub = _gd(hp=100, attack={"fire": 50}, initiative=10, protective_bubble=50)
     assert predict_win(state, gd_bub, "mob") is False
+
+
+def test_predict_win_ignores_corrupted_conservatively():
+    """corrupted HELPS the player (the monster's resist drops as it is hit), so
+    crediting it would risk predicting false wins. predict_win conservatively models
+    the player's pre-corruption (minimum) damage ⇒ corrupted must NOT change the
+    verdict. Locks the carve-out: same fight, with/without corrupted, identical
+    verdict (a borderline tiebreak win that a damage boost could only over-call)."""
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    gd_no = _gd(hp=100, attack={"fire": 50}, initiative=10)
+    gd_cor = _gd(hp=100, attack={"fire": 50}, initiative=10, corrupted=50)
+    assert predict_win(state, gd_no, "mob") == predict_win(state, gd_cor, "mob")
 
 
 def test_round_half_up_rounds_half_upward():
