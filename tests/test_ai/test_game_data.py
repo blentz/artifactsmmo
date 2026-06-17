@@ -648,6 +648,28 @@ class TestGameDataLoadMonsters:
         assert gd.monster_burn("cultist_emperor") == 0
         assert gd.monster_poison("cultist_emperor") == 0
 
+    def test_loads_monster_reconstitution_from_effect(self):
+        """A monster's `reconstitution` ABILITY (an effect, not a base stat) parses
+        so predict_win sees its full-heal period as a kill turn-cap. Absent ⇒ 0."""
+        gd = GameData()
+        monster = MagicMock()
+        monster.code = "lich"
+        monster.level = 45
+        monster.hp = 3000
+        monster.critical_strike = 0
+        monster.initiative = 100
+        eff = MagicMock()
+        eff.code = "reconstitution"
+        eff.value = 20
+        monster.effects = [eff]
+        with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=make_page([monster])):
+            gd._load_monsters(MagicMock())
+        assert gd.monster_reconstitution("lich") == 20
+        assert gd.monster_reconstitution("no_such_monster") == 0
+        # reconstitution is independent of the other abilities.
+        assert gd.monster_healing("lich") == 0
+        assert gd.monster_barrier("lich") == 0
+
     def test_stops_on_none_result(self):
         gd = GameData()
         with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=None):

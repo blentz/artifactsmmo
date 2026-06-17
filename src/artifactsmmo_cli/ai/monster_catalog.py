@@ -20,6 +20,7 @@ class MonsterCatalog:
     barrier: dict[str, int] = field(default_factory=dict)  # code -> absorbing-shield HP (effect; 0 if absent)
     burn: dict[str, int] = field(default_factory=dict)  # code -> burn DoT % of player attack (effect; 0 if absent)
     healing: dict[str, int] = field(default_factory=dict)  # code -> regen % of monster HP (effect; 0 if absent)
+    reconstitution: dict[str, int] = field(default_factory=dict)  # code -> full-heal period in turns (effect; 0 if absent)
     # OpenAPI conformance (Item 14 remediation): monster reward + loot fields.
     drops: dict[str, list[tuple[str, int, int, int]]] = field(default_factory=dict)
     """code -> [(item_code, rate, min_quantity, max_quantity), ...]. Drop rate is
@@ -125,6 +126,13 @@ class MonsterCatalog:
         Returns 0 when absent — healing is an OPTIONAL monster ability (most monsters
         have none), so unlike the always-present combat stats this does not raise."""
         return self.healing.get(code, 0)
+
+    def monster_reconstitution(self, code: str) -> int:
+        """Full-heal period (in turns) of a monster (the `reconstitution` effect).
+        Returns 0 when absent — reconstitution is an OPTIONAL monster ability (most
+        monsters have none), so unlike the always-present combat stats this does not
+        raise. 0 means no reconstitution."""
+        return self.reconstitution.get(code, 0)
 
     def monster_initiative(self, code: str) -> int:
         """Initiative (turn-order) stat of a monster. Raises `KeyError` when

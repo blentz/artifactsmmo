@@ -281,6 +281,9 @@ PREDICT_WIN_LIFESTEAL_MUTATIONS = [
     ("predict_win: drop monster barrier term in effective HP",
      "    effective_monster_hp = game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code)",
      "    effective_monster_hp = game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code) * 0"),
+    ("predict_win: drop reconstitution turn-cap guard",
+     "    if 0 < reconstitution <= rounds_to_kill:",
+     "    if 0 < reconstitution <= 0:"),
 ]
 
 

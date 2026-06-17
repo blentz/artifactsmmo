@@ -109,6 +109,12 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
     rounds_to_kill = -(-(effective_monster_hp * 10000) // kill_step)  # ceil
     if rounds_to_kill > MAX_TURNS:
         return False
+    # Reconstitution: the monster regains ALL HP every N turns. If we can't kill it
+    # strictly faster than that period, it fully heals before dying ⇒ unwinnable
+    # (conservative: win needs rounds_to_kill < period).
+    reconstitution = game_data.monster_reconstitution(monster_code)
+    if 0 < reconstitution <= rounds_to_kill:
+        return False
     raw_monster = sum(
         _element_damage(m_attack.get(e, 0), 0, p.resistance.get(e, 0)) for e in ELEMENTS
     )

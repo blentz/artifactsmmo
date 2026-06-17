@@ -50,7 +50,8 @@ def _elem_args(attack: dict, dmg_global: int, dmg_elements: dict, resist: dict) 
 
 def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
          m_hp, m_attack, m_resist, m_crit, m_init,
-         p_lifesteal=0, m_lifesteal=0, m_poison=0, m_barrier=0, m_burn=0, m_healing=0):
+         p_lifesteal=0, m_lifesteal=0, m_poison=0, m_barrier=0, m_burn=0, m_healing=0,
+         m_recon=0):
     stats = ProjectedStats(
         attack=dict(p_attack), dmg=p_dmg, dmg_elements=dict(p_dmg_elem),
         resistance=dict(p_resist), critical_strike=p_crit, initiative=p_init,
@@ -94,6 +95,9 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
         def monster_healing(self, c):
             return m_healing
 
+        def monster_reconstitution(self, c):
+            return m_recon
+
         def item_stats(self, c):
             return (ItemStats(code=c, level=1, type_="weapon", lifesteal=p_lifesteal)
                     if c == "_ls" else None)
@@ -119,7 +123,7 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
         + _elem_args(m_attack, 0, {}, p_resist)            # monster vs player resist
         + [m_crit, p_max_hp, 1 if p_init >= m_init else 0]
         + [p_lifesteal, p_atk_sum, m_lifesteal, m_atk_sum]
-        + [m_poison, m_barrier, m_burn, m_healing]
+        + [m_poison, m_barrier, m_burn, m_healing, m_recon]
     )
     lean = run_oracle("predict_win", [args])[0]
     return py, lean
@@ -161,17 +165,20 @@ def test_python_matches_lean(seed):
     # Healing: 0 most of the time, non-zero often enough to exercise the killStep regen
     # subtraction (incl. driving killStep <= 0 ⇒ unkillable).
     m_healing = rng.choice([0, 0, rng.randint(1, 50)])
+    # Reconstitution: 0 most of the time, a small period often enough to exercise the
+    # turn-cap branch (unwinnable when rounds_to_kill >= period).
+    m_recon = rng.choice([0, 0, rng.randint(1, 30)])
 
     py, lean = _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp,
                     p_init, m_hp, m_attack, m_resist, m_crit, m_init,
-                    p_lifesteal, m_lifesteal, m_poison, m_barrier, m_burn, m_healing)
+                    p_lifesteal, m_lifesteal, m_poison, m_barrier, m_burn, m_healing, m_recon)
     assert py == lean["win"], (
         f"verdict mismatch py={py} lean={lean} "
         f"p_attack={p_attack} p_dmg={p_dmg} p_dmg_elem={p_dmg_elem} "
         f"p_resist={p_resist} p_crit={p_crit} p_max_hp={p_max_hp} p_init={p_init} "
         f"m_hp={m_hp} m_attack={m_attack} m_resist={m_resist} m_crit={m_crit} m_init={m_init} "
         f"p_lifesteal={p_lifesteal} m_lifesteal={m_lifesteal} m_poison={m_poison} "
-        f"m_barrier={m_barrier} m_burn={m_burn} m_healing={m_healing}"
+        f"m_barrier={m_barrier} m_burn={m_burn} m_healing={m_healing} m_recon={m_recon}"
     )
 
 
@@ -315,3 +322,22 @@ def test_healing_flips_winnable_fight_against_lean():
                         m_healing=40)
     assert py_h is False
     assert py_h == lean_h["win"]
+
+
+def test_reconstitution_caps_kill_turns_against_lean():
+    """A comfortably winnable fight (rounds_to_kill 2 << rounds_to_die) becomes a
+    LOSS when the monster reconstitutes (full-heals) on a period <= rounds_to_kill:
+    it heals before we finish. Pins the reconstitution turn-cap against Lean — a
+    mutant that drops the guard keeps the win and dies here. Player raw 50 vs hp 100
+    => rtk 2; weak monster => rtd large; reconstitution period 2 => 2 <= 2 => loss."""
+    # Player raw 50, hp 1000; monster hp 100, weak attack => rtk 2, rtd 200, win.
+    p_attack = {"fire": 50}
+    py_no, lean_no = _run(p_attack, 0, {}, {}, 0, 1000, 50,
+                          100, {"fire": 5}, {}, 0, 10)
+    assert py_no is True
+    assert py_no == lean_no["win"]
+    # reconstitution period 2 <= rtk 2 => the monster full-heals before we kill it.
+    py_r, lean_r = _run(p_attack, 0, {}, {}, 0, 1000, 50,
+                        100, {"fire": 5}, {}, 0, 10, m_recon=2)
+    assert py_r is False
+    assert py_r == lean_r["win"]

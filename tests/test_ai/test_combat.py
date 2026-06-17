@@ -39,7 +39,7 @@ def _record_mixed(store: LearningStore, action_repr: str, wins: int, losses: int
 
 
 def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob", lifesteal=0,
-        poison=0, barrier=0, burn=0, healing=0):
+        poison=0, barrier=0, burn=0, healing=0, reconstitution=0):
     gd = GameData()
     gd._monster_hp = {code: hp}
     gd._monster_attack = {code: attack or {}}
@@ -51,6 +51,7 @@ def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob", lifestea
     gd._monster_barrier = {code: barrier}
     gd._monster_burn = {code: burn}
     gd._monster_healing = {code: healing}
+    gd._monster_reconstitution = {code: reconstitution}
     return gd
 
 
@@ -150,6 +151,19 @@ def test_predict_win_false_when_healing_makes_monster_unkillable():
     state = make_state(max_hp=1000, attack={"fire": 50}, initiative=50)
     gd = _gd(hp=100, attack={"fire": 5}, initiative=10, healing=50)
     assert predict_win(state, gd, "mob") is False
+
+
+def test_predict_win_false_when_reconstitution_outlasts_our_kill():
+    """Reconstitution turn-cap: a comfortably winnable fight (rounds_to_kill 2 <<
+    rounds_to_die) becomes a LOSS when the monster full-heals on a period <=
+    rounds_to_kill — it reconstitutes before we finish. WITHOUT the guard the bot
+    predicts a win; the mutation gate checks the guard flips it. Player raw 50 vs hp
+    100 ⇒ rtk 2; weak monster ⇒ rtd large; reconstitution period 2 ⇒ loss."""
+    state = make_state(max_hp=1000, attack={"fire": 50}, initiative=50)
+    gd_no = _gd(hp=100, attack={"fire": 5}, initiative=10)
+    assert predict_win(state, gd_no, "mob") is True
+    gd_rec = _gd(hp=100, attack={"fire": 5}, initiative=10, reconstitution=2)
+    assert predict_win(state, gd_rec, "mob") is False
 
 
 def test_round_half_up_rounds_half_upward():
