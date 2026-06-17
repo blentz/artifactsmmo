@@ -1006,6 +1006,18 @@ class GameData:
                         stats.haste = effect.value
                     elif effect.code == "lifesteal":
                         stats.lifesteal = effect.value
+                    elif (effect.code.startswith("boost_dmg_")
+                          or effect.code.startswith("boost_res_")
+                          or effect.code == "boost_hp"
+                          or effect.code == "antipoison"):
+                        # Utility-slot combat-buff potions (boost_dmg_<elem>,
+                        # boost_res_<elem>, boost_hp, antipoison): summed into one
+                        # combat-buff value so the bot VALUES + equips them (part a).
+                        # An item may carry several (enchanted_boost_potion = all 4
+                        # boost_dmg), so ACCUMULATE. The exact per-fight effect is
+                        # modeled separately in predict_win (part b). `restore`/
+                        # `splash_restore` are already valued via hp_restore above.
+                        stats.combat_buff += effect.value
                     elif effect.code in _GATHERING_SKILLS:
                         # Tool bonus for a gather skill (e.g. axe → woodcutting).
                         # Game encodes as cooldown reduction (negative value = faster);

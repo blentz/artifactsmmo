@@ -43,6 +43,9 @@ def test_equip_value_counts_utility_stats_so_artifact_not_discarded():
     # Lifesteal (combat sustain) also counts.
     ring = ItemStats(code="vampiric_ring", level=1, type_="ring", lifesteal=15)
     assert _equip_value(ring) == 15
+    # Combat-buff potions count so they aren't discarded as worthless (PLAN #3a).
+    pot = ItemStats(code="enchanted_boost_potion", level=1, type_="utility", combat_buff=20)
+    assert _equip_value(pot) == 20
 
 
 def _gd_with_sap_recipes() -> GameData:

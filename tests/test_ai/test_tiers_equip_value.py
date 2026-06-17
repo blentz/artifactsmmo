@@ -43,6 +43,13 @@ def test_values_lifesteal_combat_sustain():
     assert equip_value(ring) == 31
 
 
+def test_values_combat_buff_potion():
+    """Combat-buff potions (boost_dmg/res/hp + antipoison, summed into combat_buff)
+    are valued as utility so the bot equips them: raw 20 → 2*20+1 = 41 (PLAN #3a)."""
+    pot = ItemStats(code="enchanted_boost_potion", level=1, type_="utility", combat_buff=20)
+    assert equip_value(pot) == 41
+
+
 def test_nontool_strictly_beats_tool_on_raw_tie():
     """Spec mirror of PurposeRouting.combatScore_tiebreaks_nontool_over_tool."""
     weapon = ItemStats(code="w", level=1, type_="weapon", attack={"earth": 5})

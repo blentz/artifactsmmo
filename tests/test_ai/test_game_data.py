@@ -312,6 +312,34 @@ class TestGameDataLoadItems:
 
         assert gd._item_stats["cooked_chicken"].hp_restore == 25
 
+    def test_loads_combat_buff_from_utility_buff_effects(self):
+        """Utility-slot combat-buff potions (boost_dmg_<elem>, boost_res_<elem>,
+        boost_hp, antipoison) are SUMMED into combat_buff so the bot values + equips
+        them (PLAN #3a). An item may carry several (enchanted_boost_potion = all four
+        boost_dmg) — ACCUMULATE. Absent ⇒ 0."""
+        gd = GameData()
+        item = MagicMock()
+        item.code = "mixed_buff_potion"
+        item.level = 10
+        item.type_ = "utility"
+        item.craft = UNSET
+        effs = []
+        for code, val in (("boost_dmg_fire", 20), ("boost_dmg_air", 20),
+                          ("boost_res_water", 10), ("boost_hp", 250), ("antipoison", 30)):
+            e = MagicMock(); e.code = code; e.value = val
+            effs.append(e)
+        item.effects = effs
+        with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=make_page([item])):
+            gd._load_items(MagicMock())
+        # 20 + 20 + 10 + 250 + 30 = 330 (accumulated across all buff effects).
+        assert gd._item_stats["mixed_buff_potion"].combat_buff == 330
+        # an item with no buff effects has combat_buff 0.
+        plain = MagicMock(); plain.code = "plain"; plain.level = 1
+        plain.type_ = "weapon"; plain.craft = UNSET; plain.effects = []
+        with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=make_page([plain])):
+            gd._load_items(MagicMock())
+        assert gd._item_stats["plain"].combat_buff == 0
+
     def test_loads_hp_restore_from_restore_family_effects(self):
         """`restore` and `splash_restore` are HP-restoration potion codes (the
         `heal` of cooked food is just one of several restore codes). They must

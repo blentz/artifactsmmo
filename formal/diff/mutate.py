@@ -1384,33 +1384,44 @@ STRATEGY_DRIVER_MUTATIONS = [
 # Utility-stat valuation (2026-06-15 novice_guide discard fix). hp_bonus/wisdom/
 # prospecting must count so artifacts are scored, equipped, and not discarded.
 ARMOR_UTILITY_MUTATIONS = [
-    ("armor_score: drop whole flat utility (hp_bonus+wisdom+prospecting+inventory_space+haste+lifesteal) score 0",
-     "    return score + hp_bonus + wisdom + prospecting + inventory_space + haste + lifesteal",
+    ("armor_score: drop whole flat utility (hp_bonus+wisdom+prospecting+inventory_space+haste+lifesteal+combat_buff) score 0",
+     "    return (score + hp_bonus + wisdom + prospecting + inventory_space + haste\n"
+     "            + lifesteal + combat_buff)",
      "    return score"),
     ("armor_score: drop lifesteal — lifesteal gear undervalued",
-     "    return score + hp_bonus + wisdom + prospecting + inventory_space + haste + lifesteal",
-     "    return score + hp_bonus + wisdom + prospecting + inventory_space + haste"),
+     "            + lifesteal + combat_buff)",
+     "            + combat_buff)"),
+    ("armor_score: drop combat_buff — buff potions undervalued",
+     "            + lifesteal + combat_buff)",
+     "            + lifesteal)"),
 ]
 EQUIP_VALUE_UTILITY_MUTATIONS = [
-    ("equip_value: drop whole utility tail from raw — utility/bags/haste/lifesteal undervalued",
+    ("equip_value: drop whole utility tail from raw — utility/bags/haste/lifesteal/combat_buff undervalued",
      "           + hp_bonus + dmg + critical_strike + wisdom + prospecting + inventory_space + haste\n"
-     "           + lifesteal)",
+     "           + lifesteal + combat_buff)",
      "           + hp_bonus + dmg + critical_strike)"),
     ("equip_value: drop lifesteal from raw — lifesteal gear undervalued",
-     "           + hp_bonus + dmg + critical_strike + wisdom + prospecting + inventory_space + haste\n"
-     "           + lifesteal)",
-     "           + hp_bonus + dmg + critical_strike + wisdom + prospecting + inventory_space + haste)"),
+     "           + lifesteal + combat_buff)",
+     "           + combat_buff)"),
+    ("equip_value: drop combat_buff from raw — buff potions undervalued",
+     "           + lifesteal + combat_buff)",
+     "           + lifesteal)"),
 ]
 EQUIP_VALUE_DOMINANCE_MUTATIONS = [
-    ("dominance _equip_value: drop whole utility — artifact/bag/haste/lifesteal valued 0",
+    ("dominance _equip_value: drop whole utility — artifact/bag/haste/lifesteal/combat_buff valued 0",
      "    return (attack + resistance + hp + stats.hp_bonus + stats.wisdom\n"
-     "            + stats.prospecting + stats.inventory_space + stats.haste + stats.lifesteal)",
+     "            + stats.prospecting + stats.inventory_space + stats.haste + stats.lifesteal\n"
+     "            + stats.combat_buff)",
      "    return attack + resistance + hp"),
     ("dominance _equip_value: drop lifesteal — lifesteal gear valued 0",
-     "    return (attack + resistance + hp + stats.hp_bonus + stats.wisdom\n"
-     "            + stats.prospecting + stats.inventory_space + stats.haste + stats.lifesteal)",
-     "    return (attack + resistance + hp + stats.hp_bonus + stats.wisdom\n"
-     "            + stats.prospecting + stats.inventory_space + stats.haste)"),
+     "            + stats.prospecting + stats.inventory_space + stats.haste + stats.lifesteal\n"
+     "            + stats.combat_buff)",
+     "            + stats.prospecting + stats.inventory_space + stats.haste\n"
+     "            + stats.combat_buff)"),
+    ("dominance _equip_value: drop combat_buff — buff potions valued 0",
+     "+ stats.lifesteal\n"
+     "            + stats.combat_buff)",
+     "+ stats.lifesteal)"),
 ]
 
 

@@ -800,6 +800,8 @@ open Formal.PriorityBand
 #check @Formal.EquipValueAugmented.haste_value                 -- haste witness: haste 8 → 17
 #check @Formal.EquipValueAugmented.rawSum_mono_in_lifesteal    -- lifesteal: value monotone in lifesteal
 #check @Formal.EquipValueAugmented.lifesteal_value             -- lifesteal witness: lifesteal 15 → 31
+#check @Formal.EquipValueAugmented.rawSum_mono_in_combatBuff   -- combat buff: value monotone in combat_buff
+#check @Formal.EquipValueAugmented.combat_buff_value           -- combat-buff witness: combat_buff 20 → 41 (PLAN #3a)
 #check @Formal.EquipValueAugmented.equipValue_nontool_zero_eq_one
 #check @Formal.EquipValueAugmented.equipValue_tool_zero_eq_zero
 #check @Formal.EquipValueAugmented.copper_dagger_strictly_outranks_fishing_net

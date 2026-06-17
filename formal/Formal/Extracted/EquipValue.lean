@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/tiers/equip_value.py (sha256: 566cb3f3c60cddc78ea6f89e18ee0121e8ee875a55f72eed568bda3a6a85eecc) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/tiers/equip_value.py (sha256: 903aeec8c0bdf968dd64e3826c55796487673065eb21a09cdb535546e9594f17) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.EquipValue
@@ -14,9 +14,9 @@ def _dictGetD {α : Type} (m : List (String × α)) (k : String) (d : α) : α :
   | (k', v) :: rest => if k' == k then v else _dictGetD rest k d
 
 /-- Extracted from `equip_value_pure` (line 6). -/
-def equip_value_pure (attack : Int) (resistance : Int) (hp_restore : Int) (hp_bonus : Int) (dmg : Int) (critical_strike : Int) (wisdom : Int) (prospecting : Int) (inventory_space : Int) (haste : Int) (lifesteal : Int) (subtype : String) :
+def equip_value_pure (attack : Int) (resistance : Int) (hp_restore : Int) (hp_bonus : Int) (dmg : Int) (critical_strike : Int) (wisdom : Int) (prospecting : Int) (inventory_space : Int) (haste : Int) (lifesteal : Int) (combat_buff : Int) (subtype : String) :
     Int :=
-  let raw := ((((((((((attack + resistance) + hp_restore) + hp_bonus) + dmg) + critical_strike) + wisdom) + prospecting) + inventory_space) + haste) + lifesteal)
+  let raw := (((((((((((attack + resistance) + hp_restore) + hp_bonus) + dmg) + critical_strike) + wisdom) + prospecting) + inventory_space) + haste) + lifesteal) + combat_buff)
   let non_tool_bonus := (if (decide (subtype = "tool")) then 0 else 1)
   ((2 * raw) + non_tool_bonus)
 

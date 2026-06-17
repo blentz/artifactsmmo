@@ -92,7 +92,7 @@ def _item_block(code_id: int, stats: ItemStats | None, slot: str) -> list[int]:
     return [code_id, stats.level, fits, *_elem_block(stats, "attack"),
             *_elem_block(stats, "resistance"), stats.critical_strike,
             stats.hp_bonus + stats.wisdom + stats.prospecting + stats.inventory_space
-            + stats.haste + stats.lifesteal]
+            + stats.haste + stats.lifesteal + stats.combat_buff]
 
 
 def _py_score(stats: ItemStats, slot: str, monster_atk: dict, monster_res: dict) -> int:
@@ -337,6 +337,26 @@ def test_lifesteal_armor_scores_its_sustain_value():
     state = _make_state(5, inventory, equipment)
     result = pick_loadout("mon", state, game_data)
     assert result.get("ring1_slot") == "vamp_ring"
+    _check(table, monster_atk, monster_res, 5, inventory, equipment, ["ring1_slot"])
+
+
+def test_combat_buff_potion_scores_its_utility_value():
+    """Combat-buff potions (boost_dmg/res/hp + antipoison, summed into combat_buff) are
+    folded into the flat-utility score (PLAN #3a). A utility item with only
+    combat_buff=20 outscores a plain peer, so the bot equips fight-active buff potions,
+    and Python agrees with the Lean oracle — exercises combat_buff in flatUtil."""
+    table = _table(
+        ItemStats(code="boost_pot", level=1, type_="ring", combat_buff=20),
+        ItemStats(code="plain_ring", level=1, type_="ring"),
+    )
+    monster_atk = {"fire": 5}
+    monster_res = {"fire": 0}
+    inventory = {"boost_pot": 1, "plain_ring": 1}
+    equipment = {"ring1_slot": None}
+    game_data = _FakeGameData(table, monster_atk, monster_res)
+    state = _make_state(5, inventory, equipment)
+    result = pick_loadout("mon", state, game_data)
+    assert result.get("ring1_slot") == "boost_pot"
     _check(table, monster_atk, monster_res, 5, inventory, equipment, ["ring1_slot"])
 
 

@@ -63,9 +63,11 @@ def gather_score_pure(skill_effects: dict[str, int], skill: str) -> int:
 def armor_score_pure(elements: list[str], resistance: dict[str, int],
                      monster_attack: dict[str, int],
                      hp_bonus: int, wisdom: int, prospecting: int,
-                     inventory_space: int, haste: int, lifesteal: int) -> int:
+                     inventory_space: int, haste: int, lifesteal: int,
+                     combat_buff: int) -> int:
     """PURE CORE (mechanically extracted, P4b): ``Σ mon_atk * armor_res% +
-    hp_bonus + wisdom + prospecting + inventory_space + haste + lifesteal``.
+    hp_bonus + wisdom + prospecting + inventory_space + haste + lifesteal +
+    combat_buff``.
 
     The leading term is the monster-relative defense (damage reduced per hit).
     The trailing flat terms are monster-INDEPENDENT utility the piece grants
@@ -82,7 +84,8 @@ def armor_score_pure(elements: list[str], resistance: dict[str, int],
     score = 0
     for elem in elements:
         score = score + monster_attack.get(elem, 0) * resistance.get(elem, 0)
-    return score + hp_bonus + wisdom + prospecting + inventory_space + haste + lifesteal
+    return (score + hp_bonus + wisdom + prospecting + inventory_space + haste
+            + lifesteal + combat_buff)
 
 
 def weapon_score_raw(weapon: ItemStats, monster_resistance: dict[str, int]) -> int:
@@ -177,7 +180,8 @@ def armor_score(armor: ItemStats, monster_attack: dict[str, int]) -> int:
     """
     return armor_score_pure(list(ELEMENTS), armor.resistance, monster_attack,
                             armor.hp_bonus, armor.wisdom, armor.prospecting,
-                            armor.inventory_space, armor.haste, armor.lifesteal)
+                            armor.inventory_space, armor.haste, armor.lifesteal,
+                            armor.combat_buff)
 
 
 def _candidates_for_slot(

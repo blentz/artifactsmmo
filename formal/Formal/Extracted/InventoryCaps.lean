@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/inventory_caps.py (sha256: 51caead9bfbedf5682c126b57596f39ef3712d2090331f1b5682b36b7fe1c72d) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/inventory_caps.py (sha256: 05c3bb4b1086dc646504f6339104a8a60a01bd1bc97a6281463aebb4623214a2) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.InventoryCaps
@@ -59,7 +59,7 @@ def _is_dominated_pure (peers : List (Bool × Bool × Bool × Int)) (slot_count 
     dominator_owned peers
   (decide (dominator_owned ≥ slot_count))
 
-/-- Extracted from `_task_chain_demand_pure` (line 262; the Python `fuel <= 0` guard
+/-- Extracted from `_task_chain_demand_pure` (line 263; the Python `fuel <= 0` guard
 is the `Nat` fuel-zero arm — recursion is structural on the fuel). -/
 def _task_chain_demand_pure :
     Nat → String → String → Int → (List (String × List (String × Int))) → (List (String × Int)) → Int
@@ -87,7 +87,7 @@ def _task_chain_demand_pure :
           total recipe
         total))
 
-/-- Extracted from `useful_quantity_cap_excl_equipped_pure` (line 288). -/
+/-- Extracted from `useful_quantity_cap_excl_equipped_pure` (line 289). -/
 def useful_quantity_cap_excl_equipped_pure (item_code : String) (recipe_max : Int) (batch_buffer : Int) (safety_floor : Int) (task_type : String) (task_code : String) (task_total : Int) (task_progress : Int) (recipes : List (String × List (String × Int))) (action_cap : Int) (is_equippable : Bool) (is_dominated : Bool) (hp_restore : Int) :
     Int :=
   let recipe_cap := (if (decide (recipe_max > 0)) then (recipe_max * batch_buffer) else 0)
@@ -224,7 +224,7 @@ def useful_quantity_cap_excl_equipped_pure (item_code : String) (recipe_max : In
          else
           (max recipe_cap (max task_cap (max action_cap (max equippable_cap consumable_cap))))))))
 
-/-- Extracted from `useful_quantity_cap_pure` (line 335). -/
+/-- Extracted from `useful_quantity_cap_pure` (line 336). -/
 def useful_quantity_cap_pure (item_code : String) (recipe_max : Int) (batch_buffer : Int) (safety_floor : Int) (task_type : String) (task_code : String) (task_total : Int) (task_progress : Int) (recipes : List (String × List (String × Int))) (action_cap : Int) (is_equippable : Bool) (is_dominated : Bool) (hp_restore : Int) (equipped : Bool) :
     Int :=
   let base := (useful_quantity_cap_excl_equipped_pure item_code recipe_max batch_buffer safety_floor task_type task_code task_total task_progress recipes action_cap is_equippable is_dominated hp_restore)
