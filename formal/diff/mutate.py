@@ -1,7 +1,13 @@
 """Mutation runner: each mutant the diff test fails to kill is a survivor -> gate fails."""
+import argparse
 import os
+import queue
+import shutil
 import subprocess
 import sys
+import tempfile
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -1331,12 +1337,116 @@ TASK_RESERVATION_MUTATIONS = [
 ]
 
 
-def run_diff(test_path: str) -> int:
+# --- per-mutant test runner ------------------------------------------------
+# "parallel" (default) fans mutants across worker threads, each owning a PRIVATE
+# copy of src/artifactsmmo_cli. A worker mutates only its copy and runs the
+# kill-test with PYTHONPATH pointed at that copy (the editable install is a
+# plain-path .pth, so a prepended PYTHONPATH shadows it). The production tree is
+# NEVER mutated in parallel mode — strictly safer than serial, and ~Nx faster
+# since the cost is the Hypothesis test body, which is CPU-bound and embarrassingly
+# parallel. "serial" is the original in-place `uv run pytest` per mutant against
+# the real tree — slower, fully isolated, and the parity oracle for "parallel".
+_RUNNER = "parallel"
+# Worker count for parallel mode. Capped at 16; leaves headroom on the box.
+_WORKERS = min(16, (os.cpu_count() or 2) - 2)
+# Group filter: a group runs only when one of these substrings appears in its
+# src path or test path. None = run every group (the gate's full sweep).
+_ONLY: list[str] | None = None
+_SRC_PKG = "artifactsmmo_cli"
+_SRC_ROOT = ROOT / "src"
+_PYTEST_ARGS = ["-q", "--no-cov", "-x"]
+
+# One mutation unit: (target src file, description, old text, new text, test path).
+_Unit = tuple[Path, str, str, str, str]
+# Collected units, populated by run_group and drained by the executor. Module-
+# global so the ~80 run_group call sites need no signature change.
+_UNITS: list[_Unit] = []
+_PRINT_LOCK = threading.Lock()
+
+
+def _run_pytest(test_path: str, pythonpath: str | None) -> int:
+    """Run one kill-test in a subprocess. Return code 0 == passed == SURVIVED.
+    Uses the venv interpreter directly (sys.executable is the venv python under
+    `uv run`), skipping uv's per-call resolve. `pythonpath` shadows the editable
+    install with a worker's private src copy (parallel mode); None = real tree."""
+    env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+    if pythonpath is not None:
+        env["PYTHONPATH"] = pythonpath + os.pathsep + env.get("PYTHONPATH", "")
     return subprocess.run(
-        ["uv", "run", "pytest", test_path, "-q", "--no-cov", "-x"],
-        cwd=ROOT,
-        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        [sys.executable, "-m", "pytest", test_path, *_PYTEST_ARGS],
+        cwd=ROOT, env=env,
     ).returncode
+
+
+def _probe(target_file: Path, desc: str, old: str, new: str, test_path: str,
+           pythonpath: str | None, survivors: list[str]) -> None:
+    """Apply one mutation to target_file, run its kill-test, restore. Records a
+    survivor (or stale) exactly as the original serial run_group did."""
+    orig = target_file.read_text()
+    if old not in orig:
+        with _PRINT_LOCK:
+            print(f"STALE MUTATION (text not found): {desc}")
+        survivors.append(desc + " (stale)")
+        return
+    target_file.write_text(orig.replace(old, new, 1))
+    try:
+        survived = _run_pytest(test_path, pythonpath) == 0
+    finally:
+        target_file.write_text(orig)
+    with _PRINT_LOCK:
+        if survived:
+            print(f"SURVIVED: {desc}")
+            survivors.append(desc)
+        else:
+            print(f"killed: {desc}")
+
+
+def _execute(units: list[_Unit], survivors: list[str]) -> None:
+    """Dispatch collected units. In parallel mode, src/artifactsmmo_cli targets
+    run copy-isolated across workers (main tree untouched); the handful of
+    formal/sim targets — outside the editable package, so not PYTHONPATH-
+    shadowable — run serially in-place AFTER the parallel phase finishes, so the
+    two phases never race on the production tree."""
+    if _RUNNER == "serial":
+        _execute_serial(units, survivors)
+        return
+    parallel = [u for u in units if _SRC_ROOT in u[0].parents]
+    serial = [u for u in units if _SRC_ROOT not in u[0].parents]
+    if parallel:
+        _execute_parallel(parallel, survivors)
+    _execute_serial(serial, survivors)
+
+
+def _execute_serial(units: list[_Unit], survivors: list[str]) -> None:
+    for src, desc, old, new, test_path in units:
+        _probe(src, desc, old, new, test_path, None, survivors)
+
+
+def _execute_parallel(units: list[_Unit], survivors: list[str]) -> None:
+    """Fan units across _WORKERS threads, each leasing a private src copy."""
+    n = max(1, min(_WORKERS, len(units)))
+    tmp = Path(tempfile.mkdtemp(prefix="mutate-workers-"))
+    lease: queue.Queue[Path] = queue.Queue()
+    try:
+        for k in range(n):
+            copy_root = tmp / f"w{k}"
+            shutil.copytree(_SRC_ROOT / _SRC_PKG, copy_root / _SRC_PKG,
+                            ignore=shutil.ignore_patterns("__pycache__"))
+            lease.put(copy_root)
+
+        def task(unit: _Unit) -> None:
+            src, desc, old, new, test_path = unit
+            copy_root = lease.get()
+            try:
+                target = copy_root / src.relative_to(_SRC_ROOT)
+                _probe(target, desc, old, new, test_path, str(copy_root), survivors)
+            finally:
+                lease.put(copy_root)
+
+        with ThreadPoolExecutor(max_workers=n) as pool:
+            list(pool.map(task, units))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 # Killed by formal/diff/test_skill_gate_fastfail_diff.py (binds gather_plannable_pure
@@ -1435,22 +1545,16 @@ EQUIP_VALUE_DOMINANCE_MUTATIONS = [
 ]
 
 
-def run_group(src: Path, mutations, test_path: str, survivors: list) -> None:
-    orig = src.read_text()
-    try:
-        for desc, old, new in mutations:
-            if old not in orig:
-                print(f"STALE MUTATION (text not found): {desc}")
-                survivors.append(desc + " (stale)")
-                continue
-            src.write_text(orig.replace(old, new, 1))
-            if run_diff(test_path) == 0:
-                print(f"SURVIVED: {desc}")
-                survivors.append(desc)
-            else:
-                print(f"killed: {desc}")
-    finally:
-        src.write_text(orig)
+def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
+              survivors: list[str]) -> None:
+    """Collect this group's mutation units into _UNITS (filtered by _ONLY).
+    Execution is deferred to _execute so units can be fanned across workers. The
+    `survivors` param is retained for call-site compatibility and unused here."""
+    if _ONLY is not None and not any(
+            tok in str(src) or tok in test_path for tok in _ONLY):
+        return
+    for desc, old, new in mutations:
+        _UNITS.append((src, desc, old, new, test_path))
 
 
 _ALL_SRCS = [
@@ -2929,7 +3033,8 @@ def main() -> int:
 
 
 def _run_all_groups() -> int:
-    survivors: list = []
+    survivors: list[str] = []
+    _UNITS.clear()
     run_group(SRC, MUTATIONS, "formal/diff/test_calculate_path_diff.py", survivors)
     run_group(TASK_BATCH_SRC, TASK_BATCH_MUTATIONS, "formal/diff/test_task_batch_diff.py", survivors)
     run_group(INVENTORY_CAPS_SRC, INVENTORY_CAPS_MUTATIONS,
@@ -3148,6 +3253,7 @@ def _run_all_groups() -> int:
               "tests/test_ai/test_overstock.py", survivors)
     run_group(GAME_DATA_PARSE_SRC, RESTORE_FAMILY_MUTATIONS,
               "tests/test_ai/test_game_data.py", survivors)
+    _execute(_UNITS, survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
         return 1
@@ -3155,5 +3261,24 @@ def _run_all_groups() -> int:
     return 0
 
 
+def _parse_args(argv: list[str]) -> None:
+    global _RUNNER, _ONLY, _WORKERS
+    parser = argparse.ArgumentParser(description="Mutation runner for the formal gate.")
+    parser.add_argument("--runner", choices=("parallel", "serial"), default=_RUNNER,
+                        help="parallel (private-copy worker threads, default) or "
+                             "serial (in-place per-mutant subprocess, parity oracle)")
+    parser.add_argument("--workers", type=int, default=_WORKERS,
+                        help=f"parallel worker count (default: {_WORKERS})")
+    parser.add_argument("--only", default=None,
+                        help="comma-separated substrings; run only groups whose "
+                             "src or test path matches one (default: all groups)")
+    ns = parser.parse_args(argv)
+    _RUNNER = ns.runner
+    _WORKERS = max(1, ns.workers)
+    if ns.only:
+        _ONLY = [tok.strip() for tok in ns.only.split(",") if tok.strip()]
+
+
 if __name__ == "__main__":
+    _parse_args(sys.argv[1:])
     sys.exit(main())
