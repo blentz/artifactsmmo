@@ -51,7 +51,8 @@ def _raw_leaf(recipes: dict[int, dict[int, int]]) -> int:
     return _N - 1
 
 
-def _oracle_args(recipes, owned, root, step, step_qty, max_depth) -> list[int]:
+def _oracle_args(recipes, owned, root, step, step_qty, max_depth,
+                 max_yield=1) -> list[int]:
     triples: list[int] = []
     n = 0
     for parent, recipe in recipes.items():
@@ -63,7 +64,7 @@ def _oracle_args(recipes, owned, root, step, step_qty, max_depth) -> list[int]:
     for code, q in owned.items():
         owned_pairs.extend([code, q])
         no += 1
-    return [n, *triples, no, *owned_pairs, root, step, step_qty, max_depth]
+    return [n, *triples, no, *owned_pairs, root, step, step_qty, max_depth, max_yield]
 
 
 @settings(max_examples=400, deadline=None)
@@ -72,20 +73,22 @@ def _oracle_args(recipes, owned, root, step, step_qty, max_depth) -> list[int]:
     owned_seed=st.integers(min_value=0, max_value=10_000),
     step_qty=st.integers(min_value=0, max_value=40),
     max_depth=st.integers(min_value=0, max_value=200),
+    max_yield=st.integers(min_value=1, max_value=5),
 )
-def test_routed_target_matches_lean(seed, owned_seed, step_qty, max_depth):
+def test_routed_target_matches_lean(seed, owned_seed, step_qty, max_depth, max_yield):
     recipes = _make_dag(seed)
     rng = random.Random(owned_seed)
     owned = {i: rng.randint(0, 12) for i in range(_N) if rng.random() < 0.5}
     root = 0
     step = _raw_leaf(recipes)
-    py_code, py_qty = gather_step_target(root, step, step_qty, recipes, owned, max_depth)
+    py_code, py_qty = gather_step_target(
+        root, step, step_qty, recipes, owned, max_depth, max_yield)
     lean = run_oracle(
         "gather_step_target",
-        [_oracle_args(recipes, owned, root, step, step_qty, max_depth)],
+        [_oracle_args(recipes, owned, root, step, step_qty, max_depth, max_yield)],
     )[0]
     assert (lean["code"], lean["qty"]) == (py_code, py_qty), (
-        recipes, owned, step_qty, max_depth, (py_code, py_qty), lean)
+        recipes, owned, step_qty, max_depth, max_yield, (py_code, py_qty), lean)
 
 
 def test_unreachable_root_routes_to_step():
@@ -166,3 +169,25 @@ def test_partial_credit_keeps_root():
     assert py == (0, 1)
     lean = run_oracle("gather_step_target", [_oracle_args(recipes, owned, 0, 2, 50, 60)])[0]
     assert (lean["code"], lean["qty"]) == py
+
+
+def test_multi_yield_divides_cost_keeps_root():
+    """THE multi-yield witness: a 16-unit chain is over budget at yield 1
+    (16 > 15 -> route to step) but the resource drops 2 per gather, so the real
+    cost is ceil(16/2)=8 <= 15 and the root is kept. Both sides must apply the
+    `maxYield` divisor (ceilGathers); deterministic kill for the
+    drop-the-divisor (`maxYield := 1`) mutant, which would route to the step."""
+    recipes = {0: {1: 16}}
+    owned: dict[int, int] = {}
+    assert min_gathers(0, 1, recipes, owned) == 16
+    py = gather_step_target(0, 1, 16, recipes, owned, 15, 2)
+    assert py == (0, 1)
+    lean = run_oracle(
+        "gather_step_target", [_oracle_args(recipes, owned, 0, 1, 16, 15, 2)])[0]
+    assert (lean["code"], lean["qty"]) == py
+    # And at yield 1 it still routes to the step (the over-count path).
+    py1 = gather_step_target(0, 1, 16, recipes, owned, 15, 1)
+    assert py1 == (1, 16)
+    lean1 = run_oracle(
+        "gather_step_target", [_oracle_args(recipes, owned, 0, 1, 16, 15, 1)])[0]
+    assert (lean1["code"], lean1["qty"]) == py1

@@ -75,3 +75,20 @@ def test_does_not_mutate_owned():
     owned = {"steel_bar": 3}
     gather_step_target("steel_boots", "iron_ore", 240, _RECIPES, owned, 15)
     assert owned == {"steel_bar": 3}
+
+
+def test_multi_yield_unskips_marginal_chain():
+    """A chain needing 16 raw units is over budget at yield 1 (16 > 15) but
+    REACHABLE once the resource drops 2 per gather (ceil(16/2)=8 <= 15) — so the
+    root is kept instead of being falsely routed to the deep step. This is the
+    over-count bug the max_yield divisor fixes."""
+    recipes = {"thing": {"ore": 16}}
+    assert gather_step_target("thing", "ore", 16, recipes, {}, 15) == ("ore", 16)
+    assert gather_step_target("thing", "ore", 16, recipes, {}, 15, 2) == ("thing", 1)
+
+
+def test_multi_yield_still_skips_genuinely_deep_chain():
+    """Dividing by yield stays a SOUND lower bound: a 480-unit chain at yield 3
+    is still 160 gathers >> 15, so it is correctly routed to the deep step."""
+    assert gather_step_target(
+        "steel_boots", "iron_ore", 480, _RECIPES, {}, 15, 3) == ("iron_ore", 480)

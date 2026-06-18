@@ -41,6 +41,7 @@ execute it against the Lean oracle, exactly like `min_gathers`/`shopping_list`.
 
 from collections.abc import Mapping
 
+from artifactsmmo_cli.ai.gather_floor import ceil_gathers
 from artifactsmmo_cli.ai.min_gathers import min_gathers
 
 
@@ -51,6 +52,7 @@ def gather_step_target(
     recipes: Mapping[str, dict[str, int]],
     owned: dict[str, int],
     equip_max_depth: int,
+    max_yield: int = 1,
 ) -> tuple[str, int]:
     """Return the (item, qty) a depth-unreachable equippable root should gather.
 
@@ -59,8 +61,13 @@ def gather_step_target(
     gather cost fits that budget the caller plans the root chain directly, so we
     keep targeting the root; otherwise we target the strategy's deepest
     actionable `step` — a shallower, budget-feasible sub-target on the same
-    chain. Pure: never mutates its arguments (`min_gathers` copies `owned`)."""
-    root_cost = min_gathers(root_item, 1, recipes, owned)
+    chain. Pure: never mutates its arguments (`min_gathers` copies `owned`).
+
+    `max_yield` is the global per-gather drop maximum (`GameData.max_gather_yield`,
+    >= 1); the root's raw-unit cost is divided into gather ACTIONS by it so a
+    multi-yield chain is not over-counted into a false skip. Defaults to 1 (exact
+    unit cost) for callers without game data in scope."""
+    root_cost = ceil_gathers(min_gathers(root_item, 1, recipes, owned), max_yield)
     if root_cost <= equip_max_depth:
         return (root_item, 1)
     return (step_item, step_qty)

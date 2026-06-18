@@ -750,6 +750,21 @@ class GameData:
         return self.recipes_catalog.resource_drops_full
 
     @property
+    def max_gather_yield(self) -> int:
+        """Largest per-gather drop `max_quantity` across every resource (>= 1).
+
+        The depth-unreachability gate divides raw-unit gather counts by this to
+        get gather ACTIONS, so a multi-drop resource is not over-counted into a
+        false skip (see `gather_floor.ceil_gathers`). Returns 1 when no drop
+        table is loaded — the identity, which leaves single-yield costs exact."""
+        return max(
+            (row[3]
+             for rows in self.resource_drops_full.values()
+             for row in rows),
+            default=1,
+        )
+
+    @property
     def monster_levels(self) -> Mapping[str, int]:
         """monster_code -> level for every known monster."""
         return self.monsters.levels

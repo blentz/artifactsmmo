@@ -404,7 +404,8 @@ def _gather_goal_for_unreachable_equippable(
     if step is not None and isinstance(step, ObtainItem) and step.code != code:
         tgt_code, tgt_qty = gather_step_target(
             code, step.code, step.quantity,
-            game_data.crafting_recipes, owned, equip_max_depth)
+            game_data.crafting_recipes, owned, equip_max_depth,
+            game_data.max_gather_yield)
         return GatherMaterialsGoal(target_item=tgt_code, needed={tgt_code: tgt_qty})
     # No deeper actionable step (the root itself is the actionable leaf, or the
     # chain is cyclically blocked): fall back to the direct recipe. A recipe-less
@@ -520,7 +521,8 @@ def objective_step_goal(
                     owned[code] = owned.get(code, 0) + qty
                 tgt_code, tgt_qty = gather_step_target(
                     root.code, step.code, step.quantity,
-                    game_data.crafting_recipes, owned, upgrade.max_depth)
+                    game_data.crafting_recipes, owned, upgrade.max_depth,
+                    game_data.max_gather_yield)
                 return GatherMaterialsGoal(target_item=tgt_code, needed={tgt_code: tgt_qty})
         return GatherMaterialsGoal(target_item=step.code, needed={step.code: step.quantity})
     if isinstance(step, ReachSkillLevel):

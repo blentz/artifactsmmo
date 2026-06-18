@@ -1160,10 +1160,11 @@ args layout (all Nat ≥ 0), same recipe/owned prefix as shopping_list:
 * `[0]`                  nRecipe (number of `(item, sub, qty)` triples)
 * `[1 .. 3*nRecipe]`     the triples, flat: item0 sub0 qty0 ...
 * next: nOwned, then `(item, qty)` owned pairs flat
-* next: rootItem, stepItem, stepQty, equipMaxDepth
+* next: rootItem, stepItem, stepQty, equipMaxDepth, maxYield
 
 Emits the routed `{"code": _, "qty": _}` — compared against the Python
-`gather_step_target`. -/
+`gather_step_target`. `maxYield` (>= 1) divides the root's raw-unit gather cost
+into gather ACTIONS before the budget test (`ceilGathers`). -/
 def runGatherStepTarget (args : Array Json) : Json :=
   let g := fun i => (intArg args i).toNat
   let nRecipe := g 0
@@ -1178,6 +1179,7 @@ def runGatherStepTarget (args : Array Json) : Json :=
   let stepItem := g (p2 + 1)
   let stepQty := g (p2 + 2)
   let equipMaxDepth := g (p2 + 3)
+  let maxYield := g (p2 + 4)
   let parents := (triples.map (fun t => t.1)).eraseDups
   let recipes : Formal.ShoppingList.Recipes :=
     parents.map (fun it =>
@@ -1189,6 +1191,7 @@ def runGatherStepTarget (args : Array Json) : Json :=
   let (code, qty) :=
     Formal.StepDispatch.gatherTarget recipes owned (toString rootItem)
       (toString stepItem) (Int.ofNat stepQty) (Int.ofNat equipMaxDepth)
+      (Int.ofNat maxYield)
   Json.mkObj [("code", Json.num (Int.ofNat ((code.toNat?).getD 0))),
     ("qty", Json.num qty)]
 

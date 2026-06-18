@@ -315,13 +315,23 @@ theorem minGathers_raw_unowned (fuel : Nat) (item : String) (qty : Nat)
   unfold Formal.ShoppingList.deficit
   omega
 
+/-- Ceil-division of raw gather UNITS into gather ACTIONS by the global
+per-gather drop maximum `maxYield` (>= 1). Mirrors Python
+`gather_floor.ceil_gathers`: `(units + maxYield - 1) / maxYield`. With
+`maxYield = 1` it is the identity on `units`, so single-yield resources keep
+their exact gather count. A TIGHTER but still SOUND lower bound than `units`
+itself, so the over-budget routing stops over-counting multi-yield chains. -/
+def ceilGathers (units maxYield : Int) : Int := (units + maxYield - 1) / maxYield
+
 /-- The pure routing decision, mirroring `gather_step_target`:
-route to the root when its gather cost fits the budget, else the deepest step.
-Like the Python, the cost is the SEEDED `minGathersCount` (`min_gathers`
-copies `owned` and seeds the fuel internally). -/
+route to the root when its gather cost (raw units divided into ACTIONS by
+`maxYield`) fits the budget, else the deepest step. Like the Python, the unit
+cost is the SEEDED `minGathersCount` (`min_gathers` copies `owned` and seeds the
+fuel internally). -/
 def gatherTarget (recipes : Recipes) (owned : Dict Int) (rootItem stepItem : String)
-    (stepQty equipMaxDepth : Int) : String × Int :=
-  if minGathersCount rootItem 1 recipes owned ≤ equipMaxDepth then (rootItem, 1)
+    (stepQty equipMaxDepth maxYield : Int) : String × Int :=
+  if ceilGathers (minGathersCount rootItem 1 recipes owned) maxYield ≤ equipMaxDepth
+  then (rootItem, 1)
   else (stepItem, stepQty)
 
 /-- SOUNDNESS (route-only-when-over-budget): the deeper `step` is chosen ONLY
@@ -330,13 +340,14 @@ depth-reachable root is never abandoned — exactly the Piece-C honesty bar
 (no false-infeasible that drops a doable objective). -/
 theorem gatherTarget_step_only_when_root_over_budget
     (recipes : Recipes) (owned : Dict Int) (rootItem stepItem : String)
-    (stepQty equipMaxDepth : Int)
-    (h : gatherTarget recipes owned rootItem stepItem stepQty equipMaxDepth
+    (stepQty equipMaxDepth maxYield : Int)
+    (h : gatherTarget recipes owned rootItem stepItem stepQty equipMaxDepth maxYield
       = (stepItem, stepQty))
     (hne : (stepItem, stepQty) ≠ (rootItem, 1)) :
-    equipMaxDepth < minGathersCount rootItem 1 recipes owned := by
+    equipMaxDepth < ceilGathers (minGathersCount rootItem 1 recipes owned) maxYield := by
   unfold gatherTarget at h
-  by_cases hb : minGathersCount rootItem 1 recipes owned ≤ equipMaxDepth
+  by_cases hb : ceilGathers (minGathersCount rootItem 1 recipes owned) maxYield
+      ≤ equipMaxDepth
   · rw [if_pos hb] at h; exact absurd h hne.symm
   · omega
 
@@ -345,9 +356,10 @@ budget the decision keeps the root target (the caller plans the short craft+equi
 chain). -/
 theorem gatherTarget_root_when_feasible
     (recipes : Recipes) (owned : Dict Int) (rootItem stepItem : String)
-    (stepQty equipMaxDepth : Int)
-    (h : minGathersCount rootItem 1 recipes owned ≤ equipMaxDepth) :
-    gatherTarget recipes owned rootItem stepItem stepQty equipMaxDepth
+    (stepQty equipMaxDepth maxYield : Int)
+    (h : ceilGathers (minGathersCount rootItem 1 recipes owned) maxYield
+      ≤ equipMaxDepth) :
+    gatherTarget recipes owned rootItem stepItem stepQty equipMaxDepth maxYield
       = (rootItem, 1) := by
   unfold gatherTarget; simp [h]
 

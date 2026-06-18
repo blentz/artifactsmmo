@@ -1887,6 +1887,13 @@ GATHER_STEP_TARGET_MUTATIONS = [
     ("gather_step_target: always step (ignore reachable root)",
      "    if root_cost <= equip_max_depth:\n        return (root_item, 1)\n    return (step_item, step_qty)",
      "    return (step_item, step_qty)"),
+    # Drop the multi-yield divisor (max_yield -> 1): raw UNITS are mistaken for
+    # gather ACTIONS, so a multi-drop chain is over-counted into a false skip.
+    # Killed by test_multi_yield_divides_cost_keeps_root (yield 2: 16 units would
+    # route to the step instead of keeping the root at ceil(16/2)=8 <= 15).
+    ("gather_step_target: drop yield divisor (max_yield := 1)",
+     "    root_cost = ceil_gathers(min_gathers(root_item, 1, recipes, owned), max_yield)",
+     "    root_cost = ceil_gathers(min_gathers(root_item, 1, recipes, owned), 1)"),
 ]
 
 
