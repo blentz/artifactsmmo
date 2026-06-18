@@ -111,4 +111,16 @@ theorem productionLadder_eq_sellPressured (s : State)
   simp [productionLadder, allInLadderOrder, List.findSome?_cons,
     h0, h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, hfire]
 
+/-- `reachUnlockLevel` (slot 3, a FIGHT means) is selected when it fires and the
+    three higher slots (hpCritical, restForCombat, bankUnlock) are quiet. Used by
+    the B-0 bootstrap reach: in the under-bankRequiredLevel window reachUnlockLevel
+    fires unconditionally, so once hp is restored + bankUnlock retires it is the
+    selected means and the cycle fights. -/
+theorem productionLadder_eq_reachUnlockLevel (s : State)
+    (h0 : fires .hpCritical s = false) (h1 : fires .restForCombat s = false)
+    (h2 : fires .bankUnlock s = false)
+    (hfire : fires .reachUnlockLevel s = true) :
+    productionLadder s = some .reachUnlockLevel := by
+  simp [productionLadder, allInLadderOrder, List.findSome?_cons, h0, h1, h2, hfire]
+
 end Formal.Liveness.BlockerSelection
