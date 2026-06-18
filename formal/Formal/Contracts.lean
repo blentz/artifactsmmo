@@ -36,6 +36,7 @@ import Formal.TaskDecision
 import Formal.LowYieldCancel
 import Formal.StrategyBlend
 import Formal.DecideKey
+import Formal.ProgressionReserve
 import Formal.CyclesForProgress
 import Formal.GatherApply
 import Formal.GatherSelection
@@ -1513,6 +1514,25 @@ example : ∀ (k : Formal.DecideKey.GuardKind),
 example : ∀ (k : Formal.DecideKey.MeansKind),
     (Formal.DecideKey.goalReprOfMeans k).length > 0 :=
   @Formal.DecideKey.goalReprOfMeans_nonempty
+
+/-! ### ProgressionReserve role contracts. -/
+example : ∀ (r : Formal.ProgressionReserve.Reserved) (b : String),
+    Formal.ProgressionReserve.effectiveFloor r b + Formal.ProgressionReserve.costOf r b
+      = Formal.ProgressionReserve.reserveTotal r :=
+  @Formal.ProgressionReserve.floor_plus_cost
+example : ∀ (r : Formal.ProgressionReserve.Reserved) (b : String),
+    Formal.ProgressionReserve.effectiveFloor r b ≤ Formal.ProgressionReserve.reserveTotal r :=
+  @Formal.ProgressionReserve.effectiveFloor_le_total
+example : ∀ (r : Formal.ProgressionReserve.Reserved) (b : String),
+    Formal.ProgressionReserve.costOf r b = 0 →
+    Formal.ProgressionReserve.effectiveFloor r b = Formal.ProgressionReserve.reserveTotal r :=
+  @Formal.ProgressionReserve.nonreserved_full
+example : ∀ (r extra : Formal.ProgressionReserve.Reserved),
+    Formal.ProgressionReserve.reserveTotal r
+      ≤ Formal.ProgressionReserve.reserveTotal (r ++ extra) :=
+  @Formal.ProgressionReserve.total_le_append
+example : ∀ (gold price f1 f2 : Nat), f1 ≤ f2 → gold ≥ price + f2 → gold ≥ price + f1 :=
+  @Formal.ProgressionReserve.affordable_antitone_floor
 
 /-! ### CyclesForProgress role contracts. -/
 

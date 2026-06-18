@@ -299,6 +299,12 @@ open Formal.PriorityBand
 #check @Formal.DecideKey.decideCmp_eq_imp_negProtect              -- key-determinism: eq ⇒ equal negProtect (computed-gear-value tiebreak)
 #check @Formal.DecideKey.goalReprOfGuard_nonempty                  -- exhaustiveness: every GuardKind variant yields a non-empty repr (total dispatcher)
 #check @Formal.DecideKey.goalReprOfMeans_nonempty                  -- exhaustiveness: every MeansKind variant yields a non-empty repr (total dispatcher)
+-- ProgressionReserve required roles:
+#check @Formal.ProgressionReserve.floor_plus_cost                  -- deduction identity: floor + own cost = total
+#check @Formal.ProgressionReserve.effectiveFloor_le_total          -- floor never exceeds total
+#check @Formal.ProgressionReserve.nonreserved_full                 -- discretionary buy protects full reserve
+#check @Formal.ProgressionReserve.total_le_append                  -- monotone: more targets never lowers the floor
+#check @Formal.ProgressionReserve.affordable_antitone_floor        -- higher floor never makes a buy affordable
 -- CyclesForProgress required roles:
 #check @Formal.CyclesForProgress.cyclesForProgressPure_eq_median_concat   -- contract: pure = median(strict ++ satisfy)
 #check @Formal.CyclesForProgress.warmup_blocks                           -- warm-up gate: < W intervals ⇒ none
