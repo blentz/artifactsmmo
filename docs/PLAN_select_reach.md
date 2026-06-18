@@ -82,4 +82,12 @@ copies of the existing template, the entry that unblocks the per-seed reaches.
 New file `Formal/Liveness/BlockerSelection.lean`.
 
 ## Status
-- 2026-06-18: scoped. NEXT: the 8 selection lemmas (sub-lemma 1).
+- 2026-06-18: scoped.
+- 2026-06-18: **sub-lemma 1 DONE** (commit 2b3f1f6, gate green) —
+  `Formal/Liveness/BlockerSelection.lean`: the 8 `productionLadder_eq_<B>`
+  converse selection lemmas (hpCritical, discardCritical, craftRelief,
+  depositFull, discardHigh, gearReview, claimPending, sellPressured), each via
+  the `findSome?` short-circuit. Axioms = [propext] only.
+  NEXT: sub-lemma 2 — the quiet-prefix-persists-one-step lemmas (a blocker's
+  `planFor` action doesn't re-arm any HIGHER blocker's flag; extend
+  `BlockerMonotone`), then 3 (one-step seed-clear) and 4 (per-seed reach).
