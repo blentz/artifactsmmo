@@ -6,7 +6,7 @@ import pytest
 
 from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.craft_vs_buy import GOLD_RESERVE
-from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
 
@@ -14,6 +14,28 @@ from tests.test_ai.test_actions_execute import make_api_result, make_char_schema
 def make_gd(**kwargs) -> GameData:
     gd = GameData()
     gd._ge_sell_orders = kwargs.get("ge_sell_orders", {})
+    return gd
+
+
+def _gd_buyable_armor_and_ge_item() -> GameData:
+    """GameData with an NPC-sold body-armor upgrade (reserve=650) and a GE sell
+    order for a resale 'widget' item (not reserved).
+
+    reserve_floor("widget") == 650, which is above the flat GOLD_RESERVE=500.
+    This lets us craft a state that the OLD flat-reserve gate would have PASSED
+    (gold-price >= 500) but the NEW progression-reserve gate BLOCKS
+    (gold-price < 650).
+    """
+    gd = GameData()
+    gd._item_stats = {
+        "iron_armor": ItemStats(code="iron_armor", level=5, type_="body_armor", hp_bonus=40),
+        "rags": ItemStats(code="rags", level=1, type_="body_armor", hp_bonus=5),
+    }
+    # iron_armor costs 650 via NPC → reserve_floor("widget") == 650
+    gd._npc_stock = {"merchant": {"iron_armor": 650}}
+    # GE sell order for the widget the action will try to fill-buy
+    gd._ge_sell_orders = {"widget": ("ord-w", 20, 10)}
+    gd._monster_level = {"chicken": 1}
     return gd
 
 
@@ -43,12 +65,18 @@ class TestGeFillSellOrderAction:
         assert a.is_applicable(state, gd) is False
 
     def test_not_applicable_when_buy_would_breach_reserve(self):
+        # reserve_floor derives from progression targets; when no upgrades are
+        # available (bare make_gd has no item stats / NPC stock) the floor is 0
+        # and the buy goes through even when gold is modest.  Use the richer
+        # fixture to assert blocking behaviour — see
+        # test_not_applicable_when_buy_would_breach_progression_reserve below.
         a = GeFillSellOrderAction(order_id="ord-1", item_code="iron_ore", price=100, quantity=3,
                                   ge_location=(5, 1))
         gd = make_gd(ge_sell_orders={"iron_ore": ("ord-1", 100, 10)})
-        # gold - 300 < GOLD_RESERVE → not applicable
+        # progression reserve == 0 (no buyable upgrades in this bare gd),
+        # so gold=700-300=400 >= 0 → applicable
         state = make_state(gold=GOLD_RESERVE + 200, inventory={}, inventory_max=20)
-        assert a.is_applicable(state, gd) is False
+        assert a.is_applicable(state, gd) is True
 
     def test_not_applicable_when_order_gone(self):
         a = GeFillSellOrderAction(order_id="ord-1", item_code="iron_ore", price=2, quantity=3,
@@ -151,3 +179,15 @@ class TestGeFillSellOrderAction:
                 a.execute(state, client)
         MockMove.assert_not_called()
         mock_buy.assert_called_once()
+
+    def test_not_applicable_when_buy_would_breach_progression_reserve(self):
+        # reserve_floor(state, gd, "widget") == 650 (iron_armor NPC-priced at 650,
+        # body_armor_slot is "rags" so the upgrade is unmet).
+        # gold=620, price=20, quantity=1 → 620-20=600 >= GOLD_RESERVE(500) [old gate: PASS]
+        # but 600 < 650 [progression reserve gate: BLOCK] → not applicable
+        gd = _gd_buyable_armor_and_ge_item()
+        state = make_state(level=5, gold=620, equipment={"body_armor_slot": "rags"},
+                           inventory={}, inventory_max=20)
+        a = GeFillSellOrderAction(order_id="ord-w", item_code="widget", price=20, quantity=1,
+                                  ge_location=(5, 1))
+        assert a.is_applicable(state, gd) is False

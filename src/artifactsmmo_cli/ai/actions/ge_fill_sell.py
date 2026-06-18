@@ -21,9 +21,10 @@ from artifactsmmo_api_client.models.ge_buy_order_schema import GEBuyOrderSchema
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.movement import MoveAction
-from artifactsmmo_cli.ai.craft_vs_buy import GOLD_RESERVE
+from artifactsmmo_cli.ai.craft_vs_buy import GOLD_RESERVE  # noqa: F401 — kept for later task
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.progression_reserve import reserve_floor
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -46,9 +47,10 @@ class GeFillSellOrderAction(Action):
         # Slot-floor: buying mints +quantity; refuse if it would overflow the cap.
         if state.inventory_free < self.quantity:
             return False
-        # Gold gate: the buy must leave gold at or above the reserve (mirrors
-        # craft_vs_buy's affordability constraint and NpcBuyAction's gold gate).
-        if state.gold - self.price * self.quantity < GOLD_RESERVE:
+        # Gold gate: the buy must leave gold at or above the progression reserve
+        # floor (mirrors craft_vs_buy's affordability constraint and NpcBuyAction's
+        # gold gate, but honours the dynamic per-state reserve rather than a flat cap).
+        if state.gold - self.price * self.quantity < reserve_floor(state, game_data, self.item_code):
             return False
         order = game_data.ge_best_sell_order(self.item_code)
         if order is None:
