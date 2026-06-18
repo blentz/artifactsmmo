@@ -81,6 +81,58 @@ Sub-lemma (1): the 8 `productionLadder_eq_<B>` selection lemmas — mechanical
 copies of the existing template, the entry that unblocks the per-seed reaches.
 New file `Formal/Liveness/BlockerSelection.lean`.
 
+## TRANSIENCE-CORE FINDING (2026-06-18) — reshapes the whole approach
+
+Scoping the per-seed reaches surfaced a hard truth: **the universal per-seed
+reach is FALSE.**
+
+- `reachUnlockLevelFires = decide(bankRequiredLevel>0) ∧ decide(level <
+  bankRequiredLevel) ∧ decide(bankRequiredLevel - level ≤ 5)` has NO quieting
+  conjunct — it fires EVERY cycle while `level < bankRequiredLevel`, sits at
+  ladder idx 3 ABOVE all chore blockers, and its `.fight` action clears NONE of
+  the six chore flags. So a chore flag set at a low-level spawn CANNOT clear
+  until `level` reaches `bankRequiredLevel` — the chore blocker is never selected
+  (a fight-means preempts it continuously). NO GAPS.
+- Counterexample to `∃k, hasOverstockItems (cycleStepN k s) = false`: spawn with
+  overstock set + `bankRequiredLevel = level+5`. The cycle fights forever (until
+  level climbs); `deleteItem` is never dispatched; overstock stays true the whole
+  window. The existential fails at every k in it.
+
+**Consequence:** `fightReadyCore_reachable_of_seeds`'s per-seed hypotheses are NOT
+universally dischargeable. My `FightReadyCore` decoupling (omitting bank/leveled
+to "skip the level-44 wait") DOESN'T actually buy an earlier reach — the chores
+can't clear before `bankRequiredLevel` ANYWAY. `fightReadyCore_reachable_of_seeds`
+stays a VALID honest conditional theorem; it just has no easier discharge than
+`Settled`-reach.
+
+**The chore-clear is NOT a clean induction.** It bottoms out at the SAME honest
+hypothesis the repo already documents — `BlockersQuietInfinitelyOften` /
+"nothing re-arms the flags" leans on the model abstracting away the perception
+refresh (`FightFairness.lean:106-126`). There is no well-founded ranking over
+chore-flag count, and no proof that a set chore flag FORCES its blocker selected
+when `objectiveStep` also fires.
+
+### Revised honest path
+1. **B-0 (PROVABLE, bounded — the real next theorem):** `∃k, level ≥
+   bankRequiredLevel ∧ bankAccessible` via the existing lex measure — while
+   `reachUnlockLevel`/`bankUnlock` fire, the cycle fights and
+   `fight_decreases_measure` strictly drops xp/level deficit; gap ≤ 5 bounds it.
+   Then `reachUnlockLevel_quiet_forever` / `bankUnlock_quiet_forever` retire idx
+   2-3 permanently. Reuses `Measure.lean` + `FightProgress`.
+2. **B-1 (chore-clear) = an honest FAIRNESS hypothesis**, not a theorem — the
+   `BlockersQuietInfinitelyOoften` obligation. Like `hperc` and LIV-001, this is
+   an irreducible documented assumption (the perception-refresh abstraction).
+3. **Target `Settled`-reach** (`ai_reaches_level_fifty_of_settled`, the repo's
+   honest capstone) rather than the universal per-seed reaches: B-0 + the
+   chore-fairness/perception hypotheses → Settled → 50.
+
+### Net level-50 end-state (honest)
+Provably reaches 50 given: (i) **B-0** [provable, build next], (ii) a
+**chore-scheduling fairness** assumption, (iii) **`hperc`** perception. (ii)+(iii)
+are the irreducible "model abstracts perception" hypotheses — documented, like
+LIV-001. The selection lemmas (sub-lemma 1) + `reach_and`/`fold` + B-0 are the
+in-model parts; the rest is honest hypothesis.
+
 ## Status
 - 2026-06-18: scoped.
 - 2026-06-18: **sub-lemma 1 DONE** (commit 2b3f1f6, gate green) —
