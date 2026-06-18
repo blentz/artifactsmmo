@@ -1,8 +1,11 @@
 # PLAN: gem / skill-gated-material inventory strategy (QUEUED)
 
-**Status:** designed 2026-06-18, QUEUED behind the level-50 formal work (#2-6)
-AND behind resolving the pending `inventory_caps.py` git stash. Side-quest from
-a live-inventory check.
+**Status:** DONE 2026-06-18 (commits 633fb79 + extraction regen), full gate
+green. The pending `inventory_caps.py` stash was a wrong abandoned edit
+(`max`→`min` floor, contradicting the docstring) — DROPPED, not applied. The fix
+turned out IMPURE-ONLY (no Lean lockstep): `reachable_recipe_demand` feeds the
+unchanged pure core a skill-gated recipe demand. Side-quest from a live-inventory
+check.
 
 ## Problem (live data, Robby level 10)
 
