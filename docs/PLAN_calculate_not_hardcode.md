@@ -83,8 +83,11 @@ full Lean lockstep + `formal/gate.sh` + commit. Check the box when committed.
 - [ ] **#8 `_DUPLICATE_FILL_TYPES = {"ring"}`** — dup'd `objective.py:19` /
   `equip.py:48`. artifact/utility are multi-slot in API; derive as "types mapping
   to ≥2 slots" from the #2 derived map. Single source.
-- [ ] **#9 `GOLD_RESERVE = 500`** — `craft_vs_buy.py:15`. Track
-  `next_expansion_cost` instead of a flat floor.
+- [~] **#9 `GOLD_RESERVE = 500`** — REFRAMED 2026-06-18 into a FEATURE: a
+  calculated per-level progression-gold-reserve (cost of near-term gear/crafting/
+  boss-odds upgrades), not a flat floor. Spec captured in
+  `docs/PLAN_progression_gold_reserve.md`; needs brainstorming before build.
+  — `craft_vs_buy.py:15`.
 
 ## Out of scope (legit policy / not API data)
 Personality weights, proof scales (GEAR_EQUIP_SCALE, XP_RATE_REFERENCE), urgency
