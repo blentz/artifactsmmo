@@ -1,7 +1,20 @@
 # PLAN #5: boss/elite pursuit + achievements as progression
 
-**Priority:** 5. **Status:** planned. **Depends on:** #1 (need boss combat modeled to
-fight them safely).
+**Priority:** 5. **Status:** DESCOPED from the level-50 critical path (2026-06-18).
+**Depends on:** #1 (need boss combat modeled to fight them safely).
+
+> **Boss-drop check (2026-06-18, audit #1 of the level-50 todo):** queried live
+> game data — for every equippable gear item at level 20-50, expanded its full
+> recipe closure and checked whether any required leaf material drops ONLY from a
+> boss/elite/over-band monster. Result: NONE. The only two over-band ingredients
+> (`cyclops_eye` for `dreadful_ring` lvl20, `orc_bone` for `corrupted_stone_amulet`
+> lvl35) come from NORMAL monsters (cyclops lvl25, orc lvl38) — beatable with
+> band-appropriate gear, gated safely by `is_winnable`, with lower-level XP always
+> available to grind toward them (no deadlock). The 6 boss + 3 elite monsters are
+> lvl 50-55 endgame content; reaching level 50 does NOT require beating any of
+> them. So boss-pursuit (and the `progression_reserve.boss_targets` stub) is
+> FORWARD-LOOKING endgame/achievement work, not a level-50 blocker. Build it when
+> targeting post-50 content, not before.
 
 ## Problem
 
