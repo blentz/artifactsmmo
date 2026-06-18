@@ -11,11 +11,13 @@ from artifactsmmo_cli.ai.goals.discard_overstock import (
 from artifactsmmo_cli.ai.inventory_caps import (
     BATCH_BUFFER,
     CONSUMABLE_KEEP,
+    SAFETY_FLOOR,
     _equip_value,
     _is_dominated_pure,
     _is_equippable_dominated,
     _task_chain_demand_pure,
     overstocked_items,
+    reachable_recipe_demand,
     useful_quantity_cap,
     useful_quantity_cap_excl_equipped,
 )
@@ -739,3 +741,68 @@ class TestPureCores:
         # Credits sum across peers; threshold is >=.
         assert _is_dominated_pure([(True, True, True, 1), (True, True, True, 1)], 2) is True
         assert _is_dominated_pure([(True, True, True, 1)], 2) is False
+
+
+def _gem_gd() -> GameData:
+    """A gemstone (cut at mining@20) and a near-term bar (mining@1)."""
+    gd = GameData()
+    gd._item_stats = {
+        "topaz_stone": ItemStats(code="topaz_stone", level=20, type_="resource"),
+        "topaz": ItemStats(code="topaz", level=20, type_="resource",
+                           crafting_skill="mining", crafting_level=20),
+        "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource"),
+        "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource",
+                                crafting_skill="mining", crafting_level=1),
+    }
+    gd._crafting_recipes = {"topaz": {"topaz_stone": 24}, "copper_bar": {"copper_ore": 10}}
+    return gd
+
+
+def test_reachable_recipe_demand_zeroes_skill_gated_material():
+    """topaz_stone's only consumer (topaz) needs mining@20; a mining-10 bot can't
+    reach it, so its near-term demand is 0 (deposit-eligible). copper_ore's
+    consumer (copper_bar) is mining@1 — reachable — so its demand is unchanged."""
+    gd = _gem_gd()
+    low = make_state(skills={"mining": 10})
+    assert reachable_recipe_demand("topaz_stone", low, gd) == 0
+    assert reachable_recipe_demand("copper_ore", low, gd) == gd.max_recipe_demand("copper_ore")
+    assert gd.max_recipe_demand("copper_ore") > 0  # sanity: the reachable one is non-zero
+
+
+def test_reachable_recipe_demand_returns_full_once_skill_in_reach():
+    """At mining 20 (>= 20) the topaz recipe is reachable, so topaz_stone's full
+    transitive demand returns — keep them for cutting, no longer deposit-bait."""
+    gd = _gem_gd()
+    high = make_state(skills={"mining": 20})
+    assert reachable_recipe_demand("topaz_stone", high, gd) == gd.max_recipe_demand("topaz_stone")
+    assert gd.max_recipe_demand("topaz_stone") > 0
+    # within the +2 horizon: mining 18 already counts as reachable
+    near = make_state(skills={"mining": 18})
+    assert reachable_recipe_demand("topaz_stone", near, gd) == gd.max_recipe_demand("topaz_stone")
+
+
+def test_skill_gated_material_keeps_none_for_low_level_bot():
+    """The end effect: a low-level bot's useful_quantity_cap for the gemstone is
+    0 (keep none — fully bank-eligible under pressure; the SAFETY_FLOOR only
+    applies to items with reachable recipe use), while a skilled bot keeps the
+    full batch cap so the gems aren't shed once they're usable."""
+    gd = _gem_gd()
+    low = make_state(skills={"mining": 10})
+    assert useful_quantity_cap("topaz_stone", low, gd) == 0
+    high = make_state(skills={"mining": 20})
+    assert useful_quantity_cap("topaz_stone", high, gd) > SAFETY_FLOOR
+
+
+def test_skill_gated_gem_is_overstock_under_pressure_reachable_material_protected():
+    """End-to-end: under real space pressure a low-level bot's unusable gemstones
+    are flagged overstock (-> banked, keeping the bag lean) while a near-term
+    reachable material stays protected by its cap."""
+    gd = _gem_gd()
+    full = make_state(
+        skills={"mining": 10},
+        inventory={"topaz_stone": 15, "copper_ore": 5},
+        inventory_max=20,  # 20/20 used -> above the 0.85 watermark
+    )
+    excess = overstocked_items(full, gd)
+    assert excess.get("topaz_stone") == 15  # all gems sheddable (deposit-eligible)
+    assert "copper_ore" not in excess       # reachable material protected by its cap

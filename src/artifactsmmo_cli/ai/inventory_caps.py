@@ -47,6 +47,15 @@ SAFETY_FLOOR = 3
 """Always keep at least this many of any item that has any recipe use, so the
 bot doesn't immediately re-gather what it just discarded."""
 
+RECIPE_SKILL_HORIZON = 2
+"""A consuming recipe whose crafting-skill requirement is more than this many
+levels above the character's CURRENT level in that skill is NOT near-term
+craftable, so its material demand does not count toward the material's useful
+inventory cap. The material becomes deposit-eligible rather than reserved bag
+space the bot can't use yet — e.g. level-20 gemstones (cut at mining@20), mined
+as byproducts of low-level nodes, get banked instead of clogging a level-10
+bag. See docs/PLAN_gem_inventory_strategy.md."""
+
 # The high watermark, kept as an EXACT integer ratio (17/20 = 0.85). The
 # overstock decision compares `used / cap >= num / den` by cross-multiplication
 # over integers — exact, no float drift at the boundary (mirrored by the proved
@@ -351,6 +360,30 @@ def useful_quantity_cap_pure(
     return base
 
 
+def reachable_recipe_demand(item_code: str, state: WorldState, game_data: GameData,
+                            horizon: int = RECIPE_SKILL_HORIZON) -> int:
+    """The transitive recipe demand for `item_code` (`max_recipe_demand`), EXCEPT
+    0 when EVERY direct consumer's recipe is skill-gated more than `horizon`
+    levels above the character's current level in that skill — i.e. the material
+    has no near-term use and should not reserve inventory space (it becomes
+    deposit-eligible). Returns the FULL transitive demand (unchanged behavior)
+    for any item with at least one reachable or ungated consumer, so only
+    far-future skill-gated materials (gemstones cut at mining@20 while the bot is
+    mining@10) are affected."""
+    full = game_data.max_recipe_demand(item_code)
+    if full <= 0:
+        return 0
+    for consumer, recipe in game_data.crafting_recipes.items():
+        if recipe.get(item_code, 0) <= 0:
+            continue
+        stats = game_data.item_stats(consumer)
+        if stats is None or not stats.crafting_skill:
+            return full  # an ungated consumer keeps the material near-term useful
+        if stats.crafting_level <= state.skills.get(stats.crafting_skill, 1) + horizon:
+            return full  # a skill-reachable consumer keeps it useful
+    return 0  # every consumer is gated far above current skill -> not near-term useful
+
+
 def _cap_from_state(item_code: str, state: WorldState, game_data: GameData,
                     batch_buffer: int, safety_floor: int, equipped: bool) -> int:
     """Assemble the plain-data inputs of `useful_quantity_cap_pure` from the
@@ -365,7 +398,7 @@ def _cap_from_state(item_code: str, state: WorldState, game_data: GameData,
             is_dominated = _is_equippable_dominated(item_code, state, game_data)
         hp_restore = stats.hp_restore
     return useful_quantity_cap_pure(
-        item_code, game_data.max_recipe_demand(item_code), batch_buffer,
+        item_code, reachable_recipe_demand(item_code, state, game_data), batch_buffer,
         safety_floor, state.task_type or "", state.task_code or "",
         state.task_total, state.task_progress, game_data.crafting_recipes,
         ACTION_CONSUMABLES_CAP.get(item_code, 0),
