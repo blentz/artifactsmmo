@@ -168,6 +168,23 @@ assumption left.
   converse selection lemmas (hpCritical, discardCritical, craftRelief,
   depositFull, discardHigh, gearReview, claimPending, sellPressured), each via
   the `findSome?` short-circuit. Axioms = [propext] only.
-  NEXT: sub-lemma 2 — the quiet-prefix-persists-one-step lemmas (a blocker's
-  `planFor` action doesn't re-arm any HIGHER blocker's flag; extend
-  `BlockerMonotone`), then 3 (one-step seed-clear) and 4 (per-seed reach).
+- 2026-06-18: **B-0 inductive step DONE** (`Formal/Liveness/BootstrapReach.lean`,
+  axioms = {propext, Quot.sound, xpToNextLevel}). The bootstrap window's
+  per-cycle measure descent is fully proven:
+  * `reachUnlockLevel_fires_in_window` + `reachUnlockLevel_selected_in_window` +
+    `cycleStep_fights_of_reachUnlockLevel` — in the window, once the higher slots
+    are quiet, `cycleStep` runs `.fight`.
+  * `fightKind_decreases_measure` — KEY FINDING: `applyActionKind .fight` differs
+    from `FightProgress.fightApply` (the ladder's `.fight` MODELS the level-up
+    rollover; `fightApply` does not and decrements hp). So the ladder's fight
+    descends the lex measure with ONLY `level < 50` — NO perception invariant
+    `xp < xpToNextLevel` needed (the rollover handles the `xp ≥ threshold` case).
+  * `window_step_decreases_measure` — one `cycleStep` in the window strictly
+    decreases the measure. The `bankRequiredLevel ≤ 50` hypothesis is the honest
+    server fact bridging `level < bankRequiredLevel` to `level < 50`.
+  Also cleaned the `unusedSimpArgs` (`List.findSome?_cons`) warnings in
+  BlockerSelection.lean.
+  NEXT: the descent assembly — (1) quiet-prefix persistence (a window-invariant
+  `W s` preserved by `cycleStep` while `level < bankRequiredLevel`; tractable
+  because `.fight` preserves hp/maxHp and bankUnlock only retires), then (2)
+  `reaches_bankRequiredLevel` by well-founded recursion on `measureLt`.

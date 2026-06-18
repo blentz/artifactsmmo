@@ -32,7 +32,7 @@ open Formal.Liveness.CumulativeProgress
 theorem productionLadder_eq_hpCritical (s : State)
     (hfire : fires .hpCritical s = true) :
     productionLadder s = some .hpCritical := by
-  simp [productionLadder, allInLadderOrder, List.findSome?_cons, hfire]
+  simp [productionLadder, allInLadderOrder, hfire]
 
 /-- `discardCritical` (slot 4) is selected when it fires and the four higher slots
     (hpCritical, restForCombat, bankUnlock, reachUnlockLevel) are quiet. -/
@@ -41,7 +41,7 @@ theorem productionLadder_eq_discardCritical (s : State)
     (h2 : fires .bankUnlock s = false) (h3 : fires .reachUnlockLevel s = false)
     (hfire : fires .discardCritical s = true) :
     productionLadder s = some .discardCritical := by
-  simp [productionLadder, allInLadderOrder, List.findSome?_cons,
+  simp [productionLadder, allInLadderOrder,
     h0, h1, h2, h3, hfire]
 
 /-- `craftRelief` (slot 5) — higher: slots 0-4. -/
@@ -51,7 +51,7 @@ theorem productionLadder_eq_craftRelief (s : State)
     (h4 : fires .discardCritical s = false)
     (hfire : fires .craftRelief s = true) :
     productionLadder s = some .craftRelief := by
-  simp [productionLadder, allInLadderOrder, List.findSome?_cons,
+  simp [productionLadder, allInLadderOrder,
     h0, h1, h2, h3, h4, hfire]
 
 /-- `depositFull` (slot 6) — higher: slots 0-5. -/
@@ -61,7 +61,7 @@ theorem productionLadder_eq_depositFull (s : State)
     (h4 : fires .discardCritical s = false) (h5 : fires .craftRelief s = false)
     (hfire : fires .depositFull s = true) :
     productionLadder s = some .depositFull := by
-  simp [productionLadder, allInLadderOrder, List.findSome?_cons,
+  simp [productionLadder, allInLadderOrder,
     h0, h1, h2, h3, h4, h5, hfire]
 
 /-- `discardHigh` (slot 7) — higher: slots 0-6. -/
@@ -72,7 +72,7 @@ theorem productionLadder_eq_discardHigh (s : State)
     (h6 : fires .depositFull s = false)
     (hfire : fires .discardHigh s = true) :
     productionLadder s = some .discardHigh := by
-  simp [productionLadder, allInLadderOrder, List.findSome?_cons,
+  simp [productionLadder, allInLadderOrder,
     h0, h1, h2, h3, h4, h5, h6, hfire]
 
 /-- `gearReview` (slot 8) — higher: slots 0-7. -/
@@ -83,7 +83,7 @@ theorem productionLadder_eq_gearReview (s : State)
     (h6 : fires .depositFull s = false) (h7 : fires .discardHigh s = false)
     (hfire : fires .gearReview s = true) :
     productionLadder s = some .gearReview := by
-  simp [productionLadder, allInLadderOrder, List.findSome?_cons,
+  simp [productionLadder, allInLadderOrder,
     h0, h1, h2, h3, h4, h5, h6, h7, hfire]
 
 /-- `claimPending` (slot 9) — higher: slots 0-8. -/
@@ -95,7 +95,7 @@ theorem productionLadder_eq_claimPending (s : State)
     (h8 : fires .gearReview s = false)
     (hfire : fires .claimPending s = true) :
     productionLadder s = some .claimPending := by
-  simp [productionLadder, allInLadderOrder, List.findSome?_cons,
+  simp [productionLadder, allInLadderOrder,
     h0, h1, h2, h3, h4, h5, h6, h7, h8, hfire]
 
 /-- `sellPressured` (slot 11) — higher: slots 0-10 (incl. completeTask). -/
@@ -108,7 +108,7 @@ theorem productionLadder_eq_sellPressured (s : State)
     (h10 : fires .completeTask s = false)
     (hfire : fires .sellPressured s = true) :
     productionLadder s = some .sellPressured := by
-  simp [productionLadder, allInLadderOrder, List.findSome?_cons,
+  simp [productionLadder, allInLadderOrder,
     h0, h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, hfire]
 
 /-- `reachUnlockLevel` (slot 3, a FIGHT means) is selected when it fires and the
@@ -121,6 +121,6 @@ theorem productionLadder_eq_reachUnlockLevel (s : State)
     (h2 : fires .bankUnlock s = false)
     (hfire : fires .reachUnlockLevel s = true) :
     productionLadder s = some .reachUnlockLevel := by
-  simp [productionLadder, allInLadderOrder, List.findSome?_cons, h0, h1, h2, hfire]
+  simp [productionLadder, allInLadderOrder, h0, h1, h2, hfire]
 
 end Formal.Liveness.BlockerSelection
