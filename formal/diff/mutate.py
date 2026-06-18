@@ -113,6 +113,7 @@ CYCLE_STEP_SRC = ROOT / "formal" / "sim" / "cycle_step.py"
 EQUIP_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "equip_value.py"
 GAME_DATA_PARSE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "game_data.py"
 LOCATION_CATALOG_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "location_catalog.py"
+PROGRESSION_RESERVE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression_reserve_core.py"
 
 # Effect-parser coverage (stat-audit fixes).
 RESTORE_FAMILY_MUTATIONS = [
@@ -1242,6 +1243,26 @@ DECIDE_KEY_MUTATIONS = [
     ("decide_key: MAINTAIN_CONSUMABLES repr corrupted",
      "    MeansKind.MAINTAIN_CONSUMABLES: \"MaintainConsumables\",",
      "    MeansKind.MAINTAIN_CONSUMABLES: \"WRONG\","),
+]
+
+
+# progression_reserve_core mutations -- each breaks the deduction-accounting
+# floor so the Python decision diverges from the proved Lean oracle. Killed by
+# formal/diff/test_progression_reserve_diff.py.
+PROGRESSION_RESERVE_MUTATIONS = [
+    # Drop the deduction: a reserved item's own cost no longer credited, so its
+    # purchase is wrongly blocked by its own reservation.
+    ("progression_reserve: drop deduction (floor = full total)",
+     "    return reserve_total(reserved) - reserved.get(buying or \"\", 0)",
+     "    return reserve_total(reserved)"),
+    # Flip the affordability comparison: spends below the floor.
+    ("progression_reserve: invert affordability (>= -> <)",
+     "    return gold >= price + effective_floor(reserved, buying)",
+     "    return gold < price + effective_floor(reserved, buying)"),
+    # Ignore price in affordability -> overspends by the item's price.
+    ("progression_reserve: drop price from affordability",
+     "    return gold >= price + effective_floor(reserved, buying)",
+     "    return gold >= effective_floor(reserved, buying)"),
 ]
 
 
@@ -3128,6 +3149,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_strategy_blend_diff.py", survivors)
     run_group(DECIDE_KEY_SRC, DECIDE_KEY_MUTATIONS,
               "formal/diff/test_decide_key_diff.py", survivors)
+    run_group(PROGRESSION_RESERVE_CORE_SRC, PROGRESSION_RESERVE_MUTATIONS,
+              "formal/diff/test_progression_reserve_diff.py", survivors)
     run_group(CYCLES_FOR_PROGRESS_SRC, CYCLES_FOR_PROGRESS_MUTATIONS,
               "formal/diff/test_cycles_for_progress_diff.py", survivors)
     run_group(GATHER_APPLY_SRC, GATHER_APPLY_MUTATIONS,
