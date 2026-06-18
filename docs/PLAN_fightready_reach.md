@@ -112,6 +112,12 @@ retired hypothesis is a Manifest/Contracts role.
 
 ## Status
 - 2026-06-18: scoped; plan written; brick reach-vs-monotone split confirmed.
-  NEXT: Phase A — the combinator + `fightReady_reachable_of_seeds` assembly
-  (structural), then Phase B dynamics. Multi-session Lean effort; run via
-  /lean4:autoprove cycle-by-cycle against this roadmap.
+- 2026-06-18: **Phase A DONE** (commit e22b344, gate green, branch
+  feat/fightready-reach). `Formal/Liveness/FightReadyReach.lean`: `reach_and`
+  combinator + `FightReadyCore` + `fightReady_reachable_of_seeds` +
+  `ai_reaches_level_fifty_from_spawn_warmup` (spawn→50 modulo `hwarm`+`hperc`).
+  Axioms = standard + LIV-001. Imported into Formal.lean + LivenessAudit.lean.
+  NEXT: Phase B — discharge `hwarm` (the `∃K, FightReadyCore` reach) by proving
+  the per-seed reach dynamics (6 flag-clears + hpFull) and folding them with
+  `reach_and`; the hardest is `taskParked_reachable` (non-monotone lifecycle).
+  `hperc` stays the O5.4 obligation (#3). Run via /lean4:autoprove.
