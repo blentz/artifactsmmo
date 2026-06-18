@@ -139,8 +139,16 @@ commitment: only switch when the new winner dominates by 50%+. Prevents
 single-cycle objective flap from transient predicate flips (e.g.
 combat_capable=False momentarily because pick_loadout's inventory
 projection changes when inventory composition shifts)."""
-_COMBAT_GEAR_SLOTS = frozenset({"weapon_slot", "shield_slot", "helmet_slot", "body_armor_slot",
-                                "leg_armor_slot", "boots_slot", "ring1_slot", "ring2_slot", "amulet_slot"})
+# Combat gear occupies these item TYPES (policy: excludes artifact/utility/rune/
+# bag, which aren't combat-urgency gear). The SLOT names are derived from the
+# schema-backed ITEM_TYPE_TO_SLOTS, so a new slot for a combat type (e.g. a 3rd
+# ring) is included without editing a slot list here.
+_COMBAT_GEAR_TYPES = frozenset({
+    "weapon", "shield", "helmet", "body_armor", "leg_armor", "boots", "ring", "amulet",
+})
+_COMBAT_GEAR_SLOTS = frozenset(
+    slot for t in _COMBAT_GEAR_TYPES for slot in ITEM_TYPE_TO_SLOTS.get(t, [])
+)
 
 LEARN_W_MAX = Fraction(1, 2)
 LEARN_SAMPLE_FULL = 20

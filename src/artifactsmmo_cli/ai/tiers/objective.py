@@ -7,7 +7,7 @@ precedent."""
 from dataclasses import dataclass, field, replace
 from fractions import Fraction
 
-from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import _GATHERING_SKILLS, GameData
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value, tool_value
@@ -16,7 +16,9 @@ from artifactsmmo_cli.ai.tiers.skill_target_curve import skill_target_curve
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, SKILL_NAMES, WorldState
 
 
-_DUPLICATE_FILL_TYPES = frozenset({"ring"})
+# Single source: the server-probed set of types that accept a duplicate item
+# CODE across their slots (rings only). Shared with actions/equip.py — no copy.
+_DUPLICATE_FILL_TYPES = DUPLICATE_SLOT_TYPES
 """Multi-slot equip types whose empty slots are filled by repeating the best
 attainable item. Rings only: the game lets you wear two identical rings, so when
 fewer distinct rings are attainable than ring slots, double up the best.

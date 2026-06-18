@@ -22,12 +22,11 @@ full Lean lockstep + `formal/gate.sh` + commit. Check the box when committed.
   `PlannerDepthBound` soundness. DESIGN: max_yield as a per-item input dict
   (default 1 for craftables / unknown). Keep the lower-bound proof valid.
 
-- [ ] **#2 `ITEM_TYPE_TO_SLOTS` frozen oracle** — `equip.py:17,34`.
-  De-facto "is this gear & where", consulted across the whole stack. New
-  equippable type → silently `None` → never equipped/scored AND recycle_surplus/
-  inventory_caps treat it as junk (economic loss). DESIGN: derive slot set from
-  the client `CharacterSchema *_slot` fields / `ItemSlot` enum; needs schema
-  introspection. Enables #8.
+- [x] **#2 `ITEM_TYPE_TO_SLOTS` frozen oracle** — DONE. Derived in `equip.py`
+  from `CharacterSchema` `*_slot` fields (each field's base, digits stripped, IS
+  its item type). Byte-identical to the old maps (verified); dict iteration order
+  not load-bearing (all consumers `.get()`/`sorted()`). New equippable
+  type/slot now picked up on client regen instead of silently treated as junk.
 
 ## Tier 2 — shadow-API enumerations, silent staleness, duplication
 
@@ -77,12 +76,16 @@ full Lean lockstep + `formal/gate.sh` + commit. Check the box when committed.
   benefit; declined by decision 2026-06-18. — `bank_expansion.py:22`. Server-owned
   increment; abandoned `location_catalog.py:47 slots_per_expansion` was meant to
   learn it from the buy-response delta. Plumb runtime learning.
-- [ ] **#7 `_COMBAT_GEAR_SLOTS` / `EQUIPMENT_SLOTS`** — `strategy.py:137`,
-  `world_state.py:30`. Missing schema slot (e.g. `rune_slot`) → no urgency/prior.
-  Derive from schema (pairs with #2/#3 enumeration work).
-- [ ] **#8 `_DUPLICATE_FILL_TYPES = {"ring"}`** — dup'd `objective.py:19` /
-  `equip.py:48`. artifact/utility are multi-slot in API; derive as "types mapping
-  to ≥2 slots" from the #2 derived map. Single source.
+- [x] **#7 `_COMBAT_GEAR_SLOTS` / `EQUIPMENT_SLOTS`** — DONE. EQUIPMENT_SLOTS
+  derived from CharacterSchema `*_slot` fields; `_COMBAT_GEAR_SLOTS` derived from
+  a policy type-set (`_COMBAT_GEAR_TYPES`) via ITEM_TYPE_TO_SLOTS, so slots track
+  the schema (a new ring slot auto-included) while the combat-type policy stays
+  explicit. Byte-identical.
+- [x] **#8 `_DUPLICATE_FILL_TYPES = {"ring"}`** — DONE (DRY, not derived).
+  CORRECTION: the value is a SERVER-PROBE fact (only rings accept a duplicate
+  item CODE, HTTP 200; live probe 2026-06-14), NOT "types with ≥2 slots" — so it
+  is not schema-derivable. Single-sourced: `objective._DUPLICATE_FILL_TYPES` now
+  imports `equip.DUPLICATE_SLOT_TYPES` (the one copy is gone).
 - [~] **#9 `GOLD_RESERVE = 500`** — REFRAMED 2026-06-18 into a FEATURE: a
   calculated per-level progression-gold-reserve (cost of near-term gear/crafting/
   boss-odds upgrades), not a flat floor. Spec captured in
@@ -95,5 +98,13 @@ tiers, HP fractions, inventory soft-target bands, GOAP cost divisors, pathfindin
 heuristics. Dead code to delete opportunistically: `consumable.py:19
 _best_consumable`.
 
+## Queue (tail-ordered)
+1. Slot cluster: #2 ITEM_TYPE_TO_SLOTS → then #7 (EQUIPMENT_SLOTS) → then #8
+   (dup-fill, derives from #2's map). IN PROGRESS.
+2. #9 progression gold reserve (FEATURE, needs brainstorming) — LAST.
+   Spec: docs/PLAN_progression_gold_reserve.md.
+
 ## Status log
 - 2026-06-18: audit complete; plan written. Starting #1.
+- 2026-06-18: #1, #3, #4 (4a+DRY+4c), #5 done & gate-green; #6 closed; forks
+  resolved. Slot cluster next, #9 feature queued last.

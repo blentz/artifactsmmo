@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+import attrs
+
 from artifactsmmo_api_client.models.character_schema import CharacterSchema
 from artifactsmmo_api_client.models.craft_skill import CraftSkill
 from artifactsmmo_api_client.models.gathering_skill import GatheringSkill
@@ -30,23 +32,11 @@ def _require(char: CharacterSchema, field_name: str) -> Any:
         raise MissingApiData(f"CharacterSchema missing required field {field_name!r}")
     return val
 
+# Every equippable slot is a CharacterSchema `*_slot` field; derive the list
+# from the schema (in field order) rather than hand-typing it, so a slot the
+# server adds is tracked on client regen.
 EQUIPMENT_SLOTS = [
-    "weapon_slot",
-    "rune_slot",
-    "shield_slot",
-    "helmet_slot",
-    "body_armor_slot",
-    "leg_armor_slot",
-    "boots_slot",
-    "ring1_slot",
-    "ring2_slot",
-    "amulet_slot",
-    "artifact1_slot",
-    "artifact2_slot",
-    "artifact3_slot",
-    "utility1_slot",
-    "utility2_slot",
-    "bag_slot",
+    f.name for f in attrs.fields(CharacterSchema) if f.name.endswith("_slot")
 ]
 
 # The character's trainable skills are the API schema's craft + gathering skills
