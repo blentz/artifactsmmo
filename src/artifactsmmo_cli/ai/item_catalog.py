@@ -2,7 +2,12 @@
 
 from dataclasses import dataclass, field
 
-_GATHERING_SKILLS = frozenset({"mining", "woodcutting", "fishing", "alchemy"})
+from artifactsmmo_api_client.models.gathering_skill import GatheringSkill
+
+# The gathering skills are the API schema's GatheringSkill enum
+# ({alchemy, fishing, mining, woodcutting}) — derived, not hand-typed, so a new
+# gathering skill the server adds is classified correctly on client regen.
+_GATHERING_SKILLS = frozenset(s.value for s in GatheringSkill)
 
 
 @dataclass
