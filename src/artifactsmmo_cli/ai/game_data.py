@@ -35,6 +35,7 @@ from artifactsmmo_api_client.models.npc_item import NPCItem
 from artifactsmmo_api_client.models.resource_schema import ResourceSchema
 from artifactsmmo_api_client.types import Unset
 
+from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.game_data_cache import GameDataCache
 from artifactsmmo_cli.ai.game_data_error import GameDataCoverageError
 from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS, ItemCatalog, ItemStats
@@ -1322,10 +1323,10 @@ class GameData:
                 mon.type_.value if hasattr(mon.type_, "value") else str(mon.type_ or "normal")
             )
             self._monster_attack[mon.code] = {
-                elem: getattr(mon, f"attack_{elem}", 0) for elem in ("fire", "earth", "water", "air")
+                elem: getattr(mon, f"attack_{elem}", 0) for elem in ELEMENTS
             }
             self._monster_resistance[mon.code] = {
-                elem: getattr(mon, f"res_{elem}", 0) for elem in ("fire", "earth", "water", "air")
+                elem: getattr(mon, f"res_{elem}", 0) for elem in ELEMENTS
             }
             self._monster_critical_strike[mon.code] = mon.critical_strike
             self._monster_initiative[mon.code] = mon.initiative

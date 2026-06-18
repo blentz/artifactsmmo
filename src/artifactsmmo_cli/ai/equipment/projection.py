@@ -7,8 +7,9 @@ to judge winnability with the best-attainable loadout before equipping it."""
 
 from dataclasses import dataclass
 
+from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.world_state import ELEMENTS, WorldState
+from artifactsmmo_cli.ai.world_state import WorldState
 
 
 @dataclass(frozen=True)

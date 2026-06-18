@@ -31,7 +31,12 @@ full Lean lockstep + `formal/gate.sh` + commit. Check the box when committed.
 
 ## Tier 2 — shadow-API enumerations, silent staleness, duplication
 
-- [ ] **#3 `ELEMENTS` tuple** — dup'd `elements.py:3`, `world_state.py:60`,
+- [x] **#3 `ELEMENTS` tuple** — DONE. New leaf `ai/elements.py` derives ELEMENTS
+  from `MonsterSchema` `attack_*` fields; 3 literals now re-export/import it.
+  Equipment cores already parametric → NO proof change; combat keeps 4 slots
+  (value identical). NOTE: combat's `PredictWin.lean rawHit` still hardcodes 4
+  slots — if the schema ever grows a 5th element the combat differential fails
+  LOUDLY (forces the update) rather than silently ignoring it. — dup'd `elements.py:3`, `world_state.py:60`,
   `game_data.py`. Drives all combat damage/resist + armor/weapon scoring.
   `game_data.py:1041` ALREADY derives elements from `attack_`/`dmg_` prefixes —
   centralize to one derived source; delete the literals. FORMAL: feeds

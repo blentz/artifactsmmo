@@ -7,6 +7,7 @@ from typing import Any
 from artifactsmmo_api_client.models.character_schema import CharacterSchema
 from artifactsmmo_api_client.types import Unset
 
+from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.missing_api_data import MissingApiData
 from artifactsmmo_cli.ai.task_lifecycle import (
     TaskLifecyclePhase,
@@ -56,8 +57,6 @@ SKILL_NAMES = [
     "cooking",
     "alchemy",
 ]
-
-ELEMENTS = ("fire", "earth", "water", "air")
 
 TASKS_COIN_CODE = "tasks_coin"
 """The item code for task-reward coins (spent at the taskmaster exchange)."""
