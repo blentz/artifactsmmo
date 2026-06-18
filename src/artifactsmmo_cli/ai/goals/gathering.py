@@ -11,8 +11,9 @@ from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.buy_source_venue import BuyVenue, choose_buy_venue
 from artifactsmmo_cli.ai.combat import is_winnable
-from artifactsmmo_cli.ai.craft_vs_buy import GOLD_RESERVE, Method, acquisition_method
+from artifactsmmo_cli.ai.craft_vs_buy import Method, acquisition_method
 from artifactsmmo_cli.ai.goals.gather_plannable_core import gather_plannable_pure
+from artifactsmmo_cli.ai.progression_reserve import reserve_floor
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_selection import GatherCandidate, select_gather_source
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -254,7 +255,8 @@ class GatherMaterialsGoal(Goal):
             sellers = game_data.npcs_selling_item(item)
             if not sellers:
                 continue
-            if acquisition_method(item, qty, state, game_data, GOLD_RESERVE) is not Method.BUY:
+            if acquisition_method(item, qty, state, game_data,
+                                  reserve_floor(state, game_data, item)) is not Method.BUY:
                 continue
             npc_code, npc_price = min(sellers, key=lambda np: np[1])
             result.append(NpcBuyAction(npc_code=npc_code, item_code=item,

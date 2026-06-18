@@ -11,6 +11,7 @@ from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.craft_vs_buy import Method, acquisition_method
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
@@ -24,6 +25,7 @@ from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.progression_reserve import reserve_floor
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 from tests.test_ai.fixtures import make_state
 
@@ -815,6 +817,58 @@ class TestGatherMaterialsGoal:
     def test_repr(self):
         goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6})
         assert repr(goal) == "GatherMaterials(copper_dagger, {copper_ore:6})"
+
+    def test_buy_gate_respects_progression_reserve(self):
+        """Discretionary material buy is blocked when it would breach the gear
+        reserve; buying a reserved item is not self-blocked (floor deducted).
+
+        Setup:
+          iron_armor — body_armor, level 5, hp_bonus=10 (equip_value > 0 so
+            gear_targets picks it up), no crafting recipe, NPC sells for 120.
+            → gear_targets(state, gd) = {"iron_armor": 120}
+            → reserve_floor(state, gd, "material") = 120  (material not reserved)
+            → reserve_floor(state, gd, "iron_armor") = 0  (self-deduction)
+
+          material — resource, NPC sells for 20, no recipe, not gatherable.
+            NPC is at (0,0) so buy_cooldowns = 0+1 = 1.
+            craft_cooldowns = 1 gather (no recipe); buy is NOT strictly cheaper
+            on cooldowns alone, so the only way to get Method.BUY would be to
+            make it strictly cheaper. Instead we place the merchant at (0,0)
+            (travel=0) and set needed=2 so buy_cd=2, craft_cd=3 (3 gathers).
+
+          state — gold=130, no body_armor equipped (so iron_armor beats nothing).
+
+        Blocked:  gold 130 - price 40 = 90 < floor 120 → Method.CRAFT.
+        Self-deduction: reserve_floor(iron_armor) = 0 (not 120).
+        """
+        gd = make_game_data()
+        gd._item_stats = {
+            "iron_armor": ItemStats(
+                code="iron_armor", level=5, type_="body_armor", hp_bonus=10),
+            "material": ItemStats(
+                code="material", level=1, type_="resource"),
+        }
+        gd._crafting_recipes = {}
+        gd._npc_stock = {
+            "blacksmith": {"iron_armor": 120},
+            "merchant": {"material": 20},
+        }
+        # Merchant at (0,0) = same tile as character → travel=0
+        # buy_cd(qty=2) = 0 + 2 = 2; craft_cd(qty=2) = 3 gathers (no recipe, no
+        # owned stock, max_gather_yield defaults 0 so ceil_gathers(3,0)=3)
+        gd._npc_locations = {"blacksmith": (5, 5), "merchant": (0, 0)}
+        state = make_state(gold=130)  # x=0, y=0; no body_armor equipped
+
+        # The gear reserve is 120 (iron_armor).
+        floor_for_material = reserve_floor(state, gd, "material")
+        assert floor_for_material == 120
+
+        # Discretionary buy of 2×material costs 40; gold left = 90 < 120 → blocked.
+        assert acquisition_method("material", 2, state, gd, floor_for_material) is Method.CRAFT
+
+        # Reserved item is not self-blocked: its own cost is deducted from the floor.
+        floor_for_iron_armor = reserve_floor(state, gd, "iron_armor")
+        assert floor_for_iron_armor == 0
 
     def test_value_gradient_with_partial_collection(self):
         goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6})

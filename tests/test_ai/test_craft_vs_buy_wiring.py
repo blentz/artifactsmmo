@@ -8,7 +8,7 @@ loop: no-seller skip, non-BUY skip.
 
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.craft_vs_buy import GOLD_RESERVE, Method, acquisition_method
-from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from tests.test_ai.fixtures import make_state
 
@@ -56,9 +56,22 @@ def test_relevant_actions_injects_npcbuy_for_buy_item() -> None:
 
 
 def test_relevant_actions_no_npcbuy_when_unaffordable() -> None:
-    """Non-BUY skip: unaffordable -> no NpcBuyAction injected."""
+    """Non-BUY skip: buy would breach the progression reserve -> no NpcBuyAction.
+
+    copper_bar costs 5g.  iron_armor (body_armor, no recipe) is an unmet
+    near-term gear upgrade sold for 490g → reserve_floor = 490.  With
+    gold=494, buying copper_bar leaves 489 < 490 → blocked (Method.CRAFT).
+    """
     gd = _gd_buyable()
-    state = make_state(gold=GOLD_RESERVE - 1, inventory={}, x=0, y=0)
+    # Add a progression-reserve item so the reserve floor is non-zero.
+    gd._item_stats = {
+        "iron_armor": ItemStats(
+            code="iron_armor", level=5, type_="body_armor", hp_bonus=10),
+    }
+    gd._npc_stock["armorer"] = {"iron_armor": 490}
+    gd._npc_locations["armorer"] = (10, 10)
+    # gold=494: reserve_floor("copper_bar")=490; 494-5=489 < 490 → blocked.
+    state = make_state(gold=494, inventory={}, x=0, y=0)
     goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1})
     relevant = goal.relevant_actions([], state, gd)
     assert not any(isinstance(a, NpcBuyAction) for a in relevant)
