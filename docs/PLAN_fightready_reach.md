@@ -117,7 +117,21 @@ retired hypothesis is a Manifest/Contracts role.
   combinator + `FightReadyCore` + `fightReady_reachable_of_seeds` +
   `ai_reaches_level_fifty_from_spawn_warmup` (spawn→50 modulo `hwarm`+`hperc`).
   Axioms = standard + LIV-001. Imported into Formal.lean + LivenessAudit.lean.
-  NEXT: Phase B — discharge `hwarm` (the `∃K, FightReadyCore` reach) by proving
-  the per-seed reach dynamics (6 flag-clears + hpFull) and folding them with
-  `reach_and`; the hardest is `taskParked_reachable` (non-monotone lifecycle).
-  `hperc` stays the O5.4 obligation (#3). Run via /lean4:autoprove.
+- 2026-06-18: **Structural reduction COMPLETE** (commit 1dd3530, gate green).
+  Added `persist_and` + `fightReadyCore_reachable_of_seeds` (the `reach_and`
+  fold). The ENTIRE chain spawn→50 is now proven, conditional only on: the 7
+  per-seed reaches (`hhp`..`hcraft`), the TaskParked reach + persistence, and
+  `hperc`. The combinator/assembly Phase A is fully done.
+
+  **KEY FINDING (reshapes the roadmap):** the remaining per-seed reach DYNAMICS
+  are ENTANGLED with the SELECT side (#3). A flag clears only when
+  `productionLadder` SELECTS its blocker, so `∃K, flag false` requires reasoning
+  about what the ladder picks along the real `cycleStepN` trajectory — the same
+  SELECT-reach machinery `hperc`/O5.4 needs. The existing task-lifecycle reach
+  lemmas (`taskComplete_reachable_exists`, etc.) are over `applyPlan`
+  (hypothetical action sequences), NOT `cycleStepN`, so they don't bridge the
+  selection gap either.
+  → Phase B is NOT independent dynamics bookkeeping; the next real step is to
+  build the SELECT-side reach model (how `productionLadder` selection drives the
+  warm-up), which serves BOTH the per-seed reaches AND #3 (O5.4). Treat Phase B
+  + #3 as one sub-project: the SELECT-reach machinery.
