@@ -1211,17 +1211,23 @@ DECIDE_KEY_MUTATIONS = [
     # ordering vs the Lean oracle (which sorts by negFinal first). The
     # Hypothesis driver finds a counterexample quickly.
     ("decide_key: swap negFinal/effort in the sort tuple",
-     "    return (neg_final, effort, root_repr)",
-     "    return (effort, neg_final, root_repr)"),
-    # drop the rootRepr tiebreak: two same-(negFinal, effort) keys with
-    # different reprs now compare equal — but Python's list.sort is stable, so
-    # the repr-tiebreak assertion still passes via stability... we instead
-    # break the assertion by RETURNING the third field as a CONSTANT (any
-    # constant string), which violates the proved `eq_imp_repr` lemma at the
-    # tuple level. The test fires when two distinct reprs collide.
-    ("decide_key: drop rootRepr tiebreak (constant third field)",
-     "    return (neg_final, effort, root_repr)",
-     '    return (neg_final, effort, "")'),
+     "    return (neg_final, effort, neg_protection, root_repr)",
+     "    return (effort, neg_final, neg_protection, root_repr)"),
+    # drop the protection tiebreak: two same-(negFinal, effort) empty-slot gear
+    # keys with different computed equip value now collapse to a CONSTANT third
+    # field, violating the proved `eq_imp_negProtect` lemma at the tuple level.
+    # `test_decide_key_protection_tiebreak_matches_lean` fires: with negProtect
+    # constant, the body-armor key no longer sorts ahead of the amulet (the repr
+    # tiebreak then favours 'air...' < 'feather...').
+    ("decide_key: drop protection tiebreak (constant third field)",
+     "    return (neg_final, effort, neg_protection, root_repr)",
+     "    return (neg_final, effort, 0, root_repr)"),
+    # drop the rootRepr tiebreak: RETURN the fourth field as a CONSTANT, which
+    # violates the proved `eq_imp_repr` lemma at the tuple level. The test fires
+    # when two distinct reprs collide on equal leading fields.
+    ("decide_key: drop rootRepr tiebreak (constant fourth field)",
+     "    return (neg_final, effort, neg_protection, root_repr)",
+     '    return (neg_final, effort, neg_protection, "")'),
     # GuardKind dispatch: drop one variant entirely (KeyError at runtime, but
     # the parametrized exhaustiveness test fires immediately). We swap one
     # mapping to wrong text so the diff-against-Lean fires.
