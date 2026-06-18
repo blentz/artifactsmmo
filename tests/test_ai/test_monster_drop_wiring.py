@@ -222,6 +222,31 @@ def test_relevant_actions_skips_dropper_with_no_fight_action() -> None:
     assert [f.monster_code for f in fights] == ["chicken"]
 
 
+def test_relevant_actions_pursues_winnable_boss_drop() -> None:
+    """PLAN #5 boss pursuit: a needed item dropped by a WINNABLE boss/elite is
+    pursued exactly like any normal dropper. The planner gates only on difficulty
+    (is_winnable), never on monster TYPE — every path (factory FightAction
+    generation, _producible, this narrowing) is type-blind. This locks that
+    property so a future change can't silently re-exclude bosses by category,
+    which would make boss-only drops unreachable (the #5 gap)."""
+    gd = GameData()
+    gd._monster_level = {"chief_goblin": 1}
+    gd._monster_type = {"chief_goblin": "boss"}  # before fill (setdefault keeps it)
+    gd._monster_drops = {"chief_goblin": [("goblin_crown", 10, 1, 1)]}
+    gd._monster_locations = {"chief_goblin": [(3, 3)]}
+    fill_monster_stat_defaults(gd)
+    gd._monster_hp = {"chief_goblin": 10}  # low HP, no attack ⇒ winnable
+    state = _winnable_state()
+    assert _producible("goblin_crown", state, gd) is True
+    goal = GatherMaterialsGoal(target_item="goblin_crown", needed={"goblin_crown": 1})
+    actions = [FightAction(monster_code="chief_goblin", locations=frozenset([(3, 3)]))]
+    relevant = goal.relevant_actions(actions, state, gd)
+    fights = [a for a in relevant if isinstance(a, FightAction)]
+    assert [f.monster_code for f in fights] == ["chief_goblin"], (
+        "a winnable boss drop must be pursued (no category exclusion)"
+    )
+
+
 def test_relevant_actions_dropper_with_no_locations_uses_zero_distance() -> None:
     """A winnable dropper whose FightAction carries no locations → distance 0;
     selection still emits it as the sole winner."""
