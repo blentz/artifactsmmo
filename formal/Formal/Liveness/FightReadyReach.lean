@@ -42,6 +42,7 @@ open Formal.Liveness.CumulativeProgress
 open Formal.Liveness.GameDataInvariance
 open Formal.Liveness.Leveling
 open Formal.Liveness.FightReady
+open Formal.Liveness.BlockerMonotone
 
 /-- **The simultaneous-quieting combinator.** For predicates `P`, `Q` that are
 PERSISTENT under `cycleStepN` (once true at a state, true at every later state —
@@ -77,6 +78,59 @@ structure FightReadyCore (s : State) : Prop where
   sellable  : s.sellableInventoryNonempty = false
   craft     : s.craftReliefFires = false
   parked    : TaskParked s
+
+/-- Conjunction of two persistent predicates is persistent. -/
+theorem persist_and {P Q : State → Prop}
+    (hP : ∀ (n : Nat) (s' : State), P s' → P (cycleStepN n s'))
+    (hQ : ∀ (n : Nat) (s' : State), Q s' → Q (cycleStepN n s')) :
+    ∀ (n : Nat) (s' : State), (P s' ∧ Q s') →
+      (P (cycleStepN n s') ∧ Q (cycleStepN n s')) :=
+  fun n s' h => ⟨hP n s' h.1, hQ n s' h.2⟩
+
+/-- **The combinator fold (Phase-A structural #5).** Given that each of the
+seven model blocker-clear seeds (`hp = maxHp` and the six opaque flags) is
+REACHED from `s`, and that `TaskParked` is both reached (`hpark`) and persistent
+(`hparkP` — a Phase-B obligation), `reach_and` folds them into a single step `K`
+at which `FightReadyCore` holds. The seven flag/hp persistences are the proven
+`BlockerMonotone` halves; only the per-seed REACHES (`hhp`..`hcraft`, `hpark`)
+and `TaskParked` persistence remain for Phase B's dynamics. -/
+theorem fightReadyCore_reachable_of_seeds (s : State)
+    (hhp : ∃ k, (cycleStepN k s).hp = (cycleStepN k s).maxHp)
+    (hover : ∃ k, (cycleStepN k s).hasOverstockItems = false)
+    (hdep : ∃ k, (cycleStepN k s).selectBankDepositsNonempty = false)
+    (hgear : ∃ k, (cycleStepN k s).gearReviewFires = false)
+    (hpend : ∃ k, (cycleStepN k s).pendingItemsNonempty = false)
+    (hsell : ∃ k, (cycleStepN k s).sellableInventoryNonempty = false)
+    (hcraft : ∃ k, (cycleStepN k s).craftReliefFires = false)
+    (hpark : ∃ k, TaskParked (cycleStepN k s))
+    (hparkP : ∀ (n : Nat) (s' : State), TaskParked s' → TaskParked (cycleStepN n s')) :
+    ∃ K, FightReadyCore (cycleStepN K s) := by
+  have pHp := hp_eq_maxHp_cycleStepN
+  have pOver := hasOverstockItems_false_cycleStepN
+  have pDep := selectBankDeposits_false_cycleStepN
+  have pGear := gearReviewFires_false_cycleStepN
+  have pPend := pendingItems_false_cycleStepN
+  have pSell := sellable_false_cycleStepN
+  have pCraft := craftReliefFires_false_cycleStepN
+  have c1 := reach_and s pHp pOver hhp hover
+  have c2 := reach_and s (persist_and pHp pOver) pDep c1 hdep
+  have c3 := reach_and s (persist_and (persist_and pHp pOver) pDep) pGear c2 hgear
+  have c4 := reach_and s (persist_and (persist_and (persist_and pHp pOver) pDep) pGear)
+    pPend c3 hpend
+  have c5 := reach_and s
+    (persist_and (persist_and (persist_and (persist_and pHp pOver) pDep) pGear) pPend)
+    pSell c4 hsell
+  have c6 := reach_and s
+    (persist_and (persist_and (persist_and (persist_and (persist_and pHp pOver) pDep)
+      pGear) pPend) pSell)
+    pCraft c5 hcraft
+  have c7 := reach_and s
+    (persist_and (persist_and (persist_and (persist_and (persist_and (persist_and pHp pOver)
+      pDep) pGear) pPend) pSell) pCraft)
+    hparkP c6 hpark
+  obtain ⟨K, ⟨⟨⟨⟨⟨⟨⟨hp, hov⟩, hde⟩, hge⟩, hpe⟩, hse⟩, hcr⟩, hpa⟩⟩ := c7
+  exact ⟨K, { hpFull := hp, overstock := hov, deposits := hde, gear := hge,
+              pending := hpe, sellable := hse, craft := hcr, parked := hpa }⟩
 
 /-- **The Phase-A assembly.** A reached `FightReadyCore` (the model-provable
 warm-up, built in Phase B via `reach_and`) together with the perception
