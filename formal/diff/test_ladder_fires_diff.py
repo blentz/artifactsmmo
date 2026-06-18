@@ -114,8 +114,12 @@ import dataclasses
 
 from hypothesis import given, settings, strategies as st
 
-from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.inventory_caps import overstocked_items
+from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
+from artifactsmmo_cli.ai.tiers.means import _has_sellable
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from formal.diff.oracle_client import run_oracle
 from formal.sim.production_ladder import (
@@ -604,3 +608,326 @@ def test_scope_documents_deferred_slots() -> None:
     assert DEFERRED_SLOTS.issubset(set(ALL_IN_LADDER_ORDER))
     assert set(ASSERTED_SLOTS) | DEFERRED_SLOTS == set(ALL_IN_LADDER_ORDER)
     assert not (set(ASSERTED_SLOTS) & DEFERRED_SLOTS)
+
+
+# ===========================================================================
+# Brick 4 — drive the OPAQUE ladder slots to TRUE in PRODUCTION and run the
+# SELECTION CONTEST against the Lean oracle.
+#
+# The 7 deferred slots are opaque passthrough Bools in the Lean model
+# (`craftReliefFires`/`recyclableSurplusNonempty`/… ARE the State Bool — Lean
+# has no machinery to re-derive them). So the differential for these slots is
+# NOT a recomputation contest; it is a SELECTION contest: build a fixture with
+# a RICH GameData/WorldState/SelectionContext where production's REAL machinery
+# (`craft_relief_candidates`, `recyclable_surplus`, …) makes the slot fire,
+# read production's per-slot firing + selected MeansKind, feed the SAME
+# production-derived Bool into the oracle's matching arg index, then assert
+# (a) per-slot agreement and (b) `selected` agreement.
+#
+# This mirrors the existing `gearReview`/`objectiveStep` passthrough handling
+# (those Bools are fed identically to both sides), but here the Bool is DRIVEN
+# by production's real predicate on a hand-built fixture rather than sampled.
+#
+# Cluster A (4a): craftRelief (arg[27]) + recycleSurplus (arg[23]).
+# Bricks 4b/4c reuse `drive_and_contest` for the remaining opaque slots.
+# ===========================================================================
+
+# Map a derived TaskLifecyclePhase to the oracle's arg[16] enum int.
+_LIFECYCLE_INT: dict[TaskLifecyclePhase, int] = {
+    TaskLifecyclePhase.NONE: 0,
+    TaskLifecyclePhase.ACCEPTED: 1,
+    TaskLifecyclePhase.IN_PROGRESS: 2,
+    TaskLifecyclePhase.COMPLETE: 3,
+}
+
+
+def _rich_oracle_args(
+    w: WorldState,
+    gd: GameData,
+    ctx: SelectionContext,
+    prod: dict[LadderMeans, bool],
+    objective_step: bool,
+) -> list[int]:
+    """Build the 31-int oracle arg array (the `runLadder` docstring layout,
+    Oracle.lean) for a RICH hand-built fixture.
+
+    Every opaque per-slot arg is derived from the SAME production verdict
+    (`prod[...]`) computed on this fixture — never re-implemented here — so the
+    oracle re-evaluates `productionLadder` over EXACTLY the firing pattern
+    production produced. Structural facts (overstock / deposit / sellable /
+    coins / bank-item count) are read off the constructed world through the
+    same gates production reads, per the Brick 3 fidelity rule: `taskCoinsTotal`
+    and `bankItemsCount` come from the bank-visible view (`w.bank_items` is
+    `None` until perception loads it), never from raw bank contents."""
+    coins_total = w.inventory.get(TASKS_COIN_CODE, 0) + (
+        (w.bank_items or {}).get(TASKS_COIN_CODE, 0))
+    bank_items_count = len(w.bank_items) if w.bank_items is not None else 0
+    return [
+        w.hp,                                        # 0
+        w.max_hp,                                    # 1
+        w.level,                                     # 2
+        w.xp,                                        # 3
+        ctx.initial_xp,                              # 4
+        ctx.bank_required_level,                     # 5
+        gd.monster_level(ctx.bank_unlock_monster)    # 6 unlockMonsterLevel
+        if ctx.bank_unlock_monster else 0,
+        w.inventory_used,                            # 7
+        w.inventory_max,                             # 8
+        coins_total,                                 # 9
+        ctx.task_exchange_min_coins,                 # 10
+        0,                                           # 11 actionsAttempted
+        w.gold,                                      # 12
+        bank_items_count,                            # 13
+        gd.bank_capacity,                            # 14
+        gd.next_expansion_cost,                      # 15
+        _LIFECYCLE_INT[w.task_lifecycle_phase],      # 16 taskLifecyclePhase
+        1 if ctx.bank_accessible else 0,             # 17
+        1 if ctx.bank_unlock_monster else 0,         # 18
+        # 19/20/22: derive the opaque structural Bools from production's REAL
+        # helpers on (w, gd) — NOT from the slot verdicts (which fold in the
+        # fraction gates and would make the input tautological with the output).
+        1 if overstocked_items(w, gd) else 0,        # 19 hasOverstockItems
+        1 if select_bank_deposits(w, gd) else 0,     # 20 selectBankDepositsNonempty
+        1 if w.pending_items else 0,                 # 21 pendingItemsNonempty
+        1 if _has_sellable(w, gd) else 0,            # 22 sellableInventoryNonempty
+        1 if prod[LadderMeans.RECYCLE_SURPLUS] else 0,   # 23 recyclableSurplusNonempty
+        1,                                           # 24 taskFeasibleProjected
+        1 if prod[LadderMeans.REST_FOR_COMBAT] else 0,   # 25 restForCombatReady
+        1 if ctx.gear_review_active else 0,          # 26 gearReviewFires
+        1 if prod[LadderMeans.CRAFT_RELIEF] else 0,  # 27 craftReliefFires
+        1 if objective_step else 0,                  # 28 objectiveStepFires
+        1 if prod[LadderMeans.MAINTAIN_CONSUMABLES] else 0,  # 29 maintainConsumablesFires
+        1 if w.bank_items is not None else 0,        # 30 bankItemsKnown
+    ]
+
+
+def drive_and_contest(
+    w: WorldState,
+    gd: GameData,
+    ctx: SelectionContext,
+    *,
+    objective_step: bool = False,
+    driven: frozenset[LadderMeans] = frozenset(),
+    assert_selection: bool = True,
+) -> tuple[dict[LadderMeans, bool], LadderMeans | None,
+           dict[LadderMeans, bool], LadderMeans | None]:
+    """Run the REAL production ladder on a rich fixture, feed its per-slot
+    verdict into the Lean oracle, and assert per-slot + selection agreement.
+
+    Per-slot agreement is asserted for the NON-DEFERRED slots (`ASSERTED_SLOTS`)
+    plus the explicitly `driven` opaque slots (the slot(s) this fixture stands
+    up production's real machinery for). The OTHER deferred slots
+    (pursueTask/taskCancel/lowYieldCancel) are deliberate phase-based Lean
+    over-approximations of history-gated production predicates — they diverge
+    by design whenever the fixture's phase is accepted/inProgress, and are NOT
+    asserted per-slot here (that is Bricks 4b/4c's job). They CAN still fire on
+    the Lean side below the driven slot.
+
+    `assert_selection` (default True) asserts `selected` agreement; the driven
+    slot's TRUE fixtures DO win (or lose to an agreed-upon higher slot) and pin
+    selection. Pass `assert_selection=False` for a near-miss whose ONLY purpose
+    is the per-slot `driven`-slot contest and whose phase deliberately trips a
+    NOT-YET-BOUND deferred slot below it (e.g. an in-progress items-task with no
+    history makes Lean `pursueTask` win while history-gated production falls
+    through to `wait` — a known over-approximation, not this brick's contest).
+
+    Returns ``(prod_per_slot, prod_selected, lean_per_slot, lean_selected)`` so
+    callers can additionally assert WHICH slot fired/was selected.
+
+    Shared scaffold for Brick 4 (4a uses it for craftRelief/recycleSurplus;
+    4b/4c reuse it for the remaining opaque slots)."""
+    prod = {
+        k: production_fires(k, w, gd, None, ctx, objective_step)
+        for k in ALL_IN_LADDER_ORDER
+    }
+    prod_sel = production_ladder(w, gd, None, ctx, objective_step)
+    res = run_oracle("ladder_fires",
+                     [_rich_oracle_args(w, gd, ctx, prod, objective_step)])[0]
+    lean = {k: bool(res[_ORACLE_KEY[k]]) for k in ALL_IN_LADDER_ORDER}
+    lean_sel_name = res["selected"]
+    lean_sel = None
+    if lean_sel_name is not None:
+        lean_sel = next(k for k in ALL_IN_LADDER_ORDER
+                        if _ORACLE_KEY[k] == lean_sel_name)
+    for k in set(ASSERTED_SLOTS) | driven:
+        assert prod[k] == lean[k], (
+            f"SLOT DIVERGENCE {k.name}: production={prod[k]} lean={lean[k]}")
+    if assert_selection:
+        assert prod_sel == lean_sel, (
+            f"SELECTION DIVERGENCE: production={prod_sel} lean={lean_sel}")
+    return prod, prod_sel, lean, lean_sel
+
+
+# ---------------------------------------------------------------------------
+# Slot 1 — craftRelief (arg[27]).  Production CRAFT_RELIEF guard fires iff
+# `_used_fraction >= 0.70` AND `craft_relief_candidates(...)` non-empty
+# (tiers/guards.py + craft_relief.py). Net-relief gate requires a multi-input
+# recipe (input units consumed > 1 output). The items-task deliverable is the
+# priority-0 relief candidate; the production ladder reaches CRAFT_RELIEF via
+# the items-task path (the sim calls `_guard_fires` with an empty step profile,
+# so the task item — not a step material — must be the candidate).
+# ---------------------------------------------------------------------------
+
+
+def _craft_relief_gd() -> GameData:
+    gd = GameData()
+    gd._item_stats = {
+        "plank": ItemStats(code="plank", level=1, type_="resource",
+                           crafting_skill="woodcutting", crafting_level=1),
+    }
+    gd._crafting_recipes = {"plank": {"log": 2}}  # multi-input -> net relief 1
+    return gd
+
+
+def _single_input_relief_gd() -> GameData:
+    """Same as `_craft_relief_gd` but a 1:1 recipe (net relief 0) — the
+    net-relief gate (craft_relief.py `_net_relief_per_craft`) rejects it."""
+    gd = GameData()
+    gd._item_stats = {
+        "plank": ItemStats(code="plank", level=1, type_="resource",
+                           crafting_skill="woodcutting", crafting_level=1),
+    }
+    gd._crafting_recipes = {"plank": {"log": 1}}
+    return gd
+
+
+def _craft_relief_ctx() -> SelectionContext:
+    return SelectionContext(
+        bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
+        initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
+        target_gear=frozenset(), target_tools=frozenset(),
+        gear_review_active=False)
+
+
+def _craft_relief_world(inventory_max: int) -> WorldState:
+    # items-task plank 1/5 (IN_PROGRESS), 4 logs on hand, woodcutting@1.
+    return WorldState(
+        character="diff", level=5, xp=0, max_xp=999999, hp=100, max_hp=100,
+        gold=0, skills={"woodcutting": 1}, x=0, y=0,
+        inventory={"log": 4}, inventory_max=inventory_max,
+        equipment={}, cooldown_expires=None, bank_items=None, bank_gold=None,
+        pending_items=None,
+        task_code="plank", task_type="items", task_progress=1, task_total=5)
+
+
+def test_craft_relief_drives_and_selects() -> None:
+    """TRUE fixture: used 4/5 = 0.80 >= 0.70 AND a net-relief plank craft is
+    available -> production CRAFT_RELIEF fires and is SELECTED (it out-ranks
+    every lower slot and the higher guards are quiet). The Lean oracle, fed
+    craftReliefFires=1 (production's verdict), selects craftRelief too."""
+    w = _craft_relief_world(inventory_max=5)
+    gd = _craft_relief_gd()
+    prod, prod_sel, lean, lean_sel = drive_and_contest(w, gd, _craft_relief_ctx(), driven=frozenset({LadderMeans.CRAFT_RELIEF}))
+    # Production REALLY fires the driven slot (not faked):
+    assert prod[LadderMeans.CRAFT_RELIEF] is True
+    assert prod_sel is LadderMeans.CRAFT_RELIEF
+    assert lean_sel is LadderMeans.CRAFT_RELIEF
+
+
+def test_craft_relief_near_miss_low_fill() -> None:
+    """Near-miss (a): used 4/20 = 0.20 < 0.70 -> CRAFT_RELIEF does NOT fire.
+    Per-slot + selection agreement still holds (slot False on both sides)."""
+    w = _craft_relief_world(inventory_max=20)
+    gd = _craft_relief_gd()
+    prod, _, _, _ = drive_and_contest(w, gd, _craft_relief_ctx(), driven=frozenset({LadderMeans.CRAFT_RELIEF}), assert_selection=False)
+    assert prod[LadderMeans.CRAFT_RELIEF] is False
+
+
+def test_craft_relief_near_miss_zero_net_relief() -> None:
+    """Near-miss (b): fill 0.80 >= 0.70 but the recipe is 1:1 (net relief 0),
+    so `craft_relief_candidates` is empty -> CRAFT_RELIEF does NOT fire."""
+    w = _craft_relief_world(inventory_max=5)
+    gd = _single_input_relief_gd()
+    prod, _, _, _ = drive_and_contest(w, gd, _craft_relief_ctx(), driven=frozenset({LadderMeans.CRAFT_RELIEF}), assert_selection=False)
+    assert prod[LadderMeans.CRAFT_RELIEF] is False
+
+
+# ---------------------------------------------------------------------------
+# Slot 2 — recycleSurplus (arg[23]).  Production RECYCLE_SURPLUS means fires
+# iff `_used_fraction < 0.85` AND `recyclable_surplus(...)` non-empty
+# (tiers/means.py + recycle_surplus.py): a craftable EQUIPPABLE held above its
+# useful cap (EQUIPPABLE_KEEP=1), skill at recipe level, workshop known, NOT
+# equipped, NOT in ctx.target_gear/target_tools.
+#
+# SELECTION NOTE (a real Lean-model finding, reported): recycleSurplus sits
+# below the lifecycle slots, and for EVERY phase some higher slot fires on the
+# Lean ladder — acceptTask(none) / pursueTask(accepted|inProgress) /
+# completeTask(complete). So recycleSurplus can NEVER be the Lean SELECTION; it
+# can only fire-and-lose. The contest here therefore drives recycleSurplus TRUE
+# (the per-slot agreement that binds arg[23]) under phase=none, where BOTH
+# ladders select acceptTask — selection agreement holds at the winner.
+# ---------------------------------------------------------------------------
+
+
+def _recycle_gd() -> GameData:
+    gd = GameData()
+    gd._item_stats = {
+        "dagger": ItemStats(code="dagger", level=1, type_="weapon",
+                            crafting_skill="weaponcrafting", crafting_level=1),
+    }
+    gd._crafting_recipes = {"dagger": {"copper_bar": 6}}
+    gd._workshop_locations = {"weaponcrafting": (1, 2)}
+    return gd
+
+
+def _recycle_ctx(*, protect_dagger: bool = False) -> SelectionContext:
+    # Protect via target_TOOLS, not target_gear: recyclable_surplus protects on
+    # `target_gear | target_tools`, but the ACCEPT_TASK gear-deferral loop reads
+    # only `target_gear`. Using target_tools isolates the recycle protection
+    # near-miss from the (separately-deferred) acceptTask gear-deferral
+    # over-approximation, so acceptTask stays == Lean (phase none) here.
+    return SelectionContext(
+        bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
+        initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
+        target_gear=frozenset(),
+        target_tools=frozenset({"dagger"}) if protect_dagger else frozenset(),
+        gear_review_active=False)
+
+
+def _recycle_world(dagger_qty: int) -> WorldState:
+    # No task (phase NONE), dagger held unequipped, fill 1/20 = 0.05 < 0.85.
+    return WorldState(
+        character="diff", level=5, xp=0, max_xp=999999, hp=100, max_hp=100,
+        gold=0, skills={"weaponcrafting": 1}, x=0, y=0,
+        inventory={"dagger": dagger_qty} if dagger_qty > 0 else {},
+        inventory_max=20, equipment={}, cooldown_expires=None,
+        bank_items=None, bank_gold=None, pending_items=None,
+        task_code=None, task_type=None, task_progress=0, task_total=0)
+
+
+def test_recycle_surplus_drives_true() -> None:
+    """TRUE fixture: 2 daggers (> cap 1), under 0.85 fill, skill at level,
+    workshop known, unprotected, unequipped -> production RECYCLE_SURPLUS
+    fires. It loses selection to ACCEPT_TASK (phase NONE) on BOTH ladders, so
+    `selected` agrees at acceptTask while arg[23] is bound by the per-slot
+    contest."""
+    w = _recycle_world(dagger_qty=2)
+    gd = _recycle_gd()
+    prod, prod_sel, lean, lean_sel = drive_and_contest(w, gd, _recycle_ctx(), driven=frozenset({LadderMeans.RECYCLE_SURPLUS}))
+    assert prod[LadderMeans.RECYCLE_SURPLUS] is True
+    assert lean[LadderMeans.RECYCLE_SURPLUS] is True
+    # recycleSurplus is structurally unreachable as a Lean selection; both
+    # ladders settle on acceptTask at phase NONE (selection agreement).
+    assert prod_sel is LadderMeans.ACCEPT_TASK
+    assert lean_sel is LadderMeans.ACCEPT_TASK
+
+
+def test_recycle_surplus_near_miss_protected() -> None:
+    """Near-miss: dagger IS a committed objective code (ctx.target_gear) ->
+    `recyclable_surplus` excludes it -> RECYCLE_SURPLUS does NOT fire."""
+    w = _recycle_world(dagger_qty=2)
+    gd = _recycle_gd()
+    prod, _, lean, _ = drive_and_contest(
+        w, gd, _recycle_ctx(protect_dagger=True))
+    assert prod[LadderMeans.RECYCLE_SURPLUS] is False
+    assert lean[LadderMeans.RECYCLE_SURPLUS] is False
+
+
+def test_recycle_surplus_near_miss_at_cap() -> None:
+    """Near-miss: only 1 dagger held == useful cap (EQUIPPABLE_KEEP) -> nothing
+    above the cap -> RECYCLE_SURPLUS does NOT fire."""
+    w = _recycle_world(dagger_qty=1)
+    gd = _recycle_gd()
+    prod, _, lean, _ = drive_and_contest(w, gd, _recycle_ctx())
+    assert prod[LadderMeans.RECYCLE_SURPLUS] is False
+    assert lean[LadderMeans.RECYCLE_SURPLUS] is False
