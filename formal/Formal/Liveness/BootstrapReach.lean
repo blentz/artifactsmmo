@@ -48,6 +48,8 @@ namespace Formal.Liveness.BootstrapReach
 open Formal.Liveness.Measure
 open Formal.Liveness.MeansKind
 open Formal.Liveness.ProductionLadder
+open Formal.Liveness.PlanAction
+open Formal.Liveness.Plan
 open Formal.Liveness.CycleStep
 open Formal.Liveness.CumulativeProgress
 open Formal.Liveness.BlockerSelection
@@ -63,5 +65,24 @@ theorem reachUnlockLevel_fires_in_window (s : State)
     fires .reachUnlockLevel s = true := by
   simp only [fires, reachUnlockLevelFires, Bool.and_eq_true, decide_eq_true_eq]
   exact ⟨⟨hbr, hlt⟩, hgap⟩
+
+/-- In the window, once the three higher slots (hpCritical, restForCombat,
+bankUnlock) are quiet, the fight gate is the SELECTED means. -/
+theorem reachUnlockLevel_selected_in_window (s : State)
+    (h0 : fires .hpCritical s = false) (h1 : fires .restForCombat s = false)
+    (h2 : fires .bankUnlock s = false)
+    (hbr : s.bankRequiredLevel > 0) (hlt : s.level < s.bankRequiredLevel)
+    (hgap : s.bankRequiredLevel - s.level ≤ MAX_ACHIEVABLE_GAP_LV2) :
+    productionLadder s = some .reachUnlockLevel :=
+  productionLadder_eq_reachUnlockLevel s h0 h1 h2
+    (reachUnlockLevel_fires_in_window s hbr hlt hgap)
+
+/-- When the fight gate is selected, the cycle FIGHTS — the bootstrap window's
+self-driving step (`cycleStep` runs `.fight`, which advances xp/level). Mirrors
+the `reachUnlockLevel` case of `CycleStep.cycleStep_progress_or_waits`. -/
+theorem cycleStep_fights_of_reachUnlockLevel (s : State)
+    (hsel : productionLadder s = some .reachUnlockLevel) :
+    cycleStep s = applyActionKind .fight s := by
+  unfold cycleStep; rw [hsel]; rfl
 
 end Formal.Liveness.BootstrapReach
