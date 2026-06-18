@@ -652,6 +652,11 @@ class GamePlayer:
             state,
             {skill: getattr(last_result.data, f"{skill}_max_xp", 0) for skill in state.skills},
         )
+        # PLAN #4 visibility slice: surface this cycle's live event monster/resource
+        # spawns into the planner's location accessors. Set before objective selection
+        # and action-building, both of which read game_data this cycle.
+        if self.game_data is not None:
+            self.game_data.active_event_codes = set(active_events)
         return state
 
     def _sync_bank(self, client: AuthenticatedClient, state: WorldState) -> WorldState:

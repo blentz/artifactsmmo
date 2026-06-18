@@ -33,6 +33,15 @@ class LocationCatalog:
     acquisition cost (unlike a speculative new buy order)."""
     event_npc_spawns: dict[str, tuple[int, int]] = field(default_factory=dict)  # npc_code -> fixed event spawn tile
     npc_event_codes: dict[str, str] = field(default_factory=dict)  # npc_code -> event code (membership = is_event_npc)
+    # Event-spawned combat/gather content (PLAN #4 visibility slice). Loaded for ALL
+    # events from the catalog; surfaced to the planner only while the spawning event is
+    # in `active_event_codes` (refreshed per cycle from WorldState.active_events). Keyed
+    # by the event monster/resource code; `event_code_of_content` maps that code back to
+    # the gating event.
+    event_monster_locations: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
+    event_resource_locations: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
+    event_code_of_content: dict[str, str] = field(default_factory=dict)  # monster/resource code -> event code
+    active_event_codes: set[str] = field(default_factory=set)  # per-cycle: events live right now
     bank_capacity: int = 0
     next_expansion_cost: int = 0
     slots_per_expansion: int = 0  # learned after the first expansion (response delta)
@@ -77,6 +86,33 @@ class LocationCatalog:
     def is_event_npc(self, npc_code: str) -> bool:
         """True if this NPC only exists during a timed event window."""
         return npc_code in self.npc_event_codes
+
+    def _content_event_active(self, code: str) -> bool:
+        """True iff `code` is event-spawned content whose event is live now."""
+        ev = self.event_code_of_content.get(code)
+        return ev is not None and ev in self.active_event_codes
+
+    def active_event_monster_tiles(self, monster_code: str) -> list[tuple[int, int]]:
+        """Event spawn tiles for `monster_code` while its event is active, else []."""
+        if self._content_event_active(monster_code):
+            return self.event_monster_locations.get(monster_code, [])
+        return []
+
+    def active_event_resource_tiles(self, resource_code: str) -> list[tuple[int, int]]:
+        """Event spawn tiles for `resource_code` while its event is active, else []."""
+        if self._content_event_active(resource_code):
+            return self.event_resource_locations.get(resource_code, [])
+        return []
+
+    def active_event_monsters(self) -> dict[str, list[tuple[int, int]]]:
+        """{monster_code -> event tiles} for every event monster live right now."""
+        return {code: tiles for code, tiles in self.event_monster_locations.items()
+                if self._content_event_active(code)}
+
+    def active_event_resources(self) -> dict[str, list[tuple[int, int]]]:
+        """{resource_code -> event tiles} for every event resource live right now."""
+        return {code: tiles for code, tiles in self.event_resource_locations.items()
+                if self._content_event_active(code)}
 
     def npc_event_code(self, npc_code: str) -> str | None:
         """Event code whose active window spawns this NPC, or None if not an event NPC."""

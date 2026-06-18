@@ -372,6 +372,17 @@ class GameData:
         return self.world.npc_event_codes
 
     @property
+    def active_event_codes(self) -> set[str]:
+        """Event codes live right now. Per-cycle overlay (PLAN #4): set from
+        WorldState.active_events before planning; gates event monster/resource
+        spawns into the location accessors. Empty ⇒ no event content surfaces."""
+        return self.world.active_event_codes
+
+    @active_event_codes.setter
+    def active_event_codes(self, codes: set[str]) -> None:
+        self.world.active_event_codes = set(codes)
+
+    @property
     def _bank_capacity(self) -> int:
         return self.world.bank_capacity
 
@@ -406,12 +417,23 @@ class GameData:
     # === Public query API (delegates to the domain catalogs) ===
 
     def monster_locations(self, code: str) -> list[tuple[int, int]]:
-        """Tiles where a monster spawns."""
-        return self.monsters.monster_locations(code)
+        """Tiles where a monster spawns (static overworld + active event spawns).
+
+        A monster that is BOTH a static spawn and an event spawn can share a tile;
+        the merge is order-preserving deduped so a tile is never listed twice."""
+        base = self.monsters.monster_locations(code)
+        extra = self.world.active_event_monster_tiles(code)
+        if not extra:
+            return base
+        return list(dict.fromkeys(base + extra))
 
     def resource_locations(self, code: str) -> list[tuple[int, int]]:
-        """Tiles where a resource appears."""
-        return self.recipes_catalog.resource_locations(code)
+        """Tiles where a resource appears (static overworld + active event spawns)."""
+        base = self.recipes_catalog.resource_locations(code)
+        extra = self.world.active_event_resource_tiles(code)
+        if not extra:
+            return base
+        return list(dict.fromkeys(base + extra))
 
     def workshop_location(self, skill: str) -> tuple[int, int] | None:
         """Location of the workshop for a crafting skill."""
@@ -739,13 +761,28 @@ class GameData:
 
     @property
     def all_monster_locations(self) -> Mapping[str, list[tuple[int, int]]]:
-        """monster_code -> spawn tiles for every known monster."""
-        return self.monsters.locations
+        """monster_code -> spawn tiles for every known monster, with active event
+        monsters merged in (so the factory emits a FightAction for them only while
+        their event is live). No active events ⇒ identical to the static map."""
+        active = self.world.active_event_monsters()
+        if not active:
+            return self.monsters.locations
+        merged = dict(self.monsters.locations)
+        for code, tiles in active.items():
+            merged[code] = list(dict.fromkeys(merged.get(code, []) + tiles))
+        return merged
 
     @property
     def all_resource_locations(self) -> Mapping[str, list[tuple[int, int]]]:
-        """resource_code -> tiles for every known resource."""
-        return self.recipes_catalog.locations
+        """resource_code -> tiles for every known resource, with active event
+        resources merged in. No active events ⇒ identical to the static map."""
+        active = self.world.active_event_resources()
+        if not active:
+            return self.recipes_catalog.locations
+        merged = dict(self.recipes_catalog.locations)
+        for code, tiles in active.items():
+            merged[code] = list(dict.fromkeys(merged.get(code, []) + tiles))
+        return merged
 
     @property
     def workshop_locations(self) -> Mapping[str, tuple[int, int]]:
@@ -1208,20 +1245,29 @@ class GameData:
         return out
 
     def _build_events(self, events: list[EventSchema]) -> None:
-        """Index event NPCs (code -> event code, code -> fixed spawn tile) from the catalog.
+        """Index event content (NPCs, monsters, resources) from the catalog.
 
-        Event merchants never appear in get_all_maps; their fixed spawn tile lives
-        only in the events catalog, and they exist on the map only while their event
-        is active.
+        Event content never appears in get_all_maps; its spawn tiles live only in
+        the events catalog, and it exists on the map only while the event is active.
+        NPC merchants are gated at trade time (EventWindow); monster/resource spawns
+        (PLAN #4) are surfaced to the planner via the location accessors only while
+        their event is in `active_event_codes`.
         """
         for ev in events:
-            if ev.content.type_ != MapContentType.NPC:
+            if not ev.maps:
                 continue
-            npc_code = ev.content.code
-            self._npc_event_code[npc_code] = ev.code
-            if ev.maps:
+            ctype = ev.content.type_
+            code = ev.content.code
+            if ctype == MapContentType.NPC:
+                self._npc_event_code[code] = ev.code
                 first = ev.maps[0]
-                self._event_npc_spawns[npc_code] = (first.x, first.y)
+                self._event_npc_spawns[code] = (first.x, first.y)
+            elif ctype == MapContentType.MONSTER:
+                self.world.event_monster_locations[code] = [(m.x, m.y) for m in ev.maps]
+                self.world.event_code_of_content[code] = ev.code
+            elif ctype == MapContentType.RESOURCE:
+                self.world.event_resource_locations[code] = [(m.x, m.y) for m in ev.maps]
+                self.world.event_code_of_content[code] = ev.code
 
     def _load_events(self, client: AuthenticatedClient) -> None:
         """Fetch all events and index event NPCs."""

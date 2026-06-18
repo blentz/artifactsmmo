@@ -112,6 +112,7 @@ CYCLE_STEP_SRC = ROOT / "formal" / "sim" / "cycle_step.py"
 
 EQUIP_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "equip_value.py"
 GAME_DATA_PARSE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "game_data.py"
+LOCATION_CATALOG_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "location_catalog.py"
 
 # Effect-parser coverage (stat-audit fixes).
 RESTORE_FAMILY_MUTATIONS = [
@@ -130,6 +131,18 @@ RESTORE_FAMILY_MUTATIONS = [
     ("game_data: invert monster-effect coverage guard (unmapped code silently dropped)",
      "                    elif code not in _MONSTER_EFFECT_CARVEOUTS:",
      "                    elif code in _MONSTER_EFFECT_CARVEOUTS:"),
+]
+
+# Event-content visibility gate (PLAN #4): event monster/resource spawns surface to
+# the planner ONLY while their event is active. Killed by
+# tests/test_ai/test_event_content_visibility.py.
+EVENT_VISIBILITY_MUTATIONS = [
+    ("location_catalog: drop active-event gate (event content always visible)",
+     "        return ev is not None and ev in self.active_event_codes",
+     "        return ev is not None"),
+    ("location_catalog: invert active-event gate (event content visible only when dormant)",
+     "        return ev is not None and ev in self.active_event_codes",
+     "        return ev is not None and ev not in self.active_event_codes"),
 ]
 
 # Skill-gate fast-fail + doomed-memo (2026-06-15 feather_coat CPU-peg fix).
@@ -1562,7 +1575,7 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 
 _ALL_SRCS = [
     GATHER_PLANNABLE_CORE_SRC, DOOMED_MEMO_SRC, STRATEGY_DRIVER_SRC, EQUIP_VALUE_SRC,
-    GAME_DATA_PARSE_SRC,
+    GAME_DATA_PARSE_SRC, LOCATION_CATALOG_SRC,
     SRC, TASK_BATCH_SRC, INVENTORY_CAPS_SRC, COMBAT_SRC, PROJECTION_SRC, SCORING_SRC,
     SKILL_XP_CURVE_SRC, RECIPE_CLOSURE_SRC, TASK_FEASIBILITY_SRC, PREREQUISITE_GRAPH_SRC,
     OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, STUCK_DETECTOR_SRC,
@@ -3256,6 +3269,8 @@ def _run_all_groups() -> int:
               "tests/test_ai/test_overstock.py", survivors)
     run_group(GAME_DATA_PARSE_SRC, RESTORE_FAMILY_MUTATIONS,
               "tests/test_ai/test_game_data.py", survivors)
+    run_group(LOCATION_CATALOG_SRC, EVENT_VISIBILITY_MUTATIONS,
+              "tests/test_ai/test_event_content_visibility.py", survivors)
     _execute(_UNITS, survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
