@@ -1,6 +1,6 @@
 # tests/test_ai/test_progression_reserve.py
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.progression_reserve import buy_price, gear_targets
+from artifactsmmo_cli.ai.progression_reserve import buy_price, crafting_unlock_targets, gear_targets
 from tests.test_ai.fixtures import make_state
 
 
@@ -65,3 +65,58 @@ def test_buy_price_uses_ge_when_no_npc():
     gd._npc_stock = {}
     gd._ge_sell_orders = {"silver_ring": ("order-99", 150, 5)}
     assert buy_price("silver_ring", gd) == 150
+
+
+def test_crafting_unlock_reserves_buyable_recipe_input():
+    """Recipe input that is not gatherable and has no recipe of its own → reserved at qty * price."""
+    gd = GameData()
+    gd._item_stats = {
+        "steel_sword": ItemStats(code="steel_sword", level=6, type_="weapon",
+                                 attack={"fire": 30}, crafting_skill="weaponcrafting",
+                                 crafting_level=1),
+        "steel_bar": ItemStats(code="steel_bar", level=6, type_="resource"),
+    }
+    gd._crafting_recipes = {"steel_sword": {"steel_bar": 3}}
+    # steel_bar is sold by NPC (buyable), not gatherable, no recipe of its own
+    gd._npc_stock = {"smith": {"steel_bar": 25}}
+    gd._monster_level = {"chicken": 1}
+    state = make_state(level=5, skills={"weaponcrafting": 1})
+    targets = crafting_unlock_targets(state, gd)
+    assert targets == {"steel_bar": 75}
+
+
+def test_crafting_unlock_skips_gatherable_inputs():
+    """Recipe input that is gatherable → not a gold need, skipped."""
+    gd = GameData()
+    gd._item_stats = {
+        "steel_sword": ItemStats(code="steel_sword", level=6, type_="weapon",
+                                 attack={"fire": 30}, crafting_skill="weaponcrafting",
+                                 crafting_level=1),
+        "iron_ore": ItemStats(code="iron_ore", level=6, type_="resource"),
+    }
+    gd._crafting_recipes = {"steel_sword": {"iron_ore": 3}}
+    gd._resource_drops = {"iron_rocks": "iron_ore"}  # gatherable → not a gold need
+    gd._monster_level = {"chicken": 1}
+    state = make_state(level=5, skills={"weaponcrafting": 1})
+    assert crafting_unlock_targets(state, gd) == {}
+
+
+def test_crafting_unlock_skips_craftable_inputs():
+    """Recipe input that has its own crafting recipe → not a gold need, skipped."""
+    gd = GameData()
+    gd._item_stats = {
+        "steel_sword": ItemStats(code="steel_sword", level=6, type_="weapon",
+                                 attack={"fire": 30}, crafting_skill="weaponcrafting",
+                                 crafting_level=1),
+        "steel_bar": ItemStats(code="steel_bar", level=6, type_="resource"),
+        "iron_ore": ItemStats(code="iron_ore", level=1, type_="resource"),
+    }
+    # steel_bar has its own recipe (craftable from iron_ore) → should NOT be reserved
+    gd._crafting_recipes = {
+        "steel_sword": {"steel_bar": 3},
+        "steel_bar": {"iron_ore": 2},
+    }
+    gd._npc_stock = {"smith": {"steel_bar": 25}}
+    gd._monster_level = {"chicken": 1}
+    state = make_state(level=5, skills={"weaponcrafting": 1})
+    assert crafting_unlock_targets(state, gd) == {}

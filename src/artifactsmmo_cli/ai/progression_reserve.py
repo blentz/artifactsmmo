@@ -63,3 +63,39 @@ def _best_per_slot(state: WorldState, game_data: GameData,
             if equip_value(stats) > inc_val:
                 best[slot] = code
     return best
+
+
+def _is_gatherable(material: str, game_data: GameData) -> bool:
+    """True when some resource node drops `material` (gathering, not gold)."""
+    return any(drop == material for drop in game_data.resource_drops.values())
+
+
+def crafting_unlock_targets(state: WorldState, game_data: GameData) -> dict[str, int]:
+    """Buyable recipe INPUTS for in-horizon craftable gear whose final craft is
+    skill-reachable: an input the bot must BUY (no gather/craft path) is a real
+    upcoming gold need. Maps each such input to qty * buy price.
+
+    A material is a reserved gold need iff ALL of:
+      1. it is NOT gatherable (_is_gatherable is False), AND
+      2. it has NO crafting recipe of its own (game_data.crafting_recipe is None),
+         so gold is the only acquisition path, AND
+      3. buy_price returns a non-None value (a seller exists).
+    """
+    out: dict[str, int] = {}
+    max_level = state.level + _HORIZON
+    for code, stats in game_data.all_item_stats.items():
+        if ITEM_TYPE_TO_SLOTS.get(stats.type_) is None or stats.level > max_level:
+            continue
+        recipe = game_data.crafting_recipe(code)
+        if not recipe:
+            continue
+        for material, qty in recipe.items():
+            if _is_gatherable(material, game_data):
+                continue
+            if game_data.crafting_recipe(material) is not None:
+                continue
+            price = buy_price(material, game_data)
+            if price is None:
+                continue
+            out[material] = qty * price
+    return out
