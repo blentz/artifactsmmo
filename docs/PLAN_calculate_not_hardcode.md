@@ -86,11 +86,18 @@ full Lean lockstep + `formal/gate.sh` + commit. Check the box when committed.
   item CODE, HTTP 200; live probe 2026-06-14), NOT "types with ≥2 slots" — so it
   is not schema-derivable. Single-sourced: `objective._DUPLICATE_FILL_TYPES` now
   imports `equip.DUPLICATE_SLOT_TYPES` (the one copy is gone).
-- [~] **#9 `GOLD_RESERVE = 500`** — REFRAMED 2026-06-18 into a FEATURE: a
-  calculated per-level progression-gold-reserve (cost of near-term gear/crafting/
-  boss-odds upgrades), not a flat floor. Spec captured in
-  `docs/PLAN_progression_gold_reserve.md`; needs brainstorming before build.
-  — `craft_vs_buy.py:15`.
+- [x] **#9 `GOLD_RESERVE = 500`** — DONE 2026-06-18: REFRAMED into a FEATURE and
+  shipped — a calculated per-character progression-gold-reserve (deduction-aware
+  floor over near-term gear/crafting upgrades; boss-odds is a documented stub),
+  replacing the flat floor. Pure arithmetic proved in
+  `formal/Formal/ProgressionReserve.lean` (deduction identity `floor + cost =
+  total`, monotone total, antitone-in-floor affordability), differentially locked
+  to `progression_reserve_core.py` and mutation-killed. Impure sources in
+  `progression_reserve.py` (`gear_targets` / `crafting_unlock_targets` /
+  `boss_targets` stub), floored at `_MIN_SAFETY_FLOOR=100` so the bot never spends
+  to zero. All three buy-gates (gathering NpcBuy, ge_fill_sell, expand_bank) wired
+  to `reserve_floor`. The `GOLD_RESERVE` constant is removed; full unit suite 100%
+  cov and full formal gate green. Spec `docs/PLAN_progression_gold_reserve.md`.
 
 ## Out of scope (legit policy / not API data)
 Personality weights, proof scales (GEAR_EQUIP_SCALE, XP_RATE_REFERENCE), urgency
@@ -99,10 +106,7 @@ heuristics. Dead code to delete opportunistically: `consumable.py:19
 _best_consumable`.
 
 ## Queue (tail-ordered)
-1. Slot cluster: #2 ITEM_TYPE_TO_SLOTS → then #7 (EQUIPMENT_SLOTS) → then #8
-   (dup-fill, derives from #2's map). IN PROGRESS.
-2. #9 progression gold reserve (FEATURE, needs brainstorming) — LAST.
-   Spec: docs/PLAN_progression_gold_reserve.md.
+ALL audit items closed. No queue remaining.
 
 ## Status log
 - 2026-06-18: audit complete; plan written. Starting #1.
@@ -111,3 +115,8 @@ _best_consumable`.
 - 2026-06-18: slot cluster #2/#7/#8 done & gate-green (commit e1c99da). ALL audit
   items resolved EXCEPT #9 (progression-reserve feature, queued — needs
   brainstorming; spec docs/PLAN_progression_gold_reserve.md).
+- 2026-06-18: #9 DONE — progression gold reserve feature shipped (Tasks 1-11 of
+  docs/PLAN_progression_gold_reserve.md). GOLD_RESERVE removed; min-floor 100;
+  proven core + differential + mutation; all three buy-gates wired; full unit
+  suite 100% cov and full formal gate (ALL GATE PARTS PASSED). ALL audit items
+  now CLOSED.
