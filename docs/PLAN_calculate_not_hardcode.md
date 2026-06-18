@@ -51,7 +51,11 @@ full Lean lockstep + `formal/gate.sh` + commit. Check the box when committed.
   COMBAT_CRAFT_SKILLS). Caller-side only (strategy priors are an opaque scalar
   to the proven ranker). REMAINING: `SKILL_NAMES` (order-coupled to
   `Formal/Liveness/Skill.lean` + `test_objective_diff.py` → formal lockstep,
-  deferred); PRIOR_* magnitudes are irreducible policy (not a target). — `strategy.py:139-141`,
+  DONE 2026-06-18: derived `SKILL_NAMES = sorted(CraftSkill ∪ GatheringSkill)`;
+  the "formal lockstep" turned out free — order is not load-bearing (all Python
+  consumers dict-keyed/len; oracle gapSum/targetSum permutation-invariant; the
+  Lean `Skill` inductive is inert/unreferenced). Skill.lean docstring corrected.);
+  PRIOR_* magnitudes are irreducible policy (not a target). — `strategy.py:139-141`,
   `prerequisite_graph.py:93`, `item_catalog.py:5`, `world_state.py:49`. Gather
   set = `resource_skills()`. DESIGN FORK: `strategy.py:369 else Fraction(0)` —
   policy says FAIL on unknown skill, not score 0. Decide fail-fast vs derive-
@@ -66,7 +70,11 @@ full Lean lockstep + `formal/gate.sh` + commit. Check the box when committed.
 
 ## Tier 3 — real, lower blast radius
 
-- [ ] **#6 `BANK_EXPANSION_SLOTS = 20`** — `bank_expansion.py:22`. Server-owned
+- [x] **#6 `BANK_EXPANSION_SLOTS = 20`** — CLOSED (no change). The value is the
+  OpenAPI contract ("Buy a 20 slots bank expansion", openapi.json:2843), already
+  cited in-code — it IS API data, not a magic number. Runtime-learning the delta
+  into slots_per_expansion is real executor-layer plumbing for negligible
+  benefit; declined by decision 2026-06-18. — `bank_expansion.py:22`. Server-owned
   increment; abandoned `location_catalog.py:47 slots_per_expansion` was meant to
   learn it from the buy-response delta. Plumb runtime learning.
 - [ ] **#7 `_COMBAT_GEAR_SLOTS` / `EQUIPMENT_SLOTS`** — `strategy.py:137`,

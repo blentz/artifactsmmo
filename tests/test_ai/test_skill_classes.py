@@ -9,6 +9,21 @@ from artifactsmmo_cli.ai.tiers.skill_classes import (
     CONSUMABLE_CRAFT_SKILLS,
     GATHER_SKILLS,
 )
+from artifactsmmo_cli.ai.world_state import SKILL_NAMES
+
+
+def test_skill_names_is_the_derived_schema_vocabulary():
+    """SKILL_NAMES = CraftSkill ∪ GatheringSkill (the 8 trainable skills), derived
+    not hand-typed, and still the historical membership (combat excluded)."""
+    expected = {s.value for s in CraftSkill} | {s.value for s in GatheringSkill}
+    assert set(SKILL_NAMES) == expected
+    assert set(SKILL_NAMES) == {
+        "mining", "woodcutting", "fishing", "weaponcrafting",
+        "gearcrafting", "jewelrycrafting", "cooking", "alchemy",
+    }
+    assert "combat" not in SKILL_NAMES  # combat xp is tracked separately
+    assert SKILL_NAMES == sorted(SKILL_NAMES)  # deterministic order
+    assert len(SKILL_NAMES) == len(set(SKILL_NAMES))  # no dupes
 
 
 def test_sets_equal_the_historical_literals():

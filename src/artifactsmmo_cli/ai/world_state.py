@@ -5,6 +5,8 @@ from datetime import datetime
 from typing import Any
 
 from artifactsmmo_api_client.models.character_schema import CharacterSchema
+from artifactsmmo_api_client.models.craft_skill import CraftSkill
+from artifactsmmo_api_client.models.gathering_skill import GatheringSkill
 from artifactsmmo_api_client.types import Unset
 
 from artifactsmmo_cli.ai.elements import ELEMENTS
@@ -47,16 +49,16 @@ EQUIPMENT_SLOTS = [
     "bag_slot",
 ]
 
-SKILL_NAMES = [
-    "mining",
-    "woodcutting",
-    "fishing",
-    "weaponcrafting",
-    "gearcrafting",
-    "jewelrycrafting",
-    "cooking",
-    "alchemy",
-]
+# The character's trainable skills are the API schema's craft + gathering skills
+# (CraftSkill ∪ GatheringSkill = the 8 today), derived from the enums rather than
+# hand-typed so a skill the server adds is tracked on client regen. `combat` xp
+# is handled separately (not a craft/gather skill). The order is the schema
+# vocabulary sorted for determinism; every consumer keys by name / uses len, and
+# the formal objective reductions (gapSum/targetSum) are permutation-invariant,
+# so the order is not behaviourally load-bearing.
+SKILL_NAMES = sorted(
+    {s.value for s in CraftSkill} | {s.value for s in GatheringSkill}
+)
 
 TASKS_COIN_CODE = "tasks_coin"
 """The item code for task-reward coins (spent at the taskmaster exchange)."""
