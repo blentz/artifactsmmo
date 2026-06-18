@@ -42,14 +42,16 @@ full Lean lockstep + `formal/gate.sh` + commit. Check the box when committed.
   centralize to one derived source; delete the literals. FORMAL: feeds
   armor_score/combat proven cores → lockstep.
 
-- [~] **#4 Skill-name tables** — PARTIAL. `item_catalog._GATHERING_SKILLS` now
-  derived from `GatheringSkill` enum (clean, no formal). REMAINING (forks):
-  (a) combat-craft vs consumable-craft split is derivable-with-effort via a
-  `crafting_skill → output type_` scan but alchemy needs a policy tie-break and
-  the PRIOR_* magnitudes are irreducible policy; (b) `SKILL_NAMES` is order-
-  coupled to `Formal/Liveness/Skill.lean` + `test_objective_diff.py` → deriving
-  it risks a formal lockstep, deferred. `strategy._GATHER_SKILLS` deliberately
-  omits alchemy (policy, not the enum). — `strategy.py:139-141`,
+- [x] **#4 Skill-name tables** — DONE (modulo SKILL_NAMES). `_GATHERING_SKILLS`
+  ← `GatheringSkill` enum; new leaf `tiers/skill_classes.py` single-sources the
+  combat-craft / gather / consumable-craft partition, DERIVED from
+  CraftSkill/GatheringSkill enums + one policy seed `{alchemy,cooking}` via set
+  algebra (combat = craft − gather − kitchen). Killed the
+  strategy↔prereq_graph duplicate (`_CRAFTING_BOOTSTRAP_SKILLS` = the shared
+  COMBAT_CRAFT_SKILLS). Caller-side only (strategy priors are an opaque scalar
+  to the proven ranker). REMAINING: `SKILL_NAMES` (order-coupled to
+  `Formal/Liveness/Skill.lean` + `test_objective_diff.py` → formal lockstep,
+  deferred); PRIOR_* magnitudes are irreducible policy (not a target). — `strategy.py:139-141`,
   `prerequisite_graph.py:93`, `item_catalog.py:5`, `world_state.py:49`. Gather
   set = `resource_skills()`. DESIGN FORK: `strategy.py:369 else Fraction(0)` —
   policy says FAIL on unknown skill, not score 0. Decide fail-fast vs derive-

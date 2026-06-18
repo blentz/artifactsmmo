@@ -15,6 +15,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
+from artifactsmmo_cli.ai.tiers.skill_classes import COMBAT_CRAFT_SKILLS
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -90,9 +91,9 @@ real chance to fire, and unlocks the gear chain by lifting the skill off
 the level-1 floor. Removed automatically once the skill reaches the target
 (then the level-50 root takes over)."""
 
-_CRAFTING_BOOTSTRAP_SKILLS: frozenset[str] = frozenset(
-    {"weaponcrafting", "gearcrafting", "jewelrycrafting"}
-)
+# The skills bootstrapped off the level-1 floor are exactly the gear-producing
+# craft skills (single source: skill_classes.COMBAT_CRAFT_SKILLS).
+_CRAFTING_BOOTSTRAP_SKILLS: frozenset[str] = COMBAT_CRAFT_SKILLS
 
 _CHAR_LEVEL_BOOTSTRAP_HORIZON = 2
 """Look-ahead for the character-level bootstrap root. When `state.level <

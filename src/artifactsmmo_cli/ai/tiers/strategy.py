@@ -20,6 +20,11 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.personality import Personality
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import objective_roots, prerequisites
+from artifactsmmo_cli.ai.tiers.skill_classes import (
+    COMBAT_CRAFT_SKILLS,
+    CONSUMABLE_CRAFT_SKILLS,
+    GATHER_SKILLS,
+)
 from artifactsmmo_cli.ai.tiers.strategy_blend import (
     balancing as _balancing_pure,
 )
@@ -136,9 +141,6 @@ combat_capable=False momentarily because pick_loadout's inventory
 projection changes when inventory composition shifts)."""
 _COMBAT_GEAR_SLOTS = frozenset({"weapon_slot", "shield_slot", "helmet_slot", "body_armor_slot",
                                 "leg_armor_slot", "boots_slot", "ring1_slot", "ring2_slot", "amulet_slot"})
-_COMBAT_CRAFT_SKILLS = frozenset({"weaponcrafting", "gearcrafting", "jewelrycrafting"})
-_GATHER_SKILLS = frozenset({"mining", "woodcutting", "fishing"})
-_CONSUMABLE_CRAFT_SKILLS = frozenset({"alchemy", "cooking"})
 
 LEARN_W_MAX = Fraction(1, 2)
 LEARN_SAMPLE_FULL = 20
@@ -359,11 +361,11 @@ class StrategyEngine:
         if isinstance(root, ReachCharLevel):
             tier = PRIOR_CHAR_LEVEL
         elif isinstance(root, ReachSkillLevel):
-            if root.skill in _COMBAT_CRAFT_SKILLS:
+            if root.skill in COMBAT_CRAFT_SKILLS:
                 tier = PRIOR_COMBAT_CRAFT_SKILL
-            elif root.skill in _GATHER_SKILLS:
+            elif root.skill in GATHER_SKILLS:
                 tier = PRIOR_GATHER_SKILL
-            elif root.skill in _CONSUMABLE_CRAFT_SKILLS:
+            elif root.skill in CONSUMABLE_CRAFT_SKILLS:
                 tier = PRIOR_CONSUMABLE_SKILL
             else:
                 tier = Fraction(0)   # unknown skill — no prior, scores zero
