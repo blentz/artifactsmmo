@@ -1,6 +1,7 @@
 # tests/test_ai/test_progression_reserve.py
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.progression_reserve import (
+    _MIN_SAFETY_FLOOR,
     boss_targets,
     buy_price,
     crafting_unlock_targets,
@@ -48,6 +49,24 @@ def test_gear_targets_skips_already_equipped_best():
 def test_gear_targets_skips_out_of_horizon():
     gd = _gd_buyable_armor()
     gd._item_stats["iron_armor"].level = 99  # far above level+2
+    state = make_state(level=5, equipment={"body_armor_slot": "rags"})
+    assert gear_targets(state, gd) == {}
+
+
+def test_gear_targets_skips_craftable_upgrade():
+    """A better in-horizon gear upgrade that HAS a crafting recipe is not a gold
+    need (it can be crafted) → excluded from gear_targets."""
+    gd = _gd_buyable_armor()
+    gd._crafting_recipes = {"iron_armor": {"iron_bar": 3}}  # craftable, not a BUY
+    state = make_state(level=5, equipment={"body_armor_slot": "rags"})
+    assert gear_targets(state, gd) == {}
+
+
+def test_gear_targets_skips_upgrade_with_no_seller():
+    """A better in-horizon, non-craftable gear upgrade that NO NPC/GE sells has no
+    buy price → cannot be a gold need → excluded from gear_targets."""
+    gd = _gd_buyable_armor()
+    gd._npc_stock = {}  # nobody sells iron_armor; not craftable either
     state = make_state(level=5, equipment={"body_armor_slot": "rags"})
     assert gear_targets(state, gd) == {}
 
@@ -130,6 +149,24 @@ def test_crafting_unlock_skips_craftable_inputs():
     assert crafting_unlock_targets(state, gd) == {}
 
 
+def test_crafting_unlock_skips_input_with_no_seller():
+    """Recipe input that is neither gatherable nor craftable but has NO seller →
+    no buy price → it cannot be a reserved gold need, so it is skipped."""
+    gd = GameData()
+    gd._item_stats = {
+        "steel_sword": ItemStats(code="steel_sword", level=6, type_="weapon",
+                                 attack={"fire": 30}, crafting_skill="weaponcrafting",
+                                 crafting_level=1),
+        "steel_bar": ItemStats(code="steel_bar", level=6, type_="resource"),
+    }
+    gd._crafting_recipes = {"steel_sword": {"steel_bar": 3}}
+    # steel_bar: not gatherable, no recipe of its own, and NO NPC/GE sells it.
+    gd._npc_stock = {}
+    gd._monster_level = {"chicken": 1}
+    state = make_state(level=5, skills={"weaponcrafting": 1})
+    assert crafting_unlock_targets(state, gd) == {}
+
+
 def test_boss_targets_is_stub_empty():
     gd = _gd_buyable_armor()
     assert boss_targets(make_state(level=5), gd) == {}
@@ -145,8 +182,17 @@ def test_reserved_targets_unions_sources():
 def test_reserve_floor_deducts_when_buying_a_reserved_item():
     gd = _gd_buyable_armor()
     state = make_state(level=5, equipment={"body_armor_slot": "rags"})
-    # buying the reserved iron_armor -> its 120 is credited -> floor 0
-    assert reserve_floor(state, gd, "iron_armor") == 0
-    # buying something else -> full floor 120
+    # buying the reserved iron_armor -> its 120 is credited -> raw floor 0,
+    # but clamped up to _MIN_SAFETY_FLOOR (100) so the bot never spends to zero.
+    assert reserve_floor(state, gd, "iron_armor") == 100
+    # buying something else -> full floor 120 (already above the 100 min)
     assert reserve_floor(state, gd, "copper_ore") == 120
     assert reserve_floor(state, gd, None) == 120
+
+
+def test_minimum_safety_floor_when_nothing_reserved():
+    gd = GameData()
+    gd._item_stats = {}
+    gd._monster_level = {"chicken": 1}
+    state = make_state(level=5)
+    assert progression_reserve(state, gd) == 100   # _MIN_SAFETY_FLOOR

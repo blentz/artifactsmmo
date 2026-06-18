@@ -1077,3 +1077,14 @@ def test_second_ring_root_scored_against_its_own_empty_slot():
     ring2 = ObtainItem("copper_ring", slot="ring2_slot")
     assert not ring2.is_satisfied(state, gd)
     assert eng._marginal(ring2, state, gd) > 0
+
+
+def test_equip_gain_zero_when_item_stats_unknown():
+    """_equip_gain returns 0 for an ObtainItem whose code has no stats in
+    GameData (stats is None) — a non-gear / unknown root contributes no gear
+    gain to the marginal score or the protection tiebreak."""
+    gd = GameData()
+    gd._item_stats = {}  # no stats for any code
+    eng = StrategyEngine(CharacterObjective.from_game_data(gd), BalancedPersonality())
+    state = make_state(level=5)
+    assert eng._equip_gain(ObtainItem("mystery_item", 1), state, gd) == 0

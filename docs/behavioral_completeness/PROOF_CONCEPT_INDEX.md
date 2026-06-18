@@ -57,6 +57,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | PlannerDepthBound | planner, core | safety, reachability |
 | PrerequisiteGraph | crafting, items | safety, totality |
 | PriorityBand | core, planner | safety |
+| ProgressionReserve | core, economy | deduction-accounting, monotonicity |
 | PurposeRouting | items, characters | dominance |
 | RankingComposition | core, planner | dominance, monotonicity |
 | RealizableLoadout | items, characters | safety |

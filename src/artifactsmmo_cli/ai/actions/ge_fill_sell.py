@@ -4,7 +4,7 @@ This is the DUAL of GeFillBuyOrderAction. Filling an existing SELL order is imme
 acquisition — the player buys items from the order and receives them instantly,
 paying the standing order's price (a realizable, not speculative, cost — see
 buy_source_venue.py). It mirrors NpcBuyAction's gold/slot gates (the buy must keep
-gold above GOLD_RESERVE and have free slots) but the venue is the GE tile and the
+gold above the progression reserve floor and have free slots) but the venue is the GE tile and the
 price comes from the standing sell order. We NEVER post a new order here; we only
 fill one that already exists (the anti-surrogate guard).
 """

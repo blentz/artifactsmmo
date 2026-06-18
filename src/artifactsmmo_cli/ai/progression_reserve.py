@@ -12,6 +12,7 @@ from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.world_state import WorldState
 
 _HORIZON = 2  # reserve for upgrades usable within the next 2 character levels
+_MIN_SAFETY_FLOOR = 100  # never spend to zero even when nothing is reserved
 
 
 def buy_price(code: str, game_data: GameData) -> int | None:
@@ -121,11 +122,15 @@ def reserved_targets(state: WorldState, game_data: GameData) -> dict[str, int]:
 
 
 def progression_reserve(state: WorldState, game_data: GameData) -> int:
-    """Total gold reserved for near-term progression (replaces GOLD_RESERVE)."""
-    return reserve_total(reserved_targets(state, game_data))
+    """Total gold reserved for near-term progression (replaces the old flat
+    constant). Floored at `_MIN_SAFETY_FLOOR` so the bot never spends to zero
+    even when nothing is reserved."""
+    return max(_MIN_SAFETY_FLOOR, reserve_total(reserved_targets(state, game_data)))
 
 
 def reserve_floor(state: WorldState, game_data: GameData,
                   buying: str | None) -> int:
-    """The deduction-aware reserve floor that applies while buying `buying`."""
-    return effective_floor(reserved_targets(state, game_data), buying)
+    """The deduction-aware reserve floor that applies while buying `buying`,
+    floored at `_MIN_SAFETY_FLOOR`."""
+    reserved = reserved_targets(state, game_data)
+    return max(_MIN_SAFETY_FLOOR, effective_floor(reserved, buying))

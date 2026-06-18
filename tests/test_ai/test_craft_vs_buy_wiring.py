@@ -7,10 +7,14 @@ loop: no-seller skip, non-BUY skip.
 """
 
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
-from artifactsmmo_cli.ai.craft_vs_buy import GOLD_RESERVE, Method, acquisition_method
+from artifactsmmo_cli.ai.craft_vs_buy import Method, acquisition_method
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from tests.test_ai.fixtures import make_state
+
+# A representative reserve value passed to acquisition_method's `reserve` param
+# (the proof is parametric in `reserve`).
+_RESERVE = 500
 
 
 def _gd_buyable() -> GameData:
@@ -25,15 +29,15 @@ def _gd_buyable() -> GameData:
 
 def test_acquisition_method_buys_cheap_affordable() -> None:
     gd = _gd_buyable()
-    state = make_state(gold=GOLD_RESERVE + 1000, inventory={}, x=0, y=0)
+    state = make_state(gold=_RESERVE + 1000, inventory={}, x=0, y=0)
     # 1 copper_bar: craft ~10 ore gathers; buy ~2 cooldowns at 5g, affordable -> BUY
-    assert acquisition_method("copper_bar", 1, state, gd, GOLD_RESERVE) == Method.BUY
+    assert acquisition_method("copper_bar", 1, state, gd, _RESERVE) == Method.BUY
 
 
 def test_acquisition_method_crafts_when_unaffordable() -> None:
     gd = _gd_buyable()
-    state = make_state(gold=GOLD_RESERVE - 1, inventory={}, x=0, y=0)
-    assert acquisition_method("copper_bar", 1, state, gd, GOLD_RESERVE) == Method.CRAFT
+    state = make_state(gold=_RESERVE - 1, inventory={}, x=0, y=0)
+    assert acquisition_method("copper_bar", 1, state, gd, _RESERVE) == Method.CRAFT
 
 
 def test_acquisition_method_crafts_when_no_seller() -> None:
@@ -42,13 +46,13 @@ def test_acquisition_method_crafts_when_no_seller() -> None:
     gd._crafting_recipes = {"iron_bar": {"iron_ore": 10}}
     gd._npc_sell_prices = {}
     gd._npc_locations = {}
-    state = make_state(gold=GOLD_RESERVE + 1000, inventory={}, x=0, y=0)
-    assert acquisition_method("iron_bar", 1, state, gd, GOLD_RESERVE) == Method.CRAFT
+    state = make_state(gold=_RESERVE + 1000, inventory={}, x=0, y=0)
+    assert acquisition_method("iron_bar", 1, state, gd, _RESERVE) == Method.CRAFT
 
 
 def test_relevant_actions_injects_npcbuy_for_buy_item() -> None:
     gd = _gd_buyable()
-    state = make_state(gold=GOLD_RESERVE + 1000, inventory={}, x=0, y=0,
+    state = make_state(gold=_RESERVE + 1000, inventory={}, x=0, y=0,
                        skills={"mining": 5})
     goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 1})
     relevant = goal.relevant_actions([], state, gd)
@@ -83,7 +87,7 @@ def test_relevant_actions_no_npcbuy_when_no_seller() -> None:
     gd._crafting_recipes = {"iron_bar": {"iron_ore": 10}}
     gd._npc_sell_prices = {}
     gd._npc_locations = {}
-    state = make_state(gold=GOLD_RESERVE + 1000, inventory={}, x=0, y=0)
+    state = make_state(gold=_RESERVE + 1000, inventory={}, x=0, y=0)
     goal = GatherMaterialsGoal(target_item="iron_bar", needed={"iron_bar": 1})
     relevant = goal.relevant_actions([], state, gd)
     assert not any(isinstance(a, NpcBuyAction) for a in relevant)

@@ -866,9 +866,11 @@ class TestGatherMaterialsGoal:
         # Discretionary buy of 2×material costs 40; gold left = 90 < 120 → blocked.
         assert acquisition_method("material", 2, state, gd, floor_for_material) is Method.CRAFT
 
-        # Reserved item is not self-blocked: its own cost is deducted from the floor.
+        # Reserved item is not self-blocked: its own cost is deducted from the
+        # floor (raw floor 0), then clamped up to the _MIN_SAFETY_FLOOR (100) so
+        # the bot never spends to zero.
         floor_for_iron_armor = reserve_floor(state, gd, "iron_armor")
-        assert floor_for_iron_armor == 0
+        assert floor_for_iron_armor == 100
 
     def test_value_gradient_with_partial_collection(self):
         goal = GatherMaterialsGoal(target_item="copper_dagger", needed={"copper_ore": 6})

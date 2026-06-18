@@ -13,10 +13,6 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.min_gathers import min_gathers
 from artifactsmmo_cli.ai.world_state import WorldState
 
-GOLD_RESERVE = 500
-"""Gold kept in reserve for essentials (e.g. bank expansion); buying a needed item
-may not drop gold below this. Tunable; the proof is parametric in `reserve`."""
-
 
 class Method(Enum):
     CRAFT = "craft"

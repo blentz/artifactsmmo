@@ -13,10 +13,13 @@ formal/Formal/BuySourceVenue.lean's proof non-inert.
 
 from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
-from artifactsmmo_cli.ai.craft_vs_buy import GOLD_RESERVE
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from tests.test_ai.fixtures import make_state
+
+# Local gold-sizing baseline (the removed flat reserve value was 500); these
+# liveness tests just need gold comfortably above any reserve floor.
+_RESERVE_BASELINE = 500
 
 
 def _gd(*, npc_price=5, ge_order=None, ge_loc=(7, 7)) -> GameData:
@@ -33,7 +36,7 @@ def _gd(*, npc_price=5, ge_order=None, ge_loc=(7, 7)) -> GameData:
 
 
 def _state():
-    return make_state(gold=GOLD_RESERVE + 1000, inventory={}, x=0, y=0,
+    return make_state(gold=_RESERVE_BASELINE + 1000, inventory={}, x=0, y=0,
                       skills={"mining": 5})
 
 

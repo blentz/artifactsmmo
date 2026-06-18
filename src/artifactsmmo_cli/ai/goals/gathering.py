@@ -247,7 +247,7 @@ class GatherMaterialsGoal(Goal):
                 result.append(winner_fights[chosen])
 
         # Craft-vs-buy: offer an NpcBuy alternative for a needed item that is
-        # NPC-sold, affordable above GOLD_RESERVE, and strictly cheaper to buy than
+        # NPC-sold, affordable above the progression reserve floor, and strictly cheaper to buy than
         # craft (proved in formal/Formal/CraftVsBuy.lean). The least-cost planner
         # then picks buy-vs-make. Items with no seller / unaffordable / pricier are
         # left craft-only.

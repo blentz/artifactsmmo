@@ -26,8 +26,8 @@ def _gd_buyable_armor_and_full_bank() -> GameData:
     iron_armor: level-5 body armor, sold by NPC for 600, no crafting recipe.
 
     The progression reserve floor is 600 (iron_armor price). With gold=610:
-      - static GOLD_RESERVE(500): 610-20=590 >= 500 → old code FIRES (test RED before fix)
-      - reserve_floor=600:         610-20=590  < 600 → new code BLOCKS (test GREEN after fix)
+      - old flat reserve (500): 610-20=590 >= 500 → old code FIRES (test RED before fix)
+      - reserve_floor=600:       610-20=590  < 600 → new code BLOCKS (test GREEN after fix)
     """
     gd = GameData()
     gd._bank_capacity = 30
@@ -184,7 +184,7 @@ class TestExpandBankGoal:
         """Bank expansion is WITHHELD when buying it would breach the progression reserve.
 
         gold=610, expansion cost=20, iron_armor reserve=600.
-        Static GOLD_RESERVE(500): 610-20=590 >= 500 → old code fires.
+        Old flat reserve (500): 610-20=590 >= 500 → old code fires.
         Dynamic reserve_floor=600:  610-20=590  < 600 → new code blocks → 0.0.
         """
         gd = _gd_buyable_armor_and_full_bank()

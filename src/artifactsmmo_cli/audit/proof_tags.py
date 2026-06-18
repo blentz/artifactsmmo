@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 _ALLOWED_PROPERTIES = frozenset({
     "dominance", "monotonicity", "totality", "no-deadlock", "safety", "reachability",
-    "liveness",
+    "liveness", "deduction-accounting",
 })
 _TAG_RE = re.compile(r"@concept:\s*([^@]+?)\s*@property:\s*(.+)")
 

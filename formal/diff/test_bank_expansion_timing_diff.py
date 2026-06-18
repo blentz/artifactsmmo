@@ -6,8 +6,8 @@ The oracle takes a flat 7-int arg array
 `{"expand": 1}` / `{"expand": 0}`. The Python core returns a bool; the test
 compares against `int(...)`.
 
-Reserve is sampled from {0, 500} (the GOLD_RESERVE production value plus the
-no-reserve corner) so the SAFETY gate is exercised at the real floor and at the
+Reserve is sampled from {0, 500} (a representative reserve floor plus the
+no-reserve corner) so the SAFETY gate is exercised at a non-zero floor and at the
 degenerate zero floor; the trigger is sampled near the production 95/100 plus a
 few alternates so the cross-multiply boundary is exercised exactly.
 """
