@@ -391,6 +391,27 @@ class StrategyEngine:
                 return True
         return False
 
+    def _equip_gain(self, root: MetaGoal, state: WorldState,
+                    game_data: GameData) -> int:
+        """Exact-int combat/utility gain of equipping a gear root over what the
+        target slot already holds: `max(0, equip_value(item) -
+        equip_value(current))`. Empty slot ⇒ current is 0, so the gain is the
+        item's full equip value. Returns 0 for non-gear or stats-unknown roots.
+
+        Single source for both the `_marginal` score and the `decide` sort key's
+        protection tiebreak (`decide_key`'s third field), so the two never
+        diverge on what "better gear" means."""
+        if not isinstance(root, ObtainItem):
+            return 0
+        stats = game_data.item_stats(root.code)
+        if stats is None:
+            return 0
+        slot = self._root_slot(root, state, game_data)
+        current_code = state.equipment.get(slot) if slot is not None else None
+        current_stats = game_data.item_stats(current_code) if current_code else None
+        current_value = equip_value(current_stats) if current_stats is not None else 0
+        return max(0, equip_value(stats) - current_value)
+
     def _marginal(self, root: MetaGoal, state: WorldState, game_data: GameData,
                   combat_monster: str | None = None) -> Fraction:
         if isinstance(root, ReachCharLevel):
@@ -438,11 +459,9 @@ class StrategyEngine:
                 return Fraction(0)
             slot = self._root_slot(root, state, game_data)
             current_code = state.equipment.get(slot) if slot is not None else None
-            current_stats = game_data.item_stats(current_code) if current_code else None
-            current_value = equip_value(current_stats) if current_stats is not None else 0
             # P4a: equip_value is an exact int — the gain is exact integer
             # arithmetic; the normalisation divides into an exact Fraction.
-            gain = max(0, equip_value(stats) - current_value)
+            gain = self._equip_gain(root, state, game_data)
             marginal = min(Fraction(1), gain / GEAR_EQUIP_SCALE)
             # Combat-readiness urgency: a weapon-slot upgrade is the binding
             # objective while the character cannot fight at all.
@@ -530,7 +549,7 @@ class StrategyEngine:
         an inferior gear objective momentarily wins).
         """
         interrupt = "restore_hp" if state.hp_percent < CRITICAL_HP_FRACTION else None
-        candidates: list[tuple[MetaGoal, MetaGoal, Fraction, int, Fraction]] = []   # root, step, final, effort, pre
+        candidates: list[tuple[MetaGoal, MetaGoal, Fraction, int, Fraction, int]] = []   # root, step, final, effort, pre, protection
         for root in objective_roots(self.objective, state):
             if root.is_satisfied(state, game_data):
                 continue
@@ -541,14 +560,17 @@ class StrategyEngine:
             value = self._value(root, state, game_data, combat_monster)
             final = self._learned_blend(root, value, history, combat_monster)
             effort = root_cost(root, state, game_data)
-            candidates.append((root, step, final, effort, value))
-        candidates.sort(key=lambda c: decide_key(-c[2], c[3], repr(c[0])))   # final desc, effort asc, repr last
+            protection = self._equip_gain(root, state, game_data)
+            candidates.append((root, step, final, effort, value, protection))
+        # final desc, effort asc, protection desc (computed gear value breaks the
+        # empty-slot-urgency saturation tie), repr last.
+        candidates.sort(key=lambda c: decide_key(-c[2], c[3], -c[5], repr(c[0])))
         ranking = [
             RootScore(repr(r), root_category(r), pre, effort, final, repr(s), False)
-            for (r, s, final, effort, pre) in candidates
+            for (r, s, final, effort, pre, _prot) in candidates
         ]
         if candidates:
-            top_root, top_step, top_final, _top_effort, _top_pre = candidates[0]
+            top_root, top_step, top_final, _top_effort, _top_pre, _top_prot = candidates[0]
             chosen_root: MetaGoal | None = top_root
             chosen_step: MetaGoal | None = top_step
             if last_chosen_root is not None and last_chosen_root != repr(top_root):

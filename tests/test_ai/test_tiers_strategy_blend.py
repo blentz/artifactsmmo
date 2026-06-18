@@ -90,21 +90,24 @@ class TestLearnedBlend:
 
 class TestDecideKey:
     def test_tuple_shape(self) -> None:
-        assert decide_key(-0.9, 5, "X") == (-0.9, 5, "X")
+        assert decide_key(-0.9, 5, -3, "X") == (-0.9, 5, -3, "X")
 
-    def test_sort_order_final_then_effort_then_repr(self) -> None:
+    def test_sort_order_final_then_effort_then_protection_then_repr(self) -> None:
         items = [
-            (-0.5, 3, "B"),
-            (-0.9, 5, "A"),
-            (-0.5, 2, "Z"),
-            (-0.5, 3, "A"),
+            (-0.5, 3, 0, "B"),
+            (-0.9, 5, 0, "A"),
+            (-0.5, 2, 0, "Z"),
+            (-0.5, 3, 0, "A"),
+            (-0.5, 3, -9, "Y"),  # same (final, effort) as the -0.5/3 group; protection wins
         ]
         items.sort(key=lambda t: decide_key(*t))
-        # -0.9 wins, then ties at -0.5 break by effort then repr
-        assert items[0] == (-0.9, 5, "A")
-        assert items[1] == (-0.5, 2, "Z")
-        assert items[2] == (-0.5, 3, "A")
-        assert items[3] == (-0.5, 3, "B")
+        # -0.9 wins; then ties at -0.5 break by effort, then by protection
+        # (more-negative negProtect = higher gear value first), then by repr.
+        assert items[0] == (-0.9, 5, 0, "A")
+        assert items[1] == (-0.5, 2, 0, "Z")
+        assert items[2] == (-0.5, 3, -9, "Y")
+        assert items[3] == (-0.5, 3, 0, "A")
+        assert items[4] == (-0.5, 3, 0, "B")
 
 
 class TestDispatcherExhaustiveness:

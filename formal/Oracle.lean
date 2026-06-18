@@ -963,7 +963,8 @@ type and use a small int encoding for enum kinds and a string lookup via the
 trailing args).
 
 * `[0]`         query: 0 = compare two keys, 1 = goalReprOfGuard, 2 = goalReprOfMeans
-* For query 0: `[1, 2, 3, 4]` = a.negFinal, a.effort, b.negFinal, b.effort.
+* For query 0: `[1, 2, 3, 4, 5, 6]` = a.negFinal, a.effort, a.negProtect,
+  b.negFinal, b.effort, b.negProtect.
   Reprs are passed as separate string fields via the JSON wrapper:
   `[5]`/`[6]` carry the string encodings as integer-tagged codes (we use the
   string CHARS reconstructed via a separate dispatch path — see diff test).
@@ -982,8 +983,8 @@ Emits:
 def runDecideKey (args : Array Json) : Json :=
   let q := intArg args 0
   if q == 0 then
-    let a : Formal.DecideKey.Key := ⟨intArg args 1, intArg args 2, ""⟩
-    let b : Formal.DecideKey.Key := ⟨intArg args 3, intArg args 4, ""⟩
+    let a : Formal.DecideKey.Key := ⟨intArg args 1, intArg args 2, intArg args 3, ""⟩
+    let b : Formal.DecideKey.Key := ⟨intArg args 4, intArg args 5, intArg args 6, ""⟩
     let label : String := match Formal.DecideKey.decideCmp a b with
       | .lt => "lt" | .eq => "eq" | .gt => "gt"
     Json.mkObj [("cmp", Json.str label)]

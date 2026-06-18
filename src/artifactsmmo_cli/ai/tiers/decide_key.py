@@ -31,23 +31,34 @@ from artifactsmmo_cli.ai.tiers.guards import GuardKind
 from artifactsmmo_cli.ai.tiers.means import MeansKind
 
 
-def decide_key(neg_final: Fraction, effort: int, root_repr: str
-               ) -> tuple[Fraction, int, str]:
-    """The sort key tuple `decide` builds: `(-final, effort, root_repr)`.
+def decide_key(neg_final: Fraction, effort: int, neg_protection: int,
+               root_repr: str) -> tuple[Fraction, int, int, str]:
+    """The sort key tuple `decide` builds: `(-final, effort, -protection,
+    root_repr)`.
 
     Lower tuple sorts FIRST: smaller `-final` (= higher `final`) wins, ties
-    break by lower `effort`, ties break by string-ordered `root_repr`. The
-    tuple is the SAME shape as Python's tuple lexicographic comparison and
-    Lean's `compareLex`/`compareOn` composition over the three fields.
+    break by lower `effort`, then by smaller `-protection` (= HIGHER computed
+    gear value), then by string-ordered `root_repr`. The tuple is the SAME
+    shape as Python's tuple lexicographic comparison and Lean's
+    `compareLex`/`compareOn` composition over the four fields.
 
-    The third field is the GENUINE last tiebreak: in production every distinct
+    `protection = max(0, equip_value(item) - equip_value(current_in_slot))` is
+    the exact-int combat/utility gain (`tiers/equip_value.py`); `decide` passes
+    its negation. This breaks the `EMPTY_SLOT_URGENCY` saturation tie — where
+    every empty combat slot flattens to the same `final` score — by COMPUTED
+    protection, so body armor (large hp_bonus) outranks an amulet on its actual
+    stats instead of on an alphabetical accident. Non-gear / stats-unknown roots
+    contribute `0`, leaving them ordered by the leading fields and the repr.
+
+    The fourth field is the GENUINE last tiebreak: in production every distinct
     candidate root has a distinct `repr` (different MetaGoal types/codes), so
     no two candidates with distinct roots can tie under the full lex key.
 
-    P4a: `neg_final` is an exact `Fraction` (strategy scores are exact
-    rationals) — lexicographic comparison is exact, no float near-ties.
+    P4a: `neg_final` is an exact `Fraction` and `neg_protection` an exact `int`
+    (strategy scores / equip values are exact rationals/ints) — lexicographic
+    comparison is exact, no float near-ties.
     """
-    return (neg_final, effort, root_repr)
+    return (neg_final, effort, neg_protection, root_repr)
 
 
 # --- guard/means dispatcher repr maps --------------------------------------

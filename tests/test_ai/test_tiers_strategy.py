@@ -314,6 +314,56 @@ def _eng(gd, target_gear=None):
     return StrategyEngine(obj, BalancedPersonality())
 
 
+def _gd_empty_slots() -> GameData:
+    """Two empty-slot gear roots with EQUAL recipe depth (equal effort) but very
+    different computed equip value: a body armor (hp_bonus 50 ⇒ equip_value 101)
+    and an amulet (water resistance 4 ⇒ equip_value 9). Reproduces the trace
+    where both saturate to EMPTY_SLOT_URGENCY and the sort tie must break."""
+    gd = GameData()
+    gd._item_stats = {
+        "feather_coat": ItemStats(code="feather_coat", level=1, type_="body_armor",
+                                  hp_bonus=50, crafting_skill="gearcrafting", crafting_level=1),
+        "air_and_water_amulet": ItemStats(code="air_and_water_amulet", level=1, type_="amulet",
+                                          resistance={"water": 4},
+                                          crafting_skill="jewelrycrafting", crafting_level=1),
+        "feather": ItemStats(code="feather", level=1, type_="resource"),
+        "jasper": ItemStats(code="jasper", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"feather_coat": {"feather": 2},
+                            "air_and_water_amulet": {"jasper": 2}}
+    gd._resource_drops = {"feather_spot": "feather", "jasper_spot": "jasper"}
+    gd._resource_skill = {"feather_spot": ("mining", 1), "jasper_spot": ("mining", 1)}
+    gd._monster_level = {"chicken": 1}
+    fill_monster_stat_defaults(gd)
+    return gd
+
+
+def test_empty_slot_tie_breaks_by_computed_protection_not_alphabet():
+    """Trace 2026-06-17: empty amulet_slot and empty body_armor_slot both
+    flatten to EMPTY_SLOT_URGENCY at equal cost; the old `(-final, effort, repr)`
+    key handed the win to the amulet purely because 'air…' < 'feather…'. The
+    protection tiebreak (computed equip-value gain) now picks the body armor."""
+    gd = _gd_empty_slots()
+    eng = _eng(gd, target_gear={"amulet_slot": "air_and_water_amulet",
+                                "body_armor_slot": "feather_coat"})
+    state = make_state(level=5, skills={"mining": 5, "gearcrafting": 5,
+                                        "jewelrycrafting": 5})
+    d = eng.decide(state, gd)
+
+    gear = {rs.root_repr: rs for rs in d.ranking if "ObtainItem" in rs.root_repr}
+    body = next(rs for r, rs in gear.items() if "feather_coat" in r)
+    amulet = next(rs for r, rs in gear.items() if "air_and_water_amulet" in r)
+    # The tie the bug rode on: equal saturated score AND equal effort.
+    assert body.contribution == amulet.contribution
+    assert body.cost == amulet.cost
+    # Alphabet would seat the amulet first; computed protection outranks it.
+    assert repr(amulet.root_repr) < repr(body.root_repr)
+    assert equip_value(gd.item_stats("feather_coat")) > equip_value(
+        gd.item_stats("air_and_water_amulet"))
+    assert "feather_coat" in repr(d.chosen_root)
+    assert "air_and_water_amulet" not in repr(d.chosen_root)
+
+
 class TestBalancing:
     def test_leader_suppressed(self):
         eng = _eng(GameData())

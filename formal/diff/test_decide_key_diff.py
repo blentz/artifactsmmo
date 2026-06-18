@@ -13,6 +13,8 @@ the proved `decideCmp_eq_imp_repr` / `decideCmp_eq_imp_negFinal` /
 `decideCmp_eq_imp_effort` lemmas (since equal-key bypasses the string-typed
 oracle field).
 """
+from fractions import Fraction
+
 from hypothesis import given, settings, strategies as st
 
 from artifactsmmo_cli.ai.tiers.decide_key import (
@@ -25,9 +27,9 @@ from artifactsmmo_cli.ai.tiers.means import MeansKind
 from formal.diff.oracle_client import run_oracle
 
 
-def _expected_label(a: tuple[int, int], b: tuple[int, int]) -> str:
-    """Tuple-lex comparison on (negFinal, effort) — mirrors `decideCmp` when
-    `rootRepr` is held equal on both sides."""
+def _expected_label(a: tuple[int, int, int], b: tuple[int, int, int]) -> str:
+    """Tuple-lex comparison on (negFinal, effort, negProtect) — mirrors
+    `decideCmp` when `rootRepr` is held equal on both sides."""
     if a < b:
         return "lt"
     if a == b:
@@ -39,13 +41,31 @@ def _expected_label(a: tuple[int, int], b: tuple[int, int]) -> str:
 @given(
     a_neg=st.integers(min_value=-1000, max_value=1000),
     a_eff=st.integers(min_value=0, max_value=100),
+    a_prot=st.integers(min_value=-1000, max_value=0),
     b_neg=st.integers(min_value=-1000, max_value=1000),
     b_eff=st.integers(min_value=0, max_value=100),
+    b_prot=st.integers(min_value=-1000, max_value=0),
 )
-def test_decide_key_cmp_matches_lean(a_neg, a_eff, b_neg, b_eff) -> None:
-    lean = run_oracle("decide_key", [[0, a_neg, a_eff, b_neg, b_eff]])[0]
-    expected = _expected_label((a_neg, a_eff), (b_neg, b_eff))
+def test_decide_key_cmp_matches_lean(
+    a_neg, a_eff, a_prot, b_neg, b_eff, b_prot,
+) -> None:
+    lean = run_oracle(
+        "decide_key", [[0, a_neg, a_eff, a_prot, b_neg, b_eff, b_prot]],
+    )[0]
+    expected = _expected_label((a_neg, a_eff, a_prot), (b_neg, b_eff, b_prot))
     assert lean["cmp"] == expected
+
+
+def test_decide_key_protection_tiebreak_matches_lean() -> None:
+    """Equal (negFinal, effort) but a more-negative negProtect (= higher
+    computed equip-value gain) sorts FIRST — the body-armor-over-amulet fix.
+    Both the Python tuple key and the Lean comparator must agree, regardless of
+    the repr that would otherwise break the tie alphabetically."""
+    body = decide_key(Fraction(-5), 3, -40, "ObtainItem(code='feather_coat')")
+    amulet = decide_key(Fraction(-5), 3, -8, "ObtainItem(code='air_and_water_amulet')")
+    assert body < amulet  # body armor wins despite 'a' < 'f' on the repr field
+    lean = run_oracle("decide_key", [[0, -5, 3, -40, -5, 3, -8]])[0]
+    assert lean["cmp"] == "lt"
 
 
 def test_decide_key_python_tuple_sort_total_order() -> None:
@@ -54,11 +74,12 @@ def test_decide_key_python_tuple_sort_total_order() -> None:
     trichotomy / antisymmetry / transitivity). We check the comparator's
     swap property pairwise via the oracle for every adjacent sorted pair."""
     items = [
-        (-9, 5, "ReachCharLevel(level=5)"),
-        (-5, 3, "ReachSkillLevel(skill='mining', level=3)"),
-        (-9, 5, "ReachSkillLevel(skill='mining', level=3)"),  # same (neg, eff) as 0; repr tiebreak
-        (-5, 2, "ObtainItem(code='copper', quantity=10)"),
-        (-5, 3, "ZZZ"),
+        (-9, 5, 0, "ReachCharLevel(level=5)"),
+        (-5, 3, 0, "ReachSkillLevel(skill='mining', level=3)"),
+        (-9, 5, 0, "ReachSkillLevel(skill='mining', level=3)"),  # same (neg, eff, prot) as 0; repr tiebreak
+        (-5, 2, 0, "ObtainItem(code='copper', quantity=10)"),
+        (-5, 3, -7, "ObtainItem(code='feather_coat')"),  # same (neg, eff) as below; protection wins
+        (-5, 3, 0, "ZZZ"),
     ]
     items.sort(key=lambda t: decide_key(*t))
     # Strict total order: every adjacent pair is ≠.
@@ -75,13 +96,13 @@ def test_decide_key_repr_tiebreak() -> None:
     """Two items with identical (-final, effort) but different reprs sort by
     string order — matching `decideCmp_eq_imp_repr` (eq forces equal repr,
     so distinct reprs are strictly ordered)."""
-    a = decide_key(-1.0, 1, "AAA")
-    b = decide_key(-1.0, 1, "BBB")
+    a = decide_key(Fraction(-1), 1, 0, "AAA")
+    b = decide_key(Fraction(-1), 1, 0, "BBB")
     assert a < b
-    # Lean side at the (negFinal, effort) projection returns .eq when the int
-    # fields tie; the string tiebreak is verified by the Lean
+    # Lean side at the (negFinal, effort, negProtect) projection returns .eq
+    # when the int fields tie; the string tiebreak is verified by the Lean
     # decideCmp_eq_imp_repr theorem (statement-pinned in Contracts.lean).
-    lean = run_oracle("decide_key", [[0, -1, 1, -1, 1]])[0]
+    lean = run_oracle("decide_key", [[0, -1, 1, 0, -1, 1, 0]])[0]
     assert lean["cmp"] == "eq"
 
 
@@ -92,18 +113,21 @@ def test_decide_key_repr_tiebreak() -> None:
     eff_a=st.integers(min_value=0, max_value=10),
     eff_b=st.integers(min_value=0, max_value=10),
     eff_c=st.integers(min_value=0, max_value=10),
+    prot_a=st.integers(min_value=-10, max_value=0),
+    prot_b=st.integers(min_value=-10, max_value=0),
+    prot_c=st.integers(min_value=-10, max_value=0),
 )
 @settings(max_examples=200)
 def test_decide_key_transitivity_against_lean(
-    final_a, final_b, final_c, eff_a, eff_b, eff_c,
+    final_a, final_b, final_c, eff_a, eff_b, eff_c, prot_a, prot_b, prot_c,
 ) -> None:
     """Transitivity of `.lt`: a < b ∧ b < c ⇒ a < c (the proved
     `decideCmp_lt_trans` law). We CHECK Python tuple comparison and the Lean
     comparator agree on every triple — and that any time both AB and BC are
-    `lt` so is AC."""
-    ab = run_oracle("decide_key", [[0, final_a, eff_a, final_b, eff_b]])[0]["cmp"]
-    bc = run_oracle("decide_key", [[0, final_b, eff_b, final_c, eff_c]])[0]["cmp"]
-    ac = run_oracle("decide_key", [[0, final_a, eff_a, final_c, eff_c]])[0]["cmp"]
+    `lt` so is AC. The protection field participates in the lex order."""
+    ab = run_oracle("decide_key", [[0, final_a, eff_a, prot_a, final_b, eff_b, prot_b]])[0]["cmp"]
+    bc = run_oracle("decide_key", [[0, final_b, eff_b, prot_b, final_c, eff_c, prot_c]])[0]["cmp"]
+    ac = run_oracle("decide_key", [[0, final_a, eff_a, prot_a, final_c, eff_c, prot_c]])[0]["cmp"]
     if ab == "lt" and bc == "lt":
         assert ac == "lt"
 

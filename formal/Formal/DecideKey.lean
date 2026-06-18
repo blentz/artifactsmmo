@@ -49,36 +49,45 @@ open Std
 
 /-! ## (1) The decide-sort comparator. -/
 
-/-- One candidate's sort key triple. `negFinal` is `-final` SCALED to `Int`
-(Python flips the sign so the natural `<` sorts high-final FIRST; the diff
-test feeds an integer fixed-point representation that preserves order — see
+/-- One candidate's sort key. `negFinal` is `-final` SCALED to `Int` (Python
+flips the sign so the natural `<` sorts high-final FIRST; the diff test feeds an
+integer fixed-point representation that preserves order — see
 `formal/diff/test_decide_key_diff.py`). `effort` is the integer root cost.
-`rootRepr` is the MetaGoal's `repr` string. -/
+`negProtect` is `-protection` where `protection = max(0, equip_value(item) -
+equip_value(current_in_slot))` is the EXACT-int combat/utility gain (Python
+negates so higher protection sorts FIRST, same convention as `negFinal`); it
+breaks the empty-slot-urgency saturation tie by COMPUTED gear value, so body
+armor (large hp_bonus) outranks an amulet rather than losing on alphabet.
+`rootRepr` is the MetaGoal's `repr` string — the genuine LAST tiebreak. -/
 structure Key where
   negFinal : Int
   effort : Int
+  negProtect : Int
   rootRepr : String
 deriving Repr, DecidableEq
 
-/-- Lexicographic comparator over the three projections in `(negFinal, effort,
-rootRepr)` order. Same pattern as `UpgradeSelection.craftableCmp` — the
-`Ordering` algebra makes oriented/transitive instances synthesize. -/
+/-- Lexicographic comparator over the four projections in `(negFinal, effort,
+negProtect, rootRepr)` order. Same pattern as `UpgradeSelection.craftableCmp` —
+the `Ordering` algebra makes oriented/transitive instances synthesize. -/
 def decideCmp : Key → Key → Ordering :=
   compareLex (compareOn (fun k => k.negFinal))
     (compareLex (compareOn (fun k => k.effort))
-      (compareOn (fun k => k.rootRepr)))
+      (compareLex (compareOn (fun k => k.negProtect))
+        (compareOn (fun k => k.rootRepr))))
 
 instance : OrientedCmp decideCmp :=
   inferInstanceAs (OrientedCmp (fun a b =>
     compareLex (compareOn (fun k : Key => k.negFinal))
       (compareLex (compareOn (fun k => k.effort))
-        (compareOn (fun k => k.rootRepr))) a b))
+        (compareLex (compareOn (fun k => k.negProtect))
+          (compareOn (fun k => k.rootRepr)))) a b))
 
 instance : TransCmp decideCmp :=
   inferInstanceAs (TransCmp (fun a b =>
     compareLex (compareOn (fun k : Key => k.negFinal))
       (compareLex (compareOn (fun k => k.effort))
-        (compareOn (fun k => k.rootRepr))) a b))
+        (compareLex (compareOn (fun k => k.negProtect))
+          (compareOn (fun k => k.rootRepr)))) a b))
 
 /-! ### Key intent theorems. -/
 
@@ -101,52 +110,53 @@ theorem decideCmp_lt_trans {a b c : Key}
     decideCmp a c = .lt :=
   TransCmp.lt_trans hab hbc
 
-/-- `Ordering.then x y = .eq` ⇒ `y = .eq` (and `x = .eq`). -/
+/-- `Ordering.then x y = .eq` ⇒ `y = .eq`. -/
 private theorem then_eq_imp_snd {x y : Ordering} (h : x.then y = .eq) : y = .eq := by
   cases x <;> simp_all [Ordering.then]
 
-/-- STRICT-TOTAL DETERMINISM: an `eq` result forces ALL THREE key fields to
+/-- `Ordering.then x y = .eq` ⇒ `x = .eq` (a non-`.eq` first arg short-circuits
+`then` to itself, contradicting the `.eq` result). -/
+private theorem then_eq_imp_fst {x y : Ordering} (h : x.then y = .eq) : x = .eq := by
+  cases x <;> simp_all [Ordering.then]
+
+/-- STRICT-TOTAL DETERMINISM: an `eq` result forces ALL FOUR key fields to
 agree, in particular EQUAL `rootRepr`. So two candidates with distinct reprs
 are strictly ordered — the comparator is a strict total order on production
-inputs (distinct production roots have distinct reprs by construction). -/
+inputs (distinct production roots have distinct reprs by construction). The
+`rootRepr` projection sits LAST in the lex order, so peeling all three leading
+`.then` layers exposes it. -/
 theorem decideCmp_eq_imp_repr (a b : Key)
     (h : decideCmp a b = .eq) : a.rootRepr = b.rootRepr := by
   unfold decideCmp compareLex at h
-  replace h := then_eq_imp_snd (then_eq_imp_snd h)
+  replace h := then_eq_imp_snd (then_eq_imp_snd (then_eq_imp_snd h))
   exact LawfulEqCmp.eq_of_compare (cmp := compare) h
 
-/-- And the `negFinal` and `effort` projections also coincide on `eq`. -/
+/-- And the `negFinal` projection coincides on `eq` (the FIRST lex field). -/
 theorem decideCmp_eq_imp_negFinal (a b : Key)
     (h : decideCmp a b = .eq) : a.negFinal = b.negFinal := by
   unfold decideCmp compareLex at h
-  -- The first `then` argument must itself be `.eq`.
-  have hfirst : (compareOn (fun k : Key => k.negFinal) a b) = .eq := by
-    -- If the first comparison weren't .eq, `then` would return it, and the whole
-    -- result couldn't be .eq.
-    cases hf : compareOn (fun k : Key => k.negFinal) a b
-    · -- .lt: then .lt _ = .lt ≠ .eq
-      rw [hf] at h; simp [Ordering.then] at h
-    · rfl
-    · rw [hf] at h; simp [Ordering.then] at h
-  exact LawfulEqCmp.eq_of_compare (cmp := compare) hfirst
+  exact LawfulEqCmp.eq_of_compare (cmp := compare) (then_eq_imp_fst h)
 
+/-- And the `effort` projection coincides on `eq` (the SECOND lex field: strip
+the leading `negFinal` layer, then take the head of the remainder). -/
 theorem decideCmp_eq_imp_effort (a b : Key)
     (h : decideCmp a b = .eq) : a.effort = b.effort := by
   unfold decideCmp compareLex at h
-  -- After stripping the outer `then` we need the SECOND nested first comp to be .eq.
-  replace h := then_eq_imp_snd h
-  -- Now h : (compareLex (compareOn effort) (compareOn rootRepr)) a b = .eq, then strip again.
-  unfold compareLex at h
-  have hfirst : (compareOn (fun k : Key => k.effort) a b) = .eq := by
-    cases hf : compareOn (fun k : Key => k.effort) a b
-    · rw [hf] at h; simp [Ordering.then] at h
-    · rfl
-    · rw [hf] at h; simp [Ordering.then] at h
-  exact LawfulEqCmp.eq_of_compare (cmp := compare) hfirst
+  exact LawfulEqCmp.eq_of_compare (cmp := compare)
+    (then_eq_imp_fst (then_eq_imp_snd h))
 
-/-- ALL-THREE-DISTINCT ⇒ STRICTLY ORDERED: if any of the three key fields
-differ, the comparator returns `.lt` or `.gt`, never `.eq`. The compositions
-of the above. -/
+/-- And the `negProtect` (computed-gear-value) projection coincides on `eq` (the
+THIRD lex field: strip two leading layers, then take the head). This is the
+read-back that the protection tiebreak is a genuine, deterministic lex field —
+two keys tie there only when their computed protection is identical. -/
+theorem decideCmp_eq_imp_negProtect (a b : Key)
+    (h : decideCmp a b = .eq) : a.negProtect = b.negProtect := by
+  unfold decideCmp compareLex at h
+  exact LawfulEqCmp.eq_of_compare (cmp := compare)
+    (then_eq_imp_fst (then_eq_imp_snd (then_eq_imp_snd h)))
+
+/-- ANY-FIELD-DISTINCT ⇒ STRICTLY ORDERED: if the reprs differ, the comparator
+returns `.lt` or `.gt`, never `.eq`. The composition of the above. -/
 theorem decideCmp_ne_of_repr_ne (a b : Key) (h : a.rootRepr ≠ b.rootRepr) :
     decideCmp a b ≠ .eq := by
   intro heq
@@ -238,23 +248,34 @@ theorem goalReprOfMeans_nonempty : ∀ k : MeansKind, (goalReprOfMeans k).length
 
 /-! ### Non-vacuity examples. -/
 
-/-- Two distinct-repr keys are strictly ordered (NOT `.eq`): pins the
+/-- Two distinct keys are strictly ordered (NOT `.eq`): pins the
 strict-total-order property at concrete values. -/
 example :
-    let a : Key := ⟨-900, 5, "ReachCharLevel(level=5)"⟩
-    let b : Key := ⟨-500, 3, "ReachSkillLevel(skill='mining', level=3)"⟩
+    let a : Key := ⟨-900, 5, 0, "ReachCharLevel(level=5)"⟩
+    let b : Key := ⟨-500, 3, 0, "ReachSkillLevel(skill='mining', level=3)"⟩
     decideCmp a b = .lt := by decide
 
-/-- Two keys with identical `(negFinal, effort)` but different reprs break
-the tie by string order (NOT `.eq`): pins the repr tiebreak. -/
+/-- THE BUG FIX: two empty-slot gear keys tie on `(negFinal, effort)` — both at
+the saturated empty-slot-urgency score — but the body-armor key carries a more
+negative `negProtect` (higher computed equip-value gain) and so sorts FIRST,
+ahead of the amulet, REGARDLESS of the alphabetical order of their reprs (here
+the amulet's repr "a…" would otherwise win). Pins the protection tiebreak. -/
 example :
-    let a : Key := ⟨-500, 3, "A"⟩
-    let b : Key := ⟨-500, 3, "B"⟩
+    let bodyArmor : Key := ⟨-5, 3, -40, "ObtainItem(code='feather_coat')"⟩
+    let amulet    : Key := ⟨-5, 3, -8,  "ObtainItem(code='air_and_water_amulet')"⟩
+    decideCmp bodyArmor amulet = .lt ∧ decideCmp bodyArmor amulet ≠ .eq := by
+  refine ⟨by decide, by decide⟩
+
+/-- Two keys with identical `(negFinal, effort, negProtect)` but different reprs
+break the tie by string order (NOT `.eq`): pins the repr final tiebreak. -/
+example :
+    let a : Key := ⟨-500, 3, -1, "A"⟩
+    let b : Key := ⟨-500, 3, -1, "B"⟩
     decideCmp a b = .lt ∧ decideCmp a b ≠ .eq := by
   refine ⟨by decide, by decide⟩
 
-/-- Identical keys compare equal (only when ALL THREE fields coincide). -/
-example : decideCmp ⟨-1, 1, "X"⟩ ⟨-1, 1, "X"⟩ = .eq := by decide
+/-- Identical keys compare equal (only when ALL FOUR fields coincide). -/
+example : decideCmp ⟨-1, 1, 0, "X"⟩ ⟨-1, 1, 0, "X"⟩ = .eq := by decide
 
 /-- Every guard variant indeed yields a known production repr (witness for
 the dispatcher table). -/

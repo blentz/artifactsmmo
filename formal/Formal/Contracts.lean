@@ -1504,6 +1504,9 @@ example : ∀ (a b : Formal.DecideKey.Key),
 example : ∀ (a b : Formal.DecideKey.Key),
     Formal.DecideKey.decideCmp a b = .eq → a.effort = b.effort :=
   @Formal.DecideKey.decideCmp_eq_imp_effort
+example : ∀ (a b : Formal.DecideKey.Key),
+    Formal.DecideKey.decideCmp a b = .eq → a.negProtect = b.negProtect :=
+  @Formal.DecideKey.decideCmp_eq_imp_negProtect
 example : ∀ (k : Formal.DecideKey.GuardKind),
     (Formal.DecideKey.goalReprOfGuard k).length > 0 :=
   @Formal.DecideKey.goalReprOfGuard_nonempty
