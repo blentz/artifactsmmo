@@ -1019,6 +1019,26 @@ def runDecideKey (args : Array Json) : Json :=
       | _ => .maintainConsumables
     Json.mkObj [("repr", Json.str (Formal.DecideKey.goalReprOfMeans k))]
 
+/-- progression_reserve: args layout (all Nat ≥ 0):
+* `[0]`               nReserved (number of (code, cost) pairs)
+* `[1 .. 2*nReserved]` pairs flat: code0 cost0 code1 cost1 ...  (codes are ints,
+  stringified to match the Python str keys)
+* next: gold, price, buyingCode (buyingCode = -1 encodes None / non-reserved)
+Emits `{"floor", "affordable"}` against the proved core. -/
+def runProgressionReserve (args : Array Json) : Json :=
+  let g := fun i => intArg args i
+  let n := (g 0).toNat
+  let reserved : Formal.ProgressionReserve.Reserved :=
+    (List.range n).map (fun k => (toString (g (1 + 2*k)), (g (2 + 2*k)).toNat))
+  let p := 1 + 2*n
+  let gold := (g p).toNat
+  let price := (g (p+1)).toNat
+  let bRaw := g (p+2)
+  let buying : String := if bRaw < 0 then "" else toString bRaw
+  Json.mkObj [
+    ("floor", Json.num (Int.ofNat (Formal.ProgressionReserve.effectiveFloor reserved buying))),
+    ("affordable", Json.bool (Formal.ProgressionReserve.affordable gold price reserved buying))]
+
 /-- Compute one cycles_for_progress result using the SAME proved
 `cyclesForProgressPure`.
 
@@ -1967,6 +1987,8 @@ def runOne (item : Json) : Json :=
     runStrategyBlend args
   else if kind == "decide_key" then
     runDecideKey args
+  else if kind == "progression_reserve" then
+    runProgressionReserve args
   else if kind == "cycles_for_progress" then
     runCyclesForProgress args
   else if kind == "gather_apply" then
