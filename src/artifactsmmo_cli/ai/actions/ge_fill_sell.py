@@ -21,7 +21,6 @@ from artifactsmmo_api_client.models.ge_buy_order_schema import GEBuyOrderSchema
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.movement import MoveAction
-from artifactsmmo_cli.ai.craft_vs_buy import GOLD_RESERVE  # noqa: F401 — kept for later task
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor

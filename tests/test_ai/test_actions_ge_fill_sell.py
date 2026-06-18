@@ -64,18 +64,17 @@ class TestGeFillSellOrderAction:
         state = make_state(gold=_afford(), inventory={"x": 18}, inventory_max=20)
         assert a.is_applicable(state, gd) is False
 
-    def test_not_applicable_when_buy_would_breach_reserve(self):
-        # reserve_floor derives from progression targets; when no upgrades are
-        # available (bare make_gd has no item stats / NPC stock) the floor is 0
-        # and the buy goes through even when gold is modest.  Use the richer
-        # fixture to assert blocking behaviour — see
-        # test_not_applicable_when_buy_would_breach_progression_reserve below.
+    def test_applicable_when_no_progression_targets_reserve_is_zero(self):
+        # With no item stats or NPC stock in the bare GameData, reserve_floor
+        # returns 0 (no progression targets to protect). A buy that would have
+        # been blocked by the old flat GOLD_RESERVE gate goes through, because
+        # gold - price*qty = 700-300 = 400 >= 0.
         a = GeFillSellOrderAction(order_id="ord-1", item_code="iron_ore", price=100, quantity=3,
                                   ge_location=(5, 1))
         gd = make_gd(ge_sell_orders={"iron_ore": ("ord-1", 100, 10)})
         # progression reserve == 0 (no buyable upgrades in this bare gd),
         # so gold=700-300=400 >= 0 → applicable
-        state = make_state(gold=GOLD_RESERVE + 200, inventory={}, inventory_max=20)
+        state = make_state(gold=700, inventory={}, inventory_max=20)
         assert a.is_applicable(state, gd) is True
 
     def test_not_applicable_when_order_gone(self):
