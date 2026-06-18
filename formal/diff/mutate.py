@@ -127,6 +127,9 @@ RESTORE_FAMILY_MUTATIONS = [
     ("game_data: drop lifesteal parse (heal-on-crit gear invisible)",
      '                    elif effect.code == "lifesteal":',
      '                    elif effect.code == "lifesteal_disabled":'),
+    ("game_data: invert monster-effect coverage guard (unmapped code silently dropped)",
+     "                    elif code not in _MONSTER_EFFECT_CARVEOUTS:",
+     "                    elif code in _MONSTER_EFFECT_CARVEOUTS:"),
 ]
 
 # Skill-gate fast-fail + doomed-memo (2026-06-15 feather_coat CPU-peg fix).

@@ -14,6 +14,7 @@ from artifactsmmo_api_client.types import UNSET
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.game_data_cache import GameDataCache
+from artifactsmmo_cli.ai.game_data_error import GameDataCoverageError
 from artifactsmmo_cli.ai.player import GamePlayer
 
 
@@ -857,6 +858,50 @@ class TestGameDataLoadMonsters:
         # corrupted is independent of the other abilities.
         assert gd.monster_protective_bubble("corrupted_ogre") == 0
         assert gd.monster_frenzy("corrupted_ogre") == 0
+
+    def test_unmapped_monster_effect_code_raises(self):
+        """Parser-coverage guard: a monster ability the parser does NOT map (and
+        is not carved out) must FAIL loudly, naming the monster + code, rather than
+        silently dropping it and corrupting predict_win."""
+        gd = GameData()
+        monster = MagicMock()
+        monster.code = "void_titan"
+        monster.level = 40
+        monster.hp = 2000
+        monster.critical_strike = 0
+        monster.initiative = 100
+        eff = MagicMock()
+        eff.code = "mind_control"  # not one of the modeled abilities
+        eff.value = 50
+        monster.effects = [eff]
+        with patch("artifactsmmo_cli.ai.game_data.get_all_monsters",
+                   return_value=make_page([monster])):
+            with pytest.raises(GameDataCoverageError) as exc:
+                gd._load_monsters(MagicMock())
+        assert "void_titan" in str(exc.value)
+        assert "mind_control" in str(exc.value)
+
+    def test_carved_out_monster_effect_code_is_ignored(self):
+        """A monster ability listed in the documented carve-out set is accepted
+        without raising and without affecting any modeled stat."""
+        gd = GameData()
+        monster = MagicMock()
+        monster.code = "shiny_slime"
+        monster.level = 5
+        monster.hp = 60
+        monster.critical_strike = 0
+        monster.initiative = 100
+        eff = MagicMock()
+        eff.code = "cosmetic_glow"
+        eff.value = 1
+        monster.effects = [eff]
+        with patch("artifactsmmo_cli.ai.game_data._MONSTER_EFFECT_CARVEOUTS",
+                   frozenset({"cosmetic_glow"})):
+            with patch("artifactsmmo_cli.ai.game_data.get_all_monsters",
+                       return_value=make_page([monster])):
+                gd._load_monsters(MagicMock())  # no raise
+        assert gd.monster_poison("shiny_slime") == 0
+        assert gd.monster_lifesteal("shiny_slime") == 0
 
     def test_stops_on_none_result(self):
         gd = GameData()

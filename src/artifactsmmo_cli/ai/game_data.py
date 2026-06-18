@@ -34,12 +34,22 @@ from artifactsmmo_api_client.models.resource_schema import ResourceSchema
 from artifactsmmo_api_client.types import Unset
 
 from artifactsmmo_cli.ai.game_data_cache import GameDataCache
+from artifactsmmo_cli.ai.game_data_error import GameDataCoverageError
 from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS, ItemCatalog, ItemStats
 from artifactsmmo_cli.ai.location_catalog import LocationCatalog
 from artifactsmmo_cli.ai.monster_catalog import MonsterCatalog
 from artifactsmmo_cli.ai.recipe_catalog import RecipeCatalog
 
 __all__ = ["_GATHERING_SKILLS", "GameData", "ItemStats"]
+
+# Parser-coverage guard (docs/PLAN_game_modeling_roadmap.md): monster ability
+# effect codes the parser intentionally does NOT map to a predict_win term, but
+# which are KNOWN and benign — so they are accepted without raising. Empty today:
+# every live monster effect code (verified across all 48 monsters, 2026-06-17) is
+# mapped in _build_monsters. A NEW unmapped code raises GameDataCoverageError so it
+# cannot silently corrupt predict_win. Add a benign code here (with a reason) only
+# after confirming it carries no combat consequence.
+_MONSTER_EFFECT_CARVEOUTS: frozenset[str] = frozenset()
 
 
 @dataclass
@@ -1263,30 +1273,40 @@ class GameData:
             mon_effects = getattr(mon, "effects", None)
             if mon_effects and not isinstance(mon_effects, Unset):
                 for effect in mon_effects:
-                    if getattr(effect, "code", None) == "lifesteal":
+                    code = getattr(effect, "code", None)
+                    if code == "lifesteal":
                         self._monster_lifesteal[mon.code] = effect.value
-                    elif getattr(effect, "code", None) == "poison":
+                    elif code == "poison":
                         self._monster_poison[mon.code] = effect.value
-                    elif getattr(effect, "code", None) == "barrier":
+                    elif code == "barrier":
                         self._monster_barrier[mon.code] = effect.value
-                    elif getattr(effect, "code", None) == "burn":
+                    elif code == "burn":
                         self._monster_burn[mon.code] = effect.value
-                    elif getattr(effect, "code", None) == "healing":
+                    elif code == "healing":
                         self._monster_healing[mon.code] = effect.value
-                    elif getattr(effect, "code", None) == "reconstitution":
+                    elif code == "reconstitution":
                         self._monster_reconstitution[mon.code] = effect.value
-                    elif getattr(effect, "code", None) == "void_drain":
+                    elif code == "void_drain":
                         self._monster_void_drain[mon.code] = effect.value
-                    elif getattr(effect, "code", None) == "berserker_rage":
+                    elif code == "berserker_rage":
                         self._monster_berserker_rage[mon.code] = effect.value
-                    elif getattr(effect, "code", None) == "frenzy":
+                    elif code == "frenzy":
                         self._monster_frenzy[mon.code] = effect.value
-                    elif getattr(effect, "code", None) == "protective_bubble":
+                    elif code == "protective_bubble":
                         self._monster_protective_bubble[mon.code] = effect.value
-                    elif getattr(effect, "code", None) == "corrupted":
+                    elif code == "corrupted":
                         # corrupted HELPS the player; predict_win conservatively ignores
                         # it (parsed/covered here so it is not silently dropped).
                         self._monster_corrupted[mon.code] = effect.value
+                    elif code not in _MONSTER_EFFECT_CARVEOUTS:
+                        # Parser-coverage guard: an unmapped monster ability would
+                        # silently corrupt predict_win (the combat veto the whole bot
+                        # trusts). Fail loudly, naming the monster + code, so it gets
+                        # modeled or carved out before the bot acts on it.
+                        raise GameDataCoverageError(
+                            f"monster {mon.code!r} carries unmapped effect code "
+                            f"{code!r}: model it in predict_win or add a documented "
+                            "entry to _MONSTER_EFFECT_CARVEOUTS")
             # OpenAPI conformance fields (Item 14 remediation).
             # Defensive getattr keeps older API clients green.
             min_gold = getattr(mon, "min_gold", 0)
