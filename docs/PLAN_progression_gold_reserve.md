@@ -1,7 +1,9 @@
 # PLAN: progression-driven gold reserve (replaces flat GOLD_RESERVE=500)
 
-Status: SPEC CAPTURED 2026-06-18 (from audit #9 reframe). Needs brainstorming
-before implementation. NOT a literal swap — a new calculated model.
+Status: DESIGNED 2026-06-18. Authoritative design + settled decisions:
+`docs/superpowers/specs/2026-06-18-progression-gold-reserve-design.md`.
+The open questions below are RESOLVED there (floor+deduction; gear+crafting+boss-
+stub; +2 horizon; buy-only cost; all-3 gates; proven core). Next: writing-plans.
 
 ## User's vision (verbatim intent)
 
