@@ -111,6 +111,17 @@ theorem productionLadder_eq_sellPressured (s : State)
   simp [productionLadder, allInLadderOrder,
     h0, h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, hfire]
 
+/-- `bankUnlock` (slot 2, a FIGHT means) is selected when it fires and the two
+    higher slots (hpCritical, restForCombat) are quiet. Used by the B-0 bootstrap
+    descent: in the window a level-up can RE-ARM bankUnlock, but bankUnlock also
+    dispatches `.fight`, so the cycle fights whether bankUnlock or
+    reachUnlockLevel is selected. -/
+theorem productionLadder_eq_bankUnlock (s : State)
+    (h0 : fires .hpCritical s = false) (h1 : fires .restForCombat s = false)
+    (hfire : fires .bankUnlock s = true) :
+    productionLadder s = some .bankUnlock := by
+  simp [productionLadder, allInLadderOrder, h0, h1, hfire]
+
 /-- `reachUnlockLevel` (slot 3, a FIGHT means) is selected when it fires and the
     three higher slots (hpCritical, restForCombat, bankUnlock) are quiet. Used by
     the B-0 bootstrap reach: in the under-bankRequiredLevel window reachUnlockLevel

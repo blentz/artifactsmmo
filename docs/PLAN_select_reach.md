@@ -184,7 +184,21 @@ assumption left.
     server fact bridging `level < bankRequiredLevel` to `level < 50`.
   Also cleaned the `unusedSimpArgs` (`List.findSome?_cons`) warnings in
   BlockerSelection.lean.
-  NEXT: the descent assembly — (1) quiet-prefix persistence (a window-invariant
-  `W s` preserved by `cycleStep` while `level < bankRequiredLevel`; tractable
-  because `.fight` preserves hp/maxHp and bankUnlock only retires), then (2)
-  `reaches_bankRequiredLevel` by well-founded recursion on `measureLt`.
+- 2026-06-18: **B-0 COMPLETE.** `reaches_bankRequiredLevel` proven (axioms =
+  {propext, Quot.sound, xpToNextLevel}): from the combat-rest interrupts
+  initially quiet + window bounds (bankRequiredLevel>0, ≤50, gap≤5),
+  `∃k, (cycleStepN k s).level ≥ bankRequiredLevel`, by well-founded recursion on
+  the lex `Measure` (`measureLt_wellFounded`). Supporting bricks:
+  * `cycleStep_fights_in_window` — robust to bankUnlock RE-ARMING: a level-up can
+    re-arm bankUnlock (it reads `level`), but bankUnlock also dispatches `.fight`,
+    so the cycle fights whether bankUnlock or reachUnlockLevel is selected. Only
+    hpCritical/restForCombat must stay quiet. Added `productionLadder_eq_bankUnlock`
+    to BlockerSelection.lean.
+  * `fightKind_preserves_hpCriticalFires` / `_restForCombatFires` (both `rfl`) +
+    `fightKind_level_ge` — the persistence + monotone-level facts; `.fight`
+    preserves hp/maxHp/restForCombatReady, and `bankRequiredLevel_cycleStep`
+    (existing) gives bankRequiredLevel invariance.
+  NO perception/fairness hypothesis needed in the bootstrap window — the
+  transience-core silver lining realized. NEXT: post-B-0 — the MODEL EXTENSION
+  (perception-refresh) + O5.4 SELECT-side DIFFERENTIAL to discharge the chore-clear
+  + `hperc` out of the window (the §"CHOSEN POST-B-0 DIRECTION" plan above).
