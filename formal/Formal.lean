@@ -164,6 +164,7 @@ import Formal.Liveness.PerceptionInvariant
 import Formal.Liveness.FightFairness
 import Formal.Liveness.BlockerQuieting
 import Formal.Liveness.BlockerMonotone
+import Formal.Liveness.BlockerSelection
 import Formal.Liveness.BlockerSettled
 import Formal.Liveness.SettledWitness
 import Formal.Liveness.SettledReach
