@@ -202,7 +202,7 @@ def sellPressuredFires (s : State) : Bool :=
     `lowYieldSampleThreshold` is the opaque positive `Nat` declared above.
     Restricted to in-progress phase (the only phase where farm samples
     accrue against an active task). -/
-noncomputable def lowYieldCancelFires (s : State) : Bool :=
+def lowYieldCancelFires (s : State) : Bool :=
   decide (s.taskLifecyclePhase = .inProgress)
   && decide (s.actionsAttempted ≥ lowYieldSampleThreshold)
 
@@ -292,10 +292,11 @@ def bankExpandFires (s : State) : Bool :=
     harness asserts agreement with `craft_relief_candidates`. -/
 def craftReliefFires (s : State) : Bool := s.craftReliefFires
 
-/-- Dispatch: per-MeansKind firing predicate.
-    `noncomputable` because `lowYieldCancelFires` references the opaque
-    axiom `lowYieldSampleThreshold` (Phase 23d-5). -/
-noncomputable def fires (k : MeansKind) (s : State) : Bool :=
+/-- Dispatch: per-MeansKind firing predicate. Computable — every branch reads
+    State fields / decides concrete predicates (`lowYieldSampleThreshold` is the
+    concrete `def := 1`, not an axiom), so the ladder is oracle-evaluable for the
+    O5.4 SELECT-side differential. -/
+def fires (k : MeansKind) (s : State) : Bool :=
   match k with
   | .hpCritical       => hpCriticalFires s
   | .restForCombat    => restForCombatFires s
@@ -324,8 +325,9 @@ noncomputable def fires (k : MeansKind) (s : State) : Bool :=
 /-! ## Ladder walk -/
 
 /-- `productionLadder s` = first `MeansKind` in `allInLadderOrder` whose
-    `fires` predicate holds on `s`; `none` if none fire. -/
-noncomputable def productionLadder (s : State) : Option MeansKind :=
+    `fires` predicate holds on `s`; `none` if none fire. Computable (see
+    `fires`) — the oracle evaluates this directly for the O5.4 differential. -/
+def productionLadder (s : State) : Option MeansKind :=
   allInLadderOrder.findSome? (fun k => if fires k s then some k else none)
 
 end Formal.Liveness.ProductionLadder
