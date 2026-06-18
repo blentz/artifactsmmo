@@ -129,9 +129,37 @@ when `objectiveStep` also fires.
 ### Net level-50 end-state (honest)
 Provably reaches 50 given: (i) **B-0** [provable, build next], (ii) a
 **chore-scheduling fairness** assumption, (iii) **`hperc`** perception. (ii)+(iii)
-are the irreducible "model abstracts perception" hypotheses — documented, like
-LIV-001. The selection lemmas (sub-lemma 1) + `reach_and`/`fold` + B-0 are the
-in-model parts; the rest is honest hypothesis.
+are the "model abstracts perception" hypotheses — they could be documented like
+LIV-001, BUT see the chosen direction below.
+
+## CHOSEN POST-B-0 DIRECTION (decision 2026-06-18): EXTEND MODEL + O5.4 DIFFERENTIAL
+
+Rather than accept (ii)+(iii) as LIV-001-class assumptions, DISCHARGE them
+in-model:
+
+1. **Model extension — perception refresh.** Add a `perceptionRefresh : State →
+   State` step (folded into `cycleStep`, or a pre-pass) that, when the committed
+   objective's planner head action is a Fight, SETS `objectiveStepFires = true` /
+   `objectiveStepIsFight = true` (and recomputes the chore flags from the perceived
+   state). This makes the perception fields PRODUCIBLE in-model — overturning
+   `Settled_unreachable_without_perception`'s premise (which holds only because the
+   current pure transition never sets them) — so `hperc` and the
+   chore-scheduling fairness become provable, not assumed. CAUTION: the extension
+   must not let the model "cheat" (e.g. unconditionally set the fight flag); it
+   must mirror EXACTLY when production's perceive would arm the guard.
+2. **O5.4 SELECT-side differential — faithfulness.** The extension is only honest
+   if the Lean `perceptionRefresh` + `productionLadder` MIRROR production's
+   `perceive` + `StrategyArbiter.select`. Build the differential that feeds
+   reconstructed real fixtures (equipped gear, monster locations, learning
+   history, perception state) into production's `perceive`/`select` and asserts
+   the Lean model computes the SAME flag values + selects the SAME `MeansKind`.
+   `formal/diff/test_cycle_step_diff.py` today binds ONLY `applyActionKind`↔
+   `Action.apply` (TRACKED_FIELDS = level/xp/task/gold) and bypasses select +
+   perception — this differential extends it to the SELECT + perceive path.
+
+Net after this: level-50 is fully kernel-checked + differentially-guaranteed
+modulo only LIV-001 (the server xp-curve axiom) — no perception/fairness
+assumption left.
 
 ## Status
 - 2026-06-18: scoped.
