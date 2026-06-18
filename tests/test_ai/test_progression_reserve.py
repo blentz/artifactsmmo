@@ -42,3 +42,26 @@ def test_gear_targets_skips_out_of_horizon():
     gd._item_stats["iron_armor"].level = 99  # far above level+2
     state = make_state(level=5, equipment={"body_armor_slot": "rags"})
     assert gear_targets(state, gd) == {}
+
+
+def test_buy_price_prefers_ge_when_cheaper():
+    """GE sell order cheaper than NPC → buy_price returns the GE price."""
+    gd = GameData()
+    gd._item_stats = {
+        "iron_armor": ItemStats(code="iron_armor", level=5, type_="body_armor", hp_bonus=40),
+    }
+    gd._npc_stock = {"merchant": {"iron_armor": 200}}
+    # GE sell order: (order_id, price, quantity); price 80 < NPC 200
+    gd._ge_sell_orders = {"iron_armor": ("order-1", 80, 10)}
+    assert buy_price("iron_armor", gd) == 80
+
+
+def test_buy_price_uses_ge_when_no_npc():
+    """Item only available via a GE sell order → buy_price returns the GE price."""
+    gd = GameData()
+    gd._item_stats = {
+        "silver_ring": ItemStats(code="silver_ring", level=3, type_="ring", hp_bonus=5),
+    }
+    gd._npc_stock = {}
+    gd._ge_sell_orders = {"silver_ring": ("order-99", 150, 5)}
+    assert buy_price("silver_ring", gd) == 150

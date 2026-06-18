@@ -15,9 +15,10 @@ _HORIZON = 2  # reserve for upgrades usable within the next 2 character levels
 
 def buy_price(code: str, game_data: GameData) -> int | None:
     """Cheapest gold price to BUY one `code` (min over NPC sellers and the GE
-    best buy order), or None when nothing sells it."""
+    best SELL order — the standing sell order the player fills when buying),
+    or None when nothing sells it."""
     prices: list[int] = [p for _npc, p in game_data.npcs_selling_item(code)]
-    ge = game_data.ge_best_buy_order(code)
+    ge = game_data.ge_best_sell_order(code)
     if ge is not None:
         prices.append(ge[1])
     return min(prices) if prices else None
