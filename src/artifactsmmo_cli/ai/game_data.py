@@ -22,7 +22,9 @@ from artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get import 
 from artifactsmmo_api_client.api.np_cs.get_all_npcs_items_npcs_items_get import sync as get_all_npc_items
 from artifactsmmo_api_client.api.resources.get_all_resources_resources_get import sync as get_all_resources
 from artifactsmmo_api_client.models.bank_schema import BankSchema
+from artifactsmmo_api_client.models.craft_skill import CraftSkill
 from artifactsmmo_api_client.models.event_schema import EventSchema
+from artifactsmmo_api_client.models.gathering_skill import GatheringSkill
 from artifactsmmo_api_client.models.ge_order_type import GEOrderType
 from artifactsmmo_api_client.models.item_schema import ItemSchema
 from artifactsmmo_api_client.models.map_content_type import MapContentType
@@ -41,6 +43,15 @@ from artifactsmmo_cli.ai.monster_catalog import MonsterCatalog
 from artifactsmmo_cli.ai.recipe_catalog import RecipeCatalog
 
 __all__ = ["_GATHERING_SKILLS", "GameData", "ItemStats"]
+
+# Workshop map-content codes name their skill; the vocabulary is the API
+# schema's craft + gathering skills (CraftSkill/GatheringSkill enums), NOT a
+# hand-maintained list — a skill the server adds appears here on client regen
+# instead of silently getting no workshop location. No skill name is a substring
+# of another, so the set's iteration order does not affect the match.
+_WORKSHOP_SKILLS: frozenset[str] = (
+    frozenset(s.value for s in CraftSkill) | frozenset(s.value for s in GatheringSkill)
+)
 
 # Parser-coverage guard (docs/PLAN_game_modeling_roadmap.md): monster ability
 # effect codes the parser intentionally does NOT map to a predict_win term, but
@@ -996,9 +1007,9 @@ class GameData:
             elif ct == MapContentType.NPC:
                 self._npc_locations[code] = loc
             elif ct == MapContentType.WORKSHOP:
-                # code is workshop identifier — match to crafting skills by substring
-                for skill in ("mining", "woodcutting", "weaponcrafting", "gearcrafting",
-                              "jewelrycrafting", "cooking", "alchemy", "fishing"):
+                # code is a workshop identifier — match to its skill by substring
+                # over the API-derived skill vocabulary (_WORKSHOP_SKILLS).
+                for skill in _WORKSHOP_SKILLS:
                     if skill in code:
                         self._workshop_locations[skill] = loc
                         break

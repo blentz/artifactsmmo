@@ -11,7 +11,8 @@ full Lean lockstep + `formal/gate.sh` + commit. Check the box when committed.
 
 ## Tier 1 — discards computable signal AND flips a real decision
 
-- [ ] **#1 Multi-yield gather** — `min_gathers.py:70-72`, `gathering.py:84,96`.
+- [x] **#1 Multi-yield gather** — DONE (commit 0a2ba12, gate green). Global-max
+  `ceil_gathers` at routing/gate layer; extracted core untouched. — `min_gathers.py:70-72`, `gathering.py:84,96`.
   Assumes 1 gather = +1 drop. `resource_drop_table()` exposes `(item, rate,
   min_qty, max_qty)`. True lower bound = `ceil(remaining / max_yield)` (best
   case), TIGHTER than `remaining`; current over-count can mark a reachable gear
@@ -42,7 +43,9 @@ full Lean lockstep + `formal/gate.sh` + commit. Check the box when committed.
   policy says FAIL on unknown skill, not score 0. Decide fail-fast vs derive-
   exhaustive. FORMAL: dispatch exhaustiveness may touch DecideKey-style proofs.
 
-- [ ] **#5 Workshop→skill substring loop** — `game_data.py:985`. New craft
+- [x] **#5 Workshop→skill substring loop** — DONE. Hardcoded 8-skill tuple
+  replaced with `_WORKSHOP_SKILLS = CraftSkill ∪ GatheringSkill` (API client
+  enums). No formal impact (loader). — `game_data.py:985`. New craft
   skill's workshop gets no location → crafting silently broken. Sibling
   `_resource_skill` build at `:1148` already reads `res.skill.value` live —
   follow it. Self-contained in the loader.
