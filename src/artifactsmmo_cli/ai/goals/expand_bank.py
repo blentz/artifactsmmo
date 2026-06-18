@@ -1,10 +1,10 @@
 """ExpandBankGoal: buy more bank slots when bank fills up."""
 
 from artifactsmmo_cli.ai.bank_expansion_timing import should_expand_bank
-from artifactsmmo_cli.ai.craft_vs_buy import GOLD_RESERVE
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.progression_reserve import reserve_floor
 from artifactsmmo_cli.ai.world_state import WorldState
 
 # value() activates at or above a 95/100 fill ratio (exact integer threshold,
@@ -40,11 +40,12 @@ class ExpandBankGoal(Goal):
         if used is None or game_data.bank_capacity == 0:
             return 0.0
         # Fire only at/above the fill threshold AND when buying keeps gold at or
-        # above GOLD_RESERVE (the SAFETY-HOLE fix: the old bare gold >= cost test
-        # could drain gold below the reserve). Exact integer threshold, no float.
+        # above the progression reserve floor. A bank expansion is never a
+        # reserved gear code so buying=None applies the full floor.
+        # Exact integer threshold, no float.
         if not should_expand_bank(
             used, game_data.bank_capacity, state.gold,
-            game_data.next_expansion_cost, GOLD_RESERVE,
+            game_data.next_expansion_cost, reserve_floor(state, game_data, None),
             _TRIGGER_FILL_NUM, _TRIGGER_FILL_DEN,
         ):
             return 0.0
