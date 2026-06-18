@@ -645,11 +645,14 @@ open Formal.Liveness.FightReady
 #print axioms hfightFires_of_fightReady
 #print axioms ai_reaches_level_fifty_of_fightReady
 
--- O5.2 gear-tier part 2 brick 1 (2026-06-16): WinnableAtEveryLevel (the gear-tier
--- guarantee — a winnable XP-positive monster exists at every level) grounds combat-
--- target existence via the proven picker headline, hence grounds objectiveStepFires/
--- IsFight. The opaque-bool BINDING + the catalog derivation of WinnableAtEveryLevel
--- are the named O5.4 residual.
+-- O5.2 gear-tier part 2 (2026-06-17): WinnableAcrossBand (the gear-tier guarantee — a
+-- winnable XP-positive monster exists at every level the char actually reaches, 1≤L<50)
+-- grounds combat-target existence via the proven picker headline, hence grounds
+-- objectiveStepFires/IsFight. Brick 2 closed a vacuity trap: the earlier ∀-Int form is
+-- unsatisfiable for any finite catalog (xpPos fades at high L), so it is now band-
+-- restricted and SATISFIABILITY-witnessed. The opaque-bool BINDING + the catalog
+-- derivation of WinnableAcrossBand are the named O5.4 residual.
 open Formal.Liveness.GearTierLeveling
+#print axioms winnableAcrossBand_satisfiable
 #print axioms combatTargetExists_of_gearTier
 #print axioms combatObjective_live_below_fifty
