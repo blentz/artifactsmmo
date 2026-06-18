@@ -1,6 +1,14 @@
 # tests/test_ai/test_progression_reserve.py
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.progression_reserve import buy_price, crafting_unlock_targets, gear_targets
+from artifactsmmo_cli.ai.progression_reserve import (
+    boss_targets,
+    buy_price,
+    crafting_unlock_targets,
+    gear_targets,
+    progression_reserve,
+    reserve_floor,
+    reserved_targets,
+)
 from tests.test_ai.fixtures import make_state
 
 
@@ -120,3 +128,25 @@ def test_crafting_unlock_skips_craftable_inputs():
     gd._monster_level = {"chicken": 1}
     state = make_state(level=5, skills={"weaponcrafting": 1})
     assert crafting_unlock_targets(state, gd) == {}
+
+
+def test_boss_targets_is_stub_empty():
+    gd = _gd_buyable_armor()
+    assert boss_targets(make_state(level=5), gd) == {}
+
+
+def test_reserved_targets_unions_sources():
+    gd = _gd_buyable_armor()
+    state = make_state(level=5, equipment={"body_armor_slot": "rags"})
+    assert reserved_targets(state, gd) == {"iron_armor": 120}
+    assert progression_reserve(state, gd) == 120
+
+
+def test_reserve_floor_deducts_when_buying_a_reserved_item():
+    gd = _gd_buyable_armor()
+    state = make_state(level=5, equipment={"body_armor_slot": "rags"})
+    # buying the reserved iron_armor -> its 120 is credited -> floor 0
+    assert reserve_floor(state, gd, "iron_armor") == 0
+    # buying something else -> full floor 120
+    assert reserve_floor(state, gd, "copper_ore") == 120
+    assert reserve_floor(state, gd, None) == 120

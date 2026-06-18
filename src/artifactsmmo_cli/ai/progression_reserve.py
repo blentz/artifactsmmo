@@ -7,6 +7,7 @@ Craftable-now / unsellable items contribute nothing (no gold needed).
 """
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.progression_reserve_core import effective_floor, reserve_total
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -99,3 +100,32 @@ def crafting_unlock_targets(state: WorldState, game_data: GameData) -> dict[str,
                 continue
             out[material] = qty * price
     return out
+
+
+def boss_targets(state: WorldState, game_data: GameData) -> dict[str, int]:
+    """Boss-odds reservation — STUB. Reserving for boss-fight items needs the
+    boss-pursuit machinery (winnability + event/boss drop identification) that is
+    not yet built (docs/PLAN_calculate_not_hardcode.md #9, roadmap5). Returns no
+    targets until that lands; this is the documented extension point."""
+    return {}
+
+
+def reserved_targets(state: WorldState, game_data: GameData) -> dict[str, int]:
+    """All unmet near-term BUY-acquired progression targets -> buy price, unioned
+    across the category sources. Same code from two sources prices identically
+    (min npc/ge), so dict union is unambiguous."""
+    targets: dict[str, int] = {}
+    for source in (gear_targets, crafting_unlock_targets, boss_targets):
+        targets.update(source(state, game_data))
+    return targets
+
+
+def progression_reserve(state: WorldState, game_data: GameData) -> int:
+    """Total gold reserved for near-term progression (replaces GOLD_RESERVE)."""
+    return reserve_total(reserved_targets(state, game_data))
+
+
+def reserve_floor(state: WorldState, game_data: GameData,
+                  buying: str | None) -> int:
+    """The deduction-aware reserve floor that applies while buying `buying`."""
+    return effective_floor(reserved_targets(state, game_data), buying)
