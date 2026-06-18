@@ -108,3 +108,6 @@ _best_consumable`.
 - 2026-06-18: audit complete; plan written. Starting #1.
 - 2026-06-18: #1, #3, #4 (4a+DRY+4c), #5 done & gate-green; #6 closed; forks
   resolved. Slot cluster next, #9 feature queued last.
+- 2026-06-18: slot cluster #2/#7/#8 done & gate-green (commit e1c99da). ALL audit
+  items resolved EXCEPT #9 (progression-reserve feature, queued — needs
+  brainstorming; spec docs/PLAN_progression_gold_reserve.md).
