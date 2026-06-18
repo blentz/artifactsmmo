@@ -47,8 +47,9 @@ perception-refresh step (PLAN_select_reach.md §"CHOSEN POST-B-0 DIRECTION").
 ### Brick 2 — oracle entry `ladder_fires` (Lean side)
 New `runLadder` in `Oracle.lean`: parse a flat arg layout into a
 `Formal.Liveness.Measure.State` (the ~40 fields the firing predicates READ; rest
-get inert defaults), return per-slot `fires k s` (22 Bools, in `allInLadderOrder`)
-+ `productionLadder s` (the selected MeansKind index, or -1). Mirror the existing
+get inert defaults), return per-slot `fires k s` (23 Bools, in `allInLadderOrder` — `allInLadderOrder.
+length = 23`, proven in MeansKind.lean) + `productionLadder s` (the selected
+MeansKind name, or `null`). Mirror the existing
 flat-`intArg` entries (e.g. `runBankSelection`, Oracle.lean:606). Wire a
 `"ladder_fires"` dispatch key. Verify with a couple of `oracle_client` round-trips.
 SIZE: medium (field plumbing). RISK: low (additive).

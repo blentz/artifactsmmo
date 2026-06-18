@@ -19,6 +19,9 @@ open Formal.Phase7Invariants
 open Formal.StoreWarmup
 open Formal.WinnableCascade
 open Formal.NearestTile
+open Formal.Liveness.MeansKind (allInLadderOrder)
+open Formal.Liveness.ProductionLadder (fires productionLadder)
+open Formal.Liveness.LadderEval (inertLadderState meansKindName)
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
 def runCalculatePath (sx sy ex ey : Int) : Json :=
@@ -1901,6 +1904,83 @@ def runGatherPlannable (args : Array Json) : Json :=
     (intArg args 2).toNat (intArg args 3).toNat (intArg args 4).toNat (intArg args 5).toNat
   Json.mkObj [("plannable", Json.bool p)]
 
+/-- Evaluate the production liveness ladder (`Formal.Liveness.ProductionLadder`)
+on a JSON-supplied `State`: emit `fires k s` for every `k` in
+`allInLadderOrder` plus `productionLadder s` (the SELECTED MeansKind).
+
+This is the Lean side of the O5.4 SELECT-side differential. Brick 3's Python
+harness MUST produce the IDENTICAL flat-`intArg` layout below (Bools encoded as
+0/1; the enum `taskLifecyclePhase` encoded as an Int). Every State field that
+ANY `*Fires` predicate in `ProductionLadder.lean` reads is plumbed; all other
+`State` fields take `inertLadderState`'s neutral values.
+
+ARG LAYOUT (flat ints; index → field):
+* `[0]`  hp                          (Nat)
+* `[1]`  maxHp                        (Nat)
+* `[2]`  level                        (Nat)
+* `[3]`  xp                           (Nat)
+* `[4]`  initialXp                    (Nat)
+* `[5]`  bankRequiredLevel            (Nat)
+* `[6]`  unlockMonsterLevel           (Nat)
+* `[7]`  inventoryUsed                (Nat)
+* `[8]`  inventoryMax                 (Nat)
+* `[9]`  taskCoinsTotal               (Nat)
+* `[10]` taskExchangeMinCoins         (Nat)
+* `[11]` actionsAttempted             (Nat)
+* `[12]` gold                         (Nat)
+* `[13]` bankItemsCount               (Nat)
+* `[14]` bankCapacity                 (Nat)
+* `[15]` nextExpansionCost            (Nat)
+* `[16]` taskLifecyclePhase           (Int enum: 0→none, 1→accepted,
+                                        2→inProgress, 3→complete; else none)
+* `[17]` bankAccessible               (Bool 0/1)
+* `[18]` bankUnlockMonsterPresent     (Bool 0/1)
+* `[19]` hasOverstockItems            (Bool 0/1)
+* `[20]` selectBankDepositsNonempty   (Bool 0/1)
+* `[21]` pendingItemsNonempty         (Bool 0/1)
+* `[22]` sellableInventoryNonempty    (Bool 0/1)
+* `[23]` recyclableSurplusNonempty    (Bool 0/1)
+* `[24]` taskFeasibleProjected        (Bool 0/1)
+* `[25]` restForCombatReady           (Bool 0/1)
+* `[26]` gearReviewFires              (Bool 0/1)
+* `[27]` craftReliefFires             (Bool 0/1)
+* `[28]` objectiveStepFires           (Bool 0/1)
+* `[29]` maintainConsumablesFires     (Bool 0/1)
+* `[30]` bankItemsKnown               (Bool 0/1)
+
+Emits a JSON object: one Bool field per MeansKind keyed by `meansKindName`
+(23 fields), plus `"selected"`: the name of `productionLadder s` or `null`. -/
+def runLadder (args : Array Json) : Json :=
+  let n := fun i => (intArg args i).toNat
+  let b := fun i => intArg args i != 0
+  let phase : Formal.Liveness.TaskLifecyclePhase.TaskLifecyclePhase :=
+    match intArg args 16 with
+    | 1 => .accepted
+    | 2 => .inProgress
+    | 3 => .complete
+    | _ => .none
+  let s : Formal.Liveness.Measure.State := { inertLadderState with
+    hp := n 0, maxHp := n 1, level := n 2, xp := n 3, initialXp := n 4,
+    bankRequiredLevel := n 5, unlockMonsterLevel := n 6,
+    inventoryUsed := n 7, inventoryMax := n 8,
+    taskCoinsTotal := n 9, taskExchangeMinCoins := n 10,
+    actionsAttempted := n 11, gold := n 12,
+    bankItemsCount := n 13, bankCapacity := n 14, nextExpansionCost := n 15,
+    taskLifecyclePhase := phase,
+    bankAccessible := b 17, bankUnlockMonsterPresent := b 18,
+    hasOverstockItems := b 19, selectBankDepositsNonempty := b 20,
+    pendingItemsNonempty := b 21, sellableInventoryNonempty := b 22,
+    recyclableSurplusNonempty := b 23, taskFeasibleProjected := b 24,
+    restForCombatReady := b 25, gearReviewFires := b 26,
+    craftReliefFires := b 27, objectiveStepFires := b 28,
+    maintainConsumablesFires := b 29, bankItemsKnown := b 30 }
+  let firesFields : List (String × Json) :=
+    allInLadderOrder.map (fun k => (meansKindName k, Json.bool (fires k s)))
+  let selected : Json := match productionLadder s with
+    | some k => Json.str (meansKindName k)
+    | none => Json.null
+  Json.mkObj (firesFields ++ [("selected", selected)])
+
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
   let args := ((item.getObjValD "args" |>.getArr?).toOption.getD #[])
@@ -2055,6 +2135,8 @@ def runOne (item : Json) : Json :=
     runDoomedIsDoomed args
   else if kind == "gather_plannable" then
     runGatherPlannable args
+  else if kind == "ladder_fires" then
+    runLadder args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 
