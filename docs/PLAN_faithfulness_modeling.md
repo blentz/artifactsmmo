@@ -181,8 +181,22 @@ the capture fixture.
   `reducer_fires_of_pressured_drainArmed`. With Bricks 1–2 this is the LOCAL engine:
   fill → (pressured∧armed) fires reducer → drains to 0 → gated chores quiet → combat.
   Axioms {propext}. **LOCAL ENGINE COMPLETE (Bricks 1, 2, 3a, 3b).**
-- **Brick 3c/3d — the GLOBAL composition (NEXT, the hardest remaining).** Compose the
-  local engine into combat-fires-i.o. 3c: the claim/measure surgery (pendingCount
+- **Brick 3d-prep DONE (2026-06-19, commit 1f69623)** — `BurstStep.lean`:
+  `cycleStepF_drains_via_discardHigh` — the one-step drain (pressured + overstock +
+  7 higher slots quiet ⇒ cycle selects discardHigh ⇒ inventoryUsed = 0). Composes
+  3b + the discardHigh selection lemma + Brick 2. The drain step 3d iterates.
+- **Brick 3c/3d — the GLOBAL synthesis (NEXT, the hardest remaining).** Compose the
+  local engine (now incl. the one-step drain) into combat-fires-i.o.
+  Remaining sub-pieces: (i) trajectory assembly — discharge the 7 higher-slots-quiet
+  premises of the drain step along the cycleStepF trajectory (hp rested; bank
+  unlocked post-B-0; not over-pressured into discardCritical/depositFull;
+  craftRelief/gearReview quiet — the last two need the gearReview-loss / craft latch
+  handling); (ii) claim-fuel bound (pendingCount finite + claim-depleted) — the WF
+  problem-child; (iii) bounded-burst WF (each fight fill +≤DROP_BOUND undone by one
+  drain ⇒ bounded burst between combats ⇒ combat selected i.o.); (iv) `Blockers
+  QuietBelowCapInfinitelyOftenP` for cycleStepF (modulo RuntimeInvariant) ⇒ re-derive
+  reach-50 for cycleStepF (engine not reusable). The capstone re-derivation + WF is
+  the focused-session core; serialize the gate [[feedback_serialize_gate_runs]]. 3c: the claim/measure surgery (pendingCount
   component above bankPressure, or a separate `measureF`+WF for cycleStepF — high-
   ripple, touches measureLt_wellFounded). 3d: bounded-burst counting → `Blockers
   QuietBelowCapInfinitelyOftenP` for cycleStepF (modulo RuntimeInvariant) → re-derive
