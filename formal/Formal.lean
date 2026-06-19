@@ -169,6 +169,7 @@ import Formal.Liveness.BlockerSelection
 import Formal.Liveness.BootstrapReach
 import Formal.Liveness.PerceptionRefresh
 import Formal.Liveness.CycleStepP
+import Formal.Liveness.FightFairnessP
 import Formal.Liveness.BlockerSettled
 import Formal.Liveness.SettledWitness
 import Formal.Liveness.SettledReach

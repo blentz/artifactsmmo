@@ -122,4 +122,61 @@ theorem perceptionRefresh_fires_reachUnlockLevel (s : State) :
     fires .reachUnlockLevel (perceptionRefresh s) = fires .reachUnlockLevel s := by
   unfold perceptionRefresh; split <;> rfl
 
+/-! ## Fire-predicate preservation for the remaining `objectiveStepBlockers`
+slots (idx 4–13 of `allInLadderOrder`). Brick 4's selection-state discharge needs
+EVERY higher-than-objectiveStep means quiet on `perceptionRefresh s`; the four
+bootstrap-window fires above cover idx 0–3, and these ten cover the rest. None
+read the two objective Bools `perceptionRefresh` touches, so each is unchanged —
+same `unfold perceptionRefresh; split <;> rfl` discharge. -/
+
+/-- `perceptionRefresh` preserves the discardCritical fire. -/
+theorem perceptionRefresh_fires_discardCritical (s : State) :
+    fires .discardCritical (perceptionRefresh s) = fires .discardCritical s := by
+  unfold perceptionRefresh; split <;> rfl
+
+/-- `perceptionRefresh` preserves the craftRelief fire. -/
+theorem perceptionRefresh_fires_craftRelief (s : State) :
+    fires .craftRelief (perceptionRefresh s) = fires .craftRelief s := by
+  unfold perceptionRefresh; split <;> rfl
+
+/-- `perceptionRefresh` preserves the depositFull fire. -/
+theorem perceptionRefresh_fires_depositFull (s : State) :
+    fires .depositFull (perceptionRefresh s) = fires .depositFull s := by
+  unfold perceptionRefresh; split <;> rfl
+
+/-- `perceptionRefresh` preserves the discardHigh fire. -/
+theorem perceptionRefresh_fires_discardHigh (s : State) :
+    fires .discardHigh (perceptionRefresh s) = fires .discardHigh s := by
+  unfold perceptionRefresh; split <;> rfl
+
+/-- `perceptionRefresh` preserves the gearReview fire. -/
+theorem perceptionRefresh_fires_gearReview (s : State) :
+    fires .gearReview (perceptionRefresh s) = fires .gearReview s := by
+  unfold perceptionRefresh; split <;> rfl
+
+/-- `perceptionRefresh` preserves the claimPending fire. -/
+theorem perceptionRefresh_fires_claimPending (s : State) :
+    fires .claimPending (perceptionRefresh s) = fires .claimPending s := by
+  unfold perceptionRefresh; split <;> rfl
+
+/-- `perceptionRefresh` preserves the completeTask fire. -/
+theorem perceptionRefresh_fires_completeTask (s : State) :
+    fires .completeTask (perceptionRefresh s) = fires .completeTask s := by
+  unfold perceptionRefresh; split <;> rfl
+
+/-- `perceptionRefresh` preserves the sellPressured fire. -/
+theorem perceptionRefresh_fires_sellPressured (s : State) :
+    fires .sellPressured (perceptionRefresh s) = fires .sellPressured s := by
+  unfold perceptionRefresh; split <;> rfl
+
+/-- `perceptionRefresh` preserves the lowYieldCancel fire. -/
+theorem perceptionRefresh_fires_lowYieldCancel (s : State) :
+    fires .lowYieldCancel (perceptionRefresh s) = fires .lowYieldCancel s := by
+  unfold perceptionRefresh; split <;> rfl
+
+/-- `perceptionRefresh` preserves the taskCancel fire. -/
+theorem perceptionRefresh_fires_taskCancel (s : State) :
+    fires .taskCancel (perceptionRefresh s) = fires .taskCancel s := by
+  unfold perceptionRefresh; split <;> rfl
+
 end Formal.Liveness.PerceptionRefresh
