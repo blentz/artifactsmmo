@@ -216,4 +216,22 @@ must report `I` honestly even if `I` is non-trivial.
 - 2026-06-18: drafted. Phase 0 (faithfulness probe) is the lynchpin and gates all
   modeling detail — its output fixes the State fields and the abstraction level.
   Awaiting scope decision (Workstream A only vs A+B) before Phase 0 build.
+- 2026-06-18: scope = A+B, Phase 0 COMPLETE (abstraction decided, see Phase-0
+  FINDINGS above).
+- 2026-06-19: **Workstream B Phase-1 infra COMPLETE** (commits 6a05d5c, 3aaed18,
+  8afdb43). Built: (1) `snapshot_game_data.py` serializes item combat stats; (2)
+  `capture_base_stats.py` — user-run live tool, strips all 16 equip slots to read
+  per-level BASE stats, resumable merge, try/finally restore, 5 mocked tests; (3)
+  `best_weapon_for_level` catalog proxy (100% cov, 7 tests); (4)
+  `formal/diff/test_winnable_across_band_diff.py` — per-level sweep with REAL
+  `is_winnable`, faithful base+weapon WorldState, optimistic-weapon proxy
+  documented, SKIPS until fixtures captured (2 synthetic tests green).
+  **USER ACTION (the long pole):** (a) re-run `snapshot_game_data.py` against live
+  API (combat fields); (b) run `capture_base_stats.py <char>` once per level 1..49
+  over a real session. Then the real sweep validates WinnableAcrossBand.
+- NEXT: **Workstream A Phase 1** — the perfect-model core (faithful inventory-
+  pressure State extension + apply cores). Offline, no data dependency. Delicate:
+  extends `Measure.State` (additive; ripples into Oracle 31-int layout + diff
+  harnesses; ~50 dependent proofs must not break) → its own gated, subagent-driven
+  multi-brick effort. Per [[feedback_serialize_gate_runs]] serialize the gate.
 ```
