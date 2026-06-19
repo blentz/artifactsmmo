@@ -34,7 +34,12 @@ Brick-3 work, with the design forks sharpened 2026-06-19, is:
   raises it with no level/xp progress ⇒ measure INCREASES. Add a `pendingCount`
   component ABOVE `bankPressure` (claim depletes its own finite fuel ⇒ descends it).
 * **3d — bounded-burst transience** ⇒ `BlockersQuietBelowCapInfinitelyOftenP`
-  for `cycleStepF` ⇒ reach-50, discharging the residual FAITHFULLY.
+  for `cycleStepF` ⇒ reach-50, discharging the residual FAITHFULLY. The local
+  dichotomy it iterates is now COMPLETE: `BurstStep.cycleStepF_drains_via_discardHigh`
+  (drain side) + `PressureBurst.productionLadder_eq_objectiveStep_of_low_pressure`
+  (fight side). The residual the faithful capstone carries SHRINKS from the 14
+  `objectiveStepBlockers` to the 10 `PressureBurst.nonPressureBlockers` (+ the
+  `Drainability.RuntimeInvariant`): the 4 pressure-gated chores are proven transient.
 
 Additive only; axioms ⊆ {propext, Quot.sound, …measure-chain}. Liveness namespace. -/
 

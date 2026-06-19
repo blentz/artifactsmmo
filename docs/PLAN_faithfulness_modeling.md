@@ -185,8 +185,20 @@ the capture fixture.
   `cycleStepF_drains_via_discardHigh` — the one-step drain (pressured + overstock +
   7 higher slots quiet ⇒ cycle selects discardHigh ⇒ inventoryUsed = 0). Composes
   3b + the discardHigh selection lemma + Brick 2. The drain step 3d iterates.
+- **Brick 3c-prep DONE (2026-06-19, commit 0be0865)** — `PressureBurst.lean`: the
+  FIGHT side of the local dichotomy + the residual-shrink partition.
+  `productionLadder_eq_objectiveStep_of_low_pressure` (low pressure + 10
+  non-pressure blockers quiet + objective armed ⇒ ladder selects objectiveStep =
+  fights) is the symmetric counterpart to 3d-prep's `cycleStepF_drains_via_discardHigh`.
+  `nonPressureBlockers` (the 10) + `objectiveStepBlockers_quiet_of_low_pressure`
+  (the 14→4+10 partition: Brick-1 low-pressure silences the 4 pressure-gated chores,
+  so "10 quiet" ⇒ "14 quiet") NAME the residual shrink mechanically: the faithful
+  cycleStepF capstone carries the **10** non-pressure blockers (+ RuntimeInvariant),
+  not the 14. Axioms {propext, Quot.sound} (no LIV-001 — pure selection mechanics).
+  **LOCAL DICHOTOMY NOW COMPLETE** (drain side + fight side); 3d is the global
+  iteration.
 - **Brick 3c/3d — the GLOBAL synthesis (NEXT, the hardest remaining).** Compose the
-  local engine (now incl. the one-step drain) into combat-fires-i.o.
+  local dichotomy (drain side 3d-prep + fight side 3c-prep) into combat-fires-i.o.
   Remaining sub-pieces: (i) trajectory assembly — discharge the 7 higher-slots-quiet
   premises of the drain step along the cycleStepF trajectory (hp rested; bank
   unlocked post-B-0; not over-pressured into discardCritical/depositFull;
