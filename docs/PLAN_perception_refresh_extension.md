@@ -137,5 +137,33 @@ transience) remain. Three honest options:
 - **(C) Also tackle WinnableAcrossBand (#4)** via live-catalog binding in the same
   effort, shrinking the residual to {LIV-001, BlockersQuietInfinitelyOften}.
 
-## Status
-- 2026-06-18: scoped. Prereqs B-0 + O5.4 both COMPLETE. Awaiting direction on A/B/C.
+## Status — COMPLETE (Option A, 2026-06-18)
+All 6 bricks landed on main (subagent-driven, implementer + adversarial reviewer
+each; full Python suite green throughout). The objective-committed obligation
+(old `hperc`/`CombatPersistent`) is now PROVEN in-model + differentially validated.
+- Brick 1 — `perceptionRefresh` + preservation bridges (be1685e).
+- Brick 2 — `cycleStepP` + B-0 descent transfer (0c09d67).
+- Brick 3 — `objectiveStepFires` armed along the refreshed trajectory (2ec241a).
+- Brick 4 — `hfightFiresP`, CombatPersistent discharged in-model (ed65764).
+- Brick 5 — `ai_reaches_level_fiftyP` capstone, re-derived (engine not reusable)
+  (a40a7db).
+- Brick 6 — perceive-arm differential, binds `combatObjective_live_below_fifty`
+  to production; surfaces the WinnableAcrossBand gap honestly (caff721).
+
+`ai_reaches_level_fiftyP (s) (h : GlobalInvariantsP s) : ∃k, (cycleStepPN k s).level
+≥ 50`, axioms = {propext, Classical.choice, Quot.sound, xpToNextLevel,
+xpToNextLevel_pos} (identical to the original capstone). NET WIN: CombatPersistent
+moved from assumption to in-model fact.
+
+HONEST RESIDUAL (level-50 reachability for the refreshed cycle now rests on):
+1. LIV-001 (server xp-curve axiom) — irreducible.
+2. WinnableAcrossBand — a winnable in-band monster exists below 50. Satisfiable
+   hypothesis; differentially CHARACTERIZED by Brick 6 (production arms iff
+   winnable); reducible via live-catalog binding (roadmap #4 / option C).
+3. BlockersQuietBelowCapInfinitelyOftenP — the 14 higher ladder slots quiet i.o.
+   (the transience/fairness core). The hard residual; faithfulness is the
+   documented perception-abstraction gap.
+
+NEXT (toward "modulo only LIV-001"): option C — discharge WinnableAcrossBand by
+binding to the live monster catalog; and the BlockersQuietInfinitelyOften
+transience (the genuinely hard remaining core).
