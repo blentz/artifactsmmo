@@ -45,6 +45,26 @@ qty>0 inventory codes outside the keep set, the freeze invariant
 recipe-material walk (the reused fixpoint).
 
 Lean core only — no mathlib.
+
+## ⚠️ MODEL LAG (2026-06-19): the production last-resort relief is NOT yet modelled
+
+`src/.../bank_selection.py` gained a LAST-RESORT branch (commit 4548d9e): when
+`inventory_free == 0` AND nothing is normally bankable (the whole bag is keep-set
+protected), `select_bank_deposits` returns ONE least-critical KEEP item to free a
+slot — otherwise `FightAction` (needs `inventory_free >= 1`) cannot fire and leveling
+stalls (the full-of-useful-items livelock). This model does NOT capture that branch:
+its `State` has no capacity field, so it always takes the normal path. CONSEQUENCES:
+* The `freeze_invariant` (`deposits ∩ keep = ∅`) is FALSE for the production code at
+  `free == 0` — the last-resort deliberately banks a keep item (recoverable). The
+  honest model must RELAX it to "holds while `inventory_free > 0`".
+* The differential (`formal/diff/test_bank_selection_diff.py`) still passes because it
+  drives `inventory_max = 1000` (never `free == 0`), so it does not exercise the new
+  branch — the model is INCOMPLETE here, not contradicted on the tested domain.
+This lag is CONTAINED to this module + its oracle/differential: the liveness chain
+reads only the opaque `selectBankDepositsNonempty` Bool, not these defs. FOLLOW-ON
+(scoped): add `inventoryFree`/capacity to `State`, model `lastResortDeposit`, extend
+`deposits`, relax `freeze_invariant` to `free > 0`, re-prove, and add a `free == 0`
+differential case. Until then the proofs below describe the NORMAL (`free > 0`) path.
 -/
 
 import Formal.RecipeClosure
