@@ -15,13 +15,12 @@ from artifactsmmo_cli.ai.cycle_snapshot import RootScoreView
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.recipe_closure import closure_demand
 from artifactsmmo_cli.ai.shopping_list import shopping_list
-from artifactsmmo_cli.tui.plan_format import short_root
+from artifactsmmo_cli.tui.plan_format import _OBTAIN_RE, short_root
 
 CHOSEN_GLYPH = "●"
 STUB_GLYPH = "○"
 ALT_PAGE_SIZE = 6
 
-_OBTAIN_RE = re.compile(r"ObtainItem\(code='([^']+)', quantity=(\d+)\)")
 _CHARLVL_RE = re.compile(r"ReachCharLevel\(level=(\d+)\)")
 _SKILL_RE = re.compile(r"ReachSkillLevel\(skill='([^']+)', level=(\d+)\)")
 
@@ -103,8 +102,8 @@ def _stub_line(r: RootScoreView, game_data: GameData) -> Text:
     m = _OBTAIN_RE.fullmatch(r.root_repr)
     if m:
         code, qty = m.group(1), m.group(2)
-        verb = "Craft" if game_data.crafting_recipes.get(code) else "Collect"
         recipe = game_data.crafting_recipes.get(code)
+        verb = "Craft" if recipe else "Collect"
         needs = ""
         if recipe:
             needs = "  (needs " + ", ".join(f"{q}x {c}" for c, q in recipe.items()) + ")"

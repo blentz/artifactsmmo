@@ -30,11 +30,11 @@ def build_log_lines(snap: CycleSnapshot) -> list[str]:
     chosen = next((r for r in snap.strategy_ranking if r.root_repr == snap.chosen_root), None)
     if chosen is None:
         return [line1]
-    why = f"   [dim]why:[/dim] {chosen.category} {chosen.score:.2f}"
+    why = f"   why: {chosen.category} {chosen.score:.2f}"
     alts = [r for r in snap.strategy_ranking if r.root_repr != snap.chosen_root][:2]
     if alts:
         alt_text = " | ".join(f"{short_root(r.root_repr)} {r.score:.2f}" for r in alts)
-        why = f"{why}  [dim]alt:[/dim] {alt_text}"
+        why = f"{why}  alt: {alt_text}"
     return [line1, f"[dim]{why}[/dim]"]
 
 
