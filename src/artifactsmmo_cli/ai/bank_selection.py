@@ -74,21 +74,69 @@ def _keep_codes(state: WorldState, game_data: GameData,
     return keep
 
 
+def _sell_value(code: str, game_data: GameData) -> int:
+    buyers = game_data.npcs_buying_item(code)
+    return max((price for _, price in buyers), default=0)
+
+
+def _last_resort_deposit(state: WorldState, game_data: GameData,
+                         profile_codes: frozenset[str]) -> tuple[str, int] | None:
+    """The single least-critical item-stack to bank when the bag is COMPLETELY
+    full of keep-set items, to free exactly one slot.
+
+    Last-resort relief (2026-06-19): a bag with zero free slots and nothing
+    normally bankable is a hard stall — `FightAction.is_applicable` requires
+    `inventory_free >= 1` (combat.py) and no other relief path fires, so the
+    planner drops to WAIT and stops leveling (the confirmed full-of-keep-set
+    livelock). Banking one keep item is fully recoverable (re-withdrawable), so
+    it frees the slot without losing anything.
+
+    Picks the least disruptive stack: NOT immediately critical (best fighting
+    weapon / HP consumable / task item / task coins) before anything else, NOT
+    in the active goal's profile before profile items, then lowest sell-value,
+    then code ascending (deterministic)."""
+    hard_critical: set[str] = {TASKS_COIN_CODE}
+    if state.task_code:
+        hard_critical.add(state.task_code)
+    for code in state.inventory:
+        stats = game_data.item_stats(code)
+        if stats is not None and stats.hp_restore > 0:
+            hard_critical.add(code)
+    weapon = _best_fighting_weapon(state, game_data)
+    if weapon is not None:
+        hard_critical.add(weapon)
+
+    items = [(code, qty) for code, qty in state.inventory.items() if qty > 0]
+    if not items:
+        return None
+    items.sort(key=lambda cq: (cq[0] in hard_critical, cq[0] in profile_codes,
+                               _sell_value(cq[0], game_data), cq[0]))
+    return items[0]
+
+
 def select_bank_deposits(state: WorldState, game_data: GameData,
                          profile_codes: frozenset[str] = frozenset()) -> list[tuple[str, int]]:
     """Items to deposit, ordered (sell_value desc, code asc), excluding the
     keep-set (task item, task coins, HP consumables, best fighting weapon,
     crafting-target materials, AND the active goal's profile codes). Items
-    with no known NPC buy-back price get value 0 and sort last."""
-    keep = _keep_codes(state, game_data, profile_codes)
+    with no known NPC buy-back price get value 0 and sort last.
 
-    def sell_value(code: str) -> int:
-        buyers = game_data.npcs_buying_item(code)
-        return max((price for _, price in buyers), default=0)
+    LAST-RESORT relief: when the bag has ZERO free slots and nothing is normally
+    bankable (the whole bag is keep-set protected), bank ONE least-critical keep
+    item to free a slot — otherwise the bot cannot fight (needs a free slot) and
+    no other relief fires, stalling leveling. Gated on `inventory_free == 0` so
+    the keep-set is untouched while any slack remains."""
+    keep = _keep_codes(state, game_data, profile_codes)
 
     deposits = [
         (code, qty) for code, qty in state.inventory.items()
         if qty > 0 and code not in keep
     ]
-    deposits.sort(key=lambda cq: (-sell_value(cq[0]), cq[0]))
+    deposits.sort(key=lambda cq: (-_sell_value(cq[0], game_data), cq[0]))
+    if deposits:
+        return deposits
+    if state.inventory_free == 0:
+        item = _last_resort_deposit(state, game_data, profile_codes)
+        if item is not None:
+            return [item]
     return deposits
