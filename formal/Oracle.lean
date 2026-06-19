@@ -604,8 +604,10 @@ args layout (Ints; codes/qtys/flags are Nat ≥ 0, attack/sellValue may be any I
 * next: nAttr, then per-item 6-int blocks:
   `code, attack, isWeapon(0/1), isTool(0/1), hpRestore, sellValue`
 * next: fuel
+* next: inventoryMax (capacity; with Σ qty gives inventoryFree for the last-resort branch)
 
-Emits the sorted keep-set codes and the deposit list (codes, in sort order). -/
+Emits the sorted keep-set codes and the deposit list (`selectBankDeposits`, in order:
+normal sorted deposits, else the single last-resort keep item when inventory_free==0). -/
 def runBankSelection (args : Array Json) : Json :=
   let gN := fun i => (intArg args i).toNat
   let tasksCoin := gN 0
@@ -636,9 +638,11 @@ def runBankSelection (args : Array Json) : Json :=
     (List.range nAttr).map (fun k => (gN (p3 + 1 + 6*k), intArg args (p3 + 6 + 6*k)))
   let p4 := p3 + 1 + 6*nAttr
   let fuel := gN p4
+  let inventoryMax := gN (p4 + 1)
   let s : State := {
     tasksCoin := tasksCoin, taskCode := taskCode, taskIsItems := taskIsItems,
-    craftingTarget := craftingTarget, inventory := inventory, equipped := equipped,
+    craftingTarget := craftingTarget, inventory := inventory, inventoryMax := inventoryMax,
+    equipped := equipped,
     recipe := recipeFromTriples triples,
     attack := attrLookup attackTbl id 0,
     isWeapon := attrLookup weaponTbl (fun v => decide (v != 0)) false,
@@ -646,7 +650,7 @@ def runBankSelection (args : Array Json) : Json :=
     hpRestore := attrLookup hpTbl id 0,
     sellValue := attrLookup sellTbl id 0 }
   let keep := (keepList s fuel).mergeSort (· ≤ ·) |>.eraseDups
-  let deps := deposits s fuel
+  let deps := selectBankDeposits s fuel
   let keepJson := Json.arr ((keep.map (fun n => Json.num (Int.ofNat n))).toArray)
   let depsJson := Json.arr ((deps.map
     (fun cq => Json.arr #[Json.num (Int.ofNat cq.1), Json.num (Int.ofNat cq.2)])).toArray)

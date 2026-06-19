@@ -65,6 +65,7 @@ def _build_state(
     task_code: int | None,
     task_is_items: bool,
     crafting_target: int | None,
+    inventory_max: int = 1000,
 ) -> WorldState:
     equipment: dict[str, str | None] = {
         f"slot_{i}": _code(c) for i, c in enumerate(equipped)
@@ -81,7 +82,7 @@ def _build_state(
         x=0,
         y=0,
         inventory={_code(c): q for c, q in inventory.items()},
-        inventory_max=1000,
+        inventory_max=inventory_max,
         equipment=equipment,
         cooldown_expires=None,
         task_code=(_code(task_code) if task_code is not None else None),
@@ -104,6 +105,7 @@ def _encode_args(
     recipes: dict[int, dict[int, int]],
     attrs: dict[int, dict],
     fuel: int,
+    inventory_max: int = 1000,
 ) -> list[int]:
     args: list[int] = [TASKS_COIN_INT]
     args += [1, task_code] if task_code is not None else [0, 0]
@@ -127,7 +129,7 @@ def _encode_args(
     for code, a in attr_items:
         is_weapon = 1 if a["type_"] == "weapon" else 0
         args += [code, a["attack"], is_weapon, 1 if a["is_tool"] else 0, a["hp_restore"], a["sell"]]
-    args += [fuel]
+    args += [fuel, inventory_max]
     return args
 
 
@@ -142,9 +144,11 @@ def _keep_set_ints(state: WorldState, gd: GameData) -> set[int]:
     return out
 
 
-def _run(inventory, equipped, task_code, task_is_items, crafting_target, recipes, attrs, fuel):
+def _run(inventory, equipped, task_code, task_is_items, crafting_target, recipes, attrs, fuel,
+         inventory_max=1000):
     gd = _build_game_data(recipes, attrs)
-    state = _build_state(inventory, equipped, task_code, task_is_items, crafting_target)
+    state = _build_state(inventory, equipped, task_code, task_is_items, crafting_target,
+                         inventory_max)
 
     py_keep = _keep_set_ints(state, gd)
     py_deposits = [
@@ -153,7 +157,8 @@ def _run(inventory, equipped, task_code, task_is_items, crafting_target, recipes
     ]
 
     args = _encode_args(
-        inventory, equipped, task_code, task_is_items, crafting_target, recipes, attrs, fuel
+        inventory, equipped, task_code, task_is_items, crafting_target, recipes, attrs, fuel,
+        inventory_max,
     )
     lean = run_oracle("bank_selection", [args])[0]
     lean_keep = set(lean["keep"])
@@ -257,6 +262,44 @@ def test_recipe_material_is_task_item_freeze_case():
     dep_codes = {c for c, _ in py_deposits}
     assert dep_codes == {5}, f"only unrelated item 5 should deposit, got {dep_codes}"
     assert dep_codes.isdisjoint(py_keep)
+
+
+def test_last_resort_at_full_bag_matches_lean():
+    """free==0 with the whole bag keep-set: Python and Lean both bank ONE least-
+    critical keep item (a recipe material here), agreeing exactly. This exercises the
+    last-resort branch the older cases (inventory_max=1000) never reached."""
+    recipes = {1: {2: 2, 3: 1}}  # task item 1 <- materials 2, 3 (both kept)
+    attrs = {
+        1: {"type_": "resource", "attack": 0, "is_tool": False, "hp_restore": 0, "sell": 5},
+        2: {"type_": "resource", "attack": 0, "is_tool": False, "hp_restore": 0, "sell": 0},
+        3: {"type_": "resource", "attack": 0, "is_tool": False, "hp_restore": 0, "sell": 0},
+    }
+    inventory = {1: 1, 2: 3, 3: 4}  # used = 8 == inventory_max → free == 0
+    py_keep, py_deposits, lean_keep, lean_deposits = _run(
+        inventory, [], 1, True, None, recipes, attrs, 12, inventory_max=8,
+    )
+    assert py_keep == lean_keep
+    assert py_deposits == lean_deposits  # last-resort agreement (codes AND order)
+    assert len(py_deposits) == 1  # exactly one stack freed
+    code, _ = py_deposits[0]
+    # a recipe material (non-critical) is shed before the task item / coins.
+    assert code in {2, 3} and code not in {TASKS_COIN_INT, 1}
+
+
+def test_full_bag_with_bankable_uses_normal_path_matches_lean():
+    """free==0 but something is normally bankable → the NORMAL deposit path fires (not
+    the last-resort), and Python and Lean agree."""
+    recipes: dict[int, dict[int, int]] = {}
+    attrs = {
+        1: {"type_": "weapon", "attack": 10, "is_tool": False, "hp_restore": 0, "sell": 5},
+        2: {"type_": "resource", "attack": 0, "is_tool": False, "hp_restore": 0, "sell": 7},
+    }
+    inventory = {1: 1, 2: 5}  # used = 6 == inventory_max → free == 0
+    py_keep, py_deposits, lean_keep, lean_deposits = _run(
+        inventory, [], None, False, None, recipes, attrs, 8, inventory_max=6,
+    )
+    assert py_deposits == lean_deposits
+    assert py_deposits == [(2, 5)]  # weapon kept; resource banked normally, no last-resort
 
 
 def test_best_weapon_protected_over_tool():

@@ -46,25 +46,22 @@ recipe-material walk (the reused fixpoint).
 
 Lean core only — no mathlib.
 
-## ⚠️ MODEL LAG (2026-06-19): the production last-resort relief is NOT yet modelled
+## LAST-RESORT relief (modelled 2026-06-19, in lockstep with bank_selection.py)
 
-`src/.../bank_selection.py` gained a LAST-RESORT branch (commit 4548d9e): when
+`select_bank_deposits` has a LAST-RESORT branch (commit 4548d9e): when
 `inventory_free == 0` AND nothing is normally bankable (the whole bag is keep-set
-protected), `select_bank_deposits` returns ONE least-critical KEEP item to free a
-slot — otherwise `FightAction` (needs `inventory_free >= 1`) cannot fire and leveling
-stalls (the full-of-useful-items livelock). This model does NOT capture that branch:
-its `State` has no capacity field, so it always takes the normal path. CONSEQUENCES:
-* The `freeze_invariant` (`deposits ∩ keep = ∅`) is FALSE for the production code at
-  `free == 0` — the last-resort deliberately banks a keep item (recoverable). The
-  honest model must RELAX it to "holds while `inventory_free > 0`".
-* The differential (`formal/diff/test_bank_selection_diff.py`) still passes because it
-  drives `inventory_max = 1000` (never `free == 0`), so it does not exercise the new
-  branch — the model is INCOMPLETE here, not contradicted on the tested domain.
-This lag is CONTAINED to this module + its oracle/differential: the liveness chain
-reads only the opaque `selectBankDepositsNonempty` Bool, not these defs. FOLLOW-ON
-(scoped): add `inventoryFree`/capacity to `State`, model `lastResortDeposit`, extend
-`deposits`, relax `freeze_invariant` to `free > 0`, re-prove, and add a `free == 0`
-differential case. Until then the proofs below describe the NORMAL (`free > 0`) path.
+protected), it banks ONE least-critical KEEP item to free a slot — otherwise
+`FightAction` (needs `inventory_free >= 1`) cannot fire and leveling stalls (the
+full-of-useful-items livelock). This is now FAITHFULLY MODELLED here:
+* `State.inventoryMax` + `inventoryUsed`/`inventoryFree` carry capacity;
+* `lastResortDeposit` mirrors `_last_resort_deposit` (least-critical pick);
+* `selectBankDeposits` IS the full production function (normal path, else last-resort
+  at `free == 0`). The oracle/differential drive it, including `free == 0` cases.
+The unconditional `freeze_invariant` (`deposits ∩ keep = ∅`) is about the NORMAL path
+`deposits` (unchanged, still proven); the production `selectBankDeposits` satisfies the
+RELAXED `freeze_invariant_of_free_pos` — the freeze holds while ANY slot is free, and
+at `free == 0` the last-resort deliberately banks one (recoverable) keep item, which
+`selectBankDeposits_frees_slot_when_full` shows frees a slot from the inventory.
 -/
 
 import Formal.RecipeClosure
@@ -94,6 +91,9 @@ structure State where
   taskIsItems : Bool
   craftingTarget : Option Nat
   inventory : List (Nat × Nat)
+  /-- `state.inventory_max` — total item capacity. With `inventoryUsed` (Σ qty) this
+      gives `inventoryFree`, which the LAST-RESORT relief branch reads (`== 0`). -/
+  inventoryMax : Nat
   equipped : List Nat
   recipe : Recipe
   attack : Nat → Int
@@ -407,6 +407,111 @@ theorem best_weapon_kept_base (s : State) (c : Nat) (h : bestWeaponCode s = some
     inKeepBase s c = true := by
   unfold inKeepBase
   simp [h]
+
+/-! ### Capacity + the LAST-RESORT relief (production parity, 2026-06-19).
+
+Mirrors `select_bank_deposits`'s last-resort branch (bank_selection.py, commit
+4548d9e): when the bag has ZERO free slots AND nothing is normally bankable (the whole
+bag is keep-set protected), bank ONE least-critical keep item to free a slot — else
+`FightAction` (needs `inventory_free >= 1`) cannot fire and leveling stalls. The
+least-critical pick is, among inventory entries with `qty > 0`: NOT `inKeepBase`
+(weapon / HP consumable / task item / coin) before those, then lowest `sellValue`,
+then code ascending. (Python's `profile_codes` tiebreak is modelled as empty — the
+differential drives `select_bank_deposits` with the default empty profile.) -/
+
+/-- `state.inventory_used` — Σ stack quantities. -/
+def inventoryUsed (s : State) : Nat := (s.inventory.map Prod.snd).sum
+
+/-- `state.inventory_free` — `inventory_max − inventory_used` (Nat sub saturates). -/
+def inventoryFree (s : State) : Nat := s.inventoryMax - inventoryUsed s
+
+/-- Last-resort sort comparator: `(inKeepBase, sellValue, code)` ascending. `cq₁`
+sorts before-or-equal `cq₂` iff non-critical-vs-critical, else lower sell value, else
+`≤` code. Mirrors `_last_resort_deposit`'s key (profile term modelled empty). -/
+def lastResortLe (s : State) (cq₁ cq₂ : Nat × Nat) : Bool :=
+  let c1 := inKeepBase s cq₁.1
+  let c2 := inKeepBase s cq₂.1
+  let v1 := s.sellValue cq₁.1
+  let v2 := s.sellValue cq₂.1
+  (!c1 && c2)
+  || (c1 == c2 && (decide (v1 < v2) || (decide (v1 = v2) && decide (cq₁.1 ≤ cq₂.1))))
+
+/-- Last-resort candidates: inventory entries with `qty > 0` (the keep-set is the whole
+bag in this branch, so criticality only orders the pick). -/
+def lastResortCandidates (s : State) : List (Nat × Nat) :=
+  s.inventory.filter (fun cq => decide (cq.2 > 0))
+
+/-- The single least-critical stack to bank when the bag is full of keep-set items;
+`none` only when the bag is empty. Mirrors `_last_resort_deposit`. -/
+def lastResortDeposit (s : State) : Option (Nat × Nat) :=
+  match (lastResortCandidates s).mergeSort (fun a b => lastResortLe s a b) with
+  | [] => none
+  | x :: _ => some x
+
+/-- **`select_bank_deposits` IN FULL** (the production function): the normal sorted
+deposits when non-empty, else — only when `inventory_free == 0` — the single
+last-resort keep item, else `[]`. The existing `deposits` def is the NORMAL path; this
+wraps it with the last-resort branch. -/
+def selectBankDeposits (s : State) (fuel : Nat) : List (Nat × Nat) :=
+  if deposits s fuel ≠ [] then deposits s fuel
+  else if inventoryFree s = 0 then
+    match lastResortDeposit s with
+    | some item => [item]
+    | none => []
+  else []
+
+/-! ### selectBankDeposits theorems — normal-path parity + the relaxed freeze. -/
+
+/-- On the NORMAL path (`inventory_free > 0`), `selectBankDeposits = deposits`: the
+last-resort branch never fires while any slot is free. So every existing `deposits`
+theorem (incl. `freeze_invariant`) transfers verbatim. -/
+theorem selectBankDeposits_eq_deposits_of_free_pos (s : State) (fuel : Nat)
+    (h : inventoryFree s > 0) : selectBankDeposits s fuel = deposits s fuel := by
+  unfold selectBankDeposits
+  by_cases hd : deposits s fuel = []
+  · rw [if_neg (by simp [hd])]
+    have hfree : ¬ (inventoryFree s = 0) := by omega
+    rw [if_neg hfree, hd]
+  · rw [if_pos hd]
+
+/-- **Relaxed freeze invariant** — the honest replacement for the unconditional
+`freeze_invariant`: while ANY slot is free, no deposited code is in the keep set. At
+`free == 0` the last-resort deliberately banks ONE keep item (recoverable), so the
+freeze CANNOT hold there — and must not, or the bag stalls. -/
+theorem freeze_invariant_of_free_pos (s : State) (fuel : Nat) (cq : Nat × Nat)
+    (hfree : inventoryFree s > 0) (h : cq ∈ selectBankDeposits s fuel) :
+    cq.1 ∉ keepList s fuel := by
+  rw [selectBankDeposits_eq_deposits_of_free_pos s fuel hfree] at h
+  exact freeze_invariant s fuel cq h
+
+/-- The last-resort pick is a real inventory entry with positive quantity — so banking
+it FREES a slot (the production guarantee that breaks the livelock). -/
+theorem lastResortDeposit_mem (s : State) (cq : Nat × Nat)
+    (h : lastResortDeposit s = some cq) : cq ∈ s.inventory ∧ cq.2 > 0 := by
+  unfold lastResortDeposit at h
+  split at h
+  · exact absurd h (by simp)
+  · rename_i x xs heq
+    simp only [Option.some.injEq] at h
+    have hmem : cq ∈ (lastResortCandidates s).mergeSort (fun a b => lastResortLe s a b) := by
+      rw [heq, ← h]; simp
+    have hperm := List.mergeSort_perm (lastResortCandidates s) (fun a b => lastResortLe s a b)
+    have hcand : cq ∈ lastResortCandidates s := hperm.mem_iff.mp hmem
+    unfold lastResortCandidates at hcand
+    rw [List.mem_filter] at hcand
+    exact ⟨hcand.1, by simpa using hcand.2⟩
+
+/-- **Last-resort relief frees a slot.** When the bag is completely full
+(`inventory_free == 0`) and nothing is normally bankable, `selectBankDeposits` banks
+exactly one inventory stack — so a slot frees and the fight can fire. (`lastResortDeposit`
+is `none` only on an empty bag, which cannot have `free == 0` with positive capacity.) -/
+theorem selectBankDeposits_frees_slot_when_full (s : State) (fuel : Nat)
+    (hd : deposits s fuel = []) (hfree : inventoryFree s = 0)
+    (cq : Nat × Nat) (hlr : lastResortDeposit s = some cq) :
+    selectBankDeposits s fuel = [cq] ∧ cq ∈ s.inventory ∧ cq.2 > 0 := by
+  refine ⟨?_, lastResortDeposit_mem s cq hlr⟩
+  unfold selectBankDeposits
+  rw [if_neg (by simp [hd]), if_pos hfree, hlr]
 
 /-! ### best_weapon_argmax (optional): the best fighting weapon is the max-attack
 non-tool weapon over inventory ∪ equipped, ties broken by code ascending. -/
