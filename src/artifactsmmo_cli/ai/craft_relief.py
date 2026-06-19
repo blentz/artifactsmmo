@@ -155,5 +155,22 @@ def craft_relief_candidates(
     for code in sorted(step_items):
         consider(code, 1, batch_cap)
 
+    # Sole-output materials: for each held material m, if every recipe that
+    # consumes m produces only ONE distinct output code, that sole output is a
+    # relief candidate when craftable ≥1 AND net relief > 0.  This catches the
+    # copper_ore -> copper_bar pattern where the material itself isn't on the
+    # goal chain but its only craftable use advances a goal.
+    for mat_code, mat_qty in state.inventory.items():
+        if mat_qty <= 0:
+            continue
+        outputs = {
+            code for code, rec in game_data.crafting_recipes.items()
+            if mat_code in rec
+        }
+        if len(outputs) != 1:
+            continue
+        (output_code,) = outputs
+        consider(output_code, 1, batch_cap)
+
     candidates.sort(key=lambda c: (c.priority_class, -c.quantity, c.item_code))
     return candidates

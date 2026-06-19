@@ -255,17 +255,20 @@ class TestCraftReliefCandidates:
 
     def test_no_candidate_when_item_has_skill_but_no_recipe(self):
         """Stats name a crafting_skill but no recipe is registered — guard
-        treats it as uncraftable rather than crashing."""
+        treats it as uncraftable rather than crashing.  Use a material
+        (feather) that appears in no recipe so sole-output doesn't fire."""
         gd = _gd_ash_plank()
         gd._item_stats["phantom_item"] = ItemStats(
             code="phantom_item", level=1, type_="resource",
             crafting_skill="woodcutting", crafting_level=1,
         )
         # No entry in _crafting_recipes for phantom_item.
+        # feather is not an input for any recipe in _gd_ash_plank, so
+        # sole-output expansion is also inert here.
         state = make_state(
             task_code="phantom_item", task_type="items",
             task_progress=0, task_total=5,
-            inventory={"ash_wood": 67}, skills={"woodcutting": 1},
+            inventory={"feather": 67}, skills={"woodcutting": 1},
         )
         assert craft_relief_candidates(state, gd) == []
 
@@ -521,23 +524,31 @@ class TestStepMaterialRelief:
     craft-before-deposit job."""
 
     def test_step_items_surface_as_candidates(self):
+        """Sole-output extension: ash_wood is the only input for ash_plank, so
+        ash_plank now surfaces even without explicit step_items.  step_items
+        deduplicates via the seen-set — no double entry."""
         gd = _gd_ash_plank()
         # 99/110 = 90% pressure; 60 ash = 6 plank crafts of net relief 9.
         state = make_state(inventory={"ash_wood": 60, "feather": 39},
                            inventory_max=110)
-        assert craft_relief_candidates(state, gd) == []
+        # Sole-output fires ash_plank even without step_items now.
+        bare = craft_relief_candidates(state, gd)
+        assert [c.item_code for c in bare] == ["ash_plank"]
         cands = craft_relief_candidates(
             state, gd,
             step_items=frozenset({"ash_plank", "wooden_shield", "ash_wood"}))
-        # Raw gatherables (ash_wood, no recipe) and unknown codes contribute
-        # nothing; the craftable chain intermediate does.
+        # step_items deduplicates: same sole candidate, no duplicates.
         assert [c.item_code for c in cands] == ["ash_plank"]
 
     def test_guard_fires_from_step_profile_before_deposit(self):
+        """Sole-output extension: CRAFT_RELIEF fires even without a step_profile
+        because ash_wood → ash_plank is the sole output; step_profile still
+        works (and deduplicates via seen-set)."""
         gd = _gd_ash_plank()
         state = make_state(inventory={"ash_wood": 60, "feather": 39},
                            inventory_max=110)
-        assert GuardKind.CRAFT_RELIEF not in active_guards(state, gd, None, _ctx())
+        # Sole-output now fires CRAFT_RELIEF without step_profile too.
+        assert GuardKind.CRAFT_RELIEF in active_guards(state, gd, None, _ctx())
         step_profile = {"wooden_shield": 1, "ash_plank": 6, "ash_wood": 60}
         guards = active_guards(state, gd, None, _ctx(), step_profile)
         assert GuardKind.CRAFT_RELIEF in guards
@@ -554,6 +565,69 @@ class TestStepMaterialRelief:
                          step_profile={"ash_plank": 6})
         assert isinstance(goal, CraftReliefGoal)
         assert goal._target_item == "ash_plank"
+
+
+class TestSoleOutputMaterialRelief:
+    def test_sole_output_material_is_a_candidate(self):
+        """A held material whose ONLY craftable output is one item (copper_ore ->
+        copper_bar) is a relief candidate even off the goal chain."""
+        gd = GameData()
+        gd._crafting_recipes = {"copper_bar": {"copper_ore": 10}}   # copper_ore's only output
+        gd._item_stats = {
+            "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource",
+                                    crafting_skill="mining", crafting_level=1),
+            "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource"),
+        }
+        gd._workshop_locations = {"mining": (1, 5)}
+        gd._bank_location = (4, 0)
+        gd._taskmaster_location = (1, 2)
+        fill_monster_stat_defaults(gd)
+        # 30 ore on hand (3 bars craftable, net relief 9 per craft); pressure at 75%
+        state = make_state(inventory={"copper_ore": 30}, inventory_max=40,
+                           skills={"mining": 5})
+        cands = craft_relief_candidates(state, gd, step_items=frozenset())
+        assert any(c.item_code == "copper_bar" for c in cands)
+
+    def test_multi_output_material_not_sole_output(self):
+        """A material that feeds >1 recipe is NOT a sole-output candidate."""
+        gd = GameData()
+        gd._crafting_recipes = {"bar_a": {"ore": 5}, "bar_b": {"ore": 5}}
+        gd._item_stats = {
+            "ore": ItemStats(code="ore", level=1, type_="resource"),
+            "bar_a": ItemStats(code="bar_a", level=1, type_="resource",
+                               crafting_skill="mining", crafting_level=1),
+            "bar_b": ItemStats(code="bar_b", level=1, type_="resource",
+                               crafting_skill="mining", crafting_level=1),
+        }
+        gd._workshop_locations = {"mining": (1, 5)}
+        gd._bank_location = (4, 0)
+        gd._taskmaster_location = (1, 2)
+        fill_monster_stat_defaults(gd)
+        # 30 ore on hand at 75% pressure — multi-output, must NOT appear
+        state = make_state(inventory={"ore": 30}, inventory_max=40,
+                           skills={"mining": 5})
+        cands = craft_relief_candidates(state, gd, step_items=frozenset())
+        assert not any(c.item_code in ("bar_a", "bar_b") for c in cands)
+
+    def test_zero_qty_material_skipped_by_sole_output(self):
+        """A material present in inventory with qty=0 must not trigger
+        sole-output expansion (guard on mat_qty <= 0)."""
+        gd = GameData()
+        gd._crafting_recipes = {"copper_bar": {"copper_ore": 10}}
+        gd._item_stats = {
+            "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource",
+                                    crafting_skill="mining", crafting_level=1),
+            "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource"),
+        }
+        gd._workshop_locations = {"mining": (1, 5)}
+        gd._bank_location = (4, 0)
+        gd._taskmaster_location = (1, 2)
+        fill_monster_stat_defaults(gd)
+        # copper_ore qty=0: sole-output branch must skip it, no candidate.
+        state = make_state(inventory={"copper_ore": 0}, inventory_max=40,
+                           skills={"mining": 5})
+        cands = craft_relief_candidates(state, gd, step_items=frozenset())
+        assert cands == []
 
 
 class TestArbiterEndToEnd:
