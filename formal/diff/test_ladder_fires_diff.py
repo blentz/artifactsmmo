@@ -578,11 +578,13 @@ def test_discard_critical_boundary() -> None:
 
 def test_deposit_full_boundary() -> None:
     # fill 18/20 = 0.90 meets DEPOSIT_FULL (>=); 17/20 = 0.85 does not.
-    # bank_accessible required.
-    _assert_full_agreement(_base_scn(bank_accessible=True, inventory_max=20,
-                                     junk_qty=18))
-    _assert_full_agreement(_base_scn(bank_accessible=True, inventory_max=20,
-                                     junk_qty=17))
+    # bank_accessible + bank_known + capacity > count required for bankHasRoom.
+    _assert_full_agreement(_base_scn(bank_accessible=True, bank_known=True,
+                                     bank_capacity=10, bank_items_count=0,
+                                     inventory_max=20, junk_qty=18))
+    _assert_full_agreement(_base_scn(bank_accessible=True, bank_known=True,
+                                     bank_capacity=10, bank_items_count=0,
+                                     inventory_max=20, junk_qty=17))
 
 
 def test_sell_pressured_vs_idle_boundary() -> None:
