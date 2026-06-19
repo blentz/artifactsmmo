@@ -31,13 +31,19 @@ models that as the extreme `0`. This is OPTIMISTIC, not conservative — product
 `depositFull` (deposit-all) plausibly empties the bag, but `discardHigh`/
 `sellPressured`/`discardCritical`/`craftRelief` remove only specific items (a
 PARTIAL drain). Modelling every reducer as `→ 0` overstates the drain, making
-"low pressure next step" easier to prove. The honest differential obligation is
-therefore: verify production's reducers drop inventory pressure BELOW 85% (the
-re-trigger watermark); if some reducer leaves pressure ≥ 85%, the transience model
-must weaken `pressureDelta` to a realistic partial drain and the
-`PressureTransience` counting must be re-derived (likely needing a
-pressure-decrease-bounded-below assumption). The lemmas below are value-agnostic in
-`DROP_BOUND`.
+"low pressure next step" easier to prove. The differential investigation
+(`docs/REVIEW_pressuredelta_differential.md`, 2026-06-19) FALSIFIED the claim that a
+fired reducer drops pressure below 85%: production's discard removes only the EXCESS
+above per-item caps (a bag of capped consumables/recipe-mats stays ≥ 85% and the
+guard then goes SILENT), deposit keeps a large keep-set, sell targets only `free ≥ 5`
+(≥ 85% for `inventoryMax > 33`), and craft batch-clamps. So `→ 0` is UNFAITHFUL, and
+under a faithful partial drain the `PressureTransience` counting is FALSE — the real
+bot can livelock at ≥ 85% (`[[project_inventory_profiles]]`'s full-of-useful-items
+livelock). The honest fix (follow-on): weaken `pressureDelta` to the bounded partial
+drain each action actually performs, replace `Drainability.DrainArmed` with
+`EffectiveDrainArmed` (a reducer whose application drops below 85% fires), and
+re-derive the counting — which then surfaces the livelock as its precise failure
+precondition. The lemmas below are value-agnostic in `DROP_BOUND`.
 
 Additive only — `applyActionKind`, `cycleStep`, and every existing proof are
 untouched. Axioms ⊆ {propext, Quot.sound}. Liveness namespace — Mathlib allowed. -/

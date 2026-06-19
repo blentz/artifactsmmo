@@ -38,13 +38,20 @@ reducer as `inventoryUsed → 0` (the high-pressure branch does `rw [hdrain]` wi
 OPTIMISTIC, not conservative: production's `depositFull` plausibly empties the bag,
 but `discardHigh`/`sellPressured`/`discardCritical`/`craftRelief` remove only
 specific items (a PARTIAL drain). The transience needs each drain to land STRICTLY
-BELOW 85%; `→ 0` is the extreme that trivially satisfies it. The honest differential
-obligation (NOT yet discharged) is to verify production's reducers drop pressure
-below the 85% re-trigger watermark; if some reducer leaves pressure ≥ 85%,
-`pressureDelta` must weaken to a realistic partial drain and this counting must be
-re-derived (likely needing a pressure-decrease-bounded-below assumption). Until then,
-"the faithful cycle reaches 50" holds for the `→ 0`-drain MODEL, with that model's
-fidelity to production resting on the pending `pressureDelta` differential test.
+BELOW 85%; `→ 0` is the extreme that trivially satisfies it. The differential investigation
+(`docs/REVIEW_pressuredelta_differential.md`, 2026-06-19) FALSIFIED the `→ 0` claim:
+production's discard removes only the EXCESS above per-item caps, deposit keeps a
+large keep-set, sell targets only `free ≥ 5`, craft batch-clamps — NONE guarantees
+post-pressure < 85%, and discard/deposit can go SILENT while still pressured. So this
+counting is sound for the `→ 0`-drain MODEL but the model is UNFAITHFUL: under the
+real partial drains the conclusion "k+1 is low-pressure" FAILS, and the bot can
+livelock at ≥ 85% (`[[project_inventory_profiles]]`). The honest residual is therefore
+stronger than `DrainArmed` — call it `EffectiveDrainArmed` (a reducer whose
+application actually drops below 85% fires i.o.) — and it is a runtime property
+production does NOT guarantee. "Reaches level 50" here is a statement about the
+`→ 0`-drain model, NOT an unconditional real-bot guarantee. Follow-on: weaken
+`pressureDelta`, swap in `EffectiveDrainArmed`, re-derive — surfacing the livelock as
+the precise failure precondition.
 
 Local `perceptionRefresh` bridges (inventoryUsed/Max, hasOverstockItems,
 sellableInventoryNonempty) are proved inline — `perceptionRefresh` touches only the
