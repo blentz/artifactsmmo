@@ -268,12 +268,23 @@ the capture fixture.
   faithful-drain gap", NOT an unconditional real-bot guarantee. The honest residual is
   `EffectiveDrainArmed` (a reducer whose application drops below 85% fires i.o.) — a
   runtime property production does NOT guarantee.
-- **REMAINING work:** (1) HONEST FIX (the real follow-on): weaken `pressureDelta` to a
-  faithful bounded partial drain, replace `DrainArmed` with `EffectiveDrainArmed`,
-  re-derive `PressureTransience` — surfacing the livelock as the precise failure
-  precondition (converts the optimistic proof into an honest one whose residual names
-  the real failure mode). (2) OPTIONAL hardening (quiet-pair from per-blocker clears).
-  (3) Workstream B live data capture (separate, user long-pole).
+- **HONEST FIX DONE (2026-06-19, commit 9440f65)** — `EffectiveDrainTransience.lean`.
+  Rather than model the partial-drain arithmetic (needs per-item caps + game data),
+  lifts the effective drain to an EXPLICIT residual `EffectiveDrainArmed`: pressured +
+  below cap + ten non-pressure blockers quiet (reducer selectable) ⇒ the NEXT cycle
+  lands < 85%. `reducedResidual_of_effectiveDrain` derives `ReducedResidualF` from the
+  quiet-pair residual + `EffectiveDrainArmed` with ZERO dependence on `pressureDelta`,
+  the `→0` value, or `RuntimeInvariant`. `ai_reaches_level_fiftyF_of_effectiveDrain` =
+  the HONEST capstone. `EffectiveDrainArmed` IS the honest residual — "the bot
+  effectively drains when pressured", which production does NOT guarantee — so the proof
+  now NAMES the full-of-useful-items livelock as its failure precondition instead of
+  hiding it behind `→0`. The `→0`-based `ai_reaches_level_fiftyF_of_tenQuietPairs`
+  remains as the optimistic-model variant (kept for contrast, clearly documented).
+- **REMAINING work:** (1) OPTIONAL: prove the quiet-pair residual from per-blocker
+  clears; OPTIONAL: a concrete partial-drain `pressureDelta` + differential test pinning
+  the exact removal amounts (the model-faithfulness boundary — the honest capstone no
+  longer DEPENDS on it, but it would let `EffectiveDrainArmed` be checked, not assumed).
+  (2) Workstream B live data capture (separate, user long-pole).
 - **(superseded) Brick 3c/3d — the GLOBAL synthesis.** Compose the
   local dichotomy (drain side 3d-prep + fight side 3c-prep) into combat-fires-i.o.
   Remaining sub-pieces: (i) trajectory assembly — discharge the 7 higher-slots-quiet
