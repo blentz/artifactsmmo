@@ -46,12 +46,26 @@ def main() -> None:
         "crafting_recipes": {k: dict(v) for k, v in gd._crafting_recipes.items()},
         "resource_skill": {k: list(v) for k, v in gd._resource_skill.items()},
         "resource_drops": dict(gd._resource_drops),
+        # Combat stat fields (attack/hp_bonus/resistance/...) added for the
+        # WinnableAcrossBand sweep (docs/PLAN_faithfulness_modeling.md Workstream
+        # B): the offline best-weapon-at-L proxy + per-level winnability check need
+        # gear contributions, which the original snapshot dropped.
         "item_stats": {
             code: {
                 "level": stats.level,
                 "type": stats.type_,
                 "crafting_skill": stats.crafting_skill,
                 "crafting_level": stats.crafting_level,
+                "attack": dict(stats.attack),
+                "resistance": dict(stats.resistance),
+                "dmg": stats.dmg,
+                "dmg_elements": dict(stats.dmg_elements),
+                "critical_strike": stats.critical_strike,
+                "initiative": stats.initiative,
+                "hp_bonus": stats.hp_bonus,
+                "lifesteal": stats.lifesteal,
+                "antipoison": stats.antipoison,
+                "subtype": stats.subtype,
             }
             for code, stats in gd._item_stats.items()
         },
