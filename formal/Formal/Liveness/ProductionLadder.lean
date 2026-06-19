@@ -141,22 +141,25 @@ def reachUnlockLevelFires (s : State) : Bool :=
   && decide (s.level < s.bankRequiredLevel)
   && decide (s.bankRequiredLevel - s.level ≤ MAX_ACHIEVABLE_GAP_LV2)
 
-/-- DISCARD_CRITICAL guard. Mirrors `guards.py:81-82`:
-      overstocked AND used/max ≥ 0.95
-    Nat form: `100 * inventoryUsed ≥ 95 * inventoryMax`, treating
-    `inventoryMax == 0` as ratio 0 (NOT firing). -/
-def discardCriticalFires (s : State) : Bool :=
-  s.hasOverstockItems
-  && decide (s.inventoryMax > 0)
-  && decide (DISCARD_CRITICAL_DEN * s.inventoryUsed
-              ≥ DISCARD_CRITICAL_NUM * s.inventoryMax)
-
 /-- The bank can physically accept a deposit: accessible, item-count known,
     and used strictly below capacity. Mirrors `ai/bank_room.bank_has_room`.
     `bankItemsKnown=false` (bank unvisited) and `bankCapacity=0` both read as
     NO room. -/
 def bankHasRoom (s : State) : Bool :=
   s.bankAccessible && s.bankItemsKnown && decide (s.bankItemsCount < s.bankCapacity)
+
+/-- DISCARD_CRITICAL guard. Mirrors `guards.py` DISCARD_CRITICAL branch:
+      ¬bank_has_room AND overstocked AND used/max ≥ 0.95
+    Nat form: `100 * inventoryUsed ≥ 95 * inventoryMax`, treating
+    `inventoryMax == 0` as ratio 0 (NOT firing).
+    Task 3: added `!(bankHasRoom s)` so discard only fires when the bank
+    cannot accept deposits — deposits take priority when bank has room. -/
+def discardCriticalFires (s : State) : Bool :=
+  !(bankHasRoom s)
+  && s.hasOverstockItems
+  && decide (s.inventoryMax > 0)
+  && decide (DISCARD_CRITICAL_DEN * s.inventoryUsed
+              ≥ DISCARD_CRITICAL_NUM * s.inventoryMax)
 
 /-- DEPOSIT_FULL guard. Mirrors `guards.py` DEPOSIT_FULL branch:
       bank_accessible ∧ bank_has_room ∧ used/max ≥ 0.90 ∧ select_bank_deposits(...) nonempty
@@ -170,10 +173,13 @@ def depositFullFires (s : State) : Bool :=
               ≥ DEPOSIT_FULL_NUM * s.inventoryMax)
   && s.selectBankDepositsNonempty
 
-/-- DISCARD_HIGH guard. Mirrors `guards.py:86-87`:
-      overstocked AND used/max ≥ 0.85 -/
+/-- DISCARD_HIGH guard. Mirrors `guards.py` DISCARD_HIGH branch:
+      ¬bank_has_room AND overstocked AND used/max ≥ 0.85
+    Task 3: added `!(bankHasRoom s)` so discard only fires when the bank
+    cannot accept deposits — deposits take priority when bank has room. -/
 def discardHighFires (s : State) : Bool :=
-  s.hasOverstockItems
+  !(bankHasRoom s)
+  && s.hasOverstockItems
   && decide (s.inventoryMax > 0)
   && decide (DISCARD_HIGH_DEN * s.inventoryUsed
               ≥ DISCARD_HIGH_NUM * s.inventoryMax)

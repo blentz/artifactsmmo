@@ -154,9 +154,11 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
                 and state.level < ctx.bank_required_level
                 and ctx.bank_required_level - state.level <= MAX_ACHIEVABLE_GAP)
     if kind is GuardKind.DISCARD_CRITICAL:
-        return (bool(overstocked_items(state, game_data,
-                                       profile=active_profile(state, game_data, ctx,
-                                                              step_profile)))
+        return (not bank_has_room(ctx.bank_accessible, state.bank_items,
+                                  game_data.bank_capacity)
+                and bool(overstocked_items(state, game_data,
+                                           profile=active_profile(state, game_data, ctx,
+                                                                  step_profile)))
                 and _used_fraction(state) >= DISCARD_CRITICAL_FRACTION)
     if kind is GuardKind.CRAFT_RELIEF:
         if _used_fraction(state) < CRAFT_RELIEF_FRACTION:
@@ -174,9 +176,11 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
                     state, game_data,
                     frozenset(active_profile(state, game_data, ctx, step_profile)))))
     if kind is GuardKind.DISCARD_HIGH:
-        return (bool(overstocked_items(state, game_data,
-                                       profile=active_profile(state, game_data, ctx,
-                                                              step_profile)))
+        return (not bank_has_room(ctx.bank_accessible, state.bank_items,
+                                  game_data.bank_capacity)
+                and bool(overstocked_items(state, game_data,
+                                           profile=active_profile(state, game_data, ctx,
+                                                                  step_profile)))
                 and _used_fraction(state) >= DISCARD_HIGH_FRACTION)
     if kind is GuardKind.GEAR_REVIEW:
         return ctx.gear_review_active

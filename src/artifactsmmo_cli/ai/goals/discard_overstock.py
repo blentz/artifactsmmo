@@ -118,11 +118,11 @@ class DiscardOverstockGoal(Goal):
                     npc_code=npc_code, item_code=code, quantity=excess_qty,
                     npc_location=npc_loc,
                 ))
-            elif not ge_action_available:
-                # No NPC buyer (or unknown location) AND no fillable GE order —
-                # Delete is the only action the planner can actually execute.
-                # Without this fallback the goal becomes unsatisfiable (plan_len=0)
-                # and silently loses to lower-priority alternatives.
+            elif not ge_action_available and not buyers:
+                # No NPC buyer AND no fillable GE order — Delete is the only
+                # action the planner can execute for a truly-worthless item.
+                # Items with any NPC buyer (even if location unknown) or a GE
+                # order are left for the SELL rung; we never delete sellable items.
                 result.append(DeleteItemAction(code=code, quantity=excess_qty))
         return result
 

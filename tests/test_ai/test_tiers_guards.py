@@ -217,3 +217,32 @@ def test_deposit_full_fires_when_bank_has_room():
                        bank_items={"x": 1})
     ctx = _ctx()
     assert _fires(GuardKind.DEPOSIT_FULL, state, gd, None, ctx) is True
+
+
+def test_discard_quiet_when_bank_has_room():
+    """With bank room, overstock is deposited, not discarded — both DISCARD
+    guards must be silent even when overstock is present."""
+    gd = GameData()
+    gd._bank_capacity = 50
+    # inventory={"junk": 100}, inventory_max=100 → 100% fill, junk is overstock
+    # (empty catalog → cap 0, any quantity is overstock under pressure).
+    # bank has room: 1 item < capacity 50.
+    state = make_state(inventory={"junk": 100}, inventory_max=100,
+                       bank_items={"x": 1})
+    ctx = _ctx()  # bank_accessible=True
+    assert _fires(GuardKind.DISCARD_CRITICAL, state, gd, None, ctx) is False
+    assert _fires(GuardKind.DISCARD_HIGH, state, gd, None, ctx) is False
+
+
+def test_discard_fires_when_bank_full():
+    """Both discard guards fire when overstock is present AND the bank is full."""
+    gd = GameData()
+    gd._bank_capacity = 1
+    # bank has 1 item at capacity 1 → bank is full (no room).
+    state = make_state(inventory={"junk": 100}, inventory_max=100,
+                       bank_items={"x": 1})
+    ctx = _ctx()  # bank_accessible=True
+    # Overstock present + bank full → discard guard fires (worthless filtering
+    # happens in the goal, not the fire predicate).
+    assert _fires(GuardKind.DISCARD_HIGH, state, gd, None, ctx) is True
+    assert _fires(GuardKind.DISCARD_CRITICAL, state, gd, None, ctx) is True

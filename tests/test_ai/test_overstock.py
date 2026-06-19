@@ -356,19 +356,19 @@ class TestDiscardOverstockGoal:
         codes = {a.code if hasattr(a, "code") else a.item_code for a in relevant}
         assert "gudgeon" not in codes
 
-    def test_relevant_actions_delete_when_buyer_location_unknown(self):
-        """Buyer known but location not loaded → must fall back to Delete,
-        otherwise NpcSell is_applicable=False and the goal becomes
-        unsatisfiable (plan_len=0)."""
+    def test_relevant_actions_no_delete_when_buyer_exists_location_unknown(self):
+        """Buyer known but location not loaded → no Delete emitted (the item has
+        value; the SELL rung is responsible once the location is resolved). The
+        goal produces no action for that item, leaving it untouched rather than
+        destroying a sellable item."""
         gd = _gd_with_sap_recipes()
         gd._npc_sell_prices = {"npc1": {"sap": 2}}  # buyer known
         gd._npc_locations = {}  # location NOT loaded
         goal = DiscardOverstockGoal(game_data=gd)
         state = make_state(level=1, inventory={"sap": 50})
         relevant = goal.relevant_actions([], state, gd)
-        assert len(relevant) == 1
-        assert isinstance(relevant[0], DeleteItemAction)
-        assert relevant[0].code == "sap"
+        # No action: can't sell (no location) and won't delete a sellable item.
+        assert len(relevant) == 0
 
     def test_relevant_actions_falls_back_to_batch_delete(self):
         """No NPC buys → batch DeleteItem with full excess quantity."""
@@ -391,6 +391,33 @@ class TestDiscardOverstockGoal:
         # One batch per overstocked code (sap + extra)
         codes = {a.code if isinstance(a, DeleteItemAction) else a.item_code for a in relevant}
         assert codes == {"sap", "extra"}
+
+
+    def test_sellable_overstock_not_deleted(self):
+        """A sellable overstock item is left for the SELL rung, never deleted.
+        A truly-worthless item (no buyer, no GE order) IS deleted."""
+        gd = GameData()
+        gd._item_stats = {
+            "junk": ItemStats(code="junk", level=1, type_="resource"),
+            "rock": ItemStats(code="rock", level=1, type_="resource"),
+        }
+        gd._crafting_recipes = {}
+        # 'junk' has an NPC buyer; 'rock' does not.
+        gd._npc_sell_prices = {"vendor1": {"junk": 5}}
+        goal = DiscardOverstockGoal(game_data=gd)
+        # Both items overstocked (no recipe use → cap 0; high inventory pressure).
+        state = make_state(level=1,
+                           inventory={"junk": 50, "rock": 50},
+                           inventory_max=105)
+        relevant = goal.relevant_actions([], state, gd)
+        codes_with_actions = {
+            a.code if isinstance(a, DeleteItemAction) else a.item_code
+            for a in relevant
+        }
+        # 'rock' has no buyer → Delete(rock) is emitted.
+        assert "rock" in codes_with_actions, "worthless rock must be deleted"
+        # 'junk' has an NPC buyer → left for the SELL rung, never deleted.
+        assert "junk" not in codes_with_actions, "sellable junk must not be deleted"
 
 
 class TestEquippableDominance:
