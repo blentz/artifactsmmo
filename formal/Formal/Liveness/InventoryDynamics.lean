@@ -24,9 +24,20 @@ raises pressure by more than `DROP_BOUND`), and that each reducer clears pressur
 to `0` (which, with Brick 1's `pressureGatedChores_quiet_of_low`, silences the
 gated chores while `inventoryMax > 0`).
 
-NOTE — the exact post-values are Phase-2 DIFFERENTIAL obligations (a deposit-all
-empties the bag → `0`; a discard/sell drops below its watermark, modelled here as
-the conservative `0`). The lemmas below are value-agnostic in `DROP_BOUND`.
+NOTE — the exact post-values are Phase-2 DIFFERENTIAL obligations, and the reducer
+post-value `0` is LOAD-BEARING for the transience (`PressureTransience`): the
+counting argument needs each drain to land STRICTLY BELOW the 85% threshold, and
+models that as the extreme `0`. This is OPTIMISTIC, not conservative — production's
+`depositFull` (deposit-all) plausibly empties the bag, but `discardHigh`/
+`sellPressured`/`discardCritical`/`craftRelief` remove only specific items (a
+PARTIAL drain). Modelling every reducer as `→ 0` overstates the drain, making
+"low pressure next step" easier to prove. The honest differential obligation is
+therefore: verify production's reducers drop inventory pressure BELOW 85% (the
+re-trigger watermark); if some reducer leaves pressure ≥ 85%, the transience model
+must weaken `pressureDelta` to a realistic partial drain and the
+`PressureTransience` counting must be re-derived (likely needing a
+pressure-decrease-bounded-below assumption). The lemmas below are value-agnostic in
+`DROP_BOUND`.
 
 Additive only — `applyActionKind`, `cycleStep`, and every existing proof are
 untouched. Axioms ⊆ {propext, Quot.sound}. Liveness namespace — Mathlib allowed. -/

@@ -244,8 +244,22 @@ the capture fixture.
   RESIDUAL SET (Workstream A, honest): {LIV-001, the quiet-pair scheduling residual
   (10 non-pressure blockers), RuntimeInvariant (drainability — surfaces the real
   full-of-useful-items livelock, doesn't hide it), positive capacity, hnowait/hex/hbe}.
-  REMAINING per-residual work is OPTIONAL hardening (e.g. proving the quiet-pair
-  residual from per-blocker clear lemmas) + Workstream B data capture (separate).
+- **ADVERSARIAL REVIEW (2026-06-19, Phase 4) — one real overclaim found + surfaced.**
+  The transience is LOAD-BEARING on `pressureDelta` modelling every reducer as
+  `inventoryUsed → 0`, which is OPTIMISTIC (overstates drain): only `depositFull`
+  plausibly empties the bag; `discardHigh`/`sellPressured`/`discardCritical`/
+  `craftRelief` are PARTIAL drains. So "the faithful cycle reaches 50" holds for the
+  `→0`-drain MODEL; its fidelity rests on the PENDING `pressureDelta` differential
+  test (verify production reducers drop pressure below the 85% watermark; else weaken
+  to a partial-drain model + re-derive `PressureTransience` with a
+  pressure-decrease-bounded-below assumption). Soundness boundary documented in
+  `InventoryDynamics.lean` + `PressureTransience.lean`. Everything else reviewed clean
+  (no vacuity exploit; composition-flag staleness honestly absorbed into
+  RuntimeInvariant + perceptionRefresh arming, not fabricated).
+- **REMAINING work:** (1) the `pressureDelta` DIFFERENTIAL test (the load-bearing
+  obligation above — promote from Phase-2-deferred to the key open item); (2) OPTIONAL
+  hardening (prove the quiet-pair residual from per-blocker clear lemmas); (3)
+  Workstream B live data capture (separate, user long-pole).
 - **(superseded) Brick 3c/3d — the GLOBAL synthesis.** Compose the
   local dichotomy (drain side 3d-prep + fight side 3c-prep) into combat-fires-i.o.
   Remaining sub-pieces: (i) trajectory assembly — discharge the 7 higher-slots-quiet

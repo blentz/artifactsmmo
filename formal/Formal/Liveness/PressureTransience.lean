@@ -30,6 +30,22 @@ What remains a residual is exactly: the ten non-pressure blockers quiet i.o. (pa
 + drainability when pressured + positive capacity — all honest, checkable
 properties, NO inventory-composition fabrication.
 
+## SOUNDNESS BOUNDARY (adversarial review, 2026-06-19)
+
+This argument is LOAD-BEARING on `InventoryDynamics.pressureDelta` modelling every
+reducer as `inventoryUsed → 0` (the high-pressure branch does `rw [hdrain]` with
+`hdrain : (cycleStepFN (k+1) s).inventoryUsed = 0`, then `omega`). That `→ 0` is
+OPTIMISTIC, not conservative: production's `depositFull` plausibly empties the bag,
+but `discardHigh`/`sellPressured`/`discardCritical`/`craftRelief` remove only
+specific items (a PARTIAL drain). The transience needs each drain to land STRICTLY
+BELOW 85%; `→ 0` is the extreme that trivially satisfies it. The honest differential
+obligation (NOT yet discharged) is to verify production's reducers drop pressure
+below the 85% re-trigger watermark; if some reducer leaves pressure ≥ 85%,
+`pressureDelta` must weaken to a realistic partial drain and this counting must be
+re-derived (likely needing a pressure-decrease-bounded-below assumption). Until then,
+"the faithful cycle reaches 50" holds for the `→ 0`-drain MODEL, with that model's
+fidelity to production resting on the pending `pressureDelta` differential test.
+
 Local `perceptionRefresh` bridges (inventoryUsed/Max, hasOverstockItems,
 sellableInventoryNonempty) are proved inline — `perceptionRefresh` touches only the
 two objective Bools, so each is `split <;> rfl`.
