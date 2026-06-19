@@ -1,5 +1,37 @@
 # PLAN: faithfulness modeling — discharge BlockersQuiet faithfully (perfect-model effort)
 
+## ⚠️ 2026-06-19 PIVOT — the i.o.-fairness capstones are VACUOUS (kernel-proven)
+
+`docs/REVIEW_levelfifty_vacuity.md` + `Formal/Liveness/ResidualVacuity.lean`: the
+level-50 capstones (cycleStepP AND cycleStepF) rest on an UNSATISFIABLE residual
+(`level<50` infinitely often contradicts monotone level + the reach-50 goal), so they
+are vacuously true. The faithful-transience work below remains kernel-valid as
+conditional lemmas but its top-level capstone proves nothing. The honest engine is now
+`Formal/Liveness/MeasureDescent.lean` (commit 470391b): `exists_level_ge_of_descent` —
+reach 50 from a per-cycle lex-measure decrease (non-vacuous: `descent_hyp_satisfiable_
+with_goal` exhibits joint satisfiability with the goal; the i.o. residual never could).
+
+**THE DISCHARGE (next, the real modelling work): prove every below-50 cycleStepF cycle
+strictly decreases the lex `Measure`.** Per-means analysis (against the 6-tuple
+levelDeficit/xpDeficit/taskCycles/skillXp/bankPressure/hpDeficit):
+- FIGHT (objectiveStep/bankUnlock/reachUnlock): xp+10 or rollover ⇒ decreases
+  levelDeficit(1) or xpDeficit(2); the bankPressure(5) rise is lex-dominated. DESCENDS.
+- REST (hpCritical/restForCombat): hpDeficit(6) decreases, 1–5 equal. DESCENDS.
+- REDUCER (deposit/discard/sell/craft): removes ≥1 item ⇒ bankPressure(5) decreases,
+  1–4 equal. DESCENDS IFF it removes ≥1 — the livelock is exactly "removes nothing"
+  (the EffectiveDrain condition, now at "≥1 item" granularity; honest).
+- **claimPending: ADDS an item ⇒ bankPressure(5) INCREASES, 1–4 equal ⇒ measure
+  INCREASES. BREAKS descent (the "claim problem-child").**
+- completeTask / taskCancel / taskExchange / bankExpand / gearReview / lowYieldCancel /
+  maintainConsumables / etc.: task/idle-management means — descent UNCLEAR, must check.
+FIX OPTIONS: (a) enrich the measure (e.g. a `pendingCount` component ABOVE bankPressure
+so claim descends it; finite claim-fuel); and/or (b) a "descends within K steps"
+formulation bounding the non-descending stutter means. This is exactly why the original
+engine fled to xp-accumulation+fairness (and into vacuity) — the measure does NOT
+trivially descend every cycle. Discharging it HONESTLY confronts where the bot stalls.
+Reusable toward it: the fight/drain dichotomy, the drain crux, the level-advance engine,
+the O5.4 differential SELECT binding.
+
 ## Goal
 Make the Lean liveness model FAITHFUL to the running bot's chore/inventory
 dynamics, so `BlockersQuietBelowCapInfinitelyOftenP` is PROVEN (not assumed and
