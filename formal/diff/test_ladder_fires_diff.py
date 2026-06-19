@@ -166,7 +166,7 @@ from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
-from artifactsmmo_cli.ai.tiers.means import _has_sellable
+from artifactsmmo_cli.ai.tiers.guards import _has_sellable
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from formal.diff.oracle_client import run_oracle
 from formal.sim.production_ladder import (
@@ -296,6 +296,10 @@ def _make_game_data(scn: Scenario) -> GameData:
     gd._workshop_locations = {}
     gd._npc_stock = {}
     gd._npc_sell_prices = {SELLER_NPC: {JUNK: 5}} if scn.item_sellable else {}
+    # _has_sellable now requires a reachable buyer (npc_location is not None).
+    # Provide a static location for SELLER_NPC whenever the scenario declares
+    # the item as sellable so the production predicate matches the oracle arg[22].
+    gd._npc_locations = {SELLER_NPC: (1, 2)} if scn.item_sellable else {}
     gd._bank_capacity = scn.bank_capacity
     gd._next_expansion_cost = scn.next_expansion_cost
     return gd

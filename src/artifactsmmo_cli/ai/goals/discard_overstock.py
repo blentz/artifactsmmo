@@ -118,11 +118,14 @@ class DiscardOverstockGoal(Goal):
                     npc_code=npc_code, item_code=code, quantity=excess_qty,
                     npc_location=npc_loc,
                 ))
-            elif not ge_action_available and not buyers:
-                # No NPC buyer AND no fillable GE order — Delete is the only
-                # action the planner can execute for a truly-worthless item.
-                # Items with any NPC buyer (even if location unknown) or a GE
-                # order are left for the SELL rung; we never delete sellable items.
+            elif not ge_action_available and npc_loc is None:
+                # No reachable NPC buyer AND no fillable GE order — Delete is
+                # the only action the planner can execute for a truly-worthless-
+                # NOW item.  A buyer whose npc_location is None is a dormant
+                # event merchant (spawn window closed); NpcSellAction.is_applicable
+                # rejects them on the same check, so protecting those items from
+                # deletion causes a permanent bag-full livelock.  They are
+                # deletable (worthless-now) — the slot must be freed.
                 result.append(DeleteItemAction(code=code, quantity=excess_qty))
         return result
 

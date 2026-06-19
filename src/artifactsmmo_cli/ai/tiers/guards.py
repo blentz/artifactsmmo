@@ -92,18 +92,28 @@ GUARD_ORDER: tuple[GuardKind, ...] = (
 
 
 def _has_sellable(state: WorldState, game_data: GameData) -> bool:
-    """Item is sellable when it has a buyer NPC AND the server-side `tradeable`
-    flag is true. Replicated from tiers/means.py to avoid a circular import
-    (means.py imports SelectionContext from guards.py)."""
+    """Item is sellable-NOW when it has a reachable buyer NPC (npc_location is not
+    None) AND the server-side `tradeable` flag is true.
+
+    Dormant event merchants appear in the price table but their location is None
+    while their spawn window is closed — NpcSellAction.is_applicable rejects them
+    on the same npc_location-is-None check.  Aligning the guard predicate with
+    is_applicable prevents SELL_RELIEF from firing for unreachable buyers, which
+    was causing a permanent bag-full livelock (no rung could act).
+
+    Canonical definition — tiers/means.py imports this instead of duplicating it."""
     for code, qty in state.inventory.items():
         if qty <= 0:
             continue
-        if not game_data.npcs_buying_item(code):
+        buyers = game_data.npcs_buying_item(code)
+        if not buyers:
             continue
         stats = game_data.item_stats(code)
         if stats is not None and not stats.tradeable:
             continue
-        return True
+        # At least one buyer must be reachable now.
+        if any(game_data.npc_location(npc) is not None for npc, _price in buyers):
+            return True
     return False
 
 

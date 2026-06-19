@@ -320,9 +320,10 @@ def test_recycle_relief_quiet_when_surplus_is_protected():
 
 
 def _sell_gd() -> GameData:
-    """GameData with one NPC buyer for 'copper_ore' (tradeable item)."""
+    """GameData with one reachable NPC buyer for 'copper_ore' (tradeable item)."""
     gd = GameData()
     gd._npc_sell_prices = {"npc_buyer": {"copper_ore": 5}}
+    gd._npc_locations = {"npc_buyer": (1, 2)}  # reachable now
     gd._item_stats = {
         "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource",
                                 tradeable=True),
@@ -398,6 +399,51 @@ def test_sell_relief_quiet_when_item_not_tradeable():
     assert _fires(GuardKind.SELL_RELIEF, state, gd, None, ctx) is False
 
 
+def test_sell_relief_quiet_when_only_buyer_is_dormant_event_merchant():
+    """Bank full + the ONLY NPC buyer has npc_location()==None (dormant event
+    merchant, spawn window closed) -> SELL_RELIEF must NOT fire.
+
+    Pre-branch behaviour: SELL_RELIEF fired because _has_sellable only checked
+    npcs_buying_item (price table), not reachability.  NpcSellAction.is_applicable
+    then rejected the unreachable NPC → empty plan → permanent livelock.
+    The fix: _has_sellable requires at least one buyer with a non-None location."""
+    gd = GameData()
+    # NPC is in the price table but has NO entry in _npc_locations → npc_location returns None.
+    gd._npc_sell_prices = {"event_merchant": {"festival_token": 10}}
+    gd._item_stats = {
+        "festival_token": ItemStats(code="festival_token", level=1, type_="resource",
+                                    tradeable=True),
+    }
+    gd._bank_capacity = 1  # bank full
+    state = make_state(
+        inventory={"festival_token": 5},
+        inventory_max=20,
+        bank_items={"some_item": 1},
+    )
+    ctx = _ctx(bank_accessible=True)
+    assert _fires(GuardKind.SELL_RELIEF, state, gd, None, ctx) is False
+
+
+def test_sell_relief_fires_when_buyer_has_reachable_location():
+    """Sanity: bank full + buyer IS reachable (npc_location returns a tile)
+    -> SELL_RELIEF fires (reachable-buyer path)."""
+    gd = GameData()
+    gd._npc_sell_prices = {"merchant": {"festival_token": 10}}
+    gd._item_stats = {
+        "festival_token": ItemStats(code="festival_token", level=1, type_="resource",
+                                    tradeable=True),
+    }
+    gd._npc_locations = {"merchant": (3, 4)}
+    gd._bank_capacity = 1  # bank full
+    state = make_state(
+        inventory={"festival_token": 5},
+        inventory_max=20,
+        bank_items={"some_item": 1},
+    )
+    ctx = _ctx(bank_accessible=True)
+    assert _fires(GuardKind.SELL_RELIEF, state, gd, None, ctx) is True
+
+
 # ---------------------------------------------------------------------------
 # Bank-full cascade ordering: craft > recycle > sell > discard
 # ---------------------------------------------------------------------------
@@ -470,9 +516,10 @@ def _state_with_recycle_no_craft() -> tuple[GameData, "WorldState"]:
 
 def _state_with_sell_no_craft_recycle() -> tuple[GameData, "WorldState"]:
     """SELL_RELIEF sub-case: bank full, inventory at 75%, sellable copper_ore
-    present (NPC buyer + tradeable=True), no craft or recycle candidate."""
+    present (NPC buyer reachable + tradeable=True), no craft or recycle candidate."""
     gd = _cascade_gd_base()
     gd._npc_sell_prices = {"npc_buyer": {"copper_ore": 5}}
+    gd._npc_locations = {"npc_buyer": (1, 2)}  # reachable now
     gd._item_stats = {
         "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource",
                                 tradeable=True),
