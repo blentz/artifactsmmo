@@ -232,10 +232,13 @@ def _state_DEPOSIT_FULL():
     # 18 / 20 = 90% >= DEPOSIT_FULL_FRACTION (0.90, raised from 0.80 per spec
     # 2026-06-07 to stay strictly above the 0.85 deposit ramp); an unknown item
     # (cap=0) so select_bank_deposits returns it (junk → bankable).
+    # DEPOSIT_FULL now also requires bank_has_room (2026-06-19): bank known/empty
+    # with positive capacity so the bank can accept the deposit.
+    gd._bank_capacity = 50
     state = _base_state(
         inventory={"junk": 18},
         inventory_max=20,
-        bank_items={},  # bank known/empty
+        bank_items={},  # bank known/empty, capacity 50 -> room
     )
     ctx = _ctx(bank_accessible=True)
     assert _guard_fires(GuardKind.DEPOSIT_FULL, state, gd, None, ctx), \

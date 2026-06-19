@@ -88,6 +88,7 @@ MIRROR_PLAN_FOR: dict[LadderMeans, str] = {
     LadderMeans.REACH_UNLOCK_LEVEL: "fight",
     LadderMeans.DISCARD_CRITICAL:   "deleteItem",
     LadderMeans.CRAFT_RELIEF:       "craft",
+    LadderMeans.RECYCLE_RELIEF:     "recycle",
     LadderMeans.DEPOSIT_FULL:       "depositAll",
     LadderMeans.DISCARD_HIGH:       "deleteItem",
     LadderMeans.GEAR_REVIEW:        "optimizeLoadout",
@@ -118,6 +119,7 @@ MIRROR_LADDER_ORDER: tuple[LadderMeans, ...] = (
     LadderMeans.BANK_UNLOCK,
     LadderMeans.REACH_UNLOCK_LEVEL,
     LadderMeans.DISCARD_CRITICAL,
+    LadderMeans.RECYCLE_RELIEF,
     LadderMeans.DEPOSIT_FULL,
     LadderMeans.DISCARD_HIGH,
     LadderMeans.CLAIM_PENDING,
@@ -231,6 +233,7 @@ def fires_mirror(k: LadderMeans, s: CycleState) -> bool:
     if k is LadderMeans.BANK_UNLOCK:        return _bank_unlock_fires(s)
     if k is LadderMeans.REACH_UNLOCK_LEVEL: return _reach_unlock_level_fires(s)
     if k is LadderMeans.DISCARD_CRITICAL:   return _discard_critical_fires(s)
+    if k is LadderMeans.RECYCLE_RELIEF:     return False  # opaque deferred slot (mirrors RECYCLE_SURPLUS handling)
     if k is LadderMeans.DEPOSIT_FULL:       return _deposit_full_fires(s)
     if k is LadderMeans.DISCARD_HIGH:       return _discard_high_fires(s)
     if k is LadderMeans.CLAIM_PENDING:      return s.pending_items_nonempty
