@@ -543,19 +543,31 @@ class TestStepMaterialRelief:
     def test_guard_fires_from_step_profile_before_deposit(self):
         """Sole-output extension: CRAFT_RELIEF fires even without a step_profile
         because ash_wood → ash_plank is the sole output; step_profile still
-        works (and deduplicates via seen-set)."""
+        works (and deduplicates via seen-set).
+
+        The CRAFT_RELIEF precedes DEPOSIT_FULL ordering is a safety property
+        that must hold unconditionally — the assertion must not be gated on
+        whether DEPOSIT_FULL happens to fire.  State is constructed so that
+        DEPOSIT_FULL is guaranteed to fire: bank accessible + room (bank_items={}
+        + bank_capacity=100), ≥90% inventory pressure, and a depositble item
+        (feather is not in the ash_plank recipe keep-set)."""
         gd = _gd_ash_plank()
+        gd._bank_capacity = 100
+        # 60 ash_wood + 39 feather = 99/110 = 90% pressure (>= DEPOSIT_FULL_FRACTION).
+        # feather is not in the ash_plank recipe so it is a deposit candidate.
         state = make_state(inventory={"ash_wood": 60, "feather": 39},
-                           inventory_max=110)
+                           inventory_max=110,
+                           bank_items={})
         # Sole-output now fires CRAFT_RELIEF without step_profile too.
         assert GuardKind.CRAFT_RELIEF in active_guards(state, gd, None, _ctx())
         step_profile = {"wooden_shield": 1, "ash_plank": 6, "ash_wood": 60}
         guards = active_guards(state, gd, None, _ctx(), step_profile)
         assert GuardKind.CRAFT_RELIEF in guards
         # Craft-before-deposit: relief precedes DEPOSIT_FULL in ladder order.
-        if GuardKind.DEPOSIT_FULL in guards:
-            assert (guards.index(GuardKind.CRAFT_RELIEF)
-                    < guards.index(GuardKind.DEPOSIT_FULL))
+        # DEPOSIT_FULL is guaranteed to fire given the state above — unconditional.
+        assert GuardKind.DEPOSIT_FULL in guards
+        assert (guards.index(GuardKind.CRAFT_RELIEF)
+                < guards.index(GuardKind.DEPOSIT_FULL))
 
     def test_map_guard_craft_relief_sees_step_items(self):
         gd = _gd_ash_plank()
@@ -608,6 +620,33 @@ class TestSoleOutputMaterialRelief:
                            skills={"mining": 5})
         cands = craft_relief_candidates(state, gd, step_items=frozenset())
         assert not any(c.item_code in ("bar_a", "bar_b") for c in cands)
+
+    def test_sole_output_skips_equippable_gear(self):
+        """A held material whose SOLE recipe output is an equippable item (weapon/
+        armor/etc.) must NOT be a craft-relief candidate — end-stage gear is
+        excluded by the docstring guarantee ('End-stage gear/tools are NOT
+        considered').  Previously the sole-output loop called consider() with no
+        gear guard, re-opening the 17-copper-helmet over-craft class of bug."""
+        gd = GameData()
+        # reagent_x → sword_x is the only recipe consuming reagent_x.
+        # sword_x is a weapon (equippable): type_ in ITEM_TYPE_TO_SLOTS.
+        gd._crafting_recipes = {"sword_x": {"reagent_x": 6}}
+        gd._item_stats = {
+            "reagent_x": ItemStats(code="reagent_x", level=1, type_="resource"),
+            "sword_x": ItemStats(code="sword_x", level=1, type_="weapon",
+                                 crafting_skill="weaponcrafting", crafting_level=1),
+        }
+        gd._workshop_locations = {"weaponcrafting": (2, 2)}
+        gd._bank_location = (4, 0)
+        gd._taskmaster_location = (1, 2)
+        fill_monster_stat_defaults(gd)
+        # 30 reagent_x on hand (5 swords craftable); pressure at 75% (30/40).
+        state = make_state(inventory={"reagent_x": 30}, inventory_max=40,
+                           skills={"weaponcrafting": 5})
+        cands = craft_relief_candidates(state, gd, step_items=frozenset())
+        assert not any(c.item_code == "sword_x" for c in cands), (
+            "sword_x is equippable gear — sole-output loop must skip it"
+        )
 
     def test_zero_qty_material_skipped_by_sole_output(self):
         """A material present in inventory with qty=0 must not trigger

@@ -32,6 +32,7 @@ firing threshold in ONE activation instead of x1 per cycle.
 
 from dataclasses import dataclass
 
+from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.task_reservation import consumes_reserved
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -160,6 +161,8 @@ def craft_relief_candidates(
     # relief candidate when craftable ≥1 AND net relief > 0.  This catches the
     # copper_ore -> copper_bar pattern where the material itself isn't on the
     # goal chain but its only craftable use advances a goal.
+    # End-stage gear (equippable type) and tools (subtype=="tool") are excluded
+    # — relief is inventory management, not final assembly (docstring guarantee).
     for mat_code, mat_qty in state.inventory.items():
         if mat_qty <= 0:
             continue
@@ -170,6 +173,12 @@ def craft_relief_candidates(
         if len(outputs) != 1:
             continue
         (output_code,) = outputs
+        out_stats = game_data.item_stats(output_code)
+        if out_stats is not None and (
+            out_stats.type_ in ITEM_TYPE_TO_SLOTS
+            or out_stats.subtype == "tool"
+        ):
+            continue  # end-stage gear or tool — not a relief candidate
         consider(output_code, 1, batch_cap)
 
     candidates.sort(key=lambda c: (c.priority_class, -c.quantity, c.item_code))
