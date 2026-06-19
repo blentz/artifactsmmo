@@ -160,6 +160,13 @@ def depositFullFires (s : State) : Bool :=
               ≥ DEPOSIT_FULL_NUM * s.inventoryMax)
   && s.selectBankDepositsNonempty
 
+/-- The bank can physically accept a deposit: accessible, item-count known,
+    and used strictly below capacity. Mirrors `ai/bank_room.bank_has_room`.
+    `bankItemsKnown=false` (bank unvisited) and `bankCapacity=0` both read as
+    NO room. Not yet wired into any fires-predicate (Tasks 2–5). -/
+def bankHasRoom (s : State) : Bool :=
+  s.bankAccessible && s.bankItemsKnown && decide (s.bankItemsCount < s.bankCapacity)
+
 /-- DISCARD_HIGH guard. Mirrors `guards.py:86-87`:
       overstocked AND used/max ≥ 0.85 -/
 def discardHighFires (s : State) : Bool :=
