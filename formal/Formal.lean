@@ -187,6 +187,7 @@ import Formal.Liveness.FightFairnessF
 import Formal.Liveness.PressureDrain
 import Formal.Liveness.PressureTransience
 import Formal.Liveness.EffectiveDrainTransience
+import Formal.Liveness.ResidualVacuity
 import Formal.Liveness.WarmupCleared
 import Formal.Liveness.Leveling
 import Formal.Liveness.FightReady
