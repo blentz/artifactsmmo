@@ -3,6 +3,17 @@
 **Date:** 2026-06-19. **Prompted by:** "are we circling vacuous proofs because we've
 not accurately modeled the game or the AI?" — yes. This is the proof and the diagnosis.
 
+> **RESOLVED 2026-06-19.** The vacuous capstones and the whole i.o.-fairness transience
+> tower were REMOVED (the `cycleStepF` tower: `LevelFiftyReachableF`/`FightFairnessF`/
+> `EffectiveDrainTransience`/`PressureTransience`/`PressureDrain`/`BurstStep`/
+> `PressureBurst`/`Drainability`/`CycleStepFLeveling`; the `cycleStepP` capstone gutted
+> from `LevelFiftyReachableP`, keeping its reusable helpers; `FightFairnessP` deleted;
+> the `ResidualVacuity` demonstration module deleted now that its subjects are gone).
+> The NON-VACUOUS replacement is `Formal.Liveness.LevelingDescent.
+> cycleStepF_reaches_fifty_of_fights` (reach 50 from a per-cycle measure DESCENT via
+> `Formal.Liveness.MeasureDescent`). The kernel proofs of vacuity below are the
+> historical record of WHY the removal happened.
+
 ## The finding
 
 `Formal/Liveness/ResidualVacuity.lean` proves, with standard axioms only:

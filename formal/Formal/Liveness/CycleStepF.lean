@@ -11,35 +11,19 @@ on). This is the cycle whose `BlockersQuiet` is a faithful THEOREM rather than t
 refused false-story (the real bot re-arms chores via inventory filling, which
 `cycleStepF` models and earlier cycles did not).
 
-**This brick is the FOUNDATION only** — the definition and the per-step bridges
-(`cycleStepF` agrees with `cycleStepP` on every field except `inventoryUsed`, and
-its pressure is bounded). It does NOT yet prove the transience. The remaining
-Brick-3 work, with the design forks sharpened 2026-06-19, is:
+**This brick is the FOUNDATION** — the definition and the per-step bridges
+(`cycleStepF` agrees with `cycleStepP` on every field except `inventoryUsed`, and its
+pressure is bounded). `pressureDelta` makes `inventoryUsed` faithful (fights fill the
+bag, reducers drain it).
 
-* **3b — conservative perceive re-arming.** `pressureDelta` makes `inventoryUsed`
-  faithful, but the OPAQUE composition flags (`hasOverstockItems`,
-  `selectBankDepositsNonempty`, `sellableInventoryNonempty`) are still cleared-and-
-  never-re-armed by `applyActionKind`, so chores would not faithfully re-fire as
-  the bag fills. A conservative `inventoryPerceive` must re-arm them from pressure
-  (pressure present ⇒ assume a chore is available) — an OVER-approximation that is
-  the conservative direction for "combat still fires i.o." (more chores fire ⇒
-  harder to prove ⇒ holds a fortiori). BUT over-arming can HIDE a real
-  full-of-useful-items livelock, so the arming must be gated by a drainability
-  `RuntimeInvariant` (when pressured, a deposit is available: `bankAccessible ∧
-  selectBankDepositsNonempty`) — surfacing the livelock as a precondition, not
-  hiding it.
-* **3c — the claim/measure surgery.** Lex measure component 5
-  `bankPressure = max(0, used − 80%·max)`: fight raises it but reduces levelDeficit/
-  xpDeficit (lex 1–2, above) ⇒ descent OK; a reducer lowers it ⇒ OK; but CLAIM
-  raises it with no level/xp progress ⇒ measure INCREASES. Add a `pendingCount`
-  component ABOVE `bankPressure` (claim depletes its own finite fuel ⇒ descends it).
-* **3d — bounded-burst transience** ⇒ `BlockersQuietBelowCapInfinitelyOftenP`
-  for `cycleStepF` ⇒ reach-50, discharging the residual FAITHFULLY. The local
-  dichotomy it iterates is now COMPLETE: `BurstStep.cycleStepF_drains_via_discardHigh`
-  (drain side) + `PressureBurst.productionLadder_eq_objectiveStep_of_low_pressure`
-  (fight side). The residual the faithful capstone carries SHRINKS from the 14
-  `objectiveStepBlockers` to the 10 `PressureBurst.nonPressureBlockers` (+ the
-  `Drainability.RuntimeInvariant`): the 4 pressure-gated chores are proven transient.
+The NON-VACUOUS faithful reach-50 built on this is
+`Formal.Liveness.LevelingDescent.cycleStepF_reaches_fifty_of_fights`: a fight cycle
+strictly DESCENDS the lex measure (via `levelDeficit`/`xpDeficit`, which `pressureDelta`
+preserves — the loot fill at `bankPressure` is lex-dominated), fed to the
+`MeasureDescent` well-founded engine. NOTE (2026-06-19): an earlier i.o.-fairness
+transience tower built on this foundation (drain dichotomy / `BlockersQuiet` discharge)
+was REMOVED as vacuous — its residual forced `level < 50` infinitely often,
+contradicting monotone level + the reach-50 goal (`docs/REVIEW_levelfifty_vacuity.md`).
 
 Additive only; axioms ⊆ {propext, Quot.sound, …measure-chain}. Liveness namespace. -/
 

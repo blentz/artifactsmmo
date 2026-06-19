@@ -169,7 +169,6 @@ import Formal.Liveness.BlockerSelection
 import Formal.Liveness.BootstrapReach
 import Formal.Liveness.PerceptionRefresh
 import Formal.Liveness.CycleStepP
-import Formal.Liveness.FightFairnessP
 import Formal.Liveness.LevelFiftyReachableP
 import Formal.Liveness.BlockerSettled
 import Formal.Liveness.SettledWitness
@@ -177,17 +176,7 @@ import Formal.Liveness.SettledReach
 import Formal.Liveness.InventoryPressure
 import Formal.Liveness.InventoryDynamics
 import Formal.Liveness.CycleStepF
-import Formal.Liveness.Drainability
-import Formal.Liveness.BurstStep
-import Formal.Liveness.PressureBurst
 import Formal.Liveness.CycleStepFIteration
-import Formal.Liveness.CycleStepFLeveling
-import Formal.Liveness.LevelFiftyReachableF
-import Formal.Liveness.FightFairnessF
-import Formal.Liveness.PressureDrain
-import Formal.Liveness.PressureTransience
-import Formal.Liveness.EffectiveDrainTransience
-import Formal.Liveness.ResidualVacuity
 import Formal.Liveness.MeasureDescent
 import Formal.Liveness.LevelingDescent
 import Formal.Liveness.WarmupCleared

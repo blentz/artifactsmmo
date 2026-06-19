@@ -1,10 +1,10 @@
-import Formal.Liveness.CycleStepFLeveling
+import Formal.Liveness.CycleStepF
 import Formal.Liveness.MeasureDescent
 import Formal.Liveness.BootstrapReach
 
 /-! # LevelingDescent — the NON-VACUOUS faithful reach-50 (discharging the vacuity).
 
-`ResidualVacuity` proved the i.o.-fairness capstones vacuous (their `level < 50`-i.o.
+The removed i.o.-fairness capstones were vacuous (`docs/REVIEW_levelfifty_vacuity.md`; their `level < 50`-i.o.
 residual contradicts monotone level + the goal). `MeasureDescent` gave the honest
 engine: reach 50 from a per-cycle lex-measure DESCENT. This module discharges that
 engine's hypothesis for the LEVELING means.
@@ -20,7 +20,7 @@ rollover/accumulate split of `BootstrapReach.fightKind_decreases_measure` direct
 `cycleStepF_reaches_fifty_of_fights`: from `FightsBelowCap` — "every below-50 faithful
 cycle fights" — the faithful cycle reaches level 50, via the `MeasureDescent` engine.
 
-## Why this is NON-VACUOUS (unlike `TenQuietPairs`)
+## Why this is NON-VACUOUS (unlike the removed i.o.-fairness residual)
 
 `FightsBelowCap` is a per-step LOCAL condition (at each below-50 step the cycle fights),
 NOT an `∀N ∃k≥N … ∧ level<50` i.o. property. It is satisfiable JOINTLY with the goal
@@ -98,7 +98,7 @@ theorem cycleStepF_fight_descends (s : State) (hlvl : s.level < 50)
 
 /-- **`FightsBelowCap`** — the honest, non-vacuous leveling residual: every below-50
     faithful cycle fights (the ladder selects a fight on its refreshed selection state).
-    A per-step LOCAL condition (cf. the vacuous i.o. `TenQuietPairs`); its failure is a
+    A per-step LOCAL condition (cf. the removed, vacuous i.o.-fairness residual); its failure is a
     non-fighting (chore/claim/gear/task) cycle. -/
 def FightsBelowCap (s : State) : Prop :=
   ∀ k, (cycleStepFN k s).level < 50 →
@@ -121,7 +121,7 @@ theorem cycleStepF_reaches_fifty_of_fights (s : State) (h : FightsBelowCap s) :
 /-- **Non-vacuity check.** `FightsBelowCap` is jointly satisfiable WITH the goal — the
     degenerate `≥ 50` witness (the residual holds vacuously, the goal at `k = 0`).
     Distinguishes this formulation from the vacuous i.o. one
-    (`ResidualVacuity.capstone_hypotheses_unsatisfiable`), whose residual provably never
+    (kernel-proved in `docs/REVIEW_levelfifty_vacuity.md`), whose residual provably never
     coexists with the goal. -/
 theorem fights_below_cap_satisfiable_with_goal (s : State) (h : s.level ≥ 50) :
     FightsBelowCap s ∧ ∃ k, (cycleStepFN k s).level ≥ 50 := by

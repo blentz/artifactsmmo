@@ -24,26 +24,18 @@ raises pressure by more than `DROP_BOUND`), and that each reducer clears pressur
 to `0` (which, with Brick 1's `pressureGatedChores_quiet_of_low`, silences the
 gated chores while `inventoryMax > 0`).
 
-NOTE — the exact post-values are Phase-2 DIFFERENTIAL obligations, and the reducer
-post-value `0` is LOAD-BEARING for the transience (`PressureTransience`): the
-counting argument needs each drain to land STRICTLY BELOW the 85% threshold, and
-models that as the extreme `0`. This is OPTIMISTIC, not conservative — production's
-`depositFull` (deposit-all) plausibly empties the bag, but `discardHigh`/
-`sellPressured`/`discardCritical`/`craftRelief` remove only specific items (a
-PARTIAL drain). Modelling every reducer as `→ 0` overstates the drain, making
-"low pressure next step" easier to prove. The differential investigation
-(`docs/REVIEW_pressuredelta_differential.md`, 2026-06-19) FALSIFIED the claim that a
-fired reducer drops pressure below 85%: production's discard removes only the EXCESS
-above per-item caps (a bag of capped consumables/recipe-mats stays ≥ 85% and the
-guard then goes SILENT), deposit keeps a large keep-set, sell targets only `free ≥ 5`
-(≥ 85% for `inventoryMax > 33`), and craft batch-clamps. So `→ 0` is UNFAITHFUL, and
-under a faithful partial drain the `PressureTransience` counting is FALSE — the real
-bot can livelock at ≥ 85% (`[[project_inventory_profiles]]`'s full-of-useful-items
-livelock). The honest fix (follow-on): weaken `pressureDelta` to the bounded partial
-drain each action actually performs, replace `Drainability.DrainArmed` with
-`EffectiveDrainArmed` (a reducer whose application drops below 85% fires), and
-re-derive the counting — which then surfaces the livelock as its precise failure
-precondition. The lemmas below are value-agnostic in `DROP_BOUND`.
+NOTE (2026-06-19) — `pressureDelta` survives ONLY as the faithful inventory layer of
+the `cycleStepF` definition; the non-vacuous reach-50
+(`LevelingDescent.cycleStepF_reaches_fifty_of_fights`) uses it via its level/xp
+PRESERVATION (`pressureDelta_level`/`_xp`), NOT its reducer post-value. The reducer
+`→ 0` is therefore NO LONGER load-bearing for any live proof: the i.o.-fairness
+transience tower that depended on it was REMOVED as vacuous. The differential
+investigation (`docs/REVIEW_pressuredelta_differential.md`) had already shown `→ 0` is
+UNFAITHFUL anyway (production reducers remove only a bounded subset — discard the
+excess above per-item caps, deposit minus a keep-set, sell down to 5 free — so a bag of
+capped items can stay ≥ 85% and livelock, the `[[project_inventory_profiles]]` bug now
+fixed by the production last-resort deposit). The lemmas below are value-agnostic in
+`DROP_BOUND`; the reducer-clears lemmas are retained as harmless inventory facts.
 
 Additive only — `applyActionKind`, `cycleStep`, and every existing proof are
 untouched. Axioms ⊆ {propext, Quot.sound}. Liveness namespace — Mathlib allowed. -/

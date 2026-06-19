@@ -3,7 +3,7 @@ import Formal.Liveness.CycleStepFIteration
 
 /-! # MeasureDescent — the NON-VACUOUS level-50 engine: per-cycle measure descent.
 
-`ResidualVacuity` proved the i.o.-fairness capstones vacuous: their residual
+The removed i.o.-fairness capstones were vacuous (kernel-proved, `docs/REVIEW_levelfifty_vacuity.md`): their residual
 (`level < 50` infinitely often) contradicts monotone level + the reach-50 goal. This
 module supplies the honest replacement — a well-founded descent argument whose
 hypothesis is a LOCAL per-cycle measure decrease, NOT an i.o. property.
@@ -79,7 +79,7 @@ theorem cycleStepF_reaches_fifty_of_descent (s : State)
 
 /-! ## Non-vacuity check — the descent hypothesis is NOT self-defeating
 
-`ResidualVacuity` proved the i.o.-fairness residual UNSATISFIABLE (it implies `False`).
+The removed i.o.-fairness residual was UNSATISFIABLE (it implies `False`; `docs/REVIEW_levelfifty_vacuity.md`).
 The descent hypothesis is fundamentally different: it is jointly satisfiable WITH the
 conclusion. The witness below is the degenerate one (a state already at the cap, where
 the hypothesis holds vacuously and the goal holds at `k = 0`); it suffices to
