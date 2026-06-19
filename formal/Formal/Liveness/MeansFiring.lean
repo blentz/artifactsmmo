@@ -221,8 +221,8 @@ theorem _fires_discardCritical_implies_discardOverstock_positive (s : State) :
     discardOverstockValue (discardOverstockSatisfied s) (usedFractionRat s) > 0 := by
   intro h
   unfold fires discardCriticalFires at h
-  simp only [Bool.and_eq_true, decide_eq_true_eq] at h
-  obtain ⟨⟨hover, _⟩, _⟩ := h
+  simp only [Bool.not_eq_true', Bool.and_eq_true, decide_eq_true_eq] at h
+  obtain ⟨⟨⟨_, hover⟩, _⟩, _⟩ := h
   unfold discardOverstockSatisfied
   rw [hover]
   simp only [Bool.not_true]
@@ -237,7 +237,7 @@ theorem _fires_depositFull_implies_depositInventory_positive (s : State) :
   intro h
   unfold fires depositFullFires at h
   simp only [Bool.and_eq_true, decide_eq_true_eq] at h
-  obtain ⟨⟨⟨_, hmax⟩, hused⟩, _⟩ := h
+  obtain ⟨⟨⟨⟨_, _⟩, hmax⟩, hused⟩, _⟩ := h
   have hmax_ne : s.inventoryMax ≠ 0 := Nat.pos_iff_ne_zero.mp hmax
   have hmax_pos_rat : (0 : Rat) < (s.inventoryMax : Rat) := by exact_mod_cast hmax
   -- usedFractionRat s ≥ 90/100 (DEPOSIT_FULL_FRACTION raised to 0.90 per spec
@@ -276,8 +276,8 @@ theorem _fires_discardHigh_implies_discardOverstock_positive (s : State) :
     discardOverstockValue (discardOverstockSatisfied s) (usedFractionRat s) > 0 := by
   intro h
   unfold fires discardHighFires at h
-  simp only [Bool.and_eq_true, decide_eq_true_eq] at h
-  obtain ⟨⟨hover, _⟩, _⟩ := h
+  simp only [Bool.not_eq_true', Bool.and_eq_true, decide_eq_true_eq] at h
+  obtain ⟨⟨⟨_, hover⟩, _⟩, _⟩ := h
   unfold discardOverstockSatisfied
   rw [hover]
   simp only [Bool.not_true]

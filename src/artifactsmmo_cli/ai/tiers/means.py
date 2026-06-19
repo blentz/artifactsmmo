@@ -13,7 +13,7 @@ from artifactsmmo_cli.ai.learning.projections import low_yield_cancel_fires
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.task_decision import PIVOT, PURSUE, task_decision
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
+from artifactsmmo_cli.ai.tiers.guards import SelectionContext, _has_sellable
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 SELL_PRESSURE_FRACTION = 0.85
@@ -61,22 +61,6 @@ DISCRETIONARY_ORDER: tuple[MeansKind, ...] = (
 def _used_fraction(state: WorldState) -> float:
     return state.inventory_used / state.inventory_max if state.inventory_max > 0 else 0.0
 
-
-def _has_sellable(state: WorldState, game_data: GameData) -> bool:
-    """An item counts as sellable only when it has a buyer NPC AND the
-    server-side `tradeable` flag is true (OpenAPI Item 14 remediation).
-    Untradeable items would fail at the NpcSell action; gating here keeps
-    the means tier from selecting a sell that's destined to error out."""
-    for code, qty in state.inventory.items():
-        if qty <= 0:
-            continue
-        if not game_data.npcs_buying_item(code):
-            continue
-        stats = game_data.item_stats(code)
-        if stats is not None and not stats.tradeable:
-            continue
-        return True
-    return False
 
 
 def _tasks_coin_total(state: WorldState) -> int:

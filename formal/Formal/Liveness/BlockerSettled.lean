@@ -38,18 +38,19 @@ open Formal.Liveness.FightFairness
     cleared, and a combat objective is active. The task lifecycle is parked at
     `.none`. -/
 structure Settled (s : State) : Prop where
-  overstock : s.hasOverstockItems = false
-  deposits  : s.selectBankDepositsNonempty = false
-  gear      : s.gearReviewFires = false
-  pending   : s.pendingItemsNonempty = false
-  sellable  : s.sellableInventoryNonempty = false
-  craft     : s.craftReliefFires = false
-  hpFull    : s.hp = s.maxHp
-  bank      : s.bankAccessible = true
-  leveled   : s.level ≥ s.bankRequiredLevel
-  phaseNone : s.taskLifecyclePhase = .none
-  objFires  : s.objectiveStepFires = true
-  objFight  : s.objectiveStepIsFight = true
+  overstock      : s.hasOverstockItems = false
+  deposits       : s.selectBankDepositsNonempty = false
+  gear           : s.gearReviewFires = false
+  pending        : s.pendingItemsNonempty = false
+  sellable       : s.sellableInventoryNonempty = false
+  craft          : s.craftReliefFires = false
+  recycleNonempty : s.recyclableSurplusNonempty = false
+  hpFull         : s.hp = s.maxHp
+  bank           : s.bankAccessible = true
+  leveled        : s.level ≥ s.bankRequiredLevel
+  phaseNone      : s.taskLifecyclePhase = .none
+  objFires       : s.objectiveStepFires = true
+  objFight       : s.objectiveStepIsFight = true
 
 /-- At a `Settled` state every higher-priority blocker is quiet. -/
 theorem Settled_blockers_quiet (s : State) (h : Settled s) :
@@ -69,6 +70,8 @@ theorem Settled_blockers_quiet (s : State) (h : Settled s) :
     simp [hge]
   · simp [fires, discardCriticalFires, h.overstock]
   · simp [fires, ProductionLadder.craftReliefFires, h.craft]
+  · simp [fires, recycleReliefFires, h.recycleNonempty]
+  · simp [fires, sellReliefFires, h.sellable]
   · simp [fires, depositFullFires, h.deposits]
   · simp [fires, discardHighFires, h.overstock]
   · simp [fires, ProductionLadder.gearReviewFires, h.gear]
@@ -93,13 +96,15 @@ theorem Settled_cycleStep (s : State) (h : Settled s) : Settled (cycleStep s) :=
   have hcs : cycleStep s = applyActionKind .fight s :=
     cycleStep_eq_fight_when_objectiveStepFight s hpl h.objFight
   rw [hcs]
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · exact h.overstock
   · exact h.deposits
   · exact h.gear
   · exact h.pending
   · exact h.sellable
   · exact h.craft
+  · -- recyclableSurplusNonempty: fight clears nothing in that field; it stays false.
+    exact h.recycleNonempty
   · -- hp = maxHp (fight touches neither).
     exact h.hpFull
   · -- bankAccessible stays true.

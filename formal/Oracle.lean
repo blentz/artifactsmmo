@@ -1006,7 +1006,9 @@ def runDecideKey (args : Array Json) : Json :=
       | 5 => .depositFull
       | 6 => .discardHigh
       | 7 => .restForCombat
-      | _ => .gearReview
+      | 8 => .gearReview
+      | 9 => .recycleRelief
+      | _ => .sellRelief  -- index 10
     Json.mkObj [("repr", Json.str (Formal.DecideKey.goalReprOfGuard k))]
   else
     let idx := (intArg args 1).toNat

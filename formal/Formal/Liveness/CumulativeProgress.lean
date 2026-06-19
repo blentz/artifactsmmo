@@ -634,6 +634,12 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
     | craftRelief =>
       show (applyActionKind .craft s).level ≥ s.level
       simp [applyActionKind]
+    | recycleRelief =>
+      show (applyActionKind .recycle s).level ≥ s.level
+      simp [applyActionKind]
+    | sellRelief =>
+      show (applyActionKind .npcSell s).level ≥ s.level
+      simp [applyActionKind]
     | maintainConsumables =>
       show (applyActionKind .craft s).level ≥ s.level
       simp [applyActionKind]
@@ -831,9 +837,9 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
     have hcs : cycleStep s = applyActionKind .deleteItem s := by
       unfold cycleStep; rw [hk]; rfl
     rw [hcs]
-    simp only [fires, discardCriticalFires, Bool.and_eq_true,
+    simp only [fires, discardCriticalFires, Bool.not_eq_true', Bool.and_eq_true,
                decide_eq_true_eq] at hfires
-    have hpre : s.hasOverstockItems = true := hfires.1.1
+    have hpre : s.hasOverstockItems = true := hfires.1.1.2
     refine ⟨rfl, ?_⟩
     refine extLt_of_overstock_dec ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_
     · unfold extMeasure applyActionKind; rfl
@@ -905,9 +911,9 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
     have hcs : cycleStep s = applyActionKind .deleteItem s := by
       unfold cycleStep; rw [hk]; rfl
     rw [hcs]
-    simp only [fires, discardHighFires, Bool.and_eq_true,
+    simp only [fires, discardHighFires, Bool.not_eq_true', Bool.and_eq_true,
                decide_eq_true_eq] at hfires
-    have hpre : s.hasOverstockItems = true := hfires.1.1
+    have hpre : s.hasOverstockItems = true := hfires.1.1.2
     refine ⟨rfl, ?_⟩
     refine extLt_of_overstock_dec ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_
     · unfold extMeasure applyActionKind; rfl
@@ -1104,6 +1110,8 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
   -- Out-of-scope kinds: ruled out by hmem.
   | completeTask    => exfalso; revert hmem; unfold progressMeans; decide
   | recycleSurplus  => exfalso; revert hmem; unfold progressMeans; decide
+  | recycleRelief   => exfalso; revert hmem; unfold progressMeans; decide
+  | sellRelief      => exfalso; revert hmem; unfold progressMeans; decide
   | maintainConsumables => exfalso; revert hmem; unfold progressMeans; decide
   | lowYieldCancel  => exfalso; revert hmem; unfold progressMeans; decide
   | taskCancel      => exfalso; revert hmem; unfold progressMeans; decide

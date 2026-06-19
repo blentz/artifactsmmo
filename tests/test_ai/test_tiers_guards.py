@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.tiers.guards import (
     GUARD_ORDER,
     GuardKind,
@@ -10,6 +10,7 @@ from artifactsmmo_cli.ai.tiers.guards import (
     _fires,
     active_guards,
 )
+from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_strategy_driver import _ctx as driver_ctx
 
@@ -82,9 +83,10 @@ def test_reach_unlock_level_silent_beyond_gap():
 
 
 def test_deposit_full_fires_when_inventory_high_and_depositable_item():
-    # inventory_max=10, inventory={"ore": 9} → 90% ≥ 80%
+    # inventory_max=10, inventory={"ore": 9} → 90% ≥ 0.90
     # "ore" is not tasks_coin, not task item, not HP item, not a weapon
     # → select_bank_deposits returns [("ore", 9)]
+    # bank has room: 0 items < capacity 50
     state = make_state(
         hp=100, max_hp=100,
         inventory={"ore": 9},
@@ -92,6 +94,7 @@ def test_deposit_full_fires_when_inventory_high_and_depositable_item():
         bank_items={},
     )
     gd = GameData()
+    gd._bank_capacity = 50
     guards = active_guards(state, gd, None, _ctx(bank_accessible=True))
     assert GuardKind.DEPOSIT_FULL in guards
 
@@ -193,3 +196,411 @@ def test_discard_high_silent_when_step_profile_protects_goal_item():
     guards = active_guards(state, gd, None, _ctx(),
                            step_profile={"wooden_shield": 3})
     assert GuardKind.DISCARD_HIGH not in guards
+
+
+def test_deposit_full_quiet_when_bank_full():
+    """DEPOSIT_FULL must not fire when the bank cannot accept items (full)."""
+    gd = GameData()
+    gd._bank_capacity = 2
+    # bank used 2 == capacity 2 → no room
+    state = make_state(inventory={"junk": 100}, inventory_max=100,
+                       bank_items={"x": 1, "y": 1})
+    ctx = _ctx()  # bank_accessible=True
+    assert _fires(GuardKind.DEPOSIT_FULL, state, gd, None, ctx) is False
+
+
+def test_deposit_full_fires_when_bank_has_room():
+    """DEPOSIT_FULL fires when bank has room, inventory is full, and there is a
+    depositable item."""
+    gd = GameData()
+    gd._bank_capacity = 50
+    state = make_state(inventory={"junk": 100}, inventory_max=100,
+                       bank_items={"x": 1})
+    ctx = _ctx()
+    assert _fires(GuardKind.DEPOSIT_FULL, state, gd, None, ctx) is True
+
+
+def test_discard_quiet_when_bank_has_room():
+    """With bank room, overstock is deposited, not discarded — both DISCARD
+    guards must be silent even when overstock is present."""
+    gd = GameData()
+    gd._bank_capacity = 50
+    # inventory={"junk": 100}, inventory_max=100 → 100% fill, junk is overstock
+    # (empty catalog → cap 0, any quantity is overstock under pressure).
+    # bank has room: 1 item < capacity 50.
+    state = make_state(inventory={"junk": 100}, inventory_max=100,
+                       bank_items={"x": 1})
+    ctx = _ctx()  # bank_accessible=True
+    assert _fires(GuardKind.DISCARD_CRITICAL, state, gd, None, ctx) is False
+    assert _fires(GuardKind.DISCARD_HIGH, state, gd, None, ctx) is False
+
+
+def test_discard_fires_when_bank_full():
+    """Both discard guards fire when overstock is present AND the bank is full."""
+    gd = GameData()
+    gd._bank_capacity = 1
+    # bank has 1 item at capacity 1 → bank is full (no room).
+    state = make_state(inventory={"junk": 100}, inventory_max=100,
+                       bank_items={"x": 1})
+    ctx = _ctx()  # bank_accessible=True
+    # Overstock present + bank full → discard guard fires (worthless filtering
+    # happens in the goal, not the fire predicate).
+    assert _fires(GuardKind.DISCARD_HIGH, state, gd, None, ctx) is True
+    assert _fires(GuardKind.DISCARD_CRITICAL, state, gd, None, ctx) is True
+
+
+def _recycle_gd() -> GameData:
+    """GameData with a craftable equippable gear item and a known workshop."""
+    gd = GameData()
+    gd._item_stats = {
+        "copper_helmet": ItemStats(
+            code="copper_helmet", level=1, type_="helmet",
+            crafting_skill="gearcrafting", crafting_level=1,
+        ),
+    }
+    gd._crafting_recipes = {"copper_helmet": {"copper_bar": 6}}
+    gd._workshop_locations = {"gearcrafting": (2, 1)}
+    gd._bank_capacity = 1  # bank is full (1 item = capacity 1)
+    return gd
+
+
+def test_recycle_relief_fires_when_bank_full_with_surplus():
+    """Recyclable surplus + bank full + bag pressure -> RECYCLE_RELIEF fires."""
+    gd = _recycle_gd()
+    # bank_items has 1 item and capacity is 1 → bank full
+    state = make_state(
+        level=5, skills={"gearcrafting": 1},
+        inventory={"copper_helmet": 9},
+        inventory_max=200,
+        bank_items={"some_item": 1},
+    )
+    ctx = _ctx(bank_accessible=True)
+    assert _fires(GuardKind.RECYCLE_RELIEF, state, gd, None, ctx) is True
+
+
+def test_recycle_relief_quiet_when_bank_has_room():
+    """Same surplus but bank has room -> deposit path applies, RECYCLE_RELIEF quiet."""
+    gd = _recycle_gd()
+    gd._bank_capacity = 50  # bank has room
+    state = make_state(
+        level=5, skills={"gearcrafting": 1},
+        inventory={"copper_helmet": 9},
+        inventory_max=200,
+        bank_items={"some_item": 1},
+    )
+    ctx = _ctx(bank_accessible=True)
+    assert _fires(GuardKind.RECYCLE_RELIEF, state, gd, None, ctx) is False
+
+
+def test_recycle_relief_quiet_when_no_surplus():
+    """Bank full but no surplus → RECYCLE_RELIEF quiet."""
+    gd = _recycle_gd()
+    state = make_state(
+        level=5, skills={"gearcrafting": 1},
+        inventory={"copper_helmet": 1},  # at cap (1), no surplus
+        inventory_max=200,
+        bank_items={"some_item": 1},
+    )
+    ctx = _ctx(bank_accessible=True)
+    assert _fires(GuardKind.RECYCLE_RELIEF, state, gd, None, ctx) is False
+
+
+def test_recycle_relief_quiet_when_surplus_is_protected():
+    """Bank full, surplus exists but it is the committed objective gear → quiet."""
+    gd = _recycle_gd()
+    state = make_state(
+        level=5, skills={"gearcrafting": 1},
+        inventory={"copper_helmet": 9},
+        inventory_max=200,
+        bank_items={"some_item": 1},
+    )
+    ctx = _ctx(bank_accessible=True,
+               target_gear=frozenset({"copper_helmet"}))
+    assert _fires(GuardKind.RECYCLE_RELIEF, state, gd, None, ctx) is False
+
+
+def _sell_gd() -> GameData:
+    """GameData with one reachable NPC buyer for 'copper_ore' (tradeable item)."""
+    gd = GameData()
+    gd._npc_sell_prices = {"npc_buyer": {"copper_ore": 5}}
+    gd._npc_locations = {"npc_buyer": (1, 2)}  # reachable now
+    gd._item_stats = {
+        "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource",
+                                tradeable=True),
+    }
+    gd._bank_capacity = 1  # bank is full (1 item = capacity 1)
+    return gd
+
+
+def test_sell_relief_fires_when_bank_full_with_sellable():
+    """Bank full + sellable item in inventory -> SELL_RELIEF fires."""
+    gd = _sell_gd()
+    state = make_state(
+        inventory={"copper_ore": 5},
+        inventory_max=20,
+        bank_items={"some_item": 1},
+    )
+    ctx = _ctx(bank_accessible=True)
+    assert _fires(GuardKind.SELL_RELIEF, state, gd, None, ctx) is True
+
+
+def test_sell_relief_quiet_when_bank_has_room():
+    """Bank has room -> SELL_RELIEF quiet even with sellable items."""
+    gd = _sell_gd()
+    gd._bank_capacity = 50  # bank has room
+    state = make_state(
+        inventory={"copper_ore": 5},
+        inventory_max=20,
+        bank_items={"some_item": 1},
+    )
+    ctx = _ctx(bank_accessible=True)
+    assert _fires(GuardKind.SELL_RELIEF, state, gd, None, ctx) is False
+
+
+def test_sell_relief_quiet_when_no_sellable():
+    """Bank full but no NPC buyer for held items -> SELL_RELIEF quiet."""
+    gd = _sell_gd()
+    state = make_state(
+        inventory={"unsellable_item": 5},
+        inventory_max=20,
+        bank_items={"some_item": 1},
+    )
+    ctx = _ctx(bank_accessible=True)
+    assert _fires(GuardKind.SELL_RELIEF, state, gd, None, ctx) is False
+
+
+def test_sell_relief_quiet_when_item_zero_qty():
+    """Inventory entry with qty=0 is skipped (no real holding)."""
+    gd = _sell_gd()
+    state = make_state(
+        inventory={"copper_ore": 0},  # held qty is zero
+        inventory_max=20,
+        bank_items={"some_item": 1},
+    )
+    ctx = _ctx(bank_accessible=True)
+    assert _fires(GuardKind.SELL_RELIEF, state, gd, None, ctx) is False
+
+
+def test_sell_relief_quiet_when_item_not_tradeable():
+    """Bank full + NPC buyer exists but item is not tradeable -> quiet."""
+    gd = GameData()
+    gd._npc_sell_prices = {"npc_buyer": {"bound_item": 5}}
+    gd._item_stats = {
+        "bound_item": ItemStats(code="bound_item", level=1, type_="resource",
+                                tradeable=False),
+    }
+    gd._bank_capacity = 1
+    state = make_state(
+        inventory={"bound_item": 3},
+        inventory_max=20,
+        bank_items={"some_item": 1},
+    )
+    ctx = _ctx(bank_accessible=True)
+    assert _fires(GuardKind.SELL_RELIEF, state, gd, None, ctx) is False
+
+
+def test_sell_relief_quiet_when_only_buyer_is_dormant_event_merchant():
+    """Bank full + the ONLY NPC buyer has npc_location()==None (dormant event
+    merchant, spawn window closed) -> SELL_RELIEF must NOT fire.
+
+    Pre-branch behaviour: SELL_RELIEF fired because _has_sellable only checked
+    npcs_buying_item (price table), not reachability.  NpcSellAction.is_applicable
+    then rejected the unreachable NPC → empty plan → permanent livelock.
+    The fix: _has_sellable requires at least one buyer with a non-None location."""
+    gd = GameData()
+    # NPC is in the price table but has NO entry in _npc_locations → npc_location returns None.
+    gd._npc_sell_prices = {"event_merchant": {"festival_token": 10}}
+    gd._item_stats = {
+        "festival_token": ItemStats(code="festival_token", level=1, type_="resource",
+                                    tradeable=True),
+    }
+    gd._bank_capacity = 1  # bank full
+    state = make_state(
+        inventory={"festival_token": 5},
+        inventory_max=20,
+        bank_items={"some_item": 1},
+    )
+    ctx = _ctx(bank_accessible=True)
+    assert _fires(GuardKind.SELL_RELIEF, state, gd, None, ctx) is False
+
+
+def test_sell_relief_fires_when_buyer_has_reachable_location():
+    """Sanity: bank full + buyer IS reachable (npc_location returns a tile)
+    -> SELL_RELIEF fires (reachable-buyer path)."""
+    gd = GameData()
+    gd._npc_sell_prices = {"merchant": {"festival_token": 10}}
+    gd._item_stats = {
+        "festival_token": ItemStats(code="festival_token", level=1, type_="resource",
+                                    tradeable=True),
+    }
+    gd._npc_locations = {"merchant": (3, 4)}
+    gd._bank_capacity = 1  # bank full
+    state = make_state(
+        inventory={"festival_token": 5},
+        inventory_max=20,
+        bank_items={"some_item": 1},
+    )
+    ctx = _ctx(bank_accessible=True)
+    assert _fires(GuardKind.SELL_RELIEF, state, gd, None, ctx) is True
+
+
+# ---------------------------------------------------------------------------
+# Bank-full cascade ordering: craft > recycle > sell > discard
+# ---------------------------------------------------------------------------
+
+def _bank_full_ctx() -> SelectionContext:
+    """Context for the bank-full cascade: bank accessible, no active combat."""
+    return _ctx(bank_accessible=True)
+
+
+def _cascade_gd_base() -> GameData:
+    """Minimal GameData shared across all cascade sub-cases.
+
+    Bank full: capacity=1, one item already stored.
+    No NPC buyers, no recycle-eligible gear, no recipes by default — each
+    sub-case adds only what it needs to light up its guard."""
+    gd = GameData()
+    gd._bank_capacity = 1  # 1 item == capacity → no room
+    return gd
+
+
+def _state_with_craft() -> tuple[GameData, "WorldState"]:
+    """CRAFT_RELIEF sub-case: bank full, inventory at 75%, ash_wood craftable
+    into ash_plank (10:1 recipe → net 9 units freed per craft).
+
+    Active task = ash_plank(3). At 75 ash_wood / inventory_max=100 the
+    CRAFT_RELIEF fraction (0.70) is met; DISCARD thresholds (0.85/0.95) are
+    NOT met, so DISCARD_CRITICAL stays quiet and CRAFT_RELIEF is first."""
+    gd = _cascade_gd_base()
+    gd._crafting_recipes = {"ash_plank": {"ash_wood": 10}}
+    gd._item_stats = {
+        "ash_plank": ItemStats(
+            code="ash_plank", level=1, type_="resource",
+            crafting_skill="woodcutting", crafting_level=1,
+        ),
+    }
+    state = make_state(
+        skills={"woodcutting": 5},
+        inventory={"ash_wood": 75},
+        inventory_max=100,
+        bank_items={"x": 1},
+        task_code="ash_plank",
+        task_type="items",
+        task_total=3,
+        task_progress=0,
+    )
+    return gd, state
+
+
+def _state_with_recycle_no_craft() -> tuple[GameData, "WorldState"]:
+    """RECYCLE_RELIEF sub-case: bank full, inventory at 75%,
+    surplus copper_helmet present (held 9, cap 1), but NO craftable task item
+    so CRAFT_RELIEF stays quiet."""
+    gd = _cascade_gd_base()
+    gd._item_stats = {
+        "copper_helmet": ItemStats(
+            code="copper_helmet", level=1, type_="helmet",
+            crafting_skill="gearcrafting", crafting_level=1,
+        ),
+    }
+    gd._crafting_recipes = {"copper_helmet": {"copper_bar": 6}}
+    gd._workshop_locations = {"gearcrafting": (2, 1)}
+    state = make_state(
+        level=5, skills={"gearcrafting": 5},
+        inventory={"copper_helmet": 9},  # surplus above cap-1; 75 < 85 → no discard
+        inventory_max=12,
+        bank_items={"x": 1},
+    )
+    return gd, state
+
+
+def _state_with_sell_no_craft_recycle() -> tuple[GameData, "WorldState"]:
+    """SELL_RELIEF sub-case: bank full, inventory at 75%, sellable copper_ore
+    present (NPC buyer reachable + tradeable=True), no craft or recycle candidate."""
+    gd = _cascade_gd_base()
+    gd._npc_sell_prices = {"npc_buyer": {"copper_ore": 5}}
+    gd._npc_locations = {"npc_buyer": (1, 2)}  # reachable now
+    gd._item_stats = {
+        "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource",
+                                tradeable=True),
+    }
+    state = make_state(
+        inventory={"copper_ore": 75},
+        inventory_max=100,
+        bank_items={"x": 1},
+    )
+    return gd, state
+
+
+def _state_with_discard_only() -> tuple[GameData, "WorldState"]:
+    """DISCARD_HIGH sub-case: bank full, inventory at 90%,
+    only a worthless junk item present — no craft/recycle/sell candidate.
+    90% ≥ DISCARD_HIGH_FRACTION (0.85) so DISCARD_HIGH fires.
+    DISCARD_CRITICAL requires 0.95 so it is also checked."""
+    gd = _cascade_gd_base()
+    # "junk" has no recipe, no NPC buyer, no stats → pure overstock
+    state = make_state(
+        inventory={"junk": 90},
+        inventory_max=100,
+        bank_items={"x": 1},
+    )
+    return gd, state
+
+
+def _state_bank_has_room() -> tuple[GameData, "WorldState"]:
+    """Bank-has-room case: bag at 92%, depositable junk present, bank has room.
+    DEPOSIT_FULL should fire; RECYCLE/SELL/DISCARD must NOT fire."""
+    gd = _cascade_gd_base()
+    gd._bank_capacity = 50  # override: plenty of room
+    state = make_state(
+        inventory={"junk": 92},
+        inventory_max=100,
+        bank_items={"x": 1},
+    )
+    return gd, state
+
+
+def test_bank_full_cascade_order():
+    """End-to-end ordering: active_guards returns guards in GUARD_ORDER ladder
+    order. Across bank-full sub-cases the cascade priority is:
+      CRAFT_RELIEF > RECYCLE_RELIEF > SELL_RELIEF > DISCARD_HIGH
+    and DEPOSIT_FULL never appears while bank has no room."""
+    ctx = _bank_full_ctx()
+
+    # Sub-case 1: craft candidate present → CRAFT_RELIEF is the first guard.
+    gd, state = _state_with_craft()
+    fired = active_guards(state, gd, None, ctx)
+    assert fired, "expected at least one guard"
+    assert fired[0] is GuardKind.CRAFT_RELIEF, f"expected CRAFT_RELIEF first, got {fired}"
+    assert GuardKind.DEPOSIT_FULL not in fired, "DEPOSIT_FULL must not fire when bank is full"
+
+    # Sub-case 2: no craft candidate, recyclable surplus → RECYCLE_RELIEF first.
+    gd, state = _state_with_recycle_no_craft()
+    fired = active_guards(state, gd, None, ctx)
+    assert fired, "expected at least one guard"
+    assert fired[0] is GuardKind.RECYCLE_RELIEF, f"expected RECYCLE_RELIEF first, got {fired}"
+    assert GuardKind.DEPOSIT_FULL not in fired, "DEPOSIT_FULL must not fire when bank is full"
+
+    # Sub-case 3: no craft/recycle, sellable item → SELL_RELIEF first.
+    gd, state = _state_with_sell_no_craft_recycle()
+    fired = active_guards(state, gd, None, ctx)
+    assert fired, "expected at least one guard"
+    assert fired[0] is GuardKind.SELL_RELIEF, f"expected SELL_RELIEF first, got {fired}"
+    assert GuardKind.DEPOSIT_FULL not in fired, "DEPOSIT_FULL must not fire when bank is full"
+
+    # Sub-case 4: only worthless overstock → DISCARD_HIGH fires (at 90% ≥ 0.85).
+    gd, state = _state_with_discard_only()
+    fired = active_guards(state, gd, None, ctx)
+    assert GuardKind.DISCARD_HIGH in fired or GuardKind.DISCARD_CRITICAL in fired, (
+        f"expected DISCARD_HIGH or DISCARD_CRITICAL in {fired}"
+    )
+    assert GuardKind.DEPOSIT_FULL not in fired, "DEPOSIT_FULL must not fire when bank is full"
+
+    # Sub-case 5: bank has room → DEPOSIT_FULL fires; relief/discard guards silent.
+    gd, state = _state_bank_has_room()
+    fired = active_guards(state, gd, None, ctx)
+    assert GuardKind.DEPOSIT_FULL in fired, f"expected DEPOSIT_FULL in {fired}"
+    assert GuardKind.RECYCLE_RELIEF not in fired, "RECYCLE_RELIEF must not fire with room"
+    assert GuardKind.SELL_RELIEF not in fired, "SELL_RELIEF must not fire with room"
+    assert GuardKind.DISCARD_HIGH not in fired, "DISCARD_HIGH must not fire with room"
+    assert GuardKind.DISCARD_CRITICAL not in fired, "DISCARD_CRITICAL must not fire with room"

@@ -41,15 +41,15 @@ open Formal.Liveness.ProductionLadder
 open Formal.Liveness.CycleStep
 open Formal.Liveness.CumulativeProgress
 
-/-- The means strictly ahead of `objectiveStep` (idx 0–13) in `allInLadderOrder`.
-    `productionLadder` returns the FIRST firing means, so `objectiveStep` (idx 14)
+/-- The means strictly ahead of `objectiveStep` (idx 0–14) in `allInLadderOrder`.
+    `productionLadder` returns the FIRST firing means, so `objectiveStep` (idx 15)
     is selected exactly when all of these are quiet and it fires. -/
 def objectiveStepBlockers : List MeansKind :=
   [.hpCritical, .restForCombat, .bankUnlock, .reachUnlockLevel,
-   .discardCritical, .craftRelief, .depositFull, .discardHigh, .gearReview,
+   .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull, .discardHigh, .gearReview,
    .claimPending, .completeTask, .sellPressured, .lowYieldCancel, .taskCancel]
 
-/-- The means at/after `objectiveStep` (idx 14–22). -/
+/-- The means at/after `objectiveStep` (idx 15–23). -/
 def objectiveStepSuffix : List MeansKind :=
   [.pursueTask, .acceptTask, .taskExchange, .maintainConsumables, .sellIdle, .recycleSurplus,
    .bankExpand, .wait]

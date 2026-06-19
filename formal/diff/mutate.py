@@ -2433,8 +2433,10 @@ LADDER_GUARD_FIRES_MUTATIONS = [
     ),
     (
         "ladder/guards: DEPOSIT_FULL fill comparator >= -> > (boundary 0.90 leaks)",
-        "        return (ctx.bank_accessible and _used_fraction(state) >= DEPOSIT_FULL_FRACTION",
-        "        return (ctx.bank_accessible and _used_fraction(state) > DEPOSIT_FULL_FRACTION",
+        "                and _used_fraction(state) >= DEPOSIT_FULL_FRACTION\n"
+        "                and bool(select_bank_deposits(",
+        "                and _used_fraction(state) > DEPOSIT_FULL_FRACTION\n"
+        "                and bool(select_bank_deposits(",
     ),
     (
         "ladder/guards: DEPOSIT_FULL threshold 0.90 -> 0.85 (fires at discard ramp)",

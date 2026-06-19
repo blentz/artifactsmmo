@@ -7,6 +7,7 @@ Pure: predicates read state/game_data/history + an explicit SelectionContext
 from dataclasses import dataclass, field, replace
 from enum import Enum
 
+from artifactsmmo_cli.ai.bank_room import bank_has_room
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.craft_relief import (
@@ -18,6 +19,7 @@ from artifactsmmo_cli.ai.inventory_caps import overstocked_items
 from artifactsmmo_cli.ai.inventory_profile import inventory_profile
 from artifactsmmo_cli.ai.learning.skill_xp_curve import SkillXpCurve
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.world_state import WorldState
 
 CRITICAL_HP_FRACTION = 0.25
@@ -67,6 +69,8 @@ class GuardKind(Enum):
     REACH_UNLOCK_LEVEL = "reach_unlock_level"
     DISCARD_CRITICAL = "discard_critical"
     CRAFT_RELIEF = "craft_relief"
+    RECYCLE_RELIEF = "recycle_relief"
+    SELL_RELIEF = "sell_relief"
     DEPOSIT_FULL = "deposit_full"
     DISCARD_HIGH = "discard_high"
     GEAR_REVIEW = "gear_review"  # post-level-up / post-loss gear prioritization
@@ -79,10 +83,38 @@ GUARD_ORDER: tuple[GuardKind, ...] = (
     GuardKind.REACH_UNLOCK_LEVEL,
     GuardKind.DISCARD_CRITICAL,
     GuardKind.CRAFT_RELIEF,  # craft-before-deposit/discard when applicable
+    GuardKind.RECYCLE_RELIEF,  # bank-full: recover materials before sell/discard
+    GuardKind.SELL_RELIEF,  # bank-full: sell surplus to NPC before deposit/discard
     GuardKind.DEPOSIT_FULL,
     GuardKind.DISCARD_HIGH,
     GuardKind.GEAR_REVIEW,  # lowest-priority guard, still above all means
 )
+
+
+def _has_sellable(state: WorldState, game_data: GameData) -> bool:
+    """Item is sellable-NOW when it has a reachable buyer NPC (npc_location is not
+    None) AND the server-side `tradeable` flag is true.
+
+    Dormant event merchants appear in the price table but their location is None
+    while their spawn window is closed — NpcSellAction.is_applicable rejects them
+    on the same npc_location-is-None check.  Aligning the guard predicate with
+    is_applicable prevents SELL_RELIEF from firing for unreachable buyers, which
+    was causing a permanent bag-full livelock (no rung could act).
+
+    Canonical definition — tiers/means.py imports this instead of duplicating it."""
+    for code, qty in state.inventory.items():
+        if qty <= 0:
+            continue
+        buyers = game_data.npcs_buying_item(code)
+        if not buyers:
+            continue
+        stats = game_data.item_stats(code)
+        if stats is not None and not stats.tradeable:
+            continue
+        # At least one buyer must be reachable now.
+        if any(game_data.npc_location(npc) is not None for npc, _price in buyers):
+            return True
+    return False
 
 
 def _used_fraction(state: WorldState) -> float:
@@ -153,9 +185,11 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
                 and state.level < ctx.bank_required_level
                 and ctx.bank_required_level - state.level <= MAX_ACHIEVABLE_GAP)
     if kind is GuardKind.DISCARD_CRITICAL:
-        return (bool(overstocked_items(state, game_data,
-                                       profile=active_profile(state, game_data, ctx,
-                                                              step_profile)))
+        return (not bank_has_room(ctx.bank_accessible, state.bank_items,
+                                  game_data.bank_capacity)
+                and bool(overstocked_items(state, game_data,
+                                           profile=active_profile(state, game_data, ctx,
+                                                                  step_profile)))
                 and _used_fraction(state) >= DISCARD_CRITICAL_FRACTION)
     if kind is GuardKind.CRAFT_RELIEF:
         if _used_fraction(state) < CRAFT_RELIEF_FRACTION:
@@ -164,15 +198,29 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
             state, game_data,
             step_items=frozenset(step_profile or ()),
         ))
+    if kind is GuardKind.RECYCLE_RELIEF:
+        return (not bank_has_room(ctx.bank_accessible, state.bank_items,
+                                  game_data.bank_capacity)
+                and bool(recyclable_surplus(
+                    state, game_data, ctx.target_gear | ctx.target_tools)))
+    if kind is GuardKind.SELL_RELIEF:
+        return (not bank_has_room(ctx.bank_accessible, state.bank_items,
+                                  game_data.bank_capacity)
+                and _has_sellable(state, game_data))
     if kind is GuardKind.DEPOSIT_FULL:
-        return (ctx.bank_accessible and _used_fraction(state) >= DEPOSIT_FULL_FRACTION
+        return (ctx.bank_accessible
+                and bank_has_room(ctx.bank_accessible, state.bank_items,
+                                  game_data.bank_capacity)
+                and _used_fraction(state) >= DEPOSIT_FULL_FRACTION
                 and bool(select_bank_deposits(
                     state, game_data,
                     frozenset(active_profile(state, game_data, ctx, step_profile)))))
     if kind is GuardKind.DISCARD_HIGH:
-        return (bool(overstocked_items(state, game_data,
-                                       profile=active_profile(state, game_data, ctx,
-                                                              step_profile)))
+        return (not bank_has_room(ctx.bank_accessible, state.bank_items,
+                                  game_data.bank_capacity)
+                and bool(overstocked_items(state, game_data,
+                                           profile=active_profile(state, game_data, ctx,
+                                                                  step_profile)))
                 and _used_fraction(state) >= DISCARD_HIGH_FRACTION)
     if kind is GuardKind.GEAR_REVIEW:
         return ctx.gear_review_active

@@ -141,29 +141,45 @@ def reachUnlockLevelFires (s : State) : Bool :=
   && decide (s.level < s.bankRequiredLevel)
   && decide (s.bankRequiredLevel - s.level ≤ MAX_ACHIEVABLE_GAP_LV2)
 
-/-- DISCARD_CRITICAL guard. Mirrors `guards.py:81-82`:
-      overstocked AND used/max ≥ 0.95
+/-- The bank can physically accept a deposit: accessible, item-count known,
+    and used strictly below capacity. Mirrors `ai/bank_room.bank_has_room`.
+    `bankItemsKnown=false` (bank unvisited) and `bankCapacity=0` both read as
+    NO room. -/
+def bankHasRoom (s : State) : Bool :=
+  s.bankAccessible && s.bankItemsKnown && decide (s.bankItemsCount < s.bankCapacity)
+
+/-- DISCARD_CRITICAL guard. Mirrors `guards.py` DISCARD_CRITICAL branch:
+      ¬bank_has_room AND overstocked AND used/max ≥ 0.95
     Nat form: `100 * inventoryUsed ≥ 95 * inventoryMax`, treating
-    `inventoryMax == 0` as ratio 0 (NOT firing). -/
+    `inventoryMax == 0` as ratio 0 (NOT firing).
+    Task 3: added `!(bankHasRoom s)` so discard only fires when the bank
+    cannot accept deposits — deposits take priority when bank has room. -/
 def discardCriticalFires (s : State) : Bool :=
-  s.hasOverstockItems
+  !(bankHasRoom s)
+  && s.hasOverstockItems
   && decide (s.inventoryMax > 0)
   && decide (DISCARD_CRITICAL_DEN * s.inventoryUsed
               ≥ DISCARD_CRITICAL_NUM * s.inventoryMax)
 
-/-- DEPOSIT_FULL guard. Mirrors `guards.py:83-85`:
-      bank_accessible ∧ used/max ≥ 0.80 ∧ select_bank_deposits(...) nonempty -/
+/-- DEPOSIT_FULL guard. Mirrors `guards.py` DEPOSIT_FULL branch:
+      bank_accessible ∧ bank_has_room ∧ used/max ≥ 0.90 ∧ select_bank_deposits(...) nonempty
+    Task 2: added `bankHasRoom s` conjunct so the guard is gated on the bank
+    having a free slot (bank not full). -/
 def depositFullFires (s : State) : Bool :=
   s.bankAccessible
+  && bankHasRoom s
   && decide (s.inventoryMax > 0)
   && decide (DEPOSIT_FULL_DEN * s.inventoryUsed
               ≥ DEPOSIT_FULL_NUM * s.inventoryMax)
   && s.selectBankDepositsNonempty
 
-/-- DISCARD_HIGH guard. Mirrors `guards.py:86-87`:
-      overstocked AND used/max ≥ 0.85 -/
+/-- DISCARD_HIGH guard. Mirrors `guards.py` DISCARD_HIGH branch:
+      ¬bank_has_room AND overstocked AND used/max ≥ 0.85
+    Task 3: added `!(bankHasRoom s)` so discard only fires when the bank
+    cannot accept deposits — deposits take priority when bank has room. -/
 def discardHighFires (s : State) : Bool :=
-  s.hasOverstockItems
+  !(bankHasRoom s)
+  && s.hasOverstockItems
   && decide (s.inventoryMax > 0)
   && decide (DISCARD_HIGH_DEN * s.inventoryUsed
               ≥ DISCARD_HIGH_NUM * s.inventoryMax)
@@ -292,6 +308,16 @@ def bankExpandFires (s : State) : Bool :=
     harness asserts agreement with `craft_relief_candidates`. -/
 def craftReliefFires (s : State) : Bool := s.craftReliefFires
 
+/-- RECYCLE_RELIEF. Mirrors `tiers/guards.py::_fires(RECYCLE_RELIEF, …)`:
+    bank full (not bankHasRoom) AND recyclable surplus nonempty. -/
+def recycleReliefFires (s : State) : Bool :=
+  !(bankHasRoom s) && s.recyclableSurplusNonempty
+
+/-- SELL_RELIEF. Mirrors `tiers/guards.py::_fires(SELL_RELIEF, …)`:
+    bank full (not bankHasRoom) AND sellable inventory nonempty. -/
+def sellReliefFires (s : State) : Bool :=
+  !(bankHasRoom s) && s.sellableInventoryNonempty
+
 /-- Dispatch: per-MeansKind firing predicate. Computable — every branch reads
     State fields / decides concrete predicates (`lowYieldSampleThreshold` is the
     concrete `def := 1`, not an axiom), so the ladder is oracle-evaluable for the
@@ -304,6 +330,8 @@ def fires (k : MeansKind) (s : State) : Bool :=
   | .reachUnlockLevel => reachUnlockLevelFires s
   | .discardCritical  => discardCriticalFires s
   | .craftRelief      => craftReliefFires s
+  | .recycleRelief    => recycleReliefFires s
+  | .sellRelief       => sellReliefFires s
   | .depositFull      => depositFullFires s
   | .discardHigh      => discardHighFires s
   | .gearReview       => gearReviewFires s

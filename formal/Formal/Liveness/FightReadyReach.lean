@@ -70,14 +70,15 @@ theorem reach_and {P Q : State → Prop} (s : State)
 parked task). `SettledReach` proves `objectiveStepFires`/`objectiveStepIsFight`
 are NOT model-producible, so they are excluded here and supplied separately. -/
 structure FightReadyCore (s : State) : Prop where
-  hpFull    : s.hp = s.maxHp
-  overstock : s.hasOverstockItems = false
-  deposits  : s.selectBankDepositsNonempty = false
-  gear      : s.gearReviewFires = false
-  pending   : s.pendingItemsNonempty = false
-  sellable  : s.sellableInventoryNonempty = false
-  craft     : s.craftReliefFires = false
-  parked    : TaskParked s
+  hpFull         : s.hp = s.maxHp
+  overstock      : s.hasOverstockItems = false
+  deposits       : s.selectBankDepositsNonempty = false
+  gear           : s.gearReviewFires = false
+  pending        : s.pendingItemsNonempty = false
+  sellable       : s.sellableInventoryNonempty = false
+  craft          : s.craftReliefFires = false
+  recycleNonempty : s.recyclableSurplusNonempty = false
+  parked         : TaskParked s
 
 /-- Conjunction of two persistent predicates is persistent. -/
 theorem persist_and {P Q : State → Prop}
@@ -102,6 +103,7 @@ theorem fightReadyCore_reachable_of_seeds (s : State)
     (hpend : ∃ k, (cycleStepN k s).pendingItemsNonempty = false)
     (hsell : ∃ k, (cycleStepN k s).sellableInventoryNonempty = false)
     (hcraft : ∃ k, (cycleStepN k s).craftReliefFires = false)
+    (hrecycle : ∃ k, (cycleStepN k s).recyclableSurplusNonempty = false)
     (hpark : ∃ k, TaskParked (cycleStepN k s))
     (hparkP : ∀ (n : Nat) (s' : State), TaskParked s' → TaskParked (cycleStepN n s')) :
     ∃ K, FightReadyCore (cycleStepN K s) := by
@@ -112,6 +114,7 @@ theorem fightReadyCore_reachable_of_seeds (s : State)
   have pPend := pendingItems_false_cycleStepN
   have pSell := sellable_false_cycleStepN
   have pCraft := craftReliefFires_false_cycleStepN
+  have pRecycle := recyclableSurplusNonempty_false_cycleStepN
   have c1 := reach_and s pHp pOver hhp hover
   have c2 := reach_and s (persist_and pHp pOver) pDep c1 hdep
   have c3 := reach_and s (persist_and (persist_and pHp pOver) pDep) pGear c2 hgear
@@ -127,10 +130,15 @@ theorem fightReadyCore_reachable_of_seeds (s : State)
   have c7 := reach_and s
     (persist_and (persist_and (persist_and (persist_and (persist_and (persist_and pHp pOver)
       pDep) pGear) pPend) pSell) pCraft)
-    hparkP c6 hpark
-  obtain ⟨K, ⟨⟨⟨⟨⟨⟨⟨hp, hov⟩, hde⟩, hge⟩, hpe⟩, hse⟩, hcr⟩, hpa⟩⟩ := c7
+    pRecycle c6 hrecycle
+  have c8 := reach_and s
+    (persist_and (persist_and (persist_and (persist_and (persist_and (persist_and
+      (persist_and pHp pOver) pDep) pGear) pPend) pSell) pCraft) pRecycle)
+    hparkP c7 hpark
+  obtain ⟨K, ⟨⟨⟨⟨⟨⟨⟨⟨hp, hov⟩, hde⟩, hge⟩, hpe⟩, hse⟩, hcr⟩, hre⟩, hpa⟩⟩ := c8
   exact ⟨K, { hpFull := hp, overstock := hov, deposits := hde, gear := hge,
-              pending := hpe, sellable := hse, craft := hcr, parked := hpa }⟩
+              pending := hpe, sellable := hse, craft := hcr,
+              recycleNonempty := hre, parked := hpa }⟩
 
 /-- **The Phase-A assembly.** A reached `FightReadyCore` (the model-provable
 warm-up, built in Phase B via `reach_and`) together with the perception
@@ -147,7 +155,8 @@ theorem fightReady_reachable_of_seeds (s : State)
   exact ⟨K, { hpFull := hcore.hpFull, overstock := hcore.overstock,
               deposits := hcore.deposits, gear := hcore.gear,
               pending := hcore.pending, sellable := hcore.sellable,
-              craft := hcore.craft, parked := hcore.parked,
+              craft := hcore.craft, recycleNonempty := hcore.recycleNonempty,
+              parked := hcore.parked,
               objFires := (hperc K).1, objFight := (hperc K).2 }⟩
 
 /-- **Spawn → level-50, modulo the warm-up + perception.** Composes the Phase-A

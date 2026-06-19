@@ -356,16 +356,21 @@ class TestDiscardOverstockGoal:
         codes = {a.code if hasattr(a, "code") else a.item_code for a in relevant}
         assert "gudgeon" not in codes
 
-    def test_relevant_actions_delete_when_buyer_location_unknown(self):
-        """Buyer known but location not loaded → must fall back to Delete,
-        otherwise NpcSell is_applicable=False and the goal becomes
-        unsatisfiable (plan_len=0)."""
+    def test_relevant_actions_delete_when_only_buyer_is_dormant(self):
+        """Buyer in price table but npc_location is None (dormant event merchant,
+        spawn window closed) → Delete IS emitted.
+
+        Pre-branch behaviour left the item untouched (treating any price-table
+        buyer as protection), causing a permanent bag-full livelock because
+        NpcSellAction.is_applicable also rejects buyers with None location.
+        The fix: only a buyer with a non-None location prevents deletion."""
         gd = _gd_with_sap_recipes()
-        gd._npc_sell_prices = {"npc1": {"sap": 2}}  # buyer known
-        gd._npc_locations = {}  # location NOT loaded
+        gd._npc_sell_prices = {"event_merchant": {"sap": 2}}  # buyer in table
+        gd._npc_locations = {}  # location NOT loaded → dormant
         goal = DiscardOverstockGoal(game_data=gd)
         state = make_state(level=1, inventory={"sap": 50})
         relevant = goal.relevant_actions([], state, gd)
+        # Dormant buyer → Delete emitted so the slot is freed.
         assert len(relevant) == 1
         assert isinstance(relevant[0], DeleteItemAction)
         assert relevant[0].code == "sap"
@@ -391,6 +396,60 @@ class TestDiscardOverstockGoal:
         # One batch per overstocked code (sap + extra)
         codes = {a.code if isinstance(a, DeleteItemAction) else a.item_code for a in relevant}
         assert codes == {"sap", "extra"}
+
+
+    def test_sellable_overstock_not_deleted(self):
+        """A reachable-buyer overstock item is NOT deleted (NpcSellAction emitted
+        instead). A truly-worthless item (no buyer, no GE order) IS deleted."""
+        gd = GameData()
+        gd._item_stats = {
+            "junk": ItemStats(code="junk", level=1, type_="resource"),
+            "rock": ItemStats(code="rock", level=1, type_="resource"),
+        }
+        gd._crafting_recipes = {}
+        # 'junk' has a reachable NPC buyer; 'rock' does not.
+        gd._npc_sell_prices = {"vendor1": {"junk": 5}}
+        gd._npc_locations = {"vendor1": (1, 2)}  # reachable now
+        goal = DiscardOverstockGoal(game_data=gd)
+        # Both items overstocked (no recipe use → cap 0; high inventory pressure).
+        state = make_state(level=1,
+                           inventory={"junk": 50, "rock": 50},
+                           inventory_max=105)
+        relevant = goal.relevant_actions([], state, gd)
+        deleted_codes = {a.code for a in relevant if isinstance(a, DeleteItemAction)}
+        # 'rock' has no buyer → Delete(rock) is emitted.
+        assert "rock" in deleted_codes, "worthless rock must be deleted"
+        # 'junk' has a reachable NPC buyer → NpcSellAction, never DeleteItemAction.
+        assert "junk" not in deleted_codes, "sellable junk must not be deleted"
+
+    def test_dormant_buyer_overstock_is_deleted(self):
+        """Bank-full + the ONLY NPC buyer is a dormant event merchant (npc_location
+        None) → Delete IS emitted, freeing the slot.
+
+        Pre-branch: the old `not buyers` guard left the item untouched even when
+        the only buyer was unreachable, causing a permanent bag-full livelock
+        (SELL_RELIEF fired, but SellInventoryGoal produced an empty plan because
+        NpcSellAction.is_applicable rejected npc_location=None; DISCARD refused
+        to delete because `buyers` was truthy; bank full → DEPOSIT_FULL off).
+        Fix: protect from deletion ONLY when npc_location is not None."""
+        gd = GameData()
+        gd._item_stats = {
+            "festival_token": ItemStats(code="festival_token", level=1,
+                                        type_="resource"),
+        }
+        gd._crafting_recipes = {}
+        # Event merchant in price table but NOT in _npc_locations → dormant.
+        gd._npc_sell_prices = {"event_merchant": {"festival_token": 10}}
+        # No entry in _npc_locations → npc_location returns None.
+        goal = DiscardOverstockGoal(game_data=gd)
+        # inventory_max=55 → 50/55 ≈ 91% ≥ DISCARD_WATERMARK (0.85) → overstock detected.
+        state = make_state(level=1,
+                           inventory={"festival_token": 50},
+                           inventory_max=55)
+        relevant = goal.relevant_actions([], state, gd)
+        assert len(relevant) == 1
+        assert isinstance(relevant[0], DeleteItemAction)
+        assert relevant[0].code == "festival_token"
 
 
 class TestEquippableDominance:

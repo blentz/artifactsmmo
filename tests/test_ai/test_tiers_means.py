@@ -139,6 +139,7 @@ def test_claim_pending_fires_with_pending_items():
 def test_sell_pressured_vs_idle_mutually_exclusive_on_bag():
     gd = GameData()
     gd._npc_sell_prices = {"merchant": {"copper_ore": 5}}
+    gd._npc_locations = {"merchant": (1, 2)}  # reachable now (required by _has_sellable)
     pressured = make_state(inventory={"copper_ore": 18}, inventory_max=20, task_code="t",
                            task_total=1, task_progress=0)  # 0.90 fill; task held so ACCEPT_TASK off
     idle = make_state(inventory={"copper_ore": 2}, inventory_max=20, task_code="t",

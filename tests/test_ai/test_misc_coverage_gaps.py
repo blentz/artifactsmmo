@@ -5,7 +5,7 @@ from fractions import Fraction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
 from artifactsmmo_cli.ai.scalar_priority import yield_bonus_for_goal
-from artifactsmmo_cli.ai.tiers.means import _has_sellable
+from artifactsmmo_cli.ai.tiers.guards import _has_sellable
 from tests.test_ai.fixtures import make_state
 
 
@@ -49,10 +49,11 @@ def test_has_sellable_skips_untradeable():
 
 
 def test_has_sellable_true_when_tradeable_and_has_buyer():
-    """Sanity check for the positive path (qty > 0, buyer exists, tradeable)."""
+    """Sanity check for the positive path (qty > 0, reachable buyer exists, tradeable)."""
     state = make_state(inventory={"good_item": 1})
     gd = GameData()
     gd._npc_sell_prices = {"merchant": {"good_item": 5}}
+    gd._npc_locations = {"merchant": (1, 2)}  # reachable now
     gd._item_stats = {
         "good_item": ItemStats(code="good_item", level=1, type_="weapon",
                                tradeable=True),
