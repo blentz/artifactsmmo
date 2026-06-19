@@ -178,6 +178,7 @@ import Formal.Liveness.InventoryPressure
 import Formal.Liveness.InventoryDynamics
 import Formal.Liveness.CycleStepF
 import Formal.Liveness.Drainability
+import Formal.Liveness.BurstStep
 import Formal.Liveness.WarmupCleared
 import Formal.Liveness.Leveling
 import Formal.Liveness.FightReady
