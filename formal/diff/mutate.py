@@ -74,6 +74,7 @@ APPLY_BANK_EXPANSION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" 
 APPLY_TELEPORT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "teleport.py"
 CONSUMABLE_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_supply.py"
 MEANS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "means.py"
+GUARDS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "guards.py"
 WITHDRAW_ITEM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "withdraw_item.py"
 UNEQUIP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "unequip.py"
 TASK_EXCHANGE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "task_exchange.py"
@@ -1623,7 +1624,7 @@ _ALL_SRCS = [
     TASK_TRADE_CORE_SRC,
     APPLY_MOVE_SRC, APPLY_EQUIP_SRC, APPLY_CLAIM_SRC,
     APPLY_REST_SRC, APPLY_FIGHT_SRC, APPLY_BANK_EXPANSION_SRC, APPLY_TELEPORT_SRC,
-    CONSUMABLE_SUPPLY_SRC, MEANS_SRC,
+    CONSUMABLE_SUPPLY_SRC, MEANS_SRC, GUARDS_SRC,
     WITHDRAW_ITEM_SRC, UNEQUIP_SRC, TASK_EXCHANGE_SRC, TASK_CANCEL_SRC,
     GATHERING_APPLY_SRC, LEVEL_SKILL_GOAL_SRC,
     MONSTER_CATALOG_SRC,
@@ -2369,6 +2370,130 @@ MEANS_MAINTAIN_MUTATIONS = [
         "means: MAINTAIN_CONSUMABLES drops the combat-active gate (fires when idle)",
         "        if ctx.combat_monster is None:\n            return False\n        return maintain_consumables_fires(state, game_data)",
         "        return maintain_consumables_fires(state, game_data)",
+    ),
+]
+
+
+# O5.4 Brick 5 — ladder firing-predicate mutations. These perturb the NUMERIC
+# thresholds / comparators / structural conjuncts of the guard- and means-tier
+# `_fires` predicates (tiers/guards.py + tiers/means.py). They are killed by
+# formal/diff/test_ladder_fires_diff.py, which binds the Lean
+# `Formal.Liveness.ProductionLadder.fires`/`productionLadder` (via the
+# `ladder_fires` oracle) to these SAME `_fires` predicates through the
+# real-import bridge formal/sim/production_ladder.py — the exact defs the
+# liveness theorems (NoDeadlock, FightFairness, BootstrapReach, the level-50
+# capstone) reason over. A surviving mutant here means the Brick-4 differential
+# is vacuous on that predicate (the boundary witnesses don't pin the threshold).
+#
+# Only mutation-MEANINGFUL slots are targeted: the opaque passthrough slots
+# (craftRelief/gearReview/maintainConsumables/recycleSurplus and the
+# history-gated phase slots) carry no threshold in the firing predicate itself —
+# their firing is computed by separate machinery (craft_relief_candidates,
+# task_decision, low_yield_cancel_fires, …) already anchored elsewhere.
+LADDER_GUARD_FIRES_MUTATIONS = [
+    (
+        "ladder/guards: HP_CRITICAL comparator < -> <= (boundary 25/100 leaks)",
+        "        return state.hp_percent < CRITICAL_HP_FRACTION",
+        "        return state.hp_percent <= CRITICAL_HP_FRACTION",
+    ),
+    (
+        "ladder/guards: HP_CRITICAL threshold 0.25 -> 0.50 (widens critical band)",
+        "CRITICAL_HP_FRACTION = 0.25",
+        "CRITICAL_HP_FRACTION = 0.50",
+    ),
+    (
+        "ladder/guards: BANK_UNLOCK xp-gate > -> >= (fires when xp == initial_xp)",
+        "        if state.xp > ctx.initial_xp:",
+        "        if state.xp >= ctx.initial_xp:",
+    ),
+    (
+        "ladder/guards: BANK_UNLOCK level-margin -1 dropped (level >= target)",
+        "        return target_level == 0 or state.level >= target_level - 1",
+        "        return target_level == 0 or state.level >= target_level",
+    ),
+    (
+        "ladder/guards: REACH_UNLOCK_LEVEL gap comparator <= -> < (boundary gap 5 leaks)",
+        "                and ctx.bank_required_level - state.level <= MAX_ACHIEVABLE_GAP)",
+        "                and ctx.bank_required_level - state.level < MAX_ACHIEVABLE_GAP)",
+    ),
+    (
+        "ladder/guards: REACH_UNLOCK_LEVEL gap constant 5 -> 50 (always achievable)",
+        "MAX_ACHIEVABLE_GAP = 5",
+        "MAX_ACHIEVABLE_GAP = 50",
+    ),
+    (
+        "ladder/guards: DISCARD_CRITICAL fill comparator >= -> > (boundary 0.95 leaks)",
+        "                and _used_fraction(state) >= DISCARD_CRITICAL_FRACTION)",
+        "                and _used_fraction(state) > DISCARD_CRITICAL_FRACTION)",
+    ),
+    (
+        "ladder/guards: DISCARD_CRITICAL threshold 0.95 -> 0.85 (fires too early)",
+        "DISCARD_CRITICAL_FRACTION = 0.95",
+        "DISCARD_CRITICAL_FRACTION = 0.85",
+    ),
+    (
+        "ladder/guards: DEPOSIT_FULL fill comparator >= -> > (boundary 0.90 leaks)",
+        "        return (ctx.bank_accessible and _used_fraction(state) >= DEPOSIT_FULL_FRACTION",
+        "        return (ctx.bank_accessible and _used_fraction(state) > DEPOSIT_FULL_FRACTION",
+    ),
+    (
+        "ladder/guards: DEPOSIT_FULL threshold 0.90 -> 0.85 (fires at discard ramp)",
+        "DEPOSIT_FULL_FRACTION = 0.90",
+        "DEPOSIT_FULL_FRACTION = 0.85",
+    ),
+    (
+        "ladder/guards: DISCARD_HIGH fill comparator >= -> > (boundary 0.85 leaks)",
+        "                and _used_fraction(state) >= DISCARD_HIGH_FRACTION)",
+        "                and _used_fraction(state) > DISCARD_HIGH_FRACTION)",
+    ),
+    (
+        "ladder/guards: DISCARD_HIGH threshold 0.85 -> 0.95 (fires too late)",
+        "DISCARD_HIGH_FRACTION = 0.85",
+        "DISCARD_HIGH_FRACTION = 0.95",
+    ),
+]
+
+
+LADDER_MEANS_FIRES_MUTATIONS = [
+    (
+        "ladder/means: COMPLETE_TASK progress comparator >= -> > (boundary progress==total leaks)",
+        "                and state.task_progress >= state.task_total)",
+        "                and state.task_progress > state.task_total)",
+    ),
+    (
+        "ladder/means: SELL_PRESSURED fill comparator >= -> > (boundary 0.85 leaks)",
+        "        return _used_fraction(state) >= SELL_PRESSURE_FRACTION and _has_sellable(state, game_data)",
+        "        return _used_fraction(state) > SELL_PRESSURE_FRACTION and _has_sellable(state, game_data)",
+    ),
+    (
+        "ladder/means: SELL_PRESSURE_FRACTION 0.85 -> 0.95 (pressure boundary shifts)",
+        "SELL_PRESSURE_FRACTION = 0.85",
+        "SELL_PRESSURE_FRACTION = 0.95",
+    ),
+    (
+        "ladder/means: TASK_EXCHANGE coin comparator >= -> > (boundary coins==min leaks)",
+        "        return _tasks_coin_total(state) >= ctx.task_exchange_min_coins",
+        "        return _tasks_coin_total(state) > ctx.task_exchange_min_coins",
+    ),
+    (
+        "ladder/means: SELL_IDLE fill comparator < -> <= (boundary 0.85 leaks vs sellPressured)",
+        "        return _used_fraction(state) < SELL_PRESSURE_FRACTION and _has_sellable(state, game_data)",
+        "        return _used_fraction(state) <= SELL_PRESSURE_FRACTION and _has_sellable(state, game_data)",
+    ),
+    (
+        "ladder/means: BANK_EXPAND fill comparator < -> <= (boundary 0.95 leaks)",
+        "        if fill < BANK_EXPAND_FILL:",
+        "        if fill <= BANK_EXPAND_FILL:",
+    ),
+    (
+        "ladder/means: BANK_EXPAND_FILL 0.95 -> 0.85 (fires too early)",
+        "BANK_EXPAND_FILL = 0.95",
+        "BANK_EXPAND_FILL = 0.85",
+    ),
+    (
+        "ladder/means: BANK_EXPAND gold-gate >= -> > (boundary gold==cost leaks)",
+        "        return state.gold >= game_data.next_expansion_cost",
+        "        return state.gold > game_data.next_expansion_cost",
     ),
 ]
 
@@ -3207,6 +3332,13 @@ def _run_all_groups() -> int:
               "tests/test_ai/test_maintain_consumables.py", survivors)
     run_group(MEANS_SRC, MEANS_MAINTAIN_MUTATIONS,
               "tests/test_ai/test_maintain_consumables.py", survivors)
+    # O5.4 Brick 5 — ladder firing-predicate threshold/comparator/conjunct
+    # mutations, killed by the SELECT-side differential (binds the Lean ladder
+    # to these `_fires` predicates through the ladder_fires oracle).
+    run_group(GUARDS_SRC, LADDER_GUARD_FIRES_MUTATIONS,
+              "formal/diff/test_ladder_fires_diff.py", survivors)
+    run_group(MEANS_SRC, LADDER_MEANS_FIRES_MUTATIONS,
+              "formal/diff/test_ladder_fires_diff.py", survivors)
     run_group(GATHERING_APPLY_SRC, GATHERING_APPLY_MUTATIONS,
               "formal/diff/test_apply_baseline_diff.py", survivors)
     run_group(LEVEL_SKILL_GOAL_SRC, LEVEL_SKILL_GOAL_MUTATIONS,

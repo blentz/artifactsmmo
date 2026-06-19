@@ -1,4 +1,4 @@
-"""O5.4 Brick 3 — SELECT-side differential for the NUMERIC/structural ladder slots.
+"""O5.4 Bricks 3+4 — SELECT-side differential for the FULL liveness ladder.
 
 Binds the Lean liveness ladder (`Formal.Liveness.ProductionLadder.fires` /
 `productionLadder`, evaluated through the `ladder_fires` oracle entry) to the
@@ -8,11 +8,27 @@ REAL production firing predicates `_guard_fires` (tiers/guards.py) and
 2026-06-18 SELECT audit: every liveness theorem reasons over the Lean ladder,
 but nothing had ever asserted the Lean ladder MIRRORS production.
 
+This file now covers the WHOLE 23-slot ladder:
+  * Brick 3 (the random Hypothesis SWEEP + the numeric boundary witnesses) pins
+    the NUMERIC/structural guard + phase-derived means slots, holding the 7
+    opaque slots below at their reachable (False) value (see DEFERRED_SLOTS).
+  * Brick 4 (the dedicated DRIVE tests, sections 4a/4b/4c below) stands up RICH
+    fixtures where production's REAL machinery makes each opaque slot FIRE, then
+    runs a SELECTION CONTEST against the oracle. The slots the sweep holds False
+    are therefore no longer "unvalidated" — their TRUE-firing path is driven.
+
+Mutation-enforced (Brick 5): `formal/diff/mutate.py` perturbs the threshold /
+comparator / conjunct of each numeric `_fires` predicate (the
+`LADDER_GUARD_FIRES_MUTATIONS` / `LADDER_MEANS_FIRES_MUTATIONS` groups, bound to
+THIS file); the boundary witnesses below KILL every such mutant, so the
+differential is provably non-vacuous on those predicates.
+
 ## The honest design — opaque Bools are INPUTS supplied identically
 
 Several ladder slots read an opaque per-cycle observation that production
-derives from machinery this brick does not yet reconstruct (the planner,
-`predict_win`, `craft_relief_candidates`, …). The differential is apples-to-
+derives from machinery the random SWEEP does not reconstruct (the planner,
+`predict_win`, `craft_relief_candidates`, …) — the Brick-4 DRIVE tests below
+reconstruct it on rich fixtures. For the SWEEP, the differential is apples-to-
 apples ONLY when both sides see the SAME inputs. Each scenario therefore drives
 BOTH sides from one set of fields:
 
@@ -55,48 +71,77 @@ computes from the supplied inputs under an empty-catalog `GameData`:
 
 And `selected` (`productionLadder`) — the chosen MeansKind — is asserted equal.
 
-## Slots DEFERRED to Brick 4 (TRUE-firing path NOT yet drivable)
+## Slots the SWEEP holds False — TRUE paths now DRIVEN by Brick 4
 
-These read an opaque observation production derives from machinery Brick 4 will
-reconstruct on a real fixture; here their production value is pinned to its
+The random Hypothesis sweep above holds these 7 slots (`DEFERRED_SLOTS`) False
+on BOTH sides: each reads an opaque observation production derives from
+machinery the sweep does not stand up, so its production value is pinned to the
 empty-catalog / no-history default (False) and the Lean side is fed the SAME
-default, so they are compared only at that value — their TRUE behaviour is
-unvalidated and explicitly deferred:
+default. That sweep constraint is UNCHANGED. What HAS changed: their TRUE-firing
+paths are no longer unvalidated — each now has a dedicated Brick-4 DRIVE test
+(sections 4a/4b/4c below) that builds a RICH fixture where production's REAL
+predicate fires the slot and runs a SELECTION CONTEST against the oracle. How
+the teeth bite per slot:
 
-  * craftRelief         — production: `craft_relief_candidates` non-empty (needs
-                          recipes + inventory pressure). Brick 4.
-  * maintainConsumables — production: `maintain_consumables_fires` (needs a
-                          combat target + heal recipes). Brick 4.
-  * restForCombat       — production short-circuits on `combat_monster is None`
-                          and Lean on `restForCombatReady` (fed 0) BEFORE the
-                          numeric `hp < maxHp` clause, so the slot is False on
-                          both sides here and its firing logic (the
-                          `predict_win`-folded `restForCombatReady`) is wholly
-                          deferred. Brick 4.
-  * lowYieldCancel      — production: `low_yield_cancel_fires` (needs a
-                          LearningStore); Lean gates on phase==inProgress AND
-                          actionsAttempted. We supply history=None (⇒ False) and
-                          keep the scenario phase out of inProgress, so neither
-                          side fires. Brick 4 binds the learning path.
-  * taskCancel          — production: `task_decision == PIVOT` (needs history);
-                          Lean gates on phase∈{accepted,inProgress} AND
-                          !taskFeasibleProjected. history=None ⇒ False; we feed
-                          taskFeasibleProjected=True and keep phase∈{none,
-                          complete} so Lean is also False. Brick 4.
-  * pursueTask          — production: items-task AND history AND
-                          `task_decision==PURSUE`; Lean gates on
-                          phase∈{accepted,inProgress}. history=None ⇒ False; we
-                          keep phase∈{none,complete} so Lean is also False.
-                          Brick 4.
-  * recycleSurplus      — production: `recyclable_surplus` non-empty (needs
-                          surplus craftable gear). Empty catalog ⇒ False both
-                          sides. Brick 4.
+  * craftRelief / maintainConsumables / recycleSurplus / restForCombat — OPAQUE
+                          PASSTHROUGH Bools in the Lean model
+                          (`craftReliefFires := s.craftReliefFires`, …): the Lean
+                          per-slot value is production's verdict fed straight
+                          back in, so the per-slot check is fed-through (vacuous
+                          by construction). (gearReview / objectiveStep are the
+                          SAME passthrough mechanism but are NOT deferred — the
+                          sweep passes their Bool to both sides every scenario, so
+                          they sit in ASSERTED_SLOTS, driven directly.) The TEETH
+                          are in the `selected` assertion — a RICH fixture fires
+                          the slot in production and the oracle must SELECT the
+                          same MeansKind over the
+                          firing pattern. (craftRelief: `craft_relief_candidates`
+                          non-empty; maintainConsumables: `maintain_consumables_fires`.)
+  * restForCombat       — production folds clauses (a)/(c)/(d) into the opaque
+                          `restForCombatReady` (a `predict_win` verdict). In the
+                          SWEEP it stays False (combat_monster=None). The DRIVE
+                          test (4b) stands up a real combat fixture so the slot
+                          fires and WINS selection on both ladders (a strong
+                          contest: a wrong Lean priority would fail).
+  * recycleSurplus / maintainConsumables — honest FIRE-AND-LOSE: both sit BELOW
+                          the lifecycle slots, so for every phase a higher slot
+                          fires on the Lean ladder and neither can ever BE the
+                          Lean selection. The DRIVE tests (4a/4b) fire them TRUE
+                          in production (binding the per-slot arg) and assert
+                          `selected` agrees at the higher winner (acceptTask at
+                          phase none) — a real Lean-model finding, reported.
+  * lowYieldCancel / taskCancel / pursueTask — phase-derived
+                          OVER-APPROXIMATIONS: Lean computes them from
+                          `taskLifecyclePhase` / `actionsAttempted` /
+                          `taskFeasibleProjected` (no LearningStore concept),
+                          whereas production reads a REAL `LearningStore` +
+                          `task_decision`. In the SWEEP both stay False
+                          (history=None, taskFeasibleProjected=True, phase ∈
+                          {none, complete}). The DRIVE tests (4c) thread an
+                          actual (non-mock) `LearningStore` through production,
+                          set the Lean phase inputs consistent with production's
+                          history verdict, and run a SELECTION CONTEST. They may
+                          diverge per-slot on a NON-driven phase slot by design,
+                          so `drive_and_contest` asserts per-slot only for
+                          `ASSERTED_SLOTS ∪ {driven}` while still asserting the
+                          WINNER.
 
-To keep `selected` honest while these are deferred, every generated scenario is
-constrained so the deferred slots are FALSE on BOTH sides (phase ∈ {none,
-complete}, history=None, taskFeasibleProjected=True, empty catalog,
-combat_monster=None). Their TRUE paths — and the resulting selection contests —
-are Brick 4's job.
+The SWEEP keeps `selected` comparable by constraining every generated scenario
+so the 7 slots above are FALSE on BOTH sides (phase ∈ {none, complete},
+history=None, taskFeasibleProjected=True, empty catalog, combat_monster=None).
+Their TRUE paths and the resulting selection contests are the DRIVE tests' job.
+
+## Mutation enforcement (Brick 5)
+
+`formal/diff/mutate.py` perturbs the threshold / comparator / structural
+conjunct of each numeric `_fires` predicate (groups
+`LADDER_GUARD_FIRES_MUTATIONS` / `LADDER_MEANS_FIRES_MUTATIONS`, bound to THIS
+file). The boundary witnesses below KILL every such mutant, so the differential
+is provably non-vacuous on hpCritical / bankUnlock / reachUnlockLevel /
+discardCritical / depositFull / discardHigh / completeTask / sellPressured /
+sellIdle / taskExchange / bankExpand. The opaque passthrough slots carry no
+threshold in the firing predicate itself (their truth is computed by separate,
+separately-anchored machinery), so they are not mutation targets HERE.
 
 ## Model-fidelity note
 
