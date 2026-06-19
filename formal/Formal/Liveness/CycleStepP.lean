@@ -262,4 +262,53 @@ theorem cycleStepP_reaches_bankRequiredLevel (s : State)
     rw [hbrl] at hk
     exact hk
 
+/-! ## Brick 3 — the combat objective is armed along the refreshed trajectory
+
+The refreshed cycle SELECTS on `perceptionRefresh (state)`, so the object the
+capstone reasons about at step `k` is `perceptionRefresh (cycleStepPN k s)` and the
+arming that matters is `objectiveStepFires (perceptionRefresh (cycleStepPN k s))`.
+Below the cap, that selection state is provably armed — immediate from Brick 1
+applied to `cycleStepPN k s`. This is the in-model fact the capstone needs to
+discharge the objective-committed half of `hfightFires` for `cycleStepP`. -/
+
+/-- **Brick-3 arming: `objectiveStepFires` on the refreshed selection state.**
+Below the cap, the state the refreshed cycle SELECTS on
+(`perceptionRefresh (cycleStepPN k s)`) has `objectiveStepFires = true`. Immediate
+from Brick 1's `perceptionRefresh_objectiveStepFires` at `cycleStepPN k s`. -/
+theorem cycleStepP_objectiveStepFires_armed (s : State) (k : Nat)
+    (h : (cycleStepPN k s).level < 50) :
+    (perceptionRefresh (cycleStepPN k s)).objectiveStepFires = true :=
+  perceptionRefresh_objectiveStepFires (cycleStepPN k s) h
+
+/-- **Brick-3 arming: `objectiveStepIsFight` on the refreshed selection state.**
+Below the cap, the refreshed selection state's committed objective is combat-typed
+(`objectiveStepIsFight = true`). Immediate from Brick 1's
+`perceptionRefresh_objectiveStepIsFight` at `cycleStepPN k s`. -/
+theorem cycleStepP_objectiveStepIsFight_armed (s : State) (k : Nat)
+    (h : (cycleStepPN k s).level < 50) :
+    (perceptionRefresh (cycleStepPN k s)).objectiveStepIsFight = true :=
+  perceptionRefresh_objectiveStepIsFight (cycleStepPN k s) h
+
+/-- **Brick-3 frontier overturn (the headline).** `SettledReach.
+objectiveStepFires_false_cycleStepN` shows the PURE transition never sets
+`objectiveStepFires = true`: from a spawn with it `false` it stays `false` forever,
+so `Settled` (hence the general leveling path) is unreachable WITHOUT perception
+(`SettledReach.Settled_unreachable_without_perception`). This lemma is the precise
+contrast for the REFRESHED cycle: at every step `k` with `level < 50`, the state
+the refreshed cycle actually SELECTS on — `perceptionRefresh (cycleStepPN k s)` —
+has `objectiveStepFires = true` AND `objectiveStepIsFight = true`, regardless of
+the spawn value. So `perceptionRefresh` re-arms exactly what the pure transition
+cleared: the frontier (`objectiveStepFires_false_cycleStepN`) is OVERTURNED for the
+selection state of `cycleStepP`. This is what discharges the objective-committed
+half of `hfightFires` once it is restated over the refreshed trajectory (Brick 4).
+Note: the claim is about the SELECTION state `perceptionRefresh (cycleStepPN k s)`
+— NOT `cycleStepP s` post-transition, which (by the same frontier lemma) `cycleStep`
+would clear again; the re-arm is per-cycle, at the head of each refreshed step. -/
+theorem cycleStepP_objective_armed_overturns_frontier (s : State) (k : Nat)
+    (h : (cycleStepPN k s).level < 50) :
+    (perceptionRefresh (cycleStepPN k s)).objectiveStepFires = true
+    ∧ (perceptionRefresh (cycleStepPN k s)).objectiveStepIsFight = true :=
+  ⟨cycleStepP_objectiveStepFires_armed s k h,
+   cycleStepP_objectiveStepIsFight_armed s k h⟩
+
 end Formal.Liveness.CycleStepP

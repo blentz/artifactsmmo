@@ -662,3 +662,15 @@ open Formal.Liveness.GearTierLeveling
 #print axioms winnableAcrossBand_satisfiable
 #print axioms combatTargetExists_of_gearTier
 #print axioms combatObjective_live_below_fifty
+
+-- Perception-refresh Brick 3 (2026-06-18): the combat objective is ARMED along the
+-- refreshed trajectory. At every step k with level<50, the state the refreshed cycle
+-- SELECTS on — perceptionRefresh (cycleStepPN k s) — has objectiveStepFires AND
+-- objectiveStepIsFight true (immediate from Brick 1). This OVERTURNS the frontier
+-- (SettledReach.objectiveStepFires_false_cycleStepN: the pure transition never sets it):
+-- perceptionRefresh re-arms per-cycle what cycleStep clears. Discharges the objective-
+-- committed half of hfightFires once restated over cycleStepP (Brick 4).
+open Formal.Liveness.CycleStepP
+#print axioms cycleStepP_objectiveStepFires_armed
+#print axioms cycleStepP_objectiveStepIsFight_armed
+#print axioms cycleStepP_objective_armed_overturns_frontier
