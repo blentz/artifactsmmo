@@ -239,6 +239,40 @@ theorem craftRelief_quiet_forever (s : State) (h : s.craftReliefFires = false) (
     fires .craftRelief (cycleStepN n s) = false := by
   simp [fires, craftReliefFires, craftReliefFires_false_cycleStepN n s h]
 
+/-! ## recyclableSurplusNonempty = false (recycleRelief) — once cleared, stays cleared -/
+
+theorem recyclableSurplusNonempty_false_apply (a : ActionKind) (s : State)
+    (h : s.recyclableSurplusNonempty = false) :
+    (applyActionKind a s).recyclableSurplusNonempty = false := by
+  cases a
+  case move => simp only [applyActionKind]; rcases s.moveTarget with _ | ⟨tx, ty⟩ <;> exact h
+  case mapTransition => simp only [applyActionKind]; rcases s.moveTarget with _ | ⟨tx, ty⟩ <;> exact h
+  all_goals first | exact h | (simp [applyActionKind])
+
+theorem recyclableSurplusNonempty_false_cycleStep (s : State)
+    (h : s.recyclableSurplusNonempty = false) :
+    (cycleStep s).recyclableSurplusNonempty = false := by
+  unfold cycleStep
+  split
+  · exact h
+  · split
+    · exact h
+    · exact recyclableSurplusNonempty_false_apply _ s h
+
+theorem recyclableSurplusNonempty_false_cycleStepN :
+    ∀ (n : Nat) (s : State), s.recyclableSurplusNonempty = false →
+      (cycleStepN n s).recyclableSurplusNonempty = false
+  | 0, _, h => h
+  | n + 1, s, h => by
+      rw [cycleStepN_succ]
+      exact recyclableSurplusNonempty_false_cycleStepN n (cycleStep s)
+        (recyclableSurplusNonempty_false_cycleStep s h)
+
+/-- Once recyclable-surplus is empty, `recycleRelief` never fires again. -/
+theorem recycleRelief_quiet_forever (s : State) (h : s.recyclableSurplusNonempty = false)
+    (n : Nat) : fires .recycleRelief (cycleStepN n s) = false := by
+  simp [fires, recycleReliefFires, recyclableSurplusNonempty_false_cycleStepN n s h]
+
 /-! ## hp = maxHp (hpCritical, restForCombat) — `hp` is only restored, never reduced -/
 
 theorem hp_eq_maxHp_apply (a : ActionKind) (s : State) (h : s.hp = s.maxHp) :

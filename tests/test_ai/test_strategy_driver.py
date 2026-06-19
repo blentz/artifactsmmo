@@ -28,6 +28,7 @@ from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.pursue_task import PursueTaskGoal  # noqa: F401 (used in repr checks)
 from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
+from artifactsmmo_cli.ai.goals.recycle_surplus import RecycleSurplusGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
 from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
@@ -110,6 +111,19 @@ def test_map_guard_reach_unlock_level():
 def test_map_guard_deposit_full():
     g = map_guard(GuardKind.DEPOSIT_FULL, GameData(), _ctx())
     assert isinstance(g, DepositInventoryGoal)
+
+
+def test_map_guard_recycle_relief():
+    """RECYCLE_RELIEF maps to RecycleSurplusGoal, same as RECYCLE_SURPLUS means."""
+    gd = GameData()
+    gd._item_stats = {
+        "copper_helmet": ItemStats(code="copper_helmet", level=1, type_="helmet",
+                                   crafting_skill="gearcrafting", crafting_level=1),
+    }
+    gd._crafting_recipes = {"copper_helmet": {"copper_bar": 6}}
+    gd._workshop_locations = {"gearcrafting": (2, 1)}
+    g = map_guard(GuardKind.RECYCLE_RELIEF, gd, _ctx(target_gear=frozenset({"copper_helmet"})))
+    assert isinstance(g, RecycleSurplusGoal)
 
 
 def test_map_guard_unknown_raises():

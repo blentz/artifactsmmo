@@ -112,6 +112,7 @@ def meansKindName : MeansKind → String
   | .reachUnlockLevel    => "reachUnlockLevel"
   | .discardCritical     => "discardCritical"
   | .craftRelief         => "craftRelief"
+  | .recycleRelief       => "recycleRelief"
   | .depositFull         => "depositFull"
   | .discardHigh         => "discardHigh"
   | .gearReview          => "gearReview"

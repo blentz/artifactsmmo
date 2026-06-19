@@ -146,6 +146,7 @@ _GUARD_INDEX = {
     GuardKind.DISCARD_HIGH: 6,
     GuardKind.REST_FOR_COMBAT: 7,
     GuardKind.GEAR_REVIEW: 8,
+    GuardKind.RECYCLE_RELIEF: 9,
 }
 
 _MEANS_INDEX = {

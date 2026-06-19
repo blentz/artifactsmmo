@@ -634,6 +634,9 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
     | craftRelief =>
       show (applyActionKind .craft s).level ≥ s.level
       simp [applyActionKind]
+    | recycleRelief =>
+      show (applyActionKind .recycle s).level ≥ s.level
+      simp [applyActionKind]
     | maintainConsumables =>
       show (applyActionKind .craft s).level ≥ s.level
       simp [applyActionKind]
@@ -1104,6 +1107,7 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
   -- Out-of-scope kinds: ruled out by hmem.
   | completeTask    => exfalso; revert hmem; unfold progressMeans; decide
   | recycleSurplus  => exfalso; revert hmem; unfold progressMeans; decide
+  | recycleRelief   => exfalso; revert hmem; unfold progressMeans; decide
   | maintainConsumables => exfalso; revert hmem; unfold progressMeans; decide
   | lowYieldCancel  => exfalso; revert hmem; unfold progressMeans; decide
   | taskCancel      => exfalso; revert hmem; unfold progressMeans; decide

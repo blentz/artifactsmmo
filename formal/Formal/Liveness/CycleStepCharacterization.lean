@@ -128,6 +128,12 @@ theorem cycleStep_xp_level_preserved_when_no_fight_no_complete (s : State)
       show (applyActionKind .craft s).level = s.level
             ∧ (applyActionKind .craft s).xp = s.xp
       exact ⟨rfl, rfl⟩
+    | recycleRelief =>
+      -- planFor .recycleRelief = [.recycle]; applyActionKind .recycle preserves
+      -- level and xp (clears recyclableSurplusNonempty only).
+      show (applyActionKind .recycle s).level = s.level
+            ∧ (applyActionKind .recycle s).xp = s.xp
+      exact ⟨rfl, rfl⟩
     | maintainConsumables =>
       -- PLAN #6a: planFor .maintainConsumables = [.craft], same as craftRelief.
       show (applyActionKind .craft s).level = s.level

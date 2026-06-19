@@ -308,6 +308,11 @@ def bankExpandFires (s : State) : Bool :=
     harness asserts agreement with `craft_relief_candidates`. -/
 def craftReliefFires (s : State) : Bool := s.craftReliefFires
 
+/-- RECYCLE_RELIEF. Mirrors `tiers/guards.py::_fires(RECYCLE_RELIEF, …)`:
+    bank full (not bankHasRoom) AND recyclable surplus nonempty. -/
+def recycleReliefFires (s : State) : Bool :=
+  !(bankHasRoom s) && s.recyclableSurplusNonempty
+
 /-- Dispatch: per-MeansKind firing predicate. Computable — every branch reads
     State fields / decides concrete predicates (`lowYieldSampleThreshold` is the
     concrete `def := 1`, not an axiom), so the ladder is oracle-evaluable for the
@@ -320,6 +325,7 @@ def fires (k : MeansKind) (s : State) : Bool :=
   | .reachUnlockLevel => reachUnlockLevelFires s
   | .discardCritical  => discardCriticalFires s
   | .craftRelief      => craftReliefFires s
+  | .recycleRelief    => recycleReliefFires s
   | .depositFull      => depositFullFires s
   | .discardHigh      => discardHighFires s
   | .gearReview       => gearReviewFires s

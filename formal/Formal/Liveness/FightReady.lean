@@ -44,16 +44,17 @@ open Formal.Liveness.SettledReach
 /-- The bank-INDEPENDENT leveling invariant: non-fight blockers quiet + a committed
     combat objective. Crucially NO `bankAccessible` / `level ≥ bankRequiredLevel`. -/
 structure FightReady (s : State) : Prop where
-  hpFull    : s.hp = s.maxHp
-  overstock : s.hasOverstockItems = false
-  deposits  : s.selectBankDepositsNonempty = false
-  gear      : s.gearReviewFires = false
-  pending   : s.pendingItemsNonempty = false
-  sellable  : s.sellableInventoryNonempty = false
-  craft     : s.craftReliefFires = false
-  parked    : TaskParked s
-  objFires  : s.objectiveStepFires = true
-  objFight  : s.objectiveStepIsFight = true
+  hpFull         : s.hp = s.maxHp
+  overstock      : s.hasOverstockItems = false
+  deposits       : s.selectBankDepositsNonempty = false
+  gear           : s.gearReviewFires = false
+  pending        : s.pendingItemsNonempty = false
+  sellable       : s.sellableInventoryNonempty = false
+  craft          : s.craftReliefFires = false
+  recycleNonempty : s.recyclableSurplusNonempty = false
+  parked         : TaskParked s
+  objFires       : s.objectiveStepFires = true
+  objFight       : s.objectiveStepIsFight = true
 
 /-- **The crux selection lemma.** With the twelve non-fight blockers quiet and a
     committed combat objective firing, the ladder selects a FIGHT means — the first
@@ -74,6 +75,7 @@ theorem productionLadder_fight_of_fightReady (s : State) (h : FightReady s) :
   have q1 : fires .restForCombat s = false := by simp [fires, restForCombatFires, h.hpFull]
   have q4 : fires .discardCritical s = false := by simp [fires, discardCriticalFires, h.overstock]
   have q5 : fires .craftRelief s = false := by simp [fires, ProductionLadder.craftReliefFires, h.craft]
+  have q5b : fires .recycleRelief s = false := by simp [fires, recycleReliefFires, h.recycleNonempty]
   have q6 : fires .depositFull s = false := by simp [fires, depositFullFires, h.deposits]
   have q7 : fires .discardHigh s = false := by simp [fires, discardHighFires, h.overstock]
   have q8 : fires .gearReview s = false := by simp [fires, ProductionLadder.gearReviewFires, h.gear]
@@ -85,7 +87,7 @@ theorem productionLadder_fight_of_fightReady (s : State) (h : FightReady s) :
   -- collapse, leaving bankUnlock?.or reachUnlockLevel?.or (some objectiveStep).
   unfold productionLadder
   simp only [allInLadderOrder, List.findSome?_cons,
-             q0, q1, q4, q5, q6, q7, q8, q9, htc, q11, hlyc, htcan, hobj]
+             q0, q1, q4, q5, q5b, q6, q7, q8, q9, htc, q11, hlyc, htcan, hobj]
   -- Goal now: (if bankUnlockFires then some bankUnlock else none).or
   --           ((if reachUnlockLevelFires then some reachUnlockLevel else none).or
   --             (some objectiveStep)) ∈ the 3-way.
@@ -119,7 +121,7 @@ theorem cycleStep_eq_fight_of_fightReady (s : State) (h : FightReady s) :
 theorem FightReady_cycleStep (s : State) (h : FightReady s) : FightReady (cycleStep s) := by
   have hcs := cycleStep_eq_fight_of_fightReady s h
   rw [hcs]
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · exact h.hpFull        -- hpFull (fight touches neither hp nor maxHp)
   · exact h.overstock
   · exact h.deposits
@@ -127,6 +129,7 @@ theorem FightReady_cycleStep (s : State) (h : FightReady s) : FightReady (cycleS
   · exact h.pending
   · exact h.sellable
   · exact h.craft
+  · exact h.recycleNonempty  -- fight does not touch recyclableSurplusNonempty
   · exact TaskParked_fight s h.parked
   · simp only [applyActionKind]; exact h.objFires
   · simp only [applyActionKind]; exact h.objFight

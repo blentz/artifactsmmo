@@ -80,6 +80,7 @@ _GUARD_REPR: dict[GuardKind, str] = {
     # target is state-dependent. The static prefix below satisfies
     # exhaustiveness for callers that only want the goal family.
     GuardKind.CRAFT_RELIEF: "CraftRelief",
+    GuardKind.RECYCLE_RELIEF: "RecycleSurplus",
     # GEAR_REVIEW maps to UpgradeEquipment or GatherMaterials depending on
     # material availability — the static prefix covers exhaustiveness.
     GuardKind.GEAR_REVIEW: "UpgradeEquipment",

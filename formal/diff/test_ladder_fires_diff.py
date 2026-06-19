@@ -182,6 +182,7 @@ from formal.sim.production_ladder import (
 DEFERRED_SLOTS: frozenset[LadderMeans] = frozenset({
     LadderMeans.REST_FOR_COMBAT,
     LadderMeans.CRAFT_RELIEF,
+    LadderMeans.RECYCLE_RELIEF,  # opaque passthrough: bank-full + recyclableSurplusNonempty
     LadderMeans.MAINTAIN_CONSUMABLES,
     LadderMeans.LOW_YIELD_CANCEL,
     LadderMeans.TASK_CANCEL,
@@ -197,6 +198,7 @@ _ORACLE_KEY: dict[LadderMeans, str] = {
     LadderMeans.REACH_UNLOCK_LEVEL: "reachUnlockLevel",
     LadderMeans.DISCARD_CRITICAL: "discardCritical",
     LadderMeans.CRAFT_RELIEF: "craftRelief",
+    LadderMeans.RECYCLE_RELIEF: "recycleRelief",
     LadderMeans.DEPOSIT_FULL: "depositFull",
     LadderMeans.DISCARD_HIGH: "discardHigh",
     LadderMeans.GEAR_REVIEW: "gearReview",
@@ -939,6 +941,7 @@ def _recycle_gd() -> GameData:
     }
     gd._crafting_recipes = {"dagger": {"copper_bar": 6}}
     gd._workshop_locations = {"weaponcrafting": (1, 2)}
+    gd._bank_capacity = 50  # bank has room (0 items < 50) → RECYCLE_RELIEF quiet
     return gd
 
 
@@ -948,8 +951,11 @@ def _recycle_ctx(*, protect_dagger: bool = False) -> SelectionContext:
     # only `target_gear`. Using target_tools isolates the recycle protection
     # near-miss from the (separately-deferred) acceptTask gear-deferral
     # over-approximation, so acceptTask stays == Lean (phase none) here.
+    # bank_accessible=True + bank has room → RECYCLE_RELIEF is quiet (bank has
+    # room, so the bank-full pressure condition is False). Without room the new
+    # RECYCLE_RELIEF guard would preempt ACCEPT_TASK and win selection.
     return SelectionContext(
-        bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
+        bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
         target_gear=frozenset(),
         target_tools=frozenset({"dagger"}) if protect_dagger else frozenset(),
@@ -958,12 +964,14 @@ def _recycle_ctx(*, protect_dagger: bool = False) -> SelectionContext:
 
 def _recycle_world(dagger_qty: int) -> WorldState:
     # No task (phase NONE), dagger held unequipped, fill 1/20 = 0.05 < 0.85.
+    # bank_items={} (empty bank, capacity 50 in _recycle_gd) → bank has room →
+    # RECYCLE_RELIEF is quiet so RECYCLE_SURPLUS can win the deferred-slot contest.
     return WorldState(
         character="diff", level=5, xp=0, max_xp=999999, hp=100, max_hp=100,
         gold=0, skills={"weaponcrafting": 1}, x=0, y=0,
         inventory={"dagger": dagger_qty} if dagger_qty > 0 else {},
         inventory_max=20, equipment={}, cooldown_expires=None,
-        bank_items=None, bank_gold=None, pending_items=None,
+        bank_items={}, bank_gold=None, pending_items=None,
         task_code=None, task_type=None, task_progress=0, task_total=0)
 
 

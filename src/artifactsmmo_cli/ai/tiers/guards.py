@@ -19,6 +19,7 @@ from artifactsmmo_cli.ai.inventory_caps import overstocked_items
 from artifactsmmo_cli.ai.inventory_profile import inventory_profile
 from artifactsmmo_cli.ai.learning.skill_xp_curve import SkillXpCurve
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.world_state import WorldState
 
 CRITICAL_HP_FRACTION = 0.25
@@ -68,6 +69,7 @@ class GuardKind(Enum):
     REACH_UNLOCK_LEVEL = "reach_unlock_level"
     DISCARD_CRITICAL = "discard_critical"
     CRAFT_RELIEF = "craft_relief"
+    RECYCLE_RELIEF = "recycle_relief"
     DEPOSIT_FULL = "deposit_full"
     DISCARD_HIGH = "discard_high"
     GEAR_REVIEW = "gear_review"  # post-level-up / post-loss gear prioritization
@@ -80,6 +82,7 @@ GUARD_ORDER: tuple[GuardKind, ...] = (
     GuardKind.REACH_UNLOCK_LEVEL,
     GuardKind.DISCARD_CRITICAL,
     GuardKind.CRAFT_RELIEF,  # craft-before-deposit/discard when applicable
+    GuardKind.RECYCLE_RELIEF,  # bank-full: recover materials before sell/discard
     GuardKind.DEPOSIT_FULL,
     GuardKind.DISCARD_HIGH,
     GuardKind.GEAR_REVIEW,  # lowest-priority guard, still above all means
@@ -167,6 +170,11 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
             state, game_data,
             step_items=frozenset(step_profile or ()),
         ))
+    if kind is GuardKind.RECYCLE_RELIEF:
+        return (not bank_has_room(ctx.bank_accessible, state.bank_items,
+                                  game_data.bank_capacity)
+                and bool(recyclable_surplus(
+                    state, game_data, ctx.target_gear | ctx.target_tools)))
     if kind is GuardKind.DEPOSIT_FULL:
         return (ctx.bank_accessible
                 and bank_has_room(ctx.bank_accessible, state.bank_items,

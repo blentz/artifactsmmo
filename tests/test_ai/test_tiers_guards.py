@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.tiers.guards import (
     GUARD_ORDER,
     GuardKind,
@@ -246,3 +246,73 @@ def test_discard_fires_when_bank_full():
     # happens in the goal, not the fire predicate).
     assert _fires(GuardKind.DISCARD_HIGH, state, gd, None, ctx) is True
     assert _fires(GuardKind.DISCARD_CRITICAL, state, gd, None, ctx) is True
+
+
+def _recycle_gd() -> GameData:
+    """GameData with a craftable equippable gear item and a known workshop."""
+    gd = GameData()
+    gd._item_stats = {
+        "copper_helmet": ItemStats(
+            code="copper_helmet", level=1, type_="helmet",
+            crafting_skill="gearcrafting", crafting_level=1,
+        ),
+    }
+    gd._crafting_recipes = {"copper_helmet": {"copper_bar": 6}}
+    gd._workshop_locations = {"gearcrafting": (2, 1)}
+    gd._bank_capacity = 1  # bank is full (1 item = capacity 1)
+    return gd
+
+
+def test_recycle_relief_fires_when_bank_full_with_surplus():
+    """Recyclable surplus + bank full + bag pressure -> RECYCLE_RELIEF fires."""
+    gd = _recycle_gd()
+    # bank_items has 1 item and capacity is 1 → bank full
+    state = make_state(
+        level=5, skills={"gearcrafting": 1},
+        inventory={"copper_helmet": 9},
+        inventory_max=200,
+        bank_items={"some_item": 1},
+    )
+    ctx = _ctx(bank_accessible=True)
+    assert _fires(GuardKind.RECYCLE_RELIEF, state, gd, None, ctx) is True
+
+
+def test_recycle_relief_quiet_when_bank_has_room():
+    """Same surplus but bank has room -> deposit path applies, RECYCLE_RELIEF quiet."""
+    gd = _recycle_gd()
+    gd._bank_capacity = 50  # bank has room
+    state = make_state(
+        level=5, skills={"gearcrafting": 1},
+        inventory={"copper_helmet": 9},
+        inventory_max=200,
+        bank_items={"some_item": 1},
+    )
+    ctx = _ctx(bank_accessible=True)
+    assert _fires(GuardKind.RECYCLE_RELIEF, state, gd, None, ctx) is False
+
+
+def test_recycle_relief_quiet_when_no_surplus():
+    """Bank full but no surplus → RECYCLE_RELIEF quiet."""
+    gd = _recycle_gd()
+    state = make_state(
+        level=5, skills={"gearcrafting": 1},
+        inventory={"copper_helmet": 1},  # at cap (1), no surplus
+        inventory_max=200,
+        bank_items={"some_item": 1},
+    )
+    ctx = _ctx(bank_accessible=True)
+    assert _fires(GuardKind.RECYCLE_RELIEF, state, gd, None, ctx) is False
+
+
+def test_recycle_relief_quiet_when_surplus_is_protected():
+    """Bank full, surplus exists but it is the committed objective gear → quiet."""
+    gd = _recycle_gd()
+    state = make_state(
+        level=5, skills={"gearcrafting": 1},
+        inventory={"copper_helmet": 9},
+        inventory_max=200,
+        bank_items={"some_item": 1},
+    )
+    ctx = _ctx(bank_accessible=True,
+               target_gear=frozenset({"copper_helmet"}))
+    assert _fires(GuardKind.RECYCLE_RELIEF, state, gd, None, ctx) is False

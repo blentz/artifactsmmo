@@ -84,6 +84,7 @@ theorem Leveling_blockers_quiet (s : State) (h : Leveling s) :
     simp [hge]
   · simp [fires, discardCriticalFires, hm.overstock]
   · simp [fires, ProductionLadder.craftReliefFires, hm.craft]
+  · simp [fires, recycleReliefFires, hm.recycleNonempty]
   · simp [fires, depositFullFires, hm.deposits]
   · simp [fires, discardHighFires, hm.overstock]
   · simp [fires, ProductionLadder.gearReviewFires, hm.gear]

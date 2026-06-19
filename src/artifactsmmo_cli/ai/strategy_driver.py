@@ -295,6 +295,9 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
             initial_qty=state.inventory.get(top.item_code, 0),
             batch=top.quantity,
         )
+    if kind is GuardKind.RECYCLE_RELIEF:
+        return RecycleSurplusGoal(game_data=game_data,
+                                  protected_codes=frozenset(ctx.target_gear | ctx.target_tools))
     if kind is GuardKind.GEAR_REVIEW:
         if state is None:
             raise ValueError("GEAR_REVIEW guard requires a state")

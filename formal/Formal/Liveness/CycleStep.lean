@@ -118,6 +118,7 @@ noncomputable def planFor : MeansKind → State → Plan
   | .reachUnlockLevel , _ => [.fight]
   | .discardCritical  , _ => [.deleteItem]
   | .craftRelief      , _ => [.craft]
+  | .recycleRelief    , _ => [.recycle]
   | .depositFull      , _ => [.depositAll]
   | .discardHigh      , _ => [.deleteItem]
   | .gearReview       , _ => [.optimizeLoadout]
@@ -319,6 +320,23 @@ theorem cycleStep_progress_or_waits
     have hpre' : s.craftableSlots = s.craftableSlots + 1 := by
       rw [heq] at hpost; exact hpost
     exact Nat.succ_ne_self _ hpre'.symm
+  | recycleRelief =>
+    -- RECYCLE_RELIEF plans `.recycle`, which clears `recyclableSurplusNonempty`.
+    -- recycleReliefFires requires recyclableSurplusNonempty = true, so the
+    -- post-state (false) differs from the pre-state (true) → cycleStep s ≠ s.
+    left
+    have hcs : cycleStep s = applyActionKind .recycle s := by
+      unfold cycleStep; rw [hk]; rfl
+    rw [hcs]
+    simp only [fires, recycleReliefFires, Bool.not_eq_true', Bool.and_eq_true] at hfires
+    have hpre : s.recyclableSurplusNonempty = true := hfires.2
+    intro heq
+    have hpost : ({s with recyclableSurplusNonempty := false} : State).recyclableSurplusNonempty
+                  = false := rfl
+    have hpre' : s.recyclableSurplusNonempty = false := by
+      have : (applyActionKind .recycle s).recyclableSurplusNonempty = false := hpost
+      rw [heq] at this; exact this
+    rw [hpre] at hpre'; cases hpre'
   | maintainConsumables =>
     -- PLAN #6a: MAINTAIN_CONSUMABLES plans `.craft` (cook/brew a heal), the same
     -- shape as CRAFT_RELIEF — craftableSlots advances by +1, so the state changes.
