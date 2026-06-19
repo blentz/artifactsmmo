@@ -173,7 +173,21 @@ the capture fixture.
   `inventoryPerceive` re-arming them from pressure, gated by a drainability
   `RuntimeInvariant` (over-arming is conservative for combat-fires-i.o. but hides a
   full-of-useful-items livelock unless the invariant surfaces it).
-- **Brick 3b/3c/3d — the deep core (NEXT).**
+- **Brick 3b DONE (2026-06-19, commit af2ed68)** — `Drainability.lean`: the
+  high-pressure engine. `Pressured` (≥85%) / `DrainArmed` (junk ∨ sellable) /
+  `RuntimeInvariant` (post-unlock + pressured⇒drain-armed — the HONEST residual,
+  carries drainability explicitly instead of fabricating an always-re-arming
+  perceive that would hide a full-of-useful-items livelock) +
+  `reducer_fires_of_pressured_drainArmed`. With Bricks 1–2 this is the LOCAL engine:
+  fill → (pressured∧armed) fires reducer → drains to 0 → gated chores quiet → combat.
+  Axioms {propext}. **LOCAL ENGINE COMPLETE (Bricks 1, 2, 3a, 3b).**
+- **Brick 3c/3d — the GLOBAL composition (NEXT, the hardest remaining).** Compose the
+  local engine into combat-fires-i.o. 3c: the claim/measure surgery (pendingCount
+  component above bankPressure, or a separate `measureF`+WF for cycleStepF — high-
+  ripple, touches measureLt_wellFounded). 3d: bounded-burst counting → `Blockers
+  QuietBelowCapInfinitelyOftenP` for cycleStepF (modulo RuntimeInvariant) → re-derive
+  reach-50 for cycleStepF (the engine wasn't reusable for cycleStepP; same here).
+  This is the focused-session core; serialize the gate [[feedback_serialize_gate_runs]].
   `cycleStepF s := pressureDelta (productionLadder (perceptionRefresh s))
   (cycleStepP s)` — layer the dynamics after each refreshed step. Because
   `pressureDelta` touches only `inventoryUsed`, the level/xp DESCENT transfers from
