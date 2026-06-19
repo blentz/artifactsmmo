@@ -42,66 +42,74 @@ bank_has_room(state, game_data) :=
 `bank_capacity is None` means "capacity unknown" (NOT full) — distinct from the
 existing `bank_capacity == 0` convention used as a divide-guard in `BANK_EXPAND`.
 The cascade activates under bag pressure when `not bank_has_room`. When the bank
-HAS room, behavior is unchanged (deposit as today).
+HAS room, the bot deposits (and may still craft-relieve as today) — but it no
+longer recycles/sells/discards for relief (those are reserved for bank-full).
 
-## Four-tier cascade
+## The space-pressure response
 
-Implemented as guard-tier fire predicates, each gated on `not bank_has_room` so
-normal (bank-has-room) behavior is untouched. Every tier reuses an existing goal
-and respects the active-profile keep-set, so no tier ever destroys objective
-materials.
+Under bag pressure the bot makes space ONE of two ways, mutually exclusive on
+bank room:
 
-| Tier | Guard | Goal (reused) | Fires (bank full + bag pressure) when |
-|------|-------|---------------|----------------------------------------|
-| 1 craft | `CRAFT_RELIEF_BANKFULL` (NEW guard, `¬bank_has_room`) | `CraftReliefGoal` + sole-output extension | a craft-relief candidate exists |
-| 2 recycle | `RECYCLE_RELIEF` (NEW guard, `¬bank_has_room`) | `RecycleSurplusGoal` | a recyclable surplus exists |
-| 3 sell | `SELL_RELIEF` (NEW guard, `¬bank_has_room`) | `SellInventoryGoal` | an NPC-sellable (tradeable + buyer) item exists |
-| 4 discard | `DISCARD_CRITICAL` / `DISCARD_HIGH` (exist, fall-through) | `DiscardOverstockGoal`, **delete-only path** | last resort (sellables already consumed by tier 3) |
+- **bank_has_room → DEPOSIT.** Depositing is recoverable and loses nothing, so
+  it is always preferred when the bank can take items. No crafting / recycling /
+  selling / discarding for relief.
+- **¬bank_has_room → CASCADE: craft → recycle → sell → discard.** Each rung
+  reuses an existing goal and respects the active-profile keep-set, so no rung
+  destroys objective materials.
+
+**Discard is NOT a bag-full response.** It never fires merely because the bag is
+full — it fires only when `¬bank_has_room`, as the LAST cascade rung, and only
+for **truly worthless** items (no craft use, no recycle path, no NPC sale).
+Selling overstock for gold is the SELL rung's job, one tier above discard.
+
+| Tier | Guard | Goal (reused) | Fires (bag pressure) when |
+|------|-------|---------------|----------------------------|
+| 1 craft | `CRAFT_RELIEF` (exists, unchanged) | `CraftReliefGoal` + sole-output extension | a craft-relief candidate exists |
+| 2 recycle | `RECYCLE_RELIEF` (NEW, `¬bank_has_room`) | `RecycleSurplusGoal` | a recyclable surplus exists |
+| 3 sell | `SELL_RELIEF` (NEW, `¬bank_has_room`) | `SellInventoryGoal` | an NPC-sellable (tradeable + buyer) item exists |
+| 4 discard | `DISCARD_CRITICAL` / `DISCARD_HIGH` (exist, **+ `¬bank_has_room` gate**) | `DiscardOverstockGoal`, **delete-only path** | last: a truly-worthless overstock item remains |
+
+Tier 1 craft (`CRAFT_RELIEF`) is bank-agnostic and stays as today (fires at fill
+≥ 0.70 with a candidate — the existing craft-before-deposit). It therefore also
+serves the bank-full case as the top cascade rung. Tiers 2–4 are
+`¬bank_has_room`-gated.
 
 ### Guard ordering
 
-**Constraint:** under `not bank_has_room`, discard must be genuinely LAST
-(craft > recycle > sell > discard). But the existing bank-has-room order
-deliberately places `DISCARD_CRITICAL` (0.95) ABOVE `CRAFT_RELIEF` (0.70) — dump
-junk before crafting at near-full. We must not change the bank-has-room ordering
-(it is proven and out of scope).
-
-**Resolution:** the bank-full cascade is a contiguous block of `¬bank_has_room`-
-gated guards placed at the TOP of the space-pressure region, above
-`DISCARD_CRITICAL`. The craft rung of the cascade is a NEW `¬bank_has_room`-gated
-guard `CRAFT_RELIEF_BANKFULL` (same `CraftReliefGoal` + sole-output candidates as
-the existing `CRAFT_RELIEF`, just gated on bank-full and positioned above
-discard). The existing `CRAFT_RELIEF` stays where it is for the bank-has-room
-case. New `GUARD_ORDER` (guards.py:75):
+New `GUARD_ORDER` (guards.py:75):
 
 ```
 HP_CRITICAL, REST_FOR_COMBAT, BANK_UNLOCK, REACH_UNLOCK_LEVEL,
-CRAFT_RELIEF_BANKFULL, RECYCLE_RELIEF, SELL_RELIEF,   # bank-full cascade (¬bank_has_room)
-DISCARD_CRITICAL, CRAFT_RELIEF, DEPOSIT_FULL, DISCARD_HIGH,   # existing region (DEPOSIT_FULL now bank_has_room-gated)
+CRAFT_RELIEF,                       # bank-agnostic, fill ≥ 0.70 (unchanged)
+RECYCLE_RELIEF, SELL_RELIEF,        # NEW, ¬bank_has_room
+DEPOSIT_FULL,                       # now bank_has_room-gated
+DISCARD_CRITICAL, DISCARD_HIGH,     # now ¬bank_has_room-gated, delete-only, worthless
 GEAR_REVIEW
 ```
 
-Behavior:
-- **bank_has_room** → the three bank-full guards are gated OFF; the existing
-  region (`DISCARD_CRITICAL, CRAFT_RELIEF, DEPOSIT_FULL, DISCARD_HIGH`) runs
-  exactly as today. No proven behavior changes.
-- **¬bank_has_room** → cascade fires top-down: craft → recycle → sell; if none
-  have a candidate, fall through to `DISCARD_CRITICAL` (delete) then `DISCARD_
-  HIGH` (delete); `DEPOSIT_FULL` never fires (gated off). Discard is genuinely
-  last.
+`DEPOSIT_FULL` (bank_has_room) and `RECYCLE_RELIEF`/`SELL_RELIEF`/`DISCARD_*`
+(¬bank_has_room) are mutually exclusive on the bank-room predicate, so their
+relative order is immaterial; the listing reads craft → recycle → sell →
+deposit-or-discard. Behavior:
+- **bank_has_room** → CRAFT_RELIEF (if candidate) then DEPOSIT_FULL (≥0.90).
+  RECYCLE/SELL/DISCARD gated OFF — no relief-discard with bank room.
+- **¬bank_has_room** → CRAFT_RELIEF → RECYCLE_RELIEF → SELL_RELIEF → (DEPOSIT off)
+  → DISCARD_CRITICAL/HIGH (delete worthless). Discard genuinely last.
 
-(Alternative considered and rejected: gate `DISCARD_CRITICAL`/`DISCARD_HIGH` on
-"no craft/recycle/sell candidate" — rejected as guard-coupling that's harder to
-model formally than a clean contiguous ordered block.)
+**Behavior change (intended):** the existing `DISCARD_CRITICAL`/`DISCARD_HIGH`
+guards gain a `¬bank_has_room` gate, so they no longer fire on bag-fullness alone
+when the bank has room (the bot deposits instead). This is the explicit
+requirement "we don't need to discard before bank full."
 
-### Sell vs discard — no double-handling
+### Sell vs discard — no double-handling, worthless-only discard
 
-`DiscardOverstockGoal` today sells-before-deletes. To avoid the SELL and DISCARD
-tiers both selling: the SELL tier owns NPC selling (`SellInventoryGoal`); the
-DISCARD tier is restricted to the **delete-only** path (true last resort, fires
-only when nothing is craftable, recyclable, or sellable). Concretely, under
-bank-full pressure the discard guard's goal deletes; selling is the SELL tier's
-job one rung above.
+`DiscardOverstockGoal` today sells-before-deletes. Under the cascade the SELL rung
+(`SellInventoryGoal`) owns NPC selling; the DISCARD rung is restricted to the
+**delete-only** path AND to items that are **truly worthless** — zero NPC
+sell-value, no recycle path, not a craft input on hand. Because SELL_RELIEF
+(higher) already consumes every sellable item, by the time DISCARD fires only
+worthless items remain; the worthless filter is belt-and-suspenders so a
+profile-overstocked-but-sellable item is never deleted.
 
 ### Craft-tier extension (sole-output materials)
 
@@ -120,13 +128,14 @@ Reused as-is: `CraftReliefGoal`, `RecycleSurplusGoal`, `SellInventoryGoal`,
 `_sell_value`/`npcs_buying_item`, `active_profile` keep-set, `_last_resort_
 deposit`'s victim-ranking heuristic (for the delete-only victim choice if needed).
 
-Net-new: (a) `bank_has_room` predicate; (b) `CRAFT_RELIEF_BANKFULL` +
-`RECYCLE_RELIEF` + `SELL_RELIEF` GuardKinds with `¬bank_has_room`-gated fire
-predicates and `map_guard` branches (craft maps to the same `CraftReliefGoal`,
-recycle to `RecycleSurplusGoal`, sell to `SellInventoryGoal`); (c) the
-`bank_has_room` conjunct on `DEPOSIT_FULL`; (d) the sole-output craft extension
-to `craft_relief_candidates`; (e) the delete-only restriction on the discard goal
-under bank-full; (f) the matching Lean ladder defs + differential bindings.
+Net-new: (a) `bank_has_room` predicate; (b) `RECYCLE_RELIEF` + `SELL_RELIEF`
+GuardKinds with `¬bank_has_room`-gated fire predicates and `map_guard` branches
+(recycle → `RecycleSurplusGoal`, sell → `SellInventoryGoal`); (c) the
+`bank_has_room` conjunct on `DEPOSIT_FULL`; (d) the `¬bank_has_room` gate on
+`DISCARD_CRITICAL`/`DISCARD_HIGH` plus the delete-only + worthless-only
+restriction on the discard goal; (e) the sole-output craft extension to
+`craft_relief_candidates`; (f) the matching Lean ladder defs + differential
+bindings. `CRAFT_RELIEF` is UNCHANGED (bank-agnostic, already tier-1).
 
 ## Formal scope (kernel-proven ladder — lockstep required)
 
@@ -135,17 +144,18 @@ The guard/means ladder is proven and pinned. Changes land across all layers:
 - **Lean** (`formal/Formal/Liveness/ProductionLadder.lean`, possibly
   `BankSelection.lean`): add `bankHasRoom` to the Lean `State` (from
   `bankAccessible`, `bankCapacity`, `bankItemsCount`); `depositFullFires` +=
-  `bankHasRoom`; new `craftReliefBankfullFires`, `recycleReliefFires`,
-  `sellReliefFires` predicates (each `¬bankHasRoom ∧ candidate-nonempty`, the
-  craft one reusing the `craftReliefFires` candidate signal); insert the three
-  into `allInLadderOrder` above `discardCritical`; re-prove the ladder
-  liveness/safety theorems under the new ordering.
-- **Differential** (`formal/diff/test_ladder_fires_diff.py`): add
-  `craftReliefBankfull`/`recycleRelief`/`sellRelief` to `LadderMeans` +
-  `ASSERTED_SLOTS`; thread `bankHasRoom` and the candidate-nonempty signals
-  through the oracle arg array; add boundary witnesses (bank-full vs
-  bank-has-room). This resolves the `ladder_fires` residual: DEPOSIT_FULL no
-  longer fires on the bank-full scenario, both sides agree.
+  `bankHasRoom`; `discardCriticalFires`/`discardHighFires` += `¬bankHasRoom`; new
+  `recycleReliefFires`, `sellReliefFires` predicates (each `¬bankHasRoom ∧
+  candidate-nonempty`); update `allInLadderOrder` to the new order
+  (`craftRelief, recycleRelief, sellRelief, depositFull, discardCritical,
+  discardHigh`); re-prove the ladder liveness/safety theorems under it.
+- **Differential** (`formal/diff/test_ladder_fires_diff.py`): add `recycleRelief`/
+  `sellRelief` to `LadderMeans` + `ASSERTED_SLOTS`; thread `bankHasRoom` and the
+  candidate-nonempty signals through the oracle arg array; re-pin the
+  `depositFull`/`discardCritical`/`discardHigh` slots now that they read
+  `bankHasRoom`; add boundary witnesses (bank-full vs bank-has-room). This
+  resolves the `ladder_fires` residual: DEPOSIT_FULL no longer fires on the
+  bank-full scenario, both sides agree.
 - **Mutation**: refresh `mutate.py` anchors after the guard edits; no surviving
   mutants.
 - **Craft extension**: `craft_relief_candidates` is a DRIVEN/passthrough oracle
@@ -158,11 +168,14 @@ Implementation runs through the formal-development workflow (Lean + differential
 ## Testing / success criteria
 
 - 100% coverage; unit tests for `bank_has_room`, each new guard fire predicate,
-  the `map_guard` branches, the sole-output craft extension, and the delete-only
-  discard restriction.
+  the `map_guard` branches, the sole-output craft extension, the delete-only +
+  worthless-only discard restriction, AND a regression test that `DISCARD_*` does
+  NOT fire when `bank_has_room` (the intended behavior change).
 - A bank-full integration scenario: bag full + bank full → asserts the cascade
-  picks craft, then (no craft) recycle, then (no recycle) sell, then (nothing
-  else) discard.
+  picks craft, then (no craft) recycle, then (no recycle) sell, then (only a
+  worthless item left) discard.
+- A bank-has-room scenario: bag full + bank has room → deposits; recycle/sell/
+  discard stay quiet.
 - `test_ladder_fires_diff` GREEN (residual resolved); new slots pinned with
   boundary witnesses.
 - `gate.sh`: no NEW failures, BankSelection/ladder slot green.
@@ -174,7 +187,9 @@ Implementation runs through the formal-development workflow (Lean + differential
 - No new unified opportunity-cost scorer — the priority cascade (craft > recycle
   > sell > discard) encodes the opportunity-cost ordering; each tier keeps its
   existing selection logic.
-- No change to behavior when the bank HAS room — deposit stays preferred.
+- When the bank HAS room, deposit stays preferred and `CRAFT_RELIEF` is
+  unchanged; the ONLY bank-has-room behavior change is that relief
+  recycle/sell/discard no longer fire (deposit handles it).
 - No "craft anything on hand" — craft is limited to goal-chain intermediates +
   sole-output materials (deterministic, zero-regret).
 - Bank-capacity expansion (`BANK_EXPAND`) is unchanged.
