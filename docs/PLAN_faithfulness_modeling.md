@@ -197,7 +197,35 @@ the capture fixture.
   not the 14. Axioms {propext, Quot.sound} (no LIV-001 — pure selection mechanics).
   **LOCAL DICHOTOMY NOW COMPLETE** (drain side + fight side); 3d is the global
   iteration.
-- **Brick 3c/3d — the GLOBAL synthesis (NEXT, the hardest remaining).** Compose the
+- **Brick 3d-a DONE (2026-06-19, commit 44b70bb)** — `CycleStepFIteration.lean`: the
+  cycleStepF iteration + monotonicity PLUMBING (`cycleStepFN_add`, `_succ_outer`,
+  `cycleStepFN_level_ge`, `cycleStepFN_xp_ge_when_level_eq_throughout`), all
+  transferred off the Brick-3a per-step bridges + cycleStepP monotonicity. KEY
+  REALIZATION: the level-advance engine reaches 50 by **xp accumulation, NOT lex
+  measure** — so NO measure/WF here; the claim/pendingCount WF is confined to the
+  later bounded-burst termination (3d-c). Axioms {propext, Quot.sound, LIV-001}.
+- **Brick 3d-b DONE (2026-06-19, commits 2792d66 + 98496e8)** — the cycleStepF
+  level-advance ENGINE + CAPSTONE. `CycleStepFLeveling.lean`: `hfightFiresF` (the
+  fight-firing residual), `cycleStepFN_succ_fight_xp_level` (at a fight position the
+  faithful cycle runs the fight THEN pressureDelta; pressureDelta preserves xp/level
+  so the +10/rollover transfer through — the one new wrinkle vs the cycleStepP
+  engine), `xp_accumulates_when_level_constant_F`, `level_advances_onceF`.
+  `LevelFiftyReachableF.lean`: `GlobalInvariantsF` + `globalInvariants_stepF` +
+  `ai_reaches_level_fiftyF` — **the FAITHFUL cycle provably reaches level 50** by
+  strong induction on the gap, modulo `hfightFiresF`. Same accepted axiom set as the
+  cycleStepP capstone {propext, Classical.choice, Quot.sound, LIV-001}.
+- **Brick 3d-c — the SOLE remaining piece (the hard WF core, focused session).**
+  Discharge `hfightFiresF` from the REDUCED 10-blocker residual
+  (`PressureBurst.nonPressureBlockers` quiet below cap i.o.) + `RuntimeInvariant` via
+  the bounded-burst argument. The CRUX: prove pressure is below 85% INFINITELY OFTEN
+  along the cycleStepF trajectory (each drain resets to 0, riser ≤ DROP_BOUND), and
+  that low-pressure positions COINCIDE with 10-quiet positions so the fight-side
+  dichotomy (`productionLadder_eq_objectiveStep_of_low_pressure`) selects the fight.
+  This is where the claim-fuel bound (pendingCount finite + claim-depleted) and the
+  bounded-burst WF/counting live. ALL scaffolding around it is now built (both
+  dichotomy sides + the engine + the capstone); 3d-c is the single hardest theorem.
+  Serialize the gate [[feedback_serialize_gate_runs]].
+- **(superseded) Brick 3c/3d — the GLOBAL synthesis.** Compose the
   local dichotomy (drain side 3d-prep + fight side 3c-prep) into combat-fires-i.o.
   Remaining sub-pieces: (i) trajectory assembly — discharge the 7 higher-slots-quiet
   premises of the drain step along the cycleStepF trajectory (hp rested; bank
