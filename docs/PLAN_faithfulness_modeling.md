@@ -151,20 +151,37 @@ the capture fixture.
   threshold` + `pressureGatedChores_quiet_of_low` (100·used < 85·max ⇒ all 4 quiet)
   are provable with NO State change. Axioms {propext, Quot.sound}. Foundation of
   the transience argument.
-- **Brick 2 NEXT — the high-ripple core.** The model currently PRESERVES
-  `inventoryUsed` across every action (Plan.lean:229/237/246 explicitly defer the
-  decrement; `.fight` never raises it). Brick 2 wires the faithful dynamics:
-  fight/gather +B (bounded), deposit→drop, discard/sell/craft reduce, claim +1
-  (Phase-0 wrinkle 1). **KEY DESIGN TENSION (the crux of the whole effort):**
-  making `.fight` RAISE pressure deliberately BREAKS `BlockerSettled.Settled_
-  cycleStep` (which holds only because fight preserves the gated-chore quiet) — i.e.
-  the easy `Settled` fixpoint is UNFAITHFUL (the real Settled isn't fight-invariant;
-  fighting fills the bag). Brick 2+ must REPLACE the fixpoint with the real
-  bounded-burst transience: fight raises pressure → a gated chore fires ≤ once per
-  category → pressure drops → combat resumes, combat selected ≥ 1 per (N+1) cycles.
-  This ripples into ~50 proofs (measure descent, Settled_cycleStep, the capstone)
-  and needs a FULL gate run per brick + subagent-driven discipline. Its own focused
-  session.
+- **Brick 2 DONE (2026-06-19, commit 4b2f018)** — `InventoryDynamics.lean`: the
+  faithful `pressureDelta` per-means update (objectiveStep fight +DROP_BOUND;
+  claim +1; deposit/discard/sell/craftRelief → 0; others identity), ADDITIVE (does
+  NOT modify applyActionKind, so no existing proof breaks — the `perceptionRefresh`
+  playbook). Proved field-preservation (only inventoryUsed touched),
+  `pressureDelta_inventoryUsed_le_add_bound` (bounded growth), `pressureDelta_
+  reducer_clears` + `pressureGatedChores_quiet_after_reducer` (a drain silences the
+  4 gated chores). DROP_BOUND + exact reducer post-values = Phase-2 differential
+  obligations. Axioms {propext, Quot.sound}.
+- **Brick 3 NEXT — `cycleStepF` + the bounded-burst transience (the deep core).**
+  Define `cycleStepF s := pressureDelta (productionLadder (perceptionRefresh s))
+  (cycleStepP s)` — layer the dynamics after each refreshed step. Because
+  `pressureDelta` touches only `inventoryUsed`, the level/xp DESCENT transfers from
+  cycleStepP by rfl bridges — EXCEPT the lex measure's component 5
+  `bankPressure = max(0, used − 80%·max)`, which `pressureDelta` MOVES:
+    * a FIGHT raises bankPressure but reduces levelDeficit/xpDeficit (lex positions
+      1–2, ABOVE 5) ⇒ measure still descends. OK by lex.
+    * a REDUCER lowers bankPressure (position 5) with positions 1–4 equal ⇒ measure
+      descends. OK — chores are progress in the existing measure.
+    * **CLAIM is the problem child:** +1 pressure, NO level/xp progress ⇒ raises
+      bankPressure with positions 1–4 equal ⇒ measure INCREASES. Breaks the WF
+      descent. RESOLUTION: claim's fuel `pendingItemsNonempty`/a `pendingCount` is
+      finite and claim-depleted; add `pendingCount` as a NEW measure component
+      ABOVE bankPressure so claim DESCENDS it (claim −1 pending dominates the +1
+      pressure). Adding a measure component is the high-ripple step (touches
+      measureLt + measureLt_wellFounded + every descent proof) — do it additively as
+      a `measureF`/separate WF order for cycleStepF if feasible, else extend the
+      tuple. Then: bounded-burst counting (combat selected ≥1 per (N+1) cycles) →
+      `BlockersQuietBelowCapInfinitelyOftenP` discharged for cycleStepF → reach-50.
+  Needs a FULL gate run + subagent-driven discipline; the measure-component decision
+  is the gating design call. Its own focused session.
 
 ### Phase 1 — Faithful State extension + apply cores
 - Extend `Measure.State` with the Phase-0-selected fields (e.g. `inventoryUsed`,
