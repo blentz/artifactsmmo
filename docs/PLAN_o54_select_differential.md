@@ -92,6 +92,28 @@ With the ladder + opaque Bools differentially bound, the model extension
 arming is validated against production's perceive. Then discharge the chore-clear +
 `hperc` out of the bootstrap window → level-50 completeness modulo only LIV-001.
 
-## Status
-- 2026-06-18: scoped from the SELECT landscape audit. Brick 1 (computable ladder)
-  DONE (62832e3). NEXT: Brick 2 (oracle `ladder_fires` entry).
+## Status — COMPLETE (2026-06-18)
+All bricks landed on main; the Lean liveness ladder (`fires`/`productionLadder`,
+all 23 slots) is differentially bound to production AND mutation-enforced.
+- Brick 1 — computable ladder (62832e3).
+- Brick 2 — oracle `ladder_fires` entry (7982bbb).
+- Brick 3 — numeric-guard differential, 16 slots asserted (4d3988a).
+- Brick 4a — craftRelief + recycleSurplus + drive_and_contest scaffold (0117491).
+- Brick 4b — restForCombat (idx-1 strong contest) + maintainConsumables (9a214aa).
+- Brick 4c — taskCancel + pursueTask + lowYieldCancel via real LearningStore (dda10eb).
+- Brick 5 — 20 mutation anchors on the ladder predicates, 20/20 killed; docstring
+  refresh (e84799a).
+Each brick: implementer + adversarial reviewer (spec PASS, quality APPROVED), full
+Python suite green (2371). `formal/diff/test_ladder_fires_diff.py` = 35 tests.
+
+KEY FINDINGS surfaced: (a) recycleSurplus + maintainConsumables can NEVER win Lean
+selection (lifecycle slots partition all phases above them) — honest fire-and-lose;
+(b) phase-derived slots (taskCancel/pursueTask/lowYieldCancel) are Lean
+over-approximations of production's history/task_decision — driven via consistent
+scenarios; (c) for opaque-passthrough slots the per-slot check is fed-through
+(vacuous) — the teeth are entirely in the `selected` (productionLadder) assertion.
+
+NEXT (post-O5.4): the perception-refresh MODEL EXTENSION is now honest to build
+(its objectiveStepFires arming is differentially validated) → discharge chore-clear
++ hperc out of the bootstrap window ([[project_b0_bootstrap_reach]]) → level-50
+completeness modulo only LIV-001.
