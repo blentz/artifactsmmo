@@ -50,6 +50,7 @@ import Formal.Liveness.BootstrapReach
 import Formal.Liveness.PerceptionRefresh
 import Formal.Liveness.CycleStepP
 import Formal.Liveness.FightFairnessP
+import Formal.Liveness.LevelFiftyReachableP
 import Formal.Liveness.BlockerSettled
 import Formal.Liveness.SettledWitness
 import Formal.Liveness.SettledReach
@@ -675,3 +676,36 @@ open Formal.Liveness.CycleStepP
 #print axioms cycleStepP_objectiveStepFires_armed
 #print axioms cycleStepP_objectiveStepIsFight_armed
 #print axioms cycleStepP_objective_armed_overturns_frontier
+
+-- Perception-refresh Brick 2 (2026-06-18): the refreshed bootstrap window reaches
+-- bankRequiredLevel in-model (cycleStepPN analog of B-0's reaches_bankRequiredLevel).
+#print axioms cycleStepP_reaches_bankRequiredLevel
+
+-- Perception-refresh Brick 4 (2026-06-18): hfightFiresP — the hfightFires obligation
+-- restated over the refreshed trajectory — discharged from the scheduling residual
+-- BlockersQuietBelowCapInfinitelyOftenP ALONE. The combat-persistence (old hperc /
+-- CombatPersistent) is now PROVEN IN-MODEL (Brick 3), no longer an assumption.
+open Formal.Liveness.FightFairnessP
+#print axioms hfightFiresP_of_blockers_quiet
+#print axioms hfightFiresP_of_blockers_quiet_unrefreshed
+#print axioms blockersQuietP_of_blockersQuiet
+
+-- Perception-refresh Brick 5 (2026-06-18) — THE CAPSTONE. Level-50 reachability
+-- re-derived for the refreshed cycle cycleStepP (the LifecycleBound7 engine is NOT
+-- reusable: its cycleStepN' reduction requires the inner step to be cycleStep, which
+-- cycleStepP is not). GlobalInvariantsP replaces the assumed hfightFires with
+-- hfightFiresP, so ai_reaches_level_fiftyP rests on {hnowait, hex, hbe (refreshed),
+-- BlockersQuietBelowCapInfinitelyOftenP, WinnableAcrossBand, LIV-001} — the honest
+-- Option-A residual. Axioms ⊆ {propext, Classical.choice, Quot.sound, xpToNextLevel,
+-- xpToNextLevel_pos}.
+open Formal.Liveness.LevelFiftyReachableP
+#print axioms cycleStepPN_add
+#print axioms cycleStepPN_succ_outer
+#print axioms cycleStepPN_level_ge
+#print axioms cycleStepPN_xp_ge_when_level_eq_throughout
+#print axioms xp_accumulates_when_level_constant_P
+#print axioms level_advances_onceP
+#print axioms globalInvariants_stepP
+#print axioms ai_reaches_level_fiftyP_aux
+#print axioms ai_reaches_level_fiftyP
+#print axioms ai_reaches_level_fiftyP_of_blockers_quiet

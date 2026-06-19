@@ -95,6 +95,20 @@ theorem perceptionRefresh_bankRequiredLevel (s : State) :
     (perceptionRefresh s).bankRequiredLevel = s.bankRequiredLevel := by
   unfold perceptionRefresh; split <;> rfl
 
+/-- `perceptionRefresh` preserves `taskExchangeMinCoins` (the `taskExchange`
+non-degeneracy config field). Needed for the `hex` analog to relate the refreshed
+selection state's config to the raw state. -/
+theorem perceptionRefresh_taskExchangeMinCoins (s : State) :
+    (perceptionRefresh s).taskExchangeMinCoins = s.taskExchangeMinCoins := by
+  unfold perceptionRefresh; split <;> rfl
+
+/-- `perceptionRefresh` preserves `nextExpansionCost` (the `bankExpand`
+non-degeneracy config field). Needed for the `hbe` analog to relate the refreshed
+selection state's config to the raw state. -/
+theorem perceptionRefresh_nextExpansionCost (s : State) :
+    (perceptionRefresh s).nextExpansionCost = s.nextExpansionCost := by
+  unfold perceptionRefresh; split <;> rfl
+
 /-! ## Fire-predicate preservation for the bootstrap-window slots — none of these
 read the two objective Bools, so each fire predicate is unchanged. These let
 Brick 2 transfer `cycleStep_fights_in_window` to `cycleStepP`. -/
