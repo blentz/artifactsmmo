@@ -4,6 +4,7 @@ Covers armor-slot optimization and the empty-slot (no current stats) path.
 """
 
 from artifactsmmo_cli.ai.equipment.scoring import (
+    armor_score_pure,
     pick_gather_loadout,
     pick_loadout,
     weapon_score,
@@ -11,6 +12,18 @@ from artifactsmmo_cli.ai.equipment.scoring import (
 )
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from tests.test_ai.fixtures import make_state
+
+
+def test_armor_score_pure_includes_combat_buff():
+    """combat_buff is a flat utility term in the armor score — per the docstring
+    and the proven Lean AScore. Regression (drift gate 2026-06-19): it was
+    accepted as a parameter but dropped from the return sum, so combat-buff gear
+    (antidotes, boost items) scored as if the buff were worthless."""
+    kw = dict(hp_bonus=0, wisdom=0, prospecting=0, inventory_space=0,
+              haste=0, lifesteal=0)
+    base = armor_score_pure(["fire"], {"fire": 0}, {"fire": 0}, combat_buff=0, **kw)
+    buffed = armor_score_pure(["fire"], {"fire": 0}, {"fire": 0}, combat_buff=7, **kw)
+    assert buffed - base == 7
 
 
 def _gd() -> GameData:

@@ -1014,6 +1014,47 @@ class _FallbackDecision:
     fallback_roots: list
 
 
+def test_chosen_step_alive_false_when_top_step_yields_no_goal():
+    """Zombie-commitment release: when the top chosen_step's objective_step_goal
+    is None (e.g. ReachCharLevel with no winnable monster, or a reservation-
+    starved skill grind), the arbiter marks chosen_step_alive False so the player
+    releases the stickiness anchor instead of re-committing to the inert root
+    forever (weaponcrafting level-5 plateau, trace 2026-06-19). A fallback still
+    serves the cycle, so select returns a goal."""
+    planner = GOAPPlanner()
+    gd = _gd()
+    state = make_state(hp=100, max_hp=100, inventory={"wooden_shield": 1},
+                       equipment={"shield_slot": None})
+    actions = [EquipAction(code="wooden_shield", slot="shield_slot"), RestAction()]
+    decision = _FallbackDecision(
+        chosen_step=ReachCharLevel(level=10),          # ctx.combat_monster=None -> None goal
+        fallback_steps=[ObtainItem("wooden_shield", 1)],
+        fallback_roots=[ObtainItem("wooden_shield", 1)])
+    arbiter = StrategyArbiter(planner, history=None)
+    arbiter.set_cycle(0)
+    goal, _plan, _gt = arbiter.select(decision, state, gd, actions, _ctx())
+    assert arbiter.chosen_step_alive is False
+    assert goal is not None, "a fallback must still serve the cycle"
+
+
+def test_chosen_step_alive_true_when_top_step_yields_goal():
+    """The complement: a chosen_step that DOES map to a goal (here an owned
+    wooden_shield -> UpgradeEquipmentGoal) keeps chosen_step_alive True, so the
+    player re-anchors stickiness on the live objective normally."""
+    planner = GOAPPlanner()
+    gd = _gd()
+    state = make_state(hp=100, max_hp=100, inventory={"wooden_shield": 1},
+                       equipment={"shield_slot": None})
+    actions = [EquipAction(code="wooden_shield", slot="shield_slot"), RestAction()]
+    decision = _FallbackDecision(
+        chosen_step=ObtainItem("wooden_shield", 1),
+        fallback_steps=[], fallback_roots=[])
+    arbiter = StrategyArbiter(planner, history=None)
+    arbiter.set_cycle(0)
+    arbiter.select(decision, state, gd, actions, _ctx())
+    assert arbiter.chosen_step_alive is True
+
+
 def test_select_promotes_upgrade_equipment_from_fallback_first_pass():
     """When the top chosen_step yields no goal, the fallback FIRST pass prefers
     a fallback step that maps to UpgradeEquipmentGoal (the one-step equip),

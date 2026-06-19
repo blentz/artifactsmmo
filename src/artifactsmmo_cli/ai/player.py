@@ -305,8 +305,6 @@ class GamePlayer:
                     combat_monster=combat_monster,
                     last_chosen_root=self._last_strategy_root,
                 )
-                if decision.chosen_root is not None:
-                    self._last_strategy_root = repr(decision.chosen_root)
                 self._last_decision = decision
                 step = decision.chosen_step
                 crafting_target = step.code if isinstance(step, ObtainItem) else None
@@ -333,6 +331,16 @@ class GamePlayer:
                     suppressed=set(self._suppressed_goals),
                     objective=self._objective,
                 )
+                # Stickiness anchor: re-commit to chosen_root ONLY when its own
+                # top step served a goal this cycle. A ZOMBIE root (chosen but
+                # whose step yielded None — e.g. a reservation-starved skill
+                # grind) is released so a higher-value plannable root can win the
+                # next cycle instead of staying sticky forever (weaponcrafting
+                # level-5 plateau, trace 2026-06-19).
+                if decision.chosen_root is not None and self._arbiter.chosen_step_alive:
+                    self._last_strategy_root = repr(decision.chosen_root)
+                else:
+                    self._last_strategy_root = None
                 # Trace ranking: the candidates the arbiter actually tried, in order.
                 goal_rank_trace: list[dict[str, object]] = [
                     {"goal": gt["goal"], "priority": 0.0} for gt in goals_tried

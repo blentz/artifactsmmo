@@ -624,6 +624,13 @@ class StrategyArbiter:
         self._planner = planner
         self._history = history
         self._committed_repr: str | None = None
+        # Whether the top chosen_step produced an executable goal this cycle
+        # (objective_step_goal non-None). When False, the chosen_root is a
+        # ZOMBIE — recorded/committed but serving only a fallback root's goal —
+        # and the player must NOT re-anchor stickiness on it (else a reservation-
+        # starved skill grind stays committed forever; weaponcrafting level-5
+        # plateau, trace 2026-06-19). Defaults True; set every select().
+        self.chosen_step_alive: bool = True
         self.goals_tried: list[dict[str, object]] = []
         self._memo = DoomedMemo()
         self._cycle = 0
@@ -809,6 +816,10 @@ class StrategyArbiter:
         # chain; the ready-to-equip path is always preferable.
         step_goal = objective_step_goal(chosen_step, state, game_data, ctx,
                                         root=chosen_root, committed_root=chosen_root)
+        # Aliveness of the COMMITTED root: did its own top step yield a goal? A
+        # None here means the chosen_root is inert this cycle (only fallbacks can
+        # serve) — the player reads this to release the stickiness anchor.
+        self.chosen_step_alive = step_goal is not None
         if step_goal is not None:
             return step_goal
         # First pass: prefer UpgradeEquipmentGoal (one-step equip).
