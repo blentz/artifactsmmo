@@ -256,10 +256,24 @@ the capture fixture.
   `InventoryDynamics.lean` + `PressureTransience.lean`. Everything else reviewed clean
   (no vacuity exploit; composition-flag staleness honestly absorbed into
   RuntimeInvariant + perceptionRefresh arming, not fabricated).
-- **REMAINING work:** (1) the `pressureDelta` DIFFERENTIAL test (the load-bearing
-  obligation above — promote from Phase-2-deferred to the key open item); (2) OPTIONAL
-  hardening (prove the quiet-pair residual from per-blocker clear lemmas); (3)
-  Workstream B live data capture (separate, user long-pole).
+- **DIFFERENTIAL INVESTIGATION DONE (2026-06-19, commit 89fdbff) — claim FALSIFIED.**
+  `docs/REVIEW_pressuredelta_differential.md`: investigated whether production's five
+  reducer means drop pressure below the 85% watermark. **NONE does.** DISCARD removes
+  only EXCESS above per-item caps (capped bag stays ≥85%, guard then SILENT); DEPOSIT
+  keeps a large keep-set; SELL targets free≥5 (≥85% for max>33); CRAFT batch-clamps.
+  So `pressureDelta(reducer)→0` is UNFAITHFUL; under a faithful partial drain the
+  `PressureTransience` counting is FALSE — the real bot can livelock at ≥85%
+  ([[project_inventory_profiles]]'s full-of-useful-items livelock). The capstone is
+  unchanged (correct for the →0 model); the honest READING is "reaches 50 modulo a
+  faithful-drain gap", NOT an unconditional real-bot guarantee. The honest residual is
+  `EffectiveDrainArmed` (a reducer whose application drops below 85% fires i.o.) — a
+  runtime property production does NOT guarantee.
+- **REMAINING work:** (1) HONEST FIX (the real follow-on): weaken `pressureDelta` to a
+  faithful bounded partial drain, replace `DrainArmed` with `EffectiveDrainArmed`,
+  re-derive `PressureTransience` — surfacing the livelock as the precise failure
+  precondition (converts the optimistic proof into an honest one whose residual names
+  the real failure mode). (2) OPTIONAL hardening (quiet-pair from per-blocker clears).
+  (3) Workstream B live data capture (separate, user long-pole).
 - **(superseded) Brick 3c/3d — the GLOBAL synthesis.** Compose the
   local dichotomy (drain side 3d-prep + fight side 3c-prep) into combat-fires-i.o.
   Remaining sub-pieces: (i) trajectory assembly — discharge the 7 higher-slots-quiet
