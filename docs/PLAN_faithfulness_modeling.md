@@ -214,17 +214,25 @@ the capture fixture.
   `ai_reaches_level_fiftyF` — **the FAITHFUL cycle provably reaches level 50** by
   strong induction on the gap, modulo `hfightFiresF`. Same accepted axiom set as the
   cycleStepP capstone {propext, Classical.choice, Quot.sound, LIV-001}.
-- **Brick 3d-c — the SOLE remaining piece (the hard WF core, focused session).**
-  Discharge `hfightFiresF` from the REDUCED 10-blocker residual
-  (`PressureBurst.nonPressureBlockers` quiet below cap i.o.) + `RuntimeInvariant` via
-  the bounded-burst argument. The CRUX: prove pressure is below 85% INFINITELY OFTEN
-  along the cycleStepF trajectory (each drain resets to 0, riser ≤ DROP_BOUND), and
-  that low-pressure positions COINCIDE with 10-quiet positions so the fight-side
-  dichotomy (`productionLadder_eq_objectiveStep_of_low_pressure`) selects the fight.
-  This is where the claim-fuel bound (pendingCount finite + claim-depleted) and the
-  bounded-burst WF/counting live. ALL scaffolding around it is now built (both
-  dichotomy sides + the engine + the capstone); 3d-c is the single hardest theorem.
-  Serialize the gate [[feedback_serialize_gate_runs]].
+- **Brick 3d-c REDUCTION DONE (2026-06-19, commit 891b741)** — `FightFairnessF.lean`:
+  `hfightFiresF_of_reduced` discharges `hfightFiresF` down to `ReducedResidualF` =
+  i.o. (below cap ∧ inventory pressure LOW ∧ the ten `nonPressureBlockers` quiet).
+  `ai_reaches_level_fiftyF_of_reduced` chains it to the capstone: the FAITHFUL cycle
+  reaches 50 from `ReducedResidualF` + the three non-degeneracy invariants — NO
+  unfaithful 14-blocker assumption, NO measure, modulo LIV-001. The residual is now
+  pinned to exactly "low pressure ∧ ten quiet i.o." — the smallest honest gap.
+- **Brick 3d-c TRANSIENCE — the SOLE remaining sub-piece (hard WF core, focused
+  session).** Discharge the LOW-PRESSURE conjunct of `ReducedResidualF` from
+  `Drainability.RuntimeInvariant` + the bounded-burst dynamics. CRUX: prove pressure
+  dips below 85% INFINITELY OFTEN along the cycleStepF trajectory (each reducer step
+  resets inventoryUsed to 0 — `pressureDelta_reducer_clears`; each fill is ≤
+  DROP_BOUND — `cycleStepF_inventoryUsed_le_add_bound`), COINCIDING with the ten-quiet
+  positions. Couples to the claim-fuel bound (pendingCount finite + claim-depleted),
+  the bootstrap-window fight-blockers (bankUnlock/reachUnlockLevel ADD inventory but
+  retire on unlock), and inventoryMax constancy. This is the genuinely hard analytic
+  WF/counting theorem — design work, not mechanical mirroring. ALL scaffolding is now
+  built (both dichotomy sides + engine + capstone + reduction); this is the single
+  hardest theorem. Serialize the gate [[feedback_serialize_gate_runs]].
 - **(superseded) Brick 3c/3d — the GLOBAL synthesis.** Compose the
   local dichotomy (drain side 3d-prep + fight side 3c-prep) into combat-fires-i.o.
   Remaining sub-pieces: (i) trajectory assembly — discharge the 7 higher-slots-quiet
