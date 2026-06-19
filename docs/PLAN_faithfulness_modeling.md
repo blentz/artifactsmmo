@@ -144,6 +144,28 @@ abstraction (no live data). B is buildable-infra + one live-capture step the use
 runs. Proceed: Phase 1 (A modeling) in parallel with B infra; B's sweep waits on
 the capture fixture.
 
+### Phase 1 — BRICK STATUS (Workstream A)
+- **Brick 1 DONE (2026-06-19, commit 3d8a0dd)** — `InventoryPressure.lean`: the
+  gate-direction lemmas. Phase-0 confirmed the 4 pressure-gated chores already
+  AND-gate their used/max threshold INSIDE the `*Fires` defs, so `*Fires_imp_
+  threshold` + `pressureGatedChores_quiet_of_low` (100·used < 85·max ⇒ all 4 quiet)
+  are provable with NO State change. Axioms {propext, Quot.sound}. Foundation of
+  the transience argument.
+- **Brick 2 NEXT — the high-ripple core.** The model currently PRESERVES
+  `inventoryUsed` across every action (Plan.lean:229/237/246 explicitly defer the
+  decrement; `.fight` never raises it). Brick 2 wires the faithful dynamics:
+  fight/gather +B (bounded), deposit→drop, discard/sell/craft reduce, claim +1
+  (Phase-0 wrinkle 1). **KEY DESIGN TENSION (the crux of the whole effort):**
+  making `.fight` RAISE pressure deliberately BREAKS `BlockerSettled.Settled_
+  cycleStep` (which holds only because fight preserves the gated-chore quiet) — i.e.
+  the easy `Settled` fixpoint is UNFAITHFUL (the real Settled isn't fight-invariant;
+  fighting fills the bag). Brick 2+ must REPLACE the fixpoint with the real
+  bounded-burst transience: fight raises pressure → a gated chore fires ≤ once per
+  category → pressure drops → combat resumes, combat selected ≥ 1 per (N+1) cycles.
+  This ripples into ~50 proofs (measure descent, Settled_cycleStep, the capstone)
+  and needs a FULL gate run per brick + subagent-driven discipline. Its own focused
+  session.
+
 ### Phase 1 — Faithful State extension + apply cores
 - Extend `Measure.State` with the Phase-0-selected fields (e.g. `inventoryUsed`,
   `inventoryMax`, per-category counters). Keep additive — existing proofs must not
