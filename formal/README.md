@@ -227,3 +227,16 @@ into `_memo`) with unit tests.
 Design docs: `docs/superpowers/specs/2026-05-26-lean-formal-verification-design.md` (gate architecture),
 `docs/superpowers/specs/2026-05-27-lean-decision-logic-design.md` (decision-logic expansion). The retired
 TLA+/PlusPy predecessor: `docs/postmortems/2026-05-26-tlaplus-pluspy-formal-verification.md`.
+
+## Level-50 reachability — residual perimeter
+
+The perception-refreshed level-50 capstone
+(`Formal.Liveness.LevelFiftyReachableP.ai_reaches_level_fiftyP`) rests on exactly
+three named residuals of three classes — LIV-001 (trusted server xp-curve axiom),
+WinnableAcrossBand (faithfulness/differential, needs per-level base stats the
+server does not expose), and BlockersQuietBelowCapInfinitelyOftenP (a Lean
+hypothesis; provable in-model but only via a "chores never re-arm" abstraction
+that is unfaithful to the re-arming real bot, so the in-model discharge is
+REFUSED as a false-story proof). "Modulo only LIV-001" is honestly unreachable.
+The authoritative audit — statements, line citations, why each is irreducible,
+and what discharge would require — is `docs/LEVEL_FIFTY_RESIDUALS.md`.

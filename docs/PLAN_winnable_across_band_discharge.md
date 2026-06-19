@@ -107,3 +107,9 @@ remaining target.
 - 2026-06-18: scoped. Base-stats shortcut found infeasible (attack is gear-derived;
   base stats not server-exposed). Awaiting direction: C1 (assumption-pinned
   differential), C2 (full model, multi-session), or C3 (document as residual).
+- 2026-06-18: **CLOSED via C3.** WinnableAcrossBand documented as a faithfulness-
+  class server-data residual in `docs/LEVEL_FIFTY_RESIDUALS.md` (the authoritative
+  level-50 residual audit). C1 collapses into C2 (no sound base-hp(L) offline);
+  C2 is a multi-session gear+stat model. No honest discharge is available without
+  the server exposing per-level base stats. The residual is satisfiable
+  (`winnableAcrossBand_satisfiable`) + Brick-6 differentially characterized.
