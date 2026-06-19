@@ -36,5 +36,5 @@ def _snap(**ov) -> CycleSnapshot:
 
 def test_build_plan_detail_from_snapshot():
     out = _text(build_plan_detail(_snap(), _gd()))
-    assert "COMMITTED" in out and "copper_boots" in out
+    assert "CHOSEN" in out and "copper_boots" in out
     assert "42/60" in out and "ETA" in out

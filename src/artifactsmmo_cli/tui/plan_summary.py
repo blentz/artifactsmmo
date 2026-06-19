@@ -1,10 +1,12 @@
-"""Pure builder: render the AI's committed objective as a collapsed plan tree
-with have/need progress. Reuses closure_demand/shopping_list; no planning logic."""
+"""Pure builder: render the AI's committed objective as a flowchart — objective
+root, the chosen branch expanded (step / GOAP / have-need body), every non-chosen
+root as a one-line stub, and a suppressed-goals footer. No planning logic."""
 
 import re
 from collections.abc import Mapping
 
 from rich.console import Group, RenderableType
+from rich.padding import Padding
 from rich.table import Table
 from rich.text import Text
 
@@ -13,6 +15,10 @@ from artifactsmmo_cli.ai.cycle_snapshot import RootScoreView
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.recipe_closure import closure_demand
 from artifactsmmo_cli.ai.shopping_list import shopping_list
+from artifactsmmo_cli.tui.plan_format import short_root
+
+CHOSEN_GLYPH = "●"
+STUB_GLYPH = "○"
 
 _OBTAIN_RE = re.compile(r"ObtainItem\(code='([^']+)', quantity=(\d+)\)")
 _CHARLVL_RE = re.compile(r"ReachCharLevel\(level=(\d+)\)")
@@ -20,8 +26,6 @@ _SKILL_RE = re.compile(r"ReachSkillLevel\(skill='([^']+)', level=(\d+)\)")
 
 
 def _depth(code: str, recipes: Mapping[str, dict[str, int]], memo: dict[str, int]) -> int:
-    """Recipe depth: raw item = 0, craftable = 1 + max(input depth). Cycle-safe
-    via memo seeded to 0 before recursion."""
     if code in memo:
         return memo[code]
     memo[code] = 0
@@ -44,8 +48,6 @@ def _obtain_chain(code: str, qty: int, inventory: dict[str, int],
 
     memo: dict[str, int] = {}
     items = sorted(total, key=lambda c: (_depth(c, recipes, memo), c))
-    # SHALLOWEST item with remaining work = what's being acquired NOW (work
-    # proceeds raw -> up the recipe; you gather the leaf before crafting above it).
     pending = [c for c in items if net.get(c, 0) > 0]
     active = min(pending, key=lambda c: (_depth(c, recipes, memo), c)) if pending else None
 
@@ -67,13 +69,6 @@ def _obtain_chain(code: str, qty: int, inventory: dict[str, int],
     if stats is not None and stats.type_ in ITEM_TYPE_TO_SLOTS:
         t.add_row("Equip", code, "", "")
     return t
-
-
-def _category_of(root_repr: str, ranking: list[RootScoreView]) -> tuple[str, float | None]:
-    for r in ranking:
-        if r.root_repr == root_repr:
-            return r.category, r.score
-    return "?", None
 
 
 def _body(chosen_root: str, inventory: dict[str, int], bank: dict[str, int] | None,
@@ -98,6 +93,25 @@ def _body(chosen_root: str, inventory: dict[str, int], bank: dict[str, int] | No
     return Text(f"Plan: {chosen_root}")
 
 
+def _chosen_entry(chosen_root: str, ranking: list[RootScoreView]) -> RootScoreView | None:
+    return next((r for r in ranking if r.root_repr == chosen_root), None)
+
+
+def _stub_line(r: RootScoreView, game_data: GameData) -> Text:
+    """One-line 'would ...' for a non-chosen root (no closure expansion)."""
+    m = _OBTAIN_RE.fullmatch(r.root_repr)
+    if m:
+        code, qty = m.group(1), m.group(2)
+        verb = "Craft" if game_data.crafting_recipes.get(code) else "Collect"
+        recipe = game_data.crafting_recipes.get(code)
+        needs = ""
+        if recipe:
+            needs = "  (needs " + ", ".join(f"{q}x {c}" for c, q in recipe.items()) + ")"
+        return Text(f"│    would  {verb} {qty}x {code}{needs}", style="dim")
+    detail = r.step_repr or short_root(r.root_repr)
+    return Text(f"│    would  {detail}", style="dim")
+
+
 def build_plan_summary(
     chosen_root: str | None,
     ranking: list[RootScoreView],
@@ -110,24 +124,39 @@ def build_plan_summary(
     skill_xp: dict[str, int] | None = None,
     task_code: str | None = None, task_progress: int = 0, task_total: int = 0,
     path_next_action: str | None = None,
+    plan_len: int = 0,
+    suppressed_goals: list[str] | None = None,
 ) -> RenderableType:
-    """Render the committed objective's collapsed plan + progress: a COMMITTED
-    header, the per-root body (ObtainItem chain / char-level / skill-level / task),
-    an ETA footer, and the ranked ALTERNATIVES block."""
+    """Render the committed objective as a flowchart: an OBJECTIVE root, the
+    chosen branch expanded (step / GOAP / have-need body), the non-chosen roots
+    as stub branches, then an ETA and suppressed-goals footer."""
     if chosen_root is None:
         return Text("No committed objective this cycle.")
-    cat, score = _category_of(chosen_root, ranking)
+
     parts: list[RenderableType] = []
-    short = chosen_root.replace("ObtainItem(code=", "").replace(", quantity=1)", "")
-    head = f"COMMITTED: {short}  ({cat}" + (f", score {score:.2f}" if score is not None else "") + ")"
-    parts.append(Text(head, style="bold"))
-    parts.append(_body(chosen_root, inventory, bank, game_data, path_next_action,
-                       (xp, max_xp), skill_xp or {}, (task_code, task_progress, task_total)))
+    max_level = game_data.max_character_level if game_data is not None else 0
+    parts.append(Text(f"OBJECTIVE  reach level {max_level}", style="bold"))
+    parts.append(Text("│"))
+
+    chosen = _chosen_entry(chosen_root, ranking)
+    cat = chosen.category if chosen is not None else "?"
+    score_txt = f"  {chosen.score:.2f}" if chosen is not None else ""
+    step_txt = chosen.step_repr if chosen is not None and chosen.step_repr else "-"
+    parts.append(Text(f"├─{CHOSEN_GLYPH} {short_root(chosen_root)}  {cat}{score_txt}   ◄ CHOSEN",
+                      style="bold"))
+    parts.append(Text(f"│    step  {step_txt}", style="dim"))
+    parts.append(Text(f"│    plan  {plan_len} actions   next {path_next_action or '?'}",
+                      style="dim"))
+    parts.append(Padding(_body(chosen_root, inventory, bank, game_data, path_next_action,
+                               (xp, max_xp), skill_xp or {},
+                               (task_code, task_progress, task_total)), (0, 0, 0, 5)))
+
+    for r in (x for x in ranking if x.root_repr != chosen_root):
+        parts.append(Text(f"├─{STUB_GLYPH} {short_root(r.root_repr)}  {r.category}  {r.score:.2f}"))
+        parts.append(_stub_line(r, game_data))
+
     if projected_cycles_to_max is not None:
         parts.append(Text(f"ETA ~{projected_cycles_to_max:.0f} cycles (estimate)", style="dim"))
-    alts = [r for r in ranking if r.root_repr != chosen_root][:6]
-    if alts:
-        parts.append(Text("ALTERNATIVES (not chosen):", style="bold"))
-        for r in alts:
-            parts.append(Text(f"  {r.score:.2f}  {r.root_repr}  ({r.category})", style="dim"))
+    if suppressed_goals:
+        parts.append(Text(f"└─ suppressed  {' · '.join(suppressed_goals)}", style="dim"))
     return Group(*parts)

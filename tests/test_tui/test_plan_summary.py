@@ -83,19 +83,22 @@ def test_reach_skill_level_line():
     assert "gearcrafting" in out and "L5" in out
 
 
-def test_header_and_eta_and_alternatives():
+def test_flowchart_chosen_branch_and_stubs():
     ranking = [
         RootScoreView(root_repr="ObtainItem(code='copper_boots', quantity=1)",
-                      category="gear", score=2.5),
-        RootScoreView(root_repr="ReachCharLevel(level=3)", category="char_level", score=1.48),
+                      category="gear", score=2.5, step_repr="UpgradeEquipment(copper_boots)"),
+        RootScoreView(root_repr="ReachCharLevel(level=3)", category="char_level", score=1.48,
+                      step_repr="FightAction(chicken)"),
     ]
     out = _text(build_plan_summary(
         "ObtainItem(code='copper_boots', quantity=1)", ranking,
         {"copper_ore": 42}, None, _gd(), 18.0))
-    assert "COMMITTED" in out and "copper_boots" in out
+    assert "OBJECTIVE" in out
+    assert "CHOSEN" in out and "copper_boots" in out and "2.5" in out
     assert "ETA" in out and "18" in out
-    assert "ALTERNATIVES" in out and "ReachCharLevel" in out and "1.48" in out
-    # the committed root is NOT repeated in the alternatives list
+    # the non-chosen root appears as a stub with its score
+    assert "ReachCharLevel" in out and "1.48" in out
+    assert "would" in out                       # stub action line
 
 
 def test_pursue_task_line():
@@ -108,3 +111,29 @@ def test_pursue_task_line():
 def test_unrecognized_root_falls_back_to_plain_plan_line():
     out = _text(build_plan_summary("MysteryRoot(x=1)", [], {}, None, _gd(), None))
     assert "Plan:" in out and "MysteryRoot" in out
+
+
+def test_suppressed_footer_listed():
+    out = _text(build_plan_summary(
+        "ReachCharLevel(level=3)", [], {}, None, _gd(), None,
+        suppressed_goals=["PursueTask", "GatherMaterials"]))
+    assert "suppressed" in out and "PursueTask" in out and "GatherMaterials" in out
+
+
+def test_chosen_branch_shows_plan_len_and_next():
+    out = _text(build_plan_summary(
+        "ReachCharLevel(level=3)", [], {}, None, _gd(), None,
+        plan_len=3, path_next_action="chicken"))
+    assert "plan" in out and "3" in out and "chicken" in out
+
+
+def test_stub_would_line_for_obtain_root():
+    ranking = [
+        RootScoreView(root_repr="ReachCharLevel(level=3)", category="char_level", score=2.0,
+                      step_repr="FightAction(chicken)"),
+        RootScoreView(root_repr="ObtainItem(code='copper_boots', quantity=1)",
+                      category="gear", score=1.0, step_repr="UpgradeEquipment(copper_boots)"),
+    ]
+    out = _text(build_plan_summary("ReachCharLevel(level=3)", ranking, {}, None, _gd(), None))
+    stub = next(ln for ln in out.splitlines() if "copper_boots" in ln and "would" in ln)
+    assert "Craft" in stub
