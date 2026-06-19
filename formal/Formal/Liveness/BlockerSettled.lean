@@ -71,6 +71,7 @@ theorem Settled_blockers_quiet (s : State) (h : Settled s) :
   · simp [fires, discardCriticalFires, h.overstock]
   · simp [fires, ProductionLadder.craftReliefFires, h.craft]
   · simp [fires, recycleReliefFires, h.recycleNonempty]
+  · simp [fires, sellReliefFires, h.sellable]
   · simp [fires, depositFullFires, h.deposits]
   · simp [fires, discardHighFires, h.overstock]
   · simp [fires, ProductionLadder.gearReviewFires, h.gear]

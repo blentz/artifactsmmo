@@ -2,9 +2,9 @@
   Formal.Liveness.MeansKind
 
   Production-granularity `MeansKind` enum mirroring the StrategyArbiter's
-  ladder. There are 22 means in total, ordered:
+  ladder. There are 23 means in total, ordered:
 
-    GUARD_ORDER (9, from `tiers/guards.py:68`)  -- REST_FOR_COMBAT after
+    GUARD_ORDER (10, from `tiers/guards.py:68`)  -- REST_FOR_COMBAT after
                                                    HP_CRITICAL; CRAFT_RELIEF
                                                    between DISCARD_CRITICAL and
                                                    DEPOSIT_FULL; GEAR_REVIEW
@@ -38,7 +38,7 @@ namespace Formal.Liveness.MeansKind
     Order matches production's preordered candidate list:
       GUARD_ORDER ++ COLLECT_REWARD_ORDER ++ [OBJECTIVE_STEP] ++ DISCRETIONARY_ORDER.
 
-    Total 22 constructors. -/
+    Total 23 constructors. -/
 inductive MeansKind where
   -- Guards (GUARD_ORDER, guards.py:68)
   | hpCritical          -- HP_CRITICAL,        guards.py:69
@@ -59,6 +59,10 @@ inductive MeansKind where
                         --                     materials before sell/discard;
                         --                     fires when bank full AND
                         --                     recyclable surplus nonempty)
+  | sellRelief          -- SELL_RELIEF, guards.py (bank-full: sell surplus
+                        --                     before deposit/discard; fires
+                        --                     when bank full AND sellable
+                        --                     inventory nonempty)
   | depositFull         -- DEPOSIT_FULL,       guards.py:75
   | discardHigh         -- DISCARD_HIGH,       guards.py:76
   | gearReview          -- GEAR_REVIEW,        guards.py:77 (lowest-priority
@@ -90,14 +94,14 @@ inductive MeansKind where
     so the ladder is unconditionally total (see `NoDeadlockV2.lean`). -/
 def allInLadderOrder : List MeansKind :=
   [.hpCritical, .restForCombat, .bankUnlock, .reachUnlockLevel,
-   .discardCritical, .craftRelief, .recycleRelief, .depositFull, .discardHigh, .gearReview,
+   .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull, .discardHigh, .gearReview,
    .claimPending, .completeTask, .sellPressured, .lowYieldCancel, .taskCancel,
    .objectiveStep,
    .pursueTask, .acceptTask, .taskExchange, .maintainConsumables,
    .sellIdle, .recycleSurplus, .bankExpand,
    .wait]
 
-/-- Sanity: 24 constructors. -/
-example : allInLadderOrder.length = 24 := by decide
+/-- Sanity: 25 constructors. -/
+example : allInLadderOrder.length = 25 := by decide
 
 end Formal.Liveness.MeansKind

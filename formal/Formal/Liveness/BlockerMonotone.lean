@@ -273,6 +273,11 @@ theorem recycleRelief_quiet_forever (s : State) (h : s.recyclableSurplusNonempty
     (n : Nat) : fires .recycleRelief (cycleStepN n s) = false := by
   simp [fires, recycleReliefFires, recyclableSurplusNonempty_false_cycleStepN n s h]
 
+/-- Once sellable-inventory is empty, `sellRelief` never fires again. -/
+theorem sellRelief_quiet_forever (s : State) (h : s.sellableInventoryNonempty = false)
+    (n : Nat) : fires .sellRelief (cycleStepN n s) = false := by
+  simp [fires, sellReliefFires, sellable_false_cycleStepN n s h]
+
 /-! ## hp = maxHp (hpCritical, restForCombat) — `hp` is only restored, never reduced -/
 
 theorem hp_eq_maxHp_apply (a : ActionKind) (s : State) (h : s.hp = s.maxHp) :

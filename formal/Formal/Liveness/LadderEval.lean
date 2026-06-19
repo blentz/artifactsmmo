@@ -113,6 +113,7 @@ def meansKindName : MeansKind → String
   | .discardCritical     => "discardCritical"
   | .craftRelief         => "craftRelief"
   | .recycleRelief       => "recycleRelief"
+  | .sellRelief          => "sellRelief"
   | .depositFull         => "depositFull"
   | .discardHigh         => "discardHigh"
   | .gearReview          => "gearReview"

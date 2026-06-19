@@ -316,3 +316,82 @@ def test_recycle_relief_quiet_when_surplus_is_protected():
     ctx = _ctx(bank_accessible=True,
                target_gear=frozenset({"copper_helmet"}))
     assert _fires(GuardKind.RECYCLE_RELIEF, state, gd, None, ctx) is False
+
+
+def _sell_gd() -> GameData:
+    """GameData with one NPC buyer for 'copper_ore' (tradeable item)."""
+    gd = GameData()
+    gd._npc_sell_prices = {"npc_buyer": {"copper_ore": 5}}
+    gd._item_stats = {
+        "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource",
+                                tradeable=True),
+    }
+    gd._bank_capacity = 1  # bank is full (1 item = capacity 1)
+    return gd
+
+
+def test_sell_relief_fires_when_bank_full_with_sellable():
+    """Bank full + sellable item in inventory -> SELL_RELIEF fires."""
+    gd = _sell_gd()
+    state = make_state(
+        inventory={"copper_ore": 5},
+        inventory_max=20,
+        bank_items={"some_item": 1},
+    )
+    ctx = _ctx(bank_accessible=True)
+    assert _fires(GuardKind.SELL_RELIEF, state, gd, None, ctx) is True
+
+
+def test_sell_relief_quiet_when_bank_has_room():
+    """Bank has room -> SELL_RELIEF quiet even with sellable items."""
+    gd = _sell_gd()
+    gd._bank_capacity = 50  # bank has room
+    state = make_state(
+        inventory={"copper_ore": 5},
+        inventory_max=20,
+        bank_items={"some_item": 1},
+    )
+    ctx = _ctx(bank_accessible=True)
+    assert _fires(GuardKind.SELL_RELIEF, state, gd, None, ctx) is False
+
+
+def test_sell_relief_quiet_when_no_sellable():
+    """Bank full but no NPC buyer for held items -> SELL_RELIEF quiet."""
+    gd = _sell_gd()
+    state = make_state(
+        inventory={"unsellable_item": 5},
+        inventory_max=20,
+        bank_items={"some_item": 1},
+    )
+    ctx = _ctx(bank_accessible=True)
+    assert _fires(GuardKind.SELL_RELIEF, state, gd, None, ctx) is False
+
+
+def test_sell_relief_quiet_when_item_zero_qty():
+    """Inventory entry with qty=0 is skipped (no real holding)."""
+    gd = _sell_gd()
+    state = make_state(
+        inventory={"copper_ore": 0},  # held qty is zero
+        inventory_max=20,
+        bank_items={"some_item": 1},
+    )
+    ctx = _ctx(bank_accessible=True)
+    assert _fires(GuardKind.SELL_RELIEF, state, gd, None, ctx) is False
+
+
+def test_sell_relief_quiet_when_item_not_tradeable():
+    """Bank full + NPC buyer exists but item is not tradeable -> quiet."""
+    gd = GameData()
+    gd._npc_sell_prices = {"npc_buyer": {"bound_item": 5}}
+    gd._item_stats = {
+        "bound_item": ItemStats(code="bound_item", level=1, type_="resource",
+                                tradeable=False),
+    }
+    gd._bank_capacity = 1
+    state = make_state(
+        inventory={"bound_item": 3},
+        inventory_max=20,
+        bank_items={"some_item": 1},
+    )
+    ctx = _ctx(bank_accessible=True)
+    assert _fires(GuardKind.SELL_RELIEF, state, gd, None, ctx) is False

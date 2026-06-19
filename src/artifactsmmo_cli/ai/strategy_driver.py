@@ -298,6 +298,8 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
     if kind is GuardKind.RECYCLE_RELIEF:
         return RecycleSurplusGoal(game_data=game_data,
                                   protected_codes=frozenset(ctx.target_gear | ctx.target_tools))
+    if kind is GuardKind.SELL_RELIEF:
+        return SellInventoryGoal(bank_accessible=ctx.bank_accessible)
     if kind is GuardKind.GEAR_REVIEW:
         if state is None:
             raise ValueError("GEAR_REVIEW guard requires a state")

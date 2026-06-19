@@ -179,6 +179,7 @@ inductive GuardKind where
   | restForCombat
   | gearReview
   | recycleRelief
+  | sellRelief
 deriving Repr, DecidableEq
 
 /-- Mirror of `src/artifactsmmo_cli/ai/tiers/means.py::MeansKind`. -/
@@ -217,6 +218,7 @@ def goalReprOfGuard : GuardKind → String
   | .depositFull      => "DepositInventory"
   | .gearReview       => "UpgradeEquipment"
   | .recycleRelief    => "RecycleSurplus"
+  | .sellRelief       => "SellInventory"
 
 /-- TOTAL `match`: every `MeansKind` variant maps to a non-empty repr string. -/
 def goalReprOfMeans : MeansKind → String

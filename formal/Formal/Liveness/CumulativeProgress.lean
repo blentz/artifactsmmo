@@ -637,6 +637,9 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
     | recycleRelief =>
       show (applyActionKind .recycle s).level ≥ s.level
       simp [applyActionKind]
+    | sellRelief =>
+      show (applyActionKind .npcSell s).level ≥ s.level
+      simp [applyActionKind]
     | maintainConsumables =>
       show (applyActionKind .craft s).level ≥ s.level
       simp [applyActionKind]
@@ -1108,6 +1111,7 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
   | completeTask    => exfalso; revert hmem; unfold progressMeans; decide
   | recycleSurplus  => exfalso; revert hmem; unfold progressMeans; decide
   | recycleRelief   => exfalso; revert hmem; unfold progressMeans; decide
+  | sellRelief      => exfalso; revert hmem; unfold progressMeans; decide
   | maintainConsumables => exfalso; revert hmem; unfold progressMeans; decide
   | lowYieldCancel  => exfalso; revert hmem; unfold progressMeans; decide
   | taskCancel      => exfalso; revert hmem; unfold progressMeans; decide

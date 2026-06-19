@@ -119,6 +119,7 @@ noncomputable def planFor : MeansKind → State → Plan
   | .discardCritical  , _ => [.deleteItem]
   | .craftRelief      , _ => [.craft]
   | .recycleRelief    , _ => [.recycle]
+  | .sellRelief       , _ => [.npcSell]
   | .depositFull      , _ => [.depositAll]
   | .discardHigh      , _ => [.deleteItem]
   | .gearReview       , _ => [.optimizeLoadout]
@@ -335,6 +336,23 @@ theorem cycleStep_progress_or_waits
                   = false := rfl
     have hpre' : s.recyclableSurplusNonempty = false := by
       have : (applyActionKind .recycle s).recyclableSurplusNonempty = false := hpost
+      rw [heq] at this; exact this
+    rw [hpre] at hpre'; cases hpre'
+  | sellRelief =>
+    -- SELL_RELIEF plans `.npcSell`, which clears `sellableInventoryNonempty`.
+    -- sellReliefFires requires sellableInventoryNonempty = true, so the
+    -- post-state (false) differs from the pre-state (true) → cycleStep s ≠ s.
+    left
+    have hcs : cycleStep s = applyActionKind .npcSell s := by
+      unfold cycleStep; rw [hk]; rfl
+    rw [hcs]
+    simp only [fires, sellReliefFires, Bool.not_eq_true', Bool.and_eq_true] at hfires
+    have hpre : s.sellableInventoryNonempty = true := hfires.2
+    intro heq
+    have hpost : ({s with sellableInventoryNonempty := false} : State).sellableInventoryNonempty
+                  = false := rfl
+    have hpre' : s.sellableInventoryNonempty = false := by
+      have : (applyActionKind .npcSell s).sellableInventoryNonempty = false := hpost
       rw [heq] at this; exact this
     rw [hpre] at hpre'; cases hpre'
   | maintainConsumables =>

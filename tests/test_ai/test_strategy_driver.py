@@ -126,6 +126,12 @@ def test_map_guard_recycle_relief():
     assert isinstance(g, RecycleSurplusGoal)
 
 
+def test_map_guard_sell_relief():
+    """SELL_RELIEF maps to SellInventoryGoal."""
+    g = map_guard(GuardKind.SELL_RELIEF, GameData(), _ctx(bank_accessible=True))
+    assert isinstance(g, SellInventoryGoal)
+
+
 def test_map_guard_unknown_raises():
     with pytest.raises(ValueError):
         map_guard("bogus", GameData(), _ctx())  # type: ignore[arg-type]

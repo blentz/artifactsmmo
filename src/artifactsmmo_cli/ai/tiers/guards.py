@@ -70,6 +70,7 @@ class GuardKind(Enum):
     DISCARD_CRITICAL = "discard_critical"
     CRAFT_RELIEF = "craft_relief"
     RECYCLE_RELIEF = "recycle_relief"
+    SELL_RELIEF = "sell_relief"
     DEPOSIT_FULL = "deposit_full"
     DISCARD_HIGH = "discard_high"
     GEAR_REVIEW = "gear_review"  # post-level-up / post-loss gear prioritization
@@ -83,10 +84,27 @@ GUARD_ORDER: tuple[GuardKind, ...] = (
     GuardKind.DISCARD_CRITICAL,
     GuardKind.CRAFT_RELIEF,  # craft-before-deposit/discard when applicable
     GuardKind.RECYCLE_RELIEF,  # bank-full: recover materials before sell/discard
+    GuardKind.SELL_RELIEF,  # bank-full: sell surplus to NPC before deposit/discard
     GuardKind.DEPOSIT_FULL,
     GuardKind.DISCARD_HIGH,
     GuardKind.GEAR_REVIEW,  # lowest-priority guard, still above all means
 )
+
+
+def _has_sellable(state: WorldState, game_data: GameData) -> bool:
+    """Item is sellable when it has a buyer NPC AND the server-side `tradeable`
+    flag is true. Replicated from tiers/means.py to avoid a circular import
+    (means.py imports SelectionContext from guards.py)."""
+    for code, qty in state.inventory.items():
+        if qty <= 0:
+            continue
+        if not game_data.npcs_buying_item(code):
+            continue
+        stats = game_data.item_stats(code)
+        if stats is not None and not stats.tradeable:
+            continue
+        return True
+    return False
 
 
 def _used_fraction(state: WorldState) -> float:
@@ -175,6 +193,10 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
                                   game_data.bank_capacity)
                 and bool(recyclable_surplus(
                     state, game_data, ctx.target_gear | ctx.target_tools)))
+    if kind is GuardKind.SELL_RELIEF:
+        return (not bank_has_room(ctx.bank_accessible, state.bank_items,
+                                  game_data.bank_capacity)
+                and _has_sellable(state, game_data))
     if kind is GuardKind.DEPOSIT_FULL:
         return (ctx.bank_accessible
                 and bank_has_room(ctx.bank_accessible, state.bank_items,

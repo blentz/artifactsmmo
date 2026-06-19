@@ -46,7 +46,7 @@ open Formal.Liveness.CumulativeProgress
     is selected exactly when all of these are quiet and it fires. -/
 def objectiveStepBlockers : List MeansKind :=
   [.hpCritical, .restForCombat, .bankUnlock, .reachUnlockLevel,
-   .discardCritical, .craftRelief, .recycleRelief, .depositFull, .discardHigh, .gearReview,
+   .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull, .discardHigh, .gearReview,
    .claimPending, .completeTask, .sellPressured, .lowYieldCancel, .taskCancel]
 
 /-- The means at/after `objectiveStep` (idx 15–23). -/

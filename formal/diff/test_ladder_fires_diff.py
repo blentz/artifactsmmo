@@ -199,6 +199,7 @@ _ORACLE_KEY: dict[LadderMeans, str] = {
     LadderMeans.DISCARD_CRITICAL: "discardCritical",
     LadderMeans.CRAFT_RELIEF: "craftRelief",
     LadderMeans.RECYCLE_RELIEF: "recycleRelief",
+    LadderMeans.SELL_RELIEF: "sellRelief",
     LadderMeans.DEPOSIT_FULL: "depositFull",
     LadderMeans.DISCARD_HIGH: "discardHigh",
     LadderMeans.GEAR_REVIEW: "gearReview",
@@ -590,6 +591,25 @@ def test_sell_pressured_vs_idle_boundary() -> None:
                                      item_sellable=True))
     _assert_full_agreement(_base_scn(inventory_max=20, junk_qty=16,
                                      item_sellable=True))
+
+
+def test_sell_relief_boundary() -> None:
+    # SELL_RELIEF: bank full (known + count >= capacity) AND sellable item held.
+    # bank_known=True, bank_capacity=1, bank_items_count=1 -> bankHasRoom=False.
+    _assert_full_agreement(_base_scn(
+        bank_accessible=True, bank_known=True, bank_capacity=1, bank_items_count=1,
+        junk_qty=3, item_sellable=True,
+    ))
+    # bank has room (count < capacity) -> SELL_RELIEF quiet.
+    _assert_full_agreement(_base_scn(
+        bank_accessible=True, bank_known=True, bank_capacity=5, bank_items_count=1,
+        junk_qty=3, item_sellable=True,
+    ))
+    # bank full but no sellable item -> SELL_RELIEF quiet.
+    _assert_full_agreement(_base_scn(
+        bank_accessible=True, bank_known=True, bank_capacity=1, bank_items_count=1,
+        junk_qty=3, item_sellable=False,
+    ))
 
 
 def test_task_exchange_boundary() -> None:

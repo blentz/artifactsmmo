@@ -76,6 +76,7 @@ theorem productionLadder_fight_of_fightReady (s : State) (h : FightReady s) :
   have q4 : fires .discardCritical s = false := by simp [fires, discardCriticalFires, h.overstock]
   have q5 : fires .craftRelief s = false := by simp [fires, ProductionLadder.craftReliefFires, h.craft]
   have q5b : fires .recycleRelief s = false := by simp [fires, recycleReliefFires, h.recycleNonempty]
+  have q5c : fires .sellRelief s = false := by simp [fires, sellReliefFires, h.sellable]
   have q6 : fires .depositFull s = false := by simp [fires, depositFullFires, h.deposits]
   have q7 : fires .discardHigh s = false := by simp [fires, discardHighFires, h.overstock]
   have q8 : fires .gearReview s = false := by simp [fires, ProductionLadder.gearReviewFires, h.gear]
@@ -87,7 +88,7 @@ theorem productionLadder_fight_of_fightReady (s : State) (h : FightReady s) :
   -- collapse, leaving bankUnlock?.or reachUnlockLevel?.or (some objectiveStep).
   unfold productionLadder
   simp only [allInLadderOrder, List.findSome?_cons,
-             q0, q1, q4, q5, q5b, q6, q7, q8, q9, htc, q11, hlyc, htcan, hobj]
+             q0, q1, q4, q5, q5b, q5c, q6, q7, q8, q9, htc, q11, hlyc, htcan, hobj]
   -- Goal now: (if bankUnlockFires then some bankUnlock else none).or
   --           ((if reachUnlockLevelFires then some reachUnlockLevel else none).or
   --             (some objectiveStep)) ∈ the 3-way.

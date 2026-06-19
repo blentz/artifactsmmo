@@ -81,6 +81,7 @@ _GUARD_REPR: dict[GuardKind, str] = {
     # exhaustiveness for callers that only want the goal family.
     GuardKind.CRAFT_RELIEF: "CraftRelief",
     GuardKind.RECYCLE_RELIEF: "RecycleSurplus",
+    GuardKind.SELL_RELIEF: "SellInventory",
     # GEAR_REVIEW maps to UpgradeEquipment or GatherMaterials depending on
     # material availability — the static prefix covers exhaustiveness.
     GuardKind.GEAR_REVIEW: "UpgradeEquipment",
