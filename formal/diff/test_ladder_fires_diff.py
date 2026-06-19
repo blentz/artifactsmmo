@@ -931,3 +931,231 @@ def test_recycle_surplus_near_miss_at_cap() -> None:
     prod, _, lean, _ = drive_and_contest(w, gd, _recycle_ctx())
     assert prod[LadderMeans.RECYCLE_SURPLUS] is False
     assert lean[LadderMeans.RECYCLE_SURPLUS] is False
+
+
+# ===========================================================================
+# Brick 4b — Cluster A (combat / predict_win): restForCombat + maintainConsumables.
+#
+# Both opaque slots fold a `predict_win` / combat verdict that the Lean model
+# carries as a passthrough Bool (`restForCombatReady` arg[25],
+# `maintainConsumablesFires` arg[29]). `_rich_oracle_args` already derives those
+# two args from production's per-slot verdict (`prod[REST_FOR_COMBAT]` /
+# `prod[MAINTAIN_CONSUMABLES]`), so NO scaffold extension is needed: we stand up
+# a real combat fixture, let production's REAL machinery fire the slot, and the
+# oracle re-evaluates `productionLadder` over the firing pattern production
+# produced. The teeth are the SELECTION contest.
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Slot 1 — restForCombat (arg[25]).  Production `_guard_fires(REST_FOR_COMBAT)`
+# (tiers/guards.py ~136) fires iff: combat_monster set AND state.hp < max_hp AND
+# NOT predict_win(state @ current hp) AND predict_win(state @ hp=max_hp). It is
+# ladder idx 1 (only hpCritical above), so a firing restForCombat WINS selection
+# on both ladders when hpCritical stays quiet — a STRONG contest: a wrong Lean
+# priority for restForCombat would FAIL.
+#
+# predict_win fixture (NO gear, single-element symmetric fight):
+#   * player attack {fire:50}, initiative 0; monster hp 100, attack {fire:50},
+#     initiative 0, no resist/crit/exotic abilities -> player_first (init tie,
+#     `>=`).
+#   * kill_step = 50*raw_player*(200+crit) = 50*50*200 = 500000; monster hp 100
+#     -> rounds_to_kill = ceil(100*10000/500000) = 2.
+#   * die_step = 50*raw_monster*(200+m_crit) = 500000.
+#   At hp=49: rounds_to_die = ceil(49*10000/500000) = ceil(0.98) = 1; rtk 2 > 1
+#     -> predict_win FALSE (we die first).
+#   At hp=100: rounds_to_die = ceil(100*10000/500000) = 2; rtk 2 <= 2 (player
+#     first) -> predict_win TRUE.
+#   hp 49/100 = 0.49 >= 0.25 -> hpCritical stays quiet (the slot above), so
+#     restForCombat is the highest-firing slot and MUST win selection.
+# ---------------------------------------------------------------------------
+
+
+def _rest_combat_gd() -> GameData:
+    """A single monster `mob` with a plain {fire:50} attack and no exotic
+    abilities — the symmetric fight the predict_win arithmetic above assumes."""
+    gd = GameData()
+    gd._monster_hp = {"mob": 100}
+    gd._monster_attack = {"mob": {"fire": 50}}
+    gd._monster_resistance = {"mob": {}}
+    gd._monster_critical_strike = {"mob": 0}
+    gd._monster_initiative = {"mob": 0}
+    gd._monster_lifesteal = {"mob": 0}
+    gd._monster_poison = {"mob": 0}
+    gd._monster_barrier = {"mob": 0}
+    gd._monster_burn = {"mob": 0}
+    gd._monster_healing = {"mob": 0}
+    gd._monster_reconstitution = {"mob": 0}
+    gd._monster_void_drain = {"mob": 0}
+    gd._monster_berserker_rage = {"mob": 0}
+    gd._monster_frenzy = {"mob": 0}
+    gd._monster_protective_bubble = {"mob": 0}
+    gd._monster_corrupted = {"mob": 0}
+    gd._item_stats = {}
+    gd._crafting_recipes = {}
+    return gd
+
+
+def _rest_combat_ctx() -> SelectionContext:
+    return SelectionContext(
+        bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
+        initial_xp=0, task_exchange_min_coins=5, combat_monster="mob",
+        target_gear=frozenset(), target_tools=frozenset(),
+        gear_review_active=False)
+
+
+def _rest_combat_world(hp: int, max_hp: int) -> WorldState:
+    # Player attack {fire:50}, initiative 0 (ties the monster -> player first).
+    # No task (phase NONE) so when restForCombat does NOT fire the selection
+    # falls cleanly through to acceptTask on both ladders.
+    return WorldState(
+        character="diff", level=10, xp=0, max_xp=999999, hp=hp, max_hp=max_hp,
+        gold=0, skills={}, x=0, y=0, inventory={}, inventory_max=20,
+        equipment={"weapon_slot": None}, cooldown_expires=None,
+        bank_items=None, bank_gold=None, pending_items=None,
+        task_code=None, task_type=None, task_progress=0, task_total=0,
+        attack={"fire": 50}, initiative=0)
+
+
+def test_rest_for_combat_drives_and_selects() -> None:
+    """TRUE fixture: hp 49/100 — predict_win FALSE now (die in 1 round, kill in
+    2) but TRUE at max_hp (die in 2, kill in 2, player first) -> production
+    REST_FOR_COMBAT fires. hpCritical is quiet (0.49 >= 0.25), so restForCombat
+    is the highest firing slot and WINS selection on BOTH ladders. A wrong Lean
+    priority for restForCombat would break the selection agreement here."""
+    w = _rest_combat_world(hp=49, max_hp=100)
+    gd = _rest_combat_gd()
+    prod, prod_sel, lean, lean_sel = drive_and_contest(
+        w, gd, _rest_combat_ctx(),
+        driven=frozenset({LadderMeans.REST_FOR_COMBAT}))
+    # Production REALLY fires the driven slot (not faked):
+    assert prod[LadderMeans.REST_FOR_COMBAT] is True
+    assert lean[LadderMeans.REST_FOR_COMBAT] is True
+    assert prod[LadderMeans.HP_CRITICAL] is False
+    # Strong selection teeth: restForCombat wins on both sides.
+    assert prod_sel is LadderMeans.REST_FOR_COMBAT
+    assert lean_sel is LadderMeans.REST_FOR_COMBAT
+
+
+def test_rest_for_combat_near_miss_winnable_now() -> None:
+    """Near-miss (clause c): hp 100/110 — predict_win TRUE at CURRENT hp
+    (winnable now) so REST_FOR_COMBAT does NOT fire even though hp < max_hp.
+    Selection falls through to acceptTask (phase NONE) on both ladders, so the
+    fixture cleanly agrees and selection is asserted."""
+    w = _rest_combat_world(hp=100, max_hp=110)
+    gd = _rest_combat_gd()
+    prod, prod_sel, _, lean_sel = drive_and_contest(
+        w, gd, _rest_combat_ctx(),
+        driven=frozenset({LadderMeans.REST_FOR_COMBAT}))
+    assert prod[LadderMeans.REST_FOR_COMBAT] is False
+    assert prod_sel is LadderMeans.ACCEPT_TASK
+    assert lean_sel is LadderMeans.ACCEPT_TASK
+
+
+def test_rest_for_combat_near_miss_full_hp() -> None:
+    """Near-miss (clause b): hp == max_hp — Rest is not actionable, so
+    REST_FOR_COMBAT does NOT fire regardless of predict_win. (At full hp the
+    fight is winnable anyway, but this pins the `hp < max_hp` conjunct.)"""
+    w = _rest_combat_world(hp=100, max_hp=100)
+    gd = _rest_combat_gd()
+    prod, prod_sel, _, lean_sel = drive_and_contest(
+        w, gd, _rest_combat_ctx(),
+        driven=frozenset({LadderMeans.REST_FOR_COMBAT}))
+    assert prod[LadderMeans.REST_FOR_COMBAT] is False
+    assert prod_sel is LadderMeans.ACCEPT_TASK
+    assert lean_sel is LadderMeans.ACCEPT_TASK
+
+
+# ---------------------------------------------------------------------------
+# Slot 2 — maintainConsumables (arg[29]).  Production `_means_fires(
+# MAINTAIN_CONSUMABLES)` (tiers/means.py ~160) + `maintain_consumables_fires`
+# (consumable_supply.py ~74): combat_monster set AND heal_stock < HEAL_STOCK_FLOOR
+# (5) AND best_craftable_heal is not None (a recipe whose hp_restore item the
+# player can craft now).
+#
+# SELECTION NOTE (a real Lean-model finding, reported — mirrors recycleSurplus
+# in 4a): maintainConsumables is ladder idx 18, BELOW the lifecycle slots
+# acceptTask(16)/pursueTask/completeTask. For EVERY phase some higher slot fires
+# on the Lean ladder (acceptTask at phase none, completeTask at complete,
+# pursueTask at accepted/inProgress), so maintainConsumables can NEVER be the
+# Lean SELECTION — it can only fire-and-lose. The contest drives it TRUE (the
+# per-slot agreement binding arg[29]) at phase NONE, where BOTH ladders select
+# acceptTask; selection agreement holds at that winner.
+# ---------------------------------------------------------------------------
+
+
+def _maintain_gd() -> GameData:
+    gd = GameData()
+    gd._crafting_recipes = {"potion": {"herb": 1}}
+    gd._item_stats = {
+        "potion": ItemStats(code="potion", level=1, type_="consumable",
+                            crafting_skill="alchemy", crafting_level=1,
+                            hp_restore=50),
+    }
+    return gd
+
+
+def _maintain_ctx() -> SelectionContext:
+    return SelectionContext(
+        bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
+        initial_xp=0, task_exchange_min_coins=5, combat_monster="mob",
+        target_gear=frozenset(), target_tools=frozenset(),
+        gear_review_active=False)
+
+
+def _maintain_world(potion_qty: int) -> WorldState:
+    # No task (phase NONE), alchemy@1 (recipe level met), heal stock = potion_qty.
+    inv = {"potion": potion_qty} if potion_qty > 0 else {}
+    return WorldState(
+        character="diff", level=10, xp=0, max_xp=999999, hp=100, max_hp=100,
+        gold=0, skills={"alchemy": 1}, x=0, y=0,
+        inventory=inv, inventory_max=20,
+        equipment={"weapon_slot": None}, cooldown_expires=None,
+        bank_items=None, bank_gold=None, pending_items=None,
+        task_code=None, task_type=None, task_progress=0, task_total=0)
+
+
+def test_maintain_consumables_drives_true() -> None:
+    """TRUE fixture: combat target set, heal_stock 0 < 5, a craftable potion
+    (alchemy@1, hp_restore 50) -> production MAINTAIN_CONSUMABLES fires. It is
+    structurally below acceptTask, so it loses selection to ACCEPT_TASK (phase
+    NONE) on BOTH ladders; `selected` agrees at acceptTask while arg[29] is
+    bound by the per-slot contest."""
+    w = _maintain_world(potion_qty=0)
+    gd = _maintain_gd()
+    prod, prod_sel, lean, lean_sel = drive_and_contest(
+        w, gd, _maintain_ctx(),
+        driven=frozenset({LadderMeans.MAINTAIN_CONSUMABLES}))
+    assert prod[LadderMeans.MAINTAIN_CONSUMABLES] is True
+    assert lean[LadderMeans.MAINTAIN_CONSUMABLES] is True
+    # maintainConsumables is structurally unreachable as a Lean selection; both
+    # ladders settle on acceptTask at phase NONE (selection agreement).
+    assert prod_sel is LadderMeans.ACCEPT_TASK
+    assert lean_sel is LadderMeans.ACCEPT_TASK
+
+
+def test_maintain_consumables_near_miss_stocked() -> None:
+    """Near-miss: heal_stock 5 == HEAL_STOCK_FLOOR -> NOT under-stocked ->
+    MAINTAIN_CONSUMABLES does NOT fire (pins the `heal_stock < 5` conjunct)."""
+    w = _maintain_world(potion_qty=5)
+    gd = _maintain_gd()
+    prod, _, lean, _ = drive_and_contest(
+        w, gd, _maintain_ctx(),
+        driven=frozenset({LadderMeans.MAINTAIN_CONSUMABLES}))
+    assert prod[LadderMeans.MAINTAIN_CONSUMABLES] is False
+    assert lean[LadderMeans.MAINTAIN_CONSUMABLES] is False
+
+
+def test_maintain_consumables_near_miss_no_combat() -> None:
+    """Near-miss: no combat target -> the means tier short-circuits regardless
+    of stock/craftability -> MAINTAIN_CONSUMABLES does NOT fire."""
+    w = _maintain_world(potion_qty=0)
+    gd = _maintain_gd()
+    ctx = SelectionContext(
+        bank_accessible=False, bank_required_level=0, bank_unlock_monster=None,
+        initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
+        target_gear=frozenset(), target_tools=frozenset(),
+        gear_review_active=False)
+    prod, _, lean, _ = drive_and_contest(
+        w, gd, ctx, driven=frozenset({LadderMeans.MAINTAIN_CONSUMABLES}))
+    assert prod[LadderMeans.MAINTAIN_CONSUMABLES] is False
+    assert lean[LadderMeans.MAINTAIN_CONSUMABLES] is False
