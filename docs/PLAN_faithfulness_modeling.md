@@ -221,18 +221,31 @@ the capture fixture.
   reaches 50 from `ReducedResidualF` + the three non-degeneracy invariants — NO
   unfaithful 14-blocker assumption, NO measure, modulo LIV-001. The residual is now
   pinned to exactly "low pressure ∧ ten quiet i.o." — the smallest honest gap.
-- **Brick 3d-c TRANSIENCE — the SOLE remaining sub-piece (hard WF core, focused
-  session).** Discharge the LOW-PRESSURE conjunct of `ReducedResidualF` from
-  `Drainability.RuntimeInvariant` + the bounded-burst dynamics. CRUX: prove pressure
-  dips below 85% INFINITELY OFTEN along the cycleStepF trajectory (each reducer step
-  resets inventoryUsed to 0 — `pressureDelta_reducer_clears`; each fill is ≤
-  DROP_BOUND — `cycleStepF_inventoryUsed_le_add_bound`), COINCIDING with the ten-quiet
-  positions. Couples to the claim-fuel bound (pendingCount finite + claim-depleted),
-  the bootstrap-window fight-blockers (bankUnlock/reachUnlockLevel ADD inventory but
-  retire on unlock), and inventoryMax constancy. This is the genuinely hard analytic
-  WF/counting theorem — design work, not mechanical mirroring. ALL scaffolding is now
-  built (both dichotomy sides + engine + capstone + reduction); this is the single
-  hardest theorem. Serialize the gate [[feedback_serialize_gate_runs]].
+- **Brick 3d-c TRANSIENCE DONE (2026-06-19, commits 280d161 + c9535fb) — THE
+  FAITHFUL TRANSIENCE IS CLOSED.** Two modules:
+  * `PressureDrain.lean` (280d161): the CRUX `selected_isPressureReducer` — under
+    Pressured + DrainArmed + ten-quiet, the ladder-selected blocker is necessarily a
+    pressure reducer (findSome? membership: Brick 3b shows a drain channel fires so
+    selection lands in the blocker prefix; ten non-pressure quiet ⇒ selected ∈ the 4
+    pressure chores). Composed into `cycleStepF_drains_when_pressured_armed_tenQuiet`
+    (means-agnostic high-pressure drain). Axioms {propext, Quot.sound} for the crux.
+  * `PressureTransience.lean` (c9535fb): the COUNTING. The quiet-PAIR scheduling
+    residual `TenQuietPairsBelowCapInfinitelyOften` resolves the coincidence — low
+    pressure at k ⇒ k witnesses; high pressure at k ⇒ RuntimeInvariant arms the drain,
+    bag empties, so k+1 is low-pressure AND ten-quiet (by the pair).
+    `reducedResidual_of_tenQuietPairs` proves `ReducedResidualF` (low-pressure
+    DISCHARGED, not assumed). `ai_reaches_level_fiftyF_of_tenQuietPairs`: **the
+    FAITHFUL cycle reaches level 50 from the HONEST residual set** — non-degeneracy
+    invariants + positive capacity + RuntimeInvariant + the quiet-pair residual,
+    modulo LIV-001. The unfaithful 14-blocker assumption is GONE; the 4 pressure-gated
+    chores are proven transient. (The old claim/pendingCount-measure fear never
+    materialized — the engine uses xp accumulation, and the drain counting needed no
+    measure, just the quiet-pair + bounded dynamics.)
+  RESIDUAL SET (Workstream A, honest): {LIV-001, the quiet-pair scheduling residual
+  (10 non-pressure blockers), RuntimeInvariant (drainability — surfaces the real
+  full-of-useful-items livelock, doesn't hide it), positive capacity, hnowait/hex/hbe}.
+  REMAINING per-residual work is OPTIONAL hardening (e.g. proving the quiet-pair
+  residual from per-blocker clear lemmas) + Workstream B data capture (separate).
 - **(superseded) Brick 3c/3d — the GLOBAL synthesis.** Compose the
   local dichotomy (drain side 3d-prep + fight side 3c-prep) into combat-fires-i.o.
   Remaining sub-pieces: (i) trajectory assembly — discharge the 7 higher-slots-quiet
