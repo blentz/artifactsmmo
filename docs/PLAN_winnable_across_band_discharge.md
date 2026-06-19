@@ -73,15 +73,35 @@ per-L vector. Both become named residuals (LIV-001 class) the differential pins.
   already differentially CHARACTERIZED it (production arms iff winnable). Documenting
   it as a server-data assumption (like LIV-001) is a defensible stopping point.
 
+### Follow-up finding (2026-06-18): C1 is NOT soundly buildable either
+Pushing on C1 shows the base-stat gap is fatal to a SOUND differential, not just
+"assumption-heavy". The winnability verdict is a damage RACE (kill the monster
+before it kills you), which needs the player's `max_hp` at level L. Every way to
+supply it fails:
+- **base hp = 0 (conservative, gear-only):** real starting hp is ~115+ and is
+  load-bearing, so a zero-base char loses the race almost everywhere. A zero-base
+  FAILURE is therefore uninformative (the real geared bot would win); a zero-base
+  PASS would be sound but essentially never happens. Useless as a pass/fail.
+- **an assumed base-hp(L):** unconstrained by any data → the test's verdict is an
+  artifact of the guess, not a fact about the game. Not honest.
+There is no defensible base-hp(L) from offline data, and the live API exposes only
+totals (base+gear), so even an online capture needs a real geared character per
+level — i.e. the very gear model C2 would build. **C1 collapses into C2.**
+
 ## Recommendation
-C1 is the only near-term BUILDABLE reduction, but it is assumption-heavy and does
-not reach "modulo only LIV-001" — it relocates WinnableAcrossBand to a gear model +
-a base-stat assumption. Given that, C3 (document as a residual) is the honest
-default, with C1 available if a concrete live-data check is wanted. The clean
-"modulo only LIV-001" end-state is NOT reachable without the server exposing base-
-stat-per-level data (or a full, assumption-laden gear+stat model). The OTHER
-residual, `BlockersQuietInfinitelyOften` (the transience/fairness core), is
-independently the harder of the two.
+**C3 — document WinnableAcrossBand as a LIV-001-class residual.** Option C cannot
+produce a SOUND live-data discharge without server base-stat-per-level data; C1
+collapses into the multi-session C2 (full gear+stat model), which is itself
+assumption-laden (no live data reproduces gear totals without replaying crafting).
+The level-50 result is already at a strong, honest boundary: reaches 50 modulo
+{LIV-001, WinnableAcrossBand (satisfiable + Brick-6-characterized), BlockersQuiet-
+InfinitelyOften}. The disciplined close-out is to FORMALIZE WinnableAcrossBand's
+status as a documented server-data assumption (a Lean docstring/audit note naming
+it alongside LIV-001), not to ship an unsound or arbitrary differential. "Modulo
+only LIV-001" is unreachable for WinnableAcrossBand without the server exposing
+base stats. The OTHER residual, `BlockersQuietInfinitelyOften` (the transience/
+fairness core), is independently the harder of the two and the more interesting
+remaining target.
 
 ## Status
 - 2026-06-18: scoped. Base-stats shortcut found infeasible (attack is gear-derived;
