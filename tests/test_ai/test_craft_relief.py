@@ -394,6 +394,7 @@ class TestCraftReliefGuard:
         # so select_bank_deposits returns non-empty and DEPOSIT_FULL fires.
         gd._item_stats["gold_ore"] = ItemStats(code="gold_ore", level=1, type_="resource")
         gd._npc_sell_prices = {"merchant": {"gold_ore": 50}}
+        gd._bank_capacity = 50  # bank has room so DEPOSIT_FULL can fire
         state = make_state(
             task_code="ash_plank", task_type="items",
             task_progress=3, task_total=13,
@@ -401,6 +402,7 @@ class TestCraftReliefGuard:
             # 94/104 = 90.4% >= DEPOSIT_FULL_FRACTION (0.90, raised from 0.80
             # per spec 2026-06-07 to stay strictly above the 0.85 deposit ramp).
             inventory_max=104,
+            bank_items={},  # bank visited, 0 items used < capacity 50
         )
         guards = active_guards(state, gd, None, _ctx())
         assert GuardKind.CRAFT_RELIEF in guards

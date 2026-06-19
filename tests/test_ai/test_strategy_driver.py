@@ -235,13 +235,14 @@ def test_select_deposit_protects_grind_chain_inputs():
                             "copper_legs_armor": {"copper_bar": 5}}
     gd._resource_drops = {"ash_tree": "ash_wood"}
     gd._bank_location = (4, 0)
+    gd._bank_capacity = 50  # bank has room so DEPOSIT_FULL can fire
     fill_monster_stat_defaults(gd)
     state = make_state(
         hp=100, max_hp=100,
         inventory={"wooden_shield": 1, "ash_wood": 59, "junk": 30},
         inventory_max=100,
         equipment={"shield_slot": "wooden_shield"},
-        bank_items={},
+        bank_items={},  # bank visited, 0 items used < capacity 50
         task_code="chicken", task_type="monsters", task_progress=0, task_total=10,
     )
     actions = [DepositAllAction(bank_location=(4, 0), game_data=gd)]

@@ -82,9 +82,10 @@ def test_reach_unlock_level_silent_beyond_gap():
 
 
 def test_deposit_full_fires_when_inventory_high_and_depositable_item():
-    # inventory_max=10, inventory={"ore": 9} → 90% ≥ 80%
+    # inventory_max=10, inventory={"ore": 9} → 90% ≥ 0.90
     # "ore" is not tasks_coin, not task item, not HP item, not a weapon
     # → select_bank_deposits returns [("ore", 9)]
+    # bank has room: 0 items < capacity 50
     state = make_state(
         hp=100, max_hp=100,
         inventory={"ore": 9},
@@ -92,6 +93,7 @@ def test_deposit_full_fires_when_inventory_high_and_depositable_item():
         bank_items={},
     )
     gd = GameData()
+    gd._bank_capacity = 50
     guards = active_guards(state, gd, None, _ctx(bank_accessible=True))
     assert GuardKind.DEPOSIT_FULL in guards
 
@@ -193,3 +195,25 @@ def test_discard_high_silent_when_step_profile_protects_goal_item():
     guards = active_guards(state, gd, None, _ctx(),
                            step_profile={"wooden_shield": 3})
     assert GuardKind.DISCARD_HIGH not in guards
+
+
+def test_deposit_full_quiet_when_bank_full():
+    """DEPOSIT_FULL must not fire when the bank cannot accept items (full)."""
+    gd = GameData()
+    gd._bank_capacity = 2
+    # bank used 2 == capacity 2 → no room
+    state = make_state(inventory={"junk": 100}, inventory_max=100,
+                       bank_items={"x": 1, "y": 1})
+    ctx = _ctx()  # bank_accessible=True
+    assert _fires(GuardKind.DEPOSIT_FULL, state, gd, None, ctx) is False
+
+
+def test_deposit_full_fires_when_bank_has_room():
+    """DEPOSIT_FULL fires when bank has room, inventory is full, and there is a
+    depositable item."""
+    gd = GameData()
+    gd._bank_capacity = 50
+    state = make_state(inventory={"junk": 100}, inventory_max=100,
+                       bank_items={"x": 1})
+    ctx = _ctx()
+    assert _fires(GuardKind.DEPOSIT_FULL, state, gd, None, ctx) is True

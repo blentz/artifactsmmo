@@ -2,17 +2,19 @@
 
 `bank_capacity is None` = capacity unknown (NOT room); `bank_items is None` =
 bank never visited (NOT room). Distinct from the `bank_capacity == 0` divide-
-guard in BANK_EXPAND. Mirrors `Formal.Liveness.ProductionLadder.bankHasRoom`."""
+guard in BANK_EXPAND. Mirrors `Formal.Liveness.ProductionLadder.bankHasRoom`.
 
-from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
-from artifactsmmo_cli.ai.world_state import WorldState
+Takes primitive args (not full objects) to avoid an import cycle:
+`guards.py` consumes `bank_has_room` and defines `SelectionContext`; if
+`bank_room` imported `SelectionContext`, the cycle would be:
+  guards → bank_room → guards."""
 
 
-def bank_has_room(state: WorldState, game_data: GameData,
-                  ctx: SelectionContext) -> bool:
-    if not ctx.bank_accessible:
+def bank_has_room(bank_accessible: bool,
+                  bank_items: dict[str, int] | None,
+                  bank_capacity: int | None) -> bool:
+    if not bank_accessible:
         return False
-    if state.bank_items is None or game_data.bank_capacity is None:
+    if bank_items is None or bank_capacity is None:
         return False
-    return len(state.bank_items) < game_data.bank_capacity
+    return len(bank_items) < bank_capacity

@@ -7,6 +7,7 @@ Pure: predicates read state/game_data/history + an explicit SelectionContext
 from dataclasses import dataclass, field, replace
 from enum import Enum
 
+from artifactsmmo_cli.ai.bank_room import bank_has_room
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.craft_relief import (
@@ -165,7 +166,10 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
             step_items=frozenset(step_profile or ()),
         ))
     if kind is GuardKind.DEPOSIT_FULL:
-        return (ctx.bank_accessible and _used_fraction(state) >= DEPOSIT_FULL_FRACTION
+        return (ctx.bank_accessible
+                and bank_has_room(ctx.bank_accessible, state.bank_items,
+                                  game_data.bank_capacity)
+                and _used_fraction(state) >= DEPOSIT_FULL_FRACTION
                 and bool(select_bank_deposits(
                     state, game_data,
                     frozenset(active_profile(state, game_data, ctx, step_profile)))))

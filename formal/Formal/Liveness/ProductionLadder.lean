@@ -151,21 +151,24 @@ def discardCriticalFires (s : State) : Bool :=
   && decide (DISCARD_CRITICAL_DEN * s.inventoryUsed
               ≥ DISCARD_CRITICAL_NUM * s.inventoryMax)
 
-/-- DEPOSIT_FULL guard. Mirrors `guards.py:83-85`:
-      bank_accessible ∧ used/max ≥ 0.80 ∧ select_bank_deposits(...) nonempty -/
+/-- The bank can physically accept a deposit: accessible, item-count known,
+    and used strictly below capacity. Mirrors `ai/bank_room.bank_has_room`.
+    `bankItemsKnown=false` (bank unvisited) and `bankCapacity=0` both read as
+    NO room. -/
+def bankHasRoom (s : State) : Bool :=
+  s.bankAccessible && s.bankItemsKnown && decide (s.bankItemsCount < s.bankCapacity)
+
+/-- DEPOSIT_FULL guard. Mirrors `guards.py` DEPOSIT_FULL branch:
+      bank_accessible ∧ bank_has_room ∧ used/max ≥ 0.90 ∧ select_bank_deposits(...) nonempty
+    Task 2: added `bankHasRoom s` conjunct so the guard is gated on the bank
+    having a free slot (bank not full). -/
 def depositFullFires (s : State) : Bool :=
   s.bankAccessible
+  && bankHasRoom s
   && decide (s.inventoryMax > 0)
   && decide (DEPOSIT_FULL_DEN * s.inventoryUsed
               ≥ DEPOSIT_FULL_NUM * s.inventoryMax)
   && s.selectBankDepositsNonempty
-
-/-- The bank can physically accept a deposit: accessible, item-count known,
-    and used strictly below capacity. Mirrors `ai/bank_room.bank_has_room`.
-    `bankItemsKnown=false` (bank unvisited) and `bankCapacity=0` both read as
-    NO room. Not yet wired into any fires-predicate (Tasks 2–5). -/
-def bankHasRoom (s : State) : Bool :=
-  s.bankAccessible && s.bankItemsKnown && decide (s.bankItemsCount < s.bankCapacity)
 
 /-- DISCARD_HIGH guard. Mirrors `guards.py:86-87`:
       overstocked AND used/max ≥ 0.85 -/
