@@ -19,6 +19,7 @@ from artifactsmmo_cli.tui.plan_format import short_root
 
 CHOSEN_GLYPH = "●"
 STUB_GLYPH = "○"
+ALT_PAGE_SIZE = 6
 
 _OBTAIN_RE = re.compile(r"ObtainItem\(code='([^']+)', quantity=(\d+)\)")
 _CHARLVL_RE = re.compile(r"ReachCharLevel\(level=(\d+)\)")
@@ -126,6 +127,8 @@ def build_plan_summary(
     path_next_action: str | None = None,
     plan_len: int = 0,
     suppressed_goals: list[str] | None = None,
+    alt_page: int = 0,
+    alt_page_size: int = ALT_PAGE_SIZE,
 ) -> RenderableType:
     """Render the committed objective as a flowchart: an OBJECTIVE root, the
     chosen branch expanded (step / GOAP / have-need body), the non-chosen roots
@@ -151,7 +154,13 @@ def build_plan_summary(
                                (xp, max_xp), skill_xp or {},
                                (task_code, task_progress, task_total)), (0, 0, 0, 5)))
 
-    for r in (x for x in ranking if x.root_repr != chosen_root):
+    stubs = [x for x in ranking if x.root_repr != chosen_root]
+    total = len(stubs)
+    pages = max(1, (total + alt_page_size - 1) // alt_page_size)
+    page = min(max(alt_page, 0), pages - 1)
+    lo = page * alt_page_size
+    hi = min(lo + alt_page_size, total)
+    for r in stubs[lo:hi]:
         parts.append(Text(f"├─{STUB_GLYPH} {short_root(r.root_repr)}  {r.category}  {r.score:.2f}"))
         parts.append(_stub_line(r, game_data))
 
@@ -159,4 +168,7 @@ def build_plan_summary(
         parts.append(Text(f"ETA ~{projected_cycles_to_max:.0f} cycles (estimate)", style="dim"))
     if suppressed_goals:
         parts.append(Text(f"└─ suppressed  {' · '.join(suppressed_goals)}", style="dim"))
+    if pages > 1:
+        parts.append(Text(f"   alternatives {lo + 1}–{hi} of {total}    "
+                          f"[ prev   ] next", style="dim"))
     return Group(*parts)

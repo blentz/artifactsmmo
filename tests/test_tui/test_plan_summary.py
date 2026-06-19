@@ -137,3 +137,37 @@ def test_stub_would_line_for_obtain_root():
     out = _text(build_plan_summary("ReachCharLevel(level=3)", ranking, {}, None, _gd(), None))
     stub = next(ln for ln in out.splitlines() if "copper_boots" in ln and "would" in ln)
     assert "Craft" in stub
+
+
+def _stub_ranking(n: int) -> list[RootScoreView]:
+    out = [RootScoreView(root_repr="ReachCharLevel(level=3)", category="char_level",
+                         score=9.0, step_repr="FightAction(chicken)")]  # chosen
+    for i in range(n):
+        out.append(RootScoreView(root_repr=f"ObtainItem(code='item{i}', quantity=1)",
+                                 category="gear", score=1.0 - i * 0.01,
+                                 step_repr=f"UpgradeEquipment(item{i})"))
+    return out
+
+
+def test_pagination_footer_and_first_page_slice():
+    ranking = _stub_ranking(14)
+    out = _text(build_plan_summary("ReachCharLevel(level=3)", ranking, {}, None, _gd(), None,
+                                   alt_page=0, alt_page_size=6))
+    assert "item0" in out and "item5" in out
+    assert "item6" not in out
+    assert "alternatives 1" in out and "of 14" in out
+
+
+def test_pagination_last_page_slice():
+    ranking = _stub_ranking(14)
+    out = _text(build_plan_summary("ReachCharLevel(level=3)", ranking, {}, None, _gd(), None,
+                                   alt_page=2, alt_page_size=6))
+    assert "item12" in out and "item13" in out
+    assert "item0" not in out
+    assert "13" in out and "14" in out
+
+
+def test_no_footer_when_single_page():
+    ranking = _stub_ranking(3)
+    out = _text(build_plan_summary("ReachCharLevel(level=3)", ranking, {}, None, _gd(), None))
+    assert "alternatives" not in out

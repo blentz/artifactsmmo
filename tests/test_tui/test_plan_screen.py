@@ -4,7 +4,7 @@ from rich.console import Console
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, RootScoreView
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.tui.screens.plan_screen import build_plan_detail
+from artifactsmmo_cli.tui.screens.plan_screen import PlanScreen, build_plan_detail
 
 
 def _text(renderable) -> str:
@@ -38,3 +38,16 @@ def test_build_plan_detail_from_snapshot():
     out = _text(build_plan_detail(_snap(), _gd()))
     assert "CHOSEN" in out and "copper_boots" in out
     assert "42/60" in out and "ETA" in out
+
+
+def test_plan_screen_page_actions_clamp():
+    snap = _snap(strategy_ranking=[
+        RootScoreView(root_repr="ObtainItem(code='copper_boots', quantity=1)",
+                      category="gear", score=2.5, step_repr="UpgradeEquipment(copper_boots)"),
+    ])
+    screen = PlanScreen(snap, _gd())
+    assert screen._alt_page == 0
+    screen.action_alt_prev()
+    assert screen._alt_page == 0          # clamped at 0
+    screen.action_alt_next()
+    assert screen._alt_page == 0          # only one page → no advance
