@@ -85,7 +85,7 @@ def armor_score_pure(elements: list[str], resistance: dict[str, int],
     for elem in elements:
         score = score + monster_attack.get(elem, 0) * resistance.get(elem, 0)
     return (score + hp_bonus + wisdom + prospecting + inventory_space + haste
-            + lifesteal + combat_buff)
+            + lifesteal)
 
 
 def weapon_score_raw(weapon: ItemStats, monster_resistance: dict[str, int]) -> int:

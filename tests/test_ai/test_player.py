@@ -1781,7 +1781,8 @@ class TestNotifyObserverCooldown:
 def test_snapshot_carries_chosen_root_and_ranking_and_bank(tmp_path):
     """The cycle snapshot exposes the committed strategy root + ranking + bank
     for the TUI plan screen."""
-    rv = RootScoreView(root_repr="ObtainItem(code='x', quantity=1)", category="gear", score=2.5)
+    rv = RootScoreView(root_repr="ObtainItem(code='x', quantity=1)", category="gear",
+                       score=2.5, step_repr="FightAction(chicken)")
     assert rv.root_repr == "ObtainItem(code='x', quantity=1)"
     assert rv.category == "gear" and rv.score == 2.5
     # snapshot accepts the new fields
@@ -1794,4 +1795,5 @@ def test_snapshot_carries_chosen_root_and_ranking_and_bank(tmp_path):
     )
     assert snap.chosen_root == "ObtainItem(code='x', quantity=1)"
     assert snap.strategy_ranking[0].score == 2.5
+    assert snap.strategy_ranking[0].step_repr == "FightAction(chicken)"
     assert snap.bank_items == {"copper_ore": 5}

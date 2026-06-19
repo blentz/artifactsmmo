@@ -9,6 +9,7 @@ class RootScoreView(BaseModel):
     root_repr: str
     category: str
     score: float
+    step_repr: str = ""
 
 
 class GoalRankEntry(BaseModel):

@@ -1028,7 +1028,8 @@ class GamePlayer:
                          if self._last_decision is not None
                          and self._last_decision.chosen_root is not None else None),
             strategy_ranking=[
-                RootScoreView(root_repr=r.root_repr, category=r.category, score=float(r.score))
+                RootScoreView(root_repr=r.root_repr, category=r.category,
+                              score=float(r.score), step_repr=r.step_repr)
                 for r in (self._last_decision.ranking if self._last_decision is not None else [])
             ],
             bank_items=(dict(self.state.bank_items)
