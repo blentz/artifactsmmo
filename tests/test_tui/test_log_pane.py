@@ -2,8 +2,8 @@
 
 from unittest.mock import patch
 
-from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
-from artifactsmmo_cli.tui.widgets.log_pane import LogPane
+from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, RootScoreView
+from artifactsmmo_cli.tui.widgets.log_pane import LogPane, build_log_lines
 
 
 def _snap(**overrides) -> CycleSnapshot:
@@ -111,3 +111,59 @@ class TestLogPaneUpdateSnapshot:
         with patch.object(pane, "write", side_effect=captured.append):
             pane.update_snapshot(_snap(timestamp="short"))
         assert "short" in captured[0]
+
+
+def _ranked_snap(**overrides):
+    base = dict(
+        chosen_root="ReachCharLevel(level=6)",
+        strategy_ranking=[
+            RootScoreView(root_repr="ReachCharLevel(level=6)", category="grind", score=1.80,
+                          step_repr="FightAction(chicken)"),
+            RootScoreView(root_repr="ObtainItem(code='copper_boots', quantity=1)",
+                          category="gear", score=1.00, step_repr="UpgradeEquipment(copper_boots)"),
+            RootScoreView(root_repr="ObtainItem(code='cooked_gudgeon', quantity=1)",
+                          category="skill", score=0.40, step_repr="LevelSkill(cooking)"),
+        ],
+    )
+    base.update(overrides)
+    return _snap(**base)
+
+
+class TestBuildLogLines:
+    def test_no_chosen_root_is_single_line(self):
+        lines = build_log_lines(_snap(chosen_root=None))
+        assert len(lines) == 1
+
+    def test_empty_ranking_is_single_line(self):
+        lines = build_log_lines(_snap(chosen_root="ReachCharLevel(level=6)", strategy_ranking=[]))
+        assert len(lines) == 1
+
+    def test_why_line_shows_chosen_category_and_score(self):
+        why = build_log_lines(_ranked_snap())[1]
+        assert "why:" in why and "grind" in why and "1.80" in why
+
+    def test_why_line_shows_top_two_alternatives(self):
+        why = build_log_lines(_ranked_snap())[1]
+        assert "copper_boots" in why and "1.00" in why
+        assert "cooked_gudgeon" in why and "0.40" in why
+
+    def test_why_line_omits_alt_segment_when_only_chosen(self):
+        snap = _ranked_snap(strategy_ranking=[
+            RootScoreView(root_repr="ReachCharLevel(level=6)", category="grind", score=1.80,
+                          step_repr="FightAction(chicken)"),
+        ])
+        why = build_log_lines(snap)[1]
+        assert "alt:" not in why
+
+    def test_update_snapshot_writes_two_lines_when_ranked(self):
+        pane = LogPane()
+        captured = []
+        with patch.object(pane, "write", side_effect=captured.append):
+            pane.update_snapshot(_ranked_snap())
+        assert len(captured) == 2
+
+    def test_chosen_root_not_in_ranking_returns_single_line(self):
+        """Edge case: chosen_root doesn't appear in the ranking."""
+        snap = _ranked_snap(chosen_root="NonexistentGoal")
+        lines = build_log_lines(snap)
+        assert len(lines) == 1
