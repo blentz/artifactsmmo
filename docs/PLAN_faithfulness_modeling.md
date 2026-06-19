@@ -160,8 +160,21 @@ the capture fixture.
   reducer_clears` + `pressureGatedChores_quiet_after_reducer` (a drain silences the
   4 gated chores). DROP_BOUND + exact reducer post-values = Phase-2 differential
   obligations. Axioms {propext, Quot.sound}.
-- **Brick 3 NEXT — `cycleStepF` + the bounded-burst transience (the deep core).**
-  Define `cycleStepF s := pressureDelta (productionLadder (perceptionRefresh s))
+- **Brick 3a DONE (2026-06-19, commit 0535795)** — `CycleStepF.lean`: `cycleStepF`
+  + `cycleStepFN` + per-step bridges (agrees with cycleStepP on level/xp/hp/maxHp/
+  inventoryMax/bankRequiredLevel; pressure ≤ +DROP_BOUND). FOUNDATION; per-step only
+  (cycleStepF/cycleStepP diverge over N steps via pressure→selection feedback).
+  Axioms {propext, Quot.sound, LIV-001} (no new). REMAINING 3b/3c/3d below — the
+  research-grade core (conservative perceive + RuntimeInvariant; claim/measure
+  surgery; bounded-burst transience). Sharpened fork this turn: faithful
+  `inventoryUsed` is NOT enough — the OPAQUE composition flags
+  (`hasOverstockItems`/`selectBankDepositsNonempty`/`sellableInventoryNonempty`) are
+  still cleared-and-never-re-armed by applyActionKind, so 3b must add a conservative
+  `inventoryPerceive` re-arming them from pressure, gated by a drainability
+  `RuntimeInvariant` (over-arming is conservative for combat-fires-i.o. but hides a
+  full-of-useful-items livelock unless the invariant surfaces it).
+- **Brick 3b/3c/3d — the deep core (NEXT).**
+  `cycleStepF s := pressureDelta (productionLadder (perceptionRefresh s))
   (cycleStepP s)` — layer the dynamics after each refreshed step. Because
   `pressureDelta` touches only `inventoryUsed`, the level/xp DESCENT transfers from
   cycleStepP by rfl bridges — EXCEPT the lex measure's component 5
