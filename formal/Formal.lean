@@ -183,6 +183,7 @@ import Formal.Liveness.PressureBurst
 import Formal.Liveness.CycleStepFIteration
 import Formal.Liveness.CycleStepFLeveling
 import Formal.Liveness.LevelFiftyReachableF
+import Formal.Liveness.FightFairnessF
 import Formal.Liveness.WarmupCleared
 import Formal.Liveness.Leveling
 import Formal.Liveness.FightReady
