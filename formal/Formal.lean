@@ -174,6 +174,7 @@ import Formal.Liveness.LevelFiftyReachableP
 import Formal.Liveness.BlockerSettled
 import Formal.Liveness.SettledWitness
 import Formal.Liveness.SettledReach
+import Formal.Liveness.InventoryPressure
 import Formal.Liveness.WarmupCleared
 import Formal.Liveness.Leveling
 import Formal.Liveness.FightReady
