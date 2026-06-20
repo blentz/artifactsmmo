@@ -15,6 +15,14 @@ import json
 from collections import defaultdict, deque
 from pathlib import Path
 
+# Mirror of production ITEM_TYPE_TO_SLOTS (derived from CharacterSchema).
+# Only item types listed here are equippable; all others (resource, consumable,
+# currency, …) are skipped in the itemCatalog emission.
+_EQUIPPABLE_TYPES: frozenset[str] = frozenset({
+    "weapon", "rune", "shield", "helmet", "body_armor", "leg_armor",
+    "boots", "ring", "amulet", "artifact", "utility", "bag",
+})
+
 ROOT = Path(__file__).resolve().parents[1]
 SNAPSHOT = ROOT / "sim" / "game_data_snapshot.json"
 OUTPUT = ROOT / "Formal" / "Liveness" / "GameDataFixture.lean"
@@ -62,6 +70,75 @@ def escape_lean_string(s: str) -> str:
     return s.replace("\\", "\\\\").replace('"', '\\"')
 
 
+def _safe(code: str) -> str:
+    """Lean-safe identifier: replace non-alnum chars with '_'."""
+    return "".join(c if c.isalnum() else "_" for c in code)
+
+
+def _emit_monster_catalog(lines: list[str], snapshot: dict) -> None:
+    """Emit per-monster defs and monsterCatalog list into lines."""
+    lines.append("/-! ## Live monster catalog (sorted by code) -/")
+    lines.append("")
+    for code in sorted(snapshot["monster_level"]):
+        safe = _safe(code)
+        atk = snapshot["monster_attack"][code]
+        res = snapshot["monster_resistance"][code]
+        lines.append(f"def monster_{safe} : CatalogMonster :=")
+        lines.append(f'  {{ code := "{escape_lean_string(code)}", level := {snapshot["monster_level"][code]}')
+        lines.append(f'    hp := {snapshot["monster_hp"][code]}')
+        lines.append(f'    attackFire := {atk.get("fire", 0)}, attackEarth := {atk.get("earth", 0)}, attackWater := {atk.get("water", 0)}, attackAir := {atk.get("air", 0)}')
+        lines.append(f'    resFire := {res.get("fire", 0)}, resEarth := {res.get("earth", 0)}, resWater := {res.get("water", 0)}, resAir := {res.get("air", 0)}')
+        lines.append(f'    crit := {snapshot["monster_critical_strike"][code]} }}')
+        lines.append("")
+    lines.append("def monsterCatalog : List CatalogMonster :=")
+    lines.append("  [" + ", ".join(f"monster_{_safe(code)}" for code in sorted(snapshot["monster_level"])) + "]")
+    lines.append("")
+
+
+def _emit_base_stats_table(lines: list[str], base_doc: dict) -> None:
+    """Emit per-level base-stats defs and baseStatsTable list into lines."""
+    lines.append("/-! ## Character base stats by level (1..49) -/")
+    lines.append("")
+    sorted_levels = sorted(base_doc.get("base_stats", {}), key=int)
+    for lvl in sorted_levels:
+        row = base_doc["base_stats"][lvl]
+        a = row["attack"]
+        r = row["resistance"]
+        lines.append(f"def baseStats_{lvl} : BaseStatsRow :=")
+        lines.append(f'  {{ level := {lvl}, maxHp := {row["max_hp"]}')
+        lines.append(f'    attackFire := {a.get("fire", 0)}, attackEarth := {a.get("earth", 0)}, attackWater := {a.get("water", 0)}, attackAir := {a.get("air", 0)}')
+        lines.append(f'    resFire := {r.get("fire", 0)}, resEarth := {r.get("earth", 0)}, resWater := {r.get("water", 0)}, resAir := {r.get("air", 0)}')
+        lines.append(f'    crit := {row["critical_strike"]}, initiative := {row["initiative"]} }}')
+        lines.append("")
+    lines.append("def baseStatsTable : List BaseStatsRow :=")
+    lines.append("  [" + ", ".join(f"baseStats_{lvl}" for lvl in sorted_levels) + "]")
+    lines.append("")
+
+
+def _emit_item_catalog(lines: list[str], snapshot: dict) -> None:
+    """Emit per-item defs and itemCatalog list for equippable items only."""
+    lines.append("/-! ## Equippable item catalog (sorted by code) -/")
+    lines.append("")
+    equippable = sorted(
+        (code, s) for code, s in snapshot["item_stats"].items()
+        if s["type"] in _EQUIPPABLE_TYPES
+    )
+    for code, s in equippable:
+        safe = _safe(code)
+        atk = s.get("attack") or {}
+        res = s.get("resistance") or {}
+        lines.append(f"def item_{safe} : CatalogItem :=")
+        lines.append(f'  {{ code := "{escape_lean_string(code)}", level := {s["level"]}, slotType := "{escape_lean_string(s["type"])}"')
+        lines.append(f'    attackFire := {atk.get("fire", 0)}, attackEarth := {atk.get("earth", 0)}, attackWater := {atk.get("water", 0)}, attackAir := {atk.get("air", 0)}')
+        lines.append(f'    hpBonus := {s.get("hp_bonus", 0)}')
+        lines.append(f'    resFire := {res.get("fire", 0)}, resEarth := {res.get("earth", 0)}, resWater := {res.get("water", 0)}, resAir := {res.get("air", 0)}')
+        lines.append(f'    crit := {s.get("critical_strike", 0)} }}')
+        lines.append("")
+    lines.append("def itemCatalog : List CatalogItem :=")
+    lines.append("  [" + ", ".join(f"item_{_safe(code)}" for code, _ in equippable) + "]")
+    lines.append("")
+
+
 def generate_lean(snapshot: dict) -> str:
     recipes = snapshot["crafting_recipes"]
     depths = compute_depths(recipes)
@@ -69,6 +146,7 @@ def generate_lean(snapshot: dict) -> str:
     sorted_recipes = sorted(recipes.items())
 
     lines = [
+        "import Formal.Liveness.CatalogTypes",
         "import Formal.Liveness.RecipeChainClosure",
         "import Formal.Liveness.SkillGapClosure",
         "import Formal.Liveness.TaskCompleteReachable",
@@ -98,8 +176,11 @@ def generate_lean(snapshot: dict) -> str:
         "  recipe_then_complete_reachable theorem against LIVE data.",
         "  NO new axioms; pure structural data + instantiation. -/",
         "",
+        "set_option maxRecDepth 8192",
+        "",
         "namespace Formal.Liveness.GameDataFixture",
         "",
+        "open Formal.Liveness",
         "open Formal.Liveness.Plan",
         "open Formal.Liveness.PlanAction",
         "open Formal.Liveness.Measure",
@@ -182,6 +263,7 @@ def generate_lean(snapshot: dict) -> str:
         "  selectBankDepositsNonempty := false",
         "  pendingItemsNonempty := false",
         "  sellableInventoryNonempty := false",
+        "  recyclableSurplusNonempty := false",
         "  taskCoinsTotal := 0",
         "  taskExchangeMinCoins := 1",
         "  lowYieldCancelFires := false",
@@ -189,6 +271,8 @@ def generate_lean(snapshot: dict) -> str:
         "  pursueTaskFires := false",
         "  objectiveStepFires := false",
         "  craftReliefFires := false",
+        "  restForCombatReady := false",
+        "  gearReviewFires := false",
         "  bankItemsKnown := false",
         "  bankItemsCount := 0",
         "  bankCapacity := 0",
@@ -197,6 +281,36 @@ def generate_lean(snapshot: dict) -> str:
         "  actionsAttempted := 0",
         "  craftableSlots := 0",
         "  taskFeasibleProjected := true",
+        "  -- Item 1g-A1: task pool tracking. Default empty for legacy fixtures",
+        "  -- (no pool-depletion reasoning); 1g-A2 populates from allRecipes.",
+        "  taskPool := []",
+        "  taskCodesSeen := []",
+        "  -- Item 4a: inventory composition + gather target. Legacy fixture",
+        "  -- defaults to empty + none.",
+        "  inventoryItems := []",
+        "  gatherTarget := none",
+        "  -- Item 4b: equipment composition. Legacy fixture: nothing equipped,",
+        "  -- no pending equip/unequip.",
+        "  equipment := []",
+        "  equipTarget := none",
+        "  unequipTarget := none",
+        "  -- Item 4c: position. Legacy fixture spawns at (0, 0); no pending move.",
+        "  posX := 0",
+        "  posY := 0",
+        "  moveTarget := none",
+        "  -- Item 4e: per-skill XP map + skill targets. Legacy fixture: empty",
+        "  -- map, no pending gather/craft skill.",
+        "  skillXpDelta := []",
+        "  gatherSkill := none",
+        "  craftSkill := none",
+        "  -- Item 8: state field gap closure. Legacy fixture defaults to empty",
+        "  -- maps + zero bank gold.",
+        "  skillLevels := []",
+        "  bankItemsCatalog := []",
+        "  bankGold := 0",
+        "  pendingItemCodes := []",
+        "  npcStock := []",
+        "  eventSpawns := []",
         "",
         "/-- **Live-fixture items-task completable**.",
         "",
@@ -218,8 +332,20 @@ def generate_lean(snapshot: dict) -> str:
         "  · decide",
         "  · decide",
         "",
-        "end Formal.Liveness.GameDataFixture",
     ])
+
+    # Monster catalog
+    _emit_monster_catalog(lines, snapshot)
+
+    # Base stats table
+    base_stats_path = ROOT / "sim" / "character_base_stats.json"
+    base_doc = json.loads(base_stats_path.read_text())
+    _emit_base_stats_table(lines, base_doc)
+
+    # Item catalog
+    _emit_item_catalog(lines, snapshot)
+
+    lines.append("end Formal.Liveness.GameDataFixture")
 
     return "\n".join(lines) + "\n"
 

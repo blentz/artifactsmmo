@@ -1,3 +1,4 @@
+import Formal.Liveness.CatalogTypes
 import Formal.Liveness.RecipeChainClosure
 import Formal.Liveness.SkillGapClosure
 import Formal.Liveness.TaskCompleteReachable
@@ -7,7 +8,7 @@ import Mathlib.Tactic
 
 /-! # GameDataFixture — Phase 24 LIVE SNAPSHOT
 
-  Captured: 2026-06-02T19:54:09.159314+00:00
+  Captured: 2026-06-20T15:30:32.722769+00:00
   API: https://api.artifactsmmo.com
   Counts: 48 monsters, 485 items, 306 recipes, 24 resources.
 
@@ -28,6 +29,7 @@ set_option maxRecDepth 8192
 
 namespace Formal.Liveness.GameDataFixture
 
+open Formal.Liveness
 open Formal.Liveness.Plan
 open Formal.Liveness.PlanAction
 open Formal.Liveness.Measure
@@ -37,7 +39,7 @@ open Formal.Liveness.SkillGapClosure
 open Formal.Liveness.RecipeChainClosure
 
 /-- Snapshot timestamp (UTC ISO 8601). -/
-def snapshotCapturedAt : String := "2026-06-02T19:54:09.159314+00:00"
+def snapshotCapturedAt : String := "2026-06-20T15:30:32.722769+00:00"
 
 /-- Snapshot API base URL. -/
 def snapshotApiBaseUrl : String := "https://api.artifactsmmo.com"
@@ -2291,5 +2293,2785 @@ theorem live_first_recipe_completable :
   · decide
   · decide
   · decide
+
+/-! ## Live monster catalog (sorted by code) -/
+
+def monster_bandit_lizard : CatalogMonster :=
+  { code := "bandit_lizard", level := 25
+    hp := 780
+    attackFire := 40, attackEarth := 0, attackWater := 40, attackAir := 0
+    resFire := -5, resEarth := 25, resWater := -5, resAir := 25
+    crit := 5 }
+
+def monster_bat : CatalogMonster :=
+  { code := "bat", level := 38
+    hp := 2000
+    attackFire := 0, attackEarth := 0, attackWater := 80, attackAir := 80
+    resFire := 5, resEarth := 5, resWater := 5, resAir := -20
+    crit := 5 }
+
+def monster_blue_slime : CatalogMonster :=
+  { code := "blue_slime", level := 6
+    hp := 120
+    attackFire := 0, attackEarth := 0, attackWater := 15, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 25, resAir := 0
+    crit := 0 }
+
+def monster_chicken : CatalogMonster :=
+  { code := "chicken", level := 1
+    hp := 60
+    attackFire := 0, attackEarth := 0, attackWater := 4, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def monster_corrupted_ogre : CatalogMonster :=
+  { code := "corrupted_ogre", level := 20
+    hp := 850
+    attackFire := 0, attackEarth := 80, attackWater := 0, attackAir := 0
+    resFire := 50, resEarth := 100, resWater := 70, resAir := 50
+    crit := 5 }
+
+def monster_corrupted_owlbear : CatalogMonster :=
+  { code := "corrupted_owlbear", level := 30
+    hp := 1100
+    attackFire := 0, attackEarth := 0, attackWater := 100, attackAir := 0
+    resFire := 70, resEarth := 50, resWater := 115, resAir := 70
+    crit := 5 }
+
+def monster_cow : CatalogMonster :=
+  { code := "cow", level := 8
+    hp := 280
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 21
+    resFire := 0, resEarth := -30, resWater := 30, resAir := 0
+    crit := 0 }
+
+def monster_cultist_acolyte : CatalogMonster :=
+  { code := "cultist_acolyte", level := 33
+    hp := 1500
+    attackFire := 0, attackEarth := 65, attackWater := 0, attackAir := 65
+    resFire := -10, resEarth := 10, resWater := -10, resAir := 40
+    crit := 5 }
+
+def monster_cultist_alchemist : CatalogMonster :=
+  { code := "cultist_alchemist", level := 40
+    hp := 3000
+    attackFire := 0, attackEarth := 0, attackWater := 50, attackAir := 100
+    resFire := 5, resEarth := -10, resWater := 5, resAir := -30
+    crit := 5 }
+
+def monster_cultist_emperor : CatalogMonster :=
+  { code := "cultist_emperor", level := 35
+    hp := 1750
+    attackFire := 0, attackEarth := 40, attackWater := 40, attackAir := 90
+    resFire := 20, resEarth := 10, resWater := 0, resAir := -10
+    crit := 5 }
+
+def monster_cursed_tree : CatalogMonster :=
+  { code := "cursed_tree", level := 34
+    hp := 1550
+    attackFire := 0, attackEarth := 0, attackWater := 130, attackAir := 0
+    resFire := 5, resEarth := -5, resWater := -5, resAir := 5
+    crit := 20 }
+
+def monster_cyclops : CatalogMonster :=
+  { code := "cyclops", level := 25
+    hp := 630
+    attackFire := 0, attackEarth := 90, attackWater := 0, attackAir := 20
+    resFire := -20, resEarth := 20, resWater := 10, resAir := 0
+    crit := 5 }
+
+def monster_death_knight : CatalogMonster :=
+  { code := "death_knight", level := 28
+    hp := 820
+    attackFire := 28, attackEarth := 28, attackWater := 28, attackAir := 28
+    resFire := -5, resEarth := -5, resWater := -5, resAir := -5
+    crit := 5 }
+
+def monster_demon : CatalogMonster :=
+  { code := "demon", level := 30
+    hp := 900
+    attackFire := 90, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 20, resEarth := 0, resWater := -10, resAir := 0
+    crit := 5 }
+
+def monster_desert_scorpion : CatalogMonster :=
+  { code := "desert_scorpion", level := 50
+    hp := 4250
+    attackFire := 0, attackEarth := 350, attackWater := 0, attackAir := 0
+    resFire := -10, resEarth := 0, resWater := -10, resAir := 0
+    crit := 50 }
+
+def monster_dusk_beetle : CatalogMonster :=
+  { code := "dusk_beetle", level := 47
+    hp := 3500
+    attackFire := 120, attackEarth := 120, attackWater := 0, attackAir := 0
+    resFire := 20, resEarth := -10, resWater := 20, resAir := -10
+    crit := 5 }
+
+def monster_duskworm : CatalogMonster :=
+  { code := "duskworm", level := 48
+    hp := 25000
+    attackFire := 0, attackEarth := 0, attackWater := 550, attackAir := 0
+    resFire := -80, resEarth := -80, resWater := -80, resAir := -80
+    crit := 20 }
+
+def monster_efreet_sultan : CatalogMonster :=
+  { code := "efreet_sultan", level := 42
+    hp := 3600
+    attackFire := 100, attackEarth := 0, attackWater := 0, attackAir := 100
+    resFire := 50, resEarth := 0, resWater := 50, resAir := 0
+    crit := 5 }
+
+def monster_flying_snake : CatalogMonster :=
+  { code := "flying_snake", level := 12
+    hp := 360
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 34
+    resFire := -20, resEarth := 0, resWater := -20, resAir := 40
+    crit := 5 }
+
+def monster_goblin : CatalogMonster :=
+  { code := "goblin", level := 33
+    hp := 1550
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 170
+    resFire := 10, resEarth := 30, resWater := -20, resAir := -20
+    crit := 5 }
+
+def monster_goblin_guard : CatalogMonster :=
+  { code := "goblin_guard", level := 35
+    hp := 2000
+    attackFire := 0, attackEarth := 120, attackWater := 0, attackAir := 0
+    resFire := -20, resEarth := -20, resWater := 30, resAir := 20
+    crit := 5 }
+
+def monster_goblin_priestess : CatalogMonster :=
+  { code := "goblin_priestess", level := 35
+    hp := 6750
+    attackFire := 75, attackEarth := 75, attackWater := 75, attackAir := 75
+    resFire := 20, resEarth := 20, resWater := 20, resAir := 20
+    crit := 20 }
+
+def monster_goblin_wolfrider : CatalogMonster :=
+  { code := "goblin_wolfrider", level := 40
+    hp := 2650
+    attackFire := 0, attackEarth := 145, attackWater := 0, attackAir := 0
+    resFire := 10, resEarth := -5, resWater := 10, resAir := 10
+    crit := 5 }
+
+def monster_green_slime : CatalogMonster :=
+  { code := "green_slime", level := 4
+    hp := 80
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 12
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 25
+    crit := 0 }
+
+def monster_grimlet : CatalogMonster :=
+  { code := "grimlet", level := 45
+    hp := 7000
+    attackFire := 0, attackEarth := 0, attackWater := 150, attackAir := 0
+    resFire := 90, resEarth := 70, resWater := 90, resAir := 50
+    crit := 5 }
+
+def monster_hellhound : CatalogMonster :=
+  { code := "hellhound", level := 40
+    hp := 3250
+    attackFire := 90, attackEarth := 50, attackWater := 0, attackAir := 0
+    resFire := -20, resEarth := 10, resWater := -20, resAir := 10
+    crit := 5 }
+
+def monster_highwayman : CatalogMonster :=
+  { code := "highwayman", level := 15
+    hp := 380
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 25
+    resFire := 10, resEarth := 10, resWater := -10, resAir := -10
+    crit := 35 }
+
+def monster_imp : CatalogMonster :=
+  { code := "imp", level := 28
+    hp := 1750
+    attackFire := 0, attackEarth := 45, attackWater := 0, attackAir := 0
+    resFire := 10, resEarth := 60, resWater := 10, resAir := 10
+    crit := 5 }
+
+def monster_king_slime : CatalogMonster :=
+  { code := "king_slime", level := 15
+    hp := 1000
+    attackFire := 14, attackEarth := 14, attackWater := 14, attackAir := 14
+    resFire := 20, resEarth := 20, resWater := 20, resAir := 20
+    crit := 20 }
+
+def monster_lich : CatalogMonster :=
+  { code := "lich", level := 30
+    hp := 6600
+    attackFire := 140, attackEarth := 140, attackWater := 0, attackAir := 0
+    resFire := 24, resEarth := 24, resWater := 18, resAir := 18
+    crit := 5 }
+
+def monster_mushmush : CatalogMonster :=
+  { code := "mushmush", level := 10
+    hp := 350
+    attackFire := 16, attackEarth := 0, attackWater := 16, attackAir := 0
+    resFire := 20, resEarth := 20, resWater := 0, resAir := -30
+    crit := 5 }
+
+def monster_ogre : CatalogMonster :=
+  { code := "ogre", level := 20
+    hp := 650
+    attackFire := 0, attackEarth := 80, attackWater := 0, attackAir := 0
+    resFire := -20, resEarth := 30, resWater := 0, resAir := 0
+    crit := 5 }
+
+def monster_orc : CatalogMonster :=
+  { code := "orc", level := 38
+    hp := 1600
+    attackFire := 100, attackEarth := 0, attackWater := 0, attackAir := 100
+    resFire := -20, resEarth := 20, resWater := -20, resAir := 20
+    crit := 10 }
+
+def monster_owlbear : CatalogMonster :=
+  { code := "owlbear", level := 30
+    hp := 1100
+    attackFire := 0, attackEarth := 0, attackWater := 80, attackAir := 0
+    resFire := 0, resEarth := -20, resWater := 45, resAir := 0
+    crit := 5 }
+
+def monster_pig : CatalogMonster :=
+  { code := "pig", level := 19
+    hp := 480
+    attackFire := 0, attackEarth := 0, attackWater := 30, attackAir := 0
+    resFire := 0, resEarth := -10, resWater := 40, resAir := 0
+    crit := 30 }
+
+def monster_rat : CatalogMonster :=
+  { code := "rat", level := 25
+    hp := 800
+    attackFire := 50, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 40, resEarth := -10, resWater := 5, resAir := 5
+    crit := 50 }
+
+def monster_red_slime : CatalogMonster :=
+  { code := "red_slime", level := 7
+    hp := 120
+    attackFire := 18, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 25, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def monster_rosenblood : CatalogMonster :=
+  { code := "rosenblood", level := 40
+    hp := 8000
+    attackFire := 400, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 10, resEarth := 10, resWater := 10, resAir := 10
+    crit := 30 }
+
+def monster_sand_snake : CatalogMonster :=
+  { code := "sand_snake", level := 44
+    hp := 3200
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 180
+    resFire := 5, resEarth := 0, resWater := 5, resAir := 10
+    crit := 5 }
+
+def monster_sandwarden : CatalogMonster :=
+  { code := "sandwarden", level := 50
+    hp := 4500
+    attackFire := 220, attackEarth := 0, attackWater := 0, attackAir := 220
+    resFire := 0, resEarth := -20, resWater := 0, resAir := 0
+    crit := 5 }
+
+def monster_sandwhisper_empress : CatalogMonster :=
+  { code := "sandwhisper_empress", level := 55
+    hp := 13500
+    attackFire := 400, attackEarth := 0, attackWater := 0, attackAir := 400
+    resFire := 5, resEarth := 10, resWater := 10, resAir := 5
+    crit := 5 }
+
+def monster_sea_marauder : CatalogMonster :=
+  { code := "sea_marauder", level := 45
+    hp := 2900
+    attackFire := 190, attackEarth := 0, attackWater := 0, attackAir := 190
+    resFire := 10, resEarth := 10, resWater := 10, resAir := 10
+    crit := 5 }
+
+def monster_sheep : CatalogMonster :=
+  { code := "sheep", level := 5
+    hp := 120
+    attackFire := 0, attackEarth := 14, attackWater := 0, attackAir := 0
+    resFire := 10, resEarth := 10, resWater := 10, resAir := 10
+    crit := 0 }
+
+def monster_skeleton : CatalogMonster :=
+  { code := "skeleton", level := 18
+    hp := 480
+    attackFire := 26, attackEarth := 18, attackWater := 0, attackAir := 0
+    resFire := 30, resEarth := 0, resWater := -10, resAir := -10
+    crit := 5 }
+
+def monster_spider : CatalogMonster :=
+  { code := "spider", level := 20
+    hp := 550
+    attackFire := 40, attackEarth := 0, attackWater := 40, attackAir := 0
+    resFire := 0, resEarth := 5, resWater := -30, resAir := 5
+    crit := 5 }
+
+def monster_vampire : CatalogMonster :=
+  { code := "vampire", level := 24
+    hp := 680
+    attackFire := 20, attackEarth := 0, attackWater := 0, attackAir := 50
+    resFire := 0, resEarth := -15, resWater := -15, resAir := 30
+    crit := 35 }
+
+def monster_wolf : CatalogMonster :=
+  { code := "wolf", level := 15
+    hp := 400
+    attackFire := 0, attackEarth := 0, attackWater := 12, attackAir := 12
+    resFire := -10, resEarth := -10, resWater := 10, resAir := 10
+    crit := 50 }
+
+def monster_yellow_slime : CatalogMonster :=
+  { code := "yellow_slime", level := 2
+    hp := 70
+    attackFire := 0, attackEarth := 8, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 25, resWater := 0, resAir := 0
+    crit := 0 }
+
+def monsterCatalog : List CatalogMonster :=
+  [monster_bandit_lizard, monster_bat, monster_blue_slime, monster_chicken, monster_corrupted_ogre, monster_corrupted_owlbear, monster_cow, monster_cultist_acolyte, monster_cultist_alchemist, monster_cultist_emperor, monster_cursed_tree, monster_cyclops, monster_death_knight, monster_demon, monster_desert_scorpion, monster_dusk_beetle, monster_duskworm, monster_efreet_sultan, monster_flying_snake, monster_goblin, monster_goblin_guard, monster_goblin_priestess, monster_goblin_wolfrider, monster_green_slime, monster_grimlet, monster_hellhound, monster_highwayman, monster_imp, monster_king_slime, monster_lich, monster_mushmush, monster_ogre, monster_orc, monster_owlbear, monster_pig, monster_rat, monster_red_slime, monster_rosenblood, monster_sand_snake, monster_sandwarden, monster_sandwhisper_empress, monster_sea_marauder, monster_sheep, monster_skeleton, monster_spider, monster_vampire, monster_wolf, monster_yellow_slime]
+
+/-! ## Character base stats by level (1..49) -/
+
+def baseStats_1 : BaseStatsRow :=
+  { level := 1, maxHp := 120
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_2 : BaseStatsRow :=
+  { level := 2, maxHp := 125
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_3 : BaseStatsRow :=
+  { level := 3, maxHp := 130
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_4 : BaseStatsRow :=
+  { level := 4, maxHp := 135
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_5 : BaseStatsRow :=
+  { level := 5, maxHp := 140
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_6 : BaseStatsRow :=
+  { level := 6, maxHp := 145
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_7 : BaseStatsRow :=
+  { level := 7, maxHp := 150
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_8 : BaseStatsRow :=
+  { level := 8, maxHp := 155
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_9 : BaseStatsRow :=
+  { level := 9, maxHp := 160
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_10 : BaseStatsRow :=
+  { level := 10, maxHp := 165
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_11 : BaseStatsRow :=
+  { level := 11, maxHp := 170
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_12 : BaseStatsRow :=
+  { level := 12, maxHp := 175
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_13 : BaseStatsRow :=
+  { level := 13, maxHp := 180
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_14 : BaseStatsRow :=
+  { level := 14, maxHp := 185
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_15 : BaseStatsRow :=
+  { level := 15, maxHp := 190
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_16 : BaseStatsRow :=
+  { level := 16, maxHp := 195
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_17 : BaseStatsRow :=
+  { level := 17, maxHp := 200
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_18 : BaseStatsRow :=
+  { level := 18, maxHp := 205
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_19 : BaseStatsRow :=
+  { level := 19, maxHp := 210
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_20 : BaseStatsRow :=
+  { level := 20, maxHp := 215
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_21 : BaseStatsRow :=
+  { level := 21, maxHp := 220
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_22 : BaseStatsRow :=
+  { level := 22, maxHp := 225
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_23 : BaseStatsRow :=
+  { level := 23, maxHp := 230
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_24 : BaseStatsRow :=
+  { level := 24, maxHp := 235
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_25 : BaseStatsRow :=
+  { level := 25, maxHp := 240
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_26 : BaseStatsRow :=
+  { level := 26, maxHp := 245
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_27 : BaseStatsRow :=
+  { level := 27, maxHp := 250
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_28 : BaseStatsRow :=
+  { level := 28, maxHp := 255
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_29 : BaseStatsRow :=
+  { level := 29, maxHp := 260
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_30 : BaseStatsRow :=
+  { level := 30, maxHp := 265
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_31 : BaseStatsRow :=
+  { level := 31, maxHp := 270
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_32 : BaseStatsRow :=
+  { level := 32, maxHp := 275
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_33 : BaseStatsRow :=
+  { level := 33, maxHp := 280
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_34 : BaseStatsRow :=
+  { level := 34, maxHp := 285
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_35 : BaseStatsRow :=
+  { level := 35, maxHp := 290
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_36 : BaseStatsRow :=
+  { level := 36, maxHp := 295
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_37 : BaseStatsRow :=
+  { level := 37, maxHp := 300
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_38 : BaseStatsRow :=
+  { level := 38, maxHp := 305
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_39 : BaseStatsRow :=
+  { level := 39, maxHp := 310
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_40 : BaseStatsRow :=
+  { level := 40, maxHp := 315
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_41 : BaseStatsRow :=
+  { level := 41, maxHp := 320
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_42 : BaseStatsRow :=
+  { level := 42, maxHp := 325
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_43 : BaseStatsRow :=
+  { level := 43, maxHp := 330
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_44 : BaseStatsRow :=
+  { level := 44, maxHp := 335
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_45 : BaseStatsRow :=
+  { level := 45, maxHp := 340
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_46 : BaseStatsRow :=
+  { level := 46, maxHp := 345
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_47 : BaseStatsRow :=
+  { level := 47, maxHp := 350
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_48 : BaseStatsRow :=
+  { level := 48, maxHp := 355
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStats_49 : BaseStatsRow :=
+  { level := 49, maxHp := 360
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0, initiative := 100 }
+
+def baseStatsTable : List BaseStatsRow :=
+  [baseStats_1, baseStats_2, baseStats_3, baseStats_4, baseStats_5, baseStats_6, baseStats_7, baseStats_8, baseStats_9, baseStats_10, baseStats_11, baseStats_12, baseStats_13, baseStats_14, baseStats_15, baseStats_16, baseStats_17, baseStats_18, baseStats_19, baseStats_20, baseStats_21, baseStats_22, baseStats_23, baseStats_24, baseStats_25, baseStats_26, baseStats_27, baseStats_28, baseStats_29, baseStats_30, baseStats_31, baseStats_32, baseStats_33, baseStats_34, baseStats_35, baseStats_36, baseStats_37, baseStats_38, baseStats_39, baseStats_40, baseStats_41, baseStats_42, baseStats_43, baseStats_44, baseStats_45, baseStats_46, baseStats_47, baseStats_48, baseStats_49]
+
+/-! ## Equippable item catalog (sorted by code) -/
+
+def item_adamantite_axe : CatalogItem :=
+  { code := "adamantite_axe", level := 50, slotType := "weapon"
+    attackFire := 0, attackEarth := 5, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_adamantite_boots : CatalogItem :=
+  { code := "adamantite_boots", level := 50, slotType := "boots"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 170
+    resFire := 8, resEarth := 0, resWater := 0, resAir := 8
+    crit := 0 }
+
+def item_adamantite_fishing_rod : CatalogItem :=
+  { code := "adamantite_fishing_rod", level := 50, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 5, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_adamantite_gloves : CatalogItem :=
+  { code := "adamantite_gloves", level := 50, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 5
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_adamantite_mask : CatalogItem :=
+  { code := "adamantite_mask", level := 50, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 300
+    resFire := 0, resEarth := 5, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_adamantite_pickaxe : CatalogItem :=
+  { code := "adamantite_pickaxe", level := 50, slotType := "weapon"
+    attackFire := 0, attackEarth := 5, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_adamantite_platebody : CatalogItem :=
+  { code := "adamantite_platebody", level := 50, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 300
+    resFire := 5, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_adamantite_platelegs : CatalogItem :=
+  { code := "adamantite_platelegs", level := 50, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 300
+    resFire := 5, resEarth := 7, resWater := 0, resAir := 0
+    crit := 3 }
+
+def item_adamantite_ring : CatalogItem :=
+  { code := "adamantite_ring", level := 50, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 7 }
+
+def item_adamantite_shield : CatalogItem :=
+  { code := "adamantite_shield", level := 50, slotType := "shield"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 100
+    resFire := 18, resEarth := 0, resWater := 0, resAir := 18
+    crit := 0 }
+
+def item_adamantite_sword : CatalogItem :=
+  { code := "adamantite_sword", level := 50, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 115
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 24 }
+
+def item_adventurer_boots : CatalogItem :=
+  { code := "adventurer_boots", level := 15, slotType := "boots"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 60
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_adventurer_helmet : CatalogItem :=
+  { code := "adventurer_helmet", level := 10, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 50
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_adventurer_pants : CatalogItem :=
+  { code := "adventurer_pants", level := 15, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 60
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_adventurer_vest : CatalogItem :=
+  { code := "adventurer_vest", level := 10, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 60
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_air_and_water_amulet : CatalogItem :=
+  { code := "air_and_water_amulet", level := 10, slotType := "amulet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 20
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_air_boost_potion : CatalogItem :=
+  { code := "air_boost_potion", level := 10, slotType := "utility"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_air_res_potion : CatalogItem :=
+  { code := "air_res_potion", level := 40, slotType := "utility"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 10
+    crit := 0 }
+
+def item_air_ring : CatalogItem :=
+  { code := "air_ring", level := 15, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_air_shield : CatalogItem :=
+  { code := "air_shield", level := 40, slotType := "shield"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := -5, resEarth := 0, resWater := 0, resAir := 25
+    crit := 0 }
+
+def item_amulet_of_the_grand_master : CatalogItem :=
+  { code := "amulet_of_the_grand_master", level := 50, slotType := "amulet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 175
+    resFire := -5, resEarth := -5, resWater := -5, resAir := -5
+    crit := 8 }
+
+def item_ancestral_talisman : CatalogItem :=
+  { code := "ancestral_talisman", level := 35, slotType := "amulet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 100
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_ancient_jean : CatalogItem :=
+  { code := "ancient_jean", level := 35, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 150
+    resFire := -10, resEarth := 10, resWater := 0, resAir := 0
+    crit := 6 }
+
+def item_antidote : CatalogItem :=
+  { code := "antidote", level := 30, slotType := "utility"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_apprentice_gloves : CatalogItem :=
+  { code := "apprentice_gloves", level := 1, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 5
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_backpack : CatalogItem :=
+  { code := "backpack", level := 10, slotType := "bag"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_bandit_armor : CatalogItem :=
+  { code := "bandit_armor", level := 25, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 160
+    resFire := 0, resEarth := 6, resWater := 6, resAir := 0
+    crit := 5 }
+
+def item_battlestaff : CatalogItem :=
+  { code := "battlestaff", level := 20, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 40, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_batwing_helmet : CatalogItem :=
+  { code := "batwing_helmet", level := 40, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 200
+    resFire := -5, resEarth := -5, resWater := 0, resAir := 0
+    crit := 8 }
+
+def item_blade_of_hell : CatalogItem :=
+  { code := "blade_of_hell", level := 45, slotType := "weapon"
+    attackFire := 0, attackEarth := 115, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_bloodblade : CatalogItem :=
+  { code := "bloodblade", level := 40, slotType := "weapon"
+    attackFire := 70, attackEarth := 0, attackWater := 0, attackAir := 30
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_bow_from_hell : CatalogItem :=
+  { code := "bow_from_hell", level := 45, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 106
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 24 }
+
+def item_burn_rune : CatalogItem :=
+  { code := "burn_rune", level := 20, slotType := "rune"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_celest_ring : CatalogItem :=
+  { code := "celest_ring", level := 40, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_conjurer_cloak : CatalogItem :=
+  { code := "conjurer_cloak", level := 30, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 150
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_conjurer_skirt : CatalogItem :=
+  { code := "conjurer_skirt", level := 30, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 180
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_copper_armor : CatalogItem :=
+  { code := "copper_armor", level := 5, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 25
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_copper_axe : CatalogItem :=
+  { code := "copper_axe", level := 1, slotType := "weapon"
+    attackFire := 0, attackEarth := 5, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_copper_boots : CatalogItem :=
+  { code := "copper_boots", level := 1, slotType := "boots"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 10
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_copper_dagger : CatalogItem :=
+  { code := "copper_dagger", level := 1, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 6
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 35 }
+
+def item_copper_helmet : CatalogItem :=
+  { code := "copper_helmet", level := 1, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 20
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_copper_legs_armor : CatalogItem :=
+  { code := "copper_legs_armor", level := 5, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 25
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_copper_pickaxe : CatalogItem :=
+  { code := "copper_pickaxe", level := 1, slotType := "weapon"
+    attackFire := 0, attackEarth := 5, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_copper_ring : CatalogItem :=
+  { code := "copper_ring", level := 1, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_corrupted_crown : CatalogItem :=
+  { code := "corrupted_crown", level := 45, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 350
+    resFire := 5, resEarth := 5, resWater := 5, resAir := 5
+    crit := 0 }
+
+def item_corrupted_skull : CatalogItem :=
+  { code := "corrupted_skull", level := 25, slotType := "artifact"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 8 }
+
+def item_corrupted_stone_amulet : CatalogItem :=
+  { code := "corrupted_stone_amulet", level := 35, slotType := "amulet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 100
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_cultist_boots : CatalogItem :=
+  { code := "cultist_boots", level := 40, slotType := "boots"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 160
+    resFire := 0, resEarth := 0, resWater := 8, resAir := 8
+    crit := 0 }
+
+def item_cultist_cloak : CatalogItem :=
+  { code := "cultist_cloak", level := 40, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 180
+    resFire := 0, resEarth := 0, resWater := 7, resAir := 7
+    crit := 0 }
+
+def item_cultist_hat : CatalogItem :=
+  { code := "cultist_hat", level := 40, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 200
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 3 }
+
+def item_cultist_pants : CatalogItem :=
+  { code := "cultist_pants", level := 40, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 180
+    resFire := 7, resEarth := 0, resWater := 7, resAir := 0
+    crit := 0 }
+
+def item_cursed_hat : CatalogItem :=
+  { code := "cursed_hat", level := 35, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 170
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_cursed_sceptre : CatalogItem :=
+  { code := "cursed_sceptre", level := 35, slotType := "weapon"
+    attackFire := 82, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_dark_horned_helmet : CatalogItem :=
+  { code := "dark_horned_helmet", level := 50, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 300
+    resFire := 0, resEarth := 5, resWater := 0, resAir := 0
+    crit := 8 }
+
+def item_darkforged_boots : CatalogItem :=
+  { code := "darkforged_boots", level := 45, slotType := "boots"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 160
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 7 }
+
+def item_darkforged_helmet : CatalogItem :=
+  { code := "darkforged_helmet", level := 45, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 200
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_darkforged_plate : CatalogItem :=
+  { code := "darkforged_plate", level := 45, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 200
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_darkforged_shield : CatalogItem :=
+  { code := "darkforged_shield", level := 45, slotType := "shield"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 13, resEarth := 13, resWater := 13, resAir := 13
+    crit := 0 }
+
+def item_death_knight_sword : CatalogItem :=
+  { code := "death_knight_sword", level := 30, slotType := "weapon"
+    attackFire := 37, attackEarth := 37, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 24 }
+
+def item_demoniac_dagger : CatalogItem :=
+  { code := "demoniac_dagger", level := 45, slotType := "weapon"
+    attackFire := 85, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 35 }
+
+def item_demoniac_shield : CatalogItem :=
+  { code := "demoniac_shield", level := 45, slotType := "shield"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 15, resEarth := 15, resWater := 15, resAir := 15
+    crit := 0 }
+
+def item_desert_whip : CatalogItem :=
+  { code := "desert_whip", level := 50, slotType := "weapon"
+    attackFire := 0, attackEarth := 125, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_desert_wrap : CatalogItem :=
+  { code := "desert_wrap", level := 50, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 300
+    resFire := 7, resEarth := 0, resWater := 0, resAir := 7
+    crit := 0 }
+
+def item_diabolic_elixir : CatalogItem :=
+  { code := "diabolic_elixir", level := 45, slotType := "utility"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 12, resEarth := 12, resWater := 12, resAir := 12
+    crit := 0 }
+
+def item_diamond_amulet : CatalogItem :=
+  { code := "diamond_amulet", level := 35, slotType := "amulet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 100
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_diamond_sword : CatalogItem :=
+  { code := "diamond_sword", level := 35, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 75, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 24 }
+
+def item_divinity_ring : CatalogItem :=
+  { code := "divinity_ring", level := 40, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_dreadful_amulet : CatalogItem :=
+  { code := "dreadful_amulet", level := 20, slotType := "amulet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 40
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_dreadful_armor : CatalogItem :=
+  { code := "dreadful_armor", level := 35, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 170
+    resFire := 0, resEarth := 0, resWater := 10, resAir := 0
+    crit := 5 }
+
+def item_dreadful_battleaxe : CatalogItem :=
+  { code := "dreadful_battleaxe", level := 35, slotType := "weapon"
+    attackFire := 0, attackEarth := 20, attackWater := 65, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_dreadful_ring : CatalogItem :=
+  { code := "dreadful_ring", level := 20, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 20
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_dreadful_shield : CatalogItem :=
+  { code := "dreadful_shield", level := 35, slotType := "shield"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := -5, resEarth := 15, resWater := 15, resAir := -5
+    crit := 0 }
+
+def item_dreadful_staff : CatalogItem :=
+  { code := "dreadful_staff", level := 25, slotType := "weapon"
+    attackFire := 0, attackEarth := 25, attackWater := 25, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_duskarmor : CatalogItem :=
+  { code := "duskarmor", level := 50, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 300
+    resFire := 0, resEarth := 5, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_duskpants : CatalogItem :=
+  { code := "duskpants", level := 50, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 300
+    resFire := 0, resEarth := 5, resWater := 7, resAir := 0
+    crit := 7 }
+
+def item_dust_amulet : CatalogItem :=
+  { code := "dust_amulet", level := 50, slotType := "amulet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 200
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_dust_helmet : CatalogItem :=
+  { code := "dust_helmet", level := 50, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 300
+    resFire := 0, resEarth := 7, resWater := 7, resAir := 0
+    crit := 0 }
+
+def item_dust_sword : CatalogItem :=
+  { code := "dust_sword", level := 50, slotType := "weapon"
+    attackFire := 115, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_earth_boost_potion : CatalogItem :=
+  { code := "earth_boost_potion", level := 10, slotType := "utility"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_earth_res_potion : CatalogItem :=
+  { code := "earth_res_potion", level := 40, slotType := "utility"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 10, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_earth_ring : CatalogItem :=
+  { code := "earth_ring", level := 15, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_earth_shield : CatalogItem :=
+  { code := "earth_shield", level := 40, slotType := "shield"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 25, resWater := -10, resAir := 0
+    crit := 0 }
+
+def item_elderwood_staff : CatalogItem :=
+  { code := "elderwood_staff", level := 30, slotType := "weapon"
+    attackFire := 40, attackEarth := 0, attackWater := 40, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_emerald_amulet : CatalogItem :=
+  { code := "emerald_amulet", level := 25, slotType := "amulet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 70
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_emerald_book : CatalogItem :=
+  { code := "emerald_book", level := 40, slotType := "artifact"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_emerald_ring : CatalogItem :=
+  { code := "emerald_ring", level := 30, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 3 }
+
+def item_enchanted_antidote : CatalogItem :=
+  { code := "enchanted_antidote", level := 45, slotType := "utility"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_enchanted_boost_potion : CatalogItem :=
+  { code := "enchanted_boost_potion", level := 40, slotType := "utility"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_enchanted_bow : CatalogItem :=
+  { code := "enchanted_bow", level := 30, slotType := "weapon"
+    attackFire := 53, attackEarth := 0, attackWater := 15, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 35 }
+
+def item_enchanted_health_potion : CatalogItem :=
+  { code := "enchanted_health_potion", level := 45, slotType := "utility"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_enchanted_health_splash_potion : CatalogItem :=
+  { code := "enchanted_health_splash_potion", level := 50, slotType := "utility"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_enchanter_boots : CatalogItem :=
+  { code := "enchanter_boots", level := 35, slotType := "boots"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 110
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_enchanter_pants : CatalogItem :=
+  { code := "enchanter_pants", level := 35, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 200
+    resFire := 10, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_eternal_red_ring : CatalogItem :=
+  { code := "eternal_red_ring", level := 50, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 80
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_eternity_ring : CatalogItem :=
+  { code := "eternity_ring", level := 40, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_feather_coat : CatalogItem :=
+  { code := "feather_coat", level := 5, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 25
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_fire_and_earth_amulet : CatalogItem :=
+  { code := "fire_and_earth_amulet", level := 10, slotType := "amulet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 20
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_fire_boost_potion : CatalogItem :=
+  { code := "fire_boost_potion", level := 10, slotType := "utility"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_fire_bow : CatalogItem :=
+  { code := "fire_bow", level := 10, slotType := "weapon"
+    attackFire := 17, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 35 }
+
+def item_fire_res_potion : CatalogItem :=
+  { code := "fire_res_potion", level := 40, slotType := "utility"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 10, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_fire_ring : CatalogItem :=
+  { code := "fire_ring", level := 15, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_fire_shield : CatalogItem :=
+  { code := "fire_shield", level := 40, slotType := "shield"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 25, resEarth := 0, resWater := 0, resAir := -5
+    crit := 0 }
+
+def item_fire_staff : CatalogItem :=
+  { code := "fire_staff", level := 5, slotType := "weapon"
+    attackFire := 16, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_fishing_net : CatalogItem :=
+  { code := "fishing_net", level := 1, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 5, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_flying_boots : CatalogItem :=
+  { code := "flying_boots", level := 30, slotType := "boots"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 80
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_forest_ring : CatalogItem :=
+  { code := "forest_ring", level := 10, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 20
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_forest_whip : CatalogItem :=
+  { code := "forest_whip", level := 20, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 40
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_goblin_guard_shield : CatalogItem :=
+  { code := "goblin_guard_shield", level := 35, slotType := "shield"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 15, resEarth := -5, resWater := -5, resAir := 15
+    crit := 0 }
+
+def item_gold_axe : CatalogItem :=
+  { code := "gold_axe", level := 30, slotType := "weapon"
+    attackFire := 0, attackEarth := 5, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_gold_boots : CatalogItem :=
+  { code := "gold_boots", level := 30, slotType := "boots"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 110
+    resFire := 0, resEarth := 8, resWater := 0, resAir := 8
+    crit := 0 }
+
+def item_gold_fishing_rod : CatalogItem :=
+  { code := "gold_fishing_rod", level := 30, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 5, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_gold_helm : CatalogItem :=
+  { code := "gold_helm", level := 30, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 160
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_gold_mask : CatalogItem :=
+  { code := "gold_mask", level := 30, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 160
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_gold_pickaxe : CatalogItem :=
+  { code := "gold_pickaxe", level := 30, slotType := "weapon"
+    attackFire := 0, attackEarth := 5, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_gold_platebody : CatalogItem :=
+  { code := "gold_platebody", level := 30, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 150
+    resFire := 0, resEarth := 6, resWater := 6, resAir := 0
+    crit := 0 }
+
+def item_gold_platelegs : CatalogItem :=
+  { code := "gold_platelegs", level := 30, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 150
+    resFire := 0, resEarth := 7, resWater := 0, resAir := 7
+    crit := 0 }
+
+def item_gold_ring : CatalogItem :=
+  { code := "gold_ring", level := 30, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_gold_shield : CatalogItem :=
+  { code := "gold_shield", level := 30, slotType := "shield"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 10, resEarth := 10, resWater := 10, resAir := 10
+    crit := 0 }
+
+def item_gold_sword : CatalogItem :=
+  { code := "gold_sword", level := 30, slotType := "weapon"
+    attackFire := 0, attackEarth := 60, attackWater := 0, attackAir := 20
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_golden_gloves : CatalogItem :=
+  { code := "golden_gloves", level := 30, slotType := "weapon"
+    attackFire := 0, attackEarth := 5, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_greater_dreadful_amulet : CatalogItem :=
+  { code := "greater_dreadful_amulet", level := 30, slotType := "amulet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 90
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_greater_dreadful_staff : CatalogItem :=
+  { code := "greater_dreadful_staff", level := 30, slotType := "weapon"
+    attackFire := 0, attackEarth := 20, attackWater := 60, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_greater_emerald_amulet : CatalogItem :=
+  { code := "greater_emerald_amulet", level := 40, slotType := "amulet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 130
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 3 }
+
+def item_greater_healing_rune : CatalogItem :=
+  { code := "greater_healing_rune", level := 40, slotType := "rune"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_greater_health_potion : CatalogItem :=
+  { code := "greater_health_potion", level := 40, slotType := "utility"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_greater_lifesteal_rune : CatalogItem :=
+  { code := "greater_lifesteal_rune", level := 40, slotType := "rune"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_greater_protection_rune : CatalogItem :=
+  { code := "greater_protection_rune", level := 40, slotType := "rune"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_greater_ruby_amulet : CatalogItem :=
+  { code := "greater_ruby_amulet", level := 40, slotType := "amulet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 130
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 3 }
+
+def item_greater_sapphire_amulet : CatalogItem :=
+  { code := "greater_sapphire_amulet", level := 40, slotType := "amulet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 130
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 3 }
+
+def item_greater_topaz_amulet : CatalogItem :=
+  { code := "greater_topaz_amulet", level := 40, slotType := "amulet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 130
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 3 }
+
+def item_greater_wooden_staff : CatalogItem :=
+  { code := "greater_wooden_staff", level := 10, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 24, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_hard_leather_armor : CatalogItem :=
+  { code := "hard_leather_armor", level := 20, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 90
+    resFire := 5, resEarth := 0, resWater := 0, resAir := 5
+    crit := 0 }
+
+def item_hard_leather_boots : CatalogItem :=
+  { code := "hard_leather_boots", level := 20, slotType := "boots"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 45
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_hard_leather_helmet : CatalogItem :=
+  { code := "hard_leather_helmet", level := 20, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 80
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 3 }
+
+def item_hard_leather_pants : CatalogItem :=
+  { code := "hard_leather_pants", level := 20, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 80
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 6
+    crit := 0 }
+
+def item_healing_aura_rune : CatalogItem :=
+  { code := "healing_aura_rune", level := 20, slotType := "rune"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_healing_rune : CatalogItem :=
+  { code := "healing_rune", level := 20, slotType := "rune"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_health_boost_potion : CatalogItem :=
+  { code := "health_boost_potion", level := 40, slotType := "utility"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 250
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_health_potion : CatalogItem :=
+  { code := "health_potion", level := 30, slotType := "utility"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_health_splash_potion : CatalogItem :=
+  { code := "health_splash_potion", level := 30, slotType := "utility"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_heart_amulet : CatalogItem :=
+  { code := "heart_amulet", level := 50, slotType := "amulet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 350
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_hell_armor : CatalogItem :=
+  { code := "hell_armor", level := 45, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 250
+    resFire := -10, resEarth := -10, resWater := -10, resAir := -10
+    crit := 5 }
+
+def item_hell_helmet : CatalogItem :=
+  { code := "hell_helmet", level := 45, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 260
+    resFire := -10, resEarth := -10, resWater := -10, resAir := -10
+    crit := 8 }
+
+def item_hell_legs_armor : CatalogItem :=
+  { code := "hell_legs_armor", level := 45, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 240
+    resFire := -10, resEarth := -10, resWater := -10, resAir := -10
+    crit := 7 }
+
+def item_hell_reaper : CatalogItem :=
+  { code := "hell_reaper", level := 45, slotType := "weapon"
+    attackFire := 65, attackEarth := 0, attackWater := 65, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 10 }
+
+def item_hell_ring : CatalogItem :=
+  { code := "hell_ring", level := 45, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 80
+    resFire := -10, resEarth := -10, resWater := -10, resAir := -10
+    crit := 5 }
+
+def item_hell_staff : CatalogItem :=
+  { code := "hell_staff", level := 45, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 115, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_highwayman_dagger : CatalogItem :=
+  { code := "highwayman_dagger", level := 15, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 23
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 35 }
+
+def item_hork_helmet : CatalogItem :=
+  { code := "hork_helmet", level := 40, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 200
+    resFire := 0, resEarth := 0, resWater := -5, resAir := -5
+    crit := 8 }
+
+def item_hunting_bow : CatalogItem :=
+  { code := "hunting_bow", level := 20, slotType := "weapon"
+    attackFire := 14, attackEarth := 0, attackWater := 0, attackAir := 15
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 35 }
+
+def item_iron_armor : CatalogItem :=
+  { code := "iron_armor", level := 10, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 50
+    resFire := 0, resEarth := 0, resWater := 2, resAir := 2
+    crit := 0 }
+
+def item_iron_axe : CatalogItem :=
+  { code := "iron_axe", level := 10, slotType := "weapon"
+    attackFire := 0, attackEarth := 5, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_iron_boots : CatalogItem :=
+  { code := "iron_boots", level := 10, slotType := "boots"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 40
+    resFire := 0, resEarth := 0, resWater := 5, resAir := 5
+    crit := 0 }
+
+def item_iron_dagger : CatalogItem :=
+  { code := "iron_dagger", level := 10, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 17
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 35 }
+
+def item_iron_helm : CatalogItem :=
+  { code := "iron_helm", level := 10, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 40
+    resFire := 4, resEarth := 4, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_iron_legs_armor : CatalogItem :=
+  { code := "iron_legs_armor", level := 10, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 50
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_iron_pickaxe : CatalogItem :=
+  { code := "iron_pickaxe", level := 10, slotType := "weapon"
+    attackFire := 0, attackEarth := 5, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_iron_ring : CatalogItem :=
+  { code := "iron_ring", level := 10, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_iron_shield : CatalogItem :=
+  { code := "iron_shield", level := 10, slotType := "shield"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 4, resEarth := 4, resWater := 4, resAir := 4
+    crit := 0 }
+
+def item_iron_sword : CatalogItem :=
+  { code := "iron_sword", level := 10, slotType := "weapon"
+    attackFire := 0, attackEarth := 24, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_jester_hat : CatalogItem :=
+  { code := "jester_hat", level := 35, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 200
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 10 }
+
+def item_king_slime_sword : CatalogItem :=
+  { code := "king_slime_sword", level := 15, slotType := "weapon"
+    attackFire := 9, attackEarth := 9, attackWater := 9, attackAir := 9
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 24 }
+
+def item_leather_armor : CatalogItem :=
+  { code := "leather_armor", level := 10, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 50
+    resFire := 2, resEarth := 2, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_leather_boots : CatalogItem :=
+  { code := "leather_boots", level := 10, slotType := "boots"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 40
+    resFire := 5, resEarth := 5, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_leather_gloves : CatalogItem :=
+  { code := "leather_gloves", level := 10, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 5
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_leather_hat : CatalogItem :=
+  { code := "leather_hat", level := 10, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 40
+    resFire := 0, resEarth := 0, resWater := 4, resAir := 4
+    crit := 0 }
+
+def item_leather_legs_armor : CatalogItem :=
+  { code := "leather_legs_armor", level := 10, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 50
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_lich_crown : CatalogItem :=
+  { code := "lich_crown", level := 30, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 160
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_life_amulet : CatalogItem :=
+  { code := "life_amulet", level := 5, slotType := "amulet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 30
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_life_crystal : CatalogItem :=
+  { code := "life_crystal", level := 30, slotType := "artifact"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 180
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_life_ring : CatalogItem :=
+  { code := "life_ring", level := 15, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 25
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_lifesteal_rune : CatalogItem :=
+  { code := "lifesteal_rune", level := 20, slotType := "rune"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_lightning_sword : CatalogItem :=
+  { code := "lightning_sword", level := 40, slotType := "weapon"
+    attackFire := 0, attackEarth := 22, attackWater := 0, attackAir := 50
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 35 }
+
+def item_lizard_boots : CatalogItem :=
+  { code := "lizard_boots", level := 30, slotType := "boots"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 110
+    resFire := 8, resEarth := 0, resWater := 0, resAir := 8
+    crit := 0 }
+
+def item_lizard_skin_armor : CatalogItem :=
+  { code := "lizard_skin_armor", level := 25, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 150
+    resFire := 5, resEarth := 0, resWater := 10, resAir := 0
+    crit := 0 }
+
+def item_lizard_skin_legs_armor : CatalogItem :=
+  { code := "lizard_skin_legs_armor", level := 25, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 140
+    resFire := 3, resEarth := 0, resWater := 6, resAir := 0
+    crit := 0 }
+
+def item_lost_amulet : CatalogItem :=
+  { code := "lost_amulet", level := 30, slotType := "amulet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 90
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_lost_world_map : CatalogItem :=
+  { code := "lost_world_map", level := 20, slotType := "artifact"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_lucky_wizard_hat : CatalogItem :=
+  { code := "lucky_wizard_hat", level := 15, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 50
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 3 }
+
+def item_magic_bow : CatalogItem :=
+  { code := "magic_bow", level := 35, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 14, attackAir := 47
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 35 }
+
+def item_magic_shield : CatalogItem :=
+  { code := "magic_shield", level := 50, slotType := "shield"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 100
+    resFire := 0, resEarth := 18, resWater := 18, resAir := 0
+    crit := 0 }
+
+def item_magic_wizard_hat : CatalogItem :=
+  { code := "magic_wizard_hat", level := 20, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 90
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_malefic_armor : CatalogItem :=
+  { code := "malefic_armor", level := 35, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 170
+    resFire := 10, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_malefic_crystal : CatalogItem :=
+  { code := "malefic_crystal", level := 35, slotType := "artifact"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_malefic_ring : CatalogItem :=
+  { code := "malefic_ring", level := 35, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 7 }
+
+def item_masterful_necklace : CatalogItem :=
+  { code := "masterful_necklace", level := 35, slotType := "amulet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 100
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_mesh_armor : CatalogItem :=
+  { code := "mesh_armor", level := 45, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 200
+    resFire := 0, resEarth := 0, resWater := 7, resAir := 7
+    crit := 7 }
+
+def item_mesh_legs_armor : CatalogItem :=
+  { code := "mesh_legs_armor", level := 45, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 200
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_minor_health_potion : CatalogItem :=
+  { code := "minor_health_potion", level := 20, slotType := "utility"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_mithril_axe : CatalogItem :=
+  { code := "mithril_axe", level := 40, slotType := "weapon"
+    attackFire := 0, attackEarth := 5, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_mithril_boots : CatalogItem :=
+  { code := "mithril_boots", level := 40, slotType := "boots"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 160
+    resFire := 8, resEarth := 8, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_mithril_fishing_rod : CatalogItem :=
+  { code := "mithril_fishing_rod", level := 40, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 5, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_mithril_gloves : CatalogItem :=
+  { code := "mithril_gloves", level := 40, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 5
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_mithril_helm : CatalogItem :=
+  { code := "mithril_helm", level := 40, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 300
+    resFire := 6, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_mithril_pickaxe : CatalogItem :=
+  { code := "mithril_pickaxe", level := 40, slotType := "weapon"
+    attackFire := 0, attackEarth := 5, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_mithril_platebody : CatalogItem :=
+  { code := "mithril_platebody", level := 40, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 200
+    resFire := 8, resEarth := 8, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_mithril_platelegs : CatalogItem :=
+  { code := "mithril_platelegs", level := 40, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 250
+    resFire := 7, resEarth := 0, resWater := 0, resAir := 7
+    crit := 0 }
+
+def item_mithril_ring : CatalogItem :=
+  { code := "mithril_ring", level := 40, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 175
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 4 }
+
+def item_mithril_shield : CatalogItem :=
+  { code := "mithril_shield", level := 40, slotType := "shield"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 15, resEarth := 0, resWater := 0, resAir := 15
+    crit := 0 }
+
+def item_mithril_sword : CatalogItem :=
+  { code := "mithril_sword", level := 40, slotType := "weapon"
+    attackFire := 30, attackEarth := 0, attackWater := 70, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_moonlight_staff : CatalogItem :=
+  { code := "moonlight_staff", level := 50, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 96, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 35 }
+
+def item_mushmush_bow : CatalogItem :=
+  { code := "mushmush_bow", level := 15, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 12, attackAir := 12
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 35 }
+
+def item_mushmush_jacket : CatalogItem :=
+  { code := "mushmush_jacket", level := 15, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 60
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 3 }
+
+def item_mushmush_wizard_hat : CatalogItem :=
+  { code := "mushmush_wizard_hat", level := 15, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 50
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 3 }
+
+def item_mushstaff : CatalogItem :=
+  { code := "mushstaff", level := 15, slotType := "weapon"
+    attackFire := 15, attackEarth := 15, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 24 }
+
+def item_novice_guide : CatalogItem :=
+  { code := "novice_guide", level := 10, slotType := "artifact"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 25
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_obsidian_armor : CatalogItem :=
+  { code := "obsidian_armor", level := 30, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 180
+    resFire := 8, resEarth := 0, resWater := 5, resAir := 0
+    crit := 0 }
+
+def item_obsidian_battleaxe : CatalogItem :=
+  { code := "obsidian_battleaxe", level := 30, slotType := "weapon"
+    attackFire := 0, attackEarth := 80, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_obsidian_helmet : CatalogItem :=
+  { code := "obsidian_helmet", level := 30, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 170
+    resFire := 5, resEarth := 5, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_obsidian_legs_armor : CatalogItem :=
+  { code := "obsidian_legs_armor", level := 30, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 170
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 3 }
+
+def item_old_boots : CatalogItem :=
+  { code := "old_boots", level := 20, slotType := "boots"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 90
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_perfect_pearl : CatalogItem :=
+  { code := "perfect_pearl", level := 20, slotType := "artifact"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_piggy_armor : CatalogItem :=
+  { code := "piggy_armor", level := 25, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 150
+    resFire := 10, resEarth := 5, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_piggy_helmet : CatalogItem :=
+  { code := "piggy_helmet", level := 25, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 110
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 3 }
+
+def item_piggy_pants : CatalogItem :=
+  { code := "piggy_pants", level := 25, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 140
+    resFire := 6, resEarth := 0, resWater := 3, resAir := 0
+    crit := 0 }
+
+def item_prospecting_amulet : CatalogItem :=
+  { code := "prospecting_amulet", level := 30, slotType := "amulet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 100
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_protection_rune : CatalogItem :=
+  { code := "protection_rune", level := 20, slotType := "rune"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_ring_of_chance : CatalogItem :=
+  { code := "ring_of_chance", level := 20, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 30
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 4 }
+
+def item_ring_of_the_adept : CatalogItem :=
+  { code := "ring_of_the_adept", level := 25, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 50
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_royal_skeleton_armor : CatalogItem :=
+  { code := "royal_skeleton_armor", level := 30, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 150
+    resFire := 6, resEarth := 0, resWater := 0, resAir := 6
+    crit := 0 }
+
+def item_royal_skeleton_helmet : CatalogItem :=
+  { code := "royal_skeleton_helmet", level := 30, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 160
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_royal_skeleton_pants : CatalogItem :=
+  { code := "royal_skeleton_pants", level := 30, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 150
+    resFire := 0, resEarth := 7, resWater := 7, resAir := 0
+    crit := 0 }
+
+def item_royal_skeleton_ring : CatalogItem :=
+  { code := "royal_skeleton_ring", level := 30, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 70
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_ruby_amulet : CatalogItem :=
+  { code := "ruby_amulet", level := 25, slotType := "amulet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 70
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_ruby_book : CatalogItem :=
+  { code := "ruby_book", level := 40, slotType := "artifact"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_ruby_ring : CatalogItem :=
+  { code := "ruby_ring", level := 30, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 3 }
+
+def item_sacred_ring : CatalogItem :=
+  { code := "sacred_ring", level := 40, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_sand_snakeskin_armor : CatalogItem :=
+  { code := "sand_snakeskin_armor", level := 45, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 230
+    resFire := 0, resEarth := 0, resWater := 7, resAir := 7
+    crit := 3 }
+
+def item_sand_snakeskin_bandana : CatalogItem :=
+  { code := "sand_snakeskin_bandana", level := 45, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 260
+    resFire := 0, resEarth := 0, resWater := 5, resAir := 0
+    crit := 0 }
+
+def item_sand_snakeskin_boots : CatalogItem :=
+  { code := "sand_snakeskin_boots", level := 45, slotType := "boots"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 240
+    resFire := 0, resEarth := 0, resWater := 8, resAir := 8
+    crit := 5 }
+
+def item_sand_snakeskin_pants : CatalogItem :=
+  { code := "sand_snakeskin_pants", level := 45, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 230
+    resFire := 5, resEarth := 0, resWater := 5, resAir := 0
+    crit := 0 }
+
+def item_sandwhisper_bag : CatalogItem :=
+  { code := "sandwhisper_bag", level := 50, slotType := "bag"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_sandwhisper_codex : CatalogItem :=
+  { code := "sandwhisper_codex", level := 50, slotType := "artifact"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 200
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_sanguine_edge_of_rosen : CatalogItem :=
+  { code := "sanguine_edge_of_rosen", level := 40, slotType := "weapon"
+    attackFire := 25, attackEarth := 75, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_sapphire_amulet : CatalogItem :=
+  { code := "sapphire_amulet", level := 25, slotType := "amulet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 70
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_sapphire_book : CatalogItem :=
+  { code := "sapphire_book", level := 40, slotType := "artifact"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_sapphire_ring : CatalogItem :=
+  { code := "sapphire_ring", level := 30, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 3 }
+
+def item_satchel : CatalogItem :=
+  { code := "satchel", level := 5, slotType := "bag"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_shuriken : CatalogItem :=
+  { code := "shuriken", level := 20, slotType := "weapon"
+    attackFire := 0, attackEarth := 15, attackWater := 0, attackAir := 14
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 35 }
+
+def item_skeleton_armor : CatalogItem :=
+  { code := "skeleton_armor", level := 20, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 90
+    resFire := 5, resEarth := 0, resWater := 0, resAir := 5
+    crit := 0 }
+
+def item_skeleton_helmet : CatalogItem :=
+  { code := "skeleton_helmet", level := 20, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 90
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_skeleton_pants : CatalogItem :=
+  { code := "skeleton_pants", level := 20, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 80
+    resFire := 6, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_skull_amulet : CatalogItem :=
+  { code := "skull_amulet", level := 20, slotType := "amulet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 40
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_skull_ring : CatalogItem :=
+  { code := "skull_ring", level := 20, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 20
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_skull_staff : CatalogItem :=
+  { code := "skull_staff", level := 20, slotType := "weapon"
+    attackFire := 40, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_skull_wand : CatalogItem :=
+  { code := "skull_wand", level := 25, slotType := "weapon"
+    attackFire := 25, attackEarth := 0, attackWater := 0, attackAir := 25
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_skullforged_armor : CatalogItem :=
+  { code := "skullforged_armor", level := 50, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 300
+    resFire := 5, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_skullforged_pants : CatalogItem :=
+  { code := "skullforged_pants", level := 50, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 250
+    resFire := 4, resEarth := 0, resWater := 0, resAir := 4
+    crit := 5 }
+
+def item_skullforged_ring : CatalogItem :=
+  { code := "skullforged_ring", level := 50, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 3 }
+
+def item_slime_shield : CatalogItem :=
+  { code := "slime_shield", level := 20, slotType := "shield"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 7, resEarth := 7, resWater := 7, resAir := 7
+    crit := 0 }
+
+def item_small_antidote : CatalogItem :=
+  { code := "small_antidote", level := 20, slotType := "utility"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_small_health_potion : CatalogItem :=
+  { code := "small_health_potion", level := 5, slotType := "utility"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_snakeskin_armor : CatalogItem :=
+  { code := "snakeskin_armor", level := 25, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 150
+    resFire := 0, resEarth := 5, resWater := 0, resAir := 10
+    crit := 0 }
+
+def item_snakeskin_boots : CatalogItem :=
+  { code := "snakeskin_boots", level := 20, slotType := "boots"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 80
+    resFire := 0, resEarth := 0, resWater := 8, resAir := 8
+    crit := 0 }
+
+def item_snakeskin_legs_armor : CatalogItem :=
+  { code := "snakeskin_legs_armor", level := 25, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 140
+    resFire := 0, resEarth := 3, resWater := 0, resAir := 6
+    crit := 0 }
+
+def item_spruce_fishing_rod : CatalogItem :=
+  { code := "spruce_fishing_rod", level := 10, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 5, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_steel_armor : CatalogItem :=
+  { code := "steel_armor", level := 20, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 90
+    resFire := 0, resEarth := 5, resWater := 5, resAir := 0
+    crit := 0 }
+
+def item_steel_axe : CatalogItem :=
+  { code := "steel_axe", level := 20, slotType := "weapon"
+    attackFire := 0, attackEarth := 5, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_steel_battleaxe : CatalogItem :=
+  { code := "steel_battleaxe", level := 20, slotType := "weapon"
+    attackFire := 0, attackEarth := 40, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_steel_boots : CatalogItem :=
+  { code := "steel_boots", level := 20, slotType := "boots"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 80
+    resFire := 8, resEarth := 8, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_steel_fishing_rod : CatalogItem :=
+  { code := "steel_fishing_rod", level := 20, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 5, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_steel_gloves : CatalogItem :=
+  { code := "steel_gloves", level := 20, slotType := "weapon"
+    attackFire := 0, attackEarth := 5, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_steel_helm : CatalogItem :=
+  { code := "steel_helm", level := 20, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 90
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_steel_legs_armor : CatalogItem :=
+  { code := "steel_legs_armor", level := 20, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 80
+    resFire := 0, resEarth := 0, resWater := 6, resAir := 0
+    crit := 0 }
+
+def item_steel_pickaxe : CatalogItem :=
+  { code := "steel_pickaxe", level := 20, slotType := "weapon"
+    attackFire := 0, attackEarth := 5, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_steel_ring : CatalogItem :=
+  { code := "steel_ring", level := 20, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_sticky_dagger : CatalogItem :=
+  { code := "sticky_dagger", level := 5, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 12
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 35 }
+
+def item_sticky_sword : CatalogItem :=
+  { code := "sticky_sword", level := 5, slotType := "weapon"
+    attackFire := 0, attackEarth := 16, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_stormforged_armor : CatalogItem :=
+  { code := "stormforged_armor", level := 25, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 150
+    resFire := 0, resEarth := 10, resWater := 5, resAir := 0
+    crit := 0 }
+
+def item_stormforged_pants : CatalogItem :=
+  { code := "stormforged_pants", level := 25, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 140
+    resFire := 0, resEarth := 6, resWater := 3, resAir := 0
+    crit := 0 }
+
+def item_strangold_armor : CatalogItem :=
+  { code := "strangold_armor", level := 35, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 150
+    resFire := 6, resEarth := 0, resWater := 6, resAir := 0
+    crit := 0 }
+
+def item_strangold_helmet : CatalogItem :=
+  { code := "strangold_helmet", level := 35, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 170
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_strangold_legs_armor : CatalogItem :=
+  { code := "strangold_legs_armor", level := 35, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 150
+    resFire := 0, resEarth := 0, resWater := 7, resAir := 7
+    crit := 0 }
+
+def item_strangold_sword : CatalogItem :=
+  { code := "strangold_sword", level := 35, slotType := "weapon"
+    attackFire := 45, attackEarth := 0, attackWater := 0, attackAir := 40
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_topaz_amulet : CatalogItem :=
+  { code := "topaz_amulet", level := 25, slotType := "amulet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 70
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_topaz_book : CatalogItem :=
+  { code := "topaz_book", level := 40, slotType := "artifact"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_topaz_ring : CatalogItem :=
+  { code := "topaz_ring", level := 30, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 3 }
+
+def item_tromatising_mask : CatalogItem :=
+  { code := "tromatising_mask", level := 20, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 90
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_vampire_bow : CatalogItem :=
+  { code := "vampire_bow", level := 25, slotType := "weapon"
+    attackFire := 36, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 35 }
+
+def item_vampiric_rune : CatalogItem :=
+  { code := "vampiric_rune", level := 40, slotType := "rune"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_vital_armor : CatalogItem :=
+  { code := "vital_armor", level := 50, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 300
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 5
+    crit := 5 }
+
+def item_vital_boots : CatalogItem :=
+  { code := "vital_boots", level := 50, slotType := "boots"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 170
+    resFire := 0, resEarth := 8, resWater := 8, resAir := 0
+    crit := 0 }
+
+def item_voidstone_axe : CatalogItem :=
+  { code := "voidstone_axe", level := 50, slotType := "weapon"
+    attackFire := 0, attackEarth := 5, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_voidstone_fishing_rod : CatalogItem :=
+  { code := "voidstone_fishing_rod", level := 50, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 5, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_voidstone_gloves : CatalogItem :=
+  { code := "voidstone_gloves", level := 50, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 5
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_voidstone_pickaxe : CatalogItem :=
+  { code := "voidstone_pickaxe", level := 50, slotType := "weapon"
+    attackFire := 0, attackEarth := 5, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_water_boost_potion : CatalogItem :=
+  { code := "water_boost_potion", level := 10, slotType := "utility"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_water_bow : CatalogItem :=
+  { code := "water_bow", level := 5, slotType := "weapon"
+    attackFire := 0, attackEarth := 0, attackWater := 16, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 35 }
+
+def item_water_res_potion : CatalogItem :=
+  { code := "water_res_potion", level := 40, slotType := "utility"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 10, resAir := 0
+    crit := 0 }
+
+def item_water_ring : CatalogItem :=
+  { code := "water_ring", level := 15, slotType := "ring"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_water_shield : CatalogItem :=
+  { code := "water_shield", level := 40, slotType := "shield"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := -10, resWater := 25, resAir := 0
+    crit := 0 }
+
+def item_white_knight_armor : CatalogItem :=
+  { code := "white_knight_armor", level := 40, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 180
+    resFire := 7, resEarth := 7, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_white_knight_helmet : CatalogItem :=
+  { code := "white_knight_helmet", level := 40, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 200
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 3 }
+
+def item_white_knight_pants : CatalogItem :=
+  { code := "white_knight_pants", level := 40, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 180
+    resFire := 7, resEarth := 0, resWater := 0, resAir := 7
+    crit := 0 }
+
+def item_white_knight_shield : CatalogItem :=
+  { code := "white_knight_shield", level := 40, slotType := "shield"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 15, resWater := 0, resAir := 15
+    crit := 0 }
+
+def item_wisdom_amulet : CatalogItem :=
+  { code := "wisdom_amulet", level := 15, slotType := "amulet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 30
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_wolf_ears : CatalogItem :=
+  { code := "wolf_ears", level := 15, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 60
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_wooden_club : CatalogItem :=
+  { code := "wooden_club", level := 25, slotType := "weapon"
+    attackFire := 0, attackEarth := 36, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 35 }
+
+def item_wooden_shield : CatalogItem :=
+  { code := "wooden_shield", level := 1, slotType := "shield"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 2, resEarth := 2, resWater := 2, resAir := 2
+    crit := 0 }
+
+def item_wooden_staff : CatalogItem :=
+  { code := "wooden_staff", level := 1, slotType := "weapon"
+    attackFire := 0, attackEarth := 8, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_wooden_stick : CatalogItem :=
+  { code := "wooden_stick", level := 1, slotType := "weapon"
+    attackFire := 0, attackEarth := 4, attackWater := 0, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def item_wratharmor : CatalogItem :=
+  { code := "wratharmor", level := 40, slotType := "body_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 180
+    resFire := 0, resEarth := 0, resWater := 7, resAir := 7
+    crit := 0 }
+
+def item_wrathelmet : CatalogItem :=
+  { code := "wrathelmet", level := 40, slotType := "helmet"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 200
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_wrathpants : CatalogItem :=
+  { code := "wrathpants", level := 40, slotType := "leg_armor"
+    attackFire := 0, attackEarth := 0, attackWater := 0, attackAir := 0
+    hpBonus := 180
+    resFire := 7, resEarth := 7, resWater := 0, resAir := 0
+    crit := 0 }
+
+def item_wrathsword : CatalogItem :=
+  { code := "wrathsword", level := 40, slotType := "weapon"
+    attackFire := 0, attackEarth := 70, attackWater := 30, attackAir := 0
+    hpBonus := 0
+    resFire := 0, resEarth := 0, resWater := 0, resAir := 0
+    crit := 5 }
+
+def itemCatalog : List CatalogItem :=
+  [item_adamantite_axe, item_adamantite_boots, item_adamantite_fishing_rod, item_adamantite_gloves, item_adamantite_mask, item_adamantite_pickaxe, item_adamantite_platebody, item_adamantite_platelegs, item_adamantite_ring, item_adamantite_shield, item_adamantite_sword, item_adventurer_boots, item_adventurer_helmet, item_adventurer_pants, item_adventurer_vest, item_air_and_water_amulet, item_air_boost_potion, item_air_res_potion, item_air_ring, item_air_shield, item_amulet_of_the_grand_master, item_ancestral_talisman, item_ancient_jean, item_antidote, item_apprentice_gloves, item_backpack, item_bandit_armor, item_battlestaff, item_batwing_helmet, item_blade_of_hell, item_bloodblade, item_bow_from_hell, item_burn_rune, item_celest_ring, item_conjurer_cloak, item_conjurer_skirt, item_copper_armor, item_copper_axe, item_copper_boots, item_copper_dagger, item_copper_helmet, item_copper_legs_armor, item_copper_pickaxe, item_copper_ring, item_corrupted_crown, item_corrupted_skull, item_corrupted_stone_amulet, item_cultist_boots, item_cultist_cloak, item_cultist_hat, item_cultist_pants, item_cursed_hat, item_cursed_sceptre, item_dark_horned_helmet, item_darkforged_boots, item_darkforged_helmet, item_darkforged_plate, item_darkforged_shield, item_death_knight_sword, item_demoniac_dagger, item_demoniac_shield, item_desert_whip, item_desert_wrap, item_diabolic_elixir, item_diamond_amulet, item_diamond_sword, item_divinity_ring, item_dreadful_amulet, item_dreadful_armor, item_dreadful_battleaxe, item_dreadful_ring, item_dreadful_shield, item_dreadful_staff, item_duskarmor, item_duskpants, item_dust_amulet, item_dust_helmet, item_dust_sword, item_earth_boost_potion, item_earth_res_potion, item_earth_ring, item_earth_shield, item_elderwood_staff, item_emerald_amulet, item_emerald_book, item_emerald_ring, item_enchanted_antidote, item_enchanted_boost_potion, item_enchanted_bow, item_enchanted_health_potion, item_enchanted_health_splash_potion, item_enchanter_boots, item_enchanter_pants, item_eternal_red_ring, item_eternity_ring, item_feather_coat, item_fire_and_earth_amulet, item_fire_boost_potion, item_fire_bow, item_fire_res_potion, item_fire_ring, item_fire_shield, item_fire_staff, item_fishing_net, item_flying_boots, item_forest_ring, item_forest_whip, item_goblin_guard_shield, item_gold_axe, item_gold_boots, item_gold_fishing_rod, item_gold_helm, item_gold_mask, item_gold_pickaxe, item_gold_platebody, item_gold_platelegs, item_gold_ring, item_gold_shield, item_gold_sword, item_golden_gloves, item_greater_dreadful_amulet, item_greater_dreadful_staff, item_greater_emerald_amulet, item_greater_healing_rune, item_greater_health_potion, item_greater_lifesteal_rune, item_greater_protection_rune, item_greater_ruby_amulet, item_greater_sapphire_amulet, item_greater_topaz_amulet, item_greater_wooden_staff, item_hard_leather_armor, item_hard_leather_boots, item_hard_leather_helmet, item_hard_leather_pants, item_healing_aura_rune, item_healing_rune, item_health_boost_potion, item_health_potion, item_health_splash_potion, item_heart_amulet, item_hell_armor, item_hell_helmet, item_hell_legs_armor, item_hell_reaper, item_hell_ring, item_hell_staff, item_highwayman_dagger, item_hork_helmet, item_hunting_bow, item_iron_armor, item_iron_axe, item_iron_boots, item_iron_dagger, item_iron_helm, item_iron_legs_armor, item_iron_pickaxe, item_iron_ring, item_iron_shield, item_iron_sword, item_jester_hat, item_king_slime_sword, item_leather_armor, item_leather_boots, item_leather_gloves, item_leather_hat, item_leather_legs_armor, item_lich_crown, item_life_amulet, item_life_crystal, item_life_ring, item_lifesteal_rune, item_lightning_sword, item_lizard_boots, item_lizard_skin_armor, item_lizard_skin_legs_armor, item_lost_amulet, item_lost_world_map, item_lucky_wizard_hat, item_magic_bow, item_magic_shield, item_magic_wizard_hat, item_malefic_armor, item_malefic_crystal, item_malefic_ring, item_masterful_necklace, item_mesh_armor, item_mesh_legs_armor, item_minor_health_potion, item_mithril_axe, item_mithril_boots, item_mithril_fishing_rod, item_mithril_gloves, item_mithril_helm, item_mithril_pickaxe, item_mithril_platebody, item_mithril_platelegs, item_mithril_ring, item_mithril_shield, item_mithril_sword, item_moonlight_staff, item_mushmush_bow, item_mushmush_jacket, item_mushmush_wizard_hat, item_mushstaff, item_novice_guide, item_obsidian_armor, item_obsidian_battleaxe, item_obsidian_helmet, item_obsidian_legs_armor, item_old_boots, item_perfect_pearl, item_piggy_armor, item_piggy_helmet, item_piggy_pants, item_prospecting_amulet, item_protection_rune, item_ring_of_chance, item_ring_of_the_adept, item_royal_skeleton_armor, item_royal_skeleton_helmet, item_royal_skeleton_pants, item_royal_skeleton_ring, item_ruby_amulet, item_ruby_book, item_ruby_ring, item_sacred_ring, item_sand_snakeskin_armor, item_sand_snakeskin_bandana, item_sand_snakeskin_boots, item_sand_snakeskin_pants, item_sandwhisper_bag, item_sandwhisper_codex, item_sanguine_edge_of_rosen, item_sapphire_amulet, item_sapphire_book, item_sapphire_ring, item_satchel, item_shuriken, item_skeleton_armor, item_skeleton_helmet, item_skeleton_pants, item_skull_amulet, item_skull_ring, item_skull_staff, item_skull_wand, item_skullforged_armor, item_skullforged_pants, item_skullforged_ring, item_slime_shield, item_small_antidote, item_small_health_potion, item_snakeskin_armor, item_snakeskin_boots, item_snakeskin_legs_armor, item_spruce_fishing_rod, item_steel_armor, item_steel_axe, item_steel_battleaxe, item_steel_boots, item_steel_fishing_rod, item_steel_gloves, item_steel_helm, item_steel_legs_armor, item_steel_pickaxe, item_steel_ring, item_sticky_dagger, item_sticky_sword, item_stormforged_armor, item_stormforged_pants, item_strangold_armor, item_strangold_helmet, item_strangold_legs_armor, item_strangold_sword, item_topaz_amulet, item_topaz_book, item_topaz_ring, item_tromatising_mask, item_vampire_bow, item_vampiric_rune, item_vital_armor, item_vital_boots, item_voidstone_axe, item_voidstone_fishing_rod, item_voidstone_gloves, item_voidstone_pickaxe, item_water_boost_potion, item_water_bow, item_water_res_potion, item_water_ring, item_water_shield, item_white_knight_armor, item_white_knight_helmet, item_white_knight_pants, item_white_knight_shield, item_wisdom_amulet, item_wolf_ears, item_wooden_club, item_wooden_shield, item_wooden_staff, item_wooden_stick, item_wratharmor, item_wrathelmet, item_wrathpants, item_wrathsword]
 
 end Formal.Liveness.GameDataFixture

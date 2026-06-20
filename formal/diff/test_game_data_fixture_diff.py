@@ -34,13 +34,14 @@ from typing import Any
 import httpx
 import pytest
 
+from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.config import Config
 
-SNAPSHOT_PATH = (
-    Path(__file__).resolve().parents[1] / "sim" / "game_data_snapshot.json"
-)
+SIM_DIR = Path(__file__).resolve().parents[1] / "sim"
+FORMAL_DIR = Path(__file__).resolve().parents[1]
+SNAPSHOT_PATH = SIM_DIR / "game_data_snapshot.json"
 
 
 def _load_snapshot() -> dict[str, Any]:
@@ -161,3 +162,32 @@ def test_snapshot_recipe_count_matches_lean_fixture() -> None:
         f"Regenerate the Lean fixture: "
         f"`uv run python formal/sim/generate_lean_fixture.py`."
     )
+
+
+def test_monster_catalog_matches_snapshot() -> None:
+    snapshot = json.loads((SIM_DIR / "game_data_snapshot.json").read_text())
+    fixture = (FORMAL_DIR / "Formal" / "Liveness" / "GameDataFixture.lean").read_text()
+    # every monster code in the snapshot appears as a monster_<safe> def
+    for code in snapshot["monster_level"]:
+        safe = "".join(c if c.isalnum() else "_" for c in code)
+        assert f"def monster_{safe} : CatalogMonster" in fixture, code
+    # spot-check one fully-specified monster
+    assert 'code := "bandit_lizard"' in fixture
+    assert "level := 25" in fixture
+    # the item catalog is emitted with equippable items + a slotType
+    assert "def itemCatalog : List CatalogItem" in fixture
+    assert "slotType :=" in fixture
+    # the item catalog includes a known weapon
+    assert 'code := "steel_battleaxe"' in fixture
+    # no non-equippable resource type in item catalog
+    snapshot_items = snapshot["item_stats"]
+    non_equippable = [
+        code for code, s in snapshot_items.items()
+        if s["type"] not in ITEM_TYPE_TO_SLOTS
+    ]
+    for code in non_equippable:
+        safe = "".join(c if c.isalnum() else "_" for c in code)
+        assert f'def item_{safe} : CatalogItem' not in fixture, (
+            f"Non-equippable item {code!r} (type={snapshot_items[code]['type']!r}) "
+            "should not appear in itemCatalog"
+        )
