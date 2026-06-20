@@ -66,6 +66,7 @@ from artifactsmmo_cli.ai.tiers import (
     StrategyDecision,
     StrategyEngine,
 )
+from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal
 from artifactsmmo_cli.ai.tiers.root_progress import root_progress_value
@@ -227,11 +228,10 @@ class GamePlayer:
         b = self._blockers.get("bank")
         return b.required_level if b else 0
 
-    def run(self) -> None:
-        """Main loop: sense → select goal → plan → act."""
-        client_manager = ClientManager()
-        client = client_manager.client
-
+    def _initialize(self, client: AuthenticatedClient) -> None:
+        """Load game data, build the strategy engine, fetch state, and seed blocker
+        memory + the cycle-0 full-bank-refresh sentinel. Shared by `run()` and the
+        one-shot `plan_once()` so both sense the world identically before planning."""
         print(f"[{self._now()}] Loading game data...")
         self.game_data = GameData.load(
             client,
@@ -282,6 +282,51 @@ class GamePlayer:
         # withdraw applicability are all inert when `bank_items` is None). Any
         # value at/above the periodic threshold triggers the refresh on cycle 0.
         self._actions_since_full_refresh = BANK_REFRESH_FORCE_SENTINEL
+
+    def plan_once(self) -> PlanReport:
+        """Sense the world and compute ONE planning cycle WITHOUT executing — the
+        `plan` CLI command. Mirrors run()'s per-cycle decide+select (same refresh,
+        gear-latch, combat target, servable filter, crafting-target keep-set) so the
+        printed plan is exactly what the bot would do this cycle. No cooldown wait, no
+        action execution, no state mutation on the server."""
+        client = ClientManager().client
+        self._initialize(client)
+        self._maybe_periodic_refresh(client)
+        assert self.state is not None and self.game_data is not None
+        assert self._strategy is not None
+        state = self.state
+        game_data = self.game_data
+        self._maybe_retry_bank()
+        prev = self._prev_level if self._prev_level is not None else state.level
+        self._gear_latch.update(prev, state, self._last_outcome, game_data)
+        self._prev_level = state.level
+        self._arbiter.set_cycle(self._cycle_counter)
+        combat_monster = self._winnable_farm_target()
+        ctx = self._selection_context(combat_monster)
+        decision = self._strategy.decide(
+            state, game_data, history=self.history, combat_monster=combat_monster,
+            last_chosen_root=self._last_strategy_root,
+            step_servable=self._step_servable(state, game_data, ctx))
+        step = decision.chosen_step
+        crafting_target = step.code if isinstance(step, ObtainItem) else None
+        if crafting_target is None:
+            for alt in getattr(decision, "fallback_steps", []):
+                if isinstance(alt, ObtainItem):
+                    crafting_target = alt.code
+                    break
+        self.state = state = replace(state, crafting_target=crafting_target)
+        actions = self._build_actions()
+        selected_goal, plan, goals_tried = self._arbiter.select(
+            decision, state, game_data, actions, ctx,
+            suppressed=set(self._suppressed_goals), objective=self._objective)
+        return PlanReport(decision=decision, selected_goal=selected_goal,
+                          plan=list(plan), goals_tried=goals_tried)
+
+    def run(self) -> None:
+        """Main loop: sense → select goal → plan → act."""
+        client_manager = ClientManager()
+        client = client_manager.client
+        self._initialize(client)
 
         print(f"[{self._now()}] Starting play loop for {self.character}")
 
