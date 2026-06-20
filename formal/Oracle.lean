@@ -22,6 +22,7 @@ open Formal.NearestTile
 open Formal.Liveness.MeansKind (allInLadderOrder)
 open Formal.Liveness.ProductionLadder (fires productionLadder)
 open Formal.Liveness.LadderEval (inertLadderState meansKindName)
+open Formal.Liveness.StickySelect (Cand stickyChoose nextLast)
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
 def runCalculatePath (sx sy ex ey : Int) : Json :=
@@ -1987,10 +1988,37 @@ def runLadder (args : Array Json) : Json :=
     | none => Json.null
   Json.mkObj (firesFields ++ [("selected", selected)])
 
+/-- Tier-2 sticky override. args: [n, ratioNum, ratioDen, lastChosen("" = none),
+    then per candidate: repr, scoreNum, scoreDen]. Returns the chosen repr or null. -/
+def runStickyChoose (args : Array Json) : Json :=
+  let n := (intArg args 0).toNat
+  let ratio : Rat := (intArg args 1 : Rat) / (intArg args 2 : Rat)
+  let lcStr := strArg args 3
+  let lastChosen : Option String := if lcStr == "" then none else some lcStr
+  let cands : List Cand := (List.range n).map (fun i =>
+    { repr := strArg args (4 + 3 * i),
+      score := (intArg args (5 + 3 * i) : Rat) / (intArg args (6 + 3 * i) : Rat) })
+  match stickyChoose cands lastChosen ratio with
+  | some c => Json.str c.repr
+  | none   => Json.null
+
+/-- Progress-gated feedback. args: [hasChosen(0/1), chosenRepr, progressed(0/1)].
+    Returns the next-cycle lastChosen repr or null. -/
+def runNextLast (args : Array Json) : Json :=
+  let chosen : Option Cand :=
+    if intArg args 0 != 0 then some { repr := strArg args 1, score := 0 } else none
+  match nextLast chosen (intArg args 2 != 0) with
+  | some s => Json.str s
+  | none   => Json.null
+
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
   let args := ((item.getObjValD "args" |>.getArr?).toOption.getD #[])
-  if kind == "calculate_path" then
+  if kind == "sticky_choose" then
+    runStickyChoose args
+  else if kind == "next_last" then
+    runNextLast args
+  else if kind == "calculate_path" then
     runCalculatePath (intArg args 0) (intArg args 1) (intArg args 2) (intArg args 3)
   else if kind == "task_batch" then
     -- args: [taskBranch(0/1), remaining, mats, free, held]

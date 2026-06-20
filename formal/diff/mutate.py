@@ -43,6 +43,7 @@ UPGRADE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "up
 SCALAR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "scalar_core.py"
 PLANNER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "planner.py"
 ARBITER_SELECT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "arbiter_select.py"
+STICKY_SELECT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "sticky_select_core.py"
 TASK_DECISION_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_decision_core.py"
 OBJECTIVE_COMPLETION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "objective_completion.py"
 LOW_YIELD_BOUNDARY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "low_yield_boundary.py"
@@ -1063,6 +1064,34 @@ ARBITER_SELECT_MUTATIONS = [
     ("arbiter_select: commit on guard win (drop is_means guard)",
      "            new_committed = cand.repr_ if cand.is_means else None",
      "            new_committed = cand.repr_"),
+]
+
+
+# sticky_select_core mutations -- anchors for sticky_choose / next_last (Lean-proved
+# StickySelect.stickyChoose / nextLast). The differential
+# (test_sticky_select_diff.py) kills each.
+STICKY_SELECT_MUTATIONS = [
+    # sticky never wins: keep top even when it fails to dominate the sticky root.
+    ("sticky_select: sticky never kept (return top instead of sticky)",
+     "    if top.score <= ratio * sticky.score:\n        return sticky",
+     "    if top.score <= ratio * sticky.score:\n        return top"),
+    # dominance comparison flipped: <= -> >. Sticky kept exactly when it should lose.
+    ("sticky_select: dominance comparison flip (<= -> >)",
+     "    if top.score <= ratio * sticky.score:",
+     "    if top.score > ratio * sticky.score:"),
+    # drop the dominance ratio: threshold becomes sticky.score, so a top that should
+    # be kept (ratio*sticky < top <= ... ) wrongly yields to sticky.
+    ("sticky_select: drop dominance ratio",
+     "    if top.score <= ratio * sticky.score:",
+     "    if top.score <= sticky.score:"),
+    # vanished-sticky fallback returns None instead of top -> bot stalls.
+    ("sticky_select: vanished sticky returns None",
+     "    if sticky is None:\n        return top",
+     "    if sticky is None:\n        return None"),
+    # progress gate dropped: feed the anchor back even without progress (the zombie).
+    ("sticky_select: next_last ignores progressed (always feeds anchor)",
+     "    return chosen_repr if progressed else None",
+     "    return chosen_repr"),
 ]
 
 
@@ -3266,6 +3295,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_planner_admissibility_diff.py", survivors)
     run_group(ARBITER_SELECT_SRC, ARBITER_SELECT_MUTATIONS,
               "formal/diff/test_arbiter_select_diff.py", survivors)
+    run_group(STICKY_SELECT_SRC, STICKY_SELECT_MUTATIONS,
+              "formal/diff/test_sticky_select_diff.py", survivors)
     run_group(TASK_DECISION_CORE_SRC, TASK_DECISION_MUTATIONS,
               "formal/diff/test_task_decision_diff.py", survivors)
     run_group(OBJECTIVE_COMPLETION_SRC, WEIGHTED_REMAINING_MUTATIONS,
