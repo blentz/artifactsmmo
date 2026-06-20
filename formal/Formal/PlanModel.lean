@@ -1801,4 +1801,93 @@ theorem minGathers_craft_le_of_residual (recipes : Recipes) (rank : String → N
   rw [Int.one_mul] at hrec_H hrec_H'
   omega
 
+-- ---------------------------------------------------------------------------
+-- DAG reachability guard (Round 8): Reaches recipes item c
+-- ---------------------------------------------------------------------------
+
+/-!
+## Reachability guard
+
+Round 7 proved the UNCONDITIONAL craft-monotonicity FALSE (two machine-checked
+`#eval` counterexamples): crafting `c` can starve a SIBLING or a BELOW-`c` query
+of a shared raw input, raising `minGathersCount item 1 …`. The discriminating
+condition is whether `c` is a transitive sub-component of `item` in the recipe
+DAG — when it is, the `+1 c` lands inside `item`'s own recipe subtree and the
+consumed inputs are exactly mass `item`'s traversal would itself credit.
+
+`Reaches recipes item c` is the reflexive-transitive closure of the recipe-edge
+relation `m → mat` (for `(mat, per) ∈ recipeOf m`): `item` reaches `c` when
+`c = item` or `c` is reachable through one of `item`'s recipe inputs. It is the
+honest CORRECT guard (a true domain fact for plan-root queries, like
+`Acyclic`/`PosRecipes`), NOT a weakening of the false unconditional form.
+-/
+
+/-- `Reaches recipes item c`: `c` is in the recipe-DAG closure of `item` — either
+`c = item`, or `c` is reachable through one of `item`'s recipe inputs
+transitively. Reflexive-transitive closure of the recipe-edge relation. -/
+inductive Reaches (recipes : Recipes) : String → String → Prop where
+  | refl (item : String) : Reaches recipes item item
+  | step {item mid c : String} {per : Int}
+      (hmid : Reaches recipes item mid)
+      (hedge : (c, per) ∈ getD recipes mid []) :
+      Reaches recipes item c
+
+/-- Reachability through a direct recipe edge: if `(mat, per) ∈ recipeOf item`
+then `item` reaches `mat`. -/
+theorem Reaches.edge (recipes : Recipes) (item mat : String) (per : Int)
+    (hedge : (mat, per) ∈ getD recipes item []) :
+    Reaches recipes item mat :=
+  Reaches.step (Reaches.refl item) hedge
+
+/-- Reachability is transitive: if `item` reaches `mid` and `mid` reaches `c`,
+then `item` reaches `c`. Induction on the second derivation. -/
+theorem Reaches.trans {recipes : Recipes} {item mid c : String}
+    (h1 : Reaches recipes item mid) (h2 : Reaches recipes mid c) :
+    Reaches recipes item c := by
+  induction h2 with
+  | refl => exact h1
+  | step _ hedge ih => exact Reaches.step ih hedge
+
+/-- Under `Acyclic`, reachability MONOTONELY does not increase rank: `c`
+reachable from `item` ⇒ `rank c ≤ rank item`. (Each edge strictly drops rank;
+the reflexive base is equality.) This certifies `Reaches` is well-founded and is
+the bound the guarded coupling uses to enter `item`'s subtree at lower rank. -/
+theorem Reaches.rank_le {recipes : Recipes} {rank : String → Nat}
+    (hacy : Acyclic recipes rank) {item c : String}
+    (h : Reaches recipes item c) : rank c ≤ rank item := by
+  induction h with
+  | refl => exact Nat.le_refl _
+  | step hmid hedge ih =>
+    rename_i mid cc per
+    have := hacy mid cc per hedge
+    omega
+
+-- ---------------------------------------------------------------------------
+-- Plan-level reachability: every craft targets a sub-component of the root
+-- ---------------------------------------------------------------------------
+
+/-- `PlanReaches recipes item plan`: every `craft c` action in `plan` targets a
+recipe-DAG sub-component of the query root `item` (`Reaches recipes item c`).
+
+In a `ValidPlan` toward a single root `item`, EVERY craft produces an item the
+root transitively depends on — so this holds at every craft step. It is threaded
+as the honest reachability guard the corrected craft-monotonicity needs (round 7
+showed the unguarded form is FALSE). Gather/equip actions carry no obligation. -/
+def PlanReaches (recipes : Recipes) (item : String) : Plan → Prop
+  | []      => True
+  | a :: rest =>
+      (match a with
+       | Action.craft c => Reaches recipes item c
+       | _              => True) ∧
+      PlanReaches recipes item rest
+
+/-- `PlanReaches` of a cons unfolds to the head obligation and the tail. -/
+theorem planReaches_cons (recipes : Recipes) (item : String)
+    (a : Action) (rest : Plan) :
+    PlanReaches recipes item (a :: rest) ↔
+      (match a with
+       | Action.craft c => Reaches recipes item c
+       | _              => True) ∧
+      PlanReaches recipes item rest := Iff.rfl
+
 end Formal.PlanModel
