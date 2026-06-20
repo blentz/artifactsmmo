@@ -1697,6 +1697,290 @@ theorem minGathers_mono (recipes : Recipes) (rank : String → Nat)
               r1 r2 hrk' hpo' hr2 hr21 htnew hstep.2 hsn1 hsn2
 
 -- ---------------------------------------------------------------------------
+-- costMass monotone under Dom (Round 10): NoDupKeys invariant + preservation
+-- ---------------------------------------------------------------------------
+
+/-!
+## `costMass` monotone under `Dom` (no-duplicate-keys invariant)
+
+`costMass` sums the RAW assoc-list (`Σ v · wf c` over entries), but `Dom` is the
+`getD`-VIEW (first entry per key). A duplicate key would therefore double-count in
+`costMass` while contributing once to the `getD`-view, so `Dom a b →
+costMass a ≤ costMass b` needs a **no-duplicate-keys** invariant. `NoDupKeys` is a
+faithful inventory fact — production holdings are a dict (one entry per item code)
+— and it is PRESERVED by the model's mutators (`setD`/`consumeHoldings`/
+`applyAction`), proved below; so it is an honest domain hypothesis, not a
+weakening. `EntriesNonNeg` (every stored value `≥ 0`) is the entry-wise companion
+that propagates to tails (unlike the `getD`-view `NonNeg`, which a shadowed
+duplicate can violate).
+-/
+
+/-- `NoDupKeys m`: the head key never reappears in the tail, recursively — every
+item code has at most one entry. A faithful inventory fact (holdings are a dict),
+preserved by the model's mutators (see below). -/
+def NoDupKeys : Dict Int → Prop
+  | [] => True
+  | (k, _) :: rest => (∀ v, (k, v) ∉ rest) ∧ NoDupKeys rest
+
+/-- Erase the first entry whose key is `k` (the dict-level key delete). -/
+def eraseKey (m : Dict Int) (k : String) : Dict Int :=
+  match m with
+  | [] => []
+  | (k', v') :: rest => if k' == k then rest else (k', v') :: eraseKey rest k
+
+/-- `EntriesNonNeg m`: every STORED value is `≥ 0` (entry-wise, so it propagates
+to tails — `NonNeg`, the `getD`-view, does not, since a duplicate key can be
+shadowed). Under `NoDupKeys` it coincides with `NonNeg`. -/
+def EntriesNonNeg (m : Dict Int) : Prop := ∀ k v, (k, v) ∈ m → 0 ≤ v
+
+/-- `wf` is `≥ 0` at any fuel: the empty-owned gather count of one unit is a
+count (`minGathers_count_nonneg` at `t = 0`). -/
+theorem wf_nonneg (F : Nat) (item : String) (recipes : Recipes)
+    (hpos : PosRecipes recipes) : 0 ≤ wf F item recipes := by
+  unfold wf
+  have := minGathers_count_nonneg recipes hpos F item 1 0 [] (Int.le_refl 0) (by omega)
+  omega
+
+/-- `costMass` of an entry-wise-nonneg dict is `≥ 0` (each term `v · wf c ≥ 0`). -/
+theorem costMass_nonneg (F : Nat) (recipes : Recipes) (b : Dict Int)
+    (heb : EntriesNonNeg b) (hpos : PosRecipes recipes) : 0 ≤ costMass F b recipes := by
+  induction b with
+  | nil => simp
+  | cons kv rest ih =>
+    obtain ⟨c, v⟩ := kv; rw [costMass_cons]
+    have hv : 0 ≤ v := heb c v List.mem_cons_self
+    have := Int.mul_nonneg hv (wf_nonneg F c recipes hpos)
+    have hrest := ih (fun k' w hw => heb k' w (List.mem_cons_of_mem _ hw)); omega
+
+/-- An absent key reads the default `0`. -/
+theorem getD_zero_of_absent (m : Dict Int) (k : String) (h : ∀ v, (k, v) ∉ m) :
+    getD m k 0 = 0 := by
+  induction m with
+  | nil => rfl
+  | cons kv rest ih =>
+    obtain ⟨a, b⟩ := kv
+    by_cases hak : a = k
+    · subst hak; exact absurd List.mem_cons_self (h b)
+    · rw [getD_cons_ne _ _ _ _ _ hak]; exact ih (fun v hv => h v (List.mem_cons_of_mem _ hv))
+
+/-- The head key is absent from the tail (`NoDupKeys` head fact) ⇒ reads `0`. -/
+theorem getD_head_absent_zero {a : String} {rest : Dict Int} (hhead : ∀ v, (a, v) ∉ rest) :
+    getD rest a 0 = 0 := getD_zero_of_absent rest a hhead
+
+/-- **COST-MASS DECOMPOSITION at a key.** Under `NoDupKeys`, the cost-mass of `m`
+splits as `getD m k · wf k` (the unique `k`-contribution, `0` if `k` is absent)
+plus the cost-mass of `m` with `k` erased. The workhorse for `costMass`-mono. -/
+theorem costMass_erase (F : Nat) (recipes : Recipes) (m : Dict Int) (k : String)
+    (hnd : NoDupKeys m) :
+    costMass F m recipes = getD m k 0 * wf F k recipes + costMass F (eraseKey m k) recipes := by
+  induction m with
+  | nil => simp [eraseKey, getD]
+  | cons kv rest ih =>
+    obtain ⟨a, b⟩ := kv; obtain ⟨hhead, htail⟩ := hnd
+    by_cases hak : a = k
+    · subst hak; rw [eraseKey]; simp only [beq_self_eq_true, if_true]
+      rw [getD_cons_self, costMass_cons]
+    · rw [eraseKey]; simp only [beq_iff_eq, if_neg hak]
+      rw [costMass_cons, costMass_cons, getD_cons_ne _ _ _ _ _ hak, ih htail]
+      generalize b * wf F a recipes = X; generalize getD rest k 0 * wf F k recipes = Y; omega
+
+/-- Every entry of `eraseKey m k` is an entry of `m`. -/
+theorem mem_eraseKey {m : Dict Int} {k k' : String} {v : Int}
+    (h : (k', v) ∈ eraseKey m k) : (k', v) ∈ m := by
+  induction m with
+  | nil => simp [eraseKey] at h
+  | cons kv rest ih =>
+    obtain ⟨a, b⟩ := kv
+    by_cases hak : a = k
+    · subst hak; rw [eraseKey] at h; simp only [beq_self_eq_true, if_true] at h
+      exact List.mem_cons_of_mem _ h
+    · rw [eraseKey] at h; simp only [beq_iff_eq, if_neg hak] at h
+      rcases List.mem_cons.mp h with h1 | h2
+      · exact List.mem_cons.mpr (Or.inl h1)
+      · exact List.mem_cons_of_mem _ (ih h2)
+
+/-- `eraseKey` preserves `NoDupKeys` (a sublist of distinct keys is distinct). -/
+theorem nodupKeys_eraseKey (m : Dict Int) (k : String) (hnd : NoDupKeys m) :
+    NoDupKeys (eraseKey m k) := by
+  induction m with
+  | nil => exact hnd
+  | cons kv rest ih =>
+    obtain ⟨a, b⟩ := kv; obtain ⟨hhead, htail⟩ := hnd
+    by_cases hak : a = k
+    · subst hak; rw [eraseKey]; simp only [beq_self_eq_true, if_true]; exact htail
+    · rw [eraseKey]; simp only [beq_iff_eq, if_neg hak]
+      exact ⟨fun v hv => hhead v (mem_eraseKey hv), ih htail⟩
+
+/-- `eraseKey` preserves `EntriesNonNeg`. -/
+theorem entriesNonNeg_eraseKey {m : Dict Int} {k : String} (h : EntriesNonNeg m) :
+    EntriesNonNeg (eraseKey m k) := fun k' v hv => h k' v (mem_eraseKey hv)
+
+/-- Off the erased key, `eraseKey` does not change the `getD`-view (`NoDupKeys`). -/
+theorem getD_eraseKey_ne (m : Dict Int) (c j : String) (hcj : c ≠ j) (hnd : NoDupKeys m) :
+    getD (eraseKey m c) j 0 = getD m j 0 := by
+  induction m with
+  | nil => rfl
+  | cons kv rest ih =>
+    obtain ⟨a, b⟩ := kv; obtain ⟨hhead, htail⟩ := hnd
+    by_cases hac : a = c
+    · subst hac; rw [eraseKey]; simp only [beq_self_eq_true, if_true]
+      rw [getD_cons_ne _ _ _ _ _ hcj]
+    · rw [eraseKey]; simp only [beq_iff_eq, if_neg hac]
+      by_cases haj : a = j
+      · subst haj; rw [getD_cons_self, getD_cons_self]
+      · rw [getD_cons_ne _ _ _ _ _ haj, getD_cons_ne _ _ _ _ _ haj, ih htail]
+
+/-- `EntriesNonNeg` ⇒ the `getD`-view is `≥ 0` at every key. -/
+theorem getD_nonneg_of_entries {m : Dict Int} (h : EntriesNonNeg m) (j : String) :
+    0 ≤ getD m j 0 := by
+  induction m with
+  | nil => exact Int.le_refl 0
+  | cons kv rest ih =>
+    obtain ⟨a, b⟩ := kv
+    by_cases haj : a = j
+    · subst haj; rw [getD_cons_self]; exact h a b List.mem_cons_self
+    · rw [getD_cons_ne _ _ _ _ _ haj]
+      exact ih (fun k' w hw => h k' w (List.mem_cons_of_mem _ hw))
+
+/-- **`costMass` MONOTONE UNDER `Dom`.** If `b` pointwise dominates `a` in the
+`getD`-view (`Dom a b`), both dicts have no duplicate keys, `b`'s stored values
+are `≥ 0`, and weights are `≥ 0` (`PosRecipes`), then `costMass a ≤ costMass b`.
+
+Induction on `a`, peeling its head key `c`: by `costMass_erase`, `b`'s cost-mass
+splits as `getD b c · wf c + costMass (eraseKey b c)`; `Dom` gives
+`getD a c = v ≤ getD b c` and `wf c ≥ 0` makes the head term dominate, while the
+IH (on `rest` vs `eraseKey b c`, which still dominates by `getD_eraseKey_ne`)
+handles the rest. The `NoDupKeys a` head fact zeroes `c` in `rest`, so `rest`'s
+view genuinely matches `a` minus its head. This closes the GATHER step's
+`costMass (residual h) ≤ costMass (residual h')` (residuals there are `Dom`-ordered
+by `minGathers_mono`); the CRAFT step's residuals are NOT `Dom`-ordered (Round 10
+finding) and need a different argument. -/
+theorem costMass_mono_dom (F : Nat) (recipes : Recipes) (hpos : PosRecipes recipes)
+    (a b : Dict Int) (hda : NoDupKeys a) (hdb : NoDupKeys b)
+    (heb : EntriesNonNeg b) (hdom : Dom a b) :
+    costMass F a recipes ≤ costMass F b recipes := by
+  induction a generalizing b with
+  | nil => simp; exact costMass_nonneg F recipes b heb hpos
+  | cons kv rest ih =>
+    obtain ⟨c, v⟩ := kv; obtain ⟨hhead, htail⟩ := hda
+    rw [costMass_cons]
+    have hdec := costMass_erase F recipes b c hdb
+    have hvb : v ≤ getD b c 0 := by have := hdom c; rwa [getD_cons_self] at this
+    have hwf : 0 ≤ wf F c recipes := wf_nonneg F c recipes hpos
+    have hdom' : Dom rest (eraseKey b c) := by
+      intro j
+      by_cases hcj : c = j
+      · subst hcj
+        rw [getD_head_absent_zero hhead]
+        exact getD_nonneg_of_entries (entriesNonNeg_eraseKey heb) c
+      · have h1 : getD ((c, v) :: rest) j 0 = getD rest j 0 := getD_cons_ne _ _ _ _ _ hcj
+        have h2 : getD (eraseKey b c) j 0 = getD b j 0 := getD_eraseKey_ne b c j hcj hdb
+        have := hdom j; rw [h1] at this; rw [h2]; exact this
+    have hib := ih (eraseKey b c) htail (nodupKeys_eraseKey b c hdb)
+                  (entriesNonNeg_eraseKey heb) hdom'
+    rw [hdec]
+    have hmul : v * wf F c recipes ≤ getD b c 0 * wf F c recipes :=
+      Int.mul_le_mul_of_nonneg_right hvb hwf
+    omega
+
+-- ---------------------------------------------------------------------------
+-- NoDupKeys / EntriesNonNeg preservation by the model's mutators
+-- ---------------------------------------------------------------------------
+
+/-- Any entry of `setD m k v` has key `k` or is an existing key of `m`. -/
+theorem mem_setD_key {m : Dict Int} {k k' : String} {v w : Int}
+    (h : (k', w) ∈ setD m k v) : k' = k ∨ ∃ u, (k', u) ∈ m := by
+  induction m with
+  | nil =>
+    rw [setD] at h; rcases List.mem_cons.mp h with h1 | h2
+    · cases h1; exact Or.inl rfl
+    · simp at h2
+  | cons kv rest ih =>
+    obtain ⟨a, b⟩ := kv
+    by_cases hak : a = k
+    · subst hak; rw [setD_cons_self] at h
+      rcases List.mem_cons.mp h with h1 | h2
+      · cases h1; exact Or.inl rfl
+      · exact Or.inr ⟨w, List.mem_cons_of_mem _ h2⟩
+    · rw [setD_cons_ne _ _ _ _ _ hak] at h
+      rcases List.mem_cons.mp h with h1 | h2
+      · cases h1; exact Or.inr ⟨w, List.mem_cons_self⟩
+      · rcases ih h2 with hl | ⟨u, hu⟩
+        · exact Or.inl hl
+        · exact Or.inr ⟨u, List.mem_cons_of_mem _ hu⟩
+
+/-- **`setD` preserves `NoDupKeys`** (replace-in-place keeps the key set; append
+adds a fresh key not already present). -/
+theorem nodupKeys_setD (m : Dict Int) (k : String) (v : Int) (hnd : NoDupKeys m) :
+    NoDupKeys (setD m k v) := by
+  induction m with
+  | nil => exact ⟨fun w hw => by simp at hw, trivial⟩
+  | cons kv rest ih =>
+    obtain ⟨a, b⟩ := kv; obtain ⟨hhead, htail⟩ := hnd
+    by_cases hak : a = k
+    · subst hak; rw [setD_cons_self]; exact ⟨hhead, htail⟩
+    · rw [setD_cons_ne _ _ _ _ _ hak]
+      refine ⟨?_, ih htail⟩
+      intro w hw
+      rcases mem_setD_key hw with hl | ⟨u, hu⟩
+      · exact hak hl
+      · exact hhead u hu
+
+/-- **`setD` preserves `EntriesNonNeg`** when the written value is `≥ 0`. -/
+theorem entriesNonNeg_setD (m : Dict Int) (k : String) (v : Int) (hv : 0 ≤ v)
+    (hne : EntriesNonNeg m) : EntriesNonNeg (setD m k v) := by
+  induction m with
+  | nil =>
+    intro k' w hw; rw [setD] at hw
+    rcases List.mem_cons.mp hw with h1 | h2
+    · cases h1; exact hv
+    · simp at h2
+  | cons kv rest ih =>
+    obtain ⟨a, b⟩ := kv
+    by_cases hak : a = k
+    · subst hak; rw [setD_cons_self]
+      intro k' w hw
+      rcases List.mem_cons.mp hw with h1 | h2
+      · cases h1; exact hv
+      · exact hne k' w (List.mem_cons_of_mem _ h2)
+    · rw [setD_cons_ne _ _ _ _ _ hak]
+      intro k' w hw
+      rcases List.mem_cons.mp hw with h1 | h2
+      · cases h1; exact hne a b List.mem_cons_self
+      · exact ih (fun x y hxy => hne x y (List.mem_cons_of_mem _ hxy)) k' w h2
+
+/-- **`consumeHoldings` preserves `NoDupKeys`** (each consume step is a `setD`).
+NB it does NOT preserve `EntriesNonNeg` in general — consuming an absent input
+drives a value negative; that is gated by `ValidCraftAt` at use sites. -/
+theorem nodupKeys_consume (inputs : Dict Int) (H : Dict Int) (hnd : NoDupKeys H) :
+    NoDupKeys (consumeHoldings H inputs) := by
+  unfold consumeHoldings
+  induction inputs generalizing H with
+  | nil => simpa using hnd
+  | cons mp rest ih =>
+    obtain ⟨mat, per⟩ := mp
+    simp only [List.foldl_cons]
+    apply ih
+    rw [dictSet_eq]
+    exact nodupKeys_setD H mat (dictGet H mat - per) hnd
+
+/-- **`applyAction` preserves `NoDupKeys`** — every action's holdings update is
+built from `setD`/`consumeHoldings`, so the dict invariant survives the whole
+plan. This confirms `NoDupKeys` holds on EVERY residual the proof reasons about
+(starting from a no-dup `owned`), not just by assumption. -/
+theorem nodupKeys_applyAction (recipes : Recipes) (s : ExecState) (a : Action)
+    (hnd : NoDupKeys s.holdings) : NoDupKeys (applyAction recipes s a).holdings := by
+  cases a with
+  | gather code =>
+    show NoDupKeys (dictSet s.holdings code (dictGet s.holdings code + 1))
+    rw [dictSet_eq]; exact nodupKeys_setD _ _ _ hnd
+  | craft code =>
+    show NoDupKeys (dictSet (consumeHoldings s.holdings (recipeOf recipes code)) code _)
+    rw [dictSet_eq]
+    exact nodupKeys_setD _ _ _ (nodupKeys_consume (recipeOf recipes code) s.holdings hnd)
+  | equip code => exact hnd
+
+-- ---------------------------------------------------------------------------
 -- DAG reachability guard (Round 8): Reaches recipes item c
 -- ---------------------------------------------------------------------------
 
