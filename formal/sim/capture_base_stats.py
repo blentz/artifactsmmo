@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Any
 
 from artifactsmmo_api_client.models.equip_schema import EquipSchema
+from artifactsmmo_api_client.models.error_response_schema import ErrorResponseSchema
 from artifactsmmo_api_client.models.item_slot import ItemSlot
 from artifactsmmo_api_client.models.unequip_schema import UnequipSchema
 
@@ -78,7 +79,16 @@ def _cooldown_seconds(response: Any) -> int:
     Path: response.data.cooldown.remaining_seconds (EquipmentResponseSchema ->
     EquipRequestSchema -> CooldownSchema). Fail loudly if the server did not
     return it — we only act on real API data, never a default.
+
+    Raises RuntimeError if the server returned an error (e.g. HTTP 499 character
+    in cooldown, HTTP 483 item not equipped) so the caller gets a clear failure
+    rather than an AttributeError on None.
     """
+    if isinstance(response, ErrorResponseSchema):
+        raise RuntimeError(
+            f"API error during equip/unequip: {response.error.code} "
+            f"{response.error.message}"
+        )
     return response.data.cooldown.remaining_seconds
 
 
@@ -131,8 +141,16 @@ def capture_base_stats(api: Any, name: str, output_path: Path) -> dict[str, Any]
     Returns the captured row (for the summary line / tests). Restores the
     original loadout via `finally` even if sampling raises.
     """
-    character = api.get_character(name)
+    character = api.get_character(name).data
     level = character.level
+
+    # Wait out any existing in-progress cooldown before touching gear — the bot
+    # may be mid-action. character.cooldown is the remaining seconds per the
+    # character endpoint (distinct from a per-action response cooldown).
+    preflight_cd = getattr(character, "cooldown", 0) or 0
+    if preflight_cd > 0:
+        time.sleep(preflight_cd)
+
     original_loadout = _read_loadout(character)
     # Stack sizes for utility slots so re-equip restores the exact quantity.
     original_quantities = {
@@ -148,7 +166,7 @@ def capture_base_stats(api: Any, name: str, output_path: Path) -> dict[str, Any]
             )
             _wait_cooldown(resp)
 
-        bare = api.get_character(name)
+        bare = api.get_character(name).data
         row = _base_stats_row(bare)
     finally:
         for slot, code in equipped.items():
@@ -196,7 +214,7 @@ def main() -> None:
     mgr.initialize(cfg)
     api = mgr.api
 
-    character = api.get_character(name)
+    character = api.get_character(name).data
     level = character.level
     free_slots = sum(1 for field, _ in EQUIP_SLOTS if not getattr(character, field))
 

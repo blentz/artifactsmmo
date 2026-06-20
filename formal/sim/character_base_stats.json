@@ -1,0 +1,23 @@
+{
+  "base_stats": {
+    "6": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 145,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    }
+  },
+  "captured_at_6": "2026-06-20T15:31:40.332273+00:00",
+  "method": "algebraic_subtraction_from_equipped_character_stats"
+}
