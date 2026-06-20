@@ -324,31 +324,32 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Create: `formal/Formal/Liveness/WinnableGrounded.lean`
 - Build: `cd formal && lake build Formal.Liveness.WinnableGrounded`
 
+**APPROACH — full-loadout witness table (per the Task-1 finding `[[project_winnableacrossband_grounding]]`).** The model is best FULL obtainable loadout + full HP, and the differential sweep (Task 1) already verified `WinnableAcrossBand` holds 49/49 in production. The kernel proof does NOT re-derive `pick_loadout`'s per-monster optimization; it verifies a per-level WITNESS extracted from that sweep: for each L∈[1,49], the winning monster + the loadout item codes `pick_loadout` chose. The kernel computes the witness loadout's projected combat scalars (base + summed item stats, element-specific) and `decide`s `predictWin = true ∧ notOverleveled ∧ xpPos`, with each loadout item `level ≤ L` (obtainable, backed by Task 3's proven `canonicalPlan` obtainability). The messy projection's FIDELITY to production is pinned by a differential (the projected scalars in the fixture == production `project_loadout_stats`), the same model+differential split the project uses elsewhere.
+
 **Interfaces:**
-- Consumes: `monsterCatalog`, `baseStatsTable` (Task 2); `predictWin`, `predict_win_mono_player` (`PredictWin.lean`); `Monster`, `WinnableFn`, `notOverleveled`, `WinnableAcrossBand`, `InLevelingBand` (Task §4 anchors); `gear_obtainable_of_minPlanLength_le` (Task 3, for the obtainability note on `bestWeaponForLevel`).
+- Consumes: `monsterCatalog`, `baseStatsTable`, `itemCatalog` (Task 2); `predictWin`, `predict_win_mono_player` (`PredictWin.lean`); `Monster`, `WinnableFn`, `notOverleveled`, `WinnableAcrossBand`, `InLevelingBand`; `gear_obtainable` (Task 3 — the proven obtainability, cite for the loadout-obtainability note; NOTE its true name uses a per-action budget, rename to `gear_obtainable_of_perActionLength_le` as the Task-3 Minor when you touch it).
 - Produces:
-  - `def catalogAsMonsters : List Monster` — project `monsterCatalog` to the `Monster` (code, level) shape used by `WinnableAcrossBand` (encode `code : String` to the `Int` field via a stable index, or extend the bridge to carry the full `CatalogMonster`; keep the `WinnableAcrossBand` signature).
-  - `def bestWeaponForLevel (L : Int) : ItemStatsScalars` — mirrors production `best_weapon_for_level` over the extracted item stats (max-attack weapon with `item.level ≤ L`).
-  - `def playerScalarsAtLevel (L : Int) : PlayerScalars` — `baseStatsTable` row for `L` reduced to `predictWin`'s scalar inputs, plus `bestWeaponForLevel L`.
-  - `def winnableConcrete : WinnableFn` and `def xpPosConcrete : WinnableFn` — `winnableConcrete m = predictWin (playerScalarsAtLevel …) (monster scalars of m) …` and `xpPosConcrete m = decide (xpPerKillModel m L > 0)`.
+  - A WITNESS TABLE in the fixture: extend `generate_lean_fixture.py` (and Task 1's sweep) to emit `def winnableWitness : List WitnessRow` where `WitnessRow` carries `level : Int`, `monsterCode : String`, `loadoutCodes : List String`, and the production-projected player combat scalars for that loadout at that level (the exact inputs `predictWin` takes: `rawPlayer`, `pCrit`, `playerMaxHp`, `pLifesteal`, `pAtkSum`, … per `PredictWin.lean:142`). Add `WitnessRow` to `CatalogTypes.lean`.
+  - `def catalogAsMonsters : List Monster` — project `monsterCatalog` to the `(code, level)` `Monster` shape (encode `code` via a stable index; keep the `WinnableAcrossBand` signature).
+  - `def winnableConcrete : WinnableFn` / `def xpPosConcrete : WinnableFn` — for monster `m`, look up the witness row whose `monsterCode = m`, and `winnableConcrete m := predictWin (witness player scalars) (monster scalars of m) …`; `xpPosConcrete m := decide (xpPerKill model > 0)`. (The witness binds each band L to a specific winning `m`, so the `∃ m` is the witness's monster.)
   - `theorem winnableAcrossBand_grounded : WinnableAcrossBand winnableConcrete xpPosConcrete catalogAsMonsters` — kernel-checked.
 
-- [ ] **Step 1: State `winnableAcrossBand_grounded` with `sorry`, build**
+- [ ] **Step 1: Emit the witness table + differential-pin the projection**
 
-Create `WinnableGrounded.lean` with the defs above (bodies may start minimal) and the theorem ending in `sorry`. Build: `cd formal && lake build Formal.Liveness.WinnableGrounded` — confirm it type-checks.
+Extend Task 1's sweep / `generate_lean_fixture.py` to record, per L∈[1,49], the winning monster + `pick_loadout` loadout codes + production `project_loadout_stats` scalars, emitting `winnableWitness`. Add a differential `formal/diff/test_winnable_witness_diff.py` asserting each emitted witness row's scalars == production `project_loadout_stats(loadout at L)` AND production `is_winnable`(witness loadout, witness monster) is True AND every loadout item `level ≤ L`. This pins the witness fidelity to production (no rigged fixture). Run it green.
 
-- [ ] **Step 2: Implement the per-level stat reduction**
+- [ ] **Step 2: State `winnableAcrossBand_grounded` with `sorry`, build**
 
-Implement `playerScalarsAtLevel` and the monster-scalar projection so they feed `predictWin` exactly as production's `project_loadout_stats` → `predict_win` does. Cross-check ONE level against production by a differential (add to Task 6's diff or a focused assertion): `predictWin (playerScalarsAtLevel L) (scalars of m)` equals production `predict_win` for a sampled `(L, m)`.
+Create `WinnableGrounded.lean` with `catalogAsMonsters`, `winnableConcrete`, `xpPosConcrete`, and the theorem ending in `sorry`. `cd formal && lake build Formal.Liveness.WinnableGrounded` — confirm it type-checks.
 
-- [ ] **Step 3: Prove `winnableAcrossBand_grounded` by `decide` over band × catalog**
+- [ ] **Step 3: Prove `winnableAcrossBand_grounded` over the witness table**
 
-`WinnableAcrossBand` unfolds to `∀ L, InLevelingBand L → ∃ m ∈ catalog, …`. The band is `1 ≤ L < 50` (49 values); the catalog is finite (48). Convert the bounded `∀ L` to a `List.all` over `[1..49]` and `decide`/`native_decide` the finite check. If `native_decide` is needed for performance, isolate it and add the per-use justification for `gate/check_axioms.sh`. Use the lean4:proof-repair subagent for the conversion lemmas (bounded-∀ ↔ list-all).
+`WinnableAcrossBand` unfolds to `∀ L, InLevelingBand L → ∃ m ∈ catalog, winnable m ∧ xpPos m ∧ notOverleveled L m`. For each band L, the witness row supplies the existential `m` (its `monsterCode`); `winnableConcrete m` reduces to `predictWin` on the witness scalars (kernel-decidable) and `notOverleveled L m` / `xpPos m` are `decide`-checks. Convert the bounded `∀ L∈[1,49]` to a `List.all` over the 49-row witness table and `decide` (or `native_decide` if performance requires — isolate + justify for `gate/check_axioms.sh`). Use the lean4:proof-repair subagent for the bounded-∀ ↔ list-all conversion lemmas.
 
 - [ ] **Step 4: 0-sorry + axiom gate**
 
 Run: `cd formal && lake build Formal.Liveness.WinnableGrounded && bash gate/check_no_sorry.sh && bash gate/check_axioms.sh`
-Expected: 0 sorry; axiom check passes (only signed-off classical/LIV-001 + any justified `native_decide`). Docstring states the conservative best-weapon-proxy boundary and cites Task 3's obtainability for `bestWeaponForLevel`.
+Expected: 0 sorry; axiom check passes (only signed-off classical/LIV-001 + any justified `native_decide`). Docstring states honestly: the combat VERDICT (`predictWin`) is kernel-decided over a witness table whose loadout-PROJECTION fidelity is differential-pinned to production (Step 1), and loadout obtainability is backed by Task 3's `canonicalPlan` witness; cite both.
 
 - [ ] **Step 5: Commit**
 
