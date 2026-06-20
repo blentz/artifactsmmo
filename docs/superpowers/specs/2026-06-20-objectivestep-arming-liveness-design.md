@@ -24,29 +24,73 @@ its central hypothesis `FightsBelowCap`. So "the bot always has a right next
 action toward 50" is *defined into existence*, not proven — the O5.4 binding
 residual.
 
-Two facts make this the right lever (vs the equipment-path min-cut lemma —
-"corner 3" — which 14 rounds + 3 strategies confirmed is genuine recipe-DAG
-max-flow combinatorics, [[project_plannability_soundness]]):
-1. The reach-50 leveling step is a bare `.fight`, and a fight needs **no crafting
-   plan** (`objectiveStepIsFight ⇒ planFor = [.fight]`,
-   `CycleStepCharacterization.lean:73`). So proving "the bot always has a
-   plannable progress step toward 50" **obviates corner 3 for the leveling path**
-   — it never routes through `minGathers`/min-cut.
-2. The grounding hypothesis already exists: `WinnableAcrossBand`
-   (`GearTierLeveling.lean:54`) — at every band `1 ≤ L < 50`, the catalog has a
-   winnable, XP-positive, not-overleveled monster — and `combatObjective_live_below_fifty`
-   (`GearTierLeveling.lean:84`, already PROVEN from it) gives a combat target.
+**The alignment with corner 3 (do NOT route around it — fix it here).**
+`WinnableAcrossBand`'s soundness rests on `best_weapon_for_level` — an OPTIMISTIC
+proxy that assumes the bot can OBTAIN the best weapon at level L. That
+obtainability is exactly the gather/craft-feasibility question corner 3 (the
+`minGathers` lower bound) is about. So corner 3 is not off-path — it is the
+FOUNDATION of the gear-tier assumption that grounds `WinnableAcrossBand`. And the
+gear-obtainment context is precisely where corner 3 becomes TRACTABLE: obtaining
+ONE equippable item is **demand-1, craft exactly the recipe closure, NO surplus**
+— so the wasteful-surplus cross-branch max-cut pathology that defeated the general
+arbitrary-plan corner 3 (14 rounds, [[project_plannability_soundness]]) cannot
+arise. "Equipment capping is obviously monotone" (the user's insight) holds
+exactly in this no-surplus gear setting. Fixing corner 3 in the gear-obtainment
+framing both CLOSES it (unconditional `minGathers_le_gathers` for the
+gear-obtainment class) and GROUNDS the `best_weapon_for_level` obtainability that
+`WinnableAcrossBand` needs — removing the proxy's optimism gap. The two soundness
+stories (gear feasibility + leveling liveness) are one.
+
+The grounding hypothesis already exists: `WinnableAcrossBand`
+(`GearTierLeveling.lean:54`) — at every band `1 ≤ L < 50`, the catalog has a
+winnable, XP-positive, not-overleveled monster — and `combatObjective_live_below_fifty`
+(`GearTierLeveling.lean:84`, already PROVEN from it) gives a combat target. The
+fight step itself is still crafting-free (`planFor = [.fight]`); corner 3 enters
+not on the fight action but on grounding that the WINNABILITY-enabling gear is
+obtainable.
 
 ## Goal
 
 Replace `perceptionRefresh`'s asserted `objectiveStepFires/IsFight := true` (below
-50) with a PROOF, and ground its remaining hypothesis `WinnableAcrossBand` from
-live data BOTH empirically (differential sweep) AND by a pure-Lean kernel proof
-over the extracted monster catalog. Result: `cycleStepF_reaches_fifty_of_fights`'s
+50) with a PROOF; ground its hypothesis `WinnableAcrossBand` from live data BOTH
+empirically (differential sweep) AND by a pure-Lean kernel proof over the
+extracted monster catalog; and CLOSE corner 3 in the gear-obtainment context
+(unconditional `minGathers_le_gathers` for no-surplus gear plans + a constructive
+obtainability witness), which grounds the `best_weapon_for_level` obtainability
+the kernel proof needs. Result: `cycleStepF_reaches_fifty_of_fights`'s
 `FightsBelowCap` becomes a result (modulo the honestly-named residuals below),
-and the equipment-path min-cut lemma is not needed for leveling liveness.
+on a now-unconditional gear-feasibility foundation rather than a banked min-cut.
 
 ## Components
+
+### C0. Close corner 3 in the gear-obtainment context (foundation)
+Corner 3 (`PlanModel.lean`, `minGathers_le_gathers_of_corner3`) is the `δ ≤ ε`
+craft-monotonicity coupling that 14 rounds could not breach for ARBITRARY plans —
+because a plan may craft SURPLUS of an intermediate `c` that competes for raw
+shared with another branch (the max-cut). Discharge it in the gear-obtainment
+class, where it is tractable:
+- **The no-surplus restriction kills the coupling.** Obtaining ONE equippable is
+  demand-1: the minimal plan crafts each intermediate EXACTLY the amount consumed
+  upstream — never surplus. A* never wastes toward a single gear target, so every
+  production gear plan is no-surplus. In the no-surplus class the wasteful-`c`
+  pathology cannot arise → craft-monotonicity holds → `minGathers_le_gathers`
+  unconditional (no `corner3` hypothesis) FOR THAT CLASS. Prove the lower bound
+  directly for no-surplus plans (do NOT reduce arbitrary plans — that reduction
+  was the wall).
+- **Constructive obtainability witness.** Define the canonical gear-obtainment
+  plan (gather raw leaves, craft the recipe closure bottom-up, equip) and prove
+  its gather count = `minGathers` and its length = `minPlanLength`. This is the
+  EXISTENCE direction: `minPlanLength(gear) ≤ depth ⟹ a plan obtaining+equipping
+  the gear within depth EXISTS`. Pure construction, no max-cut.
+- This witness GROUNDS `best_weapon_for_level` obtainability (C1b's per-level
+  stat model assumes the best weapon is obtainable; C0 proves it is, within the
+  depth budget the band allows), closing the kernel proof's optimism gap.
+- **Honest boundary:** this discharges corner 3 for the demand-1 / no-surplus
+  gear-obtainment class — exactly the equipment domain ("capping is obviously
+  monotone") and exactly what every production gear plan and the liveness
+  obtainability need. The fully general arbitrary-surplus DAG lower bound is NOT
+  claimed; it is not required by any production path. State this in the theorem
+  docstring — no flattering over-claim.
 
 ### C1. Ground `WinnableAcrossBand` from live data — differential sweep
 The sweep `formal/diff/test_winnable_across_band_diff.py::test_winnable_across_band_real_sweep`
@@ -95,7 +139,8 @@ proof that the objective tier yields a plannable fight step, from:
 - `combatObjective_live_below_fifty` (proven from grounded `WinnableAcrossBand`)
   ⟹ a combat target exists at level L < 50;
 - a fight step is structurally plannable (`objectiveStepIsFight ⇒ planFor =
-  [.fight]`) — no craft, **so corner 3 / min-cut is not on this path**;
+  [.fight]`) — the fight ACTION needs no craft; corner 3 enters only on grounding
+  the winnability-enabling gear obtainability (C0/C1b), now discharged;
 - the **O5.4 binding** (a differential, same pattern as `test_ladder_fires_diff`):
   production's `objective_step_goal(ReachCharLevel)` returns a fight goal
   (`GrindCharacterXPGoal`) when `combat_monster ≠ None` (`strategy_driver.py:578-611`).
@@ -109,11 +154,13 @@ assertion — modulo the residuals below.
 
 ## Honest scope — what is proven vs named (no flattering proof)
 
-**PROVEN (this work):** `WinnableAcrossBand` grounded from live data both
-empirically (C1 differential) AND in-kernel (C1b); the objective-step arming
-(`objectiveStepFires/IsFight` below 50) discharged from combat-target-existence +
-structural fight-plannability + the O5.4 binding (C2); `FightsBelowCap` thereby a
-result feeding the reach-50 capstone (C3).
+**PROVEN (this work):** corner 3 discharged for the gear-obtainment class
+(unconditional `minGathers_le_gathers` for no-surplus gear plans + constructive
+obtainability witness, C0); `WinnableAcrossBand` grounded from live data both
+empirically (C1 differential) AND in-kernel (C1b, on C0's obtainability);
+the objective-step arming (`objectiveStepFires/IsFight` below 50) discharged from
+combat-target-existence + structural fight-plannability + the O5.4 binding (C2);
+`FightsBelowCap` thereby a result feeding the reach-50 capstone (C3).
 
 **NAMED, NOT discharged (your option-3 follow-on):**
 - *blockers-quiet*: that no chore/task means out-prioritizes the objective fight
@@ -123,14 +170,19 @@ result feeding the reach-50 capstone (C3).
 - The C1b best-weapon proxy's conservative gap (real armor only helps) — named in
   the bridge docstring; the C1 differential is the faithfulness pin.
 
-**Explicitly UNTOUCHED:** corner 3 (the equipment-path min-cut lower bound) stays
-banked as the gear-feasibility soundness in `PlanModel.lean`; it is NOT on the
-leveling-liveness path and is not needed here.
+**NAMED boundary on C0:** corner 3 is discharged for the demand-1 / no-surplus
+gear-obtainment class only — the fully general arbitrary-surplus DAG lower bound
+is not claimed (and is needed by no production path). Stated in the C0 theorem
+docstring.
 
 No theorem or docstring claims more than the above; `native_decide`/axiom use is
 scoped and gate-checked.
 
 ## Testing / success criteria
+- C0: `minGathers_le_gathers` proven 0-sorry for the no-surplus gear class (the
+  final theorem carries NO `corner3` hypothesis — grep confirms it gone); the
+  constructive obtainability witness (`gear obtainable within depth`) proven; the
+  docstring states the no-surplus boundary; differential/mutation anchors hold.
 - C1: `test_winnable_across_band_real_sweep` un-skips and PASSES (no band gaps)
   against the live snapshot; the captured fixtures committed.
 - C1b: `WinnableAcrossBand_grounded` proven 0-sorry over the extracted catalog;
@@ -146,6 +198,7 @@ scoped and gate-checked.
 
 ## Non-goals / YAGNI
 - No attempt on blockers-quiet / full every-cycle descent (option-3 follow-on).
-- No work on corner 3 / the equipment min-cut (banked, off-path).
+- No general arbitrary-surplus DAG min-cut lower bound (C0 closes only the
+  no-surplus gear class — sufficient for every production path).
 - No new combat model — reuse `PredictWin.lean` + `pick_winnable_monster_pure` +
   `best_weapon_for_level`.
