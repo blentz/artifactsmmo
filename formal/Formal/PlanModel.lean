@@ -2339,6 +2339,196 @@ theorem craft_agree_off (recipes : Recipes) (H : Dict Int) (c : String) :
   exact consume_unreached recipes c H (recipeOf recipes c) (recipeOf_reach recipes c) k hnr
 
 -- ---------------------------------------------------------------------------
+-- Reachable-restricted monotonicity (the OFF-PATH coupling engine, round 11)
+-- ---------------------------------------------------------------------------
+
+/-!
+## Reachable-restricted monotonicity
+
+`minGathers item` only ever inspects holdings at keys it can REACH
+(`minGathers_residual_unreached`). So the full-`Dom` hypothesis of
+`minGathers_mono` is stronger than needed: domination on the reach-set of `item`
+suffices. `DomR recipes item h1 h2` ("`h1` dominated by `h2` on every key
+`item` reaches") is the right order; under it the gather count is still antitone
+(MORE reachable holdings ⇒ NO MORE gathers) and the residual covariant on the
+reach-set.
+
+This is the OFF-PATH engine for the craft step `(★)`
+(`minGathersCount item 1 H ≤ minGathersCount item 1 H'`,
+`H' = craft c H`): when `¬ Reaches recipes item c`, the post-craft holdings `H'`
+are pointwise `≤ H` on every key `item` reaches (the consumed inputs only LOWER
+raws; the produced `+1 c` lands at the UNREACHABLE key `c`), i.e.
+`DomR recipes item H' H`. So `count(item, H) ≤ count(item, H')` — the count RISES,
+exactly the `(★)` direction — WITHOUT requiring the two holdings to AGREE
+(`minGathers_agree` would need equality, which fails on a DAG with shared raw).
+-/
+
+/-- `h1` dominated by `h2` on every key reachable from `item`. The order under
+which `minGathers item` is antitone, weakening `Dom` to the reach-set (the only
+keys the `item` traversal inspects). -/
+def DomR (recipes : Recipes) (item : String) (h1 h2 : Dict Int) : Prop :=
+  ∀ k, Reaches recipes item k → getD h1 k 0 ≤ getD h2 k 0
+
+/-- The generalized recipe-`foldl` coupling for `minGathers_mono_reach`: two
+parallel folds over `rc ⊆ recipeOf item`, from residuals `o1 ⊑ o2` (on the
+reach-set of `item`, both `NonNeg`), with ordered remainders `r2 ≤ r1` and
+running totals `t2 ≤ t1`, keep `count2 ≤ count1` and `DomR`-ordered residuals.
+Each material `mat ∈ rc` is reachable (edge), so the fuel-`m` IH (`IHpair`)
+gives per-material count-≤ + residual-`DomR` on the reach-set of `mat`;
+`minGathers_residual_unreached` carries `DomR` on the
+reachable-from-`item`-but-not-`mat` keys to the next sibling. -/
+theorem domR_foldl (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (m : Nat) (item : String)
+    (IHpair : ∀ (mt : String) (a1 a2 : Int) (g1 g2 : Dict Int),
+      rank mt ≤ m → 0 < a2 → a2 ≤ a1 →
+      DomR recipes mt g1 g2 → NonNeg g1 → NonNeg g2 →
+      (minGathers m mt a2 recipes (0, g2)).1 ≤ (minGathers m mt a1 recipes (0, g1)).1
+      ∧ DomR recipes mt (minGathers m mt a1 recipes (0, g1)).2
+            (minGathers m mt a2 recipes (0, g2)).2) :
+    ∀ (rc : Dict Int) (o1 o2 : Dict Int) (t1 t2 r1 r2 : Int),
+      (∀ mat per, (mat, per) ∈ rc → rank mat ≤ m) →
+      (∀ mat per, (mat, per) ∈ rc → 0 < per) →
+      (∀ mat per, (mat, per) ∈ rc → Reaches recipes item mat) →
+      0 < r2 → r2 ≤ r1 → t2 ≤ t1 →
+      DomR recipes item o1 o2 → NonNeg o1 → NonNeg o2 →
+      (List.foldl (fun st mat => minGathers m mat.1 (mat.2 * r2) recipes st) (t2, o2) rc).1
+        ≤ (List.foldl (fun st mat => minGathers m mat.1 (mat.2 * r1) recipes st) (t1, o1) rc).1
+      ∧ DomR recipes item
+          (List.foldl (fun st mat => minGathers m mat.1 (mat.2 * r1) recipes st) (t1, o1) rc).2
+          (List.foldl (fun st mat => minGathers m mat.1 (mat.2 * r2) recipes st) (t2, o2) rc).2 := by
+  intro rc
+  induction rc with
+  | nil => intro o1 o2 t1 t2 r1 r2 _ _ _ _ _ ht hd _ _; exact ⟨ht, hd⟩
+  | cons mp rest ihrec =>
+    intro o1 o2 t1 t2 r1 r2 hrk hpo hedg hr2 hr21 ht hd ho1 ho2
+    obtain ⟨mat, per⟩ := mp
+    simp only [List.foldl_cons]
+    have hper : 0 < per := hpo mat per (by simp)
+    have hrm : rank mat ≤ m := hrk mat per (by simp)
+    have hmatR : Reaches recipes item mat := hedg mat per (by simp)
+    have hp2 : 0 < per * r2 := Int.mul_pos hper hr2
+    have hp21 : per * r2 ≤ per * r1 := Int.mul_le_mul_of_nonneg_left hr21 (Int.le_of_lt hper)
+    have hp1 : 0 < per * r1 := by omega
+    have hdmat : DomR recipes mat o1 o2 := fun k hk => hd k (Reaches.trans hmatR hk)
+    have hstep := IHpair mat (per * r1) (per * r2) o1 o2 hrm hp2 hp21 hdmat ho1 ho2
+    have ta1 := minGathers_total_additive m mat (per * r1) recipes t1 o1
+    have ta2 := minGathers_total_additive m mat (per * r2) recipes t2 o2
+    rw [ta1, ta2]
+    have hsn1 := minGathers_nonneg_residual recipes hpos m mat (per * r1) 0 o1 hp1 ho1
+    have hsn2 := minGathers_nonneg_residual recipes hpos m mat (per * r2) 0 o2 hp2 ho2
+    have hdnext : DomR recipes item (minGathers m mat (per * r1) recipes (0, o1)).2
+        (minGathers m mat (per * r2) recipes (0, o2)).2 := by
+      intro k hk
+      by_cases hkmat : Reaches recipes mat k
+      · exact hstep.2 k hkmat
+      · rw [minGathers_residual_unreached recipes m mat (per * r1) 0 o1 k hkmat,
+            minGathers_residual_unreached recipes m mat (per * r2) 0 o2 k hkmat]
+        exact hd k hk
+    have hrk' : ∀ m' p, (m', p) ∈ rest → rank m' ≤ m := fun m' p hm => hrk m' p (by simp [hm])
+    have hpo' : ∀ m' p, (m', p) ∈ rest → 0 < p := fun m' p hm => hpo m' p (by simp [hm])
+    have hedg' : ∀ m' p, (m', p) ∈ rest → Reaches recipes item m' :=
+      fun m' p hm => hedg m' p (by simp [hm])
+    have htnew : (minGathers m mat (per * r2) recipes (0, o2)).1 + t2
+               ≤ (minGathers m mat (per * r1) recipes (0, o1)).1 + t1 := by
+      have := hstep.1; omega
+    exact ihrec
+      (minGathers m mat (per * r1) recipes (0, o1)).2
+      (minGathers m mat (per * r2) recipes (0, o2)).2
+      ((minGathers m mat (per * r1) recipes (0, o1)).1 + t1)
+      ((minGathers m mat (per * r2) recipes (0, o2)).1 + t2)
+      r1 r2 hrk' hpo' hedg' hr2 hr21 htnew hdnext hsn1 hsn2
+
+/-- **REACHABLE-RESTRICTED MONOTONICITY.** With MORE holdings on the reach-set of
+`item` (`DomR recipes item h1 h2`, both `NonNeg`) and a smaller-or-equal requested
+quantity (`0 < q2 ≤ q1`), `minGathers item` does NO MORE gathering and leaves a
+residual `DomR`-larger on the reach-set:
+
+    (minGathers f item q2 (0, h2)).1 ≤ (minGathers f item q1 (0, h1)).1
+    ∧ DomR recipes item (minGathers f item q1 (0, h1)).2 (minGathers f item q2 (0, h2)).2.
+
+This strengthens `minGathers_mono` by only requiring domination on the keys
+`item` actually inspects (its reach-set) — the unreachable keys are never read
+(`minGathers_residual_unreached`). Strong fuel induction; the recipe-`foldl` arm
+is `domR_foldl`, lifting `DomR item` to `DomR mat` along each recipe edge. -/
+theorem minGathers_mono_reach (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank) :
+    ∀ (f : Nat) (item : String) (q1 q2 : Int) (h1 h2 : Dict Int),
+      rank item ≤ f → 0 < q2 → q2 ≤ q1 →
+      DomR recipes item h1 h2 → NonNeg h1 → NonNeg h2 →
+      (minGathers f item q2 recipes (0, h2)).1 ≤ (minGathers f item q1 recipes (0, h1)).1
+      ∧ DomR recipes item (minGathers f item q1 recipes (0, h1)).2
+            (minGathers f item q2 recipes (0, h2)).2 := by
+  intro f
+  induction f using Nat.strongRecOn with
+  | ind f IH =>
+    intro item q1 q2 h1 h2 hrf hq2 hq21 hdom hnn1 hnn2
+    match f, IH with
+    | 0, _ => simp only [minGathers]; exact ⟨by omega, hdom⟩
+    | m + 1, IH =>
+      rw [minGathers_succ, minGathers_succ]
+      have hRi : Reaches recipes item item := Reaches.refl item
+      have hh1 : 0 ≤ getD h1 item 0 := hnn1 item
+      have hh2 : 0 ≤ getD h2 item 0 := hnn2 item
+      have hdi : getD h1 item 0 ≤ getD h2 item 0 := hdom item hRi
+      have hrem : q2 - min (getD h2 item 0) q2 ≤ q1 - min (getD h1 item 0) q1 := by
+        rw [Int.min_def, Int.min_def]; split <;> split <;> omega
+      have hdom' : DomR recipes item
+          (setD h1 item (getD h1 item 0 - min (getD h1 item 0) q1))
+          (setD h2 item (getD h2 item 0 - min (getD h2 item 0) q2)) := by
+        intro k hk; rw [getD_setD, getD_setD]
+        by_cases hik : item = k
+        · subst hik; rw [if_pos rfl, if_pos rfl]; omega
+        · rw [if_neg hik, if_neg hik]; exact hdom k hk
+      have hnn1' : NonNeg (setD h1 item (getD h1 item 0 - min (getD h1 item 0) q1)) :=
+        nonneg_setD h1 item _ hnn1 (by have := Int.min_le_left (getD h1 item 0) q1; omega)
+      have hnn2' : NonNeg (setD h2 item (getD h2 item 0 - min (getD h2 item 0) q2)) :=
+        nonneg_setD h2 item _ hnn2 (by have := Int.min_le_left (getD h2 item 0) q2; omega)
+      by_cases hc2 : q2 - min (getD h2 item 0) q2 ≤ 0
+      · rw [if_pos hc2]
+        by_cases hc1 : q1 - min (getD h1 item 0) q1 ≤ 0
+        · rw [if_pos hc1]; exact ⟨Int.le_refl 0, hdom'⟩
+        · rw [if_neg hc1]
+          by_cases hr1 : (getD recipes item []).length = 0
+          · rw [if_pos hr1]; exact ⟨by omega, hdom'⟩
+          · rw [if_neg hr1]
+            have hpoall : ∀ mat per, (mat, per) ∈ getD recipes item [] → 0 < per :=
+              fun mat per hmem => hpos item mat per hmem
+            refine ⟨?_, ?_⟩
+            · have hfoldl := recipeFoldl_count_nonneg recipes hpos m (getD recipes item [])
+                (setD h1 item (getD h1 item 0 - min (getD h1 item 0) q1)) 0
+                (q1 - min (getD h1 item 0) q1) hpoall (Int.le_refl 0) (by omega)
+              omega
+            · have hres := recipeFoldl_residual_dom recipes hpos m (getD recipes item [])
+                (setD h1 item (getD h1 item 0 - min (getD h1 item 0) q1)) 0
+                (q1 - min (getD h1 item 0) q1) hpoall hnn1' (by omega)
+              intro k hk; exact Int.le_trans (hres k) (hdom' k hk)
+      · have hc1 : ¬ q1 - min (getD h1 item 0) q1 ≤ 0 := by omega
+        rw [if_neg hc2, if_neg hc1]
+        by_cases hr : (getD recipes item []).length = 0
+        · rw [if_pos hr, if_pos hr]; exact ⟨by omega, hdom'⟩
+        · rw [if_neg hr, if_neg hr]
+          have hrkall : ∀ mat per, (mat, per) ∈ getD recipes item [] → rank mat ≤ m := by
+            intro mat per hmem; have := hacy item mat per hmem; omega
+          have hpoall : ∀ mat per, (mat, per) ∈ getD recipes item [] → 0 < per :=
+            fun mat per hmem => hpos item mat per hmem
+          have hedgeR : ∀ mat per, (mat, per) ∈ getD recipes item [] →
+              Reaches recipes item mat :=
+            fun mat per hmem => Reaches.edge recipes item mat per hmem
+          have IHpair : ∀ (mt : String) (a1 a2 : Int) (g1 g2 : Dict Int),
+              rank mt ≤ m → 0 < a2 → a2 ≤ a1 →
+              DomR recipes mt g1 g2 → NonNeg g1 → NonNeg g2 →
+              (minGathers m mt a2 recipes (0, g2)).1 ≤ (minGathers m mt a1 recipes (0, g1)).1
+              ∧ DomR recipes mt (minGathers m mt a1 recipes (0, g1)).2
+                    (minGathers m mt a2 recipes (0, g2)).2 :=
+            fun mt a1 a2 g1 g2 hr' ha2 ha21 hdg hng1 hng2 =>
+              IH m (Nat.lt_succ_self m) mt a1 a2 g1 g2 hr' ha2 ha21 hdg hng1 hng2
+          exact domR_foldl recipes rank hpos m item IHpair (getD recipes item [])
+            (setD h1 item (getD h1 item 0 - min (getD h1 item 0) q1))
+            (setD h2 item (getD h2 item 0 - min (getD h2 item 0) q2))
+            0 0 (q1 - min (getD h1 item 0) q1) (q2 - min (getD h2 item 0) q2)
+            hrkall hpoall hedgeR (by omega) hrem (Int.le_refl 0) hdom' hnn1' hnn2'
+
+-- ---------------------------------------------------------------------------
 -- Craft-step coupling (the heart): minGathers after a valid craft ≤ before
 -- ---------------------------------------------------------------------------
 
@@ -2348,13 +2538,98 @@ theorem craft_agree_off (recipes : Recipes) (H : Dict Int) (c : String) :
 A valid `craft c` consumes `recipeOf c` (`−per` each) and produces `+1 c`. The
 resulting holdings `H'` have EQUAL `costMass` to `H` (`costMass_craft_preserved`)
 but are pointwise INCOMPARABLE to `H`, so `minGathers_mono` does not apply. The
-craft step of Ψ-monotonicity is `g(H') ≤ g(H)` where `g(x) = minGathersCount`.
+Ψ craft step is `(★) : minGathersCount item 1 H ≤ minGathersCount item 1 H'`
+(round 9: the count RISES when you craft).
 
-The cleanest fully-provable corner is when the crafted item IS the query item:
-then `H'` already covers it (holds ≥ 1), so its count is `0`, trivially `≤ g(H)`.
-The general corner (query item ≠ crafted item) is the residual simultaneous
-coupling the report has flagged as irreducible; it is NOT proven here.
+The OFF-PATH corner (`¬ Reaches recipes item c`) is now fully discharged
+(`star_unreached`): there `H' ⊑ H` on `item`'s reach-set, so
+`minGathers_mono_reach` gives `(★)` directly. The ON-PATH corner
+(`Reaches recipes item c`, where `H` and `H'` disagree on the reach-set at the
+`c`-subtree) is the residual cost-mass coupling the report flagged as
+irreducible; it is NOT proven here.
 -/
+
+/-- Consuming an input list with non-negative `per` only LOWERS each key:
+`getD (consumeHoldings H inputs) k 0 ≤ getD H k 0`. (Each fold step `setD`s
+`mat ↦ held − per ≤ held` at one key and leaves the rest fixed.) -/
+theorem consume_le (H : Dict Int) (k : String) :
+    ∀ (inputs : Dict Int), (∀ mat per, (mat, per) ∈ inputs → 0 ≤ per) →
+    getD (consumeHoldings H inputs) k 0 ≤ getD H k 0 := by
+  intro inputs
+  unfold consumeHoldings
+  induction inputs generalizing H with
+  | nil => intro _; exact Int.le_refl _
+  | cons mp rest ih =>
+    obtain ⟨mat, per⟩ := mp
+    intro hnn
+    simp only [List.foldl_cons]
+    have hper : 0 ≤ per := hnn mat per (by simp)
+    have hnn' : ∀ m' p, (m', p) ∈ rest → 0 ≤ p := fun m' p hm => hnn m' p (by simp [hm])
+    refine Int.le_trans (ih (dictSet H mat (dictGet H mat - per)) hnn') ?_
+    rw [dictSet_eq, getD_setD]
+    by_cases hmk : mat = k
+    · subst hmk; rw [if_pos rfl, dictGet_eq]; omega
+    · rw [if_neg hmk]; exact Int.le_refl _
+
+/-- **OFF-PATH DOMINATION.** When `¬ Reaches recipes item c`, the post-`craft c`
+holdings are `DomR`-below `H` on `item`'s reach-set: every key `item` reaches is
+`≠ c` (c is unreachable), so the `+1 c` is invisible and only the consumed inputs
+lower the value. The hook that makes `(★)` follow from `minGathers_mono_reach`
+in the off-path corner. -/
+theorem craft_domR_unreached (recipes : Recipes)
+    (hpos : PosRecipes recipes) (H : Dict Int) (item c : String)
+    (hnr : ¬ Reaches recipes item c) :
+    DomR recipes item
+      (applyAction recipes { gathers := 0, crafts := 0, holdings := H } (Action.craft c)).holdings
+      H := by
+  intro k hk
+  have hkc : k ≠ c := fun h => hnr (h ▸ hk)
+  show getD (dictSet (consumeHoldings H (recipeOf recipes c)) c
+        (dictGet (consumeHoldings H (recipeOf recipes c)) c + 1)) k 0 ≤ getD H k 0
+  rw [dictSet_eq, getD_setD, if_neg (fun h => hkc h.symm)]
+  refine consume_le H k (recipeOf recipes c) ?_
+  intro mat per hmem
+  rw [recipeOf_eq_getD] at hmem
+  exact Int.le_of_lt (hpos c mat per hmem)
+
+/-- The post-`craft c` holdings are `NonNeg` when the consumed holdings are
+(`ValidCraftAt` guarantees this at use sites). The `+1 c` only raises `c`. -/
+theorem craft_nonneg (recipes : Recipes) (H : Dict Int) (c : String)
+    (hcov : NonNeg (consumeHoldings H (recipeOf recipes c))) :
+    NonNeg (applyAction recipes { gathers := 0, crafts := 0, holdings := H }
+      (Action.craft c)).holdings := by
+  intro k
+  show 0 ≤ getD (dictSet (consumeHoldings H (recipeOf recipes c)) c
+        (dictGet (consumeHoldings H (recipeOf recipes c)) c + 1)) k 0
+  rw [dictSet_eq, getD_setD]
+  by_cases hkc : c = k
+  · subst hkc; rw [if_pos rfl, dictGet_eq]; have := hcov c; omega
+  · rw [if_neg hkc]; exact hcov k
+
+/-- **CRAFT STEP `(★)` — OFF-PATH CORNER (0-sorry).** When `¬ Reaches recipes
+item c` the count RISES (or holds) under a valid craft of `c`:
+`minGathersCount item 1 H ≤ minGathersCount item 1 H'`. The crafted `c` and its
+consumed inputs are all invisible-or-lowering to `item`'s traversal, so
+`DomR item H' H` (`craft_domR_unreached`) and `minGathers_mono_reach` close it.
+This is a genuine, non-vacuous arm of `(★)` (the shared-raw sibling case round 9
+flagged as not closeable by `minGathers_agree` — `minGathers_mono_reach` closes
+it because we need the INEQUALITY, not equality). -/
+theorem star_unreached (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank)
+    (hRB : ∀ item, rank item ≤ recipes.length)
+    (item c : String) (H : Dict Int)
+    (hnr : ¬ Reaches recipes item c)
+    (hnnH : NonNeg H)
+    (hcov : NonNeg (consumeHoldings H (recipeOf recipes c))) :
+    minGathersCount item 1 recipes H
+      ≤ minGathersCount item 1 recipes
+        (applyAction recipes { gathers := 0, crafts := 0, holdings := H } (Action.craft c)).holdings := by
+  unfold minGathersCount
+  have hdomR := craft_domR_unreached recipes hpos H item c hnr
+  have hnnH' := craft_nonneg recipes H c hcov
+  exact (minGathers_mono_reach recipes rank hpos hacy (recipes.length + 1) item 1 1
+    (applyAction recipes { gathers := 0, crafts := 0, holdings := H } (Action.craft c)).holdings H
+    (by have := hRB item; omega) (by omega) (Int.le_refl 1) hdomR hnnH' hnnH).1
 
 /-- The holdings after a `craft c` step from `H` hold at least one `c`:
 the consume foldl leaves `c` at some value `v`, then the produce step sets it to
