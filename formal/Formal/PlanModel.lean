@@ -1,4 +1,4 @@
--- @concept: planner, plan, action @property: lower-bound, soundness
+-- @concept: planner, plan, action @property: monotonicity, safety
 /-
 Plan-action model for the plannability-soundness theorem
 (`Formal.PlanModel.min_plan_length_le_plan`).
