@@ -619,4 +619,368 @@ theorem costMass_craft_step (fuel : Nat) (c : String) (recipes : Recipes)
         - getD (consumeHoldings H (recipeOf recipes c)) c 0 = 1 by omega]
   omega
 
+-- ---------------------------------------------------------------------------
+-- Weight recursion via fuel-stability (acyclic recipe DAG)
+-- ---------------------------------------------------------------------------
+
+/-!
+## The weight recursion `wf c = recipeMass(recipeOf c)`
+
+`costMass_craft_step` reduces a craft's cost-mass change to `wf c − recipeMass c`.
+A valid craft is cost-mass *preserving* exactly when these are EQUAL — the
+**weight recursion** `wf fuel c = recipeMass fuel (recipeOf c)`. `wf_succ_craft`
+unfolds `wf (n+1) c` into the empty-owned `foldl` over the recipe at fuel `n`,
+which sums to `recipeMass n (recipeOf c) = Σ per · wf n mat`. To bump the inner
+`wf n mat` up to `wf (n+1) mat` (so both sides live at the same fuel) we need
+**fuel-stability**: `wf` stops changing once fuel exceeds the item's recipe-DAG
+depth.
+
+### The acyclicity hypothesis (faithful, not a weakening)
+
+`wf` degrades one DAG level per unit of fuel, so stability needs the DAG to have
+bounded depth — i.e. the recipe graph is **acyclic**. We certify acyclicity with
+a topological `rank : String → Nat` strictly decreasing across every recipe edge
+(`Acyclic`). This is a TRUE domain property: a real crafting recipe never has an
+item as a (transitive) ingredient of itself, so a finite rank always exists.
+Naming it is honesty, not weakening — `minGathersCount` itself seeds its fuel
+with `len(recipes)+1` *precisely because* production recipes are acyclic (a
+cyclic recipe is uncraftable). We additionally assume `PosRecipes` (every recipe
+needs a strictly-positive quantity of each input) — also a true domain property
+(a recipe entry of `0` units is not a real ingredient).
+-/
+
+/-- A holdings dict whose every key reads as `0`. Under an all-zero `owned`,
+`minGathers` credits nothing, so the threaded `owned` cannot affect the gather
+count — the key to decoupling siblings in the recipe `foldl`. -/
+def AllZero (owned : Dict Int) : Prop := ∀ k, getD owned k 0 = 0
+
+/-- Every recipe input quantity is strictly positive (faithful: a real recipe
+needs `> 0` of each ingredient). -/
+def PosRecipes (recipes : Recipes) : Prop :=
+  ∀ item mat per, (mat, per) ∈ getD recipes item [] → 0 < per
+
+/-- The recipe DAG is acyclic, certified by a topological rank strictly
+decreasing across every recipe edge. Faithful: real recipes are acyclic (no item
+is a transitive ingredient of itself), and a finite rank witnesses it. -/
+def Acyclic (recipes : Recipes) (rank : String → Nat) : Prop :=
+  ∀ item mat per, (mat, per) ∈ getD recipes item [] → rank mat < rank item
+
+theorem allzero_nil : AllZero ([] : Dict Int) := fun _ => rfl
+
+/-- Setting a key to `0` preserves `AllZero`. -/
+theorem allzero_setD0 (owned : Dict Int) (item : String) (h : AllZero owned) :
+    AllZero (setD owned item 0) := by
+  intro k; rw [getD_setD]; by_cases hk : item = k
+  · subst hk; rw [if_pos rfl]
+  · rw [if_neg hk, h k]
+
+/-- A rank-`0` acyclic item is RAW: any input would have rank `< 0`, impossible. -/
+theorem rank_zero_raw (recipes : Recipes) (rank : String → Nat) (item : String)
+    (hacy : Acyclic recipes rank) (h0 : rank item = 0) :
+    (getD recipes item []).length = 0 := by
+  cases hl : getD recipes item [] with
+  | nil => simp
+  | cons hd tl =>
+    exfalso; obtain ⟨mat, per⟩ := hd
+    have hmem : (mat, per) ∈ getD recipes item [] := by rw [hl]; simp
+    have := hacy item mat per hmem; omega
+
+/-- **DECOUPLING.** Under all-zero `owned`, positive `qty`, and positive recipes,
+the gather COUNT is owned-independent (equals the empty-owned count) and the
+residual `owned` stays `AllZero`. Zero holdings ⇒ zero crediting ⇒ the threaded
+`owned` never affects the count. This is the lemma that collapses the report's
+"foldl sibling-threading arm". -/
+theorem minGathers_allzero (fuel : Nat) (item : String) (qty : Int)
+    (recipes : Recipes) (owned : Dict Int)
+    (hpos : PosRecipes recipes) (hq : 0 < qty) (hz : AllZero owned) :
+    (minGathers fuel item qty recipes (0, owned)).1
+      = (minGathers fuel item qty recipes (0, [])).1
+    ∧ AllZero (minGathers fuel item qty recipes (0, owned)).2 := by
+  induction fuel generalizing item qty owned with
+  | zero => exact ⟨rfl, hz⟩
+  | succ n ih =>
+    rw [minGathers_succ, minGathers_succ]
+    have he : getD ([]:Dict Int) item 0 = 0 := rfl
+    rw [hz item, he]
+    have hmin : min (0:Int) qty = 0 := by omega
+    simp only [hmin, Int.sub_zero]
+    rw [if_neg (show ¬ qty ≤ 0 by omega), if_neg (show ¬ qty ≤ 0 by omega)]
+    by_cases hr : (getD recipes item []).length = 0
+    · rw [if_pos hr, if_pos hr]
+      exact ⟨rfl, allzero_setD0 owned item hz⟩
+    · rw [if_neg hr, if_neg hr]
+      suffices H : ∀ (rc : Dict Int) (o1 o2 : Dict Int) (t : Int),
+          (∀ mat per, (mat, per) ∈ rc → 0 < per) → AllZero o1 → AllZero o2 →
+          (List.foldl (fun st mat => minGathers n mat.1 (mat.2 * qty) recipes st)
+              (t, o1) rc).1
+            = (List.foldl (fun st mat => minGathers n mat.1 (mat.2 * qty) recipes st)
+                (t, o2) rc).1
+          ∧ AllZero (List.foldl
+              (fun st mat => minGathers n mat.1 (mat.2 * qty) recipes st) (t, o1) rc).2 by
+        have hmem : ∀ mat per, (mat, per) ∈ getD recipes item [] → 0 < per :=
+          fun mat per hmem => hpos item mat per hmem
+        exact H (getD recipes item []) (setD owned item 0) (setD ([]:Dict Int) item 0) 0
+          hmem (allzero_setD0 owned item hz) (allzero_setD0 [] item allzero_nil)
+      clear hr
+      intro rc
+      induction rc with
+      | nil => intro o1 o2 t _ ho1 _; exact ⟨rfl, ho1⟩
+      | cons mp rest ihrec =>
+        intro o1 o2 t hmem ho1 ho2
+        obtain ⟨mat, per⟩ := mp
+        simp only [List.foldl_cons]
+        have hper : 0 < per := hmem mat per (by simp)
+        have hpq : 0 < per * qty := Int.mul_pos hper hq
+        have h1 := ih mat (per * qty) o1 hpq ho1
+        have h2 := ih mat (per * qty) o2 hpq ho2
+        have ta1 := minGathers_total_additive n mat (per*qty) recipes t o1
+        have ta2 := minGathers_total_additive n mat (per*qty) recipes t o2
+        have hmem' : ∀ m p, (m, p) ∈ rest → 0 < p :=
+          fun m p hm => hmem m p (by simp [hm])
+        rw [ta1, ta2, h1.1, h2.1]
+        exact ihrec _ _ _ hmem' h1.2 h2.2
+
+/-- **SCALING.** The empty-seeded (more generally all-zero-seeded) gather count
+is linear in the requested quantity: `minGathers (k·q) = k · minGathers q` for
+positive `k, q`. (Zero crediting ⇒ each sub-quantity scales by `k` through the
+recipe DAG.) -/
+theorem minGathers_scale (recipes : Recipes) (hpos : PosRecipes recipes) :
+    ∀ (fuel : Nat) (item : String) (k q : Int) (owned : Dict Int),
+      0 < k → 0 < q → AllZero owned →
+      (minGathers fuel item (k * q) recipes (0, owned)).1
+        = k * (minGathers fuel item q recipes (0, owned)).1 := by
+  intro fuel
+  induction fuel with
+  | zero =>
+    intro item k q owned hk hq hz
+    simp only [minGathers, Int.zero_add]
+  | succ n ih =>
+    intro item k q owned hk hq hz
+    rw [minGathers_succ, minGathers_succ]
+    simp only [hz item]
+    have hmin1 : min (0:Int) (k*q) = 0 := by have := Int.mul_pos hk hq; omega
+    have hmin2 : min (0:Int) q = 0 := by omega
+    rw [hmin1, hmin2]
+    simp only [Int.sub_zero]
+    rw [if_neg (show ¬ k*q ≤ 0 by have := Int.mul_pos hk hq; omega),
+        if_neg (show ¬ q ≤ 0 by omega)]
+    by_cases hr : (getD recipes item []).length = 0
+    · rw [if_pos hr, if_pos hr]
+      simp only [Int.zero_add]
+    · rw [if_neg hr, if_neg hr]
+      have hz0 : AllZero (setD owned item 0) := allzero_setD0 owned item hz
+      have hpomat : ∀ mat per, (mat,per) ∈ getD recipes item [] → 0 < per :=
+        fun mat per hmem => hpos item mat per hmem
+      suffices Hgen : ∀ (rc : Dict Int) (o1 o2 : Dict Int) (t : Int),
+          (∀ mat per, (mat,per) ∈ rc → 0 < per) → AllZero o1 → AllZero o2 →
+          (List.foldl (fun st mat => minGathers n mat.1 (mat.2 * (k*q)) recipes st)
+              (k*t, o1) rc).1
+            = k * (List.foldl (fun st mat => minGathers n mat.1 (mat.2 * q) recipes st)
+                (t, o2) rc).1 by
+        have := Hgen (getD recipes item []) (setD owned item 0) (setD owned item 0) 0
+          hpomat hz0 hz0
+        simpa using this
+      intro rc
+      induction rc with
+      | nil => intro o1 o2 t _ _ _; rfl
+      | cons mp rest ihrec =>
+        intro o1 o2 t hpo ho1 ho2
+        obtain ⟨mat, per⟩ := mp
+        simp only [List.foldl_cons]
+        have hper : 0 < per := hpo mat per (by simp)
+        have hpkq : 0 < per * (k*q) := Int.mul_pos hper (Int.mul_pos hk hq)
+        have hpq : 0 < per * q := Int.mul_pos hper hq
+        have ta1 := minGathers_total_additive n mat (per*(k*q)) recipes (k*t) o1
+        have ta2 := minGathers_total_additive n mat (per*q) recipes t o2
+        rw [ta1, ta2]
+        have ca1 := (minGathers_allzero n mat (per*(k*q)) recipes o1 hpos hpkq ho1)
+        have ca2 := (minGathers_allzero n mat (per*q) recipes o2 hpos hpq ho2)
+        have hassoc : per*(k*q) = k*(per*q) := by
+          rw [← Int.mul_assoc, Int.mul_comm per k, Int.mul_assoc]
+        have hscale := ih mat k (per*q) [] hk hpq allzero_nil
+        have hheq : (minGathers n mat (per*(k*q)) recipes (0,o1)).1 + k*t
+                  = k * ((minGathers n mat (per*q) recipes (0,o2)).1 + t) := by
+          rw [ca1.1, ca2.1, hassoc, hscale, Int.mul_add]
+        rw [hheq]
+        have hpo' : ∀ m' p, (m',p) ∈ rest → 0 < p := fun m' p hm => hpo m' p (by simp [hm])
+        exact ihrec _ _ _ hpo' ca1.2 ca2.2
+
+/-- **FUEL-STABILITY (count).** Once `fuel ≥ rank item`, one more unit of fuel
+does not change the gather count: `minGathers (n+1) item = minGathers n item`
+(on the `.1` projection — the residual `owned` may differ but is `AllZero`
+either way). Strong induction on the fuel `n`; the recipe `foldl` steps in
+lockstep at the two fuels because every material has rank `< rank item ≤ n`
+(so the IH applies one fuel lower) and `minGathers_allzero` absorbs the
+differing residuals. The acyclicity rank is exactly what bounds the DAG depth. -/
+theorem minGathers_stable_count (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank) :
+    ∀ (n : Nat) (item : String) (qty : Int) (owned : Dict Int),
+      rank item ≤ n → 0 < qty → AllZero owned →
+      (minGathers (n+1) item qty recipes (0, owned)).1
+        = (minGathers n item qty recipes (0, owned)).1 := by
+  intro n
+  induction n using Nat.strongRecOn with
+  | ind n IH =>
+    intro item qty owned hrank hq hz
+    match n, IH with
+    | 0, _ =>
+      have hraw : (getD recipes item []).length = 0 :=
+        rank_zero_raw recipes rank item hacy (by omega)
+      rw [minGathers_succ]
+      simp only [hz item]
+      have hmin : min (0:Int) qty = 0 := by omega
+      simp only [hmin, Int.sub_zero]
+      rw [if_neg (show ¬ qty ≤ 0 by omega), if_pos hraw]
+      show (0 + qty) = (minGathers 0 item qty recipes (0, owned)).1
+      simp only [minGathers]
+    | m + 1, IH =>
+      rw [minGathers_succ, minGathers_succ]
+      simp only [hz item]
+      have hmin : min (0:Int) qty = 0 := by omega
+      simp only [hmin, Int.sub_zero]
+      rw [if_neg (show ¬ qty ≤ 0 by omega), if_neg (show ¬ qty ≤ 0 by omega)]
+      by_cases hr : (getD recipes item []).length = 0
+      · rw [if_pos hr, if_pos hr]
+      · rw [if_neg hr, if_neg hr]
+        have hz0 : AllZero (setD owned item 0) := allzero_setD0 owned item hz
+        have hrankmat : ∀ mat per, (mat, per) ∈ getD recipes item [] → rank mat ≤ m := by
+          intro mat per hmem
+          have := hacy item mat per hmem; omega
+        have hposmat : ∀ mat per, (mat, per) ∈ getD recipes item [] → 0 < per :=
+          fun mat per hmem => hpos item mat per hmem
+        suffices Hgen : ∀ (rc : Dict Int) (o1 o2 : Dict Int) (t : Int),
+            (∀ mat per, (mat,per) ∈ rc → rank mat ≤ m) →
+            (∀ mat per, (mat,per) ∈ rc → 0 < per) →
+            AllZero o1 → AllZero o2 →
+            (List.foldl (fun st mat => minGathers (m+1) mat.1 (mat.2 * qty) recipes st)
+                (t, o1) rc).1
+              = (List.foldl (fun st mat => minGathers m mat.1 (mat.2 * qty) recipes st)
+                  (t, o2) rc).1 by
+          exact Hgen (getD recipes item []) (setD owned item 0) (setD owned item 0) 0
+            hrankmat hposmat hz0 hz0
+        intro rc
+        induction rc with
+        | nil => intro o1 o2 t _ _ _ _; rfl
+        | cons mp rest ihrec =>
+          intro o1 o2 t hrk hpo ho1 ho2
+          obtain ⟨mat, per⟩ := mp
+          simp only [List.foldl_cons]
+          have hper : 0 < per := hpo mat per (by simp)
+          have hpq : 0 < per * qty := Int.mul_pos hper hq
+          have hrm : rank mat ≤ m := hrk mat per (by simp)
+          have hco1 := (minGathers_allzero (m+1) mat (per*qty) recipes o1 hpos hpq ho1)
+          have hco2 := (minGathers_allzero m mat (per*qty) recipes o2 hpos hpq ho2)
+          have hstab := IH m (Nat.lt_succ_self m) mat (per*qty) [] hrm hpq allzero_nil
+          have ta1 := minGathers_total_additive (m+1) mat (per*qty) recipes t o1
+          have ta2 := minGathers_total_additive m mat (per*qty) recipes t o2
+          rw [ta1, ta2]
+          have hheq : (minGathers (m+1) mat (per*qty) recipes (0, o1)).1
+                    = (minGathers m mat (per*qty) recipes (0, o2)).1 := by
+            rw [hco1.1, hco2.1, hstab]
+          rw [hheq]
+          have hrk' : ∀ m' p, (m',p) ∈ rest → rank m' ≤ m :=
+            fun m' p hm => hrk m' p (by simp [hm])
+          have hpo' : ∀ m' p, (m',p) ∈ rest → 0 < p :=
+            fun m' p hm => hpo m' p (by simp [hm])
+          exact ihrec _ _ _ hrk' hpo' hco1.2 hco2.2
+
+/-- `wf` is fuel-stable above the item's rank: `wf (n+1) mat = wf n mat` when
+`rank mat ≤ n`. (Specialisation of `minGathers_stable_count` to `wf`.) -/
+theorem wf_stable (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank)
+    (n : Nat) (mat : String) (hr : rank mat ≤ n) :
+    wf (n+1) mat recipes = wf n mat recipes := by
+  show (minGathers (n+1) mat 1 recipes (0,[])).1 = (minGathers n mat 1 recipes (0,[])).1
+  exact minGathers_stable_count recipes rank hpos hacy n mat 1 [] hr (by omega) allzero_nil
+
+/-- The empty-owned recipe `foldl` (at `q = 1`) sums to `recipeMass`:
+`Σ over (mat,per), per · wf n mat`. Threads the additive total; each material's
+count decouples to its empty-owned value (`minGathers_allzero`) and scales by
+`per` (`minGathers_scale`), giving `per · wf n mat`. -/
+theorem foldl_recipeMass (n : Nat) (recipes : Recipes) (hpos : PosRecipes recipes) :
+    ∀ (rc : Dict Int) (o : Dict Int) (t : Int),
+      (∀ mat per, (mat,per) ∈ rc → 0 < per) → AllZero o →
+      (List.foldl (fun st mat => minGathers n mat.1 (mat.2 * 1) recipes st) (t, o) rc).1
+        = t + recipeMass n rc recipes := by
+  intro rc
+  induction rc with
+  | nil => intro o t _ _; simp [recipeMass]
+  | cons mp rest ihrec =>
+    intro o t hpo ho
+    obtain ⟨mat, per⟩ := mp
+    simp only [List.foldl_cons, recipeMass_cons]
+    have hper : 0 < per := hpo mat per (by simp)
+    have hp1 : 0 < per * 1 := by omega
+    have ta := minGathers_total_additive n mat (per*1) recipes t o
+    rw [ta]
+    have ca := (minGathers_allzero n mat (per*1) recipes o hpos hp1 ho)
+    have hpo' : ∀ m' p, (m',p) ∈ rest → 0 < p := fun m' p hm => hpo m' p (by simp [hm])
+    rw [ihrec _ _ hpo' ca.2, ca.1]
+    have hsc := minGathers_scale recipes hpos n mat per 1 [] hper (by omega) allzero_nil
+    rw [hsc]
+    show per * (minGathers n mat 1 recipes (0,[])).1 + t + recipeMass n rest recipes
+       = t + (per * wf n mat recipes + recipeMass n rest recipes)
+    have hwf : wf n mat recipes = (minGathers n mat 1 recipes (0,[])).1 := rfl
+    rw [hwf]; omega
+
+/-- `recipeMass` is fuel-stable when every input has rank `≤ n` (each `wf` term
+is, by `wf_stable`). -/
+theorem recipeMass_stable (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank) (n : Nat) :
+    ∀ (rc : Dict Int), (∀ mat per, (mat,per) ∈ rc → rank mat ≤ n) →
+      recipeMass (n+1) rc recipes = recipeMass n rc recipes := by
+  intro rc
+  induction rc with
+  | nil => intro _; rfl
+  | cons mp rest ih =>
+    intro hrk
+    obtain ⟨mat, per⟩ := mp
+    simp only [recipeMass_cons]
+    have hrm : rank mat ≤ n := hrk mat per (by simp)
+    rw [wf_stable recipes rank hpos hacy n mat hrm]
+    have hrk' : ∀ m' p, (m',p) ∈ rest → rank m' ≤ n := fun m' p hm => hrk m' p (by simp [hm])
+    rw [ih hrk']
+
+/-- `recipeOf` (a `List.find?`) agrees with `getD` on the recipe table. -/
+theorem recipeOf_eq_getD (recipes : Recipes) (c : String) :
+    recipeOf recipes c = getD recipes c [] := by
+  unfold recipeOf
+  induction recipes with
+  | nil => rfl
+  | cons hd tl ih =>
+    obtain ⟨k, v⟩ := hd
+    rw [getD]
+    by_cases h : (k == c) = true
+    · simp only [List.find?, h, if_true]
+    · have hf : (k == c) = false := by simpa using h
+      simp only [List.find?, hf]
+      rw [if_neg (by simp)]
+      exact ih
+
+/-- **WEIGHT-RECURSION.** For a craftable item `c` of rank `≤ n+1` in an acyclic,
+positive recipe table, its weight equals its recipe input mass:
+`wf (n+1) c = recipeMass (n+1) (recipeOf c)`. Combined with `costMass_craft_step`
+this makes a valid craft cost-mass PRESERVING. Proof: `wf_succ_craft` unfolds to
+the fuel-`n` recipe `foldl`, which `foldl_recipeMass` sums to `recipeMass n`,
+then `recipeMass_stable` bumps fuel `n → n+1` (every input has rank `≤ n`). -/
+theorem wf_weight_rec (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank)
+    (n : Nat) (c : String) (hcr : ¬ (getD recipes c []).length = 0)
+    (hrank : rank c ≤ n + 1) :
+    wf (n+1) c recipes = recipeMass (n+1) (recipeOf recipes c) recipes := by
+  rw [wf_succ_craft n c recipes hcr]
+  have hro : recipeOf recipes c = getD recipes c [] := recipeOf_eq_getD recipes c
+  have hrk : ∀ mat per, (mat,per) ∈ getD recipes c [] → rank mat ≤ n := by
+    intro mat per hmem
+    have := hacy c mat per hmem; omega
+  have hpo : ∀ mat per, (mat,per) ∈ getD recipes c [] → 0 < per :=
+    fun mat per hmem => hpos c mat per hmem
+  have hz0 : AllZero (setD ([]:Dict Int) c (0-0)) := by
+    intro k; rw [getD_setD]; by_cases hk : c = k
+    · subst hk; rw [if_pos rfl]; rfl
+    · rw [if_neg hk]; rfl
+  rw [foldl_recipeMass n recipes hpos (getD recipes c []) (setD [] c (0-0)) 0 hpo hz0]
+  simp only [Int.zero_add]
+  rw [hro, recipeMass_stable recipes rank hpos hacy n (getD recipes c []) hrk]
+
 end Formal.PlanModel
