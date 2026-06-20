@@ -118,6 +118,69 @@ theorem cycleStepF_reaches_fifty_of_fights (s : State) (h : FightsBelowCap s) :
   have hstep := cycleStepF_fight_descends (cycleStepFN k s) hk (h k hk)
   rwa [← cycleStepFN_succ_outer k s] at hstep
 
+/-- **`FightsBelowCap` is now a RESULT, not an assumption — modulo the named residuals.**
+
+From the discharged arming (`arming_justified_below_fifty`, Task 5 — backed by Task 4's
+kernel winnable-target existence + the production differential) plus the explicitly-named
+residuals, `FightsBelowCap s` is DERIVED.
+
+The third (objective) disjunct of `FightsBelowCap` is a conjunction:
+`productionLadder … = some .objectiveStep ∧ objectiveStepIsFight = true`. This proof
+supplies its `objectiveStepIsFight = true` half via `arming_justified_below_fifty`
+(the JUSTIFIED arming — NOT the bare unconditional `perceptionRefresh_objectiveStepIsFight`),
+so the Bool is BACKED by kernel target-existence, not freely asserted.
+
+Residual hypotheses (the honest, NOT-yet-discharged dominoes):
+* `hquiet` — **blockers-quiet / selection**: at each below-50 step the ladder SELECTS one
+  of {`bankUnlock`, `reachUnlockLevel`, `objectiveStep`} (i.e. every higher-priority chore
+  / claim / gear-review / task-management blocker is quiet so the fight-bearing tier is
+  reached). This is the next domino; it is NAMED, not assumed away. It does NOT mention
+  `objectiveStepIsFight` — that conjunct arrives from the discharged arming, keeping the two
+  concerns separate and `hquiet` non-vacuous.
+* `hspawn` — **runtime invariant (real spawn level `1 ≤ level`)**: every reachable state has
+  `level ≥ 1`, the proviso `arming_justified_below_fifty` needs for the kernel target to
+  exist. A standard runtime invariant of the production state.
+* LIV-001 — inherited transitively (not a hypothesis here, an axiom of the descent engine
+  consumed by `cycleStepF_reaches_fifty_of_fights`). -/
+theorem fightsBelowCap_of_grounded (s : State)
+    (hquiet : ∀ k, (cycleStepFN k s).level < 50 →
+        productionLadder (perceptionRefresh (cycleStepFN k s)) = some .bankUnlock
+      ∨ productionLadder (perceptionRefresh (cycleStepFN k s)) = some .reachUnlockLevel
+      ∨ productionLadder (perceptionRefresh (cycleStepFN k s)) = some .objectiveStep)
+    (hspawn : ∀ k, 1 ≤ (cycleStepFN k s).level) :
+    FightsBelowCap s := by
+  intro k hk
+  rcases hquiet k hk with hbank | hreach | hobj
+  · exact Or.inl hbank
+  · exact Or.inr (Or.inl hreach)
+  · refine Or.inr (Or.inr ⟨hobj, ?_⟩)
+    -- The `objectiveStepIsFight = true` conjunct is the DISCHARGED arming, not a free set.
+    exact (arming_justified_below_fifty (cycleStepFN k s) (hspawn k) hk).2
+
+/-- **The grounded reach-50 capstone.** Applies `cycleStepF_reaches_fifty_of_fights` to the
+DERIVED `fightsBelowCap_of_grounded` — so the faithful cycle reaches level 50 with
+`FightsBelowCap` no longer assumed but DISCHARGED from the grounded arming, modulo ONLY the
+named residuals.
+
+Residual hypotheses (the EXACT remaining assumptions — nothing else):
+* `hquiet` — **blockers-quiet / selection** (the named next domino; see
+  `fightsBelowCap_of_grounded`).
+* `hspawn` — **runtime invariant `1 ≤ level`** (real spawn level, standard).
+* LIV-001 — the descent engine's axiom, inherited via
+  `cycleStepF_reaches_fifty_of_fights` (NOT a free hypothesis).
+
+The arming third-disjunct routes through `arming_justified_below_fifty` (the justified form,
+kernel-backed), so `objectiveStepIsFight := true` is no longer a free assertion feeding this
+capstone. This capstone does NOT claim blockers-quiet is discharged. -/
+theorem ai_reaches_fifty_grounded (s : State)
+    (hquiet : ∀ k, (cycleStepFN k s).level < 50 →
+        productionLadder (perceptionRefresh (cycleStepFN k s)) = some .bankUnlock
+      ∨ productionLadder (perceptionRefresh (cycleStepFN k s)) = some .reachUnlockLevel
+      ∨ productionLadder (perceptionRefresh (cycleStepFN k s)) = some .objectiveStep)
+    (hspawn : ∀ k, 1 ≤ (cycleStepFN k s).level) :
+    ∃ k, (cycleStepFN k s).level ≥ 50 :=
+  cycleStepF_reaches_fifty_of_fights s (fightsBelowCap_of_grounded s hquiet hspawn)
+
 /-- **Non-vacuity check.** `FightsBelowCap` is jointly satisfiable WITH the goal — the
     degenerate `≥ 50` witness (the residual holds vacuously, the goal at `k = 0`).
     Distinguishes this formulation from the vacuous i.o. one
