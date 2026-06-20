@@ -3348,7 +3348,25 @@ theorem star_of_corner3 (recipes : Recipes) (rank : String → Nat)
 full plannability-soundness bound `minGathersCount item 1 owned ≤ planGathers`
 holds for any valid plan producing `item`, GIVEN the single open corner
 `corner3` (`item ≠ c ∧ Reaches recipes item c`). Every other ingredient is
-proven 0-sorry; this is the whole theorem reduced to exactly one lemma. -/
+proven 0-sorry; this is the whole theorem reduced to exactly one lemma.
+
+**STATUS (2026-06-20): `corner3` RETIRED — intentionally not discharged.** A
+production-necessity audit established that this lower bound is NOT load-bearing:
+its sole consumer is `is_plannable` (`ai/goals/progression.py`'s `min_plan_length`
+gate), which functions purely as an A*-budget optimization. Both unsoundness
+failure modes are BENIGN — a false rejection reroutes to an incremental
+`GatherMaterialsGoal` on the same recipe path (`ai/strategy_driver.py` `_equippable_goal`
+~437 / `objective_step_goal` ~490), and an over-admission falls through the
+`len(plan) > 0` arbiter discipline (`ai/arbiter_select.py` ~84/95) to the next
+candidate (capped by `DoomedMemo`). The real progress invariant is those runtime
+guards, NOT this proof. The OBTAINABILITY direction (the half the level-50
+liveness actually needs) IS proven 0-sorry below (`canonicalPlan*` /
+`gear_obtainable_of_minPlanLength_le`). `corner3`/`star_of_corner3` are kept as
+optional defense-in-depth; a genuine discharge would need a max-flow /
+Multiset-conservation argument over the recipe-sibling foldl (the
+distribution-across-keys content the no-surplus restriction does NOT simplify —
+the on-path case is itself the hard case). See
+`docs/superpowers/specs/2026-06-20-objectivestep-arming-liveness-design.md`. -/
 theorem minGathers_le_gathers_of_corner3 (recipes : Recipes) (rank : String → Nat)
     (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank)
     (hRB : ∀ item, rank item ≤ recipes.length) (hrnd : RecipeNoDup recipes)
