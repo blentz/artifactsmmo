@@ -60,6 +60,7 @@ import Formal.GameDataAccessors
 import Formal.WinnableCascade
 import Formal.RealizableLoadout
 import Formal.Liveness.StickySelect
+import Formal.ServableFilter
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
@@ -2805,6 +2806,17 @@ example : ∀ (targetInNeeded hasGate : Bool) (curLevel craftLevel owned needed 
     Formal.SkillGateFastFail.isPlannable targetInNeeded hasGate curLevel craftLevel owned needed = false →
     ∀ plan, Formal.SkillGateFastFail.runPlan (decide (craftLevel ≤ curLevel)) owned plan < needed :=
   @Formal.SkillGateFastFail.fastfail_sound
+
+-- ─── ServableFilter (decide() servable filter) anti-weakening pins ───
+-- ANY servable ⇒ the result is exactly the servable subset (unservable roots dropped).
+example : ∀ {α : Type} (tagged : List (α × Bool)), tagged.any (·.2) = true →
+    Formal.ServableFilter.keepServable tagged
+      = tagged.filterMap (fun p => if p.2 then some p.1 else none) :=
+  @Formal.ServableFilter.keepServable_all_servable_of_any
+-- NONE servable ⇒ keep all (graceful fallback, never strands the bot goal-less).
+example : ∀ {α : Type} (tagged : List (α × Bool)), tagged.any (·.2) = false →
+    Formal.ServableFilter.keepServable tagged = tagged.map (·.1) :=
+  @Formal.ServableFilter.keepServable_id_of_none
 
 -- ─── StickySelect (Tier-2 root sticky + progress-gated release) anti-weakening pins ───
 -- NO-ZOMBIE: if the sticky override keeps a non-top root `c` two cycles running,

@@ -2011,6 +2011,14 @@ def runNextLast (args : Array Json) : Json :=
   | some s => Json.str s
   | none   => Json.null
 
+/-- Servable filter. args: [n, flag_0..flag_{n-1}]. Items are their indices; returns
+    the kept indices (servable subset, or all when none servable). -/
+def runKeepServable (args : Array Json) : Json :=
+  let n := (intArg args 0).toNat
+  let tagged : List (Int × Bool) :=
+    (List.range n).map (fun (i : Nat) => ((i : Int), intArg args (1 + i) != 0))
+  Json.arr ((Formal.ServableFilter.keepServable tagged).map (fun x => Json.num x)).toArray
+
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
   let args := ((item.getObjValD "args" |>.getArr?).toOption.getD #[])
@@ -2018,6 +2026,8 @@ def runOne (item : Json) : Json :=
     runStickyChoose args
   else if kind == "next_last" then
     runNextLast args
+  else if kind == "keep_servable" then
+    runKeepServable args
   else if kind == "calculate_path" then
     runCalculatePath (intArg args 0) (intArg args 1) (intArg args 2) (intArg args 3)
   else if kind == "task_batch" then

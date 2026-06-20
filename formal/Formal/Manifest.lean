@@ -1064,6 +1064,12 @@ open Formal.PriorityBand
 #check @Formal.SkillGateFastFail.runPlan_gate_closed    -- gate closed ⇒ owned invariant ∀ plan
 #check @Formal.SkillGateFastFail.fastfail_sound         -- fast-fail fires ⇒ ∀ plan owned < needed
 
+-- ServableFilter required roles (decide() servable filter;
+-- src/artifactsmmo_cli/ai/tiers/servable_filter.py::keep_servable):
+#check @Formal.ServableFilter.keepServable_all_servable_of_any  -- any servable ⇒ kept = servable subset
+#check @Formal.ServableFilter.keepServable_id_of_none           -- none servable ⇒ keep all
+#check @Formal.ServableFilter.keepServable_nonempty_of_nonempty -- never drops to empty
+
 -- StickySelect required roles (Tier-2 root sticky + progress-gated release;
 -- src/artifactsmmo_cli/ai/tiers/strategy.py:582-595 + the player.py:340 fix):
 #check @Formal.Liveness.StickySelect.sticky_requires_progress  -- no-zombie: sticky-held non-top ⇒ progressed

@@ -44,6 +44,7 @@ SCALAR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "scala
 PLANNER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "planner.py"
 ARBITER_SELECT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "arbiter_select.py"
 STICKY_SELECT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "sticky_select_core.py"
+SERVABLE_FILTER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "servable_filter.py"
 TASK_DECISION_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_decision_core.py"
 OBJECTIVE_COMPLETION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "objective_completion.py"
 LOW_YIELD_BOUNDARY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "low_yield_boundary.py"
@@ -1092,6 +1093,26 @@ STICKY_SELECT_MUTATIONS = [
     ("sticky_select: next_last ignores progressed (always feeds anchor)",
      "    return chosen_repr if progressed else None",
      "    return chosen_repr"),
+]
+
+
+# servable_filter mutations -- anchors for keep_servable (Lean-proved
+# ServableFilter.keepServable). The differential (test_servable_filter_diff.py) kills each.
+SERVABLE_FILTER_MUTATIONS = [
+    # never filter: keep all items even when some are servable.
+    ("servable_filter: never drops unservable (return all)",
+     "    kept = [it for it, ok in zip(items, servable, strict=True) if ok]\n"
+     "    return kept if kept else list(items)",
+     "    kept = [it for it, ok in zip(items, servable, strict=True) if ok]\n"
+     "    return list(items)"),
+    # invert servable test: keep the UNservable ones.
+    ("servable_filter: servable test inverted (if ok -> if not ok)",
+     "    kept = [it for it, ok in zip(items, servable, strict=True) if ok]",
+     "    kept = [it for it, ok in zip(items, servable, strict=True) if not ok]"),
+    # drop the graceful fallback: return empty when nothing is servable (strands the bot).
+    ("servable_filter: drop graceful fallback (return kept, may be empty)",
+     "    return kept if kept else list(items)",
+     "    return kept"),
 ]
 
 
@@ -3297,6 +3318,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_arbiter_select_diff.py", survivors)
     run_group(STICKY_SELECT_SRC, STICKY_SELECT_MUTATIONS,
               "formal/diff/test_sticky_select_diff.py", survivors)
+    run_group(SERVABLE_FILTER_SRC, SERVABLE_FILTER_MUTATIONS,
+              "formal/diff/test_servable_filter_diff.py", survivors)
     run_group(TASK_DECISION_CORE_SRC, TASK_DECISION_MUTATIONS,
               "formal/diff/test_task_decision_diff.py", survivors)
     run_group(OBJECTIVE_COMPLETION_SRC, WEIGHTED_REMAINING_MUTATIONS,
