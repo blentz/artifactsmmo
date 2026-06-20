@@ -1001,4 +1001,159 @@ theorem costMass_craft_preserved (recipes : Recipes) (rank : String → Nat)
       wf_weight_rec recipes rank hpos hacy n c hcr hrank]
   omega
 
+-- ---------------------------------------------------------------------------
+-- Reconstruction identity: minGathers count ↔ costMass under real holdings
+-- ---------------------------------------------------------------------------
+
+/-- `wf` of a raw item is `1` at ANY fuel (`wf_zero` ⊔ `wf_succ_raw`). -/
+theorem wf_raw (F : Nat) (item : String) (recipes : Recipes)
+    (hraw : (getD recipes item []).length = 0) :
+    wf F item recipes = 1 := by
+  cases F with
+  | zero => exact wf_zero item recipes
+  | succ n => exact wf_succ_raw n item recipes hraw
+
+/-- **RECONSTRUCTION IDENTITY.** The bridge from `minGathers` under REAL holdings
+to `costMass`: the gather count plus the cost-mass already in hand equals the
+total cost-mass needed (`q · wf item`) plus the residual cost-mass left after the
+greedy per-branch owned consumption:
+
+    (minGathers f item q recipes (0, owned)).1 + costMass F owned recipes
+      = q · wf F item recipes + costMass F (minGathers f …).2 recipes
+
+The cost-mass fuel `F` is held FIXED (any `F ≥ rank item`) while the recursion
+fuel `f` (`≥ rank item`) is the induction variable — this is the fuel-alignment
+that makes the sibling-IH and the parent goal live at the SAME weight fuel `F`,
+so the threaded residual `owned` accounts exactly as a `costMass` delta. The
+craft (`foldl`) arm sums the per-material conservation (the IH at fuel `f−1`) and
+collapses via `wf_weight_rec` (`wf F item = recipeMass F (recipeOf item)`); the
+raw arm is `wf_raw`. This is the report's long-sought "precise owned-credit
+`min_gathers` performs, which `costMass` (upper bound) loses". -/
+theorem minGathers_recon (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank) (F : Nat) :
+    ∀ (f : Nat) (item : String) (q : Int) (owned : Dict Int),
+      rank item ≤ f → rank item ≤ F → 0 < q →
+      (minGathers f item q recipes (0, owned)).1
+        + costMass F owned recipes
+        = q * wf F item recipes
+          + costMass F (minGathers f item q recipes (0, owned)).2 recipes := by
+  intro f
+  induction f with
+  | zero =>
+    intro item q owned hrf hrF hq
+    have hraw : (getD recipes item []).length = 0 :=
+      rank_zero_raw recipes rank item hacy (by omega)
+    simp only [minGathers]
+    rw [wf_raw F item recipes hraw]
+    show 0 + q + costMass F owned recipes = q * 1 + costMass F owned recipes
+    omega
+  | succ n ih =>
+    intro item q owned hrf hrF hq
+    rw [minGathers_succ]
+    by_cases hc : q - min (getD owned item 0) q ≤ 0
+    · rw [if_pos hc]
+      simp only
+      have hused : min (getD owned item 0) q = q := by
+        have := Int.min_le_right (getD owned item 0) q; omega
+      rw [hused, costMass_setD]
+      rw [show getD owned item 0 - q - getD owned item 0 = -q by omega, Int.neg_mul]
+      omega
+    · rw [if_neg hc]
+      have hused : min (getD owned item 0) q = getD owned item 0 := by
+        have := Int.min_le_left (getD owned item 0) q
+        have := Int.min_le_right (getD owned item 0) q; omega
+      by_cases hr : (getD recipes item []).length = 0
+      · rw [if_pos hr]
+        simp only
+        rw [hused, costMass_setD, wf_raw F item recipes hr]
+        rw [show getD owned item 0 - getD owned item 0 = (0:Int) by omega]
+        rw [show (0:Int) - getD owned item 0 = -(getD owned item 0) by omega, Int.neg_mul]
+        omega
+      · rw [if_neg hr]
+        rw [hused]
+        rw [show getD owned item 0 - getD owned item 0 = (0:Int) by omega]
+        have hfold : ∀ (rc : Dict Int) (o : Dict Int) (t : Int),
+            (∀ mat per, (mat,per) ∈ rc → rank mat ≤ n) →
+            (∀ mat per, (mat,per) ∈ rc → rank mat ≤ F) →
+            (∀ mat per, (mat,per) ∈ rc → 0 < per) →
+            (List.foldl (fun state mat =>
+                minGathers n mat.1 (mat.2 * (q - getD owned item 0)) recipes state) (t, o) rc).1
+              + costMass F o recipes
+            = t + recipeMass F rc recipes * (q - getD owned item 0)
+              + costMass F (List.foldl (fun state mat =>
+                  minGathers n mat.1 (mat.2 * (q - getD owned item 0)) recipes state) (t, o) rc).2
+                  recipes := by
+          intro rc
+          induction rc with
+          | nil => intro o t _ _ _; simp [recipeMass]
+          | cons mp rest ihrec =>
+            intro o t hrk hrkF hpo
+            obtain ⟨mat, per⟩ := mp
+            simp only [List.foldl_cons, recipeMass_cons]
+            have hper : 0 < per := hpo mat per (by simp)
+            have hpr : 0 < per * (q - getD owned item 0) := Int.mul_pos hper (by omega)
+            have hrm : rank mat ≤ n := hrk mat per (by simp)
+            have hrmF : rank mat ≤ F := hrkF mat per (by simp)
+            have hsib := ih mat (per * (q - getD owned item 0)) o hrm hrmF hpr
+            have hta := minGathers_total_additive n mat (per*(q - getD owned item 0)) recipes t o
+            rw [hta]
+            have hrk' : ∀ m' p, (m',p) ∈ rest → rank m' ≤ n := fun m' p hm => hrk m' p (by simp [hm])
+            have hrkF' : ∀ m' p, (m',p) ∈ rest → rank m' ≤ F := fun m' p hm => hrkF m' p (by simp [hm])
+            have hpo' : ∀ m' p, (m',p) ∈ rest → 0 < p := fun m' p hm => hpo m' p (by simp [hm])
+            have hres := ihrec (minGathers n mat (per*(q - getD owned item 0)) recipes (0,o)).2
+                          ((minGathers n mat (per*(q - getD owned item 0)) recipes (0,o)).1 + t)
+                          hrk' hrkF' hpo'
+            rw [Int.add_mul]
+            have hmul : per * wf F mat recipes * (q - getD owned item 0)
+                      = (per * (q - getD owned item 0)) * wf F mat recipes := by
+              rw [Int.mul_assoc, Int.mul_comm (wf F mat recipes) (q - getD owned item 0),
+                  ← Int.mul_assoc]
+            omega
+        have hrkall : ∀ mat per, (mat,per) ∈ getD recipes item [] → rank mat ≤ n := by
+          intro mat per hmem; have := hacy item mat per hmem; omega
+        have hrkFall : ∀ mat per, (mat,per) ∈ getD recipes item [] → rank mat ≤ F := by
+          intro mat per hmem; have := hacy item mat per hmem; omega
+        have hpoall : ∀ mat per, (mat,per) ∈ getD recipes item [] → 0 < per :=
+          fun mat per hmem => hpos item mat per hmem
+        have happ := hfold (getD recipes item []) (setD owned item 0) 0 hrkall hrkFall hpoall
+        obtain ⟨Fp, hFp⟩ : ∃ Fp, F = Fp + 1 := by
+          have hl : 0 < (getD recipes item []).length := by
+            rcases Nat.eq_zero_or_pos (getD recipes item []).length with h | h
+            · exact absurd h hr
+            · exact h
+          obtain ⟨hd, tl, hcons⟩ : ∃ hd tl, getD recipes item [] = hd :: tl := by
+            cases hh : getD recipes item [] with
+            | nil => rw [hh] at hl; simp at hl
+            | cons a b => exact ⟨a, b, rfl⟩
+          obtain ⟨m0, p0⟩ := hd
+          have hmem : (m0, p0) ∈ getD recipes item [] := by rw [hcons]; simp
+          have hr1 := hacy item m0 p0 hmem
+          cases F with
+          | zero => omega
+          | succ k => exact ⟨k, rfl⟩
+        subst hFp
+        have hwfrec : wf (Fp+1) item recipes
+            = recipeMass (Fp+1) (recipeOf recipes item) recipes :=
+          wf_weight_rec recipes rank hpos hacy Fp item hr hrF
+        have hro : recipeOf recipes item = getD recipes item [] := recipeOf_eq_getD recipes item
+        rw [hro] at hwfrec
+        have hcm := costMass_setD (Fp+1) owned item 0 recipes
+        rw [show (0:Int) - getD owned item 0 = -(getD owned item 0) by omega, Int.neg_mul] at hcm
+        rw [hwfrec] at hcm ⊢
+        have hdist : recipeMass (Fp+1) (getD recipes item []) recipes * q
+                   = recipeMass (Fp+1) (getD recipes item []) recipes * (q - getD owned item 0)
+                     + getD owned item 0 * recipeMass (Fp+1) (getD recipes item []) recipes := by
+          rw [Int.mul_comm (getD owned item 0)]
+          rw [← Int.mul_add]; congr 1; omega
+        generalize hA : (List.foldl (fun state mat =>
+            minGathers n mat.fst (mat.snd * (q - getD owned item 0)) recipes state)
+            (0, setD owned item 0) (getD recipes item [])).fst = A
+        generalize hB : costMass (Fp+1) (List.foldl (fun state mat =>
+            minGathers n mat.fst (mat.snd * (q - getD owned item 0)) recipes state)
+            (0, setD owned item 0) (getD recipes item [])).snd recipes = B
+        rw [hA, hB] at happ
+        have hcomm : q * recipeMass (Fp+1) (getD recipes item []) recipes
+                   = recipeMass (Fp+1) (getD recipes item []) recipes * q := Int.mul_comm _ _
+        omega
+
 end Formal.PlanModel
