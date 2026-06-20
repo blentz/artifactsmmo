@@ -3305,4 +3305,67 @@ theorem minGathers_le_gathers_of_star (recipes : Recipes) (rank : String → Nat
   rw [hho] at hpsi
   rw [hpg]; omega
 
+/-- **CRAFT STEP `(★)` — corner split.** The general craft step reduces to its
+single open corner `item ≠ c ∧ Reaches recipes item c` (`corner3`): the other two
+corners are discharged 0-sorry — `item = c` by `count_zero_of_validcraft` (LHS
+count is `0`, RHS `≥ 0` by `minGathers_count_nonneg`); `¬ Reaches item c` by
+`star_unreached` (the off-path domination `minGathers_mono_reach`). Given
+`corner3`, this assembles the full `star` hypothesis `psi_mono` needs. -/
+theorem star_of_corner3 (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank)
+    (hRB : ∀ item, rank item ≤ recipes.length) (hrnd : RecipeNoDup recipes)
+    (item : String)
+    (corner3 : ∀ (c : String) (G : Dict Int),
+      ¬ (getD recipes c []).length = 0 → ValidCraftAt recipes G c →
+      item ≠ c → Reaches recipes item c →
+      NonNeg G → EntriesNonNeg G → NoDupKeys G →
+      minGathersCount item 1 recipes G
+        ≤ minGathersCount item 1 recipes
+          (applyAction recipes { gathers := 0, crafts := 0, holdings := G }
+            (Action.craft c)).holdings) :
+    ∀ (c : String) (G : Dict Int),
+      ¬ (getD recipes c []).length = 0 → ValidCraftAt recipes G c →
+      NonNeg G → EntriesNonNeg G → NoDupKeys G →
+      minGathersCount item 1 recipes G
+        ≤ minGathersCount item 1 recipes
+          (applyAction recipes { gathers := 0, crafts := 0, holdings := G }
+            (Action.craft c)).holdings := by
+  intro c G hcr hvc hnn he hnd
+  have hcons : NonNeg (consumeHoldings G (recipeOf recipes c)) :=
+    nonneg_consume_of_validcraft recipes G c hnn (hrnd c) hvc
+  by_cases hic : item = c
+  · subst hic
+    have hz := count_zero_of_validcraft recipes rank hpos hacy item G hcr (hrnd item) hvc hnn
+    rw [hz]
+    exact minGathers_count_nonneg recipes hpos (recipes.length + 1) item 1 0 _
+      (Int.le_refl 0) (by omega)
+  · by_cases hreach : Reaches recipes item c
+    · exact corner3 c G hcr hvc hic hreach hnn he hnd
+    · exact star_unreached recipes rank hpos hacy hRB item c G hreach hnn hcons
+
+/-- **`minGathers_le_gathers`, modulo CORNER 3.** Combining `star_of_corner3`
+(the (★) corner split) with `minGathers_le_gathers_of_star` (the Ψ-closure): the
+full plannability-soundness bound `minGathersCount item 1 owned ≤ planGathers`
+holds for any valid plan producing `item`, GIVEN the single open corner
+`corner3` (`item ≠ c ∧ Reaches recipes item c`). Every other ingredient is
+proven 0-sorry; this is the whole theorem reduced to exactly one lemma. -/
+theorem minGathers_le_gathers_of_corner3 (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank)
+    (hRB : ∀ item, rank item ≤ recipes.length) (hrnd : RecipeNoDup recipes)
+    (item : String) (owned : Dict Int) (plan : Plan)
+    (hnn : NonNeg owned) (he : EntriesNonNeg owned) (hnd : NoDupKeys owned)
+    (corner3 : ∀ (c : String) (G : Dict Int),
+      ¬ (getD recipes c []).length = 0 → ValidCraftAt recipes G c →
+      item ≠ c → Reaches recipes item c →
+      NonNeg G → EntriesNonNeg G → NoDupKeys G →
+      minGathersCount item 1 recipes G
+        ≤ minGathersCount item 1 recipes
+          (applyAction recipes { gathers := 0, crafts := 0, holdings := G }
+            (Action.craft c)).holdings)
+    (hv : ValidPlan recipes owned plan)
+    (hprod : 1 ≤ getD (planHoldings recipes plan owned) item 0) :
+    minGathersCount item 1 recipes owned ≤ (planGathers recipes plan owned : Int) :=
+  minGathers_le_gathers_of_star recipes rank hpos hacy hRB hrnd item owned plan hnn he hnd
+    (star_of_corner3 recipes rank hpos hacy hRB hrnd item corner3) hv hprod
+
 end Formal.PlanModel
