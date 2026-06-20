@@ -94,6 +94,18 @@ class TestSessionLifecycle:
         assert rows[0][1] is not None
         assert rows[0][2] == 3
 
+    def test_win_count_counts_only_ok_outcomes(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        for i, o in enumerate(["ok", "ok", "error:fight_lost"]):
+            store.record_cycle(Cycle(
+                ts=f"2026-05-17T00:00:{i:02d}+00:00", session_id="x", cycle_index=i,
+                character="testchar", outcome=o, action_repr="Fight(chicken)"))
+        assert store.win_count("Fight(chicken)") == 2
+        assert store.sample_count("Fight(chicken)") == 3
+        assert store.win_count("Fight(never)") == 0
+        store.close()
+
     def test_end_session_without_start_is_noop(self, tmp_db_path):
         store = LearningStore(db_path=tmp_db_path, character="testchar")
         store.end_session()
@@ -827,6 +839,11 @@ class TestDegradationOnDbError:
         store = LearningStore(db_path=tmp_db_path, character="hero")
         _break_engine(store)
         assert store.sample_count("FightAction(chicken)") == 0
+
+    def test_win_count_returns_zero(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        assert store.win_count("Fight(chicken)") == 0
 
     def test_goal_stats_returns_empty_rollup(self, tmp_db_path):
         store = LearningStore(db_path=tmp_db_path, character="hero")
