@@ -2930,4 +2930,379 @@ theorem planReaches_cons (recipes : Recipes) (item : String)
        | _              => True) ∧
       PlanReaches recipes item rest := Iff.rfl
 
+-- ---------------------------------------------------------------------------
+-- Ψ-closure assembly: residual invariants, gather drop, Ψ-potential, final
+-- ---------------------------------------------------------------------------
+
+/-!
+## The Ψ-potential closure
+
+With the craft step `(★)` in hand the whole theorem closes by a Ψ-potential
+induction over `ValidPlanFrom`, mirroring `plan_mass_invariant`'s skeleton. The
+potential is `Ψ(s) := s.gathers + minGathersCount item 1 recipes s.holdings`,
+proven NON-DECREASING per action:
+
+- **gather** (raw): `minGathersCount` drops by ≤ 1 (`gather_drop`) while gathers
+  rises by 1, so Ψ is non-decreasing.
+- **craft** (valid): `minGathersCount` rises or holds (`(★)`) with gathers fixed.
+- **equip**: no-op.
+
+Then `Ψ(start) = minGathersCount item 1 owned` (gathers 0) and, since a plan that
+produces `item` has `planHoldings` covering it, `Ψ(end) = planGathers + 0`. So
+`minGathersCount item 1 owned ≤ planGathers`. The three holdings invariants
+(`NonNeg`/`EntriesNonNeg`/`NoDupKeys`) thread through each step (preserved by
+`applyAction` for valid actions). The craft step `(★)` is provided as the
+hypothesis `star` here; it is discharged below by the three-corner case split.
+-/
+
+/-- **RESIDUAL NoDupKeys.** Each `minGathers` step writes its threaded `owned`
+with a `setD`, so a no-dup start yields a no-dup residual. Fuel induction; the
+recipe `foldl` arm threads `NoDupKeys` per sibling via `minGathers_total_additive`. -/
+theorem nodupKeys_minGathers_residual (recipes : Recipes) :
+    ∀ (fuel : Nat) (item : String) (q t : Int) (owned : Dict Int),
+      NoDupKeys owned → NoDupKeys (minGathers fuel item q recipes (t, owned)).2 := by
+  intro fuel
+  induction fuel with
+  | zero => intro item q t owned hnd; simpa [minGathers] using hnd
+  | succ n ih =>
+    intro item q t owned hnd
+    rw [minGathers_succ]
+    have hres_nd : NoDupKeys (setD owned item (getD owned item 0 - min (getD owned item 0) q)) :=
+      nodupKeys_setD owned item _ hnd
+    by_cases hc : q - min (getD owned item 0) q ≤ 0
+    · rw [if_pos hc]; exact hres_nd
+    · rw [if_neg hc]
+      by_cases hr : (getD recipes item []).length = 0
+      · rw [if_pos hr]; exact hres_nd
+      · rw [if_neg hr]
+        suffices H : ∀ (rc : Dict Int) (o : Dict Int) (s : Int),
+            NoDupKeys o →
+            NoDupKeys (List.foldl (fun st mat =>
+              minGathers n mat.1 (mat.2 * (q - min (getD owned item 0) q)) recipes st)
+              (s, o) rc).2 by
+          exact H (getD recipes item []) _ t hres_nd
+        intro rc
+        induction rc with
+        | nil => intro o s ho; exact ho
+        | cons mp rest ihrec =>
+          intro o s ho
+          obtain ⟨mat, per⟩ := mp
+          simp only [List.foldl_cons]
+          have hta := minGathers_total_additive n mat
+            (per * (q - min (getD owned item 0) q)) recipes s o
+          rw [hta]
+          exact ihrec _ _ (ih mat _ 0 o ho)
+
+/-- **RESIDUAL EntriesNonNeg.** Each `minGathers` step writes `held − min(held, q)
+≥ 0` (under `NonNeg owned`), so a `≥ 0`-entries start yields `≥ 0`-entries
+residual. Fuel induction; the recipe `foldl` arm threads both `NonNeg` (for the
+next write bound, via `minGathers_nonneg_residual`) and `EntriesNonNeg`. -/
+theorem entriesNonNeg_minGathers_residual (recipes : Recipes) (hpos : PosRecipes recipes) :
+    ∀ (fuel : Nat) (item : String) (q t : Int) (owned : Dict Int),
+      0 < q → NonNeg owned → EntriesNonNeg owned →
+      EntriesNonNeg (minGathers fuel item q recipes (t, owned)).2 := by
+  intro fuel
+  induction fuel with
+  | zero => intro item q t owned _ _ he; simpa [minGathers] using he
+  | succ n ih =>
+    intro item q t owned hq hnn he
+    rw [minGathers_succ]
+    have hheld : 0 ≤ getD owned item 0 := hnn item
+    have hmin_le : min (getD owned item 0) q ≤ getD owned item 0 := Int.min_le_left _ _
+    have hres_en : EntriesNonNeg (setD owned item (getD owned item 0 - min (getD owned item 0) q)) :=
+      entriesNonNeg_setD owned item _ (by omega) he
+    have hres_nn : NonNeg (setD owned item (getD owned item 0 - min (getD owned item 0) q)) :=
+      nonneg_setD owned item _ hnn (by omega)
+    by_cases hc : q - min (getD owned item 0) q ≤ 0
+    · rw [if_pos hc]; exact hres_en
+    · rw [if_neg hc]
+      by_cases hr : (getD recipes item []).length = 0
+      · rw [if_pos hr]; exact hres_en
+      · rw [if_neg hr]
+        have hpoall : ∀ mat per, (mat, per) ∈ getD recipes item [] → 0 < per :=
+          fun mat per hmem => hpos item mat per hmem
+        suffices H : ∀ (rc : Dict Int) (o : Dict Int) (s : Int),
+            (∀ mat per, (mat, per) ∈ rc → 0 < per) → NonNeg o → EntriesNonNeg o →
+            EntriesNonNeg (List.foldl (fun st mat =>
+              minGathers n mat.1 (mat.2 * (q - min (getD owned item 0) q)) recipes st)
+              (s, o) rc).2 by
+          exact H (getD recipes item []) _ t hpoall hres_nn hres_en
+        intro rc
+        induction rc with
+        | nil => intro o s _ _ he'; exact he'
+        | cons mp rest ihrec =>
+          intro o s hpo hnn' he'
+          obtain ⟨mat, per⟩ := mp
+          simp only [List.foldl_cons]
+          have hper : 0 < per := hpo mat per (by simp)
+          have hpq : 0 < per * (q - min (getD owned item 0) q) := Int.mul_pos hper (by omega)
+          have hta := minGathers_total_additive n mat
+            (per * (q - min (getD owned item 0) q)) recipes s o
+          rw [hta]
+          have hsn := minGathers_nonneg_residual recipes hpos n mat
+            (per * (q - min (getD owned item 0) q)) 0 o hpq hnn'
+          have hse := ih mat (per * (q - min (getD owned item 0) q)) 0 o hpq hnn' he'
+          have hpo' : ∀ m' p, (m', p) ∈ rest → 0 < p := fun m' p hm => hpo m' p (by simp [hm])
+          exact ihrec _ _ hpo' hsn hse
+
+/-- **GATHER STEP (drop ≤ 1).** A raw `gather code` step drops the remaining
+gather count by at most `1`: `minGathersCount item 1 H ≤ minGathersCount item 1
+H' + 1` where `H'` is the post-gather holdings. Since `H' ⊒ H` pointwise (only
+`code` rises), `minGathers_mono` gives `Dom (res H) (res H')`, hence
+`costMass (res H) ≤ costMass (res H')` (`costMass_mono_dom`); `minGathers_recon`
+at `H`/`H'` plus `costMass H' = costMass H + 1` (raw, `wf = 1`) closes the
+drop-≤-1 the Ψ gather step needs. -/
+theorem gather_drop (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank)
+    (hRB : ∀ item, rank item ≤ recipes.length)
+    (item code : String) (H : Dict Int)
+    (hraw : (getD recipes code []).length = 0)
+    (hnnH : NonNeg H) (heH : EntriesNonNeg H) (hndH : NoDupKeys H) :
+    minGathersCount item 1 recipes H
+      ≤ minGathersCount item 1 recipes
+          (applyAction recipes { gathers := 0, crafts := 0, holdings := H }
+            (Action.gather code)).holdings + 1 := by
+  have hri : rank item ≤ recipes.length + 1 := by have := hRB item; omega
+  have hH'eq : (applyAction recipes { gathers := 0, crafts := 0, holdings := H }
+      (Action.gather code)).holdings = setD H code (getD H code 0 + 1) := by
+    show dictSet H code (dictGet H code + 1) = _
+    rw [dictSet_eq, dictGet_eq]
+  rw [hH'eq]
+  have hDom : Dom H (setD H code (getD H code 0 + 1)) := by
+    intro k; rw [getD_setD]
+    by_cases hck : code = k
+    · subst hck; rw [if_pos rfl]; have := hnnH code; omega
+    · rw [if_neg hck]; exact Int.le_refl _
+  have hnnH' : NonNeg (setD H code (getD H code 0 + 1)) :=
+    nonneg_setD H code _ hnnH (by have := hnnH code; omega)
+  have heH' : EntriesNonNeg (setD H code (getD H code 0 + 1)) :=
+    entriesNonNeg_setD H code _ (by have := hnnH code; omega) heH
+  have hndH' : NoDupKeys (setD H code (getD H code 0 + 1)) := nodupKeys_setD H code _ hndH
+  have hmono := minGathers_mono recipes rank hpos hacy (recipes.length + 1) item 1 1 H
+    (setD H code (getD H code 0 + 1)) hri (by omega) (Int.le_refl 1) hDom hnnH hnnH'
+  have hndrH : NoDupKeys (minGathers (recipes.length + 1) item 1 recipes (0, H)).2 :=
+    nodupKeys_minGathers_residual recipes (recipes.length + 1) item 1 0 H hndH
+  have hndrH' : NoDupKeys (minGathers (recipes.length + 1) item 1 recipes
+      (0, setD H code (getD H code 0 + 1))).2 :=
+    nodupKeys_minGathers_residual recipes (recipes.length + 1) item 1 0 _ hndH'
+  have herH' : EntriesNonNeg (minGathers (recipes.length + 1) item 1 recipes
+      (0, setD H code (getD H code 0 + 1))).2 :=
+    entriesNonNeg_minGathers_residual recipes hpos (recipes.length + 1) item 1 0 _
+      (by omega) hnnH' heH'
+  have hcmres : costMass (recipes.length + 1)
+      (minGathers (recipes.length + 1) item 1 recipes (0, H)).2 recipes
+      ≤ costMass (recipes.length + 1)
+        (minGathers (recipes.length + 1) item 1 recipes
+          (0, setD H code (getD H code 0 + 1))).2 recipes :=
+    costMass_mono_dom (recipes.length + 1) recipes hpos _ _ hndrH hndrH' herH' hmono.2
+  have hrecH := minGathers_recon recipes rank hpos hacy (recipes.length + 1)
+    (recipes.length + 1) item 1 H hri hri (by omega)
+  have hrecH' := minGathers_recon recipes rank hpos hacy (recipes.length + 1)
+    (recipes.length + 1) item 1 (setD H code (getD H code 0 + 1)) hri hri (by omega)
+  have hcmH' : costMass (recipes.length + 1) (setD H code (getD H code 0 + 1)) recipes
+      = costMass (recipes.length + 1) H recipes + 1 := by
+    rw [costMass_setD, wf_raw (recipes.length + 1) code recipes hraw]
+    have := hnnH code; omega
+  unfold minGathersCount
+  rw [Int.one_mul] at hrecH hrecH'
+  omega
+
+/-- A valid craft's consume leaves all holdings `NonNeg`: `ValidCraftAt` puts
+every input `mat` at `per ≤ getD H mat`, so `setD H mat (getD H mat − per) ≥ 0`;
+`NoDupKeys (recipeOf c)` keeps the per-input coverage as each consume fires. -/
+theorem nonneg_consume_of_validcraft (recipes : Recipes) (H : Dict Int) (c : String)
+    (hnnH : NonNeg H) (hnd : NoDupKeys (recipeOf recipes c))
+    (hvc : ValidCraftAt recipes H c) :
+    NonNeg (consumeHoldings H (recipeOf recipes c)) := by
+  have hcov : ∀ mat per, (mat, per) ∈ recipeOf recipes c → per ≤ getD H mat 0 := by
+    intro mat per hmem
+    have := validcraft_input recipes H c mat per hvc hmem
+    rwa [dictGet_eq] at this
+  suffices H2 : ∀ (inputs : Dict Int) (G : Dict Int),
+      NoDupKeys inputs → NonNeg G →
+      (∀ mat per, (mat, per) ∈ inputs → per ≤ getD G mat 0) →
+      NonNeg (consumeHoldings G inputs) by
+    exact H2 (recipeOf recipes c) H hnd hnnH hcov
+  intro inputs
+  unfold consumeHoldings
+  induction inputs with
+  | nil => intro G _ hG _; simpa using hG
+  | cons mp rest ih =>
+    obtain ⟨mat, per⟩ := mp
+    intro G hnd2 hG hcov2
+    simp only [List.foldl_cons]
+    have hmat_notin : ∀ p, (mat, p) ∉ rest := by
+      simp only [NoDupKeys] at hnd2; exact hnd2.1
+    have hnd2' : NoDupKeys rest := by simp only [NoDupKeys] at hnd2; exact hnd2.2
+    have hpcov : per ≤ getD G mat 0 := hcov2 mat per (by simp)
+    have hG' : NonNeg (dictSet G mat (dictGet G mat - per)) := by
+      rw [dictSet_eq, dictGet_eq]
+      exact nonneg_setD G mat _ hG (by omega)
+    have hcov2' : ∀ mat' per', (mat', per') ∈ rest →
+        per' ≤ getD (dictSet G mat (dictGet G mat - per)) mat' 0 := by
+      intro mat' per' hmem
+      rw [dictSet_eq, dictGet_eq, getD_setD]
+      by_cases hmm : mat = mat'
+      · subst hmm; exact absurd hmem (hmat_notin per')
+      · rw [if_neg hmm]; exact hcov2 mat' per' (by simp [hmem])
+    exact ih (dictSet G mat (dictGet G mat - per)) hnd2' hG' hcov2'
+
+/-- Under `NoDupKeys`, the `getD`-view `NonNeg` upgrades to entry-wise
+`EntriesNonNeg` (each stored entry is the unique `getD`-value for its key). -/
+theorem entriesNonNeg_of_nonneg_nodup (m : Dict Int) (hnn : NonNeg m) (hnd : NoDupKeys m) :
+    EntriesNonNeg m := by
+  induction m with
+  | nil => intro k v hkv; simp at hkv
+  | cons kv rest ih =>
+    obtain ⟨c, w⟩ := kv
+    obtain ⟨hhead, htail⟩ := hnd
+    intro k v hkv
+    rcases List.mem_cons.mp hkv with h1 | h2
+    · cases h1
+      have := hnn c; rw [getD_cons_self] at this; exact this
+    · have hck : c ≠ k := by
+        intro h; subst h; exact hhead v h2
+      have hnntail : NonNeg rest := by
+        intro j
+        by_cases hcj : c = j
+        · subst hcj
+          rw [getD_zero_of_absent rest c (fun u hu => hhead u hu)]; exact Int.le_refl 0
+        · have := hnn j; rw [getD_cons_ne _ _ _ _ _ hcj] at this; exact this
+      exact ih hnntail htail k v h2
+
+/-- Every recipe input list is a dict (one entry per input code) — a faithful
+domain fact carried as a named hypothesis (like `Acyclic`/`PosRecipes`). -/
+def RecipeNoDup (recipes : Recipes) : Prop := ∀ c, NoDupKeys (recipeOf recipes c)
+
+/-- **Ψ-POTENTIAL NON-DECREASING.** Along any valid plan the potential
+`Ψ(s) := s.gathers + minGathersCount item 1 recipes s.holdings` is
+non-decreasing per action: gather drops the count by ≤ 1 while raising gathers
+(`gather_drop`); a valid craft raises-or-holds the count with gathers fixed
+(`star`, the `(★)` craft step); equip is a no-op. The holdings invariants
+`NonNeg`/`EntriesNonNeg`/`NoDupKeys` thread through each step. -/
+theorem psi_mono (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank)
+    (hRB : ∀ item, rank item ≤ recipes.length) (hrnd : RecipeNoDup recipes)
+    (item : String)
+    (star : ∀ (c : String) (G : Dict Int),
+      ¬ (getD recipes c []).length = 0 → ValidCraftAt recipes G c →
+      NonNeg G → EntriesNonNeg G → NoDupKeys G →
+      minGathersCount item 1 recipes G
+        ≤ minGathersCount item 1 recipes
+          (applyAction recipes { gathers := 0, crafts := 0, holdings := G }
+            (Action.craft c)).holdings) :
+    ∀ (plan : Plan) (s : ExecState),
+      ValidPlanFrom recipes s plan →
+      NonNeg s.holdings → EntriesNonNeg s.holdings → NoDupKeys s.holdings →
+      (s.gathers : Int) + minGathersCount item 1 recipes s.holdings
+        ≤ ((List.foldl (applyAction recipes) s plan).gathers : Int)
+          + minGathersCount item 1 recipes (List.foldl (applyAction recipes) s plan).holdings := by
+  intro plan
+  induction plan with
+  | nil => intro s _ _ _ _; simp
+  | cons a rest ih =>
+    intro s hv hnn he hnd
+    simp only [List.foldl_cons]
+    obtain ⟨hstep, hrestv⟩ := hv
+    have hnn' : NonNeg (applyAction recipes s a).holdings := by
+      cases a with
+      | gather code =>
+        show NonNeg (dictSet s.holdings code (dictGet s.holdings code + 1))
+        rw [dictSet_eq, dictGet_eq]
+        exact nonneg_setD s.holdings code _ hnn (by have := hnn code; omega)
+      | craft code =>
+        obtain ⟨_hcr, hvc⟩ := hstep
+        have hcons := nonneg_consume_of_validcraft recipes s.holdings code hnn (hrnd code) hvc
+        exact craft_nonneg recipes s.holdings code hcons
+      | equip code => exact hnn
+    have he' : EntriesNonNeg (applyAction recipes s a).holdings := by
+      cases a with
+      | gather code =>
+        show EntriesNonNeg (dictSet s.holdings code (dictGet s.holdings code + 1))
+        rw [dictSet_eq, dictGet_eq]
+        exact entriesNonNeg_setD s.holdings code _ (by have := hnn code; omega) he
+      | craft code =>
+        obtain ⟨_hcr, hvc⟩ := hstep
+        have hcons := nonneg_consume_of_validcraft recipes s.holdings code hnn (hrnd code) hvc
+        have hnnH' := craft_nonneg recipes s.holdings code hcons
+        have hndH' := nodupKeys_applyAction recipes s (Action.craft code) hnd
+        exact entriesNonNeg_of_nonneg_nodup _ hnnH' hndH'
+      | equip code => exact he
+    have hnd' : NoDupKeys (applyAction recipes s a).holdings :=
+      nodupKeys_applyAction recipes s a hnd
+    have hrec := ih (applyAction recipes s a) hrestv hnn' he' hnd'
+    have hone : (s.gathers : Int) + minGathersCount item 1 recipes s.holdings
+        ≤ ((applyAction recipes s a).gathers : Int)
+          + minGathersCount item 1 recipes (applyAction recipes s a).holdings := by
+      cases a with
+      | gather code =>
+        have hraw : (getD recipes code []).length = 0 := by
+          have hh : recipeOf recipes code = [] := hstep
+          rw [recipeOf_eq_getD] at hh; rw [hh]; rfl
+        have hg : ((applyAction recipes s (Action.gather code)).gathers : Int)
+            = (s.gathers : Int) + 1 := by
+          show ((s.gathers + 1 : Nat) : Int) = _; omega
+        have hhbridge : (applyAction recipes s (Action.gather code)).holdings
+            = (applyAction recipes { gathers := 0, crafts := 0, holdings := s.holdings }
+                (Action.gather code)).holdings := rfl
+        have hgd := gather_drop recipes rank hpos hacy hRB item code s.holdings hraw hnn he hnd
+        rw [hg, hhbridge]; omega
+      | craft code =>
+        obtain ⟨hcr, hvc⟩ := hstep
+        have hcr' : ¬ (getD recipes code []).length = 0 := by
+          rw [← recipeOf_eq_getD]
+          intro hh; exact hcr (List.length_eq_zero_iff.mp hh)
+        have hg : ((applyAction recipes s (Action.craft code)).gathers : Int)
+            = (s.gathers : Int) := rfl
+        have hhbridge : (applyAction recipes s (Action.craft code)).holdings
+            = (applyAction recipes { gathers := 0, crafts := 0, holdings := s.holdings }
+                (Action.craft code)).holdings := rfl
+        have hst := star code s.holdings hcr' hvc hnn he hnd
+        rw [hg, hhbridge]; omega
+      | equip code =>
+        have hg : ((applyAction recipes s (Action.equip code)).gathers : Int)
+            = (s.gathers : Int) := rfl
+        have hh : (applyAction recipes s (Action.equip code)).holdings = s.holdings := rfl
+        rw [hg, hh]; exact Int.le_refl _
+    exact Int.le_trans hone hrec
+
+/-- **`minGathers_le_gathers`, modulo `(★)`.** From the Ψ-potential being
+non-decreasing (`psi_mono`): `Ψ(start) = minGathersCount item 1 owned` (gathers
+0) and, since the plan produces `item`, `planHoldings` covers it so
+`minGathersCount item 1 planHoldings = 0`, giving `Ψ(end) = planGathers`. Hence
+`minGathersCount item 1 owned ≤ planGathers`. The craft step `(★)` is the
+`star` hypothesis, discharged below. -/
+theorem minGathers_le_gathers_of_star (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank)
+    (hRB : ∀ item, rank item ≤ recipes.length) (hrnd : RecipeNoDup recipes)
+    (item : String) (owned : Dict Int) (plan : Plan)
+    (hnn : NonNeg owned) (he : EntriesNonNeg owned) (hnd : NoDupKeys owned)
+    (star : ∀ (c : String) (G : Dict Int),
+      ¬ (getD recipes c []).length = 0 → ValidCraftAt recipes G c →
+      NonNeg G → EntriesNonNeg G → NoDupKeys G →
+      minGathersCount item 1 recipes G
+        ≤ minGathersCount item 1 recipes
+          (applyAction recipes { gathers := 0, crafts := 0, holdings := G }
+            (Action.craft c)).holdings)
+    (hv : ValidPlan recipes owned plan)
+    (hprod : 1 ≤ getD (planHoldings recipes plan owned) item 0) :
+    minGathersCount item 1 recipes owned ≤ (planGathers recipes plan owned : Int) := by
+  have hpsi := psi_mono recipes rank hpos hacy hRB hrnd item star plan
+    { gathers := 0, crafts := 0, holdings := owned } hv hnn he hnd
+  have hcov : minGathersCount item 1 recipes (planHoldings recipes plan owned) = 0 :=
+    minGathersCount_covered item 1 recipes _ hprod
+  have hpg : (planGathers recipes plan owned : Int)
+      = ((List.foldl (applyAction recipes)
+          { gathers := 0, crafts := 0, holdings := owned } plan).gathers : Int) := rfl
+  have hph : planHoldings recipes plan owned
+      = (List.foldl (applyAction recipes)
+          { gathers := 0, crafts := 0, holdings := owned } plan).holdings := rfl
+  rw [hph] at hcov
+  have hstart : (({ gathers := 0, crafts := 0, holdings := owned } : ExecState).gathers : Int)
+      = 0 := rfl
+  rw [hstart, hcov] at hpsi
+  have hho : ({ gathers := 0, crafts := 0, holdings := owned } : ExecState).holdings = owned := rfl
+  rw [hho] at hpsi
+  rw [hpg]; omega
+
 end Formal.PlanModel
