@@ -87,7 +87,8 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - Produces, in `GameDataFixture.lean` (namespace `Formal.Liveness.GameDataFixture` — match the existing file's namespace):
   - `def monsterCatalog : List CatalogMonster` where `CatalogMonster` carries `code : String`, `level : Int`, `hp : Int`, `attackFire/Earth/Water/Air : Int`, `resFire/Earth/Water/Air : Int`, `crit : Int`.
   - `def baseStatsTable : List BaseStatsRow` (each row carries its own `level` field) where `BaseStatsRow` carries `level`, `maxHp`, `attack{4}`, `res{4}`, `crit`, `initiative`.
-  - The `CatalogMonster`/`BaseStatsRow` structures live in a NEW small core module `formal/Formal/Liveness/CatalogTypes.lean` (one cohesive group of plain data structs — allowed by the one-class rule), imported by `GameDataFixture.lean`.
+  - `def itemCatalog : List CatalogItem` — the combat-relevant equippable item stats (needed by Task 4's full-loadout kernel proof, per the full-loadout finding `[[project_winnableacrossband_grounding]]`). `CatalogItem` carries `code : String`, `level : Int`, `slotType : String` (the item `type`/subtype determining its equip slot), `attackFire/Earth/Water/Air : Int`, `hpBonus : Int`, `resFire/Earth/Water/Air : Int`, `crit : Int`. Emit from `snapshot["item_stats"]` (skip non-equippable items — those with no slot type). Mirror the production `ITEM_TYPE_TO_SLOTS` slot mapping so the Lean best-loadout matches production.
+  - The `CatalogMonster`/`BaseStatsRow`/`CatalogItem` structures live in a NEW small core module `formal/Formal/Liveness/CatalogTypes.lean` (one cohesive group of plain data structs — allowed by the one-class rule), imported by `GameDataFixture.lean`.
 
 - [ ] **Step 1: Write the failing fixture-diff assertion**
 
@@ -104,7 +105,12 @@ def test_monster_catalog_matches_snapshot() -> None:
     # spot-check one fully-specified monster
     assert 'code := "bandit_lizard"' in fixture
     assert "level := 25" in fixture
+    # the item catalog is emitted with equippable items + a slotType
+    assert "def itemCatalog : List CatalogItem" in fixture
+    assert "slotType :=" in fixture
 ```
+
+Also assert the `itemCatalog` includes a known weapon (e.g. `'code := "steel_battleaxe"'`) and excludes a non-equippable resource — verify against `ITEM_TYPE_TO_SLOTS` membership.
 
 - [ ] **Step 2: Run to verify it fails**
 
@@ -148,6 +154,22 @@ structure BaseStatsRow where
   initiative : Int
 deriving Repr, DecidableEq
 
+structure CatalogItem where
+  code : String
+  level : Int
+  slotType : String
+  attackFire : Int
+  attackEarth : Int
+  attackWater : Int
+  attackAir : Int
+  hpBonus : Int
+  resFire : Int
+  resEarth : Int
+  resWater : Int
+  resAir : Int
+  crit : Int
+deriving Repr, DecidableEq
+
 end Formal.Liveness
 ```
 
@@ -186,6 +208,8 @@ In `formal/sim/generate_lean_fixture.py`, after the recipe block (before `return
     lines.append("def baseStatsTable : List BaseStatsRow :=")
     lines.append("  [" + ", ".join(f"baseStats_{lvl}" for lvl in sorted(base_doc.get('base_stats', {}), key=int)) + "]")
 ```
+
+Then add an item loop emitting `itemCatalog`: for each equippable `code, s` in `sorted(snapshot["item_stats"].items())` whose `s["type"]` (or subtype) maps to an equip slot in the production `ITEM_TYPE_TO_SLOTS` (import/mirror that mapping; SKIP items with no equip slot), emit `def item_{safe} : CatalogItem := { code, level := s["level"], slotType := "<type>", attackFire/Earth/Water/Air := s["attack"][e] (0 if absent), hpBonus := s["hp_bonus"], resFire/.../resAir := s["resistance"][e], crit := s["critical_strike"] }`, then `def itemCatalog : List CatalogItem := [ … ]`. Pull the per-element attack/resistance from the snapshot's `item_stats` dict fields (default 0 when an element is absent — that is the game's real value, not a fabricated default).
 
 Add `import Formal.Liveness.CatalogTypes` and `open Formal.Liveness` to the fixture header the generator emits.
 
