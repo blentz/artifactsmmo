@@ -1266,4 +1266,51 @@ theorem planGathers_eq_costMass_diff (recipes : Recipes) (rank : String → Nat)
   simp only [planHoldings, runPlan] at *
   omega
 
+-- ---------------------------------------------------------------------------
+-- Termination + covered-holdings reconstruction
+-- ---------------------------------------------------------------------------
+
+/-- **TERMINATION (count).** When holdings already cover the requested quantity
+(`q ≤ getD owned item 0`), `minGathers` gathers nothing: the per-node credit
+`used = min held q = q` zeroes the remaining deficit, so the count is `0`. -/
+theorem minGathers_covered (fuel : Nat) (item : String) (q : Int)
+    (recipes : Recipes) (owned : Dict Int) (hcov : q ≤ getD owned item 0) :
+    (minGathers (fuel+1) item q recipes (0, owned)).1 = 0 := by
+  rw [minGathers_succ]
+  have hmin : min (getD owned item 0) q = q := by
+    have h1 := Int.min_le_right (getD owned item 0) q
+    have h2 : q ≤ min (getD owned item 0) q := Int.le_min.mpr ⟨hcov, Int.le_refl q⟩
+    omega
+  rw [hmin, if_pos (by omega)]
+
+/-- `minGathersCount` at the production fuel is `0` when holdings cover the
+quantity (`minGathers_covered` at fuel `|recipes|`). -/
+theorem minGathersCount_covered (item : String) (q : Int)
+    (recipes : Recipes) (owned : Dict Int) (hcov : q ≤ getD owned item 0) :
+    minGathersCount item q recipes owned = 0 := by
+  unfold minGathersCount
+  exact minGathers_covered recipes.length item q recipes owned hcov
+
+/-- **COVERED-HOLDINGS RECONSTRUCTION.** When `H` already holds `item`
+(`1 ≤ getD H item 0`), its cost-mass decomposes as the item's weight plus the
+residual mass left after crediting one unit of `item`:
+`costMass H = wf item + costMass (minGathers … (0, H)).2`. (Reconstruction with
+`q = 1` plus `minGathers_covered`, which kills the gather-count term.) The plan's
+final holdings are exactly such an `H` — this is the planHoldings side of the
+final bound. -/
+theorem costMass_of_covered (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank)
+    (item : String) (H : Dict Int)
+    (hrf : rank item ≤ recipes.length) (hcov : 1 ≤ getD H item 0) :
+    costMass (recipes.length + 1) H recipes
+      = wf (recipes.length + 1) item recipes
+        + costMass (recipes.length + 1)
+            (minGathers (recipes.length + 1) item 1 recipes (0, H)).2 recipes := by
+  have hrec := minGathers_recon recipes rank hpos hacy (recipes.length + 1)
+    (recipes.length + 1) item 1 H (by omega) (by omega) (by omega)
+  have hterm : (minGathers (recipes.length + 1) item 1 recipes (0, H)).1 = 0 :=
+    minGathers_covered recipes.length item 1 recipes H hcov
+  rw [hterm, Int.one_mul] at hrec
+  omega
+
 end Formal.PlanModel
