@@ -57,7 +57,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.objective_needs import objective_needs
 from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
-from artifactsmmo_cli.ai.tiers.skill_grind_target import build_grind_candidates, is_obtainable
+from artifactsmmo_cli.ai.tiers.skill_grind_target import build_grind_candidates
 from artifactsmmo_cli.ai.tiers.skill_step_dispatch import (
     DispatchCandidate,
     FlagInputs,
@@ -487,18 +487,9 @@ def objective_step_goal(
                 dest_slot = root.slot if root.slot is not None else root_slots[0]
                 upgrade = UpgradeEquipmentGoal(initial_equipment=state.equipment,
                                                committed_target=(root.code, dest_slot))
-                if (upgrade.is_plannable(state, game_data)
-                        and is_obtainable(root.code, state, game_data, frozenset())):
-                    # Root chain depth-reachable (materials in hand/craftable)
-                    # and all raw leaves obtainable (gatherable or winnable
-                    # monster drop): plan the whole craft+equip under one commit.
-                    # The obtainability guard catches chains whose raw materials
-                    # are monster-drop-only (e.g. feather_coat) — min_plan_length
-                    # counts them as gatherable and declares depth reachable, but
-                    # the GOAP planner finds no gather action for them and returns
-                    # plan_len 0. Without the guard the arbiter commits to the dead
-                    # UpgradeEquipment every cycle and never makes progress
-                    # (trace 2026-06-19: feather_coat CPU peg).
+                if upgrade.is_plannable(state, game_data):
+                    # Root chain depth-reachable (materials in hand/craftable):
+                    # plan the whole craft+equip under one commit.
                     return upgrade
                 # Root craft SKILL-GATED (not a depth problem): the final
                 # craft is blocked until the crafting skill rises, but the
