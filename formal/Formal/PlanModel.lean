@@ -1748,4 +1748,57 @@ theorem minGathers_craft_le_self (recipes : Recipes) (hpos : PosRecipes recipes)
   exact minGathers_count_nonneg recipes hpos (recipes.length + 1) c 1 0 H
     (Int.le_refl 0) (by omega)
 
+/-- **CRAFT STEP — recon reduction (0-sorry).** For the GENERAL query item, a
+valid craft of a craftable `c` reduces the craft-monotonicity goal
+`minGathersCount item 1 recipes H' ≤ minGathersCount item 1 recipes H`
+(`H'` the post-craft holdings) EXACTLY to a residual cost-mass comparison:
+
+    costMass F (minGathers F item 1 recipes (0, H')).2 recipes
+      ≤ costMass F (minGathers F item 1 recipes (0, H)).2 recipes      (F = |recipes|+1)
+
+via `minGathers_recon` at `H` and `H'` (the gather count is
+`wf item + costMass (residual) − costMass (holdings)`) and
+`costMass_craft_preserved'` (a valid craft conserves total cost-mass, so the
+`−costMass(holdings)` terms cancel). This banks the round-4/5 reduction as a
+reusable lemma so future work starts from the SHARP residual obligation rather
+than re-deriving it.
+
+**Honesty note.** The residual comparison hypothesis `hres` is left as an
+explicit premise — it is NOT discharged here and is, as the round-5/6 analysis
+and the `#eval` counterexamples show, genuinely conditional: the unconditional
+`item ≠ c` form is FALSE (crafting `c` can starve a sibling or below-`c` query
+of a shared raw input). The honest discharge needs DAG-reachability of `c` from
+`item` (the query is the plan root; every craft is a sub-component of it). -/
+theorem minGathers_craft_le_of_residual (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank)
+    (hRB : ∀ item, rank item ≤ recipes.length)
+    (item c : String) (H : Dict Int)
+    (hcr : ¬ (getD recipes c []).length = 0)
+    (hres : costMass (recipes.length + 1)
+              (minGathers (recipes.length + 1) item 1 recipes
+                (0, (applyAction recipes { gathers := 0, crafts := 0, holdings := H }
+                      (Action.craft c)).holdings)).2 recipes
+          ≤ costMass (recipes.length + 1)
+              (minGathers (recipes.length + 1) item 1 recipes (0, H)).2 recipes) :
+    minGathersCount item 1 recipes
+        (applyAction recipes { gathers := 0, crafts := 0, holdings := H }
+          (Action.craft c)).holdings
+      ≤ minGathersCount item 1 recipes H := by
+  have hrec_H := minGathers_recon recipes rank hpos hacy (recipes.length + 1)
+    (recipes.length + 1) item 1 H (by have := hRB item; omega) (by have := hRB item; omega)
+    (by omega)
+  have hrec_H' := minGathers_recon recipes rank hpos hacy (recipes.length + 1)
+    (recipes.length + 1) item 1
+    (applyAction recipes { gathers := 0, crafts := 0, holdings := H } (Action.craft c)).holdings
+    (by have := hRB item; omega) (by have := hRB item; omega) (by omega)
+  have hcm : costMass (recipes.length + 1)
+      (applyAction recipes { gathers := 0, crafts := 0, holdings := H } (Action.craft c)).holdings
+        recipes
+      = costMass (recipes.length + 1) H recipes :=
+    costMass_craft_preserved' recipes rank hpos hacy recipes.length c
+      { gathers := 0, crafts := 0, holdings := H } hcr (by have := hRB c; omega)
+  unfold minGathersCount
+  rw [Int.one_mul] at hrec_H hrec_H'
+  omega
+
 end Formal.PlanModel
