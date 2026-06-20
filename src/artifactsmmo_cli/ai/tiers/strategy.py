@@ -1,6 +1,7 @@
 """Tier-3 strategy engine: rank Tier-1 roots and descend to the nearest
 actionable subgoal. Pure; P3a runs it in shadow (traced, not enacted)."""
 
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from fractions import Fraction
 
@@ -19,6 +20,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.personality import Personality
+from artifactsmmo_cli.ai.tiers.servable_filter import keep_servable
 from artifactsmmo_cli.ai.tiers.sticky_select_core import StickyCand, sticky_choose
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import objective_roots, prerequisites
 from artifactsmmo_cli.ai.tiers.skill_classes import (
@@ -548,7 +550,9 @@ class StrategyEngine:
     def decide(self, state: WorldState, game_data: GameData,
                history: LearningStore | None = None,
                combat_monster: str | None = None,
-               last_chosen_root: str | None = None) -> StrategyDecision:
+               last_chosen_root: str | None = None,
+               step_servable: Callable[[MetaGoal, MetaGoal], bool] | None = None,
+               ) -> StrategyDecision:
         """Pick the top-ranked objective root with Tier-2 sticky commitment.
 
         `last_chosen_root` is the previous cycle's chosen_root repr (None on
@@ -573,6 +577,16 @@ class StrategyEngine:
             effort = root_cost(root, state, game_data)
             protection = self._equip_gain(root, state, game_data)
             candidates.append((root, step, final, effort, value, protection))
+        # Servable filter (2026-06-20): drop roots whose actionable step yields no
+        # plannable goal this cycle, WHENEVER at least one root is servable — so
+        # chosen_root is a root the bot can actually work on, not a top-scored but
+        # unbuildable objective (feather_coat: committed to a woodcutting-gated body
+        # armor while the bot char-grinds slimes under-geared; trace 2026-06-20). The
+        # proven decide_key sort + Tier-2 sticky then operate on the servable subset.
+        # step_servable is None in unit tests that don't exercise plannability.
+        if step_servable is not None:
+            flags = [step_servable(c[0], c[1]) for c in candidates]
+            candidates = keep_servable(candidates, flags)
         # final desc, effort asc, protection desc (computed gear value breaks the
         # empty-slot-urgency saturation tie), repr last.
         candidates.sort(key=lambda c: decide_key(-c[2], c[3], -c[5], repr(c[0])))

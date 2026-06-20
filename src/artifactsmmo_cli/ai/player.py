@@ -57,7 +57,7 @@ from artifactsmmo_cli.ai.recovery import (
     StuckExit,
     StuckSignal,
 )
-from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
+from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter, objective_step_goal
 from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
 from artifactsmmo_cli.ai.tiers import (
     BalancedPersonality,
@@ -314,6 +314,7 @@ class GamePlayer:
                     history=self.history,
                     combat_monster=combat_monster,
                     last_chosen_root=self._last_strategy_root,
+                    step_servable=self._step_servable(state, game_data, ctx),
                 )
                 self._last_decision = decision
                 step = decision.chosen_step
@@ -1195,6 +1196,22 @@ class GamePlayer:
             path_winnable=path_winnable,
             pick_winnable=pick,
         ))
+
+    def _step_servable(
+        self, state: WorldState, game_data: GameData, ctx: SelectionContext
+    ) -> Callable[[MetaGoal, MetaGoal], bool]:
+        """Build the per-root plannability predicate decide() uses to demote roots
+        whose actionable step can't be served this cycle. A root is servable when its
+        step routes to a goal (objective_step_goal) that is plannable now — the same
+        objective_step_goal the arbiter will resolve, so decide()'s servability matches
+        what select() can actually serve. Closes the feather_coat mismatch: a body
+        armor whose woodcutting-gated step yields an unplannable GatherMaterials is
+        demoted below the plannable ReachCharLevel grind."""
+        def servable(root: MetaGoal, step: MetaGoal) -> bool:
+            goal = objective_step_goal(step, state, game_data, ctx,
+                                       root=root, committed_root=root)
+            return goal is not None and goal.is_plannable(state, game_data, self.history)
+        return servable
 
     def _update_sticky_anchor(
         self, chosen_root: MetaGoal | None, state: WorldState,
