@@ -1696,4 +1696,56 @@ theorem minGathers_mono (recipes : Recipes) (rank : String → Nat)
               ((minGathers m mat (per * r2) recipes (0, o2)).1 + t2)
               r1 r2 hrk' hpo' hr2 hr21 htnew hstep.2 hsn1 hsn2
 
+-- ---------------------------------------------------------------------------
+-- Craft-step coupling (the heart): minGathers after a valid craft ≤ before
+-- ---------------------------------------------------------------------------
+
+/-!
+## The craft step
+
+A valid `craft c` consumes `recipeOf c` (`−per` each) and produces `+1 c`. The
+resulting holdings `H'` have EQUAL `costMass` to `H` (`costMass_craft_preserved`)
+but are pointwise INCOMPARABLE to `H`, so `minGathers_mono` does not apply. The
+craft step of Ψ-monotonicity is `g(H') ≤ g(H)` where `g(x) = minGathersCount`.
+
+The cleanest fully-provable corner is when the crafted item IS the query item:
+then `H'` already covers it (holds ≥ 1), so its count is `0`, trivially `≤ g(H)`.
+The general corner (query item ≠ crafted item) is the residual simultaneous
+coupling the report has flagged as irreducible; it is NOT proven here.
+-/
+
+/-- The holdings after a `craft c` step from `H` hold at least one `c`:
+the consume foldl leaves `c` at some value `v`, then the produce step sets it to
+`v + 1`, so `getD H' c 0 = consumed_c + 1`. Combined with `NonNeg` of the consumed
+holdings this gives `1 ≤ getD H' c 0`. -/
+theorem craft_holds_target (recipes : Recipes) (H : Dict Int) (c : String)
+    (hcov : NonNeg (consumeHoldings H (recipeOf recipes c))) :
+    1 ≤ getD (applyAction recipes { gathers := 0, crafts := 0, holdings := H }
+          (Action.craft c)).holdings c 0 := by
+  show 1 ≤ getD (dictSet (consumeHoldings H (recipeOf recipes c)) c
+            (dictGet (consumeHoldings H (recipeOf recipes c)) c + 1)) c 0
+  rw [dictSet_eq, dictGet_eq, getD_setD, if_pos rfl]
+  have := hcov c; omega
+
+/-- **CRAFT STEP — target corner (0-sorry).** When the crafted item `c` IS the
+query `item`, a valid craft makes the query trivially satisfiable: `H'` holds
+`≥ 1` of `item`, so `minGathersCount item 1 recipes H' = 0 ≤ minGathersCount … H`.
+(Uses `craft_holds_target` + `minGathersCount_covered`; the `0 ≤ …` lower bound is
+`minGathers_count_nonneg`.) -/
+theorem minGathers_craft_le_self (recipes : Recipes) (hpos : PosRecipes recipes)
+    (H : Dict Int) (c : String)
+    (hcov : NonNeg (consumeHoldings H (recipeOf recipes c))) :
+    minGathersCount c 1 recipes
+        (applyAction recipes { gathers := 0, crafts := 0, holdings := H }
+          (Action.craft c)).holdings
+      ≤ minGathersCount c 1 recipes H := by
+  have hcovered : 1 ≤ getD (applyAction recipes
+      { gathers := 0, crafts := 0, holdings := H } (Action.craft c)).holdings c 0 :=
+    craft_holds_target recipes H c hcov
+  rw [minGathersCount_covered c 1 recipes _ hcovered]
+  -- the RHS count is ≥ 0
+  unfold minGathersCount
+  exact minGathers_count_nonneg recipes hpos (recipes.length + 1) c 1 0 H
+    (Int.le_refl 0) (by omega)
+
 end Formal.PlanModel
