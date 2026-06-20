@@ -2631,6 +2631,113 @@ theorem star_unreached (recipes : Recipes) (rank : String → Nat)
     (applyAction recipes { gathers := 0, crafts := 0, holdings := H } (Action.craft c)).holdings H
     (by have := hRB item; omega) (by omega) (Int.le_refl 1) hdomR hnnH' hnnH).1
 
+-- ---------------------------------------------------------------------------
+-- ON-PATH corner of (★): the crafted item IS the query (round 11)
+-- ---------------------------------------------------------------------------
+
+/-- The residual after a COVERED `minGathers` call is the start with `item`
+reduced by exactly `q`: `(minGathers (fuel+1) item q (0, owned)).2 =
+setD owned item (getD owned item 0 − q)` (the covered branch consumes the full
+`q` and gathers nothing). -/
+theorem minGathers_covered_residual (fuel : Nat) (item : String) (q : Int)
+    (recipes : Recipes) (owned : Dict Int) (hcov : q ≤ getD owned item 0) :
+    (minGathers (fuel+1) item q recipes (0, owned)).2
+      = setD owned item (getD owned item 0 - q) := by
+  rw [minGathers_succ]
+  have hmin : min (getD owned item 0) q = q := by
+    have h1 := Int.min_le_right (getD owned item 0) q
+    have h2 : q ≤ min (getD owned item 0) q := Int.le_min.mpr ⟨hcov, Int.le_refl q⟩
+    omega
+  rw [hmin, if_pos (by omega)]
+
+/-- A recipe `foldl` over inputs ALL covered by `owned` (each `per·rem ≤
+getD owned mat`) gathers NOTHING: the count is the seed `s`. Requires
+`NoDupKeys inputs` so each covered consume leaves the OTHER inputs untouched
+(`minGathers_covered_residual` reduces only the consumed key, distinct from the
+remaining inputs). Induction on the input list. -/
+theorem foldl_covered (recipes : Recipes) (m : Nat) (rem : Int) :
+    ∀ (inputs : Dict Int) (owned : Dict Int) (s : Int),
+      NoDupKeys inputs →
+      (∀ mat per, (mat, per) ∈ inputs → per * rem ≤ getD owned mat 0) →
+      (List.foldl (fun st mat => minGathers (m+1) mat.1 (mat.2 * rem) recipes st)
+        (s, owned) inputs).1 = s := by
+  intro inputs
+  induction inputs with
+  | nil => intro owned s _ _; rfl
+  | cons mp rest ih =>
+    obtain ⟨mat, per⟩ := mp
+    intro owned s hnd hcov
+    simp only [List.foldl_cons]
+    have hpr : per * rem ≤ getD owned mat 0 := hcov mat per (by simp)
+    have hc := minGathers_covered m mat (per * rem) recipes owned hpr
+    have hres := minGathers_covered_residual m mat (per * rem) recipes owned hpr
+    have hta := minGathers_total_additive (m+1) mat (per*rem) recipes s owned
+    rw [hta, hc, Int.zero_add]
+    have hmat_notin : ∀ p, (mat, p) ∉ rest := by
+      simp only [NoDupKeys] at hnd; exact hnd.1
+    have hnd' : NoDupKeys rest := by simp only [NoDupKeys] at hnd; exact hnd.2
+    have hcov' : ∀ mat' per', (mat', per') ∈ rest →
+        per' * rem ≤ getD (minGathers (m+1) mat (per*rem) recipes (0,owned)).2 mat' 0 := by
+      intro mat' per' hmem
+      rw [hres, getD_setD]
+      by_cases hmm : mat = mat'
+      · subst hmm; exact absurd hmem (hmat_notin per')
+      · rw [if_neg hmm]; exact hcov mat' per' (by simp [hmem])
+    exact ih _ s hnd' hcov'
+
+/-- `ValidCraftAt` extracted to a single recipe input: every `(mat, per) ∈
+recipeOf c` has `per ≤ dictGet H mat`. -/
+theorem validcraft_input (recipes : Recipes) (H : Dict Int) (c mat : String) (per : Int)
+    (hvc : ValidCraftAt recipes H c) (hmem : (mat, per) ∈ recipeOf recipes c) :
+    per ≤ dictGet H mat := by
+  unfold ValidCraftAt at hvc; unfold recipeOf at hmem; exact hvc mat per hmem
+
+/-- **CRAFT STEP `(★)` — ON-PATH `item = c` CORNER (0-sorry).** When the query
+IS the crafted item `c`, a VALID craft makes `minGathersCount c 1 recipes H = 0`:
+`ValidCraftAt` puts every recipe input in `H` (covered), so the `minGathers c`
+traversal credits the recipe entirely and gathers nothing. Hence
+`(★) : minGathersCount c 1 H = 0 ≤ minGathersCount c 1 H'` holds trivially.
+Carries `NoDupKeys (recipeOf c)` (recipe inputs are a dict — a faithful domain
+fact). -/
+theorem count_zero_of_validcraft (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank)
+    (c : String) (H : Dict Int)
+    (hcr : ¬ (getD recipes c []).length = 0)
+    (hnd : NoDupKeys (recipeOf recipes c))
+    (hvc : ValidCraftAt recipes H c) (hnnH : NonNeg H) :
+    minGathersCount c 1 recipes H = 0 := by
+  unfold minGathersCount
+  have hro : recipeOf recipes c = getD recipes c [] := recipeOf_eq_getD recipes c
+  obtain ⟨m, hm⟩ : ∃ m, recipes.length = m + 1 := by
+    rcases Nat.eq_zero_or_pos recipes.length with h | h
+    · exfalso; apply hcr
+      have : recipes = [] := List.length_eq_zero_iff.mp h
+      subst this; simp [getD]
+    · exact ⟨recipes.length - 1, by omega⟩
+  rw [hm, minGathers_succ]
+  have hhc : 0 ≤ getD H c 0 := hnnH c
+  by_cases hcov : (1:Int) - min (getD H c 0) 1 ≤ 0
+  · rw [if_pos hcov]
+  · rw [if_neg hcov, if_neg hcr]
+    have hmin : min (getD H c 0) 1 = getD H c 0 := by
+      have := Int.min_le_left (getD H c 0) 1
+      have := Int.min_le_right (getD H c 0) 1; omega
+    have hrem1 : (1:Int) - min (getD H c 0) 1 = 1 := by rw [hmin]; omega
+    have hcovin : ∀ mat per, (mat, per) ∈ getD recipes c [] →
+        per * (1 - min (getD H c 0) 1)
+          ≤ getD (setD H c (getD H c 0 - min (getD H c 0) 1)) mat 0 := by
+      intro mat per hmem
+      rw [hrem1, Int.mul_one, getD_setD]
+      have hmem' : (mat, per) ∈ recipeOf recipes c := hro ▸ hmem
+      have hvcm : per ≤ dictGet H mat := validcraft_input recipes H c mat per hvc hmem'
+      rw [dictGet_eq] at hvcm
+      by_cases hmc : c = mat
+      · exfalso; subst hmc; have := hacy c c per hmem; omega
+      · rw [if_neg hmc]; exact hvcm
+    exact foldl_covered recipes m (1 - min (getD H c 0) 1)
+      (getD recipes c []) (setD H c (getD H c 0 - min (getD H c 0) 1)) 0
+      (hro ▸ hnd) hcovin
+
 /-- The holdings after a `craft c` step from `H` hold at least one `c`:
 the consume foldl leaves `c` at some value `v`, then the produce step sets it to
 `v + 1`, so `getD H' c 0 = consumed_c + 1`. Combined with `NonNeg` of the consumed
