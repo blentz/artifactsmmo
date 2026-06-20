@@ -3361,7 +3361,7 @@ failure modes are BENIGN — a false rejection reroutes to an incremental
 candidate (capped by `DoomedMemo`). The real progress invariant is those runtime
 guards, NOT this proof. The OBTAINABILITY direction (the half the level-50
 liveness actually needs) IS proven 0-sorry below (`canonicalPlan*` /
-`gear_obtainable_of_minPlanLength_le`). `corner3`/`star_of_corner3` are kept as
+`gear_obtainable_of_perActionLength_le`). `corner3`/`star_of_corner3` are kept as
 optional defense-in-depth; a genuine discharge would need a max-flow /
 Multiset-conservation argument over the recipe-sibling foldl (the
 distribution-across-keys content the no-surplus restriction does NOT simplify —
@@ -4610,7 +4610,7 @@ they coincide and `planGathers = (minGathersCount item 1 …).toNat`
 more times than `minPlanLength`, so this honest bound is stated in per-action
 units. Bridging to `minPlanLength` requires a batch-gather model extension and is
 left as a documented gap. -/
-theorem gear_obtainable_of_minPlanLength_le (recipes : Recipes) (rank : String → Nat)
+theorem gear_obtainable_of_perActionLength_le (recipes : Recipes) (rank : String → Nat)
     (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank)
     (hRB : ∀ item, rank item ≤ recipes.length) (hnd : RecipeNoDup recipes)
     (item : String) (owned : Dict Int) (hnn : NonNeg owned) (d : Nat)

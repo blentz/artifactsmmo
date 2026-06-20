@@ -259,7 +259,7 @@ So `NoSurplusPlan` is the proof encoding of a structural truth, not a convenient
   - `def canonicalPlan (recipes) (item) (owned) : Plan` — bottom-up: gather raw leaves, craft the closure in rank order, equip `item`.
   - `theorem canonicalPlan_valid` : `ValidPlan recipes owned (canonicalPlan recipes item owned)` and `NoSurplusPlan …` and `SatisfiesEquip (canonicalPlan …) item owned recipes`.
   - `theorem canonicalPlan_gathers` : `planGathers recipes (canonicalPlan recipes item owned) owned = (minGathersCount item 1 recipes owned).toNat` (the witness achieves the lower bound).
-  - `theorem gear_obtainable_of_minPlanLength_le` : a length bound `(canonicalPlan …).length ≤ d` follows when `minPlanLength` (mints+crafts+equip) `≤ d`, giving EXISTENCE of an obtaining+equipping valid plan within depth.
+  - `theorem gear_obtainable_of_perActionLength_le` : a length bound `(canonicalPlan …).length ≤ d` follows when `minPlanLength` (mints+crafts+equip) `≤ d`, giving EXISTENCE of an obtaining+equipping valid plan within depth.
 
 - [ ] **Step 1: State `NoSurplusPlan` + the no-surplus lower-bound theorem with `sorry`**
 
@@ -298,7 +298,7 @@ Expected: `minGathers_le_gathers_nosurplus` does NOT mention `corner3`; the only
 
 - [ ] **Step 6: Construct `canonicalPlan` + obtainability witness with `sorry`s, then prove**
 
-Add `canonicalPlan`, `canonicalPlan_valid`, `canonicalPlan_gathers`, `gear_obtainable_of_minPlanLength_le` (statements first with `sorry`, build, then develop proofs via subagent). `canonicalPlan` is a structural recursion over the recipe closure in `rank` order; its validity and no-surplus property are constructive; `canonicalPlan_gathers` matches the witness gather count to `minGathersCount` by the same mass-conservation identity (`minGathers_recon`, already proven).
+Add `canonicalPlan`, `canonicalPlan_valid`, `canonicalPlan_gathers`, `gear_obtainable_of_perActionLength_le` (statements first with `sorry`, build, then develop proofs via subagent). `canonicalPlan` is a structural recursion over the recipe closure in `rank` order; its validity and no-surplus property are constructive; `canonicalPlan_gathers` matches the witness gather count to `minGathersCount` by the same mass-conservation identity (`minGathers_recon`, already proven).
 
 - [ ] **Step 7: Full module build, 0-sorry check, docstrings**
 

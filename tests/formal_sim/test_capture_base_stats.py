@@ -121,12 +121,20 @@ class FakeApi:
         self._get_count += 1
         self.calls.append(("get_character", name))
         if self._get_count == 1:
-            return _make_character(
-                level=self._level, equipped=self._equipped, stats=BASE_STATS_GEARED
+            return SimpleNamespace(
+                data=_make_character(
+                    level=self._level,
+                    equipped=self._equipped,
+                    stats=BASE_STATS_GEARED,
+                )
             )
         if self._raise_on_second_get:
             raise ValueError("sampling boom")
-        return _make_character(level=self._level, equipped={}, stats=self._bare_stats)
+        return SimpleNamespace(
+            data=_make_character(
+                level=self._level, equipped={}, stats=self._bare_stats
+            )
+        )
 
     def action_unequip_item(self, name: str, body: Any) -> SimpleNamespace:
         self.calls.append(("unequip", body.slot))
