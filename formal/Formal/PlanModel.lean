@@ -75,6 +75,8 @@ The following are **outside this model** and are noted here for honesty:
 import Formal.Extracted.MinGathers
 import Formal.Extracted.MinCrafts
 import Formal.Extracted.MinPlanLength
+import Formal.StepDispatch
+import Formal.Extracted.Bridges6
 
 namespace Formal.PlanModel
 
@@ -349,5 +351,106 @@ example : ¬ SatisfiesEquip
   intro h
   have := h "feather" 10 (by simp)
   simp [dictGet] at this
+
+-- ---------------------------------------------------------------------------
+-- Mass-conservation infrastructure (Task 5)
+-- ---------------------------------------------------------------------------
+
+/-!
+## Conservation identity infrastructure
+
+The deep step of the plannability-soundness proof is `minGathers_le_gathers`:
+`min_gathers item 1 recipes owned ≤ planGathers recipes plan owned` for any
+`ValidPlan`. The obstacle (see `.git/sdd/task-5-report.md`) is that the plan
+recursion runs left-to-right over `List Action` while `_min_gathers` recurses
+over the recipe DAG with GREEDY per-branch owned consumption. The bridge is a
+GLOBAL conservation identity expressing the gather count as
+`q · w(item) − Δ(consumed mass)`.
+
+We work on the HAND model `Formal.StepDispatch.minGathers` (richer lemma base,
+shared `getD`/`setD` encoding) and transfer to the extracted
+`Extracted.MinGathers.min_gathers` via `Extracted.Bridges.min_gathers_bridge`
+only at the API boundary. `PlanModel.dictGet`/`dictSet` are definitionally
+`Formal.ShoppingList.getD`/`setD`.
+-/
+
+open Formal.ShoppingList (Dict Recipes getD setD)
+open Formal.StepDispatch (minGathers minGathersCount minGathers_succ)
+
+/-- `dictGet` IS `Formal.ShoppingList.getD` (same equations). -/
+theorem dictGet_eq (m : List (String × Int)) (k : String) :
+    dictGet m k = getD m k 0 := by
+  induction m with
+  | nil => rfl
+  | cons kv rest ih => obtain ⟨a, b⟩ := kv; simp only [dictGet, getD, ih]
+
+/-- `dictSet` IS `Formal.ShoppingList.setD` (same equations). -/
+theorem dictSet_eq (m : List (String × Int)) (k : String) (v : Int) :
+    dictSet m k v = setD m k v := by
+  induction m with
+  | nil => rfl
+  | cons kv rest ih => obtain ⟨a, b⟩ := kv; simp only [dictSet, setD, ih]
+
+-- ---------------------------------------------------------------------------
+-- Total-additivity: the running total threads additively and never feeds back
+-- ---------------------------------------------------------------------------
+
+/-- The running `total` accumulator is added to but never read by the
+recursion: `minGathers` from total `t` equals `minGathers` from total `0` plus
+`t`, and the returned `owned` residual is `t`-independent.
+
+This decouples the gather count from the threaded total, so siblings in the
+`foldl` can be reasoned about from a zero base and re-summed. Proved by
+induction on the fuel; the `foldl` arm uses the IH on each sibling and a
+general `foldl` shift lemma derived inline. -/
+theorem minGathers_total_additive (fuel : Nat) (item : String) (qty : Int)
+    (recipes : Recipes) (t : Int) (owned : Dict Int) :
+    minGathers fuel item qty recipes (t, owned)
+      = ((minGathers fuel item qty recipes (0, owned)).1 + t,
+         (minGathers fuel item qty recipes (0, owned)).2) := by
+  induction fuel generalizing item qty t owned with
+  | zero =>
+    simp only [minGathers]
+    refine Prod.ext ?_ rfl
+    show t + qty = 0 + qty + t
+    omega
+  | succ n ih =>
+    rw [minGathers_succ, minGathers_succ]
+    -- abstract the (total-independent) deficit and residual owned
+    generalize hrem : qty - min (getD owned item 0) qty = rem
+    generalize hod : setD owned item (getD owned item 0 - min (getD owned item 0) qty) = owned'
+    by_cases hc : rem ≤ 0
+    · rw [if_pos hc, if_pos hc]; simp
+    · rw [if_neg hc, if_neg hc]
+      by_cases hr : (getD recipes item []).length = 0
+      · rw [if_pos hr, if_pos hr]
+        refine Prod.ext ?_ rfl
+        show t + rem = 0 + rem + t
+        omega
+      · rw [if_neg hr, if_neg hr]
+        -- foldl arm: thread the additive total through the sibling fold
+        suffices h : ∀ (rc : Dict Int) (s0 : Int × Dict Int),
+            List.foldl
+              (fun state mat => minGathers n mat.1 (mat.2 * rem) recipes state)
+              (s0.1 + t, s0.2) rc
+            = ((List.foldl
+                  (fun state mat => minGathers n mat.1 (mat.2 * rem) recipes state)
+                  (s0.1, s0.2) rc).1 + t,
+               (List.foldl
+                  (fun state mat => minGathers n mat.1 (mat.2 * rem) recipes state)
+                  (s0.1, s0.2) rc).2) by
+          have := h (getD recipes item []) (0, owned')
+          simpa using this
+        intro rc
+        induction rc with
+        | nil => intro s0; simp
+        | cons mat rest ihrec =>
+          intro s0
+          simp only [List.foldl_cons]
+          rw [ih mat.1 (mat.2 * rem) (s0.1 + t) s0.2,
+              ih mat.1 (mat.2 * rem) s0.1 s0.2]
+          rw [← Int.add_assoc]
+          rw [ihrec ((minGathers n mat.1 (mat.2 * rem) recipes (0, s0.2)).1 + s0.1,
+                     (minGathers n mat.1 (mat.2 * rem) recipes (0, s0.2)).2)]
 
 end Formal.PlanModel
