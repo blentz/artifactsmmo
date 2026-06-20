@@ -1313,4 +1313,387 @@ theorem costMass_of_covered (recipes : Recipes) (rank : String → Nat)
   rw [hterm, Int.one_mul] at hrec
   omega
 
+-- ---------------------------------------------------------------------------
+-- Pointwise-monotonicity layer for minGathers (the GATHER step)
+-- ---------------------------------------------------------------------------
+
+/-!
+## Pointwise monotonicity
+
+`Dom h1 h2` ("`h1` is pointwise dominated by `h2`") and `NonNeg h` are the
+order structure under which `minGathers`'s gather count is antitone (more
+holdings ⇒ no more gathers) and its residual covariant. This closes the GATHER
+step of the Ψ-potential argument (a raw gather adds one unit of holdings, so the
+remaining gather count drops by ≤ 1). The CRAFT step is handled separately by a
+direct cost-mass coupling (`minGathers_craft_le`), since a craft's holdings are
+pointwise *incomparable* to the pre-craft holdings.
+-/
+
+/-- `h1` is pointwise dominated by `h2`: every key reads `≤` under `h1`. -/
+def Dom (h1 h2 : Dict Int) : Prop := ∀ k, getD h1 k 0 ≤ getD h2 k 0
+
+/-- Every key of `h` reads `≥ 0`. -/
+def NonNeg (h : Dict Int) : Prop := ∀ k, 0 ≤ getD h k 0
+
+theorem dom_refl (h : Dict Int) : Dom h h := fun _ => Int.le_refl _
+
+theorem dom_trans {h1 h2 h3 : Dict Int} (h12 : Dom h1 h2) (h23 : Dom h2 h3) :
+    Dom h1 h3 := fun k => Int.le_trans (h12 k) (h23 k)
+
+theorem nonneg_nil : NonNeg ([] : Dict Int) := fun _ => Int.le_refl 0
+
+/-- Setting a key to a value `≥` the old value, with the rest `NonNeg`,
+preserves `NonNeg`. -/
+theorem nonneg_setD (h : Dict Int) (k : String) (v : Int)
+    (hnn : NonNeg h) (hv : 0 ≤ v) : NonNeg (setD h k v) := by
+  intro j; rw [getD_setD]; by_cases hk : k = j
+  · rw [if_pos hk]; exact hv
+  · rw [if_neg hk]; exact hnn j
+
+/-- Setting a key to a value `≤` `getD h2 k 0` (under `Dom h1 h2` elsewhere)
+keeps the pair `Dom`-ordered. -/
+theorem dom_setD (h1 h2 : Dict Int) (k : String) (v : Int)
+    (hdom : Dom h1 h2) (hv : v ≤ getD h2 k 0) : Dom (setD h1 k v) h2 := by
+  intro j; rw [getD_setD]; by_cases hk : k = j
+  · subst hk; rw [if_pos rfl]; exact hv
+  · rw [if_neg hk]; exact hdom j
+
+/-- **COUNT MONOTONICITY in the running total.** The gather count of
+`minGathers` is `≥` its running total `t` whenever `0 ≤ q` — gathering can only
+add to the total. Needs `PosRecipes` so each recipe sub-call has positive
+quantity. In particular (`t = 0`) the count is `≥ 0`. -/
+theorem minGathers_count_nonneg (recipes : Recipes) (hpos : PosRecipes recipes) :
+    ∀ (fuel : Nat) (item : String) (q t : Int) (owned : Dict Int),
+      0 ≤ t → 0 ≤ q → (minGathers fuel item q recipes (t, owned)).1 ≥ t := by
+  intro fuel
+  induction fuel with
+  | zero =>
+    intro item q t owned ht hq
+    simp only [minGathers]; omega
+  | succ n ih =>
+    intro item q t owned ht hq
+    rw [minGathers_succ]
+    by_cases hc : q - min (getD owned item 0) q ≤ 0
+    · rw [if_pos hc]; exact Int.le_refl t
+    · rw [if_neg hc]
+      by_cases hr : (getD recipes item []).length = 0
+      · rw [if_pos hr]; simp only; omega
+      · rw [if_neg hr]
+        -- foldl arm: each sibling step (positive sub-qty) preserves "count ≥ total"
+        suffices H : ∀ (rc : Dict Int) (o : Dict Int) (s : Int),
+            (∀ mat per, (mat, per) ∈ rc → 0 < per) → 0 ≤ s →
+            (List.foldl (fun st mat =>
+              minGathers n mat.1 (mat.2 * (q - min (getD owned item 0) q)) recipes st)
+              (s, o) rc).1 ≥ s by
+          have hpoall : ∀ mat per, (mat, per) ∈ getD recipes item [] → 0 < per :=
+            fun mat per hmem => hpos item mat per hmem
+          have := H (getD recipes item [])
+            (setD owned item (getD owned item 0 - min (getD owned item 0) q)) t hpoall ht
+          simpa using this
+        intro rc
+        induction rc with
+        | nil => intro o s _ hs; exact Int.le_refl s
+        | cons mp rest ihrec =>
+          intro o s hpo hs
+          obtain ⟨mat, per⟩ := mp
+          simp only [List.foldl_cons]
+          have hper : 0 < per := hpo mat per (by simp)
+          have hpq : 0 ≤ per * (q - min (getD owned item 0) q) :=
+            Int.le_of_lt (Int.mul_pos hper (by omega))
+          have hstep := ih mat (per * (q - min (getD owned item 0) q)) s o hs hpq
+          have hpo' : ∀ m' p, (m', p) ∈ rest → 0 < p := fun m' p hm => hpo m' p (by simp [hm])
+          exact Int.le_trans hstep (ihrec _ _ hpo' (Int.le_trans hs hstep))
+
+/-- **RESIDUAL NON-NEGATIVITY.** Starting from `NonNeg owned`, the residual
+`owned` after `minGathers` is still `NonNeg`: each consume sets a key to
+`held − min(held, q) ≥ 0` (`min ≤ held`), and gathering adds nothing negative. -/
+theorem minGathers_nonneg_residual (recipes : Recipes) (hpos : PosRecipes recipes) :
+    ∀ (fuel : Nat) (item : String) (q t : Int) (owned : Dict Int),
+      0 < q → NonNeg owned →
+      NonNeg (minGathers fuel item q recipes (t, owned)).2 := by
+  intro fuel
+  induction fuel with
+  | zero => intro item q t owned _ hnn; simpa [minGathers] using hnn
+  | succ n ih =>
+    intro item q t owned hq hnn
+    rw [minGathers_succ]
+    have hheld : 0 ≤ getD owned item 0 := hnn item
+    have hmin_le : min (getD owned item 0) q ≤ getD owned item 0 := Int.min_le_left _ _
+    have hres_nn : NonNeg (setD owned item (getD owned item 0 - min (getD owned item 0) q)) :=
+      nonneg_setD owned item _ hnn (by omega)
+    by_cases hc : q - min (getD owned item 0) q ≤ 0
+    · rw [if_pos hc]; exact hres_nn
+    · rw [if_neg hc]
+      by_cases hr : (getD recipes item []).length = 0
+      · rw [if_pos hr]; exact hres_nn
+      · rw [if_neg hr]
+        suffices H : ∀ (rc : Dict Int) (o : Dict Int) (s : Int),
+            (∀ mat per, (mat, per) ∈ rc → 0 < per) → NonNeg o →
+            NonNeg (List.foldl (fun st mat =>
+              minGathers n mat.1 (mat.2 * (q - min (getD owned item 0) q)) recipes st)
+              (s, o) rc).2 by
+          have hpoall : ∀ mat per, (mat, per) ∈ getD recipes item [] → 0 < per :=
+            fun mat per hmem => hpos item mat per hmem
+          exact H (getD recipes item []) _ t hpoall hres_nn
+        intro rc
+        induction rc with
+        | nil => intro o s _ ho; exact ho
+        | cons mp rest ihrec =>
+          intro o s hpo ho
+          obtain ⟨mat, per⟩ := mp
+          simp only [List.foldl_cons]
+          have hper : 0 < per := hpo mat per (by simp)
+          have hpq : 0 < per * (q - min (getD owned item 0) q) := Int.mul_pos hper (by omega)
+          have hstep := ih mat (per * (q - min (getD owned item 0) q)) s o hpq ho
+          have hpo' : ∀ m' p, (m', p) ∈ rest → 0 < p := fun m' p hm => hpo m' p (by simp [hm])
+          exact ihrec _ _ hpo' hstep
+
+/-- **RESIDUAL ≤ START.** The residual `owned` after `minGathers` is pointwise
+`≤` the start `owned` (gathering only ever consumes held units). Needs
+`NonNeg owned` so each consumed key reads `held − min(held, q) ≤ held`. -/
+theorem minGathers_residual_le (recipes : Recipes) (hpos : PosRecipes recipes) :
+    ∀ (fuel : Nat) (item : String) (q t : Int) (owned : Dict Int),
+      0 < q → NonNeg owned →
+      Dom (minGathers fuel item q recipes (t, owned)).2 owned := by
+  intro fuel
+  induction fuel with
+  | zero => intro item q t owned _ _; simpa [minGathers] using dom_refl owned
+  | succ n ih =>
+    intro item q t owned hq hnn
+    rw [minGathers_succ]
+    have hheld : 0 ≤ getD owned item 0 := hnn item
+    have hmin_nn : 0 ≤ min (getD owned item 0) q := Int.le_min.mpr ⟨hheld, by omega⟩
+    have hcon_le : getD owned item 0 - min (getD owned item 0) q ≤ getD owned item 0 := by omega
+    have hres_dom : Dom (setD owned item (getD owned item 0 - min (getD owned item 0) q)) owned :=
+      dom_setD owned owned item _ (dom_refl owned) hcon_le
+    have hres_nn : NonNeg (setD owned item (getD owned item 0 - min (getD owned item 0) q)) :=
+      nonneg_setD owned item _ hnn (by omega)
+    by_cases hc : q - min (getD owned item 0) q ≤ 0
+    · rw [if_pos hc]; exact hres_dom
+    · rw [if_neg hc]
+      by_cases hr : (getD recipes item []).length = 0
+      · rw [if_pos hr]; exact hres_dom
+      · rw [if_neg hr]
+        -- foldl arm: chain residual-domination across siblings, transitively
+        -- back to the post-consume start, then to `owned` via `hres_dom`.
+        suffices H : ∀ (rc : Dict Int) (o : Dict Int) (s : Int),
+            (∀ mat per, (mat, per) ∈ rc → 0 < per) → NonNeg o →
+            Dom (List.foldl (fun st mat =>
+              minGathers n mat.1 (mat.2 * (q - min (getD owned item 0) q)) recipes st)
+              (s, o) rc).2 o by
+          have hpoall : ∀ mat per, (mat, per) ∈ getD recipes item [] → 0 < per :=
+            fun mat per hmem => hpos item mat per hmem
+          have := H (getD recipes item []) _ t hpoall hres_nn
+          exact dom_trans this hres_dom
+        intro rc
+        induction rc with
+        | nil => intro o s _ _; exact dom_refl o
+        | cons mp rest ihrec =>
+          intro o s hpo ho
+          obtain ⟨mat, per⟩ := mp
+          simp only [List.foldl_cons]
+          have hper : 0 < per := hpo mat per (by simp)
+          have hpq : 0 < per * (q - min (getD owned item 0) q) := Int.mul_pos hper (by omega)
+          have hstep_dom := ih mat (per * (q - min (getD owned item 0) q)) s o hpq ho
+          have hstep_nn := minGathers_nonneg_residual recipes hpos n mat
+            (per * (q - min (getD owned item 0) q)) s o hpq ho
+          have hpo' : ∀ m' p, (m', p) ∈ rest → 0 < p := fun m' p hm => hpo m' p (by simp [hm])
+          exact dom_trans (ihrec _ _ hpo' hstep_nn) hstep_dom
+
+/-- The recipe `foldl` (at sub-quantity `r ≥ 0`) never reduces its running total:
+its count is `≥` the seed total `s` (each sibling step adds via
+`minGathers_count_nonneg`). The standalone foldl arm of `minGathers_count_nonneg`,
+needed by the `minGathers_mono` "q2 done / q1 not" structural arm. -/
+theorem recipeFoldl_count_nonneg (recipes : Recipes) (hpos : PosRecipes recipes)
+    (m : Nat) :
+    ∀ (rc : Dict Int) (o : Dict Int) (s r : Int),
+      (∀ mat per, (mat, per) ∈ rc → 0 < per) → 0 ≤ s → 0 ≤ r →
+      (List.foldl (fun st mat => minGathers m mat.1 (mat.2 * r) recipes st)
+        (s, o) rc).1 ≥ s := by
+  intro rc
+  induction rc with
+  | nil => intro o s r _ hs _; exact Int.le_refl s
+  | cons mp rest ihrec =>
+    intro o s r hpo hs hr
+    obtain ⟨mat, per⟩ := mp
+    simp only [List.foldl_cons]
+    have hper : 0 < per := hpo mat per (by simp)
+    have hpr : 0 ≤ per * r := Int.mul_nonneg (Int.le_of_lt hper) hr
+    have hstep := minGathers_count_nonneg recipes hpos m mat (per * r) s o hs hpr
+    have hpo' : ∀ m' p, (m', p) ∈ rest → 0 < p := fun m' p hm => hpo m' p (by simp [hm])
+    exact Int.le_trans hstep (ihrec _ _ _ hpo' (Int.le_trans hs hstep) hr)
+
+/-- The recipe `foldl` (at sub-quantity `r > 0`, `NonNeg` seed `o`) leaves a
+residual pointwise `≤ o`. The standalone foldl arm of `minGathers_residual_le`,
+needed by the `minGathers_mono` "q2 done / q1 not" structural arm. -/
+theorem recipeFoldl_residual_dom (recipes : Recipes) (hpos : PosRecipes recipes)
+    (m : Nat) :
+    ∀ (rc : Dict Int) (o : Dict Int) (s r : Int),
+      (∀ mat per, (mat, per) ∈ rc → 0 < per) → NonNeg o → 0 < r →
+      Dom (List.foldl (fun st mat => minGathers m mat.1 (mat.2 * r) recipes st)
+        (s, o) rc).2 o := by
+  intro rc
+  induction rc with
+  | nil => intro o s r _ _ _; exact dom_refl o
+  | cons mp rest ihrec =>
+    intro o s r hpo ho hr
+    obtain ⟨mat, per⟩ := mp
+    simp only [List.foldl_cons]
+    have hper : 0 < per := hpo mat per (by simp)
+    have hpr : 0 < per * r := Int.mul_pos hper hr
+    have hstep_dom := minGathers_residual_le recipes hpos m mat (per * r) s o hpr ho
+    have hstep_nn := minGathers_nonneg_residual recipes hpos m mat (per * r) s o hpr ho
+    have hpo' : ∀ m' p, (m', p) ∈ rest → 0 < p := fun m' p hm => hpo m' p (by simp [hm])
+    exact dom_trans (ihrec _ _ _ hpo' hstep_nn hr) hstep_dom
+
+/-- **POINTWISE MONOTONICITY.** With MORE holdings (`Dom h1 h2`, both `NonNeg`)
+and a SMALLER-OR-EQUAL requested quantity (`0 < q2 ≤ q1`), `minGathers` does NO
+MORE gathering AND leaves a (pointwise) LARGER residual:
+
+    (minGathers f item q2 (0, h2)).1 ≤ (minGathers f item q1 (0, h1)).1
+    ∧ Dom (minGathers f item q1 (0, h1)).2 (minGathers f item q2 (0, h2)).2.
+
+The PAIRED conclusion (count-≤ and residual-`Dom` in the SAME direction) is what
+threads the recipe `foldl`: each sibling's residual-`Dom` feeds the next
+sibling's holdings hypothesis, and the per-sibling sub-quantities stay ordered
+because `rem_i = q_i − min(h_i, q_i)` is monotone in the same direction
+(`rem2 ≤ rem1`). The `rank item ≤ f` fuel bound lets the IH fire one fuel lower
+on every (strictly lower-rank, by acyclicity) recipe material. Closes the GATHER
+step of the Ψ-potential. -/
+theorem minGathers_mono (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank) :
+    ∀ (f : Nat) (item : String) (q1 q2 : Int) (h1 h2 : Dict Int),
+      rank item ≤ f → 0 < q2 → q2 ≤ q1 → Dom h1 h2 → NonNeg h1 → NonNeg h2 →
+      (minGathers f item q2 recipes (0, h2)).1 ≤ (minGathers f item q1 recipes (0, h1)).1
+      ∧ Dom (minGathers f item q1 recipes (0, h1)).2
+            (minGathers f item q2 recipes (0, h2)).2 := by
+  intro f
+  induction f using Nat.strongRecOn with
+  | ind f IH =>
+    intro item q1 q2 h1 h2 hrf hq2 hq21 hdom hnn1 hnn2
+    match f, IH with
+    | 0, _ =>
+      -- rank item ≤ 0 ⇒ item is raw; 0-fuel count is just the qty.
+      simp only [minGathers]
+      exact ⟨by omega, hdom⟩
+    | m + 1, IH =>
+      rw [minGathers_succ, minGathers_succ]
+      -- held bounds for the two holdings
+      have hh1 : 0 ≤ getD h1 item 0 := hnn1 item
+      have hh2 : 0 ≤ getD h2 item 0 := hnn2 item
+      have hdi : getD h1 item 0 ≤ getD h2 item 0 := hdom item
+      -- abstract the two used amounts (keep defining equations for the bounds)
+      have hu1le : min (getD h1 item 0) q1 ≤ getD h1 item 0 := Int.min_le_left _ _
+      have hu2le : min (getD h2 item 0) q2 ≤ getD h2 item 0 := Int.min_le_left _ _
+      have hu1q : min (getD h1 item 0) q1 ≤ q1 := Int.min_le_right _ _
+      have hu2q : min (getD h2 item 0) q2 ≤ q2 := Int.min_le_right _ _
+      have hu1nn : 0 ≤ min (getD h1 item 0) q1 := Int.le_min.mpr ⟨hh1, by omega⟩
+      have hu2nn : 0 ≤ min (getD h2 item 0) q2 := Int.le_min.mpr ⟨hh2, by omega⟩
+      -- key remainder ordering: rem2 ≤ rem1
+      have hrem : q2 - min (getD h2 item 0) q2 ≤ q1 - min (getD h1 item 0) q1 := by
+        rw [Int.min_def, Int.min_def]; split <;> split <;> omega
+      -- post-consume residuals, ordered + nonneg
+      have hdom' : Dom (setD h1 item (getD h1 item 0 - min (getD h1 item 0) q1))
+          (setD h2 item (getD h2 item 0 - min (getD h2 item 0) q2)) := by
+        intro k; rw [getD_setD, getD_setD]
+        by_cases hk : item = k
+        · subst hk; rw [if_pos rfl, if_pos rfl]; omega
+        · rw [if_neg hk, if_neg hk]; exact hdom k
+      have hnn1' : NonNeg (setD h1 item (getD h1 item 0 - min (getD h1 item 0) q1)) :=
+        nonneg_setD h1 item _ hnn1 (by omega)
+      have hnn2' : NonNeg (setD h2 item (getD h2 item 0 - min (getD h2 item 0) q2)) :=
+        nonneg_setD h2 item _ hnn2 (by omega)
+      by_cases hc2 : q2 - min (getD h2 item 0) q2 ≤ 0
+      · -- q2 done: count2 = 0 ≤ count1, residual side from monotone start
+        rw [if_pos hc2]
+        by_cases hc1 : q1 - min (getD h1 item 0) q1 ≤ 0
+        · rw [if_pos hc1]
+          exact ⟨Int.le_refl 0, hdom'⟩
+        · rw [if_neg hc1]
+          by_cases hr1 : (getD recipes item []).length = 0
+          · rw [if_pos hr1]
+            exact ⟨by omega, hdom'⟩
+          · rw [if_neg hr1]
+            have hpoall : ∀ mat per, (mat, per) ∈ getD recipes item [] → 0 < per :=
+              fun mat per hmem => hpos item mat per hmem
+            refine ⟨?_, ?_⟩
+            · -- count1 (foldl) ≥ 0, count2 = 0
+              have hfoldl := recipeFoldl_count_nonneg recipes hpos m (getD recipes item [])
+                (setD h1 item (getD h1 item 0 - min (getD h1 item 0) q1)) 0
+                (q1 - min (getD h1 item 0) q1) hpoall (Int.le_refl 0) (by omega)
+              omega
+            · -- Dom (foldl residual under h1') h2'
+              have hres := recipeFoldl_residual_dom recipes hpos m (getD recipes item [])
+                (setD h1 item (getD h1 item 0 - min (getD h1 item 0) q1)) 0
+                (q1 - min (getD h1 item 0) q1) hpoall hnn1' (by omega)
+              exact dom_trans hres hdom'
+      · -- q2 still remaining: q1 also (since rem1 ≥ rem2 > 0)
+        have hc1 : ¬ q1 - min (getD h1 item 0) q1 ≤ 0 := by omega
+        rw [if_neg hc2, if_neg hc1]
+        by_cases hr : (getD recipes item []).length = 0
+        · rw [if_pos hr, if_pos hr]
+          refine ⟨by omega, hdom'⟩
+        · rw [if_neg hr, if_neg hr]
+          -- the recipe foldl coupling: thread the paired invariant per sibling
+          have hrkall : ∀ mat per, (mat, per) ∈ getD recipes item [] → rank mat ≤ m := by
+            intro mat per hmem; have := hacy item mat per hmem; omega
+          have hpoall : ∀ mat per, (mat, per) ∈ getD recipes item [] → 0 < per :=
+            fun mat per hmem => hpos item mat per hmem
+          -- generalized foldl coupling lemma; abstract the two remainders as r1,r2
+          suffices Hgen : ∀ (rc : Dict Int) (o1 o2 : Dict Int) (t1 t2 r1 r2 : Int),
+              (∀ mat per, (mat, per) ∈ rc → rank mat ≤ m) →
+              (∀ mat per, (mat, per) ∈ rc → 0 < per) →
+              0 < r2 → r2 ≤ r1 →
+              t2 ≤ t1 → Dom o1 o2 → NonNeg o1 → NonNeg o2 →
+              (List.foldl (fun st mat =>
+                  minGathers m mat.1 (mat.2 * r2) recipes st) (t2, o2) rc).1
+                ≤ (List.foldl (fun st mat =>
+                  minGathers m mat.1 (mat.2 * r1) recipes st) (t1, o1) rc).1
+              ∧ Dom (List.foldl (fun st mat =>
+                  minGathers m mat.1 (mat.2 * r1) recipes st) (t1, o1) rc).2
+                    (List.foldl (fun st mat =>
+                  minGathers m mat.1 (mat.2 * r2) recipes st) (t2, o2) rc).2 by
+            exact Hgen (getD recipes item [])
+              (setD h1 item (getD h1 item 0 - min (getD h1 item 0) q1))
+              (setD h2 item (getD h2 item 0 - min (getD h2 item 0) q2))
+              0 0 (q1 - min (getD h1 item 0) q1) (q2 - min (getD h2 item 0) q2)
+              hrkall hpoall (by omega) hrem (Int.le_refl 0) hdom' hnn1' hnn2'
+          intro rc
+          induction rc with
+          | nil => intro o1 o2 t1 t2 r1 r2 _ _ _ _ ht hd _ _; exact ⟨ht, hd⟩
+          | cons mp rest ihrec =>
+            intro o1 o2 t1 t2 r1 r2 hrk hpo hr2 hr21 ht hd ho1 ho2
+            obtain ⟨mat, per⟩ := mp
+            simp only [List.foldl_cons]
+            have hper : 0 < per := hpo mat per (by simp)
+            have hrm : rank mat ≤ m := hrk mat per (by simp)
+            have hp2 : 0 < per * r2 := Int.mul_pos hper hr2
+            have hp21 : per * r2 ≤ per * r1 :=
+              Int.mul_le_mul_of_nonneg_left hr21 (Int.le_of_lt hper)
+            -- one-step coupling at the SAME fuel m via the strong IH (m < m+1)
+            have hstep := IH m (Nat.lt_succ_self m) mat (per * r1) (per * r2)
+              o1 o2 hrm hp2 hp21 hd ho1 ho2
+            -- strip the running totals via total-additivity
+            have ta1 := minGathers_total_additive m mat (per * r1) recipes t1 o1
+            have ta2 := minGathers_total_additive m mat (per * r2) recipes t2 o2
+            rw [ta1, ta2]
+            -- residuals of the single step are NonNeg → feed next sibling
+            have hsn1 := minGathers_nonneg_residual recipes hpos m mat
+              (per * r1) 0 o1 (by omega) ho1
+            have hsn2 := minGathers_nonneg_residual recipes hpos m mat
+              (per * r2) 0 o2 hp2 ho2
+            have hrk' : ∀ m' p, (m', p) ∈ rest → rank m' ≤ m :=
+              fun m' p hm => hrk m' p (by simp [hm])
+            have hpo' : ∀ m' p, (m', p) ∈ rest → 0 < p :=
+              fun m' p hm => hpo m' p (by simp [hm])
+            have htnew : (minGathers m mat (per * r2) recipes (0, o2)).1 + t2
+                       ≤ (minGathers m mat (per * r1) recipes (0, o1)).1 + t1 := by
+              have := hstep.1; omega
+            exact ihrec
+              (minGathers m mat (per * r1) recipes (0, o1)).2
+              (minGathers m mat (per * r2) recipes (0, o2)).2
+              ((minGathers m mat (per * r1) recipes (0, o1)).1 + t1)
+              ((minGathers m mat (per * r2) recipes (0, o2)).1 + t2)
+              r1 r2 hrk' hpo' hr2 hr21 htnew hstep.2 hsn1 hsn2
+
 end Formal.PlanModel
