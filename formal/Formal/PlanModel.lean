@@ -3368,4 +3368,1256 @@ theorem minGathers_le_gathers_of_corner3 (recipes : Recipes) (rank : String → 
   minGathers_le_gathers_of_star recipes rank hpos hacy hRB hrnd item owned plan hnn he hnd
     (star_of_corner3 recipes rank hpos hacy hRB hrnd item corner3) hv hprod
 
+-- ---------------------------------------------------------------------------
+-- Constructive obtainability witness: `canonicalPlan`
+-- ---------------------------------------------------------------------------
+
+/-!
+## The canonical obtainment plan (constructive existence witness)
+
+`buildPlan` mirrors the recursion of `minGathers` (StepDispatch) action-for-action:
+at a raw item it emits `remaining` flat `gather`s; at a craftable item it
+recursively builds the plans for each recipe input (ingredients FIRST, threading
+the residual `owned` between siblings exactly as `minGathers`' inner `foldl`
+does) and then emits `remaining` `craft`s of the item. The residual `owned` is
+returned alongside the plan so the sibling threading matches `minGathers`'
+`(count, owned)` state shape.
+
+Because the recursion and owned-crediting mirror `minGathers` exactly, the
+emitted `gather` count equals `(minGathers …).1` — the lower bound is met with
+equality (`canonicalPlan_gathers`).
+
+**Scope boundary.** This is the constructive EXISTENCE witness for the
+demand-`1`, gear-obtainment direction (a valid plan that obtains+equips the
+item). It is NOT the general lower bound (`minGathers_le_gathers_of_corner3`),
+and surplus accounting (`NoSurplusPlan`) is left to a separate effort.
+-/
+
+/-- Build (plan, residual-owned) for obtaining `qty` of `item`, mirroring the
+`minGathers fuel item qty recipes (·, owned)` recursion. The second component is
+the residual `owned` after greedy per-branch crediting (matching
+`(minGathers …).2`), threaded between recipe siblings so the gather count agrees
+with `minGathers`. -/
+def buildPlan : Nat → String → Int → Recipes → Dict Int → Plan × Dict Int
+  | 0, item, qty, _, owned => (List.replicate qty.toNat (Action.gather item), owned)
+  | fuel + 1, item, qty, recipes, owned =>
+      let held := getD owned item 0
+      let used := min held qty
+      let owned' := setD owned item (held - used)
+      let remaining := qty - used
+      if remaining ≤ 0 then ([], owned')
+      else
+        let recipe := getD recipes item []
+        if recipe.length = 0 then
+          (List.replicate remaining.toNat (Action.gather item), owned')
+        else
+          let res := recipe.foldl
+            (fun (st : Plan × Dict Int) mat =>
+              let sub := buildPlan fuel mat.1 (mat.2 * remaining) recipes st.2
+              (st.1 ++ sub.1, sub.2))
+            ([], owned')
+          (res.1 ++ List.replicate remaining.toNat (Action.craft item), res.2)
+
+/-- The canonical plan that obtains and equips `item`: build the recipe closure
+(raws gathered, crafts bottom-up in rank order via `buildPlan`) then `equip item`.
+Constructive existence witness for the demand-`1` gear-obtainment direction. -/
+def canonicalPlan (recipes : Recipes) (item : String) (owned : Dict Int) : Plan :=
+  (buildPlan (recipes.length + 1) item 1 recipes owned).1 ++ [Action.equip item]
+
+/-- The literal number of `gather` actions in a plan (independent of holdings).
+`runPlan`'s `gathers` counter equals exactly this, since only `gather` increments
+it. -/
+def countGathers : Plan → Nat
+  | [] => 0
+  | Action.gather _ :: rest => countGathers rest + 1
+  | _ :: rest => countGathers rest
+
+@[simp] theorem countGathers_append (p q : Plan) :
+    countGathers (p ++ q) = countGathers p + countGathers q := by
+  induction p with
+  | nil => simp [countGathers]
+  | cons a rest ih =>
+    cases a <;> simp only [List.cons_append, countGathers, ih] <;> omega
+
+@[simp] theorem countGathers_replicate_gather (n : Nat) (c : String) :
+    countGathers (List.replicate n (Action.gather c)) = n := by
+  induction n with
+  | zero => simp [countGathers]
+  | succ m ih => rw [List.replicate_succ]; simp only [countGathers, ih]
+
+@[simp] theorem countGathers_replicate_craft (n : Nat) (c : String) :
+    countGathers (List.replicate n (Action.craft c)) = 0 := by
+  induction n with
+  | zero => simp [countGathers]
+  | succ m ih => rw [List.replicate_succ]; simp only [countGathers, ih]
+
+/-- Running any plan threads the gather counter additively from any start state:
+the final `gathers` is the start `gathers` plus `countGathers plan`. The holdings
+do not affect the count. -/
+theorem runPlan_gathers_foldl (recipes : Recipes) (plan : Plan) (s : ExecState) :
+    (List.foldl (applyAction recipes) s plan).gathers
+      = s.gathers + countGathers plan := by
+  induction plan generalizing s with
+  | nil => simp [countGathers]
+  | cons a rest ih =>
+    simp only [List.foldl_cons]
+    rw [ih (applyAction recipes s a)]
+    cases a with
+    | gather code =>
+      show s.gathers + 1 + countGathers rest = s.gathers + countGathers (Action.gather code :: rest)
+      simp only [countGathers]; omega
+    | craft code =>
+      show s.gathers + countGathers rest = s.gathers + countGathers (Action.craft code :: rest)
+      simp only [countGathers]
+    | equip code =>
+      show s.gathers + countGathers rest = s.gathers + countGathers (Action.equip code :: rest)
+      simp only [countGathers]
+
+/-- `planGathers` is exactly the literal `gather`-action count. -/
+theorem planGathers_eq_countGathers (recipes : Recipes) (plan : Plan)
+    (owned : Dict Int) :
+    planGathers recipes plan owned = countGathers plan := by
+  show (List.foldl (applyAction recipes) { gathers := 0, crafts := 0, holdings := owned } plan).gathers = _
+  rw [runPlan_gathers_foldl]; simp
+
+/-- **GATHER-COUNT + RESIDUAL CORRESPONDENCE.** `buildPlan` mirrors `minGathers`
+exactly: the number of `gather` actions it emits equals `minGathers`' gather
+count (from a zero running total), and the residual `owned` it returns is
+identical. Proved by induction on fuel; the craftable arm threads the shared
+sibling `foldl` invariant (plan-gather-count ↔ minGathers-count, residual ↔
+residual) with `minGathers_total_additive` re-summing the additive total. -/
+theorem buildPlan_correspondence (recipes : Recipes) (hpos : PosRecipes recipes) :
+    ∀ (fuel : Nat) (item : String) (qty : Int) (owned : Dict Int), 0 ≤ qty →
+      ((countGathers (buildPlan fuel item qty recipes owned).1 : Int)
+          = (minGathers fuel item qty recipes (0, owned)).1)
+      ∧ (buildPlan fuel item qty recipes owned).2
+          = (minGathers fuel item qty recipes (0, owned)).2 := by
+  intro fuel
+  induction fuel with
+  | zero =>
+    intro item qty owned hq
+    refine ⟨?_, rfl⟩
+    simp only [buildPlan, minGathers]
+    rw [countGathers_replicate_gather]
+    show (qty.toNat : Int) = 0 + qty
+    rw [Int.toNat_of_nonneg hq]; omega
+  | succ n ih =>
+    intro item qty owned hq
+    rw [minGathers_succ]
+    simp only [buildPlan]
+    by_cases hc : qty - min (getD owned item 0) qty ≤ 0
+    · rw [if_pos hc, if_pos hc]
+      exact ⟨by simp [countGathers], rfl⟩
+    · rw [if_neg hc, if_neg hc]
+      by_cases hr : (getD recipes item []).length = 0
+      · rw [if_pos hr, if_pos hr]
+        refine ⟨?_, rfl⟩
+        rw [countGathers_replicate_gather]
+        have : (0:Int) ≤ qty - min (getD owned item 0) qty := by omega
+        omega
+      · rw [if_neg hr, if_neg hr]
+        -- shared foldl invariant: build-foldl gather-count and residual track
+        -- minGathers-foldl count and residual, modulo an additive total `t`.
+        have hrnn : (0:Int) ≤ qty - min (getD owned item 0) qty := by omega
+        generalize hrem : qty - min (getD owned item 0) qty = rem
+        rw [hrem] at hrnn
+        generalize hod : setD owned item (getD owned item 0 - min (getD owned item 0) qty) = owned'
+        suffices H : ∀ (rc : Dict Int) (o : Dict Int) (p0 : Plan) (t : Int),
+            (∀ mat per, (mat, per) ∈ rc → 0 < per) →
+            ((countGathers
+                (List.foldl (fun (st : Plan × Dict Int) mat =>
+                    (st.1 ++ (buildPlan n mat.1 (mat.2 * rem) recipes st.2).1,
+                     (buildPlan n mat.1 (mat.2 * rem) recipes st.2).2))
+                  (p0, o) rc).1 : Int)
+              = (List.foldl (fun state mat =>
+                    minGathers n mat.1 (mat.2 * rem) recipes state) (t, o) rc).1
+                - t + (countGathers p0 : Int))
+            ∧ (List.foldl (fun (st : Plan × Dict Int) mat =>
+                    (st.1 ++ (buildPlan n mat.1 (mat.2 * rem) recipes st.2).1,
+                     (buildPlan n mat.1 (mat.2 * rem) recipes st.2).2))
+                  (p0, o) rc).2
+                = (List.foldl (fun state mat =>
+                    minGathers n mat.1 (mat.2 * rem) recipes state) (t, o) rc).2 by
+          have hpoall : ∀ mat per, (mat, per) ∈ getD recipes item [] → 0 < per :=
+            fun mat per hmem => hpos item mat per hmem
+          have hH := H (getD recipes item []) owned' [] 0 hpoall
+          obtain ⟨hcount, hres⟩ := hH
+          refine ⟨?_, hres⟩
+          rw [countGathers_append, countGathers_replicate_craft]
+          push_cast
+          rw [hcount]
+          simp [countGathers]
+        intro rc
+        induction rc with
+        | nil => intro o p0 t _; exact ⟨by simp, rfl⟩
+        | cons mat rest ihrec =>
+          intro o p0 t hpo
+          simp only [List.foldl_cons]
+          have hper : 0 < mat.2 := hpo mat.1 mat.2 (by cases mat; simp)
+          have hsubnn : 0 ≤ mat.2 * rem := Int.mul_nonneg (by omega) hrnn
+          have hsub := ih mat.1 (mat.2 * rem) o hsubnn
+          obtain ⟨hsc, hsr⟩ := hsub
+          rw [hsr]
+          -- minGathers total-additive over this sibling
+          have hta := minGathers_total_additive n mat.1 (mat.2 * rem) recipes t o
+          rw [hta]
+          have hpo' : ∀ m' p, (m', p) ∈ rest → 0 < p :=
+            fun m' p hm => hpo m' p (by simp [hm])
+          have hres2 := ihrec
+            (minGathers n mat.1 (mat.2 * rem) recipes (0, o)).2
+            (p0 ++ (buildPlan n mat.1 (mat.2 * rem) recipes o).1)
+            ((minGathers n mat.1 (mat.2 * rem) recipes (0, o)).1 + t)
+            hpo'
+          obtain ⟨hc2, hr2⟩ := hres2
+          refine ⟨?_, hr2⟩
+          rw [hc2]
+          rw [countGathers_append]
+          push_cast
+          rw [hsc]
+          omega
+
+/-- **WITNESS MEETS THE BOUND.** The canonical plan's gather count equals the
+`minGathers` lower bound exactly: `planGathers (canonicalPlan …) = minGathersCount item 1 …`.
+The `equip` action contributes no gathers, so the count is `countGathers` of the
+`buildPlan` prefix, which equals `(minGathers …).1` by `buildPlan_correspondence`
+(nonneg, so `.toNat` round-trips).
+
+Constructive existence witness for the demand-`1` gear-obtainment direction; not
+the general lower bound. -/
+theorem canonicalPlan_gathers (recipes : Recipes) (hpos : PosRecipes recipes)
+    (item : String) (owned : Dict Int) :
+    planGathers recipes (canonicalPlan recipes item owned) owned
+      = (minGathersCount item 1 recipes owned).toNat := by
+  rw [planGathers_eq_countGathers, canonicalPlan, countGathers_append]
+  have hcorr := (buildPlan_correspondence recipes hpos (recipes.length + 1) item 1 owned
+    (by omega)).1
+  have hnn : (0:Int) ≤ (minGathers (recipes.length + 1) item 1 recipes (0, owned)).1 :=
+    minGathers_count_nonneg recipes hpos (recipes.length + 1) item 1 0 owned
+      (Int.le_refl 0) (by omega)
+  unfold minGathersCount
+  -- countGathers (buildPlan …) = (minGathers …).1.toNat
+  have hcg : (countGathers (buildPlan (recipes.length + 1) item 1 recipes owned).1 : Int)
+      = (minGathers (recipes.length + 1) item 1 recipes (0, owned)).1 := hcorr
+  have hcraft : countGathers ([Action.equip item] : Plan) = 0 := by simp [countGathers]
+  rw [hcraft, Nat.add_zero]
+  -- from hcg (Int) and nonneg, conclude the Nat equality
+  omega
+
+theorem canonicalPlan_equip_mem (recipes : Recipes) (item : String) (owned : Dict Int) :
+    Action.equip item ∈ canonicalPlan recipes item owned := by
+  rw [canonicalPlan]
+  exact List.mem_append_right _ (by simp)
+
+-- ---------------------------------------------------------------------------
+-- ValidPlanFrom / runPlan compositional helpers
+-- ---------------------------------------------------------------------------
+
+/-- `ValidPlanFrom` over a concatenation splits: valid on `p` from `s`, then
+valid on `q` from the state after running `p`. -/
+theorem validPlanFrom_append (recipes : Recipes) (p q : Plan) (s : ExecState) :
+    ValidPlanFrom recipes s (p ++ q)
+      ↔ ValidPlanFrom recipes s p
+        ∧ ValidPlanFrom recipes (List.foldl (applyAction recipes) s p) q := by
+  induction p generalizing s with
+  | nil => simp [ValidPlanFrom]
+  | cons a rest ih =>
+    simp only [List.cons_append, ValidPlanFrom, List.foldl_cons]
+    rw [ih (applyAction recipes s a)]
+    constructor
+    · rintro ⟨hstep, hrest, hq⟩; exact ⟨⟨hstep, hrest⟩, hq⟩
+    · rintro ⟨⟨hstep, hrest⟩, hq⟩; exact ⟨hstep, hrest, hq⟩
+
+/-- The holdings after a `gather c` step: `c` bumped by 1. -/
+theorem foldl_gather_holdings (recipes : Recipes) (s : ExecState) (c : String) :
+    (applyAction recipes s (Action.gather c)).holdings
+      = dictSet s.holdings c (dictGet s.holdings c + 1) := rfl
+
+/-- Running `replicate n (gather c)` raises `holdings[c]` by `n` and leaves every
+other key unchanged; every step is a valid gather when `c` is raw. -/
+theorem replicate_gather_holdings (recipes : Recipes) (c : String) (n : Nat) :
+    ∀ (s : ExecState),
+      getD (List.foldl (applyAction recipes) s
+        (List.replicate n (Action.gather c))).holdings c 0
+        = getD s.holdings c 0 + (n : Int)
+      ∧ (∀ k, k ≠ c →
+          getD (List.foldl (applyAction recipes) s
+            (List.replicate n (Action.gather c))).holdings k 0
+            = getD s.holdings k 0) := by
+  induction n with
+  | zero => intro s; simp
+  | succ m ih =>
+    intro s
+    rw [List.replicate_succ, List.foldl_cons]
+    have hh := ih (applyAction recipes s (Action.gather c))
+    obtain ⟨h1, h2⟩ := hh
+    rw [foldl_gather_holdings] at h1 h2
+    refine ⟨?_, ?_⟩
+    · rw [h1, dictGet_eq, dictSet_eq, getD_setD, if_pos rfl]; push_cast; omega
+    · intro k hk
+      rw [h2 k hk, dictSet_eq, getD_setD, if_neg (by simpa [eq_comm] using hk)]
+
+/-- A fold of `dictSet h k (getD h k − δ)` over a list that does NOT contain key
+`mat` leaves `mat` unchanged. -/
+theorem consume_absent (mat : String) (L : List (String × Int)) :
+    (∀ p, (mat, p) ∉ L) → ∀ (H : Dict Int),
+      getD (List.foldl
+        (fun h (mp : String × Int) => dictSet h mp.1 (dictGet h mp.1 - mp.2)) H L) mat 0
+        = getD H mat 0 := by
+  induction L with
+  | nil => intro _ H; simp
+  | cons mp rest ih =>
+    intro habs H
+    obtain ⟨m0, p0⟩ := mp
+    simp only [List.foldl_cons]
+    have hne : m0 ≠ mat := by intro h; subst h; exact habs p0 (by simp)
+    have habs' : ∀ p, (mat, p) ∉ rest := fun p hp => habs p (by simp [hp])
+    rw [ih habs' (dictSet H m0 (dictGet H m0 - p0))]
+    rw [dictSet_eq, getD_setD, if_neg hne]
+
+/-- Consuming an input list leaves a key absent from the list unchanged. -/
+theorem consume_other (recipes : Recipes) (c : String) (H : Dict Int)
+    (habs : ∀ per, (c, per) ∉ recipeOf recipes c) :
+    getD (consumeHoldings H (recipeOf recipes c)) c 0 = getD H c 0 := by
+  unfold consumeHoldings
+  exact consume_absent c (recipeOf recipes c) habs H
+
+/-- Consuming an input list with NO duplicate keys drops a member key `mat` by
+exactly its `per` (single occurrence). -/
+theorem consume_input (recipes : Recipes) (c mat : String) (per : Int)
+    (H : Dict Int) (hnd : NoDupKeys (recipeOf recipes c))
+    (hmem : (mat, per) ∈ recipeOf recipes c) :
+    getD (consumeHoldings H (recipeOf recipes c)) mat 0
+      = getD H mat 0 - per := by
+  unfold consumeHoldings
+  generalize hL : recipeOf recipes c = L at hnd hmem ⊢
+  clear hL
+  induction L generalizing H with
+  | nil => simp at hmem
+  | cons mp rest ih =>
+    obtain ⟨m0, p0⟩ := mp
+    simp only [List.foldl_cons]
+    obtain ⟨hhead, hndtl⟩ := hnd
+    rw [List.mem_cons] at hmem
+    rcases hmem with heq | htl
+    · -- mat = m0, per = p0; rest has no m0 (NoDup) so it's untouched after the set
+      have heq2 : m0 = mat ∧ p0 = per := Prod.mk.injEq .. |>.mp heq.symm
+      obtain ⟨rfl, rfl⟩ := heq2
+      have habs : ∀ p, (m0, p) ∉ rest := fun p hp => hhead p hp
+      rw [consume_absent m0 rest habs (dictSet H m0 (dictGet H m0 - p0))]
+      rw [dictSet_eq, getD_setD, if_pos rfl, dictGet_eq]
+    · -- mat in rest; m0 ≠ mat (NoDup head distinct, and mat≠m0 since (mat,per)∈rest)
+      have hne : m0 ≠ mat := by
+        intro h; subst h; exact hhead per htl
+      rw [ih (dictSet H m0 (dictGet H m0 - p0)) hndtl htl]
+      rw [dictSet_eq, getD_setD, if_neg hne]
+
+/-- Effect of a single `craft c` step on a *specific* input key `mat` of the
+recipe, when the recipe has no duplicate keys and `c ≠ mat` (acyclic): the input
+drops by exactly `per`. -/
+theorem craft_step_input (recipes : Recipes) (c mat : String) (per : Int)
+    (s : ExecState) (hnd : NoDupKeys (recipeOf recipes c))
+    (hmem : (mat, per) ∈ recipeOf recipes c) (hne : c ≠ mat) :
+    getD (applyAction recipes s (Action.craft c)).holdings mat 0
+      = getD s.holdings mat 0 - per := by
+  show getD (dictSet (consumeHoldings s.holdings (recipeOf recipes c)) c
+      (dictGet (consumeHoldings s.holdings (recipeOf recipes c)) c + 1)) mat 0 = _
+  rw [dictSet_eq, getD_setD, if_neg hne]
+  -- consumeHoldings drops `mat` by `per` (NoDup ⇒ single occurrence)
+  have := consume_input recipes c mat per s.holdings hnd hmem
+  exact this
+
+/-- Effect of a single `craft c` step on the produced item `c` itself (acyclic ⇒
+`c` is not among its own inputs, so consumption does not touch it): rises by 1. -/
+theorem craft_step_output (recipes : Recipes) (rank : String → Nat)
+    (hacy : Acyclic recipes rank) (c : String) (s : ExecState) :
+    getD (applyAction recipes s (Action.craft c)).holdings c 0
+      = getD s.holdings c 0 + 1 := by
+  show getD (dictSet (consumeHoldings s.holdings (recipeOf recipes c)) c
+      (dictGet (consumeHoldings s.holdings (recipeOf recipes c)) c + 1)) c 0 = _
+  rw [dictSet_eq, getD_setD, if_pos rfl, dictGet_eq]
+  -- consuming the recipe inputs does not change `c` (c ∉ inputs by acyclicity)
+  have hc_not_input : ∀ per, (c, per) ∉ recipeOf recipes c := by
+    intro per hmem
+    have hreceq : recipeOf recipes c = getD recipes c [] := recipeOf_eq_getD recipes c
+    rw [hreceq] at hmem
+    have := hacy c c per hmem; omega
+  have := consume_other recipes c s.holdings hc_not_input
+  rw [this]
+
+/-- Sum of `per` over recipe entries `(mat, per)` whose key `mat` equals `k`. -/
+def sumPerAt (rc : List (String × Int)) (k : String) : Int :=
+  match rc with
+  | [] => 0
+  | (mat, per) :: rest => (if mat = k then per else 0) + sumPerAt rest k
+
+theorem sumPerAt_absent (l : List (String × Int)) (mat : String)
+    (habs : ∀ p, (mat, p) ∉ l) : sumPerAt l mat = 0 := by
+  induction l with
+  | nil => rfl
+  | cons mp rest ih =>
+    obtain ⟨m0, p0⟩ := mp
+    simp only [sumPerAt]
+    have hne : ¬ m0 = mat := by intro h; subst h; exact habs p0 (by simp)
+    rw [if_neg hne, ih (fun p hp => habs p (by simp [hp]))]; rfl
+
+theorem sumPerAt_member (l : List (String × Int)) (mat : String)
+    (per : Int) (hmem : (mat, per) ∈ l) (hnd : NoDupKeys l) :
+    sumPerAt l mat = per := by
+  induction l with
+  | nil => simp at hmem
+  | cons mp rest ih =>
+    obtain ⟨m0, p0⟩ := mp
+    obtain ⟨hhead, hndtl⟩ := hnd
+    rw [List.mem_cons] at hmem
+    simp only [sumPerAt]
+    rcases hmem with heq | htl
+    · have heq2 : m0 = mat ∧ p0 = per := Prod.mk.injEq .. |>.mp heq.symm
+      obtain ⟨rfl, rfl⟩ := heq2
+      rw [if_pos rfl, sumPerAt_absent rest m0 (fun p hp => hhead p hp)]; omega
+    · have hne : ¬ m0 = mat := by intro h; subst h; exact hhead per htl
+      rw [if_neg hne, ih htl hndtl]; omega
+
+/-- **REPLICATE-CRAFT EFFECT.** Running `replicate n (craft c)` changes holdings
+by: each input `mat` drops by `n * per`, the output `c` rises by `n`, every other
+key is unchanged. Acyclicity (`c ∉` its own inputs) and `NoDupKeys` keep the
+per-key bookkeeping clean. -/
+theorem replicate_craft_effect (recipes : Recipes) (rank : String → Nat)
+    (hacy : Acyclic recipes rank) (c : String)
+    (hnd : NoDupKeys (recipeOf recipes c)) (n : Nat) :
+    ∀ (s : ExecState) (k : String),
+      getD (List.foldl (applyAction recipes) s (List.replicate n (Action.craft c))).holdings k 0
+        = getD s.holdings k 0
+          + (if k = c then (n : Int) else 0)
+          - (n : Int) * sumPerAt (recipeOf recipes c) k := by
+  induction n with
+  | zero => intro s k; simp
+  | succ m ih =>
+    intro s k
+    rw [List.replicate_succ, List.foldl_cons]
+    rw [ih (applyAction recipes s (Action.craft c)) k]
+    by_cases hk : k = c
+    · subst hk
+      rw [craft_step_output recipes rank hacy k s, if_pos rfl, if_pos rfl]
+      -- k is not its own input (acyclic) ⇒ sumPerAt (recipeOf k) k = 0
+      have hc0 : sumPerAt (recipeOf recipes k) k = 0 := by
+        apply sumPerAt_absent
+        intro per hmem
+        have hreceq : recipeOf recipes k = getD recipes k [] := recipeOf_eq_getD recipes k
+        rw [hreceq] at hmem
+        have := hacy k k per hmem; omega
+      rw [hc0, Int.mul_zero, Int.mul_zero]; push_cast; omega
+    · rw [if_neg hk, if_neg hk]
+      by_cases hin : ∃ per, (k, per) ∈ recipeOf recipes c
+      · obtain ⟨per, hmem⟩ := hin
+        rw [craft_step_input recipes c k per s hnd hmem (fun h => hk h.symm)]
+        have hsp : sumPerAt (recipeOf recipes c) k = per :=
+          sumPerAt_member (recipeOf recipes c) k per hmem hnd
+        rw [hsp]
+        have hexp : ((m : Int) + 1) * per = (m : Int) * per + per := by
+          rw [Int.add_mul, Int.one_mul]
+        push_cast; rw [hexp]; omega
+      · -- k absent from inputs: craft step does not change k
+        have hkabs : ∀ per, (k, per) ∉ recipeOf recipes c := by
+          intro per hmem; exact hin ⟨per, hmem⟩
+        have hstep : getD (applyAction recipes s (Action.craft c)).holdings k 0
+            = getD s.holdings k 0 := by
+          show getD (dictSet (consumeHoldings s.holdings (recipeOf recipes c)) c
+              (dictGet (consumeHoldings s.holdings (recipeOf recipes c)) c + 1)) k 0 = _
+          rw [dictSet_eq, getD_setD, if_neg (fun h => hk h.symm)]
+          exact consume_absent k (recipeOf recipes c) hkabs s.holdings
+        rw [hstep]
+        have hsp0 : sumPerAt (recipeOf recipes c) k = 0 := sumPerAt_absent _ _ hkabs
+        rw [hsp0, Int.mul_zero, Int.mul_zero]
+
+/-- **REPLICATE-CRAFT VALIDITY.** Running `replicate n (craft c)` from holdings
+that stock `n` crafts' worth of each input (`n·per ≤ holdings[mat]`) is
+`ValidPlanFrom`: every one of the `n` crafts finds its inputs in hand. Each craft
+consumes `per` of each input (NoDup recipe), so after `k` crafts the stock is
+`(n−k)·per`, still covering the remaining `n−k`. Positivity (`PosRecipes`) and
+acyclicity keep `per > 0` and `c ∉` its own inputs. -/
+theorem replicate_craft_valid (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank) (c : String)
+    (hnd : NoDupKeys (recipeOf recipes c))
+    (hcr : recipeOf recipes c ≠ []) (n : Nat) :
+    ∀ (s : ExecState),
+      (∀ mat per, (mat, per) ∈ recipeOf recipes c →
+        (n : Int) * per ≤ getD s.holdings mat 0) →
+      ValidPlanFrom recipes s (List.replicate n (Action.craft c)) := by
+  induction n with
+  | zero => intro s _; simp [ValidPlanFrom]
+  | succ m ih =>
+    intro s hstock
+    rw [List.replicate_succ, ValidPlanFrom]
+    refine ⟨⟨hcr, ?_⟩, ?_⟩
+    · -- ValidCraftAt: this craft's inputs present
+      intro mat per hmem
+      -- `hmem`'s membership target is definitionally `recipeOf recipes c`
+      have hmem' : (mat, per) ∈ recipeOf recipes c := hmem
+      have hper : 0 < per := hpos c mat per (by rw [recipeOf_eq_getD] at hmem'; exact hmem')
+      have hst := hstock mat per hmem'
+      have hle : per ≤ ((m : Int) + 1) * per := by
+        have hexp : ((m : Int) + 1) * per = (m : Int) * per + per := by
+          rw [Int.add_mul, Int.one_mul]
+        have hmnn : 0 ≤ (m : Int) * per := Int.mul_nonneg (by omega) (by omega)
+        rw [hexp]; omega
+      push_cast at hst
+      rw [dictGet_eq]
+      omega
+    · -- after the craft, the remaining m crafts have their stock
+      apply ih
+      intro mat per hmem
+      have hne : c ≠ mat := by
+        intro h; subst h
+        have hreceq : recipeOf recipes c = getD recipes c [] := recipeOf_eq_getD recipes c
+        rw [hreceq] at hmem
+        have := hacy c c per hmem; omega
+      rw [craft_step_input recipes c mat per s hnd hmem hne]
+      have hst := hstock mat per hmem
+      push_cast at hst ⊢
+      have hexp : ((m : Int) + 1) * per = (m : Int) * per + per := by
+        rw [Int.add_mul, Int.one_mul]
+      rw [hexp] at hst
+      omega
+
+-- ---------------------------------------------------------------------------
+-- buildPlan validity + production invariant
+-- ---------------------------------------------------------------------------
+
+/-- Sum of `per * rem` over recipe entries `(mat, per)` whose key `mat` equals `k`.
+The net production of key `k` across one recipe's siblings at scale `rem`. -/
+def sumQtyAt (rc : List (String × Int)) (rem : Int) (k : String) : Int :=
+  match rc with
+  | [] => 0
+  | (mat, per) :: rest =>
+      (if mat = k then per * rem else 0) + sumQtyAt rest rem k
+
+/-- `applyAction` changes holdings independently of the gather/craft counters;
+running a plan from two states with equal holdings yields equal holdings. -/
+theorem foldl_holdings_irrel (recipes : Recipes) (plan : Plan) (h : Dict Int)
+    (g1 c1 g2 c2 : Nat) :
+    (List.foldl (applyAction recipes) { gathers := g1, crafts := c1, holdings := h } plan).holdings
+      = (List.foldl (applyAction recipes) { gathers := g2, crafts := c2, holdings := h } plan).holdings := by
+  induction plan generalizing h g1 c1 g2 c2 with
+  | nil => rfl
+  | cons a rest ih =>
+    simp only [List.foldl_cons]
+    cases a with
+    | gather code =>
+      exact ih (dictSet h code (dictGet h code + 1)) _ _ _ _
+    | craft code =>
+      exact ih _ _ _ _ _
+    | equip code =>
+      exact ih h _ _ _ _
+
+/-- `ValidPlanFrom` depends only on the holdings, not the gather/craft counters. -/
+theorem validPlanFrom_holdings_irrel (recipes : Recipes) (plan : Plan) (h : Dict Int)
+    (g1 c1 g2 c2 : Nat)
+    (hv : ValidPlanFrom recipes { gathers := g1, crafts := c1, holdings := h } plan) :
+    ValidPlanFrom recipes { gathers := g2, crafts := c2, holdings := h } plan := by
+  induction plan generalizing h g1 c1 g2 c2 with
+  | nil => trivial
+  | cons a rest ih =>
+    obtain ⟨hstep, hrest⟩ := hv
+    refine ⟨?_, ?_⟩
+    · cases a <;> exact hstep
+    · cases a with
+      | gather code => exact ih _ _ _ _ _ hrest
+      | craft code => exact ih _ _ _ _ _ hrest
+      | equip code => exact ih h _ _ _ _ hrest
+
+/-- The plan accumulator of `buildPlan`'s sibling foldl is purely prepended:
+folding from `(p0, obk)` yields `p0 ++ (fold from ([], obk)).1`, and the
+bookkeeping component is `p0`-independent. -/
+theorem buildPlan_foldl_prefix (recipes : Recipes) (n : Nat) (rem : Int) :
+    ∀ (rc : List (String × Int)) (obk : Dict Int) (p0 : Plan),
+      (rc.foldl
+        (fun (st : Plan × Dict Int) mat =>
+          (st.1 ++ (buildPlan n mat.1 (mat.2 * rem) recipes st.2).1,
+           (buildPlan n mat.1 (mat.2 * rem) recipes st.2).2)) (p0, obk))
+      = (p0 ++ (rc.foldl
+          (fun (st : Plan × Dict Int) mat =>
+            (st.1 ++ (buildPlan n mat.1 (mat.2 * rem) recipes st.2).1,
+             (buildPlan n mat.1 (mat.2 * rem) recipes st.2).2)) ([], obk)).1,
+         (rc.foldl
+          (fun (st : Plan × Dict Int) mat =>
+            (st.1 ++ (buildPlan n mat.1 (mat.2 * rem) recipes st.2).1,
+             (buildPlan n mat.1 (mat.2 * rem) recipes st.2).2)) ([], obk)).2) := by
+  intro rc
+  induction rc with
+  | nil => intro obk p0; simp
+  | cons mat rest ih =>
+    intro obk p0
+    simp only [List.foldl_cons, List.nil_append]
+    rw [ih (buildPlan n mat.1 (mat.2 * rem) recipes obk).2
+          (p0 ++ (buildPlan n mat.1 (mat.2 * rem) recipes obk).1)]
+    rw [ih (buildPlan n mat.1 (mat.2 * rem) recipes obk).2
+          (buildPlan n mat.1 (mat.2 * rem) recipes obk).1]
+    simp [List.append_assoc]
+
+/-- Running the sibling foldl of `buildPlan`'s craftable arm from a runtime state
+`Hrt` dominating the bookkeeping `obk`: the accumulated sibling plans (the new
+suffix beyond `p0`) are valid from `Hrt`, the resulting runtime dominates the
+final bookkeeping, and the per-key runtime change equals the bookkeeping change
+plus the per-key sibling productions `sumQtyAt`. Parametrized by the fuel-`n`
+`buildPlan_run` statement `Hn` (so it composes inside the fuel induction). -/
+theorem buildPlan_siblings (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes)
+    (n : Nat) (rem : Int) (hrem : 0 < rem)
+    (Hn : ∀ (it : String) (q : Int) (ow Hr : Dict Int),
+      rank it ≤ n → 0 ≤ q → NonNeg ow → Dom ow Hr →
+      ValidPlanFrom recipes { gathers := 0, crafts := 0, holdings := Hr }
+          (buildPlan n it q recipes ow).1
+      ∧ (∀ k, getD (List.foldl (applyAction recipes)
+            { gathers := 0, crafts := 0, holdings := Hr }
+            (buildPlan n it q recipes ow).1).holdings k 0
+          = getD Hr k 0 + (getD (buildPlan n it q recipes ow).2 k 0 - getD ow k 0)
+            + (if k = it then q else 0))) :
+    ∀ (rc : List (String × Int)) (obk Hrt : Dict Int),
+      (∀ mat per, (mat, per) ∈ rc → rank mat ≤ n) →
+      (∀ mat per, (mat, per) ∈ rc → 0 < per) →
+      NonNeg obk →
+      Dom obk Hrt →
+      ValidPlanFrom recipes { gathers := 0, crafts := 0, holdings := Hrt }
+          (rc.foldl
+            (fun (st : Plan × Dict Int) mat =>
+              (st.1 ++ (buildPlan n mat.1 (mat.2 * rem) recipes st.2).1,
+               (buildPlan n mat.1 (mat.2 * rem) recipes st.2).2)) ([], obk)).1
+      ∧ Dom (rc.foldl
+              (fun (st : Plan × Dict Int) mat =>
+                (st.1 ++ (buildPlan n mat.1 (mat.2 * rem) recipes st.2).1,
+                 (buildPlan n mat.1 (mat.2 * rem) recipes st.2).2)) ([], obk)).2
+            (List.foldl (applyAction recipes)
+              { gathers := 0, crafts := 0, holdings := Hrt }
+              (rc.foldl
+                (fun (st : Plan × Dict Int) mat =>
+                  (st.1 ++ (buildPlan n mat.1 (mat.2 * rem) recipes st.2).1,
+                   (buildPlan n mat.1 (mat.2 * rem) recipes st.2).2)) ([], obk)).1).holdings
+      ∧ ∀ k, getD (List.foldl (applyAction recipes)
+              { gathers := 0, crafts := 0, holdings := Hrt }
+              (rc.foldl
+                (fun (st : Plan × Dict Int) mat =>
+                  (st.1 ++ (buildPlan n mat.1 (mat.2 * rem) recipes st.2).1,
+                   (buildPlan n mat.1 (mat.2 * rem) recipes st.2).2)) ([], obk)).1).holdings k 0
+            = getD Hrt k 0
+              + (getD (rc.foldl
+                  (fun (st : Plan × Dict Int) mat =>
+                    (st.1 ++ (buildPlan n mat.1 (mat.2 * rem) recipes st.2).1,
+                     (buildPlan n mat.1 (mat.2 * rem) recipes st.2).2)) ([], obk)).2 k 0
+                 - getD obk k 0)
+              + sumQtyAt rc rem k := by
+  intro rc
+  induction rc with
+  | nil =>
+    intro obk Hrt _ _ _ hdom
+    refine ⟨by simp [ValidPlanFrom], ?_, ?_⟩
+    · simpa using hdom
+    · intro k; simp [sumQtyAt]
+  | cons mat rest ih =>
+    intro obk Hrt hrank hposrc hnnobk hdom
+    -- decompose foldl (mat::rest) ([],obk) = head_plan ++ foldl rest ([], bk1)
+    have hrankmat : rank mat.1 ≤ n := hrank mat.1 mat.2 (by cases mat; simp)
+    have hpermat : 0 < mat.2 := hposrc mat.1 mat.2 (by cases mat; simp)
+    have hqnn : 0 ≤ mat.2 * rem := Int.mul_nonneg (by omega) (by omega)
+    have hqpos : 0 < mat.2 * rem := Int.mul_pos hpermat hrem
+    -- head residual NonNeg (minGathers residual)
+    have hbk1nn : NonNeg (buildPlan n mat.1 (mat.2 * rem) recipes obk).2 := by
+      have hcorr := (buildPlan_correspondence recipes hpos n mat.1 (mat.2 * rem) obk hqnn).2
+      rw [hcorr]
+      exact minGathers_nonneg_residual recipes hpos n mat.1 (mat.2 * rem) 0 obk hqpos hnnobk
+    -- the head sibling
+    have hHn := Hn mat.1 (mat.2 * rem) obk Hrt hrankmat hqnn hnnobk hdom
+    obtain ⟨hHvalid, hHdelta⟩ := hHn
+    -- runtime after head plan
+    have hfoldcons : (List.foldl
+        (fun (st : Plan × Dict Int) m =>
+          (st.1 ++ (buildPlan n m.1 (m.2 * rem) recipes st.2).1,
+           (buildPlan n m.1 (m.2 * rem) recipes st.2).2)) ([], obk) (mat :: rest))
+        = (List.foldl
+            (fun (st : Plan × Dict Int) m =>
+              (st.1 ++ (buildPlan n m.1 (m.2 * rem) recipes st.2).1,
+               (buildPlan n m.1 (m.2 * rem) recipes st.2).2))
+            ((buildPlan n mat.1 (mat.2 * rem) recipes obk).1,
+             (buildPlan n mat.1 (mat.2 * rem) recipes obk).2) rest) := by
+      simp [List.foldl_cons]
+    rw [hfoldcons]
+    rw [buildPlan_foldl_prefix recipes n rem rest
+        (buildPlan n mat.1 (mat.2 * rem) recipes obk).2
+        (buildPlan n mat.1 (mat.2 * rem) recipes obk).1]
+    -- abbreviate the head bookkeeping/plan via generalize (everywhere)
+    generalize hhp : (buildPlan n mat.1 (mat.2 * rem) recipes obk).1 = hp at *
+    generalize hbk1 : (buildPlan n mat.1 (mat.2 * rem) recipes obk).2 = bk1 at *
+    -- runtime after head plan (kept as an explicit term)
+    have hHdom1 : Dom bk1 (List.foldl (applyAction recipes)
+        { gathers := 0, crafts := 0, holdings := Hrt } hp).holdings := by
+      intro k
+      have hdk0 := hHdelta k
+      rw [hdk0]
+      have hdk := hdom k
+      by_cases hk : k = mat.1
+      · subst hk; rw [if_pos rfl]; omega
+      · rw [if_neg hk]; omega
+    have hrank' : ∀ m p, (m, p) ∈ rest → rank m ≤ n := fun m p hm => hrank m p (by simp [hm])
+    have hpos' : ∀ m p, (m, p) ∈ rest → 0 < p := fun m p hm => hposrc m p (by simp [hm])
+    have hrec := ih bk1 (List.foldl (applyAction recipes)
+        { gathers := 0, crafts := 0, holdings := Hrt } hp).holdings hrank' hpos' hbk1nn hHdom1
+    obtain ⟨hrvalid, hrdom, hrdelta⟩ := hrec
+    refine ⟨?_, ?_, ?_⟩
+    · rw [validPlanFrom_append]
+      refine ⟨hHvalid, ?_⟩
+      have hstate : (List.foldl (applyAction recipes)
+          { gathers := 0, crafts := 0, holdings := Hrt } hp)
+          = { gathers := (List.foldl (applyAction recipes)
+                { gathers := 0, crafts := 0, holdings := Hrt } hp).gathers,
+              crafts := (List.foldl (applyAction recipes)
+                { gathers := 0, crafts := 0, holdings := Hrt } hp).crafts,
+              holdings := (List.foldl (applyAction recipes)
+                { gathers := 0, crafts := 0, holdings := Hrt } hp).holdings } := rfl
+      rw [hstate]
+      exact validPlanFrom_holdings_irrel recipes _ _ 0 0 _ _ hrvalid
+    · rw [List.foldl_append,
+          foldl_holdings_irrel recipes _ (List.foldl (applyAction recipes)
+            { gathers := 0, crafts := 0, holdings := Hrt } hp).holdings _]
+      exact hrdom
+    · intro k
+      rw [List.foldl_append,
+          foldl_holdings_irrel recipes _ (List.foldl (applyAction recipes)
+            { gathers := 0, crafts := 0, holdings := Hrt } hp).holdings _,
+          hrdelta k]
+      have hd1 := hHdelta k
+      have hsum : sumQtyAt (mat :: rest) rem k
+          = (if mat.1 = k then mat.2 * rem else 0) + sumQtyAt rest rem k := by
+        cases mat; simp [sumQtyAt]
+      rw [hsum, hd1]
+      by_cases hk : k = mat.1
+      · subst hk
+        have p1 : (if mat.1 = mat.1 then mat.2 * rem else 0) = mat.2 * rem := if_pos rfl
+        rw [p1]; dsimp only; omega
+      · have e1 : (if mat.1 = k then mat.2 * rem else 0) = 0 := if_neg (fun h => hk h.symm)
+        have e2 : (if k = mat.1 then mat.2 * rem else 0) = 0 := if_neg hk
+        rw [e1, e2]
+        dsimp only
+        omega
+
+/-- For a `NoDupKeys` list, a member `(mat, per)` contributes exactly `per * rem`
+to `sumQtyAt` at `mat` (single occurrence). -/
+theorem sumQtyAt_absent (l : List (String × Int)) (rem : Int) (mat : String)
+    (habs : ∀ p, (mat, p) ∉ l) : sumQtyAt l rem mat = 0 := by
+  induction l with
+  | nil => rfl
+  | cons mp rest ih =>
+    obtain ⟨m0, p0⟩ := mp
+    simp only [sumQtyAt]
+    have hne : ¬ m0 = mat := by intro h; subst h; exact habs p0 (by simp)
+    rw [if_neg hne, ih (fun p hp => habs p (by simp [hp]))]; rfl
+
+/-- `sumQtyAt` is `rem` times `sumPerAt` (the productions scale linearly in `rem`). -/
+theorem sumQtyAt_eq_mul (rc : List (String × Int)) (rem : Int) (k : String) :
+    sumQtyAt rc rem k = rem * sumPerAt rc k := by
+  induction rc with
+  | nil => simp [sumQtyAt, sumPerAt]
+  | cons mp rest ih =>
+    obtain ⟨m0, p0⟩ := mp
+    simp only [sumQtyAt, sumPerAt, ih]
+    by_cases hk : m0 = k
+    · rw [if_pos hk, if_pos hk, Int.mul_add, Int.mul_comm rem p0]
+    · rw [if_neg hk, if_neg hk, Int.mul_add, Int.mul_zero]
+
+theorem sumQtyAt_member (l : List (String × Int)) (rem : Int) (mat : String)
+    (per : Int) (hmem : (mat, per) ∈ l) (hnd : NoDupKeys l) :
+    sumQtyAt l rem mat = per * rem := by
+  induction l with
+  | nil => simp at hmem
+  | cons mp rest ih =>
+    obtain ⟨m0, p0⟩ := mp
+    obtain ⟨hhead, hndtl⟩ := hnd
+    rw [List.mem_cons] at hmem
+    simp only [sumQtyAt]
+    rcases hmem with heq | htl
+    · have heq2 : m0 = mat ∧ p0 = per := Prod.mk.injEq .. |>.mp heq.symm
+      obtain ⟨rfl, rfl⟩ := heq2
+      rw [if_pos rfl, sumQtyAt_absent rest rem m0 (fun p hp => hhead p hp)]; omega
+    · have hne : ¬ m0 = mat := by intro h; subst h; exact hhead per htl
+      rw [if_neg hne, ih htl hndtl]; omega
+
+/-- The sibling-foldl bookkeeping residual stays `NonNeg` when the start `obk`
+is `NonNeg`: each sibling's `buildPlan` residual equals a `minGathers` residual
+(`buildPlan_correspondence`), which is `NonNeg` (`minGathers_nonneg_residual`). -/
+theorem buildPlan_siblings_bk_nonneg (recipes : Recipes) (hpos : PosRecipes recipes)
+    (n : Nat) (rem : Int) (hrem : 0 < rem) :
+    ∀ (rc : List (String × Int)) (obk : Dict Int),
+      (∀ mat per, (mat, per) ∈ rc → 0 < per) → NonNeg obk →
+      NonNeg (rc.foldl
+        (fun (st : Plan × Dict Int) mat =>
+          (st.1 ++ (buildPlan n mat.1 (mat.2 * rem) recipes st.2).1,
+           (buildPlan n mat.1 (mat.2 * rem) recipes st.2).2)) ([], obk)).2 := by
+  intro rc
+  induction rc with
+  | nil => intro obk _ hnn; simpa using hnn
+  | cons mat rest ih =>
+    intro obk hpo hnn
+    rw [List.foldl_cons]
+    rw [buildPlan_foldl_prefix recipes n rem rest
+        (buildPlan n mat.1 (mat.2 * rem) recipes obk).2
+        ([] ++ (buildPlan n mat.1 (mat.2 * rem) recipes obk).1)]
+    -- residual of head sibling is NonNeg (minGathers residual)
+    have hpermat : 0 < mat.2 := hpo mat.1 mat.2 (by cases mat; simp)
+    have hqnn : 0 < mat.2 * rem := Int.mul_pos hpermat hrem
+    have hcorr := (buildPlan_correspondence recipes hpos n mat.1 (mat.2 * rem) obk (by omega)).2
+    have hheadnn : NonNeg (buildPlan n mat.1 (mat.2 * rem) recipes obk).2 := by
+      rw [hcorr]
+      exact minGathers_nonneg_residual recipes hpos n mat.1 (mat.2 * rem) 0 obk hqnn hnn
+    have hpo' : ∀ m p, (m, p) ∈ rest → 0 < p := fun m p hm => hpo m p (by simp [hm])
+    exact ih (buildPlan n mat.1 (mat.2 * rem) recipes obk).2 hpo' hheadnn
+
+/-- The per-key runtime delta of running `(buildPlan fuel item qty recipes owned).1`
+from a runtime holdings `H`: holdings move by the bookkeeping residual change plus
+`qty` units of the produced `item`. -/
+def BuildDelta (fuel : Nat) (item : String) (qty : Int) (recipes : Recipes)
+    (owned H finalH : Dict Int) : Prop :=
+  ∀ k, getD finalH k 0
+    = getD H k 0
+      + (getD (buildPlan fuel item qty recipes owned).2 k 0 - getD owned k 0)
+      + (if k = item then qty else 0)
+
+/-- **buildPlan VALIDITY + PRODUCTION.** Running `buildPlan` from a runtime
+holdings `H` that dominates the bookkeeping `owned` (`Dom owned H`) is
+`ValidPlanFrom` and shifts holdings by the `BuildDelta` identity: each non-target
+key tracks the bookkeeping residual change, the target `item` additionally rises
+by `qty`. Domain hyps are the honest acyclic/positive/no-dup recipe assumptions
+plus the rank bound `rank item ≤ fuel`. -/
+theorem buildPlan_run (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank)
+    (hnd : RecipeNoDup recipes) :
+    ∀ (fuel : Nat) (item : String) (qty : Int) (owned H : Dict Int),
+      rank item ≤ fuel → 0 ≤ qty → NonNeg owned → Dom owned H →
+      ValidPlanFrom recipes { gathers := 0, crafts := 0, holdings := H }
+          (buildPlan fuel item qty recipes owned).1
+      ∧ BuildDelta fuel item qty recipes owned H
+          (List.foldl (applyAction recipes)
+            { gathers := 0, crafts := 0, holdings := H }
+            (buildPlan fuel item qty recipes owned).1).holdings := by
+  intro fuel
+  induction fuel with
+  | zero =>
+    intro item qty owned H hrf hq hownnn hdom
+    -- rank item ≤ 0 ⇒ raw ⇒ but buildPlan 0 emits qty.toNat gathers of item
+    have hraw : (getD recipes item []).length = 0 :=
+      rank_zero_raw recipes rank item hacy (by omega)
+    have hrecnil : recipeOf recipes item = [] := by
+      rw [recipeOf_eq_getD]; exact List.length_eq_zero_iff.mp hraw
+    simp only [buildPlan]
+    refine ⟨?_, ?_⟩
+    · -- replicate gathers of a raw item are all valid
+      have : ∀ (n : Nat) (s : ExecState),
+          ValidPlanFrom recipes s (List.replicate n (Action.gather item)) := by
+        intro n
+        induction n with
+        | zero => intro s; simp [ValidPlanFrom]
+        | succ m ihn =>
+          intro s
+          rw [List.replicate_succ, ValidPlanFrom]
+          exact ⟨hrecnil, ihn _⟩
+      exact this _ _
+    · intro k
+      have hgh := replicate_gather_holdings recipes item qty.toNat
+        { gathers := 0, crafts := 0, holdings := H }
+      obtain ⟨h1, h2⟩ := hgh
+      by_cases hk : k = item
+      · subst hk
+        rw [h1, if_pos rfl]
+        show getD H k 0 + (qty.toNat : Int) = getD H k 0 + (getD owned k 0 - getD owned k 0) + qty
+        rw [Int.toNat_of_nonneg hq]; omega
+      · rw [h2 k hk, if_neg hk]
+        show getD H k 0 = getD H k 0 + (getD owned k 0 - getD owned k 0) + 0
+        omega
+  | succ n ih =>
+    intro item qty owned H hrf hq hownnn hdom
+    have hitemnn : 0 ≤ getD owned item 0 := hownnn item
+    have hrnn : 0 ≤ qty - min (getD owned item 0) qty := by
+      have := Int.min_le_right (getD owned item 0) qty; omega
+    by_cases hc : qty - min (getD owned item 0) qty ≤ 0
+    · -- remaining ≤ 0: empty plan; residual = setD owned item (held - used); used = qty
+      have huq : min (getD owned item 0) qty = qty := by
+        have := Int.min_le_right (getD owned item 0) qty; omega
+      have hbp1 : (buildPlan (n+1) item qty recipes owned).1 = [] := by
+        simp only [buildPlan]; rw [if_pos hc]
+      have hbp2 : (buildPlan (n+1) item qty recipes owned).2
+          = setD owned item (getD owned item 0 - min (getD owned item 0) qty) := by
+        simp only [buildPlan]; rw [if_pos hc]
+      refine ⟨by rw [hbp1]; simp [ValidPlanFrom], ?_⟩
+      intro k
+      rw [hbp1]
+      simp only [List.foldl_nil]
+      rw [hbp2, getD_setD]
+      by_cases hk : k = item
+      · subst hk
+        rw [if_pos rfl, if_pos rfl, huq]; omega
+      · rw [if_neg (by simpa [eq_comm] using hk), if_neg hk]; omega
+    · by_cases hr : (getD recipes item []).length = 0
+      · -- RAW arm: emit `rem` gathers of item
+        have hrecnil : recipeOf recipes item = [] := by
+          rw [recipeOf_eq_getD]; exact List.length_eq_zero_iff.mp hr
+        have hbp1 : (buildPlan (n+1) item qty recipes owned).1
+            = List.replicate (qty - min (getD owned item 0) qty).toNat (Action.gather item) := by
+          simp only [buildPlan]; rw [if_neg hc, if_pos hr]
+        have hbp2 : (buildPlan (n+1) item qty recipes owned).2
+            = setD owned item (getD owned item 0 - min (getD owned item 0) qty) := by
+          simp only [buildPlan]; rw [if_neg hc, if_pos hr]
+        refine ⟨?_, ?_⟩
+        · rw [hbp1]
+          have hgv : ∀ (m : Nat) (s : ExecState),
+              ValidPlanFrom recipes s (List.replicate m (Action.gather item)) := by
+            intro m
+            induction m with
+            | zero => intro s; simp [ValidPlanFrom]
+            | succ j ihj => intro s; rw [List.replicate_succ, ValidPlanFrom]; exact ⟨hrecnil, ihj _⟩
+          exact hgv _ _
+        · intro k
+          rw [hbp1, hbp2]
+          have hgh := replicate_gather_holdings recipes item
+            (qty - min (getD owned item 0) qty).toNat
+            { gathers := 0, crafts := 0, holdings := H }
+          obtain ⟨h1, h2⟩ := hgh
+          rw [getD_setD]
+          have hHproj : ∀ j, getD ({ gathers := 0, crafts := 0, holdings := H } : ExecState).holdings j 0
+              = getD H j 0 := fun _ => rfl
+          by_cases hk : k = item
+          · subst hk
+            rw [h1, hHproj, if_pos rfl, if_pos rfl]
+            rw [Int.toNat_of_nonneg hrnn]; omega
+          · rw [h2 k hk, hHproj, if_neg (by simpa [eq_comm] using hk), if_neg hk]; omega
+      · -- CRAFTABLE arm
+        -- shorthand for the recipe and residual-owned-after-credit
+        have hrnnstrict : 0 < qty - min (getD owned item 0) qty := by omega
+        -- the recipe (= getD recipes item []), nonempty, rank-bounded, pos, no-dup
+        have hrank_in : ∀ mat per, (mat, per) ∈ getD recipes item [] → rank mat ≤ n := by
+          intro mat per hmem; have := hacy item mat per hmem; omega
+        have hpos_in : ∀ mat per, (mat, per) ∈ getD recipes item [] → 0 < per :=
+          fun mat per hmem => hpos item mat per hmem
+        -- unfold buildPlan craftable
+        have hbp1 : (buildPlan (n+1) item qty recipes owned).1
+            = ((getD recipes item []).foldl
+                (fun (st : Plan × Dict Int) mat =>
+                  (st.1 ++ (buildPlan n mat.1 (mat.2 * (qty - min (getD owned item 0) qty))
+                              recipes st.2).1,
+                   (buildPlan n mat.1 (mat.2 * (qty - min (getD owned item 0) qty))
+                              recipes st.2).2))
+                ([], setD owned item (getD owned item 0 - min (getD owned item 0) qty))).1
+              ++ List.replicate (qty - min (getD owned item 0) qty).toNat (Action.craft item) := by
+          simp only [buildPlan]; rw [if_neg hc, if_neg hr]
+        have hbp2 : (buildPlan (n+1) item qty recipes owned).2
+            = ((getD recipes item []).foldl
+                (fun (st : Plan × Dict Int) mat =>
+                  (st.1 ++ (buildPlan n mat.1 (mat.2 * (qty - min (getD owned item 0) qty))
+                              recipes st.2).1,
+                   (buildPlan n mat.1 (mat.2 * (qty - min (getD owned item 0) qty))
+                              recipes st.2).2))
+                ([], setD owned item (getD owned item 0 - min (getD owned item 0) qty))).2 := by
+          simp only [buildPlan]; rw [if_neg hc, if_neg hr]
+        -- residual-owned-after-credit dominated by runtime H, and NonNeg
+        have hdomOwned' : Dom (setD owned item (getD owned item 0 - min (getD owned item 0) qty)) H := by
+          intro k; rw [getD_setD]
+          by_cases hk : item = k
+          · subst hk; have := hdom item; have := Int.min_le_left (getD owned item 0) qty
+            rw [if_pos rfl]; omega
+          · rw [if_neg hk]; exact hdom k
+        have hownnn' : NonNeg (setD owned item (getD owned item 0 - min (getD owned item 0) qty)) := by
+          apply nonneg_setD owned item _ hownnn
+          have := Int.min_le_left (getD owned item 0) qty; omega
+        -- the IH packaged as the `Hn` hypothesis for siblings
+        have Hn : ∀ (it : String) (q : Int) (ow Hr : Dict Int),
+            rank it ≤ n → 0 ≤ q → NonNeg ow → Dom ow Hr →
+            ValidPlanFrom recipes { gathers := 0, crafts := 0, holdings := Hr }
+                (buildPlan n it q recipes ow).1
+            ∧ (∀ k, getD (List.foldl (applyAction recipes)
+                  { gathers := 0, crafts := 0, holdings := Hr }
+                  (buildPlan n it q recipes ow).1).holdings k 0
+                = getD Hr k 0 + (getD (buildPlan n it q recipes ow).2 k 0 - getD ow k 0)
+                  + (if k = it then q else 0)) := by
+          intro it q ow Hr hrk hqn hnnow hdm
+          have := ih it q ow Hr hrk hqn hnnow hdm
+          exact ⟨this.1, this.2⟩
+        have hsib := buildPlan_siblings recipes rank hpos n
+          (qty - min (getD owned item 0) qty)
+          hrnnstrict Hn (getD recipes item [])
+          (setD owned item (getD owned item 0 - min (getD owned item 0) qty)) H
+          hrank_in hpos_in hownnn' hdomOwned'
+        obtain ⟨hsv, hsdom, hsdelta⟩ := hsib
+        -- the recipe NoDup
+        have hndr : NoDupKeys (recipeOf recipes item) := hnd item
+        have hndr' : NoDupKeys (getD recipes item []) := by rw [← recipeOf_eq_getD]; exact hndr
+        have hcrne : recipeOf recipes item ≠ [] := by
+          rw [recipeOf_eq_getD]; intro h; rw [h] at hr; simp at hr
+        -- post-sibling runtime holdings stock each input ≥ rem*per
+        -- the sibling plan and post-sibling runtime, named
+        refine ⟨?_, ?_⟩
+        · -- VALIDITY: siblings ++ replicate crafts
+          rw [hbp1, validPlanFrom_append]
+          refine ⟨hsv, ?_⟩
+          -- crafts valid from post-sibling state; stock from sibling delta
+          apply replicate_craft_valid recipes rank hpos hacy item hndr hcrne
+          -- stock: each input mat present with rem*per
+          intro mat per hmemc
+          have hmem : (mat, per) ∈ getD recipes item [] := by
+            rw [recipeOf_eq_getD] at hmemc; exact hmemc
+          have hd := hsdelta mat
+          rw [hd]
+          -- sumQtyAt (getD recipes item []) rem mat = per * rem (NoDup, member)
+          have hsq : sumQtyAt (getD recipes item []) (qty - min (getD owned item 0) qty) mat
+              = per * (qty - min (getD owned item 0) qty) :=
+            sumQtyAt_member (getD recipes item []) (qty - min (getD owned item 0) qty)
+              mat per hmem hndr'
+          rw [hsq]
+          -- getD H mat + (bk[mat]-owned'[mat]) + per*rem ≥ rem*per ;  H ≥ owned' so first two ≥0
+          have hdm := hdomOwned' mat
+          have hsdm := hsdom mat
+          -- bk[mat] ≥ ... not needed: use H ≥ owned' and bk ≥ 0? Instead bound via hsdm:
+          -- hsdom: Dom finalbk finalrt ; not directly. Use: getD H mat ≥ owned'[mat]
+          have hpermat : 0 < per := hpos item mat per hmem
+          have hbknn := buildPlan_siblings_bk_nonneg recipes hpos n
+            (qty - min (getD owned item 0) qty) hrnnstrict (getD recipes item [])
+            (setD owned item (getD owned item 0 - min (getD owned item 0) qty))
+            hpos_in hownnn'
+          have hbkmat := hbknn mat
+          have hmulcomm : per * (qty - min (getD owned item 0) qty)
+              = (qty - min (getD owned item 0) qty) * per := Int.mul_comm _ _
+          have htn : ((qty - min (getD owned item 0) qty).toNat : Int)
+              = qty - min (getD owned item 0) qty := Int.toNat_of_nonneg hrnn
+          rw [htn]
+          omega
+        · -- DELTA: compose sibling delta + crafts consumption
+          intro k
+          rw [hbp1]
+          rw [List.foldl_append]
+          -- run craft suffix from post-sibling state
+          rw [replicate_craft_effect recipes rank hacy item hndr
+              (qty - min (getD owned item 0) qty).toNat _ k]
+          -- post-sibling holdings via sibling delta
+          rw [hsdelta k]
+          -- residual = sibling bookkeeping
+          rw [hbp2]
+          -- relate sumQtyAt to sumPerAt and clear the toNat
+          rw [sumQtyAt_eq_mul]
+          have htn : ((qty - min (getD owned item 0) qty).toNat : Int)
+              = qty - min (getD owned item 0) qty := Int.toNat_of_nonneg hrnn
+          rw [htn]
+          -- owned'[k] vs owned[k]: equal unless k = item (acyclic ⇒ item is the credited key)
+          have hown'k : getD (setD owned item (getD owned item 0 - min (getD owned item 0) qty)) k 0
+              = getD owned k 0 + (if k = item then (getD owned item 0 - min (getD owned item 0) qty)
+                                                    - getD owned item 0 else 0) := by
+            rw [getD_setD]; by_cases hk : item = k
+            · subst hk; rw [if_pos rfl, if_pos rfl]; omega
+            · rw [if_neg hk, if_neg (fun h => hk h.symm)]; omega
+          rw [hown'k]
+          -- normalise the craft-effect recipe form to getD
+          have hreceq : recipeOf recipes item = getD recipes item [] := recipeOf_eq_getD recipes item
+          rw [hreceq]
+          by_cases hk : k = item
+          · subst hk
+            -- k ∉ its inputs (acyclic) ⇒ sumPerAt (getD recipes k []) k = 0
+            have hsp0 : sumPerAt (getD recipes k []) k = 0 := by
+              apply sumPerAt_absent; intro per hmem
+              have := hacy k k per hmem; omega
+            rw [if_pos rfl, if_pos rfl, if_pos rfl, hsp0]
+            simp only [Int.mul_zero]; omega
+          · rw [if_neg hk, if_neg hk, if_neg hk]
+            omega
+
+/-- **CONSTRUCTIVE OBTAINABILITY WITNESS.** `canonicalPlan recipes item owned`
+is a valid plan that obtains and equips `item`: it is a `ValidPlan` and it
+`SatisfiesEquip` (`ValidPlan` ∧ `equip item ∈ plan` ∧ holds ≥ 1 of `item`).
+
+Constructive existence witness for the demand-`1`, gear-obtainment direction; it
+is NOT the general lower bound (`minGathers_le_gathers_of_corner3`). The
+`NoSurplusPlan` conjunct is intentionally omitted pending its separate definition.
+
+TODO(nosurplus): add NoSurplusPlan conjunct once def lands. -/
+theorem canonicalPlan_valid (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank)
+    (hRB : ∀ item, rank item ≤ recipes.length) (hnd : RecipeNoDup recipes)
+    (item : String) (owned : Dict Int) (hnn : NonNeg owned) :
+    ValidPlan recipes owned (canonicalPlan recipes item owned)
+      ∧ SatisfiesEquip (canonicalPlan recipes item owned) item owned recipes := by
+  have hdom : Dom owned owned := dom_refl owned
+  have hrun := buildPlan_run recipes rank hpos hacy hnd (recipes.length + 1) item 1 owned owned
+    (by have := hRB item; omega) (by omega) hnn hdom
+  obtain ⟨hvalid, hdelta⟩ := hrun
+  -- ValidPlan: buildPlan prefix is valid; the trailing `equip` is always valid
+  have hvalidPlan : ValidPlan recipes owned (canonicalPlan recipes item owned) := by
+    rw [canonicalPlan, ValidPlan, validPlanFrom_append]
+    refine ⟨hvalid, ?_⟩
+    -- validity of [equip item] from any state is trivial
+    simp [ValidPlanFrom]
+  refine ⟨hvalidPlan, hvalidPlan, canonicalPlan_equip_mem recipes item owned, ?_⟩
+  -- production: holdings of `item` ≥ 1 after running the canonical plan
+  -- the equip step is a no-op on holdings, so use the buildPlan delta
+  have hprod : 1 ≤ getD (planHoldings recipes (canonicalPlan recipes item owned) owned) item 0 := by
+    rw [canonicalPlan]
+    -- runPlan over (buildPlan ++ [equip]) = run [equip] from run buildPlan; equip is a no-op
+    have hfold : (List.foldl (applyAction recipes)
+        { gathers := 0, crafts := 0, holdings := owned }
+        ((buildPlan (recipes.length + 1) item 1 recipes owned).1 ++ [Action.equip item])).holdings
+        = (List.foldl (applyAction recipes)
+            { gathers := 0, crafts := 0, holdings := owned }
+            (buildPlan (recipes.length + 1) item 1 recipes owned).1).holdings := by
+      rw [List.foldl_append]; rfl
+    show 1 ≤ getD (planHoldings recipes
+      ((buildPlan (recipes.length + 1) item 1 recipes owned).1 ++ [Action.equip item]) owned) item 0
+    unfold planHoldings runPlan
+    rw [hfold]
+    have hd := hdelta item
+    rw [hd, if_pos rfl]
+    -- getD owned item + (residual[item] - owned item) + 1 = residual[item] + 1 ≥ 1
+    have hcorr := (buildPlan_correspondence recipes hpos (recipes.length + 1) item 1 owned
+      (by omega)).2
+    rw [hcorr]
+    have hresnn : NonNeg (minGathers (recipes.length + 1) item 1 recipes (0, owned)).2 :=
+      minGathers_nonneg_residual recipes hpos (recipes.length + 1) item 1 0 owned (by omega) hnn
+    have := hresnn item
+    omega
+  rw [dictGet_eq]; exact hprod
+
+/-- The literal number of `craft` actions in a plan. -/
+def countCrafts : Plan → Nat
+  | [] => 0
+  | Action.craft _ :: rest => countCrafts rest + 1
+  | _ :: rest => countCrafts rest
+
+/-- The literal number of `equip` actions in a plan. -/
+def countEquips : Plan → Nat
+  | [] => 0
+  | Action.equip _ :: rest => countEquips rest + 1
+  | _ :: rest => countEquips rest
+
+@[simp] theorem countCrafts_append (p q : Plan) :
+    countCrafts (p ++ q) = countCrafts p + countCrafts q := by
+  induction p with
+  | nil => simp [countCrafts]
+  | cons a rest ih => cases a <;> simp only [List.cons_append, countCrafts, ih] <;> omega
+
+@[simp] theorem countEquips_append (p q : Plan) :
+    countEquips (p ++ q) = countEquips p + countEquips q := by
+  induction p with
+  | nil => simp [countEquips]
+  | cons a rest ih => cases a <;> simp only [List.cons_append, countEquips, ih] <;> omega
+
+/-- Running a plan threads the craft counter additively. -/
+theorem runPlan_crafts_foldl (recipes : Recipes) (plan : Plan) (s : ExecState) :
+    (List.foldl (applyAction recipes) s plan).crafts = s.crafts + countCrafts plan := by
+  induction plan generalizing s with
+  | nil => simp [countCrafts]
+  | cons a rest ih =>
+    simp only [List.foldl_cons]; rw [ih (applyAction recipes s a)]
+    cases a with
+    | gather code => show s.crafts + _ = _; simp only [countCrafts]
+    | craft code => show s.crafts + 1 + _ = _; simp only [countCrafts]; omega
+    | equip code => show s.crafts + _ = _; simp only [countCrafts]
+
+theorem planCrafts_eq_countCrafts (recipes : Recipes) (plan : Plan) (owned : Dict Int) :
+    planCrafts recipes plan owned = countCrafts plan := by
+  show (List.foldl (applyAction recipes) { gathers := 0, crafts := 0, holdings := owned } plan).crafts = _
+  rw [runPlan_crafts_foldl]; simp
+
+@[simp] theorem countEquips_replicate_gather (n : Nat) (c : String) :
+    countEquips (List.replicate n (Action.gather c)) = 0 := by
+  induction n with
+  | zero => simp [countEquips]
+  | succ m ih => rw [List.replicate_succ]; simp only [countEquips, ih]
+
+@[simp] theorem countEquips_replicate_craft (n : Nat) (c : String) :
+    countEquips (List.replicate n (Action.craft c)) = 0 := by
+  induction n with
+  | zero => simp [countEquips]
+  | succ m ih => rw [List.replicate_succ]; simp only [countEquips, ih]
+
+/-- `buildPlan` never emits an `equip` action. -/
+theorem countEquips_buildPlan (recipes : Recipes) :
+    ∀ (fuel : Nat) (item : String) (qty : Int) (owned : Dict Int),
+      countEquips (buildPlan fuel item qty recipes owned).1 = 0 := by
+  intro fuel
+  induction fuel with
+  | zero => intro item qty owned; simp [buildPlan]
+  | succ n ih =>
+    intro item qty owned
+    simp only [buildPlan]
+    by_cases hc : qty - min (getD owned item 0) qty ≤ 0
+    · rw [if_pos hc]; simp [countEquips]
+    · rw [if_neg hc]
+      by_cases hr : (getD recipes item []).length = 0
+      · rw [if_pos hr]; simp
+      · rw [if_neg hr]
+        rw [countEquips_append, countEquips_replicate_craft]
+        -- the sibling foldl emits no equips
+        have hfold : ∀ (rc : List (String × Int)) (o : Dict Int) (p0 : Plan),
+            countEquips p0 = 0 →
+            countEquips (rc.foldl
+              (fun (st : Plan × Dict Int) mat =>
+                (st.1 ++ (buildPlan n mat.1 (mat.2 * (qty - min (getD owned item 0) qty))
+                            recipes st.2).1,
+                 (buildPlan n mat.1 (mat.2 * (qty - min (getD owned item 0) qty))
+                            recipes st.2).2)) (p0, o)).1 = 0 := by
+          intro rc
+          induction rc with
+          | nil => intro o p0 hp0; simpa using hp0
+          | cons mat rest ihrc =>
+            intro o p0 hp0
+            simp only [List.foldl_cons]
+            apply ihrc
+            rw [countEquips_append, hp0, ih mat.1
+              (mat.2 * (qty - min (getD owned item 0) qty)) o]
+        rw [hfold (getD recipes item [])
+          (setD owned item (getD owned item 0 - min (getD owned item 0) qty)) [] (by simp [countEquips])]
+
+/-- A plan's length is its gather + craft + equip action counts. -/
+theorem length_eq_counts (plan : Plan) :
+    plan.length = countGathers plan + countCrafts plan + countEquips plan := by
+  induction plan with
+  | nil => simp [countGathers, countCrafts, countEquips]
+  | cons a rest ih =>
+    cases a <;> simp only [List.length_cons, countGathers, countCrafts, countEquips, ih] <;> omega
+
+/-- **OBTAINABILITY WITNESS WITH LENGTH BOUND.** When the per-action length budget
+`d` dominates the canonical plan's own action count
+(`planGathers + planCrafts + 1 ≤ d`), there EXISTS a valid plan that obtains and
+equips `item` of length `≤ d` — namely `canonicalPlan`.
+
+**Scope / boundary.** This is the constructive existence witness for the
+demand-`1`, gear-obtainment direction; it is NOT the general lower bound. The
+length budget is stated against the *per-action* count
+(`planGathers + planCrafts + 1`, one gather per raw unit) rather than the
+production `minPlanLength`, which applies `ceil_gathers` (dividing the raw gather
+count by `maxGatherYield` for multi-drop resources). For `maxGatherYield = 1`
+they coincide and `planGathers = (minGathersCount item 1 …).toNat`
+(`canonicalPlan_gathers`); for `maxGatherYield > 1` the per-action plan may gather
+more times than `minPlanLength`, so this honest bound is stated in per-action
+units. Bridging to `minPlanLength` requires a batch-gather model extension and is
+left as a documented gap. -/
+theorem gear_obtainable_of_minPlanLength_le (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank)
+    (hRB : ∀ item, rank item ≤ recipes.length) (hnd : RecipeNoDup recipes)
+    (item : String) (owned : Dict Int) (hnn : NonNeg owned) (d : Nat)
+    (hbudget : planGathers recipes (canonicalPlan recipes item owned) owned
+      + planCrafts recipes (canonicalPlan recipes item owned) owned + 1 ≤ d) :
+    ∃ plan, SatisfiesEquip plan item owned recipes ∧ plan.length ≤ d := by
+  refine ⟨canonicalPlan recipes item owned, ?_, ?_⟩
+  · exact (canonicalPlan_valid recipes rank hpos hacy hRB hnd item owned hnn).2
+  · -- length = gathers + crafts + 1 (single equip)
+    rw [length_eq_counts]
+    rw [canonicalPlan]
+    have hg : countGathers ((buildPlan (recipes.length + 1) item 1 recipes owned).1
+        ++ [Action.equip item]) = planGathers recipes (canonicalPlan recipes item owned) owned := by
+      rw [planGathers_eq_countGathers, canonicalPlan]
+    have hc : countCrafts ((buildPlan (recipes.length + 1) item 1 recipes owned).1
+        ++ [Action.equip item])
+        = planCrafts recipes (canonicalPlan recipes item owned) owned := by
+      rw [planCrafts_eq_countCrafts, canonicalPlan]
+    have he : countEquips ((buildPlan (recipes.length + 1) item 1 recipes owned).1
+        ++ [Action.equip item]) = 1 := by
+      rw [countEquips_append]
+      have : countEquips (buildPlan (recipes.length + 1) item 1 recipes owned).1 = 0 :=
+        countEquips_buildPlan recipes (recipes.length + 1) item 1 owned
+      rw [this]; simp [countEquips]
+    rw [hg, hc, he]
+    exact hbudget
+
 end Formal.PlanModel
