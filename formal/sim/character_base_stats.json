@@ -1,5 +1,770 @@
 {
   "base_stats": {
+    "1": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 120,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "10": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 165,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "11": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 170,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "12": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 175,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "13": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 180,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "14": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 185,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "15": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 190,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "16": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 195,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "17": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 200,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "18": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 205,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "19": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 210,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "2": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 125,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "20": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 215,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "21": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 220,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "22": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 225,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "23": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 230,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "24": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 235,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "25": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 240,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "26": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 245,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "27": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 250,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "28": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 255,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "29": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 260,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "3": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 130,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "30": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 265,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "31": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 270,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "32": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 275,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "33": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 280,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "34": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 285,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "35": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 290,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "36": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 295,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "37": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 300,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "38": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 305,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "39": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 310,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "4": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 135,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "40": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 315,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "41": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 320,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "42": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 325,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "43": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 330,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "44": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 335,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "45": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 340,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "46": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 345,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "47": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 350,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "48": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 355,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "49": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 360,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "5": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 140,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
     "6": {
       "attack": {
         "air": 0,
@@ -16,8 +781,80 @@
         "fire": 0,
         "water": 0
       }
+    },
+    "7": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 150,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "8": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 155,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
+    },
+    "9": {
+      "attack": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      },
+      "critical_strike": 0,
+      "initiative": 100,
+      "max_hp": 160,
+      "resistance": {
+        "air": 0,
+        "earth": 0,
+        "fire": 0,
+        "water": 0
+      }
     }
   },
-  "captured_at_6": "2026-06-20T15:31:40.332273+00:00",
-  "method": "algebraic_subtraction_from_equipped_character_stats"
+  "provenance": {
+    "combat_stats": {
+      "attack": "zero at all levels (all attack comes from gear)",
+      "critical_strike": 0,
+      "initiative": 100,
+      "resistance": "zero at all levels (all resistance comes from gear)"
+    },
+    "description": "Per-level base stats derived from the documented base-hp rule max_hp=115+5*level with level-invariant zero base combat stats (attack/resistance/critical_strike) and initiative=100. NOT a 49-point physical capture.",
+    "formula": "max_hp = 115 + 5 * level",
+    "live_anchors": [
+      {
+        "level": 1,
+        "max_hp": 120,
+        "source": "game_start"
+      },
+      {
+        "captured_at": "2026-06-20T15:31:40.332273+00:00",
+        "level": 6,
+        "max_hp": 145,
+        "source": "algebraic_subtraction_from_equipped_character_stats"
+      }
+    ]
+  }
 }
