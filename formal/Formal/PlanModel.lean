@@ -552,4 +552,71 @@ theorem wf_succ_craft (n : Nat) (item : String) (recipes : Recipes)
   rw [if_neg (by decide), if_neg hcr]
   simp only [Int.sub_zero]
 
+-- ---------------------------------------------------------------------------
+-- Single-craft cost-mass delta
+-- ---------------------------------------------------------------------------
+
+/-- The total weighted input mass of a recipe input list under `wf fuel`:
+`Σ (mat, per) ∈ inputs, per · wf mat`. The amount of cost-mass a craft step
+consumes from holdings. -/
+def recipeMass (fuel : Nat) (inputs : Dict Int) (recipes : Recipes) : Int :=
+  match inputs with
+  | [] => 0
+  | (mat, per) :: rest => per * wf fuel mat recipes + recipeMass fuel rest recipes
+
+@[simp] theorem recipeMass_nil (fuel : Nat) (recipes : Recipes) :
+    recipeMass fuel [] recipes = 0 := rfl
+
+@[simp] theorem recipeMass_cons (fuel : Nat) (mat : String) (per : Int)
+    (rest : Dict Int) (recipes : Recipes) :
+    recipeMass fuel ((mat, per) :: rest) recipes
+      = per * wf fuel mat recipes + recipeMass fuel rest recipes := rfl
+
+/-- The recipe-input consume operation, named to match `applyAction`'s craft
+`foldl` lambda exactly (so it rewrites without unfolding fights). -/
+def consumeHoldings (H : Dict Int) (inputs : Dict Int) : Dict Int :=
+  List.foldl
+    (fun h (mat_per : String × Int) =>
+      let mat := mat_per.1
+      let per := mat_per.2
+      dictSet h mat (dictGet h mat - per))
+    H inputs
+
+/-- Consuming a recipe input list from holdings drops cost-mass by exactly
+`recipeMass`. Each fold step is a `costMass_setD` with delta `−per · wf mat`. -/
+theorem costMass_consume (fuel : Nat) (inputs : Dict Int)
+    (recipes : Recipes) (H : Dict Int) :
+    costMass fuel (consumeHoldings H inputs) recipes
+      = costMass fuel H recipes - recipeMass fuel inputs recipes := by
+  unfold consumeHoldings
+  induction inputs generalizing H with
+  | nil => simp
+  | cons mp rest ih =>
+    obtain ⟨mat, per⟩ := mp
+    simp only [List.foldl_cons, recipeMass_cons]
+    rw [ih (dictSet H mat (dictGet H mat - per))]
+    rw [dictSet_eq, costMass_setD, dictGet_eq]
+    rw [show getD H mat 0 - per - getD H mat 0 = -per by omega, Int.neg_mul]
+    omega
+
+/-- A single `craft c` step's effect on cost-mass: it consumes the recipe's
+input mass and produces one unit of `c`, so
+`costMass(after) = costMass(H) − recipeMass(inputs) + wf c`. Combines
+`costMass_consume` with the final `+1 c` (another `costMass_setD`). -/
+theorem costMass_craft_step (fuel : Nat) (c : String) (recipes : Recipes)
+    (H : Dict Int) :
+    costMass fuel
+        (applyAction recipes { gathers := 0, crafts := 0, holdings := H }
+          (Action.craft c)).holdings recipes
+      = costMass fuel H recipes
+        - recipeMass fuel (recipeOf recipes c) recipes
+        + wf fuel c recipes := by
+  show costMass fuel
+      (dictSet (consumeHoldings H (recipeOf recipes c)) c
+        (dictGet (consumeHoldings H (recipeOf recipes c)) c + 1)) recipes = _
+  rw [dictSet_eq, costMass_setD, dictGet_eq, costMass_consume]
+  rw [show getD (consumeHoldings H (recipeOf recipes c)) c 0 + 1
+        - getD (consumeHoldings H (recipeOf recipes c)) c 0 = 1 by omega]
+  omega
+
 end Formal.PlanModel
