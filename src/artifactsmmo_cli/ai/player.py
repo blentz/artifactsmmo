@@ -67,6 +67,9 @@ from artifactsmmo_cli.ai.tiers import (
     StrategyEngine,
 )
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
+from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal
+from artifactsmmo_cli.ai.tiers.root_progress import root_progress_value
+from artifactsmmo_cli.ai.tiers.sticky_select_core import next_last
 from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.ai.winnable_cascade import CascadeInputs, winnable_farm_target_pure
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
@@ -130,6 +133,13 @@ class GamePlayer:
         # is_reachable (e.g. combat_capable=False for one cycle from a
         # pick_loadout shift) doesn't demote the active objective.
         self._last_strategy_root: str | None = None
+        # Progress-gated sticky release (2026-06-20): the committed root's progress
+        # value recorded last cycle. The anchor is re-fed only when this cycle's value
+        # strictly exceeds it (the root advanced on its own axis). Replaces the broken
+        # `chosen_step_alive` gate that re-committed a never-executing zombie grind
+        # forever (weaponcrafting 1028-cycle hold). See
+        # Formal/Liveness/StickySelect.lean + docs/PLAN_zombie_progress_gate.md.
+        self._sticky_progress_value: int | None = None
         # Learned minimum tasks_coin worth attempting a taskmaster exchange. The
         # API does not expose the per-exchange cost as data, so we discover it
         # from HTTP 478 ("missing items") failures: raise the bound past any coin
@@ -331,16 +341,21 @@ class GamePlayer:
                     suppressed=set(self._suppressed_goals),
                     objective=self._objective,
                 )
-                # Stickiness anchor: re-commit to chosen_root ONLY when its own
-                # top step served a goal this cycle. A ZOMBIE root (chosen but
-                # whose step yielded None — e.g. a reservation-starved skill
-                # grind) is released so a higher-value plannable root can win the
-                # next cycle instead of staying sticky forever (weaponcrafting
-                # level-5 plateau, trace 2026-06-19).
-                if decision.chosen_root is not None and self._arbiter.chosen_step_alive:
-                    self._last_strategy_root = repr(decision.chosen_root)
-                else:
-                    self._last_strategy_root = None
+                # Progress-gated stickiness anchor (2026-06-20): re-commit to
+                # chosen_root ONLY when it BOTH yielded a goal this cycle
+                # (chosen_step_alive) AND strictly advanced on its own progress axis
+                # since last cycle. The 2026-06-19 chosen_step_alive-only gate was
+                # insufficient: a skill grind produces a goal object every cycle
+                # (chosen_step_alive=True) that never wins arbitration, so weaponcrafting
+                # xp froze at 75 for 1028 cycles while the anchor re-committed forever.
+                # The progress value (root_progress_value) is keyed to the root TYPE, so
+                # gathering mining xp while committed to weaponcrafting does NOT count —
+                # the frozen committed-skill value releases the zombie, and the
+                # higher-value plannable root wins next cycle (released_picks_top). Pure
+                # feedback core: sticky_select_core.next_last (Lean nextLast).
+                self._update_sticky_anchor(
+                    decision.chosen_root, state, game_data,
+                    self._arbiter.chosen_step_alive)
                 # Trace ranking: the candidates the arbiter actually tried, in order.
                 goal_rank_trace: list[dict[str, object]] = [
                     {"goal": gt["goal"], "priority": 0.0} for gt in goals_tried
@@ -1180,6 +1195,33 @@ class GamePlayer:
             path_winnable=path_winnable,
             pick_winnable=pick,
         ))
+
+    def _update_sticky_anchor(
+        self, chosen_root: MetaGoal | None, state: WorldState,
+        game_data: GameData, chosen_step_alive: bool) -> None:
+        """Progress-gated Tier-2 sticky release (2026-06-20). Re-feed `chosen_root` as
+        next cycle's sticky anchor ONLY when it yielded a goal this cycle AND advanced
+        on its own progress axis since last cycle; otherwise release it so the
+        highest-value plannable root wins next cycle. A freshly-chosen root gets one
+        cycle to act before the progress gate can release it. Mirrors
+        `Formal/Liveness/StickySelect.lean::nextLast`; the frozen-axis release kills the
+        weaponcrafting zombie (1028-cycle hold)."""
+        if chosen_root is None:
+            self._last_strategy_root = None
+            self._sticky_progress_value = None
+            return
+        cur_value = root_progress_value(chosen_root, state, game_data)
+        if repr(chosen_root) == self._last_strategy_root:
+            # Same root as last cycle: the value was recorded then (set in lockstep
+            # with the anchor), so it is non-None here. Progress = it advanced.
+            assert self._sticky_progress_value is not None
+            progressed = cur_value > self._sticky_progress_value
+        else:
+            # Freshly chosen this cycle: one cycle to act before the gate can release.
+            progressed = True
+        progressed = progressed and chosen_step_alive
+        self._last_strategy_root = next_last(repr(chosen_root), progressed)
+        self._sticky_progress_value = cur_value
 
     def _maybe_retry_bank(self) -> None:
         """Periodically retry bank access after an achievement gate failure

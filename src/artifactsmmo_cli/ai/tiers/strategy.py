@@ -19,6 +19,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.personality import Personality
+from artifactsmmo_cli.ai.tiers.sticky_select_core import StickyCand, sticky_choose
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import objective_roots, prerequisites
 from artifactsmmo_cli.ai.tiers.skill_classes import (
     COMBAT_CRAFT_SKILLS,
@@ -580,19 +581,17 @@ class StrategyEngine:
             for (r, s, final, effort, pre, _prot) in candidates
         ]
         if candidates:
-            top_root, top_step, top_final, _top_effort, _top_pre, _top_prot = candidates[0]
-            chosen_root: MetaGoal | None = top_root
-            chosen_step: MetaGoal | None = top_step
-            if last_chosen_root is not None and last_chosen_root != repr(top_root):
-                sticky_candidate = next(
-                    (c for c in candidates if repr(c[0]) == last_chosen_root),
-                    None,
-                )
-                if sticky_candidate is not None:
-                    sticky_final = sticky_candidate[2]
-                    if top_final <= STICKY_DOMINANCE_RATIO * sticky_final:
-                        chosen_root = sticky_candidate[0]
-                        chosen_step = sticky_candidate[1]
+            # Tier-2 sticky override routed through the kernel-proved pure core
+            # (Formal/Liveness/StickySelect.lean::stickyChoose; differential
+            # formal/diff/test_sticky_select_diff.py). `candidates` is decide_key-sorted
+            # (head = top). The core keeps the top unless last cycle's chosen_root
+            # survives this cycle and the top fails to dominate it by the ratio.
+            sticky_cands = [StickyCand(repr(c[0]), c[2]) for c in candidates]
+            chosen_cand = sticky_choose(sticky_cands, last_chosen_root, STICKY_DOMINANCE_RATIO)
+            assert chosen_cand is not None  # candidates non-empty
+            chosen_tuple = next(c for c in candidates if repr(c[0]) == chosen_cand.repr_)
+            chosen_root: MetaGoal | None = chosen_tuple[0]
+            chosen_step: MetaGoal | None = chosen_tuple[1]
             # Fallback chain: all OTHER ranked steps below the chosen one,
             # in ranking order. The arbiter consults these when the top
             # step's goal is None (combat target missing, etc.). Paired

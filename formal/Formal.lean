@@ -183,6 +183,9 @@ import Formal.Liveness.CycleStepF
 import Formal.Liveness.CycleStepFIteration
 import Formal.Liveness.MeasureDescent
 import Formal.Liveness.LevelingDescent
+import Formal.Liveness.StickySelect
+import Formal.Liveness.ZombieFreedom
+import Formal.Liveness.GatedArming
 import Formal.Liveness.WarmupCleared
 import Formal.Liveness.Leveling
 import Formal.Liveness.FightReady

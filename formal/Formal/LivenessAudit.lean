@@ -83,6 +83,9 @@ import Formal.Liveness.MetaGoalDispatch
 import Formal.Liveness.StateFieldGapSemantics
 import Formal.Liveness.TaskPoolSemantics
 import Formal.Liveness.TaskPoolTrajectory
+import Formal.Liveness.StickySelect
+import Formal.Liveness.ZombieFreedom
+import Formal.Liveness.GatedArming
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
@@ -699,3 +702,19 @@ open Formal.Liveness.LevelFiftyReachableP
 #print axioms cycleStepPN_succ_outer
 #print axioms cycleStepPN_level_ge
 #print axioms cycleStepPN_xp_ge_when_level_eq_throughout
+
+-- StickySelect / ZombieFreedom (Tier-2 sticky progress-gated release; no infinite
+-- zombie hold). `no_infinite_sticky_hold` uses ONLY the standard axiom set; the
+-- measure instantiation `no_infinite_zombie_below_fifty` additionally inherits the
+-- pre-existing measure axiom LIV-001 (`Measure.xpToNextLevel`) — NO new axioms.
+open Formal.Liveness.StickySelect
+#print axioms sticky_requires_progress
+#print axioms sticky_progress_safe
+#print axioms released_picks_top
+#print axioms no_infinite_sticky_hold
+open Formal.Liveness.ZombieFreedom
+#print axioms no_infinite_zombie_below_fifty
+open Formal.Liveness.GatedArming
+#print axioms gatedArming_eq_top_of_released
+#print axioms arming_false_of_held_nonfight
+#print axioms no_infinite_zombie_suppression
