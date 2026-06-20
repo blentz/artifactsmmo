@@ -374,7 +374,8 @@ only at the API boundary. `PlanModel.dictGet`/`dictSet` are definitionally
 `Formal.ShoppingList.getD`/`setD`.
 -/
 
-open Formal.ShoppingList (Dict Recipes getD setD)
+open Formal.ShoppingList (Dict Recipes getD setD getD_cons_self getD_cons_ne
+  setD_cons_self setD_cons_ne getD_setD)
 open Formal.StepDispatch (minGathers minGathersCount minGathers_succ)
 
 /-- `dictGet` IS `Formal.ShoppingList.getD` (same equations). -/
@@ -452,5 +453,103 @@ theorem minGathers_total_additive (fuel : Nat) (item : String) (qty : Int)
           rw [← Int.add_assoc]
           rw [ihrec ((minGathers n mat.1 (mat.2 * rem) recipes (0, s0.2)).1 + s0.1,
                      (minGathers n mat.1 (mat.2 * rem) recipes (0, s0.2)).2)]
+
+/-- The seed-`(t, owned)` gather count is the zero-seed count plus `t`
+(the `.1` projection of `minGathers_total_additive`). -/
+theorem minGathers_fst_total (fuel : Nat) (item : String) (qty : Int)
+    (recipes : Recipes) (t : Int) (owned : Dict Int) :
+    (minGathers fuel item qty recipes (t, owned)).1
+      = (minGathers fuel item qty recipes (0, owned)).1 + t := by
+  rw [minGathers_total_additive]
+
+/-- The seed-`(t, owned)` residual owned is `t`-independent. -/
+theorem minGathers_snd_total (fuel : Nat) (item : String) (qty : Int)
+    (recipes : Recipes) (t : Int) (owned : Dict Int) :
+    (minGathers fuel item qty recipes (t, owned)).2
+      = (minGathers fuel item qty recipes (0, owned)).2 := by
+  rw [minGathers_total_additive]
+
+-- ---------------------------------------------------------------------------
+-- Owned-free weight `w` and `costMass`
+-- ---------------------------------------------------------------------------
+
+/-- Fuel-indexed owned-free weight: the gather count for ONE unit of `item`
+from empty holdings. `wf 0 item = 1`; at positive fuel `wf` satisfies the
+recipe recursion (`wf (raw) = 1`, `wf (craftable) = Σ per · wf mat`). Indexing
+by the SAME fuel as `minGathers` keeps the depth-degradation aligned so the
+conservation identity's induction closes without a separate depth bound. -/
+def wf (fuel : Nat) (item : String) (recipes : Recipes) : Int :=
+  (minGathers fuel item 1 recipes (0, [])).1
+
+/-- Total cost-mass of a holdings dict under weight `wf fuel`: `Σ v · wf c`
+over the assoc-list entries (a hand-rolled summation, omega-friendly). -/
+def costMass (fuel : Nat) (m : Dict Int) (recipes : Recipes) : Int :=
+  match m with
+  | [] => 0
+  | (c, v) :: rest => v * wf fuel c recipes + costMass fuel rest recipes
+
+@[simp] theorem costMass_nil (fuel : Nat) (recipes : Recipes) :
+    costMass fuel [] recipes = 0 := rfl
+
+@[simp] theorem costMass_cons (fuel : Nat) (c : String) (v : Int)
+    (rest : Dict Int) (recipes : Recipes) :
+    costMass fuel ((c, v) :: rest) recipes
+      = v * wf fuel c recipes + costMass fuel rest recipes := rfl
+
+/-- Setting `m[k] := v` shifts cost-mass by `(v − old) · wf k`: the single
+entry for `k` changes its contribution, everything else is preserved. The
+fundamental accounting lemma — every consume/credit step is a `setD`. -/
+theorem costMass_setD (fuel : Nat) (m : Dict Int) (k : String) (v : Int)
+    (recipes : Recipes) :
+    costMass fuel (setD m k v) recipes
+      = costMass fuel m recipes + (v - getD m k 0) * wf fuel k recipes := by
+  induction m with
+  | nil =>
+    show costMass fuel [(k, v)] recipes = 0 + (v - getD [] k 0) * wf fuel k recipes
+    simp [costMass, getD]
+  | cons kv rest ih =>
+    obtain ⟨a, b⟩ := kv
+    by_cases h : a = k
+    · subst h
+      rw [setD_cons_self, costMass_cons, costMass_cons, getD_cons_self,
+          Int.sub_mul]
+      omega
+    · rw [setD_cons_ne _ _ _ _ _ h, costMass_cons, costMass_cons, ih,
+          getD_cons_ne _ _ _ _ _ h]
+      omega
+
+/-- `wf 0 item = 1`: out of fuel, one unit accounts as a single raw gather. -/
+@[simp] theorem wf_zero (item : String) (recipes : Recipes) :
+    wf 0 item recipes = 1 := by
+  show (minGathers 0 item 1 recipes (0, [])).1 = 1
+  simp [minGathers]
+
+/-- A RAW item weighs exactly `1` at positive fuel (one flat gather). -/
+theorem wf_succ_raw (n : Nat) (item : String) (recipes : Recipes)
+    (hraw : (getD recipes item []).length = 0) :
+    wf (n + 1) item recipes = 1 := by
+  show (minGathers (n + 1) item 1 recipes (0, [])).1 = 1
+  have := Formal.StepDispatch.minGathers_raw_unowned n item 1 recipes hraw
+  simpa using this
+
+/-- `wf` of a craftable item at `fuel+1` expands into the recipe sub-weights at
+`fuel`: it is the empty-owned `foldl` over the recipe, each material entered at
+quantity `per`. (One-step unfold of `wf`; the per-material quantities are the
+recipe `per_unit` values since the parent quantity is `1` and holdings empty.)
+This is the recipe-DAG recursion `wf` satisfies. -/
+theorem wf_succ_craft (n : Nat) (item : String) (recipes : Recipes)
+    (hcr : ¬ (getD recipes item []).length = 0) :
+    wf (n + 1) item recipes
+      = ((getD recipes item []).foldl
+          (fun state mat => minGathers n mat.1 (mat.2 * 1) recipes state)
+          (0, setD [] item (0 - 0))).1 := by
+  show (minGathers (n + 1) item 1 recipes (0, [])).1 = _
+  rw [minGathers_succ]
+  have hg : getD ([] : Dict Int) item 0 = 0 := rfl
+  rw [hg]
+  have hmin : min (0 : Int) 1 = 0 := by decide
+  rw [hmin]
+  rw [if_neg (by decide), if_neg hcr]
+  simp only [Int.sub_zero]
 
 end Formal.PlanModel
