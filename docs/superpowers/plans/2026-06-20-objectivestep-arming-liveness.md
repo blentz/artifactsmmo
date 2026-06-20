@@ -24,9 +24,14 @@
 
 ---
 
-### Task 1: Ground `WinnableAcrossBand` empirically — capture base stats + un-skip the sweep (C1)
+### Task 1: Ground `WinnableAcrossBand` empirically — base stats + full-loadout sweep (C1)
 
 Do this FIRST: it confirms `WinnableAcrossBand` is actually TRUE against live data before investing in the kernel proof. Low-risk, independent, ships the empirical grounding.
+
+**FINDING (2026-06-20, mid-task) — `[[project_winnableacrossband_grounding]]`:** the existing sweep used `best_weapon_for_level` (weapon-only, deliberately conservative). That proxy CANNOT witness `WinnableAcrossBand` past L17 — an unarmored body (resistance 0) loses `predict_win` even to far-lower monsters. Two corrections, human-approved:
+1. **Best full obtainable loadout, not weapon-only.** Model the best obtainable FULL loadout at level L (best item per slot with `item.level ≤ L`, via production `pick_loadout` over the obtainable catalog), since that is the bot's faithful capability. SOUND for the EXISTENCE claim MODULO gear-obtainability — which is exactly Task 3 (corner 3); this tightens the C1↔C0 coupling.
+2. **Full projected HP.** The harness `_base_world_state` set `state.hp = base_max_hp + weapon.hp_bonus`, so with armor equipped the character fought at base+weapon HP (armor HP dropped via `effective_hp = min(state.hp, proj.max_hp)`). Set `state.hp` to the FULL projected max (rest-to-full, armor HP counted) — the bot rests before fighting. This was a real harness bug.
+With BOTH corrections the sweep is clean 1..49 (verified: zero gaps). The base-stats capture (commits `a56887c`, `26c7a96`) is already DONE; the remaining Task-1 work is the loadout-model upgrade below.
 
 **Files:**
 - Run: `formal/sim/capture_base_stats.py` (exists; CLI `uv run python formal/sim/capture_base_stats.py <character> [output]`)

@@ -63,6 +63,8 @@ on a now-unconditional gear-feasibility foundation rather than a banked min-cut.
 
 ## Components
 
+> **AMENDMENT (2026-06-20, post-Task-1 finding — `[[project_winnableacrossband_grounding]]`):** wherever this spec says `best_weapon_for_level` / "best-weapon proxy", read **best FULL obtainable loadout** (best item per slot, `item.level ≤ L`, via production `pick_loadout`) at **full projected HP**. The weapon-only proxy cannot witness `WinnableAcrossBand` past L17 (an unarmored body loses `predict_win`); the harness also had an HP bug (fought at base+weapon HP). With the full-loadout + full-HP model the sweep is clean 1..49. The obtainability residual now covers full gear (still closed by C0/Task 3) — tightening the C1↔C0 coupling, not changing it.
+
 ### C0. Close corner 3 in the gear-obtainment context (foundation)
 Corner 3 (`PlanModel.lean`, `minGathers_le_gathers_of_corner3`) is the `δ ≤ ε`
 craft-monotonicity coupling that 14 rounds could not breach for ARBITRARY plans —
