@@ -129,6 +129,7 @@ import Formal.Liveness.SkillGapClosure
 import Formal.Liveness.RecipeChainClosure
 import Formal.Liveness.ItemsTaskTermination
 import Formal.Liveness.ItemsTaskRun
+import Formal.Liveness.CatalogTypes
 import Formal.Liveness.GameDataFixture
 import Formal.Liveness.LevelFiftyReachable
 import Formal.Liveness.LifecycleBound
@@ -187,6 +188,7 @@ import Formal.Liveness.Leveling
 import Formal.Liveness.FightReady
 import Formal.Liveness.FightReadyReach
 import Formal.Liveness.GearTierLeveling
+import Formal.Liveness.WinnableGrounded
 import Formal.DoomedMemo
 import Formal.SkillGateFastFail
 import Formal.PlanModel

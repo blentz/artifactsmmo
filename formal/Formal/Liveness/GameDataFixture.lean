@@ -5074,4 +5074,505 @@ def item_wrathsword : CatalogItem :=
 def itemCatalog : List CatalogItem :=
   [item_adamantite_axe, item_adamantite_boots, item_adamantite_fishing_rod, item_adamantite_gloves, item_adamantite_mask, item_adamantite_pickaxe, item_adamantite_platebody, item_adamantite_platelegs, item_adamantite_ring, item_adamantite_shield, item_adamantite_sword, item_adventurer_boots, item_adventurer_helmet, item_adventurer_pants, item_adventurer_vest, item_air_and_water_amulet, item_air_boost_potion, item_air_res_potion, item_air_ring, item_air_shield, item_amulet_of_the_grand_master, item_ancestral_talisman, item_ancient_jean, item_antidote, item_apprentice_gloves, item_backpack, item_bandit_armor, item_battlestaff, item_batwing_helmet, item_blade_of_hell, item_bloodblade, item_bow_from_hell, item_burn_rune, item_celest_ring, item_conjurer_cloak, item_conjurer_skirt, item_copper_armor, item_copper_axe, item_copper_boots, item_copper_dagger, item_copper_helmet, item_copper_legs_armor, item_copper_pickaxe, item_copper_ring, item_corrupted_crown, item_corrupted_skull, item_corrupted_stone_amulet, item_cultist_boots, item_cultist_cloak, item_cultist_hat, item_cultist_pants, item_cursed_hat, item_cursed_sceptre, item_dark_horned_helmet, item_darkforged_boots, item_darkforged_helmet, item_darkforged_plate, item_darkforged_shield, item_death_knight_sword, item_demoniac_dagger, item_demoniac_shield, item_desert_whip, item_desert_wrap, item_diabolic_elixir, item_diamond_amulet, item_diamond_sword, item_divinity_ring, item_dreadful_amulet, item_dreadful_armor, item_dreadful_battleaxe, item_dreadful_ring, item_dreadful_shield, item_dreadful_staff, item_duskarmor, item_duskpants, item_dust_amulet, item_dust_helmet, item_dust_sword, item_earth_boost_potion, item_earth_res_potion, item_earth_ring, item_earth_shield, item_elderwood_staff, item_emerald_amulet, item_emerald_book, item_emerald_ring, item_enchanted_antidote, item_enchanted_boost_potion, item_enchanted_bow, item_enchanted_health_potion, item_enchanted_health_splash_potion, item_enchanter_boots, item_enchanter_pants, item_eternal_red_ring, item_eternity_ring, item_feather_coat, item_fire_and_earth_amulet, item_fire_boost_potion, item_fire_bow, item_fire_res_potion, item_fire_ring, item_fire_shield, item_fire_staff, item_fishing_net, item_flying_boots, item_forest_ring, item_forest_whip, item_goblin_guard_shield, item_gold_axe, item_gold_boots, item_gold_fishing_rod, item_gold_helm, item_gold_mask, item_gold_pickaxe, item_gold_platebody, item_gold_platelegs, item_gold_ring, item_gold_shield, item_gold_sword, item_golden_gloves, item_greater_dreadful_amulet, item_greater_dreadful_staff, item_greater_emerald_amulet, item_greater_healing_rune, item_greater_health_potion, item_greater_lifesteal_rune, item_greater_protection_rune, item_greater_ruby_amulet, item_greater_sapphire_amulet, item_greater_topaz_amulet, item_greater_wooden_staff, item_hard_leather_armor, item_hard_leather_boots, item_hard_leather_helmet, item_hard_leather_pants, item_healing_aura_rune, item_healing_rune, item_health_boost_potion, item_health_potion, item_health_splash_potion, item_heart_amulet, item_hell_armor, item_hell_helmet, item_hell_legs_armor, item_hell_reaper, item_hell_ring, item_hell_staff, item_highwayman_dagger, item_hork_helmet, item_hunting_bow, item_iron_armor, item_iron_axe, item_iron_boots, item_iron_dagger, item_iron_helm, item_iron_legs_armor, item_iron_pickaxe, item_iron_ring, item_iron_shield, item_iron_sword, item_jester_hat, item_king_slime_sword, item_leather_armor, item_leather_boots, item_leather_gloves, item_leather_hat, item_leather_legs_armor, item_lich_crown, item_life_amulet, item_life_crystal, item_life_ring, item_lifesteal_rune, item_lightning_sword, item_lizard_boots, item_lizard_skin_armor, item_lizard_skin_legs_armor, item_lost_amulet, item_lost_world_map, item_lucky_wizard_hat, item_magic_bow, item_magic_shield, item_magic_wizard_hat, item_malefic_armor, item_malefic_crystal, item_malefic_ring, item_masterful_necklace, item_mesh_armor, item_mesh_legs_armor, item_minor_health_potion, item_mithril_axe, item_mithril_boots, item_mithril_fishing_rod, item_mithril_gloves, item_mithril_helm, item_mithril_pickaxe, item_mithril_platebody, item_mithril_platelegs, item_mithril_ring, item_mithril_shield, item_mithril_sword, item_moonlight_staff, item_mushmush_bow, item_mushmush_jacket, item_mushmush_wizard_hat, item_mushstaff, item_novice_guide, item_obsidian_armor, item_obsidian_battleaxe, item_obsidian_helmet, item_obsidian_legs_armor, item_old_boots, item_perfect_pearl, item_piggy_armor, item_piggy_helmet, item_piggy_pants, item_prospecting_amulet, item_protection_rune, item_ring_of_chance, item_ring_of_the_adept, item_royal_skeleton_armor, item_royal_skeleton_helmet, item_royal_skeleton_pants, item_royal_skeleton_ring, item_ruby_amulet, item_ruby_book, item_ruby_ring, item_sacred_ring, item_sand_snakeskin_armor, item_sand_snakeskin_bandana, item_sand_snakeskin_boots, item_sand_snakeskin_pants, item_sandwhisper_bag, item_sandwhisper_codex, item_sanguine_edge_of_rosen, item_sapphire_amulet, item_sapphire_book, item_sapphire_ring, item_satchel, item_shuriken, item_skeleton_armor, item_skeleton_helmet, item_skeleton_pants, item_skull_amulet, item_skull_ring, item_skull_staff, item_skull_wand, item_skullforged_armor, item_skullforged_pants, item_skullforged_ring, item_slime_shield, item_small_antidote, item_small_health_potion, item_snakeskin_armor, item_snakeskin_boots, item_snakeskin_legs_armor, item_spruce_fishing_rod, item_steel_armor, item_steel_axe, item_steel_battleaxe, item_steel_boots, item_steel_fishing_rod, item_steel_gloves, item_steel_helm, item_steel_legs_armor, item_steel_pickaxe, item_steel_ring, item_sticky_dagger, item_sticky_sword, item_stormforged_armor, item_stormforged_pants, item_strangold_armor, item_strangold_helmet, item_strangold_legs_armor, item_strangold_sword, item_topaz_amulet, item_topaz_book, item_topaz_ring, item_tromatising_mask, item_vampire_bow, item_vampiric_rune, item_vital_armor, item_vital_boots, item_voidstone_axe, item_voidstone_fishing_rod, item_voidstone_gloves, item_voidstone_pickaxe, item_water_boost_potion, item_water_bow, item_water_res_potion, item_water_ring, item_water_shield, item_white_knight_armor, item_white_knight_helmet, item_white_knight_pants, item_white_knight_shield, item_wisdom_amulet, item_wolf_ears, item_wooden_club, item_wooden_shield, item_wooden_staff, item_wooden_stick, item_wratharmor, item_wrathelmet, item_wrathpants, item_wrathsword]
 
+/-! ## WinnableAcrossBand witness table (one row per band level 1..49)
+
+  Each row: the winning monster + `pick_loadout` loadout + the
+  production-projected `predictWin` scalars at that level. The
+  projection's fidelity is pinned by
+  `formal/diff/test_winnable_witness_diff.py`. -/
+
+def winnableWitness : List WitnessRow :=
+  [
+    { level := 1, monsterCode := "yellow_slime", monsterLevel := 2
+      loadoutCodes := ["copper_boots", "copper_dagger", "copper_helmet", "wooden_shield"]
+      pCrit := 35, pMaxHp := 150, pInitiative := 100
+      pAtkSum := 6, pLifesteal := 0, pAntipoison := 0
+      rawPlayer := 6, monsterHp := 70, rawMonster := 8
+      mCrit := 0, mAtkSum := 8, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 2, monsterCode := "green_slime", monsterLevel := 4
+      loadoutCodes := ["copper_boots", "copper_helmet", "wooden_shield", "wooden_staff"]
+      pCrit := 5, pMaxHp := 155, pInitiative := 100
+      pAtkSum := 8, pLifesteal := 0, pAntipoison := 0
+      rawPlayer := 8, monsterHp := 80, rawMonster := 12
+      mCrit := 0, mAtkSum := 12, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 3, monsterCode := "green_slime", monsterLevel := 4
+      loadoutCodes := ["copper_boots", "copper_helmet", "wooden_shield", "wooden_staff"]
+      pCrit := 5, pMaxHp := 160, pInitiative := 100
+      pAtkSum := 8, pLifesteal := 0, pAntipoison := 0
+      rawPlayer := 8, monsterHp := 80, rawMonster := 12
+      mCrit := 0, mAtkSum := 12, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 4, monsterCode := "green_slime", monsterLevel := 4
+      loadoutCodes := ["copper_boots", "copper_helmet", "wooden_shield", "wooden_staff"]
+      pCrit := 5, pMaxHp := 165, pInitiative := 100
+      pAtkSum := 8, pLifesteal := 0, pAntipoison := 0
+      rawPlayer := 8, monsterHp := 80, rawMonster := 12
+      mCrit := 0, mAtkSum := 12, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 5, monsterCode := "red_slime", monsterLevel := 7
+      loadoutCodes := ["copper_armor", "copper_boots", "copper_helmet", "copper_legs_armor", "life_amulet", "water_bow", "wooden_shield"]
+      pCrit := 35, pMaxHp := 250, pInitiative := 100
+      pAtkSum := 16, pLifesteal := 0, pAntipoison := 0
+      rawPlayer := 17, monsterHp := 120, rawMonster := 18
+      mCrit := 0, mAtkSum := 18, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 6, monsterCode := "cow", monsterLevel := 8
+      loadoutCodes := ["copper_armor", "copper_boots", "copper_helmet", "copper_legs_armor", "life_amulet", "sticky_sword", "wooden_shield"]
+      pCrit := 5, pMaxHp := 255, pInitiative := 100
+      pAtkSum := 16, pLifesteal := 0, pAntipoison := 0
+      rawPlayer := 23, monsterHp := 280, rawMonster := 21
+      mCrit := 0, mAtkSum := 21, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 7, monsterCode := "cow", monsterLevel := 8
+      loadoutCodes := ["copper_armor", "copper_boots", "copper_helmet", "copper_legs_armor", "life_amulet", "sticky_sword", "wooden_shield"]
+      pCrit := 5, pMaxHp := 260, pInitiative := 100
+      pAtkSum := 16, pLifesteal := 0, pAntipoison := 0
+      rawPlayer := 23, monsterHp := 280, rawMonster := 21
+      mCrit := 0, mAtkSum := 21, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 8, monsterCode := "cow", monsterLevel := 8
+      loadoutCodes := ["copper_armor", "copper_boots", "copper_helmet", "copper_legs_armor", "life_amulet", "sticky_sword", "wooden_shield"]
+      pCrit := 5, pMaxHp := 265, pInitiative := 100
+      pAtkSum := 16, pLifesteal := 0, pAntipoison := 0
+      rawPlayer := 23, monsterHp := 280, rawMonster := 21
+      mCrit := 0, mAtkSum := 21, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 9, monsterCode := "cow", monsterLevel := 8
+      loadoutCodes := ["copper_armor", "copper_boots", "copper_helmet", "copper_legs_armor", "life_amulet", "sticky_sword", "wooden_shield"]
+      pCrit := 5, pMaxHp := 270, pInitiative := 100
+      pAtkSum := 16, pLifesteal := 0, pAntipoison := 0
+      rawPlayer := 23, monsterHp := 280, rawMonster := 21
+      mCrit := 0, mAtkSum := 21, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 10, monsterCode := "flying_snake", monsterLevel := 12
+      loadoutCodes := ["forest_ring", "greater_wooden_staff", "iron_armor", "iron_boots", "iron_shield", "leather_hat", "leather_legs_armor", "life_amulet", "novice_guide"]
+      pCrit := 5, pMaxHp := 420, pInitiative := 100
+      pAtkSum := 24, pLifesteal := 0, pAntipoison := 0
+      rawPlayer := 32, monsterHp := 360, rawMonster := 29
+      mCrit := 5, mAtkSum := 34, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := false },
+    { level := 11, monsterCode := "flying_snake", monsterLevel := 12
+      loadoutCodes := ["forest_ring", "greater_wooden_staff", "iron_armor", "iron_boots", "iron_shield", "leather_hat", "leather_legs_armor", "life_amulet", "novice_guide"]
+      pCrit := 5, pMaxHp := 425, pInitiative := 100
+      pAtkSum := 24, pLifesteal := 0, pAntipoison := 0
+      rawPlayer := 32, monsterHp := 360, rawMonster := 29
+      mCrit := 5, mAtkSum := 34, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := false },
+    { level := 12, monsterCode := "flying_snake", monsterLevel := 12
+      loadoutCodes := ["forest_ring", "greater_wooden_staff", "iron_armor", "iron_boots", "iron_shield", "leather_hat", "leather_legs_armor", "life_amulet", "novice_guide"]
+      pCrit := 5, pMaxHp := 430, pInitiative := 100
+      pAtkSum := 24, pLifesteal := 0, pAntipoison := 0
+      rawPlayer := 32, monsterHp := 360, rawMonster := 29
+      mCrit := 5, mAtkSum := 34, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := false },
+    { level := 13, monsterCode := "highwayman", monsterLevel := 15
+      loadoutCodes := ["forest_ring", "greater_wooden_staff", "iron_armor", "iron_boots", "iron_shield", "leather_hat", "leather_legs_armor", "life_amulet", "novice_guide"]
+      pCrit := 5, pMaxHp := 435, pInitiative := 100
+      pAtkSum := 24, pLifesteal := 0, pAntipoison := 0
+      rawPlayer := 30, monsterHp := 380, rawMonster := 21
+      mCrit := 35, mAtkSum := 25, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := false },
+    { level := 14, monsterCode := "highwayman", monsterLevel := 15
+      loadoutCodes := ["forest_ring", "greater_wooden_staff", "iron_armor", "iron_boots", "iron_shield", "leather_hat", "leather_legs_armor", "life_amulet", "novice_guide"]
+      pCrit := 5, pMaxHp := 440, pInitiative := 100
+      pAtkSum := 24, pLifesteal := 0, pAntipoison := 0
+      rawPlayer := 30, monsterHp := 380, rawMonster := 21
+      mCrit := 35, mAtkSum := 25, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := false },
+    { level := 15, monsterCode := "highwayman", monsterLevel := 15
+      loadoutCodes := ["adventurer_pants", "forest_ring", "iron_armor", "iron_boots", "iron_shield", "king_slime_sword", "leather_hat", "life_amulet", "life_ring", "novice_guide"]
+      pCrit := 24, pMaxHp := 480, pInitiative := 100
+      pAtkSum := 36, pLifesteal := 0, pAntipoison := 0
+      rawPlayer := 40, monsterHp := 380, rawMonster := 21
+      mCrit := 35, mAtkSum := 25, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := false },
+    { level := 16, monsterCode := "skeleton", monsterLevel := 18
+      loadoutCodes := ["adventurer_pants", "forest_ring", "iron_helm", "iron_shield", "king_slime_sword", "leather_armor", "leather_boots", "life_amulet", "life_ring", "novice_guide"]
+      pCrit := 24, pMaxHp := 485, pInitiative := 100
+      pAtkSum := 36, pLifesteal := 0, pAntipoison := 0
+      rawPlayer := 39, monsterHp := 480, rawMonster := 37
+      mCrit := 5, mAtkSum := 44, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := false },
+    { level := 17, monsterCode := "pig", monsterLevel := 19
+      loadoutCodes := ["adventurer_pants", "forest_ring", "iron_armor", "iron_boots", "iron_shield", "king_slime_sword", "leather_hat", "life_amulet", "life_ring", "novice_guide"]
+      pCrit := 24, pMaxHp := 490, pInitiative := 100
+      pAtkSum := 36, pLifesteal := 0, pAntipoison := 0
+      rawPlayer := 37, monsterHp := 480, rawMonster := 25
+      mCrit := 30, mAtkSum := 30, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 18, monsterCode := "pig", monsterLevel := 19
+      loadoutCodes := ["adventurer_pants", "forest_ring", "iron_armor", "iron_boots", "iron_shield", "king_slime_sword", "leather_hat", "life_amulet", "life_ring", "novice_guide"]
+      pCrit := 24, pMaxHp := 495, pInitiative := 100
+      pAtkSum := 36, pLifesteal := 0, pAntipoison := 0
+      rawPlayer := 37, monsterHp := 480, rawMonster := 25
+      mCrit := 30, mAtkSum := 30, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 19, monsterCode := "pig", monsterLevel := 19
+      loadoutCodes := ["adventurer_pants", "forest_ring", "iron_armor", "iron_boots", "iron_shield", "king_slime_sword", "leather_hat", "life_amulet", "life_ring", "novice_guide"]
+      pCrit := 24, pMaxHp := 500, pInitiative := 100
+      pAtkSum := 36, pLifesteal := 0, pAntipoison := 0
+      rawPlayer := 37, monsterHp := 480, rawMonster := 25
+      mCrit := 30, mAtkSum := 30, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 20, monsterCode := "spider", monsterLevel := 20
+      loadoutCodes := ["battlestaff", "dreadful_amulet", "iron_helm", "life_ring", "lifesteal_rune", "novice_guide", "ring_of_chance", "slime_shield", "snakeskin_boots", "steel_armor", "steel_legs_armor"]
+      pCrit := 9, pMaxHp := 625, pInitiative := 100
+      pAtkSum := 40, pLifesteal := 10, pAntipoison := 0
+      rawPlayer := 74, monsterHp := 550, rawMonster := 66
+      mCrit := 5, mAtkSum := 80, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 21, monsterCode := "spider", monsterLevel := 20
+      loadoutCodes := ["battlestaff", "dreadful_amulet", "iron_helm", "life_ring", "lifesteal_rune", "novice_guide", "ring_of_chance", "slime_shield", "snakeskin_boots", "steel_armor", "steel_legs_armor"]
+      pCrit := 9, pMaxHp := 630, pInitiative := 100
+      pAtkSum := 40, pLifesteal := 10, pAntipoison := 0
+      rawPlayer := 74, monsterHp := 550, rawMonster := 66
+      mCrit := 5, mAtkSum := 80, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 22, monsterCode := "spider", monsterLevel := 20
+      loadoutCodes := ["battlestaff", "dreadful_amulet", "iron_helm", "life_ring", "lifesteal_rune", "novice_guide", "ring_of_chance", "slime_shield", "snakeskin_boots", "steel_armor", "steel_legs_armor"]
+      pCrit := 9, pMaxHp := 635, pInitiative := 100
+      pAtkSum := 40, pLifesteal := 10, pAntipoison := 0
+      rawPlayer := 74, monsterHp := 550, rawMonster := 66
+      mCrit := 5, mAtkSum := 80, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 23, monsterCode := "spider", monsterLevel := 20
+      loadoutCodes := ["battlestaff", "dreadful_amulet", "iron_helm", "life_ring", "lifesteal_rune", "novice_guide", "ring_of_chance", "slime_shield", "snakeskin_boots", "steel_armor", "steel_legs_armor"]
+      pCrit := 9, pMaxHp := 640, pInitiative := 100
+      pAtkSum := 40, pLifesteal := 10, pAntipoison := 0
+      rawPlayer := 74, monsterHp := 550, rawMonster := 66
+      mCrit := 5, mAtkSum := 80, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 24, monsterCode := "spider", monsterLevel := 20
+      loadoutCodes := ["battlestaff", "dreadful_amulet", "iron_helm", "life_ring", "lifesteal_rune", "novice_guide", "ring_of_chance", "slime_shield", "snakeskin_boots", "steel_armor", "steel_legs_armor"]
+      pCrit := 9, pMaxHp := 645, pInitiative := 100
+      pAtkSum := 40, pLifesteal := 10, pAntipoison := 0
+      rawPlayer := 74, monsterHp := 550, rawMonster := 66
+      mCrit := 5, mAtkSum := 80, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 25, monsterCode := "bandit_lizard", monsterLevel := 25
+      loadoutCodes := ["iron_helm", "lifesteal_rune", "lizard_skin_armor", "lizard_skin_legs_armor", "novice_guide", "ring_of_chance", "ring_of_the_adept", "ruby_amulet", "skull_wand", "slime_shield", "snakeskin_boots"]
+      pCrit := 9, pMaxHp := 825, pInitiative := 200
+      pAtkSum := 50, pLifesteal := 10, pAntipoison := 0
+      rawPlayer := 59, monsterHp := 780, rawMonster := 60
+      mCrit := 5, mAtkSum := 80, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 26, monsterCode := "bandit_lizard", monsterLevel := 25
+      loadoutCodes := ["iron_helm", "lifesteal_rune", "lizard_skin_armor", "lizard_skin_legs_armor", "novice_guide", "ring_of_chance", "ring_of_the_adept", "ruby_amulet", "skull_wand", "slime_shield", "snakeskin_boots"]
+      pCrit := 9, pMaxHp := 830, pInitiative := 200
+      pAtkSum := 50, pLifesteal := 10, pAntipoison := 0
+      rawPlayer := 59, monsterHp := 780, rawMonster := 60
+      mCrit := 5, mAtkSum := 80, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 27, monsterCode := "bandit_lizard", monsterLevel := 25
+      loadoutCodes := ["iron_helm", "lifesteal_rune", "lizard_skin_armor", "lizard_skin_legs_armor", "novice_guide", "ring_of_chance", "ring_of_the_adept", "ruby_amulet", "skull_wand", "slime_shield", "snakeskin_boots"]
+      pCrit := 9, pMaxHp := 835, pInitiative := 200
+      pAtkSum := 50, pLifesteal := 10, pAntipoison := 0
+      rawPlayer := 59, monsterHp := 780, rawMonster := 60
+      mCrit := 5, mAtkSum := 80, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 28, monsterCode := "demon", monsterLevel := 30
+      loadoutCodes := ["dreadful_staff", "iron_helm", "lifesteal_rune", "novice_guide", "piggy_armor", "piggy_pants", "ring_of_chance", "ring_of_the_adept", "ruby_amulet", "slime_shield", "steel_boots"]
+      pCrit := 9, pMaxHp := 840, pInitiative := 150
+      pAtkSum := 50, pLifesteal := 10, pAntipoison := 0
+      rawPlayer := 62, monsterHp := 900, rawMonster := 58
+      mCrit := 5, mAtkSum := 90, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := false },
+    { level := 29, monsterCode := "demon", monsterLevel := 30
+      loadoutCodes := ["dreadful_staff", "iron_helm", "lifesteal_rune", "novice_guide", "piggy_armor", "piggy_pants", "ring_of_chance", "ring_of_the_adept", "ruby_amulet", "slime_shield", "steel_boots"]
+      pCrit := 9, pMaxHp := 845, pInitiative := 150
+      pAtkSum := 50, pLifesteal := 10, pAntipoison := 0
+      rawPlayer := 62, monsterHp := 900, rawMonster := 58
+      mCrit := 5, mAtkSum := 90, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := false },
+    { level := 30, monsterCode := "demon", monsterLevel := 30
+      loadoutCodes := ["gold_shield", "greater_dreadful_staff", "life_crystal", "lifesteal_rune", "lizard_boots", "novice_guide", "obsidian_helmet", "piggy_armor", "piggy_pants", "prospecting_amulet", "ring_of_the_adept", "royal_skeleton_ring"]
+      pCrit := 5, pMaxHp := 1260, pInitiative := 180
+      pAtkSum := 80, pLifesteal := 10, pAntipoison := 0
+      rawPlayer := 125, monsterHp := 900, rawMonster := 55
+      mCrit := 5, mAtkSum := 90, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := false },
+    { level := 31, monsterCode := "cultist_acolyte", monsterLevel := 33
+      loadoutCodes := ["elderwood_staff", "gold_boots", "gold_platelegs", "gold_shield", "life_crystal", "lifesteal_rune", "novice_guide", "obsidian_helmet", "prospecting_amulet", "ring_of_the_adept", "royal_skeleton_ring", "snakeskin_armor"]
+      pCrit := 5, pMaxHp := 1275, pInitiative := 280
+      pAtkSum := 80, pLifesteal := 10, pAntipoison := 0
+      rawPlayer := 130, monsterHp := 1500, rawMonster := 84
+      mCrit := 5, mAtkSum := 130, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 32, monsterCode := "cultist_acolyte", monsterLevel := 33
+      loadoutCodes := ["elderwood_staff", "gold_boots", "gold_platelegs", "gold_shield", "life_crystal", "lifesteal_rune", "novice_guide", "obsidian_helmet", "prospecting_amulet", "ring_of_the_adept", "royal_skeleton_ring", "snakeskin_armor"]
+      pCrit := 5, pMaxHp := 1280, pInitiative := 280
+      pAtkSum := 80, pLifesteal := 10, pAntipoison := 0
+      rawPlayer := 130, monsterHp := 1500, rawMonster := 84
+      mCrit := 5, mAtkSum := 130, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 33, monsterCode := "goblin_guard", monsterLevel := 35
+      loadoutCodes := ["death_knight_sword", "gold_boots", "gold_shield", "life_crystal", "lifesteal_rune", "novice_guide", "obsidian_helmet", "prospecting_amulet", "ring_of_the_adept", "royal_skeleton_pants", "royal_skeleton_ring", "stormforged_armor"]
+      pCrit := 24, pMaxHp := 1285, pInitiative := 205
+      pAtkSum := 74, pLifesteal := 10, pAntipoison := 0
+      rawPlayer := 139, monsterHp := 2000, rawMonster := 72
+      mCrit := 5, mAtkSum := 120, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := false },
+    { level := 34, monsterCode := "goblin_guard", monsterLevel := 35
+      loadoutCodes := ["death_knight_sword", "gold_boots", "gold_shield", "life_crystal", "lifesteal_rune", "novice_guide", "obsidian_helmet", "prospecting_amulet", "ring_of_the_adept", "royal_skeleton_pants", "royal_skeleton_ring", "stormforged_armor"]
+      pCrit := 24, pMaxHp := 1290, pInitiative := 205
+      pAtkSum := 74, pLifesteal := 10, pAntipoison := 0
+      rawPlayer := 139, monsterHp := 2000, rawMonster := 72
+      mCrit := 5, mAtkSum := 120, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := false },
+    { level := 35, monsterCode := "goblin_guard", monsterLevel := 35
+      loadoutCodes := ["ancient_jean", "cursed_sceptre", "dreadful_shield", "gold_boots", "life_crystal", "lifesteal_rune", "novice_guide", "obsidian_helmet", "prospecting_amulet", "ring_of_the_adept", "royal_skeleton_ring", "stormforged_armor"]
+      pCrit := 11, pMaxHp := 1295, pInitiative := 205
+      pAtkSum := 82, pLifesteal := 10, pAntipoison := 0
+      rawPlayer := 148, monsterHp := 2000, rawMonster := 62
+      mCrit := 5, mAtkSum := 120, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := false },
+    { level := 36, monsterCode := "orc", monsterLevel := 38
+      loadoutCodes := ["cursed_sceptre", "enchanter_pants", "goblin_guard_shield", "life_crystal", "lifesteal_rune", "lizard_boots", "novice_guide", "obsidian_helmet", "prospecting_amulet", "ring_of_the_adept", "royal_skeleton_armor", "royal_skeleton_ring"]
+      pCrit := 5, pMaxHp := 1350, pInitiative := 230
+      pAtkSum := 82, pLifesteal := 10, pAntipoison := 0
+      rawPlayer := 176, monsterHp := 1600, rawMonster := 127
+      mCrit := 10, mAtkSum := 200, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := false },
+    { level := 37, monsterCode := "orc", monsterLevel := 38
+      loadoutCodes := ["cursed_sceptre", "enchanter_pants", "goblin_guard_shield", "life_crystal", "lifesteal_rune", "lizard_boots", "novice_guide", "obsidian_helmet", "prospecting_amulet", "ring_of_the_adept", "royal_skeleton_armor", "royal_skeleton_ring"]
+      pCrit := 5, pMaxHp := 1355, pInitiative := 230
+      pAtkSum := 82, pLifesteal := 10, pAntipoison := 0
+      rawPlayer := 176, monsterHp := 1600, rawMonster := 127
+      mCrit := 10, mAtkSum := 200, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := false },
+    { level := 38, monsterCode := "orc", monsterLevel := 38
+      loadoutCodes := ["cursed_sceptre", "enchanter_pants", "goblin_guard_shield", "life_crystal", "lifesteal_rune", "lizard_boots", "novice_guide", "obsidian_helmet", "prospecting_amulet", "ring_of_the_adept", "royal_skeleton_armor", "royal_skeleton_ring"]
+      pCrit := 5, pMaxHp := 1360, pInitiative := 230
+      pAtkSum := 82, pLifesteal := 10, pAntipoison := 0
+      rawPlayer := 176, monsterHp := 1600, rawMonster := 127
+      mCrit := 10, mAtkSum := 200, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := false },
+    { level := 39, monsterCode := "orc", monsterLevel := 38
+      loadoutCodes := ["cursed_sceptre", "enchanter_pants", "goblin_guard_shield", "life_crystal", "lifesteal_rune", "lizard_boots", "novice_guide", "obsidian_helmet", "prospecting_amulet", "ring_of_the_adept", "royal_skeleton_armor", "royal_skeleton_ring"]
+      pCrit := 5, pMaxHp := 1365, pInitiative := 230
+      pAtkSum := 82, pLifesteal := 10, pAntipoison := 0
+      rawPlayer := 176, monsterHp := 1600, rawMonster := 127
+      mCrit := 10, mAtkSum := 200, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := false },
+    { level := 40, monsterCode := "cultist_alchemist", monsterLevel := 40
+      loadoutCodes := ["air_res_potion", "air_shield", "cultist_boots", "greater_lifesteal_rune", "greater_sapphire_amulet", "leather_hat", "life_crystal", "mithril_ring", "novice_guide", "royal_skeleton_ring", "sanguine_edge_of_rosen", "strangold_legs_armor", "water_res_potion", "wratharmor"]
+      pCrit := 12, pMaxHp := 1425, pInitiative := 560
+      pAtkSum := 100, pLifesteal := 20, pAntipoison := 0
+      rawPlayer := 165, monsterHp := 3000, rawMonster := 71
+      mCrit := 5, mAtkSum := 150, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 41, monsterCode := "cultist_alchemist", monsterLevel := 40
+      loadoutCodes := ["air_res_potion", "air_shield", "cultist_boots", "greater_lifesteal_rune", "greater_sapphire_amulet", "leather_hat", "life_crystal", "mithril_ring", "novice_guide", "royal_skeleton_ring", "sanguine_edge_of_rosen", "strangold_legs_armor", "water_res_potion", "wratharmor"]
+      pCrit := 12, pMaxHp := 1430, pInitiative := 560
+      pAtkSum := 100, pLifesteal := 20, pAntipoison := 0
+      rawPlayer := 165, monsterHp := 3000, rawMonster := 71
+      mCrit := 5, mAtkSum := 150, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 42, monsterCode := "sand_snake", monsterLevel := 44
+      loadoutCodes := ["air_res_potion", "air_shield", "cultist_boots", "greater_lifesteal_rune", "greater_sapphire_amulet", "health_boost_potion", "leather_hat", "life_crystal", "mithril_platelegs", "mithril_ring", "novice_guide", "royal_skeleton_ring", "sanguine_edge_of_rosen", "snakeskin_armor"]
+      pCrit := 12, pMaxHp := 1755, pInitiative := 710
+      pAtkSum := 100, pLifesteal := 20, pAntipoison := 0
+      rawPlayer := 143, monsterHp := 3200, rawMonster := 65
+      mCrit := 5, mAtkSum := 180, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 43, monsterCode := "sand_snake", monsterLevel := 44
+      loadoutCodes := ["air_res_potion", "air_shield", "cultist_boots", "greater_lifesteal_rune", "greater_sapphire_amulet", "health_boost_potion", "leather_hat", "life_crystal", "mithril_platelegs", "mithril_ring", "novice_guide", "royal_skeleton_ring", "sanguine_edge_of_rosen", "snakeskin_armor"]
+      pCrit := 12, pMaxHp := 1760, pInitiative := 710
+      pAtkSum := 100, pLifesteal := 20, pAntipoison := 0
+      rawPlayer := 143, monsterHp := 3200, rawMonster := 65
+      mCrit := 5, mAtkSum := 180, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 44, monsterCode := "sand_snake", monsterLevel := 44
+      loadoutCodes := ["air_res_potion", "air_shield", "cultist_boots", "greater_lifesteal_rune", "greater_sapphire_amulet", "health_boost_potion", "leather_hat", "life_crystal", "mithril_platelegs", "mithril_ring", "novice_guide", "royal_skeleton_ring", "sanguine_edge_of_rosen", "snakeskin_armor"]
+      pCrit := 12, pMaxHp := 1765, pInitiative := 710
+      pAtkSum := 100, pLifesteal := 20, pAntipoison := 0
+      rawPlayer := 143, monsterHp := 3200, rawMonster := 65
+      mCrit := 5, mAtkSum := 180, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 45, monsterCode := "dusk_beetle", monsterLevel := 47
+      loadoutCodes := ["bow_from_hell", "corrupted_crown", "demoniac_shield", "diabolic_elixir", "fire_res_potion", "greater_lifesteal_rune", "greater_sapphire_amulet", "life_crystal", "mithril_boots", "mithril_platebody", "mithril_ring", "novice_guide", "royal_skeleton_ring", "wrathpants"]
+      pCrit := 31, pMaxHp := 1810, pInitiative := 460
+      pAtkSum := 106, pLifesteal := 20, pAntipoison := 0
+      rawPlayer := 194, monsterHp := 3500, rawMonster := 96
+      mCrit := 5, mAtkSum := 240, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 46, monsterCode := "dusk_beetle", monsterLevel := 47
+      loadoutCodes := ["bow_from_hell", "corrupted_crown", "demoniac_shield", "diabolic_elixir", "fire_res_potion", "greater_lifesteal_rune", "greater_sapphire_amulet", "life_crystal", "mithril_boots", "mithril_platebody", "mithril_ring", "novice_guide", "royal_skeleton_ring", "wrathpants"]
+      pCrit := 31, pMaxHp := 1815, pInitiative := 460
+      pAtkSum := 106, pLifesteal := 20, pAntipoison := 0
+      rawPlayer := 194, monsterHp := 3500, rawMonster := 96
+      mCrit := 5, mAtkSum := 240, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 47, monsterCode := "dusk_beetle", monsterLevel := 47
+      loadoutCodes := ["bow_from_hell", "corrupted_crown", "demoniac_shield", "diabolic_elixir", "fire_res_potion", "greater_lifesteal_rune", "greater_sapphire_amulet", "life_crystal", "mithril_boots", "mithril_platebody", "mithril_ring", "novice_guide", "royal_skeleton_ring", "wrathpants"]
+      pCrit := 31, pMaxHp := 1820, pInitiative := 460
+      pAtkSum := 106, pLifesteal := 20, pAntipoison := 0
+      rawPlayer := 194, monsterHp := 3500, rawMonster := 96
+      mCrit := 5, mAtkSum := 240, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := true },
+    { level := 48, monsterCode := "desert_scorpion", monsterLevel := 50
+      loadoutCodes := ["ancient_jean", "corrupted_crown", "diabolic_elixir", "earth_res_potion", "earth_shield", "greater_lifesteal_rune", "greater_sapphire_amulet", "hell_reaper", "life_crystal", "mithril_boots", "mithril_ring", "novice_guide", "royal_skeleton_ring", "stormforged_armor"]
+      pCrit := 23, pMaxHp := 1745, pInitiative := 585
+      pAtkSum := 130, pLifesteal := 20, pAntipoison := 0
+      rawPlayer := 253, monsterHp := 4250, rawMonster := 70
+      mCrit := 50, mAtkSum := 350, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := false },
+    { level := 49, monsterCode := "desert_scorpion", monsterLevel := 50
+      loadoutCodes := ["ancient_jean", "corrupted_crown", "diabolic_elixir", "earth_res_potion", "earth_shield", "greater_lifesteal_rune", "greater_sapphire_amulet", "hell_reaper", "life_crystal", "mithril_boots", "mithril_ring", "novice_guide", "royal_skeleton_ring", "stormforged_armor"]
+      pCrit := 23, pMaxHp := 1750, pInitiative := 585
+      pAtkSum := 130, pLifesteal := 20, pAntipoison := 0
+      rawPlayer := 253, monsterHp := 4250, rawMonster := 70
+      mCrit := 50, mAtkSum := 350, mLifesteal := 0
+      mPoison := 0, mBarrier := 0, mBurn := 0
+      mHealing := 0, mReconstitution := 0, mVoidDrain := 0
+      mBerserk := 0, mFrenzy := 0, mBubble := 0
+      playerFirst := false }
+  ]
+
 end Formal.Liveness.GameDataFixture

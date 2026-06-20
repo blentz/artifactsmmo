@@ -58,6 +58,7 @@ import Formal.Liveness.Leveling
 import Formal.Liveness.FightReady
 import Formal.Liveness.FightReadyReach
 import Formal.Liveness.GearTierLeveling
+import Formal.Liveness.WinnableGrounded
 import Formal.Liveness.LifecycleBound
 import Formal.Liveness.LifecycleBound2
 import Formal.Liveness.LifecycleBound3
@@ -663,6 +664,13 @@ open Formal.Liveness.GearTierLeveling
 #print axioms winnableAcrossBand_satisfiable
 #print axioms combatTargetExists_of_gearTier
 #print axioms combatObjective_live_below_fifty
+
+-- Task 4 (2026-06-20): WinnableAcrossBand DISCHARGED over the live catalog via a
+-- per-level witness table. The combat verdict is kernel `decide`d over
+-- production-projected scalars (differential-pinned by
+-- formal/diff/test_winnable_witness_diff.py); no native_decide, no new axioms.
+open Formal.Liveness.WinnableGrounded
+#print axioms winnableAcrossBand_grounded
 
 -- Perception-refresh Brick 3 (2026-06-18): the combat objective is ARMED along the
 -- refreshed trajectory. At every step k with level<50, the state the refreshed cycle

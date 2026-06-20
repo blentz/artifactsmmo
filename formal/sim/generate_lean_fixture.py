@@ -9,11 +9,22 @@ ingredient DAG (production game-data guarantees acyclicity by
 construction). Items not in `crafting_recipes` are leaves (depth 0).
 
 Output: Formal/Liveness/GameDataFixture.lean (overwrite mock fixture).
+
+Run from the repo root as a module so the `formal` package resolves:
+
+    uv run python -m formal.sim.generate_lean_fixture
 """
 
 import json
 from collections import defaultdict, deque
 from pathlib import Path
+
+from formal.sim.winnable_witness import (
+    WitnessRow,
+    build_witness_table,
+    game_data_from_snapshot,
+    item_stats_from_snapshot,
+)
 
 # Mirror of production ITEM_TYPE_TO_SLOTS (derived from CharacterSchema).
 # Only item types listed here are equippable; all others (resource, consumable,
@@ -136,6 +147,45 @@ def _emit_item_catalog(lines: list[str], snapshot: dict) -> None:
         lines.append("")
     lines.append("def itemCatalog : List CatalogItem :=")
     lines.append("  [" + ", ".join(f"item_{_safe(code)}" for code, _ in equippable) + "]")
+    lines.append("")
+
+
+def _emit_witness_table(lines: list[str], rows: list[WitnessRow]) -> None:
+    """Emit `winnableWitness : List WitnessRow` — one verified row per band level.
+
+    The rows are produced by `formal.sim.winnable_witness.build_witness_table`
+    (the real production sweep) and differential-pinned by
+    `formal/diff/test_winnable_witness_diff.py`. Consumed by the kernel proof
+    `Formal/Liveness/WinnableGrounded.lean`."""
+    lines.append("/-! ## WinnableAcrossBand witness table (one row per band level 1..49)")
+    lines.append("")
+    lines.append("  Each row: the winning monster + `pick_loadout` loadout + the")
+    lines.append("  production-projected `predictWin` scalars at that level. The")
+    lines.append("  projection's fidelity is pinned by")
+    lines.append("  `formal/diff/test_winnable_witness_diff.py`. -/")
+    lines.append("")
+    lines.append("def winnableWitness : List WitnessRow :=")
+    lines.append("  [")
+    row_strs: list[str] = []
+    for r in rows:
+        codes = ", ".join(f'"{escape_lean_string(c)}"' for c in r.loadout_codes)
+        first = "true" if r.player_first else "false"
+        row_strs.append(
+            "    { level := " + str(r.level)
+            + f', monsterCode := "{escape_lean_string(r.monster_code)}"'
+            + f", monsterLevel := {r.monster_level}\n"
+            + f"      loadoutCodes := [{codes}]\n"
+            + f"      pCrit := {r.p_crit}, pMaxHp := {r.p_max_hp}, pInitiative := {r.p_initiative}\n"
+            + f"      pAtkSum := {r.p_atk_sum}, pLifesteal := {r.p_lifesteal}, pAntipoison := {r.p_antipoison}\n"
+            + f"      rawPlayer := {r.raw_player}, monsterHp := {r.monster_hp}, rawMonster := {r.raw_monster}\n"
+            + f"      mCrit := {r.m_crit}, mAtkSum := {r.m_atk_sum}, mLifesteal := {r.m_lifesteal}\n"
+            + f"      mPoison := {r.m_poison}, mBarrier := {r.m_barrier}, mBurn := {r.m_burn}\n"
+            + f"      mHealing := {r.m_healing}, mReconstitution := {r.m_reconstitution}, mVoidDrain := {r.m_void_drain}\n"
+            + f"      mBerserk := {r.m_berserk}, mFrenzy := {r.m_frenzy}, mBubble := {r.m_bubble}\n"
+            + f"      playerFirst := {first} }}"
+        )
+    lines.append(",\n".join(row_strs))
+    lines.append("  ]")
     lines.append("")
 
 
@@ -344,6 +394,14 @@ def generate_lean(snapshot: dict) -> str:
 
     # Item catalog
     _emit_item_catalog(lines, snapshot)
+
+    # WinnableAcrossBand witness table (built from the real production sweep).
+    stats_by_code = item_stats_from_snapshot(snapshot)
+    game_data = game_data_from_snapshot(snapshot, stats_by_code)
+    witness_rows = build_witness_table(
+        base_doc.get("base_stats", {}), stats_by_code, game_data,
+    )
+    _emit_witness_table(lines, witness_rows)
 
     lines.append("end Formal.Liveness.GameDataFixture")
 
