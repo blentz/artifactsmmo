@@ -1697,6 +1697,280 @@ theorem minGathers_mono (recipes : Recipes) (rank : String → Nat)
               r1 r2 hrk' hpo' hr2 hr21 htnew hstep.2 hsn1 hsn2
 
 -- ---------------------------------------------------------------------------
+-- DAG reachability guard (Round 8): Reaches recipes item c
+-- ---------------------------------------------------------------------------
+
+/-!
+## Reachability guard
+
+Round 7 proved the UNCONDITIONAL craft-monotonicity FALSE (two machine-checked
+`#eval` counterexamples): crafting `c` can starve a SIBLING or a BELOW-`c` query
+of a shared raw input, raising `minGathersCount item 1 …`. The discriminating
+condition is whether `c` is a transitive sub-component of `item` in the recipe
+DAG — when it is, the `+1 c` lands inside `item`'s own recipe subtree and the
+consumed inputs are exactly mass `item`'s traversal would itself credit.
+
+`Reaches recipes item c` is the reflexive-transitive closure of the recipe-edge
+relation `m → mat` (for `(mat, per) ∈ recipeOf m`): `item` reaches `c` when
+`c = item` or `c` is reachable through one of `item`'s recipe inputs. It is the
+honest CORRECT guard (a true domain fact for plan-root queries, like
+`Acyclic`/`PosRecipes`), NOT a weakening of the false unconditional form.
+-/
+
+/-- `Reaches recipes item c`: `c` is in the recipe-DAG closure of `item` — either
+`c = item`, or `c` is reachable through one of `item`'s recipe inputs
+transitively. Reflexive-transitive closure of the recipe-edge relation. -/
+inductive Reaches (recipes : Recipes) : String → String → Prop where
+  | refl (item : String) : Reaches recipes item item
+  | step {item mid c : String} {per : Int}
+      (hmid : Reaches recipes item mid)
+      (hedge : (c, per) ∈ getD recipes mid []) :
+      Reaches recipes item c
+
+/-- Reachability through a direct recipe edge: if `(mat, per) ∈ recipeOf item`
+then `item` reaches `mat`. -/
+theorem Reaches.edge (recipes : Recipes) (item mat : String) (per : Int)
+    (hedge : (mat, per) ∈ getD recipes item []) :
+    Reaches recipes item mat :=
+  Reaches.step (Reaches.refl item) hedge
+
+/-- Reachability is transitive: if `item` reaches `mid` and `mid` reaches `c`,
+then `item` reaches `c`. Induction on the second derivation. -/
+theorem Reaches.trans {recipes : Recipes} {item mid c : String}
+    (h1 : Reaches recipes item mid) (h2 : Reaches recipes mid c) :
+    Reaches recipes item c := by
+  induction h2 with
+  | refl => exact h1
+  | step _ hedge ih => exact Reaches.step ih hedge
+
+/-- Under `Acyclic`, reachability MONOTONELY does not increase rank: `c`
+reachable from `item` ⇒ `rank c ≤ rank item`. (Each edge strictly drops rank;
+the reflexive base is equality.) This certifies `Reaches` is well-founded and is
+the bound the guarded coupling uses to enter `item`'s subtree at lower rank. -/
+theorem Reaches.rank_le {recipes : Recipes} {rank : String → Nat}
+    (hacy : Acyclic recipes rank) {item c : String}
+    (h : Reaches recipes item c) : rank c ≤ rank item := by
+  induction h with
+  | refl => exact Nat.le_refl _
+  | step hmid hedge ih =>
+    rename_i mid cc per
+    have := hacy mid cc per hedge
+    omega
+
+-- ---------------------------------------------------------------------------
+-- Off-path invariance: minGathers depends only on holdings at reachable keys
+-- ---------------------------------------------------------------------------
+
+/-!
+## Off-path invariance (the reachability-discriminated craft corner)
+
+Round 7's counterexamples showed crafting `c` raises `minGathersCount item …`
+exactly when `item` does NOT reach `c` (sibling / below-`c` query starved of a
+shared raw input). The dual TRUE fact — needed for the guarded craft step — is
+that `minGathers item` is INVARIANT under any holdings change confined to keys
+`item` cannot reach. We prove the two structural facts behind it:
+
+- `minGathers_residual_unreached`: the traversal for `item` never modifies a key
+  it cannot reach (the residual equals the start there).
+- `minGathers_agree`: if two holdings AGREE on every key reachable from `item`,
+  the gather counts are EQUAL (and the residuals still agree on reachable keys).
+
+Together: a craft of `c` with `¬ Reaches recipes item c` leaves the query count
+unchanged — the OFF-PATH half of guarded craft-monotonicity, fully discharged.
+-/
+
+/-- The `minGathers` traversal for `item` never touches a key it cannot reach:
+on any `k` with `¬ Reaches recipes item k`, the residual reads the same as the
+start holdings. (Each consume `setD` is at `item` or a reachable material; an
+unreachable `k` is preserved through every recipe-`foldl` step.) Strong fuel
+induction; the `foldl` arm uses `Reaches.edge`/`Reaches.trans` to push
+unreachability down to each material. -/
+theorem minGathers_residual_unreached (recipes : Recipes) :
+    ∀ (f : Nat) (item : String) (q t : Int) (owned : Dict Int) (k : String),
+      ¬ Reaches recipes item k →
+      getD (minGathers f item q recipes (t, owned)).2 k 0 = getD owned k 0 := by
+  intro f
+  induction f using Nat.strongRecOn with
+  | ind f IH =>
+    intro item q t owned k hnr
+    match f, IH with
+    | 0, _ => rfl
+    | m + 1, IH =>
+      rw [minGathers_succ]
+      have hik : item ≠ k := fun h => hnr (h ▸ Reaches.refl item)
+      by_cases hc : q - min (getD owned item 0) q ≤ 0
+      · rw [if_pos hc]; rw [getD_setD, if_neg hik]
+      · rw [if_neg hc]
+        by_cases hr : (getD recipes item []).length = 0
+        · rw [if_pos hr]; rw [getD_setD, if_neg hik]
+        · rw [if_neg hr]
+          have hknr_mat : ∀ mat per, (mat, per) ∈ getD recipes item [] →
+              ¬ Reaches recipes mat k :=
+            fun mat per hmem hreach =>
+              hnr (Reaches.trans (Reaches.edge recipes item mat per hmem) hreach)
+          have hstart : getD (setD owned item (getD owned item 0 - min (getD owned item 0) q)) k 0
+              = getD owned k 0 := by rw [getD_setD, if_neg hik]
+          suffices H : ∀ (rc : Dict Int) (o : Dict Int) (s : Int),
+              (∀ mat per, (mat, per) ∈ rc → ¬ Reaches recipes mat k) →
+              getD (List.foldl (fun st mat =>
+                minGathers m mat.1 (mat.2 * (q - min (getD owned item 0) q)) recipes st)
+                (s, o) rc).2 k 0 = getD o k 0 by
+            rw [H (getD recipes item [])
+              (setD owned item (getD owned item 0 - min (getD owned item 0) q)) _ hknr_mat,
+              hstart]
+          intro rc
+          induction rc with
+          | nil => intro o s _; rfl
+          | cons mp rest ihrec =>
+            intro o s hnrmat
+            obtain ⟨mat, per⟩ := mp
+            simp only [List.foldl_cons]
+            have hstep := IH m (Nat.lt_succ_self m) mat
+              (per * (q - min (getD owned item 0) q)) s o k
+              (hnrmat mat per (by simp))
+            have hnrmat' : ∀ m' p, (m', p) ∈ rest → ¬ Reaches recipes m' k :=
+              fun m' p hm => hnrmat m' p (by simp [hm])
+            rw [ihrec _ _ hnrmat', hstep]
+
+/-- Setting a key `item` to a common value preserves agreement-on-reachable. -/
+theorem setD_agree (recipes : Recipes) (item : String) (H1 H2 : Dict Int)
+    (v : Int)
+    (hagree : ∀ k, Reaches recipes item k → getD H1 k 0 = getD H2 k 0) :
+    ∀ k, Reaches recipes item k →
+      getD (setD H1 item v) k 0 = getD (setD H2 item v) k 0 := by
+  intro k hk
+  rw [getD_setD, getD_setD]
+  by_cases hik : item = k
+  · subst hik; rw [if_pos rfl, if_pos rfl]
+  · rw [if_neg hik, if_neg hik]; exact hagree k hk
+
+/-- The generalized recipe-`foldl` coupling for `minGathers_agree`: two parallel
+folds over a recipe sublist `rc ⊆ recipeOf item`, from residuals `o1, o2` that
+AGREE on every key reachable from `item`, have equal counts and residuals that
+still agree on every reachable key. Each material `mat ∈ rc` is reachable from
+`item` (edge), so the fuel-`m` IH (`IHcount`) gives per-material count-eq +
+residual-agree on reachable-from-`mat` keys; `minGathers_residual_unreached`
+carries agreement on the reachable-from-`item`-but-not-`mat` keys to the next
+sibling. -/
+theorem agree_foldl (recipes : Recipes) (rank : String → Nat) (m : Nat)
+    (item : String) (rem : Int) (hrempos : 0 < rem)
+    (IHcount : ∀ (mt : String) (q : Int) (h1 h2 : Dict Int),
+      rank mt ≤ m → 0 < q →
+      (∀ k, Reaches recipes mt k → getD h1 k 0 = getD h2 k 0) →
+      (minGathers m mt q recipes (0, h1)).1 = (minGathers m mt q recipes (0, h2)).1
+      ∧ (∀ k, Reaches recipes mt k →
+          getD (minGathers m mt q recipes (0, h1)).2 k 0
+            = getD (minGathers m mt q recipes (0, h2)).2 k 0)) :
+    ∀ (rc : Dict Int) (o1 o2 : Dict Int) (t : Int),
+      (∀ mat per, (mat, per) ∈ rc → rank mat ≤ m) →
+      (∀ mat per, (mat, per) ∈ rc → 0 < per) →
+      (∀ mat per, (mat, per) ∈ rc → Reaches recipes item mat) →
+      (∀ k, Reaches recipes item k → getD o1 k 0 = getD o2 k 0) →
+      (List.foldl (fun st mat => minGathers m mat.1 (mat.2 * rem) recipes st)
+          (t, o1) rc).1
+        = (List.foldl (fun st mat => minGathers m mat.1 (mat.2 * rem) recipes st)
+            (t, o2) rc).1
+      ∧ (∀ k, Reaches recipes item k →
+          getD (List.foldl (fun st mat =>
+              minGathers m mat.1 (mat.2 * rem) recipes st) (t, o1) rc).2 k 0
+            = getD (List.foldl (fun st mat =>
+              minGathers m mat.1 (mat.2 * rem) recipes st) (t, o2) rc).2 k 0) := by
+  intro rc
+  induction rc with
+  | nil => intro o1 o2 t _ _ _ hag; exact ⟨rfl, hag⟩
+  | cons mp rest ihrec =>
+    intro o1 o2 t hrk hpo hedg hag
+    obtain ⟨mat, per⟩ := mp
+    simp only [List.foldl_cons]
+    have hper : 0 < per := hpo mat per (by simp)
+    have hrm : rank mat ≤ m := hrk mat per (by simp)
+    have hpr : 0 < per * rem := Int.mul_pos hper hrempos
+    have hmatR : Reaches recipes item mat := hedg mat per (by simp)
+    have hagmat : ∀ k, Reaches recipes mat k → getD o1 k 0 = getD o2 k 0 :=
+      fun k hk => hag k (Reaches.trans hmatR hk)
+    have hstep := IHcount mat (per * rem) o1 o2 hrm hpr hagmat
+    have ta1 := minGathers_total_additive m mat (per * rem) recipes t o1
+    have ta2 := minGathers_total_additive m mat (per * rem) recipes t o2
+    rw [ta1, ta2]
+    have hagnext : ∀ k, Reaches recipes item k →
+        getD (minGathers m mat (per * rem) recipes (0, o1)).2 k 0
+          = getD (minGathers m mat (per * rem) recipes (0, o2)).2 k 0 := by
+      intro k hk
+      by_cases hkmat : Reaches recipes mat k
+      · exact hstep.2 k hkmat
+      · rw [minGathers_residual_unreached recipes m mat
+              (per * rem) 0 o1 k hkmat,
+            minGathers_residual_unreached recipes m mat
+              (per * rem) 0 o2 k hkmat]
+        exact hag k hk
+    have hrk' : ∀ m' p, (m', p) ∈ rest → rank m' ≤ m :=
+      fun m' p hm => hrk m' p (by simp [hm])
+    have hpo' : ∀ m' p, (m', p) ∈ rest → 0 < p :=
+      fun m' p hm => hpo m' p (by simp [hm])
+    have hedg' : ∀ m' p, (m', p) ∈ rest → Reaches recipes item m' :=
+      fun m' p hm => hedg m' p (by simp [hm])
+    rw [hstep.1]
+    exact ihrec _ _ _ hrk' hpo' hedg' hagnext
+
+/-- **OFF-PATH INVARIANCE.** If two holdings `H1, H2` AGREE on every key
+reachable from `item`, then `minGathers item` yields the EQUAL gather count (and
+residuals still agreeing on reachable keys). The traversal for `item` only ever
+inspects holdings at keys it can reach, so changes confined to unreachable keys
+are invisible. Strong fuel induction; the recipe-`foldl` arm is `agree_foldl`.
+
+This is the reachability-discriminated craft corner: when `¬ Reaches item c`, a
+craft of `c` perturbs only keys unreachable from `item` (the inputs of `c` and
+`c` itself), so `minGathersCount item` is UNCHANGED — exactly the off-path half
+of guarded craft-monotonicity. -/
+theorem minGathers_agree (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank) :
+    ∀ (f : Nat) (item : String) (q : Int) (H1 H2 : Dict Int),
+      rank item ≤ f → 0 < q →
+      (∀ k, Reaches recipes item k → getD H1 k 0 = getD H2 k 0) →
+      (minGathers f item q recipes (0, H1)).1 = (minGathers f item q recipes (0, H2)).1
+      ∧ (∀ k, Reaches recipes item k →
+          getD (minGathers f item q recipes (0, H1)).2 k 0
+            = getD (minGathers f item q recipes (0, H2)).2 k 0) := by
+  intro f
+  induction f using Nat.strongRecOn with
+  | ind f IH =>
+    intro item q H1 H2 hrf hq hagree
+    match f, IH with
+    | 0, _ => exact ⟨rfl, fun k hk => hagree k hk⟩
+    | m + 1, IH =>
+      have hself : getD H1 item 0 = getD H2 item 0 := hagree item (Reaches.refl item)
+      have hsetag := setD_agree recipes item H1 H2
+        (getD H2 item 0 - min (getD H2 item 0) q) hagree
+      rw [minGathers_succ, minGathers_succ, hself]
+      by_cases hc : q - min (getD H2 item 0) q ≤ 0
+      · simp only [if_pos hc]; exact ⟨trivial, hsetag⟩
+      · simp only [if_neg hc]
+        by_cases hr : (getD recipes item []).length = 0
+        · simp only [if_pos hr]; exact ⟨trivial, hsetag⟩
+        · simp only [if_neg hr]
+          have hrempos : 0 < q - min (getD H2 item 0) q := by omega
+          have hrkall : ∀ mat per, (mat, per) ∈ getD recipes item [] → rank mat ≤ m := by
+            intro mat per hmem; have := hacy item mat per hmem; omega
+          have hpoall : ∀ mat per, (mat, per) ∈ getD recipes item [] → 0 < per :=
+            fun mat per hmem => hpos item mat per hmem
+          have hedgeR : ∀ mat per, (mat, per) ∈ getD recipes item [] →
+              Reaches recipes item mat :=
+            fun mat per hmem => Reaches.edge recipes item mat per hmem
+          have IHcount : ∀ (mt : String) (q' : Int) (h1 h2 : Dict Int),
+              rank mt ≤ m → 0 < q' →
+              (∀ k, Reaches recipes mt k → getD h1 k 0 = getD h2 k 0) →
+              (minGathers m mt q' recipes (0, h1)).1 = (minGathers m mt q' recipes (0, h2)).1
+              ∧ (∀ k, Reaches recipes mt k →
+                  getD (minGathers m mt q' recipes (0, h1)).2 k 0
+                    = getD (minGathers m mt q' recipes (0, h2)).2 k 0) :=
+            fun mt q' h1 h2 hr' hq' hag' => IH m (Nat.lt_succ_self m) mt q' h1 h2 hr' hq' hag'
+          exact agree_foldl recipes rank m item
+            (q - min (getD H2 item 0) q) hrempos IHcount (getD recipes item [])
+            (setD H1 item (getD H2 item 0 - min (getD H2 item 0) q))
+            (setD H2 item (getD H2 item 0 - min (getD H2 item 0) q))
+            0 hrkall hpoall hedgeR hsetag
+
+-- ---------------------------------------------------------------------------
 -- Craft-step coupling (the heart): minGathers after a valid craft ≤ before
 -- ---------------------------------------------------------------------------
 
@@ -1800,67 +2074,6 @@ theorem minGathers_craft_le_of_residual (recipes : Recipes) (rank : String → N
   unfold minGathersCount
   rw [Int.one_mul] at hrec_H hrec_H'
   omega
-
--- ---------------------------------------------------------------------------
--- DAG reachability guard (Round 8): Reaches recipes item c
--- ---------------------------------------------------------------------------
-
-/-!
-## Reachability guard
-
-Round 7 proved the UNCONDITIONAL craft-monotonicity FALSE (two machine-checked
-`#eval` counterexamples): crafting `c` can starve a SIBLING or a BELOW-`c` query
-of a shared raw input, raising `minGathersCount item 1 …`. The discriminating
-condition is whether `c` is a transitive sub-component of `item` in the recipe
-DAG — when it is, the `+1 c` lands inside `item`'s own recipe subtree and the
-consumed inputs are exactly mass `item`'s traversal would itself credit.
-
-`Reaches recipes item c` is the reflexive-transitive closure of the recipe-edge
-relation `m → mat` (for `(mat, per) ∈ recipeOf m`): `item` reaches `c` when
-`c = item` or `c` is reachable through one of `item`'s recipe inputs. It is the
-honest CORRECT guard (a true domain fact for plan-root queries, like
-`Acyclic`/`PosRecipes`), NOT a weakening of the false unconditional form.
--/
-
-/-- `Reaches recipes item c`: `c` is in the recipe-DAG closure of `item` — either
-`c = item`, or `c` is reachable through one of `item`'s recipe inputs
-transitively. Reflexive-transitive closure of the recipe-edge relation. -/
-inductive Reaches (recipes : Recipes) : String → String → Prop where
-  | refl (item : String) : Reaches recipes item item
-  | step {item mid c : String} {per : Int}
-      (hmid : Reaches recipes item mid)
-      (hedge : (c, per) ∈ getD recipes mid []) :
-      Reaches recipes item c
-
-/-- Reachability through a direct recipe edge: if `(mat, per) ∈ recipeOf item`
-then `item` reaches `mat`. -/
-theorem Reaches.edge (recipes : Recipes) (item mat : String) (per : Int)
-    (hedge : (mat, per) ∈ getD recipes item []) :
-    Reaches recipes item mat :=
-  Reaches.step (Reaches.refl item) hedge
-
-/-- Reachability is transitive: if `item` reaches `mid` and `mid` reaches `c`,
-then `item` reaches `c`. Induction on the second derivation. -/
-theorem Reaches.trans {recipes : Recipes} {item mid c : String}
-    (h1 : Reaches recipes item mid) (h2 : Reaches recipes mid c) :
-    Reaches recipes item c := by
-  induction h2 with
-  | refl => exact h1
-  | step _ hedge ih => exact Reaches.step ih hedge
-
-/-- Under `Acyclic`, reachability MONOTONELY does not increase rank: `c`
-reachable from `item` ⇒ `rank c ≤ rank item`. (Each edge strictly drops rank;
-the reflexive base is equality.) This certifies `Reaches` is well-founded and is
-the bound the guarded coupling uses to enter `item`'s subtree at lower rank. -/
-theorem Reaches.rank_le {recipes : Recipes} {rank : String → Nat}
-    (hacy : Acyclic recipes rank) {item c : String}
-    (h : Reaches recipes item c) : rank c ≤ rank item := by
-  induction h with
-  | refl => exact Nat.le_refl _
-  | step hmid hedge ih =>
-    rename_i mid cc per
-    have := hacy mid cc per hedge
-    omega
 
 -- ---------------------------------------------------------------------------
 -- Plan-level reachability: every craft targets a sub-component of the root
