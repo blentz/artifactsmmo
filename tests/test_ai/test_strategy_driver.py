@@ -2200,3 +2200,64 @@ def test_non_ring_keeps_one_slot_per_code():
                        equipment={"utility1_slot": "small_health_potion"})
     equip = EquipAction(code="small_health_potion", slot="utility2_slot")
     assert equip.is_applicable(state, gd) is False
+
+
+# ---------------------------------------------------------------------------
+# objective_step_goal depth-routing: feather_coat (deep chain)
+# ---------------------------------------------------------------------------
+
+def _gd_feather_coat() -> GameData:
+    """feather_coat body armour (gearcrafting-5): needs ash_plank×2 + feather×5.
+    feather is a monster drop (no crafting recipe). ash_plank is woodcrafted
+    from ash_wood×10 (REAL recipe quantities). With ash_wood×10 in inventory,
+    the full chain still needs 10 more ash_wood (2 planks × 10 = 20 total,
+    minus 10 owned = 10 remaining) plus 5 feathers = 15 raw gathers; add 2
+    crafts + 1 equip → min_plan_length = 18 > max_depth 15 →
+    UpgradeEquipmentGoal.is_plannable returns False by depth-reject alone.
+    The router must fall through to branch-3 (GatherMaterials on the step)."""
+    gd = GameData()
+    gd._item_stats = {
+        "feather_coat": ItemStats(code="feather_coat", level=5, type_="body_armor",
+                                  crafting_skill="gearcrafting", crafting_level=5),
+        "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource",
+                               crafting_skill="woodcutting", crafting_level=1),
+        "ash_wood": ItemStats(code="ash_wood", level=1, type_="resource"),
+        "feather": ItemStats(code="feather", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {
+        "feather_coat": {"ash_plank": 2, "feather": 5},
+        "ash_plank": {"ash_wood": 10},
+    }
+    gd._resource_drops = {"ash_tree": "ash_wood"}
+    gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
+    return gd
+
+
+def test_deep_gear_routes_to_incremental_gather_not_empty_upgrade():
+    """feather_coat from scratch: objective_step_goal returns a GatherMaterials
+    step (incremental progress), not the over-deep UpgradeEquipment.
+
+    Real recipe: feather_coat = {ash_plank:2, feather:5}, ash_plank = {ash_wood:10}.
+    With ash_wood×10 in inventory: need 10 more ash_wood + 5 feathers = 15 gathers
+    + 2 crafts + 1 equip = 18 > max_depth 15. UpgradeEquipmentGoal.is_plannable
+    returns False by depth-reject ALONE (no extra guard needed). The router must
+    reach branch-3 (gather_step_target → GatherMaterialsGoal)."""
+    gd = _gd_feather_coat()
+    state = make_state(
+        skills={"gearcrafting": 5, "woodcutting": 3},
+        inventory={"ash_wood": 10},
+        equipment={"body_armor_slot": None},
+        bank_items={},
+    )
+    step = ObtainItem("ash_plank", 2)
+    root = ObtainItem("feather_coat", 1, slot="body_armor_slot")
+    # Confirm WHY it routes: depth-reject (18 > max_depth 15), not a fixture artifact.
+    upgrade = UpgradeEquipmentGoal(initial_equipment=state.equipment,
+                                   committed_target=("feather_coat", "body_armor_slot"))
+    assert upgrade.is_plannable(state, gd) is False, (
+        "is_plannable must be False (min_plan_length 18 > max_depth 15) "
+        "so the depth-reject — not any extra guard — drives the route"
+    )
+    goal = objective_step_goal(step, state, gd, _ctx(), root=root, committed_root=root)
+    assert goal is not None
+    assert type(goal).__name__ == "GatherMaterialsGoal"

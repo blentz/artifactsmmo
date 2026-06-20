@@ -375,6 +375,25 @@ MODULES: tuple[ModuleSpec, ...] = (
         functions=("_min_gathers", "min_gathers"),
     ),
     ModuleSpec(
+        source="src/artifactsmmo_cli/ai/gather_floor.py",
+        output=f"{GENERATED_DIR}/GatherFloor.lean",
+        core_name="GatherFloor",
+        functions=("ceil_gathers",),
+    ),
+    ModuleSpec(
+        source="src/artifactsmmo_cli/ai/min_crafts.py",
+        output=f"{GENERATED_DIR}/MinCrafts.lean",
+        core_name="MinCrafts",
+        functions=("_min_crafts", "min_crafts"),
+    ),
+    ModuleSpec(
+        source="src/artifactsmmo_cli/ai/min_plan_length.py",
+        output=f"{GENERATED_DIR}/MinPlanLength.lean",
+        core_name="MinPlanLength",
+        functions=("min_plan_length",),
+        imports=("ceil_gathers", "min_gathers", "min_crafts"),
+    ),
+    ModuleSpec(
         source="src/artifactsmmo_cli/ai/equipment/scoring.py",
         output=f"{GENERATED_DIR}/EquipmentScoring.lean",
         core_name="EquipmentScoring",
