@@ -48,36 +48,63 @@ because of the omitted craft/equip steps. With the estimate honest, feather_coat
 final feathers (live-verified: `GatherMaterials(feather,{feather:5})` plans to
 `Fight(chicken)×5`).
 
+## The discovered gap this discharges (why the proof is the centerpiece)
+
+The existing depth-bound proof (`PlannerDepthBound.lean:94-103`,
+`reachable_not_satisfying_when_lb_exceeds_depth`) proves the *mechanism* — IF a
+sound lower bound `lb` on satisfying-plan length exceeds `maxDepth`, no reachable
+node is satisfied — but it takes the lower-bound property as an **UNPROVEN
+HYPOTHESIS**:
+
+```lean
+(hsat_lb : ∀ n, satisfyingLen n → n.planLen ≥ lb)   -- assumed, never discharged
+```
+
+`satisfyingLen` is an abstract `Node → Prop` with no tie to the action semantics
+or to what `minGathers` computes. So the production gate `is_plannable` rests on
+an *assumed* connection between its estimate and real plan length. That assumption
+is the trust gap. **This work DISCHARGES it** (full, zero assumed hypothesis).
+
 ## What is proven — and what is NOT (honest scope)
 
-**PROVEN (closes the bug's gap):**
-- A new pure core `min_plan_length(item, recipes, owned)` = lower bound on plan
-  length counting **mints + craft steps + equip** (not just mints).
-- **Theorem `min_plan_length_le_plan` (soundness):** for every plan `P` that
-  produces (and, for an equippable, equips) `item` from `owned`,
-  `min_plan_length(item, recipes, owned) ≤ P.length`.
-- Compose with the existing `plan_length_le_max_depth`:
-  **`min_plan_length(item) > max_depth ⟹ no plan exists within max_depth`** —
-  so `is_plannable = False` (rejection) is **proven never to reject a genuinely
-  plannable goal**, and the estimate's inclusion of crafts+equip means it no
-  longer over-admits at the `mints == max_depth` boundary.
+**PROVEN (full discharge):**
+- A minimal **plan-action model** in Lean: an `Action` (`gather code | craft code
+  | equip code`), a `Plan = List Action`, and an `apply`/`produces` semantics
+  giving the multiset of items a plan yields from `owned` holdings, plus a
+  predicate `SatisfiesEquip plan item` ("plan crafts and equips `item`").
+- A new pure core `min_plan_length(item, recipes, owned)` = `mints + crafts +
+  equip` (mints = `min_gathers`; crafts = one per craftable closure node needing
+  production; equip = 1 for an equippable).
+- **Theorem `min_plan_length_le_plan` (the discharge):** for every `Plan P` with
+  `SatisfiesEquip P item`, `min_plan_length(item, recipes, owned) ≤ P.length`.
+  Sub-lemmas: `min_gathers ≤ (gather actions in P)` (mass-conservation induction
+  over the recipe DAG); `crafts ≤ (craft actions in P)`; `1 ≤ (equip actions in
+  P)`; the three action kinds are disjoint so the sum bounds `P.length`.
+- **`hsat_lb` is then DISCHARGED**, not assumed: instantiate
+  `reachable_not_satisfying_when_lb_exceeds_depth` with `lb = min_plan_length` and
+  `satisfyingLen = SatisfiesEquip`, proving the hypothesis from
+  `min_plan_length_le_plan`. Result:
+  **`min_plan_length(item) > max_depth ⟹ no satisfying plan within max_depth`**,
+  with NO remaining assumption — so `is_plannable = False` is proven sound, and
+  the crafts+equip terms remove the `mints == max_depth` over-admit.
 - Production `min_plan_length` is bound to the Lean model by the differential +
-  mutation gate (same function over all inputs), exactly as `min_gathers` is
-  today (`Extracted/MinGathers.lean` + `test_gather_step_target_diff.py`).
+  mutation gate (same function over all inputs), like `min_gathers`
+  (`Extracted/MinGathers.lean` + `test_gather_step_target_diff.py`).
 
-**NOT proven — stated, not claimed:**
+**NOT proven — stated, not claimed (named in the theorem docstrings):**
 - A* **completeness within the time budget** — a plan may exist but the bounded
   search times out. We do not prove the planner finds every plan.
-- **Movement / inventory-space** contributions to plan length — `min_plan_length`
-  bounds craft+gather+equip actions, not travel or deposit/discard interleavings.
-- Therefore `is_plannable = True` remains **necessary, not sufficient**: it means
-  "not excluded by the proven depth lower bound," NOT "a plan is guaranteed." The
-  spec and the proof name this boundary explicitly; no theorem or docstring
-  claims full planner completeness.
+- **Movement / inventory-space** contributions to plan length — the model counts
+  gather/craft/equip actions, not travel or deposit/discard interleavings.
+- Therefore `is_plannable = True` stays **necessary, not sufficient**: "not
+  excluded by the proven depth lower bound," NOT "a plan is guaranteed." No
+  theorem or docstring claims full planner completeness; the model abstracts the
+  action set to exactly the kinds the lower bound counts.
 
-The headline claim is exactly: **the depth-admission estimate is a sound lower
-bound on true plan length** — eliminating the false-"plannable" verdict that came
-from omitting craft/equip actions.
+Headline, exactly: **the depth-admission estimate is proven (no assumed
+hypothesis) to be a sound lower bound on true plan length** for the gather/craft/
+equip action model — eliminating the false-"plannable" verdict from omitted
+craft/equip actions, and discharging the previously-assumed `hsat_lb`.
 
 ## Components
 
@@ -106,11 +133,27 @@ So: `return ceil_gathers(min_gathers(...), max_yield) + crafts + equip <= max_de
 take `max_gather_yield` and apply the divide internally to the mint term only.)
 The skill-gate fast-fail check above it (lines 135-138) is unchanged.
 
-### 3. Lean proof
-`formal/Formal/` — `minPlanLength` def + `min_plan_length_le_plan` theorem +
-the composition `min_plan_length_gt_maxDepth_imp_no_plan`. Reuse the
-`PlannerDepthBound.lean` plan model and the `MinGathers.lean` extraction pattern.
-Extract `min_plan_length` to `Extracted/`.
+### 3. Lean plan-action model + discharge proof (the centerpiece)
+`formal/Formal/PlanModel.lean` (new) + additions to `PlannerDepthBound.lean`:
+- `Action` (`gather String | craft String | equip String`), `Plan := List Action`,
+  an `apply`/`produces : Plan → owned → Multiset/assoc-list of items`, and
+  `SatisfiesEquip : Plan → String → Prop` ("plan crafts+equips the item").
+- `minPlanLength` def (mirrors the production core), extracted to `Extracted/`.
+- **Sub-lemmas** (the real proof work):
+  - `minGathers_le_gathers` — `min_gathers(item) ≤ (# gather actions in P)` for any
+    `P` producing `item`; mass-conservation induction over the recipe DAG with
+    holdings credited (mirrors `_min_gathers`'s greedy consume).
+  - `crafts_le_crafts` — one craft per produced craftable node ≤ `# craft actions`.
+  - `one_le_equips` — `SatisfiesEquip ⟹ ≥ 1 equip action`.
+  - disjointness of the three action kinds ⇒ `minPlanLength ≤ P.length`
+    (`min_plan_length_le_plan`).
+- **Discharge:** `min_plan_length_gt_maxDepth_imp_no_plan` instantiates
+  `reachable_not_satisfying_when_lb_exceeds_depth` with `lb = minPlanLength`,
+  `satisfyingLen = SatisfiesEquip`, hypothesis proved by `min_plan_length_le_plan`
+  — NO assumed `hsat_lb`. Replace/retire the assumed-hypothesis
+  `copper_boots_unreachable_under_upgrade_depth` with the discharged version.
+- Each "NOT proven" boundary (A* completeness, movement, inventory) is named in
+  the theorem docstrings so the model's abstraction is explicit, not hidden.
 
 ### 4. Differential + mutation
 `formal/diff/` — a `test_min_plan_length_diff.py` (or extend
@@ -137,8 +180,12 @@ stall; no slime-leveling fallback for an attainable gear objective.
   `objective_step_goal` returns a `GatherMaterials` step (NOT an empty-plan
   `UpgradeEquipment`), and is non-None (no fallthrough to char-level when the
   gear is attainable).
-- Lean: `lake build` 0 sorry; `min_plan_length_le_plan` + composition proven;
-  axiom-clean. Differential green; mutation kills the drop-craft-term mutant.
+- Lean: `lake build` 0 sorry; the plan-action model + `min_plan_length_le_plan`
+  proven; `hsat_lb` DISCHARGED (the no-plan theorem has no assumed lower-bound
+  hypothesis — grep the final theorem for a residual `hsat_lb`/`planLen ≥`
+  hypothesis and confirm it is gone); axiom-clean (no new `axiom`/`sorry`/
+  `native_decide`); the per-axiom liveness gate passes. Differential green;
+  mutation kills the drop-craft-term mutant.
 - `formal/gate.sh` ALL GATE PARTS PASSED; full Python suite 100% coverage.
 
 ## Non-goals / YAGNI
