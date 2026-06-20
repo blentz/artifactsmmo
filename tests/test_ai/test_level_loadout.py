@@ -185,3 +185,25 @@ def test_hp_bonus_ceiling_guarantees_hp_ge_projected_max() -> None:
     for s in stats.values():
         if s.level <= 5:
             assert base_max_hp + ceiling >= base_max_hp + s.hp_bonus
+
+
+def test_hp_bonus_ceiling_multi_slot_rings_sum_top_two() -> None:
+    """Multi-slot types sum top-N hp_bonus values (N = slot count).
+
+    pick_loadout equips ring1_slot + ring2_slot independently, so the ceiling
+    must be >= copper_ring.hp_bonus + iron_ring.hp_bonus (5 + 3 = 8), NOT just
+    max(5, 3) = 5.  The old per-type-max logic returned 5; the corrected
+    sum-top-N logic returns 8.
+    """
+    base_max_hp = 200
+    stats = {
+        "copper_ring": ItemStats(code="copper_ring", level=5, type_="ring", hp_bonus=5),
+        "iron_ring": ItemStats(code="iron_ring", level=5, type_="ring", hp_bonus=3),
+    }
+    ceiling = obtainable_hp_bonus_ceiling(stats, 5)
+    # Must cover BOTH rings (two ring slots), not just the best one.
+    assert ceiling >= 5 + 3, (
+        f"ceiling {ceiling} undercounts: two ring slots require hp_bonus sum of "
+        f"both rings (5 + 3 = 8), not just max (5)"
+    )
+    assert base_max_hp + ceiling >= base_max_hp + 5 + 3

@@ -34,10 +34,10 @@ def best_weapon_for_level(
     attack, then highest item level, then last code lexicographically. Returns
     ``None`` when no weapon is obtainable at `level`.
 
-    Retained for the Lean C1b-proof layer (``bestWeaponForLevel`` in
-    ``GearTierLeveling.lean``) that mirrors the weapon-only proxy over the
-    extracted item stats. The sweep itself uses ``obtainable_inventory_for_level``
-    + ``obtainable_hp_bonus_ceiling`` for the full-loadout + full-HP model.
+    Retained for the planned C1b Lean kernel proof (per-level stat model), not
+    yet referenced in any Lean file. The sweep itself uses
+    ``obtainable_inventory_for_level`` + ``obtainable_hp_bonus_ceiling`` for the
+    full-loadout + full-HP model.
     """
     candidates = [
         stats
@@ -83,25 +83,33 @@ def obtainable_hp_bonus_ceiling(
 ) -> int:
     """Upper bound on total HP bonus from the best obtainable gear at ``level``.
 
-    Sums the maximum ``hp_bonus`` available per equip-slot TYPE (not per slot
-    instance) across all obtainable items (``item.level <= level``). Because
-    ``project_loadout_stats`` accumulates ``hp_bonus`` for every slot that
-    changes, the projected ``max_hp = state.max_hp + Σ_slot hp_bonus`` is at
+    For each equippable item TYPE, sums the top-N ``hp_bonus`` values where N is
+    the number of slots that type occupies (``len(ITEM_TYPE_TO_SLOTS[type_])``).
+    Multi-slot types (ring→2, artifact→3, utility→2) thus contribute the SUM of
+    their N best items, matching how ``pick_loadout`` fills all N slots
+    independently with distinct items.
+
+    Because ``project_loadout_stats`` accumulates ``hp_bonus`` for every slot
+    that changes, the projected ``max_hp = state.max_hp + Σ_slot hp_bonus`` is at
     most ``state.max_hp + this ceiling``. Setting ``state.hp = base_max_hp +
     ceiling`` therefore guarantees ``state.hp >= p.max_hp`` for ANY loadout
     ``pick_loadout`` selects — so ``effective_hp = min(state.hp, p.max_hp) ==
     p.max_hp`` and the combat verdict runs at FULL projected HP (faithful to the
     bot resting before fighting).
 
-    The ceiling is CONSERVATIVE in the sense that it may overcount hp_bonus for
-    types with multiple slots (e.g. rings contribute only once here even though
-    ring1+ring2 could stack), so ``state.hp`` may exceed ``p.max_hp`` slightly,
-    which is harmless — ``effective_hp`` is still clamped to ``p.max_hp``.
+    The ceiling is a genuine upper bound: it never undercounts, so
+    ``state.hp >= p.max_hp`` holds for any per-monster loadout ``pick_loadout``
+    can choose.
     """
-    best_per_type: dict[str, int] = {}
+    hp_bonuses_per_type: dict[str, list[int]] = {}
     for stats in stats_by_code.values():
         if stats.level > level or stats.type_ not in ITEM_TYPE_TO_SLOTS:
             continue
-        if stats.hp_bonus > best_per_type.get(stats.type_, 0):
-            best_per_type[stats.type_] = stats.hp_bonus
-    return sum(best_per_type.values())
+        if stats.hp_bonus > 0:
+            hp_bonuses_per_type.setdefault(stats.type_, []).append(stats.hp_bonus)
+    total = 0
+    for type_, bonuses in hp_bonuses_per_type.items():
+        n_slots = len(ITEM_TYPE_TO_SLOTS[type_])
+        bonuses.sort(reverse=True)
+        total += sum(bonuses[:n_slots])
+    return total

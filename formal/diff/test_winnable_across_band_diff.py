@@ -376,8 +376,10 @@ def test_winnable_across_band_real_sweep() -> None:
     )
     assert not gaps, (
         f"WinnableAcrossBand gaps — no winnable, XP-positive, not-overleveled "
-        f"monster at band level(s) {gaps} (optimistic-weapon proxy; armor the "
-        f"proxy ignores could still close these). Winners covered: "
+        f"monster at band level(s) {gaps}. This is a genuine gap: the full "
+        f"optimistic loadout (best obtainable weapon + armor + rings + amulet + "
+        f"utility at each band level) cannot defeat any XP-positive in-window "
+        f"monster. No catalog item at this level closes the gap. Winners covered: "
         f"{sorted(winners)}. Uncaptured levels (skipped): {missing}."
     )
 
