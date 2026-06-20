@@ -215,6 +215,30 @@ def ValidCraftAt (recipes : List (String × List (String × Int)))
   ∀ (mat : String) (per : Int),
     (mat, per) ∈ recipe_list → per ≤ dictGet holdings mat
 
+/-- The recipe input list for `code` (empty if `code` is raw / absent). Mirrors
+the `recipe_list` let-binding used in `applyAction`/`ValidCraftAt`. -/
+def recipeOf (recipes : List (String × List (String × Int)))
+    (code : String) : List (String × Int) :=
+  match List.find? (fun p => p.1 == code) recipes with
+  | none   => []
+  | some p => p.2
+
+/-- `ValidGatherAt recipes code` holds when `code` is **raw** — it has no recipe
+entry (an empty input list). A resource tile only yields raw materials; a
+craftable item can never be gathered. This is the per-step pre-condition
+enforced by `ValidPlan` at each `gather` action.
+
+**Faithfulness note.** Without this restriction the model's `gather code` would
+mint one unit of *any* code — including a fully-craftable item like
+`feather_coat` — for a single gather, contradicting the production
+`min_gathers` lower bound (`src/.../ai/min_gathers.py`: "a raw material can only
+be obtained by gathering"). Requiring the gathered code to be raw is exactly the
+production assumption that makes `min_gathers` a sound lower bound, so adding it
+*strengthens* faithfulness; the cheat-plan `example` below is unaffected. -/
+def ValidGatherAt (recipes : List (String × List (String × Int)))
+    (code : String) : Prop :=
+  recipeOf recipes code = []
+
 -- ---------------------------------------------------------------------------
 -- ValidPlan: all craft actions have their inputs present at execution time
 -- ---------------------------------------------------------------------------
@@ -232,8 +256,9 @@ def ValidPlanFrom (recipes : List (String × List (String × Int)))
   | []      => True
   | a :: rest =>
       (match a with
-       | Action.craft code => ValidCraftAt recipes s.holdings code
-       | _                 => True) ∧
+       | Action.craft code  => ValidCraftAt recipes s.holdings code
+       | Action.gather code => ValidGatherAt recipes code
+       | _                  => True) ∧
       ValidPlanFrom recipes (applyAction recipes s a) rest
 
 /-- `ValidPlan recipes owned plan`: the plan is input-respecting when run from
