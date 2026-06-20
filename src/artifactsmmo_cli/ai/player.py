@@ -1227,7 +1227,15 @@ class GamePlayer:
         def servable(root: MetaGoal, step: MetaGoal) -> bool:
             goal = objective_step_goal(step, state, game_data, ctx,
                                        root=root, committed_root=root)
-            return goal is not None and goal.is_plannable(state, game_data, self.history)
+            if goal is None or not goal.is_plannable(state, game_data, self.history):
+                return False
+            # is_plannable is an OPTIMISTIC cheap gate (feather_coat passed it yet the
+            # planner found plan_len=0 over 8789 nodes). The doomed memo carries the
+            # REAL plan-failure signal from prior cycles, so a root whose goal actually
+            # failed to plan is demoted rather than re-committed while the bot
+            # char-grinds the fallback. Re-probed when the plannability signature
+            # changes (e.g. a level-up) via DoomedMemo's TTL.
+            return not self._arbiter.goal_doomed(repr(goal), state)
         return servable
 
     def _update_sticky_anchor(

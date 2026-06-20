@@ -10,7 +10,12 @@ root wins next cycle. See Formal/Liveness/StickySelect.lean.
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
 from tests.test_ai.fixtures import make_state
-from tests.test_ai.test_strategy_driver import _make_planner_gd
+from tests.test_ai.test_strategy_driver import (
+    _ctx,
+    _gd,
+    _make_planner_gd,
+    objective_step_goal,
+)
 
 
 def _player() -> GamePlayer:
@@ -83,6 +88,36 @@ def test_none_root_clears_anchor():
     p._update_sticky_anchor(None, make_state(), _make_planner_gd(), True)
     assert p._last_strategy_root is None
     assert p._sticky_progress_value is None
+
+
+def test_step_servable_demotes_doomed_goal():
+    # is_plannable is optimistic (feather_coat passed it yet planned to plan_len=0).
+    # The doomed memo carries the REAL plan-failure signal: a goal that actually
+    # failed to plan is demoted by the servable predicate so chosen_root stops
+    # committing to an unbuildable objective while the bot char-grinds.
+    p = GamePlayer(character="hero")
+    gd = _gd()
+    st = make_state()
+    ctx = _ctx()
+    step = ObtainItem("ash_plank", 6)
+    goal = objective_step_goal(step, st, gd, ctx, root=step, committed_root=step)
+    assert goal is not None and goal.is_plannable(st, gd)
+    pred = p._step_servable(st, gd, ctx)
+    # Not doomed -> servable.
+    assert pred(step, step) is True
+    # Mark the goal doomed in the arbiter memo -> predicate demotes it.
+    p._arbiter.set_cycle(3)
+    p._arbiter._memo.mark(repr(goal), st, 3)
+    assert pred(step, step) is False
+
+
+def test_arbiter_goal_doomed_reflects_memo():
+    p = GamePlayer(character="hero")
+    st = make_state()
+    p._arbiter.set_cycle(0)
+    assert p._arbiter.goal_doomed("SomeGoal()", st) is False
+    p._arbiter._memo.mark("SomeGoal()", st, 0)
+    assert p._arbiter.goal_doomed("SomeGoal()", st) is True
 
 
 def test_switching_root_rearms_for_new_root():
