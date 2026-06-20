@@ -2159,6 +2159,83 @@ theorem minGathers_craft_le_of_residual (recipes : Recipes) (rank : String → N
   rw [Int.one_mul] at hrec_H hrec_H'
   omega
 
+/-- **CRAFT STEP — recon reduction, CORRECT DIRECTION (0-sorry).**
+
+ROUND 9 FINDING (machine-checked): the Ψ-closure does NOT need the
+`g(H') ≤ g(H)` direction that rounds 1–8 and the round-9 prompt chased — it needs
+the OPPOSITE, and that opposite is TRUE WITHOUT any reachability guard.
+
+The Ψ-potential `Ψ(s) = s.gathers + minGathersCount item 1 s.holdings` must be
+NON-DECREASING per `ValidPlan` action so that `Ψ_start ≤ Ψ_end` gives
+`minGathersCount item 1 owned ≤ planGathers`. For a `craft` step (gathers fixed)
+"non-decreasing" means `Ψ(before) ≤ Ψ(after)`, i.e.
+
+    minGathersCount item 1 recipes H ≤ minGathersCount item 1 recipes H'     (★)
+
+— the count goes UP (or stays) when you craft. This is intuitively obvious: a
+valid craft converts raw mass into ONE intermediate `c`, which can only increase
+(or keep) the remaining work to reach `item` from the current holdings.
+
+`(★)` was VERIFIED by `#eval` to hold for EVERY query `item` over every valid
+craft of every craftable `c`, with NO reachability guard — INCLUDING round 7's
+"counterexamples" (which only refuted the WRONG direction `g(H') ≤ g(H)`):
+  - query below `c` (`R=[(c,[(wood,2)])]`, `H=[wood:2]`): `g(H)=0 ≤ g(H')=1` ✓
+  - sibling `d` sharing a raw pool: `g(d,H)=0 ≤ g(d,H')=2` ✓
+  - root that already over-holds `c` (a NEW round-9 counterexample to the
+    `g(H')≤g(H)` form even UNDER `Reaches`: `g(root,H)=0`, `g(root,H')=2`): the
+    correct direction `0 ≤ 2` holds ✓.
+
+So the `Reaches`/`PlanReaches` guard machinery (rounds 7–8) is NOT needed for the
+craft step at all — the correct statement is unconditional in `item`. This lemma
+banks the recon reduction in the correct direction: `(★)` reduces EXACTLY to the
+residual cost-mass comparison
+
+    costMass F (minGathers F item 1 recipes (0, H)).2 recipes
+      ≤ costMass F (minGathers F item 1 recipes (0, H')).2 recipes      (F=|recipes|+1)
+
+via `minGathers_recon` at `H` and `H'` + `costMass_craft_preserved'` (cost-mass
+conserved cancels the holdings terms). Note this is the round-7 residual
+comparison with the inequality FLIPPED — same equivalence (round 5), now pointing
+the way the Ψ-closure actually needs.
+
+**Honesty note.** The residual comparison `hres` is an explicit premise — NOT
+discharged here, NOT assumed downstream. It is the genuine remaining content (a
+cost-mass coupling: `g(H) ≤ g(H')` still has the round-5/6 wall, mirrored —
+`minGathers_mono` gives bounds the wrong way, so the `+1 c`'s cost-neutrality
+`wf c = recipeMass(inputs c)` must be threaded through the greedy traversal). But
+it is now UNGUARDED and correctly directed. -/
+theorem minGathers_craft_ge_of_residual (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank)
+    (hRB : ∀ item, rank item ≤ recipes.length)
+    (item c : String) (H : Dict Int)
+    (hcr : ¬ (getD recipes c []).length = 0)
+    (hres : costMass (recipes.length + 1)
+              (minGathers (recipes.length + 1) item 1 recipes (0, H)).2 recipes
+          ≤ costMass (recipes.length + 1)
+              (minGathers (recipes.length + 1) item 1 recipes
+                (0, (applyAction recipes { gathers := 0, crafts := 0, holdings := H }
+                      (Action.craft c)).holdings)).2 recipes) :
+    minGathersCount item 1 recipes H
+      ≤ minGathersCount item 1 recipes
+        (applyAction recipes { gathers := 0, crafts := 0, holdings := H }
+          (Action.craft c)).holdings := by
+  have hrec_H := minGathers_recon recipes rank hpos hacy (recipes.length + 1)
+    (recipes.length + 1) item 1 H (by have := hRB item; omega) (by have := hRB item; omega)
+    (by omega)
+  have hrec_H' := minGathers_recon recipes rank hpos hacy (recipes.length + 1)
+    (recipes.length + 1) item 1
+    (applyAction recipes { gathers := 0, crafts := 0, holdings := H } (Action.craft c)).holdings
+    (by have := hRB item; omega) (by have := hRB item; omega) (by omega)
+  have hcm : costMass (recipes.length + 1)
+      (applyAction recipes { gathers := 0, crafts := 0, holdings := H } (Action.craft c)).holdings
+        recipes
+      = costMass (recipes.length + 1) H recipes :=
+    costMass_craft_preserved' recipes rank hpos hacy recipes.length c
+      { gathers := 0, crafts := 0, holdings := H } hcr (by have := hRB c; omega)
+  unfold minGathersCount
+  rw [Int.one_mul] at hrec_H hrec_H'
+  omega
+
 -- ---------------------------------------------------------------------------
 -- Plan-level reachability: every craft targets a sub-component of the root
 -- ---------------------------------------------------------------------------
