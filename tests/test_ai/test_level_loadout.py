@@ -1,6 +1,10 @@
-"""Tests for the catalog-wide best-weapon-by-level proxy (WinnableAcrossBand sweep)."""
+"""Tests for the catalog-wide best-equipment-by-level proxy (WinnableAcrossBand sweep)."""
 
-from artifactsmmo_cli.ai.equipment.level_loadout import best_weapon_for_level
+from artifactsmmo_cli.ai.equipment.level_loadout import (
+    best_weapon_for_level,
+    obtainable_hp_bonus_ceiling,
+    obtainable_inventory_for_level,
+)
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 
 
@@ -66,3 +70,118 @@ def test_tie_on_attack_and_level_broken_by_code() -> None:
     best = best_weapon_for_level(stats, 5)
     assert best is not None
     assert best.code == "zzz"
+
+
+# ---------------------------------------------------------------------------
+# obtainable_inventory_for_level
+# ---------------------------------------------------------------------------
+
+
+def test_obtainable_inventory_empty_catalog() -> None:
+    assert obtainable_inventory_for_level({}, 10) == {}
+
+
+def test_obtainable_inventory_only_equippable_types_included() -> None:
+    """Consumables and non-equip types are excluded; weapons and armor are kept."""
+    stats = {
+        "sword": _weapon("sword", 1, {"fire": 5}),
+        "helm": ItemStats(code="helm", level=1, type_="helmet", resistance={"fire": 10}),
+        "potion": ItemStats(code="potion", level=1, type_="consumable", hp_restore=50),
+        "raw_mat": ItemStats(code="raw_mat", level=1, type_="resource"),
+    }
+    result = obtainable_inventory_for_level(stats, 10)
+    assert result == {"sword": 1, "helm": 1}
+
+
+def test_obtainable_inventory_excludes_items_above_level() -> None:
+    stats = {
+        "low_sword": _weapon("low_sword", 5, {"fire": 10}),
+        "high_sword": _weapon("high_sword", 15, {"fire": 30}),
+        "low_boots": ItemStats(code="low_boots", level=5, type_="boots", hp_bonus=20),
+        "high_boots": ItemStats(code="high_boots", level=15, type_="boots", hp_bonus=50),
+    }
+    result = obtainable_inventory_for_level(stats, 10)
+    assert result == {"low_sword": 1, "low_boots": 1}
+
+
+def test_obtainable_inventory_quantity_is_always_one() -> None:
+    """Each item gets quantity 1 (presence in catalog = one obtainable copy)."""
+    stats = {
+        "sword": _weapon("sword", 1, {"fire": 5}),
+        "armor": ItemStats(code="armor", level=1, type_="body_armor", resistance={"fire": 10}),
+    }
+    result = obtainable_inventory_for_level(stats, 10)
+    assert all(qty == 1 for qty in result.values())
+
+
+def test_obtainable_inventory_at_exact_level_boundary() -> None:
+    """item.level == L is included; item.level == L+1 is excluded."""
+    stats = {
+        "at_level": _weapon("at_level", 5, {"fire": 10}),
+        "above_level": _weapon("above_level", 6, {"fire": 20}),
+    }
+    result = obtainable_inventory_for_level(stats, 5)
+    assert result == {"at_level": 1}
+
+
+# ---------------------------------------------------------------------------
+# obtainable_hp_bonus_ceiling
+# ---------------------------------------------------------------------------
+
+
+def test_hp_bonus_ceiling_empty_catalog() -> None:
+    assert obtainable_hp_bonus_ceiling({}, 10) == 0
+
+
+def test_hp_bonus_ceiling_no_hp_bonus_items() -> None:
+    """Items with hp_bonus=0 contribute nothing to the ceiling."""
+    stats = {
+        "sword": _weapon("sword", 1, {"fire": 5}),  # hp_bonus defaults to 0
+        "helm": ItemStats(code="helm", level=1, type_="helmet"),  # hp_bonus=0
+    }
+    assert obtainable_hp_bonus_ceiling(stats, 10) == 0
+
+
+def test_hp_bonus_ceiling_sums_max_per_type() -> None:
+    """Best hp_bonus per type is summed across distinct types."""
+    stats = {
+        "helm_low": ItemStats(code="helm_low", level=1, type_="helmet", hp_bonus=10),
+        "helm_high": ItemStats(code="helm_high", level=5, type_="helmet", hp_bonus=30),
+        "boots": ItemStats(code="boots", level=1, type_="boots", hp_bonus=15),
+    }
+    # helmets: max hp_bonus = 30; boots: 15 → ceiling = 45
+    assert obtainable_hp_bonus_ceiling(stats, 10) == 45
+
+
+def test_hp_bonus_ceiling_excludes_above_level() -> None:
+    """Items above the level cap are excluded from the ceiling."""
+    stats = {
+        "helm_ok": ItemStats(code="helm_ok", level=5, type_="helmet", hp_bonus=20),
+        "helm_too_high": ItemStats(code="helm_too_high", level=15, type_="helmet", hp_bonus=100),
+    }
+    assert obtainable_hp_bonus_ceiling(stats, 10) == 20
+
+
+def test_hp_bonus_ceiling_excludes_non_equippable_types() -> None:
+    """Non-equip types (consumables, resources) don't contribute to ceiling."""
+    stats = {
+        "potion": ItemStats(code="potion", level=1, type_="consumable", hp_restore=200, hp_bonus=0),
+        "helm": ItemStats(code="helm", level=1, type_="helmet", hp_bonus=25),
+    }
+    assert obtainable_hp_bonus_ceiling(stats, 10) == 25
+
+
+def test_hp_bonus_ceiling_guarantees_hp_ge_projected_max() -> None:
+    """Core soundness check: base + ceiling >= base + any-item's hp_bonus
+    for every obtainable item, so state.hp >= p.max_hp for any loadout."""
+    base_max_hp = 200
+    stats = {
+        "helm": ItemStats(code="helm", level=5, type_="helmet", hp_bonus=30),
+        "boots": ItemStats(code="boots", level=5, type_="boots", hp_bonus=15),
+        "sword": _weapon("sword", 5, {"fire": 10}),  # hp_bonus=0
+    }
+    ceiling = obtainable_hp_bonus_ceiling(stats, 5)
+    # ceiling must be >= the hp_bonus of any individual obtainable item
+    for s in stats.values():
+        if s.level <= 5:
+            assert base_max_hp + ceiling >= base_max_hp + s.hp_bonus

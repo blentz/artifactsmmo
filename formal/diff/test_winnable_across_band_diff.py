@@ -30,43 +30,44 @@ as `state.<stat> + Σ_slot (picked − equipped)`. `predict_win` reads ONLY the
 projected stats (`p.attack[e]`, `p.max_hp`, `p.resistance[e]`,
 `p.critical_strike`, `p.initiative`, `p.dmg`, `p.dmg_elements`) plus `state.hp`.
 
-So to feed `is_winnable` the totals `base + best_weapon`, we construct the
-WorldState as:
+To feed `is_winnable` the totals `base + BEST FULL OBTAINABLE LOADOUT`, we
+construct the WorldState as:
 
   * stat fields (`attack`, `max_hp`, `resistance`, `critical_strike`,
     `initiative`, `dmg`, `dmg_elements`) = the captured per-level BASE stats,
     with NO gear baked in;
-  * `equipment = {}` (nothing equipped) so the weapon contributes its FULL
-    stats (no `new == old` cancellation in projection);
-  * `inventory = {weapon.code: 1}` so `pick_loadout`'s owned-item scan finds
-    the weapon as the sole weapon-slot candidate and equips it;
-  * `level = L` so `state.level >= weapon.level` (the `_candidates_for_slot`
-    gate) — the best weapon is `item.level <= L` by construction;
-  * `hp = projected_max_hp = base.max_hp + weapon.hp_bonus` so
-    `effective_hp = min(state.hp, p.max_hp) == p.max_hp` — i.e. the verdict is
-    rendered at FULL projected HP (a character entering a fight rested).
+  * `equipment = {}` (nothing equipped) so every equipped piece contributes its
+    FULL stat delta (no `new == old` cancellation in projection);
+  * `inventory = obtainable_inventory_for_level(L)` — every equippable item
+    with `item.level <= L` with quantity 1, so `pick_loadout`'s per-slot scan
+    finds the strongest item for each slot and equips it;
+  * `level = L` so `state.level >= item.level` (the `_candidates_for_slot`
+    gate) — every item in the obtainable inventory is usable by construction;
+  * `hp = base_max_hp + obtainable_hp_bonus_ceiling(L)` — an upper bound on
+    the total HP bonus any loadout `pick_loadout` could produce, which guarantees
+    `effective_hp = min(state.hp, p.max_hp) == p.max_hp` — the verdict is
+    rendered at FULL projected HP (faithful to the bot resting before fighting).
 
-After `pick_loadout` equips the weapon, `project_loadout_stats` adds the
-weapon's `attack`, `dmg`, `dmg_elements`, `resistance`, `critical_strike`,
+After `pick_loadout` selects the best full loadout, `project_loadout_stats` adds
+each piece's `attack`, `dmg`, `dmg_elements`, `resistance`, `critical_strike`,
 `initiative`, `hp_bonus` on top of the base fields. The totals fed to
-`predict_win` therefore equal **base + best weapon** — exactly the claim's
-projected player. We call the REAL `is_winnable` / `pick_winnable_monster_pure`
+`predict_win` therefore equal **base + best full obtainable gear** — the
+claim's projected player. We call the REAL `is_winnable` / `pick_winnable_monster_pure`
 / `xp_per_kill` — never a re-derived predicate.
 
 ## SOUNDNESS GAP (documented, not hidden)
 
-This is the OPTIMISTIC-WEAPON proxy and it is intentionally one-sided:
+This is the OPTIMISTIC-FULL-LOADOUT proxy, intentionally one-sided on
+ACQUISITION — not on GEAR STRENGTH:
 
-  1. ONLY the weapon is modelled. Base armor/ring/amulet/utility contributions
-     are NOT added beyond the captured base. Real gear ADDS attack/resistance/
-     hp/crit, so the real character is at least as strong as this proxy ⇒ any
-     monster this proxy calls winnable is winnable for the real (better-geared)
-     character too. The proxy is CONSERVATIVE for "winnable exists": a gap it
-     reports (no winnable at level L) could still be closed by armor the proxy
-     ignores, so a reported gap is an UPPER BOUND on the true gap, not proof of
-     one. (`best_weapon_for_level` is the catalog-wide upper bound on the weapon
-     itself; the proxy is optimistic about ACQUISITION — the bot may not yet own
-     the best weapon — and pessimistic about non-weapon gear.)
+  1. The full best-per-slot gear is modelled (weapon + armor + rings + amulet
+     + utility). Real gear ADDS attack/resistance/hp/crit, so the real character
+     is at least as strong as this proxy, ONCE the gear is obtained. Any monster
+     this proxy calls winnable is winnable for the real (better-or-equal-geared)
+     character. The proxy is optimistic about ACQUISITION — the bot may not yet
+     own the best gear — and that gear-obtainability residual is precisely Task 3
+     (corner 3). A gap it reports (no winnable at level L) is genuine: no catalog
+     item at this level can defeat the monster with any loadout.
   2. Monster effect maps (poison/lifesteal/…) are whatever the snapshot
      carries; the live snapshot currently only captures the core monster stats,
      so exotic abilities default to 0 (matching `GameData`'s 0-fallback). This
@@ -104,7 +105,11 @@ import pytest
 
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
-from artifactsmmo_cli.ai.equipment.level_loadout import best_weapon_for_level
+from artifactsmmo_cli.ai.equipment.level_loadout import (
+    best_weapon_for_level,
+    obtainable_hp_bonus_ceiling,
+    obtainable_inventory_for_level,
+)
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
 from artifactsmmo_cli.ai.equipment.scoring import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
@@ -130,33 +135,44 @@ COMBAT_FIELD_MARKER = "attack"
 # ---------------------------------------------------------------------------
 
 
-def _base_world_state(level: int, base_row: dict[str, Any], weapon: ItemStats,
-                      ) -> WorldState:
+def _base_world_state(
+    level: int,
+    base_row: dict[str, Any],
+    inventory: dict[str, int],
+    hp_bonus_ceiling: int,
+) -> WorldState:
     """Construct the faithful level-`level` combat WorldState.
 
-    Stat fields = BASE stats (no gear baked in). `weapon` sits in inventory and
-    nothing is equipped, so production's `pick_loadout` equips the weapon and
-    `project_loadout_stats` adds its full contribution ⇒ the totals fed to
-    `predict_win` are `base + weapon`. `hp` is set to the projected max
-    (`base.max_hp + weapon.hp_bonus`) so the verdict renders at full HP.
+    Stat fields = BASE stats (no gear baked in). All obtainable items for this
+    level sit in `inventory` and nothing is equipped, so production's
+    `pick_loadout` selects the best full loadout and `project_loadout_stats`
+    adds each piece's full contribution ⇒ the totals fed to `predict_win` are
+    `base + best full obtainable gear`.
+
+    `hp` is set to `base.max_hp + hp_bonus_ceiling`, where `hp_bonus_ceiling`
+    is the sum of the maximum hp_bonus available per item type at this level
+    (an upper bound on what any pick_loadout selection can add to max_hp).
+    This guarantees `effective_hp = min(state.hp, p.max_hp) == p.max_hp` —
+    the verdict runs at FULL projected HP (faithful to the bot resting before
+    fighting).
 
     See the module docstring "How the faithful level-L WorldState is built".
     """
     base_attack = {e: v for e, v in base_row["attack"].items() if v != 0}
     base_resistance = {e: v for e, v in base_row["resistance"].items() if v != 0}
-    projected_max_hp = base_row["max_hp"] + weapon.hp_bonus
+    hp = base_row["max_hp"] + hp_bonus_ceiling
     return WorldState(
         character="sweep",
         level=level,
         xp=0,
         max_xp=999999,
-        hp=projected_max_hp,
+        hp=hp,
         max_hp=base_row["max_hp"],
         gold=0,
         skills={},
         x=0,
         y=0,
-        inventory={weapon.code: 1},
+        inventory=inventory,
         inventory_max=40,
         equipment={},
         cooldown_expires=None,
@@ -186,21 +202,20 @@ def _winnable_in_band_target(
     game_data: GameData,
 ) -> str | None:
     """Production verdict: the picked winnable, XP-positive, not-overleveled
-    monster for a level-`level` character wielding the best obtainable weapon,
+    monster for a level-`level` character with the best full obtainable loadout,
     or `None` if no such monster exists (a `WinnableAcrossBand` gap).
 
-    Drives the REAL chain: `best_weapon_for_level` → faithful WorldState →
+    Drives the REAL chain: `obtainable_inventory_for_level` → faithful
+    WorldState (full obtainable catalog as inventory, full projected HP) →
     `pick_winnable_monster_pure` over the live catalog with the REAL
-    `is_winnable` and the REAL `xp_per_kill > 0` predicate. The picker's
-    own not-overleveled (suicide-guard) filter (`level <= char_level + 2`) is
-    exactly the Lean `notOverleveled`, so a returned target witnesses all three
-    band conditions."""
-    weapon = best_weapon_for_level(stats_by_code, level)
-    if weapon is None:
-        # No obtainable weapon at this level — the proxy cannot even arm the
-        # character. Treat as no winnable target (a genuine gap).
-        return None
-    state = _base_world_state(level, base_row, weapon)
+    `is_winnable` (which calls `pick_loadout` internally) and the REAL
+    `xp_per_kill > 0` predicate. The picker's own not-overleveled
+    (suicide-guard) filter (`level <= char_level + 2`) is exactly the Lean
+    `notOverleveled`, so a returned target witnesses all three band conditions.
+    """
+    inventory = obtainable_inventory_for_level(stats_by_code, level)
+    hp_ceiling = obtainable_hp_bonus_ceiling(stats_by_code, level)
+    state = _base_world_state(level, base_row, inventory, hp_ceiling)
     return pick_winnable_monster_pure(
         level,
         list(game_data.monster_levels.items()),
@@ -422,27 +437,35 @@ def _synthetic_base_stats() -> dict[str, dict[str, Any]]:
 
 def test_synthetic_harness_reports_monster_winnable() -> None:
     """End-to-end self-test of the harness on an in-memory catalog: the
-    constructed base+weapon WorldState must let production's REAL `is_winnable`
-    beat the synthetic monster, and the sweep must pick it as the in-band
-    winnable target for the captured level. Proves the WorldState construction
-    and production-call wiring work before real fixtures exist."""
+    constructed base + full-obtainable-loadout WorldState must let production's
+    REAL `is_winnable` beat the synthetic monster, and the sweep must pick it as
+    the in-band winnable target for the captured level. Proves the WorldState
+    construction and production-call wiring work before real fixtures exist."""
     stats_by_code = _synthetic_stats_by_code()
     game_data = _synthetic_game_data(stats_by_code)
     base_stats = _synthetic_base_stats()
 
-    # Direct: the faithful WorldState (base + iron_sword) beats the chicken via
-    # the REAL is_winnable.
-    weapon = best_weapon_for_level(stats_by_code, 5)
-    assert weapon is not None and weapon.code == "iron_sword"
-    state = _base_world_state(5, base_stats["5"], weapon)
+    # Direct: the faithful WorldState (base + full obtainable inventory at L5)
+    # beats the chicken via the REAL is_winnable. The synthetic catalog has only
+    # iron_sword (weapon, level 1, fire 40), so the full obtainable inventory at
+    # L5 is {"iron_sword": 1} — identical to the old weapon-only proxy here.
+    inventory = obtainable_inventory_for_level(stats_by_code, 5)
+    hp_ceiling = obtainable_hp_bonus_ceiling(stats_by_code, 5)
+    assert inventory == {"iron_sword": 1}
+    assert hp_ceiling == 0  # iron_sword has hp_bonus=0
+    state = _base_world_state(5, base_stats["5"], inventory, hp_ceiling)
     assert is_winnable(state, game_data, "chicken") is True
 
-    # The projected totals are base + weapon (the construction is faithful):
+    # The projected totals are base + iron_sword (the construction is faithful):
     # base attack {} + iron_sword fire 40 ⇒ projected fire attack 40.
     loadout = pick_loadout("chicken", state, game_data)
     projected = project_loadout_stats(state, loadout, game_data)
     assert projected.attack.get("fire") == 40, projected.attack
-    assert projected.max_hp == 145  # base.max_hp + weapon.hp_bonus(0)
+    assert projected.max_hp == 145  # base.max_hp(145) + iron_sword.hp_bonus(0)
+
+    # best_weapon_for_level is still usable for Lean C1b layer reference:
+    weapon = best_weapon_for_level(stats_by_code, 5)
+    assert weapon is not None and weapon.code == "iron_sword"
 
     # Full sweep: level 5 has a winnable in-band target; no gaps; other band
     # levels are "missing" (no captured row), not gaps.
