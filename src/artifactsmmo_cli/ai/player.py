@@ -140,6 +140,11 @@ class GamePlayer:
         # forever (weaponcrafting 1028-cycle hold). See
         # Formal/Liveness/StickySelect.lean + docs/PLAN_zombie_progress_gate.md.
         self._sticky_progress_value: int | None = None
+        # Per-cycle servable-filter diagnostic (2026-06-20): whether the committed
+        # chosen_root's step is plannable now. Emitted in the trace so a live run can
+        # confirm the filter demotes unservable top roots (feather_coat) instead of
+        # committing to them while char-grinding. See _step_servable / servable_filter.
+        self._last_servability_diag: dict[str, object] = {}
         # Learned minimum tasks_coin worth attempting a taskmaster exchange. The
         # API does not expose the per-exchange cost as data, so we discover it
         # from HTTP 478 ("missing items") failures: raise the bound past any coin
@@ -309,14 +314,25 @@ class GamePlayer:
                 assert self._strategy is not None
                 combat_monster = self._winnable_farm_target()
                 ctx = self._selection_context(combat_monster)
+                servable_pred = self._step_servable(state, game_data, ctx)
                 decision = self._strategy.decide(
                     state, game_data,
                     history=self.history,
                     combat_monster=combat_monster,
                     last_chosen_root=self._last_strategy_root,
-                    step_servable=self._step_servable(state, game_data, ctx),
+                    step_servable=servable_pred,
                 )
                 self._last_decision = decision
+                # Diagnostic: is the committed root's step actually servable this
+                # cycle? After the servable-filter this should be True whenever any
+                # root is servable; a committed root with a False here means the
+                # filter fell back (nothing servable) — surfaced in the trace.
+                cr, cs = decision.chosen_root, decision.chosen_step
+                self._last_servability_diag = {
+                    "chosen_root_servable": bool(
+                        cr is not None and cs is not None and servable_pred(cr, cs)),
+                    "chosen_root": repr(cr) if cr is not None else None,
+                }
                 step = decision.chosen_step
                 crafting_target = step.code if isinstance(step, ObtainItem) else None
                 # When the top step isn't ObtainItem (e.g. bootstrap
@@ -850,6 +866,7 @@ class GamePlayer:
             "outcome": outcome,
             "recovery": recovery,
             "suppressed_goals": list(self._suppressed_goals.keys()),
+            "servability": self._last_servability_diag,
         }
         if self._strategy is not None and self.game_data is not None:
             decision = self._last_decision or self._strategy.decide(
