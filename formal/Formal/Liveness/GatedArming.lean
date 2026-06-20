@@ -1,3 +1,4 @@
+-- @concept: liveness, planner @property: liveness
 import Formal.Liveness.StickySelect
 
 /-! # GatedArming — derive `objectiveStepIsFight` from the progress-gated selection

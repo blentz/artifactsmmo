@@ -1,3 +1,4 @@
+-- @concept: liveness, planner @property: liveness, safety
 import Mathlib.Tactic
 
 /-! # StickySelect — Tier-2 root sticky selection + progress-gated release

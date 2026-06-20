@@ -1,3 +1,4 @@
+-- @concept: liveness, planner @property: liveness
 import Formal.Liveness.StickySelect
 import Formal.Liveness.Measure
 

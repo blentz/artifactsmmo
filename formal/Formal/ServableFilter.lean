@@ -1,5 +1,4 @@
-import Mathlib.Tactic
-
+-- @concept: core, planner @property: safety, totality
 /-! # ServableFilter — keep only plannable-step roots when any is plannable
 
 Mirrors `src/artifactsmmo_cli/ai/tiers/servable_filter.py::keep_servable`, the filter
