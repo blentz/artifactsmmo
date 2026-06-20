@@ -219,7 +219,15 @@ class GatherMaterialsGoal(Goal):
         fights_by_code: dict[str, FightAction] = {
             a.monster_code: a for a in actions if isinstance(a, FightAction)
         }
-        for item in self._needed:
+        # Emit a fight for EVERY monster-drop in the full recipe closure, not just
+        # top-level needed items. feather_coat (needed={feather_coat:1}) is crafted,
+        # not dropped; its feather input is a chicken drop deep in the closure. The
+        # old `for item in self._needed` missed it, so Fight(chicken) never entered
+        # the action set and GatherMaterials(feather_coat) planned to plan_len=0 — the
+        # bot then char-grinded slimes instead of hunting chickens (trace 2026-06-20).
+        # `chain` is the closure demand (built above for `withdrawable`); non-drop
+        # items (feather_coat, ash_plank) have no droppers and are skipped.
+        for item in chain:
             droppers = game_data.monsters_dropping(item)
             if not droppers:
                 continue

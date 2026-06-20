@@ -18,6 +18,7 @@ import Formal.PriorityBand
 import Formal.OwnedCount
 import Formal.UpgradeSelection
 import Formal.Scalarizer
+import Formal.ServableFilter
 import Formal.PlannerAdmissibility
 import Formal.PlannerDepthBound
 import Formal.TieredSelection
@@ -183,6 +184,9 @@ import Formal.Liveness.CycleStepF
 import Formal.Liveness.CycleStepFIteration
 import Formal.Liveness.MeasureDescent
 import Formal.Liveness.LevelingDescent
+import Formal.Liveness.StickySelect
+import Formal.Liveness.ZombieFreedom
+import Formal.Liveness.GatedArming
 import Formal.Liveness.WarmupCleared
 import Formal.Liveness.Leveling
 import Formal.Liveness.FightReady

@@ -297,6 +297,54 @@ def test_is_winnable_false_when_prediction_loses():
     assert is_winnable(state, gd, "mob", None) is False
 
 
+def _record_wins(store: LearningStore, action_repr: str, n: int) -> None:
+    _record_mixed(store, action_repr, wins=n, losses=0)
+
+
+def test_monotonic_win_flags_lower_level_after_higher_win(tmp_path):
+    """A win vs a level-2 monster flags a level-1 monster winnable even when the
+    stat formula (predict_win) would lose against it."""
+    state = make_state(max_hp=10, attack={"fire": 1}, initiative=0)
+    gd = _gd(hp=10000, attack={"fire": 50}, initiative=100, code="chicken")
+    gd._monster_level = {"chicken": 1, "slime": 2}
+    store = LearningStore(db_path=str(tmp_path / "l.db"), character="h")
+    _record_wins(store, "Fight(slime)", 1)
+    assert predict_win(state, gd, "chicken") is False
+    assert is_winnable(state, gd, "chicken", store) is True
+
+
+def test_monotonic_win_does_not_flag_higher_level(tmp_path):
+    """A win vs a level-1 monster does NOT flag a level-2 monster winnable."""
+    state = make_state(max_hp=10, attack={"fire": 1}, initiative=0)
+    gd = _gd(hp=10000, attack={"fire": 50}, initiative=100, code="slime")
+    gd._monster_level = {"chicken": 1, "slime": 2}
+    store = LearningStore(db_path=str(tmp_path / "l.db"), character="h")
+    _record_wins(store, "Fight(chicken)", 1)
+    assert is_winnable(state, gd, "slime", store) is False
+
+
+def test_monotonic_win_vetoed_by_own_loss(tmp_path):
+    """Having lost to THIS monster, the higher-level-win inference is suppressed
+    (the 'until a future loss' caveat)."""
+    state = make_state(max_hp=10, attack={"fire": 1}, initiative=0)
+    gd = _gd(hp=10000, attack={"fire": 50}, initiative=100, code="chicken")
+    gd._monster_level = {"chicken": 1, "slime": 2}
+    store = LearningStore(db_path=str(tmp_path / "l.db"), character="h")
+    _record_wins(store, "Fight(slime)", 1)
+    _record_mixed(store, "Fight(chicken)", wins=0, losses=1)  # one loss to chicken
+    assert is_winnable(state, gd, "chicken", store) is False
+
+
+def test_monotonic_win_needs_an_actual_win(tmp_path):
+    """A LOSS vs a higher-level monster is not a win — no inference."""
+    state = make_state(max_hp=10, attack={"fire": 1}, initiative=0)
+    gd = _gd(hp=10000, attack={"fire": 50}, initiative=100, code="chicken")
+    gd._monster_level = {"chicken": 1, "slime": 2}
+    store = LearningStore(db_path=str(tmp_path / "l.db"), character="h")
+    _record_losses(store, "Fight(slime)", 1)
+    assert is_winnable(state, gd, "chicken", store) is False
+
+
 def test_is_winnable_veto_overrides_optimistic_prediction(tmp_path):
     """A well-observed loss record vetoes a stat prediction that says we win."""
     state = make_state(max_hp=100, attack={"fire": 30}, initiative=50)

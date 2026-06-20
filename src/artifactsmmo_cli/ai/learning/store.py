@@ -336,6 +336,25 @@ class LearningStore:
         except SQLAlchemyError:
             return 0
 
+    def win_count(self, action_repr: str) -> int:
+        """Number of cycles with outcome=='ok' recorded for this action_repr. The raw
+        (NOT warmup-gated) success tally — `success_rate` returns 1.0 below 5 samples,
+        so it cannot distinguish a single win from a single loss; the monotonic-win
+        winnability inference needs the unsmoothed count."""
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = (
+                    select(Cycle.id)
+                    .where(
+                        Cycle.character == self._character,
+                        Cycle.action_repr == action_repr,
+                        Cycle.outcome == "ok",
+                    )
+                )
+                return len(list(s.exec(stmt)))
+        except SQLAlchemyError:
+            return 0
+
     def action_stats(self, action_repr: str, window: int = WINDOW_ACTION) -> ActionStats:
         """Return one Pydantic-validated rollup for one action."""
         n = self.sample_count(action_repr)

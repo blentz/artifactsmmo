@@ -57,7 +57,11 @@ from artifactsmmo_cli.ai.recovery import (
     StuckExit,
     StuckSignal,
 )
-from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
+from artifactsmmo_cli.ai.strategy_driver import (
+    StrategyArbiter,
+    monster_drop_inputs,
+    objective_step_goal,
+)
 from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
 from artifactsmmo_cli.ai.tiers import (
     BalancedPersonality,
@@ -66,7 +70,11 @@ from artifactsmmo_cli.ai.tiers import (
     StrategyDecision,
     StrategyEngine,
 )
+from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
+from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal
+from artifactsmmo_cli.ai.tiers.root_progress import root_progress_value
+from artifactsmmo_cli.ai.tiers.sticky_select_core import next_last
 from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.ai.winnable_cascade import CascadeInputs, winnable_farm_target_pure
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
@@ -130,6 +138,18 @@ class GamePlayer:
         # is_reachable (e.g. combat_capable=False for one cycle from a
         # pick_loadout shift) doesn't demote the active objective.
         self._last_strategy_root: str | None = None
+        # Progress-gated sticky release (2026-06-20): the committed root's progress
+        # value recorded last cycle. The anchor is re-fed only when this cycle's value
+        # strictly exceeds it (the root advanced on its own axis). Replaces the broken
+        # `chosen_step_alive` gate that re-committed a never-executing zombie grind
+        # forever (weaponcrafting 1028-cycle hold). See
+        # Formal/Liveness/StickySelect.lean + docs/PLAN_zombie_progress_gate.md.
+        self._sticky_progress_value: int | None = None
+        # Per-cycle servable-filter diagnostic (2026-06-20): whether the committed
+        # chosen_root's step is plannable now. Emitted in the trace so a live run can
+        # confirm the filter demotes unservable top roots (feather_coat) instead of
+        # committing to them while char-grinding. See _step_servable / servable_filter.
+        self._last_servability_diag: dict[str, object] = {}
         # Learned minimum tasks_coin worth attempting a taskmaster exchange. The
         # API does not expose the per-exchange cost as data, so we discover it
         # from HTTP 478 ("missing items") failures: raise the bound past any coin
@@ -212,11 +232,10 @@ class GamePlayer:
         b = self._blockers.get("bank")
         return b.required_level if b else 0
 
-    def run(self) -> None:
-        """Main loop: sense → select goal → plan → act."""
-        client_manager = ClientManager()
-        client = client_manager.client
-
+    def _initialize(self, client: AuthenticatedClient) -> None:
+        """Load game data, build the strategy engine, fetch state, and seed blocker
+        memory + the cycle-0 full-bank-refresh sentinel. Shared by `run()` and the
+        one-shot `plan_once()` so both sense the world identically before planning."""
         print(f"[{self._now()}] Loading game data...")
         self.game_data = GameData.load(
             client,
@@ -268,6 +287,66 @@ class GamePlayer:
         # value at/above the periodic threshold triggers the refresh on cycle 0.
         self._actions_since_full_refresh = BANK_REFRESH_FORCE_SENTINEL
 
+    def plan_once(self) -> PlanReport:
+        """Sense the world and compute ONE planning cycle WITHOUT executing — the
+        `plan` CLI command. Mirrors run()'s per-cycle decide+select (same refresh,
+        gear-latch, combat target, servable filter, crafting-target keep-set) so the
+        printed plan is exactly what the bot would do this cycle. No cooldown wait, no
+        action execution, no state mutation on the server."""
+        client = ClientManager().client
+        self._initialize(client)
+        self._maybe_periodic_refresh(client)
+        assert self.state is not None and self.game_data is not None
+        assert self._strategy is not None
+        state = self.state
+        game_data = self.game_data
+        self._maybe_retry_bank()
+        prev = self._prev_level if self._prev_level is not None else state.level
+        self._gear_latch.update(prev, state, self._last_outcome, game_data)
+        self._prev_level = state.level
+        self._arbiter.set_cycle(self._cycle_counter)
+        combat_monster = self._winnable_farm_target()
+        ctx = self._selection_context(combat_monster)
+        decision = self._strategy.decide(
+            state, game_data, history=self.history, combat_monster=combat_monster,
+            last_chosen_root=self._last_strategy_root,
+            step_servable=self._step_servable(state, game_data, ctx))
+        step = decision.chosen_step
+        crafting_target = step.code if isinstance(step, ObtainItem) else None
+        if crafting_target is None:
+            for alt in getattr(decision, "fallback_steps", []):
+                if isinstance(alt, ObtainItem):
+                    crafting_target = alt.code
+                    break
+        self.state = state = replace(state, crafting_target=crafting_target)
+        actions = self._build_actions()
+        selected_goal, plan, goals_tried = self._arbiter.select(
+            decision, state, game_data, actions, ctx,
+            suppressed=set(self._suppressed_goals), objective=self._objective)
+        # For the chosen objective's recipe, report each monster-drop input's live
+        # winnability — an unwinnable drop (e.g. chicken too strong) makes the gear
+        # unbuildable, which is the difference between "hunts chickens" and "can't".
+        drop_inputs: list[dict[str, object]] = []
+        root = decision.chosen_root
+        if isinstance(root, ObtainItem):
+            for leaf in monster_drop_inputs(root.code, game_data):
+                droppers = [m for m, *_ in game_data.monsters_dropping(leaf)]
+                winnable = sorted(
+                    m for m in droppers
+                    if is_winnable(state, game_data, m, self.history)
+                    and game_data.monster_locations(m))
+                drop_inputs.append({"item": leaf, "droppers": sorted(droppers),
+                                    "winnable": winnable})
+        return PlanReport(decision=decision, selected_goal=selected_goal,
+                          plan=list(plan), goals_tried=goals_tried,
+                          drop_inputs=drop_inputs)
+
+    def run(self) -> None:
+        """Main loop: sense → select goal → plan → act."""
+        client_manager = ClientManager()
+        client = client_manager.client
+        self._initialize(client)
+
         print(f"[{self._now()}] Starting play loop for {self.character}")
 
         try:
@@ -299,13 +378,25 @@ class GamePlayer:
                 assert self._strategy is not None
                 combat_monster = self._winnable_farm_target()
                 ctx = self._selection_context(combat_monster)
+                servable_pred = self._step_servable(state, game_data, ctx)
                 decision = self._strategy.decide(
                     state, game_data,
                     history=self.history,
                     combat_monster=combat_monster,
                     last_chosen_root=self._last_strategy_root,
+                    step_servable=servable_pred,
                 )
                 self._last_decision = decision
+                # Diagnostic: is the committed root's step actually servable this
+                # cycle? After the servable-filter this should be True whenever any
+                # root is servable; a committed root with a False here means the
+                # filter fell back (nothing servable) — surfaced in the trace.
+                cr, cs = decision.chosen_root, decision.chosen_step
+                self._last_servability_diag = {
+                    "chosen_root_servable": bool(
+                        cr is not None and cs is not None and servable_pred(cr, cs)),
+                    "chosen_root": repr(cr) if cr is not None else None,
+                }
                 step = decision.chosen_step
                 crafting_target = step.code if isinstance(step, ObtainItem) else None
                 # When the top step isn't ObtainItem (e.g. bootstrap
@@ -331,16 +422,21 @@ class GamePlayer:
                     suppressed=set(self._suppressed_goals),
                     objective=self._objective,
                 )
-                # Stickiness anchor: re-commit to chosen_root ONLY when its own
-                # top step served a goal this cycle. A ZOMBIE root (chosen but
-                # whose step yielded None — e.g. a reservation-starved skill
-                # grind) is released so a higher-value plannable root can win the
-                # next cycle instead of staying sticky forever (weaponcrafting
-                # level-5 plateau, trace 2026-06-19).
-                if decision.chosen_root is not None and self._arbiter.chosen_step_alive:
-                    self._last_strategy_root = repr(decision.chosen_root)
-                else:
-                    self._last_strategy_root = None
+                # Progress-gated stickiness anchor (2026-06-20): re-commit to
+                # chosen_root ONLY when it BOTH yielded a goal this cycle
+                # (chosen_step_alive) AND strictly advanced on its own progress axis
+                # since last cycle. The 2026-06-19 chosen_step_alive-only gate was
+                # insufficient: a skill grind produces a goal object every cycle
+                # (chosen_step_alive=True) that never wins arbitration, so weaponcrafting
+                # xp froze at 75 for 1028 cycles while the anchor re-committed forever.
+                # The progress value (root_progress_value) is keyed to the root TYPE, so
+                # gathering mining xp while committed to weaponcrafting does NOT count —
+                # the frozen committed-skill value releases the zombie, and the
+                # higher-value plannable root wins next cycle (released_picks_top). Pure
+                # feedback core: sticky_select_core.next_last (Lean nextLast).
+                self._update_sticky_anchor(
+                    decision.chosen_root, state, game_data,
+                    self._arbiter.chosen_step_alive)
                 # Trace ranking: the candidates the arbiter actually tried, in order.
                 goal_rank_trace: list[dict[str, object]] = [
                     {"goal": gt["goal"], "priority": 0.0} for gt in goals_tried
@@ -834,6 +930,7 @@ class GamePlayer:
             "outcome": outcome,
             "recovery": recovery,
             "suppressed_goals": list(self._suppressed_goals.keys()),
+            "servability": self._last_servability_diag,
         }
         if self._strategy is not None and self.game_data is not None:
             decision = self._last_decision or self._strategy.decide(
@@ -1180,6 +1277,49 @@ class GamePlayer:
             path_winnable=path_winnable,
             pick_winnable=pick,
         ))
+
+    def _step_servable(
+        self, state: WorldState, game_data: GameData, ctx: SelectionContext
+    ) -> Callable[[MetaGoal, MetaGoal], bool]:
+        """Build the per-root plannability predicate decide() uses to demote roots
+        whose actionable step can't be served this cycle. A root is servable when its
+        step routes to a goal (objective_step_goal) that is plannable now — the same
+        objective_step_goal the arbiter will resolve, so decide()'s servability matches
+        what select() can actually serve. Closes the feather_coat mismatch: a body
+        armor whose woodcutting-gated step yields an unplannable GatherMaterials is
+        demoted below the plannable ReachCharLevel grind."""
+        def servable(root: MetaGoal, step: MetaGoal) -> bool:
+            goal = objective_step_goal(step, state, game_data, ctx,
+                                       root=root, committed_root=root)
+            return goal is not None and goal.is_plannable(state, game_data, self.history)
+        return servable
+
+    def _update_sticky_anchor(
+        self, chosen_root: MetaGoal | None, state: WorldState,
+        game_data: GameData, chosen_step_alive: bool) -> None:
+        """Progress-gated Tier-2 sticky release (2026-06-20). Re-feed `chosen_root` as
+        next cycle's sticky anchor ONLY when it yielded a goal this cycle AND advanced
+        on its own progress axis since last cycle; otherwise release it so the
+        highest-value plannable root wins next cycle. A freshly-chosen root gets one
+        cycle to act before the progress gate can release it. Mirrors
+        `Formal/Liveness/StickySelect.lean::nextLast`; the frozen-axis release kills the
+        weaponcrafting zombie (1028-cycle hold)."""
+        if chosen_root is None:
+            self._last_strategy_root = None
+            self._sticky_progress_value = None
+            return
+        cur_value = root_progress_value(chosen_root, state, game_data)
+        if repr(chosen_root) == self._last_strategy_root:
+            # Same root as last cycle: the value was recorded then (set in lockstep
+            # with the anchor), so it is non-None here. Progress = it advanced.
+            assert self._sticky_progress_value is not None
+            progressed = cur_value > self._sticky_progress_value
+        else:
+            # Freshly chosen this cycle: one cycle to act before the gate can release.
+            progressed = True
+        progressed = progressed and chosen_step_alive
+        self._last_strategy_root = next_last(repr(chosen_root), progressed)
+        self._sticky_progress_value = cur_value
 
     def _maybe_retry_bank(self) -> None:
         """Periodically retry bank access after an achievement gate failure

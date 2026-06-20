@@ -38,8 +38,11 @@ concept tag, or a concept with no module, is a traceability gap.
 | InventoryChainSafe | bank, items | safety |
 | InventoryProfile | bank, items, crafting | safety |
 | LiquidationVenue | grandexchange | dominance, totality, safety, monotonicity |
+| Liveness.GatedArming | liveness, planner | liveness |
 | Liveness.ItemsTaskRun | tasks | safety, totality, reachability |
 | Liveness.ItemsTaskTermination | tasks, crafting, bank | safety, totality |
+| Liveness.StickySelect | liveness, planner | liveness, safety |
+| Liveness.ZombieFreedom | liveness, planner | liveness |
 | LivenessChain | combat, monsters | reachability, no-deadlock |
 | LowYieldCancel | tasks | safety, monotonicity |
 | MonsterDropApply | combat, planner | liveness, safety |
@@ -64,6 +67,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | RealizableLoadout | items, characters | safety |
 | RecycleProtection | items, crafting | safety |
 | Scalarizer | core | monotonicity |
+| ServableFilter | core, planner | safety, totality |
 | ShoppingList | resources | dominance, monotonicity, safety, totality |
 | SkillGateFastFail | core, planner | safety, totality |
 | SkillGrindSelection | crafting, planner | safety, totality |

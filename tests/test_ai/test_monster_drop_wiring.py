@@ -9,7 +9,7 @@ MonsterDropCandidate per monster, call select_monster_for_drop, and keep ONLY th
 winner FightAction (structurally identical to the existing GatherSelection narrowing).
 """
 from artifactsmmo_cli.ai.actions.combat import FightAction
-from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.strategy_driver import objective_step_goal
@@ -34,6 +34,34 @@ def _winnable_state(**overrides) -> object:
                 attack={"fire": 30}, initiative=50)
     base.update(overrides)
     return make_state(**base)
+
+
+def test_crafted_item_emits_fight_for_drop_recipe_input() -> None:
+    """The fix (2026-06-20): GatherMaterials(feather_coat, {feather_coat:1}) — a
+    CRAFTED item, not a drop — must still emit Fight(chicken) for its feather
+    recipe-INPUT (a chicken drop deep in the closure). The old emission loop only
+    iterated top-level `needed` (feather_coat), so the chicken fight never entered
+    the action set and the goal planned to plan_len=0; the bot then char-grinded
+    slimes instead of hunting chickens. Now the loop walks the recipe closure."""
+    gd = GameData()
+    gd._item_stats = {
+        "feather_coat": ItemStats(code="feather_coat", level=1, type_="body_armor",
+                                  crafting_skill="gearcrafting", crafting_level=1),
+    }
+    gd._crafting_recipes = {"feather_coat": {"feather": 2}}
+    gd._monster_level = {"chicken": 1}
+    gd._monster_drops = {"chicken": [("feather", 8, 1, 1)]}
+    gd._monster_locations = {"chicken": [(0, 1)]}
+    fill_monster_stat_defaults(gd)
+    gd._monster_hp = {"chicken": 10}
+    state = _winnable_state(inventory={}, inventory_max=50)
+    actions = [FightAction(monster_code="chicken", locations=frozenset({(0, 1)}))]
+    goal = GatherMaterialsGoal(target_item="feather_coat", needed={"feather_coat": 1})
+    relevant = goal.relevant_actions(actions, state, gd)
+    assert any(isinstance(a, FightAction) and a.monster_code == "chicken"
+               for a in relevant), (
+        "Fight(chicken) for the feather recipe-input must be emitted so the planner "
+        "can hunt chickens for feathers")
 
 
 def test_gather_feather_plans_via_fighting_chicken() -> None:

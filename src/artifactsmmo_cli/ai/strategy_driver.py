@@ -451,6 +451,45 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
     return upgrade  # pragma: no cover
 
 
+def _recipe_has_combat_drop_input(
+    code: str, game_data: GameData, visited: frozenset[str] = frozenset()) -> bool:
+    """True when `code`'s recipe closure contains a PURE monster-drop leaf — an
+    input obtained only by fighting (e.g. feather <- chicken), neither craftable
+    nor a resource-node drop. Such an input forces the whole-chain GOAP plan to
+    interleave fights with gathers/crafts, exploding the search; the caller routes
+    to flat per-input steps instead. Cycle-safe."""
+    if code in visited:
+        return False
+    recipe = game_data.crafting_recipe(code)
+    if recipe is None:
+        return (bool(game_data.monsters_dropping(code))
+                and code not in game_data.resource_drops.values())
+    nxt = visited | {code}
+    return any(_recipe_has_combat_drop_input(mat, game_data, nxt) for mat in recipe)
+
+
+def monster_drop_inputs(
+    code: str, game_data: GameData, visited: frozenset[str] = frozenset()) -> list[str]:
+    """The PURE monster-drop leaves in `code`'s recipe closure (inputs obtained only
+    by fighting, e.g. feather). Used by the `plan` CLI to report whether those drops
+    are winnable for the live loadout. Cycle-safe; deterministic order."""
+    if code in visited:
+        return []
+    recipe = game_data.crafting_recipe(code)
+    if recipe is None:
+        if (game_data.monsters_dropping(code)
+                and code not in game_data.resource_drops.values()):
+            return [code]
+        return []
+    nxt = visited | {code}
+    out: list[str] = []
+    for mat in recipe:
+        for leaf in monster_drop_inputs(mat, game_data, nxt):
+            if leaf not in out:
+                out.append(leaf)
+    return out
+
+
 def objective_step_goal(
     step: MetaGoal | None,
     state: WorldState,
@@ -484,6 +523,19 @@ def objective_step_goal(
             root_stats = game_data.item_stats(root.code)
             root_slots = ITEM_TYPE_TO_SLOTS.get(root_stats.type_) if root_stats is not None else None
             if root_slots:
+                # Recipe with a MONSTER-DROP input (feather <- chicken): planning the
+                # whole craft+equip chain EXPLODES — the GOAP A* must interleave
+                # fights, gathers, crafts and travel across the chicken spawn /
+                # resource node / workshop, which times out (live: feather_coat 57k
+                # nodes, depth 23, plan_len 0). The recipe is deterministic but the
+                # search is not. Collect inputs INCREMENTALLY: route to the flat
+                # actionable step (gather wood / craft plank / hunt chickens for
+                # feathers, one at a time). Each flat GatherMaterials plans within
+                # budget — GatherMaterials(feather) emits Fight(chicken) and is a flat
+                # hunt — and once every input is in hand the final craft is shallow.
+                if _recipe_has_combat_drop_input(root.code, game_data):
+                    return GatherMaterialsGoal(target_item=step.code,
+                                               needed={step.code: step.quantity})
                 dest_slot = root.slot if root.slot is not None else root_slots[0]
                 upgrade = UpgradeEquipmentGoal(initial_equipment=state.equipment,
                                                committed_target=(root.code, dest_slot))
