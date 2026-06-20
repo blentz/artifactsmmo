@@ -9,17 +9,19 @@ greedy-consume so it extracts to Lean cleanly."""
 from collections.abc import Mapping
 
 
-def min_crafts(item: str, qty: int, recipes: "Mapping[str, dict[str, int]]",
+def min_crafts(item: str, qty: int, recipes: Mapping[str, dict[str, int]],
                owned: dict[str, int]) -> int:
-    return _min_crafts(len(recipes) + 1, item, qty, recipes, (0, dict(owned)))[0]
+    state = _min_crafts(len(recipes) + 1, item, qty, recipes, (0, dict(owned)))
+    return state[0]
 
 
 def _min_crafts(fuel: int, item: str, qty: int,
-                recipes: "Mapping[str, dict[str, int]]",
+                recipes: Mapping[str, dict[str, int]],
                 state: tuple[int, dict[str, int]]) -> tuple[int, dict[str, int]]:
     if fuel <= 0:
         return state
-    total, owned = state[0], state[1]
+    total = state[0]
+    owned = state[1]
     held = owned.get(item, 0)
     used = min(held, qty)
     owned[item] = held - used

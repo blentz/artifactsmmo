@@ -12,9 +12,9 @@ from artifactsmmo_cli.ai.min_gathers import min_gathers
 
 
 def min_plan_length(item: str, qty: int,
-                    recipes: "Mapping[str, dict[str, int]]",
+                    recipes: Mapping[str, dict[str, int]],
                     owned: dict[str, int], max_gather_yield: int,
-                    *, equip: bool) -> int:
+                    equip: bool) -> int:
     mints = ceil_gathers(min_gathers(item, qty, recipes, owned), max_gather_yield)
     crafts = min_crafts(item, qty, recipes, owned)
     return mints + crafts + (1 if equip else 0)

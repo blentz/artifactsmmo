@@ -55,6 +55,9 @@ import Formal.Extracted.InventoryCaps
 import Formal.Extracted.CyclesForProgress
 import Formal.Extracted.ScalarCore
 import Formal.Extracted.MinGathers
+import Formal.Extracted.GatherFloor
+import Formal.Extracted.MinCrafts
+import Formal.Extracted.MinPlanLength
 import Formal.Extracted.EquipmentScoring
 import Formal.Extracted.EquipValue
 import Formal.Extracted.Bridges
@@ -186,3 +189,4 @@ import Formal.Liveness.FightReadyReach
 import Formal.Liveness.GearTierLeveling
 import Formal.DoomedMemo
 import Formal.SkillGateFastFail
+import Formal.PlanModel
