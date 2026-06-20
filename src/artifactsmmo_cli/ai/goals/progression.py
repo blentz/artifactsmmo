@@ -15,9 +15,8 @@ from artifactsmmo_cli.ai.goals.upgrade_selection import (
     craftable_key,
     inventory_key,
 )
-from artifactsmmo_cli.ai.gather_floor import ceil_gathers
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.min_gathers import min_gathers
+from artifactsmmo_cli.ai.min_plan_length import min_plan_length
 from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
 from artifactsmmo_cli.ai.shopping_list import fully_covered_materials
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
@@ -136,10 +135,10 @@ class UpgradeEquipmentGoal(Goal):
         if (stats is not None and stats.crafting_skill
                 and state.skills.get(stats.crafting_skill, 1) < stats.crafting_level):
             return False
-        gathers = ceil_gathers(
-            min_gathers(item, 1, game_data.crafting_recipes, owned),
-            game_data.max_gather_yield)
-        return gathers <= self.max_depth
+        return min_plan_length(
+            item, 1, game_data.crafting_recipes, owned,
+            game_data.max_gather_yield, equip=True,
+        ) <= self.max_depth
 
     def relevant_actions(self, actions: list[Action], state: WorldState,
                          game_data: GameData) -> list[Action]:
