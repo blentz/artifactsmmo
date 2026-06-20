@@ -983,4 +983,22 @@ theorem wf_weight_rec (recipes : Recipes) (rank : String → Nat)
   simp only [Int.zero_add]
   rw [hro, recipeMass_stable recipes rank hpos hacy n (getD recipes c []) hrk]
 
+/-- **CRAFT COST-MASS PRESERVATION.** A craft of a *craftable* item `c` (rank
+`≤ n+1`) leaves the total cost-mass UNCHANGED: it consumes exactly
+`recipeMass (recipeOf c)` of input mass and produces `wf c = recipeMass(recipeOf c)`
+of output mass. The cost-mass potential is therefore invariant under crafts — the
+fact the Ψ-potential / craft-monotonicity argument rests on. (Combines the
+unconditional `costMass_craft_step` with `wf_weight_rec`.) -/
+theorem costMass_craft_preserved (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank)
+    (n : Nat) (c : String) (H : Dict Int)
+    (hcr : ¬ (getD recipes c []).length = 0) (hrank : rank c ≤ n + 1) :
+    costMass (n+1)
+        (applyAction recipes { gathers := 0, crafts := 0, holdings := H }
+          (Action.craft c)).holdings recipes
+      = costMass (n+1) H recipes := by
+  rw [costMass_craft_step (n+1) c recipes H,
+      wf_weight_rec recipes rank hpos hacy n c hcr hrank]
+  omega
+
 end Formal.PlanModel
