@@ -172,8 +172,7 @@ def test_monster_catalog_matches_snapshot() -> None:
         safe = "".join(c if c.isalnum() else "_" for c in code)
         assert f"def monster_{safe} : CatalogMonster" in fixture, code
     # spot-check one fully-specified monster
-    assert 'code := "bandit_lizard"' in fixture
-    assert "level := 25" in fixture
+    assert 'code := "bandit_lizard", level := 25' in fixture
     # the item catalog is emitted with equippable items + a slotType
     assert "def itemCatalog : List CatalogItem" in fixture
     assert "slotType :=" in fixture
