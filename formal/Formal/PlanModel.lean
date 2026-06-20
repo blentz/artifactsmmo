@@ -1971,6 +1971,90 @@ theorem minGathers_agree (recipes : Recipes) (rank : String → Nat)
             0 hrkall hpoall hedgeR hsetag
 
 -- ---------------------------------------------------------------------------
+-- On-path infrastructure: top-down reachability + craft perturbation locality
+-- ---------------------------------------------------------------------------
+
+/-!
+## On-path infrastructure
+
+The ON-PATH δ-coupling descends `item`'s recipe DAG along the branch that REACHES
+the crafted `c`. Three structural facts equip that descent:
+
+- `reaches_cases` — the TOP-DOWN view of `Reaches`: `item` reaches `c` iff `item =
+  c` or some DIRECT recipe input `mat` of `item` reaches `c`. (The `Reaches`
+  inductive extends at the far end; this re-presents it as a head step + tail
+  recursion, the shape a fuel induction descending from `item` consumes.)
+- `consume_unreached` / `craft_agree_off` — the craft's perturbation is CONFINED
+  to keys reachable from `c`: consuming `recipeOf c` (all inputs reachable from
+  `c` by one edge) and producing `+1 c` (reachable by `refl`) never touches a key
+  `k` with `¬ Reaches recipes c k`. So `H` and the post-craft holdings AGREE off
+  the reach-set of `c` — the off-path dispatch hook for `minGathers_agree`.
+-/
+
+/-- **TOP-DOWN reachability.** `item` reaches `c` iff `item = c` or some direct
+recipe input `mat` of `item` reaches `c`. The `Reaches` inductive grows at the
+far end (`mid → c`); this flips it to a head edge + tail recursion (induction on
+the derivation, re-threading via `Reaches.trans`). This is the case-split a fuel
+induction descending from `item` toward `c` uses at each node. -/
+theorem reaches_cases (recipes : Recipes) (item c : String)
+    (h : Reaches recipes item c) :
+    item = c ∨ ∃ mat per, (mat, per) ∈ getD recipes item [] ∧ Reaches recipes mat c := by
+  induction h with
+  | refl => exact Or.inl rfl
+  | step hmid hedge ih =>
+    rename_i mid cc per
+    rcases ih with heq | ⟨mat, per2, hmem, hr⟩
+    · subst heq
+      exact Or.inr ⟨cc, per, hedge, Reaches.refl cc⟩
+    · exact Or.inr ⟨mat, per2, hmem, Reaches.trans hr (Reaches.step (Reaches.refl mid) hedge)⟩
+
+/-- Consuming a recipe input list whose inputs are ALL reachable from `c` never
+modifies a key `k` with `¬ Reaches recipes c k`: each consume `setD` is at a
+reachable material, leaving the unreachable `k` untouched through the whole fold. -/
+theorem consume_unreached (recipes : Recipes) (c : String) (H : Dict Int)
+    (inputs : Dict Int)
+    (hin : ∀ mat per, (mat, per) ∈ inputs → Reaches recipes c mat) :
+    ∀ k, ¬ Reaches recipes c k → getD (consumeHoldings H inputs) k 0 = getD H k 0 := by
+  intro k hnr
+  unfold consumeHoldings
+  induction inputs generalizing H with
+  | nil => rfl
+  | cons mp rest ih =>
+    obtain ⟨mat, per⟩ := mp
+    simp only [List.foldl_cons]
+    have hmatR : Reaches recipes c mat := hin mat per (by simp)
+    have hmk : mat ≠ k := fun h => hnr (h ▸ hmatR)
+    have hin' : ∀ m' p, (m', p) ∈ rest → Reaches recipes c m' :=
+      fun m' p hm => hin m' p (by simp [hm])
+    rw [ih (dictSet H mat (dictGet H mat - per)) hin']
+    rw [dictSet_eq, getD_setD, if_neg hmk]
+
+/-- Every direct recipe input of `c` is reachable from `c` (one edge). -/
+theorem recipeOf_reach (recipes : Recipes) (c : String) :
+    ∀ mat per, (mat, per) ∈ recipeOf recipes c → Reaches recipes c mat := by
+  intro mat per hmem
+  rw [recipeOf_eq_getD] at hmem
+  exact Reaches.edge recipes c mat per hmem
+
+/-- **OFF-c AGREEMENT.** The post-`craft c` holdings AGREE with `H` on every key
+`k` unreachable from `c`. The craft touches only `c` (`+1`, killed by `c ≠ k`
+since `c` reaches `c`) and the inputs `recipeOf c` (all reachable from `c`, so
+`consume_unreached` leaves `k` alone). This is the hook that lets `minGathers_agree`
+dispatch the OFF-PATH siblings of the on-path coupling. -/
+theorem craft_agree_off (recipes : Recipes) (H : Dict Int) (c : String) :
+    ∀ k, ¬ Reaches recipes c k →
+      getD (applyAction recipes { gathers := 0, crafts := 0, holdings := H }
+              (Action.craft c)).holdings k 0
+        = getD H k 0 := by
+  intro k hnr
+  show getD (dictSet (consumeHoldings H (recipeOf recipes c)) c
+        (dictGet (consumeHoldings H (recipeOf recipes c)) c + 1)) k 0 = _
+  rw [dictSet_eq, getD_setD]
+  have hck : c ≠ k := fun h => hnr (h ▸ Reaches.refl c)
+  rw [if_neg hck]
+  exact consume_unreached recipes c H (recipeOf recipes c) (recipeOf_reach recipes c) k hnr
+
+-- ---------------------------------------------------------------------------
 -- Craft-step coupling (the heart): minGathers after a valid craft ≤ before
 -- ---------------------------------------------------------------------------
 
