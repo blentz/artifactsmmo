@@ -725,16 +725,6 @@ class StrategyArbiter:
             self._memo.mark(r, state, self._cycle)
         return plan
 
-    def goal_doomed(self, goal_repr: str, state: WorldState) -> bool:
-        """True when `goal_repr` was conclusively un-plannable on a recent cycle
-        (recorded in the doomed memo) and its re-probe window hasn't elapsed. The
-        servable-filter in decide() consults this so a root whose goal actually
-        FAILED to plan (feather_coat: 8789 nodes, plan_len 0 — but is_plannable
-        optimistically True) is demoted, instead of staying chosen_root while the bot
-        char-grinds the fallback. This is the REAL plan-failure signal that
-        is_plannable misses."""
-        return self._memo.is_doomed(goal_repr, state, self._cycle)
-
     def select(
         self,
         decision: object,

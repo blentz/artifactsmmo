@@ -90,11 +90,10 @@ def test_none_root_clears_anchor():
     assert p._sticky_progress_value is None
 
 
-def test_step_servable_demotes_doomed_goal():
-    # is_plannable is optimistic (feather_coat passed it yet planned to plan_len=0).
-    # The doomed memo carries the REAL plan-failure signal: a goal that actually
-    # failed to plan is demoted by the servable predicate so chosen_root stops
-    # committing to an unbuildable objective while the bot char-grinds.
+def test_step_servable_true_for_plannable_goal():
+    # The servable predicate is is_plannable-keyed: a plannable step goal is servable
+    # (the doomed-memo demotion was reverted 2026-06-20 — it masked the real planner
+    # bug by demoting buildable gear like feather_coat to slime-grinding).
     p = GamePlayer(character="hero")
     gd = _gd()
     st = make_state()
@@ -103,21 +102,7 @@ def test_step_servable_demotes_doomed_goal():
     goal = objective_step_goal(step, st, gd, ctx, root=step, committed_root=step)
     assert goal is not None and goal.is_plannable(st, gd)
     pred = p._step_servable(st, gd, ctx)
-    # Not doomed -> servable.
     assert pred(step, step) is True
-    # Mark the goal doomed in the arbiter memo -> predicate demotes it.
-    p._arbiter.set_cycle(3)
-    p._arbiter._memo.mark(repr(goal), st, 3)
-    assert pred(step, step) is False
-
-
-def test_arbiter_goal_doomed_reflects_memo():
-    p = GamePlayer(character="hero")
-    st = make_state()
-    p._arbiter.set_cycle(0)
-    assert p._arbiter.goal_doomed("SomeGoal()", st) is False
-    p._arbiter._memo.mark("SomeGoal()", st, 0)
-    assert p._arbiter.goal_doomed("SomeGoal()", st) is True
 
 
 def test_switching_root_rearms_for_new_root():
