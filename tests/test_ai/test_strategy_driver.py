@@ -45,6 +45,7 @@ from artifactsmmo_cli.ai.strategy_driver import (
     map_guard,
     map_means,
     _recipe_has_combat_drop_input,
+    monster_drop_inputs,
     objective_step_goal,
 )
 from artifactsmmo_cli.ai.task_batch import task_batch_size
@@ -624,6 +625,30 @@ def test_objective_step_combat_drop_input_routes_to_flat_step():
     g2 = objective_step_goal(ObtainItem("feather", 2), state, gd, _ctx(), root=root)
     assert isinstance(g2, GatherMaterialsGoal)
     assert g2._needed == {"feather": 2}
+
+
+def test_monster_drop_inputs_collects_pure_drop_leaves():
+    """monster_drop_inputs returns the recipe closure's pure monster-drop leaves
+    (feather), skipping craftable/gatherable inputs (ash_plank/ash_wood)."""
+    gd = GameData()
+    gd._item_stats = {
+        "feather_coat": ItemStats(code="feather_coat", level=1, type_="body_armor"),
+        "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource"),
+        "feather": ItemStats(code="feather", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"feather_coat": {"feather": 5, "ash_plank": 2},
+                            "ash_plank": {"ash_wood": 1}}
+    gd._resource_drops = {"ash_tree": "ash_wood"}
+    gd._monster_drops = {"chicken": [("feather", 8, 1, 1)]}
+    assert monster_drop_inputs("feather_coat", gd) == ["feather"]
+    # No recipe / not a drop -> empty.
+    assert monster_drop_inputs("ash_wood", gd) == []
+
+
+def test_monster_drop_inputs_is_cycle_safe():
+    gd = GameData()
+    gd._crafting_recipes = {"a": {"b": 1}, "b": {"a": 1}}
+    assert monster_drop_inputs("a", gd) == []
 
 
 def test_recipe_has_combat_drop_input_is_cycle_safe():

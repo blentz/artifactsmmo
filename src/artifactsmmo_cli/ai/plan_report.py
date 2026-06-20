@@ -1,6 +1,6 @@
 """PlanReport: the result of a single no-execute planning cycle (the `plan` CLI)."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -20,3 +20,7 @@ class PlanReport:
     selected_goal: Goal | None
     plan: list[Action]
     goals_tried: list[dict[str, object]]
+    # For the chosen objective's recipe: each pure monster-drop input, its dropping
+    # monsters, and whether each is winnable with the LIVE loadout. Answers "will the
+    # bot actually hunt these?" — an unwinnable drop makes the gear unbuildable.
+    drop_inputs: list[dict[str, object]] = field(default_factory=list)

@@ -45,6 +45,13 @@ def _print_report(player: GamePlayer, report: PlanReport) -> None:
         timed = " TIMED_OUT" if g.get("timed_out") else ""
         print(f"  {g.get('goal')}: nodes={g.get('nodes')} depth={g.get('depth')} "
               f"plan_len={g.get('plan_len')}{timed}{flag}")
+    if report.drop_inputs:
+        print("-" * 70)
+        print("monster-drop recipe inputs (winnable with the LIVE loadout?):")
+        for di in report.drop_inputs:
+            win = di.get("winnable") or []
+            verdict = f"WINNABLE via {win}" if win else "NOT WINNABLE — gear unbuildable!"
+            print(f"  {di.get('item')}: droppers={di.get('droppers')} -> {verdict}")
     print("-" * 70)
     print("root ranking (top 8):")
     for rs in d.ranking[:8]:

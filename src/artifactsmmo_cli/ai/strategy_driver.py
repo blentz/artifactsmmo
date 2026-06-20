@@ -468,6 +468,28 @@ def _recipe_has_combat_drop_input(
     return any(_recipe_has_combat_drop_input(mat, game_data, nxt) for mat in recipe)
 
 
+def monster_drop_inputs(
+    code: str, game_data: GameData, visited: frozenset[str] = frozenset()) -> list[str]:
+    """The PURE monster-drop leaves in `code`'s recipe closure (inputs obtained only
+    by fighting, e.g. feather). Used by the `plan` CLI to report whether those drops
+    are winnable for the live loadout. Cycle-safe; deterministic order."""
+    if code in visited:
+        return []
+    recipe = game_data.crafting_recipe(code)
+    if recipe is None:
+        if (game_data.monsters_dropping(code)
+                and code not in game_data.resource_drops.values()):
+            return [code]
+        return []
+    nxt = visited | {code}
+    out: list[str] = []
+    for mat in recipe:
+        for leaf in monster_drop_inputs(mat, game_data, nxt):
+            if leaf not in out:
+                out.append(leaf)
+    return out
+
+
 def objective_step_goal(
     step: MetaGoal | None,
     state: WorldState,

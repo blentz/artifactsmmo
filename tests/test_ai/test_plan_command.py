@@ -56,6 +56,42 @@ def test_plan_once_crafting_target_from_fallback():
     assert report.decision.chosen_step is None
 
 
+def test_plan_once_reports_drop_input_winnability():
+    """plan_once reports, for a gear chosen_root, each monster-drop recipe input and
+    whether it's winnable with the live loadout (feather <- chicken)."""
+    from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+    gd = GameData()
+    gd._item_stats = {
+        "feather_coat": ItemStats(code="feather_coat", level=1, type_="body_armor"),
+        "feather": ItemStats(code="feather", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"feather_coat": {"feather": 5}}
+    gd._monster_drops = {"chicken": [("feather", 8, 1, 1)]}
+    gd._monster_level = {"chicken": 1}
+    gd._monster_locations = {"chicken": [(0, 1)]}
+    from tests.test_ai._monster_fixture import fill_monster_stat_defaults
+    fill_monster_stat_defaults(gd)
+    gd._monster_hp = {"chicken": 10}
+    state = make_state(level=6, x=0, y=0, hp=200, max_hp=200, attack={"fire": 40})
+    decision = StrategyDecision(
+        interrupt=None, chosen_root=ObtainItem("feather_coat", 1, "body_armor_slot"),
+        chosen_step=ObtainItem("feather", 5), desired_state={})
+    fake_strategy = MagicMock()
+    fake_strategy.decide.return_value = decision
+    player = GamePlayer(character="hero")
+    with patch.object(ClientManager_mock := MagicMock(), "client", MagicMock()):
+        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=ClientManager_mock):
+            with patch("artifactsmmo_cli.ai.player.GameData.load", return_value=gd):
+                with patch.object(player, "_fetch_world_state", return_value=state):
+                    with patch.object(player, "_maybe_periodic_refresh"):
+                        with patch.object(player, "_build_actions", return_value=[]):
+                            with patch("artifactsmmo_cli.ai.player.StrategyEngine",
+                                       return_value=fake_strategy):
+                                report = player.plan_once()
+    assert report.drop_inputs == [
+        {"item": "feather", "droppers": ["chicken"], "winnable": ["chicken"]}]
+
+
 def _canned_report() -> PlanReport:
     decision = StrategyDecision(
         interrupt=None,
@@ -74,6 +110,10 @@ def _canned_report() -> PlanReport:
              "plan_len": 0, "timed_out": True},
             {"goal": "GatherMaterials(feather)", "nodes": 5, "depth": 2,
              "plan_len": 2, "timed_out": False},
+        ],
+        drop_inputs=[
+            {"item": "feather", "droppers": ["chicken"], "winnable": ["chicken"]},
+            {"item": "scale", "droppers": ["dragon"], "winnable": []},
         ],
     )
 
@@ -95,6 +135,9 @@ def test_plan_command_prints_report(capsys):
     assert "chosen_root" in out and "feather_coat" in out
     assert "Fight(chicken)" in out
     assert "NO PLAN" in out and "TIMED_OUT" in out
+    # drop-input winnability section: a winnable feather + an unwinnable scale.
+    assert "WINNABLE via ['chicken']" in out
+    assert "NOT WINNABLE" in out
 
 
 def test_plan_command_empty_plan_branch(capsys):

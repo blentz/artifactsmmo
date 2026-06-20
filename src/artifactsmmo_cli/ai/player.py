@@ -57,7 +57,11 @@ from artifactsmmo_cli.ai.recovery import (
     StuckExit,
     StuckSignal,
 )
-from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter, objective_step_goal
+from artifactsmmo_cli.ai.strategy_driver import (
+    StrategyArbiter,
+    monster_drop_inputs,
+    objective_step_goal,
+)
 from artifactsmmo_cli.ai.task_decision import PURSUE, task_decision
 from artifactsmmo_cli.ai.tiers import (
     BalancedPersonality,
@@ -319,8 +323,23 @@ class GamePlayer:
         selected_goal, plan, goals_tried = self._arbiter.select(
             decision, state, game_data, actions, ctx,
             suppressed=set(self._suppressed_goals), objective=self._objective)
+        # For the chosen objective's recipe, report each monster-drop input's live
+        # winnability — an unwinnable drop (e.g. chicken too strong) makes the gear
+        # unbuildable, which is the difference between "hunts chickens" and "can't".
+        drop_inputs: list[dict[str, object]] = []
+        root = decision.chosen_root
+        if isinstance(root, ObtainItem):
+            for leaf in monster_drop_inputs(root.code, game_data):
+                droppers = [m for m, *_ in game_data.monsters_dropping(leaf)]
+                winnable = sorted(
+                    m for m in droppers
+                    if is_winnable(state, game_data, m, self.history)
+                    and game_data.monster_locations(m))
+                drop_inputs.append({"item": leaf, "droppers": sorted(droppers),
+                                    "winnable": winnable})
         return PlanReport(decision=decision, selected_goal=selected_goal,
-                          plan=list(plan), goals_tried=goals_tried)
+                          plan=list(plan), goals_tried=goals_tried,
+                          drop_inputs=drop_inputs)
 
     def run(self) -> None:
         """Main loop: sense → select goal → plan → act."""
