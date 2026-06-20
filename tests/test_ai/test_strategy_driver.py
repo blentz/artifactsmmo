@@ -44,6 +44,7 @@ from artifactsmmo_cli.ai.strategy_driver import (
     _task_recipe_inputs,
     map_guard,
     map_means,
+    _recipe_has_combat_drop_input,
     objective_step_goal,
 )
 from artifactsmmo_cli.ai.task_batch import task_batch_size
@@ -592,6 +593,45 @@ def test_objective_step_intermediate_maps_to_equippable_root():
     g = objective_step_goal(step, make_state(), gd, _ctx(), root=root)
     assert isinstance(g, UpgradeEquipmentGoal)
     assert g._committed_target == ("wooden_shield", "shield_slot")
+
+
+def test_objective_step_combat_drop_input_routes_to_flat_step():
+    """A recipe with a MONSTER-DROP input (feather <- chicken) must NOT plan the
+    whole craft+equip chain — the GOAP search interleaves fights/gathers/crafts and
+    explodes (live: feather_coat 57k nodes, timeout, plan_len 0; bot fell to
+    slime-grind). Route to the flat actionable step instead so inputs are collected
+    incrementally (gather wood / hunt chickens), each within budget."""
+    gd = GameData()
+    gd._item_stats = {
+        "feather_coat": ItemStats(code="feather_coat", level=1, type_="body_armor",
+                                  crafting_skill="gearcrafting", crafting_level=1),
+        "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource"),
+        "feather": ItemStats(code="feather", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"feather_coat": {"ash_plank": 2, "feather": 2},
+                            "ash_plank": {"ash_wood": 1}}
+    gd._resource_drops = {"ash_tree": "ash_wood"}
+    gd._monster_drops = {"chicken": [("feather", 8, 1, 1)]}
+    state = make_state(level=1, inventory={}, bank_items={})
+    root = ObtainItem("feather_coat", 1, "body_armor_slot")
+    # Even when the chosen step IS an intermediate of the equippable root, the
+    # combat-drop input forces flat per-input routing (NOT UpgradeEquipment).
+    step = ObtainItem("ash_plank", 2)
+    g = objective_step_goal(step, state, gd, _ctx(), root=root)
+    assert isinstance(g, GatherMaterialsGoal)
+    assert g._needed == {"ash_plank": 2}
+    # Sibling combat-drop input routes to a flat feather hunt.
+    g2 = objective_step_goal(ObtainItem("feather", 2), state, gd, _ctx(), root=root)
+    assert isinstance(g2, GatherMaterialsGoal)
+    assert g2._needed == {"feather": 2}
+
+
+def test_recipe_has_combat_drop_input_is_cycle_safe():
+    """A pathological cyclic recipe (a<-b, b<-a) must not infinite-loop the
+    combat-drop closure walk; the per-path visited guard returns False."""
+    gd = GameData()
+    gd._crafting_recipes = {"a": {"b": 1}, "b": {"a": 1}}
+    assert _recipe_has_combat_drop_input("a", gd) is False
 
 
 def test_objective_step_intermediate_unreachable_root_routes_to_deepest_step():
