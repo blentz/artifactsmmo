@@ -120,23 +120,32 @@ theorem cycleStepF_reaches_fifty_of_fights (s : State) (h : FightsBelowCap s) :
 
 /-- **`FightsBelowCap` is now a RESULT, not an assumption — modulo the named residuals.**
 
-From the discharged arming (`arming_justified_below_fifty`, Task 5 — backed by Task 4's
-kernel winnable-target existence + the production differential) plus the explicitly-named
+From the discharged arming (`arming_justified_below_fifty`, Task 5) plus the explicitly-named
 residuals, `FightsBelowCap s` is DERIVED.
 
 The third (objective) disjunct of `FightsBelowCap` is a conjunction:
 `productionLadder … = some .objectiveStep ∧ objectiveStepIsFight = true`. This proof
-supplies its `objectiveStepIsFight = true` half via `arming_justified_below_fifty`
-(the JUSTIFIED arming — NOT the bare unconditional `perceptionRefresh_objectiveStepIsFight`),
-so the Bool is BACKED by kernel target-existence, not freely asserted.
+supplies its `objectiveStepIsFight = true` half via `arming_justified_below_fifty.2`
+(the trivial `unfold perceptionRefresh; rw [if_pos]` half), which proves the MODEL's set
+value `objectiveStepIsFight := true`.  The kernel target-existence half
+(`arming_justified_below_fifty.1`, from Task 4's `winnableAcrossBand_grounded`) and the
+production differential (`test_objectivestep_arming_diff.py`) ground the model's arming
+FAITHFULNESS *offline* — they are NOT logically consumed inside this proof term.
+
+Note: the model's below-50 arming is OPTIMISTIC relative to production.  Production's
+`objective_step_goal(ReachCharLevel)` returns None (no fight) in the long-haul items-task
+defer case (`bootstrap_gap > 4 ∧ items-task active`), but `perceptionRefresh` sets
+`objectiveStepIsFight := true` unconditionally below 50.  That gap is folded into the named
+`hquiet` residual below — this proof does NOT claim the defer-case is handled.
 
 Residual hypotheses (the honest, NOT-yet-discharged dominoes):
 * `hquiet` — **blockers-quiet / selection**: at each below-50 step the ladder SELECTS one
   of {`bankUnlock`, `reachUnlockLevel`, `objectiveStep`} (i.e. every higher-priority chore
-  / claim / gear-review / task-management blocker is quiet so the fight-bearing tier is
-  reached). This is the next domino; it is NAMED, not assumed away. It does NOT mention
-  `objectiveStepIsFight` — that conjunct arrives from the discharged arming, keeping the two
-  concerns separate and `hquiet` non-vacuous.
+  / claim / gear-review / task-management blocker — INCLUDING the items-task defer-case that
+  would prevent a fight — is quiet so the fight-bearing tier is reached). This is the next
+  domino; it is NAMED, not assumed away. It does NOT mention `objectiveStepIsFight` — that
+  conjunct arrives from the model's set value (`.2`), keeping the two concerns separate and
+  `hquiet` non-vacuous.
 * `hspawn` — **runtime invariant (real spawn level `1 ≤ level`)**: every reachable state has
   `level ≥ 1`, the proviso `arming_justified_below_fifty` needs for the kernel target to
   exist. A standard runtime invariant of the production state.
@@ -164,14 +173,19 @@ named residuals.
 
 Residual hypotheses (the EXACT remaining assumptions — nothing else):
 * `hquiet` — **blockers-quiet / selection** (the named next domino; see
-  `fightsBelowCap_of_grounded`).
+  `fightsBelowCap_of_grounded` — this residual explicitly covers the items-task defer-case
+  gap between the model's unconditional arming and production behaviour).
 * `hspawn` — **runtime invariant `1 ≤ level`** (real spawn level, standard).
 * LIV-001 — the descent engine's axiom, inherited via
   `cycleStepF_reaches_fifty_of_fights` (NOT a free hypothesis).
 
-The arming third-disjunct routes through `arming_justified_below_fifty` (the justified form,
-kernel-backed), so `objectiveStepIsFight := true` is no longer a free assertion feeding this
-capstone. This capstone does NOT claim blockers-quiet is discharged. -/
+The arming third-disjunct uses `arming_justified_below_fifty.2` — the model's set value
+`objectiveStepIsFight := true` (via `unfold perceptionRefresh; rw [if_pos]`).  The
+offline grounding for model FAITHFULNESS — Task 4's kernel target-existence
+(`arming_justified_below_fifty.1`) + the production differential — is NOT logically consumed
+inside this proof term; it establishes that the model's unconditional arming faithfully
+images production outside the items-task defer-case.  This capstone does NOT claim
+blockers-quiet is discharged, and does NOT claim the defer-case is handled. -/
 theorem ai_reaches_fifty_grounded (s : State)
     (hquiet : ∀ k, (cycleStepFN k s).level < 50 →
         productionLadder (perceptionRefresh (cycleStepFN k s)) = some .bankUnlock

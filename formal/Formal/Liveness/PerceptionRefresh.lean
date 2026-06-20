@@ -70,23 +70,27 @@ theorem perceptionRefresh_objectiveStepFires (s : State) (h : s.level < 50) :
     (perceptionRefresh s).objectiveStepFires = true := by
   unfold perceptionRefresh; rw [if_pos h]
 
-/-! ## Arming justification — the set value is BACKED, not a free assertion.
+/-! ## Arming justification — the model's set value is grounded OFFLINE for faithfulness.
 
-`perceptionRefresh` still SETS `objectiveStepIsFight := true` below the cap (it
-models "perception observes the objective tier fires a fight"). The lemmas below
-DISCHARGE that set value: the kernel half proves a winnable combat target EXISTS
-below 50 (Task 4's `winnableAcrossBand_grounded` fed through
-`combatObjective_live_below_fifty`), and the production half — pinned by
-`formal/diff/test_objectivestep_arming_diff.py` — proves that when such a target
-exists (and we are not in the long-haul items-task defer case) production's
-`objective_step_goal(ReachCharLevel)` yields a `GrindCharacterXPGoal`, a FIGHT. So
-the arming is the in-model image of a production fact, not an axiom.
+`perceptionRefresh` SETS `objectiveStepIsFight := true` UNCONDITIONALLY below the cap
+(the `if s.level < 50 then … true …` branch).  This is the model's set value, provable
+by `unfold perceptionRefresh; rw [if_pos]` alone.
 
-Residual: the differential pins production's `ReachCharLevel → fight` behaviour;
-the kernel pins target-existence. The defer-case (long-haul items task) is the
-one production branch that yields NO fight; it is modelled in the differential
-(not in `perceptionRefresh`, which abstracts the items-task lifecycle away — the
-chore flags stay the documented `BlockersQuietInfinitelyOften` gap). -/
+The lemmas below establish MODEL FAITHFULNESS *offline* — they are NOT logically
+consumed by proofs that merely need the set value:
+* The kernel half (`combatTarget_exists_below_fifty`, Task 4's
+  `winnableAcrossBand_grounded` fed through `combatObjective_live_below_fifty`) proves a
+  winnable combat target EXISTS at every level `1 ≤ L < 50`.
+* The production differential (`formal/diff/test_objectivestep_arming_diff.py`) pins that
+  when such a target exists and we are NOT in the long-haul items-task defer case
+  (`bootstrap_gap > 4 ∧ items-task active`), production's
+  `objective_step_goal(ReachCharLevel)` yields a `GrindCharacterXPGoal`, a FIGHT.
+
+Together these ground the model's unconditional arming as a faithful image of production
+behaviour — OUTSIDE the defer-case.  The defer-case (the one production branch yielding
+NO fight below 50) is NOT modelled in `perceptionRefresh` (which abstracts the
+items-task lifecycle away); it lives in the undischarged `BlockersQuietInfinitelyOften`
+residual (`hquiet`) of the capstone. -/
 
 /-- **Kernel half — a winnable combat target exists below the cap.** Instantiates
 Task 4's `winnableAcrossBand_grounded` through `combatObjective_live_below_fifty`:
@@ -100,13 +104,22 @@ theorem combatTarget_exists_below_fifty (L : Int) (hlo : 1 ≤ L) (hhi : L < 50)
   combatObjective_live_below_fifty winnableConcrete xpPosConcrete catalogAsMonsters
     winnableAcrossBand_grounded L hlo hhi
 
-/-- **The arming is justified.** Below the cap (and at a real spawn level
-`1 ≤ s.level`), a winnable combat target provably EXISTS (`combatTarget_exists_
-below_fifty`) AND `perceptionRefresh` arms `objectiveStepIsFight = true`. The
-existence of the target is exactly the production proviso the differential pins
-to `objective_step_goal(ReachCharLevel)` yielding a `GrindCharacterXPGoal` — so
-the set Bool is BACKED by {kernel target-existence + the production diff},
-replacing the free `:= true`. -/
+/-- **The arming is grounded.** Below the cap (and at a real spawn level `1 ≤ s.level`),
+`arming_justified_below_fifty` bundles two components:
+* `.1` — a kernel target-existence proof (from Task 4's `winnableAcrossBand_grounded`):
+  a winnable combat target EXISTS at `s.level`.  Together with the production differential
+  (`test_objectivestep_arming_diff.py`) this establishes that the model's unconditional
+  arming is a FAITHFUL image of production outside the items-task defer-case.  This is
+  the offline grounding — it is NOT logically consumed by capstone proofs that only need
+  `.2`.
+* `.2` — the model's set value: `(perceptionRefresh s).objectiveStepIsFight = true`,
+  proved by `unfold perceptionRefresh; rw [if_pos]`.  This is what the capstone proof
+  term directly consumes.
+
+The model's unconditional arming is OPTIMISTIC vs production: in the long-haul items-task
+defer case production returns None (no fight), but `perceptionRefresh` sets `true`
+regardless.  That gap is the items-task component of the undischarged
+`BlockersQuietInfinitelyOften` residual — it is named there, not confronted here. -/
 theorem arming_justified_below_fifty (s : State) (hlo : 1 ≤ s.level)
     (hhi : s.level < 50) :
     (∃ target,
@@ -117,13 +130,15 @@ theorem arming_justified_below_fifty (s : State) (hlo : 1 ≤ s.level)
       (by exact_mod_cast hhi),
    by unfold perceptionRefresh; rw [if_pos hhi]⟩
 
-/-- Below the cap, `perceptionRefresh` arms `objectiveStepIsFight` (the objective
-plan leads with a Fight). At a real spawn level (`1 ≤ s.level`) this set value is
-the JUSTIFIED conclusion of `arming_justified_below_fifty` — backed by a kernel
-winnable-target existence proof and the production differential, no longer a free
-assertion. The `1 ≤ s.level` hypothesis is unused here (every reachable State has
-`level ≥ 1`); the unconditional form is kept for the field-preservation callers,
-and the justified form is `arming_justified_below_fifty`. -/
+/-- Below the cap, `perceptionRefresh` arms `objectiveStepIsFight` — the model's set
+value `objectiveStepIsFight := true` from the `if s.level < 50` branch.  This is
+proved by `unfold perceptionRefresh; rw [if_pos]` alone (no kernel result needed).
+
+For the offline FAITHFULNESS grounding of this set value, see `arming_justified_below_fifty`:
+its `.1` (kernel target-existence, Task 4) + the production differential establish that
+the model faithfully images production outside the items-task defer-case; its `.2` IS
+this theorem.  The unconditional form here is kept for field-preservation callers that
+only need the Bool; the bundled form is `arming_justified_below_fifty`. -/
 theorem perceptionRefresh_objectiveStepIsFight (s : State) (h : s.level < 50) :
     (perceptionRefresh s).objectiveStepIsFight = true := by
   unfold perceptionRefresh; rw [if_pos h]
