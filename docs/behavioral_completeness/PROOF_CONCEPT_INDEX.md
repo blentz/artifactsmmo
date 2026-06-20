@@ -53,6 +53,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | PersonalityGrounding | characters, items | dominance |
 | Phase7Invariants | items, core | safety |
 | Phase8Invariants | items, crafting, bank | safety, reachability |
+| PlanModel | planner, plan, action | monotonicity, safety |
 | PlannerAdmissibility | planner, core | dominance |
 | PlannerDepthBound | planner, core | safety, reachability |
 | PrerequisiteGraph | crafting, items | safety, totality |
