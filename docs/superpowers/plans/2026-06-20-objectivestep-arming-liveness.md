@@ -210,6 +210,13 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 The research-grade task. `corner3` is currently an assumed binder in `minGathers_le_gathers_of_corner3` (`PlanModel.lean:3352`): `∀ c G, … minGathersCount item 1 recipes G ≤ minGathersCount item 1 recipes (afterCraft c G)`. Discharge it by introducing a `NoSurplusPlan` invariant under which every craft in the plan is on-path (its output is consumed downstream), making the per-craft monotonicity provable, and thread it through the existing induction so the final theorem carries NO `corner3` binder. CORE-ONLY (PlanModel is a safety module).
 
+**The structural basis (why no-surplus is FORCED, not assumed) — `[[project_gear_demand_economy]]`:** the equipment economy makes every craft in a gear-obtainment plan on-path:
+- recipes are **monotone** (ingredient→output non-decreasing toward the target on the cost/mass ladder — already captured by `wf_weight_rec` cost-neutrality + `costMass_mono_dom` in this file);
+- equippable gear demand is **per-slot exactly 1, exactly 2 for rings** (consumables excluded);
+- **strict per-slot tier dominance** — a superseding tier retires the lower, which is never re-demanded;
+- this hierarchy is **invariant** under events/tasks/grand-exchange.
+So `NoSurplusPlan` is the proof encoding of a structural truth, not a convenient restriction. Define gear demand from the slot cap (1, rings 2) and prove the per-craft on-path obligation from tier-dominance + monotone recipe. The production-side shadow of the same invariant is the dup-free-EXCEPT-rings per-slot ownership cap (`[[project_dual_ring_carveout]]` / `RealizableLoadout`) — reuse its slot/ring distinction so the model and production agree on demand-2-for-rings.
+
 **Files:**
 - Modify: `formal/Formal/PlanModel.lean` (add `NoSurplusPlan`, the per-craft monotonicity lemma, `minGathers_le_gathers_nosurplus`, `canonicalPlan` + obtainability)
 - Build: `cd formal && lake build Formal.PlanModel`
@@ -217,7 +224,7 @@ The research-grade task. `corner3` is currently an assumed binder in `minGathers
 **Interfaces:**
 - Consumes: existing `Action`, `Plan`, `ValidPlan`, `ValidCraftAt`, `Reaches`, `planHoldings`, `planGathers`, `minGathersCount`, `runPlan`, `applyAction`, `costMass` from `PlanModel.lean`/`StepDispatch.lean`.
 - Produces:
-  - `def NoSurplusPlan (recipes) (owned) (plan) : Prop` — every `Action.craft c` in `plan` produces output that is consumed by a later action or remains as exactly the demanded final quantity (no strictly-surplus craft). Concretely: for the suffix after each craft, the crafted unit is required by the remaining plan's net demand for the target.
+  - `def NoSurplusPlan (recipes) (owned) (plan) : Prop` — every `Action.craft c` in `plan` produces output that is consumed by a later action or remains as exactly the demanded final quantity (no strictly-surplus craft). Concretely: for the suffix after each craft, the crafted unit is required by the remaining plan's net demand for the target. Per-slot demand cap = 1, EXCEPT rings = 2 (match `[[project_dual_ring_carveout]]`); the equip target's slot determines the cap.
   - `theorem craft_monotone_of_onpath` — the per-craft `corner3` obligation, proved from the no-surplus invariant for the specific `c` crafted.
   - `theorem minGathers_le_gathers_nosurplus (recipes) (rank) (… same domain hyps as corner3 version …) (item owned plan) (hns : NoSurplusPlan recipes owned plan) (hv : ValidPlan recipes owned plan) (hprod : 1 ≤ getD (planHoldings recipes plan owned) item 0) : minGathersCount item 1 recipes owned ≤ (planGathers recipes plan owned : Int)` — NO `corner3` binder.
   - `def canonicalPlan (recipes) (item) (owned) : Plan` — bottom-up: gather raw leaves, craft the closure in rank order, equip `item`.
