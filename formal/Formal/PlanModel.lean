@@ -246,19 +246,31 @@ def ValidGatherAt (recipes : List (String × List (String × Int)))
 -- ---------------------------------------------------------------------------
 
 /-- `ValidPlanFrom recipes s plan` holds when, starting from state `s`,
-every `craft` action in `plan` has its recipe inputs present in the current
-holdings at the moment it executes.
+every `craft` action in `plan` targets a CRAFTABLE item (`recipeOf code ≠ []`)
+and has its recipe inputs present in the current holdings at the moment it
+executes.
+
+**Faithfulness note (craftable guard).** The `recipeOf code ≠ []` conjunct
+mirrors the `ValidGatherAt` raw guard: production can only `craft` an item that
+HAS a recipe — you cannot "craft" a raw material. Without it the model's total
+`applyAction (craft code)` for a RAW `code` would `+1` holdings while consuming
+nothing (empty recipe), minting one unit of a raw item for FREE — exactly the
+gather hole the previous round closed, but on the craft branch (it would falsify
+`minGathersCount item 1 ≤ planGathers`: a `[craft raw, equip]` plan produces the
+item with `planGathers = 0`). Requiring the craft target to be craftable is the
+production assumption, so it *strengthens* faithfulness; the cheat-plan `example`
+still rejects (feather_coat is craftable, so it fails on the INPUT check).
 
 Defined recursively over the plan list, threading state forward one step at a
 time (same shape as `runPlan` / `List.foldl`). This makes the Task-5 induction
 match: unfold one `foldl` step, case-split on the action, for `craft` extract
-the `ValidCraftAt` hypothesis, then continue on the tail. -/
+the craftable + `ValidCraftAt` hypotheses, then continue on the tail. -/
 def ValidPlanFrom (recipes : List (String × List (String × Int)))
     (s : ExecState) : Plan → Prop
   | []      => True
   | a :: rest =>
       (match a with
-       | Action.craft code  => ValidCraftAt recipes s.holdings code
+       | Action.craft code  => recipeOf recipes code ≠ [] ∧ ValidCraftAt recipes s.holdings code
        | Action.gather code => ValidGatherAt recipes code
        | _                  => True) ∧
       ValidPlanFrom recipes (applyAction recipes s a) rest
@@ -347,9 +359,11 @@ example : ¬ SatisfiesEquip
   unfold SatisfiesEquip ValidPlan ValidPlanFrom ValidCraftAt cheatRecipes
   simp [List.find?]
   -- The goal reduces: we need to show the `ValidCraftAt` condition fails.
+  -- (The `recipeOf ≠ []` craftable conjunct holds for feather_coat, so the
+  -- cheat is rejected by the INPUT check, not the craftable check.)
   -- Specifically, `10 ≤ dictGet [] "feather"` = `10 ≤ 0` is false.
-  intro h
-  have := h "feather" 10 (by simp)
+  intro _ hvc
+  have := hvc "feather" 10 (by simp)
   simp [dictGet] at this
 
 -- ---------------------------------------------------------------------------
