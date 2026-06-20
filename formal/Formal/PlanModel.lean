@@ -1170,4 +1170,100 @@ theorem minGathers_recon (recipes : Recipes) (rank : String → Nat)
                    = recipeMass (Fp+1) (getD recipes item []) recipes * q := Int.mul_comm _ _
         omega
 
+-- ---------------------------------------------------------------------------
+-- Plan-mass invariant: gathers − costMass is constant along a valid plan
+-- ---------------------------------------------------------------------------
+
+/-- A raw `gather code` step raises total cost-mass by exactly `1`
+(`wf (raw) = 1` and the step `setD`s `holdings[code] += 1`). -/
+theorem costMass_gather_raw (F : Nat) (recipes : Recipes) (s : ExecState) (code : String)
+    (hraw : (getD recipes code []).length = 0) :
+    costMass F (applyAction recipes s (Action.gather code)).holdings recipes
+      = costMass F s.holdings recipes + 1 := by
+  show costMass F (dictSet s.holdings code (dictGet s.holdings code + 1)) recipes = _
+  rw [dictSet_eq, costMass_setD, dictGet_eq, wf_raw F code recipes hraw]
+  omega
+
+/-- `costMass_craft_preserved` lifted to a full `ExecState` (the `craft` step's
+holdings depend only on `s.holdings`). -/
+theorem costMass_craft_preserved' (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank)
+    (n : Nat) (c : String) (s : ExecState)
+    (hcr : ¬ (getD recipes c []).length = 0) (hrank : rank c ≤ n + 1) :
+    costMass (n+1) (applyAction recipes s (Action.craft c)).holdings recipes
+      = costMass (n+1) s.holdings recipes := by
+  have key := costMass_craft_preserved recipes rank hpos hacy n c s.holdings hcr hrank
+  show costMass (n+1)
+      (dictSet (consumeHoldings s.holdings (recipeOf recipes c)) c
+        (dictGet (consumeHoldings s.holdings (recipeOf recipes c)) c + 1)) recipes = _
+  exact key
+
+/-- **PLAN-MASS INVARIANT.** Along ANY valid plan the quantity
+`gathers − costMass (holdings)` is CONSTANT: every `gather` raises both
+`gathers` and `costMass` by exactly `1` (raw, `wf = 1`), every (valid, hence
+craftable) `craft` preserves `costMass` and leaves `gathers` fixed
+(`costMass_craft_preserved'`), and `equip` is a no-op. Carries the honest domain
+hypotheses `PosRecipes`/`Acyclic` plus a rank bound `rank item ≤ |recipes|`
+(the topological depth never exceeds the number of recipes — the same fact that
+seeds `minGathersCount`'s fuel with `|recipes| + 1`). The cost-mass fuel is fixed
+at `|recipes| + 1` so it dominates every rank. -/
+theorem plan_mass_invariant (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank)
+    (hRB : ∀ item, rank item ≤ recipes.length) :
+    ∀ (plan : Plan) (s : ExecState),
+      ValidPlanFrom recipes s plan →
+      (List.foldl (applyAction recipes) s plan).gathers
+        - costMass (recipes.length + 1)
+            (List.foldl (applyAction recipes) s plan).holdings recipes
+      = (s.gathers : Int) - costMass (recipes.length + 1) s.holdings recipes := by
+  intro plan
+  induction plan with
+  | nil => intro s _; simp
+  | cons a rest ih =>
+    intro s hv
+    simp only [List.foldl_cons]
+    obtain ⟨hstep, hrestv⟩ := hv
+    rw [ih (applyAction recipes s a) hrestv]
+    cases a with
+    | gather code =>
+      have hraw : (getD recipes code []).length = 0 := by
+        have hh : recipeOf recipes code = [] := hstep
+        rw [recipeOf_eq_getD] at hh; rw [hh]; rfl
+      have hg : (applyAction recipes s (Action.gather code)).gathers = s.gathers + 1 := rfl
+      rw [hg, costMass_gather_raw (recipes.length+1) recipes s code hraw]
+      omega
+    | craft code =>
+      obtain ⟨hcr, _hvc⟩ := hstep
+      have hcr' : ¬ (getD recipes code []).length = 0 := by
+        rw [← recipeOf_eq_getD]
+        intro hh
+        exact hcr (List.length_eq_zero_iff.mp hh)
+      have hc := costMass_craft_preserved' recipes rank hpos hacy recipes.length code s hcr'
+                  (by have := hRB code; omega)
+      have hg : (applyAction recipes s (Action.craft code)).gathers = s.gathers := rfl
+      rw [hg, hc]
+    | equip code =>
+      have hg : (applyAction recipes s (Action.equip code)).gathers = s.gathers := rfl
+      have hh : (applyAction recipes s (Action.equip code)).holdings = s.holdings := rfl
+      rw [hg, hh]
+
+/-- **EXACT PLAN GATHER COUNT.** Specialising the invariant to the initial state
+`{0, 0, owned}`: the gather count of any valid plan equals the cost-mass it
+*adds* to the holdings — `planGathers = costMass planHoldings − costMass owned`.
+(The plan converts `costMass owned` of held mass into `costMass planHoldings` by
+gathering the difference, one unit of raw mass per gather.) -/
+theorem planGathers_eq_costMass_diff (recipes : Recipes) (rank : String → Nat)
+    (hpos : PosRecipes recipes) (hacy : Acyclic recipes rank)
+    (hRB : ∀ item, rank item ≤ recipes.length)
+    (plan : Plan) (owned : Dict Int) (hv : ValidPlan recipes owned plan) :
+    (planGathers recipes plan owned : Int)
+      = costMass (recipes.length + 1) (planHoldings recipes plan owned) recipes
+        - costMass (recipes.length + 1) owned recipes := by
+  have h := plan_mass_invariant recipes rank hpos hacy hRB plan
+    { gathers := 0, crafts := 0, holdings := owned } hv
+  show (((List.foldl (applyAction recipes)
+      { gathers := 0, crafts := 0, holdings := owned } plan).gathers : Nat) : Int) = _
+  simp only [planHoldings, runPlan] at *
+  omega
+
 end Formal.PlanModel
