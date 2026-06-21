@@ -43,16 +43,24 @@ def _slot_assignments(type_: str, slots: list[str],
     return out
 
 
+GOLD = "gold"
+"""The currency code for ordinary (gold) purchases (`NPCItem.currency`).
+Distinguished as ALWAYS attainable: the perfect sheet assumes full gold, and
+gold is earnable by any fight/sell. A non-gold currency is an item code whose
+own attainability must be established by recursion."""
+
+
 def _attainable_closure(code: str, game_data: GameData,
-                        leaf_ok: Callable[[str], bool],
+                        leaf_ok: Callable[[str, frozenset[str]], bool],
                         _path: frozenset[str] = frozenset()) -> bool:
-    """Shared cycle-safe producibility walk: an item is attainable iff its craft
-    chain bottoms out in leaves that `leaf_ok` accepts. The recipe walk is
-    IDENTICAL for the perfect-sheet (`is_attainable`) and the near-term
-    (`is_attainable_now`) gates — they differ ONLY in the leaf rule, so the walk
-    lives here once. Mirrors the proved `Formal.Objective.attainAux`, which is
-    parametric in its `drop` leaf predicate (the Python `leaf_ok`). Cycle-safe
-    via `_path`: a recipe item already on the path can never bottom out."""
+    """Shared cycle-safe producibility walk: an item is attainable iff it has a
+    craft recipe whose materials are all attainable, else its `leaf_ok` holds.
+    The recipe walk is IDENTICAL for the perfect-sheet (`is_attainable`) and the
+    near-term (`is_attainable_now`) gates — they differ ONLY in the leaf rule, so
+    the walk lives here once. `leaf_ok` receives the current `_path` so a
+    purchase edge can recurse on its currency's attainability under the same
+    cycle guard. Mirrors the proved `Formal.Objective.attainAux`, parametric in
+    its leaf (`drop`) and purchase (`buys`) relations. Cycle-safe via `_path`."""
     recipe = game_data.crafting_recipe(code)
     if recipe is not None:
         if code in _path:
@@ -60,7 +68,7 @@ def _attainable_closure(code: str, game_data: GameData,
         sub_path = _path | {code}
         return all(_attainable_closure(mat, game_data, leaf_ok, sub_path)
                    for mat in recipe)
-    return leaf_ok(code)
+    return leaf_ok(code, _path)
 
 
 def _gatherable(code: str, game_data: GameData) -> bool:
@@ -77,52 +85,87 @@ def _drops_from_spawning_monster(code: str, game_data: GameData) -> bool:
                for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(code))
 
 
+def _permanent_vendor_purchases(code: str, game_data: GameData) -> list[tuple[int, str]]:
+    """(price, currency) for each PERMANENT, reachable NPC vendor that sells
+    `code`. Event vendors (timed spawn) and unlocated NPCs are excluded: a
+    perfect-sheet acquisition source must be reliably reachable, not a window
+    that may be closed. Mirrors the `EventWindow` gating used for event
+    merchants."""
+    return [(price, currency)
+            for npc, price, currency in game_data.npc_purchases(code)
+            if not game_data.is_event_npc(npc) and game_data.npc_location(npc) is not None]
+
+
 def is_attainable(code: str, game_data: GameData) -> bool:
     """True when the item is producible AT MAX PROGRESSION: its craft chain
-    bottoms out in leaves that are gatherable raws OR drops from a known-spawn
-    monster (bosses included). State-independent — the perfect-sheet target
-    ignores current skills and current combat strength.
+    bottoms out in leaves that are gatherable raws, drops from a known-spawn
+    monster (bosses included), OR PURCHASABLE from a permanent vendor for an
+    attainable currency. State-independent — the perfect-sheet target ignores
+    current skills, combat strength, and gold.
 
-    Previously GATHERING-ONLY, which rejected every armor that crafts from a
-    monster drop (copper_armor<-wool, copper_legs_armor<-feather,
-    life_amulet<-feather+red_slimeball) and so silently dropped body/leg/amulet
-    from `target_gear`; the near-term gate pursued them but the perfect sheet
-    under-targeted. Now unified with `is_attainable_now` on the shared
-    `_attainable_closure` walk — they differ only in the leaf rule, this one
-    omitting the winnability gate (at max progression every spawning monster is
-    beatable)."""
-    return _attainable_closure(
-        code, game_data,
-        lambda leaf: _gatherable(leaf, game_data)
-        or _drops_from_spawning_monster(leaf, game_data))
+    Previously GATHERING-ONLY (dropped monster-drop armor — body/leg/amulet),
+    then gather-or-monster-drop (task #11). The purchase edge (task #12) adds the
+    rune/artifact/bag slots, whose items are NPC-only: an item with no recipe is
+    attainable if a permanent vendor sells it for `gold` (always attainable) or
+    for a currency item that is itself attainable (recursion, cycle-guarded via
+    the closure path — e.g. a rune bought with sandwhisper_coin which is itself
+    earned/dropped)."""
+    def leaf_ok(leaf: str, path: frozenset[str]) -> bool:
+        if _gatherable(leaf, game_data) or _drops_from_spawning_monster(leaf, game_data):
+            return True
+        if leaf in path:
+            return False
+        sub = path | {leaf}
+        return any(currency == GOLD
+                   or _attainable_closure(currency, game_data, leaf_ok, sub)
+                   for _price, currency in _permanent_vendor_purchases(leaf, game_data))
+
+    return _attainable_closure(code, game_data, leaf_ok)
 
 
 def is_attainable_now(code: str, state: WorldState, game_data: GameData) -> bool:
     """State-aware producibility for NEAR-TERM targets: the same recipe walk as
     `is_attainable`, but the leaf is gatherable OR a drop from a monster that is
-    winnable NOW (judged at full HP) with a known spawn — the leaf semantics of
-    the strategy tier's `_producible`.
+    winnable NOW (judged at full HP) with a known spawn OR PURCHASABLE-NOW from a
+    permanent vendor (affordable: gold price ≤ current gold, or a non-gold
+    currency that is itself attainable-now). The leaf semantics of the strategy
+    tier's `_producible`, plus affordability.
 
     `is_attainable` is the wrong gate for near-term gear at LOW level: every
     armor a low-level character can wear crafts from monster drops, and a
-    low-level character can't yet beat the monsters dropping the BiS materials.
-    Drops from monsters the character can't beat yet stay excluded — those
-    targets self-unlock as gear/level improve.
+    low-level character can't yet beat the monsters dropping the BiS materials,
+    nor afford a 20000-gold rune. Targets that need more gold/level self-unlock.
 
     Winnability is judged AT FULL HP: this is a strategic "can the character ever
     farm this" question and rest is always available, so a transiently-damaged
     character must not see its gear targets evaporate (predict_win at hp=31/175
     fails every monster, which flipped chosen_root on every post-fight cycle).
     Matches the G3 Lean model (`winnable_at_max_hp`). Tactical fight entry keeps
-    current-HP semantics in predict_win itself."""
+    current-HP semantics in predict_win itself.
+
+    AFFORDABILITY is conservative for v1: a gold purchase needs `state.gold ≥
+    price`; a non-gold (item) currency only needs the currency item attainable-
+    now (quantity is not yet modeled — an over-approximation on quantity, refined
+    when a buy goal lands)."""
     rested = replace(state, hp=state.max_hp)
 
-    def leaf_ok(leaf: str) -> bool:
+    def leaf_ok(leaf: str, path: frozenset[str]) -> bool:
         if _gatherable(leaf, game_data):
             return True
-        return any(is_winnable(rested, game_data, monster_code)
-                   and game_data.monster_locations(monster_code)
-                   for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(leaf))
+        if any(is_winnable(rested, game_data, monster_code)
+               and game_data.monster_locations(monster_code)
+               for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(leaf)):
+            return True
+        if leaf in path:
+            return False
+        sub = path | {leaf}
+        for price, currency in _permanent_vendor_purchases(leaf, game_data):
+            if currency == GOLD:
+                if state.gold >= price:
+                    return True
+            elif _attainable_closure(currency, game_data, leaf_ok, sub):
+                return True
+        return False
 
     return _attainable_closure(code, game_data, leaf_ok)
 

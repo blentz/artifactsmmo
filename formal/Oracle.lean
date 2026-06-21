@@ -435,7 +435,9 @@ args layout (all Nat ≥ 0):
 * `[0]`              nEdges (number of `(item, mat)` recipe-material edges)
 * `[1 .. 2*nEdges]`  edges flat: item0 mat0 item1 mat1 ...
 * next: nHasRecipe, then the item codes that HAVE a recipe
-* next: nDrops, then the drop-item codes (resource-drop values)
+* next: nDrops, then the drop-item codes (resource-drop values + the gold token)
+* next: nBuyEdges, then `(item, currency)` purchase edges flat:
+        item0 cur0 item1 cur1 ...  (gold is encoded as a drop-leaf currency)
 * next: queryItem, fuel
 
 Emits `is_attainable` (bool). -/
@@ -451,14 +453,20 @@ def runObjectiveAttainable (args : Array Json) : Json :=
   let nDrops := g p2
   let dropList : List Nat := (List.range nDrops).map (fun k => g (p2 + 1 + k))
   let p3 := p2 + 1 + nDrops
-  let queryItem := g p3
-  let fuel := g (p3 + 1)
+  let nBuy := g p3
+  let buyEdges : List (Nat × Nat) :=
+    (List.range nBuy).map (fun k => (g (p3 + 1 + 2*k), g (p3 + 2 + 2*k)))
+  let p4 := p3 + 1 + 2*nBuy
+  let queryItem := g p4
+  let fuel := g (p4 + 1)
   let r : Formal.Objective.Recipe := fun item =>
     (edges.filter (fun e => decide (e.1 = item))).map Prod.snd
   let hasRec : Formal.Objective.HasRecipe := fun item => decide (item ∈ hasList)
   let drop : Formal.Objective.IsDrop := fun item => decide (item ∈ dropList)
+  let buys : Formal.Objective.Buys := fun item =>
+    (buyEdges.filter (fun e => decide (e.1 = item))).map Prod.snd
   Json.mkObj [("is_attainable",
-    Json.bool (Formal.Objective.isAttainable r hasRec drop fuel queryItem))]
+    Json.bool (Formal.Objective.isAttainable r hasRec drop buys fuel queryItem))]
 
 /-- Run `bestAttainableGear`: choose the first-slot item for a gear type.
 

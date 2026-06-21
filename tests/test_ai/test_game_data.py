@@ -915,11 +915,12 @@ def test_load_npcs_captures_sell_prices(monkeypatch):
     from artifactsmmo_cli.ai.game_data import GameData
 
     class FakeEntry:
-        def __init__(self, npc, code, buy_price, sell_price):
+        def __init__(self, npc, code, buy_price, sell_price, currency="gold"):
             self.npc = npc
             self.code = code
             self.buy_price = buy_price
             self.sell_price = sell_price
+            self.currency = currency
 
     class FakeResult:
         def __init__(self, data):
@@ -940,6 +941,74 @@ def test_load_npcs_captures_sell_prices(monkeypatch):
 
     assert gd._npc_sell_prices == {"cook": {"cooked_chicken": 5, "stale_bread": 2},
                                     "smith": {"iron_ore": 8}}
+
+
+def test_load_npcs_captures_buy_currency(monkeypatch):
+    """_build_npcs must record NPCItem.currency alongside buy_price: a bare price
+    is ambiguous (gold vs item currency). Only items with a buy_price are stocked,
+    so only those get a currency entry."""
+    from artifactsmmo_cli.ai.game_data import GameData
+
+    class FakeEntry:
+        def __init__(self, npc, code, buy_price, sell_price, currency):
+            self.npc = npc
+            self.code = code
+            self.buy_price = buy_price
+            self.sell_price = sell_price
+            self.currency = currency
+
+    class FakeResult:
+        def __init__(self, data):
+            self.data = data
+
+    def fake_sync(client, page, size):
+        if page == 1:
+            return FakeResult([
+                FakeEntry("rune_vendor", "lifesteal_rune", buy_price=20000, sell_price=None, currency="gold"),
+                FakeEntry("trader", "greater_lifesteal_rune", buy_price=100, sell_price=None, currency="sandwhisper_coin"),
+                FakeEntry("smith", "iron_ore", buy_price=None, sell_price=8, currency="gold"),  # not stocked
+            ])
+        return FakeResult([])
+
+    monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_all_npc_items", fake_sync)
+    gd = GameData()
+    gd._load_npcs(client=None)
+
+    assert gd._npc_stock == {"rune_vendor": {"lifesteal_rune": 20000},
+                             "trader": {"greater_lifesteal_rune": 100}}
+    assert gd._npc_buy_currency == {"rune_vendor": {"lifesteal_rune": "gold"},
+                                    "trader": {"greater_lifesteal_rune": "sandwhisper_coin"}}
+    # buy_price=None item is not stocked, so it gets no currency entry either.
+    assert "smith" not in gd._npc_buy_currency
+
+
+def test_npc_purchase_currency_and_purchases():
+    """npc_purchase_currency reports the pay currency; npc_purchases returns
+    (npc, price, currency) cheapest-first; both None/empty for unsold items."""
+    from artifactsmmo_cli.ai.game_data import GameData
+    gd = GameData()
+    gd._npc_stock = {"rune_vendor": {"lifesteal_rune": 20000},
+                     "trader": {"lifesteal_rune": 90}}
+    gd._npc_buy_currency = {"rune_vendor": {"lifesteal_rune": "gold"},
+                            "trader": {"lifesteal_rune": "sandwhisper_coin"}}
+    assert gd.npc_purchase_currency("rune_vendor", "lifesteal_rune") == "gold"
+    assert gd.npc_purchase_currency("trader", "lifesteal_rune") == "sandwhisper_coin"
+    assert gd.npc_purchase_currency("rune_vendor", "unknown") is None
+    assert gd.npc_purchases("lifesteal_rune") == [
+        ("trader", 90, "sandwhisper_coin"),
+        ("rune_vendor", 20000, "gold"),
+    ]
+    assert gd.npc_purchases("nonexistent") == []
+
+
+def test_npc_purchases_defaults_currency_to_gold_when_unindexed():
+    """If a stocked item somehow lacks a currency index entry, npc_purchases
+    falls back to 'gold' (the API's default) rather than dropping the seller."""
+    from artifactsmmo_cli.ai.game_data import GameData
+    gd = GameData()
+    gd._npc_stock = {"vendor": {"thing": 5}}
+    # no _npc_buy_currency entry for vendor/thing
+    assert gd.npc_purchases("thing") == [("vendor", 5, "gold")]
 
 
 def test_npc_buys_item_returns_price():
