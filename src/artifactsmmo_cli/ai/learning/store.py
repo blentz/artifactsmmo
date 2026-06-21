@@ -232,6 +232,42 @@ class LearningStore:
         except SQLAlchemyError:
             return None
 
+    def action_class_fraction(self, action_class: str,
+                              window: int = WINDOW_ACTION) -> float:
+        """Fraction of the last `window` ok cycles whose `action_class` matches —
+        the observed ACTION-MIX frequency. 0.0 when no ok cycles are recorded.
+
+        #16 strategic_value frequency-weighting: a wisdom point helps on every
+        FIGHT cycle, a bag on every BANK-TRIP cycle, so their cooldown-seconds-
+        saved rates must be weighted by HOW OFTEN each action type actually runs.
+        That frequency is learned here from the action mix rather than derived
+        from an (untracked) char-level xp curve."""
+        return self._cached(
+            ("action_class_fraction", action_class, window),
+            lambda: self._action_class_fraction_uncached(action_class, window),
+        )
+
+    def _action_class_fraction_uncached(self, action_class: str, window: int) -> float:
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = (
+                    select(Cycle.action_class)
+                    .where(
+                        Cycle.character == self._character,
+                        Cycle.outcome == "ok",
+                        col(Cycle.action_class).is_not(None),
+                    )
+                    .order_by(col(Cycle.ts).desc())
+                    .limit(window)
+                )
+                rows = list(s.exec(stmt))
+            if not rows:
+                return 0.0
+            match = sum(1 for r in rows if r == action_class)
+            return match / len(rows)
+        except SQLAlchemyError:
+            return 0.0
+
     def success_rate(self, action_repr: str, window: int = WINDOW_ACTION) -> float:
         """Fraction of last `window` cycles with outcome=='ok'. 1.0 if < 5 samples."""
         return self._cached(
