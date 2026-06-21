@@ -178,7 +178,14 @@ inventory_space) hit the no-invented-defaults wall and need a user decision.
   comments updated). within-slot SELECTION (target_gear/near_term_gear) stays
   equip_value. Net live effect: wisdom/prospecting gear down-weighted ~1000× (openapi
   0.001) so XP/drop artifacts no longer rank like attack; bags at parity pending 3b.
-* PHASE 3b DESIGN LOCKED (user 2026-06-21: efficiency sub-budget below combat;
+* PHASE 3b DONE (merged 57b3fd9, full gate green). Built per the design below.
+  Shipped: LearningStore.action_class_fraction (action-mix freq); strategic_weights
+  (state, history) → learned cooldown-seconds-saved weights (wisdom/prospecting =
+  0.001×fight_cd×f_fight; inventory = roundtrip_cd/inventory_max×f_trip; haste = 0
+  until probe); strategic_value wrapper efficiency-budget CAP (combat dominance
+  structural); history threaded _equip_gain→_marginal→_value←decide (cold →
+  combat-only). Proved core unchanged. 100% cov.
+* PHASE 3b DESIGN (locked; user 2026-06-21: efficiency sub-budget below combat;
   build full). Combat and efficiency are DIMENSIONALLY incommensurate (combat =
   stat-points×SCALE; efficiency = cooldown-seconds). Resolution: combat keeps the
   dominant SCALE weight; the efficiency block is CAPPED at < 1 combat-point so it
