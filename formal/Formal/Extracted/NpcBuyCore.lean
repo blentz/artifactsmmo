@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/actions/npc_buy_core.py (sha256: 66a3650e55cc6f930907b8ea6ff61501cea933300a135da4a6bf81e3635af4bb) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/actions/npc_buy_core.py (sha256: ebf41543b562c9686d5249c96676131b47780149c6cbd4fb74fba408ceb34028) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.NpcBuyCore
