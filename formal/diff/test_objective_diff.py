@@ -20,7 +20,6 @@ from hypothesis import given, settings, strategies as st
 
 from artifactsmmo_cli.ai.game_data import ItemStats
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
-from artifactsmmo_cli.ai.tiers.strategic_value import strategic_value
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainable
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES, WorldState
 from formal.diff.oracle_client import run_oracle
@@ -408,10 +407,7 @@ def test_gap_matches_lean(seed):
     }
     recipes = {1: {999: 1}}
     drops = {100: 999}
-    # gap() now weights CROSS-SLOT gear by strategic_value (#16), so the (target,
-    # have) pairs fed to the objective_gap oracle must be strategic_value too —
-    # not equip_value (which still drives target_gear SELECTION, tested above).
-    target_val = strategic_value(item_stats[1])  # P4a: exact int
+    target_val = equip_value(item_stats[1])  # P4a: exact int
 
     # equipped weapon: maybe none, maybe a weaker/stronger item
     have_val = 0
@@ -420,7 +416,7 @@ def test_gap_matches_lean(seed):
         eq = _stats(2, "weapon", rng.randint(0, 12), rng.randint(0, 12), rng.randint(0, 12))
         item_stats[2] = eq
         equipment["weapon_slot"] = "2"
-        have_val = strategic_value(eq)  # P4a: exact int
+        have_val = equip_value(eq)  # P4a: exact int
 
     gd = _FakeGameData(recipes, drops, item_stats)
     obj = CharacterObjective.from_game_data(gd)

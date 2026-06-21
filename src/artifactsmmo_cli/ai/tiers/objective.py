@@ -12,7 +12,6 @@ from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import _GATHERING_SKILLS, GameData
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value, tool_value
-from artifactsmmo_cli.ai.tiers.strategic_value import strategic_value
 from artifactsmmo_cli.ai.tiers.objective_completion import is_complete_pure
 from artifactsmmo_cli.ai.tiers.skill_target_curve import skill_target_curve
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, SKILL_NAMES, WorldState
@@ -296,17 +295,6 @@ class CharacterObjective:
         stats = self._game_data.item_stats(code)
         return equip_value(stats) if stats is not None else 0
 
-    def _strategic_item_value(self, code: str | None) -> int:
-        """Efficiency-weighted value for CROSS-SLOT gap priority (#14/#16): combat
-        stats keep the dominant scale weight (so combat-slot ordering matches
-        equip_value), while non-combat efficiency stats are re-weighted by their
-        derived rate. Used ONLY in `gap()`; within-slot best-item selection
-        (`target_gear`, `near_term_gear`) stays on the proved `equip_value`."""
-        if not code:
-            return 0
-        stats = self._game_data.item_stats(code)
-        return strategic_value(stats) if stats is not None else 0
-
     def gap(self, state: WorldState) -> ObjectiveGap:
         char_level_gap = max(0, self.target_char_level - state.level)
         skill_gaps = {
@@ -317,14 +305,9 @@ class CharacterObjective:
         gear_gaps: dict[str, int] = {}
         gear_target_total = 0
         for slot, target_code in self.target_gear.items():
-            # CROSS-SLOT priority uses strategic_value (efficiency-weighted) so a
-            # bag/rune slot's gap reflects its compounding non-combat value, not a
-            # 1:1-with-attack sum (#16). target_gear was still SELECTED by
-            # equip_value (combat scorer) in from_game_data — only the gap
-            # WEIGHTING differs here.
-            target_val = self._strategic_item_value(target_code)
+            target_val = self._item_value(target_code)
             gear_target_total += target_val
-            deficit = max(0, target_val - self._strategic_item_value(state.equipment.get(slot)))
+            deficit = max(0, target_val - self._item_value(state.equipment.get(slot)))
             if deficit > 0:
                 gear_gaps[slot] = deficit
 
