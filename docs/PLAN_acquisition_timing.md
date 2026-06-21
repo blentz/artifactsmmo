@@ -151,8 +151,22 @@ inventory_space) hit the no-invented-defaults wall and need a user decision.
   MIRROR_LADDER_ORDER") is EXPECTED, not a baseline break — gate.sh runs
   differential before mutation under set -e, so "ALL GATE PARTS PASSED" is the
   real green signal (a `| tail` on the gate invocation masks gate.sh's own exit).
-* NEXT: (Phase 3) ObjectiveGap rewire — derive the weights from game_data
-  (wisdom×0.001, prospecting×0.001, inventory×cadence-proxy, combat dominant,
-  haste×1 until probe) and use strategic_value for _item_value cross-slot priority;
-  adapt Objective.lean (parametric value); (Phase 4) #14 horizon factor.
+* Phase 3a DONE (branch feat/strategic-value-wire, full gate green): ObjectiveGap.gap
+  cross-slot priority now weights gear gaps by `strategic_value` (via
+  `_strategic_item_value`); target_gear/near_term_gear SELECTION stays on the proved
+  `equip_value` (combat order unchanged). Weights (fixed-point SCALE=1000):
+  combat=SCALE (dominant, ratios cancel), wisdom/prospecting=1 (openapi 0.001),
+  inventory_space+haste=SCALE (DEFERRED at weight-parity — no invented rate).
+  Lean gap proofs unchanged (axisGap_nonneg/gapSum_le_targetSum parametric in any
+  nonneg value; strategicValue_nonneg supplies it). Lockstep: objective gap
+  differential rebound to strategic_value; gap unit assertions + wrapper tests
+  updated. NOTE: mutation gate's dirty-source guard ABORTS on uncommitted target
+  files — COMMIT before running mutation/full gate (cost a redundant gate run).
+* DECISIONS (user 2026-06-21): common currency for efficiency stats =
+  COOLDOWN-SECONDS SAVED; inventory proxy = mean(map→nearest-bank chebyshev)×5×2
+  roundtrip ÷ items_per_trip(=inventory_max); sequencing = wire-now/full-rates-next.
+* NEXT (Phase 3b): commensurate inventory + (post-probe) haste into cooldown-seconds
+  -saved weights — needs avg-fight-cd + fights/level (xp curve) + mean-bank-distance
+  derivations from game_data; replace the DEFERRED parity weights. Then (Phase 4)
+  #14 horizon factor.
 * #12/#13 complete + merged. #15 (currency arbitrage) independent, still queued.
