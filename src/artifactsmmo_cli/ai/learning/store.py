@@ -195,6 +195,43 @@ class LearningStore:
         except SQLAlchemyError:
             return None
 
+    def action_class_cost(self, action_class: str, default: float,
+                          window: int = WINDOW_ACTION) -> float:
+        """Median actual_cooldown_seconds over the last `window` ok cycles of a
+        given ACTION TYPE (e.g. "FightAction", "MovementAction",
+        "DepositAllAction"), or `default` if < 5 samples.
+
+        Per-action-TYPE cooldown is what the #16 strategic_value weights consume:
+        the cooldown-seconds-saved commensuration reads the learned typical fight
+        / move / deposit cooldown from gameplay rather than assuming a static
+        figure (no fight-cooldown formula exists in the API). Companion to
+        `action_cost`, which keys on the specific `action_repr`."""
+        median = self._cached(
+            ("action_class_cost", action_class, window),
+            lambda: self._action_class_cost_median(action_class, window),
+        )
+        return median if median is not None else default
+
+    def _action_class_cost_median(self, action_class: str, window: int) -> float | None:
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = (
+                    select(Cycle.actual_cooldown_seconds)
+                    .where(
+                        Cycle.character == self._character,
+                        Cycle.action_class == action_class,
+                        Cycle.outcome == "ok",
+                        col(Cycle.actual_cooldown_seconds).is_not(None),
+                    )
+                    .order_by(col(Cycle.ts).desc())
+                    .limit(window)
+                )
+                rows = list(s.exec(stmt))
+            non_null = [r for r in rows if r is not None]
+            return warmup_gated_median(non_null)
+        except SQLAlchemyError:
+            return None
+
     def success_rate(self, action_repr: str, window: int = WINDOW_ACTION) -> float:
         """Fraction of last `window` cycles with outcome=='ok'. 1.0 if < 5 samples."""
         return self._cached(

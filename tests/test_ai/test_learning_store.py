@@ -214,7 +214,7 @@ def test_package_reexport():
     assert RootImport is ModuleImport
 
 
-def _insert_cycles(store, action_repr, cooldowns, outcomes=None):
+def _insert_cycles(store, action_repr, cooldowns, outcomes=None, action_class=None):
     """Helper: insert N cycles with given cooldowns and outcomes."""
     outcomes = outcomes or ["ok"] * len(cooldowns)
     for i, (cd, oc) in enumerate(zip(cooldowns, outcomes, strict=False)):
@@ -222,8 +222,46 @@ def _insert_cycles(store, action_repr, cooldowns, outcomes=None):
             ts=f"2026-05-17T00:00:{i:02d}+00:00",
             session_id="x", cycle_index=i, character="x", outcome=oc,
             action_repr=action_repr,
+            action_class=action_class,
             actual_cooldown_seconds=cd,
         ))
+
+
+class TestActionClassCost:
+    def test_returns_default_when_fewer_than_5_samples(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        _insert_cycles(store, "Fight(x)", [10.0, 11.0, 12.0], action_class="FightAction")
+        assert store.action_class_cost("FightAction", default=99.0) == 99.0
+        store.close()
+
+    def test_returns_median_over_the_whole_class(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        # Different reprs, same class — the per-class median spans both.
+        _insert_cycles(store, "Fight(x)", [10.0, 12.0], action_class="FightAction")
+        _insert_cycles(store, "Fight(y)", [14.0, 16.0, 18.0], action_class="FightAction")
+        assert store.action_class_cost("FightAction", default=99.0) == 14.0
+        store.close()
+
+    def test_filters_by_action_class(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        _insert_cycles(store, "Fight(x)", [10.0] * 5, action_class="FightAction")
+        _insert_cycles(store, "Move(a,b)", [30.0] * 5, action_class="MovementAction")
+        assert store.action_class_cost("FightAction", default=99.0) == 10.0
+        assert store.action_class_cost("MovementAction", default=99.0) == 30.0
+        store.close()
+
+    def test_ignores_failed_actions(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        _insert_cycles(store, "Fight(x)",
+                       cooldowns=[10.0, 10.0, 10.0, 99.0, 99.0],
+                       outcomes=["ok", "ok", "ok", "error:HTTP_497", "error:HTTP_497"],
+                       action_class="FightAction")
+        assert store.action_class_cost("FightAction", default=42.0) == 42.0
+        store.close()
 
 
 class TestActionCost:
@@ -809,6 +847,11 @@ class TestDegradationOnDbError:
         store = LearningStore(db_path=tmp_db_path, character="hero")
         _break_engine(store)
         assert store.action_cost("FightAction(chicken)", default=3.5) == 3.5
+
+    def test_action_class_cost_returns_default(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        assert store.action_class_cost("FightAction", default=3.5) == 3.5
 
     def test_success_rate_returns_one(self, tmp_db_path):
         store = LearningStore(db_path=tmp_db_path, character="hero")
