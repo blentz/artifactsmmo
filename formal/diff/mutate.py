@@ -710,6 +710,22 @@ OBJECTIVE_MUTATIONS = [
     ("objective: char_level_gap sign flip (target-level -> level-target)",
      "        char_level_gap = max(0, self.target_char_level - state.level)",
      "        char_level_gap = max(0, state.level - self.target_char_level)"),
+    # drop the monster-drop leaf branch: reverts is_attainable to the old
+    # gathering-ONLY bug that silently dropped body/leg/amulet from target_gear.
+    # A craft chain bottoming out in a (spawning) monster drop is wrongly
+    # rejected -> killed by test_attainable_spawning_monster_drop_accepted.
+    ("objective: drop monster-drop leaf branch (gathering-only regression)",
+     "        lambda leaf: _gatherable(leaf, game_data)\n"
+     "        or _drops_from_spawning_monster(leaf, game_data))",
+     "        lambda leaf: _gatherable(leaf, game_data))"),
+    # drop the known-spawn gate: accept ANY monster drop even from a monster the
+    # bot can never reach. Killed by test_attainable_spawnless_monster_drop_rejected
+    # and the random graph (spawn-less droppers must not ground their item).
+    ("objective: drop known-spawn gate in monster-drop leaf",
+     "    return any(game_data.monster_locations(monster_code)\n"
+     "               for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(code))",
+     "    return any(True\n"
+     "               for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(code))"),
     # NOTE: the historical `is_complete` weakening mutation (and -> or) MOVED to
     # `objective_completion.py` after the pure-core extraction (the property
     # `ObjectiveGap.is_complete` now delegates to `is_complete_pure`). The

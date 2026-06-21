@@ -4,6 +4,7 @@ Two tightly-coupled frozen models in one file (CharacterObjective produces
 ObjectiveGap), following the cycle_snapshot.py GoalRankEntry/GoalAttempt
 precedent."""
 
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from fractions import Fraction
 
@@ -42,52 +43,88 @@ def _slot_assignments(type_: str, slots: list[str],
     return out
 
 
-def is_attainable(code: str, game_data: GameData, _path: frozenset[str] = frozenset()) -> bool:
-    """True when the item is producible in principle (at max progression): its
-    craft chain bottoms out in gatherables, with no drop-only/unknown component.
-    State-independent — the perfect-sheet target ignores current skills. Cycle-safe."""
+def _attainable_closure(code: str, game_data: GameData,
+                        leaf_ok: Callable[[str], bool],
+                        _path: frozenset[str] = frozenset()) -> bool:
+    """Shared cycle-safe producibility walk: an item is attainable iff its craft
+    chain bottoms out in leaves that `leaf_ok` accepts. The recipe walk is
+    IDENTICAL for the perfect-sheet (`is_attainable`) and the near-term
+    (`is_attainable_now`) gates — they differ ONLY in the leaf rule, so the walk
+    lives here once. Mirrors the proved `Formal.Objective.attainAux`, which is
+    parametric in its `drop` leaf predicate (the Python `leaf_ok`). Cycle-safe
+    via `_path`: a recipe item already on the path can never bottom out."""
     recipe = game_data.crafting_recipe(code)
     if recipe is not None:
         if code in _path:
             return False
         sub_path = _path | {code}
-        return all(is_attainable(mat, game_data, sub_path) for mat in recipe)
+        return all(_attainable_closure(mat, game_data, leaf_ok, sub_path)
+                   for mat in recipe)
+    return leaf_ok(code)
+
+
+def _gatherable(code: str, game_data: GameData) -> bool:
+    """A raw resource-drop leaf (`code in resource_drops.values()`)."""
     return code in game_data.resource_drops.values()
 
 
-def is_attainable_now(code: str, state: WorldState, game_data: GameData,
-                      _path: frozenset[str] = frozenset()) -> bool:
-    """State-aware producibility for NEAR-TERM targets: the craft chain
-    bottoms out in gatherables OR drops from a winnable monster with a known
-    spawn — the same leaf semantics as the strategy tier's `_producible`.
-
-    `is_attainable` is the wrong gate for near-term gear: every armor a
-    low-level character can wear crafts from monster drops (copper_armor
-    needs wool, copper_legs_armor needs feather, life_amulet needs feather +
-    red_slimeball), so the gathering-only closure rejected ALL of them and
-    the 2026-06-11 near-term-gear fix was inert (trace 17:21: three empty
-    slots, zero armor roots). Drops from monsters the character can't beat
-    yet stay excluded — those targets self-unlock as gear/level improve.
-
-    Winnability is judged AT FULL HP: this is a strategic "can the
-    character ever farm this" question and rest is always available, so a
-    transiently-damaged character must not see its gear targets evaporate
-    (predict_win at hp=31/175 fails every monster, which flipped
-    chosen_root on every post-fight cycle). Matches the G3 Lean model
-    (`winnable_at_max_hp`). Tactical fight entry keeps current-HP
-    semantics in predict_win itself. Cycle-safe."""
-    recipe = game_data.crafting_recipe(code)
-    if recipe is not None:
-        if code in _path:
-            return False
-        sub_path = _path | {code}
-        return all(is_attainable_now(mat, state, game_data, sub_path) for mat in recipe)
-    if code in game_data.resource_drops.values():
-        return True
-    rested = replace(state, hp=state.max_hp)
-    return any(is_winnable(rested, game_data, monster_code)
-               and game_data.monster_locations(monster_code)
+def _drops_from_spawning_monster(code: str, game_data: GameData) -> bool:
+    """Some monster with a KNOWN spawn (static overworld or active event, bosses
+    included) drops `code`. State-INDEPENDENT: the perfect sheet assumes full
+    progression, at which any spawning monster is farmable, so its drops count
+    as producible regardless of current combat strength."""
+    return any(game_data.monster_locations(monster_code)
                for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(code))
+
+
+def is_attainable(code: str, game_data: GameData) -> bool:
+    """True when the item is producible AT MAX PROGRESSION: its craft chain
+    bottoms out in leaves that are gatherable raws OR drops from a known-spawn
+    monster (bosses included). State-independent — the perfect-sheet target
+    ignores current skills and current combat strength.
+
+    Previously GATHERING-ONLY, which rejected every armor that crafts from a
+    monster drop (copper_armor<-wool, copper_legs_armor<-feather,
+    life_amulet<-feather+red_slimeball) and so silently dropped body/leg/amulet
+    from `target_gear`; the near-term gate pursued them but the perfect sheet
+    under-targeted. Now unified with `is_attainable_now` on the shared
+    `_attainable_closure` walk — they differ only in the leaf rule, this one
+    omitting the winnability gate (at max progression every spawning monster is
+    beatable)."""
+    return _attainable_closure(
+        code, game_data,
+        lambda leaf: _gatherable(leaf, game_data)
+        or _drops_from_spawning_monster(leaf, game_data))
+
+
+def is_attainable_now(code: str, state: WorldState, game_data: GameData) -> bool:
+    """State-aware producibility for NEAR-TERM targets: the same recipe walk as
+    `is_attainable`, but the leaf is gatherable OR a drop from a monster that is
+    winnable NOW (judged at full HP) with a known spawn — the leaf semantics of
+    the strategy tier's `_producible`.
+
+    `is_attainable` is the wrong gate for near-term gear at LOW level: every
+    armor a low-level character can wear crafts from monster drops, and a
+    low-level character can't yet beat the monsters dropping the BiS materials.
+    Drops from monsters the character can't beat yet stay excluded — those
+    targets self-unlock as gear/level improve.
+
+    Winnability is judged AT FULL HP: this is a strategic "can the character ever
+    farm this" question and rest is always available, so a transiently-damaged
+    character must not see its gear targets evaporate (predict_win at hp=31/175
+    fails every monster, which flipped chosen_root on every post-fight cycle).
+    Matches the G3 Lean model (`winnable_at_max_hp`). Tactical fight entry keeps
+    current-HP semantics in predict_win itself."""
+    rested = replace(state, hp=state.max_hp)
+
+    def leaf_ok(leaf: str) -> bool:
+        if _gatherable(leaf, game_data):
+            return True
+        return any(is_winnable(rested, game_data, monster_code)
+                   and game_data.monster_locations(monster_code)
+                   for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(leaf))
+
+    return _attainable_closure(code, game_data, leaf_ok)
 
 
 @dataclass(frozen=True)
