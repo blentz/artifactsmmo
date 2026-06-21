@@ -1412,9 +1412,25 @@ def runNpcBuyInventory (args : Array Json) : Json :=
     Json.mkObj
       [("applicable", Json.bool (Formal.NpcBuyInventory.isApplicable i quantity gold price)),
        ("free", Json.num (Int.ofNat (Formal.NpcBuyInventory.free i)))]
-  else
+  else if q == 1 then
     let quantity := (intArg args 3).toNat
     let post := Formal.NpcBuyInventory.apply i quantity
+    Json.mkObj [("used", Json.num (Int.ofNat post.used)),
+                ("cap", Json.num (Int.ofNat post.cap))]
+  else if q == 2 then
+    -- item-currency applicability: [2, used, cap, quantity, currencyOnHand, spent]
+    let quantity := (intArg args 3).toNat
+    let currencyOnHand := (intArg args 4).toNat
+    let spent := (intArg args 5).toNat
+    Json.mkObj
+      [("applicable",
+        Json.bool (Formal.NpcBuyInventory.isApplicableCurrency i quantity currencyOnHand spent)),
+       ("free", Json.num (Int.ofNat (Formal.NpcBuyInventory.free i)))]
+  else
+    -- item-currency apply projection: [3, used, cap, quantity, spent]
+    let quantity := (intArg args 3).toNat
+    let spent := (intArg args 4).toNat
+    let post := Formal.NpcBuyInventory.applyCurrency i quantity spent
     Json.mkObj [("used", Json.num (Int.ofNat post.used)),
                 ("cap", Json.num (Int.ofNat post.cap))]
 

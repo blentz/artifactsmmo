@@ -62,3 +62,45 @@ def npc_buy_apply_pure(
     new_inventory = dict(inventory)
     new_inventory[item_code] = new_inventory.get(item_code, 0) + quantity
     return new_inventory
+
+
+def npc_buy_currency_is_applicable_pure(
+    inv_used: int,
+    inv_max: int,
+    quantity: int,
+    currency_on_hand: int,
+    total_spent: int,
+) -> bool:
+    """True iff a free slot exists for the bought item AND the pay-currency stack
+    covers `total_spent` (= price * quantity).
+
+    The item-currency analogue of `npc_buy_is_applicable_pure`: the gold gate is
+    replaced by a currency-on-hand gate (`NpcBuyAction.is_applicable`'s non-gold
+    branch). Mirrors `Formal.NpcBuyInventory.isApplicableCurrency`.
+    """
+    free = inv_max - inv_used
+    if free < quantity:
+        return False
+    return not currency_on_hand < total_spent
+
+
+def npc_buy_currency_apply_pure(
+    inventory: Mapping[str, int],
+    item_code: str,
+    quantity: int,
+    currency: str,
+    total_spent: int,
+) -> dict[str, int]:
+    """Mint `+quantity` of `item_code` and draw the `currency` stack down by
+    `total_spent` (= price * quantity).
+
+    `item_code` count += quantity; `currency` count -= total_spent; all other
+    entries preserved. Net slot count is `used + quantity - total_spent`, mirroring
+    `Formal.NpcBuyInventory.applyCurrency`. The production `NpcBuyAction.apply`
+    asserts the slot precondition and `is_applicable` guarantees
+    `currency_on_hand >= total_spent`, so the currency count stays non-negative.
+    """
+    new_inventory = dict(inventory)
+    new_inventory[item_code] = new_inventory.get(item_code, 0) + quantity
+    new_inventory[currency] = new_inventory.get(currency, 0) - total_spent
+    return new_inventory

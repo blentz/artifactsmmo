@@ -2318,6 +2318,28 @@ NPC_BUY_MUTATIONS = [
      "    return new_inventory",
      "    new_inventory[item_code] = new_inventory.get(item_code, 0) + quantity + 1\n"
      "    return new_inventory"),
+    # Item-currency path (task #13b). Drop the currency-on-hand gate: an
+    # unaffordable currency purchase is wrongly accepted. Killed by
+    # test_currency_insufficient_on_hand_blocked + the random currency diff.
+    ("npc_buy: drop currency-on-hand check in currency is_applicable",
+     "    return not currency_on_hand < total_spent",
+     "    return True"),
+    # Drop the slot floor on the currency path: apply could mint past cap.
+    # Killed by the free-slot currency differential.
+    ("npc_buy: drop slot floor in currency is_applicable",
+     "    free = inv_max - inv_used\n"
+     "    if free < quantity:\n"
+     "        return False\n"
+     "    return not currency_on_hand < total_spent",
+     "    return not currency_on_hand < total_spent"),
+    # Drop the currency consumption in apply: the currency stack is never drawn
+    # down (resurrects the phase-5 gold-only bug). Killed by
+    # test_currency_apply_matches_lean (post[coin] mismatch) +
+    # test_currency_consumption_frees_net_space.
+    ("npc_buy: drop currency consumption in currency apply",
+     "    new_inventory[currency] = new_inventory.get(currency, 0) - total_spent\n"
+     "    return new_inventory",
+     "    return new_inventory"),
 ]
 
 

@@ -14,6 +14,8 @@ from hypothesis import given, settings, strategies as st
 
 from artifactsmmo_cli.ai.actions.npc_buy_core import (
     npc_buy_apply_pure,
+    npc_buy_currency_apply_pure,
+    npc_buy_currency_is_applicable_pure,
     npc_buy_is_applicable_pure,
 )
 from formal.diff.oracle_client import run_oracle
@@ -132,3 +134,82 @@ def test_gold_boundary_one_short_blocked():
     assert py is False
     lean = run_oracle("npc_buy_inventory", [[0, 0, 100, 5, 14, 3]])[0]
     assert lean["applicable"] is False
+
+
+# ---------------------------------------------------------------------------
+# Item-currency purchase (task #13b): npc_buy_currency_* cores vs the proved
+# Formal.NpcBuyInventory.isApplicableCurrency / applyCurrency (oracle q=2 / q=3).
+# ---------------------------------------------------------------------------
+
+@settings(max_examples=300)
+@given(
+    used=st.integers(min_value=0, max_value=200),
+    span=st.integers(min_value=0, max_value=200),
+    quantity=st.integers(min_value=0, max_value=50),
+    on_hand=st.integers(min_value=0, max_value=500),
+    spent=st.integers(min_value=0, max_value=500),
+)
+def test_currency_is_applicable_matches_lean(used, span, quantity, on_hand, spent):
+    cap = used + span
+    py = npc_buy_currency_is_applicable_pure(used, cap, quantity, on_hand, spent)
+    lean = run_oracle("npc_buy_inventory", [[2, used, cap, quantity, on_hand, spent]])[0]
+    assert py == lean["applicable"]
+    assert lean["free"] == cap - used
+    if py:
+        # proved invariant: free slot AND currency covers spend; net stays in cap
+        assert (cap - used) >= quantity
+        assert on_hand >= spent
+        post = npc_buy_currency_apply_pure({"x": used, "coin": on_hand}, "x", quantity, "coin", spent)
+        # net slot count = used + quantity - spent (truncating); must fit cap
+        net_used = max(0, used + quantity - spent)
+        assert net_used <= cap
+
+
+@settings(max_examples=300)
+@given(
+    used=st.integers(min_value=0, max_value=200),
+    span=st.integers(min_value=0, max_value=200),
+    quantity=st.integers(min_value=0, max_value=50),
+    spent=st.integers(min_value=0, max_value=200),
+)
+def test_currency_apply_matches_lean(used, span, quantity, spent):
+    cap = used + span
+    # Bookkeeping: bought item +quantity, currency -spent, others preserved.
+    # Seed the currency stack high enough that the decrement stays non-negative
+    # (is_applicable guarantees this in production).
+    pre = {"rune": 7, "coin": spent + 5, "other": 3}
+    post = npc_buy_currency_apply_pure(pre, "rune", quantity, "coin", spent)
+    assert post["rune"] == 7 + quantity
+    assert post["coin"] == spent + 5 - spent
+    assert post["other"] == 3
+    # Slot totals match the Lean oracle (applyCurrency projection).
+    lean = run_oracle("npc_buy_inventory", [[3, used, cap, quantity, spent]])[0]
+    assert lean["used"] == max(0, used + quantity - spent)  # Nat truncation
+    assert lean["cap"] == cap
+
+
+def test_currency_insufficient_on_hand_blocked():
+    """Rich in gold is irrelevant: too little of the pay currency must refuse."""
+    py = npc_buy_currency_is_applicable_pure(
+        inv_used=0, inv_max=100, quantity=1, currency_on_hand=50, total_spent=100)
+    assert py is False
+    lean = run_oracle("npc_buy_inventory", [[2, 0, 100, 1, 50, 100]])[0]
+    assert lean["applicable"] is False
+
+
+def test_currency_exact_on_hand_accepted():
+    """currency_on_hand == total_spent is the accepted boundary."""
+    py = npc_buy_currency_is_applicable_pure(
+        inv_used=5, inv_max=10, quantity=5, currency_on_hand=100, total_spent=100)
+    assert py is True
+    lean = run_oracle("npc_buy_inventory", [[2, 5, 10, 5, 100, 100]])[0]
+    assert lean["applicable"] is True
+
+
+def test_currency_consumption_frees_net_space():
+    """Paying more currency units than items bought lowers net used (10→6)."""
+    post = npc_buy_currency_apply_pure({"r": 0, "coin": 5}, "r", 1, "coin", 5)
+    assert post["r"] == 1
+    assert post["coin"] == 0
+    lean = run_oracle("npc_buy_inventory", [[3, 10, 20, 1, 5]])[0]
+    assert lean["used"] == 6

@@ -114,7 +114,71 @@ theorem npc_buy_chain_safe (i : Inv) (qs : List Nat)
   rw [applyN_used]
   omega
 
+/-! ### Item-currency purchase (task #13b).
+
+When the vendor's pay currency is NOT gold, the player pays in an inventory ITEM:
+the buy needs a free slot for the bought item AND `spent` (= price*quantity) units
+of the currency on hand; `apply` mints `quantity` of the item and draws the
+currency stack down by `spent`. The net slot count is `used + quantity - spent`
+(Nat-truncating) — the consumption can only FREE space, so cap-safety holds a
+fortiori. The Python cores are `npc_buy_currency_is_applicable_pure` /
+`npc_buy_currency_apply_pure`. -/
+
+/-- Currency-purchase applicability: a free slot for the mint AND enough of the
+pay currency on hand. (The gold gate is replaced by a currency-on-hand gate.) -/
+def isApplicableCurrency (i : Inv) (quantity currencyOnHand spent : Nat) : Bool :=
+  decide (quantity ≤ i.cap - i.used) && decide (spent ≤ currencyOnHand)
+
+/-- Currency-purchase slot projection: net `used' = used + quantity - spent`
+(mint the bought item, consume `spent` units of the currency item). -/
+def applyCurrency (i : Inv) (quantity spent : Nat) : Inv :=
+  { i with used := i.used + quantity - spent }
+
+/-- Lower bound: a passing currency check guarantees the slot floor. -/
+theorem npc_buy_currency_is_applicable_imp_free_ge
+    (i : Inv) (quantity currencyOnHand spent : Nat) :
+    isApplicableCurrency i quantity currencyOnHand spent = true →
+      quantity ≤ i.cap - i.used := by
+  intro h; simp [isApplicableCurrency] at h; exact h.1
+
+/-- Companion lower bound on the currency-on-hand component. -/
+theorem npc_buy_currency_is_applicable_imp_currency_ge
+    (i : Inv) (quantity currencyOnHand spent : Nat) :
+    isApplicableCurrency i quantity currencyOnHand spent = true →
+      spent ≤ currencyOnHand := by
+  intro h; simp [isApplicableCurrency] at h; exact h.2
+
+/-- **Per-step safety** for a currency purchase: under the slot floor, the net
+count never overflows the cap. The currency consumption only lowers `used`, so
+this holds a fortiori versus the gold case (mint-only). -/
+theorem npc_buy_currency_apply_inventory_safe
+    (i : Inv) (quantity currencyOnHand spent : Nat)
+    (hwf : i.used ≤ i.cap)
+    (h : isApplicableCurrency i quantity currencyOnHand spent = true) :
+    (applyCurrency i quantity spent).used ≤ i.cap := by
+  have hfree := npc_buy_currency_is_applicable_imp_free_ge i quantity currencyOnHand spent h
+  simp [applyCurrency]
+  omega
+
 /-! ### Non-vacuity witnesses (boundary cases). -/
+
+/-- Witness: a currency buy at the slot boundary (`quantity = free`) with exactly
+enough currency succeeds and stays in cap. -/
+theorem currency_boundary_accepted_witness :
+    let i : Inv := { used := 5, cap := 10 }
+    isApplicableCurrency i 5 100 100 = true ∧ (applyCurrency i 5 100).used ≤ i.cap := by
+  refine ⟨by decide, ?_⟩; decide
+
+/-- Witness: insufficient currency-on-hand is REFUSED even with free slots and
+plenty of gold (gold is irrelevant on the currency path). -/
+theorem currency_short_refused_witness :
+    isApplicableCurrency { used := 0, cap := 100 } 1 50 100 = false := by decide
+
+/-- Witness: paying a currency frees net space — buying 1 item for 5 currency
+units leaves `used` DOWN by 4 (10 → 6). Pins that consumption is modeled, not
+dropped. -/
+theorem currency_consumption_frees_space_witness :
+    (applyCurrency { used := 10, cap := 20 } 1 5).used = 6 := by decide
 
 /-- Witness: a buy of exactly `quantity = free` succeeds and stays in cap.
 The boundary anchor — `quantity == free` is the contested case where the

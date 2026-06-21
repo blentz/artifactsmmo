@@ -1647,6 +1647,22 @@ example : ∀ (i : Formal.NpcBuyInventory.Inv) (qs : List Nat),
     i.used ≤ i.cap → qs.sum ≤ i.cap - i.used →
     (Formal.NpcBuyInventory.applyN i qs).used ≤ i.cap :=
   @Formal.NpcBuyInventory.npc_buy_chain_safe
+-- item-currency applicability lower bound (slot): passing check ⇒ quantity ≤ free
+example : ∀ (i : Formal.NpcBuyInventory.Inv) (quantity currencyOnHand spent : Nat),
+    Formal.NpcBuyInventory.isApplicableCurrency i quantity currencyOnHand spent = true →
+    quantity ≤ i.cap - i.used :=
+  @Formal.NpcBuyInventory.npc_buy_currency_is_applicable_imp_free_ge
+-- item-currency applicability lower bound (currency): passing check ⇒ spent ≤ currencyOnHand
+example : ∀ (i : Formal.NpcBuyInventory.Inv) (quantity currencyOnHand spent : Nat),
+    Formal.NpcBuyInventory.isApplicableCurrency i quantity currencyOnHand spent = true →
+    spent ≤ currencyOnHand :=
+  @Formal.NpcBuyInventory.npc_buy_currency_is_applicable_imp_currency_ge
+-- item-currency per-step safety: wellformed + applicable ⇒ net post.used ≤ cap
+example : ∀ (i : Formal.NpcBuyInventory.Inv) (quantity currencyOnHand spent : Nat),
+    i.used ≤ i.cap →
+    Formal.NpcBuyInventory.isApplicableCurrency i quantity currencyOnHand spent = true →
+    (Formal.NpcBuyInventory.applyCurrency i quantity spent).used ≤ i.cap :=
+  @Formal.NpcBuyInventory.npc_buy_currency_apply_inventory_safe
 
 -- ActionCostNonneg statement contracts. Pin the role theorems' exact types.
 -- bucket 1: constant cost ≥ 0
