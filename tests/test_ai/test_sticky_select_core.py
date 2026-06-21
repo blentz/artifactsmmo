@@ -110,6 +110,25 @@ class TestRootProgressValue:
         more = root_progress_value(root, _state(inventory={"copper_bar": 5}), gd)
         assert few == 2 and more == 5
 
+    def test_obtain_transitive_closure_raw_weighted(self):
+        # 2-level recipe: boots <- 6 bar <- 10 ore. raw(ore)=1, raw(bar)=10,
+        # raw(boots)=60. The deepened witness counts the TRANSITIVE closure (ore,
+        # not just the direct bar input) so a long ore-gather stretch registers
+        # progress, and the raw weight keeps a craft non-decreasing.
+        root = ObtainItem(code="copper_boots", quantity=1, slot="boots_slot")
+        gd = _FakeGameData({"copper_boots": {"copper_bar": 6},
+                            "copper_bar": {"copper_ore": 10}})
+        # gather ore: strictly increases (the shallow predecessor read this as flat).
+        assert (root_progress_value(root, _state(inventory={"copper_ore": 1}), gd)
+                > root_progress_value(root, _state(inventory={}), gd))
+        # smelt 10 ore -> 1 bar: equal raw units, non-decreasing (no false regression).
+        assert (root_progress_value(root, _state(inventory={"copper_ore": 10}), gd)
+                == root_progress_value(root, _state(inventory={"copper_bar": 1}), gd) == 10)
+        # bank and inventory are summed additively.
+        assert (root_progress_value(root, _state(inventory={"copper_ore": 3},
+                                                 bank_items={"copper_ore": 2}), gd)
+                == root_progress_value(root, _state(inventory={"copper_ore": 5}), gd) == 5)
+
     def test_obtain_no_recipe_counts_owned_only(self):
         root = ObtainItem(code="raw_thing", quantity=1, slot=None)
         gd = _FakeGameData({})
@@ -120,10 +139,16 @@ class TestRootProgressValue:
 
 
 class _FakeGameData:
-    """Minimal GameData stand-in exposing only crafting_recipe."""
+    """Minimal GameData stand-in exposing the recipe accessors the deepened
+    `_obtain_progress` reads: `crafting_recipe` plus the full `crafting_recipes`
+    map (consumed by `closure_demand` / `raw_material_units`)."""
 
     def __init__(self, recipes: dict[str, dict[str, int]]) -> None:
         self._recipes = recipes
 
     def crafting_recipe(self, code: str) -> dict[str, int] | None:
         return self._recipes.get(code)
+
+    @property
+    def crafting_recipes(self) -> dict[str, dict[str, int]]:
+        return self._recipes

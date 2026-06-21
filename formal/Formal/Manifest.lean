@@ -1108,6 +1108,10 @@ open Formal.PriorityBand
 #check @Formal.Liveness.StickySelect.dropped_when_frozen       -- non-vacuity: frozen root is released
 #check @Formal.Liveness.StickySelect.no_infinite_sticky_hold   -- liveness: no infinite zombie hold (∀ WF measure)
 #check @Formal.Liveness.ZombieFreedom.no_infinite_zombie_below_fifty  -- instance at the reach-50 measureLt
+-- ObtainProgress (deepened gear-root progress witness faithfulness — root_progress.py):
+#check @Formal.Liveness.ObtainProgress.obtainProgress_gather_strict   -- gather a closure unit ⇒ witness STRICTLY ↑ (no false-flat)
+#check @Formal.Liveness.ObtainProgress.obtainProgress_mono            -- owned ↑ ⇒ witness ↑ (no spurious drop)
+#check @Formal.Liveness.ObtainProgress.obtainProgress_craft_invariant -- single-tier craft ⇒ witness UNCHANGED (no false regression)
 #check @Formal.Liveness.GatedArming.gatedArming_eq_top_of_released    -- released ⇒ arming = top root's fight status
 #check @Formal.Liveness.GatedArming.arming_false_of_held_nonfight     -- held non-fight root ⇒ arming suppressed
 #check @Formal.Liveness.GatedArming.no_infinite_zombie_suppression    -- no infinite zombie suppression of the arming

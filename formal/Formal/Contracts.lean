@@ -60,6 +60,7 @@ import Formal.GameDataAccessors
 import Formal.WinnableCascade
 import Formal.RealizableLoadout
 import Formal.Liveness.StickySelect
+import Formal.Liveness.ObtainProgress
 import Formal.ServableFilter
 import Formal.StrategicValue
 import Formal.Extracted.Bridges9
@@ -2870,6 +2871,30 @@ example : ∀ {σ β : Type} (r : β → β → Prop), WellFounded r → ∀ (μ
         (Formal.Liveness.StickySelect.nextLast (some c) (prog k)) ratio = some c) →
     (∀ k, (cands (k + 1)).head? ≠ some c) → False :=
   @Formal.Liveness.StickySelect.no_infinite_sticky_hold
+
+-- ─── ObtainProgress (deepened gear-root progress witness faithfulness) pins ───
+-- GATHER STRICT: gathering one unit of a closure node with positive raw weight strictly
+-- raises the witness. Weakening to ≤ (dropping strictness) fails to elaborate. This is
+-- the theorem that makes ore-gathering toward copper_boots register as progress — the
+-- false-flat that released the sticky anchor (cannibalisation livelock) is impossible.
+example : ∀ (r : Formal.RecipeClosure.Recipe) (fuel : Nat) (owned : Nat → Nat)
+    (nodes : List Nat) (g : Nat), g ∈ nodes → nodes.Nodup →
+    0 < Formal.RecipeClosure.rawUnits r fuel g →
+    Formal.Liveness.ObtainProgress.obtainProgress r fuel owned nodes
+      < Formal.Liveness.ObtainProgress.obtainProgress r fuel
+          (fun j => owned j + (if j = g then 1 else 0)) nodes :=
+  @Formal.Liveness.ObtainProgress.obtainProgress_gather_strict
+-- CRAFT INVARIANT: a single-intermediate craft (produce 1 `o`, consume `qty` of child `c`
+-- with rawUnits o = qty·rawUnits c) leaves the witness unchanged. Weakening the
+-- conservation hypothesis or the conclusion (to ≤/≥) fails to elaborate.
+example : ∀ (r : Formal.RecipeClosure.Recipe) (fuel : Nat) (owned : Nat → Nat)
+    (nodes : List Nat) (o c qty : Nat), o ∈ nodes → c ∈ nodes → o ≠ c → nodes.Nodup →
+    qty ≤ owned c →
+    Formal.RecipeClosure.rawUnits r fuel o = qty * Formal.RecipeClosure.rawUnits r fuel c →
+    Formal.Liveness.ObtainProgress.obtainProgress r fuel
+        (fun j => (owned j + (if j = o then 1 else 0)) - (if j = c then qty else 0)) nodes
+      = Formal.Liveness.ObtainProgress.obtainProgress r fuel owned nodes :=
+  @Formal.Liveness.ObtainProgress.obtainProgress_craft_invariant
 
 -- StrategicValue (#16): the extracted efficiency-weighted scorer's code-binding
 -- contracts. The bridge is a FULL pointwise equality (extracted flat-arg core =
