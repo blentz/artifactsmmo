@@ -584,16 +584,25 @@ def test_objective_step_obtain_material():
     assert g._needed == {"ash_plank": 6}
 
 
-def test_objective_step_intermediate_maps_to_equippable_root():
-    """An intermediate recipe-input step (ash_plank, no slots) whose chain ROOT
-    is an equippable (wooden_shield) plans UpgradeEquipmentGoal against the
-    ROOT so the whole craft+equip chain runs under one commit (lines 220-224)."""
+def test_objective_step_intermediate_chunks_toward_equippable_root():
+    """An intermediate recipe-input step (ash_plank, no slots) whose chain ROOT is
+    an equippable (wooden_shield) is pursued ONE PLANNABLE CHUNK at a time — a flat
+    GatherMaterials toward the root's chain, NOT the whole-chain UpgradeEquipment.
+
+    The old code returned UpgradeEquipmentGoal(root) here, but that hands the whole
+    craft+equip chain to the A* at once; when the chain exceeds the planner depth
+    budget (copper_boots: 16 actions > max_depth 15) the one-shot plan returns
+    plan_len 0 and the bot abandons the gear for chicken grind (trace 2026-06-21).
+    The committed root is unchanged — only its EXECUTION is chunked via
+    gather_step_target, whose own depth check picks a budget-feasible target."""
     gd = _gd()
     step = ObtainItem("ash_plank", 6)
     root = ObtainItem("wooden_shield", 1)
     g = objective_step_goal(step, make_state(), gd, _ctx(), root=root)
-    assert isinstance(g, UpgradeEquipmentGoal)
-    assert g._committed_target == ("wooden_shield", "shield_slot")
+    assert isinstance(g, GatherMaterialsGoal)
+    # the chunk targets a node ON the wooden_shield chain (the root, an
+    # intermediate, or a raw base material), never something off-chain.
+    assert g._target_item in {"wooden_shield", "ash_plank", "ash_wood"}
 
 
 def test_objective_step_combat_drop_input_routes_to_flat_step():
@@ -717,17 +726,21 @@ def test_objective_step_unreachable_root_credits_bank_then_routes_to_step():
     assert g._needed == {"iron_ore": 320}
 
 
-def test_objective_step_intermediate_reachable_root_keeps_upgrade():
-    """When the root chain IS depth-reachable (materials in hand), the
-    intermediate-step still maps to UpgradeEquipment(root) for the one-commit
-    craft+equip — the ash_plank/wooden_shield design is preserved."""
+def test_objective_step_intermediate_reachable_root_chunks_the_craft():
+    """Even when the root chain is shallow & in hand (ash_plank x6 ready), the
+    intermediate-step is pursued via a plannable CHUNK (GatherMaterials toward the
+    shield's chain), NOT a one-shot UpgradeEquipment(root). The craft chunk fits the
+    depth budget; the EQUIP follows next cycle through the equippable branch once the
+    shield is owned (prerequisites() returns [] for owned-but-unequipped gear, so the
+    actionable step becomes the root itself). Robust: a flat chunk is always
+    plannable, where the whole craft+equip chain can overflow max_depth."""
     gd = _gd()  # wooden_shield <- ash_plank x6 <- ash_wood; shallow & in hand
     state = make_state(level=5, inventory={"ash_plank": 6})
     step = ObtainItem("ash_plank", 6)
     root = ObtainItem("wooden_shield", 1)
     g = objective_step_goal(step, state, gd, _ctx(), root=root)
-    assert isinstance(g, UpgradeEquipmentGoal)
-    assert g._committed_target == ("wooden_shield", "shield_slot")
+    assert isinstance(g, GatherMaterialsGoal)
+    assert g._target_item in {"wooden_shield", "ash_plank", "ash_wood"}
 
 
 def test_objective_step_reach_skill_no_craftable_returns_none():
