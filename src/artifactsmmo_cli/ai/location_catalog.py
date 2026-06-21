@@ -130,11 +130,18 @@ class LocationCatalog:
         return self.npc_stock.get(npc_code, {}).get(item_code)
 
     def npcs_selling_item(self, item_code: str) -> list[tuple[str, int]]:
-        """Return [(npc_code, price)] for all NPCs that sell item_code, cheapest first."""
+        """Return [(npc_code, price)] for NPCs selling item_code FOR GOLD, cheapest
+        first. GOLD-ONLY by contract: every caller (craft_vs_buy.acquisition_method,
+        progression_reserve, the gathering must-buy path) treats the returned price
+        as gold — comparing a sandwhisper_coin/small_pearls price as gold would be a
+        category error (#15). Non-gold purchases (rune/bag/artifact special vendors)
+        are surfaced by the currency-aware `npc_purchases` and routed through the
+        objective buy-edge / currency-earning sub-goal instead."""
         results = [
             (npc_code, stock[item_code])
             for npc_code, stock in self.npc_stock.items()
             if item_code in stock
+            and (self.npc_buy_currency.get(npc_code, {}).get(item_code) or "gold") == "gold"
         ]
         return sorted(results, key=lambda x: x[1])
 

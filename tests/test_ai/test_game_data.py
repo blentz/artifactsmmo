@@ -999,6 +999,11 @@ def test_npc_purchase_currency_and_purchases():
         ("rune_vendor", 20000, "gold"),
     ]
     assert gd.npc_purchases("nonexistent") == []
+    # #15: npcs_selling_item is GOLD-ONLY — it must DROP the cheaper (90)
+    # sandwhisper_coin trader and return only the gold vendor, so the callers that
+    # treat the price as gold (acquisition_method, progression_reserve) never
+    # compare a non-gold price as gold.
+    assert gd.npcs_selling_item("lifesteal_rune") == [("rune_vendor", 20000)]
 
 
 def test_npc_purchases_defaults_currency_to_gold_when_unindexed():
