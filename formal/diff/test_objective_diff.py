@@ -36,24 +36,43 @@ def _make_state(level: int, skills: dict[str, int],
 
 
 class _FakeGameData:
-    """Minimal GameData stand-in exposing only what objective.py reads."""
+    """Minimal GameData stand-in exposing only what objective.py reads.
+
+    Models monster drops + spawn locations so the unified `is_attainable` leaf
+    (gatherable OR known-spawn monster drop) can be bound to the oracle: the
+    Lean `drop` predicate is the FULL leaf-acceptance set, which here is the
+    union of `resource_drops.values()` and items dropped by a located monster."""
 
     MAX_CHARACTER_LEVEL = 50
     MAX_SKILL_LEVEL = 50
 
     def __init__(self, recipes: dict[int, dict[int, int]], drops: dict[int, int],
-                 item_stats: dict[int, ItemStats]):
+                 item_stats: dict[int, ItemStats],
+                 monster_drops: dict[int, list[int]] | None = None,
+                 monster_spawns: dict[int, bool] | None = None):
         # recipe maps item -> {mat: qty}; mat/qty values irrelevant to attainability
         self._crafting_recipes = {str(k): {str(m): q for m, q in v.items()}
                                   for k, v in recipes.items()}
         self._resource_drops = {str(r): str(d) for r, d in drops.items()}
         self._item_stats = {str(c): s for c, s in item_stats.items()}
+        # monster -> dropped item codes; monster -> has a known spawn tile.
+        self._monster_drops = {str(m): [str(i) for i in items]
+                               for m, items in (monster_drops or {}).items()}
+        self._monster_spawns = {str(m): bool(v)
+                                for m, v in (monster_spawns or {}).items()}
 
     def crafting_recipe(self, code: str):
         return self._crafting_recipes.get(code)
 
     def item_stats(self, code: str):
         return self._item_stats.get(code)
+
+    def monsters_dropping(self, item: str) -> list[tuple[str, int, int, int]]:
+        return [(m, 10, 1, 1) for m, items in self._monster_drops.items()
+                if item in items]
+
+    def monster_locations(self, code: str) -> list[tuple[int, int]]:
+        return [(0, 0)] if self._monster_spawns.get(code) else []
 
     @property
     def resource_drops(self) -> dict[str, str]:
@@ -76,7 +95,18 @@ class _FakeGameData:
 # is_attainable
 # ---------------------------------------------------------------------------
 
-def _encode_attainable(recipes, drops, query, fuel):
+def _leaf_codes(drops, monster_drops, monster_spawns):
+    """The full leaf-acceptance set = the Lean `drop` predicate: gatherable raws
+    (resource_drops values) UNION items dropped by a monster with a known spawn.
+    Monster drops without a spawn are NOT leaves (the dropper is unreachable)."""
+    leaves = set(drops.values())
+    for monster, items in monster_drops.items():
+        if monster_spawns.get(monster):
+            leaves.update(items)
+    return leaves
+
+
+def _encode_attainable(recipes, leaf_codes, query, fuel):
     edges = []
     n_edges = 0
     for item, mats in recipes.items():
@@ -84,7 +114,7 @@ def _encode_attainable(recipes, drops, query, fuel):
             edges += [item, mat]
             n_edges += 1
     has_list = list(recipes.keys())
-    drop_items = sorted(set(drops.values()))
+    drop_items = sorted(leaf_codes)
     args = ([n_edges] + edges
             + [len(has_list)] + has_list
             + [len(drop_items)] + drop_items
@@ -112,9 +142,19 @@ def _rand_attainable_graph(rng, allow_cycle):
     drops: dict[int, int] = {}
     for d in range(rng.randint(0, 5)):
         drops[100 + d] = rng.randint(0, n - 1)
+    # monsters drop some items; each monster may or may not have a known spawn.
+    # A spawn-less monster's drop must NOT make its item a leaf — this gives the
+    # spawn-gate in the unified `is_attainable` leaf its differential teeth.
+    monster_drops: dict[int, list[int]] = {}
+    monster_spawns: dict[int, bool] = {}
+    for mi in range(rng.randint(0, 4)):
+        monster = 200 + mi
+        dropped = rng.sample(items, rng.randint(1, n)) if items else []
+        monster_drops[monster] = dropped
+        monster_spawns[monster] = rng.random() < 0.6
     query = rng.choice(items)
     fuel = 2 * n + 4
-    return recipes, drops, query, fuel
+    return recipes, drops, monster_drops, monster_spawns, query, fuel
 
 
 @settings(max_examples=240, deadline=None)
@@ -122,13 +162,40 @@ def _rand_attainable_graph(rng, allow_cycle):
 def test_is_attainable_matches_lean(seed):
     rng = random.Random(seed)
     allow_cycle = rng.random() < 0.5
-    recipes, drops, query, fuel = _rand_attainable_graph(rng, allow_cycle)
-    gd = _FakeGameData(recipes, drops, {})
+    recipes, drops, monster_drops, monster_spawns, query, fuel = \
+        _rand_attainable_graph(rng, allow_cycle)
+    gd = _FakeGameData(recipes, drops, {}, monster_drops, monster_spawns)
     py = is_attainable(str(query), gd)
-    args = _encode_attainable(recipes, drops, query, fuel)
+    leaf_codes = _leaf_codes(drops, monster_drops, monster_spawns)
+    args = _encode_attainable(recipes, leaf_codes, query, fuel)
     lean = run_oracle("objective_attainable", [args])[0]
-    ctx = (f"recipes={recipes} drops={drops} query={query} cycle={allow_cycle}")
+    ctx = (f"recipes={recipes} drops={drops} monster_drops={monster_drops} "
+           f"monster_spawns={monster_spawns} query={query} cycle={allow_cycle}")
     assert py == lean["is_attainable"], f"attainable mismatch: {ctx} lean={lean}"
+
+
+def test_attainable_spawnless_monster_drop_rejected():
+    """A monster drop whose ONLY dropper has no known spawn is not a leaf: the
+    unified `is_attainable` rejects it, matching the oracle's `drop`=∅ set."""
+    recipes = {0: {1: 1}}                # item 0 crafts from item 1
+    monster_drops = {200: [1]}           # item 1 drops from monster 200
+    monster_spawns = {200: False}        # ...which has no known spawn
+    gd = _FakeGameData(recipes, {}, {}, monster_drops, monster_spawns)
+    assert is_attainable("0", gd) is False
+    args = _encode_attainable(recipes, set(), 0, 8)
+    assert run_oracle("objective_attainable", [args])[0]["is_attainable"] is False
+
+
+def test_attainable_spawning_monster_drop_accepted():
+    """The same item becomes attainable once its dropper has a known spawn:
+    leaf set = {1}, so item 0 (crafts from 1) grounds out."""
+    recipes = {0: {1: 1}}
+    monster_drops = {200: [1]}
+    monster_spawns = {200: True}
+    gd = _FakeGameData(recipes, {}, {}, monster_drops, monster_spawns)
+    assert is_attainable("0", gd) is True
+    args = _encode_attainable(recipes, {1}, 0, 8)
+    assert run_oracle("objective_attainable", [args])[0]["is_attainable"] is True
 
 
 def test_attainable_cyclic_is_false():
@@ -137,7 +204,7 @@ def test_attainable_cyclic_is_false():
     drops: dict[int, int] = {}
     gd = _FakeGameData(recipes, drops, {})
     assert is_attainable("0", gd) is False
-    args = _encode_attainable(recipes, drops, 0, 8)
+    args = _encode_attainable(recipes, set(drops.values()), 0, 8)
     assert run_oracle("objective_attainable", [args])[0]["is_attainable"] is False
 
 
@@ -146,7 +213,7 @@ def test_attainable_drop_only_leaf_false():
     recipes = {0: {1: 1}}
     gd = _FakeGameData(recipes, {}, {})
     assert is_attainable("0", gd) is False
-    args = _encode_attainable(recipes, {}, 0, 8)
+    args = _encode_attainable(recipes, set(), 0, 8)
     assert run_oracle("objective_attainable", [args])[0]["is_attainable"] is False
 
 
@@ -156,7 +223,7 @@ def test_attainable_chain_true():
     drops = {100: 1}
     gd = _FakeGameData(recipes, drops, {})
     assert is_attainable("0", gd) is True
-    args = _encode_attainable(recipes, drops, 0, 8)
+    args = _encode_attainable(recipes, set(drops.values()), 0, 8)
     assert run_oracle("objective_attainable", [args])[0]["is_attainable"] is True
 
 

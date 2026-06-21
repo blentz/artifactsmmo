@@ -329,6 +329,42 @@ def test_is_attainable_now_cycle_safe():
     assert is_attainable_now("a", make_state(), gd) is False
 
 
+def test_is_attainable_accepts_known_spawn_monster_drop():
+    """Perfect-sheet leaf fix: feather_coat crafts from feather (a chicken drop,
+    chicken has a known spawn) + bar (gatherable). The gathering-only
+    is_attainable used to reject this and silently drop body_armor from the
+    perfect sheet; the unified leaf accepts a known-spawn monster drop."""
+    gd = _gd_drop_recipes()
+    assert is_attainable("feather_coat", gd) is True
+
+
+def test_is_attainable_ignores_winnability_for_perfect_sheet():
+    """State-INDEPENDENT: dragon_helm crafts from dragon_scale (the dragon is
+    unbeatable NOW, but at max progression it is farmable). The perfect sheet
+    targets it; only is_attainable_now gates on current winnability."""
+    gd = _gd_drop_recipes()
+    assert is_attainable("dragon_helm", gd) is True
+    assert is_attainable_now("dragon_helm", make_state(level=5, attack={"air": 5}), gd) is False
+
+
+def test_is_attainable_requires_known_spawn():
+    """A monster drop with NO known spawn location is not producible (the bot
+    could never reach the dropper). Removing chicken's spawn rejects
+    feather_coat."""
+    gd = _gd_drop_recipes()
+    gd._monster_locations = {"dragon": [(9, 9)]}   # chicken spawn unknown
+    assert is_attainable("feather_coat", gd) is False
+
+
+def test_target_gear_surfaces_monster_drop_armor():
+    """The headline #11 fix: monster-drop-crafted armor now appears in the
+    perfect sheet's target_gear, not only in near_term_gear. Both feather_coat
+    (body) and dragon_helm (helmet) are state-independently attainable."""
+    obj = CharacterObjective.from_game_data(_gd_drop_recipes())
+    assert obj.target_gear["body_armor_slot"] == "feather_coat"
+    assert obj.target_gear["helmet_slot"] == "dragon_helm"
+
+
 def _gd_with_recipes() -> GameData:
     gd = GameData()
     gd._item_stats = {
