@@ -133,6 +133,22 @@ class GatherMaterialsGoal(Goal):
         chain: dict[str, int] = {}
         for code, qty in self._needed.items():
             closure_demand(code, qty, game_data, chain, frozenset())
+        # Currency-earning for must-buy items (#13): a non-craftable NPC-only item
+        # paid in a NON-GOLD currency (e.g. greater_lifesteal_rune ←
+        # sandwhisper_coin) is only buyable once the currency is on hand. Add the
+        # currency's demand (unit_price × qty) into the closure so the monster-drop
+        # Fight emission below FARMS it (sandwhisper_coin is a sea_marauder drop)
+        # → the planner chains Fight×N → NpcBuy. Skip when a permanent GOLD vendor
+        # exists (gold needs no farming) or the item is craftable.
+        for code, qty in list(self._needed.items()):
+            if game_data.crafting_recipe(code) is not None:
+                continue
+            perm = [(price, cur) for npc, price, cur in game_data.npc_purchases(code)
+                    if not game_data.is_event_npc(npc) and game_data.npc_location(npc) is not None]
+            if not perm or any(cur == "gold" for _price, cur in perm):
+                continue
+            unit_price, currency = min(perm, key=lambda pc: pc[0])
+            chain[currency] = chain.get(currency, 0) + unit_price * qty
         withdrawable |= set(chain)
 
         # Bank-aware gather pruning: the shopping_list credits inventory+bank at
