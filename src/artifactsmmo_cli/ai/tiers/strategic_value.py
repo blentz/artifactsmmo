@@ -95,6 +95,7 @@ def strategic_value(
     stats: ItemStats,
     weights: tuple[int, int, int, int, int] = DEFAULT_STRATEGIC_WEIGHTS,
     efficiency_budget: int | None = None,
+    horizon: tuple[int, int] | None = None,
 ) -> int:
     """Efficiency-weighted cross-slot value of an equippable — used ONLY by gear
     cross-slot priority (#14/#16, StrategyEngine._equip_gain), never the combat
@@ -116,6 +117,14 @@ def strategic_value(
     block uncapped (the plain weighted sum). The cap is policy in this wrapper;
     the proved core `strategic_value_pure` stays a pure weighted sum. Derived
     weights + budget come from `strategic_weights(state, history)`.
+
+    `horizon=(num, den)` (#14 acquisition timing) scales the efficiency block by
+    `num/den` — the fraction of the character's leveling still ahead,
+    `(max_level − level) / max_level`. Efficiency benefits (saved cooldowns)
+    accrue over the REMAINING climb, so they are worth most early and decay to 0
+    at max level (the bot won't chase a rune at L49). Combat is NOT scaled — a
+    weapon is needed regardless of horizon. Scaling only shrinks the (already
+    capped) efficiency block, so combat dominance is preserved. `None` ⇒ factor 1.
     """
     attack = sum(stats.attack.values()) if stats.attack else 0
     resistance = sum(stats.resistance.values()) if stats.resistance else 0
@@ -124,11 +133,15 @@ def strategic_value(
                   + stats.combat_buff)
     combat_w, wisdom_w, prospecting_w, inventory_w, haste_w = weights
     combat_part = combat_raw * combat_w
-    # Efficiency block via the proved core with combat zeroed out, then capped.
+    # Efficiency block via the proved core with combat zeroed out, then capped,
+    # then horizon-scaled (#14). Cap-before-scale keeps the result ≤ budget.
     efficiency_part = strategic_value_pure(
         0, stats.wisdom, stats.prospecting, stats.inventory_space, stats.haste,
         0, wisdom_w, prospecting_w, inventory_w, haste_w,
     )
     if efficiency_budget is not None and efficiency_part > efficiency_budget:
         efficiency_part = efficiency_budget
+    if horizon is not None:
+        num, den = horizon
+        efficiency_part = efficiency_part * num // den
     return combat_part + efficiency_part

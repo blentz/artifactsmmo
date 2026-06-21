@@ -112,3 +112,39 @@ def test_efficiency_under_budget_passes_through():
     """Below the cap the efficiency block is unchanged (combat 0 + 5*50=250)."""
     bag = ItemStats(code="bag", level=1, type_="bag", inventory_space=5)
     assert strategic_value(bag, (1000, 1, 1, 50, 0), efficiency_budget=999) == 250
+
+
+# ---- #14 horizon factor ----
+
+def test_horizon_scales_efficiency_only_not_combat():
+    """horizon (num,den) scales the efficiency block by num/den; combat untouched.
+    weapon attack 10 (combat 10000) + bag-ish efficiency: a mixed item with
+    inventory 10 (weight 50 → eff 500) at horizon 1/2 → eff 250, combat stays."""
+    item = ItemStats(code="m", level=1, type_="body_armor",
+                     resistance={"earth": 10}, inventory_space=10)
+    # combat_raw 10 → 10000; efficiency 10*50=500; horizon 1/2 → 250.
+    assert strategic_value(item, (1000, 1, 1, 50, 0), horizon=(1, 2)) == 10000 + 250
+
+
+def test_horizon_zero_at_max_level_kills_efficiency():
+    """At max level the horizon numerator is 0 → efficiency contributes nothing."""
+    bag = ItemStats(code="bag", level=1, type_="bag", inventory_space=35)
+    assert strategic_value(bag, (1000, 1, 1, 50, 0), horizon=(0, 50)) == 0
+
+
+def test_horizon_full_early_is_unscaled():
+    """Full horizon (50/50) leaves the efficiency block unchanged."""
+    bag = ItemStats(code="bag", level=1, type_="bag", inventory_space=35)
+    full = strategic_value(bag, (1000, 1, 1, 50, 0), horizon=(50, 50))
+    none = strategic_value(bag, (1000, 1, 1, 50, 0))
+    assert full == none == 35 * 50
+
+
+def test_horizon_preserves_combat_dominance():
+    """Horizon only shrinks the (capped) efficiency block, so a combat item still
+    outranks an all-efficiency item at any horizon."""
+    bag = ItemStats(code="bag", level=1, type_="bag", inventory_space=100)
+    weapon = ItemStats(code="w", level=1, type_="weapon", attack={"earth": 1})
+    capped_bag = strategic_value(bag, (1000, 1, 1, 50, 0), efficiency_budget=999, horizon=(49, 50))
+    one_combat = strategic_value(weapon, (1000, 1, 1, 50, 0), efficiency_budget=999, horizon=(49, 50))
+    assert capped_bag < one_combat == 1000
