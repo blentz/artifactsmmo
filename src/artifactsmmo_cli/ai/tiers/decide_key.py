@@ -42,13 +42,17 @@ def decide_key(neg_final: Fraction, effort: int, neg_protection: int,
     shape as Python's tuple lexicographic comparison and Lean's
     `compareLex`/`compareOn` composition over the four fields.
 
-    `protection = max(0, equip_value(item) - equip_value(current_in_slot))` is
-    the exact-int combat/utility gain (`tiers/equip_value.py`); `decide` passes
-    its negation. This breaks the `EMPTY_SLOT_URGENCY` saturation tie — where
-    every empty combat slot flattens to the same `final` score — by COMPUTED
-    protection, so body armor (large hp_bonus) outranks an amulet on its actual
-    stats instead of on an alphabetical accident. Non-gear / stats-unknown roots
-    contribute `0`, leaving them ordered by the leading fields and the repr.
+    `protection = max(0, strategic_value(item) - strategic_value(current_in_slot))`
+    is the exact-int efficiency-weighted gain (`tiers/strategic_value.py`, #16);
+    `decide` passes its negation. This breaks the `EMPTY_SLOT_URGENCY` saturation
+    tie — where every empty combat slot flattens to the same `final` score — by
+    COMPUTED protection, so body armor (large hp_bonus) outranks an amulet on its
+    actual stats instead of on an alphabetical accident. Combat stats carry the
+    dominant SCALE weight so combat-slot ordering is unchanged vs the old
+    equip_value tiebreak; non-combat efficiency stats add their own weight. Either
+    way `decide_key` is AGNOSTIC to the source — it receives an abstract int.
+    Non-gear / stats-unknown roots contribute `0`, leaving them ordered by the
+    leading fields and the repr.
 
     The fourth field is the GENUINE last tiebreak: in production every distinct
     candidate root has a distinct `repr` (different MetaGoal types/codes), so

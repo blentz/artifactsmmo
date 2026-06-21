@@ -53,9 +53,12 @@ open Std
 flips the sign so the natural `<` sorts high-final FIRST; the diff test feeds an
 integer fixed-point representation that preserves order — see
 `formal/diff/test_decide_key_diff.py`). `effort` is the integer root cost.
-`negProtect` is `-protection` where `protection = max(0, equip_value(item) -
-equip_value(current_in_slot))` is the EXACT-int combat/utility gain (Python
-negates so higher protection sorts FIRST, same convention as `negFinal`); it
+`negProtect` is `-protection` where `protection = max(0, strategic_value(item) -
+strategic_value(current_in_slot))` is the EXACT-int efficiency-weighted gain (#16;
+Python negates so higher protection sorts FIRST, same convention as `negFinal`).
+This proof is AGNOSTIC to protection's source — `negProtect` is an abstract `Int`
+field of the lex `Key`, so swapping equip_value→strategic_value on the Python side
+changes the value fed in, not this comparator. It
 breaks the empty-slot-urgency saturation tie by COMPUTED gear value, so body
 armor (large hp_bonus) outranks an amulet rather than losing on alphabet.
 `rootRepr` is the MetaGoal's `repr` string — the genuine LAST tiebreak. -/
