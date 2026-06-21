@@ -352,6 +352,14 @@ class GameData:
         self.world.npc_stock = value
 
     @property
+    def _npc_buy_currency(self) -> dict[str, dict[str, str]]:
+        return self.world.npc_buy_currency
+
+    @_npc_buy_currency.setter
+    def _npc_buy_currency(self, value: dict[str, dict[str, str]]) -> None:
+        self.world.npc_buy_currency = value
+
+    @property
     def _npc_sell_prices(self) -> dict[str, dict[str, int]]:
         return self.world.npc_sell_prices
 
@@ -705,6 +713,16 @@ class GameData:
     def npcs_selling_item(self, item_code: str) -> list[tuple[str, int]]:
         """Return [(npc_code, price)] for all NPCs that sell item_code, cheapest first."""
         return self.world.npcs_selling_item(item_code)
+
+    def npc_purchase_currency(self, npc_code: str, item_code: str) -> str | None:
+        """Currency the player pays npc_code to buy item_code (`'gold'` or an item
+        code), or None if the NPC doesn't sell it."""
+        return self.world.npc_purchase_currency(npc_code, item_code)
+
+    def npc_purchases(self, item_code: str) -> list[tuple[str, int, str]]:
+        """[(npc_code, price, currency)] for every NPC selling item_code, cheapest
+        first. Currency-aware companion to `npcs_selling_item`."""
+        return self.world.npc_purchases(item_code)
 
     def npc_buys_item(self, npc_code: str, item_code: str) -> int | None:
         """Price npc_code pays for item_code when the player sells it, or None if the NPC doesn't buy it."""
@@ -1204,6 +1222,9 @@ class GameData:
             buy_price = entry.buy_price
             if not isinstance(buy_price, Unset) and buy_price is not None:
                 self._npc_stock.setdefault(entry.npc, {})[entry.code] = buy_price
+                # Capture the currency alongside the price: a bare price is
+                # ambiguous (gold vs sandwhisper_coin vs small_pearls vs …).
+                self._npc_buy_currency.setdefault(entry.npc, {})[entry.code] = entry.currency
             sell_price = entry.sell_price
             if not isinstance(sell_price, Unset) and sell_price is not None:
                 self._npc_sell_prices.setdefault(entry.npc, {})[entry.code] = sell_price

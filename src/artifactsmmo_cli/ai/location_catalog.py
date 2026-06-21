@@ -16,6 +16,13 @@ class LocationCatalog:
     grand_exchange_tile: tuple[int, int] | None = None
     npc_tiles: dict[str, tuple[int, int]] = field(default_factory=dict)  # npc_code -> (x, y)
     npc_stock: dict[str, dict[str, int]] = field(default_factory=dict)  # npc_code -> {item_code: buy_price}
+    npc_buy_currency: dict[str, dict[str, str]] = field(default_factory=dict)  # npc_code -> {item_code: currency}
+    """Currency the player PAYS to buy each stocked item (`NPCItem.currency`:
+    "if it's not gold, it's the item code"). Parallel to `npc_stock`; populated
+    from the same NPC items. `gold` is the common case, but several vendors take
+    item currencies (`sandwhisper_coin`, `small_pearls`, `elemental_page`, …) so
+    the buy PRICE alone is ambiguous without this. Acquisition planning recurses
+    on currency attainability."""
     npc_sell_prices: dict[str, dict[str, int]] = field(default_factory=dict)  # npc_code -> {item_code: sell_price}
     ge_buy_orders: dict[str, tuple[str, int, int]] = field(default_factory=dict)
     """item_code -> (order_id, price, quantity) for the HIGHEST-price OPEN BUY
@@ -128,6 +135,24 @@ class LocationCatalog:
             (npc_code, stock[item_code])
             for npc_code, stock in self.npc_stock.items()
             if item_code in stock
+        ]
+        return sorted(results, key=lambda x: x[1])
+
+    def npc_purchase_currency(self, npc_code: str, item_code: str) -> str | None:
+        """Currency the player pays npc_code to buy item_code, or None if the NPC
+        doesn't sell it. `'gold'` for ordinary vendors; an item code otherwise."""
+        return self.npc_buy_currency.get(npc_code, {}).get(item_code)
+
+    def npc_purchases(self, item_code: str) -> list[tuple[str, int, str]]:
+        """Return [(npc_code, price, currency)] for every NPC that sells
+        item_code, cheapest first. The currency-aware companion to
+        `npcs_selling_item` (which collapses to gold); acquisition planning needs
+        the currency to recurse on its attainability."""
+        results = [
+            (npc_code, price, self.npc_buy_currency.get(npc_code, {}).get(item_code, "gold"))
+            for npc_code, stock in self.npc_stock.items()
+            for item, price in stock.items()
+            if item == item_code
         ]
         return sorted(results, key=lambda x: x[1])
 
