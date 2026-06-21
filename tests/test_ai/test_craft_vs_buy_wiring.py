@@ -81,6 +81,52 @@ def test_relevant_actions_no_npcbuy_when_unaffordable() -> None:
     assert not any(isinstance(a, NpcBuyAction) for a in relevant)
 
 
+def test_relevant_actions_must_buy_noncraftable_npc_only_item() -> None:
+    """Task #12 phase 6 reachability fix: a NON-craftable NPC-sold item (rune /
+    bag / artifact — no recipe, not gathered) can ONLY be bought, so NpcBuy is
+    offered unconditionally even though acquisition_method returns CRAFT for it
+    (a non-craftable item misleadingly looks 'cheap to gather'). Pre-fix this
+    slot was unreachable."""
+    gd = GameData()
+    gd._item_stats = {
+        "lifesteal_rune": ItemStats(code="lifesteal_rune", level=20, type_="rune", lifesteal=10),
+    }
+    gd._npc_stock = {"rune_vendor": {"lifesteal_rune": 20000}}
+    gd._npc_buy_currency = {"rune_vendor": {"lifesteal_rune": "gold"}}
+    gd._npc_locations = {"rune_vendor": (8, 13)}
+    # CRAFT is what the craft-vs-buy gate returns for this non-craftable item —
+    # proving the must-buy path is NOT going through that gate.
+    assert acquisition_method("lifesteal_rune", 1, state := make_state(
+        level=20, gold=100000, x=0, y=0), gd, _RESERVE) == Method.CRAFT
+    goal = GatherMaterialsGoal(target_item="lifesteal_rune", needed={"lifesteal_rune": 1})
+    relevant = goal.relevant_actions([], state, gd)
+    buys = [a for a in relevant if isinstance(a, NpcBuyAction) and a.item_code == "lifesteal_rune"]
+    assert buys, "non-craftable NPC-only item must offer NpcBuy"
+    assert buys[0].is_applicable(state, gd) is True
+
+
+def test_relevant_actions_must_buy_offers_every_vendor_for_affordable_currency() -> None:
+    """For a non-craftable item sold by multiple vendors in different currencies,
+    EVERY vendor is offered so the planner can pick one the character can afford
+    (is_applicable gates each). The gold vendor is affordable; the coin vendor is
+    not (no coins on hand) — both offered, only the gold one applicable."""
+    gd = GameData()
+    gd._item_stats = {"omni_rune": ItemStats(code="omni_rune", level=20, type_="rune", lifesteal=5)}
+    gd._npc_stock = {"gold_vendor": {"omni_rune": 5000}, "coin_vendor": {"omni_rune": 50}}
+    gd._npc_buy_currency = {"gold_vendor": {"omni_rune": "gold"},
+                            "coin_vendor": {"omni_rune": "rare_coin"}}
+    gd._npc_locations = {"gold_vendor": (1, 1), "coin_vendor": (2, 2)}
+    state = make_state(level=20, gold=100000, inventory={}, x=0, y=0)
+    goal = GatherMaterialsGoal(target_item="omni_rune", needed={"omni_rune": 1})
+    relevant = goal.relevant_actions([], state, gd)
+    buys = {a.npc_code for a in relevant if isinstance(a, NpcBuyAction) and a.item_code == "omni_rune"}
+    assert buys == {"gold_vendor", "coin_vendor"}, "every vendor offered"
+    applicable = {a.npc_code for a in relevant
+                  if isinstance(a, NpcBuyAction) and a.item_code == "omni_rune"
+                  and a.is_applicable(state, gd)}
+    assert applicable == {"gold_vendor"}, "only the affordable-currency vendor is applicable"
+
+
 def test_relevant_actions_no_npcbuy_when_no_seller() -> None:
     """No-seller skip: item has no NPC sellers -> no NpcBuyAction injected."""
     gd = GameData()
