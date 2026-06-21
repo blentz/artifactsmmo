@@ -442,9 +442,14 @@ class StrategyEngine:
         # below combat. history=None (cold / unit tests) → efficiency weights 0, so
         # gain is combat-only (efficiency gear uncredited until learned).
         weights, budget = strategic_weights(state, history)
-        current_value = (strategic_value(current_stats, weights, budget)
+        # #14 horizon: scale efficiency by the leveling still ahead,
+        # (max_level − level)/max_level — efficiency gear is worth most early,
+        # ~0 near max level. Clamp the numerator at 0 for level >= max.
+        max_level = game_data.max_character_level
+        horizon = (max(0, max_level - state.level), max_level) if max_level > 0 else None
+        current_value = (strategic_value(current_stats, weights, budget, horizon)
                          if current_stats is not None else 0)
-        return max(0, strategic_value(stats, weights, budget) - current_value)
+        return max(0, strategic_value(stats, weights, budget, horizon) - current_value)
 
     def _marginal(self, root: MetaGoal, state: WorldState, game_data: GameData,
                   combat_monster: str | None = None,
