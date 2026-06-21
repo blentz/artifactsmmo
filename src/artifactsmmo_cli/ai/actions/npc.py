@@ -15,6 +15,8 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.npc_buy_core import (
     npc_buy_apply_pure,
+    npc_buy_currency_apply_pure,
+    npc_buy_currency_is_applicable_pure,
     npc_buy_is_applicable_pure,
 )
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
@@ -59,11 +61,15 @@ class NpcBuyAction(Action):
                 return False
         else:
             # Item-currency purchase: need a free slot for the bought item AND
-            # `price * quantity` of the currency item on hand. (Lean proof of this
-            # consumption path is task #12 Phase 6; the gold path stays proved.)
-            if state.inventory_free < self.quantity:
-                return False
-            if state.inventory.get(currency, 0) < price * self.quantity:
+            # `price * quantity` of the currency item on hand. Delegates to the
+            # proved core (Formal.NpcBuyInventory.isApplicableCurrency).
+            if not npc_buy_currency_is_applicable_pure(
+                inv_used=state.inventory_used,
+                inv_max=state.inventory_max,
+                quantity=self.quantity,
+                currency_on_hand=state.inventory.get(currency, 0),
+                total_spent=price * self.quantity,
+            ):
                 return False
         return event_npc_tradeable(
             self.npc_code, game_data,
@@ -84,15 +90,17 @@ class NpcBuyAction(Action):
             )
         price = game_data.npc_sells_item(self.npc_code, self.item_code) or 0
         currency = game_data.npc_purchase_currency(self.npc_code, self.item_code) or "gold"
-        new_inventory = npc_buy_apply_pure(state.inventory, self.item_code, self.quantity)
         if currency == "gold":
+            new_inventory = npc_buy_apply_pure(state.inventory, self.item_code, self.quantity)
             new_gold = state.gold - price * self.quantity
         else:
             # Pay in the currency item: gold is untouched, the currency stack is
-            # drawn down by price*quantity (is_applicable guarantees enough).
+            # drawn down by price*quantity (delegates to the proved core
+            # Formal.NpcBuyInventory.applyCurrency; is_applicable guarantees enough).
             new_gold = state.gold
-            spent = price * self.quantity
-            new_inventory[currency] = new_inventory.get(currency, 0) - spent
+            new_inventory = npc_buy_currency_apply_pure(
+                state.inventory, self.item_code, self.quantity,
+                currency, price * self.quantity)
         dest = self.npc_location or (state.x, state.y)
         return dataclasses.replace(
             state,

@@ -411,6 +411,13 @@ open Formal.PriorityBand
 #check @Formal.NpcBuyInventory.chain_safe_boundary_witness        -- non-vacuous witness: 2-step chain at boundary
 #check @Formal.NpcBuyInventory.gold_short_refused_witness         -- witness: gold gate failure
 #check @Formal.NpcBuyInventory.gold_exact_min_accepted_witness    -- witness: gold at exact minimum accepted
+-- Item-currency purchase roles (task #13b: NpcBuyAction non-gold currency path):
+#check @Formal.NpcBuyInventory.npc_buy_currency_is_applicable_imp_free_ge      -- ⇒ quantity ≤ free
+#check @Formal.NpcBuyInventory.npc_buy_currency_is_applicable_imp_currency_ge  -- ⇒ spent ≤ currencyOnHand
+#check @Formal.NpcBuyInventory.npc_buy_currency_apply_inventory_safe           -- per-step safety: net used ≤ cap
+#check @Formal.NpcBuyInventory.currency_boundary_accepted_witness              -- witness: boundary buy accepted
+#check @Formal.NpcBuyInventory.currency_short_refused_witness                  -- witness: insufficient currency refused
+#check @Formal.NpcBuyInventory.currency_consumption_frees_space_witness        -- witness: consumption frees net slots
 -- ActionCostNonneg required roles:
 #check @Formal.ActionCostNonneg.constantCost_nonneg          -- bucket 1: constant cost ≥ 0
 #check @Formal.ActionCostNonneg.distanceCost_nonneg          -- bucket 2: base + dist ≥ 0

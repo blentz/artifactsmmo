@@ -6,10 +6,12 @@ Also covers the fail-open branches in acquisition_method and the relevant_action
 loop: no-seller skip, non-BUY skip.
 """
 
+from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.craft_vs_buy import Method, acquisition_method
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
 # A representative reserve value passed to acquisition_method's `reserve` param
@@ -125,6 +127,59 @@ def test_relevant_actions_must_buy_offers_every_vendor_for_affordable_currency()
                   if isinstance(a, NpcBuyAction) and a.item_code == "omni_rune"
                   and a.is_applicable(state, gd)}
     assert applicable == {"gold_vendor"}, "only the affordable-currency vendor is applicable"
+
+
+def test_relevant_actions_farms_nongold_currency_for_must_buy(_=None) -> None:
+    """Task #13: a non-craftable item paid in a NON-GOLD currency surfaces BOTH
+    the NpcBuy AND a Fight for the monster that drops the currency, so the
+    planner chains Fight×N → NpcBuy. greater_lifesteal_rune costs sandwhisper_coin
+    (a sea_marauder drop) — the coin's demand is injected into the closure and
+    the proven monster-drop emission farms it."""
+    gd = GameData()
+    gd._item_stats = {"greater_lifesteal_rune": ItemStats(
+        code="greater_lifesteal_rune", level=40, type_="rune", lifesteal=20)}
+    gd._npc_stock = {"sandwhisper_trader": {"greater_lifesteal_rune": 100}}
+    gd._npc_buy_currency = {"sandwhisper_trader": {"greater_lifesteal_rune": "sandwhisper_coin"}}
+    gd._npc_locations = {"sandwhisper_trader": (-2, 18)}
+    gd._monster_level = {"sea_marauder": 5}
+    gd._monster_hp = {"sea_marauder": 20}
+    fill_monster_stat_defaults(gd)
+    gd._monster_drops = {"sea_marauder": [("sandwhisper_coin", 50, 1, 1)]}
+    gd._monster_locations = {"sea_marauder": (10, 10)}
+    actions = [
+        FightAction(monster_code="sea_marauder", locations=[(10, 10)]),
+        NpcBuyAction(npc_code="sandwhisper_trader", item_code="greater_lifesteal_rune",
+                     npc_location=(-2, 18), quantity=1),
+    ]
+    goal = GatherMaterialsGoal(target_item="greater_lifesteal_rune",
+                              needed={"greater_lifesteal_rune": 1})
+    state = make_state(level=40, attack={"air": 50}, gold=0, x=0, y=0)
+    relevant = goal.relevant_actions(actions, state, gd)
+    assert any(isinstance(a, FightAction) and a.monster_code == "sea_marauder" for a in relevant), \
+        "currency-dropper Fight must be farmed"
+    assert any(isinstance(a, NpcBuyAction) for a in relevant), "rune NpcBuy must be offered"
+
+
+def test_relevant_actions_no_currency_farm_when_gold_vendor_exists() -> None:
+    """If a permanent GOLD vendor also sells the item, no currency-farming is
+    injected (gold needs no farming): the coin-dropper Fight is NOT surfaced."""
+    gd = GameData()
+    gd._item_stats = {"omni_rune": ItemStats(code="omni_rune", level=40, type_="rune", lifesteal=5)}
+    gd._npc_stock = {"gold_vendor": {"omni_rune": 5000}, "coin_vendor": {"omni_rune": 100}}
+    gd._npc_buy_currency = {"gold_vendor": {"omni_rune": "gold"},
+                            "coin_vendor": {"omni_rune": "sandwhisper_coin"}}
+    gd._npc_locations = {"gold_vendor": (1, 1), "coin_vendor": (2, 2)}
+    gd._monster_level = {"sea_marauder": 5}
+    gd._monster_hp = {"sea_marauder": 20}
+    fill_monster_stat_defaults(gd)
+    gd._monster_drops = {"sea_marauder": [("sandwhisper_coin", 50, 1, 1)]}
+    gd._monster_locations = {"sea_marauder": (10, 10)}
+    actions = [FightAction(monster_code="sea_marauder", locations=[(10, 10)])]
+    goal = GatherMaterialsGoal(target_item="omni_rune", needed={"omni_rune": 1})
+    state = make_state(level=40, attack={"air": 50}, gold=100000, x=0, y=0)
+    relevant = goal.relevant_actions(actions, state, gd)
+    assert not any(isinstance(a, FightAction) for a in relevant), \
+        "gold vendor available → no coin-farming"
 
 
 def test_relevant_actions_no_npcbuy_when_no_seller() -> None:
