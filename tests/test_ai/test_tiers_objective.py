@@ -112,11 +112,9 @@ def test_gap_measures_level_and_skill_and_gear_deficit():
     assert g.char_level_gap == 40
     assert g.skill_gaps["mining"] == 45
     assert g.skill_gaps["woodcutting"] == 49  # default level 1 → gap 49
-    # gap() now uses strategic_value for CROSS-SLOT priority (#16): a pure-combat
-    # weapon scores combat_raw × COMBAT_WEIGHT(1000). iron_sword(raw 30)=30000 vs
-    # equipped wooden_stick(raw 4)=4000 → gap 26000. (target_gear is still SELECTED
-    # by equip_value; only the gap weighting is strategic.)
-    assert g.gear_gaps["weapon_slot"] == 26000
+    # weapon target iron_sword(2*30+1=61) vs equipped wooden_stick(2*4+1=9)
+    # → gap 52 (augmented equip_value: 2*raw + nonToolBonus).
+    assert g.gear_gaps["weapon_slot"] == 52.0
     assert 0.0 < g.char_level_fraction <= 1.0
     assert 0.0 < g.gear_fraction <= 1.0
 
@@ -125,9 +123,8 @@ def test_empty_slot_scores_full_target_value():
     obj = CharacterObjective.from_game_data(_gd())
     state = make_state(level=50, skills={s: 50 for s in SKILL_NAMES}, equipment={})
     g = obj.gap(state)
-    # Empty slot: full strategic_value of iron_sword = combat_raw(30) ×
-    # COMBAT_WEIGHT(1000) = 30000 (#16 cross-slot priority).
-    assert g.gear_gaps["weapon_slot"] == 30000
+    # Empty slot: full augmented iron_sword value = 2*30 + 1 (non-tool) = 61.
+    assert g.gear_gaps["weapon_slot"] == 61.0
 
 
 def test_gear_fraction_zero_and_complete_when_no_gear_targeted():
