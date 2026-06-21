@@ -87,6 +87,40 @@ i.e. an item grounds if a reachable vendor sells it for a grounded currency.
 
 ### Phase 6 — Unit suite ≥100% + adversarial proof review.
 
+## Phase 2 design note (decided)
+
+The buy edge FOLDS INTO the no-recipe leaf, not a separate top-level edge: every
+rune/artifact/bag item has NO craft recipe, so it already reaches `leaf_ok`. A
+craftable-AND-buyable item is attainable via its recipe path regardless, so the
+buy edge only ever matters at no-recipe items. So `leaf_ok` gains a third
+disjunct AND becomes recursive on currency:
+
+```
+leaf_ok(leaf, path):
+  gatherable(leaf) or drops_from_spawning_monster(leaf)  -> True
+  if leaf in path: return False                          # currency-cycle guard
+  for (npc, price, currency) in npc_purchases(leaf):
+    if is_event_npc(npc) or npc_location(npc) is None: continue   # permanent+reachable
+    if currency == 'gold': return True                  # gold always attainable
+    if _attainable_closure(currency, ..., path|{leaf}): return True
+  return False
+```
+
+`leaf_ok` therefore takes `path` (the closure passes it). `is_attainable_now`
+adds affordability (owned/earnable currency) — v1 may keep it conservative.
+
+Lean (phase 3): `drop` is no longer a flat predicate. Add `Buyable : item ->
+currency` + a distinguished always-grounded `gold`; a `Grounded.buy` constructor
+(grounded currency -> grounded item), extend `groundedByN`/`attainAux` with the
+buy disjunct at the leaf, re-prove soundness/completeness/equivalence.
+
 ## Status
-* Phase 1: NOT STARTED (next).
+* Phase 1: DONE (commit on feat/npc-purchase-acq) — currency captured, accessors
+  npc_purchase_currency/npc_purchases, 100% cov, mypy clean. Additive; planner
+  behavior unchanged (accessor not yet consumed).
+* Phase 2-4: NEXT — one cohesive formal change (Python buy-edge + Lean
+  Grounded.buy + differential/mutation). MUST ship together: adding the buy edge
+  to Python alone breaks the objective differential (Python diverges from the
+  oracle) — the gate would (correctly) go red.
+* Phase 5-6: targeting + NpcBuy goal (likely a later session).
 * Decision recorded: build now (user, 2026-06-20). Recommended-defer was declined.
