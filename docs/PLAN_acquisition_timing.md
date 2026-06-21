@@ -112,8 +112,30 @@ user (don't invent silently).
 So 2/4 rates are cleanly API-derived (wisdom, prospecting); 2/4 (haste,
 inventory_space) hit the no-invented-defaults wall and need a user decision.
 
+## Phase 1 decisions RESOLVED (user 2026-06-20)
+
+* **haste** → CONFIRM EMPIRICALLY (live probe). Not in API; measure it:
+  1. equip a known-haste item (effect value N), record a fight's cooldown `cdN`;
+  2. unequip, record the same fight's cooldown `cd0`;
+  3. rate per point = `(cd0 − cdN) / (cd0 × N)`.
+  Needs a LIVE character run (perturbs the real character) — author a one-shot
+  probe script; do NOT hijack the playing bot without the user's go-ahead. Until
+  measured, haste stays weight 1 (excluded), so #16 can ship on wisdom +
+  prospecting + inventory and fold haste in once the rate is known.
+* **inventory_space** → PROXY from gather/craft cadence, all API-derived in the
+  existing COOLDOWN-COUNT currency (craft_vs_buy already counts cooldowns as
+  actions, not seconds):
+  - bank deposit cooldown = 3s × distinct items (openapi) → ~1 cooldown-action per
+    bank trip in the action-count model;
+  - items/level ≈ xp_to_level / xp_per_action (xp curve + action xp, API);
+  - trips_saved per Δslot ≈ Δslots / items_per_trip;
+  - inventory rate = trips_saved × bank_roundtrip_cooldown (distance × move
+    cooldown, map-derived). Stays within "use API data".
+
 ## Status
-* Design + architecture decided; Phase 1 grounding DONE (above). 2 modeling
-  decisions surfaced (haste rate, inventory production rate) — BLOCKING phases 2-5
-  per "use only API data or fail". Awaiting user direction.
+* Design + architecture decided; Phase 1 grounding + decisions DONE. NEXT:
+  (Phase 1b) author the haste probe script (user runs it on the live char);
+  (Phase 2) strategic_value core (wisdom×0.001, prospecting×0.001, inventory×proxy,
+  haste×1-pending) + extracted Lean + nonneg/monotone proofs + differential +
+  mutation; (Phase 3) ObjectiveGap rewire; (Phase 4) #14 horizon factor.
 * #12/#13 complete + merged. #15 (currency arbitrage) independent, still queued.
