@@ -222,6 +222,54 @@ class TestNpcBuyAction:
         assert new_state.gold == 80  # 100 - 2 * 10
         assert new_state.inventory.get("cooked_chicken") == 2
 
+    def test_item_currency_applicable_with_enough_currency_ignores_gold(self):
+        """Task #12: a rune sold for sandwhisper_coin is gated on the COIN stack,
+        not gold — applicable at 0 gold when the coins are on hand."""
+        action = NpcBuyAction(npc_code="trader", item_code="vampiric_rune", quantity=1, npc_location=(3, 3))
+        gd = make_gd(npc_stock={"trader": {"vampiric_rune": 100}})
+        gd._npc_buy_currency = {"trader": {"vampiric_rune": "sandwhisper_coin"}}
+        state = make_state(gold=0, inventory={"sandwhisper_coin": 100}, inventory_max=200)
+        assert action.is_applicable(state, gd) is True
+
+    def test_item_currency_not_applicable_without_enough_currency(self):
+        """Rich in gold, poor in the pay currency → not applicable (the pre-#12
+        bug would have wrongly accepted it on the gold balance)."""
+        action = NpcBuyAction(npc_code="trader", item_code="vampiric_rune", quantity=1, npc_location=(3, 3))
+        gd = make_gd(npc_stock={"trader": {"vampiric_rune": 100}})
+        gd._npc_buy_currency = {"trader": {"vampiric_rune": "sandwhisper_coin"}}
+        state = make_state(gold=1_000_000, inventory={"sandwhisper_coin": 50}, inventory_max=200)
+        assert action.is_applicable(state, gd) is False
+
+    def test_item_currency_not_applicable_when_no_free_slot(self):
+        """Item-currency purchase still needs a free slot for the bought item:
+        coins on hand but a full bag must refuse."""
+        action = NpcBuyAction(npc_code="trader", item_code="vampiric_rune", quantity=1, npc_location=(3, 3))
+        gd = make_gd(npc_stock={"trader": {"vampiric_rune": 100}})
+        gd._npc_buy_currency = {"trader": {"vampiric_rune": "sandwhisper_coin"}}
+        state = make_state(gold=0, inventory={"sandwhisper_coin": 100}, inventory_max=100)  # free=0
+        assert action.is_applicable(state, gd) is False
+
+    def test_apply_item_currency_consumes_currency_not_gold(self):
+        """apply draws the currency stack down by price*quantity and leaves gold
+        untouched (the server deducts the currency; the projection must match)."""
+        action = NpcBuyAction(npc_code="trader", item_code="vampiric_rune", quantity=1, npc_location=(3, 3))
+        gd = make_gd(npc_stock={"trader": {"vampiric_rune": 100}})
+        gd._npc_buy_currency = {"trader": {"vampiric_rune": "sandwhisper_coin"}}
+        state = make_state(gold=500, inventory={"sandwhisper_coin": 150}, inventory_max=200)
+        new_state = action.apply(state, gd)
+        assert new_state.gold == 500                               # gold untouched
+        assert new_state.inventory["sandwhisper_coin"] == 50       # 150 - 100
+        assert new_state.inventory.get("vampiric_rune") == 1
+
+    def test_cost_item_currency_has_no_gold_term(self):
+        """An item-currency purchase spends no gold, so cost omits the gold term
+        (a gold purchase at price 100 would add 100/10 = 10)."""
+        action = NpcBuyAction(npc_code="trader", item_code="vampiric_rune", quantity=1, npc_location=(0, 0))
+        gd = make_gd(npc_stock={"trader": {"vampiric_rune": 100}})
+        gd._npc_buy_currency = {"trader": {"vampiric_rune": "sandwhisper_coin"}}
+        state = make_state(gold=0, inventory={"sandwhisper_coin": 100}, inventory_max=200)
+        assert action.cost(state, gd) == 2.0
+
     def test_not_applicable_when_insufficient_inventory_slots(self):
         """REAL BUG #6 regression-pin: pre-fix is_applicable lacked the slot
         check, so apply minted past inventory_max. Post-fix the slot floor
