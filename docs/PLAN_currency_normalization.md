@@ -54,5 +54,20 @@ cross-currency reasoning sound and (optionally) surfaces arbitrage.
   sell_revenue_gold)` core if pursued; the loop discovery is impure I/O.
 
 ## Status
-* Phase 0 (this plan + audit) DONE. Phases 1–3 NOT started. Scope decision
-  pending: how deep (bug-fix only / + normalization / + arbitrage).
+* Phase 1 (bug fix) DONE + MERGED (206cb00): npcs_selling_item gold-only;
+  gathering non-craftable path uses currency-aware npc_purchases. Latent
+  gold-assumption closed; full gate green.
+* Phase 2 (numeraire) + Phase 3 (cross-currency arbitrage) ABANDONED as moot.
+  Live probe (scripts/probe_currency_arbitrage.py, 2026-06-21) found:
+  - 14 non-gold currencies, 10 GE-tradeable, 4 soulbound (sandwhisper_coin,
+    tasks_coin, corrupted_gem, malefic_shard).
+  - CROSS-CURRENCY arbitrage: **0 spreads** — no tradeable-currency item resells
+    above its gold-equivalent cost. So a currency_gold_value numeraire has NO
+    consumer (it would be dead code, the dead-gap() anti-pattern). Not built.
+  - GOLD-only spreads: 2 real ones — sapphire (GE-buy 645g → resell 1500g,
+    +855g), topaz (+835g). These need NO currency normalization (both sides gold);
+    they are a SEPARATE potential feature: a "buy-cheap-GE / sell-high" gold-making
+    means. Out of #15's scope (currency normalization). Spin as a new task if
+    desired (verify the 1500g resale is an NPC-fixed price vs a transient GE buy
+    order before relying on it).
+* #15 RESOLVED at Phase 1 (the real fix). Normalization/arbitrage moot per live data.
