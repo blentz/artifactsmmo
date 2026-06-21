@@ -128,10 +128,25 @@ buy disjunct at the leaf, re-prove soundness/completeness/equivalence.
   None — their currencies (small_pearls/elemental_page/codex_page) are NOT
   obtainable via gather/drop/craft/permanent-NPC, the truthful answer (deeper
   dungeon/archaeology content; out of scope).
-* Phase 5-6: REMAINING — the slots are now TARGETED (in target_gear) but the
-  planner has no NpcBuy GOAL for permanent vendors to actually execute the
-  purchase (existing NpcBuy is event-gated, [[project_event_merchants]]). Also:
-  is_attainable_now affordability ignores currency QUANTITY (v1
-  over-approximation). Latent: craft_vs_buy/progression_reserve treat
-  npcs_selling_item prices as gold (wrong for non-gold currency) — pre-existing.
+* Phase 5: DONE (07c40d7, branch feat/npc-buy-currency) — currency-aware
+  NpcBuyAction. is_applicable/apply/cost branch on npc_purchase_currency: gold ->
+  proved gold/slot core (unchanged, kernel-bound); item currency -> free-slot +
+  inventory[currency] >= price*qty gate, consume the currency stack, gold
+  untouched. 5 unit tests; proved cores untouched so gate stays green. 3665
+  tests, 100% cov.
+* Phase 6: REMAINING. Two confirmed gaps:
+  1. REACHABILITY (the blocker): `acquisition_method` returns CRAFT for a pure
+     NPC-only item (empirically: lifesteal_rune with 100k gold + permanent vendor
+     -> Method.CRAFT) because _craft_cooldowns treats a non-craftable item as
+     cheaply "gatherable", so relevant_actions NEVER offers NpcBuy -> the gear
+     goal is UNPLANNABLE for rune/bag. Fix: relevant_actions must offer NpcBuy
+     unconditionally for items that are NPC-sold but NOT craftable/gatherable
+     (BUY is the only method; the craft-vs-buy proof's domain is craft-OR-buy,
+     not this). Likely a separate must-buy path, not a change to the proved
+     cheaper_acquisition.
+  2. CURRENCY EARNING: no sub-goal proactively earns sandwhisper_coin etc., so
+     non-gold purchases only fire if coins happen to be on hand. Plus prove the
+     item-currency consumption path (extend NpcBuyInventory.lean + differential).
+  Latent (pre-existing, out of scope): craft_vs_buy/progression_reserve treat
+  npcs_selling_item prices as gold (wrong for non-gold currency).
 * Decision recorded: build now (user, 2026-06-20). Recommended-defer was declined.
