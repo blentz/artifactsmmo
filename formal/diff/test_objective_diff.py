@@ -49,7 +49,8 @@ class _FakeGameData:
     def __init__(self, recipes: dict[int, dict[int, int]], drops: dict[int, int],
                  item_stats: dict[int, ItemStats],
                  monster_drops: dict[int, list[int]] | None = None,
-                 monster_spawns: dict[int, bool] | None = None):
+                 monster_spawns: dict[int, bool] | None = None,
+                 buy_edges: dict[int, list[tuple[str, str]]] | None = None):
         # recipe maps item -> {mat: qty}; mat/qty values irrelevant to attainability
         self._crafting_recipes = {str(k): {str(m): q for m, q in v.items()}
                                   for k, v in recipes.items()}
@@ -60,6 +61,11 @@ class _FakeGameData:
                                for m, items in (monster_drops or {}).items()}
         self._monster_spawns = {str(m): bool(v)
                                 for m, v in (monster_spawns or {}).items()}
+        # NPC purchase edges: item(int) -> [(currency_str, kind)] where kind is
+        # 'perm' (permanent, located vendor — counts) | 'event' | 'unlocated'
+        # (both excluded by _permanent_vendor_purchases). currency_str is 'gold'
+        # or a stringified item code.
+        self._buy_edges = {str(it): edges for it, edges in (buy_edges or {}).items()}
 
     def crafting_recipe(self, code: str):
         return self._crafting_recipes.get(code)
@@ -73,6 +79,18 @@ class _FakeGameData:
 
     def monster_locations(self, code: str) -> list[tuple[int, int]]:
         return [(0, 0)] if self._monster_spawns.get(code) else []
+
+    def npc_purchases(self, item_code: str) -> list[tuple[str, int, str]]:
+        # one synthetic vendor per edge; the npc name encodes its kind so
+        # is_event_npc / npc_location can reproduce the permanence gate.
+        return [(f"{kind}{i}", 1, currency)
+                for i, (currency, kind) in enumerate(self._buy_edges.get(item_code, []))]
+
+    def is_event_npc(self, npc_code: str) -> bool:
+        return npc_code.startswith("event")
+
+    def npc_location(self, npc_code: str) -> tuple[int, int] | None:
+        return None if npc_code.startswith("unlocated") else (0, 0)
 
     @property
     def resource_drops(self) -> dict[str, str]:
@@ -95,10 +113,15 @@ class _FakeGameData:
 # is_attainable
 # ---------------------------------------------------------------------------
 
+# A reserved code modeling the always-grounded `gold` currency as a drop-leaf
+# (the Lean `Buys` doc: gold ∈ drop). Picked clear of the random item range.
+GOLD_CODE = 9000
+
+
 def _leaf_codes(drops, monster_drops, monster_spawns):
-    """The full leaf-acceptance set = the Lean `drop` predicate: gatherable raws
-    (resource_drops values) UNION items dropped by a monster with a known spawn.
-    Monster drops without a spawn are NOT leaves (the dropper is unreachable)."""
+    """The base leaf-acceptance set (the Lean `drop` predicate MINUS the gold
+    token): gatherable raws (resource_drops values) UNION items dropped by a
+    monster with a known spawn. Monster drops without a spawn are NOT leaves."""
     leaves = set(drops.values())
     for monster, items in monster_drops.items():
         if monster_spawns.get(monster):
@@ -106,7 +129,26 @@ def _leaf_codes(drops, monster_drops, monster_spawns):
     return leaves
 
 
-def _encode_attainable(recipes, leaf_codes, query, fuel):
+def _perm_buy_edges(buy_edges):
+    """Resolve the fake's buy_edges to the Lean `buys` relation: only PERMANENT
+    edges count (event/unlocated vendors are excluded by
+    _permanent_vendor_purchases). 'gold' currency maps to GOLD_CODE. Returns
+    (edges, gold_used) where edges is [(item, currency_code)]."""
+    edges = []
+    gold_used = False
+    for item, item_edges in buy_edges.items():
+        for currency, kind in item_edges:
+            if kind != "perm":
+                continue
+            if currency == "gold":
+                edges.append((int(item), GOLD_CODE))
+                gold_used = True
+            else:
+                edges.append((int(item), int(currency)))
+    return edges, gold_used
+
+
+def _encode_attainable(recipes, leaf_codes, query, fuel, buy_edges=None):
     edges = []
     n_edges = 0
     for item, mats in recipes.items():
@@ -114,10 +156,16 @@ def _encode_attainable(recipes, leaf_codes, query, fuel):
             edges += [item, mat]
             n_edges += 1
     has_list = list(recipes.keys())
-    drop_items = sorted(leaf_codes)
+    perm_edges, gold_used = _perm_buy_edges(buy_edges or {})
+    drop_set = set(leaf_codes) | ({GOLD_CODE} if gold_used else set())
+    drop_items = sorted(drop_set)
+    buy_flat = []
+    for it, cur in perm_edges:
+        buy_flat += [it, cur]
     args = ([n_edges] + edges
             + [len(has_list)] + has_list
             + [len(drop_items)] + drop_items
+            + [len(perm_edges)] + buy_flat
             + [query, fuel])
     return args
 
@@ -152,25 +200,38 @@ def _rand_attainable_graph(rng, allow_cycle):
         dropped = rng.sample(items, rng.randint(1, n)) if items else []
         monster_drops[monster] = dropped
         monster_spawns[monster] = rng.random() < 0.6
+    # NPC purchase edges: an item may be bought with 'gold', another item code,
+    # or via a non-permanent (event/unlocated) vendor that must NOT count. This
+    # exercises the buy-recursion, the gold token, purchase cycles, and the
+    # permanent-vendor gate.
+    buy_edges: dict[int, list[tuple[str, str]]] = {}
+    for it in items:
+        if rng.random() < 0.4:
+            choices = [("gold", "perm"),
+                       (str(rng.randint(0, n - 1)), "perm"),
+                       (str(rng.randint(0, n - 1)), "event"),
+                       (str(rng.randint(0, n - 1)), "unlocated")]
+            buy_edges[it] = rng.sample(choices, rng.randint(1, len(choices)))
     query = rng.choice(items)
     fuel = 2 * n + 4
-    return recipes, drops, monster_drops, monster_spawns, query, fuel
+    return recipes, drops, monster_drops, monster_spawns, buy_edges, query, fuel
 
 
-@settings(max_examples=240, deadline=None)
+@settings(max_examples=400, deadline=None)
 @given(seed=st.integers(min_value=0, max_value=2**31 - 1))
 def test_is_attainable_matches_lean(seed):
     rng = random.Random(seed)
     allow_cycle = rng.random() < 0.5
-    recipes, drops, monster_drops, monster_spawns, query, fuel = \
+    recipes, drops, monster_drops, monster_spawns, buy_edges, query, fuel = \
         _rand_attainable_graph(rng, allow_cycle)
-    gd = _FakeGameData(recipes, drops, {}, monster_drops, monster_spawns)
+    gd = _FakeGameData(recipes, drops, {}, monster_drops, monster_spawns, buy_edges)
     py = is_attainable(str(query), gd)
     leaf_codes = _leaf_codes(drops, monster_drops, monster_spawns)
-    args = _encode_attainable(recipes, leaf_codes, query, fuel)
+    args = _encode_attainable(recipes, leaf_codes, query, fuel, buy_edges)
     lean = run_oracle("objective_attainable", [args])[0]
     ctx = (f"recipes={recipes} drops={drops} monster_drops={monster_drops} "
-           f"monster_spawns={monster_spawns} query={query} cycle={allow_cycle}")
+           f"monster_spawns={monster_spawns} buy_edges={buy_edges} "
+           f"query={query} cycle={allow_cycle}")
     assert py == lean["is_attainable"], f"attainable mismatch: {ctx} lean={lean}"
 
 
@@ -196,6 +257,46 @@ def test_attainable_spawning_monster_drop_accepted():
     assert is_attainable("0", gd) is True
     args = _encode_attainable(recipes, {1}, 0, 8)
     assert run_oracle("objective_attainable", [args])[0]["is_attainable"] is True
+
+
+def test_attainable_npc_gold_purchase_matches_lean():
+    """A no-recipe item bought for gold from a permanent vendor is attainable;
+    the oracle models gold as a drop-leaf (GOLD_CODE)."""
+    buy_edges = {0: [("gold", "perm")]}
+    gd = _FakeGameData({}, {}, {}, None, None, buy_edges)
+    assert is_attainable("0", gd) is True
+    args = _encode_attainable({}, set(), 0, 8, buy_edges)
+    assert run_oracle("objective_attainable", [args])[0]["is_attainable"] is True
+
+
+def test_attainable_npc_item_currency_recurses_matches_lean():
+    """Item 0 bought with currency 1; 1 is gatherable (a drop leaf). Both Python
+    and the oracle ground 0 via the recursive buy edge."""
+    buy_edges = {0: [("1", "perm")]}
+    gd = _FakeGameData({}, {100: 1}, {}, None, None, buy_edges)  # drops: 1 is gatherable
+    assert is_attainable("0", gd) is True
+    args = _encode_attainable({}, {1}, 0, 8, buy_edges)
+    assert run_oracle("objective_attainable", [args])[0]["is_attainable"] is True
+
+
+def test_attainable_event_vendor_excluded_matches_lean():
+    """A purchase offered ONLY by an event/unlocated vendor does not count: item
+    0's sole edges are non-permanent, so it is not attainable (oracle buys=∅)."""
+    buy_edges = {0: [("gold", "event"), ("gold", "unlocated")]}
+    gd = _FakeGameData({}, {}, {}, None, None, buy_edges)
+    assert is_attainable("0", gd) is False
+    args = _encode_attainable({}, set(), 0, 8, buy_edges)
+    assert run_oracle("objective_attainable", [args])[0]["is_attainable"] is False
+
+
+def test_attainable_buy_cycle_matches_lean():
+    """A pure buy-cycle (0↔1), neither otherwise obtainable, is not attainable —
+    the closure path guard and the oracle's attainAux both reject."""
+    buy_edges = {0: [("1", "perm")], 1: [("0", "perm")]}
+    gd = _FakeGameData({}, {}, {}, None, None, buy_edges)
+    assert is_attainable("0", gd) is False
+    args = _encode_attainable({}, set(), 0, 8, buy_edges)
+    assert run_oracle("objective_attainable", [args])[0]["is_attainable"] is False
 
 
 def test_attainable_cyclic_is_false():

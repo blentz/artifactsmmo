@@ -770,23 +770,23 @@ example : ∀ (beatable : Nat → Bool),
 -- COMPLETENESS (Grounded ⇒ accepted for all adequate fuel). A cyclic recipe or a
 -- drop-only-but-not-grounded component is NOT Grounded, hence NOT attainable.
 example : ∀ (r : Formal.Objective.Recipe) (hasRec : Formal.Objective.HasRecipe)
-    (drop : Formal.Objective.IsDrop) (item : Nat),
-    (∀ fuel, Formal.Objective.isAttainable r hasRec drop fuel item = true →
-        Formal.Objective.Grounded r hasRec drop item) ∧
-    (Formal.Objective.Grounded r hasRec drop item →
-      ∃ N, ∀ fuel, N ≤ fuel → Formal.Objective.isAttainable r hasRec drop fuel item = true) :=
+    (drop : Formal.Objective.IsDrop) (buys : Formal.Objective.Buys) (item : Nat),
+    (∀ fuel, Formal.Objective.isAttainable r hasRec drop buys fuel item = true →
+        Formal.Objective.Grounded r hasRec drop buys item) ∧
+    (Formal.Objective.Grounded r hasRec drop buys item →
+      ∃ N, ∀ fuel, N ≤ fuel → Formal.Objective.isAttainable r hasRec drop buys fuel item = true) :=
   @Formal.Objective.is_attainable_eq_grounding
 -- grounding SOUNDNESS of the saturation: groundedByN accepts only Grounded items.
 example : ∀ (r : Formal.Objective.Recipe) (hasRec : Formal.Objective.HasRecipe)
-    (drop : Formal.Objective.IsDrop) (n item : Nat),
-    Formal.Objective.groundedByN r hasRec drop n item = true →
-      Formal.Objective.Grounded r hasRec drop item :=
+    (drop : Formal.Objective.IsDrop) (buys : Formal.Objective.Buys) (n item : Nat),
+    Formal.Objective.groundedByN r hasRec drop buys n item = true →
+      Formal.Objective.Grounded r hasRec drop buys item :=
   @Formal.Objective.groundedByN_sound
 -- grounding COMPLETENESS of the saturation: every Grounded item appears in a round.
 example : ∀ (r : Formal.Objective.Recipe) (hasRec : Formal.Objective.HasRecipe)
-    (drop : Formal.Objective.IsDrop) {item : Nat},
-    Formal.Objective.Grounded r hasRec drop item →
-      ∃ n, Formal.Objective.groundedByN r hasRec drop n item = true :=
+    (drop : Formal.Objective.IsDrop) (buys : Formal.Objective.Buys) {item : Nat},
+    Formal.Objective.Grounded r hasRec drop buys item →
+      ∃ n, Formal.Objective.groundedByN r hasRec drop buys n item = true :=
   @Formal.Objective.grounded_groundedByN
 -- best_gear_argmax: the chosen first-slot item IS attainable, IS a candidate, and
 -- ranks ≥ every attainable candidate under (-value, code) — the genuine argmax.

@@ -65,30 +65,44 @@ None`). Carried separately so `recipe is not None` is mirrored exactly. -/
 abbrev HasRecipe := Nat → Bool
 
 /-- `isDrop item` : the item is a resource-drop item
-(`code in _resource_drops.values()`). -/
+(`code in _resource_drops.values()`). The distinguished `gold` currency is
+modeled as a drop-leaf (always grounded) — see `Buys`. -/
 abbrev IsDrop := Nat → Bool
+
+/-- `buys item` : the currency codes for which a PERMANENT, reachable vendor
+sells `item` (`_permanent_vendor_purchases`, projected to currencies). An item
+is buyable iff ANY of its currencies is itself attainable; `gold` is encoded as a
+member of `drop` so a gold purchase grounds in one step. The Python buy edge is
+tried ONLY at no-recipe items (inside `leaf_ok`), so the `buy` grounding
+constructor and the `attainAux` buy branch are both gated on `hasRec = false`. -/
+abbrev Buys := Nat → List Nat
 
 /-! ### Grounding — the least fixpoint, defined inductively. -/
 
-/-- `Grounded`: the least set such that a drop-leaf is grounded, and an item with
-a recipe is grounded when all its materials are. A cyclic recipe never bottoms
-out (no finite derivation), so its items are NOT grounded. -/
-inductive Grounded (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) : Nat → Prop
-  | leaf {m : Nat} (hnr : hasRec m = false) (hd : drop m = true) : Grounded r hasRec drop m
+/-- `Grounded`: the least set such that a drop-leaf is grounded, an item with a
+recipe is grounded when all its materials are, and a NO-RECIPE item is grounded
+when some currency it is bought with is grounded. A cyclic recipe (or a pure
+buy-cycle) never bottoms out, so its items are NOT grounded. The `buy`
+constructor is gated on `hasRec = false` to mirror Python (the purchase edge
+lives in the no-recipe `leaf_ok` branch). -/
+inductive Grounded (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) (buys : Buys) : Nat → Prop
+  | leaf {m : Nat} (hnr : hasRec m = false) (hd : drop m = true) : Grounded r hasRec drop buys m
   | craft {m : Nat} (hr : hasRec m = true)
-      (hmats : ∀ mat ∈ r m, Grounded r hasRec drop mat) : Grounded r hasRec drop m
+      (hmats : ∀ mat ∈ r m, Grounded r hasRec drop buys mat) : Grounded r hasRec drop buys m
+  | buy {m c : Nat} (hnr : hasRec m = false) (hc : c ∈ buys m)
+      (hg : Grounded r hasRec drop buys c) : Grounded r hasRec drop buys m
 
 /-! ### Fuel-bounded saturation (grounding closure). -/
 
 /-- Items grounded within `n` saturation rounds. Round 0 grounds nothing; round
 `n+1` grounds drop-leaves and recipe items whose materials are grounded by round
 `n`. -/
-def groundedByN (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) :
+def groundedByN (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) (buys : Buys) :
     Nat → Nat → Bool
   | 0, _ => false
   | n + 1, item =>
-    if hasRec item then (r item).all (fun mat => groundedByN r hasRec drop n mat)
-    else drop item
+    if hasRec item then (r item).all (fun mat => groundedByN r hasRec drop buys n mat)
+    else drop item || (buys item).any (fun c => groundedByN r hasRec drop buys n c)
 
 /-! ### The recursive cycle-safe `isAttainable` (mirrors objective.py:15). -/
 
@@ -96,26 +110,29 @@ def groundedByN (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) :
 set bounds it; we thread fuel = universe size so the function is total). At fuel
 `fuel+1` with a recipe: `false` when `item ∈ path` (cycle guard), else all
 materials attainable under `item :: path`. Without a recipe: `item` is a drop. -/
-def attainAux (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) :
+def attainAux (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) (buys : Buys) :
     Nat → List Nat → Nat → Bool
   | 0, _, _ => false
   | fuel + 1, path, item =>
     if hasRec item then
       if item ∈ path then false
-      else (r item).all (fun mat => attainAux r hasRec drop fuel (item :: path) mat)
-    else drop item
+      else (r item).all (fun mat => attainAux r hasRec drop buys fuel (item :: path) mat)
+    else
+      if drop item then true
+      else if item ∈ path then false
+      else (buys item).any (fun c => attainAux r hasRec drop buys fuel (item :: path) c)
 
 /-- Top-level `is_attainable(code)`: empty path; callers pass `fuel` ≥ universe
 size. -/
-def isAttainable (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop)
+def isAttainable (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) (buys : Buys)
     (fuel : Nat) (item : Nat) : Bool :=
-  attainAux r hasRec drop fuel [] item
+  attainAux r hasRec drop buys fuel [] item
 
 /-! ### `groundedByN` monotonicity. -/
 
-theorem groundedByN_mono (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) :
-    ∀ (n : Nat) (item : Nat), groundedByN r hasRec drop n item = true →
-      groundedByN r hasRec drop (n + 1) item = true := by
+theorem groundedByN_mono (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) (buys : Buys) :
+    ∀ (n : Nat) (item : Nat), groundedByN r hasRec drop buys n item = true →
+      groundedByN r hasRec drop buys (n + 1) item = true := by
   intro n
   induction n with
   | zero => intro item h; simp [groundedByN] at h
@@ -127,30 +144,35 @@ theorem groundedByN_mono (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) :
       rw [List.all_eq_true] at h ⊢
       intro mat hmat
       exact ih mat (h mat hmat)
-    · simp only [hr, Bool.false_eq_true, if_false] at h ⊢
-      exact h
+    · simp only [hr, Bool.false_eq_true, if_false, Bool.or_eq_true] at h ⊢
+      rcases h with hd | hany
+      · exact Or.inl hd
+      · refine Or.inr ?_
+        rw [List.any_eq_true] at hany ⊢
+        obtain ⟨c, hc, hgc⟩ := hany
+        exact ⟨c, hc, ih c hgc⟩
 
-theorem groundedByN_mono_le (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop)
-    (n k : Nat) (item : Nat) (h : groundedByN r hasRec drop n item = true) :
-    groundedByN r hasRec drop (n + k) item = true := by
+theorem groundedByN_mono_le (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) (buys : Buys)
+    (n k : Nat) (item : Nat) (h : groundedByN r hasRec drop buys n item = true) :
+    groundedByN r hasRec drop buys (n + k) item = true := by
   induction k with
   | zero => exact h
-  | succ j ih => exact groundedByN_mono r hasRec drop (n + j) item ih
+  | succ j ih => exact groundedByN_mono r hasRec drop buys (n + j) item ih
 
 /-- Monotone for any `n ≤ m`. -/
-theorem groundedByN_mono_of_le (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop)
+theorem groundedByN_mono_of_le (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) (buys : Buys)
     {n m : Nat} (hnm : n ≤ m) (item : Nat)
-    (h : groundedByN r hasRec drop n item = true) :
-    groundedByN r hasRec drop m item = true := by
+    (h : groundedByN r hasRec drop buys n item = true) :
+    groundedByN r hasRec drop buys m item = true := by
   obtain ⟨k, rfl⟩ := Nat.exists_eq_add_of_le hnm
-  exact groundedByN_mono_le r hasRec drop n k item h
+  exact groundedByN_mono_le r hasRec drop buys n k item h
 
 /-! ### Soundness / completeness of `groundedByN` vs the fixpoint. -/
 
 /-- SOUNDNESS: `groundedByN` accepts only `Grounded` items. -/
-theorem groundedByN_sound (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) :
-    ∀ (n : Nat) (item : Nat), groundedByN r hasRec drop n item = true →
-      Grounded r hasRec drop item := by
+theorem groundedByN_sound (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) (buys : Buys) :
+    ∀ (n : Nat) (item : Nat), groundedByN r hasRec drop buys n item = true →
+      Grounded r hasRec drop buys item := by
   intro n
   induction n with
   | zero => intro item h; simp [groundedByN] at h
@@ -161,24 +183,28 @@ theorem groundedByN_sound (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) :
     · simp only [hr, if_true] at h
       rw [List.all_eq_true] at h
       exact Grounded.craft hr (fun mat hmat => ih mat (h mat hmat))
-    · simp only [hr, Bool.false_eq_true, if_false] at h
-      exact Grounded.leaf (by simpa using hr) h
+    · simp only [hr, Bool.false_eq_true, if_false, Bool.or_eq_true] at h
+      rcases h with hd | hany
+      · exact Grounded.leaf (by simpa using hr) hd
+      · rw [List.any_eq_true] at hany
+        obtain ⟨c, hc, hgc⟩ := hany
+        exact Grounded.buy (by simpa using hr) hc (ih c hgc)
 
 /-- COMPLETENESS: every `Grounded` item is accepted by some saturation round. -/
-theorem grounded_groundedByN (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop)
-    {item : Nat} (h : Grounded r hasRec drop item) :
-    ∃ n, groundedByN r hasRec drop n item = true := by
+theorem grounded_groundedByN (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) (buys : Buys)
+    {item : Nat} (h : Grounded r hasRec drop buys item) :
+    ∃ n, groundedByN r hasRec drop buys n item = true := by
   induction h with
   | @leaf m hnr hd =>
     refine ⟨1, ?_⟩
     unfold groundedByN
-    simp only [hnr, Bool.false_eq_true, if_false]
-    exact hd
+    simp only [hnr, Bool.false_eq_true, if_false, Bool.or_eq_true]
+    exact Or.inl hd
   | @craft m hr hmats ih =>
     -- common round bounding all materials, via a generic list lemma
     have hbound : ∀ (l : List Nat),
-        (∀ mat ∈ l, ∃ n, groundedByN r hasRec drop n mat = true) →
-        ∃ N, ∀ mat ∈ l, groundedByN r hasRec drop N mat = true := by
+        (∀ mat ∈ l, ∃ n, groundedByN r hasRec drop buys n mat = true) →
+        ∃ N, ∀ mat ∈ l, groundedByN r hasRec drop buys N mat = true := by
       intro l
       induction l with
       | nil => intro _; exact ⟨0, by intro mat hmat; simp at hmat⟩
@@ -190,8 +216,8 @@ theorem grounded_groundedByN (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop)
         intro mat hmat
         rcases List.mem_cons.mp hmat with he | hm
         · subst he
-          exact groundedByN_mono_le r hasRec drop Nhd Ntl mat hhd
-        · have := groundedByN_mono_le r hasRec drop Ntl Nhd mat (htl mat hm)
+          exact groundedByN_mono_le r hasRec drop buys Nhd Ntl mat hhd
+        · have := groundedByN_mono_le r hasRec drop buys Ntl Nhd mat (htl mat hm)
           rwa [Nat.add_comm] at this
     obtain ⟨N, hN⟩ := hbound (r m) ih
     refine ⟨N + 1, ?_⟩
@@ -200,14 +226,21 @@ theorem grounded_groundedByN (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop)
     rw [List.all_eq_true]
     intro mat hmat
     exact hN mat (by simpa using hmat)
+  | @buy m c hnr hc _hg ihc =>
+    -- m has no recipe; its grounded currency c is bought one round earlier.
+    obtain ⟨n, hn⟩ := ihc
+    refine ⟨n + 1, ?_⟩
+    unfold groundedByN
+    simp only [hnr, Bool.false_eq_true, if_false, Bool.or_eq_true]
+    exact Or.inr (List.any_eq_true.mpr ⟨c, hc, hn⟩)
 
 /-! ### `attainAux` (cycle-safe recursion) = grounding fixpoint. -/
 
 /-- SOUNDNESS of `attainAux`: under any path and fuel, accept ⇒ `Grounded`. The
 cycle guard only ever REJECTS, so an accepted item has a real derivation. -/
-theorem attainAux_sound (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) :
+theorem attainAux_sound (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) (buys : Buys) :
     ∀ (fuel : Nat) (path : List Nat) (item : Nat),
-      attainAux r hasRec drop fuel path item = true → Grounded r hasRec drop item := by
+      attainAux r hasRec drop buys fuel path item = true → Grounded r hasRec drop buys item := by
   intro fuel
   induction fuel with
   | zero => intro path item h; simp [attainAux] at h
@@ -222,7 +255,15 @@ theorem attainAux_sound (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) :
         rw [List.all_eq_true] at h
         exact Grounded.craft hr (fun mat hmat => ih (item :: path) mat (h mat hmat))
     · simp only [hr, Bool.false_eq_true, if_false] at h
-      exact Grounded.leaf (by simpa using hr) h
+      by_cases hd : drop item = true
+      · exact Grounded.leaf (by simpa using hr) hd
+      · rw [if_neg hd] at h
+        by_cases hp : item ∈ path
+        · rw [if_pos hp] at h; exact absurd h (by simp)
+        · rw [if_neg hp] at h
+          rw [List.any_eq_true] at h
+          obtain ⟨c, hc, hgc⟩ := h
+          exact Grounded.buy (by simpa using hr) hc (ih (item :: path) c hgc)
 
 /-! ### Completeness via the MINIMAL grounding round (strict measure).
 
@@ -239,44 +280,44 @@ acyclic derivation". We bundle minimality as `IsMinRound`. -/
 /-- `IsMinRound m item`: `item` is grounded at round `m` but NOT at round `m-1`
 (its minimal grounding round is exactly `m`). For `m = 0` this is vacuously
 false (nothing is grounded at round 0), so all uses have `m ≥ 1`. -/
-def IsMinRound (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) (m item : Nat) : Prop :=
-  groundedByN r hasRec drop m item = true ∧
-    ∀ j, j < m → groundedByN r hasRec drop j item = false
+def IsMinRound (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) (buys : Buys) (m item : Nat) : Prop :=
+  groundedByN r hasRec drop buys m item = true ∧
+    ∀ j, j < m → groundedByN r hasRec drop buys j item = false
 
 /-- Every grounded item HAS a minimal grounding round. We minimize by strong
 induction on a witness round (Lean core, no `Nat.find`): given any round `n`
 that grounds `item`, either no smaller round does (then `n` is minimal) or some
 strictly smaller round does (recurse). -/
-theorem exists_minRound (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop)
-    {item : Nat} (h : ∃ n, groundedByN r hasRec drop n item = true) :
-    ∃ m, IsMinRound r hasRec drop m item := by
+theorem exists_minRound (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) (buys : Buys)
+    {item : Nat} (h : ∃ n, groundedByN r hasRec drop buys n item = true) :
+    ∃ m, IsMinRound r hasRec drop buys m item := by
   obtain ⟨n, hn⟩ := h
   induction n using Nat.strongRecOn with
   | ind n ih =>
-    by_cases hsmaller : ∃ j, j < n ∧ groundedByN r hasRec drop j item = true
+    by_cases hsmaller : ∃ j, j < n ∧ groundedByN r hasRec drop buys j item = true
     · obtain ⟨j, hjlt, hjg⟩ := hsmaller
       exact ih j hjlt hjg
     · refine ⟨n, hn, ?_⟩
       intro j hj
-      cases hc : groundedByN r hasRec drop j item with
+      cases hc : groundedByN r hasRec drop buys j item with
       | false => rfl
       | true => exact absurd ⟨j, hj, hc⟩ hsmaller
 
 /-- If a recipe item has minimal round `m+1`, every material is grounded by round
 `m` (one round earlier). -/
-theorem materials_grounded_pred (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop)
+theorem materials_grounded_pred (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) (buys : Buys)
     (n item : Nat) (hr : hasRec item = true)
-    (h : groundedByN r hasRec drop (n + 1) item = true) :
-    ∀ mat ∈ r item, groundedByN r hasRec drop n mat = true := by
+    (h : groundedByN r hasRec drop buys (n + 1) item = true) :
+    ∀ mat ∈ r item, groundedByN r hasRec drop buys n mat = true := by
   unfold groundedByN at h
   simp only [hr, if_true] at h
   rw [List.all_eq_true] at h
   exact h
 
 /-- The minimal grounding round is unique. -/
-theorem minRound_unique (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop)
-    (item m1 m2 : Nat) (h1 : IsMinRound r hasRec drop m1 item)
-    (h2 : IsMinRound r hasRec drop m2 item) : m1 = m2 := by
+theorem minRound_unique (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) (buys : Buys)
+    (item m1 m2 : Nat) (h1 : IsMinRound r hasRec drop buys m1 item)
+    (h2 : IsMinRound r hasRec drop buys m2 item) : m1 = m2 := by
   obtain ⟨hg1, hl1⟩ := h1
   obtain ⟨hg2, hl2⟩ := h2
   rcases Nat.lt_trichotomy m1 m2 with hlt | heq | hgt
@@ -287,11 +328,11 @@ theorem minRound_unique (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop)
 /-- COMPLETENESS, path-general, parameterised by the item's minimal round `m`.
 `attainAux` accepts `item` (minimal round `m`) under ANY `path` whose every
 member's minimal round exceeds `m`, given fuel `≥ m`. -/
-theorem attainAux_complete_min (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) :
+theorem attainAux_complete_min (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) (buys : Buys) :
     ∀ (m : Nat) (item : Nat) (path : List Nat),
-      IsMinRound r hasRec drop m item →
-      (∀ a ∈ path, ∀ ma, IsMinRound r hasRec drop ma a → m < ma) →
-      ∀ fuel, m ≤ fuel → attainAux r hasRec drop fuel path item = true := by
+      IsMinRound r hasRec drop buys m item →
+      (∀ a ∈ path, ∀ ma, IsMinRound r hasRec drop buys ma a → m < ma) →
+      ∀ fuel, m ≤ fuel → attainAux r hasRec drop buys fuel path item = true := by
   intro m
   induction m using Nat.strongRecOn with
   | ind m ih =>
@@ -319,10 +360,10 @@ theorem attainAux_complete_min (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop)
       simp only [hnp, if_false]
       rw [List.all_eq_true]
       intro mat hmat
-      have hmatg : groundedByN r hasRec drop k mat = true :=
-        materials_grounded_pred r hasRec drop k item hr hg mat hmat
+      have hmatg : groundedByN r hasRec drop buys k mat = true :=
+        materials_grounded_pred r hasRec drop buys k item hr hg mat hmat
       -- mat has a minimal round mm ≤ k < k+1.
-      obtain ⟨mm, hmm⟩ := exists_minRound r hasRec drop ⟨k, hmatg⟩
+      obtain ⟨mm, hmm⟩ := exists_minRound r hasRec drop buys ⟨k, hmatg⟩
       have hmmk : mm ≤ k := by
         rcases Nat.lt_or_ge k mm with hkm | hge
         · exact absurd hmatg (by rw [hmm.2 k hkm]; simp)
@@ -331,26 +372,57 @@ theorem attainAux_complete_min (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop)
       intro a ha ma hma
       rcases List.mem_cons.mp ha with he | hold
       · -- a = item, its minimal round is k+1 (uniqueness of minimal round).
-        have hma' : IsMinRound r hasRec drop ma item := he ▸ hma
-        have : ma = k + 1 := minRound_unique r hasRec drop item ma (k + 1) hma' ⟨hg, hmin'⟩
+        have hma' : IsMinRound r hasRec drop buys ma item := he ▸ hma
+        have : ma = k + 1 := minRound_unique r hasRec drop buys item ma (k + 1) hma' ⟨hg, hmin'⟩
         omega
       · have := hpath a hold ma hma; omega
-    · unfold groundedByN at hg
-      simp only [hr, Bool.false_eq_true, if_false] at hg
+    · -- no recipe: item grounded via a drop-leaf or a bought (grounded) currency.
       simp only [hr, Bool.false_eq_true, if_false]
-      exact hg
+      by_cases hd : drop item = true
+      · rw [if_pos hd]
+      · rw [if_neg hd]
+        -- item ∉ path (its minimal round is k+1; every path member's exceeds it)
+        have hnp : item ∉ path := by
+          intro hin
+          have := hpath item hin (k + 1) ⟨hg, hmin'⟩
+          omega
+        rw [if_neg hnp]
+        -- drop item = false, so the buy disjunct of `hg` must hold
+        have hany : (buys item).any (fun c => groundedByN r hasRec drop buys k c) = true := by
+          have hg' := hg
+          unfold groundedByN at hg'
+          simp only [hr, Bool.false_eq_true, if_false, Bool.or_eq_true] at hg'
+          rcases hg' with h' | h'
+          · exact absurd h' hd
+          · exact h'
+        rw [List.any_eq_true] at hany ⊢
+        obtain ⟨c, hc, hgc⟩ := hany
+        refine ⟨c, hc, ?_⟩
+        -- c has a minimal round mm ≤ k < k+1; recurse with item joining the path.
+        obtain ⟨mm, hmm⟩ := exists_minRound r hasRec drop buys ⟨k, hgc⟩
+        have hmmk : mm ≤ k := by
+          rcases Nat.lt_or_ge k mm with hkm | hge
+          · exact absurd hgc (by rw [hmm.2 k hkm]; simp)
+          · exact hge
+        refine ih mm (by omega) c (item :: path) hmm ?_ f' (by omega)
+        intro a ha ma hma
+        rcases List.mem_cons.mp ha with he | hold
+        · have hma' : IsMinRound r hasRec drop buys ma item := he ▸ hma
+          have : ma = k + 1 := minRound_unique r hasRec drop buys item ma (k + 1) hma' ⟨hg, hmin'⟩
+          omega
+        · have := hpath a hold ma hma; omega
 
 /-- COMPLETENESS at the top level: a grounded item is accepted by `isAttainable`
 with the EMPTY path, for any fuel ≥ its minimal grounding round. The empty path
 trivially satisfies the path invariant. -/
-theorem grounded_isAttainable (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop)
-    {item : Nat} (h : Grounded r hasRec drop item) :
-    ∃ N, ∀ fuel, N ≤ fuel → isAttainable r hasRec drop fuel item = true := by
-  obtain ⟨n, hn⟩ := grounded_groundedByN r hasRec drop h
-  obtain ⟨m, hm⟩ := exists_minRound r hasRec drop ⟨n, hn⟩
+theorem grounded_isAttainable (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) (buys : Buys)
+    {item : Nat} (h : Grounded r hasRec drop buys item) :
+    ∃ N, ∀ fuel, N ≤ fuel → isAttainable r hasRec drop buys fuel item = true := by
+  obtain ⟨n, hn⟩ := grounded_groundedByN r hasRec drop buys h
+  obtain ⟨m, hm⟩ := exists_minRound r hasRec drop buys ⟨n, hn⟩
   refine ⟨m, fun fuel hfuel => ?_⟩
   unfold isAttainable
-  exact attainAux_complete_min r hasRec drop m item [] hm (by intro a ha; simp at ha) fuel hfuel
+  exact attainAux_complete_min r hasRec drop buys m item [] hm (by intro a ha; simp at ha) fuel hfuel
 
 /-! ### The headline equivalence: `is_attainable` = grounding fixpoint. -/
 
@@ -359,14 +431,14 @@ accepting implies `Grounded` (SOUNDNESS); and a `Grounded` item is accepted for
 all sufficiently large fuel (COMPLETENESS). Combined: with adequate fuel,
 `isAttainable item = true ↔ Grounded item`. A cyclic recipe and a drop-only-but-
 not-recipe-grounded item are NOT `Grounded`, hence NOT attainable. -/
-theorem is_attainable_eq_grounding (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop)
+theorem is_attainable_eq_grounding (r : Recipe) (hasRec : HasRecipe) (drop : IsDrop) (buys : Buys)
     (item : Nat) :
-    (∀ fuel, isAttainable r hasRec drop fuel item = true → Grounded r hasRec drop item) ∧
-    (Grounded r hasRec drop item →
-      ∃ N, ∀ fuel, N ≤ fuel → isAttainable r hasRec drop fuel item = true) := by
-  refine ⟨?_, grounded_isAttainable r hasRec drop⟩
+    (∀ fuel, isAttainable r hasRec drop buys fuel item = true → Grounded r hasRec drop buys item) ∧
+    (Grounded r hasRec drop buys item →
+      ∃ N, ∀ fuel, N ≤ fuel → isAttainable r hasRec drop buys fuel item = true) := by
+  refine ⟨?_, grounded_isAttainable r hasRec drop buys⟩
   intro fuel h
-  exact attainAux_sound r hasRec drop fuel [] item h
+  exact attainAux_sound r hasRec drop buys fuel [] item h
 
 /-- A CYCLIC recipe `a → b → a` (both have recipes, neither is a drop) is NOT
 grounded — so `isAttainable` returns `false` for any fuel (the `_path` guard
@@ -375,7 +447,8 @@ example :
     let r : Recipe := fun n => if n = 0 then [1] else if n = 1 then [0] else []
     let hasRec : HasRecipe := fun n => n = 0 ∨ n = 1
     let drop : IsDrop := fun _ => false
-    isAttainable r hasRec drop 8 0 = false := by decide
+    let buys : Buys := fun _ => []
+    isAttainable r hasRec drop buys 8 0 = false := by decide
 
 /-- A DROP-ONLY component that is NOT a resource drop and has NO recipe is NOT
 grounded — `isAttainable` returns `false`. Item 0 has a recipe needing item 1;
@@ -384,14 +457,43 @@ example :
     let r : Recipe := fun n => if n = 0 then [1] else []
     let hasRec : HasRecipe := fun n => n = 0
     let drop : IsDrop := fun _ => false
-    isAttainable r hasRec drop 8 0 = false := by decide
+    let buys : Buys := fun _ => []
+    isAttainable r hasRec drop buys 8 0 = false := by decide
 
 /-- A genuine chain DOES ground: item 0 crafts from drop-leaf 1. -/
 example :
     let r : Recipe := fun n => if n = 0 then [1] else []
     let hasRec : HasRecipe := fun n => n = 0
     let drop : IsDrop := fun n => n = 1
-    isAttainable r hasRec drop 8 0 = true := by decide
+    let buys : Buys := fun _ => []
+    isAttainable r hasRec drop buys 8 0 = true := by decide
+
+/-- BUY EDGE: a no-recipe item 0 is bought with currency 1, which is a drop-leaf.
+So 0 grounds via the purchase edge. -/
+example :
+    let r : Recipe := fun _ => []
+    let hasRec : HasRecipe := fun _ => false
+    let drop : IsDrop := fun n => n = 1
+    let buys : Buys := fun n => if n = 0 then [1] else []
+    isAttainable r hasRec drop buys 8 0 = true := by decide
+
+/-- BUY with `gold` (modeled as drop-leaf 9, always grounded): item 0 has no
+recipe and is not itself a drop, but a vendor sells it for gold → attainable. -/
+example :
+    let r : Recipe := fun _ => []
+    let hasRec : HasRecipe := fun _ => false
+    let drop : IsDrop := fun n => n = 9
+    let buys : Buys := fun n => if n = 0 then [9] else []
+    isAttainable r hasRec drop buys 8 0 = true := by decide
+
+/-- A BUY-CYCLE (0 bought with 1, 1 bought with 0), neither a drop, is NOT
+grounded — the path guard rejects it. -/
+example :
+    let r : Recipe := fun _ => []
+    let hasRec : HasRecipe := fun _ => false
+    let drop : IsDrop := fun _ => false
+    let buys : Buys := fun n => if n = 0 then [1] else if n = 1 then [0] else []
+    isAttainable r hasRec drop buys 8 0 = false := by decide
 
 /-! ### Gear selection: argmax over ATTAINABLE items, ties by code ascending.
 

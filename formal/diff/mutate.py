@@ -715,9 +715,8 @@ OBJECTIVE_MUTATIONS = [
     # A craft chain bottoming out in a (spawning) monster drop is wrongly
     # rejected -> killed by test_attainable_spawning_monster_drop_accepted.
     ("objective: drop monster-drop leaf branch (gathering-only regression)",
-     "        lambda leaf: _gatherable(leaf, game_data)\n"
-     "        or _drops_from_spawning_monster(leaf, game_data))",
-     "        lambda leaf: _gatherable(leaf, game_data))"),
+     "        if _gatherable(leaf, game_data) or _drops_from_spawning_monster(leaf, game_data):",
+     "        if _gatherable(leaf, game_data):"),
     # drop the known-spawn gate: accept ANY monster drop even from a monster the
     # bot can never reach. Killed by test_attainable_spawnless_monster_drop_rejected
     # and the random graph (spawn-less droppers must not ground their item).
@@ -726,6 +725,29 @@ OBJECTIVE_MUTATIONS = [
      "               for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(code))",
      "    return any(True\n"
      "               for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(code))"),
+    # drop the entire NPC purchase edge in the perfect-sheet leaf: reverts task
+    # #12, so an NPC-only item (rune/artifact/bag) is wrongly unattainable.
+    # Killed by the gold-purchase + item-currency differential tests.
+    ("objective: drop NPC purchase edge in is_attainable leaf",
+     "        return any(currency == GOLD\n"
+     "                   or _attainable_closure(currency, game_data, leaf_ok, sub)\n"
+     "                   for _price, currency in _permanent_vendor_purchases(leaf, game_data))",
+     "        return False"),
+    # drop the gold-currency acceptance: a gold purchase must recurse on the
+    # literal 'gold' (which grounds in nothing) and wrongly fails. Killed by the
+    # gold-purchase differential test.
+    ("objective: drop gold-currency acceptance in buy edge",
+     "        return any(currency == GOLD\n"
+     "                   or _attainable_closure(currency, game_data, leaf_ok, sub)\n"
+     "                   for _price, currency in _permanent_vendor_purchases(leaf, game_data))",
+     "        return any(_attainable_closure(currency, game_data, leaf_ok, sub)\n"
+     "                   for _price, currency in _permanent_vendor_purchases(leaf, game_data))"),
+    # drop the permanent/reachable vendor gate: event and unlocated vendors are
+    # wrongly counted. Killed by test_attainable_event_vendor_excluded_matches_lean
+    # (and the random graph's non-permanent edges).
+    ("objective: drop permanent-vendor gate",
+     "            if not game_data.is_event_npc(npc) and game_data.npc_location(npc) is not None]",
+     "            ]"),
     # NOTE: the historical `is_complete` weakening mutation (and -> or) MOVED to
     # `objective_completion.py` after the pure-core extraction (the property
     # `ObjectiveGap.is_complete` now delegates to `is_complete_pure`). The

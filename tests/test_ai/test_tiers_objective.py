@@ -365,6 +365,118 @@ def test_target_gear_surfaces_monster_drop_armor():
     assert obj.target_gear["helmet_slot"] == "dragon_helm"
 
 
+def _gd_npc_rune() -> GameData:
+    """A rune slot whose only acquisition is an NPC purchase: lifesteal_rune has
+    no recipe, no gather/drop, sold by a permanent rune_vendor for gold."""
+    gd = GameData()
+    gd._item_stats = {
+        "lifesteal_rune": ItemStats(code="lifesteal_rune", level=20, type_="rune", lifesteal=10),
+    }
+    gd._npc_stock = {"rune_vendor": {"lifesteal_rune": 20000}}
+    gd._npc_buy_currency = {"rune_vendor": {"lifesteal_rune": "gold"}}
+    gd._npc_locations = {"rune_vendor": (8, 13)}
+    return gd
+
+
+def test_is_attainable_accepts_npc_gold_purchase():
+    """Task #12: an NPC-only item bought for gold from a permanent vendor is
+    attainable (perfect sheet assumes full gold)."""
+    assert is_attainable("lifesteal_rune", _gd_npc_rune()) is True
+
+
+def test_is_attainable_rejects_event_only_vendor():
+    """A vendor that only spawns during a timed event is not a reliable
+    perfect-sheet acquisition source."""
+    gd = _gd_npc_rune()
+    gd._npc_event_code["rune_vendor"] = "rune_festival"
+    assert is_attainable("lifesteal_rune", gd) is False
+
+
+def test_is_attainable_rejects_unlocated_vendor():
+    """A vendor with no known map location cannot be reached."""
+    gd = _gd_npc_rune()
+    gd._npc_locations = {}
+    assert is_attainable("lifesteal_rune", gd) is False
+
+
+def test_is_attainable_npc_item_currency_recurses():
+    """A purchase paid in an ITEM currency is attainable iff that currency is
+    attainable. greater_lifesteal_rune costs sandwhisper_coin; the coin is a
+    chicken drop (known spawn) → attainable, so the rune is too."""
+    gd = _gd_npc_rune()
+    gd._item_stats["greater_lifesteal_rune"] = ItemStats(
+        code="greater_lifesteal_rune", level=40, type_="rune", lifesteal=20)
+    gd._npc_stock["sandwhisper_trader"] = {"greater_lifesteal_rune": 100}
+    gd._npc_buy_currency["sandwhisper_trader"] = {"greater_lifesteal_rune": "sandwhisper_coin"}
+    gd._npc_locations["sandwhisper_trader"] = (-2, 18)
+    gd._monster_drops = {"chicken": [("sandwhisper_coin", 10, 1, 1)]}
+    gd._monster_locations = {"chicken": [(0, 1)]}
+    assert is_attainable("greater_lifesteal_rune", gd) is True
+
+
+def test_is_attainable_npc_unattainable_currency_rejected():
+    """If the pay currency is itself unattainable (no gather/drop/craft/vendor),
+    the purchase does not make the item attainable."""
+    gd = _gd_npc_rune()
+    gd._item_stats["cursed_rune"] = ItemStats(code="cursed_rune", level=40, type_="rune")
+    gd._npc_stock["trader"] = {"cursed_rune": 1}
+    gd._npc_buy_currency["trader"] = {"cursed_rune": "void_token"}  # nothing yields void_token
+    gd._npc_locations["trader"] = (1, 1)
+    assert is_attainable("cursed_rune", gd) is False
+
+
+def test_is_attainable_buy_cycle_safe():
+    """A purchase cycle (A paid in B, B paid in A), neither otherwise
+    obtainable, is not attainable — the path guard breaks the loop."""
+    gd = GameData()
+    gd._item_stats = {"a": ItemStats(code="a", level=1, type_="rune"),
+                      "b": ItemStats(code="b", level=1, type_="rune")}
+    gd._npc_stock = {"v": {"a": 1, "b": 1}}
+    gd._npc_buy_currency = {"v": {"a": "b", "b": "a"}}
+    gd._npc_locations = {"v": (0, 0)}
+    assert is_attainable("a", gd) is False
+
+
+def test_target_gear_surfaces_npc_purchased_rune():
+    """The headline #12 fix: an NPC-bought rune now appears in target_gear, so
+    the rune_slot is targeted by the perfect sheet."""
+    obj = CharacterObjective.from_game_data(_gd_npc_rune())
+    assert obj.target_gear["rune_slot"] == "lifesteal_rune"
+
+
+def test_is_attainable_now_gold_purchase_gated_on_affordability():
+    """Near-term: a gold purchase is attainable_now only when the character can
+    afford it. 20000-gold rune: yes at 25000 gold, no at 5000."""
+    gd = _gd_npc_rune()
+    assert is_attainable_now("lifesteal_rune", make_state(level=20, gold=25000), gd) is True
+    assert is_attainable_now("lifesteal_rune", make_state(level=20, gold=5000), gd) is False
+
+
+def test_is_attainable_now_item_currency_recurses():
+    """Near-term buy paid in an ITEM currency: attainable_now iff the currency is
+    attainable_now. magic_dust is gatherable, so the rune is buyable now even at
+    0 gold (no gold price to meet)."""
+    gd = _gd_npc_rune()
+    gd._item_stats["dust_rune"] = ItemStats(code="dust_rune", level=20, type_="rune")
+    gd._npc_stock["dust_trader"] = {"dust_rune": 3}
+    gd._npc_buy_currency["dust_trader"] = {"dust_rune": "magic_dust"}
+    gd._npc_locations["dust_trader"] = (4, 4)
+    gd._resource_drops = {"dust_node": "magic_dust"}  # magic_dust gatherable
+    assert is_attainable_now("dust_rune", make_state(level=20, gold=0), gd) is True
+
+
+def test_is_attainable_now_buy_cycle_safe():
+    """Near-term purchase cycle (a paid in b, b paid in a), neither otherwise
+    obtainable: not attainable_now — the path guard breaks the loop."""
+    gd = GameData()
+    gd._item_stats = {"a": ItemStats(code="a", level=1, type_="rune"),
+                      "b": ItemStats(code="b", level=1, type_="rune")}
+    gd._npc_stock = {"v": {"a": 1, "b": 1}}
+    gd._npc_buy_currency = {"v": {"a": "b", "b": "a"}}
+    gd._npc_locations = {"v": (0, 0)}
+    assert is_attainable_now("a", make_state(level=5, gold=10000), gd) is False
+
+
 def _gd_with_recipes() -> GameData:
     gd = GameData()
     gd._item_stats = {
