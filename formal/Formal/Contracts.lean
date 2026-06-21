@@ -61,6 +61,7 @@ import Formal.WinnableCascade
 import Formal.RealizableLoadout
 import Formal.Liveness.StickySelect
 import Formal.Liveness.ObtainProgress
+import Formal.Liveness.GearBuildTermination
 import Formal.ServableFilter
 import Formal.StrategicValue
 import Formal.Extracted.Bridges9
@@ -2895,6 +2896,20 @@ example : ∀ (r : Formal.RecipeClosure.Recipe) (fuel : Nat) (owned : Nat → Na
         (fun j => (owned j + (if j = o then 1 else 0)) - (if j = c then qty else 0)) nodes
       = Formal.Liveness.ObtainProgress.obtainProgress r fuel owned nodes :=
   @Formal.Liveness.ObtainProgress.obtainProgress_craft_invariant
+
+-- ─── GearBuildTermination (buildable gear target is BUILT in finite steps) pin ───
+-- A Grounded (buildable) target over a finite universe covering its unmet closure is
+-- reached by a finite sequence of markSat (actionable-step executions). Weakening
+-- (dropping WellFormed, the coverage hypothesis, or the existence conclusion) fails to
+-- elaborate. This is "gear progress always builds the target" — paired with selection
+-- admitting only Grounded roots (is_reachable_eq_grounding), the bot never commits to,
+-- nor stalls on, an unbuildable target.
+example : ∀ (g : Formal.StrategyTraversal.Graph), Formal.StrategyTraversal.WellFormed g →
+    ∀ (U : List Nat) (t : Nat), Formal.StrategyTraversal.Grounded g t →
+    (∀ a, Formal.StrategyTraversal.UnmetReach g t a → a ∈ U) →
+    ∃ steps : List Nat,
+      (steps.foldl Formal.Liveness.GearBuildTermination.markSat g).isSat t = true :=
+  @Formal.Liveness.GearBuildTermination.grounded_builds_target
 
 -- StrategicValue (#16): the extracted efficiency-weighted scorer's code-binding
 -- contracts. The bridge is a FULL pointwise equality (extracted flat-arg core =
