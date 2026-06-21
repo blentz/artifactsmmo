@@ -12,6 +12,7 @@ from artifactsmmo_cli.ai.learning.projections import expected_yield_per_cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.tiers.decide_key import decide_key
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
+from artifactsmmo_cli.ai.tiers.strategic_value import STRATEGIC_SCALE, strategic_value
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
@@ -103,8 +104,11 @@ is geared. While an armor slot is still empty the lower CHAR_GAP_PER_LEVEL
 applies, preserving the empty-slot-armor-dominates invariant without touching
 EMPTY_SLOT_URGENCY (2026-06-14, surgical: bump only after slots are filled)."""
 
-GEAR_EQUIP_SCALE = Fraction(20)
-"""Normalizes gear equip-value gain to ~[0,1]; tune so a first-tier upgrade ~0.7-0.9."""
+GEAR_EQUIP_SCALE = Fraction(20) * STRATEGIC_SCALE
+"""Normalizes gear strategic-value gain to ~[0,1]; tune so a first-tier upgrade
+~0.7-0.9. Scaled by STRATEGIC_SCALE (1000) because `_equip_gain` now measures the
+gain in strategic_value's fixed-point units (combat stats × SCALE) rather than raw
+equip_value, so combat-gear marginals keep the same ~[0,1] gradation as before."""
 BALANCE_K = Fraction(1, 4)
 BALANCE_THRESHOLD = 2
 BALANCE_MIN = Fraction(1, 2)
@@ -406,14 +410,23 @@ class StrategyEngine:
 
     def _equip_gain(self, root: MetaGoal, state: WorldState,
                     game_data: GameData) -> int:
-        """Exact-int combat/utility gain of equipping a gear root over what the
-        target slot already holds: `max(0, equip_value(item) -
-        equip_value(current))`. Empty slot ⇒ current is 0, so the gain is the
-        item's full equip value. Returns 0 for non-gear or stats-unknown roots.
+        """Exact-int gain of equipping a gear root over what the target slot
+        already holds: `max(0, strategic_value(item) - strategic_value(current))`.
+        Empty slot ⇒ current is 0, so the gain is the item's full strategic value.
+        Returns 0 for non-gear or stats-unknown roots.
+
+        Uses `strategic_value` (NOT `equip_value`) so CROSS-SLOT gear priority is
+        efficiency-weighted (#16): combat stats carry the dominant SCALE weight so
+        combat-slot ordering is unchanged, while non-combat efficiency stats
+        (wisdom/prospecting down-weighted; inventory/haste held at parity pending
+        their derived rates) get their own weight — a bag/rune slot's gain reflects
+        its non-combat value instead of a 1:1-with-attack sum. WITHIN-slot best-item
+        SELECTION (target_gear / near_term_gear) stays on the proved equip_value.
 
         Single source for both the `_marginal` score and the `decide` sort key's
-        protection tiebreak (`decide_key`'s third field), so the two never
-        diverge on what "better gear" means."""
+        protection tiebreak (`decide_key`'s third field), so the two never diverge
+        on what "better gear" means. The gain is in strategic_value fixed-point
+        units (combat × STRATEGIC_SCALE); GEAR_EQUIP_SCALE is scaled to match."""
         if not isinstance(root, ObtainItem):
             return 0
         stats = game_data.item_stats(root.code)
@@ -422,8 +435,8 @@ class StrategyEngine:
         slot = self._root_slot(root, state, game_data)
         current_code = state.equipment.get(slot) if slot is not None else None
         current_stats = game_data.item_stats(current_code) if current_code else None
-        current_value = equip_value(current_stats) if current_stats is not None else 0
-        return max(0, equip_value(stats) - current_value)
+        current_value = strategic_value(current_stats) if current_stats is not None else 0
+        return max(0, strategic_value(stats) - current_value)
 
     def _marginal(self, root: MetaGoal, state: WorldState, game_data: GameData,
                   combat_monster: str | None = None) -> Fraction:

@@ -8,6 +8,7 @@ from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
+from artifactsmmo_cli.ai.tiers.strategic_value import strategic_value
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
@@ -421,7 +422,9 @@ class TestMarginal:
         state = make_state(equipment={"weapon_slot": None})
         # combat_monster set → combat-readiness urgency off, testing base marginal.
         m = eng._marginal(ObtainItem("copper_dagger"), state, gd, combat_monster="chicken")
-        assert m == min(1.0, equip_value(gd.item_stats("copper_dagger")) / GEAR_EQUIP_SCALE)
+        # #16: gear marginal is now strategic_value-based (combat × SCALE), not
+        # equip_value; GEAR_EQUIP_SCALE is scaled to match.
+        assert m == min(1.0, strategic_value(gd.item_stats("copper_dagger")) / GEAR_EQUIP_SCALE)
         assert m > 0
 
     def test_gear_marginal_zero_when_no_gain(self):
@@ -893,7 +896,7 @@ class TestEmptySlotUrgency:
         eng = StrategyEngine(obj, BalancedPersonality())
         state = make_state(level=6, equipment={"weapon_slot": "copper_dagger"})
         m = eng._marginal(ObtainItem("copper_armor"), state, gd, combat_monster="chicken")
-        gain = Fraction(equip_value(gd.item_stats("copper_armor")))
+        gain = Fraction(strategic_value(gd.item_stats("copper_armor")))  # #16: strategic_value-based
         assert m == min(Fraction(1), gain / GEAR_EQUIP_SCALE)   # plain marginal, no boost
 
     def test_gear_slot_resolution_prefers_weakest_ring(self):
