@@ -151,22 +151,28 @@ inventory_space) hit the no-invented-defaults wall and need a user decision.
   MIRROR_LADDER_ORDER") is EXPECTED, not a baseline break — gate.sh runs
   differential before mutation under set -e, so "ALL GATE PARTS PASSED" is the
   real green signal (a `| tail` on the gate invocation masks gate.sh's own exit).
-* Phase 3a DONE (branch feat/strategic-value-wire, full gate green): ObjectiveGap.gap
-  cross-slot priority now weights gear gaps by `strategic_value` (via
-  `_strategic_item_value`); target_gear/near_term_gear SELECTION stays on the proved
-  `equip_value` (combat order unchanged). Weights (fixed-point SCALE=1000):
-  combat=SCALE (dominant, ratios cancel), wisdom/prospecting=1 (openapi 0.001),
-  inventory_space+haste=SCALE (DEFERRED at weight-parity — no invented rate).
-  Lean gap proofs unchanged (axisGap_nonneg/gapSum_le_targetSum parametric in any
-  nonneg value; strategicValue_nonneg supplies it). Lockstep: objective gap
-  differential rebound to strategic_value; gap unit assertions + wrapper tests
-  updated. NOTE: mutation gate's dirty-source guard ABORTS on uncommitted target
-  files — COMMIT before running mutation/full gate (cost a redundant gate run).
-* DECISIONS (user 2026-06-21): common currency for efficiency stats =
-  COOLDOWN-SECONDS SAVED; inventory proxy = mean(map→nearest-bank chebyshev)×5×2
-  roundtrip ÷ items_per_trip(=inventory_max); sequencing = wire-now/full-rates-next.
-* NEXT (Phase 3b): commensurate inventory + (post-probe) haste into cooldown-seconds
-  -saved weights — needs avg-fight-cd + fights/level (xp curve) + mean-bank-distance
-  derivations from game_data; replace the DEFERRED parity weights. Then (Phase 4)
-  #14 horizon factor.
+* Phase 3a was INERT + REVERTED. It wired ObjectiveGap.gap → strategic_value, but
+  gap()/ObjectiveGap has NO live consumer — the whole Tier-1 objective-distance
+  chain (gap → personality.weighted_remaining → objective_completion) is shadow/dead
+  in the live planner (logged: project_dead_tier1_objective_gap; user: investigate
+  separately). The LIVE cross-slot gear priority is StrategyEngine._equip_gain =
+  max(0, equip_value(item) − equip_value(current)), the single source for both the
+  _marginal rank score AND the kernel-proved decide_key protection tiebreak.
+* Phase 2 strategic_value core + wrapper RETAINED (proved, gated) — they feed the
+  real lever next.
+* Phase 3b-prereq DONE (merged): LearningStore.action_class_cost — learned
+  per-action-TYPE cooldown (FightAction/MovementAction/DepositAllAction medians,
+  warmup-gated, default fallback). The API has NO static fight-cooldown formula, so
+  the cooldown-seconds currency READS GAMEPLAY (user direction 2026-06-21). The
+  recording already existed (action_class + actual_cooldown_seconds per cycle).
+* DECISIONS (user 2026-06-21): common currency = COOLDOWN-SECONDS SAVED, learned
+  from gameplay (not assumed); inventory proxy ÷ items_per_trip(=inventory_max);
+  wire-now/full-rates-next; #16 lever = _equip_gain; dead Tier-1 = separate issue.
+* NEXT — the REAL #16 wiring (own careful pass, decide_key-coupled):
+  1. swap equip_value→strategic_value in StrategyEngine._equip_gain (combat-dominant
+     scaling preserves combat order);
+  2. rescale GEAR_EQUIP_SCALE for the ×1000 so _marginal normalization holds;
+  3. UPDATE DecideKey.lean + Oracle + decide_key differential + REFRESH mutation
+     anchors (tiebreak values change) — see project_protection_tiebreak;
+  4. then 3b learned-cooldown weights (action_class_cost) + Phase 4 horizon (50−lvl)/50.
 * #12/#13 complete + merged. #15 (currency arbitrage) independent, still queued.
