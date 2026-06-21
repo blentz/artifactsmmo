@@ -133,9 +133,14 @@ inventory_space) hit the no-invented-defaults wall and need a user decision.
     cooldown, map-derived). Stays within "use API data".
 
 ## Status
-* Design + architecture decided; Phase 1 grounding + decisions DONE. NEXT:
-  (Phase 1b) author the haste probe script (user runs it on the live char);
-  (Phase 2) strategic_value core (wisdom×0.001, prospecting×0.001, inventory×proxy,
-  haste×1-pending) + extracted Lean + nonneg/monotone proofs + differential +
-  mutation; (Phase 3) ObjectiveGap rewire; (Phase 4) #14 horizon factor.
+* Design + architecture decided; Phase 1 grounding + decisions DONE.
+* Phase 1b DONE (authored): `scripts/probe_haste.py` (branch feat/haste-probe,
+  56ef098) — empirical haste-rate probe. R fights item-ON vs item-OFF, rate =
+  (cd0−cdN)/(cd0×N); predict_win safety gate + lost-fight abort + loadout restore
+  + combat-stat-confound warning; coverage-omitted (live-I/O). AWAITING the user's
+  live run for the haste rate; until then haste stays weight 1.
+* NEXT: (Phase 2) strategic_value core (wisdom×0.001, prospecting×0.001,
+  inventory×proxy, haste×1-pending-probe) + extracted Lean + nonneg/monotone proofs
+  + differential + mutation; (Phase 3) ObjectiveGap rewire; (Phase 4) #14 horizon
+  factor. Phase 2 can start now (haste folds in once the probe returns a rate).
 * #12/#13 complete + merged. #15 (currency arbitrage) independent, still queued.
