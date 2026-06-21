@@ -88,3 +88,27 @@ def test_wrapper_accepts_custom_weights():
     """Phase 3b supplies derived inventory/haste weights via the weights arg."""
     bag = ItemStats(code="bag", level=1, type_="bag", inventory_space=10)
     assert strategic_value(bag, (1000, 1, 1, 7, 1000)) == 70
+
+
+def test_efficiency_budget_caps_efficiency_block_below_combat():
+    """#16 sub-budget: the efficiency block is capped at efficiency_budget so a
+    combat item always outranks an all-efficiency item. A 100-slot bag at weight
+    50 = 5000 efficiency, capped to budget 999."""
+    bag = ItemStats(code="bag", level=1, type_="bag", inventory_space=100)
+    capped = strategic_value(bag, (1000, 1, 1, 50, 0), efficiency_budget=999)
+    assert capped == 999  # combat_part 0 + min(999, 5000)
+    # A single combat-raw point outranks the capped bag.
+    weapon = ItemStats(code="w", level=1, type_="weapon", attack={"earth": 1})
+    assert strategic_value(weapon, (1000, 1, 1, 50, 0), efficiency_budget=999) == 1000
+
+
+def test_efficiency_budget_none_is_uncapped():
+    """No budget → plain weighted sum (backward-compatible)."""
+    bag = ItemStats(code="bag", level=1, type_="bag", inventory_space=100)
+    assert strategic_value(bag, (1000, 1, 1, 50, 0)) == 5000
+
+
+def test_efficiency_under_budget_passes_through():
+    """Below the cap the efficiency block is unchanged (combat 0 + 5*50=250)."""
+    bag = ItemStats(code="bag", level=1, type_="bag", inventory_space=5)
+    assert strategic_value(bag, (1000, 1, 1, 50, 0), efficiency_budget=999) == 250

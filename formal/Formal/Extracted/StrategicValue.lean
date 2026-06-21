@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/tiers/strategic_value.py (sha256: b6a1bb858b619e9d71692851f4734f6b2d26082bbfae65bdc2ed0ed0026eab4b) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/tiers/strategic_value.py (sha256: ea623dc3378d95ad7a932b7fc8aefcc397033cd4e918fa16e595b72c68a926ad) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.StrategicValue

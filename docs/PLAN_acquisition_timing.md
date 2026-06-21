@@ -178,12 +178,33 @@ inventory_space) hit the no-invented-defaults wall and need a user decision.
   comments updated). within-slot SELECTION (target_gear/near_term_gear) stays
   equip_value. Net live effect: wisdom/prospecting gear down-weighted ~1000× (openapi
   0.001) so XP/drop artifacts no longer rank like attack; bags at parity pending 3b.
-* NEXT:
-  1. (Phase 3b) replace the DEFERRED inventory/haste parity weights with
-     cooldown-seconds-saved rates LEARNED from gameplay (LearningStore.
-     action_class_cost for Fight/Move/Deposit cd) — needs threading history into the
-     weight computation + fights/level (learned xp curve) + bank roundtrip cd;
-  2. (Phase 4) #14 horizon factor (50−level)/50 modulating the gear marginal so
-     efficiency acquisition is front-loaded.
-  Haste folds in once the live probe returns its rate.
+* PHASE 3b DESIGN LOCKED (user 2026-06-21: efficiency sub-budget below combat;
+  build full). Combat and efficiency are DIMENSIONALLY incommensurate (combat =
+  stat-points×SCALE; efficiency = cooldown-seconds). Resolution: combat keeps the
+  dominant SCALE weight; the efficiency block is CAPPED at < 1 combat-point so it
+  orders gear only among efficiency-bearing/empty slots and never outranks a real
+  combat upgrade. The cap lives in the WRAPPER (strategic_value), NOT the proved
+  core (strategic_value_pure stays a plain weighted sum — no Lean/bridge/oracle/diff
+  change). Wrapper: total = combat_raw×combat_weight + min(EFFICIENCY_BUDGET,
+  Σ efficiency_stat × seconds_rate_fp).
+  FREQUENCY (the crux): per-event seconds bias toward inventory (wisdom helps every
+  FIGHT, a bag every BANK-FILL), so rates must be frequency-weighted. The char-level
+  xp curve is NOT tracked (skill_max_xp is skill-keyed) → fights/level unavailable.
+  Use LEARNED ACTION-MIX instead: f_fight/f_trip = fraction of recent cycles of each
+  action_class (needs a new LearningStore.action_class_count, sibling to
+  action_class_cost). Then:
+    - wisdom/prospecting seconds_rate = 0.001 × learned_fight_cd × f_fight
+    - inventory seconds_rate/slot = (learned bank roundtrip cd / inventory_max) × f_trip
+      (roundtrip cd ≈ 2×action_class_cost("MovementAction") + action_class_cost(deposit))
+    - haste = 0 until the live probe returns its rate (no invented rate)
+  All cooldowns LEARNED (action_class_cost); cold fallback = DEFAULT_FIGHT_CYCLES /
+  defaults → efficiency ≈ 0 (parity removed) so behavior degrades to combat-only
+  gear priority when unlearned.
+  BUILD STEPS: (1) action_class_count accessor + test; (2) strategic_weights(state,
+  history, game_data) deriving the fixed-point weights + budget; (3) wrapper cap +
+  thread history through _equip_gain/_marginal (history=None → cold/zero-efficiency,
+  backward-compatible); (4) strategy/wrapper unit tests + mutation + gate.
+* (Phase 4) #14 horizon factor (50−level)/50 multiplying the efficiency block so
+  acquisition is front-loaded (efficiency rates are per-event; horizon scales total
+  remaining benefit). Haste folds in once the probe returns its rate.
 * #12/#13 complete + merged. #15 (currency arbitrage) independent, still queued.

@@ -13,6 +13,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.tiers.decide_key import decide_key
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.strategic_value import STRATEGIC_SCALE, strategic_value
+from artifactsmmo_cli.ai.tiers.strategic_weights import strategic_weights
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
@@ -409,7 +410,8 @@ class StrategyEngine:
         return False
 
     def _equip_gain(self, root: MetaGoal, state: WorldState,
-                    game_data: GameData) -> int:
+                    game_data: GameData,
+                    history: LearningStore | None = None) -> int:
         """Exact-int gain of equipping a gear root over what the target slot
         already holds: `max(0, strategic_value(item) - strategic_value(current))`.
         Empty slot ⇒ current is 0, so the gain is the item's full strategic value.
@@ -435,11 +437,18 @@ class StrategyEngine:
         slot = self._root_slot(root, state, game_data)
         current_code = state.equipment.get(slot) if slot is not None else None
         current_stats = game_data.item_stats(current_code) if current_code else None
-        current_value = strategic_value(current_stats) if current_stats is not None else 0
-        return max(0, strategic_value(stats) - current_value)
+        # Weights + efficiency budget LEARNED from gameplay (#16 Phase 3b): combat
+        # dominant, efficiency stats by cooldown-seconds-saved × action-mix, capped
+        # below combat. history=None (cold / unit tests) → efficiency weights 0, so
+        # gain is combat-only (efficiency gear uncredited until learned).
+        weights, budget = strategic_weights(state, history)
+        current_value = (strategic_value(current_stats, weights, budget)
+                         if current_stats is not None else 0)
+        return max(0, strategic_value(stats, weights, budget) - current_value)
 
     def _marginal(self, root: MetaGoal, state: WorldState, game_data: GameData,
-                  combat_monster: str | None = None) -> Fraction:
+                  combat_monster: str | None = None,
+                  history: LearningStore | None = None) -> Fraction:
         if isinstance(root, ReachCharLevel):
             # Inverse-gap char-level urgency: smaller gaps (the bootstrap
             # root `ReachCharLevel(state.level + 2)`) score HIGHER than the
@@ -487,7 +496,7 @@ class StrategyEngine:
             current_code = state.equipment.get(slot) if slot is not None else None
             # P4a: equip_value is an exact int — the gain is exact integer
             # arithmetic; the normalisation divides into an exact Fraction.
-            gain = self._equip_gain(root, state, game_data)
+            gain = self._equip_gain(root, state, game_data, history)
             marginal = min(Fraction(1), gain / GEAR_EQUIP_SCALE)
             # Combat-readiness urgency: a weapon-slot upgrade is the binding
             # objective while the character cannot fight at all.
@@ -540,9 +549,10 @@ class StrategyEngine:
         return PRIOR_RELEVANT_TOOL * weight
 
     def _value(self, root: MetaGoal, state: WorldState, game_data: GameData,
-               combat_monster: str | None = None) -> Fraction:
+               combat_monster: str | None = None,
+               history: LearningStore | None = None) -> Fraction:
         base = (self._base_prior(root, state, game_data)
-                * self._marginal(root, state, game_data, combat_monster)
+                * self._marginal(root, state, game_data, combat_monster, history)
                 * self._balancing(root, state))
         return max(base, self._relevant_tool_value(root, state, game_data))
 
@@ -585,10 +595,10 @@ class StrategyEngine:
                 continue
             step = actionable_step(root, state, game_data)
             assert step is not None
-            value = self._value(root, state, game_data, combat_monster)
+            value = self._value(root, state, game_data, combat_monster, history)
             final = self._learned_blend(root, value, history, combat_monster)
             effort = root_cost(root, state, game_data)
-            protection = self._equip_gain(root, state, game_data)
+            protection = self._equip_gain(root, state, game_data, history)
             candidates.append((root, step, final, effort, value, protection))
         # Servable filter (2026-06-20): drop roots whose actionable step yields no
         # plannable goal this cycle, WHENEVER at least one root is servable — so
