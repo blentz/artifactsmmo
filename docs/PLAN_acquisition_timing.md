@@ -211,7 +211,13 @@ inventory_space) hit the no-invented-defaults wall and need a user decision.
   history, game_data) deriving the fixed-point weights + budget; (3) wrapper cap +
   thread history through _equip_gain/_marginal (history=None → cold/zero-efficiency,
   backward-compatible); (4) strategy/wrapper unit tests + mutation + gate.
-* (Phase 4) #14 horizon factor (50−level)/50 multiplying the efficiency block so
-  acquisition is front-loaded (efficiency rates are per-event; horizon scales total
-  remaining benefit). Haste folds in once the probe returns its rate.
+* PHASE 4 DONE (merged d28d537, full gate green): strategic_value scales the
+  efficiency block by horizon=(max_level−level)/max_level — efficiency gear
+  front-loaded (worth most early, 0 at max level; clamped ≥0). Combat NOT scaled;
+  scaling only shrinks the capped efficiency block so combat dominance holds at every
+  horizon. _equip_gain computes the factor from state.level + max_character_level.
+  Wrapper policy only; proved core unchanged. 100% cov.
+* #14/#16 FEATURE COMPLETE (Phases 2,3a,3b,4 + cooldown learning + dead-Tier-1 bug
+  logged). REMAINING: haste rate — folds into strategic_weights (currently 0) once
+  the user runs scripts/probe_haste.py on a live char; one-line change + a test.
 * #12/#13 complete + merged. #15 (currency arbitrage) independent, still queued.
