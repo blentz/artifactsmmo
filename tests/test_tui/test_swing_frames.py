@@ -41,3 +41,10 @@ def test_glide_reaches_last_frame_at_arrive_fraction():
 
 def test_glide_single_frame_is_zero():
     assert glide_index(5.0, 10.0, 1) == 0
+
+
+def test_glide_zero_duration_window_returns_last_frame():
+    # duration 0 -> window 0 -> the `window <= 0` guard returns the last frame
+    assert glide_index(1.0, 0.0, 5) == 4
+    # arrive_fraction 0 also collapses the window
+    assert glide_index(1.0, 10.0, 5, arrive_fraction=0.0) == 4
