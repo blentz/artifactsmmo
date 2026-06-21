@@ -3,7 +3,13 @@
 The formal differential + mutation gate proves exact-integer agreement with the
 Lean core; these tests cover the pure function in the main suite.
 """
-from artifactsmmo_cli.ai.tiers.strategic_value import strategic_value_pure
+from artifactsmmo_cli.ai.game_data import ItemStats
+from artifactsmmo_cli.ai.tiers.strategic_value import (
+    DEFAULT_STRATEGIC_WEIGHTS,
+    STRATEGIC_SCALE,
+    strategic_value,
+    strategic_value_pure,
+)
 
 
 def test_weighted_sum():
@@ -37,3 +43,48 @@ def test_monotone_in_inventory_space():
     base = strategic_value_pure(0, 0, 0, 10, 0, 1000, 1, 1, 50, 1)
     more = strategic_value_pure(0, 0, 0, 20, 0, 1000, 1, 1, 50, 1)
     assert more > base
+
+
+# ---- wrapper (ItemStats → strategic_value) ----
+
+def test_wrapper_combat_raw_excludes_efficiency_stats():
+    """combat_raw = attack+resistance+hp_restore+hp_bonus+dmg+crit+lifesteal+
+    combat_buff (equip_value's raw MINUS the four efficiency stats), ×SCALE.
+    A pure-combat weapon (attack 30) → 30 × 1000 = 30000."""
+    s = ItemStats(code="iron_sword", level=2, type_="weapon", attack={"earth": 30})
+    assert strategic_value(s) == 30 * STRATEGIC_SCALE
+
+
+def test_wrapper_combat_raw_sums_every_combat_field():
+    """Every combat field contributes to combat_raw (so a dropped term is caught):
+    attack(2+3) + resistance(4) + hp_restore(5) + hp_bonus(6) + dmg(7) + crit(8)
+    + lifesteal(9) + combat_buff(10) = 54 → 54 × 1000 = 54000. Efficiency stats
+    (wisdom/prospecting/inventory/haste) are NOT in combat_raw."""
+    s = ItemStats(
+        code="kitchen_sink", level=1, type_="weapon",
+        attack={"fire": 2, "air": 3}, resistance={"earth": 4}, hp_restore=5,
+        hp_bonus=6, dmg=7, critical_strike=8, lifesteal=9, combat_buff=10,
+    )
+    assert strategic_value(s) == 54 * STRATEGIC_SCALE
+
+
+def test_wrapper_efficiency_stats_downweighted():
+    """wisdom/prospecting carry weight 1 (openapi 0.001×SCALE); inventory/haste
+    DEFERRED at parity (=SCALE). An artifact (wisdom 25, prospecting 25) →
+    25*1 + 25*1 = 50; a bag (inventory_space 35) → 35*1000 = 35000."""
+    artifact = ItemStats(code="guide", level=1, type_="artifact", wisdom=25, prospecting=25)
+    assert strategic_value(artifact) == 50
+    bag = ItemStats(code="bag", level=1, type_="bag", inventory_space=35)
+    assert strategic_value(bag) == 35 * STRATEGIC_SCALE
+
+
+def test_wrapper_default_weights_shape():
+    """Documented fixed-point weights: combat/inventory/haste at SCALE, wisdom/
+    prospecting at the 0.001 rate."""
+    assert DEFAULT_STRATEGIC_WEIGHTS == (1000, 1, 1, 1000, 1000)
+
+
+def test_wrapper_accepts_custom_weights():
+    """Phase 3b supplies derived inventory/haste weights via the weights arg."""
+    bag = ItemStats(code="bag", level=1, type_="bag", inventory_space=10)
+    assert strategic_value(bag, (1000, 1, 1, 7, 1000)) == 70
