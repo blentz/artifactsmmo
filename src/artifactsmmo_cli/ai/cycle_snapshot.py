@@ -62,6 +62,8 @@ class CycleSnapshot(BaseModel):
     # Decision
     selected_goal: str
     action: str
+    action_kind: str = "other"          # move|gather|fight|rest|other (TUI animation)
+    action_target: str | None = None    # gather resource / fight monster / "x,y"
     outcome: str
     goal_rank: list[GoalRankEntry] = Field(default_factory=list)
     path_next_action: str | None = None

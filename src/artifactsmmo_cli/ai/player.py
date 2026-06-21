@@ -37,6 +37,7 @@ from artifactsmmo_cli.ai.constants import (
     ERROR_CODE_COOLDOWN,
     STUCK_DETECTOR_WINDOW,
 )
+from artifactsmmo_cli.ai.action_kind import action_kind_of
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, GoalAttempt, GoalRankEntry, RootScoreView
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_latch import GearLatch
@@ -595,7 +596,7 @@ class GamePlayer:
                 self._notify_observer(
                     repr(selected_goal) if selected_goal else "<none>",
                     repr(action), outcome, goal_rank_trace,
-                    planner_stats=cycle_stats,
+                    planner_stats=cycle_stats, action=action,
                 )
                 signal = self._detector.detect()
                 if signal is not None:
@@ -1064,6 +1065,7 @@ class GamePlayer:
         outcome: str,
         goal_rank_trace: list[dict[str, Any]],
         planner_stats: dict[str, object] | None = None,
+        action: object | None = None,
     ) -> None:
         """Build a CycleSnapshot and hand it to the observer (TUI host).
 
@@ -1091,6 +1093,7 @@ class GamePlayer:
                 0.0,
                 (self.state.cooldown_expires - datetime.now(tz=timezone.utc)).total_seconds(),
             )
+        action_kind, action_target = action_kind_of(action) if action is not None else ("other", None)
         snap = CycleSnapshot(
             cycle_index=self._cycle_counter,
             timestamp=datetime.now(tz=timezone.utc).isoformat(),
@@ -1111,6 +1114,8 @@ class GamePlayer:
             cooldown_remaining=cooldown_remaining,
             selected_goal=selected_goal_name,
             action=action_name,
+            action_kind=action_kind,
+            action_target=action_target,
             outcome=outcome,
             goal_rank=[GoalRankEntry(goal=str(e["goal"]), priority=float(e["priority"]))
                        for e in goal_rank_trace],
