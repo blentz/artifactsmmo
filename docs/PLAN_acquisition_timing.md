@@ -168,11 +168,22 @@ inventory_space) hit the no-invented-defaults wall and need a user decision.
 * DECISIONS (user 2026-06-21): common currency = COOLDOWN-SECONDS SAVED, learned
   from gameplay (not assumed); inventory proxy ÷ items_per_trip(=inventory_max);
   wire-now/full-rates-next; #16 lever = _equip_gain; dead Tier-1 = separate issue.
-* NEXT — the REAL #16 wiring (own careful pass, decide_key-coupled):
-  1. swap equip_value→strategic_value in StrategyEngine._equip_gain (combat-dominant
-     scaling preserves combat order);
-  2. rescale GEAR_EQUIP_SCALE for the ×1000 so _marginal normalization holds;
-  3. UPDATE DecideKey.lean + Oracle + decide_key differential + REFRESH mutation
-     anchors (tiebreak values change) — see project_protection_tiebreak;
-  4. then 3b learned-cooldown weights (action_class_cost) + Phase 4 horizon (50−lvl)/50.
+* REAL #16 WIRING DONE (merged 079978f, full gate green): StrategyEngine._equip_gain
+  now uses strategic_value (was equip_value) — the live source for the gear
+  _marginal score AND the decide_key protection tiebreak. GEAR_EQUIP_SCALE rescaled
+  ×STRATEGIC_SCALE(1000) so combat marginals keep ~[0,1] gradation. Combat ordering
+  preserved (combat-dominant). KEY: decide_key proof/differential/mutation UNTOUCHED
+  — protection is an abstract int in DecideKey.lean (negProtect), so the value-source
+  swap never reaches the comparator (step 3 of the old plan was a non-issue; only doc
+  comments updated). within-slot SELECTION (target_gear/near_term_gear) stays
+  equip_value. Net live effect: wisdom/prospecting gear down-weighted ~1000× (openapi
+  0.001) so XP/drop artifacts no longer rank like attack; bags at parity pending 3b.
+* NEXT:
+  1. (Phase 3b) replace the DEFERRED inventory/haste parity weights with
+     cooldown-seconds-saved rates LEARNED from gameplay (LearningStore.
+     action_class_cost for Fight/Move/Deposit cd) — needs threading history into the
+     weight computation + fights/level (learned xp curve) + bank roundtrip cd;
+  2. (Phase 4) #14 horizon factor (50−level)/50 modulating the gear marginal so
+     efficiency acquisition is front-loaded.
+  Haste folds in once the live probe returns its rate.
 * #12/#13 complete + merged. #15 (currency arbitrage) independent, still queued.
