@@ -115,12 +115,23 @@ currency` + a distinguished always-grounded `gold`; a `Grounded.buy` constructor
 buy disjunct at the leaf, re-prove soundness/completeness/equivalence.
 
 ## Status
-* Phase 1: DONE (commit on feat/npc-purchase-acq) — currency captured, accessors
-  npc_purchase_currency/npc_purchases, 100% cov, mypy clean. Additive; planner
-  behavior unchanged (accessor not yet consumed).
-* Phase 2-4: NEXT — one cohesive formal change (Python buy-edge + Lean
-  Grounded.buy + differential/mutation). MUST ship together: adding the buy edge
-  to Python alone breaks the objective differential (Python diverges from the
-  oracle) — the gate would (correctly) go red.
-* Phase 5-6: targeting + NpcBuy goal (likely a later session).
+* Phase 1: DONE (ac2ffda) — currency captured, accessors, 100% cov.
+* Phase 2-4: DONE (236926d) — buy edge in is_attainable + is_attainable_now
+  (Python); Lean `Buys` + `Grounded.buy` (gated hasRec=false; gold as drop-leaf),
+  re-proved soundness/completeness/equivalence (axioms clean
+  {propext,Classical.choice,Quot.sound}); Oracle + Contracts threaded;
+  differential 12/12 (400 random graphs w/ gold/item-currency/event-excluded/
+  buy-cycle edges); 3 new mutations + refreshed #11 — all 7 objective mutants
+  killed. Full suite 3660, 100% cov, mypy clean, Lean green.
+  LIVE PAYOFF: rune_slot→greater_lifesteal_rune (←sandwhisper_coin←monster drop),
+  bag_slot→sandwhisper_bag now surface in target_gear (were None). Artifacts stay
+  None — their currencies (small_pearls/elemental_page/codex_page) are NOT
+  obtainable via gather/drop/craft/permanent-NPC, the truthful answer (deeper
+  dungeon/archaeology content; out of scope).
+* Phase 5-6: REMAINING — the slots are now TARGETED (in target_gear) but the
+  planner has no NpcBuy GOAL for permanent vendors to actually execute the
+  purchase (existing NpcBuy is event-gated, [[project_event_merchants]]). Also:
+  is_attainable_now affordability ignores currency QUANTITY (v1
+  over-approximation). Latent: craft_vs_buy/progression_reserve treat
+  npcs_selling_item prices as gold (wrong for non-gold currency) — pre-existing.
 * Decision recorded: build now (user, 2026-06-20). Recommended-defer was declined.
