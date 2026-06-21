@@ -426,6 +426,12 @@ MODULES: tuple[ModuleSpec, ...] = (
         core_name="SkillStepDispatch",
         functions=("combine_dispatch_pure",),
     ),
+    ModuleSpec(
+        source="src/artifactsmmo_cli/ai/tiers/strategic_value.py",
+        output=f"{GENERATED_DIR}/StrategicValue.lean",
+        core_name="StrategicValue",
+        functions=("strategic_value_pure",),
+    ),
 )
 
 

@@ -69,6 +69,8 @@ import Formal.Extracted.Bridges5
 import Formal.Extracted.Bridges6
 import Formal.Extracted.Bridges7
 import Formal.Extracted.Bridges8
+import Formal.Extracted.Bridges9
+import Formal.Extracted.StrategicValue
 import Formal.Extracted.SkillTargetCurve
 import Formal.Extracted.SkillGrindSelection
 import Formal.InventoryChainSafe
@@ -95,6 +97,7 @@ import Formal.CycleInvariants
 import Formal.NoActionDeadlock
 import Formal.MultiCycleLiveness
 import Formal.EquipValueAugmented
+import Formal.StrategicValue
 import Formal.GearPolicy
 import Formal.RankingComposition
 import Formal.PersonalityGrounding
