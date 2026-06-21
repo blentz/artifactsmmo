@@ -276,32 +276,36 @@ class GatherMaterialsGoal(Goal):
         # then picks buy-vs-make. Items with no seller / unaffordable / pricier are
         # left craft-only.
         for item, qty in self._needed.items():
-            sellers = game_data.npcs_selling_item(item)
-            if not sellers:
-                continue
             craftable = game_data.crafting_recipe(item) is not None
-            if craftable:
-                # Craftable AND sold: only offer NpcBuy when buying beats
-                # crafting (proved cheaper_acquisition). Offer the cheapest seller.
-                if acquisition_method(item, qty, state, game_data,
-                                      reserve_floor(state, game_data, item)) is not Method.BUY:
-                    continue
-                sellers_to_offer = [min(sellers, key=lambda np: np[1])]
-            else:
+            if not craftable:
                 # NON-craftable NPC-sold item (rune / bag / artifact — no recipe,
                 # not gathered/dropped): BUY is the ONLY acquisition method, so
                 # offer it unconditionally. Without this the craft-vs-buy gate
                 # returned CRAFT (a non-craftable item looks "cheap to gather")
                 # and the slot was unreachable (task #12 phase 6). Offer EVERY
-                # vendor so the planner can pick one whose currency the character
-                # can afford — NpcBuyAction.is_applicable gates each on the right
-                # currency (gold vs sandwhisper_coin etc.).
-                sellers_to_offer = sellers
-            for npc_code, _npc_price in sellers_to_offer:
-                result.append(NpcBuyAction(npc_code=npc_code, item_code=item,
-                                           npc_location=game_data.npc_location(npc_code),
-                                           quantity=qty))
+                # vendor via the CURRENCY-AWARE npc_purchases so the planner can
+                # pick one whose currency the character can afford —
+                # NpcBuyAction.is_applicable gates each on the right currency (gold
+                # vs sandwhisper_coin etc.). NOT npcs_selling_item: that is gold-only
+                # (#15) and would drop the special-currency vendors this path needs.
+                for npc_code, _price, _currency in game_data.npc_purchases(item):
+                    result.append(NpcBuyAction(npc_code=npc_code, item_code=item,
+                                               npc_location=game_data.npc_location(npc_code),
+                                               quantity=qty))
+                continue
+            # Craftable AND GOLD-sold: only offer NpcBuy when buying beats crafting
+            # (proved cheaper_acquisition). npcs_selling_item is gold-only, so the
+            # gold-reserve comparison in acquisition_method is sound (#15).
+            sellers = game_data.npcs_selling_item(item)
+            if not sellers:
+                continue
+            if acquisition_method(item, qty, state, game_data,
+                                  reserve_floor(state, game_data, item)) is not Method.BUY:
+                continue
             npc_code, npc_price = min(sellers, key=lambda np: np[1])
+            result.append(NpcBuyAction(npc_code=npc_code, item_code=item,
+                                       npc_location=game_data.npc_location(npc_code),
+                                       quantity=qty))
             # Immediate-fill GE buy source (DUAL of the discard_overstock GE
             # liquidation): when a standing GE SELL order is strictly cheaper than
             # the NPC buy price AND can supply the whole qty in one fill, also offer
