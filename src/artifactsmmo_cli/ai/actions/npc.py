@@ -40,17 +40,31 @@ class NpcBuyAction(Action):
         price = game_data.npc_sells_item(self.npc_code, self.item_code)
         if price is None:
             return False
-        # Slot-floor + gold gate (delegates to the proved pure core).
-        # The slot precondition mirrors GatherAction's MIN_FREE_SLOTS shape:
-        # without it, `apply` would mint past `inventory_max` (REAL BUG #6).
-        if not npc_buy_is_applicable_pure(
-            inv_used=state.inventory_used,
-            inv_max=state.inventory_max,
-            quantity=self.quantity,
-            gold=state.gold,
-            price=price,
-        ):
-            return False
+        # The vendor's pay currency decides the affordability gate: 'gold' pays
+        # from gold, any other code pays from that item's inventory count
+        # (NPCItem.currency: "if it's not gold, it's the item code"). A bare price
+        # is ambiguous without it (a rune at "100" may be 100 sandwhisper_coin).
+        currency = game_data.npc_purchase_currency(self.npc_code, self.item_code) or "gold"
+        if currency == "gold":
+            # Slot-floor + gold gate (delegates to the proved pure core).
+            # The slot precondition mirrors GatherAction's MIN_FREE_SLOTS shape:
+            # without it, `apply` would mint past `inventory_max` (REAL BUG #6).
+            if not npc_buy_is_applicable_pure(
+                inv_used=state.inventory_used,
+                inv_max=state.inventory_max,
+                quantity=self.quantity,
+                gold=state.gold,
+                price=price,
+            ):
+                return False
+        else:
+            # Item-currency purchase: need a free slot for the bought item AND
+            # `price * quantity` of the currency item on hand. (Lean proof of this
+            # consumption path is task #12 Phase 6; the gold path stays proved.)
+            if state.inventory_free < self.quantity:
+                return False
+            if state.inventory.get(currency, 0) < price * self.quantity:
+                return False
         return event_npc_tradeable(
             self.npc_code, game_data,
             x=state.x, y=state.y,
@@ -69,8 +83,16 @@ class NpcBuyAction(Action):
                 f"< quantity={self.quantity} — is_applicable invariant violated"
             )
         price = game_data.npc_sells_item(self.npc_code, self.item_code) or 0
-        new_gold = state.gold - price * self.quantity
+        currency = game_data.npc_purchase_currency(self.npc_code, self.item_code) or "gold"
         new_inventory = npc_buy_apply_pure(state.inventory, self.item_code, self.quantity)
+        if currency == "gold":
+            new_gold = state.gold - price * self.quantity
+        else:
+            # Pay in the currency item: gold is untouched, the currency stack is
+            # drawn down by price*quantity (is_applicable guarantees enough).
+            new_gold = state.gold
+            spent = price * self.quantity
+            new_inventory[currency] = new_inventory.get(currency, 0) - spent
         dest = self.npc_location or (state.x, state.y)
         return dataclasses.replace(
             state,
@@ -86,8 +108,12 @@ class NpcBuyAction(Action):
         dest = self.npc_location or (state.x, state.y)
         dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
         price = game_data.npc_sells_item(self.npc_code, self.item_code) or 0
-        # Gold cost scaled to action cost: 1 unit per 10 gold.
-        return 2.0 + dist + price * self.quantity / 10.0
+        currency = game_data.npc_purchase_currency(self.npc_code, self.item_code) or "gold"
+        # Gold cost scaled to action cost: 1 unit per 10 gold. An item-currency
+        # purchase spends no gold, so only the travel + base cost applies (the
+        # currency was already earned).
+        gold_term = price * self.quantity / 10.0 if currency == "gold" else 0.0
+        return 2.0 + dist + gold_term
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         if self.npc_location and (state.x, state.y) != self.npc_location:
