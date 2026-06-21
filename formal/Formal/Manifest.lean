@@ -1108,6 +1108,14 @@ open Formal.PriorityBand
 #check @Formal.Liveness.StickySelect.dropped_when_frozen       -- non-vacuity: frozen root is released
 #check @Formal.Liveness.StickySelect.no_infinite_sticky_hold   -- liveness: no infinite zombie hold (∀ WF measure)
 #check @Formal.Liveness.ZombieFreedom.no_infinite_zombie_below_fifty  -- instance at the reach-50 measureLt
+-- ObtainProgress (deepened gear-root progress witness faithfulness — root_progress.py):
+#check @Formal.Liveness.ObtainProgress.obtainProgress_gather_strict   -- gather a closure unit ⇒ witness STRICTLY ↑ (no false-flat)
+#check @Formal.Liveness.ObtainProgress.obtainProgress_mono            -- owned ↑ ⇒ witness ↑ (no spurious drop)
+#check @Formal.Liveness.ObtainProgress.obtainProgress_craft_invariant -- single-tier craft ⇒ witness UNCHANGED (no false regression)
+-- GearBuildTermination (a buildable/Grounded gear target is BUILT in finite steps):
+#check @Formal.Liveness.GearBuildTermination.grounded_builds_target    -- Grounded target ⇒ ∃ finite actionable-step sequence that satisfies it
+#check @Formal.Liveness.GearBuildTermination.grounded_markSat          -- gear progress is monotone: marking a node satisfied never un-grounds the target
+#check @Formal.Liveness.GearBuildTermination.measure_markSat_lt        -- each productive step strictly drops the unmet-count (termination measure)
 #check @Formal.Liveness.GatedArming.gatedArming_eq_top_of_released    -- released ⇒ arming = top root's fight status
 #check @Formal.Liveness.GatedArming.arming_false_of_held_nonfight     -- held non-fight root ⇒ arming suppressed
 #check @Formal.Liveness.GatedArming.no_infinite_zombie_suppression    -- no infinite zombie suppression of the arming

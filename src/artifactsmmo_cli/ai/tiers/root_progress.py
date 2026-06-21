@@ -22,6 +22,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachCharLevel,
     ReachSkillLevel,
 )
+from artifactsmmo_cli.ai.recipe_closure import closure_demand, raw_material_units
 from artifactsmmo_cli.ai.world_state import WorldState
 
 # An equipped target is maximally progressed; dominates any in-progress material count.
@@ -34,16 +35,41 @@ _LEVEL_SCALE = 100_000_000
 def _obtain_progress(
     code: str, state: WorldState, game_data: GameData
 ) -> int:
-    """Progress toward obtaining an equippable: equipped dominates; otherwise count the
-    owned units of the target plus the owned units of its direct recipe inputs (which
-    rise as the bot gathers/crafts toward the item)."""
+    """Progress toward obtaining an equippable: equipped dominates; otherwise the
+    raw-material-unit-weighted count of owned units across the target's WHOLE recipe
+    closure (target + every transitive intermediate + raw resource), counting both
+    inventory AND bank.
+
+    The raw-unit weight (`raw_material_units`) is what makes the measure faithful
+    across a CRAFT conversion: smelting 10 copper_ore (raw 1 each = 10) into 1
+    copper_bar (raw 10) leaves the sum unchanged (10 -> 10), so a craft never reads
+    as a regression; gathering one more raw unit strictly increases it. The shallow
+    predecessor counted only DIRECT recipe inputs in INVENTORY, so during a long
+    ore-gather stretch toward copper_boots the direct copper_bar count stayed flat —
+    the root read as "not progressing", the sticky anchor was released every cycle,
+    and a tied same-tier gear root cannibalised the shared copper_bar (the
+    copper_boots never-crafted livelock, trace 2026-06-21). Counting the transitive
+    closure + bank makes every ore gathered register as progress toward boots.
+
+    Modelled and proved monotone in `formal/Formal/Liveness/ObtainProgress.lean`
+    (gather ⇒ strict increase, craft ⇒ non-decrease); this is the production witness
+    of the `hprogFaithful` obligation in `ZombieFreedom.lean`."""
     if code in (v for v in state.equipment.values() if v is not None):
         return _EQUIPPED_VALUE
-    owned = state.inventory.get(code, 0)
-    recipe = game_data.crafting_recipe(code)
-    if recipe is not None:
-        owned += sum(state.inventory.get(mat, 0) for mat in recipe)
-    return owned
+    bank = state.bank_items or {}
+    # Item-code closure = target + every transitive recipe MATERIAL (intermediates
+    # AND gathered leaf items, e.g. copper_boots + copper_bar + copper_ore).
+    # `closure_demand` keys on item codes; `recipe_closure` would give resource
+    # codes (copper_rocks) not the ore item, so it is the wrong set here.
+    demand: dict[str, int] = {}
+    closure_demand(code, 1, game_data, demand, frozenset())
+    nodes = set(demand) | {code}
+    total = 0
+    for node in nodes:
+        owned = state.inventory.get(node, 0) + bank.get(node, 0)
+        if owned:
+            total += owned * raw_material_units(game_data, node)
+    return total
 
 
 def root_progress_value(

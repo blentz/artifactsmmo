@@ -189,6 +189,8 @@ import Formal.Liveness.MeasureDescent
 import Formal.Liveness.LevelingDescent
 import Formal.Liveness.StickySelect
 import Formal.Liveness.ZombieFreedom
+import Formal.Liveness.ObtainProgress
+import Formal.Liveness.GearBuildTermination
 import Formal.Liveness.GatedArming
 import Formal.Liveness.WarmupCleared
 import Formal.Liveness.Leveling

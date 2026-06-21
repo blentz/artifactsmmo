@@ -322,6 +322,35 @@ def runRecipeClosure (args : Array Json) : Json :=
   Json.mkObj [("needed_resources", toJson needed), ("craftable_mats", toJson craft),
     ("raw_material_units", Json.num (Int.ofNat (rawUnits r fuel queryItem)))]
 
+/-- Compute `obtainProgress r fuel owned nodes` — the deepened gear-root progress witness
+(`Formal.Liveness.ObtainProgress.obtainProgress`). Bridges the real Python
+`_obtain_progress` to the proved Lean def.
+
+args layout (all Nat):
+* `[0]`               nRecipe; then `(item, sub, qty)` triples flat
+* next: nNodes; then the `nodes` closure list
+* next: nOwned; then `(node, count)` owned pairs flat
+* next: fuel -/
+def runObtainProgress (args : Array Json) : Json :=
+  let g := fun i => (intArg args i).toNat
+  let nRecipe := g 0
+  let triples : List (Nat × Nat × Nat) :=
+    (List.range nRecipe).map (fun k => (g (1 + 3*k), g (2 + 3*k), g (3 + 3*k)))
+  let p1 := 1 + 3*nRecipe
+  let nNodes := g p1
+  let nodes : List Nat := (List.range nNodes).map (fun k => g (p1 + 1 + k))
+  let p2 := p1 + 1 + nNodes
+  let nOwned := g p2
+  let ownedPairs : List (Nat × Nat) :=
+    (List.range nOwned).map (fun k => (g (p2 + 1 + 2*k), g (p2 + 2 + 2*k)))
+  let p3 := p2 + 1 + 2*nOwned
+  let fuel := g p3
+  let r := recipeFromTriples triples
+  let owned := fun j =>
+    (ownedPairs.filter (fun pr => decide (pr.1 = j))).foldl (fun acc pr => acc + pr.2) 0
+  Json.mkObj [("obtain_progress",
+    Json.num (Int.ofNat (Formal.Liveness.ObtainProgress.obtainProgress r fuel owned nodes)))]
+
 /-- Build a `TaskFeasibility.Recipe` (Nat → List Nat, ingredient codes only)
 from a list of `(item, sub)` pairs: `r item` = every `sub` whose pair's first
 component is `item`, in encounter order. -/
@@ -2098,6 +2127,8 @@ def runOne (item : Json) : Json :=
     runSkillXpCurve args
   else if kind == "recipe_closure" then
     runRecipeClosure args
+  else if kind == "obtain_progress" then
+    runObtainProgress args
   else if kind == "task_feasibility_items" then
     runTaskFeasibilityItems args
   else if kind == "task_feasibility_monster" then

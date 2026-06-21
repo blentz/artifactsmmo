@@ -39,6 +39,7 @@ BANK_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_selection.
 STUCK_DETECTOR_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recovery.py"
 PRIORITY_BAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "priority_band.py"
 OWNED_COUNT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "owned_count.py"
+ROOT_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "root_progress.py"
 UPGRADE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "upgrade_selection.py"
 SCALAR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "scalar_core.py"
 PLANNER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "planner.py"
@@ -679,6 +680,29 @@ RECIPE_CLOSURE_MUTATIONS = [
     ("raw_material_units: drop qty factor (qty * units -> units)",
      "        total = total + qty * _raw_units(fuel - 1, sub, recipes, deeper)",
      "        total = total + _raw_units(fuel - 1, sub, recipes, deeper)"),
+]
+
+
+# root_progress mutations -- the deepened gear-root progress witness `_obtain_progress`.
+# Each breaks the faithfulness the proved `obtainProgress` theorems guarantee and is killed
+# by formal/diff/test_obtain_progress_diff.py (binds the live function to the Lean def).
+ROOT_PROGRESS_MUTATIONS = [
+    # drop the bank term: banked material no longer counts toward progress, so the
+    # witness undercounts whenever the bot has deposited intermediates (random bank
+    # counts in the diff make py != lean).
+    ("root_progress: drop bank term (inventory only)",
+     "        owned = state.inventory.get(node, 0) + bank.get(node, 0)",
+     "        owned = state.inventory.get(node, 0)"),
+    # drop the raw_material_units weight: unweighted owned count, so a craft conversion
+    # (10 ore -> 1 bar) no longer conserves and gathering registers the wrong magnitude.
+    ("root_progress: drop raw-unit weight (owned * units -> owned)",
+     "            total += owned * raw_material_units(game_data, node)",
+     "            total += owned"),
+    # shallow regression: skip the transitive closure so only the target itself counts
+    # (the original copper_boots never-crafted bug — ore-gathering reads as no progress).
+    ("root_progress: skip transitive closure (target only)",
+     "    closure_demand(code, 1, game_data, demand, frozenset())",
+     "    demand.clear()"),
 ]
 
 
@@ -1727,7 +1751,7 @@ _ALL_SRCS = [
     SRC, TASK_BATCH_SRC, INVENTORY_CAPS_SRC, COMBAT_SRC, PROJECTION_SRC, SCORING_SRC,
     SKILL_XP_CURVE_SRC, RECIPE_CLOSURE_SRC, TASK_FEASIBILITY_SRC, PREREQUISITE_GRAPH_SRC,
     OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, STUCK_DETECTOR_SRC,
-    PRIORITY_BAND_SRC, OWNED_COUNT_SRC, UPGRADE_SELECTION_SRC, SCALAR_CORE_SRC,
+    PRIORITY_BAND_SRC, OWNED_COUNT_SRC, ROOT_PROGRESS_SRC, UPGRADE_SELECTION_SRC, SCALAR_CORE_SRC,
     PLANNER_SRC, ARBITER_SELECT_SRC, TASK_DECISION_CORE_SRC, OBJECTIVE_COMPLETION_SRC,
     LOW_YIELD_BOUNDARY_SRC, STRATEGY_BLEND_SRC, DECIDE_KEY_SRC,
     CYCLES_FOR_PROGRESS_SRC,
@@ -3426,6 +3450,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_strategy_blend_diff.py", survivors)
     run_group(DECIDE_KEY_SRC, DECIDE_KEY_MUTATIONS,
               "formal/diff/test_decide_key_diff.py", survivors)
+    run_group(ROOT_PROGRESS_SRC, ROOT_PROGRESS_MUTATIONS,
+              "formal/diff/test_obtain_progress_diff.py", survivors)
     run_group(PROGRESSION_RESERVE_CORE_SRC, PROGRESSION_RESERVE_MUTATIONS,
               "formal/diff/test_progression_reserve_diff.py", survivors)
     run_group(CYCLES_FOR_PROGRESS_SRC, CYCLES_FOR_PROGRESS_MUTATIONS,

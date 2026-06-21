@@ -537,12 +537,29 @@ def objective_step_goal(
                     return GatherMaterialsGoal(target_item=step.code,
                                                needed={step.code: step.quantity})
                 dest_slot = root.slot if root.slot is not None else root_slots[0]
+                owned: dict[str, int] = dict(state.inventory)
+                for code, qty in (state.bank_items or {}).items():
+                    owned[code] = owned.get(code, 0) + qty
                 upgrade = UpgradeEquipmentGoal(initial_equipment=state.equipment,
                                                committed_target=(root.code, dest_slot))
-                if upgrade.is_plannable(state, game_data):
-                    # Root chain depth-reachable (materials in hand/craftable):
-                    # plan the whole craft+equip under one commit.
-                    return upgrade
+                # Pursue the committed gear root one PLANNABLE CHUNK at a time — never
+                # hand the whole craft+equip chain to the A* at once. The old code
+                # returned the whole-chain `upgrade` whenever `upgrade.is_plannable`,
+                # but is_plannable means "achievable ever", NOT "the A* finds it within
+                # max_depth". With 6 copper_bar + 8 copper_ore in hand the copper_boots
+                # chain is ~16 actions (gather 12 ore + craft 2 bars + craft boots +
+                # equip) > max_depth 15, so the one-shot plan returned plan_len 0 and the
+                # bot abandoned boots for chicken grind (trace 2026-06-21). A depth
+                # predicate can't save it either: min_plan_length is only a LOWER bound
+                # (omits travel + the final assembly), so `<= max_depth` never PROVES the
+                # plan fits. So we always chunk: when the step is an intermediate, route
+                # to the deepest flat gather (gather_step_target), which plans within
+                # budget and makes incremental progress; once the materials accumulate
+                # the strategy's actionable_step advances to the next recipe level, and
+                # when every input is in hand the step becomes the root itself (handled
+                # by the equippable branch above as a shallow craft+equip). The root
+                # objective commitment is unchanged — only its EXECUTION is chunked.
+                #
                 # Root craft SKILL-GATED (not a depth problem): the final
                 # craft is blocked until the crafting skill rises, but the
                 # step's materials are needed regardless — plan the literal
@@ -573,9 +590,6 @@ def objective_step_goal(
                 # actionable step. Sound: the step is a prerequisite ON the root's
                 # path and never harder than the root (gather_step_target +
                 # formal/Formal/StepDispatch.lean gatherTarget_*).
-                owned: dict[str, int] = dict(state.inventory)
-                for code, qty in (state.bank_items or {}).items():
-                    owned[code] = owned.get(code, 0) + qty
                 tgt_code, tgt_qty = gather_step_target(
                     root.code, step.code, step.quantity,
                     game_data.crafting_recipes, owned, upgrade.max_depth,
