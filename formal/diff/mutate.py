@@ -586,6 +586,38 @@ SKILL_STEP_DISPATCH_MUTATIONS = [
      "    if True:\n"),
 ]
 
+STRATEGIC_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "strategic_value.py"
+
+# strategic_value mutations -- anchors for the EXTRACTED strategic_value_pure
+# (efficiency-weighted cross-slot scorer, #16). Killed by the differential test
+# formal/diff/test_strategic_value_diff.py, which asserts exact-integer agreement
+# with the proved Lean core Extracted.StrategicValue.strategic_value_pure plus
+# the nonneg + per-stat monotonicity contracts (Bridges9). Each substring is
+# code-unique (the docstring deliberately avoids the `stat * weight` tokens).
+STRATEGIC_VALUE_MUTATIONS = [
+    # drop the haste contribution -- diverges whenever haste>0 and haste_weight>0.
+    ("strategic_value: drop haste term",
+     "        + haste * haste_weight",
+     "        + haste * 0"),
+    # drop the prospecting contribution.
+    ("strategic_value: drop prospecting term",
+     "        + prospecting * prospecting_weight",
+     "        + prospecting * 0"),
+    # swap the inventory weight for the combat weight -- diverges when the two
+    # derived rates differ (they always do: combat dominates).
+    ("strategic_value: inventory weight becomes combat weight",
+     "        + inventory_space * inventory_weight",
+     "        + inventory_space * combat_weight"),
+    # flip the wisdom term's sign -- diverges and breaks nonneg under wisdom>0.
+    ("strategic_value: negate wisdom term",
+     "        + wisdom * wisdom_weight",
+     "        - wisdom * wisdom_weight"),
+    # combat product becomes a sum -- diverges unless combat_raw or weight is 0/1.
+    ("strategic_value: combat product becomes sum",
+     "        combat_raw * combat_weight",
+     "        combat_raw + combat_weight"),
+]
+
 
 # grind_ladder mutations -- anchors for dispatch_candidate_flags / cannibalize_pure
 # (the reservation-flag hoisting). Killed by formal/diff/test_grind_ladder_diff.py,
@@ -1737,6 +1769,8 @@ _ALL_SRCS = [
     CYCLE_STEP_SRC,
     # Piece-C — feasibility router for depth-unreachable equippable roots.
     GATHER_STEP_TARGET_SRC,
+    # #16 — efficiency-weighted strategic_value scorer.
+    STRATEGIC_VALUE_SRC,
 ]
 
 
@@ -3346,6 +3380,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_skill_grind_selection_diff.py", survivors)
     run_group(SKILL_STEP_DISPATCH_SRC, SKILL_STEP_DISPATCH_MUTATIONS,
               "formal/diff/test_skill_step_dispatch_diff.py", survivors)
+    run_group(STRATEGIC_VALUE_SRC, STRATEGIC_VALUE_MUTATIONS,
+              "formal/diff/test_strategic_value_diff.py", survivors)
     run_group(SKILL_STEP_DISPATCH_SRC, GRIND_LADDER_MUTATIONS,
               "formal/diff/test_grind_ladder_diff.py", survivors)
     run_group(RECIPE_CLOSURE_SRC, RECIPE_CLOSURE_MUTATIONS,

@@ -61,6 +61,8 @@ import Formal.WinnableCascade
 import Formal.RealizableLoadout
 import Formal.Liveness.StickySelect
 import Formal.ServableFilter
+import Formal.StrategicValue
+import Formal.Extracted.Bridges9
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
     ascribing it the full expected type. If a theorem's statement is weakened or
@@ -2868,3 +2870,40 @@ example : ∀ {σ β : Type} (r : β → β → Prop), WellFounded r → ∀ (μ
         (Formal.Liveness.StickySelect.nextLast (some c) (prog k)) ratio = some c) →
     (∀ k, (cands (k + 1)).head? ≠ some c) → False :=
   @Formal.Liveness.StickySelect.no_infinite_sticky_hold
+
+-- StrategicValue (#16): the extracted efficiency-weighted scorer's code-binding
+-- contracts. The bridge is a FULL pointwise equality (extracted flat-arg core =
+-- hand structured model, ∀ inputs); nonneg/monotone are TRANSFERRED onto the
+-- extracted def. Weakening any (dropping a hypothesis, narrowing to a bounded
+-- domain, flipping ≤) fails to elaborate against the proof term.
+example : ∀ (combatRaw wisdom prospecting inventorySpace haste
+     combatW wisdomW prospectingW inventoryW hasteW : Int),
+    Extracted.StrategicValue.strategic_value_pure
+        combatRaw wisdom prospecting inventorySpace haste
+        combatW wisdomW prospectingW inventoryW hasteW
+      = Formal.StrategicValue.strategicValue
+        ⟨combatRaw, wisdom, prospecting, inventorySpace, haste⟩
+        ⟨combatW, wisdomW, prospectingW, inventoryW, hasteW⟩ :=
+  @Extracted.Bridges.strategic_value_bridge
+-- NONNEG: nonneg stats AND nonneg weights ⇒ nonneg score (ObjectiveGap gap-bound
+-- precondition). Dropping any of the ten nonneg hypotheses fails to elaborate.
+example : ∀ (combatRaw wisdom prospecting inventorySpace haste
+     combatW wisdomW prospectingW inventoryW hasteW : Int),
+    0 ≤ combatRaw → 0 ≤ wisdom → 0 ≤ prospecting → 0 ≤ inventorySpace → 0 ≤ haste →
+    0 ≤ combatW → 0 ≤ wisdomW → 0 ≤ prospectingW → 0 ≤ inventoryW → 0 ≤ hasteW →
+    0 ≤ Extracted.StrategicValue.strategic_value_pure
+        combatRaw wisdom prospecting inventorySpace haste
+        combatW wisdomW prospectingW inventoryW hasteW :=
+  @Extracted.Bridges.strategic_value_nonneg_extracted
+-- MONOTONE in inventory_space (bags), with nonneg inventory weight — the #16
+-- load-bearing direction (a bigger bag never lowers strategic value).
+example : ∀ (combatRaw wisdom prospecting inventorySpace haste
+     combatW wisdomW prospectingW inventoryW hasteW x' : Int),
+    0 ≤ inventoryW → inventorySpace ≤ x' →
+    Extracted.StrategicValue.strategic_value_pure
+        combatRaw wisdom prospecting inventorySpace haste
+        combatW wisdomW prospectingW inventoryW hasteW
+      ≤ Extracted.StrategicValue.strategic_value_pure
+        combatRaw wisdom prospecting x' haste
+        combatW wisdomW prospectingW inventoryW hasteW :=
+  @Extracted.Bridges.strategic_value_mono_inventorySpace_extracted

@@ -134,13 +134,25 @@ inventory_space) hit the no-invented-defaults wall and need a user decision.
 
 ## Status
 * Design + architecture decided; Phase 1 grounding + decisions DONE.
-* Phase 1b DONE (authored): `scripts/probe_haste.py` (branch feat/haste-probe,
-  56ef098) — empirical haste-rate probe. R fights item-ON vs item-OFF, rate =
-  (cd0−cdN)/(cd0×N); predict_win safety gate + lost-fight abort + loadout restore
-  + combat-stat-confound warning; coverage-omitted (live-I/O). AWAITING the user's
-  live run for the haste rate; until then haste stays weight 1.
-* NEXT: (Phase 2) strategic_value core (wisdom×0.001, prospecting×0.001,
-  inventory×proxy, haste×1-pending-probe) + extracted Lean + nonneg/monotone proofs
-  + differential + mutation; (Phase 3) ObjectiveGap rewire; (Phase 4) #14 horizon
-  factor. Phase 2 can start now (haste folds in once the probe returns a rate).
+* Phase 1b DONE (merged): scripts/probe_haste.py — empirical haste-rate probe.
+  R fights item-ON vs item-OFF, rate = (cd0−cdN)/(cd0×N); predict_win safety gate +
+  lost-fight abort + loadout restore + combat-stat-confound warning; coverage-
+  omitted (live-I/O). AWAITING the user's live run for the haste rate.
+* Phase 2 DONE (branch feat/strategic-value, 49e56ea — full gate green):
+  `strategic_value_pure` pure core (tiers/strategic_value.py) extracted to
+  Formal/Extracted/StrategicValue.lean, proved against hand model
+  Formal/StrategicValue.lean (nonneg + 5 per-stat monotonicity + 2 witnesses),
+  transferred via Bridges9; Oracle `strategic_value` runner + differential
+  (exact-int agreement/nonneg/monotone) + 5 mutations (all killed) + Manifest +
+  Contracts pins + unit tests; 100% coverage. The five inputs (combat_raw +
+  wisdom/prospecting/inventory_space/haste) each take a CALLER-SUPPLIED nonneg-int
+  weight; combat_raw carries one dominant weight so combat ordering is preserved.
+  GOTCHA: mutation-kill output ("1 failed … skip HP_CRITICAL / reverse
+  MIRROR_LADDER_ORDER") is EXPECTED, not a baseline break — gate.sh runs
+  differential before mutation under set -e, so "ALL GATE PARTS PASSED" is the
+  real green signal (a `| tail` on the gate invocation masks gate.sh's own exit).
+* NEXT: (Phase 3) ObjectiveGap rewire — derive the weights from game_data
+  (wisdom×0.001, prospecting×0.001, inventory×cadence-proxy, combat dominant,
+  haste×1 until probe) and use strategic_value for _item_value cross-slot priority;
+  adapt Objective.lean (parametric value); (Phase 4) #14 horizon factor.
 * #12/#13 complete + merged. #15 (currency arbitrage) independent, still queued.
