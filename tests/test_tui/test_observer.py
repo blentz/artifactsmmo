@@ -6,6 +6,21 @@ from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.tui.observer import ThreadSafeBridge
 
 
+class _StubApp:
+    def __init__(self):
+        self.planning_calls = []
+    # no call_from_thread -> bridge invokes handler directly
+
+
+def test_notify_planning_forwards_to_handler():
+    app = _StubApp()
+    seen = []
+    bridge = ThreadSafeBridge(app, lambda s: None, planning_handler=seen.append)
+    bridge.notify_planning(True)
+    bridge.notify_planning(False)
+    assert seen == [True, False]
+
+
 def _make_snap() -> CycleSnapshot:
     return CycleSnapshot(
         cycle_index=0, timestamp="2026-05-18T00:00:00Z", character="hero",

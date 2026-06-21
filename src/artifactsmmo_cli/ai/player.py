@@ -166,6 +166,7 @@ class GamePlayer:
         self.history = history
         self._last_path_plan: PathPlan | None = None
         self._cycle_observer = cycle_observer
+        self._planning_observer: Callable[[bool], None] | None = None
         # Event-driven gear prioritization: the latch (set on level-up or a
         # predicted-winnable fight loss, cleared when gear is level-appropriate)
         # is updated once per cycle BEFORE selection and read into the
@@ -177,6 +178,13 @@ class GamePlayer:
     def set_cycle_observer(self, observer: "Callable[[CycleSnapshot], None] | None") -> None:
         """Allow callers (e.g. TUI host) to subscribe after construction."""
         self._cycle_observer = observer
+
+    def set_planning_observer(self, observer: "Callable[[bool], None] | None") -> None:
+        self._planning_observer = observer
+
+    def _notify_planning(self, active: bool) -> None:
+        if self._planning_observer is not None:
+            self._planning_observer(active)
 
     # === Backward-compatibility shims that delegate to the blocker registry ===
     # These let the rest of player.py keep using the old field names while the
@@ -380,6 +388,7 @@ class GamePlayer:
                 combat_monster = self._winnable_farm_target()
                 ctx = self._selection_context(combat_monster)
                 servable_pred = self._step_servable(state, game_data, ctx)
+                self._notify_planning(True)
                 decision = self._strategy.decide(
                     state, game_data,
                     history=self.history,

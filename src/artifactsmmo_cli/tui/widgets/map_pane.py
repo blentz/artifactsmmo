@@ -47,6 +47,7 @@ class MapPane(Static):
         self._anim_frames: list[tuple[int, int]] = []
         self._anim_index = 0
         self._anim_timer: Timer | None = None
+        self._planning_active = False
 
     @staticmethod
     def _build_tile_index(gd: GameData) -> dict[tuple[int, int], TileContent]:
@@ -105,6 +106,10 @@ class MapPane(Static):
 
     def on_unmount(self) -> None:
         self._stop_anim()
+
+    def set_planning(self, active: bool) -> None:
+        self._planning_active = active
+        self.refresh()
 
     def render(self) -> Text:
         snap = self.snapshot
