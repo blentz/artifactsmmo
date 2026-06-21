@@ -264,6 +264,35 @@ class TestActionClassCost:
         store.close()
 
 
+class TestActionClassFraction:
+    def test_empty_returns_zero(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        assert store.action_class_fraction("FightAction") == 0.0
+        store.close()
+
+    def test_fraction_over_action_mix(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        _insert_cycles(store, "Fight(x)", [1.0, 1.0, 1.0], action_class="FightAction")
+        _insert_cycles(store, "Dep", [1.0], action_class="DepositAllAction")
+        assert store.action_class_fraction("FightAction") == 0.75
+        assert store.action_class_fraction("DepositAllAction") == 0.25
+        store.close()
+
+    def test_failed_cycles_excluded_from_denominator(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="testchar")
+        store.start_session()
+        _insert_cycles(store, "Fight(x)", [1.0, 1.0], action_class="FightAction")
+        _insert_cycles(store, "Fight(y)",
+                       cooldowns=[1.0, 1.0],
+                       outcomes=["error:HTTP_497", "error:HTTP_497"],
+                       action_class="FightAction")
+        # Only the 2 ok cycles count → fraction 1.0 (both ok cycles are FightAction).
+        assert store.action_class_fraction("FightAction") == 1.0
+        store.close()
+
+
 class TestActionCost:
     def test_returns_default_when_fewer_than_5_samples(self, tmp_db_path):
         store = LearningStore(db_path=tmp_db_path, character="testchar")
@@ -852,6 +881,11 @@ class TestDegradationOnDbError:
         store = LearningStore(db_path=tmp_db_path, character="hero")
         _break_engine(store)
         assert store.action_class_cost("FightAction", default=3.5) == 3.5
+
+    def test_action_class_fraction_returns_zero(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        assert store.action_class_fraction("FightAction") == 0.0
 
     def test_success_rate_returns_one(self, tmp_db_path):
         store = LearningStore(db_path=tmp_db_path, character="hero")

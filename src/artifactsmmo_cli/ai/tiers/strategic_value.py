@@ -94,20 +94,28 @@ def strategic_value_pure(
 def strategic_value(
     stats: ItemStats,
     weights: tuple[int, int, int, int, int] = DEFAULT_STRATEGIC_WEIGHTS,
+    efficiency_budget: int | None = None,
 ) -> int:
-    """Efficiency-weighted cross-slot value of an equippable — used ONLY by
-    ObjectiveGap cross-slot priority (#14/#16), never the combat loadout pick
-    (that stays on the proved `equip_value`).
+    """Efficiency-weighted cross-slot value of an equippable — used ONLY by gear
+    cross-slot priority (#14/#16, StrategyEngine._equip_gain), never the combat
+    loadout pick (that stays on the proved `equip_value`).
 
-    Hoists the ItemStats dict sums to the already-summed ints the extracted core
-    takes: `combat_raw` is the genuine-combat signal (attack + resistance +
-    hp_restore + hp_bonus + dmg + critical_strike + lifesteal + combat_buff) —
-    exactly `equip_value`'s raw signal MINUS the four efficiency stats, which are
-    then weighted separately. With DEFAULT_STRATEGIC_WEIGHTS, combat (and the
-    deferred inventory/haste) carry the dominant SCALE weight while
-    wisdom/prospecting carry the openapi 0.001 rate, so combat-slot ordering is
-    preserved and XP/drop artifacts are down-weighted. Phase 3b supplies derived
-    inventory/haste weights via the `weights` argument.
+    Hoists the ItemStats dict sums to the ints the extracted core takes:
+    `combat_raw` is the genuine-combat signal (attack + resistance + hp_restore +
+    hp_bonus + dmg + critical_strike + lifesteal + combat_buff) — exactly
+    `equip_value`'s raw signal MINUS the four efficiency stats, which are weighted
+    separately.
+
+    value = combat_raw × combat_weight + EFFICIENCY, where EFFICIENCY is the
+    weighted efficiency-stat sum optionally CAPPED at `efficiency_budget`. Combat
+    and the efficiency rates are different dimensions (stat-points vs
+    cooldown-seconds), so combat dominance is STRUCTURAL: with the budget set
+    below one combat-raw point (× weight), any combat item outranks any
+    all-efficiency item, and efficiency only orders gear among efficiency-bearing
+    / empty slots (#16 sub-budget decision). `efficiency_budget=None` leaves the
+    block uncapped (the plain weighted sum). The cap is policy in this wrapper;
+    the proved core `strategic_value_pure` stays a pure weighted sum. Derived
+    weights + budget come from `strategic_weights(state, history)`.
     """
     attack = sum(stats.attack.values()) if stats.attack else 0
     resistance = sum(stats.resistance.values()) if stats.resistance else 0
@@ -115,7 +123,12 @@ def strategic_value(
                   + stats.dmg + stats.critical_strike + stats.lifesteal
                   + stats.combat_buff)
     combat_w, wisdom_w, prospecting_w, inventory_w, haste_w = weights
-    return strategic_value_pure(
-        combat_raw, stats.wisdom, stats.prospecting, stats.inventory_space,
-        stats.haste, combat_w, wisdom_w, prospecting_w, inventory_w, haste_w,
+    combat_part = combat_raw * combat_w
+    # Efficiency block via the proved core with combat zeroed out, then capped.
+    efficiency_part = strategic_value_pure(
+        0, stats.wisdom, stats.prospecting, stats.inventory_space, stats.haste,
+        0, wisdom_w, prospecting_w, inventory_w, haste_w,
     )
+    if efficiency_budget is not None and efficiency_part > efficiency_budget:
+        efficiency_part = efficiency_budget
+    return combat_part + efficiency_part
