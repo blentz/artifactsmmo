@@ -12,6 +12,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.buy_source_venue import BuyVenue, choose_buy_venue
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.craft_vs_buy import Method, acquisition_method
+from artifactsmmo_cli.ai.goals.currency_afford_core import currency_afford_plannable_pure
 from artifactsmmo_cli.ai.goals.gather_plannable_core import gather_plannable_pure
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor
 from artifactsmmo_cli.ai.game_data import GameData
@@ -380,6 +381,51 @@ class GatherMaterialsGoal(Goal):
             for mat, qty in self._needed.items()
         )
 
+    def _currency_leaves_affordable(self, state: WorldState, game_data: GameData) -> bool:
+        """Return False if any currency-buy leaf in the recipe closure is
+        unaffordable — killing the search early (currency_afford_plannable_pure
+        proved sound: an unaffordable NpcBuy is inapplicable, and
+        GatherMaterials.relevant_actions emits no action that earns the currency,
+        so no plan can acquire the leaf).
+
+        Mirrors the closure build in relevant_actions exactly: iterate
+        self._needed.items(), accumulate closure_demand per item into one shared
+        `chain` dict. A leaf is a currency-buy leaf when:
+          - no crafting recipe (recipe is None), AND
+          - not a resource drop, AND
+          - no monster drops it, AND
+          - at least one NPC sells it (npc_purchases non-empty).
+
+        For each such leaf, affordability = any vendor offers it at a currency
+        price the character can cover (inv + bank >= price * closure_qty). Uses
+        the cheapest-first ordering from npc_purchases and accepts the first
+        affordable vendor. If no vendor is affordable, the leaf prunes the goal.
+        """
+        bank = state.bank_items or {}
+        chain: dict[str, int] = {}
+        for code, qty in self._needed.items():
+            closure_demand(code, qty, game_data, chain, frozenset())
+        for leaf, qty in chain.items():
+            if leaf in self._needed:
+                continue
+            if game_data.crafting_recipe(leaf) is not None:
+                continue
+            if leaf in game_data.resource_drops.values():
+                continue
+            if game_data.monsters_dropping(leaf):
+                continue
+            purchases = game_data.npc_purchases(leaf)
+            if not purchases:
+                continue
+            owned = state.inventory.get(leaf, 0) + bank.get(leaf, 0)
+            affordable = any(
+                (state.inventory.get(currency, 0) + bank.get(currency, 0)) >= price * qty
+                for _npc, price, currency in purchases
+            )
+            if not currency_afford_plannable_pure(True, affordable, owned, qty):
+                return False
+        return True
+
     def is_plannable(self, state: WorldState, game_data: GameData,
                      history: LearningStore | None = None) -> bool:
         """Fail fast when satisfaction requires CRAFTING the target and the
@@ -389,7 +435,13 @@ class GatherMaterialsGoal(Goal):
         2 < 5) burned 97k-99k nodes / the full 90s budget to plan_len 0 on
         every probe cycle. Materials-only goals (finished target not among
         `needed`) stay plannable — gathering inputs never needs the gated
-        final craft."""
+        final craft.
+
+        Also fast-fails when a currency-buy leaf in the recipe closure is
+        unaffordable (C4 Task 5): no plan can acquire a jasper_crystal-style
+        leaf without the requisite currency. Both gates must pass."""
+        if not self._currency_leaves_affordable(state, game_data):
+            return False
         if self._target_item not in self._needed:
             return gather_plannable_pure(False, False, 0, 0, 0, 0)
         stats = game_data.item_stats(self._target_item)
