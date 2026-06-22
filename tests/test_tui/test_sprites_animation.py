@@ -90,8 +90,11 @@ def test_oriented_head_cardinals_and_diagonals():
     assert oriented_head(t, 0, -1).rows == AXE_HEAD.rows               # up = base
     assert oriented_head(t, 1, 0).rows == rot90cw(AXE_HEAD).rows       # right = 1 CW
     assert oriented_head(t, 0, 1).rows == rot90cw(rot90cw(AXE_HEAD)).rows   # down = 2
+    assert oriented_head(t, -1, 0).rows == rot90cw(rot90cw(rot90cw(AXE_HEAD))).rows  # left = 3
     assert oriented_head(t, 1, -1).rows == AXE_NE.rows                 # NE = ne base
     assert oriented_head(t, 1, 1).rows == rot90cw(AXE_NE).rows         # SE = ne 1 CW
+    assert oriented_head(t, -1, 1).rows == rot90cw(rot90cw(AXE_NE)).rows            # SW = ne 2
+    assert oriented_head(t, -1, -1).rows == rot90cw(rot90cw(rot90cw(AXE_NE))).rows  # NW = ne 3
 
 
 def test_ne_heads_and_bundles_valid():
@@ -99,6 +102,8 @@ def test_ne_heads_and_bundles_valid():
                     ("ham_ne", HAMMER_NE), ("sword_ne", FIGHT_NE)]:
         validate_sprite(name, s)
     assert AXE == ToolHeads(AXE_HEAD, AXE_NE)
+    assert PICKAXE == ToolHeads(PICKAXE_HEAD, PICKAXE_NE)
+    assert HAMMER == ToolHeads(HAMMER_HEAD, HAMMER_NE)
     assert SWORD == ToolHeads(FIGHT_HEAD, FIGHT_NE)
 
 
