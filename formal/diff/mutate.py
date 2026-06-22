@@ -153,6 +153,7 @@ EVENT_VISIBILITY_MUTATIONS = [
 # Skill-gate fast-fail + doomed-memo (2026-06-15 feather_coat CPU-peg fix).
 GATHER_PLANNABLE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "gather_plannable_core.py"
 LEAF_ATTAINABLE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "leaf_attainable_core.py"
+COMPLETE_TASK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "complete_task_core.py"
 DOOMED_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "doomed_memo.py"
 STRATEGY_DRIVER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "strategy_driver.py"
 
@@ -1666,6 +1667,17 @@ LEAF_ATTAINABLE_MUTATIONS = [
      "    return True"),
 ]
 
+# Killed by formal/diff/test_complete_task_income_diff.py (binds complete_task_apply_pure
+# to the proved Formal.CompleteTaskIncome.applyComplete).
+COMPLETE_TASK_MUTATIONS = [
+    ("complete_task: mint zero instead of coin_reward",
+     "    new_inventory[TASKS_COIN_CODE] = new_inventory.get(TASKS_COIN_CODE, 0) + coin_reward",
+     "    new_inventory[TASKS_COIN_CODE] = new_inventory.get(TASKS_COIN_CODE, 0)"),
+    ("complete_task: subtract instead of add the reward",
+     "    new_inventory[TASKS_COIN_CODE] = new_inventory.get(TASKS_COIN_CODE, 0) + coin_reward",
+     "    new_inventory[TASKS_COIN_CODE] = new_inventory.get(TASKS_COIN_CODE, 0) - coin_reward"),
+]
+
 # Killed by formal/diff/test_doomed_memo_diff.py (binds DoomedMemo._ttl / is_doomed
 # to the proved Formal.DoomedMemo.ttl / isDoomed).
 DOOMED_MEMO_MUTATIONS = [
@@ -1812,6 +1824,8 @@ _ALL_SRCS = [
     STRATEGIC_VALUE_SRC,
     # C1 — acquisition-leaf attainability (task-earnable + currency-buy disjuncts).
     LEAF_ATTAINABLE_CORE_SRC,
+    # C2 — complete_task coin-minting pure core.
+    COMPLETE_TASK_CORE_SRC,
 ]
 
 
@@ -3620,6 +3634,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_skill_gate_fastfail_diff.py", survivors)
     run_group(LEAF_ATTAINABLE_CORE_SRC, LEAF_ATTAINABLE_MUTATIONS,
               "formal/diff/test_leaf_attainable_diff.py", survivors)
+    run_group(COMPLETE_TASK_CORE_SRC, COMPLETE_TASK_MUTATIONS,
+              "formal/diff/test_complete_task_income_diff.py", survivors)
     run_group(DOOMED_MEMO_SRC, DOOMED_MEMO_MUTATIONS,
               "formal/diff/test_doomed_memo_diff.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, STRATEGY_DRIVER_MUTATIONS,
