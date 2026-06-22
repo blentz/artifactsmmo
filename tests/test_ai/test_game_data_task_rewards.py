@@ -2,6 +2,7 @@
 import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.game_data_error import GameDataCoverageError
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 
 
@@ -45,7 +46,8 @@ class _FakeRewards:
 class _FakeTask:
     def __init__(self, items: list[str], code: str = "dummy") -> None:
         self.code = code
-        self.rewards = _FakeRewards([_FakeItem(c) for c in items])
+        # Use quantity=1 so tasks_coin items pass the ≥1 enforcement at load.
+        self.rewards = _FakeRewards([_FakeItem(c, quantity=1) for c in items])
 
 
 def _fake_tasks() -> list[_FakeTask]:
@@ -103,3 +105,9 @@ class _FakeCoinTask:
 
 def _fake_coin_tasks() -> list[_FakeCoinTask]:
     return [_FakeCoinTask("chicken", 3), _FakeCoinTask("copper_ore", 2)]
+
+
+def test_build_tasks_rejects_zero_coin_reward():
+    """C2: a tasks_coin quantity of 0 must raise at load time (not silently mint 0)."""
+    with pytest.raises((GameDataCoverageError, ValueError)):
+        GameData()._build_tasks([_FakeCoinTask("chicken", 0)])

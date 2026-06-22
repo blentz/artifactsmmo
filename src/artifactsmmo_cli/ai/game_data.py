@@ -39,12 +39,12 @@ from artifactsmmo_api_client.types import Unset
 
 from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.game_data_cache import GameDataCache
-from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 from artifactsmmo_cli.ai.game_data_error import GameDataCoverageError
 from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS, ItemCatalog, ItemStats
 from artifactsmmo_cli.ai.location_catalog import LocationCatalog
 from artifactsmmo_cli.ai.monster_catalog import MonsterCatalog
 from artifactsmmo_cli.ai.recipe_catalog import RecipeCatalog
+from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 
 __all__ = ["_GATHERING_SKILLS", "GameData", "ItemStats"]
 
@@ -1294,6 +1294,19 @@ class GameData:
             for item in task.rewards.items
             if item.code == TASKS_COIN_CODE
         }
+        # C2: the coin-income monotonicity proof requires reward ≥ 1; enforce it
+        # from API data rather than assume it.
+        bad = [
+            (code, qty)
+            for code, qty in self._task_coin_rewards.items()
+            if qty < 1
+        ]
+        if bad:
+            details = ", ".join(
+                f"task {code!r} awards tasks_coin quantity {qty} < 1"
+                for code, qty in bad
+            )
+            raise GameDataCoverageError(details)
 
     def _load_ge_orders(self, client: AuthenticatedClient) -> None:
         """Index, per item, the highest-price OPEN BUY order and the lowest-price
