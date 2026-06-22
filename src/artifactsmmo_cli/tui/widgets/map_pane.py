@@ -17,12 +17,15 @@ from artifactsmmo_cli.tui.path_interpolate import glide_path
 from artifactsmmo_cli.tui.sprite_registry import SpriteRegistry
 from artifactsmmo_cli.tui.sprites import (
     BLANK_SPRITE,
-    FIGHT_HEAD,
-    HAMMER_HEAD,
+    CLOUD_SPRITE,
+    CLOUD_SPRITE_R,
+    HAMMER,
     PLANNING_SPRITE,
     PLAYER_SPRITE,
+    SWORD,
     Sprite,
     SpriteCategory,
+    ToolHeads,
     gather_head,
     overlay_sprites,
 )
@@ -52,22 +55,20 @@ _SKILL_TO_RESOURCE_KEY = {
 TileContent = tuple[SpriteCategory, str]
 
 
-def _is_bar(code: str | None, game_data: GameData) -> bool:
-    """True when `code` names a craftable bar (all in-game bars end '_bar')."""
-    return code is not None and code.endswith("_bar") and game_data.item_stats(code) is not None
-
-
-def select_swing_head(mode: Mode, action_target: str | None, game_data: GameData) -> Sprite | None:
-    """The tool head for a swing mode + target, or None when no tool should show:
-    gather -> axe/pickaxe by the resource's skill; fight -> sword; craft -> hammer
-    only for a bar; anything else -> None."""
+def select_swing_head(mode: Mode, action_target: str | None, game_data: GameData) -> ToolHeads | None:
+    """The tool bundle for a swing mode + target, or None when no tool shows:
+    gather -> axe/pickaxe by the resource's skill; fight -> sword; craft -> sword for
+    cooking else hammer (unknown item -> None)."""
     if mode is Mode.GATHER_SWING:
         skill_req = game_data.resource_skill_level(action_target) if action_target else None
         return gather_head(skill_req[0] if skill_req is not None else None)
     if mode is Mode.FIGHT_SWING:
-        return FIGHT_HEAD
-    if mode is Mode.CRAFT_SWING and _is_bar(action_target, game_data):
-        return HAMMER_HEAD
+        return SWORD
+    if mode is Mode.CRAFT_SWING:
+        stats = game_data.item_stats(action_target) if action_target else None
+        if stats is None:
+            return None
+        return SWORD if stats.crafting_skill == "cooking" else HAMMER
     return None
 
 
@@ -87,6 +88,7 @@ class MapPane(Static):
         self._anim_start = 0.0
         self._anim_timer: Timer | None = None
         self._planning_active = False
+        self._planning_start = 0.0
 
     @staticmethod
     def _build_tile_index(gd: GameData) -> dict[tuple[int, int], TileContent]:
@@ -158,6 +160,8 @@ class MapPane(Static):
             self._anim_timer = None
 
     def set_planning(self, active: bool) -> None:
+        if active and not self._planning_active:
+            self._planning_start = time.monotonic()
         self._planning_active = active
         self.refresh()
 
@@ -170,7 +174,7 @@ class MapPane(Static):
         now = time.monotonic()
         center = self._glide_center(now)
         return self._render_viewport(
-            snap, width, height, center, self._player_sprite(now), self._swing_overlay(now)
+            snap, width, height, center, self._player_sprite(now), self._active_overlay(now)
         )
 
     def on_resize(self, event: Resize) -> None:
@@ -196,7 +200,7 @@ class MapPane(Static):
     def _swing_overlay(self, now: float) -> dict[tuple[int, int], Sprite]:
         """The per-tile tool overlay map for the current swing frame: head in the
         arc-neighbor tile + grip in the player tile. {} when idle/planning/walking or
-        when no tool applies (e.g. a non-bar craft)."""
+        when no tool applies (e.g. an unknown craft item)."""
         snap = self.snapshot
         if snap is None:
             return {}
@@ -210,6 +214,18 @@ class MapPane(Static):
             return {}
         idx = swing_frame_index(elapsed, SWING_FRAME_COUNT, SWING_SWEEP_SECONDS)
         return swing_overlay(mode, idx, head)
+
+    def _planning_overlay(self, now: float) -> dict[tuple[int, int], Sprite]:
+        if not self._planning_active:
+            return {}
+        if int(now - self._planning_start) % 2 == 0:
+            return {(1, -1): CLOUD_SPRITE, (2, -1): CLOUD_SPRITE_R}
+        return {(1, -1): CLOUD_SPRITE_R, (2, -1): CLOUD_SPRITE}
+
+    def _active_overlay(self, now: float) -> dict[tuple[int, int], Sprite]:
+        if self._planning_active:
+            return self._planning_overlay(now)
+        return self._swing_overlay(now)
 
     def _glide_center(self, now: float) -> tuple[int, int] | None:
         if not self._anim_frames:
