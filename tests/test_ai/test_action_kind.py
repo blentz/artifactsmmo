@@ -1,7 +1,8 @@
 from artifactsmmo_cli.ai.action_kind import action_kind_of
-from artifactsmmo_cli.ai.actions.movement import MoveAction
-from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.crafting import CraftAction
+from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 
 
@@ -23,3 +24,7 @@ def test_rest_kind_no_target():
 
 def test_unknown_action_is_other():
     assert action_kind_of(object()) == ("other", None)
+
+
+def test_craft_kind_and_target():
+    assert action_kind_of(CraftAction(code="copper_bar")) == ("craft", "copper_bar")
