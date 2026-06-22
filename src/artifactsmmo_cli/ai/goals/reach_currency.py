@@ -17,7 +17,18 @@ from artifactsmmo_cli.ai.goals.funding_core import funding_cycles_pure
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
-ACTIONS_PER_CYCLE = 3   # accept + one progress action + complete
+ACTIONS_PER_CYCLE = 3
+"""Planning nodes per funding cycle: AcceptTask + one progress action
+(Fight/Craft) + CompleteTask. This is EXACT for the planning `apply` model, not
+optimistic: movement is FOLDED INTO each action's `apply` (AcceptTaskAction.apply
+sets x,y directly — no separate MoveAction node), and the in-model `task_total`
+is 1 so a SINGLE progress action satisfies CompleteTaskAction's
+`task_progress >= task_total` gate. If either assumption ever changes — movement
+de-folded into its own planning node, or in-model `task_total` raised above 1, or
+a Craft-based task needing intermediate craft nodes — the real per-cycle node
+count exceeds 3 and `max_depth` UNDER-provisions, silently reintroducing the
+planner timeout this goal exists to prevent. Re-derive this constant if so."""
+PRIORITY_WHEN_NEEDED = 1.0  # placeholder ranking; demand routing is C4
 PRIORITY_WHEN_NEEDED = 1.0  # placeholder ranking; demand routing is C4
 
 
