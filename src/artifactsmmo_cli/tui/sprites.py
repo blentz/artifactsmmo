@@ -66,6 +66,34 @@ PLAYER_SPRITE = Sprite(
     palette={"o": INK, "y": SKIN, "e": INK, "b": TUNIC},
 )
 
+def _player_with_tool(positions: tuple[tuple[int, int], ...], key: str, color: str) -> Sprite:
+    """PLAYER_SPRITE with `key` painted at the given (row, col) cells (which must
+    be transparent in the base), using `color`. Returns a new immutable Sprite."""
+    rows = list(PLAYER_SPRITE.rows)
+    for r, c in positions:
+        assert rows[r][c] == TRANSPARENT, f"tool cell ({r},{c}) not transparent"
+        rows[r] = rows[r][:c] + key + rows[r][c + 1:]
+    palette = dict(PLAYER_SPRITE.palette)
+    palette[key] = color
+    return Sprite(rows=tuple(rows), palette=palette)
+
+
+# Clockwise right-side arc, 12 -> 1:30 -> 3 -> 4:30 -> 6 o'clock. Each entry is the
+# transparent cell that holds the pickaxe head for that frame (verified against
+# PLAYER_SPRITE: these cells are '.').
+_GATHER_CLOCK: tuple[tuple[int, int], ...] = ((0, 6), (1, 7), (3, 7), (5, 7), (6, 7))
+# Mirror on X (col -> 7-col) for the counterclockwise left-side sword arc.
+_FIGHT_CLOCK: tuple[tuple[int, int], ...] = tuple((r, 7 - c) for (r, c) in _GATHER_CLOCK)
+
+GATHER_SWING_FRAMES: tuple[Sprite, ...] = tuple(
+    _player_with_tool((rc,), "t", COPPER) for rc in _GATHER_CLOCK
+)
+FIGHT_SWING_FRAMES: tuple[Sprite, ...] = tuple(
+    _player_with_tool((rc,), "t", STEEL) for rc in _FIGHT_CLOCK
+)
+# Thought bubble at 2 o'clock from the head (upper-right transparent cells).
+PLANNING_SPRITE: Sprite = _player_with_tool(((0, 7), (1, 7)), "p", BONE)
+
 GREEN_SLIME_SPRITE = Sprite(
     rows=(
         "..oooo..",

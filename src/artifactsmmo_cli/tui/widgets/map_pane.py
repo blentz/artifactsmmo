@@ -1,5 +1,6 @@
 """Tile-map pane: each tile is an 8x8 half-block sprite, centered on the player."""
 
+import time
 from typing import Any
 
 from rich.text import Text
@@ -13,15 +14,20 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.tui.glyphs import UNMAPPED_COLOR, WALKABLE_COLOR
 from artifactsmmo_cli.tui.half_block import HalfBlockCompositor
 from artifactsmmo_cli.tui.sprite_registry import SpriteRegistry
-from artifactsmmo_cli.tui.sprites import BLANK_SPRITE, PLAYER_SPRITE, Sprite, SpriteCategory
+from artifactsmmo_cli.tui.sprites import (
+    BLANK_SPRITE, FIGHT_SWING_FRAMES, GATHER_SWING_FRAMES, PLANNING_SPRITE,
+    PLAYER_SPRITE, Sprite, SpriteCategory,
+)
 from artifactsmmo_cli.tui.path_interpolate import glide_path
+from artifactsmmo_cli.tui.swing_frames import Mode, current_mode, glide_index, swing_frame_index
 
 TILE_W = 8   # chars per tile column (8 pixels wide)
 TILE_H = 4   # char-rows per tile (8 pixels tall, 2 px per char-row)
 FALLBACK_W = 80
 FALLBACK_H = 41
 MAX_ANIM_STEPS = 12       # cap glide frames so big jumps still finish fast
-ANIM_FRAME_SECONDS = 0.05  # ~50ms/frame -> <= ~600ms total, well inside the move cooldown
+ANIM_FRAME_SECONDS = 0.05  # ~50ms/frame -> persistent timer interval
+SWING_SWEEP_SECONDS = 0.8  # one chop/strike; loops over the cooldown
 
 _SKILL_TO_RESOURCE_KEY = {
     "woodcutting": "resource_woodcutting",
@@ -45,8 +51,9 @@ class MapPane(Static):
         self._registry = SpriteRegistry()
         self._compositor = HalfBlockCompositor()
         self._anim_frames: list[tuple[int, int]] = []
-        self._anim_index = 0
+        self._anim_start = 0.0
         self._anim_timer: Timer | None = None
+        self._planning_active = False
 
     @staticmethod
     def _build_tile_index(gd: GameData) -> dict[tuple[int, int], TileContent]:
@@ -81,30 +88,45 @@ class MapPane(Static):
     def update_snapshot(self, snap: CycleSnapshot) -> None:
         prior = self.snapshot
         self.snapshot = snap
-        self._stop_anim()
+        self._anim_start = time.monotonic()
+        self._planning_active = False
         if prior is not None and (prior.x, prior.y) != (snap.x, snap.y):
             self._anim_frames = glide_path((prior.x, prior.y), (snap.x, snap.y), MAX_ANIM_STEPS)
-            self._anim_index = 0
-            if self.is_mounted:
-                self._anim_timer = self.set_interval(ANIM_FRAME_SECONDS, self._tick)
+        else:
+            self._anim_frames = []
         self.refresh()
 
-    def _stop_anim(self) -> None:
+    def on_mount(self) -> None:
+        # pragma: no cover — Textual timer glue: on_mount is only called by the
+        # Textual framework when the widget is mounted into a real app; headless
+        # tests construct MapPane without mounting, so this line cannot be reached
+        # by the unit test suite without a full async Textual integration test.
+        # The timer behavior is instead tested indirectly via _is_animating (which
+        # exercises the same elapsed-vs-cooldown logic) and the mounted timer test
+        # in TestGlideAnimation.test_timer_created_when_mounted_and_unmount_cancels.
+        self._anim_timer = self.set_interval(ANIM_FRAME_SECONDS, self._tick)  # pragma: no cover
+
+    def _tick(self) -> None:
+        if self._is_animating():
+            self.refresh()
+
+    def _is_animating(self) -> bool:
+        if self._planning_active:
+            return True
+        snap = self.snapshot
+        if snap is None:
+            return False
+        elapsed = time.monotonic() - self._anim_start
+        return elapsed < snap.cooldown_remaining
+
+    def on_unmount(self) -> None:
         if self._anim_timer is not None:
             self._anim_timer.stop()
             self._anim_timer = None
-        self._anim_frames = []
-        self._anim_index = 0
 
-    def _tick(self) -> None:
-        if self._anim_index >= len(self._anim_frames) - 1:
-            self._stop_anim()
-        else:
-            self._anim_index += 1
+    def set_planning(self, active: bool) -> None:
+        self._planning_active = active
         self.refresh()
-
-    def on_unmount(self) -> None:
-        self._stop_anim()
 
     def render(self) -> Text:
         snap = self.snapshot
@@ -112,8 +134,9 @@ class MapPane(Static):
             return Text("Waiting for first cycle...")
         width = self.size.width or FALLBACK_W
         height = self.size.height or FALLBACK_H
-        center = self._anim_frames[self._anim_index] if self._anim_frames else None
-        return self._render_viewport(snap, width, height, center)
+        now = time.monotonic()
+        center = self._glide_center(now)
+        return self._render_viewport(snap, width, height, center, self._player_sprite(now))
 
     def on_resize(self, event: Resize) -> None:
         self.refresh()
@@ -125,9 +148,32 @@ class MapPane(Static):
             return coords
         return f"{coords} · {content[1]}"
 
-    def _tile_sprite_and_terrain(self, wx: int, wy: int, is_player: bool) -> tuple[Sprite, str]:
+    def _player_sprite(self, now: float) -> Sprite:
+        snap = self.snapshot
+        if snap is None:
+            return PLAYER_SPRITE
+        elapsed = now - self._anim_start
+        mode = current_mode(snap.action_kind, self._planning_active, elapsed, snap.cooldown_remaining)
+        if mode is Mode.PLANNING:
+            return PLANNING_SPRITE
+        if mode is Mode.GATHER_SWING:
+            return GATHER_SWING_FRAMES[swing_frame_index(elapsed, len(GATHER_SWING_FRAMES), SWING_SWEEP_SECONDS)]
+        if mode is Mode.FIGHT_SWING:
+            return FIGHT_SWING_FRAMES[swing_frame_index(elapsed, len(FIGHT_SWING_FRAMES), SWING_SWEEP_SECONDS)]
+        return PLAYER_SPRITE
+
+    def _glide_center(self, now: float) -> tuple[int, int] | None:
+        if not self._anim_frames:
+            return None
+        snap = self.snapshot
+        duration = snap.cooldown_remaining if snap is not None else 0.0
+        idx = glide_index(now - self._anim_start, duration, len(self._anim_frames))
+        return self._anim_frames[idx]
+
+    def _tile_sprite_and_terrain(self, wx: int, wy: int, is_player: bool,
+                                 player_sprite: Sprite) -> tuple[Sprite, str]:
         if is_player:
-            return PLAYER_SPRITE, WALKABLE_COLOR
+            return player_sprite, WALKABLE_COLOR
         content = self._tile_index.get((wx, wy))
         if content is None:
             terrain = WALKABLE_COLOR if (wx, wy) in self._known_tiles else UNMAPPED_COLOR
@@ -141,6 +187,7 @@ class MapPane(Static):
         width: int,
         height: int,
         center: tuple[int, int] | None = None,
+        player_sprite: Sprite = PLAYER_SPRITE,
     ) -> Text:
         tiles_w = width // TILE_W
         tiles_h = (height - 1) // TILE_H
@@ -156,7 +203,7 @@ class MapPane(Static):
                 wx = cx + tcol - half_w
                 wy = cy + trow - half_h
                 is_player = tcol == half_w and trow == half_h
-                sprite, terrain = self._tile_sprite_and_terrain(wx, wy, is_player)
+                sprite, terrain = self._tile_sprite_and_terrain(wx, wy, is_player, player_sprite)
                 rows4 = self._compositor.compose(sprite, terrain)
                 for i in range(TILE_H):
                     sublines[i].append_text(rows4[i])

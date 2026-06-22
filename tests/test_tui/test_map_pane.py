@@ -177,7 +177,8 @@ class TestGlideAnimation:
         pane.update_snapshot(_snap(0, 0))
         pane.update_snapshot(_snap(3, 0))
         assert pane._anim_frames == [(1, 0), (2, 0), (3, 0)]
-        assert pane._anim_index == 0
+        # glide is time-driven; verify the start timestamp was stamped
+        assert isinstance(pane._anim_start, float)
 
     def test_no_move_clears_animation(self):
         pane = MapPane(_gd_typed())
@@ -191,29 +192,55 @@ class TestGlideAnimation:
         pane.update_snapshot(_snap(0, 0))
         pane.update_snapshot(_snap(5, 0))
         pane._tick()                            # advance one frame
+        start_before = pane._anim_start
         pane.update_snapshot(_snap(5, 3))       # new move from (5,0)
         assert pane._anim_frames == [(5, 1), (5, 2), (5, 3)]
-        assert pane._anim_index == 0
+        # glide is time-driven: verify frames end at new destination and start was re-stamped
+        assert pane._anim_frames[-1] == (5, 3)
+        assert pane._anim_start >= start_before
 
-    def test_tick_advances_then_settles(self):
+    def test_tick_advances_then_settles(self, monkeypatch):
+        # New persistent-timer design: _tick calls refresh() while animating; the
+        # glide position is time-driven (not index-driven). Verify _is_animating()
+        # is True within the cooldown window and False once elapsed exceeds it.
         pane = MapPane(_gd_typed())
+        fake_now = [0.0]
+        monkeypatch.setattr("artifactsmmo_cli.tui.widgets.map_pane.time.monotonic",
+                            lambda: fake_now[0])
+        snap_with_cooldown = CycleSnapshot(
+            cycle_index=0, timestamp="t", character="c", x=2, y=0, level=1,
+            xp=0, max_xp=100, hp=100, max_hp=100, gold=0,
+            selected_goal="X", action="Y", outcome="ok", cooldown_remaining=5.0,
+        )
         pane.update_snapshot(_snap(0, 0))
-        pane.update_snapshot(_snap(2, 0))       # frames [(1,0),(2,0)]
-        assert pane._anim_index == 0
-        pane._tick()
-        assert pane._anim_index == 1
-        pane._tick()                            # at last frame -> stop
-        assert pane._anim_frames == []
-        assert pane._anim_timer is None
+        pane.update_snapshot(snap_with_cooldown)     # frames [(1,0),(2,0)]; start=0.0
+        assert pane._anim_frames == [(1, 0), (2, 0)]
+        assert pane._is_animating() is True          # 0.0 < 5.0
+        fake_now[0] = 6.0
+        assert pane._is_animating() is False         # 6.0 >= 5.0 -> settled
+        # anim_frames are kept (they encode the path); timer persists (persistent design)
+        assert pane._anim_frames == [(1, 0), (2, 0)]
+        assert pane._anim_timer is None              # not mounted, so no timer
 
-    def test_render_centers_on_glide_then_snap(self):
+    def test_render_centers_on_glide_then_snap(self, monkeypatch):
+        # New time-based glide: center is derived from glide_index(elapsed, cooldown).
+        # At start (elapsed ≈ 0) the first frame is shown; after cooldown the last frame
+        # (snap position) is shown.
+        fake_now = [0.0]
+        monkeypatch.setattr("artifactsmmo_cli.tui.widgets.map_pane.time.monotonic",
+                            lambda: fake_now[0])
         pane = MapPane(_gd_typed())
+        snap_with_cooldown = CycleSnapshot(
+            cycle_index=0, timestamp="t", character="c", x=2, y=0, level=1,
+            xp=0, max_xp=100, hp=100, max_hp=100, gold=0,
+            selected_goal="X", action="Y", outcome="ok", cooldown_remaining=5.0,
+        )
         pane.update_snapshot(_snap(0, 0))
-        pane.update_snapshot(_snap(2, 0))
-        assert pane.render().plain.split("\n")[0].startswith("(1,0)")   # frame 0
-        pane._tick()
-        pane._tick()                            # settle
-        assert pane.render().plain.split("\n")[0].startswith("(2,0)")   # snap
+        pane.update_snapshot(snap_with_cooldown)     # frames [(1,0),(2,0)]; start=0.0
+        # elapsed=0 -> glide_index returns 0 -> center=(1,0)
+        assert pane.render().plain.split("\n")[0].startswith("(1,0)")
+        fake_now[0] = 10.0                           # well past cooldown -> last frame
+        assert pane.render().plain.split("\n")[0].startswith("(2,0)")
 
     async def test_timer_created_when_mounted_and_unmount_cancels(self):
         pane = MapPane(_gd_typed())
@@ -226,4 +253,4 @@ class TestGlideAnimation:
         async with _Host().run_test(size=(90, 45)):
             pane.update_snapshot(_snap(4, 0))   # mounted -> real timer created
             assert pane._anim_timer is not None
-        assert pane._anim_timer is None         # on_unmount -> _stop_anim
+        assert pane._anim_timer is None         # on_unmount stops the timer

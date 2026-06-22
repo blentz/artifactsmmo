@@ -133,8 +133,9 @@ def _run_with_tui(
     player.game_data = GameData.load(
         client, ttl_minutes=game_data_ttl_minutes, force_refresh=refresh_game_data)
     app = WatchApp(character=character, game_data=player.game_data)
-    bridge = ThreadSafeBridge(app, app.update_snapshot)
+    bridge = ThreadSafeBridge(app, app.update_snapshot, planning_handler=app.set_planning)
     player.set_cycle_observer(bridge.notify)
+    player.set_planning_observer(bridge.notify_planning)
 
     # Daemon thread so the process exits cleanly when the TUI quits.
     bot_thread = threading.Thread(target=player.run, daemon=True)

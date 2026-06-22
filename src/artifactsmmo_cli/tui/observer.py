@@ -14,9 +14,15 @@ class ThreadSafeBridge:
     every widget mutation must go through call_from_thread).
     """
 
-    def __init__(self, app: Any, handler: Callable[[CycleSnapshot], None]) -> None:
+    def __init__(
+        self,
+        app: Any,
+        handler: Callable[[CycleSnapshot], None],
+        planning_handler: Callable[[bool], None] | None = None,
+    ) -> None:
         self._app = app
         self._handler = handler
+        self._planning_handler = planning_handler
 
     def notify(self, snap: CycleSnapshot) -> None:
         # Textual's App.call_from_thread is the documented escape hatch.
@@ -27,3 +33,12 @@ class ThreadSafeBridge:
             self._handler(snap)
         else:
             call_from_thread(self._handler, snap)
+
+    def notify_planning(self, active: bool) -> None:
+        if self._planning_handler is None:
+            return
+        call_from_thread = getattr(self._app, "call_from_thread", None)
+        if call_from_thread is None:
+            self._planning_handler(active)
+        else:
+            call_from_thread(self._planning_handler, active)

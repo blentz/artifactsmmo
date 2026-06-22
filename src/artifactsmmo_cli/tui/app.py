@@ -112,6 +112,10 @@ class WatchApp(App[None]):
         else:
             self.push_screen(LogScreen(self._recent_snapshots))
 
+    def set_planning(self, active: bool) -> None:
+        """Bot-thread signal (via ThreadSafeBridge): planner is deciding."""
+        self.query_one("#map", MapPane).set_planning(active)
+
     def action_toggle_plan(self) -> None:
         if isinstance(self.screen, PlanScreen):
             self.pop_screen()
