@@ -152,6 +152,7 @@ EVENT_VISIBILITY_MUTATIONS = [
 
 # Skill-gate fast-fail + doomed-memo (2026-06-15 feather_coat CPU-peg fix).
 GATHER_PLANNABLE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "gather_plannable_core.py"
+LEAF_ATTAINABLE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "leaf_attainable_core.py"
 DOOMED_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "doomed_memo.py"
 STRATEGY_DRIVER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "strategy_driver.py"
 
@@ -1651,6 +1652,20 @@ GATHER_PLANNABLE_MUTATIONS = [
      "    return owned > needed"),
 ]
 
+# Killed by formal/diff/test_leaf_attainable_diff.py (binds leaf_attainable_pure
+# to the proved Formal.LeafAttainable.leafAttainable).
+LEAF_ATTAINABLE_MUTATIONS = [
+    ("leaf_attainable: drop the task-earnable disjunct",
+     "    return (gatherable or known_spawn_drop or task_earnable\n            or buyable_with_attainable_currency)",
+     "    return (gatherable or known_spawn_drop\n            or buyable_with_attainable_currency)"),
+    ("leaf_attainable: drop the currency-buy disjunct",
+     "    return (gatherable or known_spawn_drop or task_earnable\n            or buyable_with_attainable_currency)",
+     "    return (gatherable or known_spawn_drop or task_earnable)"),
+    ("leaf_attainable: collapse to always-True",
+     "    return (gatherable or known_spawn_drop or task_earnable\n            or buyable_with_attainable_currency)",
+     "    return True"),
+]
+
 # Killed by formal/diff/test_doomed_memo_diff.py (binds DoomedMemo._ttl / is_doomed
 # to the proved Formal.DoomedMemo.ttl / isDoomed).
 DOOMED_MEMO_MUTATIONS = [
@@ -1795,6 +1810,8 @@ _ALL_SRCS = [
     GATHER_STEP_TARGET_SRC,
     # #16 — efficiency-weighted strategic_value scorer.
     STRATEGIC_VALUE_SRC,
+    # C1 — acquisition-leaf attainability (task-earnable + currency-buy disjuncts).
+    LEAF_ATTAINABLE_CORE_SRC,
 ]
 
 
@@ -3601,6 +3618,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_task_reservation_diff.py", survivors)
     run_group(GATHER_PLANNABLE_CORE_SRC, GATHER_PLANNABLE_MUTATIONS,
               "formal/diff/test_skill_gate_fastfail_diff.py", survivors)
+    run_group(LEAF_ATTAINABLE_CORE_SRC, LEAF_ATTAINABLE_MUTATIONS,
+              "formal/diff/test_leaf_attainable_diff.py", survivors)
     run_group(DOOMED_MEMO_SRC, DOOMED_MEMO_MUTATIONS,
               "formal/diff/test_doomed_memo_diff.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, STRATEGY_DRIVER_MUTATIONS,
