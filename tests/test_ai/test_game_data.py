@@ -1218,10 +1218,11 @@ class TestGameDataLoad:
                 with patch("artifactsmmo_cli.ai.game_data.get_all_resources", return_value=empty_page):
                     with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=empty_page):
                         with patch("artifactsmmo_cli.ai.game_data.get_all_npc_items", return_value=empty_page):
-                            with patch("artifactsmmo_cli.ai.game_data.get_all_events", return_value=empty_page):
-                                with patch("artifactsmmo_cli.ai.game_data.get_ge_orders", return_value=empty_page):
-                                    with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None):
-                                        gd = GameData.load(client, cache=cache)
+                            with patch("artifactsmmo_cli.ai.game_data.get_all_tasks", return_value=empty_page):
+                                with patch("artifactsmmo_cli.ai.game_data.get_all_events", return_value=empty_page):
+                                    with patch("artifactsmmo_cli.ai.game_data.get_ge_orders", return_value=empty_page):
+                                        with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None):
+                                            gd = GameData.load(client, cache=cache)
         assert isinstance(gd, GameData)
 
 
@@ -1740,7 +1741,7 @@ class TestGameDataFetchBuildSplit:
         assert gd._resource_locations == {"copper": [(2, 3)]}
 
 
-_STATIC = ("maps", "items", "resources", "monsters", "npcs", "events")
+_STATIC = ("maps", "items", "resources", "monsters", "npcs", "tasks", "events")
 
 
 class _RecordingCache(GameDataCache):
@@ -1868,7 +1869,7 @@ def test_warm_and_cold_events_build_equal(monkeypatch, tmp_path):
     (built from from_dict(to_dict(...))) must index identically."""
     ev = _make_event_npc(code="gold_merchant", npc_code="merchant", x=5, y=6)  # real EventSchema
     monkeypatch.setattr(GameData, "_fetch_events", lambda self, client: [ev])
-    for name in ("maps", "items", "resources", "monsters", "npcs"):
+    for name in ("maps", "items", "resources", "monsters", "npcs", "tasks"):
         monkeypatch.setattr(GameData, f"_fetch_{name}", lambda self, client: [])
     monkeypatch.setattr(GameData, "_fetch_bank", lambda self, client: None)
     monkeypatch.setattr(GameData, "_load_ge_orders", lambda self, client: None)

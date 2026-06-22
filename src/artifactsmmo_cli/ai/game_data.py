@@ -21,6 +21,8 @@ from artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get import s
 from artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get import sync as get_bank_details
 from artifactsmmo_api_client.api.np_cs.get_all_npcs_items_npcs_items_get import sync as get_all_npc_items
 from artifactsmmo_api_client.api.resources.get_all_resources_resources_get import sync as get_all_resources
+from artifactsmmo_api_client.api.tasks.get_all_tasks_tasks_list_get import sync as get_all_tasks
+from artifactsmmo_api_client.models.task_full_schema import TaskFullSchema
 from artifactsmmo_api_client.models.bank_schema import BankSchema
 from artifactsmmo_api_client.models.craft_skill import CraftSkill
 from artifactsmmo_api_client.models.event_schema import EventSchema
@@ -72,6 +74,7 @@ class GameData:
     monsters: MonsterCatalog = field(default_factory=MonsterCatalog)
     recipes_catalog: RecipeCatalog = field(default_factory=RecipeCatalog)
     world: LocationCatalog = field(default_factory=LocationCatalog)
+    _task_reward_item_codes: frozenset[str] = field(default_factory=frozenset)
 
     # === Legacy private-state accessors ===
     # Tests and fixtures seed GameData through these historical private
@@ -732,6 +735,18 @@ class GameData:
         """Return [(npc_code, price)] for all NPCs that buy item_code from the player, highest price first."""
         return self.world.npcs_buying_item(item_code)
 
+    @property
+    def task_reward_item_codes(self) -> frozenset[str]:
+        """Item codes granted by completing ANY task (API task-reward data).
+        `tasks_coin` is the canonical member — it funds task-currency purchases
+        (e.g. jasper_crystal @ tasks_trader)."""
+        return self._task_reward_item_codes
+
+    def is_task_earnable(self, code: str) -> bool:
+        """True iff `code` is awarded by completing some task (so it is
+        obtainable by the always-available task loop)."""
+        return code in self._task_reward_item_codes
+
     def ge_best_buy_order(self, item_code: str) -> tuple[str, int, int] | None:
         """The highest-price OPEN BUY order for item_code as (order_id, price,
         quantity), or None if no such standing order exists. This is the order the
@@ -916,6 +931,7 @@ class GameData:
                 "resources": data._fetch_resources(client),
                 "monsters": data._fetch_monsters(client),
                 "npcs": data._fetch_npcs(client),
+                "tasks": data._fetch_tasks(client),
                 "events": data._fetch_events(client),
                 "bank": data._fetch_bank(client),
             }
@@ -941,6 +957,7 @@ class GameData:
                 "resources": [ResourceSchema.from_dict(d) for d in raw["resources"]],
                 "monsters": [MonsterSchema.from_dict(d) for d in raw["monsters"]],
                 "npcs": [NPCItem.from_dict(d) for d in raw["npcs"]],
+                "tasks": [TaskFullSchema.from_dict(d) for d in raw["tasks"]],
                 "events": [EventSchema.from_dict(d) for d in raw["events"]],
                 "bank": BankSchema.from_dict(raw["bank"]) if raw["bank"] is not None else None,
             }
@@ -949,6 +966,7 @@ class GameData:
         data._build_resources(objs["resources"])
         data._build_monsters(objs["monsters"])
         data._build_npcs(objs["npcs"])
+        data._build_tasks(objs["tasks"])
         data._build_events(objs["events"])
         data._build_bank(objs["bank"])
         data._load_ge_orders(client)
@@ -1232,6 +1250,26 @@ class GameData:
     def _load_npcs(self, client: AuthenticatedClient) -> None:
         """Fetch all NPC items and build buy and sell stock indexes."""
         self._build_npcs(self._fetch_npcs(client))
+
+    def _fetch_tasks(self, client: AuthenticatedClient) -> list[TaskFullSchema]:
+        """Page all task definitions; return the list of schema objects."""
+        out: list[TaskFullSchema] = []
+        page = 1
+        while True:
+            result = get_all_tasks(client=client, page=page, size=100)
+            if result is None or not result.data:
+                break
+            out.extend(result.data)
+            if len(result.data) < 100:
+                break
+            page += 1
+        return out
+
+    def _build_tasks(self, tasks: list[TaskFullSchema]) -> None:
+        """Collect the set of item codes any task awards on completion."""
+        self._task_reward_item_codes = frozenset(
+            item.code for task in tasks for item in task.rewards.items
+        )
 
     def _load_ge_orders(self, client: AuthenticatedClient) -> None:
         """Index, per item, the highest-price OPEN BUY order and the lowest-price

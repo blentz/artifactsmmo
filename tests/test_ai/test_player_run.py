@@ -63,7 +63,7 @@ def _patch_game_data_load():
     empty = MagicMock(data=[])
     with contextlib.ExitStack() as stack:
         for name in ("get_all_maps", "get_all_items", "get_all_resources",
-                     "get_all_monsters", "get_all_npc_items", "get_all_events", "get_ge_orders"):
+                     "get_all_monsters", "get_all_npc_items", "get_all_tasks", "get_all_events", "get_ge_orders"):
             stack.enter_context(patch(f"artifactsmmo_cli.ai.game_data.{name}", return_value=empty))
         stack.enter_context(patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None))
         stack.enter_context(patch("artifactsmmo_cli.ai.game_data.GameDataCache", _NoopCache))
