@@ -2,6 +2,7 @@
 from artifactsmmo_cli.tui.widgets.map_pane import MapPane, select_swing_head
 from artifactsmmo_cli.tui.sprites import (
     PLAYER_SPRITE, PLANNING_SPRITE, AXE, PICKAXE, HAMMER, SWORD, oriented_head,
+    CLOUD_SPRITE, CLOUD_SPRITE_R,
 )
 from artifactsmmo_cli.tui.swing_frames import Mode
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
@@ -174,3 +175,50 @@ def test_render_viewport_overlay_changes_neighbor_tile():
     swung = p._render_viewport(snap, 80, 41, None, PLAYER_SPRITE, {(1, 0): oriented_head(AXE, 1, 0)})
     # styled markup differs (the head pixels land in the right-neighbor tile)
     assert plain.markup != swung.markup
+
+
+def test_planning_overlay_two_tiles_swap_each_second():
+    p = _pane()
+    p.snapshot = _snap(action_kind="gather", cooldown_remaining=5.0)
+    p._planning_active = True
+    p._planning_start = 0.0
+    f0 = p._planning_overlay(now=0.5)                 # second 0
+    assert f0 == {(1, -1): CLOUD_SPRITE, (2, -1): CLOUD_SPRITE_R}
+    f1 = p._planning_overlay(now=1.5)                 # second 1 -> swapped
+    assert f1 == {(1, -1): CLOUD_SPRITE_R, (2, -1): CLOUD_SPRITE}
+    f2 = p._planning_overlay(now=2.5)                 # second 2 -> back
+    assert f2 == f0
+
+
+def test_planning_overlay_empty_when_not_planning():
+    p = _pane()
+    p.snapshot = _snap(action_kind="gather", cooldown_remaining=5.0)
+    p._planning_active = False
+    assert p._planning_overlay(now=1.0) == {}
+
+
+def test_set_planning_stamps_start_once(monkeypatch):
+    p = _pane()
+    monkeypatch.setattr("artifactsmmo_cli.tui.widgets.map_pane.time.monotonic", lambda: 10.0)
+    p.set_planning(True)
+    assert p._planning_start == 10.0
+    monkeypatch.setattr("artifactsmmo_cli.tui.widgets.map_pane.time.monotonic", lambda: 20.0)
+    p.set_planning(True)                              # already planning -> not re-stamped
+    assert p._planning_start == 10.0
+    p.set_planning(False)
+
+
+def test_active_overlay_picks_planning_then_swing():
+    p = _pane()
+    p._game_data = _GD(skills={"ash_tree": ("woodcutting", 1)})
+    p.snapshot = _snap(action_kind="gather", action_target="ash_tree", cooldown_remaining=5.0)
+    p._anim_start = 0.0
+    p._anim_frames = []
+    # planning active -> cloud
+    p._planning_active = True
+    p._planning_start = 0.0
+    assert (1, -1) in p._active_overlay(now=0.5)
+    # planning off -> swing head
+    p._planning_active = False
+    ov = p._active_overlay(now=0.35)
+    assert (1, 0) in ov

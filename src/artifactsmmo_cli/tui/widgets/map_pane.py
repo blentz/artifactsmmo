@@ -17,6 +17,8 @@ from artifactsmmo_cli.tui.path_interpolate import glide_path
 from artifactsmmo_cli.tui.sprite_registry import SpriteRegistry
 from artifactsmmo_cli.tui.sprites import (
     BLANK_SPRITE,
+    CLOUD_SPRITE,
+    CLOUD_SPRITE_R,
     HAMMER,
     PLANNING_SPRITE,
     PLAYER_SPRITE,
@@ -86,6 +88,7 @@ class MapPane(Static):
         self._anim_start = 0.0
         self._anim_timer: Timer | None = None
         self._planning_active = False
+        self._planning_start = 0.0
 
     @staticmethod
     def _build_tile_index(gd: GameData) -> dict[tuple[int, int], TileContent]:
@@ -157,6 +160,8 @@ class MapPane(Static):
             self._anim_timer = None
 
     def set_planning(self, active: bool) -> None:
+        if active and not self._planning_active:
+            self._planning_start = time.monotonic()
         self._planning_active = active
         self.refresh()
 
@@ -169,7 +174,7 @@ class MapPane(Static):
         now = time.monotonic()
         center = self._glide_center(now)
         return self._render_viewport(
-            snap, width, height, center, self._player_sprite(now), self._swing_overlay(now)
+            snap, width, height, center, self._player_sprite(now), self._active_overlay(now)
         )
 
     def on_resize(self, event: Resize) -> None:
@@ -209,6 +214,18 @@ class MapPane(Static):
             return {}
         idx = swing_frame_index(elapsed, SWING_FRAME_COUNT, SWING_SWEEP_SECONDS)
         return swing_overlay(mode, idx, head)
+
+    def _planning_overlay(self, now: float) -> dict[tuple[int, int], Sprite]:
+        if not self._planning_active:
+            return {}
+        if int(now - self._planning_start) % 2 == 0:
+            return {(1, -1): CLOUD_SPRITE, (2, -1): CLOUD_SPRITE_R}
+        return {(1, -1): CLOUD_SPRITE_R, (2, -1): CLOUD_SPRITE}
+
+    def _active_overlay(self, now: float) -> dict[tuple[int, int], Sprite]:
+        if self._planning_active:
+            return self._planning_overlay(now)
+        return self._swing_overlay(now)
 
     def _glide_center(self, now: float) -> tuple[int, int] | None:
         if not self._anim_frames:
