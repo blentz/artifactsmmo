@@ -1980,6 +1980,12 @@ def runLeafAttainable (args : Array Json) : Json :=
     (intArg args 0 != 0) (intArg args 1 != 0) (intArg args 2 != 0) (intArg args 3 != 0)
   Json.mkObj [("attainable", Json.bool a)]
 
+-- CompleteTaskIncome: post-completion tasks_coin count.
+-- args = [coins, reward]
+def runCompleteTaskIncome (args : Array Json) : Json :=
+  let c := Formal.CompleteTaskIncome.applyComplete (intArg args 0).toNat (intArg args 1).toNat
+  Json.mkObj [("coins_after", Json.num (Int.ofNat c))]
+
 /-- Evaluate the production liveness ladder (`Formal.Liveness.ProductionLadder`)
 on a JSON-supplied `State`: emit `fires k s` for every `k` in
 `allInLadderOrder` plus `productionLadder s` (the SELECTED MeansKind).
@@ -2254,6 +2260,8 @@ def runOne (item : Json) : Json :=
     runGatherPlannable args
   else if kind == "leaf_attainable" then
     runLeafAttainable args
+  else if kind == "complete_task_income" then
+    runCompleteTaskIncome args
   else if kind == "ladder_fires" then
     runLadder args
   else
