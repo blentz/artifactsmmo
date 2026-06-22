@@ -10,6 +10,7 @@ from artifactsmmo_api_client.api.my_characters.action_complete_task_my_name_acti
 )
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.complete_task_core import complete_task_apply_pure
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -44,7 +45,14 @@ class CompleteTaskAction(Action):
         return state.task_total > 0 and state.task_progress >= state.task_total
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
+        """Clear the completed task, move to taskmaster, and mint the task's
+        tasks_coin reward into inventory via the proved complete_task_apply_pure
+        core (previously inventory was untouched; coins are the planner-relevant
+        reward for funding TaskExchangeAction)."""
         dest = self.taskmaster_location
+        assert state.task_code is not None, "apply called without an active task"
+        coin_reward = game_data.task_coin_reward(state.task_code)
+        inventory = complete_task_apply_pure(state.inventory, coin_reward)
         return dataclasses.replace(
             state,
             x=dest[0],
@@ -56,6 +64,7 @@ class CompleteTaskAction(Action):
             task_total=0,
             task_lifecycle_phase=TaskLifecyclePhase.NONE,
             xp=state.xp + TASK_COMPLETE_XP_ESTIMATE,
+            inventory=inventory,
         )
 
     def cost(self, state: WorldState, game_data: GameData,

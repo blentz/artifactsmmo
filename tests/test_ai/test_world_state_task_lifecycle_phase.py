@@ -126,6 +126,9 @@ class TestApplyTransitions:
     def _gd() -> GameData:
         gd = GameData()
         gd._taskmaster_location = (1, 2)
+        # CompleteTaskAction.apply now calls task_coin_reward; seed a
+        # conservative floor so apply doesn't raise "no task coin-reward data".
+        gd._task_coin_rewards = {"monsters_chicken": 1, "copper_ore": 1}
         return gd
 
     def test_accept_task_action_transitions_none_to_accepted(self):

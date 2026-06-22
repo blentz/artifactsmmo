@@ -48,6 +48,8 @@ def make_game_data_mock() -> GameData:
     gd._monster_resistance = {"chicken": {}, "cow": {}}
     gd._monster_critical_strike = {"chicken": 0, "cow": 0}
     gd._monster_initiative = {"chicken": 0, "cow": 0}
+    # CompleteTaskAction.apply calls task_coin_reward; provide a floor.
+    gd._task_coin_rewards = {"chicken": 1, "cow": 1}
     return gd
 
 

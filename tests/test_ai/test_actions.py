@@ -816,7 +816,9 @@ class TestCompleteTaskAction:
     def test_apply_clears_task_and_moves(self):
         action = CompleteTaskAction(taskmaster_location=(1, 2))
         state = make_state(x=0, y=0, task_code="chicken", task_total=10, task_progress=10)
-        new_state = action.apply(state, make_game_data())
+        gd = make_game_data()
+        gd._task_coin_rewards = {"chicken": 1}
+        new_state = action.apply(state, gd)
         assert new_state.task_code == ""
         assert new_state.task_total == 0
         assert new_state.task_progress == 0
@@ -834,7 +836,9 @@ class TestCompleteTaskAction:
         state = make_state(
             x=0, y=0, xp=12345, task_code="chicken", task_total=10, task_progress=10
         )
-        new_state = action.apply(state, make_game_data())
+        gd = make_game_data()
+        gd._task_coin_rewards = {"chicken": 1}
+        new_state = action.apply(state, gd)
         assert new_state.xp == state.xp
 
     def test_cost_includes_distance(self):
@@ -844,6 +848,28 @@ class TestCompleteTaskAction:
 
     def test_repr(self):
         assert repr(CompleteTaskAction(taskmaster_location=(1, 2))) == "CompleteTask"
+
+    def test_apply_mints_tasks_coin_reward(self):
+        """CompleteTaskAction.apply mints the task's tasks_coin reward into
+        inventory via complete_task_apply_pure + GameData.task_coin_reward.
+        The delta must equal the seeded reward (3) and the existing task-clearing
+        behaviour must be preserved (task_code=="" / task_total==0)."""
+        action = CompleteTaskAction(taskmaster_location=(1, 2))
+        state = make_state(
+            x=0, y=0,
+            task_code="chicken", task_progress=1, task_total=1,
+            inventory={"tasks_coin": 2},
+        )
+        gd = make_game_data()
+        gd._task_coin_rewards = {"chicken": 3}
+        before = state.inventory.get("tasks_coin", 0)
+        new_state = action.apply(state, gd)
+        # coin reward minted
+        assert new_state.inventory.get("tasks_coin", 0) == before + 3
+        # task state still cleared (no regression)
+        assert new_state.task_code == ""
+        assert new_state.task_total == 0
+        assert new_state.task_progress == 0
 
 
 class TestTaskExchangeAction:
