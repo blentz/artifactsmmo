@@ -154,6 +154,7 @@ EVENT_VISIBILITY_MUTATIONS = [
 GATHER_PLANNABLE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "gather_plannable_core.py"
 LEAF_ATTAINABLE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "leaf_attainable_core.py"
 COMPLETE_TASK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "complete_task_core.py"
+FUNDING_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "funding_core.py"
 DOOMED_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "doomed_memo.py"
 STRATEGY_DRIVER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "strategy_driver.py"
 
@@ -1678,6 +1679,20 @@ COMPLETE_TASK_MUTATIONS = [
      "    new_inventory[TASKS_COIN_CODE] = new_inventory.get(TASKS_COIN_CODE, 0) - coin_reward"),
 ]
 
+# Killed by formal/diff/test_currency_funding_diff.py (binds funding_cycles_pure
+# to the proved Formal.Liveness.CurrencyFunding.fundingCycles).
+FUNDING_MUTATIONS = [
+    ("funding_cycles: drop the ceil rounding (floor-div understates cycles)",
+     "    return (deficit + per_task_floor - 1) // per_task_floor",
+     "    return deficit // per_task_floor"),
+    ("funding_cycles: ignore on_hand (always full target)",
+     "    deficit = target - on_hand",
+     "    deficit = target"),
+    ("funding_cycles: drop already-funded short-circuit",
+     "    if on_hand >= target:\n        return 0",
+     "    if False:\n        return 0"),
+]
+
 # Killed by formal/diff/test_doomed_memo_diff.py (binds DoomedMemo._ttl / is_doomed
 # to the proved Formal.DoomedMemo.ttl / isDoomed).
 DOOMED_MEMO_MUTATIONS = [
@@ -1826,6 +1841,8 @@ _ALL_SRCS = [
     LEAF_ATTAINABLE_CORE_SRC,
     # C2 — complete_task coin-minting pure core.
     COMPLETE_TASK_CORE_SRC,
+    # C3 — funding_cycles_pure: cycles to reach a currency target.
+    FUNDING_CORE_SRC,
 ]
 
 
@@ -3636,6 +3653,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_leaf_attainable_diff.py", survivors)
     run_group(COMPLETE_TASK_CORE_SRC, COMPLETE_TASK_MUTATIONS,
               "formal/diff/test_complete_task_income_diff.py", survivors)
+    run_group(FUNDING_CORE_SRC, FUNDING_MUTATIONS,
+              "formal/diff/test_currency_funding_diff.py", survivors)
     run_group(DOOMED_MEMO_SRC, DOOMED_MEMO_MUTATIONS,
               "formal/diff/test_doomed_memo_diff.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, STRATEGY_DRIVER_MUTATIONS,
