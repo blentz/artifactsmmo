@@ -1973,6 +1973,13 @@ def runGatherPlannable (args : Array Json) : Json :=
     (intArg args 2).toNat (intArg args 3).toNat (intArg args 4).toNat (intArg args 5).toNat
   Json.mkObj [("plannable", Json.bool p)]
 
+-- LeafAttainable: acquisition-leaf attainability.
+-- args = [gatherable(0/1), knownSpawnDrop(0/1), taskEarnable(0/1), buyable(0/1)]
+def runLeafAttainable (args : Array Json) : Json :=
+  let a := Formal.LeafAttainable.leafAttainable
+    (intArg args 0 != 0) (intArg args 1 != 0) (intArg args 2 != 0) (intArg args 3 != 0)
+  Json.mkObj [("attainable", Json.bool a)]
+
 /-- Evaluate the production liveness ladder (`Formal.Liveness.ProductionLadder`)
 on a JSON-supplied `State`: emit `fires k s` for every `k` in
 `allInLadderOrder` plus `productionLadder s` (the SELECTED MeansKind).
@@ -2245,6 +2252,8 @@ def runOne (item : Json) : Json :=
     runDoomedIsDoomed args
   else if kind == "gather_plannable" then
     runGatherPlannable args
+  else if kind == "leaf_attainable" then
+    runLeafAttainable args
   else if kind == "ladder_fires" then
     runLadder args
   else
