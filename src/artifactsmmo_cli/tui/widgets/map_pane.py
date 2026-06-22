@@ -200,7 +200,7 @@ class MapPane(Static):
     def _swing_overlay(self, now: float) -> dict[tuple[int, int], Sprite]:
         """The per-tile tool overlay map for the current swing frame: head in the
         arc-neighbor tile + grip in the player tile. {} when idle/planning/walking or
-        when no tool applies (e.g. a non-bar craft)."""
+        when no tool applies (e.g. an unknown craft item)."""
         snap = self.snapshot
         if snap is None:
             return {}
