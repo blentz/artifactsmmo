@@ -20,7 +20,8 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachCharLevel,
     ReachSkillLevel,
 )
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.tiers.leaf_attainable_core import leaf_attainable_pure
+from artifactsmmo_cli.ai.tiers.objective import GOLD, CharacterObjective, _permanent_vendor_purchases
 from artifactsmmo_cli.ai.tiers.personality import Personality
 from artifactsmmo_cli.ai.tiers.servable_filter import keep_servable
 from artifactsmmo_cli.ai.tiers.sticky_select_core import StickyCand, sticky_choose
@@ -238,8 +239,10 @@ def root_cost(root: MetaGoal, state: WorldState, game_data: GameData) -> int:
 
 def _producible(code: str, state: WorldState, game_data: GameData) -> bool:
     """True when the item can be made by known means: craftable (has a recipe),
-    gatherable (some resource drops it), or obtainable by FIGHTING — some monster
-    that drops it is WINNABLE with the best on-hand loadout.
+    gatherable (some resource drops it), task-earnable (awarded by the task loop),
+    currency-buyable from a permanent vendor for gold or a directly task-earnable
+    currency, or obtainable by FIGHTING — some monster that drops it is WINNABLE
+    with the best on-hand loadout.
 
     The winnability gate is load-bearing: a drop from an unwinnable monster must
     NOT read as producible, else the planner would emit an unreachable FightAction
@@ -248,15 +251,33 @@ def _producible(code: str, state: WorldState, game_data: GameData) -> bool:
     guard in GatherMaterialsGoal.relevant_actions), so the item would read
     producible yet generate an empty/stuck plan. Requiring a non-empty spawn list
     makes producible ⇒ a FightAction can actually be emitted (genuinely obtainable).
-    Buying is still out of scope here (offered as a planner alternative in
-    GatherMaterialsGoal.relevant_actions, not as a producibility source)."""
-    if (game_data.crafting_recipe(code) is not None
-            or code in game_data.resource_drops.values()
-            or game_data.is_task_earnable(code)):
+
+    The currency-buy check here is FLAT (non-recursive): currency is gold or is
+    directly task-earnable. This is sufficient because tasks_coin (the real
+    use-case) is directly task-earnable. Cross-prerequisite recursion lives in
+    is_reachable, not here. The `known_spawn_drop` flag uses the WINNABLE+spawned
+    drop (state-aware), preserving the winnability gate.
+
+    Routes the leaf decision through leaf_attainable_pure so the Lean proof
+    governs the live behavior (Finding B fix). Craftable short-circuits before
+    the core call to avoid instantiating the four flags when unneeded."""
+    if game_data.crafting_recipe(code) is not None:
         return True
-    return any(is_winnable(state, game_data, monster_code)
-               and game_data.monster_locations(monster_code)
-               for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(code))
+    # Flat currency-buy: gold or directly task-earnable currency (tasks_coin).
+    # Non-recursive — sufficient for the task-coin use-case; is_reachable recurses.
+    buyable = any(
+        currency == GOLD or game_data.is_task_earnable(currency)
+        for _price, currency in _permanent_vendor_purchases(code, game_data))
+    # Winnable drop: state-aware (preserves the winnability gate).
+    winnable_drop = any(
+        is_winnable(state, game_data, monster_code)
+        and game_data.monster_locations(monster_code)
+        for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(code))
+    return leaf_attainable_pure(
+        code in game_data.resource_drops.values(),
+        winnable_drop,
+        game_data.is_task_earnable(code),
+        buyable)
 
 
 def is_reachable(root: MetaGoal, state: WorldState, game_data: GameData,

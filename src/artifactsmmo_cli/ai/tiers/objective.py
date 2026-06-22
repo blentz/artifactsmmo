@@ -12,6 +12,7 @@ from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import _GATHERING_SKILLS, GameData
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value, tool_value
+from artifactsmmo_cli.ai.tiers.leaf_attainable_core import leaf_attainable_pure
 from artifactsmmo_cli.ai.tiers.objective_completion import is_complete_pure
 from artifactsmmo_cli.ai.tiers.skill_target_curve import skill_target_curve
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, SKILL_NAMES, WorldState
@@ -111,16 +112,17 @@ def is_attainable(code: str, game_data: GameData) -> bool:
     the closure path — e.g. a rune bought with sandwhisper_coin which is itself
     earned/dropped)."""
     def leaf_ok(leaf: str, path: frozenset[str]) -> bool:
-        if (_gatherable(leaf, game_data)
-                or _drops_from_spawning_monster(leaf, game_data)
-                or game_data.is_task_earnable(leaf)):
-            return True
-        if leaf in path:
-            return False
-        sub = path | {leaf}
-        return any(currency == GOLD
-                   or _attainable_closure(currency, game_data, leaf_ok, sub)
-                   for _price, currency in _permanent_vendor_purchases(leaf, game_data))
+        # Cycle guard for the recursive buyable path only — gatherable/drop/task-earnable
+        # don't recurse so they're not subject to the path check.
+        buyable = leaf not in path and any(
+            currency == GOLD
+            or _attainable_closure(currency, game_data, leaf_ok, path | {leaf})
+            for _price, currency in _permanent_vendor_purchases(leaf, game_data))
+        return leaf_attainable_pure(
+            _gatherable(leaf, game_data),
+            _drops_from_spawning_monster(leaf, game_data),
+            game_data.is_task_earnable(leaf),
+            buyable)
 
     return _attainable_closure(code, game_data, leaf_ok)
 

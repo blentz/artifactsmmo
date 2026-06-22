@@ -1102,3 +1102,37 @@ def test_producible_recognizes_task_earnable_currency():
     gd = GameData()
     gd._task_reward_item_codes = frozenset({"tasks_coin"})
     assert _producible("tasks_coin", make_state(), gd) is True
+
+
+def _gd_task_vendor() -> GameData:
+    """jasper_crystal sold by a permanent, located tasks_trader NPC for tasks_coin
+    (a task-earnable currency). No recipe, no gather/drop, no monster."""
+    gd = GameData()
+    gd._task_reward_item_codes = frozenset({"tasks_coin"})
+    gd._npc_stock = {"tasks_trader": {"jasper_crystal": 8}}
+    gd._npc_buy_currency = {"tasks_trader": {"jasper_crystal": "tasks_coin"}}
+    gd._npc_locations = {"tasks_trader": (1, 2)}
+    gd._item_stats = {
+        "jasper_crystal": ItemStats(code="jasper_crystal", level=1, type_="resource"),
+    }
+    return gd
+
+
+def test_producible_recognizes_currency_buy_with_task_earnable_currency():
+    """jasper_crystal has no recipe, no resource-drop, and no winnable dropper;
+    it is sold by a permanent vendor for tasks_coin (task-earnable) →
+    _producible must return True (Finding A fix)."""
+    gd = _gd_task_vendor()
+    assert _producible("jasper_crystal", make_state(), gd) is True
+
+
+def test_not_producible_for_currency_buy_with_unattainable_currency():
+    """An NPC-sold item whose currency is neither gold nor task-earnable must
+    NOT be producible — the flat currency check must not over-admit."""
+    gd = GameData()
+    gd._task_reward_item_codes = frozenset()
+    gd._npc_stock = {"mystery_shop": {"rare_gem": 1}}
+    gd._npc_buy_currency = {"mystery_shop": {"rare_gem": "void_token"}}  # not earnable
+    gd._npc_locations = {"mystery_shop": (3, 3)}
+    gd._item_stats = {"rare_gem": ItemStats(code="rare_gem", level=1, type_="resource")}
+    assert _producible("rare_gem", make_state(), gd) is False
