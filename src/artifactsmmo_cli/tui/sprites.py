@@ -158,7 +158,7 @@ def gather_head(skill: str | None) -> Sprite:
 
 
 def grip_overlay(dcol: int, drow: int) -> Sprite:
-    """A mostly-transparent 8x8 with a 3-pixel handle ('h'=BARK) stepping from the
+    """A mostly-transparent 8x8 with a 2-pixel handle ('h'=BARK) stepping from the
     player's hand (4,4) toward the head direction. The player-tile overlay so the
     swung tool reads as held. Combat's negative dcol mirrors for free."""
     grid = [[TRANSPARENT] * SPRITE_SIZE for _ in range(SPRITE_SIZE)]
