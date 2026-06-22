@@ -1992,6 +1992,13 @@ def runCurrencyFunding (args : Array Json) : Json :=
     (intArg args 0).toNat (intArg args 1).toNat (intArg args 2).toNat
   Json.mkObj [("cycles", Json.num (Int.ofNat c))]
 
+-- CurrencyAffordFastFail: affordability fast-fail.
+-- args = [targetInClosure(0/1), affordable(0/1), owned, needed]
+def runCurrencyAfford (args : Array Json) : Json :=
+  let p := Formal.CurrencyAffordFastFail.isPlannable
+    (intArg args 0 != 0) (intArg args 1 != 0) (intArg args 2).toNat (intArg args 3).toNat
+  Json.mkObj [("plannable", Json.bool p)]
+
 /-- Evaluate the production liveness ladder (`Formal.Liveness.ProductionLadder`)
 on a JSON-supplied `State`: emit `fires k s` for every `k` in
 `allInLadderOrder` plus `productionLadder s` (the SELECTED MeansKind).
@@ -2270,6 +2277,8 @@ def runOne (item : Json) : Json :=
     runCompleteTaskIncome args
   else if kind == "currency_funding" then
     runCurrencyFunding args
+  else if kind == "currency_afford" then
+    runCurrencyAfford args
   else if kind == "ladder_fires" then
     runLadder args
   else
