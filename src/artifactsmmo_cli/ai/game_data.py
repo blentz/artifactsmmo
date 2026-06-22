@@ -39,6 +39,7 @@ from artifactsmmo_api_client.types import Unset
 
 from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.game_data_cache import GameDataCache
+from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 from artifactsmmo_cli.ai.game_data_error import GameDataCoverageError
 from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS, ItemCatalog, ItemStats
 from artifactsmmo_cli.ai.location_catalog import LocationCatalog
@@ -75,6 +76,7 @@ class GameData:
     recipes_catalog: RecipeCatalog = field(default_factory=RecipeCatalog)
     world: LocationCatalog = field(default_factory=LocationCatalog)
     _task_reward_item_codes: frozenset[str] = field(default_factory=frozenset)
+    _task_coin_rewards: dict[str, int] = field(default_factory=dict)
 
     # === Legacy private-state accessors ===
     # Tests and fixtures seed GameData through these historical private
@@ -747,6 +749,21 @@ class GameData:
         obtainable by the always-available task loop)."""
         return code in self._task_reward_item_codes
 
+    def min_task_coin_reward(self) -> int:
+        """Conservative floor: the smallest `tasks_coin` award across all loaded
+        tasks. Used to project a not-yet-assigned (`__pending__`) task's reward
+        without over-crediting. Raises if no task data is loaded (no defaulting)."""
+        if not self._task_coin_rewards:
+            raise ValueError("no task coin-reward data loaded")
+        return min(self._task_coin_rewards.values())
+
+    def task_coin_reward(self, task_code: str) -> int:
+        """`tasks_coin` awarded by completing `task_code`. For a known task the
+        exact API amount; for an unknown / `__pending__` / empty code the
+        conservative `min_task_coin_reward()` floor (never over-credits)."""
+        known = self._task_coin_rewards.get(task_code)
+        return known if known is not None else self.min_task_coin_reward()
+
     def ge_best_buy_order(self, item_code: str) -> tuple[str, int, int] | None:
         """The highest-price OPEN BUY order for item_code as (order_id, price,
         quantity), or None if no such standing order exists. This is the order the
@@ -1266,10 +1283,17 @@ class GameData:
         return out
 
     def _build_tasks(self, tasks: list[TaskFullSchema]) -> None:
-        """Collect the set of item codes any task awards on completion."""
+        """Collect (a) the set of item codes any task awards [C1], and
+        (b) per-task `tasks_coin` reward amounts [C2]."""
         self._task_reward_item_codes = frozenset(
             item.code for task in tasks for item in task.rewards.items
         )
+        self._task_coin_rewards = {
+            task.code: item.quantity
+            for task in tasks
+            for item in task.rewards.items
+            if item.code == TASKS_COIN_CODE
+        }
 
     def _load_ge_orders(self, client: AuthenticatedClient) -> None:
         """Index, per item, the highest-price OPEN BUY order and the lowest-price
