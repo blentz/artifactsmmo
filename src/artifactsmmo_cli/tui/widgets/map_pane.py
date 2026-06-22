@@ -51,7 +51,6 @@ class MapPane(Static):
         self._registry = SpriteRegistry()
         self._compositor = HalfBlockCompositor()
         self._anim_frames: list[tuple[int, int]] = []
-        self._anim_index = 0
         self._anim_start = 0.0
         self._anim_timer: Timer | None = None
         self._planning_active = False
@@ -95,7 +94,6 @@ class MapPane(Static):
             self._anim_frames = glide_path((prior.x, prior.y), (snap.x, snap.y), MAX_ANIM_STEPS)
         else:
             self._anim_frames = []
-        self._anim_index = 0
         self.refresh()
 
     def on_mount(self) -> None:

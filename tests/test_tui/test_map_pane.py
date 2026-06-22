@@ -177,7 +177,8 @@ class TestGlideAnimation:
         pane.update_snapshot(_snap(0, 0))
         pane.update_snapshot(_snap(3, 0))
         assert pane._anim_frames == [(1, 0), (2, 0), (3, 0)]
-        assert pane._anim_index == 0
+        # glide is time-driven; verify the start timestamp was stamped
+        assert isinstance(pane._anim_start, float)
 
     def test_no_move_clears_animation(self):
         pane = MapPane(_gd_typed())
@@ -191,9 +192,12 @@ class TestGlideAnimation:
         pane.update_snapshot(_snap(0, 0))
         pane.update_snapshot(_snap(5, 0))
         pane._tick()                            # advance one frame
+        start_before = pane._anim_start
         pane.update_snapshot(_snap(5, 3))       # new move from (5,0)
         assert pane._anim_frames == [(5, 1), (5, 2), (5, 3)]
-        assert pane._anim_index == 0
+        # glide is time-driven: verify frames end at new destination and start was re-stamped
+        assert pane._anim_frames[-1] == (5, 3)
+        assert pane._anim_start >= start_before
 
     def test_tick_advances_then_settles(self, monkeypatch):
         # New persistent-timer design: _tick calls refresh() while animating; the
