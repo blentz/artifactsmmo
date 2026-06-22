@@ -15,7 +15,8 @@ from artifactsmmo_cli.tui.glyphs import UNMAPPED_COLOR, WALKABLE_COLOR
 from artifactsmmo_cli.tui.half_block import HalfBlockCompositor
 from artifactsmmo_cli.tui.sprite_registry import SpriteRegistry
 from artifactsmmo_cli.tui.sprites import (
-    BLANK_SPRITE, PLANNING_SPRITE, PLAYER_SPRITE, Sprite, SpriteCategory, overlay_sprites,
+    BLANK_SPRITE, PICKAXE_HEAD, PLANNING_SPRITE, PLAYER_SPRITE, Sprite, SpriteCategory,
+    overlay_sprites,
 )
 from artifactsmmo_cli.tui.path_interpolate import glide_path
 from artifactsmmo_cli.tui.swing_frames import (
@@ -170,7 +171,8 @@ class MapPane(Static):
         elapsed = now - self._anim_start
         mode = current_mode(snap.action_kind, self._planning_active, elapsed, snap.cooldown_remaining)
         idx = swing_frame_index(elapsed, SWING_FRAME_COUNT, SWING_SWEEP_SECONDS)
-        return swing_overlay(mode, idx)
+        # TODO(Task 4): replace PICKAXE_HEAD with select_swing_head(mode, ...)
+        return swing_overlay(mode, idx, PICKAXE_HEAD)
 
     def _glide_center(self, now: float) -> tuple[int, int] | None:
         if not self._anim_frames:

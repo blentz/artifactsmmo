@@ -7,7 +7,7 @@ the tool sprites to paint (pure data from `sprites.py`)."""
 
 from enum import Enum
 
-from artifactsmmo_cli.tui.sprites import FIGHT_HEAD, PICKAXE_HEAD, Sprite, grip_overlay
+from artifactsmmo_cli.tui.sprites import Sprite, grip_overlay
 
 
 class Mode(Enum):
@@ -15,6 +15,7 @@ class Mode(Enum):
     GLIDE = "glide"
     GATHER_SWING = "gather_swing"
     FIGHT_SWING = "fight_swing"
+    CRAFT_SWING = "craft_swing"
     PLANNING = "planning"
 
 
@@ -22,6 +23,7 @@ _KIND_TO_MODE = {
     "move": Mode.GLIDE,
     "gather": Mode.GATHER_SWING,
     "fight": Mode.FIGHT_SWING,
+    "craft": Mode.CRAFT_SWING,
 }
 
 
@@ -64,14 +66,14 @@ _FIGHT_OFFSETS: list[tuple[int, int]] = [(0, -1), (-1, -1), (-1, 0), (-1, 1), (0
 SWING_FRAME_COUNT = 5      # arc frames per sweep (len of the offset lists)
 
 
-def swing_overlay(mode: Mode, frame_index: int) -> dict[tuple[int, int], Sprite]:
-    """Overlay map for a swing frame: the head in the arc-neighbor tile plus a
-    grip in the player tile (0,0). Empty for non-swing modes. The head offset
-    sweeps a half-circle — gather right/CW, fight left/CCW (mirrored)."""
-    if mode is Mode.GATHER_SWING:
-        offsets, head = _GATHER_OFFSETS, PICKAXE_HEAD
-    elif mode is Mode.FIGHT_SWING:
-        offsets, head = _FIGHT_OFFSETS, FIGHT_HEAD
+def swing_overlay(mode: Mode, frame_index: int, head: Sprite) -> dict[tuple[int, int], Sprite]:
+    """Overlay map for a swing frame: the given `head` in the arc-neighbor tile plus
+    a grip in the player tile (0,0). Empty for non-swing modes. Gather and craft sweep
+    the right/CW arc; fight sweeps the left/CCW arc (mirrored)."""
+    if mode is Mode.FIGHT_SWING:
+        offsets = _FIGHT_OFFSETS
+    elif mode in (Mode.GATHER_SWING, Mode.CRAFT_SWING):
+        offsets = _GATHER_OFFSETS
     else:
         return {}
     off = offsets[frame_index % len(offsets)]
