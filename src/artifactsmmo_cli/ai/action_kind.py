@@ -12,8 +12,8 @@ from artifactsmmo_cli.ai.actions.rest import RestAction
 def action_kind_of(action: object) -> tuple[str, str | None]:
     """Return (kind, target) for the TUI animation layer.
 
-    kind ∈ {"move","gather","fight","rest","other"}; target is the gather
-    resource / fight monster / "x,y" destination, or None."""
+    kind ∈ {"move","gather","fight","rest","craft","other"}; target is the gather
+    resource / fight monster / craft item / "x,y" destination, or None."""
     if isinstance(action, MoveAction):
         return "move", f"{action.x},{action.y}"
     if isinstance(action, GatherAction):
