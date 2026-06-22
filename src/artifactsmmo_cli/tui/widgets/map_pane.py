@@ -15,11 +15,12 @@ from artifactsmmo_cli.tui.glyphs import UNMAPPED_COLOR, WALKABLE_COLOR
 from artifactsmmo_cli.tui.half_block import HalfBlockCompositor
 from artifactsmmo_cli.tui.sprite_registry import SpriteRegistry
 from artifactsmmo_cli.tui.sprites import (
-    BLANK_SPRITE, FIGHT_SWING_FRAMES, GATHER_SWING_FRAMES, PLANNING_SPRITE,
-    PLAYER_SPRITE, Sprite, SpriteCategory,
+    BLANK_SPRITE, PLANNING_SPRITE, PLAYER_SPRITE, Sprite, SpriteCategory, overlay_sprites,
 )
 from artifactsmmo_cli.tui.path_interpolate import glide_path
-from artifactsmmo_cli.tui.swing_frames import Mode, current_mode, glide_index, swing_frame_index
+from artifactsmmo_cli.tui.swing_frames import (
+    SWING_FRAME_COUNT, Mode, current_mode, glide_index, swing_frame_index, swing_overlay,
+)
 
 TILE_W = 8   # chars per tile column (8 pixels wide)
 TILE_H = 4   # char-rows per tile (8 pixels tall, 2 px per char-row)
@@ -136,7 +137,9 @@ class MapPane(Static):
         height = self.size.height or FALLBACK_H
         now = time.monotonic()
         center = self._glide_center(now)
-        return self._render_viewport(snap, width, height, center, self._player_sprite(now))
+        return self._render_viewport(
+            snap, width, height, center, self._player_sprite(now), self._swing_overlay(now)
+        )
 
     def on_resize(self, event: Resize) -> None:
         self.refresh()
@@ -156,11 +159,18 @@ class MapPane(Static):
         mode = current_mode(snap.action_kind, self._planning_active, elapsed, snap.cooldown_remaining)
         if mode is Mode.PLANNING:
             return PLANNING_SPRITE
-        if mode is Mode.GATHER_SWING:
-            return GATHER_SWING_FRAMES[swing_frame_index(elapsed, len(GATHER_SWING_FRAMES), SWING_SWEEP_SECONDS)]
-        if mode is Mode.FIGHT_SWING:
-            return FIGHT_SWING_FRAMES[swing_frame_index(elapsed, len(FIGHT_SWING_FRAMES), SWING_SWEEP_SECONDS)]
         return PLAYER_SPRITE
+
+    def _swing_overlay(self, now: float) -> dict[tuple[int, int], Sprite]:
+        """The per-tile tool overlay map for the current swing frame ({} when not
+        gathering/fighting). Head in the arc-neighbor tile + grip in the player tile."""
+        snap = self.snapshot
+        if snap is None:
+            return {}
+        elapsed = now - self._anim_start
+        mode = current_mode(snap.action_kind, self._planning_active, elapsed, snap.cooldown_remaining)
+        idx = swing_frame_index(elapsed, SWING_FRAME_COUNT, SWING_SWEEP_SECONDS)
+        return swing_overlay(mode, idx)
 
     def _glide_center(self, now: float) -> tuple[int, int] | None:
         if not self._anim_frames:
@@ -188,7 +198,9 @@ class MapPane(Static):
         height: int,
         center: tuple[int, int] | None = None,
         player_sprite: Sprite = PLAYER_SPRITE,
+        overlay: dict[tuple[int, int], Sprite] | None = None,
     ) -> Text:
+        overlay = overlay or {}
         tiles_w = width // TILE_W
         tiles_h = (height - 1) // TILE_H
         half_w = tiles_w // 2
@@ -204,6 +216,9 @@ class MapPane(Static):
                 wy = cy + trow - half_h
                 is_player = tcol == half_w and trow == half_h
                 sprite, terrain = self._tile_sprite_and_terrain(wx, wy, is_player, player_sprite)
+                tool = overlay.get((tcol - half_w, trow - half_h))
+                if tool is not None:
+                    sprite = overlay_sprites(sprite, tool)
                 rows4 = self._compositor.compose(sprite, terrain)
                 for i in range(TILE_H):
                     sublines[i].append_text(rows4[i])

@@ -1,10 +1,13 @@
 """Pure animation-mode + frame-index math for the map TUI player sprite.
 
-No Textual, no time, no I/O — just numbers. The MapPane supplies elapsed
-seconds (monotonic since snapshot arrival) and the snapshot's cooldown
-duration; these functions decide the mode and which sprite frame to show."""
+No Textual, no time, no I/O. The mode/index functions are pure numbers; the
+MapPane supplies elapsed seconds (monotonic since snapshot arrival) and the
+snapshot's cooldown duration. `swing_overlay` additionally maps a swing frame to
+the tool sprites to paint (pure data from `sprites.py`)."""
 
 from enum import Enum
+
+from artifactsmmo_cli.tui.sprites import FIGHT_HEAD, GATHER_HEAD, Sprite, grip_overlay
 
 
 class Mode(Enum):
@@ -54,3 +57,22 @@ def glide_index(elapsed: float, duration: float, frame_count: int,
         return frame_count - 1
     progress = min(elapsed / window, 1.0)               # [0,1]
     return min(int(round(progress * (frame_count - 1))), frame_count - 1)
+
+
+_GATHER_OFFSETS: list[tuple[int, int]] = [(0, -1), (1, -1), (1, 0), (1, 1), (0, 1)]
+_FIGHT_OFFSETS: list[tuple[int, int]] = [(0, -1), (-1, -1), (-1, 0), (-1, 1), (0, 1)]
+SWING_FRAME_COUNT = 5      # arc frames per sweep (len of the offset lists)
+
+
+def swing_overlay(mode: Mode, frame_index: int) -> dict[tuple[int, int], Sprite]:
+    """Overlay map for a swing frame: the head in the arc-neighbor tile plus a
+    grip in the player tile (0,0). Empty for non-swing modes. The head offset
+    sweeps a half-circle — gather right/CW, fight left/CCW (mirrored)."""
+    if mode is Mode.GATHER_SWING:
+        offsets, head = _GATHER_OFFSETS, GATHER_HEAD
+    elif mode is Mode.FIGHT_SWING:
+        offsets, head = _FIGHT_OFFSETS, FIGHT_HEAD
+    else:
+        return {}
+    off = offsets[frame_index % len(offsets)]
+    return {(0, 0): grip_overlay(off[0], off[1]), off: head}
