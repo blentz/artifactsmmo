@@ -1986,6 +1986,12 @@ def runCompleteTaskIncome (args : Array Json) : Json :=
   let c := Formal.CompleteTaskIncome.applyComplete (intArg args 0).toNat (intArg args 1).toNat
   Json.mkObj [("coins_after", Json.num (Int.ofNat c))]
 
+-- CurrencyFunding: cycles to fund a currency target. args = [onHand, target, floor]
+def runCurrencyFunding (args : Array Json) : Json :=
+  let c := Formal.Liveness.CurrencyFunding.fundingCycles
+    (intArg args 0).toNat (intArg args 1).toNat (intArg args 2).toNat
+  Json.mkObj [("cycles", Json.num (Int.ofNat c))]
+
 /-- Evaluate the production liveness ladder (`Formal.Liveness.ProductionLadder`)
 on a JSON-supplied `State`: emit `fires k s` for every `k` in
 `allInLadderOrder` plus `productionLadder s` (the SELECTED MeansKind).
@@ -2262,6 +2268,8 @@ def runOne (item : Json) : Json :=
     runLeafAttainable args
   else if kind == "complete_task_income" then
     runCompleteTaskIncome args
+  else if kind == "currency_funding" then
+    runCurrencyFunding args
   else if kind == "ladder_fires" then
     runLadder args
   else
