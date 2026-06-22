@@ -17,8 +17,10 @@ from artifactsmmo_cli.tui.path_interpolate import glide_path
 from artifactsmmo_cli.tui.sprite_registry import SpriteRegistry
 from artifactsmmo_cli.tui.sprites import (
     BLANK_SPRITE,
-    CLOUD_SPRITE,
-    CLOUD_SPRITE_R,
+    CLOUD_LEFT_A,
+    CLOUD_LEFT_B,
+    CLOUD_RIGHT_A,
+    CLOUD_RIGHT_B,
     HAMMER,
     PLANNING_SPRITE,
     PLAYER_SPRITE,
@@ -218,9 +220,11 @@ class MapPane(Static):
     def _planning_overlay(self, now: float) -> dict[tuple[int, int], Sprite]:
         if not self._planning_active:
             return {}
+        # One conjoined cloud across both tiles; only the inner swirl shimmers.
+        # Left/right halves keep their side every frame so the seam never breaks.
         if int(now - self._planning_start) % 2 == 0:
-            return {(1, -1): CLOUD_SPRITE, (2, -1): CLOUD_SPRITE_R}
-        return {(1, -1): CLOUD_SPRITE_R, (2, -1): CLOUD_SPRITE}
+            return {(1, -1): CLOUD_LEFT_A, (2, -1): CLOUD_RIGHT_A}
+        return {(1, -1): CLOUD_LEFT_B, (2, -1): CLOUD_RIGHT_B}
 
     def _active_overlay(self, now: float) -> dict[tuple[int, int], Sprite]:
         if self._planning_active:

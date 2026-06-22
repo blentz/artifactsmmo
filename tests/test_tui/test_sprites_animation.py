@@ -1,5 +1,6 @@
 from artifactsmmo_cli.tui.sprites import (
-    AXE, AXE_HEAD, AXE_NE, CLOUD_SPRITE, CLOUD_SPRITE_R, FIGHT_HEAD, FIGHT_NE, HAMMER,
+    AXE, AXE_HEAD, AXE_NE, CLOUD_LEFT_A, CLOUD_LEFT_B, CLOUD_RIGHT_A, CLOUD_RIGHT_B,
+    FIGHT_HEAD, FIGHT_NE, HAMMER,
     HAMMER_NE, PICKAXE, PICKAXE_NE, SWORD, ToolHeads, oriented_head, rot90cw,
     PICKAXE_HEAD, HAMMER_HEAD, gather_head,
     BLANK_SPRITE, PLANNING_SPRITE, PLAYER_SPRITE,
@@ -107,9 +108,18 @@ def test_ne_heads_and_bundles_valid():
     assert SWORD == ToolHeads(FIGHT_HEAD, FIGHT_NE)
 
 
-def test_cloud_sprites_valid_with_shadow():
-    validate_sprite("cloud", CLOUD_SPRITE)
-    assert CLOUD_SPRITE_R.rows == rot90cw(CLOUD_SPRITE).rows
-    dark = sum(ch == "d" for row in CLOUD_SPRITE.rows for ch in row)
-    light = sum(ch == "l" for row in CLOUD_SPRITE.rows for ch in row)
-    assert dark >= 6 and light >= dark            # bumpy body + doubled shadow
+def test_cloud_halves_valid_and_conjoined():
+    halves = (CLOUD_LEFT_A, CLOUD_RIGHT_A, CLOUD_LEFT_B, CLOUD_RIGHT_B)
+    for i, sprite in enumerate(halves):
+        validate_sprite(f"cloud{i}", sprite)
+    # The seam conjoins: across the body rows the left half fills its right edge
+    # (col 7) and the right half its left edge (col 0) -- no gap between tiles.
+    for left, right in ((CLOUD_LEFT_A, CLOUD_RIGHT_A), (CLOUD_LEFT_B, CLOUD_RIGHT_B)):
+        for y in range(1, 7):
+            assert left.rows[y][7] != "." and right.rows[y][0] != "."
+    # Each frame carries a doubled dark swirl inside a larger light body.
+    for left, right in ((CLOUD_LEFT_A, CLOUD_RIGHT_A), (CLOUD_LEFT_B, CLOUD_RIGHT_B)):
+        cells = [ch for s in (left, right) for row in s.rows for ch in row]
+        dark = sum(ch == "d" for ch in cells)
+        light = sum(ch == "l" for ch in cells)
+        assert dark >= 6 and light >= dark

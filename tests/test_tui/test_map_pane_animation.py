@@ -2,7 +2,7 @@
 from artifactsmmo_cli.tui.widgets.map_pane import MapPane, select_swing_head
 from artifactsmmo_cli.tui.sprites import (
     PLAYER_SPRITE, PLANNING_SPRITE, AXE, PICKAXE, HAMMER, SWORD, oriented_head,
-    CLOUD_SPRITE, CLOUD_SPRITE_R,
+    CLOUD_LEFT_A, CLOUD_LEFT_B, CLOUD_RIGHT_A, CLOUD_RIGHT_B,
 )
 from artifactsmmo_cli.tui.swing_frames import Mode
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
@@ -177,17 +177,19 @@ def test_render_viewport_overlay_changes_neighbor_tile():
     assert plain.markup != swung.markup
 
 
-def test_planning_overlay_two_tiles_swap_each_second():
+def test_planning_overlay_one_cloud_shimmer_each_second():
     p = _pane()
     p.snapshot = _snap(action_kind="gather", cooldown_remaining=5.0)
     p._planning_active = True
     p._planning_start = 0.0
-    f0 = p._planning_overlay(now=0.5)                 # second 0
-    assert f0 == {(1, -1): CLOUD_SPRITE, (2, -1): CLOUD_SPRITE_R}
-    f1 = p._planning_overlay(now=1.5)                 # second 1 -> swapped
-    assert f1 == {(1, -1): CLOUD_SPRITE_R, (2, -1): CLOUD_SPRITE}
-    f2 = p._planning_overlay(now=2.5)                 # second 2 -> back
+    f0 = p._planning_overlay(now=0.5)                 # second 0 -> frame A
+    assert f0 == {(1, -1): CLOUD_LEFT_A, (2, -1): CLOUD_RIGHT_A}
+    f1 = p._planning_overlay(now=1.5)                 # second 1 -> frame B
+    assert f1 == {(1, -1): CLOUD_LEFT_B, (2, -1): CLOUD_RIGHT_B}
+    f2 = p._planning_overlay(now=2.5)                 # second 2 -> back to A
     assert f2 == f0
+    # The left tile always holds a left half and the right tile a right half:
+    # the seam never swaps, so the two tiles always read as one cloud.
 
 
 def test_planning_overlay_empty_when_not_planning():

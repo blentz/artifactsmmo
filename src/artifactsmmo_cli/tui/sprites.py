@@ -251,14 +251,33 @@ def gather_head(skill: str | None) -> ToolHeads:
     return PICKAXE
 
 
-# Thought cloud: light-grey bubbly rounded rectangle with doubled dark-grey shading.
-# The second cloud tile is this rotated 90° (asymmetric -> irregular).
-CLOUD_SPRITE: Sprite = Sprite(
-    rows=("..llll..", ".llllll.", "llldllll", "lldddlll", "llldddll", ".lddll..",
-          "..llll..", "........"),
-    palette={"l": STONE, "d": SLATE},
+# Thought cloud: ONE light-grey bubbly blob spanning two adjacent tiles. The
+# left/right halves are authored as fixed seam-mates -- the left half fills its
+# right edge (col 7) and the right half its left edge (col 0) so the body rows
+# conjoin into a single cloud (never swapped). The "thinking" shimmer toggles
+# only the dark-grey swirl inside; the outline + seam stay constant. Frame A's
+# swirl sits slightly left, frame B's slightly right.
+_CLOUD_PALETTE: dict[str, str] = {"l": STONE, "d": SLATE}
+CLOUD_LEFT_A: Sprite = Sprite(
+    rows=("...llll.", "..llllll", ".llllldd", "lllllddd", "lllllddd", ".llllldd",
+          "..llllll", "....ll.."),
+    palette=_CLOUD_PALETTE,
 )
-CLOUD_SPRITE_R: Sprite = rot90cw(CLOUD_SPRITE)
+CLOUD_RIGHT_A: Sprite = Sprite(
+    rows=(".llll...", "llllll..", "lllllll.", "dlllllll", "dlllllll", "lllllll.",
+          "llllll..", "..ll...."),
+    palette=_CLOUD_PALETTE,
+)
+CLOUD_LEFT_B: Sprite = Sprite(
+    rows=("...llll.", "..llllll", ".lllllll", "llllllld", "llllllld", ".lllllll",
+          "..llllll", "....ll.."),
+    palette=_CLOUD_PALETTE,
+)
+CLOUD_RIGHT_B: Sprite = Sprite(
+    rows=(".llll...", "llllll..", "ddlllll.", "dddlllll", "dddlllll", "ddlllll.",
+          "llllll..", "..ll...."),
+    palette=_CLOUD_PALETTE,
+)
 
 
 # Thought bubble at 2 o'clock from the head (upper-right transparent cells).
