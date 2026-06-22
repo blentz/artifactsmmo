@@ -16,6 +16,7 @@ from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
 from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
 from artifactsmmo_cli.ai.goals.craft_relief import CraftReliefGoal
+from artifactsmmo_cli.ai.goals.currency_demand import first_unaffordable_currency_leaf
 from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
 from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
@@ -25,6 +26,7 @@ from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
 from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.pursue_task import PursueTaskGoal
+from artifactsmmo_cli.ai.goals.reach_currency import ReachCurrencyGoal
 from artifactsmmo_cli.ai.goals.maintain_consumables import MaintainConsumablesGoal
 from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
@@ -510,6 +512,20 @@ def objective_step_goal(
     if step is None:
         return None
     if isinstance(step, ObtainItem):
+        # DEMAND ROUTING (C4 Task 6): if obtaining this item is BLOCKED on an
+        # unaffordable currency-buy leaf in its recipe closure (e.g. satchel <-
+        # jasper_crystal @ tasks_trader for 8 tasks_coin, with 0 tasks_coin), the
+        # GatherMaterials/UpgradeEquipment goal built below is unplannable
+        # (GatherMaterialsGoal.is_plannable fast-fails — currency_afford_plannable_pure).
+        # Route to ReachCurrencyGoal to FUND the currency instead, so the arbiter
+        # has a plannable funding goal to select. Once funded the leaf becomes
+        # affordable and the next pass builds the craft path (buy + craft). Shares
+        # the ONE closure+predicate with is_plannable (first_unaffordable_currency_leaf).
+        leaf = first_unaffordable_currency_leaf(
+            {step.code: step.quantity}, state, game_data)
+        if leaf is not None:
+            currency, amount = leaf
+            return ReachCurrencyGoal(currency=currency, target=amount)
         stats = game_data.item_stats(step.code)
         slots = ITEM_TYPE_TO_SLOTS.get(stats.type_) if stats is not None else None
         if slots:

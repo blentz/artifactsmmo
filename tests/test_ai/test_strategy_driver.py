@@ -27,6 +27,7 @@ from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
 from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.pursue_task import PursueTaskGoal  # noqa: F401 (used in repr checks)
+from artifactsmmo_cli.ai.goals.reach_currency import ReachCurrencyGoal
 from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
 from artifactsmmo_cli.ai.goals.recycle_surplus import RecycleSurplusGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
@@ -436,6 +437,52 @@ def test_gather_helper_falls_back_to_direct_recipe_without_deeper_step():
     assert isinstance(goal, GatherMaterialsGoal)
     # Empty recipe -> needed is the (empty) direct recipe fallback.
     assert goal._target_item == "plank"
+
+
+# ---------------------------------------------------------------------------
+# C4 Task 6: DEMAND ROUTING — route to ReachCurrencyGoal when the ObtainItem
+# objective is blocked on an unaffordable currency-buy leaf (satchel <-
+# jasper_crystal @ tasks_trader for 8 tasks_coin).
+# ---------------------------------------------------------------------------
+
+def _satchel_currency_gd():
+    """satchel is a craftable bag whose only recipe input is jasper_crystal, a
+    currency-buy leaf (non-craftable, not gathered, no monster drop, sold by
+    tasks_trader for 8 tasks_coin). Skill gate OPEN (gearcrafting >= 1)."""
+    gd = GameData()
+    gd._crafting_recipes = {"satchel": {"jasper_crystal": 1}}
+    gd._item_stats = {
+        "satchel": ItemStats(code="satchel", level=1, type_="bag",
+                             crafting_skill="gearcrafting", crafting_level=1),
+    }
+    gd._npc_stock = {"tasks_trader": {"jasper_crystal": 8}}
+    gd._npc_buy_currency = {"tasks_trader": {"jasper_crystal": "tasks_coin"}}
+    gd._npc_locations = {"tasks_trader": (4, 1)}
+    return gd
+
+
+def test_objective_step_routes_to_reach_currency_when_leaf_unaffordable():
+    """0 tasks_coin: GatherMaterials(satchel) is unplannable (jasper unaffordable),
+    so the arbiter mapping returns ReachCurrencyGoal(tasks_coin, 8) to FUND the
+    coin instead — a plannable funding goal the arbiter can select."""
+    gd = _satchel_currency_gd()
+    state = make_state(skills={"gearcrafting": 5}, inventory={}, bank_items={}, x=0, y=0)
+    goal = objective_step_goal(ObtainItem("satchel", 1), state, gd, _ctx())
+    assert isinstance(goal, ReachCurrencyGoal)
+    assert goal._currency == "tasks_coin"
+    assert goal._target == 8
+
+
+def test_objective_step_gathers_satchel_when_currency_funded():
+    """tasks_coin >= 8: jasper is affordable, so the mapping returns the craft
+    path (a GatherMaterials/UpgradeEquipment goal targeting satchel), NOT a
+    funding goal."""
+    gd = _satchel_currency_gd()
+    state = make_state(skills={"gearcrafting": 5}, inventory={"tasks_coin": 8},
+                       bank_items={}, x=0, y=0)
+    goal = objective_step_goal(ObtainItem("satchel", 1), state, gd, _ctx())
+    assert not isinstance(goal, ReachCurrencyGoal)
+    assert goal is not None
 
 
 def test_map_guard_gear_review_upgrades_when_materials_in_hand():

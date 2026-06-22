@@ -12,7 +12,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.buy_source_venue import BuyVenue, choose_buy_venue
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.craft_vs_buy import Method, acquisition_method
-from artifactsmmo_cli.ai.goals.currency_afford_core import currency_afford_plannable_pure
+from artifactsmmo_cli.ai.goals.currency_demand import first_unaffordable_currency_leaf
 from artifactsmmo_cli.ai.goals.gather_plannable_core import gather_plannable_pure
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor
 from artifactsmmo_cli.ai.game_data import GameData
@@ -401,30 +401,7 @@ class GatherMaterialsGoal(Goal):
         the cheapest-first ordering from npc_purchases and accepts the first
         affordable vendor. If no vendor is affordable, the leaf prunes the goal.
         """
-        bank = state.bank_items or {}
-        chain: dict[str, int] = {}
-        for code, qty in self._needed.items():
-            closure_demand(code, qty, game_data, chain, frozenset())
-        for leaf, qty in chain.items():
-            if leaf in self._needed:
-                continue
-            if game_data.crafting_recipe(leaf) is not None:
-                continue
-            if leaf in game_data.resource_drops.values():
-                continue
-            if game_data.monsters_dropping(leaf):
-                continue
-            purchases = game_data.npc_purchases(leaf)
-            if not purchases:
-                continue
-            owned = state.inventory.get(leaf, 0) + bank.get(leaf, 0)
-            affordable = any(
-                (state.inventory.get(currency, 0) + bank.get(currency, 0)) >= price * qty
-                for _npc, price, currency in purchases
-            )
-            if not currency_afford_plannable_pure(True, affordable, owned, qty):
-                return False
-        return True
+        return first_unaffordable_currency_leaf(self._needed, state, game_data) is None
 
     def is_plannable(self, state: WorldState, game_data: GameData,
                      history: LearningStore | None = None) -> bool:
