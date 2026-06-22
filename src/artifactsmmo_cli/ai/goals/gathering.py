@@ -270,6 +270,26 @@ class GatherMaterialsGoal(Goal):
             if chosen is not None and chosen in winner_fights:
                 result.append(winner_fights[chosen])
 
+        # C4 Task 1: emit NpcBuy for deep recipe-closure leaves that are
+        # currency-bought. A top-level needed item is handled below; a TRANSITIVE
+        # ingredient (e.g. jasper_crystal in satchel's recipe) is only in `chain`,
+        # not in self._needed. Without this, the planner never sees a way to
+        # acquire the leaf and the target is unreachable.
+        # Conditions: leaf is non-craftable, not a resource drop, not a monster
+        # drop, has a permanent vendor (exclude event NPCs + unlocated).
+        for item, qty in chain.items():
+            if item in self._needed:
+                continue  # top-level items handled by the existing loop below
+            if (game_data.crafting_recipe(item) is None
+                    and item not in game_data.resource_drops.values()
+                    and not game_data.monsters_dropping(item)):
+                for npc_code, _price, _currency in game_data.npc_purchases(item):
+                    if game_data.is_event_npc(npc_code) or game_data.npc_location(npc_code) is None:
+                        continue
+                    result.append(NpcBuyAction(npc_code=npc_code, item_code=item,
+                                               npc_location=game_data.npc_location(npc_code),
+                                               quantity=qty))
+
         # Craft-vs-buy: offer an NpcBuy alternative for a needed item that is
         # NPC-sold, affordable above the progression reserve floor, and strictly cheaper to buy than
         # craft (proved in formal/Formal/CraftVsBuy.lean). The least-cost planner

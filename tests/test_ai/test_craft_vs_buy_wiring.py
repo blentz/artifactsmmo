@@ -215,3 +215,34 @@ def test_buy_cooldowns_unknown_location() -> None:
     # Unknown location: returns `needed` (1)
     assert _buy_cooldowns(None, state, 1) == 1
     assert _buy_cooldowns(None, state, 3) == 3
+
+
+def test_relevant_actions_emits_npcbuy_for_deep_closure_currency_buy_leaf() -> None:
+    """C4 Task 1: a deep recipe-closure leaf that is currency-bought (not
+    craftable, not a resource/monster drop) must surface an NpcBuyAction even
+    though it is NOT in self._needed (i.e. it's a transitive ingredient).
+
+    Scenario: satchel is the target (needed={satchel:1}). satchel's recipe
+    requires jasper_crystal x1. jasper_crystal is non-craftable, not a
+    resource drop, not a monster drop, and sold by tasks_trader for
+    tasks_coin (a non-gold currency). The planner must be offered
+    NpcBuyAction(item_code='jasper_crystal', npc_code='tasks_trader', ...) so
+    it can chain currency-farming → buy.
+    """
+    gd = GameData()
+    # satchel is craftable (recipe: jasper_crystal x1)
+    gd._crafting_recipes = {"satchel": {"jasper_crystal": 1}}
+    # jasper_crystal: non-craftable, not gathered, not dropped
+    # tasks_trader sells it for 8 tasks_coin each (permanent vendor)
+    gd._npc_stock = {"tasks_trader": {"jasper_crystal": 8}}
+    gd._npc_buy_currency = {"tasks_trader": {"jasper_crystal": "tasks_coin"}}
+    gd._npc_locations = {"tasks_trader": (4, 1)}
+    state = make_state(level=10, gold=0, inventory={}, x=0, y=0)
+    goal = GatherMaterialsGoal(target_item="satchel", needed={"satchel": 1})
+    relevant = goal.relevant_actions([], state, gd)
+    buy_actions = [a for a in relevant
+                   if isinstance(a, NpcBuyAction) and a.item_code == "jasper_crystal"]
+    assert buy_actions, (
+        "NpcBuyAction for deep closure currency-buy leaf 'jasper_crystal' must be emitted "
+        "even though it is not in self._needed (only satchel is)"
+    )
