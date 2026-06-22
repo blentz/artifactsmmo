@@ -253,4 +253,4 @@ class TestGlideAnimation:
         async with _Host().run_test(size=(90, 45)):
             pane.update_snapshot(_snap(4, 0))   # mounted -> real timer created
             assert pane._anim_timer is not None
-        assert pane._anim_timer is None         # on_unmount -> _stop_anim
+        assert pane._anim_timer is None         # on_unmount stops the timer

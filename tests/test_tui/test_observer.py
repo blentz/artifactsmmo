@@ -7,9 +7,8 @@ from artifactsmmo_cli.tui.observer import ThreadSafeBridge
 
 
 class _StubApp:
-    def __init__(self):
-        self.planning_calls = []
-    # no call_from_thread -> bridge invokes handler directly
+    # no call_from_thread attribute -> bridge invokes the handler directly
+    pass
 
 
 def test_notify_planning_forwards_to_handler():
