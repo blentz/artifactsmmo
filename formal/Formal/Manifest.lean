@@ -22,6 +22,7 @@ import Formal.RecycleProtection
 import Formal.BankExpansionTiming
 import Formal.DoomedMemo
 import Formal.SkillGateFastFail
+import Formal.LeafAttainable
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
@@ -1092,6 +1093,12 @@ open Formal.PriorityBand
 #check @Formal.SkillGateFastFail.applyStep_gate_closed  -- gate closed ⇒ step is a no-op on owned
 #check @Formal.SkillGateFastFail.runPlan_gate_closed    -- gate closed ⇒ owned invariant ∀ plan
 #check @Formal.SkillGateFastFail.fastfail_sound         -- fast-fail fires ⇒ ∀ plan owned < needed
+
+-- LeafAttainable required roles (acquisition-leaf attainability;
+-- src/artifactsmmo_cli/ai/tiers/leaf_attainable_core.py + tiers/objective.py is_attainable):
+#check @Formal.LeafAttainable.leafAttainable_iff_or          -- validity: decision = disjunction
+#check @Formal.LeafAttainable.leafAttainable_task_earnable   -- task source alone ⇒ attainable
+#check @Formal.LeafAttainable.leafAttainable_monotone_task   -- monotone in the task source
 
 -- ServableFilter required roles (decide() servable filter;
 -- src/artifactsmmo_cli/ai/tiers/servable_filter.py::keep_servable):

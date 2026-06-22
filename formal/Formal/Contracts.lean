@@ -12,6 +12,7 @@ import Formal.SkillGrindSelection
 import Formal.SkillStepDispatch
 import Formal.DoomedMemo
 import Formal.SkillGateFastFail
+import Formal.LeafAttainable
 import Formal.GrindLadder
 import Formal.MonsterDropApply
 import Formal.SkillXpCurve
@@ -2826,6 +2827,16 @@ example : ∀ (targetInNeeded hasGate : Bool) (curLevel craftLevel owned needed 
     Formal.SkillGateFastFail.isPlannable targetInNeeded hasGate curLevel craftLevel owned needed = false →
     ∀ plan, Formal.SkillGateFastFail.runPlan (decide (craftLevel ≤ curLevel)) owned plan < needed :=
   @Formal.SkillGateFastFail.fastfail_sound
+
+-- ─── LeafAttainable (acquisition-leaf attainability) anti-weakening pins ───
+-- VALIDITY: the decision is EXACTLY the 4-way source disjunction (weakening any
+-- term — e.g. dropping taskEarnable — fails to elaborate against this rfl).
+example : ∀ (g d t b : Bool),
+    Formal.LeafAttainable.leafAttainable g d t b = (g || d || t || b) :=
+  @Formal.LeafAttainable.leafAttainable_iff_or
+-- TASK SOURCE: earned-by-task ⇒ attainable regardless of other sources.
+example : ∀ (g d b : Bool), Formal.LeafAttainable.leafAttainable g d true b = true :=
+  @Formal.LeafAttainable.leafAttainable_task_earnable
 
 -- ─── ServableFilter (decide() servable filter) anti-weakening pins ───
 -- ANY servable ⇒ the result is exactly the servable subset (unservable roots dropped).

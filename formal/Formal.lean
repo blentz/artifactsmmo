@@ -201,3 +201,4 @@ import Formal.Liveness.WinnableGrounded
 import Formal.DoomedMemo
 import Formal.SkillGateFastFail
 import Formal.PlanModel
+import Formal.LeafAttainable
