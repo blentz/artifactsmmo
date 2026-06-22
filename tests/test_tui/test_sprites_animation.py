@@ -48,10 +48,10 @@ def test_sword_tip_is_light_grey_blade_medium():
 
 
 def test_gather_head_selects_by_skill():
-    assert gather_head("woodcutting") is AXE_HEAD
-    assert gather_head("mining") is PICKAXE_HEAD
-    assert gather_head("fishing") is PICKAXE_HEAD          # fallback
-    assert gather_head(None) is PICKAXE_HEAD               # fallback
+    assert gather_head("woodcutting") is AXE
+    assert gather_head("mining") is PICKAXE
+    assert gather_head("fishing") is PICKAXE               # fallback
+    assert gather_head(None) is PICKAXE                    # fallback
 
 
 def test_grip_haft_is_two_pixels():

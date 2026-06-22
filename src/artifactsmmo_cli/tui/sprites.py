@@ -169,14 +169,6 @@ FIGHT_HEAD: Sprite = Sprite(
 )
 
 
-def gather_head(skill: str | None) -> Sprite:
-    """The gather tool head for a gathered resource's skill: woodcutting -> axe,
-    mining -> pickaxe; everything else (fishing/alchemy/unknown) -> pickaxe."""
-    if skill == "woodcutting":
-        return AXE_HEAD
-    return PICKAXE_HEAD
-
-
 def grip_overlay(dcol: int, drow: int) -> Sprite:
     """A mostly-transparent 8x8 with a 2-pixel handle ('h'=BARK) stepping from the
     player's hand (4,4) toward the head direction. The player-tile overlay so the
@@ -250,6 +242,14 @@ AXE: ToolHeads = ToolHeads(AXE_HEAD, AXE_NE)
 PICKAXE: ToolHeads = ToolHeads(PICKAXE_HEAD, PICKAXE_NE)
 HAMMER: ToolHeads = ToolHeads(HAMMER_HEAD, HAMMER_NE)
 SWORD: ToolHeads = ToolHeads(FIGHT_HEAD, FIGHT_NE)
+
+
+def gather_head(skill: str | None) -> ToolHeads:
+    """The gather tool for a resource's skill: woodcutting -> axe, else -> pickaxe."""
+    if skill == "woodcutting":
+        return AXE
+    return PICKAXE
+
 
 # Thought cloud: light-grey bubbly rounded rectangle with doubled dark-grey shading.
 # The second cloud tile is this rotated 90° (asymmetric -> irregular).

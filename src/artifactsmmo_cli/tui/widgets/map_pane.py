@@ -17,12 +17,13 @@ from artifactsmmo_cli.tui.path_interpolate import glide_path
 from artifactsmmo_cli.tui.sprite_registry import SpriteRegistry
 from artifactsmmo_cli.tui.sprites import (
     BLANK_SPRITE,
-    FIGHT_HEAD,
-    HAMMER_HEAD,
+    HAMMER,
     PLANNING_SPRITE,
     PLAYER_SPRITE,
+    SWORD,
     Sprite,
     SpriteCategory,
+    ToolHeads,
     gather_head,
     overlay_sprites,
 )
@@ -52,22 +53,20 @@ _SKILL_TO_RESOURCE_KEY = {
 TileContent = tuple[SpriteCategory, str]
 
 
-def _is_bar(code: str | None, game_data: GameData) -> bool:
-    """True when `code` names a craftable bar (all in-game bars end '_bar')."""
-    return code is not None and code.endswith("_bar") and game_data.item_stats(code) is not None
-
-
-def select_swing_head(mode: Mode, action_target: str | None, game_data: GameData) -> Sprite | None:
-    """The tool head for a swing mode + target, or None when no tool should show:
-    gather -> axe/pickaxe by the resource's skill; fight -> sword; craft -> hammer
-    only for a bar; anything else -> None."""
+def select_swing_head(mode: Mode, action_target: str | None, game_data: GameData) -> ToolHeads | None:
+    """The tool bundle for a swing mode + target, or None when no tool shows:
+    gather -> axe/pickaxe by the resource's skill; fight -> sword; craft -> sword for
+    cooking else hammer (unknown item -> None)."""
     if mode is Mode.GATHER_SWING:
         skill_req = game_data.resource_skill_level(action_target) if action_target else None
         return gather_head(skill_req[0] if skill_req is not None else None)
     if mode is Mode.FIGHT_SWING:
-        return FIGHT_HEAD
-    if mode is Mode.CRAFT_SWING and _is_bar(action_target, game_data):
-        return HAMMER_HEAD
+        return SWORD
+    if mode is Mode.CRAFT_SWING:
+        stats = game_data.item_stats(action_target) if action_target else None
+        if stats is None:
+            return None
+        return SWORD if stats.crafting_skill == "cooking" else HAMMER
     return None
 
 
