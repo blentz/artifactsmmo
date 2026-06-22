@@ -34,6 +34,7 @@ from artifactsmmo_cli.ai.tiers.strategy import (
     STICKY_DOMINANCE_RATIO,
     XP_RATE_REFERENCE,
     StrategyEngine,
+    _producible,
     actionable_step,
     desired_state_of,
     is_reachable,
@@ -1091,3 +1092,13 @@ def test_equip_gain_zero_when_item_stats_unknown():
     eng = StrategyEngine(CharacterObjective.from_game_data(gd), BalancedPersonality())
     state = make_state(level=5)
     assert eng._equip_gain(ObtainItem("mystery_item", 1), state, gd) == 0
+
+
+# --- C1: task-currency producibility ---
+
+def test_producible_recognizes_task_earnable_currency():
+    """tasks_coin is listed in task_reward_item_codes → _producible must
+    return True without needing a recipe, resource-drop, or winnable fight."""
+    gd = GameData()
+    gd._task_reward_item_codes = frozenset({"tasks_coin"})
+    assert _producible("tasks_coin", make_state(), gd) is True

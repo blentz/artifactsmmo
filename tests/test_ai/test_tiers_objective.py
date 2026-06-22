@@ -555,3 +555,31 @@ def test_near_term_gear_duplicate_fills_empty_second_ring():
     state = make_state(level=5, equipment={"ring1_slot": "copper_ring"})
     nt = obj.near_term_gear(state)
     assert nt.get("ring2_slot") == "copper_ring"  # empty 2nd ring slot still targeted
+
+
+# --- C1: task-currency leaf ---
+
+def _gd_task_currency() -> GameData:
+    """satchel craftable from jasper_crystal, which is bought from a permanent
+    tasks_trader NPC using tasks_coin (a task-earnable currency)."""
+    gd = GameData()
+    gd._task_reward_item_codes = frozenset({"tasks_coin"})
+    gd._crafting_recipes = {"satchel": {"jasper_crystal": 1}}
+    gd._npc_stock = {"tasks_trader": {"jasper_crystal": 8}}
+    gd._npc_buy_currency = {"tasks_trader": {"jasper_crystal": "tasks_coin"}}
+    gd._npc_locations = {"tasks_trader": (1, 2)}
+    return gd
+
+
+def test_is_attainable_task_earnable_leaf():
+    """tasks_coin is a task-earnable leaf — is_attainable must accept it
+    so jasper_crystal (bought with it) becomes attainable."""
+    gd = _gd_task_currency()
+    assert is_attainable("jasper_crystal", gd) is True
+
+
+def test_is_attainable_satchel_via_task_currency_chain():
+    """satchel crafts from jasper_crystal which needs tasks_coin (task-earnable)
+    — the full chain must resolve as attainable."""
+    gd = _gd_task_currency()
+    assert is_attainable("satchel", gd) is True

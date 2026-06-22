@@ -111,7 +111,9 @@ def is_attainable(code: str, game_data: GameData) -> bool:
     the closure path — e.g. a rune bought with sandwhisper_coin which is itself
     earned/dropped)."""
     def leaf_ok(leaf: str, path: frozenset[str]) -> bool:
-        if _gatherable(leaf, game_data) or _drops_from_spawning_monster(leaf, game_data):
+        if (_gatherable(leaf, game_data)
+                or _drops_from_spawning_monster(leaf, game_data)
+                or game_data.is_task_earnable(leaf)):
             return True
         if leaf in path:
             return False
