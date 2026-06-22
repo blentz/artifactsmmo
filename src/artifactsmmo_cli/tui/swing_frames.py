@@ -2,8 +2,8 @@
 
 No Textual, no time, no I/O. The mode/index functions are pure numbers; the
 MapPane supplies elapsed seconds (monotonic since snapshot arrival) and the
-snapshot's cooldown duration. `swing_overlay` additionally maps a swing frame to
-the tool sprites to paint (pure data from `sprites.py`)."""
+snapshot's cooldown duration. `swing_overlay` additionally places the supplied head
+sprite for a swing frame (the caller selects which tool)."""
 
 from enum import Enum
 
