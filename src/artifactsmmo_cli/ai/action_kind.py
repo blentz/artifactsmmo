@@ -3,6 +3,7 @@
 One source of truth so the renderer never string-parses repr(action)."""
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
@@ -21,4 +22,6 @@ def action_kind_of(action: object) -> tuple[str, str | None]:
         return "fight", action.monster_code
     if isinstance(action, RestAction):
         return "rest", None
+    if isinstance(action, CraftAction):
+        return "craft", action.code
     return "other", None
