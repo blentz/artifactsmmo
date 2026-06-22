@@ -300,6 +300,19 @@ class TestWatchAppModals:
             assert not isinstance(app.screen, PlanScreen)
 
 
+class TestWatchAppSetPlanning:
+    @pytest.mark.asyncio
+    async def test_set_planning_delegates_to_map_pane(self):
+        """WatchApp.set_planning forwards the active flag to MapPane.set_planning."""
+        app = _make_app()
+        async with app.run_test(size=(120, 50)):
+            map_pane = app.query_one("#map", MapPane)
+            app.set_planning(True)
+            assert map_pane._planning_active is True
+            app.set_planning(False)
+            assert map_pane._planning_active is False
+
+
 class TestThreeByThreeLayout:
     async def test_map_spans_wide_right_block_and_log_is_full_width(self):
         app = WatchApp("hero", GameData())
