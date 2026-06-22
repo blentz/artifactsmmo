@@ -51,7 +51,7 @@ def test_glide_zero_duration_window_returns_last_frame():
 
 
 from artifactsmmo_cli.tui.swing_frames import swing_overlay
-from artifactsmmo_cli.tui.sprites import GATHER_HEAD, FIGHT_HEAD
+from artifactsmmo_cli.tui.sprites import PICKAXE_HEAD, FIGHT_HEAD
 
 
 def test_non_swing_modes_have_no_overlay():
@@ -61,7 +61,7 @@ def test_non_swing_modes_have_no_overlay():
 
 def test_gather_overlay_head_on_right_with_grip():
     ov = swing_overlay(Mode.GATHER_SWING, 2)   # frame 2 -> (1,0) right
-    assert ov[(1, 0)] is GATHER_HEAD
+    assert ov[(1, 0)] is PICKAXE_HEAD
     assert (0, 0) in ov                          # grip in the player tile
     assert all(dc >= 0 for (dc, _dr) in ov)      # nothing on the left
 

@@ -1,7 +1,7 @@
 # tests/test_tui/test_map_pane_animation.py
 from artifactsmmo_cli.tui.widgets.map_pane import MapPane
 from artifactsmmo_cli.tui.sprites import (
-    PLAYER_SPRITE, PLANNING_SPRITE, GATHER_HEAD, FIGHT_HEAD,
+    PLAYER_SPRITE, PLANNING_SPRITE, PICKAXE_HEAD, FIGHT_HEAD,
 )
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
@@ -41,7 +41,7 @@ def test_gather_swing_overlay_has_head_on_right():
     p._anim_start = 0.0
     assert p._player_sprite(now=0.35) is PLAYER_SPRITE
     ov = p._swing_overlay(now=0.35)   # frame 2 of a 0.8s sweep -> (1,0)
-    assert ov[(1, 0)] is GATHER_HEAD
+    assert ov[(1, 0)] is PICKAXE_HEAD
     assert (0, 0) in ov
 
 
@@ -131,6 +131,6 @@ def test_render_viewport_overlay_changes_neighbor_tile():
     snap = _snap(action_kind="gather", x=0, y=0, cooldown_remaining=5.0)
     p.snapshot = snap
     plain = p._render_viewport(snap, 80, 41, None, PLAYER_SPRITE, {})
-    swung = p._render_viewport(snap, 80, 41, None, PLAYER_SPRITE, {(1, 0): GATHER_HEAD})
+    swung = p._render_viewport(snap, 80, 41, None, PLAYER_SPRITE, {(1, 0): PICKAXE_HEAD})
     # styled markup differs (the COPPER head pixels land in the right-neighbor tile)
     assert plain.markup != swung.markup

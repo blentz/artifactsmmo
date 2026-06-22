@@ -7,7 +7,7 @@ the tool sprites to paint (pure data from `sprites.py`)."""
 
 from enum import Enum
 
-from artifactsmmo_cli.tui.sprites import FIGHT_HEAD, GATHER_HEAD, Sprite, grip_overlay
+from artifactsmmo_cli.tui.sprites import FIGHT_HEAD, PICKAXE_HEAD, Sprite, grip_overlay
 
 
 class Mode(Enum):
@@ -69,7 +69,7 @@ def swing_overlay(mode: Mode, frame_index: int) -> dict[tuple[int, int], Sprite]
     grip in the player tile (0,0). Empty for non-swing modes. The head offset
     sweeps a half-circle — gather right/CW, fight left/CCW (mirrored)."""
     if mode is Mode.GATHER_SWING:
-        offsets, head = _GATHER_OFFSETS, GATHER_HEAD
+        offsets, head = _GATHER_OFFSETS, PICKAXE_HEAD
     elif mode is Mode.FIGHT_SWING:
         offsets, head = _FIGHT_OFFSETS, FIGHT_HEAD
     else:

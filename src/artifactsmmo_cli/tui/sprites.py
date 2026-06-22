@@ -92,34 +92,69 @@ def _player_with_tool(positions: tuple[tuple[int, int], ...], key: str, color: s
     return Sprite(rows=tuple(rows), palette=palette)
 
 
-# Tool heads (drawn in the arc-neighbor tile, one full 8x8 weapon each). The swing
-# sweeps the head through the neighbor tiles; the player tile carries a grip.
-GATHER_HEAD: Sprite = Sprite(
+# Tool heads (drawn in the arc-neighbor tile, one 8x8 weapon each). 1px haft at
+# col 3, head at top, reused at all arc offsets. m=STEEL (medium grey),
+# l=STONE (light grey), h=BARK (handle).
+AXE_HEAD: Sprite = Sprite(
     rows=(
         "........",
-        "...cc...",
-        "..cccc..",
-        ".cccccc.",
-        "..cccc..",
-        "...cc...",
-        "...hh...",
-        "...hh...",
+        "........",
+        ".mmmmmml",   # head offset on the haft (2px left, 3px right), blade on col 7
+        ".mmmmmml",
+        ".mmmmmml",
+        "...h....",
+        "...h....",
+        "........",
     ),
-    palette={"c": COPPER, "h": BARK},
+    palette={"m": STEEL, "l": STONE, "h": BARK},
+)
+PICKAXE_HEAD: Sprite = Sprite(
+    rows=(
+        "........",
+        "........",
+        ".lmmml..",   # head centred on haft (cols 2-4); light-grey triangles each side
+        "llmmmll.",
+        ".lmmml..",
+        "...h....",
+        "...h....",
+        "........",
+    ),
+    palette={"m": STEEL, "l": STONE, "h": BARK},
+)
+HAMMER_HEAD: Sprite = Sprite(
+    rows=(
+        "........",
+        "........",
+        "..mmm...",   # pickaxe minus light-grey: solid block on the haft
+        "..mmm...",
+        "..mmm...",
+        "...h....",
+        "...h....",
+        "........",
+    ),
+    palette={"m": STEEL, "h": BARK},
 )
 FIGHT_HEAD: Sprite = Sprite(
     rows=(
-        "...ss...",
-        "...ss...",
-        "...ss...",
-        "...ss...",
-        ".hhsshh.",
-        "...hh...",
-        "...hh...",
-        "...hh...",
+        "...l....",   # light-grey tip
+        "..lll...",   # pickaxe-style triangle
+        "..mmm...",   # vertical medium-grey blade, centred on haft
+        "..mmm...",
+        "..mmm...",
+        "...h....",
+        "...h....",
+        "........",
     ),
-    palette={"s": STEEL, "h": BARK},
+    palette={"m": STEEL, "l": STONE, "h": BARK},
 )
+
+
+def gather_head(skill: str | None) -> Sprite:
+    """The gather tool head for a gathered resource's skill: woodcutting -> axe,
+    mining -> pickaxe; everything else (fishing/alchemy/unknown) -> pickaxe."""
+    if skill == "woodcutting":
+        return AXE_HEAD
+    return PICKAXE_HEAD
 
 
 def grip_overlay(dcol: int, drow: int) -> Sprite:
@@ -127,7 +162,7 @@ def grip_overlay(dcol: int, drow: int) -> Sprite:
     player's hand (4,4) toward the head direction. The player-tile overlay so the
     swung tool reads as held. Combat's negative dcol mirrors for free."""
     grid = [[TRANSPARENT] * SPRITE_SIZE for _ in range(SPRITE_SIZE)]
-    for k in (1, 2, 3):
+    for k in (1, 2):
         r, c = 4 + k * drow, 4 + k * dcol
         if 0 <= r < SPRITE_SIZE and 0 <= c < SPRITE_SIZE:
             grid[r][c] = "h"
