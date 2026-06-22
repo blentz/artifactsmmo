@@ -1,5 +1,6 @@
 """GameData task-reward loading: which item codes are earnable by completing tasks."""
 import pytest
+from unittest.mock import MagicMock, patch
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.game_data_error import GameDataCoverageError
@@ -111,3 +112,31 @@ def test_build_tasks_rejects_zero_coin_reward():
     """C2: a tasks_coin quantity of 0 must raise at load time (not silently mint 0)."""
     with pytest.raises((GameDataCoverageError, ValueError)):
         GameData()._build_tasks([_FakeCoinTask("chicken", 0)])
+
+
+def test_fetch_tasks_paginates_until_partial_page():
+    """_fetch_tasks fetches page 2 when page 1 is full (100 items), stops on partial."""
+    coin_item = MagicMock()
+    coin_item.code = TASKS_COIN_CODE
+    coin_item.quantity = 1
+
+    def make_task(code: str) -> MagicMock:
+        t = MagicMock()
+        t.code = code
+        t.rewards = MagicMock()
+        t.rewards.items = [coin_item]
+        return t
+
+    # Page 1: exactly 100 tasks (triggers page 2 fetch)
+    page1 = MagicMock()
+    page1.data = [make_task(f"monster_{i}") for i in range(100)]
+    # Page 2: partial (triggers stop)
+    page2 = MagicMock()
+    page2.data = [make_task("cow")]
+
+    gd = GameData()
+    with patch("artifactsmmo_cli.ai.game_data.get_all_tasks", side_effect=[page1, page2]):
+        tasks = gd._fetch_tasks(MagicMock())
+
+    assert len(tasks) == 101
+    assert tasks[-1].code == "cow"
