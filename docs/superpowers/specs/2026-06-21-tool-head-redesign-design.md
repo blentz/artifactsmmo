@@ -102,6 +102,17 @@ Modes stay mutually exclusive in time. Glide / planning / movement timing /
 snapshot+observer layer are untouched. The bar-gate (craft-but-not-a-bar → `{}`)
 keeps non-bar crafts as idle.
 
+### No tool while walking
+
+No tool overlay shows during movement. By design the glide only animates on a
+`move` snapshot (`current_mode` → `GLIDE` → no head), but a server-state position
+correction arriving on a swing cycle could build glide frames while `action_kind`
+is a swing kind, showing a tool mid-slide. Guard it explicitly:
+`MapPane._swing_overlay` returns `{}` whenever a glide is in progress — i.e.
+`self._anim_frames` is non-empty and the glide has not finished
+(`now - self._anim_start` < the glide window). The player is "walking" → no
+pickaxe/sword/hammer is drawn until it arrives.
+
 ## Components & isolation
 
 | Unit | Responsibility | Depends on |
@@ -149,6 +160,9 @@ overlay = swing_overlay(mode, swing_frame_index(...), head) if head else {}
   resource → pickaxe; fight → sword; craft of `*_bar` → hammer; craft of a
   non-bar → `{}`; idle/planning → `{}`. (Build a `GameData` test double exposing
   the resource-skill + recipe lookups, mirroring existing TUI test doubles.)
+- No tool while walking: with glide frames present and `now` inside the glide
+  window, `_swing_overlay` returns `{}` even for a gather/fight/craft snapshot;
+  once the glide window has elapsed the overlay returns to normal.
 - Grip is 2px (haft −15%).
 - 100% coverage held; the `on_mount` pragma remains the only carve-out.
 
