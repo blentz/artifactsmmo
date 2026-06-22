@@ -1,6 +1,7 @@
 from artifactsmmo_cli.tui.swing_frames import (
-    Mode, current_mode, swing_frame_index, glide_index,
+    Mode, current_mode, glide_index, swing_frame_index, swing_overlay,
 )
+from artifactsmmo_cli.tui.sprites import HAMMER_HEAD, PICKAXE_HEAD
 
 
 def test_planning_overrides_everything():
@@ -48,10 +49,6 @@ def test_glide_zero_duration_window_returns_last_frame():
     assert glide_index(1.0, 0.0, 5) == 4
     # arrive_fraction 0 also collapses the window
     assert glide_index(1.0, 10.0, 5, arrive_fraction=0.0) == 4
-
-
-from artifactsmmo_cli.tui.swing_frames import swing_overlay
-from artifactsmmo_cli.tui.sprites import PICKAXE_HEAD, HAMMER_HEAD
 
 
 def test_non_swing_modes_have_no_overlay():
