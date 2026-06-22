@@ -48,3 +48,33 @@ def test_glide_zero_duration_window_returns_last_frame():
     assert glide_index(1.0, 0.0, 5) == 4
     # arrive_fraction 0 also collapses the window
     assert glide_index(1.0, 10.0, 5, arrive_fraction=0.0) == 4
+
+
+from artifactsmmo_cli.tui.swing_frames import swing_overlay
+from artifactsmmo_cli.tui.sprites import GATHER_HEAD, FIGHT_HEAD
+
+
+def test_non_swing_modes_have_no_overlay():
+    for m in (Mode.IDLE, Mode.GLIDE, Mode.PLANNING):
+        assert swing_overlay(m, 0) == {}
+
+
+def test_gather_overlay_head_on_right_with_grip():
+    ov = swing_overlay(Mode.GATHER_SWING, 2)   # frame 2 -> (1,0) right
+    assert ov[(1, 0)] is GATHER_HEAD
+    assert (0, 0) in ov                          # grip in the player tile
+    assert all(dc >= 0 for (dc, _dr) in ov)      # nothing on the left
+
+
+def test_fight_overlay_head_on_left_mirrors_gather():
+    ov = swing_overlay(Mode.FIGHT_SWING, 2)     # frame 2 -> (-1,0) left
+    assert ov[(-1, 0)] is FIGHT_HEAD
+    assert (0, 0) in ov
+    assert any(dc < 0 for (dc, _dr) in ov)       # head on the left
+
+
+def test_frame_index_wraps_and_sweeps_arc():
+    heads = [next(off for off in swing_overlay(Mode.GATHER_SWING, i) if off != (0, 0))
+             for i in range(5)]
+    assert heads == [(0, -1), (1, -1), (1, 0), (1, 1), (0, 1)]
+    assert swing_overlay(Mode.GATHER_SWING, 5) == swing_overlay(Mode.GATHER_SWING, 0)

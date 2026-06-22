@@ -50,6 +50,20 @@ def validate_sprite(name: str, sprite: Sprite) -> None:
                 raise ValueError(f"sprite {name!r} row {i}: palette key {ch!r} undefined")
 
 
+def overlay_sprites(base: Sprite, top: Sprite) -> Sprite:
+    """Merge two 8x8 sprites: each non-transparent pixel of `top` wins, else
+    `base` shows through. Palette merges with `top` taking precedence on key
+    collisions. Returns a new immutable Sprite (compositor-cache safe)."""
+    rows = tuple(
+        "".join(
+            top.rows[r][c] if top.rows[r][c] != TRANSPARENT else base.rows[r][c]
+            for c in range(SPRITE_SIZE)
+        )
+        for r in range(SPRITE_SIZE)
+    )
+    return Sprite(rows=rows, palette={**base.palette, **top.palette})
+
+
 BLANK_SPRITE = Sprite(rows=(TRANSPARENT * SPRITE_SIZE,) * SPRITE_SIZE, palette={})
 
 PLAYER_SPRITE = Sprite(
@@ -78,19 +92,48 @@ def _player_with_tool(positions: tuple[tuple[int, int], ...], key: str, color: s
     return Sprite(rows=tuple(rows), palette=palette)
 
 
-# Clockwise right-side arc, 12 -> 1:30 -> 3 -> 4:30 -> 6 o'clock. Each entry is the
-# transparent cell that holds the pickaxe head for that frame (verified against
-# PLAYER_SPRITE: these cells are '.').
-_GATHER_CLOCK: tuple[tuple[int, int], ...] = ((0, 6), (1, 7), (3, 7), (5, 7), (6, 7))
-# Mirror on X (col -> 7-col) for the counterclockwise left-side sword arc.
-_FIGHT_CLOCK: tuple[tuple[int, int], ...] = tuple((r, 7 - c) for (r, c) in _GATHER_CLOCK)
+# Tool heads (drawn in the arc-neighbor tile, one full 8x8 weapon each). The swing
+# sweeps the head through the neighbor tiles; the player tile carries a grip.
+GATHER_HEAD: Sprite = Sprite(
+    rows=(
+        "........",
+        "...cc...",
+        "..cccc..",
+        ".cccccc.",
+        "..cccc..",
+        "...cc...",
+        "...hh...",
+        "...hh...",
+    ),
+    palette={"c": COPPER, "h": BARK},
+)
+FIGHT_HEAD: Sprite = Sprite(
+    rows=(
+        "...ss...",
+        "...ss...",
+        "...ss...",
+        "...ss...",
+        ".hhsshh.",
+        "...hh...",
+        "...hh...",
+        "...hh...",
+    ),
+    palette={"s": STEEL, "h": BARK},
+)
 
-GATHER_SWING_FRAMES: tuple[Sprite, ...] = tuple(
-    _player_with_tool((rc,), "t", COPPER) for rc in _GATHER_CLOCK
-)
-FIGHT_SWING_FRAMES: tuple[Sprite, ...] = tuple(
-    _player_with_tool((rc,), "t", STEEL) for rc in _FIGHT_CLOCK
-)
+
+def grip_overlay(dcol: int, drow: int) -> Sprite:
+    """A mostly-transparent 8x8 with a 3-pixel handle ('h'=BARK) stepping from the
+    player's hand (4,4) toward the head direction. The player-tile overlay so the
+    swung tool reads as held. Combat's negative dcol mirrors for free."""
+    grid = [[TRANSPARENT] * SPRITE_SIZE for _ in range(SPRITE_SIZE)]
+    for k in (1, 2, 3):
+        r, c = 4 + k * drow, 4 + k * dcol
+        if 0 <= r < SPRITE_SIZE and 0 <= c < SPRITE_SIZE:
+            grid[r][c] = "h"
+    return Sprite(rows=tuple("".join(row) for row in grid), palette={"h": BARK})
+
+
 # Thought bubble at 2 o'clock from the head (upper-right transparent cells).
 PLANNING_SPRITE: Sprite = _player_with_tool(((0, 7), (1, 7)), "p", BONE)
 

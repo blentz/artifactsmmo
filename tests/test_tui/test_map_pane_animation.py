@@ -1,7 +1,7 @@
 # tests/test_tui/test_map_pane_animation.py
 from artifactsmmo_cli.tui.widgets.map_pane import MapPane
 from artifactsmmo_cli.tui.sprites import (
-    PLAYER_SPRITE, PLANNING_SPRITE, GATHER_SWING_FRAMES, FIGHT_SWING_FRAMES,
+    PLAYER_SPRITE, PLANNING_SPRITE, GATHER_HEAD, FIGHT_HEAD,
 )
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
@@ -34,18 +34,42 @@ def test_planning_shows_bubble():
     assert p._player_sprite(now=1.0) is PLANNING_SPRITE
 
 
-def test_gather_picks_a_swing_frame():
+def test_gather_swing_overlay_has_head_on_right():
+    # swing modes keep the base player sprite; the tool comes via the overlay map
     p = _pane()
     p.snapshot = _snap(action_kind="gather", cooldown_remaining=5.0)
     p._anim_start = 0.0
-    assert p._player_sprite(now=0.5) in GATHER_SWING_FRAMES
+    assert p._player_sprite(now=0.35) is PLAYER_SPRITE
+    ov = p._swing_overlay(now=0.35)   # frame 2 of a 0.8s sweep -> (1,0)
+    assert ov[(1, 0)] is GATHER_HEAD
+    assert (0, 0) in ov
 
 
-def test_fight_picks_a_swing_frame():
+def test_fight_swing_overlay_has_head_on_left():
     p = _pane()
     p.snapshot = _snap(action_kind="fight", cooldown_remaining=5.0)
     p._anim_start = 0.0
-    assert p._player_sprite(now=0.5) in FIGHT_SWING_FRAMES
+    ov = p._swing_overlay(now=0.35)
+    assert ov[(-1, 0)] is FIGHT_HEAD
+
+
+def test_no_overlay_when_idle_or_planning():
+    p = _pane()
+    p.snapshot = _snap(action_kind="rest", cooldown_remaining=5.0)
+    p._anim_start = 0.0
+    assert p._swing_overlay(now=1.0) == {}
+    p2 = _pane()
+    p2.snapshot = _snap(action_kind="gather", cooldown_remaining=5.0)
+    p2._anim_start = 0.0
+    p2._planning_active = True
+    assert p2._swing_overlay(now=1.0) == {}
+
+
+def test_swing_overlay_empty_without_snapshot():
+    p = _pane()
+    p.snapshot = None
+    p._anim_start = 0.0
+    assert p._swing_overlay(now=1.0) == {}
 
 
 def test_update_snapshot_clears_planning_and_stamps_start(monkeypatch):
@@ -98,3 +122,15 @@ def test_tick_no_refresh_when_not_animating(monkeypatch):
     # no snapshot, not planning -> _is_animating is False
     p._tick()
     assert refresh_calls == []
+
+
+def test_render_viewport_overlay_changes_neighbor_tile():
+    # the tool overlay must actually CHANGE the rendered output, not merely run:
+    # rendering the arc-neighbor tile with the head overlaid differs from plain.
+    p = _pane()
+    snap = _snap(action_kind="gather", x=0, y=0, cooldown_remaining=5.0)
+    p.snapshot = snap
+    plain = p._render_viewport(snap, 80, 41, None, PLAYER_SPRITE, {})
+    swung = p._render_viewport(snap, 80, 41, None, PLAYER_SPRITE, {(1, 0): GATHER_HEAD})
+    # styled markup differs (the COPPER head pixels land in the right-neighbor tile)
+    assert plain.markup != swung.markup
