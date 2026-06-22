@@ -14,8 +14,28 @@ from artifactsmmo_cli.tui.glyphs import (
     STRUCTURE_COLOR,
 )
 from artifactsmmo_cli.tui.palette import (
-    AMBER, BARK, BLOOD, BONE, BREW, COPPER, DOORWOOD, EMBER, GOBLIN_SKIN, GOLD, INK, KHAKI,
-    LEAF, OGRE_SKIN, ORC_SKIN, PINK, SKIN, SLATE, STEEL, STONE, TUNIC, WATER,
+    AMBER,
+    BARK,
+    BLOOD,
+    BONE,
+    BREW,
+    COPPER,
+    DOORWOOD,
+    EMBER,
+    GOBLIN_SKIN,
+    GOLD,
+    INK,
+    KHAKI,
+    LEAF,
+    OGRE_SKIN,
+    ORC_SKIN,
+    PINK,
+    SKIN,
+    SLATE,
+    STEEL,
+    STONE,
+    TUNIC,
+    WATER,
 )
 
 SPRITE_SIZE = 8

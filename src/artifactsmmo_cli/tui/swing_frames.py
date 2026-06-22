@@ -58,7 +58,7 @@ def glide_index(elapsed: float, duration: float, frame_count: int,
     if window <= 0.0:
         return frame_count - 1
     progress = min(elapsed / window, 1.0)               # [0,1]
-    return min(int(round(progress * (frame_count - 1))), frame_count - 1)
+    return min(round(progress * (frame_count - 1)), frame_count - 1)
 
 
 _GATHER_OFFSETS: list[tuple[int, int]] = [(0, -1), (1, -1), (1, 0), (1, 1), (0, 1)]
