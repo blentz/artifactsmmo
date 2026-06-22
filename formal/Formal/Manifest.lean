@@ -1111,6 +1111,12 @@ open Formal.PriorityBand
 #check @Formal.Liveness.CurrencyFunding.fundingCycles_sufficient   -- depth bound reaches target
 #check @Formal.Liveness.CurrencyFunding.funding_remaining_descends -- measure strictly drops
 
+-- CurrencyAffordFastFail required roles (GatherMaterialsGoal.is_plannable afford fast-fail;
+-- src/artifactsmmo_cli/ai/goals/currency_afford_core.py):
+#check @Formal.CurrencyAffordFastFail.applyStep_unaffordable  -- unaffordable ⇒ step is a no-op on owned
+#check @Formal.CurrencyAffordFastFail.runPlan_unaffordable    -- unaffordable ⇒ owned invariant ∀ plan
+#check @Formal.CurrencyAffordFastFail.fastfail_sound          -- fast-fail fires ⇒ ∀ plan owned < needed
+
 -- ServableFilter required roles (decide() servable filter;
 -- src/artifactsmmo_cli/ai/tiers/servable_filter.py::keep_servable):
 #check @Formal.ServableFilter.keepServable_all_servable_of_any  -- any servable ⇒ kept = servable subset

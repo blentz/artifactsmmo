@@ -200,6 +200,7 @@ import Formal.Liveness.GearTierLeveling
 import Formal.Liveness.WinnableGrounded
 import Formal.DoomedMemo
 import Formal.SkillGateFastFail
+import Formal.CurrencyAffordFastFail
 import Formal.PlanModel
 import Formal.LeafAttainable
 import Formal.CompleteTaskIncome

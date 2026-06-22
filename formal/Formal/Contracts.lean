@@ -12,6 +12,7 @@ import Formal.SkillGrindSelection
 import Formal.SkillStepDispatch
 import Formal.DoomedMemo
 import Formal.SkillGateFastFail
+import Formal.CurrencyAffordFastFail
 import Formal.LeafAttainable
 import Formal.CompleteTaskIncome
 import Formal.Liveness.CurrencyFunding
@@ -2847,6 +2848,19 @@ example : ∀ (onHand target floor : Nat), 1 ≤ floor →
 example : ∀ (coins target floor : Nat), coins < target → 1 ≤ floor →
     target - (coins + floor) < target - coins :=
   @Formal.Liveness.CurrencyFunding.funding_remaining_descends
+
+-- ─── CurrencyAffordFastFail (GatherMaterialsGoal.is_plannable afford fast-fail) anti-weakening pins ───
+-- unaffordable ⇒ owned count invariant across the ENTIRE plan.
+example : ∀ (owned : Nat) (plan : List Formal.CurrencyAffordFastFail.Step),
+    Formal.CurrencyAffordFastFail.runPlan false owned plan = owned :=
+  @Formal.CurrencyAffordFastFail.runPlan_unaffordable
+-- SOUNDNESS: fast-fail fires ⇒ EVERY plan leaves owned strictly below needed
+-- (the pruned goal is genuinely unreachable; weakening `< needed` to `≤ needed`
+-- fails to elaborate against the proven `<`).
+example : ∀ (targetInClosure affordable : Bool) (owned needed : Nat),
+    Formal.CurrencyAffordFastFail.isPlannable targetInClosure affordable owned needed = false →
+    ∀ plan, Formal.CurrencyAffordFastFail.runPlan affordable owned plan < needed :=
+  @Formal.CurrencyAffordFastFail.fastfail_sound
 
 -- ─── CompleteTaskIncome (CompleteTaskAction.apply coin minting) anti-weakening pins ───
 -- VALIDITY: post-completion coin count is EXACTLY coins + reward.
