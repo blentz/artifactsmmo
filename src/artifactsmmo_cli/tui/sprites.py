@@ -189,6 +189,78 @@ def grip_overlay(dcol: int, drow: int) -> Sprite:
     return Sprite(rows=tuple("".join(row) for row in grid), palette={"h": BARK})
 
 
+def rot90cw(sprite: Sprite) -> Sprite:
+    """Exact 90° clockwise rotation of an 8x8 sprite: new[i][j] = old[7-j][i]."""
+    n = SPRITE_SIZE
+    rows = tuple(
+        "".join(sprite.rows[n - 1 - j][i] for j in range(n)) for i in range(n)
+    )
+    return Sprite(rows=rows, palette=dict(sprite.palette))
+
+
+@dataclass(frozen=True)
+class ToolHeads:
+    """A tool head in two hand-authored orientations (the rest derive by rot90cw):
+    `up` points up (canonical), `ne` points up-right (diagonal)."""
+
+    up: Sprite
+    ne: Sprite
+
+
+_DIR_TO_BASE_TURNS: dict[tuple[int, int], tuple[int, int]] = {
+    (0, -1): (0, 0), (1, 0): (0, 1), (0, 1): (0, 2), (-1, 0): (0, 3),
+    (1, -1): (1, 0), (1, 1): (1, 1), (-1, 1): (1, 2), (-1, -1): (1, 3),
+}
+
+
+def oriented_head(tool: ToolHeads, dcol: int, drow: int) -> Sprite:
+    """The tool head oriented to point in unit direction (dcol, drow) — away from
+    the player — so the haft trails back toward the player tile."""
+    base_idx, turns = _DIR_TO_BASE_TURNS.get((dcol, drow), (0, 0))
+    sprite = tool.up if base_idx == 0 else tool.ne
+    for _ in range(turns):
+        sprite = rot90cw(sprite)
+    return sprite
+
+
+# Hand-authored NE (up-right) heads: head/blade upper-right, haft trailing to the
+# lower-left toward the player. m=STEEL, l=STONE, h=BARK.
+AXE_NE: Sprite = Sprite(
+    rows=("....mmml", "....mmml", "....mmm.", "...hm...", "..h.....", ".h......",
+          "h.......", "........"),
+    palette={"m": STEEL, "l": STONE, "h": BARK},
+)
+PICKAXE_NE: Sprite = Sprite(
+    rows=("....mml.", "...lmmml", "....mmm.", "...hm...", "..h.....", ".h......",
+          "h.......", "........"),
+    palette={"m": STEEL, "l": STONE, "h": BARK},
+)
+HAMMER_NE: Sprite = Sprite(
+    rows=("....mmm.", "....mmm.", "....mmm.", "...hm...", "..h.....", ".h......",
+          "h.......", "........"),
+    palette={"m": STEEL, "h": BARK},
+)
+FIGHT_NE: Sprite = Sprite(
+    rows=(".....ll.", "....lmm.", "...lmm..", "..hmm...", "..h.....", ".h......",
+          "h.......", "........"),
+    palette={"m": STEEL, "l": STONE, "h": BARK},
+)
+
+AXE: ToolHeads = ToolHeads(AXE_HEAD, AXE_NE)
+PICKAXE: ToolHeads = ToolHeads(PICKAXE_HEAD, PICKAXE_NE)
+HAMMER: ToolHeads = ToolHeads(HAMMER_HEAD, HAMMER_NE)
+SWORD: ToolHeads = ToolHeads(FIGHT_HEAD, FIGHT_NE)
+
+# Thought cloud: light-grey bubbly rounded rectangle with doubled dark-grey shading.
+# The second cloud tile is this rotated 90° (asymmetric -> irregular).
+CLOUD_SPRITE: Sprite = Sprite(
+    rows=("..llll..", ".llllll.", "llldllll", "lldddlll", "llldddll", ".lddll..",
+          "..llll..", "........"),
+    palette={"l": STONE, "d": SLATE},
+)
+CLOUD_SPRITE_R: Sprite = rot90cw(CLOUD_SPRITE)
+
+
 # Thought bubble at 2 o'clock from the head (upper-right transparent cells).
 PLANNING_SPRITE: Sprite = _player_with_tool(((0, 7), (1, 7)), "p", BONE)
 
