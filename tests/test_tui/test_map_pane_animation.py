@@ -96,15 +96,13 @@ def test_is_bar():
 
 def test_no_tool_overlay_while_gliding():
     p = _pane()
-    p.snapshot = _snap(action_kind="gather", x=0, y=0, cooldown_remaining=5.0)
     p._anim_start = 0.0
-    p._anim_frames = [(1, 0), (2, 0)]                      # glide in progress
     p._game_data = _GD(skills={"ash_tree": ("woodcutting", 1)})
     p.snapshot = _snap(action_kind="gather", action_target="ash_tree", cooldown_remaining=5.0)
-    p._anim_frames = [(1, 0), (2, 0)]
+    p._anim_frames = [(1, 0), (2, 0)]                      # glide in progress
     assert p._swing_overlay(now=0.5) == {}                # walking -> no tool
-    # after the glide window, the tool returns
-    assert p._swing_overlay(now=6.0) == {}                # cooldown elapsed -> idle anyway
+    # after the glide window (cooldown elapsed -> idle anyway), still no tool
+    assert p._swing_overlay(now=6.0) == {}
 
 
 def test_swing_overlay_gather_axe_when_not_gliding():

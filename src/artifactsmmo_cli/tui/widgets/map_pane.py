@@ -13,14 +13,26 @@ from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.tui.glyphs import UNMAPPED_COLOR, WALKABLE_COLOR
 from artifactsmmo_cli.tui.half_block import HalfBlockCompositor
+from artifactsmmo_cli.tui.path_interpolate import glide_path
 from artifactsmmo_cli.tui.sprite_registry import SpriteRegistry
 from artifactsmmo_cli.tui.sprites import (
-    AXE_HEAD, BLANK_SPRITE, FIGHT_HEAD, HAMMER_HEAD, PICKAXE_HEAD, PLANNING_SPRITE,
-    PLAYER_SPRITE, Sprite, SpriteCategory, gather_head, overlay_sprites,
+    BLANK_SPRITE,
+    FIGHT_HEAD,
+    HAMMER_HEAD,
+    PLANNING_SPRITE,
+    PLAYER_SPRITE,
+    Sprite,
+    SpriteCategory,
+    gather_head,
+    overlay_sprites,
 )
-from artifactsmmo_cli.tui.path_interpolate import glide_path
 from artifactsmmo_cli.tui.swing_frames import (
-    SWING_FRAME_COUNT, Mode, current_mode, glide_index, swing_frame_index, swing_overlay,
+    SWING_FRAME_COUNT,
+    Mode,
+    current_mode,
+    glide_index,
+    swing_frame_index,
+    swing_overlay,
 )
 
 TILE_W = 8   # chars per tile column (8 pixels wide)
