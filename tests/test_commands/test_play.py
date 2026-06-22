@@ -320,6 +320,9 @@ class FakeWatchApp:
     def update_snapshot(self, snap) -> None:
         """No-op observer target (handed to ThreadSafeBridge)."""
 
+    def set_planning(self, active: bool) -> None:
+        """No-op planning-signal target (handed to ThreadSafeBridge)."""
+
     def call_from_thread(self, callback, *args, **kwargs):
         return callback(*args, **kwargs)
 
@@ -381,9 +384,13 @@ class TestRunWithTui:
                 mock_watch_app_cls.assert_called_once_with(
                     character="hero", game_data=loaded_data
                 )
-                # Bridge wraps the app's update callback and feeds the cycle observer.
-                mock_bridge_cls.assert_called_once_with(mock_app, mock_app.update_snapshot)
+                # Bridge wraps the app's update callback + planning signal, and feeds
+                # both the cycle observer and the planning observer.
+                mock_bridge_cls.assert_called_once_with(
+                    mock_app, mock_app.update_snapshot, planning_handler=mock_app.set_planning
+                )
                 mock_player.set_cycle_observer.assert_called_once_with(mock_bridge.notify)
+                mock_player.set_planning_observer.assert_called_once_with(mock_bridge.notify_planning)
                 # Bot runs in a daemon worker thread.
                 mock_threading.Thread.assert_called_once_with(
                     target=mock_player.run, daemon=True
