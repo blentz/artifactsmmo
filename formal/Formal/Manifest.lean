@@ -1106,6 +1106,11 @@ open Formal.PriorityBand
 #check @Formal.CompleteTaskIncome.applyComplete_adds      -- validity: post = coins + reward
 #check @Formal.CompleteTaskIncome.applyComplete_monotone  -- reward ≥ 1 ⇒ strict increase
 
+-- CurrencyFunding required roles (ReachCurrencyGoal funding termination;
+-- src/artifactsmmo_cli/ai/goals/funding_core.py):
+#check @Formal.Liveness.CurrencyFunding.fundingCycles_sufficient   -- depth bound reaches target
+#check @Formal.Liveness.CurrencyFunding.funding_remaining_descends -- measure strictly drops
+
 -- ServableFilter required roles (decide() servable filter;
 -- src/artifactsmmo_cli/ai/tiers/servable_filter.py::keep_servable):
 #check @Formal.ServableFilter.keepServable_all_servable_of_any  -- any servable ⇒ kept = servable subset

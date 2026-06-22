@@ -14,6 +14,7 @@ import Formal.DoomedMemo
 import Formal.SkillGateFastFail
 import Formal.LeafAttainable
 import Formal.CompleteTaskIncome
+import Formal.Liveness.CurrencyFunding
 import Formal.GrindLadder
 import Formal.MonsterDropApply
 import Formal.SkillXpCurve
@@ -2838,6 +2839,14 @@ example : ∀ (g d t b : Bool),
 -- TASK SOURCE: earned-by-task ⇒ attainable regardless of other sources.
 example : ∀ (g d b : Bool), Formal.LeafAttainable.leafAttainable g d true b = true :=
   @Formal.LeafAttainable.leafAttainable_task_earnable
+
+-- ─── CurrencyFunding (ReachCurrencyGoal funding) anti-weakening pins ───
+example : ∀ (onHand target floor : Nat), 1 ≤ floor →
+    target ≤ onHand + Formal.Liveness.CurrencyFunding.fundingCycles onHand target floor * floor :=
+  @Formal.Liveness.CurrencyFunding.fundingCycles_sufficient
+example : ∀ (coins target floor : Nat), coins < target → 1 ≤ floor →
+    target - (coins + floor) < target - coins :=
+  @Formal.Liveness.CurrencyFunding.funding_remaining_descends
 
 -- ─── CompleteTaskIncome (CompleteTaskAction.apply coin minting) anti-weakening pins ───
 -- VALIDITY: post-completion coin count is EXACTLY coins + reward.

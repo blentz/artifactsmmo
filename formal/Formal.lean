@@ -203,3 +203,4 @@ import Formal.SkillGateFastFail
 import Formal.PlanModel
 import Formal.LeafAttainable
 import Formal.CompleteTaskIncome
+import Formal.Liveness.CurrencyFunding
