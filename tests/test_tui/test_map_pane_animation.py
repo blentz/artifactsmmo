@@ -124,12 +124,13 @@ def test_tick_no_refresh_when_not_animating(monkeypatch):
     assert refresh_calls == []
 
 
-def test_render_viewport_applies_tool_overlay_branch():
-    # a non-empty overlay must merge the tool onto the arc-neighbor tile (covers
-    # the overlay_sprites apply branch in _render_viewport).
+def test_render_viewport_overlay_changes_neighbor_tile():
+    # the tool overlay must actually CHANGE the rendered output, not merely run:
+    # rendering the arc-neighbor tile with the head overlaid differs from plain.
     p = _pane()
     snap = _snap(action_kind="gather", x=0, y=0, cooldown_remaining=5.0)
     p.snapshot = snap
-    overlay = {(0, 0): GATHER_HEAD, (1, 0): GATHER_HEAD}
-    text = p._render_viewport(snap, 80, 41, None, PLAYER_SPRITE, overlay)
-    assert text.plain  # rendered without error; the overlay branch executed
+    plain = p._render_viewport(snap, 80, 41, None, PLAYER_SPRITE, {})
+    swung = p._render_viewport(snap, 80, 41, None, PLAYER_SPRITE, {(1, 0): GATHER_HEAD})
+    # styled markup differs (the COPPER head pixels land in the right-neighbor tile)
+    assert plain.markup != swung.markup
