@@ -67,7 +67,20 @@ def test_swing_overlay_places_passed_head_on_right_for_gather_and_craft():
 def test_swing_overlay_fight_on_left():
     ov = swing_overlay(Mode.FIGHT_SWING, 2, PICKAXE_HEAD)
     assert ov[(-1, 0)] is PICKAXE_HEAD
+    assert (0, 0) in ov                              # grip in the player tile
     assert any(dc < 0 for (dc, _dr) in ov)
+
+
+def test_gather_arc_order_and_index_wrap():
+    # the head sweeps the 5-offset CW arc in order, and frame_index wraps mod len
+    expected = [(0, -1), (1, -1), (1, 0), (1, 1), (0, 1)]
+    arc = [
+        next(off for off in swing_overlay(Mode.GATHER_SWING, i, PICKAXE_HEAD) if off != (0, 0))
+        for i in range(5)
+    ]
+    assert arc == expected
+    assert (swing_overlay(Mode.GATHER_SWING, 5, PICKAXE_HEAD)
+            == swing_overlay(Mode.GATHER_SWING, 0, PICKAXE_HEAD))
 
 
 def test_craft_mode_from_action_kind():
