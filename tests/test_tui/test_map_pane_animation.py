@@ -1,8 +1,9 @@
 # tests/test_tui/test_map_pane_animation.py
-from artifactsmmo_cli.tui.widgets.map_pane import MapPane
+from artifactsmmo_cli.tui.widgets.map_pane import MapPane, select_swing_head, _is_bar
 from artifactsmmo_cli.tui.sprites import (
-    PLAYER_SPRITE, PLANNING_SPRITE, PICKAXE_HEAD, FIGHT_HEAD,
+    PLAYER_SPRITE, PLANNING_SPRITE, AXE_HEAD, PICKAXE_HEAD, HAMMER_HEAD, FIGHT_HEAD,
 )
+from artifactsmmo_cli.tui.swing_frames import Mode
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
 
@@ -19,6 +20,19 @@ def _pane():
     return MapPane(GameData())
 
 
+class _GD:
+    """Minimal game_data double for head selection."""
+    def __init__(self, skills=None, items=()):
+        self._skills = skills or {}
+        self._items = set(items)
+
+    def resource_skill_level(self, code):
+        return self._skills.get(code)
+
+    def item_stats(self, code):
+        return object() if code in self._items else None
+
+
 def test_idle_shows_player_sprite():
     p = _pane()
     p.snapshot = _snap(action_kind="rest")
@@ -32,25 +46,6 @@ def test_planning_shows_bubble():
     p._anim_start = 0.0
     p._planning_active = True
     assert p._player_sprite(now=1.0) is PLANNING_SPRITE
-
-
-def test_gather_swing_overlay_has_head_on_right():
-    # swing modes keep the base player sprite; the tool comes via the overlay map
-    p = _pane()
-    p.snapshot = _snap(action_kind="gather", cooldown_remaining=5.0)
-    p._anim_start = 0.0
-    assert p._player_sprite(now=0.35) is PLAYER_SPRITE
-    ov = p._swing_overlay(now=0.35)   # frame 2 of a 0.8s sweep -> (1,0)
-    assert ov[(1, 0)] is PICKAXE_HEAD
-    assert (0, 0) in ov
-
-
-def test_fight_swing_overlay_has_head_on_left():
-    p = _pane()
-    p.snapshot = _snap(action_kind="fight", cooldown_remaining=5.0)
-    p._anim_start = 0.0
-    ov = p._swing_overlay(now=0.35)
-    assert ov[(-1, 0)] is FIGHT_HEAD
 
 
 def test_no_overlay_when_idle_or_planning():
@@ -70,6 +65,56 @@ def test_swing_overlay_empty_without_snapshot():
     p.snapshot = None
     p._anim_start = 0.0
     assert p._swing_overlay(now=1.0) == {}
+
+
+def test_select_head_gather_by_skill():
+    gd = _GD(skills={"ash_tree": ("woodcutting", 1), "copper_rocks": ("mining", 1)})
+    assert select_swing_head(Mode.GATHER_SWING, "ash_tree", gd) is AXE_HEAD
+    assert select_swing_head(Mode.GATHER_SWING, "copper_rocks", gd) is PICKAXE_HEAD
+    assert select_swing_head(Mode.GATHER_SWING, "shrimp_spot", gd) is PICKAXE_HEAD  # fallback
+    assert select_swing_head(Mode.GATHER_SWING, None, gd) is PICKAXE_HEAD
+
+
+def test_select_head_fight_is_sword():
+    assert select_swing_head(Mode.FIGHT_SWING, "chicken", _GD()) is FIGHT_HEAD
+
+
+def test_select_head_craft_hammer_only_for_bars():
+    gd = _GD(items=("copper_bar", "copper_boots"))
+    assert select_swing_head(Mode.CRAFT_SWING, "copper_bar", gd) is HAMMER_HEAD
+    assert select_swing_head(Mode.CRAFT_SWING, "copper_boots", gd) is None
+    assert select_swing_head(Mode.IDLE, "copper_bar", gd) is None
+
+
+def test_is_bar():
+    gd = _GD(items=("copper_bar",))
+    assert _is_bar("copper_bar", gd) is True
+    assert _is_bar("copper_boots", gd) is False
+    assert _is_bar(None, gd) is False
+    assert _is_bar("ghost_bar", gd) is False              # endswith _bar but no item
+
+
+def test_no_tool_overlay_while_gliding():
+    p = _pane()
+    p.snapshot = _snap(action_kind="gather", x=0, y=0, cooldown_remaining=5.0)
+    p._anim_start = 0.0
+    p._anim_frames = [(1, 0), (2, 0)]                      # glide in progress
+    p._game_data = _GD(skills={"ash_tree": ("woodcutting", 1)})
+    p.snapshot = _snap(action_kind="gather", action_target="ash_tree", cooldown_remaining=5.0)
+    p._anim_frames = [(1, 0), (2, 0)]
+    assert p._swing_overlay(now=0.5) == {}                # walking -> no tool
+    # after the glide window, the tool returns
+    assert p._swing_overlay(now=6.0) == {}                # cooldown elapsed -> idle anyway
+
+
+def test_swing_overlay_gather_axe_when_not_gliding():
+    p = _pane()
+    p._game_data = _GD(skills={"ash_tree": ("woodcutting", 1)})
+    p.snapshot = _snap(action_kind="gather", action_target="ash_tree", cooldown_remaining=5.0)
+    p._anim_start = 0.0
+    p._anim_frames = []                                    # not gliding
+    ov = p._swing_overlay(now=0.35)                        # frame 2 -> (1,0)
+    assert ov[(1, 0)] is AXE_HEAD
 
 
 def test_update_snapshot_clears_planning_and_stamps_start(monkeypatch):
@@ -131,6 +176,6 @@ def test_render_viewport_overlay_changes_neighbor_tile():
     snap = _snap(action_kind="gather", x=0, y=0, cooldown_remaining=5.0)
     p.snapshot = snap
     plain = p._render_viewport(snap, 80, 41, None, PLAYER_SPRITE, {})
-    swung = p._render_viewport(snap, 80, 41, None, PLAYER_SPRITE, {(1, 0): PICKAXE_HEAD})
-    # styled markup differs (the COPPER head pixels land in the right-neighbor tile)
+    swung = p._render_viewport(snap, 80, 41, None, PLAYER_SPRITE, {(1, 0): AXE_HEAD})
+    # styled markup differs (the head pixels land in the right-neighbor tile)
     assert plain.markup != swung.markup

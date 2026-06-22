@@ -15,8 +15,8 @@ from artifactsmmo_cli.tui.glyphs import UNMAPPED_COLOR, WALKABLE_COLOR
 from artifactsmmo_cli.tui.half_block import HalfBlockCompositor
 from artifactsmmo_cli.tui.sprite_registry import SpriteRegistry
 from artifactsmmo_cli.tui.sprites import (
-    BLANK_SPRITE, PICKAXE_HEAD, PLANNING_SPRITE, PLAYER_SPRITE, Sprite, SpriteCategory,
-    overlay_sprites,
+    AXE_HEAD, BLANK_SPRITE, FIGHT_HEAD, HAMMER_HEAD, PICKAXE_HEAD, PLANNING_SPRITE,
+    PLAYER_SPRITE, Sprite, SpriteCategory, gather_head, overlay_sprites,
 )
 from artifactsmmo_cli.tui.path_interpolate import glide_path
 from artifactsmmo_cli.tui.swing_frames import (
@@ -38,6 +38,25 @@ _SKILL_TO_RESOURCE_KEY = {
     "alchemy": "resource_alchemy",
 }
 TileContent = tuple[SpriteCategory, str]
+
+
+def _is_bar(code: str | None, game_data: GameData) -> bool:
+    """True when `code` names a craftable bar (all in-game bars end '_bar')."""
+    return code is not None and code.endswith("_bar") and game_data.item_stats(code) is not None
+
+
+def select_swing_head(mode: Mode, action_target: str | None, game_data: GameData) -> Sprite | None:
+    """The tool head for a swing mode + target, or None when no tool should show:
+    gather -> axe/pickaxe by the resource's skill; fight -> sword; craft -> hammer
+    only for a bar; anything else -> None."""
+    if mode is Mode.GATHER_SWING:
+        skill_req = game_data.resource_skill_level(action_target) if action_target else None
+        return gather_head(skill_req[0] if skill_req is not None else None)
+    if mode is Mode.FIGHT_SWING:
+        return FIGHT_HEAD
+    if mode is Mode.CRAFT_SWING and _is_bar(action_target, game_data):
+        return HAMMER_HEAD
+    return None
 
 
 class MapPane(Static):
@@ -169,10 +188,15 @@ class MapPane(Static):
         if snap is None:
             return {}
         elapsed = now - self._anim_start
+        # No tool while walking: a glide animation in progress suppresses the swing.
+        if self._anim_frames and elapsed < snap.cooldown_remaining:
+            return {}
         mode = current_mode(snap.action_kind, self._planning_active, elapsed, snap.cooldown_remaining)
+        head = select_swing_head(mode, snap.action_target, self._game_data)
+        if head is None:
+            return {}
         idx = swing_frame_index(elapsed, SWING_FRAME_COUNT, SWING_SWEEP_SECONDS)
-        # TODO(Task 4): replace PICKAXE_HEAD with select_swing_head(mode, ...)
-        return swing_overlay(mode, idx, PICKAXE_HEAD)
+        return swing_overlay(mode, idx, head)
 
     def _glide_center(self, now: float) -> tuple[int, int] | None:
         if not self._anim_frames:
