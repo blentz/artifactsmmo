@@ -13,6 +13,7 @@ import Formal.SkillStepDispatch
 import Formal.DoomedMemo
 import Formal.SkillGateFastFail
 import Formal.LeafAttainable
+import Formal.CompleteTaskIncome
 import Formal.GrindLadder
 import Formal.MonsterDropApply
 import Formal.SkillXpCurve
@@ -2837,6 +2838,16 @@ example : ∀ (g d t b : Bool),
 -- TASK SOURCE: earned-by-task ⇒ attainable regardless of other sources.
 example : ∀ (g d b : Bool), Formal.LeafAttainable.leafAttainable g d true b = true :=
   @Formal.LeafAttainable.leafAttainable_task_earnable
+
+-- ─── CompleteTaskIncome (CompleteTaskAction.apply coin minting) anti-weakening pins ───
+-- VALIDITY: post-completion coin count is EXACTLY coins + reward.
+example : ∀ (coins reward : Nat),
+    Formal.CompleteTaskIncome.applyComplete coins reward = coins + reward :=
+  @Formal.CompleteTaskIncome.applyComplete_adds
+-- MONOTONICITY: reward ≥ 1 ⇒ STRICT increase (weakening `<` to `≤` fails to elaborate).
+example : ∀ (coins reward : Nat), 1 ≤ reward →
+    coins < Formal.CompleteTaskIncome.applyComplete coins reward :=
+  @Formal.CompleteTaskIncome.applyComplete_monotone
 
 -- ─── ServableFilter (decide() servable filter) anti-weakening pins ───
 -- ANY servable ⇒ the result is exactly the servable subset (unservable roots dropped).

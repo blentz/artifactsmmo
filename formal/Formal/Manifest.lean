@@ -23,6 +23,7 @@ import Formal.BankExpansionTiming
 import Formal.DoomedMemo
 import Formal.SkillGateFastFail
 import Formal.LeafAttainable
+import Formal.CompleteTaskIncome
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
@@ -1099,6 +1100,11 @@ open Formal.PriorityBand
 #check @Formal.LeafAttainable.leafAttainable_iff_or          -- validity: decision = disjunction
 #check @Formal.LeafAttainable.leafAttainable_task_earnable   -- task source alone ⇒ attainable
 #check @Formal.LeafAttainable.leafAttainable_monotone_task   -- monotone in the task source
+
+-- CompleteTaskIncome required roles (CompleteTaskAction.apply coin minting;
+-- src/artifactsmmo_cli/ai/actions/complete_task_core.py):
+#check @Formal.CompleteTaskIncome.applyComplete_adds      -- validity: post = coins + reward
+#check @Formal.CompleteTaskIncome.applyComplete_monotone  -- reward ≥ 1 ⇒ strict increase
 
 -- ServableFilter required roles (decide() servable filter;
 -- src/artifactsmmo_cli/ai/tiers/servable_filter.py::keep_servable):

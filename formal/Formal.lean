@@ -202,3 +202,4 @@ import Formal.DoomedMemo
 import Formal.SkillGateFastFail
 import Formal.PlanModel
 import Formal.LeafAttainable
+import Formal.CompleteTaskIncome
