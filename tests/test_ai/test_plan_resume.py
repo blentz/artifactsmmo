@@ -81,3 +81,15 @@ def test_resume_discards_when_no_game_data(tmp_path):
     player._build_actions = lambda: [_Act("StepA"), _Act("StepB")]  # type: ignore[attr-defined]
     player._resume_plan_cache(make_state(), None)  # no game_data -> early discard
     assert player._plan_cache is None
+
+
+def test_resume_discards_when_cursor_at_plan_end(tmp_path):
+    store = _store(tmp_path)
+    # cursor == len(plan): the remaining tail is empty -> nothing to rebuild
+    store.save_plan_commitment(
+        "GatherMaterials(...)", _GATHER_JSON, ["StepA", "StepB"], 2, "copper_ring", False)
+    player = GamePlayer(character="hero", dry_run=True, history=store)
+    player._build_actions = lambda: [_Act("StepA"), _Act("StepB")]  # type: ignore[attr-defined]
+    game_data_stub = object()
+    player._resume_plan_cache(make_state(), game_data_stub)  # type: ignore[arg-type]
+    assert player._plan_cache is None

@@ -1,5 +1,7 @@
 """Round-trip serialization tests for the six plan-bearing goal classes."""
 
+import pytest
+
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
 from artifactsmmo_cli.ai.goals.craft_relief import CraftReliefGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
@@ -128,3 +130,8 @@ def test_non_plan_bearing_goal_returns_none():
     class Dummy:  # no serialize()
         pass
     assert goal_to_dict(Dummy()) is None
+
+
+def test_unknown_type_raises():
+    with pytest.raises(ValueError, match="unknown goal type"):
+        goal_from_dict({"type": "NonExistent"}, game_data=None)
