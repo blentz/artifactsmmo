@@ -199,6 +199,7 @@ import Formal.Liveness.FightReadyReach
 import Formal.Liveness.GearTierLeveling
 import Formal.Liveness.WinnableGrounded
 import Formal.DoomedMemo
+import Formal.NextCraftAction
 import Formal.SkillGateFastFail
 import Formal.CurrencyAffordFastFail
 import Formal.PlanModel

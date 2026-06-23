@@ -1089,6 +1089,12 @@ open Formal.PriorityBand
 #check @Formal.DoomedMemo.isDoomed_expires         -- liveness: window elapsed ⇒ not doomed
 #check @Formal.DoomedMemo.escalation_grows_window  -- same-sig re-mark never shrinks window
 
+-- NextCraftAction required roles (next_craft_target_pure; churn fix;
+-- src/artifactsmmo_cli/ai/next_craft_core.py):
+#check @Formal.NextCraftAction.nextCraftTarget_none_iff        -- validity: none ↔ qty ≤ owned target
+#check @Formal.NextCraftAction.nextHelper_craft_inputs_satisfied -- ordering: craft ⇒ all inputs on hand
+#check @Formal.NextCraftAction.nextCraftTarget_qty_pos          -- shortness: returned qty ≥ 1
+
 -- SkillGateFastFail required roles (GatherMaterialsGoal.is_plannable;
 -- src/artifactsmmo_cli/ai/goals/gathering.py:316-335):
 #check @Formal.SkillGateFastFail.applyStep_gate_closed  -- gate closed ⇒ step is a no-op on owned

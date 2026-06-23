@@ -11,6 +11,7 @@ import Formal.SkillTargetCurve
 import Formal.SkillGrindSelection
 import Formal.SkillStepDispatch
 import Formal.DoomedMemo
+import Formal.NextCraftAction
 import Formal.SkillGateFastFail
 import Formal.CurrencyAffordFastFail
 import Formal.LeafAttainable
@@ -2817,6 +2818,29 @@ example : ∀ {σ : Type} [inst : DecidableEq σ] (base maxR : Nat) (sig0 : σ)
     Formal.DoomedMemo.ttl base maxR failures ≤ cycle - setAt →
     Formal.DoomedMemo.isDoomed base maxR sig0 setAt failures sig cycle = false :=
   @Formal.DoomedMemo.isDoomed_expires
+
+-- ─── NextCraftAction (next_craft_target_pure; churn fix) anti-weakening pins ───
+-- VALIDITY: none iff already satisfied (weakening ↔ to → would still compile, but ↔ is exact)
+example : ∀ (recipes : String → Option (List (String × Nat))) (owned : String → Nat)
+    (target : String) (qty fuel : Nat),
+    Formal.NextCraftAction.nextCraftTarget recipes owned target qty fuel = none ↔
+    qty ≤ owned target :=
+  @Formal.NextCraftAction.nextCraftTarget_none_iff
+-- ORDERING: craft returned ⇒ recipe inputs exist and none is short
+example : ∀ (recipes : String → Option (List (String × Nat))) (owned : String → Nat)
+    (item : String) (need fuel : Nat) (result : Formal.NextCraftAction.NextAction),
+      Formal.NextCraftAction.nextHelper recipes owned item need fuel = result →
+      result.kind = Formal.NextCraftAction.Kind.craft →
+      ∃ inputs,
+        recipes result.item = some inputs ∧
+        inputs.find? (fun p => decide (owned p.1 < p.2 * result.qty)) = none :=
+  @Formal.NextCraftAction.nextHelper_craft_inputs_satisfied
+-- SHORTNESS: returned action always has qty ≥ 1 (genuine positive deficit)
+example : ∀ (recipes : String → Option (List (String × Nat))) (owned : String → Nat)
+    (target : String) (qty fuel : Nat) (result : Formal.NextCraftAction.NextAction),
+    Formal.NextCraftAction.nextCraftTarget recipes owned target qty fuel = some result →
+    1 ≤ result.qty :=
+  @Formal.NextCraftAction.nextCraftTarget_qty_pos
 
 -- ─── SkillGateFastFail (GatherMaterialsGoal.is_plannable) anti-weakening pins ───
 -- gate closed ⇒ owned count invariant across the ENTIRE plan.
