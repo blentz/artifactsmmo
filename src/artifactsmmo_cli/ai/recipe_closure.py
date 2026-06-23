@@ -26,9 +26,27 @@ Visited sets are insertion-ordered `dict[str, int]` membership maps
 list, and all reads go through order-independent `dict.get`.
 """
 
-from collections.abc import Iterable, Mapping
+from __future__ import annotations
 
-from artifactsmmo_cli.ai.game_data import GameData
+from collections.abc import Iterable, Mapping
+from typing import Protocol, runtime_checkable
+
+
+@runtime_checkable
+class _HasRecipes(Protocol):
+    """Structural subset of GameData used by the public recipe-closure wrappers.
+
+    A Protocol avoids importing GameData here, which would create a circular
+    dependency when GameData imports recipe_cost_memo which imports this module.
+    All concrete callers pass a GameData instance, which satisfies this protocol
+    via structural subtyping.
+    """
+
+    @property
+    def crafting_recipes(self) -> Mapping[str, dict[str, int]]: ...
+
+    @property
+    def resource_drops(self) -> Mapping[str, str]: ...
 
 
 def _closure_visited(fuel: int, material: str, recipes: Mapping[str, dict[str, int]],
@@ -111,7 +129,7 @@ def recipe_closure_pure(roots: list[str], recipes: Mapping[str, dict[str, int]],
     return needed_resources, craftable_mats
 
 
-def recipe_closure(game_data: GameData, roots: Iterable[str]) -> tuple[set[str], set[str]]:
+def recipe_closure(game_data: _HasRecipes, roots: Iterable[str]) -> tuple[set[str], set[str]]:
     """Return (needed_resources, craftable_mats) for producing every item in roots.
 
     needed_resources: resource codes whose drop is some material in the closure.
@@ -121,7 +139,7 @@ def recipe_closure(game_data: GameData, roots: Iterable[str]) -> tuple[set[str],
                                game_data.resource_drops)
 
 
-def raw_material_units(game_data: GameData, item: str, visited: frozenset[str] | None = None) -> int:
+def raw_material_units(game_data: _HasRecipes, item: str, visited: frozenset[str] | None = None) -> int:
     """Total raw-resource quantity gathered to craft one `item`, multiplying
     ingredient quantities down the recipe tree. A raw (gathered) or unknown item
     costs 1. Cyclic recipes terminate via the visited guard (revisit -> 1)."""
@@ -130,7 +148,7 @@ def raw_material_units(game_data: GameData, item: str, visited: frozenset[str] |
     return _raw_units(len(recipes) + 1, item, recipes, {code: 1 for code in visited})
 
 
-def closure_demand(root: str, multiplier: int, game_data: GameData,
+def closure_demand(root: str, multiplier: int, game_data: _HasRecipes,
                    out: dict[str, int], visited: frozenset[str]) -> None:
     """Accumulate the recipe-closure demand of `root` (x `multiplier`) into
     `out`. The root itself and every transitive material are recorded at their
