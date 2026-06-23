@@ -19,3 +19,15 @@ def run_oracle(kind: str, inputs: list[list[int]]) -> list[dict]:
     if proc.returncode != 0:
         raise RuntimeError(f"oracle failed: {proc.stderr}")
     return json.loads(proc.stdout)
+
+
+def run_oracle_structured(kind: str, args_batches: list[list]) -> list[dict]:
+    """Like run_oracle but each args entry may contain arbitrary JSON values
+    (objects/strings), not just ints. For string-keyed structured inputs."""
+    if not ORACLE.exists():
+        raise RuntimeError(f"oracle not built: {ORACLE} (run `cd formal && lake build oracle`)")
+    payload = json.dumps([{"kind": kind, "args": list(args)} for args in args_batches])
+    proc = subprocess.run([str(ORACLE)], input=payload, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError(f"oracle failed: {proc.stderr}")
+    return json.loads(proc.stdout)

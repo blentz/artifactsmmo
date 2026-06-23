@@ -23,6 +23,7 @@ open Formal.Liveness.MeansKind (allInLadderOrder)
 open Formal.Liveness.ProductionLadder (fires productionLadder)
 open Formal.Liveness.LadderEval (inertLadderState meansKindName)
 open Formal.Liveness.StickySelect (Cand stickyChoose nextLast)
+open Formal.NextCraftAction
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
 def runCalculatePath (sx sy ex ey : Int) : Json :=
@@ -2107,6 +2108,71 @@ def runKeepServable (args : Array Json) : Json :=
     (List.range n).map (fun (i : Nat) => ((i : Int), intArg args (1 + i) != 0))
   Json.arr ((Formal.ServableFilter.keepServable tagged).map (fun x => Json.num x)).toArray
 
+/-- Compute one next_craft_target result using the proved `nextCraftTarget`.
+
+args layout (mixed JSON):
+* `[0]` recipes_obj : JSON OBJECT whose keys are item codes (strings) and whose
+        values are JSON ARRAYs of `[input_str, per_int]` pairs.
+        The inputs array preserves Python dict insertion order.
+        The outer object's key order is irrelevant (lookup only, not traversal).
+* `[1]` owned_obj  : JSON OBJECT mapping item codes → owned count (int ≥ 0).
+* `[2]` target     : string (item code).
+* `[3]` qty        : int ≥ 0 (how many of target needed).
+* `[4]` fuel       : int ≥ 0 (recursion budget; caller passes len(recipes)+1).
+
+Emits `null` when none (target already satisfied); otherwise:
+`{"item": str, "kind": "gather"|"craft", "qty": int}`. -/
+def runNextCraft (args : Array Json) : Json :=
+  -- Parse recipes object into an assoc list, preserving per-item inputs order.
+  let recipesJson := args[0]!
+  let recipeAssoc : List (String × List (String × Nat)) :=
+    match recipesJson.getObj? with
+    | .error _ => []
+    | .ok kvMap =>
+        kvMap.toList.filterMap (fun (itemName, inputsJson) =>
+          match inputsJson.getArr? with
+          | .error _ => none
+          | .ok pairsArr =>
+              let inputs : List (String × Nat) :=
+                pairsArr.toList.filterMap (fun pairJson =>
+                  match pairJson.getArr? with
+                  | .error _ => none
+                  | .ok pair =>
+                    if pair.size < 2 then none
+                    else
+                      match (pair[0]!.getStr?).toOption,
+                            (pair[1]!.getInt?).toOption with
+                      | some inp, some per => some (inp, per.toNat)
+                      | _, _ => none)
+              some (itemName, inputs))
+  let recipes : String → Option (List (String × Nat)) :=
+    fun s => match recipeAssoc.find? (fun p => p.1 == s) with
+      | some p => some p.2
+      | none   => none
+  -- Parse owned object into an assoc list.
+  let ownedJson := args[1]!
+  let ownedAssoc : List (String × Nat) :=
+    match ownedJson.getObj? with
+    | .error _ => []
+    | .ok kvMap =>
+        kvMap.toList.filterMap (fun (itemName, qtyJson) =>
+          match qtyJson.getInt? with
+          | .error _ => none
+          | .ok n    => some (itemName, n.toNat))
+  let owned : String → Nat :=
+    fun s => match ownedAssoc.find? (fun p => p.1 == s) with
+      | some p => p.2
+      | none   => 0
+  let target := strArg args 2
+  let qty    := (intArg args 3).toNat
+  let fuel   := (intArg args 4).toNat
+  match nextCraftTarget recipes owned target qty fuel with
+  | none    => Json.null
+  | some na =>
+      let kindStr : String := match na.kind with | Kind.gather => "gather" | Kind.craft => "craft"
+      Json.mkObj [("item", Json.str na.item), ("kind", Json.str kindStr),
+                  ("qty", Json.num (Int.ofNat na.qty))]
+
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
   let args := ((item.getObjValD "args" |>.getArr?).toOption.getD #[])
@@ -2281,6 +2347,8 @@ def runOne (item : Json) : Json :=
     runCurrencyAfford args
   else if kind == "ladder_fires" then
     runLadder args
+  else if kind == "next_craft" then
+    runNextCraft args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 
