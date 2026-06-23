@@ -386,3 +386,50 @@ def test_relevant_actions_emits_npcbuy_for_deep_closure_currency_buy_leaf() -> N
         "NpcBuyAction for deep closure currency-buy leaf 'jasper_crystal' must be emitted "
         "even though it is not in self._needed (only satchel is)"
     )
+
+
+def test_is_plannable_event_npc_vendor_not_counted_for_affordability() -> None:
+    """C4 fix: first_unaffordable_currency_leaf must filter event NPCs (matching
+    relevant_actions). An event vendor selling a currency-buy leaf is not usable
+    by the planner (relevant_actions skips it), so it must not be counted as an
+    affordable source — the leaf must be treated as unaffordable (no usable vendor).
+
+    Scenario: mystical_crystal is sold ONLY by an EVENT NPC (seasonal_trader)
+    for 50 event_tokens. Even though the character has 50 event_tokens on hand,
+    the goal should be unplannable because the event vendor is not usable.
+    """
+    from artifactsmmo_cli.ai.goals.currency_demand import first_unaffordable_currency_leaf
+
+    gd = GameData()
+    # widget requires mystical_crystal x1
+    gd._crafting_recipes = {"widget": {"mystical_crystal": 1}}
+    gd._item_stats = {
+        "widget": ItemStats(code="widget", level=1, type_="weapon",
+                            crafting_skill="weaponcrafting", crafting_level=1),
+    }
+    # mystical_crystal: non-craftable, not gathered, not dropped
+    # seasonal_trader (EVENT NPC) sells it for 50 event_tokens
+    gd._npc_stock = {"seasonal_trader": {"mystical_crystal": 50}}
+    gd._npc_buy_currency = {"seasonal_trader": {"mystical_crystal": "event_tokens"}}
+    gd._npc_locations = {"seasonal_trader": (0, 0)}
+    # Mark seasonal_trader as an event NPC (timed/seasonal only)
+    gd.world.npc_event_codes["seasonal_trader"] = "seasonal_event"
+
+    # Character HAS enough event_tokens to "afford" it, but event vendor is not usable
+    state = make_state(skills={"weaponcrafting": 5}, inventory={"event_tokens": 50},
+                       bank_items={}, x=0, y=0)
+
+    # first_unaffordable_currency_leaf must recognize event vendor doesn't count
+    result = first_unaffordable_currency_leaf({"widget": 1}, state, gd)
+    # Since event vendor is filtered out (no permanent vendors), the leaf is
+    # unaffordable (no viable purchase path exists).
+    assert result == ("event_tokens", 50), (
+        "Leaf with only event vendor must be unaffordable: "
+        f"got {result}"
+    )
+
+    # Cross-check: GatherMaterialsGoal.is_plannable should also return False
+    goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1})
+    assert goal.is_plannable(state, gd) is False, (
+        "Goal with only event-vendor currency-buy leaf must be unplannable"
+    )

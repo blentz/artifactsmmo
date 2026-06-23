@@ -56,10 +56,32 @@ def first_unaffordable_currency_leaf(
         purchases = game_data.npc_purchases(leaf)
         if not purchases:
             continue
+        # Filter to PERMANENT, LOCATED vendors only (matching relevant_actions' guard).
+        # Event NPCs and unlocated NPCs are not usable by relevant_actions,
+        # so they must not count as affordable vendors here.
+        permanent = [
+            (npc, price, currency)
+            for npc, price, currency in purchases
+            if not game_data.is_event_npc(npc) and game_data.npc_location(npc) is not None
+        ]
+        if not permanent:
+            # No usable vendor for this leaf — it's a currency-buy leaf
+            # (non-craftable, non-drop) with zero viable purchase paths.
+            # Treat it as unaffordable (owned count won't help).
+            owned = state.inventory.get(leaf, 0) + bank.get(leaf, 0)
+            if currency_afford_plannable_pure(True, False, owned, qty):
+                continue
+            # Blocking: unaffordable + no usable vendor. Return a dummy result
+            # (the leaf has no permanent vendor, so we can't pick one; but
+            # the goal is still blocked). Arbitrarily use the first purchase for
+            # currency/price info (they all have the same currency per closure
+            # demand) even though the vendor is not usable.
+            _npc, price, currency = purchases[0]
+            return currency, price * qty
         owned = state.inventory.get(leaf, 0) + bank.get(leaf, 0)
         affordable = any(
             (state.inventory.get(currency, 0) + bank.get(currency, 0)) >= price * qty
-            for _npc, price, currency in purchases
+            for _npc, price, currency in permanent
         )
         # currency_afford_plannable_pure is the proved live decision: a leaf is
         # only blocking when not affordable AND not already owned in sufficient
@@ -68,6 +90,6 @@ def first_unaffordable_currency_leaf(
             continue
         # Blocking unaffordable leaf: pick the cheapest vendor as the funding
         # target (the currency amount ReachCurrencyGoal must reach).
-        _npc, price, currency = min(purchases, key=lambda p: p[1])
+        _npc, price, currency = min(permanent, key=lambda p: p[1])
         return currency, price * qty
     return None
