@@ -71,6 +71,7 @@ from artifactsmmo_cli.ai.tiers import (
     StrategyDecision,
     StrategyEngine,
 )
+from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
 from artifactsmmo_cli.ai.plan_cache import PlanCache
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.should_replan import should_replan
@@ -265,6 +266,14 @@ class GamePlayer:
                     latch_active=self._gear_latch.active,
                     goal_repr=repr(selected_goal),
                 )
+                if self.history is not None:
+                    plan_reprs = [repr(a) for a in plan]
+                    goal_json = json.dumps(goal_to_dict(selected_goal) or {})
+                    self.history.record_plan_body(
+                        repr(selected_goal), plan_reprs[0], plan_reprs)
+                    self.history.save_plan_commitment(
+                        repr(selected_goal), goal_json, plan_reprs, 0,
+                        self._last_decide_crafting_target, self._gear_latch.active)
             else:
                 self._plan_cache = None
             return selected_goal, plan, goals_tried, True

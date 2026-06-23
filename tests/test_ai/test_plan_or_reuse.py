@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.plan_cache import PlanCache
 from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state
@@ -67,3 +68,21 @@ def test_second_call_reuses_without_replanning():
     assert replanned is False
     assert calls["n"] == 1                               # decide NOT called again
     assert returned_plan[0] is plan[1]                   # serves the next step
+
+
+def test_replan_persists_body_and_commitment(tmp_path):
+    goal = _Goal()
+    plan = [_Act(), _Act()]
+    store = LearningStore(db_path=str(tmp_path / "l.db"), character="hero")
+    store.start_session()
+    player = GamePlayer(character="hero", dry_run=True, history=store)
+    player._gear_latch._active = False
+
+    def _fake_decide(state, game_data, actions, ctx_combat_monster):
+        return goal, list(plan), [{"goal": repr(goal)}]
+
+    player._decide_band = _fake_decide  # type: ignore[attr-defined]
+    player._plan_or_reuse(make_state(), None, [], None)
+
+    assert len(store.plan_bodies_for_goal("FakeGoal()")) == 1
+    assert store.load_plan_commitment() is not None
