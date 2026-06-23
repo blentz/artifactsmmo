@@ -513,6 +513,12 @@ class UpgradeEquipmentGoal(Goal):
             )
         return False
 
+    def serialize(self) -> dict[str, object]:
+        committed = list(self._committed_target) if self._committed_target is not None else None
+        return {"type": "UpgradeEquipmentGoal",
+                "initial_equipment": dict(self._initial_equipment),
+                "committed_target": committed}
+
     def __repr__(self) -> str:
         # The committed target is part of the goal's identity. Run-18 trace
         # 2026-06-12 (cycles 27-98): the bare "UpgradeEquipment" repr made the

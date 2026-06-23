@@ -150,3 +150,39 @@ class LearnedSetting(SQLModel, table=True):
     character: str = Field(index=True)
     key: str = Field(index=True)
     value: int
+
+
+class PlanBodyLogBase(SQLModel):
+    """One computed plan body, logged at re-plan time. Counted by the Phase-2
+    macro detector."""
+
+    character: str = Field(index=True)
+    session_id: str = Field(index=True)
+    ts: str
+    goal_repr: str = Field(index=True)
+    head_action_repr: str = Field(index=True)
+    body_json: str  # JSON list[str] of action reprs
+
+
+class PlanBodyLog(PlanBodyLogBase, table=True):
+    __tablename__ = "plan_body_log"
+
+    id: int | None = Field(default=None, primary_key=True)
+
+
+class PlanCommitmentBase(SQLModel):
+    """The bot's live plan commitment — one row per character, upserted on each
+    re-plan, for restart-resume."""
+
+    character: str = Field(primary_key=True)
+    goal_repr: str
+    goal_json: str  # JSON serialization of the goal (see goal_serialization, Task 5)
+    plan_json: str  # JSON list[str] of action reprs
+    cursor: int
+    crafting_target: str | None = None
+    latch_active: bool = False
+    replanned_ts: str
+
+
+class PlanCommitment(PlanCommitmentBase, table=True):
+    __tablename__ = "plan_commitment"

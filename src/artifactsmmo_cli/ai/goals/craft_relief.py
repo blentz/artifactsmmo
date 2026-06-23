@@ -83,5 +83,11 @@ class CraftReliefGoal(Goal):
         # Move + Craft worst case. Two-step ceiling keeps the planner snappy.
         return 5
 
+    def serialize(self) -> dict[str, object]:
+        return {"type": "CraftReliefGoal",
+                "target_item": self._target_item,
+                "initial_qty": self._initial_qty,
+                "batch": self._batch}
+
     def __repr__(self) -> str:
         return f"CraftRelief({self._target_item})"
