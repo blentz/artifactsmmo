@@ -13,7 +13,7 @@ memo ≡ closure_demand over random acyclic recipe DAGs.
 
 from __future__ import annotations
 
-from artifactsmmo_cli.ai.recipe_closure import closure_demand
+from artifactsmmo_cli.ai.recipe_closure import _HasRecipes, closure_demand
 
 
 class RecipeCostMemo:
@@ -23,7 +23,7 @@ class RecipeCostMemo:
     Call `clear()` when the recipe set changes to force recomputation.
     """
 
-    def __init__(self, game_data: object) -> None:
+    def __init__(self, game_data: _HasRecipes) -> None:
         self._game_data = game_data
         self._cache: dict[str, dict[str, int]] = {}
 
@@ -37,7 +37,7 @@ class RecipeCostMemo:
         """
         if item not in self._cache:
             out: dict[str, int] = {}
-            closure_demand(item, 1, self._game_data, out, frozenset())  # type: ignore[arg-type]
+            closure_demand(item, 1, self._game_data, out, frozenset())
             self._cache[item] = out
         return self._cache[item]
 
