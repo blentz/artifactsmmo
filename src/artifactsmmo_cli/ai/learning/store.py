@@ -17,6 +17,10 @@ from artifactsmmo_cli.ai.learning.models import (
     Blocker,
     Cycle,
     LearnedSetting,
+    PlanBodyLog,
+    PlanBodyLogBase,
+    PlanCommitment,
+    PlanCommitmentBase,
     Session,
     SkillXpObservation,
     TaskRewardObservation,
@@ -628,3 +632,78 @@ class LearningStore:
                 s.commit()
         except SQLAlchemyError as e:
             print(f"[learning] set_learned_int({key}) failed: {e}")
+
+    def record_plan_body(self, goal_repr: str, head_action_repr: str,
+                         body: list[str]) -> None:
+        """Append a computed plan body. Best-effort; degraded storage must not
+        kill the player loop."""
+        try:
+            with SqlSession(self._engine) as s:
+                s.add(PlanBodyLog(
+                    character=self._character,
+                    session_id=self._session_id or "no-session",
+                    ts=datetime.now(tz=timezone.utc).isoformat(),
+                    goal_repr=goal_repr,
+                    head_action_repr=head_action_repr,
+                    body_json=json.dumps(body),
+                ))
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[learning] record_plan_body failed: {e}")
+
+    def plan_bodies_for_goal(self, goal_repr: str) -> list[PlanBodyLogBase]:
+        """All logged plan bodies for a goal repr (Phase-2 macro detector input)."""
+        try:
+            with SqlSession(self._engine) as s:
+                return list(s.exec(
+                    select(PlanBodyLog).where(
+                        PlanBodyLog.character == self._character,
+                        PlanBodyLog.goal_repr == goal_repr,
+                    )
+                ).all())
+        except SQLAlchemyError:
+            return []
+
+    def save_plan_commitment(self, goal_repr: str, goal_json: str,
+                             plan_reprs: list[str], cursor: int,
+                             crafting_target: str | None,
+                             latch_active: bool) -> None:
+        """Upsert the single live commitment row for this character."""
+        try:
+            with SqlSession(self._engine) as s:
+                row = s.exec(
+                    select(PlanCommitment).where(
+                        PlanCommitment.character == self._character)
+                ).first()
+                ts = datetime.now(tz=timezone.utc).isoformat()
+                if row is not None:
+                    row.goal_repr = goal_repr
+                    row.goal_json = goal_json
+                    row.plan_json = json.dumps(plan_reprs)
+                    row.cursor = cursor
+                    row.crafting_target = crafting_target
+                    row.latch_active = latch_active
+                    row.replanned_ts = ts
+                    s.add(row)
+                else:
+                    s.add(PlanCommitment(
+                        character=self._character, goal_repr=goal_repr,
+                        goal_json=goal_json,
+                        plan_json=json.dumps(plan_reprs), cursor=cursor,
+                        crafting_target=crafting_target, latch_active=latch_active,
+                        replanned_ts=ts,
+                    ))
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[learning] save_plan_commitment failed: {e}")
+
+    def load_plan_commitment(self) -> PlanCommitmentBase | None:
+        """Read the live commitment row, or None when absent / on DB error."""
+        try:
+            with SqlSession(self._engine) as s:
+                return s.exec(
+                    select(PlanCommitment).where(
+                        PlanCommitment.character == self._character)
+                ).first()
+        except SQLAlchemyError:
+            return None
