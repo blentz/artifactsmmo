@@ -7,6 +7,7 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.arbiter_select import Candidate, select_pure
+from artifactsmmo_cli.ai.craft_plan_gen import generate_next_craft_action
 from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
 from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
 from artifactsmmo_cli.ai.game_data import GameData
@@ -780,6 +781,21 @@ class StrategyArbiter:
                 "plan_len": 0,
             })
             return []
+        # Fast-path: for a deterministic gather-craft closure (all leaves are
+        # gatherable raws or skill-gated-met craftables) skip A* entirely.
+        # O(closure) vs 52K-node search for copper_ring-style chains.
+        # Falls back to None for monster-drop / NPC-buy / unmet-skill-gate goals.
+        gen = generate_next_craft_action(goal, state, game_data, actions)
+        if gen is not None:
+            self._last_timed_out = False
+            self.goals_tried.append({
+                "goal": repr(goal),
+                "nodes": 0,
+                "depth": 1,
+                "timed_out": False,
+                "plan_len": len(gen),
+            })
+            return gen
         plan = self._planner.plan(state, goal, actions, game_data, self._history,
                                   budget_seconds=budget_seconds)
         stats = self._planner.last_stats
