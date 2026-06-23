@@ -118,6 +118,26 @@ EQUIP_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "equip_va
 GAME_DATA_PARSE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "game_data.py"
 LOCATION_CATALOG_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "location_catalog.py"
 PROGRESSION_RESERVE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression_reserve_core.py"
+NEXT_CRAFT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "next_craft_core.py"
+
+# next_craft_target_pure mutations -- anchors for the deterministic craft-action
+# generator (churn fix). Each breaks one of the four load-bearing decisions;
+# killed by formal/diff/test_next_craft_diff.py (300-example property over random
+# DAGs + spot-checks).
+NEXT_CRAFT_MUTATIONS = [
+    ("next_craft: drop per-scaling on required inputs",
+     "        required = per * deficit",
+     "        required = deficit"),
+    ("next_craft: short-input off-by-one (< -> <=)",
+     "        if owned.get(inp, 0) < required:",
+     "        if owned.get(inp, 0) <= required:"),
+    ("next_craft: None-boundary off-by-one (>= -> >)",
+     "    if owned.get(target, 0) >= qty:",
+     "    if owned.get(target, 0) > qty:"),
+    ("next_craft: craft result emits gather kind",
+     '    return NextAction(item, "craft", deficit)  # all inputs on hand → craft',
+     '    return NextAction(item, "gather", deficit)  # all inputs on hand → craft'),
+]
 
 # Effect-parser coverage (stat-audit fixes).
 RESTORE_FAMILY_MUTATIONS = [
@@ -1875,6 +1895,8 @@ _ALL_SRCS = [
     FUNDING_CORE_SRC,
     # C4 — currency_afford_plannable_pure: fast-fail for unaffordable currency-buy leaves.
     CURRENCY_AFFORD_CORE_SRC,
+    # C5 — next_craft_target_pure: churn fix (replaces 52K-node A* re-run).
+    NEXT_CRAFT_CORE_SRC,
 ]
 
 
@@ -3705,6 +3727,9 @@ def _run_all_groups() -> int:
               "tests/test_ai/test_game_data.py", survivors)
     run_group(LOCATION_CATALOG_SRC, EVENT_VISIBILITY_MUTATIONS,
               "tests/test_ai/test_event_content_visibility.py", survivors)
+    # C5 — next_craft_target_pure: churn fix differential.
+    run_group(NEXT_CRAFT_CORE_SRC, NEXT_CRAFT_MUTATIONS,
+              "formal/diff/test_next_craft_diff.py", survivors)
     _execute(_UNITS, survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
