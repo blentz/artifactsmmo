@@ -21,7 +21,10 @@ def macro_research(
     out: str | None = typer.Option(None, "--out", help="write report to file"),
     top_n: int = typer.Option(20, "--top-n", help="macro candidates to show"),
 ) -> None:
-    rows = load_cycle_rows(db or _default_db_path())
+    path = db or _default_db_path()
+    if not Path(path).exists():
+        raise typer.BadParameter(f"learning.db not found: {path}")
+    rows = load_cycle_rows(path)
     cost = cost_by_goal_type(rows)
     bands = segment_bands(rows, "level") + segment_bands(rows, "skill")
     candidates = score_candidates(bands)

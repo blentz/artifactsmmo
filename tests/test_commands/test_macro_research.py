@@ -1,3 +1,6 @@
+import pytest
+import typer
+
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.commands.macro_research import _default_db_path, macro_research
@@ -6,6 +9,13 @@ from artifactsmmo_cli.commands.macro_research import _default_db_path, macro_res
 def test_default_db_path_points_at_learning_db():
     p = _default_db_path()
     assert p.endswith("artifactsmmo/learning.db")
+
+
+def test_macro_research_raises_bad_parameter_for_missing_db(tmp_path):
+    missing = tmp_path / "nope.db"
+    with pytest.raises(typer.BadParameter):
+        macro_research(db=str(missing), out=None, top_n=5)
+    assert not missing.exists()
 
 
 def _seed_progression(store, char):

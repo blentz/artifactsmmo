@@ -34,12 +34,20 @@ def format_report(cost: list[CostStat], candidates: list[MacroCandidate],
 
     lines.append(f"## Top {top_n} macro candidates (by value = occurrences x nodes)")
     lines.append("")
-    lines.append("| kind | value | occurrences | distinct chars | total nodes | chain | example keys |")
-    lines.append("|---|---|---|---|---|---|---|")
+    lines.append(
+        "> **How to read:** candidates are ranked by distinct characters first "
+        "(cross-character recurrence = stability across characters until the seasonal reset), "
+        "then by value (= occurrences x total search nodes saved). "
+        "A high mean nodes/band with low distinct chars is a volatile single-character chain, "
+        "not a stable macro.")
+    lines.append("")
+    lines.append("| kind | value | occurrences | distinct chars | total nodes | mean nodes/band | chain | example keys |")
+    lines.append("|---|---|---|---|---|---|---|---|")
     for c in candidates[:top_n]:
+        mean_nodes = c.total_nodes / c.occurrences
         lines.append(
             f"| {c.kind} | {c.value} | {c.occurrences} | {c.distinct_characters} | "
-            f"{c.total_nodes} | {_chain_str(c.chain)} | {', '.join(c.example_keys)} |")
+            f"{c.total_nodes} | {mean_nodes:.0f} | {_chain_str(c.chain)} | {', '.join(c.example_keys)} |")
     lines.append("")
 
     lines.append("## Goal-repr variants (key-canonicalization evidence)")

@@ -27,6 +27,7 @@ def test_goal_repr_variants_skips_none_goal():
 
 def test_format_report_contains_sections():
     cost = [CostStat("PursueTask", 2, 4000, 2000.0, 1)]
+    # total_nodes=4000, occurrences=2 → mean nodes/band = 2000
     cand = [MacroCandidate("level", (("PursueTask", "CraftAction"),), 2, 2, 4000, 8000,
                            ("level=2",))]
     variants = {"PursueTask": ["PursueTask(t1)", "PursueTask(t2)"]}
@@ -36,3 +37,6 @@ def test_format_report_contains_sections():
     assert "value" in md.lower()                     # candidate table header
     assert "8000" in md                              # candidate value
     assert "PursueTask(t1)" in md                    # variants section
+    assert "How to read" in md                       # cross-character explanation note
+    assert "mean nodes/band" in md                   # new column header
+    assert "2000" in md                              # computed mean (4000 nodes / 2 occ)

@@ -47,4 +47,4 @@ def score_candidates(bands: list[Band]) -> list[MacroCandidate]:
             distinct_characters=len(chars), total_nodes=total_nodes,
             value=len(group) * total_nodes, example_keys=tuple(keys[:3]),
         ))
-    return sorted(candidates, key=lambda c: (c.value, c.occurrences), reverse=True)
+    return sorted(candidates, key=lambda c: (c.distinct_characters, c.value, c.occurrences), reverse=True)

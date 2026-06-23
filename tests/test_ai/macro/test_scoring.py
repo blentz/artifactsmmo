@@ -37,3 +37,19 @@ def test_score_groups_and_ranks_by_value():
     assert cands[0].total_nodes == 2000
     assert cands[0].value == 4000          # 2 occ * 2000 nodes
     assert cands[1].value == 5             # cheap chain ranks last
+
+
+def test_score_cross_char_precedes_higher_value_single_char():
+    # chain X: 2 distinct characters, lower value (1 occ * 500 nodes = 500)
+    band_x1 = _band("level=5", [_row("GatherMaterials(ash)", "GatherAction", 500)], char="alpha")
+    band_x2 = _band("level=5", [_row("GatherMaterials(ash)", "GatherAction", 0, char="beta")], char="beta")
+    # chain Y: 1 distinct character, higher value (3 occ * 400 nodes = 1200)
+    band_y1 = _band("level=5", [_row("PursueTask(t)", "CraftAction", 400)], char="hero")
+    band_y2 = _band("level=5", [_row("PursueTask(t)", "CraftAction", 400)], char="hero")
+    band_y3 = _band("level=5", [_row("PursueTask(t)", "CraftAction", 400)], char="hero")
+    cands = score_candidates([band_x1, band_x2, band_y1, band_y2, band_y3])
+    # X has distinct_characters=2, Y has distinct_characters=1 — X must rank first
+    assert cands[0].chain == (("GatherMaterials", "GatherAction"),)
+    assert cands[0].distinct_characters == 2
+    assert cands[1].chain == (("PursueTask", "CraftAction"),)
+    assert cands[1].distinct_characters == 1
