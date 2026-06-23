@@ -707,3 +707,20 @@ class LearningStore:
                 ).first()
         except SQLAlchemyError:
             return None
+
+    def update_commitment_cursor(self, cursor: int) -> None:
+        """Advance the persisted cursor on the single live commitment row.
+        No-op when no commitment row exists yet (or on DB error)."""
+        try:
+            with SqlSession(self._engine) as s:
+                row = s.exec(
+                    select(PlanCommitment).where(
+                        PlanCommitment.character == self._character)
+                ).first()
+                if row is None:
+                    return
+                row.cursor = cursor
+                s.add(row)
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[learning] update_commitment_cursor failed: {e}")

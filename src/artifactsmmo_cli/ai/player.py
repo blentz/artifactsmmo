@@ -637,6 +637,8 @@ class GamePlayer:
                 if outcome == "ok" and self._plan_cache is not None:
                     self._plan_cache.advance()
                     self._plan_cache.cycles_since_replan += 1
+                    if self.history is not None:
+                        self.history.update_commitment_cursor(self._plan_cache.cursor)
 
                 # After action.execute (or dry_run apply), record the cycle
                 # for stuck detection. `error:cooldown` is treated as

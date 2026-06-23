@@ -93,3 +93,20 @@ def test_resume_discards_when_cursor_at_plan_end(tmp_path):
     game_data_stub = object()
     player._resume_plan_cache(make_state(), game_data_stub)  # type: ignore[arg-type]
     assert player._plan_cache is None
+
+
+def test_resume_uses_persisted_cursor(tmp_path):
+    store = _store(tmp_path)
+    # Cursor=1 means StepA was already completed — resume should start from StepB.
+    store.save_plan_commitment(
+        "GatherMaterials(...)", _GATHER_JSON,
+        ["StepA", "StepB", "StepC"], 1, None, False)
+    player = GamePlayer(character="hero", dry_run=True, history=store)
+    player._build_actions = lambda: [  # type: ignore[attr-defined]
+        _Act("StepA"), _Act("StepB"), _Act("StepC")]
+    game_data_stub = object()
+    player._resume_plan_cache(make_state(), game_data_stub)  # type: ignore[arg-type]
+    assert player._plan_cache is not None
+    # tail from cursor=1 is [StepB, StepC] — length 2
+    assert len(player._plan_cache.plan) == 2
+    assert repr(player._plan_cache.plan[0]) == "StepB"

@@ -66,3 +66,27 @@ def test_load_plan_commitment_returns_none_on_error(tmp_path):
     s = _store(tmp_path)
     _break_engine(s)
     assert s.load_plan_commitment() is None
+
+
+def test_update_commitment_cursor_advances(tmp_path):
+    s = _store(tmp_path)
+    s.save_plan_commitment("Goal(g)", '{"type":"X"}', ["A", "B", "C"], 0, None, False)
+    s.update_commitment_cursor(2)
+    loaded = s.load_plan_commitment()
+    assert loaded is not None
+    assert loaded.cursor == 2
+
+
+def test_update_commitment_cursor_no_row_is_noop(tmp_path):
+    s = _store(tmp_path)
+    # no commitment row saved yet — must not raise
+    s.update_commitment_cursor(5)
+    assert s.load_plan_commitment() is None
+
+
+def test_update_commitment_cursor_swallows_error(tmp_path, capsys):
+    s = _store(tmp_path)
+    s.save_plan_commitment("Goal(g)", '{"type":"X"}', ["A", "B"], 0, None, False)
+    _break_engine(s)
+    s.update_commitment_cursor(1)
+    assert "update_commitment_cursor failed" in capsys.readouterr().out
