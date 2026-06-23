@@ -71,7 +71,9 @@ from artifactsmmo_cli.ai.tiers import (
     StrategyDecision,
     StrategyEngine,
 )
+from artifactsmmo_cli.ai.plan_cache import PlanCache
 from artifactsmmo_cli.ai.plan_report import PlanReport
+from artifactsmmo_cli.ai.should_replan import should_replan
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal
 from artifactsmmo_cli.ai.tiers.root_progress import root_progress_value
@@ -174,6 +176,8 @@ class GamePlayer:
         self._gear_latch = GearLatch()
         self._prev_level: int | None = None
         self._last_outcome: str | None = None
+        self._plan_cache: PlanCache | None = None
+        self._last_decide_crafting_target: str | None = None
 
     def set_cycle_observer(self, observer: "Callable[[CycleSnapshot], None] | None") -> None:
         """Allow callers (e.g. TUI host) to subscribe after construction."""
@@ -185,6 +189,90 @@ class GamePlayer:
     def _notify_planning(self, active: bool) -> None:
         if self._planning_observer is not None:
             self._planning_observer(active)
+
+    def _decide_band(
+        self,
+        state: "WorldState",
+        game_data: GameData,
+        actions: "list[Action]",
+        ctx_combat_monster: "str | None",
+    ) -> "tuple[Goal | None, list[Action], list[Any]]":
+        """Run the full Tier-3 decision + GOAP selection. The expensive band —
+        invoked only when should_replan is True. Returns (selected_goal, plan,
+        goals_tried). Side effects (sticky anchor, crafting_target on state) match
+        the pre-extraction loop body."""
+        assert self._strategy is not None
+        combat_monster = ctx_combat_monster
+        ctx = self._selection_context(combat_monster)
+        servable_pred = self._step_servable(state, game_data, ctx)
+        self._notify_planning(True)
+        decision = self._strategy.decide(
+            state, game_data,
+            history=self.history,
+            combat_monster=combat_monster,
+            last_chosen_root=self._last_strategy_root,
+            step_servable=servable_pred,
+        )
+        self._last_decision = decision
+        cr, cs = decision.chosen_root, decision.chosen_step
+        self._last_servability_diag = {
+            "chosen_root_servable": bool(
+                cr is not None and cs is not None and servable_pred(cr, cs)),
+            "chosen_root": repr(cr) if cr is not None else None,
+        }
+        step = decision.chosen_step
+        crafting_target = step.code if isinstance(step, ObtainItem) else None
+        if crafting_target is None:
+            for alt in getattr(decision, "fallback_steps", []):
+                if isinstance(alt, ObtainItem):
+                    crafting_target = alt.code
+                    break
+        self.state = state = replace(state, crafting_target=crafting_target)
+        selected_goal, plan, goals_tried = self._arbiter.select(
+            decision, state, game_data, actions, ctx,
+            suppressed=set(self._suppressed_goals),
+            objective=self._objective,
+        )
+        self._update_sticky_anchor(
+            decision.chosen_root, state, game_data, self._arbiter.chosen_step_alive)
+        self._last_decide_crafting_target = crafting_target
+        return selected_goal, plan, goals_tried
+
+    def _plan_or_reuse(
+        self,
+        state: "WorldState",
+        game_data: GameData,
+        actions: "list[Action]",
+        ctx_combat_monster: "str | None",
+    ) -> "tuple[Goal | None, list[Action], list[Any], bool]":
+        """Reuse the cached plan unless should_replan fires. Returns
+        (selected_goal, plan, goals_tried, replanned)."""
+        cache = self._plan_cache
+        step = cache.current() if cache is not None else None
+        goal_satisfied = cache is not None and cache.selected_goal.is_satisfied(state)
+        step_applicable = step is not None and step.is_applicable(state, game_data)
+        if should_replan(
+            cache, self._last_outcome, self._gear_latch.active,
+            goal_satisfied, step_applicable, BANK_REFRESH_INTERVAL,
+        ):
+            selected_goal, plan, goals_tried = self._decide_band(
+                state, game_data, actions, ctx_combat_monster)
+            if plan and selected_goal is not None:
+                self._plan_cache = PlanCache(
+                    selected_goal=selected_goal,
+                    plan=list(plan),
+                    crafting_target=self._last_decide_crafting_target,
+                    latch_active=self._gear_latch.active,
+                    goal_repr=repr(selected_goal),
+                )
+            else:
+                self._plan_cache = None
+            return selected_goal, plan, goals_tried, True
+        # cache hit
+        assert cache is not None
+        self.state = replace(state, crafting_target=cache.crafting_target)
+        self._notify_planning(False)
+        return cache.selected_goal, cache.plan[cache.cursor:], [], False
 
     # === Backward-compatibility shims that delegate to the blocker registry ===
     # These let the rest of player.py keep using the old field names while the
@@ -386,68 +474,9 @@ class GamePlayer:
 
                 assert self._strategy is not None
                 combat_monster = self._winnable_farm_target()
-                ctx = self._selection_context(combat_monster)
-                servable_pred = self._step_servable(state, game_data, ctx)
-                self._notify_planning(True)
-                decision = self._strategy.decide(
-                    state, game_data,
-                    history=self.history,
-                    combat_monster=combat_monster,
-                    last_chosen_root=self._last_strategy_root,
-                    step_servable=servable_pred,
-                )
-                self._last_decision = decision
-                # Diagnostic: is the committed root's step actually servable this
-                # cycle? After the servable-filter this should be True whenever any
-                # root is servable; a committed root with a False here means the
-                # filter fell back (nothing servable) — surfaced in the trace.
-                cr, cs = decision.chosen_root, decision.chosen_step
-                self._last_servability_diag = {
-                    "chosen_root_servable": bool(
-                        cr is not None and cs is not None and servable_pred(cr, cs)),
-                    "chosen_root": repr(cr) if cr is not None else None,
-                }
-                step = decision.chosen_step
-                crafting_target = step.code if isinstance(step, ObtainItem) else None
-                # When the top step isn't ObtainItem (e.g. bootstrap
-                # ReachCharLevel with no winnable target), look down the
-                # fallback chain — the arbiter will walk it for the actual
-                # step_goal, and the bank keep-set must protect THAT
-                # target's recipe materials. Trace 2026-06-06 15:21
-                # session: chosen_step=ReachCharLevel(6), crafting_target
-                # stayed None, DEPOSIT_FULL guard cycled 21 gathered
-                # copper_ore into bank because keep-set didn't protect
-                # them — bot ran a Gather→Deposit→Gather loop forever
-                # while wooden_shield/copper_helmet/copper_boots roots
-                # ranked 1.0 with valid ObtainItem steps in fallback.
-                if crafting_target is None:
-                    fallback_steps = getattr(decision, "fallback_steps", [])
-                    for alt in fallback_steps:
-                        if isinstance(alt, ObtainItem):
-                            crafting_target = alt.code
-                            break
-                self.state = state = replace(state, crafting_target=crafting_target)
-                selected_goal, plan, goals_tried = self._arbiter.select(
-                    decision, state, game_data, actions, ctx,
-                    suppressed=set(self._suppressed_goals),
-                    objective=self._objective,
-                )
-                # Progress-gated stickiness anchor (2026-06-20): re-commit to
-                # chosen_root ONLY when it BOTH yielded a goal this cycle
-                # (chosen_step_alive) AND strictly advanced on its own progress axis
-                # since last cycle. The 2026-06-19 chosen_step_alive-only gate was
-                # insufficient: a skill grind produces a goal object every cycle
-                # (chosen_step_alive=True) that never wins arbitration, so weaponcrafting
-                # xp froze at 75 for 1028 cycles while the anchor re-committed forever.
-                # The progress value (root_progress_value) is keyed to the root TYPE, so
-                # gathering mining xp while committed to weaponcrafting does NOT count —
-                # the frozen committed-skill value releases the zombie, and the
-                # higher-value plannable root wins next cycle (released_picks_top). Pure
-                # feedback core: sticky_select_core.next_last (Lean nextLast).
-                self._update_sticky_anchor(
-                    decision.chosen_root, state, game_data,
-                    self._arbiter.chosen_step_alive)
-                # Trace ranking: the candidates the arbiter actually tried, in order.
+                selected_goal, plan, goals_tried, replanned = self._plan_or_reuse(
+                    state, game_data, actions, combat_monster)
+                state = self.state  # _plan_or_reuse may have replaced crafting_target
                 goal_rank_trace: list[dict[str, object]] = [
                     {"goal": gt["goal"], "priority": 0.0} for gt in goals_tried
                 ]
@@ -550,9 +579,9 @@ class GamePlayer:
                     selected_goal=repr(selected_goal),
                     predicted_cost=predicted,
                     actual_cooldown_seconds=cooldown_remaining,
-                    planner_nodes=self.planner.last_stats.nodes_explored,
-                    planner_depth=self.planner.last_stats.max_depth_reached,
-                    planner_timed_out=self.planner.last_stats.timed_out,
+                    planner_nodes=self.planner.last_stats.nodes_explored if replanned else 0,
+                    planner_depth=self.planner.last_stats.max_depth_reached if replanned else 0,
+                    planner_timed_out=self.planner.last_stats.timed_out if replanned else False,
                     plan_len=len(plan),
                     cycles_to_satisfy=cycles_to_satisfy,
                 )
@@ -562,6 +591,9 @@ class GamePlayer:
                 # previous value intact (they continue before reaching here).
                 self._last_outcome = outcome
                 self.state = new_state
+                if outcome == "ok" and self._plan_cache is not None:
+                    self._plan_cache.advance()
+                    self._plan_cache.cycles_since_replan += 1
 
                 # After action.execute (or dry_run apply), record the cycle
                 # for stuck detection. `error:cooldown` is treated as
@@ -582,15 +614,16 @@ class GamePlayer:
                     goal_name=repr(selected_goal),
                     action_name=repr(action),
                     planned_depth=len(plan),
-                    planner_timed_out=self.planner.last_stats.timed_out,
+                    planner_timed_out=self.planner.last_stats.timed_out if replanned else False,
                     succeeded=outcome_for_stuck,
                 ))
                 self._actions_since_full_refresh += 1
                 self._decrement_suppressions()
                 cycle_stats: dict[str, object] = {
-                    "nodes": self.planner.last_stats.nodes_explored,
-                    "depth": self.planner.last_stats.max_depth_reached,
-                    "timed_out": self.planner.last_stats.timed_out,
+                    "nodes": self.planner.last_stats.nodes_explored if replanned else 0,
+                    "depth": self.planner.last_stats.max_depth_reached if replanned else 0,
+                    "timed_out": self.planner.last_stats.timed_out if replanned else False,
+                    "replanned": replanned,
                     "plan_len": len(plan),
                     "goals_tried": goals_tried,
                     "goal_rank": goal_rank_trace,
