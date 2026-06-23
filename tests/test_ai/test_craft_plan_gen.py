@@ -10,8 +10,6 @@ Covers:
   monster-drop goal still routes to A* (planner invoked).
 """
 
-import pytest
-
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.craft_plan_gen import generate_next_craft_action
@@ -21,7 +19,6 @@ from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -412,28 +409,87 @@ class TestStrategyArbiterIntegration:
 
         assert _SpyPlanner.calls == 1, "Planner must be invoked for monster-drop goal"
 
-    def test_bank_closure_material_returns_none(self) -> None:
-        """Bar in bank → generator returns None (A* fallback).
+    def test_banked_target_still_generates(self) -> None:
+        """Banked TARGET (finished output) → generator fires, does NOT fall back.
 
-        CraftAction.execute requires inputs to be IN INVENTORY.  A material in
-        the bank needs a WithdrawItemAction before CraftAction can use it.
-        The generator has no "withdraw" step, so emitting [CraftAction] with a
-        banked material would crash the API call at runtime.  The correct
-        behaviour is to return None so A* takes over (A* emits Withdraw→Craft).
+        Issue #1 regression guard: the old blanket gate fired when copper_ring was
+        in the bank, even though copper_ring is the OUTPUT (not an input needing
+        withdraw).  The precise gate skips top-level needed keys.
+
+        Setup: needed={copper_ring:2}, bank has copper_ring:1 (one already banked),
+        inventory has no ore → generator should emit GatherAction(copper_rocks) to
+        make the remaining ring from scratch.
         """
         gd = _gd_copper_ring()
-        state = make_state(inventory={}, bank_items={"copper_bar": 1},
-                           skills={"mining": 5, "jewelrycrafting": 5})
+        state = make_state(
+            inventory={},
+            bank_items={"copper_ring": 1},  # banked TARGET, not an input
+            skills={"mining": 5, "jewelrycrafting": 5},
+        )
+        goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 2})
+        actions = _copper_ring_actions()
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        assert result is not None, (
+            "Banked target (output) must NOT cause A* fallback — "
+            "generator should make the remaining quantity from scratch"
+        )
+        assert len(result) == 1
+        assert isinstance(result[0], GatherAction)
+        assert result[0].resource_code == "copper_rocks"
+
+    def test_surplus_banked_input_inventory_covers_generates(self) -> None:
+        """Surplus banked input but inventory already covers requirement → generates.
+
+        Issue #2 regression guard: the old blanket gate fired when copper_bar was
+        in the bank, even when inventory held enough bars to craft the ring without
+        any withdraw.
+
+        Setup: inventory={copper_bar:1} (covers 1-ring requirement), bank has an
+        extra copper_bar:1 (surplus) → generator emits CraftAction(copper_ring).
+        """
+        gd = _gd_copper_ring()
+        state = make_state(
+            inventory={"copper_bar": 1},   # covers the requirement (1 bar per ring)
+            bank_items={"copper_bar": 1},  # surplus — no withdraw needed
+            skills={"mining": 5, "jewelrycrafting": 5},
+        )
         goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
         actions = _copper_ring_actions()
 
         result = generate_next_craft_action(goal, state, gd, actions)
 
-        # copper_bar is a closure item present in the bank → must defer to A*.
+        assert result is not None, (
+            "Surplus banked input (inventory covers requirement) must NOT cause "
+            "A* fallback — no withdraw is needed"
+        )
+        assert len(result) == 1
+        assert isinstance(result[0], CraftAction)
+        assert result[0].code == "copper_ring"
+
+    def test_banked_needed_input_inventory_short_falls_back(self) -> None:
+        """Banked INPUT genuinely needed (inventory short) → A* fallback.
+
+        Crash-avoidance + correct deferral: copper_bar is an INPUT that must be
+        withdrawn before CraftAction can use it.  With 0 bars in inventory and
+        the recipe requiring 1 bar per ring, the generator cannot emit a craft
+        without a prior withdraw step.  Returning None lets A* emit Withdraw→Craft.
+        """
+        gd = _gd_copper_ring()
+        state = make_state(
+            inventory={},              # 0 bars in inventory
+            bank_items={"copper_bar": 6},  # bars banked and genuinely needed
+            skills={"mining": 5, "jewelrycrafting": 5},
+        )
+        goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
+        actions = _copper_ring_actions()
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
         assert result is None, (
-            "Generator must return None (A* fallback) when a closure material "
-            "is in the bank — emitting CraftAction without a prior withdraw "
-            "would cause a runtime API crash."
+            "Generator must return None (A* fallback) when a banked INPUT is "
+            "genuinely needed — A* will emit Withdraw→Craft correctly"
         )
 
     def test_inventory_material_does_not_fall_back(self) -> None:

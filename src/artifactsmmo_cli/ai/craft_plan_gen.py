@@ -9,9 +9,16 @@ Falls back to None (A* fallback) for:
 - closures that contain monster-drop leaves
 - closures that contain NPC-buy / currency leaves
 - closures that have any craft whose skill gate is not yet met
-- closures where ANY closure item has a positive bank quantity (a banked material
-  needs a WithdrawItemAction before use; the generator cannot emit withdraws — A*
-  will handle Withdraw→Craft correctly)
+- closures where a NON-TOP-LEVEL input/intermediate is both banked AND short in
+  inventory: that banked material would need a WithdrawItemAction before use;
+  the generator cannot emit withdraws, so A* handles Withdraw→Craft correctly.
+  Top-level targets (goal._needed keys) are excluded from this check — a banked
+  finished good is an output, not an input that needs withdrawing.
+
+The precise bank gate (rather than a blanket "any banked closure item → None")
+preserves the fast-path for the two common mid-game states:
+  - banked TARGET (finished output) — generator still fires, re-makes remainder
+  - banked SURPLUS input (inventory already covers the requirement) — also fires
 """
 
 from artifactsmmo_cli.ai.actions.base import Action
@@ -20,6 +27,7 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.next_craft_core import NextAction, next_craft_target_pure
+from artifactsmmo_cli.ai.recipe_closure import _closure_demand
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -63,9 +71,16 @@ def generate_next_craft_action(
     - Any item in the recipe closure has no recipe AND is not a gatherable raw
       resource (e.g. monster drops, NPC-buy items)
     - Any craftable item in the closure has a skill gate the character has not met
-    - Any closure item has a positive quantity in the bank: a banked material needs
-      a WithdrawItemAction before CraftAction can use it; the generator has no
-      "withdraw" kind, so it defers to A* which correctly emits Withdraw→Craft.
+    - A closure INPUT/INTERMEDIATE (not a top-level target in ``goal._needed``) is
+      banked AND inventory is short of the required quantity: that item must be
+      withdrawn before crafting; the generator has no "withdraw" step, so it defers
+      to A* which correctly emits Withdraw→Craft.
+
+    The bank gate is PRECISE — it does NOT fire when:
+    - The banked item is the top-level craft target (it is an output, not an input
+      that needs withdrawing before use).
+    - The banked item is a closure input/intermediate but inventory already covers
+      the required quantity (the bank holds surplus; no withdraw needed).
 
     When a single unambiguous next action can be derived, returns a one-element
     list containing the matching action from
@@ -88,10 +103,7 @@ def generate_next_craft_action(
     bank: dict[str, int] = state.bank_items or {}
 
     # CAN-GENERATE gate: every closure item must be either a craftable (with met
-    # skill gate AND a known workshop) or a gatherable raw.  Also fall back to A*
-    # whenever any closure item has a positive bank quantity — the generator cannot
-    # emit a WithdrawItemAction, so emitting CraftAction without a prior withdraw
-    # would cause a runtime API failure.  A* correctly emits Withdraw→Craft.
+    # skill gate AND a known workshop) or a gatherable raw.
     for item in closure:
         recipe = recipes.get(item)
         if recipe is not None:
@@ -108,17 +120,35 @@ def generate_next_craft_action(
             if item not in gatherable_items:
                 return None  # Monster drop / NPC-buy leaf → fall back to A*.
 
-        # Banked material: A* will emit WithdrawItemAction → CraftAction; the
-        # generator only knows "gather" and "craft", so defer to A*.
-        if bank.get(item, 0) > 0:
-            return None  # Closure item present in bank → fall back to A*.
+    # PRECISE BANK GATE: fall back to A* only when a closure INPUT/INTERMEDIATE
+    # (not a top-level target in `needed`) is banked AND inventory is short of the
+    # required quantity.  Such an item must be withdrawn before CraftAction can use
+    # it; the generator has no "withdraw" step, so A* handles Withdraw→Craft.
+    #
+    # We intentionally SKIP this gate for top-level targets (`needed` keys): a
+    # banked finished output is never an input that needs withdrawing — the
+    # generator will simply re-make the remaining quantity from scratch.
+    #
+    # We also SKIP when inventory already covers the requirement: the bank holds
+    # surplus (Issue #2 regression guard) and no withdraw is needed.
+    if bank:
+        # Compute per-item closure demand once, only when the bank is non-empty.
+        demand: dict[str, int] = {}
+        for root, qty in needed.items():
+            _closure_demand(len(recipes) + 1, root, qty, recipes, {}, demand)
+        top_level: set[str] = set(needed)
+        for item, required_qty in demand.items():
+            if item in top_level:
+                continue  # Top-level target: not a banked input needing withdraw.
+            if bank.get(item, 0) > 0 and state.inventory.get(item, 0) < required_qty:
+                return None  # Banked input is genuinely needed → A* will withdraw.
 
-    # owned = INVENTORY ONLY.  Bank items are NOT available to CraftAction
-    # without a prior WithdrawItemAction.  Counting bank items here would cause
-    # the generator to skip a necessary withdraw step and crash the API call at
-    # runtime.  (The CAN-GENERATE gate above already falls back to A* when any
-    # bank quantity is non-zero, so this path is only reached for the from-scratch
-    # gather-craft case where the bank holds no closure materials.)
+    # owned = INVENTORY ONLY.  Bank items are NOT available to CraftAction without
+    # a prior WithdrawItemAction.  The precise bank gate above ensures we only
+    # reach this point when either (a) no closure inputs are banked, (b) the bank
+    # holds only surplus (inventory already covers requirements), or (c) the banked
+    # item is a top-level output (not an input).  In all three cases emitting a
+    # gather or craft action is correct — no withdraw is needed.
     owned: dict[str, int] = dict(state.inventory)
 
     # Find the first non-None next action across all top-level needed items.

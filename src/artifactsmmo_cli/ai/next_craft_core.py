@@ -81,8 +81,12 @@ def _next(
     recipe = recipes.get(item)
     if recipe is None:
         return NextAction(item, "gather", deficit)  # raw resource → gather the shortfall
-    if fuel <= 0:
-        # Acyclic recipe data guarantees this branch is unreachable; total-function guard.
+    if fuel <= 0:  # pragma: no cover
+        # Acyclic recipe data guarantees this branch is unreachable via the public
+        # next_craft_target_pure API: fuel is seeded at len(recipes)+1 and each
+        # recursive call marks a DISTINCT item (the DFS can visit at most
+        # len(recipes) items before hitting a raw leaf with no recipe).  The guard
+        # exists only to keep the function total for hypothetically cyclic inputs.
         return NextAction(item, "gather", deficit)
     # To craft `deficit` more of `item`, each input is needed `per * deficit`.
     for inp, per in recipe.items():
