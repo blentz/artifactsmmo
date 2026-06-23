@@ -352,13 +352,13 @@ class GamePlayer:
         goal = goal_from_dict(goal_data, game_data)
         by_repr = {repr(a): a for a in self._build_actions()}
         tail = json.loads(row.plan_json)[row.cursor:]
+        if game_data is None:
+            return  # cannot validate steps without game data -> re-plan cold
         rebuilt = []
         for r in tail:
             a = by_repr.get(r)
-            if a is None:
-                return  # unmatchable -> discard, re-plan cold
-            if game_data is not None and not a.is_applicable(state, game_data):
-                return  # stale step -> discard, re-plan cold
+            if a is None or not a.is_applicable(state, game_data):
+                return  # unmatchable / stale -> discard, re-plan cold
             rebuilt.append(a)
         if not rebuilt:
             return

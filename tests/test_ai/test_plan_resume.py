@@ -54,7 +54,30 @@ def test_resume_rehydrates_when_all_steps_applicable(tmp_path):
         "GatherMaterials(...)", _GATHER_JSON, ["StepA", "StepB"], 0, "copper_ring", False)
     player = GamePlayer(character="hero", dry_run=True, history=store)
     player._build_actions = lambda: [_Act("StepA"), _Act("StepB")]  # type: ignore[attr-defined]
-    player._resume_plan_cache(make_state(), None)
+    game_data_stub = object()
+    player._resume_plan_cache(make_state(), game_data_stub)  # type: ignore[arg-type]
     assert player._plan_cache is not None
     assert player._plan_cache.crafting_target == "copper_ring"
     assert player._plan_cache.selected_goal.__class__.__name__ == "GatherMaterialsGoal"
+
+
+def test_resume_discards_when_step_not_applicable(tmp_path):
+    store = _store(tmp_path)
+    store.save_plan_commitment(
+        "GatherMaterials(...)", _GATHER_JSON, ["StepA", "StepB"], 0, "copper_ring", False)
+    player = GamePlayer(character="hero", dry_run=True, history=store)
+    # StepB is not applicable — validation must reject and leave cache None
+    player._build_actions = lambda: [_Act("StepA"), _Act("StepB", applicable=False)]  # type: ignore[attr-defined]
+    game_data_stub = object()
+    player._resume_plan_cache(make_state(), game_data_stub)  # type: ignore[arg-type]
+    assert player._plan_cache is None
+
+
+def test_resume_discards_when_no_game_data(tmp_path):
+    store = _store(tmp_path)
+    store.save_plan_commitment(
+        "GatherMaterials(...)", _GATHER_JSON, ["StepA", "StepB"], 0, "copper_ring", False)
+    player = GamePlayer(character="hero", dry_run=True, history=store)
+    player._build_actions = lambda: [_Act("StepA"), _Act("StepB")]  # type: ignore[attr-defined]
+    player._resume_plan_cache(make_state(), None)  # no game_data -> early discard
+    assert player._plan_cache is None
