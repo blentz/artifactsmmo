@@ -10,6 +10,7 @@ from rich.console import Console
 from artifactsmmo_cli import __version__
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.commands import account, action, bank, character, craft, info, stats, task, trade
+from artifactsmmo_cli.commands.macro_research import macro_research as macro_research_command
 from artifactsmmo_cli.commands.plan import plan as plan_command
 from artifactsmmo_cli.commands.play import play as play_command
 from artifactsmmo_cli.config import Config
@@ -33,6 +34,9 @@ app.add_typer(info.app, name="info", help="Information and lookup commands")
 app.add_typer(account.app, name="account", help="Account management commands")
 app.command("play", help="Run the autonomous AI player")(play_command)
 app.command("plan", help="Print the plan the AI would execute this cycle (no actions)")(plan_command)
+app.command("macro-research", help="Analyze learning.db for recurring progression macros (read-only)")(
+    macro_research_command
+)
 app.add_typer(stats.app, name="stats", help="Inspect AI session traces (traces.jsonl)")
 
 
