@@ -1,6 +1,11 @@
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.commands.macro_research import macro_research
+from artifactsmmo_cli.commands.macro_research import _default_db_path, macro_research
+
+
+def test_default_db_path_points_at_learning_db():
+    p = _default_db_path()
+    assert p.endswith("artifactsmmo/learning.db")
 
 
 def _seed_progression(store, char):

@@ -19,14 +19,15 @@ class Band:
 
 
 def _segment_key(row: CycleRow, kind: str) -> str | None:
-    """The band key for a row, or None if the row is excluded from this kind."""
+    """The band key for a row, or None if the row is excluded from this kind.
+
+    `kind` is validated by `segment_bands` before this is called, so only
+    "level" and "skill" ever reach here — no redundant kind guard."""
     if kind == "level":
         return f"level={row.level}"
-    if kind == "skill":
-        if parse_goal_type(row.selected_goal) != "LevelSkill":
-            return None
-        return row.selected_goal
-    raise ValueError(f"unknown band kind: {kind}")
+    if parse_goal_type(row.selected_goal) != "LevelSkill":
+        return None
+    return row.selected_goal
 
 
 def segment_bands(rows: list[CycleRow], kind: str) -> list[Band]:

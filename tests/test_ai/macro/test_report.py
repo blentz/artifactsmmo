@@ -16,6 +16,15 @@ def test_goal_repr_variants_dedupes_and_sorts():
     ]
 
 
+def test_goal_repr_variants_skips_none_goal():
+    rows = [
+        CycleRow("h", "s", 0, 1, None, "A", 1, False),                 # skipped
+        CycleRow("h", "s", 1, 1, "PursueTask(t1)", "A", 1, False),
+    ]
+    v = goal_repr_variants(rows)
+    assert v == {"PursueTask": ["PursueTask(t1)"]}                      # no "<none>" key
+
+
 def test_format_report_contains_sections():
     cost = [CostStat("PursueTask", 2, 4000, 2000.0, 1)]
     cand = [MacroCandidate("level", (("PursueTask", "CraftAction"),), 2, 2, 4000, 8000,
