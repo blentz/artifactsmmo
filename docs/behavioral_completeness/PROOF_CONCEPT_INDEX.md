@@ -17,8 +17,10 @@ concept tag, or a concept with no module, is a traceability gap.
 | BuySourceVenue | grandexchange | dominance, totality, safety, monotonicity |
 | CheapestPath | combat, monsters | reachability, dominance |
 | CombatTargetExistence | combat, monsters | reachability, safety |
+| CompleteTaskIncome | core, tasks | monotonicity |
 | ConsumableSelection | items | dominance, monotonicity, totality, safety |
 | CraftVsBuy | crafting, npcs | dominance, monotonicity, totality, safety |
+| CurrencyAffordFastFail | core, planner | safety, totality |
 | CycleInvariants | characters, combat | safety, monotonicity |
 | CyclesForProgress | characters | reachability, monotonicity |
 | DecideKey | core, planner | dominance, totality |
@@ -37,7 +39,9 @@ concept tag, or a concept with no module, is a traceability gap.
 | GuardCoverage | core | no-deadlock, safety |
 | InventoryChainSafe | bank, items | safety |
 | InventoryProfile | bank, items, crafting | safety |
+| LeafAttainable | core, planner | validity, monotonicity |
 | LiquidationVenue | grandexchange | dominance, totality, safety, monotonicity |
+| Liveness.CurrencyFunding | liveness, tasks | termination, sufficiency |
 | Liveness.GatedArming | liveness, planner | liveness |
 | Liveness.GearBuildTermination | liveness, planner | liveness |
 | Liveness.ItemsTaskRun | tasks | safety, totality, reachability |

@@ -154,6 +154,10 @@ def _base_game_data() -> GameData:
     gd._workshop_locations = {}
     gd._npc_stock = {}
     gd._npc_sell_prices = {}
+    # CompleteTaskAction.apply calls task_coin_reward(task_code) → min_task_coin_reward()
+    # when the code is unknown; seed a minimal reward so COMPLETE_TASK fixtures don't raise.
+    gd._task_coin_rewards = {"task_done": 1}
+    gd._task_reward_item_codes = frozenset({"tasks_coin"})
     return gd
 
 

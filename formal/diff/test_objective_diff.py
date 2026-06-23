@@ -92,6 +92,13 @@ class _FakeGameData:
     def npc_location(self, npc_code: str) -> tuple[int, int] | None:
         return None if npc_code.startswith("unlocated") else (0, 0)
 
+    def is_task_earnable(self, code: str) -> bool:
+        # The differential test graph uses integer codes; tasks_coin earning is not
+        # modelled here (the Lean oracle's `drop` predicate covers gatherable + monster
+        # drops + gold; task-earnable is a separate leaf not exercised in this random
+        # graph, so False is the correct model-faithful answer for all integer codes).
+        return False
+
     @property
     def resource_drops(self) -> dict[str, str]:
         return self._resource_drops

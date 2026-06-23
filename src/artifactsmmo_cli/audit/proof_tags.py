@@ -9,6 +9,9 @@ from dataclasses import dataclass
 _ALLOWED_PROPERTIES = frozenset({
     "dominance", "monotonicity", "totality", "no-deadlock", "safety", "reachability",
     "liveness", "deduction-accounting",
+    # C1–C3 additions: validity (function mirrors a spec), sufficiency (condition
+    # guarantees an outcome), termination (process/descent terminates).
+    "validity", "sufficiency", "termination",
 })
 _TAG_RE = re.compile(r"@concept:\s*([^@]+?)\s*@property:\s*(.+)")
 

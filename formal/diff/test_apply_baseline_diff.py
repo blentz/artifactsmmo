@@ -140,6 +140,10 @@ def _make_game_data_basic() -> GameData:
     gd._monster_level = {"chicken": 1}
     gd._bank_location = (4, 0)
     gd._next_expansion_cost = 1000
+    # CompleteTaskAction.apply calls task_coin_reward(task_code) → min_task_coin_reward()
+    # when the code is unknown; seed a minimal reward so tests that call apply() don't raise.
+    gd._task_coin_rewards = {"x": 1}
+    gd._task_reward_item_codes = frozenset({"tasks_coin"})
     return gd
 
 

@@ -155,6 +155,7 @@ GATHER_PLANNABLE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" /
 LEAF_ATTAINABLE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "leaf_attainable_core.py"
 COMPLETE_TASK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "complete_task_core.py"
 FUNDING_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "funding_core.py"
+CURRENCY_AFFORD_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "currency_afford_core.py"
 DOOMED_MEMO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "doomed_memo.py"
 STRATEGY_DRIVER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "strategy_driver.py"
 
@@ -773,9 +774,13 @@ OBJECTIVE_MUTATIONS = [
     # gathering-ONLY bug that silently dropped body/leg/amulet from target_gear.
     # A craft chain bottoming out in a (spawning) monster drop is wrongly
     # rejected -> killed by test_attainable_spawning_monster_drop_accepted.
+    # Updated (C4): leaf_ok now calls leaf_attainable_pure; the mutation targets
+    # the _drops_from_spawning_monster argument directly.
     ("objective: drop monster-drop leaf branch (gathering-only regression)",
-     "        if _gatherable(leaf, game_data) or _drops_from_spawning_monster(leaf, game_data):",
-     "        if _gatherable(leaf, game_data):"),
+     "            _drops_from_spawning_monster(leaf, game_data),\n"
+     "            game_data.is_task_earnable(leaf),",
+     "            False,\n"
+     "            game_data.is_task_earnable(leaf),"),
     # drop the known-spawn gate: accept ANY monster drop even from a monster the
     # bot can never reach. Killed by test_attainable_spawnless_monster_drop_rejected
     # and the random graph (spawn-less droppers must not ground their item).
@@ -787,20 +792,27 @@ OBJECTIVE_MUTATIONS = [
     # drop the entire NPC purchase edge in the perfect-sheet leaf: reverts task
     # #12, so an NPC-only item (rune/artifact/bag) is wrongly unattainable.
     # Killed by the gold-purchase + item-currency differential tests.
+    # Updated (C4): leaf_ok now computes `buyable` as a local variable; the
+    # mutation collapses it to False (equivalent to dropping the whole buy edge).
     ("objective: drop NPC purchase edge in is_attainable leaf",
-     "        return any(currency == GOLD\n"
-     "                   or _attainable_closure(currency, game_data, leaf_ok, sub)\n"
-     "                   for _price, currency in _permanent_vendor_purchases(leaf, game_data))",
-     "        return False"),
+     "        buyable = leaf not in path and any(\n"
+     "            currency == GOLD\n"
+     "            or _attainable_closure(currency, game_data, leaf_ok, path | {leaf})\n"
+     "            for _price, currency in _permanent_vendor_purchases(leaf, game_data))",
+     "        buyable = False"),
     # drop the gold-currency acceptance: a gold purchase must recurse on the
     # literal 'gold' (which grounds in nothing) and wrongly fails. Killed by the
     # gold-purchase differential test.
+    # Updated (C4): the `currency == GOLD` check is now inside the `any(...)` for
+    # `buyable`; drop just the gold branch, keeping the recursive currency path.
     ("objective: drop gold-currency acceptance in buy edge",
-     "        return any(currency == GOLD\n"
-     "                   or _attainable_closure(currency, game_data, leaf_ok, sub)\n"
-     "                   for _price, currency in _permanent_vendor_purchases(leaf, game_data))",
-     "        return any(_attainable_closure(currency, game_data, leaf_ok, sub)\n"
-     "                   for _price, currency in _permanent_vendor_purchases(leaf, game_data))"),
+     "        buyable = leaf not in path and any(\n"
+     "            currency == GOLD\n"
+     "            or _attainable_closure(currency, game_data, leaf_ok, path | {leaf})\n"
+     "            for _price, currency in _permanent_vendor_purchases(leaf, game_data))",
+     "        buyable = leaf not in path and any(\n"
+     "            _attainable_closure(currency, game_data, leaf_ok, path | {leaf})\n"
+     "            for _price, currency in _permanent_vendor_purchases(leaf, game_data))"),
     # drop the permanent/reachable vendor gate: event and unlocated vendors are
     # wrongly counted. Killed by test_attainable_event_vendor_excluded_matches_lean
     # (and the random graph's non-permanent edges).
@@ -1693,6 +1705,24 @@ FUNDING_MUTATIONS = [
      "    if False:\n        return 0"),
 ]
 
+# Killed by formal/diff/test_currency_afford_diff.py (binds
+# currency_afford_plannable_pure to the proved Formal.CurrencyAffordFastFail.isPlannable).
+# The three mutants cover: dropping the `affordable` disjunct (always
+# False when unaffordable+unowned), dropping the `owned >= needed`
+# fallback (already-owned leaf wrongly pruned), and collapsing to
+# always-True (fast-fail never fires — the original node-burn bug).
+CURRENCY_AFFORD_MUTATIONS = [
+    ("currency_afford: drop affordable disjunct",
+     "    return (not target_in_closure) or affordable or owned >= needed",
+     "    return (not target_in_closure) or owned >= needed"),
+    ("currency_afford: drop owned-fallback disjunct",
+     "    return (not target_in_closure) or affordable or owned >= needed",
+     "    return (not target_in_closure) or affordable"),
+    ("currency_afford: collapse to always-True",
+     "    return (not target_in_closure) or affordable or owned >= needed",
+     "    return True"),
+]
+
 # Killed by formal/diff/test_doomed_memo_diff.py (binds DoomedMemo._ttl / is_doomed
 # to the proved Formal.DoomedMemo.ttl / isDoomed).
 DOOMED_MEMO_MUTATIONS = [
@@ -1843,6 +1873,8 @@ _ALL_SRCS = [
     COMPLETE_TASK_CORE_SRC,
     # C3 — funding_cycles_pure: cycles to reach a currency target.
     FUNDING_CORE_SRC,
+    # C4 — currency_afford_plannable_pure: fast-fail for unaffordable currency-buy leaves.
+    CURRENCY_AFFORD_CORE_SRC,
 ]
 
 
@@ -3655,6 +3687,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_complete_task_income_diff.py", survivors)
     run_group(FUNDING_CORE_SRC, FUNDING_MUTATIONS,
               "formal/diff/test_currency_funding_diff.py", survivors)
+    run_group(CURRENCY_AFFORD_CORE_SRC, CURRENCY_AFFORD_MUTATIONS,
+              "formal/diff/test_currency_afford_diff.py", survivors)
     run_group(DOOMED_MEMO_SRC, DOOMED_MEMO_MUTATIONS,
               "formal/diff/test_doomed_memo_diff.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, STRATEGY_DRIVER_MUTATIONS,
