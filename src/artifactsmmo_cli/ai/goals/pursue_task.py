@@ -111,5 +111,11 @@ class PursueTaskGoal(Goal):
     def max_depth(self) -> int:
         return 100
 
+    def serialize(self) -> dict[str, object]:
+        return {"type": "PursueTaskGoal",
+                "task_code": self._task_code,
+                "initial_progress": self._initial_progress,
+                "batch": self._batch}
+
     def __repr__(self) -> str:
         return f"PursueTask({self._task_code})"

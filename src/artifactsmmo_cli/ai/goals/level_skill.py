@@ -163,5 +163,11 @@ class LevelSkillGoal(Goal):
                 return True
         return False
 
+    def serialize(self) -> dict[str, object]:
+        return {"type": "LevelSkillGoal",
+                "skill_name": self._skill_name,
+                "target_level": self._target_level,
+                "initial_skill_xp": self._initial_skill_xp}
+
     def __repr__(self) -> str:
         return f"LevelSkill({self._skill_name}->{self._target_level})"

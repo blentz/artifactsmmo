@@ -92,5 +92,10 @@ class GrindCharacterXPGoal(Goal):
                 result.append(action)
         return result
 
+    def serialize(self) -> dict[str, object]:
+        return {"type": "GrindCharacterXPGoal",
+                "target_monster": self._target_monster,
+                "initial_xp": self._initial_xp}
+
     def __repr__(self) -> str:
         return f"GrindCharacterXP({self._target_monster})"

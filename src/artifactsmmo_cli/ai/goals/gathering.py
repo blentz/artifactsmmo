@@ -434,6 +434,11 @@ class GatherMaterialsGoal(Goal):
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"inventory": self._needed}
 
+    def serialize(self) -> dict[str, object]:
+        return {"type": "GatherMaterialsGoal",
+                "target_item": self._target_item,
+                "needed": dict(self._needed)}
+
     def __repr__(self) -> str:
         # `needed` is part of the goal's IDENTITY: sticky commitment
         # (arbiter select) and fallback dedupe both key on repr. Omitting it
