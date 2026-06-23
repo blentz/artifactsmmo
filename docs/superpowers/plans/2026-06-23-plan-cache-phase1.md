@@ -587,6 +587,7 @@ class PlanCommitmentBase(SQLModel):
 
     character: str = Field(primary_key=True)
     goal_repr: str
+    goal_json: str  # JSON serialization of the goal (see goal_serialization, Task 5)
     plan_json: str  # JSON list[str] of action reprs
     cursor: int
     crafting_target: str | None = None
@@ -625,13 +626,14 @@ def test_plan_body_round_trips(tmp_path):
 
 def test_commitment_upserts_single_row(tmp_path):
     s = _store(tmp_path)
-    s.save_plan_commitment("Goal(g)", ["A", "B"], 0, "copper_ring", False)
-    s.save_plan_commitment("Goal(g)", ["A", "B", "C"], 1, None, True)
+    s.save_plan_commitment("Goal(g)", "{}", ["A", "B"], 0, "copper_ring", False)
+    s.save_plan_commitment("Goal(g)", '{"type":"X"}', ["A", "B", "C"], 1, None, True)
     loaded = s.load_plan_commitment()
     assert loaded is not None
     assert loaded.cursor == 1
     assert loaded.latch_active is True
     assert loaded.crafting_target is None
+    assert loaded.goal_json == '{"type":"X"}'
 
 
 def test_load_commitment_absent_returns_none(tmp_path):
@@ -691,8 +693,9 @@ def plan_bodies_for_goal(self, goal_repr: str) -> list[PlanBodyLogBase]:
     except SQLAlchemyError:
         return []
 
-def save_plan_commitment(self, goal_repr: str, plan_reprs: list[str],
-                         cursor: int, crafting_target: str | None,
+def save_plan_commitment(self, goal_repr: str, goal_json: str,
+                         plan_reprs: list[str], cursor: int,
+                         crafting_target: str | None,
                          latch_active: bool) -> None:
     """Upsert the single live commitment row for this character."""
     try:
@@ -704,6 +707,7 @@ def save_plan_commitment(self, goal_repr: str, plan_reprs: list[str],
             ts = datetime.now(tz=timezone.utc).isoformat()
             if row is not None:
                 row.goal_repr = goal_repr
+                row.goal_json = goal_json
                 row.plan_json = json.dumps(plan_reprs)
                 row.cursor = cursor
                 row.crafting_target = crafting_target
@@ -713,6 +717,7 @@ def save_plan_commitment(self, goal_repr: str, plan_reprs: list[str],
             else:
                 s.add(PlanCommitment(
                     character=self._character, goal_repr=goal_repr,
+                    goal_json=goal_json,
                     plan_json=json.dumps(plan_reprs), cursor=cursor,
                     crafting_target=crafting_target, latch_active=latch_active,
                     replanned_ts=ts,
@@ -747,7 +752,162 @@ git commit -m "feat(plan-cache): persist plan bodies + live commitment to learni
 
 ---
 
-### Task 5: Wire persistence into the re-plan path
+### Task 5: Goal serialization for plan-bearing objective goals
+
+Add `serialize()` to the six goal classes that produce multi-step plans worth
+resuming, plus a `goal_from_dict` factory that re-injects live `GameData`. Other
+goal types (transient guards/means) are not serialized — they re-plan cold on
+restart.
+
+**Files:**
+- Create: `src/artifactsmmo_cli/ai/goal_serialization.py`
+- Modify (add one `serialize` method each): the 6 goal files below
+- Test: `tests/test_ai/test_goal_serialization.py`
+
+**The six plan-bearing goals (constructor params — read each file for exact private attr names):**
+
+| Class | file | constructor params | injectable (NOT serialized) |
+|---|---|---|---|
+| GatherMaterialsGoal | goals/gathering.py | `target_item: str, needed: dict[str,int]` | — |
+| UpgradeEquipmentGoal | goals/progression.py | `initial_equipment: dict[str,str\|None]\|None=None, committed_target: tuple[str,str]\|None=None` | — |
+| CraftReliefGoal | goals/craft_relief.py | `target_item: str, initial_qty: int, batch: int=1` | — |
+| PursueTaskGoal | goals/pursue_task.py | `task_code: str, initial_progress: int, batch: int=1` | — |
+| LevelSkillGoal | goals/level_skill.py | `skill_name: str, target_level: int, initial_skill_xp: int=0, xp_curve: SkillXpCurve\|None=None` | `xp_curve` (pass None; ctor default tolerates it) |
+| GrindCharacterXPGoal | goals/grind_character_xp.py | `target_monster: str, initial_xp: int=0, game_data: GameData\|None=None` | `game_data` |
+
+**Interfaces:**
+- Produces:
+  - `<Goal>.serialize(self) -> dict` on each of the 6 classes, returning `{"type": "<ClassName>", ...constructor scalars/collections...}` (never the injectable).
+  - `goal_serialization.goal_to_dict(goal: Goal) -> dict | None` — `goal.serialize()` when the goal has one (the 6 types), else `None`.
+  - `goal_serialization.goal_from_dict(data: dict, game_data: GameData | None) -> Goal` — dispatches on `data["type"]`, injecting `game_data` (and `None` for `xp_curve`).
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# tests/test_ai/test_goal_serialization.py
+from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.goals.craft_relief import CraftReliefGoal
+from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
+from artifactsmmo_cli.ai.goal_serialization import goal_to_dict, goal_from_dict
+
+
+def test_gather_round_trips():
+    g = GatherMaterialsGoal("copper_ring", {"copper_ore": 6})
+    d = goal_to_dict(g)
+    assert d["type"] == "GatherMaterialsGoal"
+    back = goal_from_dict(d, game_data=None)
+    assert repr(back) == repr(g)
+
+
+def test_craft_relief_round_trips():
+    g = CraftReliefGoal("copper_bar", initial_qty=2, batch=3)
+    back = goal_from_dict(goal_to_dict(g), game_data=None)
+    assert repr(back) == repr(g)
+    assert back._batch == 3  # dropped from repr — must still round-trip
+
+
+def test_grind_injects_game_data():
+    g = GrindCharacterXPGoal("chicken", initial_xp=10)
+    sentinel = object()
+    back = goal_from_dict(goal_to_dict(g), game_data=sentinel)
+    assert back._game_data is sentinel
+    assert repr(back) == repr(g)
+
+
+def test_non_plan_bearing_goal_returns_none():
+    class Dummy:  # no serialize()
+        pass
+    assert goal_to_dict(Dummy()) is None
+```
+
+(The implementer reads each goal file for the exact private attribute names —
+e.g. `self._target_item`, `self._needed`, `self._batch`, `self._game_data` — and
+writes `serialize` accordingly. The `back._batch == 3` / `back._game_data is
+sentinel` assertions lock that fields dropped from `__repr__` actually
+round-trip. Add a round-trip test for all six classes, not just these four.)
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `uv run pytest tests/test_ai/test_goal_serialization.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'artifactsmmo_cli.ai.goal_serialization'`
+
+- [ ] **Step 3: Implement `serialize` on each goal + the factory module**
+
+Add to each goal (example for `GatherMaterialsGoal` in `goals/gathering.py`):
+
+```python
+def serialize(self) -> dict:
+    return {"type": "GatherMaterialsGoal",
+            "target_item": self._target_item,
+            "needed": dict(self._needed)}
+```
+
+For `UpgradeEquipmentGoal`, serialize `committed_target` as a list (JSON has no
+tuple) and `initial_equipment` as-is. Every `serialize` field name must match the
+`goal_from_dict` key it feeds.
+
+```python
+# src/artifactsmmo_cli/ai/goal_serialization.py
+"""Serialize/rehydrate the plan-bearing objective goals so a persisted plan can
+resume after restart. Transient guard/means goals are not serializable here and
+re-plan cold. GameData (and SkillXpCurve) are re-injected from the live arbiter,
+never stored. See docs/superpowers/specs/2026-06-23-plan-cache-macro-learning-design.md."""
+
+from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.goals.craft_relief import CraftReliefGoal
+from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
+from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
+from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
+from artifactsmmo_cli.ai.goals.pursue_task import PursueTaskGoal
+
+
+def goal_to_dict(goal: Goal) -> dict | None:
+    """The goal's serialized form, or None when it is not a plan-bearing type."""
+    serialize = getattr(goal, "serialize", None)
+    if serialize is None:
+        return None
+    return serialize()
+
+
+def goal_from_dict(data: dict, game_data: GameData | None) -> Goal:
+    """Rehydrate a plan-bearing goal, injecting live GameData where needed."""
+    t = data["type"]
+    if t == "GatherMaterialsGoal":
+        return GatherMaterialsGoal(data["target_item"], dict(data["needed"]))
+    if t == "CraftReliefGoal":
+        return CraftReliefGoal(data["target_item"], data["initial_qty"], data["batch"])
+    if t == "PursueTaskGoal":
+        return PursueTaskGoal(data["task_code"], data["initial_progress"], data["batch"])
+    if t == "GrindCharacterXPGoal":
+        return GrindCharacterXPGoal(data["target_monster"], data["initial_xp"], game_data)
+    if t == "LevelSkillGoal":
+        return LevelSkillGoal(data["skill_name"], data["target_level"],
+                              data["initial_skill_xp"], None)
+    if t == "UpgradeEquipmentGoal":
+        committed = data["committed_target"]
+        return UpgradeEquipmentGoal(
+            data["initial_equipment"],
+            tuple(committed) if committed is not None else None)
+    raise ValueError(f"unknown goal type for rehydration: {t}")
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `uv run pytest tests/test_ai/test_goal_serialization.py -v`
+Expected: PASS (6 round-trip tests + the None test).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/artifactsmmo_cli/ai/goal_serialization.py src/artifactsmmo_cli/ai/goals/ tests/test_ai/test_goal_serialization.py
+git commit -m "feat(plan-cache): serialize plan-bearing goals for resume"
+```
+
+---
+
+### Task 6: Wire persistence into the re-plan path
 
 On every re-plan that yields a plan, log the body and save the commitment.
 
@@ -796,12 +956,17 @@ In `_plan_or_reuse`, inside `if plan and selected_goal is not None:` after build
 ```python
 if self.history is not None:
     plan_reprs = [repr(a) for a in plan]
+    goal_json = json.dumps(goal_to_dict(selected_goal) or {})
     self.history.record_plan_body(
         repr(selected_goal), plan_reprs[0], plan_reprs)
     self.history.save_plan_commitment(
-        repr(selected_goal), plan_reprs, 0,
+        repr(selected_goal), goal_json, plan_reprs, 0,
         self._last_decide_crafting_target, self._gear_latch.active)
 ```
+
+Add `from artifactsmmo_cli.ai.goal_serialization import goal_to_dict, goal_from_dict`
+to the imports (Task 7 uses `goal_from_dict`). `json` is already imported in
+`player.py`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -817,25 +982,26 @@ git commit -m "feat(plan-cache): persist body + commitment on every re-plan"
 
 ---
 
-### Task 6: Restart-resume (validation-gated, lowest priority)
+### Task 7: Restart-resume via goal rehydration
 
-Load the persisted commitment at startup and reuse it only if every remaining
-step is applicable from the current world. If any step's repr is unmatchable or
-inapplicable, discard and re-plan cold. This saves at most one search per restart
-— ship it last; it is safe to defer if time-boxed.
+Load the persisted commitment at startup; rehydrate the goal (Task 5 factory) and
+the plan tail (repr-match against freshly built actions). Reuse only if the goal
+rehydrates AND every remaining step is applicable; otherwise discard and re-plan
+cold.
 
 **Files:**
 - Modify: `src/artifactsmmo_cli/ai/player.py` (`run`, after `_initialize`; new helper `_resume_plan_cache`)
 - Test: `tests/test_ai/test_plan_resume.py`
 
 **Interfaces:**
-- Consumes: `LearningStore.load_plan_commitment`, `_build_actions`, `Action.is_applicable`.
+- Consumes: `LearningStore.load_plan_commitment` (Task 4), `goal_from_dict` (Task 5), `_build_actions`, `Action.is_applicable`, `PlanCache` (Task 1).
 - Produces: `GamePlayer._resume_plan_cache(self, state, game_data) -> None` (sets `self._plan_cache` or leaves it None).
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
 # tests/test_ai/test_plan_resume.py
+import json
 from dataclasses import dataclass
 
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -843,35 +1009,82 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from tests.test_ai.fixtures import make_state
 
 
+@dataclass
+class _Act:
+    name: str
+    applicable: bool = True
+
+    def is_applicable(self, state, game_data):
+        return self.applicable
+
+    def __repr__(self):
+        return self.name
+
+
+def _store(tmp_path):
+    s = LearningStore(db_path=str(tmp_path / "l.db"), character="hero")
+    s.start_session()
+    return s
+
+
+_GATHER_JSON = json.dumps(
+    {"type": "GatherMaterialsGoal", "target_item": "copper_ring",
+     "needed": {"copper_ore": 6}})
+
+
 def test_resume_discards_when_step_unmatchable(tmp_path):
-    store = LearningStore(db_path=str(tmp_path / "l.db"), character="hero")
-    store.start_session()
-    store.save_plan_commitment("Goal(g)", ["NoSuchAction()"], 0, None, False)
+    store = _store(tmp_path)
+    store.save_plan_commitment(
+        "GatherMaterials(...)", _GATHER_JSON, ["NoSuchAction()"], 0, None, False)
     player = GamePlayer(character="hero", dry_run=True, history=store)
     player._build_actions = lambda: []  # type: ignore[attr-defined]
     player._resume_plan_cache(make_state(), None)
     assert player._plan_cache is None
+
+
+def test_resume_skips_when_goal_not_plan_bearing(tmp_path):
+    store = _store(tmp_path)
+    store.save_plan_commitment("Deposit", "{}", ["StepA"], 0, None, False)
+    player = GamePlayer(character="hero", dry_run=True, history=store)
+    player._build_actions = lambda: [_Act("StepA")]  # type: ignore[attr-defined]
+    player._resume_plan_cache(make_state(), None)
+    assert player._plan_cache is None
+
+
+def test_resume_rehydrates_when_all_steps_applicable(tmp_path):
+    store = _store(tmp_path)
+    store.save_plan_commitment(
+        "GatherMaterials(...)", _GATHER_JSON, ["StepA", "StepB"], 0, "copper_ring", False)
+    player = GamePlayer(character="hero", dry_run=True, history=store)
+    player._build_actions = lambda: [_Act("StepA"), _Act("StepB")]  # type: ignore[attr-defined]
+    player._resume_plan_cache(make_state(), None)
+    assert player._plan_cache is not None
+    assert player._plan_cache.crafting_target == "copper_ring"
+    assert player._plan_cache.selected_goal.__class__.__name__ == "GatherMaterialsGoal"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/test_ai/test_plan_resume.py -v`
-Expected: FAIL — `AttributeError: ... '_resume_plan_cache'`
+Expected: FAIL — `AttributeError: 'GamePlayer' object has no attribute '_resume_plan_cache'`
 
 - [ ] **Step 3: Implement `_resume_plan_cache`**
 
 ```python
 def _resume_plan_cache(self, state, game_data) -> None:
-    """Restore a persisted commitment iff every remaining step matches a fresh
-    applicable action. Otherwise leave the cache None (cold re-plan)."""
+    """Restore a persisted commitment iff the goal rehydrates and every remaining
+    step matches a fresh applicable action. Otherwise leave the cache None."""
     if self.history is None:
         return
     row = self.history.load_plan_commitment()
     if row is None:
         return
+    goal_data = json.loads(row.goal_json)
+    if not goal_data or "type" not in goal_data:
+        return  # goal was not a plan-bearing type — re-plan cold
+    goal = goal_from_dict(goal_data, game_data)
     by_repr = {repr(a): a for a in self._build_actions()}
-    plan_reprs = json.loads(row.plan_json)
-    tail = plan_reprs[row.cursor:]
+    tail = json.loads(row.plan_json)[row.cursor:]
     rebuilt = []
     for r in tail:
         a = by_repr.get(r)
@@ -880,21 +1093,14 @@ def _resume_plan_cache(self, state, game_data) -> None:
         rebuilt.append(a)
     if not rebuilt:
         return
-    # Goal object is not persisted; resume keeps the plan and lets the next
-    # exhaustion/trigger re-derive the goal. selected_goal is required to be
-    # non-None for execution, so we only resume when a live decision will fill
-    # it — here we conservatively leave the cache None unless a goal is present.
-    # Simplest safe contract: do not resume goalless; full re-plan on cycle 1.
-    return
+    self._plan_cache = PlanCache(
+        selected_goal=goal,
+        plan=rebuilt,
+        crafting_target=row.crafting_target,
+        latch_active=row.latch_active,
+        goal_repr=row.goal_repr,
+    )
 ```
-
-NOTE: persisting/rehydrating the `Goal` object is out of scope (goals are not
-serializable here). Task 6 therefore validates the resume path but intentionally
-keeps the conservative contract: it never resumes a goalless plan. The test above
-locks the discard branch. If a future change makes goals serializable, extend
-this method then. **This task may be dropped entirely without affecting the CPU
-win** — it exists to satisfy "cache plans in DB" for restart, which Tasks 4–5
-already do at the persistence layer.
 
 - [ ] **Step 4: Call it after `_initialize`**
 
@@ -915,12 +1121,12 @@ Expected: PASS.
 
 ```bash
 git add src/artifactsmmo_cli/ai/player.py tests/test_ai/test_plan_resume.py
-git commit -m "feat(plan-cache): validation-gated restart-resume scaffold"
+git commit -m "feat(plan-cache): restart-resume via goal rehydration"
 ```
 
 ---
 
-### Task 7: Full gate + coverage
+### Task 8: Full gate + coverage
 
 **Files:** none (verification only)
 
@@ -961,15 +1167,24 @@ git commit -m "test(plan-cache): close coverage gaps; gate green"
 - Loop restructure (3 bands) → Task 3. ✓
 - `PlanCache` → Task 1. ✓
 - `should_replan` 6 triggers → Task 2. ✓
-- DB persist live commitment + plan-body log → Tasks 4–5. ✓
+- DB tables + store methods (commitment incl. `goal_json` + plan-body log) → Task 4. ✓
+- Goal serialization (6 plan-bearing goals + factory) → Task 5. ✓
+- Persist body + commitment on re-plan → Task 6. ✓
 - Trace honesty (`replanned`, zeroed stats) → Task 3 Step 8. ✓
-- Formal-gate run + T4 obligation note → Task 7. ✓
-- Restart-resume validation → Task 6 (conservatively scoped; goal serialization flagged out of scope). ⚠ partial-by-design.
+- Restart-resume via goal rehydration → Task 7 (scoped to plan-bearing goals, per user decision). ✓
+- Formal-gate run + T4 obligation note → Task 8. ✓
 - Phase 2 macro learning → NOT in this plan (separate plan after Phase 1 green, per spec build-order). ✓ intentional.
 
-**Placeholder scan:** none — every code step shows complete code. Task 6 explicitly documents its conservative contract rather than hand-waving.
+**Placeholder scan:** none — every code step shows complete code. Task 5 leaves the
+exact `serialize` body to the implementer because private attr names need a file
+read; the field contract and factory are fully specified.
 
-**Type consistency:** `PlanCache` fields/methods identical across Tasks 1–6; `should_replan` signature identical in Tasks 2–3; store method names (`record_plan_body`, `save_plan_commitment`, `load_plan_commitment`, `plan_bodies_for_goal`) identical across Tasks 4–6.
+**Type consistency:** `PlanCache` fields/methods identical across Tasks 1–7;
+`should_replan` signature identical in Tasks 2–3; `save_plan_commitment` signature
+(with `goal_json` 2nd param) identical across Tasks 4, 6, 7; store method names
+(`record_plan_body`, `save_plan_commitment`, `load_plan_commitment`,
+`plan_bodies_for_goal`) and serialization names (`goal_to_dict`, `goal_from_dict`)
+consistent across consuming tasks.
 
 **Known soft spot:** Task 3's `_decide_band` extraction must preserve every side
 effect of the current loop body (`_last_decision`, `_last_servability_diag`,
