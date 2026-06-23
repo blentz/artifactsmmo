@@ -338,6 +338,38 @@ class GamePlayer:
         b = self._blockers.get("bank")
         return b.required_level if b else 0
 
+    def _resume_plan_cache(self, state: WorldState, game_data: GameData | None) -> None:
+        """Restore a persisted commitment iff the goal rehydrates and every remaining
+        step matches a fresh applicable action. Otherwise leave the cache None."""
+        if self.history is None:
+            return
+        row = self.history.load_plan_commitment()
+        if row is None:
+            return
+        goal_data = json.loads(row.goal_json)
+        if not goal_data or "type" not in goal_data:
+            return  # goal was not a plan-bearing type — re-plan cold
+        goal = goal_from_dict(goal_data, game_data)
+        by_repr = {repr(a): a for a in self._build_actions()}
+        tail = json.loads(row.plan_json)[row.cursor:]
+        rebuilt = []
+        for r in tail:
+            a = by_repr.get(r)
+            if a is None:
+                return  # unmatchable -> discard, re-plan cold
+            if game_data is not None and not a.is_applicable(state, game_data):
+                return  # stale step -> discard, re-plan cold
+            rebuilt.append(a)
+        if not rebuilt:
+            return
+        self._plan_cache = PlanCache(
+            selected_goal=goal,
+            plan=rebuilt,
+            crafting_target=row.crafting_target,
+            latch_active=row.latch_active,
+            goal_repr=row.goal_repr,
+        )
+
     def _initialize(self, client: AuthenticatedClient) -> None:
         """Load game data, build the strategy engine, fetch state, and seed blocker
         memory + the cycle-0 full-bank-refresh sentinel. Shared by `run()` and the
@@ -452,6 +484,8 @@ class GamePlayer:
         client_manager = ClientManager()
         client = client_manager.client
         self._initialize(client)
+        if self.state is not None:
+            self._resume_plan_cache(self.state, self.game_data)
 
         print(f"[{self._now()}] Starting play loop for {self.character}")
 
