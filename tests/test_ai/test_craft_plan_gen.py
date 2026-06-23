@@ -12,6 +12,7 @@ Covers:
 
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.craft_plan_gen import generate_next_craft_action
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
@@ -135,6 +136,40 @@ class TestCopperRingGatherPhase:
         assert len(result) == 1
         assert isinstance(result[0], CraftAction)
         assert result[0].code == "copper_ring"
+
+
+class TestWithdrawsBankedIntermediate:
+    """Banked craftable intermediate → emit a WithdrawItemAction (no A* bank-gate)."""
+
+    def test_returns_withdraw_when_bar_banked(self):
+        """copper_bar in the bank, short inventory → withdraw it, not gather/craft."""
+        gd = _gd_copper_ring()
+        state = make_state(inventory={}, bank_items={"copper_bar": 5},
+                           skills={"mining": 5, "jewelrycrafting": 5})
+        goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
+        actions = [
+            *_copper_ring_actions(),
+            WithdrawItemAction(code="copper_bar", quantity=1, bank_location=(4, 0)),
+        ]
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        assert result is not None
+        assert len(result) == 1
+        assert isinstance(result[0], WithdrawItemAction)
+        assert result[0].code == "copper_bar"
+
+    def test_none_when_withdraw_action_absent(self):
+        """Banked bar but no WithdrawItemAction in the list → fall back to A*."""
+        gd = _gd_copper_ring()
+        state = make_state(inventory={}, bank_items={"copper_bar": 5},
+                           skills={"mining": 5, "jewelrycrafting": 5})
+        goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
+        actions = _copper_ring_actions()  # no WithdrawItemAction surfaced
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        assert result is None
 
 
 class TestSatisfiedGoalReturnsNone:

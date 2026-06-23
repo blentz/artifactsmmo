@@ -2115,13 +2115,14 @@ args layout (mixed JSON):
         values are JSON ARRAYs of `[input_str, per_int]` pairs.
         The inputs array preserves Python dict insertion order.
         The outer object's key order is irrelevant (lookup only, not traversal).
-* `[1]` owned_obj  : JSON OBJECT mapping item codes → owned count (int ≥ 0).
-* `[2]` target     : string (item code).
-* `[3]` qty        : int ≥ 0 (how many of target needed).
-* `[4]` fuel       : int ≥ 0 (recursion budget; caller passes len(recipes)+1).
+* `[1]` owned_obj  : JSON OBJECT mapping item codes → owned (inventory) count (int ≥ 0).
+* `[2]` bank_obj   : JSON OBJECT mapping item codes → banked count (int ≥ 0).
+* `[3]` target     : string (item code).
+* `[4]` qty        : int ≥ 0 (how many of target needed).
+* `[5]` fuel       : int ≥ 0 (recursion budget; caller passes len(recipes)+1).
 
 Emits `null` when none (target already satisfied); otherwise:
-`{"item": str, "kind": "gather"|"craft", "qty": int}`. -/
+`{"item": str, "kind": "gather"|"craft"|"withdraw", "qty": int}`. -/
 def runNextCraft (args : Array Json) : Json :=
   -- Parse recipes object into an assoc list, preserving per-item inputs order.
   let recipesJson := args[0]!
@@ -2163,13 +2164,28 @@ def runNextCraft (args : Array Json) : Json :=
     fun s => match ownedAssoc.find? (fun p => p.1 == s) with
       | some p => p.2
       | none   => 0
-  let target := strArg args 2
-  let qty    := (intArg args 3).toNat
-  let fuel   := (intArg args 4).toNat
-  match nextCraftTarget recipes owned target qty fuel with
+  -- Parse bank object into an assoc list (same shape as owned).
+  let bankJson := args[2]!
+  let bankAssoc : List (String × Nat) :=
+    match bankJson.getObj? with
+    | .error _ => []
+    | .ok kvMap =>
+        kvMap.toList.filterMap (fun (itemName, qtyJson) =>
+          match qtyJson.getInt? with
+          | .error _ => none
+          | .ok n    => some (itemName, n.toNat))
+  let bank : String → Nat :=
+    fun s => match bankAssoc.find? (fun p => p.1 == s) with
+      | some p => p.2
+      | none   => 0
+  let target := strArg args 3
+  let qty    := (intArg args 4).toNat
+  let fuel   := (intArg args 5).toNat
+  match nextCraftTarget recipes owned bank target qty fuel with
   | none    => Json.null
   | some na =>
-      let kindStr : String := match na.kind with | Kind.gather => "gather" | Kind.craft => "craft"
+      let kindStr : String := match na.kind with
+        | Kind.gather => "gather" | Kind.craft => "craft" | Kind.withdraw => "withdraw"
       Json.mkObj [("item", Json.str na.item), ("kind", Json.str kindStr),
                   ("qty", Json.num (Int.ofNat na.qty))]
 

@@ -24,10 +24,10 @@ preserves the fast-path for the two common mid-game states:
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.next_craft_core import NextAction, next_craft_target_pure
-from artifactsmmo_cli.ai.recipe_closure import _closure_demand
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -120,41 +120,19 @@ def generate_next_craft_action(
             if item not in gatherable_items:
                 return None  # Monster drop / NPC-buy leaf → fall back to A*.
 
-    # PRECISE BANK GATE: fall back to A* only when a closure INPUT/INTERMEDIATE
-    # (not a top-level target in `needed`) is banked AND inventory is short of the
-    # required quantity.  Such an item must be withdrawn before CraftAction can use
-    # it; the generator has no "withdraw" step, so A* handles Withdraw→Craft.
-    #
-    # We intentionally SKIP this gate for top-level targets (`needed` keys): a
-    # banked finished output is never an input that needs withdrawing — the
-    # generator will simply re-make the remaining quantity from scratch.
-    #
-    # We also SKIP when inventory already covers the requirement: the bank holds
-    # surplus (Issue #2 regression guard) and no withdraw is needed.
-    if bank:
-        # Compute per-item closure demand once, only when the bank is non-empty.
-        demand: dict[str, int] = {}
-        for root, qty in needed.items():
-            _closure_demand(len(recipes) + 1, root, qty, recipes, {}, demand)
-        top_level: set[str] = set(needed)
-        for item, required_qty in demand.items():
-            if item in top_level:
-                continue  # Top-level target: not a banked input needing withdraw.
-            if bank.get(item, 0) > 0 and state.inventory.get(item, 0) < required_qty:
-                return None  # Banked input is genuinely needed → A* will withdraw.
-
-    # owned = INVENTORY ONLY.  Bank items are NOT available to CraftAction without
-    # a prior WithdrawItemAction.  The precise bank gate above ensures we only
-    # reach this point when either (a) no closure inputs are banked, (b) the bank
-    # holds only surplus (inventory already covers requirements), or (c) the banked
-    # item is a top-level output (not an input).  In all three cases emitting a
-    # gather or craft action is correct — no withdraw is needed.
+    # owned = INVENTORY; the bank is passed SEPARATELY to the core.  A banked
+    # craftable intermediate (e.g. copper_bar) no longer forces an A* Withdraw→Craft
+    # search: the core emits a "withdraw" NextAction for the first short input that
+    # is in the bank (mirrors the kernel-proved Lean `nextHelper` withdraw arm),
+    # which we map to a WithdrawItemAction below.  Top-level targets are never
+    # withdrawn (the descent only checks INPUTS), so a banked finished output is
+    # still re-made from scratch.
     owned: dict[str, int] = dict(state.inventory)
 
     # Find the first non-None next action across all top-level needed items.
     na: NextAction | None = None
     for item, qty in needed.items():
-        na = next_craft_target_pure(recipes, owned, item, qty)
+        na = next_craft_target_pure(recipes, owned, bank, item, qty)
         if na is not None:
             break
 
@@ -174,6 +152,13 @@ def generate_next_craft_action(
             ):
                 return [action]
         return None  # No matching gather action found → fall back to A*.
+
+    if na.kind == "withdraw":
+        # Banked intermediate: pull it from the bank rather than re-make it.
+        for action in relevant:
+            if isinstance(action, WithdrawItemAction) and action.code == na.item:
+                return [action]
+        return None  # No matching withdraw action found → fall back to A*.
 
     # na.kind == "craft"
     for action in relevant:

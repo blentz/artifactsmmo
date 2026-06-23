@@ -21,13 +21,14 @@ class NextAction(NamedTuple):
     """
 
     item: str
-    kind: Literal["gather", "craft"]
+    kind: Literal["gather", "craft", "withdraw"]
     qty: int
 
 
 def next_craft_target_pure(
     recipes: Mapping[str, dict[str, int]],
     owned: Mapping[str, int],
+    bank: Mapping[str, int],
     target: str,
     qty: int,
 ) -> NextAction | None:
@@ -53,12 +54,13 @@ def next_craft_target_pure(
     """
     if owned.get(target, 0) >= qty:
         return None
-    return _next(recipes, owned, target, qty, len(recipes) + 1)
+    return _next(recipes, owned, bank, target, qty, len(recipes) + 1)
 
 
 def _next(
     recipes: Mapping[str, dict[str, int]],
     owned: Mapping[str, int],
+    bank: Mapping[str, int],
     item: str,
     need: int,
     fuel: int,
@@ -92,5 +94,10 @@ def _next(
     for inp, per in recipe.items():
         required = per * deficit
         if owned.get(inp, 0) < required:
-            return _next(recipes, owned, inp, required, fuel - 1)  # make input first
+            # First short input. If it is in the bank, withdraw what's there
+            # (capped at the shortfall) rather than re-gathering/re-crafting it;
+            # otherwise descend to make it. Mirrors Lean `nextHelper` withdraw arm.
+            if bank.get(inp, 0) == 0:
+                return _next(recipes, owned, bank, inp, required, fuel - 1)
+            return NextAction(inp, "withdraw", min(bank.get(inp, 0), required - owned.get(inp, 0)))
     return NextAction(item, "craft", deficit)  # all inputs on hand → craft
