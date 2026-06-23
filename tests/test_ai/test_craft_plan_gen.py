@@ -412,8 +412,15 @@ class TestStrategyArbiterIntegration:
 
         assert _SpyPlanner.calls == 1, "Planner must be invoked for monster-drop goal"
 
-    def test_bank_items_count_toward_owned(self):
-        """Bar in bank (not inventory) still satisfies the bar need → craft ring."""
+    def test_bank_closure_material_returns_none(self) -> None:
+        """Bar in bank → generator returns None (A* fallback).
+
+        CraftAction.execute requires inputs to be IN INVENTORY.  A material in
+        the bank needs a WithdrawItemAction before CraftAction can use it.
+        The generator has no "withdraw" step, so emitting [CraftAction] with a
+        banked material would crash the API call at runtime.  The correct
+        behaviour is to return None so A* takes over (A* emits Withdraw→Craft).
+        """
         gd = _gd_copper_ring()
         state = make_state(inventory={}, bank_items={"copper_bar": 1},
                            skills={"mining": 5, "jewelrycrafting": 5})
@@ -422,7 +429,28 @@ class TestStrategyArbiterIntegration:
 
         result = generate_next_craft_action(goal, state, gd, actions)
 
-        # Bar is in bank → owned["copper_bar"]=1, so next step is craft ring.
-        assert result is not None
+        # copper_bar is a closure item present in the bank → must defer to A*.
+        assert result is None, (
+            "Generator must return None (A* fallback) when a closure material "
+            "is in the bank — emitting CraftAction without a prior withdraw "
+            "would cause a runtime API crash."
+        )
+
+    def test_inventory_material_does_not_fall_back(self) -> None:
+        """Bar in INVENTORY (not bank) → generator fires and emits CraftAction.
+
+        Confirms that the bank-fallback guard does not affect the normal
+        from-scratch gather→craft case where materials land in inventory.
+        """
+        gd = _gd_copper_ring()
+        state = make_state(inventory={"copper_bar": 1}, bank_items={},
+                           skills={"mining": 5, "jewelrycrafting": 5})
+        goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
+        actions = _copper_ring_actions()
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        # Bar is in inventory → generator can directly emit CraftAction(copper_ring).
+        assert result is not None, "Inventory-held bar must not trigger A* fallback"
         assert isinstance(result[0], CraftAction)
         assert result[0].code == "copper_ring"

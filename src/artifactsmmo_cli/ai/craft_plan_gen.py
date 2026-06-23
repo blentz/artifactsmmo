@@ -9,6 +9,9 @@ Falls back to None (A* fallback) for:
 - closures that contain monster-drop leaves
 - closures that contain NPC-buy / currency leaves
 - closures that have any craft whose skill gate is not yet met
+- closures where ANY closure item has a positive bank quantity (a banked material
+  needs a WithdrawItemAction before use; the generator cannot emit withdraws — A*
+  will handle Withdraw→Craft correctly)
 """
 
 from artifactsmmo_cli.ai.actions.base import Action
@@ -24,11 +27,15 @@ def _closure_items(
     recipes: dict[str, dict[str, int]],
     needed: dict[str, int],
 ) -> set[str]:
-    """Return every item appearing in the recipe closure of `needed`.
+    """Return every ITEM CODE appearing in the recipe closure of `needed`.
 
-    Walks the recipe DAG depth-first, collecting every item code reachable from
-    the top-level `needed` dict.  Terminates because crafting recipe graphs are
-    acyclic (the game data guarantees this).
+    Note: recipe_closure.recipe_closure_pure is the shared closure engine, but
+    it returns RESOURCE NODE codes for raw leaves (e.g. "copper_rocks"), whereas
+    the CAN-GENERATE gate here needs ITEM codes (e.g. "copper_ore") to check
+    skill gates, workshop availability, and bank quantities.  Those two namespaces
+    are distinct, so we keep this hand-rolled DFS rather than forcing a mismatched
+    reuse.  The walk is acyclic because game recipe graphs are DAGs; the seen-guard
+    ensures termination even for hypothetically cyclic inputs.
     """
     seen: set[str] = set()
     stack: list[str] = list(needed)
@@ -56,6 +63,9 @@ def generate_next_craft_action(
     - Any item in the recipe closure has no recipe AND is not a gatherable raw
       resource (e.g. monster drops, NPC-buy items)
     - Any craftable item in the closure has a skill gate the character has not met
+    - Any closure item has a positive quantity in the bank: a banked material needs
+      a WithdrawItemAction before CraftAction can use it; the generator has no
+      "withdraw" kind, so it defers to A* which correctly emits Withdraw→Craft.
 
     When a single unambiguous next action can be derived, returns a one-element
     list containing the matching action from
@@ -69,15 +79,19 @@ def generate_next_craft_action(
     recipes: dict[str, dict[str, int]] = dict(game_data.crafting_recipes)
     needed: dict[str, int] = goal.needed
 
-    # Collect every item in the recipe closure.
+    # Collect every item code in the recipe closure.
     closure = _closure_items(recipes, needed)
 
     # Gatherable raw item codes: items that are produced by some resource node.
     gatherable_items: set[str] = set(game_data.resource_drops.values())
 
+    bank: dict[str, int] = state.bank_items or {}
+
     # CAN-GENERATE gate: every closure item must be either a craftable (with met
-    # skill gate AND a known workshop) or a gatherable raw.  Return None on first
-    # failure so A* takes over.
+    # skill gate AND a known workshop) or a gatherable raw.  Also fall back to A*
+    # whenever any closure item has a positive bank quantity — the generator cannot
+    # emit a WithdrawItemAction, so emitting CraftAction without a prior withdraw
+    # would cause a runtime API failure.  A* correctly emits Withdraw→Craft.
     for item in closure:
         recipe = recipes.get(item)
         if recipe is not None:
@@ -94,10 +108,18 @@ def generate_next_craft_action(
             if item not in gatherable_items:
                 return None  # Monster drop / NPC-buy leaf → fall back to A*.
 
-    # Compute owned = inventory + bank for the generator.
+        # Banked material: A* will emit WithdrawItemAction → CraftAction; the
+        # generator only knows "gather" and "craft", so defer to A*.
+        if bank.get(item, 0) > 0:
+            return None  # Closure item present in bank → fall back to A*.
+
+    # owned = INVENTORY ONLY.  Bank items are NOT available to CraftAction
+    # without a prior WithdrawItemAction.  Counting bank items here would cause
+    # the generator to skip a necessary withdraw step and crash the API call at
+    # runtime.  (The CAN-GENERATE gate above already falls back to A* when any
+    # bank quantity is non-zero, so this path is only reached for the from-scratch
+    # gather-craft case where the bank holds no closure materials.)
     owned: dict[str, int] = dict(state.inventory)
-    for code, qty in (state.bank_items or {}).items():
-        owned[code] = owned.get(code, 0) + qty
 
     # Find the first non-None next action across all top-level needed items.
     na: NextAction | None = None

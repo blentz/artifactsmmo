@@ -1,6 +1,6 @@
 """Tests for next_craft_target_pure — deterministic next craft/gather action."""
 
-from artifactsmmo_cli.ai.next_craft_core import NextAction, next_craft_target_pure
+from artifactsmmo_cli.ai.next_craft_core import NextAction, _next, next_craft_target_pure
 
 COPPER_RECIPES: dict[str, dict[str, int]] = {
     "copper_ring": {"copper_bar": 6},
@@ -87,3 +87,16 @@ def test_raw_target_partial_owned_returns_deficit() -> None:
     """Raw target with partial ownership → gather the deficit."""
     result = next_craft_target_pure({}, {"copper_ore": 3}, "copper_ore", 5)
     assert result == NextAction("copper_ore", "gather", 2)
+
+
+def test_fuel_zero_guard_returns_gather() -> None:
+    """fuel=0 terminates with a gather action (total-function guard, line 86).
+
+    The guard is unreachable via the public next_craft_target_pure API (fuel is
+    seeded at len(recipes)+1 and acyclic recipe graphs exhaust it before fuel
+    reaches zero).  This test exercises it directly via _next to achieve 100%
+    branch coverage.  The behaviour matches a raw leaf: return 'gather'.
+    """
+    recipes: dict[str, dict[str, int]] = {"copper_bar": {"copper_ore": 10}}
+    result = _next(recipes, {}, "copper_bar", 1, fuel=0)
+    assert result == NextAction("copper_bar", "gather", 1)

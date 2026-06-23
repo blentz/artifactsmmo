@@ -791,7 +791,7 @@ class StrategyArbiter:
             self.goals_tried.append({
                 "goal": repr(goal),
                 "nodes": 0,
-                "depth": 1,
+                "depth": 0,
                 "timed_out": False,
                 "plan_len": len(gen),
             })
