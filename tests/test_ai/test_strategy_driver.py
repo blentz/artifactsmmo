@@ -457,6 +457,7 @@ def _satchel_currency_gd():
     }
     gd._npc_stock = {"tasks_trader": {"jasper_crystal": 8}}
     gd._npc_buy_currency = {"tasks_trader": {"jasper_crystal": "tasks_coin"}}
+    gd._task_coin_rewards = {"chicken": 1}  # C2 floor for funding-cycle calc
     gd._npc_locations = {"tasks_trader": (4, 1)}
     return gd
 

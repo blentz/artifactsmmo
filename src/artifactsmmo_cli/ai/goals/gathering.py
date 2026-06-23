@@ -12,7 +12,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.buy_source_venue import BuyVenue, choose_buy_venue
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.craft_vs_buy import Method, acquisition_method
-from artifactsmmo_cli.ai.goals.currency_demand import first_unaffordable_currency_leaf
+from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
 from artifactsmmo_cli.ai.goals.gather_plannable_core import gather_plannable_pure
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor
 from artifactsmmo_cli.ai.game_data import GameData
@@ -401,7 +401,7 @@ class GatherMaterialsGoal(Goal):
         the cheapest-first ordering from npc_purchases and accepts the first
         affordable vendor. If no vendor is affordable, the leaf prunes the goal.
         """
-        return first_unaffordable_currency_leaf(self._needed, state, game_data) is None
+        return not analyze_currency_leaves(self._needed, state, game_data).blocked
 
     def is_plannable(self, state: WorldState, game_data: GameData,
                      history: LearningStore | None = None) -> bool:

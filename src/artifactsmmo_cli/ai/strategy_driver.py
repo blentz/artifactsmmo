@@ -16,7 +16,7 @@ from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
 from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
 from artifactsmmo_cli.ai.goals.craft_relief import CraftReliefGoal
-from artifactsmmo_cli.ai.goals.currency_demand import first_unaffordable_currency_leaf
+from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
 from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
 from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
@@ -520,11 +520,15 @@ def objective_step_goal(
         # Route to ReachCurrencyGoal to FUND the currency instead, so the arbiter
         # has a plannable funding goal to select. Once funded the leaf becomes
         # affordable and the next pass builds the craft path (buy + craft). Shares
-        # the ONE closure+predicate with is_plannable (first_unaffordable_currency_leaf).
-        leaf = first_unaffordable_currency_leaf(
+        # the ONE closure walk with is_plannable (analyze_currency_leaves). Only a
+        # tasks_coin-funded leaf yields a funding_target — a gold/event-only leaf is
+        # `blocked` (is_plannable prunes it) but NOT routed here (ReachCurrencyGoal
+        # mints only tasks_coin, so funding a gold leaf would chase an unreachable
+        # goal).
+        analysis = analyze_currency_leaves(
             {step.code: step.quantity}, state, game_data)
-        if leaf is not None:
-            currency, amount = leaf
+        if analysis.funding_target is not None:
+            currency, amount = analysis.funding_target
             return ReachCurrencyGoal(currency=currency, target=amount)
         stats = game_data.item_stats(step.code)
         slots = ITEM_TYPE_TO_SLOTS.get(stats.type_) if stats is not None else None

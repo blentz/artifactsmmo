@@ -72,6 +72,7 @@ def _make_satchel_game_data() -> GameData:
     # Permanent NPC vendor: tasks_trader sells jasper_crystal for 8 tasks_coin
     gd._npc_stock[TASKS_TRADER] = {JASPER: JASPER_PRICE}
     gd._npc_buy_currency[TASKS_TRADER] = {JASPER: TASKS_COIN}
+    gd._task_coin_rewards = {"chicken": 1}  # C2 floor for funding-cycle calc
     gd._npc_locations[TASKS_TRADER] = TRADER_LOC
     # tasks_trader is NOT an event NPC (not in npc_event_codes)
 

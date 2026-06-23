@@ -236,6 +236,7 @@ def _satchel_gd() -> GameData:
     }
     gd._npc_stock = {"tasks_trader": {"jasper_crystal": 8}}
     gd._npc_buy_currency = {"tasks_trader": {"jasper_crystal": "tasks_coin"}}
+    gd._task_coin_rewards = {"chicken": 1}  # C2 floor (min_task_coin_reward) for funding-cycle calc
     gd._npc_locations = {"tasks_trader": (4, 1)}
     return gd
 
@@ -376,6 +377,7 @@ def test_relevant_actions_emits_npcbuy_for_deep_closure_currency_buy_leaf() -> N
     # tasks_trader sells it for 8 tasks_coin each (permanent vendor)
     gd._npc_stock = {"tasks_trader": {"jasper_crystal": 8}}
     gd._npc_buy_currency = {"tasks_trader": {"jasper_crystal": "tasks_coin"}}
+    gd._task_coin_rewards = {"chicken": 1}  # C2 floor (min_task_coin_reward) for funding-cycle calc
     gd._npc_locations = {"tasks_trader": (4, 1)}
     state = make_state(level=10, gold=0, inventory={}, x=0, y=0)
     goal = GatherMaterialsGoal(target_item="satchel", needed={"satchel": 1})
@@ -388,48 +390,151 @@ def test_relevant_actions_emits_npcbuy_for_deep_closure_currency_buy_leaf() -> N
     )
 
 
-def test_is_plannable_event_npc_vendor_not_counted_for_affordability() -> None:
-    """C4 fix: first_unaffordable_currency_leaf must filter event NPCs (matching
-    relevant_actions). An event vendor selling a currency-buy leaf is not usable
-    by the planner (relevant_actions skips it), so it must not be counted as an
-    affordable source — the leaf must be treated as unaffordable (no usable vendor).
+def test_event_npc_vendor_blocked_but_not_funded() -> None:
+    """C4 follow-up (Minor #3): a leaf sold ONLY by an EVENT vendor is BLOCKED
+    (is_plannable prunes — relevant_actions emits no NpcBuy for an event vendor,
+    so no plan can buy it) but is NOT a funding target (ReachCurrencyGoal mints
+    only tasks_coin; it cannot earn the event currency, so routing to it would
+    chase an unreachable goal).
 
-    Scenario: mystical_crystal is sold ONLY by an EVENT NPC (seasonal_trader)
-    for 50 event_tokens. Even though the character has 50 event_tokens on hand,
-    the goal should be unplannable because the event vendor is not usable.
+    Scenario: mystical_crystal sold ONLY by EVENT NPC seasonal_trader for 50
+    event_tokens. Even with 50 event_tokens on hand, the event vendor is not
+    usable, so the leaf is blocked and there is no funding target.
     """
-    from artifactsmmo_cli.ai.goals.currency_demand import first_unaffordable_currency_leaf
+    from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
 
     gd = GameData()
-    # widget requires mystical_crystal x1
     gd._crafting_recipes = {"widget": {"mystical_crystal": 1}}
     gd._item_stats = {
         "widget": ItemStats(code="widget", level=1, type_="weapon",
                             crafting_skill="weaponcrafting", crafting_level=1),
     }
-    # mystical_crystal: non-craftable, not gathered, not dropped
-    # seasonal_trader (EVENT NPC) sells it for 50 event_tokens
     gd._npc_stock = {"seasonal_trader": {"mystical_crystal": 50}}
     gd._npc_buy_currency = {"seasonal_trader": {"mystical_crystal": "event_tokens"}}
     gd._npc_locations = {"seasonal_trader": (0, 0)}
-    # Mark seasonal_trader as an event NPC (timed/seasonal only)
     gd.world.npc_event_codes["seasonal_trader"] = "seasonal_event"
 
-    # Character HAS enough event_tokens to "afford" it, but event vendor is not usable
     state = make_state(skills={"weaponcrafting": 5}, inventory={"event_tokens": 50},
                        bank_items={}, x=0, y=0)
 
-    # first_unaffordable_currency_leaf must recognize event vendor doesn't count
-    result = first_unaffordable_currency_leaf({"widget": 1}, state, gd)
-    # Since event vendor is filtered out (no permanent vendors), the leaf is
-    # unaffordable (no viable purchase path exists).
-    assert result == ("event_tokens", 50), (
-        "Leaf with only event vendor must be unaffordable: "
-        f"got {result}"
+    result = analyze_currency_leaves({"widget": 1}, state, gd)
+    assert result.blocked is True, "event-only vendor leaf must block is_plannable"
+    assert result.funding_target is None, (
+        "must NOT route ReachCurrencyGoal toward an event/non-task currency: "
+        f"got {result.funding_target}"
+    )
+
+
+def test_gold_leaf_blocked_but_not_funded() -> None:
+    """C4 follow-up (Minor #1/#3): a leaf bought from a PERMANENT vendor for a
+    NON-task currency (gold) that the character cannot afford is BLOCKED, but is
+    NOT a funding target — ReachCurrencyGoal cannot earn gold (it mints
+    tasks_coin), so the bot earns gold by its normal means instead."""
+    from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
+
+    gd = GameData()
+    gd._crafting_recipes = {"widget": {"rare_gem": 1}}
+    gd._item_stats = {
+        "widget": ItemStats(code="widget", level=1, type_="weapon",
+                            crafting_skill="weaponcrafting", crafting_level=1),
+    }
+    gd._npc_stock = {"jeweler": {"rare_gem": 500}}
+    gd._npc_buy_currency = {"jeweler": {"rare_gem": "gold"}}
+    gd._npc_locations = {"jeweler": (0, 0)}
+    gd._task_coin_rewards = {"chicken": 1}  # so min_task_coin_reward is defined
+
+    state = make_state(skills={"weaponcrafting": 5}, inventory={"gold": 0},
+                       bank_items={}, x=0, y=0)
+
+    result = analyze_currency_leaves({"widget": 1}, state, gd)
+    assert result.blocked is True, "unaffordable gold leaf must block is_plannable"
+    assert result.funding_target is None, (
+        "must NOT route ReachCurrencyGoal toward gold (unfundable by tasks): "
+        f"got {result.funding_target}"
+    )
+
+
+def test_tasks_coin_leaf_blocked_and_funded() -> None:
+    """A permanent tasks_coin vendor, unaffordable → blocked AND a funding target
+    (tasks_coin, price*qty) the arbiter routes ReachCurrencyGoal to."""
+    from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
+
+    gd = GameData()
+    gd._crafting_recipes = {"satchel": {"jasper_crystal": 2}}
+    gd._item_stats = {
+        "satchel": ItemStats(code="satchel", level=5, type_="bag",
+                             crafting_skill="gearcrafting", crafting_level=5),
+    }
+    gd._npc_stock = {"tasks_trader": {"jasper_crystal": 8}}
+    gd._npc_buy_currency = {"tasks_trader": {"jasper_crystal": "tasks_coin"}}
+    gd._task_coin_rewards = {"chicken": 1}  # C2 floor (min_task_coin_reward) for funding-cycle calc
+    gd._npc_locations = {"tasks_trader": (1, 2)}
+    gd._task_coin_rewards = {"chicken": 1}
+
+    state = make_state(skills={"gearcrafting": 5}, inventory={"tasks_coin": 0},
+                       bank_items={}, x=0, y=0)
+
+    result = analyze_currency_leaves({"satchel": 1}, state, gd)
+    assert result.blocked is True
+    # jasper_crystal x2 (closure qty) @ 8 tasks_coin = 16
+    assert result.funding_target == ("tasks_coin", 16), result.funding_target
+
+
+def test_funding_vendor_picked_by_fewest_cycles_not_raw_price() -> None:
+    """C4 follow-up (Minor #1): with two PERMANENT tasks_coin vendors at different
+    prices, the funding target is the one needing the FEWEST funding cycles given
+    current holdings — a semantic key, not raw cheapest price."""
+    from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
+
+    gd = GameData()
+    gd._crafting_recipes = {"widget": {"shard": 1}}
+    gd._item_stats = {
+        "widget": ItemStats(code="widget", level=1, type_="weapon",
+                            crafting_skill="weaponcrafting", crafting_level=1),
+    }
+    # two permanent tasks_coin vendors for `shard`: cheap@10 and pricier@12.
+    gd._npc_stock = {"trader_a": {"shard": 10}, "trader_b": {"shard": 12}}
+    gd._npc_buy_currency = {
+        "trader_a": {"shard": "tasks_coin"},
+        "trader_b": {"shard": "tasks_coin"},
+    }
+    gd._npc_locations = {"trader_a": (0, 0), "trader_b": (1, 1)}
+    gd._task_coin_rewards = {"chicken": 1}  # floor = 1
+
+    # Same currency (tasks_coin), so fewest cycles == cheapest price here: 10.
+    state = make_state(skills={"weaponcrafting": 5}, inventory={"tasks_coin": 0},
+                       bank_items={}, x=0, y=0)
+    result = analyze_currency_leaves({"widget": 1}, state, gd)
+    assert result.funding_target == ("tasks_coin", 10), (
+        "fewest-cycles vendor (cheapest in same currency) must win: "
+        f"got {result.funding_target}"
     )
 
     # Cross-check: GatherMaterialsGoal.is_plannable should also return False
     goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1})
     assert goal.is_plannable(state, gd) is False, (
         "Goal with only event-vendor currency-buy leaf must be unplannable"
+    )
+
+
+def test_relevant_actions_skips_event_vendor_for_closure_leaf() -> None:
+    """C4 deep-leaf emission must NOT emit NpcBuy for a recipe-CLOSURE leaf whose
+    only vendor is an EVENT/unlocated NPC (covers the event-vendor skip in
+    relevant_actions, matching the currency_demand permanent-vendor filter)."""
+    gd = GameData()
+    # gizmo (weaponcrafting) requires flux x1; flux sold ONLY by an event vendor.
+    gd._crafting_recipes = {"gizmo": {"flux": 1}}
+    gd._item_stats = {
+        "gizmo": ItemStats(code="gizmo", level=1, type_="weapon",
+                           crafting_skill="weaponcrafting", crafting_level=1),
+    }
+    gd._npc_stock = {"festival_trader": {"flux": 9}}
+    gd._npc_buy_currency = {"festival_trader": {"flux": "festival_coin"}}
+    gd._npc_locations = {"festival_trader": (3, 3)}
+    gd.world.npc_event_codes["festival_trader"] = "festival_event"
+    state = make_state(skills={"weaponcrafting": 5}, inventory={}, x=0, y=0)
+    goal = GatherMaterialsGoal(target_item="gizmo", needed={"gizmo": 1})
+    relevant = goal.relevant_actions([], state, gd)
+    assert not any(isinstance(a, NpcBuyAction) and a.item_code == "flux" for a in relevant), (
+        "event-vendor closure leaf must not get an NpcBuy emission"
     )
