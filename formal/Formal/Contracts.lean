@@ -2819,28 +2819,42 @@ example : ∀ {σ : Type} [inst : DecidableEq σ] (base maxR : Nat) (sig0 : σ)
     Formal.DoomedMemo.isDoomed base maxR sig0 setAt failures sig cycle = false :=
   @Formal.DoomedMemo.isDoomed_expires
 
--- ─── NextCraftAction (next_craft_target_pure; churn fix) anti-weakening pins ───
+-- ─── NextCraftAction (next_craft_target_pure; churn fix + withdraw branch) anti-weakening pins ───
 -- VALIDITY: none iff already satisfied (weakening ↔ to → would still compile, but ↔ is exact)
-example : ∀ (recipes : String → Option (List (String × Nat))) (owned : String → Nat)
+example : ∀ (recipes : String → Option (List (String × Nat))) (owned bank : String → Nat)
     (target : String) (qty fuel : Nat),
-    Formal.NextCraftAction.nextCraftTarget recipes owned target qty fuel = none ↔
+    Formal.NextCraftAction.nextCraftTarget recipes owned bank target qty fuel = none ↔
     qty ≤ owned target :=
   @Formal.NextCraftAction.nextCraftTarget_none_iff
 -- ORDERING: craft returned ⇒ recipe inputs exist and none is short
-example : ∀ (recipes : String → Option (List (String × Nat))) (owned : String → Nat)
+example : ∀ (recipes : String → Option (List (String × Nat))) (owned bank : String → Nat)
     (item : String) (need fuel : Nat) (result : Formal.NextCraftAction.NextAction),
-      Formal.NextCraftAction.nextHelper recipes owned item need fuel = result →
+      Formal.NextCraftAction.nextHelper recipes owned bank item need fuel = result →
       result.kind = Formal.NextCraftAction.Kind.craft →
       ∃ inputs,
         recipes result.item = some inputs ∧
         inputs.find? (fun p => decide (owned p.1 < p.2 * result.qty)) = none :=
   @Formal.NextCraftAction.nextHelper_craft_inputs_satisfied
 -- SHORTNESS: returned action always has qty ≥ 1 (genuine positive deficit)
-example : ∀ (recipes : String → Option (List (String × Nat))) (owned : String → Nat)
+example : ∀ (recipes : String → Option (List (String × Nat))) (owned bank : String → Nat)
     (target : String) (qty fuel : Nat) (result : Formal.NextCraftAction.NextAction),
-    Formal.NextCraftAction.nextCraftTarget recipes owned target qty fuel = some result →
+    Formal.NextCraftAction.nextCraftTarget recipes owned bank target qty fuel = some result →
     1 ≤ result.qty :=
   @Formal.NextCraftAction.nextCraftTarget_qty_pos
+-- WITHDRAW-BANKED: a withdraw action is emitted only for a genuinely banked item
+example : ∀ (recipes : String → Option (List (String × Nat))) (owned bank : String → Nat)
+    (item : String) (need fuel : Nat) (result : Formal.NextCraftAction.NextAction),
+      Formal.NextCraftAction.nextHelper recipes owned bank item need fuel = result →
+      result.kind = Formal.NextCraftAction.Kind.withdraw →
+      0 < bank result.item :=
+  @Formal.NextCraftAction.nextHelper_withdraw_banked
+-- WITHDRAW-LE-BANK: a withdraw never asks for more than the bank holds
+example : ∀ (recipes : String → Option (List (String × Nat))) (owned bank : String → Nat)
+    (item : String) (need fuel : Nat) (result : Formal.NextCraftAction.NextAction),
+      Formal.NextCraftAction.nextHelper recipes owned bank item need fuel = result →
+      result.kind = Formal.NextCraftAction.Kind.withdraw →
+      result.qty ≤ bank result.item :=
+  @Formal.NextCraftAction.nextHelper_withdraw_le_bank
 
 -- ─── SkillGateFastFail (GatherMaterialsGoal.is_plannable) anti-weakening pins ───
 -- gate closed ⇒ owned count invariant across the ENTIRE plan.

@@ -1094,6 +1094,8 @@ open Formal.PriorityBand
 #check @Formal.NextCraftAction.nextCraftTarget_none_iff        -- validity: none ↔ qty ≤ owned target
 #check @Formal.NextCraftAction.nextHelper_craft_inputs_satisfied -- ordering: craft ⇒ all inputs on hand
 #check @Formal.NextCraftAction.nextCraftTarget_qty_pos          -- shortness: returned qty ≥ 1
+#check @Formal.NextCraftAction.nextHelper_withdraw_banked       -- withdraw ⇒ item genuinely banked
+#check @Formal.NextCraftAction.nextHelper_withdraw_le_bank      -- withdraw ⇒ qty ≤ bank held
 
 -- SkillGateFastFail required roles (GatherMaterialsGoal.is_plannable;
 -- src/artifactsmmo_cli/ai/goals/gathering.py:316-335):
