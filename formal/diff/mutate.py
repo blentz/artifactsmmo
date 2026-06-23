@@ -137,6 +137,16 @@ NEXT_CRAFT_MUTATIONS = [
     ("next_craft: craft result emits gather kind",
      '    return NextAction(item, "craft", deficit)  # all inputs on hand → craft',
      '    return NextAction(item, "gather", deficit)  # all inputs on hand → craft'),
+    # withdraw branch (banked-intermediate fix): banked short input → withdraw.
+    ("next_craft: withdraw bank-check flip (== 0 -> != 0)",
+     "            if bank.get(inp, 0) == 0:",
+     "            if bank.get(inp, 0) != 0:"),
+    ("next_craft: withdraw emits gather kind",
+     '            return NextAction(inp, "withdraw", min(bank.get(inp, 0), required - owned.get(inp, 0)))',
+     '            return NextAction(inp, "gather", min(bank.get(inp, 0), required - owned.get(inp, 0)))'),
+    ("next_craft: withdraw qty min -> max (over-withdraw)",
+     '            return NextAction(inp, "withdraw", min(bank.get(inp, 0), required - owned.get(inp, 0)))',
+     '            return NextAction(inp, "withdraw", max(bank.get(inp, 0), required - owned.get(inp, 0)))'),
 ]
 
 # Effect-parser coverage (stat-audit fixes).
