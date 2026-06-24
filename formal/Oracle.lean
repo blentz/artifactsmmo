@@ -1,4 +1,5 @@
 import Formal
+import Formal.CraftPlanDriver
 import Lean.Data.Json
 
 open Lean Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin
@@ -2189,6 +2190,60 @@ def runNextCraft (args : Array Json) : Json :=
       Json.mkObj [("item", Json.str na.item), ("kind", Json.str kindStr),
                   ("qty", Json.num (Int.ofNat na.qty))]
 
+/-- Compute the FULL craft plan using the proved `craftPlan`.
+
+args layout matches `runNextCraft` plus an outer fuel:
+* `[0]` recipes_obj, `[1]` owned_obj, `[2]` bank_obj, `[3]` target, `[4]` qty,
+* `[5]` fuel (outer step budget; caller passes a generous closure bound).
+
+Emits a JSON ARRAY of `{"item","kind","qty"}` objects (the ordered plan). -/
+def runCraftPlan (args : Array Json) : Json :=
+  let recipesJson := args[0]!
+  let recipeAssoc : List (String × List (String × Nat)) :=
+    match recipesJson.getObj? with
+    | .error _ => []
+    | .ok kvMap =>
+        kvMap.toList.filterMap (fun (itemName, inputsJson) =>
+          match inputsJson.getArr? with
+          | .error _ => none
+          | .ok pairsArr =>
+              let inputs : List (String × Nat) :=
+                pairsArr.toList.filterMap (fun pairJson =>
+                  match pairJson.getArr? with
+                  | .error _ => none
+                  | .ok pair =>
+                    if pair.size < 2 then none
+                    else
+                      match (pair[0]!.getStr?).toOption, (pair[1]!.getInt?).toOption with
+                      | some inp, some per => some (inp, per.toNat)
+                      | _, _ => none)
+              some (itemName, inputs))
+  let recipes : String → Option (List (String × Nat)) :=
+    fun s => match recipeAssoc.find? (fun (p : String × List (String × Nat)) => p.1 == s) with
+      | some p => some p.2 | none => none
+  let parseCounts : Json → List (String × Nat) := fun j =>
+    match j.getObj? with
+    | .error _ => []
+    | .ok kvMap => kvMap.toList.filterMap (fun (n, qj) =>
+        match qj.getInt? with | .error _ => none | .ok v => some (n, v.toNat))
+  let ownedAssoc := parseCounts args[1]!
+  let owned : String → Nat := fun s =>
+    match ownedAssoc.find? (fun (p : String × Nat) => p.1 == s) with | some p => p.2 | none => 0
+  let bankAssoc := parseCounts args[2]!
+  let bank : String → Nat := fun s =>
+    match bankAssoc.find? (fun (p : String × Nat) => p.1 == s) with | some p => p.2 | none => 0
+  let target := strArg args 3
+  let qty    := (intArg args 4).toNat
+  let fuel   := (intArg args 5).toNat
+  let innerFuel := recipeAssoc.length + 1
+  let plan := Formal.CraftPlanDriver.craftPlan recipes target qty innerFuel owned bank fuel
+  let naJson : NextAction → Json := fun na =>
+    let k : String := match na.kind with
+      | Kind.gather => "gather" | Kind.craft => "craft" | Kind.withdraw => "withdraw"
+    Json.mkObj [("item", Json.str na.item), ("kind", Json.str k),
+                ("qty", Json.num (Int.ofNat na.qty))]
+  Json.arr ((plan.map naJson).toArray)
+
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
   let args := ((item.getObjValD "args" |>.getArr?).toOption.getD #[])
@@ -2365,6 +2420,8 @@ def runOne (item : Json) : Json :=
     runLadder args
   else if kind == "next_craft" then
     runNextCraft args
+  else if kind == "craft_plan" then
+    runCraftPlan args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 
