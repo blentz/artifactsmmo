@@ -42,12 +42,13 @@ structure DC where
   obtainable : Bool
   uses_reserved_full : Bool
   uses_reserved_relaxed : Bool
+  wanted : Bool
 
 /-- Project a `DC` to the selection's `GrindCandidate` (drops the reserved flags;
-preserves every field the selection reads). -/
+preserves every field the selection reads, incl. the wanted-first key). -/
 def toGrind (c : DC) : GrindCandidate :=
   { code := c.code, craft_skill := c.craft_skill, craft_level := c.craft_level,
-    mats_missing := c.mats_missing, obtainable := c.obtainable }
+    mats_missing := c.mats_missing, obtainable := c.obtainable, wanted := c.wanted }
 
 /-- The FULL-reservation candidate list: drop any candidate that uses a
 full-reserved material, project to GrindCandidate. -/

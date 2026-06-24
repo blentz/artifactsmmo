@@ -20,24 +20,38 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class GrindCandidate:
-    """A craftable item considered for a skill grind. `mats_missing` and
-    `obtainable` are HOISTED (computed against holdings / recipe-closure
-    reachability by the impure wrapper) so this core stays pure/extractable."""
+    """A craftable item considered for a skill grind. `mats_missing`,
+    `obtainable` and `wanted` are HOISTED (computed against holdings /
+    recipe-closure reachability / the objective's gear+tool targets by the impure
+    wrapper) so this core stays pure/extractable. `wanted` = the crafted item is a
+    current objective gear/tool target (`is_target`); a wanted item produces a
+    keeper while leveling, a non-wanted one only a throwaway."""
     code: str
     craft_skill: str
     craft_level: int
     mats_missing: int
     obtainable: bool
+    wanted: bool
 
 
 def _beats(c: GrindCandidate, best: GrindCandidate | None) -> bool:
     """True when feasible `c` strictly precedes `best` in the selection order
-    `(-mats_missing, craft_level)`: fewest missing materials first, then highest
-    craft level. A None `best` (no incumbent) is always beaten. A full tie keeps
-    the incumbent (first-seen in candidate order) — deterministic without a
-    string tie-break."""
+    `(wanted desc, -mats_missing, craft_level)`: a WANTED item (an objective
+    gear/tool target) outranks a throwaway, THEN fewest missing materials, THEN
+    highest craft level. A None `best` (no incumbent) is always beaten. A full tie
+    keeps the incumbent (first-seen in candidate order) — deterministic without a
+    string tie-break.
+
+    Wanted-first (2026-06-24): pure fewest-materials greed made the bot craft a
+    value-10 `apprentice_gloves` (feathers already in bag) to level weaponcrafting
+    while ignoring `copper_dagger` (value 83, the committed weapon). Crafting a
+    wanted item gains the SAME skill XP and yields a keeper, so it dominates."""
     if best is None:
         return True
+    if c.wanted and not best.wanted:
+        return True
+    if best.wanted and not c.wanted:
+        return False
     if c.mats_missing != best.mats_missing:
         return c.mats_missing < best.mats_missing
     if c.craft_level != best.craft_level:

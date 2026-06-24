@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/tiers/skill_grind_selection.py (sha256: 31a0980267b7d80e4f790631de119331536b337ec49bf3ee137df4ca31bfc88d) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/tiers/skill_grind_selection.py (sha256: cd0b9e55b9bca9d140f486a44bf676b749fbd926f44352ccfd6c9096e614bbd4) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.SkillGrindSelection
@@ -10,25 +10,34 @@ structure GrindCandidate where
   craft_level : Int
   mats_missing : Int
   obtainable : Bool
+  wanted : Bool
 
-/-- Extracted from `_beats` (line 33). -/
+/-- Extracted from `_beats` (line 37). -/
 def _beats (c : GrindCandidate) (best : Option GrindCandidate) :
     Bool :=
   (match best with
   | none =>
     true
   | some best_1 =>
-    (if (!(decide ((c.mats_missing) = (best_1.mats_missing))))
+    (if ((c.wanted) && (!(best_1.wanted)))
      then
-      (decide ((c.mats_missing) < (best_1.mats_missing)))
+      true
      else
-      (if (!(decide ((c.craft_level) = (best_1.craft_level))))
+      (if ((best_1.wanted) && (!(c.wanted)))
        then
-        (decide ((c.craft_level) > (best_1.craft_level)))
+        false
        else
-        false)))
+        (if (!(decide ((c.mats_missing) = (best_1.mats_missing))))
+         then
+          (decide ((c.mats_missing) < (best_1.mats_missing)))
+         else
+          (if (!(decide ((c.craft_level) = (best_1.craft_level))))
+           then
+            (decide ((c.craft_level) > (best_1.craft_level)))
+           else
+            false)))))
 
-/-- Extracted from `skill_grind_selection_pure` (line 48). -/
+/-- Extracted from `skill_grind_selection_pure` (line 62). -/
 def skill_grind_selection_pure (skill : String) (current_level : Int) (candidates : List GrindCandidate) :
     String :=
   let best : Option GrindCandidate := none

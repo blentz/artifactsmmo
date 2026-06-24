@@ -57,6 +57,11 @@ class SelectionContext:
     # leaves the guard task-only.
     target_gear: frozenset[str] = field(default_factory=frozenset)
     target_tools: frozenset[str] = field(default_factory=frozenset)
+    # Usable-NOW gear/tool targets (near_term_gear ∪ target_tools): the codes the
+    # skill-grind treats as `wanted` keepers so it crafts a real upgrade for skill
+    # XP instead of a throwaway. Distinct from `target_gear` (endgame BiS, which is
+    # never craftable at low char level — using it would make the preference dead).
+    near_term_targets: frozenset[str] = field(default_factory=frozenset)
     # Post-level-up / post-fight-loss gear prioritization latch. Set by the
     # player's GearLatch and cleared when no craftable upgrade remains.
     gear_review_active: bool = False

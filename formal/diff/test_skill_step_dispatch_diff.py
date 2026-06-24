@@ -36,6 +36,7 @@ _CODES = ["copper_dagger", "copper_helmet", "wooden_shield", "iron_sword", ""]
             st.booleans(),                            # obtainable
             st.booleans(),                            # uses_reserved_full
             st.booleans(),                            # relaxed_raw
+            st.booleans(),                            # wanted (objective target)
         ),
         min_size=0, max_size=8),
 )
@@ -43,13 +44,14 @@ def test_python_matches_lean(skill, current_level, committed_skill,
                              committed_level, candidates):
     py_cands = []
     flat: list = [skill, current_level, committed_skill, committed_level]
-    for (code, cs, cl, mm, ob, full, relaxed_raw) in candidates:
+    for (code, cs, cl, mm, ob, full, relaxed_raw, wt) in candidates:
         relaxed = relaxed_raw and full   # enforce relaxed ⊆ full
         py_cands.append(DispatchCandidate(
             code=code, craft_skill=cs, craft_level=cl, mats_missing=mm,
-            obtainable=ob, uses_reserved_full=full, uses_reserved_relaxed=relaxed))
+            obtainable=ob, uses_reserved_full=full, uses_reserved_relaxed=relaxed,
+            wanted=wt))
         flat += [code, cs, cl, mm, 1 if ob else 0, 1 if full else 0,
-                 1 if relaxed else 0]
+                 1 if relaxed else 0, 1 if wt else 0]
 
     py = skill_step_dispatch_pure(skill, current_level, committed_skill,
                                   committed_level, py_cands)

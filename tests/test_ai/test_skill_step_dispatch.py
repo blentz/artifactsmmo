@@ -62,14 +62,26 @@ def test_cannibalize_false_when_no_feasible():
     assert cannibalize_pure(1, cands) is False
 
 
-def _c(code, level=1, missing=0, obtainable=True, full=False, relaxed=False):
+def _c(code, level=1, missing=0, obtainable=True, full=False, relaxed=False, wanted=False):
     """A same-skill (gearcrafting) candidate. `full`/`relaxed` = uses a material
-    in the full / relaxed reserved set."""
+    in the full / relaxed reserved set. `wanted` = an objective gear/tool target."""
     return DispatchCandidate(
         code=code, craft_skill="gearcrafting", craft_level=level,
         mats_missing=missing, obtainable=obtainable,
-        uses_reserved_full=full, uses_reserved_relaxed=relaxed,
+        uses_reserved_full=full, uses_reserved_relaxed=relaxed, wanted=wanted,
     )
+
+
+def test_grind_prefers_wanted_over_cheaper_throwaway():
+    """Not suppressed: the grind picks a WANTED keeper over a cheaper throwaway,
+    even though the throwaway has fewer missing materials."""
+    d = skill_step_dispatch_pure(
+        "gearcrafting", 5, "weaponcrafting", 1,
+        [_c("throwaway_gloves", missing=0, wanted=False),
+         _c("copper_helmet", missing=2, wanted=True)],
+    )
+    assert d.kind == "grind"
+    assert d.code == "copper_helmet"
 
 
 def test_suppress_when_committed_same_skill_craftable_now():

@@ -605,6 +605,17 @@ SKILL_GRIND_SELECTION_MUTATIONS = [
     ("skill_grind_selection: _beats fewest-missing flip",
      "        return c.mats_missing < best.mats_missing\n",
      "        return c.mats_missing > best.mats_missing\n"),
+    # neuter the wanted-first clause -- a WANTED keeper no longer beats a cheaper
+    # throwaway, reviving the apprentice_gloves-over-copper_dagger inversion.
+    # Killed by test_wanted_beats_cheaper_throwaway_diff.
+    ("skill_grind_selection: _beats drop wanted preference",
+     "    if c.wanted and not best.wanted:\n        return True\n",
+     "    if c.wanted and not best.wanted:\n        return False\n"),
+    # invert the wanted-shield clause -- an UNWANTED candidate displaces a wanted
+    # incumbent. Killed by the wanted-first scenarios (winner flips off the keeper).
+    ("skill_grind_selection: _beats invert wanted shield",
+     "    if best.wanted and not c.wanted:\n        return False\n",
+     "    if best.wanted and not c.wanted:\n        return True\n"),
 ]
 
 

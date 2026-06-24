@@ -1848,9 +1848,9 @@ extracted `Extracted.SkillGrindSelection.skill_grind_selection_pure`.
 args layout (mixed String/Int):
 * `[0]`  skill          (String)
 * `[1]`  current_level  (Int)
-* then candidate blocks of 5:
+* then candidate blocks of 6:
   `code(String), craft_skill(String), craft_level(Int), mats_missing(Int),
-   obtainable(0/1 Int)`
+   obtainable(0/1 Int), wanted(0/1 Int)`
 
 Strings are read directly via `strArg` (the diff side packs them as JSON
 strings), so the extracted String-keyed `craft_skill == skill` / `code`
@@ -1859,15 +1859,16 @@ comparisons run unchanged. Emits the chosen in-skill item `{"code": String}`
 def runSkillGrindSelection (args : Array Json) : Json :=
   let skill := strArg args 0
   let currentLevel := intArg args 1
-  let nCand := (args.size - 2) / 5
+  let nCand := (args.size - 2) / 6
   let candidates : List Extracted.SkillGrindSelection.GrindCandidate :=
     (List.range nCand).map (fun k =>
-      let base := 2 + 5 * k
+      let base := 2 + 6 * k
       { code := strArg args base,
         craft_skill := strArg args (base + 1),
         craft_level := intArg args (base + 2),
         mats_missing := intArg args (base + 3),
-        obtainable := intArg args (base + 4) != 0 })
+        obtainable := intArg args (base + 4) != 0,
+        wanted := intArg args (base + 5) != 0 })
   let result := Extracted.SkillGrindSelection.skill_grind_selection_pure
     skill currentLevel candidates
   Json.mkObj [("code", Json.str result)]
@@ -1893,9 +1894,10 @@ args layout (mixed String/Int):
 * `[1]` current_level    (Int)
 * `[2]` committed_skill  (String, "" = none)
 * `[3]` committed_level  (Int)
-* then candidate blocks of 7:
+* then candidate blocks of 8:
   `code(String), craft_skill(String), craft_level(Int), mats_missing(Int),
-   obtainable(0/1), uses_reserved_full(0/1), uses_reserved_relaxed(0/1)`
+   obtainable(0/1), uses_reserved_full(0/1), uses_reserved_relaxed(0/1),
+   wanted(0/1)`
 
 Emits `{"kind": String, "code": String}`. -/
 def runSkillStepDispatch (args : Array Json) : Json :=
@@ -1903,17 +1905,18 @@ def runSkillStepDispatch (args : Array Json) : Json :=
   let currentLevel := intArg args 1
   let committedSkill := strArg args 2
   let committedLevel := intArg args 3
-  let nCand := (args.size - 4) / 7
+  let nCand := (args.size - 4) / 8
   let candidates : List Formal.SkillStepDispatch.DC :=
     (List.range nCand).map (fun k =>
-      let base := 4 + 7 * k
+      let base := 4 + 8 * k
       { code := strArg args base,
         craft_skill := strArg args (base + 1),
         craft_level := intArg args (base + 2),
         mats_missing := intArg args (base + 3),
         obtainable := intArg args (base + 4) != 0,
         uses_reserved_full := intArg args (base + 5) != 0,
-        uses_reserved_relaxed := intArg args (base + 6) != 0 })
+        uses_reserved_relaxed := intArg args (base + 6) != 0,
+        wanted := intArg args (base + 7) != 0 })
   let result := Formal.SkillStepDispatch.dispatch
     skill currentLevel committedSkill committedLevel candidates
   Json.mkObj [("kind", Json.str result.1), ("code", Json.str result.2)]

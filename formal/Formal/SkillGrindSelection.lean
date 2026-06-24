@@ -244,4 +244,19 @@ theorem grind_actionable (skill : String) (level : Int) (cands : List GrindCandi
     · simp at hcontra
   exact hne b hbmem
 
+/-- `beats_prefers_wanted`: a WANTED candidate strictly beats a non-wanted
+incumbent — the wanted-first primary key (an objective gear/tool target outranks
+a throwaway regardless of its material count or craft level). -/
+theorem beats_prefers_wanted (c b : GrindCandidate)
+    (hc : c.wanted = true) (hb : b.wanted = false) :
+    _beats c (some b) = true := by
+  simp [_beats, hc, hb]
+
+/-- `unwanted_not_beats_wanted`: a non-wanted candidate NEVER displaces a wanted
+incumbent — even with fewer missing materials or a higher craft level. -/
+theorem unwanted_not_beats_wanted (c b : GrindCandidate)
+    (hc : c.wanted = false) (hb : b.wanted = true) :
+    _beats c (some b) = false := by
+  simp [_beats, hc, hb]
+
 end Formal.SkillGrindSelection
