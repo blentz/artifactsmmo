@@ -5,6 +5,7 @@ from typing import Any
 
 from rich.text import Text
 from textual.events import Resize
+from textual.geometry import Region
 from textual.reactive import reactive
 from textual.timer import Timer
 from textual.widgets import Static
@@ -146,8 +147,38 @@ class MapPane(Static):
         self._anim_timer = self.set_interval(ANIM_FRAME_SECONDS, self._tick)  # pragma: no cover
 
     def _tick(self) -> None:
-        if self._is_animating():
+        if not self._is_animating():
+            return
+        # Repaint only the rows that actually change. The player is
+        # screen-centered, so a stationary swing/planning frame dirties just the
+        # center tile-rows; only a glide (map scrolling under the player) needs a
+        # full repaint. This cuts Textual's per-frame ANSI paint of the whole
+        # viewport (the profiled hot path) down to a 3-tile-row band.
+        region = self._dirty_region()
+        if region is None:
             self.refresh()
+        else:
+            self.refresh(region)
+
+    def _dirty_region(self) -> Region | None:
+        """The screen region that changes this animation frame, or None for a
+        full repaint. A glide scrolls the whole map (full); a stationary swing or
+        planning frame only changes a 3-tile-row band around the centered player
+        (head sits in an adjacent tile, planning cloud just above)."""
+        snap = self.snapshot
+        if snap is None:
+            return None
+        if self._anim_frames and time.monotonic() - self._anim_start < snap.cooldown_remaining:
+            return None  # gliding → map scrolls → repaint everything
+        width = self.size.width or FALLBACK_W
+        height = self.size.height or FALLBACK_H
+        tiles_h = (height - 1) // TILE_H
+        half_h = tiles_h // 2
+        top_row = max(0, half_h - 1)
+        bot_row = min(tiles_h - 1, half_h + 1)
+        y0 = 1 + top_row * TILE_H  # +1 skips the HUD line (static between snapshots)
+        rows = (bot_row - top_row + 1) * TILE_H
+        return Region(0, y0, width, rows)
 
     def _is_animating(self) -> bool:
         """True only when something is GENUINELY moving frame-to-frame:

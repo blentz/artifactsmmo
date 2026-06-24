@@ -1,7 +1,6 @@
 """MapPane tile-model viewport tests (mostly app-free; sizing uses run_test)."""
-
 from textual.app import App, ComposeResult
-from textual.geometry import Size
+from textual.geometry import Region, Size
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
@@ -243,6 +242,47 @@ class TestGlideAnimation:
         fake_now[0] = 1.0                            # 1.0 < 5.0 → cooldown still active
         assert pane._swing_overlay(1.0) == {}        # no tool swinging
         assert pane._is_animating() is False         # static → no re-render (CPU fix)
+
+    def test_dirty_region_none_without_snapshot(self):
+        assert MapPane(_gd_typed())._dirty_region() is None
+
+    def test_dirty_region_full_during_glide(self, monkeypatch):
+        # A glide scrolls the map under the player → whole viewport must repaint.
+        fake_now = [0.0]
+        monkeypatch.setattr("artifactsmmo_cli.tui.widgets.map_pane.time.monotonic",
+                            lambda: fake_now[0])
+        pane = MapPane(_gd_typed())
+        pane.update_snapshot(_snap(0, 0))
+        moving = CycleSnapshot(
+            cycle_index=1, timestamp="t", character="c", x=3, y=0, level=1,
+            xp=0, max_xp=100, hp=100, max_hp=100, gold=0,
+            selected_goal="X", action="Y", outcome="ok", cooldown_remaining=5.0,
+        )
+        pane.update_snapshot(moving)                 # different tile → glide frames
+        assert pane._anim_frames != []
+        fake_now[0] = 1.0                            # still gliding (1.0 < 5.0)
+        assert pane._dirty_region() is None          # full repaint while scrolling
+
+    def test_dirty_region_center_band_when_stationary(self):
+        # Stationary (no glide): repaint only the center 3-tile-row band, full
+        # width, skipping the static HUD line. Unmounted size falls back to
+        # FALLBACK_W/H (80x41) → tiles_h=10, half_h=5 → rows 4..6 → y=17, h=12.
+        pane = MapPane(_gd_typed())
+        pane.update_snapshot(_snap(0, 0))            # same start → no glide frames
+        region = pane._dirty_region()
+        assert region is not None
+        assert (region.x, region.y, region.width, region.height) == (0, 17, 80, 12)
+
+    def test_tick_refreshes_region_when_planning(self, monkeypatch):
+        # Planning is animated (cloud shimmer) but stationary → _tick must repaint
+        # only the center band, not the whole viewport.
+        pane = MapPane(_gd_typed())
+        pane.update_snapshot(_snap(0, 0))
+        pane.set_planning(True)
+        calls: list = []
+        monkeypatch.setattr(pane, "refresh", lambda *r, **k: calls.append(r) or pane)
+        pane._tick()
+        assert len(calls) == 1 and calls[0] and isinstance(calls[0][0], Region)
 
     def test_render_centers_on_glide_then_snap(self, monkeypatch):
         # New time-based glide: center is derived from glide_index(elapsed, cooldown).
