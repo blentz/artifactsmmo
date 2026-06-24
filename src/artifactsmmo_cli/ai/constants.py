@@ -4,6 +4,15 @@
 # catch slow goal ping-pong loops without reacting to one-off retries.
 STUCK_DETECTOR_WINDOW = 30
 
+# EXPONENTIAL backoff after an action that FAILED while leaving no server
+# cooldown, so a persistent error (e.g. a Withdraw that keeps returning HTTP 478)
+# cannot spin the cycle loop at full CPU. The delay doubles per consecutive
+# no-cooldown failure (BASE, 2*BASE, 4*BASE, …) up to MAX, then resets to 0 on
+# the next successful (or cooldown-only) cycle — fast to recover from a one-off
+# error, but quickly idle on a true livelock.
+ERROR_BACKOFF_BASE_SECONDS = 1.0
+ERROR_BACKOFF_MAX_SECONDS = 60.0
+
 # Force a full state refresh (character + bank + pending items) after this
 # many successful actions, so the lazily-loaded bank_items never stays stale
 # for long (ALL bank-aware planning is inert while bank_items is None/stale).

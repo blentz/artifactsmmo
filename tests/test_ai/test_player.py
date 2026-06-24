@@ -14,6 +14,7 @@ from artifactsmmo_api_client.types import UNSET
 from sqlmodel import Session, select
 
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
+from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, RootScoreView
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -704,6 +705,70 @@ class TestExecute:
 
         assert isinstance(new_state, WorldState)
         assert outcome == "error:other"
+
+    def test_execute_withdraw_http_478_resyncs_bank(self):
+        """A Withdraw failing on HTTP 478 ("missing items") must RE-SYNC the bank,
+        correcting the stale bank_items that drove the impossible withdraw. Without
+        this the generator re-emits the identical failing withdraw forever — a
+        no-cooldown CPU-spin livelock (live Robby 2026-06-24: 4502 cycles)."""
+        player = GamePlayer(character="hero")
+        # Stale bank view claims 7 ash_plank are banked; the real bank is empty.
+        player.state = make_state(x=4, y=0, bank_items={"ash_plank": 7})
+        player.game_data = make_game_data_mock()
+        client = MagicMock()
+
+        action = WithdrawItemAction(code="ash_plank", quantity=7, bank_location=(4, 0))
+        char = make_char_schema(x=4, y=0)
+        empty_events = MagicMock(); empty_events.data = []
+        real_bank = MagicMock(); real_bank.data = []          # bank actually empty
+        bank_details = MagicMock(); bank_details.data = MagicMock()
+        bank_details.data.gold = 0
+        bank_details.data.slots = 60
+
+        import io
+        from contextlib import redirect_stdout
+        with redirect_stdout(io.StringIO()):
+            with patch("artifactsmmo_cli.ai.actions.withdraw_item.withdraw_item",
+                       side_effect=ApiActionError(478, "missing items")):
+                with patch("artifactsmmo_cli.ai.player.get_character",
+                           return_value=make_get_character_result(char)):
+                    with patch("artifactsmmo_cli.ai.player.get_all_active_events",
+                               return_value=empty_events):
+                        with patch("artifactsmmo_cli.ai.player.get_bank_items",
+                                   return_value=real_bank):
+                            with patch("artifactsmmo_cli.ai.player.get_bank_details",
+                                       return_value=bank_details):
+                                new_state, outcome = player._execute(action, client)
+
+        assert outcome == "error:HTTP_478"
+        assert new_state.bank_items == {}   # re-synced: the stale ash_plank claim is gone
+
+    def test_execute_withdraw_478_resync_tolerates_network_error(self):
+        """If the bank re-sync itself network-fails, the 478 cycle still returns
+        (no crash) — the periodic refresh retries next cycle."""
+        player = GamePlayer(character="hero")
+        player.state = make_state(x=4, y=0, bank_items={"ash_plank": 7})
+        player.game_data = make_game_data_mock()
+        client = MagicMock()
+        action = WithdrawItemAction(code="ash_plank", quantity=7, bank_location=(4, 0))
+        char = make_char_schema(x=4, y=0)
+        empty_events = MagicMock(); empty_events.data = []
+
+        import io
+        from contextlib import redirect_stdout
+        with redirect_stdout(io.StringIO()):
+            with patch("artifactsmmo_cli.ai.actions.withdraw_item.withdraw_item",
+                       side_effect=ApiActionError(478, "missing items")):
+                with patch("artifactsmmo_cli.ai.player.get_character",
+                           return_value=make_get_character_result(char)):
+                    with patch("artifactsmmo_cli.ai.player.get_all_active_events",
+                               return_value=empty_events):
+                        with patch("artifactsmmo_cli.ai.player.get_bank_items",
+                                   side_effect=httpx.HTTPError("net down")):
+                            new_state, outcome = player._execute(action, client)
+
+        assert outcome == "error:HTTP_478"
+        assert isinstance(new_state, WorldState)
 
     def test_execute_http_499_logs_server_cooldown(self):
         player = GamePlayer(character="hero")
