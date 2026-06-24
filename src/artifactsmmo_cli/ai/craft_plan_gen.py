@@ -21,6 +21,8 @@ preserves the fast-path for the two common mid-game states:
   - banked SURPLUS input (inventory already covers the requirement) — also fires
 """
 
+import dataclasses
+
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
@@ -169,7 +171,15 @@ def _map_next_action(
     if na.kind == "withdraw":
         for action in relevant:
             if isinstance(action, WithdrawItemAction) and action.code == na.item:
-                return action
+                # Honor the core's bank-CLAMPED quantity (min(bank_stock, deficit),
+                # next_craft_core._next). The factory pre-builds withdraws at FIXED
+                # quantities (full recipe requirement, per-craft, ×1); reusing one
+                # by code alone over-withdraws when the bank holds fewer than the
+                # requirement → HTTP 478, and the plan never reaches the gather step
+                # that supplies the deficit (live Robby 2026-06-24: bank ash_plank=4
+                # but Withdraw(ash_plank×7)→478 every cycle). Reuse the matched
+                # action's bank_location/accessible, override the quantity.
+                return dataclasses.replace(action, quantity=na.qty)
         return None
     # na.kind == "craft"
     for action in relevant:

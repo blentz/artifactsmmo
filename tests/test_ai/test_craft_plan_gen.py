@@ -172,6 +172,44 @@ class TestWithdrawsBankedIntermediate:
         assert result is None
 
 
+class TestWithdrawClampedToBankStock:
+    """Regression (live 2026-06-24 Robby): the bank held FEWER of an intermediate
+    than the recipe needs (ash_plank: bank 4, wooden_shield wants 6). The proved
+    core clamps the withdraw to bank stock and gathers the rest, but the action
+    mapping returned a pre-built FULL-quantity WithdrawItemAction → withdrawing
+    more than the bank holds → HTTP 478, and the plan never reached the gather
+    step (Withdraw(ash_plank×7)→478 loop). The mapped withdraw must carry the
+    core's clamped quantity."""
+
+    def test_withdraw_quantity_clamped_to_bank_stock(self):
+        gd = _gd_copper_ring()
+        gd._crafting_recipes["copper_ring"] = {"copper_bar": 3}  # need 3 bars
+        state = make_state(inventory={}, bank_items={"copper_bar": 2},  # bank has only 2
+                           skills={"mining": 5, "jewelrycrafting": 5})
+        goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
+        actions = [
+            *_copper_ring_actions(),
+            # Full-requirement withdraw listed FIRST — the by-code-only mapping
+            # would pick this (quantity 3) over the bank-available 2.
+            WithdrawItemAction(code="copper_bar", quantity=3, bank_location=(4, 0)),
+            WithdrawItemAction(code="copper_bar", quantity=1, bank_location=(4, 0)),
+        ]
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        assert result is not None
+        first = result[0]
+        assert isinstance(first, WithdrawItemAction) and first.code == "copper_bar"
+        assert first.quantity == 2, (
+            f"withdraw qty must clamp to bank stock (2), got {first.quantity}"
+        )
+        assert first.bank_location == (4, 0)
+        # The plan must still gather the deficit the bank cannot cover.
+        assert any(isinstance(a, GatherAction) for a in result), (
+            "plan must gather the deficit the bank can't cover"
+        )
+
+
 class TestSatisfiedGoalReturnsNone:
     """Goal already satisfied (owned >= qty) → None."""
 
