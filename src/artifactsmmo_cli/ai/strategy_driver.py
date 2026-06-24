@@ -197,6 +197,7 @@ def _skill_dispatch_candidates(
     skill: str, state: WorldState, game_data: GameData,
     reserved_full: set[str], reserved_relaxed: set[str],
     current_level: int, objective_targets: frozenset[str],
+    wanted_targets: frozenset[str],
 ) -> list[DispatchCandidate]:
     """Hoist in-skill grind candidates with the two reserved-set membership
     flags the proved dispatch core consumes (relaxed ⊆ full, so a candidate
@@ -241,6 +242,12 @@ def _skill_dispatch_candidates(
             code=gc.code, craft_skill=gc.craft_skill, craft_level=gc.craft_level,
             mats_missing=gc.mats_missing, obtainable=gc.obtainable,
             uses_reserved_full=uses_full, uses_reserved_relaxed=uses_relaxed,
+            # Prefer crafting a real, usable-NOW gear/tool target (or the committed
+            # objective item) over a throwaway for skill XP. NOTE: `wanted_targets`
+            # is near-term (near_term_gear ∪ target_tools ∪ committed), NOT the
+            # BiS `is_target` set used for reservation — at low char level no BiS
+            # item is craftable, so is_target would never fire (dead-code trap).
+            wanted=gc.code in wanted_targets,
         ))
     return out
 
@@ -640,8 +647,13 @@ def objective_step_goal(
             cs = game_data.item_stats(committed_root.code)
             if cs is not None and cs.crafting_skill:
                 committed_skill, committed_level = cs.crafting_skill, cs.crafting_level
-        source_codes: list[str] = [r.code for r in (root, committed_root)
-                                   if isinstance(r, ObtainItem)]
+        committed_codes = frozenset(r.code for r in (root, committed_root)
+                                     if isinstance(r, ObtainItem))
+        # Items the bot WANTS a keeper of right now: the usable-now near-term gear
+        # and tool targets plus the committed objective item(s). The grind prefers
+        # crafting one of these over a throwaway (same skill XP, plus a keeper).
+        wanted_targets = ctx.near_term_targets | committed_codes
+        source_codes: list[str] = list(committed_codes)
         source_codes += list(ctx.target_gear | ctx.target_tools)
         reserved_full: set[str] = set()
         reserved_relaxed: set[str] = set()
@@ -654,7 +666,7 @@ def objective_step_goal(
                 reserved_relaxed.update(rec)
         candidates = _skill_dispatch_candidates(
             step.skill, state, game_data, reserved_full, reserved_relaxed,
-            current, ctx.target_gear | ctx.target_tools)
+            current, ctx.target_gear | ctx.target_tools, wanted_targets)
         decision = skill_step_dispatch_pure(step.skill, current,
                                             committed_skill, committed_level, candidates)
         if decision.kind == "grind":

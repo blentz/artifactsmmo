@@ -104,6 +104,8 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.SkillGrindSelection.grind_in_level   -- selected candidate is in level
 #check @Formal.SkillGrindSelection.grind_obtainable -- selected candidate is obtainable
 #check @Formal.SkillGrindSelection.grind_actionable -- feasible non-empty candidate ⇒ non-empty result
+#check @Formal.SkillGrindSelection.beats_prefers_wanted   -- wanted candidate beats non-wanted incumbent
+#check @Formal.SkillGrindSelection.unwanted_not_beats_wanted -- non-wanted never displaces wanted incumbent
 -- SkillStepDispatch required roles (reservation-aware grind/suppress/no-grind routing):
 #check @Formal.SkillStepDispatch.suppress_correct    -- SUPPRESS iff committed same-skill craftable-now
 #check @Formal.SkillStepDispatch.full_preference     -- full pass picks ⇒ that pick is the result

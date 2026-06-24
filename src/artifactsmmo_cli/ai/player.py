@@ -1525,9 +1525,13 @@ class GamePlayer:
         # equipment chain (not just the active task item).
         target_gear: frozenset[str] = frozenset()
         target_tools: frozenset[str] = frozenset()
+        near_term_targets: frozenset[str] = frozenset()
         if self._objective is not None:
             target_gear = frozenset(self._objective.target_gear.values())
             target_tools = frozenset(self._objective.target_tools.values())
+            # Usable-now keepers for the skill-grind `wanted` preference.
+            near_term_targets = frozenset(
+                self._objective.near_term_gear(self.state).values()) | target_tools
         return SelectionContext(
             bank_accessible=self._bank_accessible,
             bank_required_level=self._bank_required_level,
@@ -1538,6 +1542,7 @@ class GamePlayer:
             skill_xp_curves=skill_xp_curves,
             target_gear=target_gear,
             target_tools=target_tools,
+            near_term_targets=near_term_targets,
             gear_review_active=self._gear_latch.active,
         )
 

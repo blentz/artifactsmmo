@@ -40,6 +40,7 @@ class DispatchCandidate:
     obtainable: bool
     uses_reserved_full: bool
     uses_reserved_relaxed: bool
+    wanted: bool  # the crafted item is a current objective gear/tool target (is_target)
 
 
 @dataclass(frozen=True)
@@ -116,7 +117,7 @@ def combine_dispatch_pure(
 def _to_grind(c: DispatchCandidate) -> GrindCandidate:
     return GrindCandidate(code=c.code, craft_skill=c.craft_skill,
                           craft_level=c.craft_level, mats_missing=c.mats_missing,
-                          obtainable=c.obtainable)
+                          obtainable=c.obtainable, wanted=c.wanted)
 
 
 def skill_step_dispatch_pure(

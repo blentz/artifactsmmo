@@ -2,8 +2,9 @@
 
 Among items that are same-skill, in-level, and OBTAINABLE (every recipe input
 reachable by gather/craft/winnable-drop), prefer the shallowest material chain
-(fewest missing on hand), then the highest skill level (more XP), tie-broken by
-code. Returns None when no such in-skill recipe exists — the caller falls back to
+(fewest missing on hand), then the highest skill level (more XP); a full tie keeps
+the FIRST-SEEN candidate (insertion order) — there is no string/alphabetical
+tie-break. Returns None when no such in-skill recipe exists — the caller falls back to
 LevelSkillGoal on the SAME skill (never cross-skill). Inclusion is a recipe-table
 + reachability fact, free of bank-freshness false positives (only `mats_missing`
 ordering reads holdings).
@@ -71,6 +72,9 @@ def build_grind_candidates(skill: str, state: WorldState,
             craft_level=stats.crafting_level,
             mats_missing=mats_missing,
             obtainable=is_obtainable(code, state, game_data, frozenset()),
+            # No objective context in this standalone (non-live) path; the live
+            # grind goes through skill_step_dispatch, which sets wanted=is_target.
+            wanted=False,
         ))
     return candidates
 

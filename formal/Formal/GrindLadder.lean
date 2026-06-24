@@ -59,7 +59,8 @@ def toDC (rc : RC) (cl : Int) (rf rr : List String) (cann : Bool) : DC :=
   { code := rc.code, craft_skill := rc.craft_skill, craft_level := rc.craft_level,
     mats_missing := rc.mats_missing, obtainable := rc.obtainable,
     uses_reserved_full := (flagsFor rc cl rf rr cann).1,
-    uses_reserved_relaxed := (flagsFor rc cl rf rr cann).2 }
+    uses_reserved_relaxed := (flagsFor rc cl rf rr cann).2,
+    wanted := rc.is_target }
 
 /-- The full grind dispatch from raw candidates: compute the cannibalize flag,
 project each candidate, run the proved `dispatch`. Mirrors the Python

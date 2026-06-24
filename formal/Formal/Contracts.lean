@@ -452,6 +452,16 @@ example : ∀ (skill : String) (level : Int)
     (∀ d ∈ cands, d.code ≠ "") →
     Extracted.SkillGrindSelection.skill_grind_selection_pure skill level cands ≠ "" :=
   @Formal.SkillGrindSelection.grind_actionable
+-- beats_prefers_wanted: a wanted candidate beats a non-wanted incumbent (wanted-first key).
+example : ∀ (c b : Extracted.SkillGrindSelection.GrindCandidate),
+    c.wanted = true → b.wanted = false →
+    Extracted.SkillGrindSelection._beats c (some b) = true :=
+  @Formal.SkillGrindSelection.beats_prefers_wanted
+-- unwanted_not_beats_wanted: a non-wanted candidate never displaces a wanted incumbent.
+example : ∀ (c b : Extracted.SkillGrindSelection.GrindCandidate),
+    c.wanted = false → b.wanted = true →
+    Extracted.SkillGrindSelection._beats c (some b) = false :=
+  @Formal.SkillGrindSelection.unwanted_not_beats_wanted
 
 /-! ### SkillStepDispatch role contracts.
 

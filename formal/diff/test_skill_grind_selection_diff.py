@@ -31,19 +31,37 @@ _CODES = ["copper_dagger", "wooden_staff", "iron_sword", "ash_plank", "cooked_ch
             st.integers(min_value=0, max_value=12),   # craft_level
             st.integers(min_value=0, max_value=20),   # mats_missing
             st.booleans(),                            # obtainable
+            st.booleans(),                            # wanted (objective gear/tool target)
         ),
         min_size=0, max_size=8),
 )
 def test_python_matches_lean(skill, current_level, candidates):
     py_cands = [
-        GrindCandidate(code, cs, cl, mm, ob)
-        for (code, cs, cl, mm, ob) in candidates
+        GrindCandidate(code, cs, cl, mm, ob, wt)
+        for (code, cs, cl, mm, ob, wt) in candidates
     ]
     py = skill_grind_selection_pure(skill, current_level, py_cands)
 
     args: list = [skill, current_level]
-    for (code, cs, cl, mm, ob) in candidates:
-        args += [code, cs, cl, mm, 1 if ob else 0]
+    for (code, cs, cl, mm, ob, wt) in candidates:
+        args += [code, cs, cl, mm, 1 if ob else 0, 1 if wt else 0]
 
     lean = run_oracle("skill_grind_selection", [args])[0]
     assert py == lean["code"], (skill, current_level, candidates, py, lean)
+
+
+def test_wanted_beats_cheaper_throwaway_diff():
+    """The reported inversion: a WANTED keeper (more missing materials) must beat
+    a cheaper throwaway. Pins the wanted-first key on both sides."""
+    cands = [
+        ("apprentice_gloves", "weaponcrafting", 1, 0, True, False),
+        ("copper_dagger", "weaponcrafting", 1, 2, True, True),
+    ]
+    py = skill_grind_selection_pure(
+        "weaponcrafting", 5, [GrindCandidate(*c) for c in cands])
+    args: list = ["weaponcrafting", 5]
+    for (code, cs, cl, mm, ob, wt) in cands:
+        args += [code, cs, cl, mm, 1 if ob else 0, 1 if wt else 0]
+    lean = run_oracle("skill_grind_selection", [args])[0]
+    assert py == "copper_dagger"
+    assert py == lean["code"]
