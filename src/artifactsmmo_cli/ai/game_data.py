@@ -44,6 +44,7 @@ from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS, ItemCatalog, Ite
 from artifactsmmo_cli.ai.location_catalog import LocationCatalog
 from artifactsmmo_cli.ai.monster_catalog import MonsterCatalog
 from artifactsmmo_cli.ai.recipe_catalog import RecipeCatalog
+from artifactsmmo_cli.ai.recipe_cost_memo import RecipeCostMemo
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 
 __all__ = ["_GATHERING_SKILLS", "GameData", "ItemStats"]
@@ -77,6 +78,7 @@ class GameData:
     world: LocationCatalog = field(default_factory=LocationCatalog)
     _task_reward_item_codes: frozenset[str] = field(default_factory=frozenset)
     _task_coin_rewards: dict[str, int] = field(default_factory=dict)
+    _recipe_cost_memo: RecipeCostMemo | None = field(default=None, init=False, repr=False)
 
     # === Legacy private-state accessors ===
     # Tests and fixtures seed GameData through these historical private
@@ -155,6 +157,8 @@ class GameData:
     @_crafting_recipes.setter
     def _crafting_recipes(self, value: dict[str, dict[str, int]]) -> None:
         self.recipes_catalog.crafting_recipes = value
+        if self._recipe_cost_memo is not None:
+            self._recipe_cost_memo.clear()
 
     @property
     def _resource_skill(self) -> dict[str, tuple[str, int]]:
@@ -800,6 +804,17 @@ class GameData:
     def crafting_recipes(self) -> Mapping[str, dict[str, int]]:
         """item_code -> {material: quantity} for every craftable item."""
         return self.recipes_catalog.crafting_recipes
+
+    @property
+    def recipe_cost(self) -> RecipeCostMemo:
+        """Lazily-built memoized transitive recipe demand (one unit per item).
+
+        Invalidated automatically when `_crafting_recipes` is reloaded.
+        Phase A accessor — read only; Phase B will wire planners to consume it.
+        """
+        if self._recipe_cost_memo is None:
+            self._recipe_cost_memo = RecipeCostMemo(self)
+        return self._recipe_cost_memo
 
     @property
     def resource_drops(self) -> Mapping[str, str]:

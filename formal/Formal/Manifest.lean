@@ -20,6 +20,7 @@ import Formal.TaskTradeReadyPriority
 import Formal.WithdrawSetExpansion
 import Formal.RecycleProtection
 import Formal.BankExpansionTiming
+import Formal.CraftPlanDriver
 import Formal.DoomedMemo
 import Formal.SkillGateFastFail
 import Formal.LeafAttainable
@@ -1094,6 +1095,14 @@ open Formal.PriorityBand
 #check @Formal.NextCraftAction.nextCraftTarget_none_iff        -- validity: none ↔ qty ≤ owned target
 #check @Formal.NextCraftAction.nextHelper_craft_inputs_satisfied -- ordering: craft ⇒ all inputs on hand
 #check @Formal.NextCraftAction.nextCraftTarget_qty_pos          -- shortness: returned qty ≥ 1
+#check @Formal.NextCraftAction.nextHelper_withdraw_banked       -- withdraw ⇒ item genuinely banked
+#check @Formal.NextCraftAction.nextHelper_withdraw_le_bank      -- withdraw ⇒ qty ≤ bank held
+
+-- CraftPlanDriver required roles (full-plan driver; craft_plan_driver_core.py):
+#check @Formal.CraftPlanDriver.craftPlan_head          -- head = proven single step (B1)
+#check @Formal.CraftPlanDriver.craftPlan_nil_iff       -- empty plan ⇔ target already satisfied
+#check @Formal.CraftPlanDriver.craftPlan_steps_valid   -- every step is a genuine nextCraftTarget output
+#check @Formal.CraftPlanDriver.craftPlan_reaches       -- completion-correctness: complete plan reaches target
 
 -- SkillGateFastFail required roles (GatherMaterialsGoal.is_plannable;
 -- src/artifactsmmo_cli/ai/goals/gathering.py:316-335):

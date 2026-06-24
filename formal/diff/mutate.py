@@ -119,6 +119,22 @@ GAME_DATA_PARSE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "game_data.py"
 LOCATION_CATALOG_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "location_catalog.py"
 PROGRESSION_RESERVE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression_reserve_core.py"
 NEXT_CRAFT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "next_craft_core.py"
+CRAFT_PLAN_DRIVER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_plan_driver_core.py"
+
+# craft_plan_full / _apply_state mutations (B2 full-plan driver). The CONSUMING
+# model is the soundness-critical part; killed by
+# formal/diff/test_craft_plan_driver_diff.py (plan-agreement + reaches-target).
+CRAFT_PLAN_DRIVER_MUTATIONS = [
+    ("craft_plan_driver: drop craft input consumption",
+     "                new_owned[inp] = new_owned.get(inp, 0) - per * na.qty",
+     "                new_owned[inp] = new_owned.get(inp, 0)"),
+    ("craft_plan_driver: craft consumption sign flip (- -> +)",
+     "                new_owned[inp] = new_owned.get(inp, 0) - per * na.qty",
+     "                new_owned[inp] = new_owned.get(inp, 0) + per * na.qty"),
+    ("craft_plan_driver: withdraw skips bank debit",
+     "        new_bank[na.item] = new_bank.get(na.item, 0) - na.qty",
+     "        new_bank[na.item] = new_bank.get(na.item, 0)"),
+]
 
 # next_craft_target_pure mutations -- anchors for the deterministic craft-action
 # generator (churn fix). Each breaks one of the four load-bearing decisions;
@@ -137,6 +153,16 @@ NEXT_CRAFT_MUTATIONS = [
     ("next_craft: craft result emits gather kind",
      '    return NextAction(item, "craft", deficit)  # all inputs on hand → craft',
      '    return NextAction(item, "gather", deficit)  # all inputs on hand → craft'),
+    # withdraw branch (banked-intermediate fix): banked short input → withdraw.
+    ("next_craft: withdraw bank-check flip (== 0 -> != 0)",
+     "            if bank.get(inp, 0) == 0:",
+     "            if bank.get(inp, 0) != 0:"),
+    ("next_craft: withdraw emits gather kind",
+     '            return NextAction(inp, "withdraw", min(bank.get(inp, 0), required - owned.get(inp, 0)))',
+     '            return NextAction(inp, "gather", min(bank.get(inp, 0), required - owned.get(inp, 0)))'),
+    ("next_craft: withdraw qty min -> max (over-withdraw)",
+     '            return NextAction(inp, "withdraw", min(bank.get(inp, 0), required - owned.get(inp, 0)))',
+     '            return NextAction(inp, "withdraw", max(bank.get(inp, 0), required - owned.get(inp, 0)))'),
 ]
 
 # Effect-parser coverage (stat-audit fixes).
@@ -3730,6 +3756,9 @@ def _run_all_groups() -> int:
     # C5 — next_craft_target_pure: churn fix differential.
     run_group(NEXT_CRAFT_CORE_SRC, NEXT_CRAFT_MUTATIONS,
               "formal/diff/test_next_craft_diff.py", survivors)
+    # B2 — craft_plan_full full-plan driver (consuming model) differential.
+    run_group(CRAFT_PLAN_DRIVER_SRC, CRAFT_PLAN_DRIVER_MUTATIONS,
+              "formal/diff/test_craft_plan_driver_diff.py", survivors)
     _execute(_UNITS, survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")

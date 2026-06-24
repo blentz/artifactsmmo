@@ -24,10 +24,11 @@ preserves the fast-path for the two common mid-game states:
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.craft_plan_driver_core import craft_plan_full
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
-from artifactsmmo_cli.ai.next_craft_core import NextAction, next_craft_target_pure
-from artifactsmmo_cli.ai.recipe_closure import _closure_demand
+from artifactsmmo_cli.ai.next_craft_core import NextAction
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -120,63 +121,58 @@ def generate_next_craft_action(
             if item not in gatherable_items:
                 return None  # Monster drop / NPC-buy leaf → fall back to A*.
 
-    # PRECISE BANK GATE: fall back to A* only when a closure INPUT/INTERMEDIATE
-    # (not a top-level target in `needed`) is banked AND inventory is short of the
-    # required quantity.  Such an item must be withdrawn before CraftAction can use
-    # it; the generator has no "withdraw" step, so A* handles Withdraw→Craft.
-    #
-    # We intentionally SKIP this gate for top-level targets (`needed` keys): a
-    # banked finished output is never an input that needs withdrawing — the
-    # generator will simply re-make the remaining quantity from scratch.
-    #
-    # We also SKIP when inventory already covers the requirement: the bank holds
-    # surplus (Issue #2 regression guard) and no withdraw is needed.
-    if bank:
-        # Compute per-item closure demand once, only when the bank is non-empty.
-        demand: dict[str, int] = {}
-        for root, qty in needed.items():
-            _closure_demand(len(recipes) + 1, root, qty, recipes, {}, demand)
-        top_level: set[str] = set(needed)
-        for item, required_qty in demand.items():
-            if item in top_level:
-                continue  # Top-level target: not a banked input needing withdraw.
-            if bank.get(item, 0) > 0 and state.inventory.get(item, 0) < required_qty:
-                return None  # Banked input is genuinely needed → A* will withdraw.
-
-    # owned = INVENTORY ONLY.  Bank items are NOT available to CraftAction without
-    # a prior WithdrawItemAction.  The precise bank gate above ensures we only
-    # reach this point when either (a) no closure inputs are banked, (b) the bank
-    # holds only surplus (inventory already covers requirements), or (c) the banked
-    # item is a top-level output (not an input).  In all three cases emitting a
-    # gather or craft action is correct — no withdraw is needed.
+    # owned = INVENTORY; the bank is passed SEPARATELY to the core.  A banked
+    # craftable intermediate (e.g. copper_bar) no longer forces an A* Withdraw→Craft
+    # search: the core emits a "withdraw" NextAction for the first short input that
+    # is in the bank (mirrors the kernel-proved Lean `nextHelper` withdraw arm),
+    # which we map to a WithdrawItemAction below.  Top-level targets are never
+    # withdrawn (the descent only checks INPUTS), so a banked finished output is
+    # still re-made from scratch.
     owned: dict[str, int] = dict(state.inventory)
 
-    # Find the first non-None next action across all top-level needed items.
-    na: NextAction | None = None
-    for item, qty in needed.items():
-        na = next_craft_target_pure(recipes, owned, item, qty)
-        if na is not None:
-            break
-
-    if na is None:
-        # All needed items satisfied in owned — let normal path handle it.
-        return None
-
-    # Map the NextAction to a concrete action from relevant_actions.
     relevant = goal.relevant_actions(actions, state, game_data)
 
+    # Build the FULL deterministic plan for the first needed item that isn't
+    # already satisfied, then map each step to a concrete action.  The player's
+    # PlanCache caches this plan and executes it step-by-step, re-validating each
+    # step (is_applicable / should_replan) and re-planning on any divergence — so
+    # the simulated multi-step plan degrades safely against live state.  Mirrors
+    # the kernel-proved `craftPlan` (Formal/CraftPlanDriver.lean): every step is a
+    # genuine next move (craftPlan_steps_valid) and a complete plan reaches the
+    # target (craftPlan_reaches).
+    for item, qty in needed.items():
+        plan = craft_plan_full(recipes, owned, bank, item, qty)
+        if not plan:
+            continue  # this item already satisfied; try the next needed item
+        mapped: list[Action] = []
+        for na in plan:
+            action = _map_next_action(na, relevant, game_data)
+            if action is None:
+                return None  # a step has no concrete action → fall back to A*
+            mapped.append(action)
+        return mapped
+    return None  # all needed items already satisfied — let normal path handle it
+
+
+def _map_next_action(
+    na: NextAction, relevant: list[Action], game_data: GameData
+) -> Action | None:
+    """Map one NextAction to a concrete action from `relevant`, or None if absent."""
     if na.kind == "gather":
-        # Find the GatherAction whose resource yields na.item.
         for action in relevant:
             if (
                 isinstance(action, GatherAction)
                 and game_data.resource_drop_item(action.resource_code) == na.item
             ):
-                return [action]
-        return None  # No matching gather action found → fall back to A*.
-
+                return action
+        return None
+    if na.kind == "withdraw":
+        for action in relevant:
+            if isinstance(action, WithdrawItemAction) and action.code == na.item:
+                return action
+        return None
     # na.kind == "craft"
     for action in relevant:
         if isinstance(action, CraftAction) and action.code == na.item:
-            return [action]
-    return None  # No matching craft action found → fall back to A*.
+            return action
+    return None
