@@ -209,6 +209,70 @@ def test_handle_stuck_no_progress_level3_raises_stuck_exit():
     assert exc_info.value.signal == StuckSignal.NO_PROGRESS
 
 
+def _wedge(player: GamePlayer, *, goal: str = "GatherMaterials", fails: int = 10,
+           use_record_cycle: bool = False) -> None:
+    """Record a 20-cycle window where `Withdraw(ash_plank)` (driven by `goal`)
+    fails `fails` times amid succeeding `Move` cycles, state varying each cycle."""
+    for i in range(20):
+        if i % 2 == 0 and i < fails * 2:
+            rec = CycleRecord(
+                state_key=(i, 0, 5, (), (), None, 0, False), goal_name=goal,
+                action_name="Withdraw(ash_plank)", planned_depth=1,
+                planner_timed_out=False, succeeded=False)
+        else:
+            rec = CycleRecord(
+                state_key=(i, 0, 5, (), (), None, 0, False), goal_name=goal,
+                action_name="Move", planned_depth=1,
+                planner_timed_out=False, succeeded=True)
+        if use_record_cycle:
+            player._record_cycle(rec)
+        else:
+            player._detector.record(rec)
+
+
+def test_handle_stuck_repeated_action_level1_suppresses_driving_goal():
+    """REPEATED_ACTION_FAILURE L1 suppresses the goal(s) driving the
+    repeatedly-failing action for 10 cycles, and acknowledges the signal."""
+    player = GamePlayer(character="testchar")
+    _wedge(player, goal="GatherMaterials", fails=10)
+    player._handle_stuck(StuckSignal.REPEATED_ACTION_FAILURE, client=None)
+    assert player._suppressed_goals.get("GatherMaterials") == 10
+    assert player._recovery_level[StuckSignal.REPEATED_ACTION_FAILURE] == 1
+    assert player._detector._ack_index.get(StuckSignal.REPEATED_ACTION_FAILURE) is not None
+
+
+def test_handle_stuck_repeated_action_skips_none_placeholder():
+    """A repeatedly-failing action driven only by the '<none>' placeholder has
+    no real goal to suppress — the handler clears the signal without punishing."""
+    player = GamePlayer(character="testchar")
+    _wedge(player, goal="<none>", fails=10)
+    player._handle_stuck(StuckSignal.REPEATED_ACTION_FAILURE, client=None)
+    assert "<none>" not in player._suppressed_goals
+    assert player._suppressed_goals == {}
+    assert player._detector._ack_index.get(StuckSignal.REPEATED_ACTION_FAILURE) is not None
+
+
+def test_handle_stuck_repeated_action_level2_suppresses_longer():
+    player = GamePlayer(character="testchar")
+    player._recovery_level[StuckSignal.REPEATED_ACTION_FAILURE] = 1
+    _wedge(player, goal="GatherMaterials", fails=10)
+    player._handle_stuck(StuckSignal.REPEATED_ACTION_FAILURE, client=None)
+    assert player._suppressed_goals.get("GatherMaterials") == 30
+    assert player._recovery_level[StuckSignal.REPEATED_ACTION_FAILURE] == 2
+
+
+def test_handle_stuck_repeated_action_level3_raises_stuck_exit():
+    """L3 takes the honest terminal path. Uses _record_cycle so the per-signal
+    counter-evidence streak is tracked (failing cycles do NOT decay escalation)."""
+    player = GamePlayer(character="testchar")
+    _wedge(player, goal="GatherMaterials", fails=10, use_record_cycle=True)
+    player._recovery_level[StuckSignal.REPEATED_ACTION_FAILURE] = 2
+    with pytest.raises(StuckExit) as exc_info:
+        player._handle_stuck(StuckSignal.REPEATED_ACTION_FAILURE, client=None)
+    assert exc_info.value.signal == StuckSignal.REPEATED_ACTION_FAILURE
+    assert not isinstance(exc_info.value, SystemExit)
+
+
 class TestEscalationDecay:
     """_recovery_level[signal] decays: a full detection window (8 for
     GOAL_OSCILLATION) of CONSECUTIVE counter-evidence since the signal last

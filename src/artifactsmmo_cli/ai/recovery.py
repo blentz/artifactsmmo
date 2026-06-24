@@ -11,6 +11,7 @@ class StuckSignal(Enum):
     STATE_FROZEN = "state_frozen"
     GOAL_OSCILLATION = "goal_oscillation"
     NO_PROGRESS = "no_progress"
+    REPEATED_ACTION_FAILURE = "repeated_action_failure"
 
 
 # Detection window sizes: how many recent cycles each check examines. Exported
@@ -21,12 +22,24 @@ class StuckSignal(Enum):
 STATE_FROZEN_WINDOW = 10
 GOAL_OSCILLATION_WINDOW = 8
 NO_PROGRESS_WINDOW = 4
+REPEATED_ACTION_WINDOW = 20
 
 SIGNAL_WINDOWS: dict[StuckSignal, int] = {
     StuckSignal.STATE_FROZEN: STATE_FROZEN_WINDOW,
     StuckSignal.GOAL_OSCILLATION: GOAL_OSCILLATION_WINDOW,
     StuckSignal.NO_PROGRESS: NO_PROGRESS_WINDOW,
+    StuckSignal.REPEATED_ACTION_FAILURE: REPEATED_ACTION_WINDOW,
 }
+
+# REPEATED_ACTION_FAILURE gate: how many times the SAME named action may fail
+# within the last REPEATED_ACTION_WINDOW cycles before the signal fires. Unlike
+# the other signals this tolerates interspersed progress (it counts a specific
+# action's failures, not a consecutive run) — it catches the class the other
+# three miss, e.g. the bank-resync 478 loop (a Withdraw that keeps failing while
+# state varies, goals don't oscillate, and it is not a <no_plan> flood). 10 of
+# 20 cycles failing on one action is a livelock; conservative against transient
+# retries. The <no_plan> sentinel is excluded — NO_PROGRESS owns that class.
+REPEATED_ACTION_FAILURE_THRESHOLD = 10
 
 # Genuine-oscillation gates (see _check_goal_oscillation). OSC_MIN_SWITCHES=3
 # means the goal sequence leaves-and-returns at least twice (>= 2 overlapping
@@ -84,7 +97,22 @@ class StuckDetector:
             return StuckSignal.GOAL_OSCILLATION
         if self._check_no_progress():
             return StuckSignal.NO_PROGRESS
+        if self._check_repeated_action_failure():
+            return StuckSignal.REPEATED_ACTION_FAILURE
         return None
+
+    def _check_repeated_action_failure(self) -> bool:
+        """True when one named action failed >= REPEATED_ACTION_FAILURE_THRESHOLD
+        times in the post-ack last-REPEATED_ACTION_WINDOW window, regardless of
+        interspersed progress. The <no_plan> sentinel is excluded (NO_PROGRESS
+        owns the no-plan flood)."""
+        cutoff = self._ack_index.get(StuckSignal.REPEATED_ACTION_FAILURE, 0)
+        window = self._recent_since(cutoff, count=REPEATED_ACTION_WINDOW)
+        counts: dict[str, int] = {}
+        for rec in window:
+            if not rec.succeeded and rec.action_name != "<no_plan>":
+                counts[rec.action_name] = counts.get(rec.action_name, 0) + 1
+        return any(c >= REPEATED_ACTION_FAILURE_THRESHOLD for c in counts.values())
 
     def _check_no_progress(self) -> bool:
         cutoff = self._ack_index.get(StuckSignal.NO_PROGRESS, 0)

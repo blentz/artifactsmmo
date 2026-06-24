@@ -209,3 +209,78 @@ class TestNoProgress:
             det.record(make_record(action_name=name, state_key=(i, 0, 5, (), (), None, 0, False)))
         # Last 4 cycles: <no_plan>, Fight, <no_plan>, Fight → not all <no_plan>
         assert det.detect() is None
+
+
+class TestRepeatedActionFailure:
+    """The 4th signal: a single named action failing >= 10 times in the last 20
+    cycles, regardless of interspersed progress (the 478 bank-loop class)."""
+
+    def _wedged(self, det, fails: int):
+        # 20 cycles: `fails` failing Withdraw(ash_plank), the rest succeeding
+        # Move, every cycle a distinct state (frozen quiet), one goal (osc quiet).
+        for i in range(20):
+            if i % 2 == 0 and i < fails * 2:
+                det.record(make_record(
+                    action_name="Withdraw(ash_plank)", goal_name="GatherMaterials",
+                    succeeded=False, state_key=(i, 0, 5, (), (), None, 0, False)))
+            else:
+                det.record(make_record(
+                    action_name="Move", goal_name="GatherMaterials",
+                    succeeded=True, state_key=(i, 0, 5, (), (), None, 0, False)))
+
+    def test_fires_when_one_action_fails_10_of_20(self):
+        det = StuckDetector()
+        self._wedged(det, fails=10)
+        assert det.detect() == StuckSignal.REPEATED_ACTION_FAILURE
+
+    def test_no_fire_at_9_failures(self):
+        det = StuckDetector()
+        self._wedged(det, fails=9)
+        assert det.detect() != StuckSignal.REPEATED_ACTION_FAILURE
+        assert det.detect() is None
+
+    def test_no_plan_flood_excluded(self):
+        # 10 <no_plan> failures interspersed with successes so the last 4 are not
+        # all <no_plan> (noprog quiet). <no_plan> is excluded from the tally.
+        det = StuckDetector()
+        # Same goal on every cycle so the 2-distinct-goal oscillation gate stays
+        # quiet — this isolates the <no_plan> exclusion from the repeated tally.
+        for i in range(20):
+            if i % 2 == 0:
+                det.record(make_record(action_name="<no_plan>", goal_name="GatherMaterials",
+                                       succeeded=False,
+                                       state_key=(i, 0, 5, (), (), None, 0, False)))
+            else:
+                det.record(make_record(action_name="Move", goal_name="GatherMaterials",
+                                       succeeded=True,
+                                       state_key=(i, 0, 5, (), (), None, 0, False)))
+        assert det.detect() is None
+
+    def test_tolerates_interspersed_progress(self):
+        # The defining property: 10 failures of one action even with 10 successes
+        # of OTHER actions between them still fires (state varies the whole time).
+        det = StuckDetector()
+        self._wedged(det, fails=10)
+        assert det._check_repeated_action_failure() is True
+
+    def test_acknowledge_resets_window(self):
+        det = StuckDetector()
+        self._wedged(det, fails=10)
+        assert det.detect() == StuckSignal.REPEATED_ACTION_FAILURE
+        det.acknowledge(StuckSignal.REPEATED_ACTION_FAILURE)
+        # post-ack window is empty → cannot re-fire until fresh failures accrue
+        assert det.detect() != StuckSignal.REPEATED_ACTION_FAILURE
+
+    def test_noprog_beats_repeated(self):
+        # 16 failing Withdraws (repeated would fire) then 4 <no_plan> (noprog):
+        # NO_PROGRESS has strict precedence.
+        det = StuckDetector()
+        for i in range(16):
+            det.record(make_record(action_name="Withdraw(ash_plank)",
+                                    goal_name="GatherMaterials", succeeded=False,
+                                    state_key=(i, 0, 5, (), (), None, 0, False)))
+        for i in range(16, 20):
+            det.record(make_record(action_name="<no_plan>", goal_name="<none>",
+                                    succeeded=False,
+                                    state_key=(i, 0, 5, (), (), None, 0, False)))
+        assert det.detect() == StuckSignal.NO_PROGRESS
