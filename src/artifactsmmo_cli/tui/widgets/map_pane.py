@@ -3,12 +3,18 @@
 import time
 from typing import Any
 
+from rich.console import Console
 from rich.text import Text
 from textual.events import Resize
 from textual.geometry import Region
 from textual.reactive import reactive
+from textual.strip import Strip
 from textual.timer import Timer
 from textual.widgets import Static
+
+# Standalone console for converting a line's rich Text into Strip segments
+# without a mounted Textual app (keeps render_line headless-testable).
+_RENDER_CONSOLE = Console()
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
@@ -94,6 +100,13 @@ class MapPane(Static):
         self._anim_timer: Timer | None = None
         self._planning_active = False
         self._planning_start = 0.0
+        # Per-screen-line Strip cache keyed on a content signature, so static
+        # map lines reuse their already-styled Strip across frames (Textual never
+        # re-styles them). Only lines whose signature changed (the swing/glide
+        # rows) are rebuilt. `_anim_now` pins one frame-time across a render pass
+        # so all lines composite consistently.
+        self._line_cache: dict[int, tuple[object, Strip]] = {}
+        self._anim_now = 0.0
 
     @staticmethod
     def _build_tile_index(gd: GameData) -> dict[tuple[int, int], TileContent]:
@@ -129,7 +142,9 @@ class MapPane(Static):
         prior = self.snapshot
         self.snapshot = snap
         self._anim_start = time.monotonic()
+        self._anim_now = self._anim_start
         self._planning_active = False
+        self._line_cache.clear()  # new cycle → content changes wholesale
         if prior is not None and (prior.x, prior.y) != (snap.x, snap.y):
             self._anim_frames = glide_path((prior.x, prior.y), (snap.x, snap.y), MAX_ANIM_STEPS)
         else:
@@ -149,6 +164,7 @@ class MapPane(Static):
     def _tick(self) -> None:
         if not self._is_animating():
             return
+        self._anim_now = time.monotonic()  # pin one frame-time for this pass
         # Repaint only the rows that actually change. The player is
         # screen-centered, so a stationary swing/planning frame dirties just the
         # center tile-rows; only a glide (map scrolling under the player) needs a
@@ -209,6 +225,7 @@ class MapPane(Static):
         if active and not self._planning_active:
             self._planning_start = time.monotonic()
         self._planning_active = active
+        self._anim_now = time.monotonic()
         self.refresh()
 
     def render(self) -> Text:
@@ -224,6 +241,8 @@ class MapPane(Static):
         )
 
     def on_resize(self, event: Resize) -> None:
+        self._line_cache.clear()  # dims changed → every line's geometry changes
+        self._anim_now = time.monotonic()
         self.refresh()
 
     def _hud_line(self, cx: int, cy: int) -> str:
@@ -294,6 +313,45 @@ class MapPane(Static):
         category, code = content
         return self._registry.sprite_for(code, category), WALKABLE_COLOR
 
+    @staticmethod
+    def _line_count(height: int) -> int:
+        """Number of screen lines: 1 HUD + tiles_h * TILE_H tile sublines."""
+        return 1 + ((height - 1) // TILE_H) * TILE_H
+
+    def _line_text(
+        self,
+        y: int,
+        width: int,
+        height: int,
+        center: tuple[int, int],
+        player_sprite: Sprite,
+        overlay: dict[tuple[int, int], Sprite],
+    ) -> Text:
+        """The rich Text for ONE screen line `y` (0 = HUD line). The single
+        source of truth shared by `_render_viewport` (full, for tests) and
+        `render_line` (per-line, live)."""
+        tiles_w = width // TILE_W
+        tiles_h = (height - 1) // TILE_H
+        half_w = tiles_w // 2
+        half_h = tiles_h // 2
+        cx, cy = center
+        line = Text(no_wrap=True, overflow="crop")
+        if y == 0:
+            line.append(self._hud_line(cx, cy), style="dim")
+            return line
+        trow = (y - 1) // TILE_H
+        sub = (y - 1) % TILE_H
+        for tcol in range(tiles_w):
+            wx = cx + tcol - half_w
+            wy = cy + trow - half_h
+            is_player = tcol == half_w and trow == half_h
+            sprite, terrain = self._tile_sprite_and_terrain(wx, wy, is_player, player_sprite)
+            tool = overlay.get((tcol - half_w, trow - half_h))
+            if tool is not None:
+                sprite = overlay_sprites(sprite, tool)
+            line.append_text(self._compositor.compose(sprite, terrain)[sub])
+        return line
+
     def _render_viewport(
         self,
         snap: CycleSnapshot,
@@ -303,30 +361,63 @@ class MapPane(Static):
         player_sprite: Sprite = PLAYER_SPRITE,
         overlay: dict[tuple[int, int], Sprite] | None = None,
     ) -> Text:
-        overlay = overlay or {}
-        tiles_w = width // TILE_W
-        tiles_h = (height - 1) // TILE_H
-        half_w = tiles_w // 2
-        half_h = tiles_h // 2
-        cx, cy = center if center is not None else (snap.x, snap.y)
+        center = center if center is not None else (snap.x, snap.y)
+        ov = overlay or {}
         text = Text(no_wrap=True, overflow="crop")
-        text.append(self._hud_line(cx, cy), style="dim")
-        for trow in range(tiles_h):
-            text.append("\n")
-            sublines = [Text(no_wrap=True, overflow="crop") for _ in range(TILE_H)]
-            for tcol in range(tiles_w):
-                wx = cx + tcol - half_w
-                wy = cy + trow - half_h
-                is_player = tcol == half_w and trow == half_h
-                sprite, terrain = self._tile_sprite_and_terrain(wx, wy, is_player, player_sprite)
-                tool = overlay.get((tcol - half_w, trow - half_h))
-                if tool is not None:
-                    sprite = overlay_sprites(sprite, tool)
-                rows4 = self._compositor.compose(sprite, terrain)
-                for i in range(TILE_H):
-                    sublines[i].append_text(rows4[i])
-            for i in range(TILE_H):
-                if i > 0:
-                    text.append("\n")
-                text.append_text(sublines[i])
+        for y in range(self._line_count(height)):
+            if y > 0:
+                text.append("\n")
+            text.append_text(self._line_text(y, width, height, center, player_sprite, ov))
         return text
+
+    def render_line(self, y: int) -> Strip:
+        """Render screen line `y` as a Strip, reusing a cached (already-styled)
+        Strip whenever the line's content signature is unchanged. Static map lines
+        therefore cost nothing after the first frame — only swing/glide lines are
+        rebuilt — so Textual never re-styles the whole viewport per frame."""
+        width = self.size.width or FALLBACK_W
+        height = self.size.height or FALLBACK_H
+        snap = self.snapshot
+        if snap is None:
+            text = Text("Waiting for first cycle...") if y == 0 else Text("")
+            return self._text_strip(text, width)
+        if y >= self._line_count(height):
+            return Strip.blank(width)
+        center = self._glide_center(self._anim_now) or (snap.x, snap.y)
+        sprite = self._player_sprite(self._anim_now)
+        overlay = self._active_overlay(self._anim_now)
+        sig = self._line_signature(y, height, center, sprite, overlay)
+        cached = self._line_cache.get(y)
+        if cached is not None and cached[0] == sig:
+            return cached[1]
+        strip = self._text_strip(self._line_text(y, width, height, center, sprite, overlay), width)
+        self._line_cache[y] = (sig, strip)
+        return strip
+
+    def _line_signature(
+        self,
+        y: int,
+        height: int,
+        center: tuple[int, int],
+        player_sprite: Sprite,
+        overlay: dict[tuple[int, int], Sprite],
+    ) -> object:
+        """A cheap key capturing everything that changes a line's pixels: the
+        viewport center (scroll), the player sprite (center tile only), and any
+        tool/cloud overlay landing on this line's tile-row. Stable for static map
+        lines → cache hit; changes only on the swing/glide rows."""
+        if y == 0:
+            return ("hud", center)
+        tiles_h = (height - 1) // TILE_H
+        half_h = tiles_h // 2
+        trow = (y - 1) // TILE_H
+        sub = (y - 1) % TILE_H
+        row_off = trow - half_h
+        ov = tuple(sorted((k, id(v)) for k, v in overlay.items() if k[1] == row_off))
+        psprite = id(player_sprite) if row_off == 0 else 0
+        return (center, trow, sub, psprite, ov)
+
+    def _text_strip(self, text: Text, width: int) -> Strip:
+        opts = _RENDER_CONSOLE.options.update_width(width)
+        rendered = _RENDER_CONSOLE.render_lines(text, opts, pad=True)
+        return Strip(rendered[0] if rendered else [], width)

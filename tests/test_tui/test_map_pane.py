@@ -316,3 +316,44 @@ class TestGlideAnimation:
             pane.update_snapshot(_snap(4, 0))   # mounted -> real timer created
             assert pane._anim_timer is not None
         assert pane._anim_timer is None         # on_unmount stops the timer
+
+
+class TestRenderLine:
+    """Per-line Strip rendering with the static-line cache (the CPU fix)."""
+
+    def test_render_line_matches_viewport(self):
+        # Each render_line(y) Strip must equal line y of the full _render_viewport
+        # (single source of truth via _line_text). Unmounted → FALLBACK 80x41.
+        pane = MapPane(_gd_typed())
+        pane.update_snapshot(_snap(0, 0))
+        lines = pane._render_viewport(_snap(0, 0), FALLBACK_W, FALLBACK_H).plain.split("\n")
+        for y in range(pane._line_count(FALLBACK_H)):
+            # Strip is padded to full width; the HUD line isn't — compare content.
+            assert pane.render_line(y).text.rstrip() == lines[y].rstrip()
+
+    def test_static_line_is_cached(self):
+        # A static (non-swing) line returns the SAME Strip object on the next
+        # frame — Textual never re-styles it. This is the whole point.
+        pane = MapPane(_gd_typed())
+        pane.update_snapshot(_snap(0, 0))
+        first = pane.render_line(5)
+        assert pane.render_line(5) is first          # signature unchanged → cache hit
+
+    def test_blank_beyond_viewport(self):
+        pane = MapPane(_gd_typed())
+        pane.update_snapshot(_snap(0, 0))
+        beyond = pane._line_count(FALLBACK_H) + 3
+        assert pane.render_line(beyond).text.strip() == ""
+
+    def test_waiting_line_without_snapshot(self):
+        pane = MapPane(_gd_typed())
+        assert "Waiting" in pane.render_line(0).text
+        assert pane.render_line(1).text.strip() == ""
+
+    def test_snapshot_change_clears_cache(self):
+        pane = MapPane(_gd_typed())
+        pane.update_snapshot(_snap(0, 0))
+        pane.render_line(5)
+        assert pane._line_cache                       # populated
+        pane.update_snapshot(_snap(0, 0))             # new cycle clears it
+        assert pane._line_cache == {}
