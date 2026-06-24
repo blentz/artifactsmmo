@@ -45,7 +45,9 @@ TILE_H = 4   # char-rows per tile (8 pixels tall, 2 px per char-row)
 FALLBACK_W = 80
 FALLBACK_H = 41
 MAX_ANIM_STEPS = 12       # cap glide frames so big jumps still finish fast
-ANIM_FRAME_SECONDS = 0.05  # ~50ms/frame -> persistent timer interval
+ANIM_FRAME_SECONDS = 0.15  # ~6.7fps -> ample for a watcher's swing/glide. Was
+# 0.05 (20fps), which re-rendered the full viewport ~20x/sec for the WHOLE
+# cooldown and pegged CPU at ~66% (the bot thread itself sleeps on cooldown).
 SWING_SWEEP_SECONDS = 0.8  # one chop/strike; loops over the cooldown
 
 _SKILL_TO_RESOURCE_KEY = {
@@ -148,13 +150,24 @@ class MapPane(Static):
             self.refresh()
 
     def _is_animating(self) -> bool:
+        """True only when something is GENUINELY moving frame-to-frame:
+        planning, an in-progress glide (player walking), or an active tool swing.
+        A no-tool cooldown wait (rest / move / deposit) is a STATIC scene and is
+        NOT re-rendered — the old `elapsed < cooldown_remaining` re-rendered the
+        full viewport ~20x/sec for the whole wait even when nothing changed."""
         if self._planning_active:
             return True
         snap = self.snapshot
         if snap is None:
             return False
-        elapsed = time.monotonic() - self._anim_start
-        return elapsed < snap.cooldown_remaining
+        now = time.monotonic()
+        if now - self._anim_start >= snap.cooldown_remaining:
+            return False  # cooldown elapsed — nothing left to animate
+        if self._anim_frames:
+            return True  # glide (player walking tile-to-tile) in progress
+        # A swinging tool (gather/fight/craft) animates over the cooldown; a
+        # no-tool action leaves the scene static, so skip the re-render.
+        return bool(self._swing_overlay(now))
 
     def on_unmount(self) -> None:
         if self._anim_timer is not None:

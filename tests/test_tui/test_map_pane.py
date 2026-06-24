@@ -222,6 +222,28 @@ class TestGlideAnimation:
         assert pane._anim_frames == [(1, 0), (2, 0)]
         assert pane._anim_timer is None              # not mounted, so no timer
 
+    def test_no_swing_static_cooldown_not_animating(self, monkeypatch):
+        # CPU fix: a no-tool cooldown wait (no glide in progress, no swinging
+        # tool) is a STATIC scene — _is_animating() must be False so the timer
+        # does NOT re-render, even though the cooldown is still ticking. The old
+        # code returned True for the whole `elapsed < cooldown_remaining` window.
+        fake_now = [0.0]
+        monkeypatch.setattr("artifactsmmo_cli.tui.widgets.map_pane.time.monotonic",
+                            lambda: fake_now[0])
+        pane = MapPane(_gd_typed())
+        pane.update_snapshot(_snap(0, 0))
+        static_snap = CycleSnapshot(
+            cycle_index=1, timestamp="t", character="c", x=0, y=0, level=1,
+            xp=0, max_xp=100, hp=100, max_hp=100, gold=0,
+            selected_goal="RestoreHP", action="Rest", outcome="ok",
+            cooldown_remaining=5.0,
+        )
+        pane.update_snapshot(static_snap)            # same tile → no glide frames
+        assert pane._anim_frames == []
+        fake_now[0] = 1.0                            # 1.0 < 5.0 → cooldown still active
+        assert pane._swing_overlay(1.0) == {}        # no tool swinging
+        assert pane._is_animating() is False         # static → no re-render (CPU fix)
+
     def test_render_centers_on_glide_then_snap(self, monkeypatch):
         # New time-based glide: center is derived from glide_index(elapsed, cooldown).
         # At start (elapsed ≈ 0) the first frame is shown; after cooldown the last frame
