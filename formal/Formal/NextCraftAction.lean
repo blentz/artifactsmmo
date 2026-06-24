@@ -281,6 +281,25 @@ theorem nextHelper_withdraw_le_bank
           exact Nat.min_le_left _ _
       · subst h; simp at hkind
 
+/-- **ENTRY-LEVEL WITHDRAW-BANKED.** When the entry point `nextCraftTarget`
+returns a `withdraw` action, the withdrawn item is genuinely banked. Lifts the
+helper-level `nextHelper_withdraw_banked` through `nextCraftTarget`, so the
+withdraw safety property is pinned at the public API the wrapper actually calls. -/
+theorem nextCraftTarget_withdraw_banked
+    (recipes : String → Option (List (String × Nat)))
+    (owned bank : String → Nat)
+    (target : String) (qty fuel : Nat)
+    (result : NextAction)
+    (h : nextCraftTarget recipes owned bank target qty fuel = some result)
+    (hk : result.kind = Kind.withdraw) :
+    0 < bank result.item := by
+  simp only [nextCraftTarget] at h
+  split at h
+  · simp at h
+  · simp only [Option.some.injEq] at h
+    subst h
+    exact nextHelper_withdraw_banked recipes owned bank target qty fuel _ rfl hk
+
 /-! ## Non-vacuity witnesses — copper_ring chain -/
 
 /-
