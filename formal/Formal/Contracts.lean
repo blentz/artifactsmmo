@@ -2856,6 +2856,13 @@ example : ∀ (recipes : String → Option (List (String × Nat))) (owned bank :
       result.kind = Formal.NextCraftAction.Kind.withdraw →
       result.qty ≤ bank result.item :=
   @Formal.NextCraftAction.nextHelper_withdraw_le_bank
+-- ENTRY-LEVEL WITHDRAW-BANKED: lifted to the public nextCraftTarget API
+example : ∀ (recipes : String → Option (List (String × Nat))) (owned bank : String → Nat)
+    (target : String) (qty fuel : Nat) (result : Formal.NextCraftAction.NextAction),
+      Formal.NextCraftAction.nextCraftTarget recipes owned bank target qty fuel = some result →
+      result.kind = Formal.NextCraftAction.Kind.withdraw →
+      0 < bank result.item :=
+  @Formal.NextCraftAction.nextCraftTarget_withdraw_banked
 
 -- ─── CraftPlanDriver (full-plan driver; craft_plan_driver_core.py) anti-weakening pins ───
 -- HEAD: the plan's first action is exactly the proven single-step result

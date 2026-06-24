@@ -1097,6 +1097,7 @@ open Formal.PriorityBand
 #check @Formal.NextCraftAction.nextCraftTarget_qty_pos          -- shortness: returned qty ≥ 1
 #check @Formal.NextCraftAction.nextHelper_withdraw_banked       -- withdraw ⇒ item genuinely banked
 #check @Formal.NextCraftAction.nextHelper_withdraw_le_bank      -- withdraw ⇒ qty ≤ bank held
+#check @Formal.NextCraftAction.nextCraftTarget_withdraw_banked  -- entry-level: withdraw ⇒ item banked
 
 -- CraftPlanDriver required roles (full-plan driver; craft_plan_driver_core.py):
 #check @Formal.CraftPlanDriver.craftPlan_head          -- head = proven single step (B1)
