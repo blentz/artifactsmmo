@@ -33,6 +33,8 @@ from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
 from artifactsmmo_cli.ai.constants import (
     BANK_REFRESH_FORCE_SENTINEL,
     BANK_REFRESH_INTERVAL,
+    ERROR_BACKOFF_BASE_SECONDS,
+    ERROR_BACKOFF_MAX_SECONDS,
     ERROR_CODE_ALREADY_EQUIPPED,
     ERROR_CODE_COOLDOWN,
     STUCK_DETECTOR_WINDOW,
@@ -120,6 +122,10 @@ class GamePlayer:
         self._detector = StuckDetector(history_size=STUCK_DETECTOR_WINDOW)
         self._suppressed_goals: dict[str, int] = {}
         self._actions_since_full_refresh: int = 0
+        # Consecutive no-cooldown action failures, driving the exponential
+        # backoff that keeps a persistent error (e.g. a stuck Withdraw→478) from
+        # spinning the loop at full CPU. Reset on any ok/cooldown cycle.
+        self._error_backoff_n: int = 0
         self._recovery_level: dict[StuckSignal, int] = {}
         # Escalation decay bookkeeping (see _record_cycle/_handle_stuck): per
         # signal, the current and the maximum run of CONSECUTIVE
@@ -605,6 +611,22 @@ class GamePlayer:
                 cooldown_remaining = 0.0
                 if new_state.cooldown_expires is not None:
                     cooldown_remaining = max(0.0, (new_state.cooldown_expires - now).total_seconds())
+                # EXPONENTIAL backoff on a no-cooldown failure: a persistent
+                # action error (e.g. a Withdraw that keeps returning HTTP 478)
+                # otherwise spins the cycle loop at full CPU because nothing
+                # sleeps. The delay doubles per consecutive failure (capped) and
+                # resets on the next ok/cooldown cycle — fast to recover from a
+                # one-off error, quickly idle on a true livelock. The sleep also
+                # gives the just-resynced bank / stuck detector room to react.
+                if outcome in ("ok", "error:cooldown"):
+                    self._error_backoff_n = 0
+                elif cooldown_remaining == 0.0:
+                    delay = min(
+                        ERROR_BACKOFF_BASE_SECONDS * (2 ** self._error_backoff_n),
+                        ERROR_BACKOFF_MAX_SECONDS,
+                    )
+                    time.sleep(delay)
+                    self._error_backoff_n += 1
                 predicted = action.cost(prev_state_for_learning, game_data, self.history)
                 cycles_to_satisfy = None
                 self._learn_task_exchange_cost(action, prev_state_for_learning, new_state, outcome)
@@ -749,7 +771,22 @@ class GamePlayer:
                 # Finer-grained learning label keyed on the structured code.
                 print(f"[{self._now()}] Action failed: {e} — refreshing state")
                 outcome = f"error:HTTP_{e.code}"
-            return self._fetch_world_state(client), outcome
+            refreshed = self._fetch_world_state(client)
+            if outcome.startswith("error:HTTP_") and isinstance(
+                action, (WithdrawItemAction, DepositAllAction)
+            ):
+                # A bank action failed on a structured HTTP error (e.g. 478
+                # "missing items" on a Withdraw): our bank view drove an
+                # impossible plan, so RE-SYNC the bank now. Without this, the
+                # stale `bank_items` (which claimed the item was banked) persists
+                # and the craft-plan generator re-emits the identical failing
+                # withdraw every cycle — a no-cooldown livelock that spins CPU
+                # (live Robby trace 2026-06-24: 4502 cycles of Withdraw→478).
+                try:
+                    refreshed = self._sync_bank(client, refreshed)
+                except httpx.HTTPError:
+                    pass  # transient; the periodic refresh retries
+            return refreshed, outcome
         except RuntimeError as e:
             msg = str(e)
             if msg.startswith("fight_lost"):
