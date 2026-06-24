@@ -25,9 +25,10 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.craft_plan_driver_core import craft_plan_full
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
-from artifactsmmo_cli.ai.next_craft_core import NextAction, next_craft_target_pure
+from artifactsmmo_cli.ai.next_craft_core import NextAction
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -129,39 +130,49 @@ def generate_next_craft_action(
     # still re-made from scratch.
     owned: dict[str, int] = dict(state.inventory)
 
-    # Find the first non-None next action across all top-level needed items.
-    na: NextAction | None = None
-    for item, qty in needed.items():
-        na = next_craft_target_pure(recipes, owned, bank, item, qty)
-        if na is not None:
-            break
-
-    if na is None:
-        # All needed items satisfied in owned — let normal path handle it.
-        return None
-
-    # Map the NextAction to a concrete action from relevant_actions.
     relevant = goal.relevant_actions(actions, state, game_data)
 
+    # Build the FULL deterministic plan for the first needed item that isn't
+    # already satisfied, then map each step to a concrete action.  The player's
+    # PlanCache caches this plan and executes it step-by-step, re-validating each
+    # step (is_applicable / should_replan) and re-planning on any divergence — so
+    # the simulated multi-step plan degrades safely against live state.  Mirrors
+    # the kernel-proved `craftPlan` (Formal/CraftPlanDriver.lean): every step is a
+    # genuine next move (craftPlan_steps_valid) and a complete plan reaches the
+    # target (craftPlan_reaches).
+    for item, qty in needed.items():
+        plan = craft_plan_full(recipes, owned, bank, item, qty)
+        if not plan:
+            continue  # this item already satisfied; try the next needed item
+        mapped: list[Action] = []
+        for na in plan:
+            action = _map_next_action(na, relevant, game_data)
+            if action is None:
+                return None  # a step has no concrete action → fall back to A*
+            mapped.append(action)
+        return mapped
+    return None  # all needed items already satisfied — let normal path handle it
+
+
+def _map_next_action(
+    na: NextAction, relevant: list[Action], game_data: GameData
+) -> Action | None:
+    """Map one NextAction to a concrete action from `relevant`, or None if absent."""
     if na.kind == "gather":
-        # Find the GatherAction whose resource yields na.item.
         for action in relevant:
             if (
                 isinstance(action, GatherAction)
                 and game_data.resource_drop_item(action.resource_code) == na.item
             ):
-                return [action]
-        return None  # No matching gather action found → fall back to A*.
-
+                return action
+        return None
     if na.kind == "withdraw":
-        # Banked intermediate: pull it from the bank rather than re-make it.
         for action in relevant:
             if isinstance(action, WithdrawItemAction) and action.code == na.item:
-                return [action]
-        return None  # No matching withdraw action found → fall back to A*.
-
+                return action
+        return None
     # na.kind == "craft"
     for action in relevant:
         if isinstance(action, CraftAction) and action.code == na.item:
-            return [action]
-    return None  # No matching craft action found → fall back to A*.
+            return action
+    return None

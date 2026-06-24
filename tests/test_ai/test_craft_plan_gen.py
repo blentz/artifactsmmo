@@ -102,10 +102,10 @@ class TestCopperRingGatherPhase:
 
         result = generate_next_craft_action(goal, state, gd, actions)
 
-        assert result is not None, "Expected a gather action, not None (A* fallback)"
-        assert len(result) == 1
+        assert result is not None, "Expected a plan, not None (A* fallback)"
         assert isinstance(result[0], GatherAction)
         assert result[0].resource_code == "copper_rocks"
+        assert isinstance(result[-1], CraftAction) and result[-1].code == "copper_ring"
 
     def test_returns_craft_bar_when_ore_present(self):
         """10 copper_ore owned → next step is craft copper_bar."""
@@ -118,9 +118,9 @@ class TestCopperRingGatherPhase:
         result = generate_next_craft_action(goal, state, gd, actions)
 
         assert result is not None
-        assert len(result) == 1
         assert isinstance(result[0], CraftAction)
         assert result[0].code == "copper_bar"
+        assert isinstance(result[-1], CraftAction) and result[-1].code == "copper_ring"
 
     def test_returns_craft_ring_when_bar_present(self):
         """1 copper_bar owned → final step is craft copper_ring."""
@@ -155,9 +155,9 @@ class TestWithdrawsBankedIntermediate:
         result = generate_next_craft_action(goal, state, gd, actions)
 
         assert result is not None
-        assert len(result) == 1
         assert isinstance(result[0], WithdrawItemAction)
         assert result[0].code == "copper_bar"
+        assert isinstance(result[-1], CraftAction) and result[-1].code == "copper_ring"
 
     def test_none_when_withdraw_action_absent(self):
         """Banked bar but no WithdrawItemAction in the list → fall back to A*."""
@@ -417,8 +417,9 @@ class TestStrategyArbiterIntegration:
         assert plan, "Expected a non-empty generated plan"
         assert _SpyPlanner.calls == 0, "Planner must NOT be invoked for copper_ring goal"
         assert arbiter.goals_tried[-1]["nodes"] == 0
-        assert len(plan) == 1
+        # Full deterministic plan: first step gathers ore, last step crafts the ring.
         assert isinstance(plan[0], GatherAction)
+        assert isinstance(plan[-1], CraftAction) and plan[-1].code == "copper_ring"
 
     def test_monster_drop_goal_invokes_planner(self):
         """A feather_coat goal (monster-drop leaf) must invoke the planner (A*)."""
@@ -470,9 +471,10 @@ class TestStrategyArbiterIntegration:
             "Banked target (output) must NOT cause A* fallback — "
             "generator should make the remaining quantity from scratch"
         )
-        assert len(result) == 1
+        # Full plan re-makes the remaining ring: gather ore first, craft ring last.
         assert isinstance(result[0], GatherAction)
         assert result[0].resource_code == "copper_rocks"
+        assert isinstance(result[-1], CraftAction) and result[-1].code == "copper_ring"
 
     def test_surplus_banked_input_inventory_covers_generates(self) -> None:
         """Surplus banked input but inventory already covers requirement → generates.
