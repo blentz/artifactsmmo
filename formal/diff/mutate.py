@@ -1031,6 +1031,45 @@ STUCK_DETECTOR_MUTATIONS = [
     ("stuck_detector: _recent_since index off-by-one (start_idx + i -> + i - 1)",
      "            if start_idx + i >= cutoff_cycle",
      "            if start_idx + i - 1 >= cutoff_cycle"),
+    # REPEATED_ACTION_FAILURE threshold off-by-one: >= K -> >= K-1, so a 9-failure
+    # window (one below threshold) wrongly fires (kills via the one-short test).
+    ("stuck_detector: repeated threshold off-by-one (>= K -> >= K-1)",
+     "        return any(c >= REPEATED_ACTION_FAILURE_THRESHOLD for c in counts.values())",
+     "        return any(c >= REPEATED_ACTION_FAILURE_THRESHOLD - 1 for c in counts.values())"),
+    # drop the <no_plan> exclusion: a no-plan flood (which NO_PROGRESS owns) is
+    # also counted as a repeated action (kills via the no_plan-flood test).
+    ("stuck_detector: repeated drop no_plan guard",
+     '            if not rec.succeeded and rec.action_name != "<no_plan>":\n'
+     "                counts[rec.action_name] = counts.get(rec.action_name, 0) + 1",
+     "            if not rec.succeeded:\n"
+     "                counts[rec.action_name] = counts.get(rec.action_name, 0) + 1"),
+    # flip the failure sense: count SUCCESSES instead of failures, so a wedged
+    # all-failing action reports 0 and never fires (kills via the flip-sense test).
+    ("stuck_detector: repeated flip failure sense (not succeeded -> succeeded)",
+     '            if not rec.succeeded and rec.action_name != "<no_plan>":\n'
+     "                counts[rec.action_name] = counts.get(rec.action_name, 0) + 1",
+     '            if rec.succeeded and rec.action_name != "<no_plan>":\n'
+     "                counts[rec.action_name] = counts.get(rec.action_name, 0) + 1"),
+    # repeated window off-by-one: count=W -> W-1 drops the oldest record, so a
+    # 10-failure window spanning exactly the last 20 falls to 9 (kills via the
+    # window-boundary test).
+    ("stuck_detector: repeated window off-by-one (count=W -> W-1)",
+     "        window = self._recent_since(cutoff, count=REPEATED_ACTION_WINDOW)\n"
+     "        counts: dict[str, int] = {}",
+     "        window = self._recent_since(cutoff, count=REPEATED_ACTION_WINDOW - 1)\n"
+     "        counts: dict[str, int] = {}"),
+    # detect precedence: check REPEATED before NO_PROGRESS, so a window that is
+    # simultaneously noprog AND repeated wrongly reports repeated (kills via the
+    # noprog-beats-repeated test).
+    ("stuck_detector: detect precedence swap (repeated before noprog)",
+     "        if self._check_no_progress():\n"
+     "            return StuckSignal.NO_PROGRESS\n"
+     "        if self._check_repeated_action_failure():\n"
+     "            return StuckSignal.REPEATED_ACTION_FAILURE",
+     "        if self._check_repeated_action_failure():\n"
+     "            return StuckSignal.REPEATED_ACTION_FAILURE\n"
+     "        if self._check_no_progress():\n"
+     "            return StuckSignal.NO_PROGRESS"),
 ]
 
 

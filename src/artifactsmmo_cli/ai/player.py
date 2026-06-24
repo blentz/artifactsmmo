@@ -54,6 +54,8 @@ from artifactsmmo_cli.ai.planner import GOAPPlanner, _state_key
 from artifactsmmo_cli.ai.player_helpers import delete_cost as _delete_cost  # noqa: F401  (test import target)
 from artifactsmmo_cli.ai.player_helpers import format_plan as _format_plan
 from artifactsmmo_cli.ai.recovery import (
+    REPEATED_ACTION_FAILURE_THRESHOLD,
+    REPEATED_ACTION_WINDOW,
     SIGNAL_WINDOWS,
     CycleRecord,
     StuckDetector,
@@ -1083,6 +1085,13 @@ class GamePlayer:
                 self._prev_cycle_state_key is not None
                 and record.state_key != self._prev_cycle_state_key
             ),
+            # A cycle is counter-evidence for REPEATED_ACTION_FAILURE unless it is
+            # a failing NAMED action (the only thing that builds the per-action
+            # tally): a success or a <no_plan> cycle refutes the repeated-failure
+            # hypothesis. A genuine wedge cannot produce a full window of these.
+            StuckSignal.REPEATED_ACTION_FAILURE: (
+                record.succeeded or record.action_name == "<no_plan>"
+            ),
         }
         self._prev_cycle_state_key = record.state_key
         for sig, healthy in counter_evidence.items():
@@ -1167,6 +1176,43 @@ class GamePlayer:
             else:
                 print(f"[{self._now()}] [recovery] NO_PROGRESS L3: recovery exhausted — "
                       "stopping run (manual intervention)")
+                raise StuckExit(signal)
+
+        elif signal == StuckSignal.REPEATED_ACTION_FAILURE:
+            # Suppress the goal(s) driving the repeatedly-failing action(s). Find
+            # the action_name(s) that failed >= threshold in the window, then the
+            # goal_name(s) whose records emitted them. Drop "<none>" (the no-plan
+            # placeholder, not a suppressible goal).
+            window = list(self._detector._history)[-REPEATED_ACTION_WINDOW:]
+            fail_counts: dict[str, int] = {}
+            for r in window:
+                if not r.succeeded and r.action_name != "<no_plan>":
+                    fail_counts[r.action_name] = fail_counts.get(r.action_name, 0) + 1
+            repeated_actions = {
+                a for a, c in fail_counts.items()
+                if c >= REPEATED_ACTION_FAILURE_THRESHOLD
+            }
+            distinct = {
+                r.goal_name for r in window
+                if r.action_name in repeated_actions
+                and not r.succeeded and r.goal_name != "<none>"
+            }
+            if not distinct:
+                print(f"[{self._now()}] [recovery] REPEATED_ACTION_FAILURE: "
+                      "no failing goal to suppress; clearing signal")
+            elif level == 1:
+                for name in distinct:
+                    self._suppressed_goals[name] = 10
+                print(f"[{self._now()}] [recovery] REPEATED_ACTION_FAILURE L1: "
+                      f"suppressing {distinct} for 10 cycles")
+            elif level == 2:
+                for name in distinct:
+                    self._suppressed_goals[name] = 30
+                print(f"[{self._now()}] [recovery] REPEATED_ACTION_FAILURE L2: "
+                      f"suppressing {distinct} for 30 cycles")
+            else:
+                print(f"[{self._now()}] [recovery] REPEATED_ACTION_FAILURE L3: "
+                      "recovery exhausted — stopping run (manual intervention)")
                 raise StuckExit(signal)
 
         self._detector.acknowledge(signal)

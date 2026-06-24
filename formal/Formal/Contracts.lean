@@ -1041,7 +1041,7 @@ example : ∀ (d : Formal.StuckDetector.Detector) (cutoff count : Nat) (r : Form
       ∃ i, i < d.history.length ∧
         Formal.StuckDetector.startIdx d + i ≥ cutoff ∧ d.history[i]? = some r :=
   @Formal.StuckDetector.recentSince_mem_global
--- detect_precedence: strict order frozen > osc > noprog, else none (the cascade).
+-- detect_precedence: strict order frozen > osc > noprog > repeated, else none.
 example : ∀ (d : Formal.StuckDetector.Detector),
     (Formal.StuckDetector.checkStateFrozen d = true →
       Formal.StuckDetector.detect d = some Formal.StuckDetector.Signal.frozen) ∧
@@ -1055,6 +1055,12 @@ example : ∀ (d : Formal.StuckDetector.Detector),
     (Formal.StuckDetector.checkStateFrozen d = false →
       Formal.StuckDetector.checkGoalOscillation d = false →
       Formal.StuckDetector.checkNoProgress d = false →
+      Formal.StuckDetector.checkRepeatedAction d = true →
+      Formal.StuckDetector.detect d = some Formal.StuckDetector.Signal.repeated) ∧
+    (Formal.StuckDetector.checkStateFrozen d = false →
+      Formal.StuckDetector.checkGoalOscillation d = false →
+      Formal.StuckDetector.checkNoProgress d = false →
+      Formal.StuckDetector.checkRepeatedAction d = false →
       Formal.StuckDetector.detect d = none) :=
   @Formal.StuckDetector.detect_precedence
 -- detect_frozen_wins: frozen check holding forces frozen even if osc/noprog hold.
@@ -1160,6 +1166,51 @@ example : ∀ (d : Formal.StuckDetector.Detector), d.history.length ≤ d.counte
     Formal.StuckDetector.checkGoalOscillation (Formal.StuckDetector.acknowledge d
       Formal.StuckDetector.Signal.osc) = false :=
   @Formal.StuckDetector.ack_osc_cannot_fire
+
+-- REPEATED_ACTION_FAILURE role contracts (4th signal, 2026-06-24).
+-- repeated_threshold: fires ↔ max per-action failure tally in the last-20 window ≥ 10.
+example : ∀ (d : Formal.StuckDetector.Detector),
+    Formal.StuckDetector.checkRepeatedAction d = true
+      ↔ Formal.StuckDetector.maxActionFailCount
+          (Formal.StuckDetector.recentSince d d.ackRepeated
+            Formal.StuckDetector.repeatedWindow) ≥ Formal.StuckDetector.repeatedThreshold :=
+  @Formal.StuckDetector.repeated_threshold
+-- repeated_requires_failures: max tally below threshold ⇒ NEVER fires (safety).
+example : ∀ (d : Formal.StuckDetector.Detector),
+    Formal.StuckDetector.maxActionFailCount
+        (Formal.StuckDetector.recentSince d d.ackRepeated Formal.StuckDetector.repeatedWindow)
+        < Formal.StuckDetector.repeatedThreshold →
+    Formal.StuckDetector.checkRepeatedAction d = false :=
+  @Formal.StuckDetector.repeated_requires_failures
+-- repeated_fire_witness: firing exhibits a real action code with ≥threshold failing,
+-- non-noPlan records in the window (NON-VACUITY teeth).
+example : ∀ (d : Formal.StuckDetector.Detector),
+    Formal.StuckDetector.checkRepeatedAction d = true →
+    ∃ a, Formal.StuckDetector.repeatedThreshold ≤ Formal.StuckDetector.actionFailCount a
+          (Formal.StuckDetector.recentSince d d.ackRepeated Formal.StuckDetector.repeatedWindow)
+      ∧ ∃ r ∈ Formal.StuckDetector.recentSince d d.ackRepeated Formal.StuckDetector.repeatedWindow,
+          r.action = a ∧ r.ok = false ∧ r.noPlan = false :=
+  @Formal.StuckDetector.repeated_fire_witness
+-- detect_repeated_last: frozen/osc/noprog false ∧ repeated ⇒ detect = repeated.
+example : ∀ (d : Formal.StuckDetector.Detector),
+    Formal.StuckDetector.checkStateFrozen d = false →
+    Formal.StuckDetector.checkGoalOscillation d = false →
+    Formal.StuckDetector.checkNoProgress d = false →
+    Formal.StuckDetector.checkRepeatedAction d = true →
+    Formal.StuckDetector.detect d = some Formal.StuckDetector.Signal.repeated :=
+  @Formal.StuckDetector.detect_repeated_last
+-- ack_suppression_repeated: post-ack repeated window empty.
+example : ∀ (d : Formal.StuckDetector.Detector), d.history.length ≤ d.counter →
+    Formal.StuckDetector.recentSince (Formal.StuckDetector.acknowledge d
+        Formal.StuckDetector.Signal.repeated)
+      (Formal.StuckDetector.acknowledge d Formal.StuckDetector.Signal.repeated).ackRepeated
+      Formal.StuckDetector.repeatedWindow = [] :=
+  @Formal.StuckDetector.ack_suppression_repeated
+-- ack_repeated_cannot_fire: just-acked repeated cannot re-fire.
+example : ∀ (d : Formal.StuckDetector.Detector), d.history.length ≤ d.counter →
+    Formal.StuckDetector.checkRepeatedAction (Formal.StuckDetector.acknowledge d
+      Formal.StuckDetector.Signal.repeated) = false :=
+  @Formal.StuckDetector.ack_repeated_cannot_fire
 
 /-! ### PriorityBand role contracts.
 

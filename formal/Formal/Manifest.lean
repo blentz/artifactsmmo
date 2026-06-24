@@ -215,6 +215,15 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.StuckDetector.ack_noprog_cannot_fire   -- just-acked noprog cannot re-fire
 #check @Formal.StuckDetector.ack_frozen_cannot_fire   -- just-acked frozen cannot re-fire
 #check @Formal.StuckDetector.ack_osc_cannot_fire      -- just-acked osc cannot re-fire
+-- REPEATED_ACTION_FAILURE (4th signal, 2026-06-24):
+#check @Formal.StuckDetector.repeated_threshold       -- repeated ↔ some action fails ≥10 in last-20
+#check @Formal.StuckDetector.repeated_requires_failures -- max tally <10 ⇒ repeated can NEVER fire
+#check @Formal.StuckDetector.repeated_fire_witness    -- fires ⇒ a real ≥10-failing named action exists (non-vacuity)
+#check @Formal.StuckDetector.detect_repeated_last     -- frozen/osc/noprog false ∧ repeated ⇒ repeated
+#check @Formal.StuckDetector.ack_suppression_repeated -- post-ack repeated window empty
+#check @Formal.StuckDetector.ack_repeated_cannot_fire -- just-acked repeated cannot re-fire
+#check @Formal.StuckDetector.repeated_fires           -- 10-of-20 wedged-action trace ⇒ repeated
+#check @Formal.StuckDetector.repeated_one_short_no_fire -- 9 failures ⇒ none
 -- PriorityBand required roles:
 open Formal.PriorityBand
 #check @Formal.PriorityBand.clamp_lower_bound    -- band-lower: floor ≤ clamped result

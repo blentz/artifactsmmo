@@ -28,44 +28,54 @@ _VERDICT = {
     StuckSignal.STATE_FROZEN: "frozen",
     StuckSignal.GOAL_OSCILLATION: "osc",
     StuckSignal.NO_PROGRESS: "noprog",
+    StuckSignal.REPEATED_ACTION_FAILURE: "repeated",
     None: "none",
 }
 
 
-def _record(state: int, goal: int, no_plan: bool, ok: bool | None = None) -> CycleRecord:
+def _record(state: int, goal: int, no_plan: bool, ok: bool | None = None,
+            action: int | None = None) -> CycleRecord:
     # A no-plan cycle is always recorded as failed in production; an action
     # cycle's succeeded flag is independent (outcome != ok) and defaults True.
+    # The action code defaults to the goal code (so legacy scenarios keep one
+    # action per goal); the repeated-action scenarios pass it explicitly to make
+    # the SAME action recur across different goals / states.
     succeeded = (not no_plan) if ok is None else ok
+    action_code = goal if action is None else action
     return CycleRecord(
         state_key=(state,),
         goal_name=f"g{goal}",
-        action_name=_NO_PLAN if no_plan else f"a{goal}",
+        action_name=_NO_PLAN if no_plan else f"a{action_code}",
         planned_depth=0,
         planner_timed_out=False,
         succeeded=succeeded,
     )
 
 
-def _ack_cutoffs(det: StuckDetector) -> tuple[int, int, int]:
+def _ack_cutoffs(det: StuckDetector) -> tuple[int, int, int, int]:
     return (
         det._ack_index.get(StuckSignal.STATE_FROZEN, 0),
         det._ack_index.get(StuckSignal.GOAL_OSCILLATION, 0),
         det._ack_index.get(StuckSignal.NO_PROGRESS, 0),
+        det._ack_index.get(StuckSignal.REPEATED_ACTION_FAILURE, 0),
     )
 
 
 def _oracle_args(det: StuckDetector) -> list[int]:
     history = list(det._history)
     counter = det._cycle_counter
-    ack_f, ack_o, ack_n = _ack_cutoffs(det)
-    flat: list[int] = [counter, ack_f, ack_o, ack_n, len(history)]
-    # state/goal codes are recovered from the synthetic encoding above.
+    ack_f, ack_o, ack_n, ack_r = _ack_cutoffs(det)
+    flat: list[int] = [counter, ack_f, ack_o, ack_n, ack_r, len(history)]
+    # state/goal/action codes are recovered from the synthetic encoding above;
+    # a <no_plan> record carries action code 0 (the model filters noPlan out of
+    # the repeated-action tally, so its code is irrelevant).
     for rec in history:
         state = rec.state_key[0]
         goal = int(rec.goal_name[1:])
         no_plan = 1 if rec.action_name == _NO_PLAN else 0
         ok = 1 if rec.succeeded else 0
-        flat += [state, goal, no_plan, ok]
+        action = 0 if no_plan else int(rec.action_name[1:])
+        flat += [state, goal, no_plan, ok, action]
     return flat
 
 
@@ -284,4 +294,100 @@ def test_window_boundary_osc_exact_8():
     lean = run_oracle("stuck_detector", [_oracle_args(det)])[0]
     assert lean["osc_window_len"] == 8
     assert det.detect() == StuckSignal.GOAL_OSCILLATION
+    _assert_matches(det)
+
+
+# ---- REPEATED_ACTION_FAILURE scenarios (the 478 bank-loop class) ----
+def test_repeated_action_failure_fires():
+    """Action 'a0' fails 10x among 10 interspersed successes, with state varying
+    every cycle (frozen quiet), one goal code (osc quiet), no <no_plan> (noprog
+    quiet). The class the first three signals all miss."""
+    det = StuckDetector()
+    for i in range(20):
+        if i % 2 == 0:
+            det.record(_record(i, 0, no_plan=False, ok=False, action=0))  # wedged
+        else:
+            det.record(_record(i, 0, no_plan=False, ok=True, action=1))  # progress
+    lean = run_oracle("stuck_detector", [_oracle_args(det)])[0]
+    assert lean["repeated_max_fail"] == 10
+    assert det.detect() == StuckSignal.REPEATED_ACTION_FAILURE
+    _assert_matches(det)
+
+
+def test_repeated_action_one_short_does_not_fire():
+    """Only 9 failures of action 'a0' (one below threshold): must NOT fire.
+    Kills the threshold off-by-one mutant (>= K -> >= K-1 would fire at 9)."""
+    det = StuckDetector()
+    for i in range(20):
+        # first failing slot (i==0) is a success instead -> 9 failures of a0
+        if i % 2 == 0 and i != 0:
+            det.record(_record(i, 0, no_plan=False, ok=False, action=0))
+        else:
+            det.record(_record(i, 0, no_plan=False, ok=True, action=1))
+    lean = run_oracle("stuck_detector", [_oracle_args(det)])[0]
+    assert lean["repeated_max_fail"] == 9
+    assert det.detect() != StuckSignal.REPEATED_ACTION_FAILURE
+    _assert_matches(det)
+
+
+def test_repeated_no_plan_flood_excluded():
+    """10 <no_plan> FAILURES interspersed with successes so the last-4 window is
+    NOT all <no_plan> (noprog stays quiet). The repeated check EXCLUDES <no_plan>,
+    so this must report 'none' — kills the drop-the-no_plan-guard mutant (which
+    would count the 10 no-plans and wrongly fire repeated)."""
+    det = StuckDetector()
+    for i in range(20):
+        if i % 2 == 0:
+            det.record(_record(i, 0, no_plan=True))      # no-plan failure
+        else:
+            det.record(_record(i, 0, no_plan=False, ok=True, action=1))  # success
+    lean = run_oracle("stuck_detector", [_oracle_args(det)])[0]
+    assert lean["repeated_max_fail"] == 0  # no NAMED action failed
+    assert det.detect() is None
+    _assert_matches(det)
+
+
+def test_repeated_flip_failure_sense_guard():
+    """20 failing 'a0' cycles (every cycle fails the wedged action): genuine
+    repeated. Kills the flip-failure-sense mutant ('not succeeded' -> 'succeeded'
+    counts the 0 successes -> none)."""
+    det = StuckDetector()
+    for i in range(20):
+        det.record(_record(i, 0, no_plan=False, ok=False, action=0))
+    lean = run_oracle("stuck_detector", [_oracle_args(det)])[0]
+    assert lean["repeated_max_fail"] == 20
+    assert det.detect() == StuckSignal.REPEATED_ACTION_FAILURE
+    _assert_matches(det)
+
+
+def test_repeated_window_boundary_exact_10_spanning_20():
+    """The 10 failures of 'a0' span exactly the last-20 window, the OLDEST record
+    (index 0) being one of them. A window off-by-one shrink (count=20 -> 19) drops
+    that oldest failure -> 9 -> none, flipping the verdict. Pins the window size."""
+    det = StuckDetector()
+    # index 0 is a failing a0; indices 2,4,...,18 give 9 more -> 10 total.
+    for i in range(20):
+        if i % 2 == 0:
+            det.record(_record(i, 0, no_plan=False, ok=False, action=0))
+        else:
+            det.record(_record(i, 0, no_plan=False, ok=True, action=1))
+    lean = run_oracle("stuck_detector", [_oracle_args(det)])[0]
+    assert lean["repeated_window_len"] == 20
+    assert lean["repeated_max_fail"] == 10
+    assert det.detect() == StuckSignal.REPEATED_ACTION_FAILURE
+    _assert_matches(det)
+
+
+def test_noprog_beats_repeated():
+    """16 failing 'a0' cycles (repeated would fire) then 4 <no_plan> (noprog fires):
+    NO_PROGRESS has strict precedence over REPEATED_ACTION_FAILURE. Kills a
+    detect-order mutation that checks repeated before no_progress."""
+    det = StuckDetector()
+    for i in range(16):
+        det.record(_record(i, 0, no_plan=False, ok=False, action=0))
+    for i in range(16, 20):
+        det.record(_record(i, 0, no_plan=True))
+    lean = run_oracle("stuck_detector", [_oracle_args(det)])[0]
+    assert lean["repeated_max_fail"] == 16  # repeated WOULD fire in isolation
+    assert det.detect() == StuckSignal.NO_PROGRESS
     _assert_matches(det)
