@@ -434,6 +434,30 @@ class TestPursueTask:
         assert MeansKind.PURSUE_TASK not in discretionary
 
 
+def _gd_with_buyer() -> GameData:
+    """GameData with one reachable NPC buyer for 'wooden_shield' (tradeable item)."""
+    gd = GameData()
+    gd._npc_sell_prices = {"vendor": {"wooden_shield": 2}}
+    gd._npc_locations = {"vendor": (1, 1)}
+    gd._item_stats = {
+        "wooden_shield": ItemStats(code="wooden_shield", level=1, type_="shield",
+                                   tradeable=True),
+    }
+    gd._crafting_recipes = {}
+    return gd
+
+
+def test_sell_pressured_fires_on_severe_accumulation_unpressured():
+    from artifactsmmo_cli.ai.tiers.means import MeansKind, _fires
+    gd = _gd_with_buyer()
+    # 40 shields, cap 1 -> steps 5 == SEVERE; bag NOT full (inventory_max 200).
+    severe = make_state(level=1, inventory={"wooden_shield": 40}, inventory_max=200)
+    assert _fires(MeansKind.SELL_PRESSURED, severe, gd, None, _ctx()) is True
+    # 14 shields -> steps 3 < SEVERE, low pressure -> SELL_PRESSURED does NOT fire
+    moderate = make_state(level=1, inventory={"wooden_shield": 14}, inventory_max=200)
+    assert _fires(MeansKind.SELL_PRESSURED, moderate, gd, None, _ctx()) is False
+
+
 def test_low_yield_cancel_absent_when_alt_repr_found_but_no_yield(tmp_path):
     """alt_repr is found but expected_yield_per_cycle returns 0 samples for it → no fire."""
     store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
