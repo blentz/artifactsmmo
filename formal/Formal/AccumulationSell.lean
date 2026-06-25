@@ -30,8 +30,8 @@ namespace Formal.AccumulationSell
 (mirrors `ACCUM_MULT = 5`). -/
 def accMult : Nat := 5
 
-/-- `accumulation_steps ≥ severeSteps` (held ≥ cap*32) escalates the sell above
-the progression band (mirrors `SEVERE_STEPS = 5`). -/
+/-- `accumulation_steps ≥ severeSteps` (held ≥ cap*32) marks a SEVERE hoard,
+which takes the top of the discretionary sell band (mirrors `SEVERE_STEPS = 5`). -/
 def severeSteps : Nat := 5
 
 /-- The doubling loop, fuel-bounded structural recursion. `bound` starts at
@@ -160,7 +160,7 @@ theorem fuel_pow (f bound held k : Nat) (hk : 1 ≤ k)
 
 /-- `steps_threshold`: reaching `severeSteps` (5) accumulation steps means the
 held quantity is at least `32 = 2^5` times the effective cap — the geometric
-severity that escalates the sell above the progression band. -/
+severity that sends the sell to the top of the discretionary band. -/
 theorem steps_threshold (held cap : Nat)
     (h : severeSteps ≤ accumulationSteps held cap) :
     max cap 1 * 32 ≤ held := by

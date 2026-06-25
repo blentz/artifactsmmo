@@ -75,7 +75,8 @@ def sellable_accumulation(state: WorldState, game_data: GameData) -> dict[str, i
 
 def worst_accumulation_steps(state: WorldState, game_data: GameData) -> int:
     """Max `accumulation_steps` over sellable over-ratio items (0 if none) —
-    the severity signal driving the SELL_PRESSURED escalation."""
+    the severity signal driving `SellInventoryGoal.value` (a SEVERE hoard, steps
+    >= SEVERE_STEPS, takes the top of the discretionary band)."""
     worst = 0
     for code, held in state.inventory.items():
         if held <= 0 or not _is_sellable(code, game_data):
