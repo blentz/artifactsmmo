@@ -173,10 +173,13 @@ class TestUsefulQuantityCap:
         # b IS reachable from a once: need 5 b for 5 a.
         assert useful_quantity_cap("b", state, gd) >= 5
 
-    def test_cap_zero_for_non_healing_consumable(self):
-        """Only hp_restore>0 consumables qualify for the keep cap. A
-        consumable with hp_restore=0 (e.g. some buff potion) gets the
-        normal recipe/task/equip rules."""
+    def test_cap_protects_non_healing_consumable(self):
+        """EVERY `type == "consumable"` item is kept, not just hp_restore>0
+        ones: a non-healing consumable (teleport potion, gold-bag potion, buff
+        dust) is used deliberately and must never be auto-deleted/bank-drained
+        as junk. API `type`-driven keep-floor (CONSUMABLE_KEEP), so the cap is
+        999 even with hp_restore=0 — the prior `== 0` was the bug (recall_potion
+        / forest_bank_potion / bag_of_gold fell to cap 0 and were delete-eligible)."""
         gd = GameData()
         gd._item_stats = {
             "buff_dust": ItemStats(code="buff_dust", level=1,
@@ -184,7 +187,23 @@ class TestUsefulQuantityCap:
         }
         gd._crafting_recipes = {}
         state = make_state()
-        assert useful_quantity_cap("buff_dust", state, gd) == 0
+        assert useful_quantity_cap("buff_dust", state, gd) == 999
+
+    def test_cap_protects_every_currency_type(self):
+        """EVERY `type == "currency"` item is protected (cap 999), not just
+        tasks_coin by hardcoded code. The live server defines event_ticket,
+        corrupted_gem, sandwhisper_coin — all economic currency that must never
+        be auto-deleted/bank-drained. API `type`-driven so future currencies are
+        covered too."""
+        gd = GameData()
+        gd._item_stats = {
+            "event_ticket": ItemStats(code="event_ticket", level=1, type_="currency"),
+            "sandwhisper_coin": ItemStats(code="sandwhisper_coin", level=1, type_="currency"),
+        }
+        gd._crafting_recipes = {}
+        state = make_state()
+        assert useful_quantity_cap("event_ticket", state, gd) == 999
+        assert useful_quantity_cap("sandwhisper_coin", state, gd) == 999
 
     def test_cap_protects_tasks_coin_at_scale(self):
         """Trace 2026-06-05T02:55: Robby deleted 3 tasks_coin (out of 12)

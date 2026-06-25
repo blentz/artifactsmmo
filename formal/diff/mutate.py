@@ -272,6 +272,20 @@ INVENTORY_CAPS_MUTATIONS = [
     ("inventory_caps: overstock off-by-one (+1)",
      "            excess[code] = over",
      "            excess[code] = over + 1"),
+    # drop the currency keep-floor: currencies (event_ticket, sandwhisper_coin,
+    # …) fall to cap 0 and become delete/drain-eligible (the categorization bug).
+    ("inventory_caps: drop currency keep-floor",
+     '        if stats.type_ == "currency":\n'
+     "            return CURRENCY_KEEP",
+     '        if stats.type_ == "currency":\n'
+     "            return 0"),
+    # drop the consumable keep-floor: non-hp consumables (teleport / gold-bag
+    # potions) fall to cap 0 and become delete/drain-eligible.
+    ("inventory_caps: drop consumable keep-floor",
+     '        if stats.type_ == "consumable":\n'
+     "            return CONSUMABLE_KEEP",
+     '        if stats.type_ == "consumable":\n'
+     "            return 0"),
 ]
 
 

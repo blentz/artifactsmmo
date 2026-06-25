@@ -4,7 +4,9 @@ agree with the proved Lean `cap` / `overstock`.
 `useful_quantity_cap` reads four game-data/state inputs:
 * `recipe_max` = `game_data.max_recipe_demand(code)`  -> recipe component
 * the active items-task demand (`task_type == "items" ∧ task_code == code`)
-* `ACTION_CONSUMABLES_CAP.get(code, 0)`  (9 for tasks_coin, else 0)
+* the non-recipe keep-floor `_non_recipe_keep_floor(code, stats)`: API
+  `type`-driven — 999 for `currency`/`consumable`, else the
+  `ACTION_CONSUMABLES_CAP` code override (else 0)
 * equippable: `ITEM_TYPE_TO_SLOTS.get(stats.type_)` truthy
 plus the equipped floor (`code in state.equipment.values()`).
 
@@ -12,10 +14,11 @@ We control all of them exactly to isolate the max/floor clamp against Lean,
 through a REAL GameData (P3b de-monkeypatch — the no-mock rule):
 * a one-recipe world `END ← recipe_demand × code` realizes any
   `max_recipe_demand(code) == recipe_demand` (empty catalog for demand 0).
-* a real ItemStats catalog entry whose `type_` is equippable ("weapon") or
-  not ("resource") matches the chosen `equippable` flag; `hp_restore`
-  drives the consumable cap.
-* The item code is chosen as `tasks_coin` (action_cap 9) or `"X"` (action_cap 0).
+* a real ItemStats catalog entry whose `type_` is sampled across the API
+  taxonomy (weapon → equippable; resource; currency; consumable) so the
+  type-driven keep-floor is exercised; `hp_restore` drives the consumable cap.
+* The shell's `action_cap` is read from the real `_non_recipe_keep_floor`, the
+  same value the production wrapper feeds the proven Lean `cap` core.
 * The WorldState carries the items-task demand and the equipment so the Python
   task_cap and equipped floor match the Lean inputs.
 
@@ -28,7 +31,7 @@ from hypothesis import strategies as st
 import artifactsmmo_cli.ai.inventory_caps as ic_mod
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
+from artifactsmmo_cli.ai.world_state import WorldState
 from formal.diff.oracle_client import run_oracle
 
 
@@ -79,8 +82,11 @@ def _gd(code: str, recipe_demand: int, stats: ItemStats) -> GameData:
 @settings(max_examples=300)
 @given(
     recipe_demand=st.integers(min_value=0, max_value=12),
-    equippable=st.booleans(),
-    use_coin=st.booleans(),
+    # Sample the full API `type` taxonomy so the SHELL's type-driven
+    # `_non_recipe_keep_floor` (currency / consumable keep) is exercised, not
+    # just weapon/resource. The Lean `cap` core takes actionCap as a parameter,
+    # so the model is unchanged — we feed it the SAME action_cap the shell uses.
+    item_type=st.sampled_from(["weapon", "resource", "currency", "consumable"]),
     is_healing=st.booleans(),
     task_remaining=st.integers(min_value=0, max_value=30),
     equipped=st.booleans(),
@@ -90,21 +96,25 @@ def _gd(code: str, recipe_demand: int, stats: ItemStats) -> GameData:
     batch_buffer=st.integers(min_value=1, max_value=5),
     safety_floor=st.integers(min_value=1, max_value=5),
 )
-def test_python_matches_lean(recipe_demand, equippable, use_coin, is_healing,
+def test_python_matches_lean(recipe_demand, item_type, is_healing,
                              task_remaining, equipped, qty, batch_buffer,
                              safety_floor):
-    code = TASKS_COIN_CODE if use_coin else "X"
-    # Read action_cap from the actual Python constant (raised to 999 by
-    # 602f7b4 because tasks_coin stacks). The Lean model takes actionCap
-    # as a parameter, so the model stays correct; pass the same value the
-    # Python code uses.
-    action_cap = ic_mod.ACTION_CONSUMABLES_CAP.get(code, 0)
-    item_type = "weapon" if equippable else "resource"
+    code = "X"
     # hp_restore activates the consumable cap (f1f8941, c3b8dfa). Generate
     # both branches: hp_restore=0 (cap inert) AND hp_restore>0 (cap kicks in).
     hp_restore_val = 20 if is_healing else 0
     stats = ItemStats(code=code, level=1, type_=item_type,
                        hp_restore=hp_restore_val)
+    # action_cap is whatever the SHELL feeds the proven core. Reimplement the
+    # type-driven rule INDEPENDENTLY here (NOT by calling _non_recipe_keep_floor)
+    # so a mutation of the production helper diverges py_cap from the oracle —
+    # i.e. the differential has TEETH on the keep-floor categorization.
+    if item_type == "currency":
+        action_cap = ic_mod.CURRENCY_KEEP
+    elif item_type == "consumable":
+        action_cap = ic_mod.CONSUMABLE_KEEP
+    else:
+        action_cap = ic_mod.ACTION_CONSUMABLES_CAP.get(code, 0)
 
     game_data = _gd(code, recipe_demand, stats)
     state = _make_state(code, task_remaining, equipped, qty)

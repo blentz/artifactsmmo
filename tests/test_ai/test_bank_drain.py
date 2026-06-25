@@ -27,11 +27,48 @@ def _gd() -> GameData:
     return gd
 
 
-def test_excess_drains_far_gated_bank_junk():
-    """sap (no recipe use, useful cap 0) held only in the bank → drain all of it."""
+def test_excess_drains_truly_useless_bank_junk():
+    """sap (no recipe consumer in this catalog, useful cap 0) held only in the
+    bank → genuine junk, drain all of it."""
     gd = _gd()
     state = make_state(level=5, bank_items={"sap": 50})
     assert bank_drain_excess(state, gd, protected_codes=frozenset()) == {"sap": 50}
+
+
+def test_excess_keeps_eventual_recipe_demand_for_far_gated_material():
+    """A far-skill-gated material that a recipe WILL consume must NOT be deleted
+    from the bank: the bank keeps its full eventual recipe demand (max_recipe_
+    demand), draining only the surplus beyond it. Protects a level-10+ drop
+    (gold_ore, jasper_crystal) banked while the crafting skill is still too low."""
+    gd = GameData()
+    # "rare_ore" has NO near-term use (high crafting_level) but a recipe at
+    # mining level 20 consumes 8 of it. useful_quantity_cap is 0 at level 5
+    # (skill-gated), but the bank must keep the eventual demand of 8.
+    gd._item_stats = {
+        "rare_ore": ItemStats(code="rare_ore", level=1, type_="resource"),
+        "rare_bar": ItemStats(code="rare_bar", level=20, type_="resource",
+                              crafting_skill="mining", crafting_level=20),
+    }
+    gd._crafting_recipes = {"rare_bar": {"rare_ore": 8}}
+    state = make_state(level=5, skills={"mining": 5}, bank_items={"rare_ore": 50})
+    # cap = max(useful_cap=0, max_recipe_demand=8) = 8 -> drain 50 - 8 = 42.
+    assert bank_drain_excess(state, gd, protected_codes=frozenset()) == {"rare_ore": 42}
+    # At/under the eventual demand, nothing drains.
+    within = make_state(level=5, skills={"mining": 5}, bank_items={"rare_ore": 8})
+    assert bank_drain_excess(within, gd, protected_codes=frozenset()) == {}
+
+
+def test_excess_never_drains_currency_or_consumable_from_bank():
+    """Currency and (non-hp) consumables are protected by useful_quantity_cap's
+    type-driven floor, so the bank never drains them as junk."""
+    gd = GameData()
+    gd._item_stats = {
+        "event_ticket": ItemStats(code="event_ticket", level=1, type_="currency"),
+        "recall_potion": ItemStats(code="recall_potion", level=1, type_="consumable"),
+    }
+    gd._crafting_recipes = {}
+    state = make_state(level=5, bank_items={"event_ticket": 30, "recall_potion": 30})
+    assert bank_drain_excess(state, gd, protected_codes=frozenset()) == {}
 
 
 def test_excess_keeps_useful_cap_in_bank():
