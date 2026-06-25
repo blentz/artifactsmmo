@@ -88,3 +88,7 @@ logs.txt
 
 # Brainstorming visual-companion scratch
 .superpowers/
+
+# macro-research / ad-hoc report output (never commit)
+report.md
+report.md.
