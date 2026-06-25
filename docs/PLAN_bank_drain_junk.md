@@ -63,6 +63,28 @@ shippable (the MeansKind↔Lean ladder-fires differential + means-coverage break
 until the Lean side lands), so it must go in one lockstep. Best executed in a
 fresh focused session against this recipe.
 
+## STATUS: BUILT 2026-06-24 (branch feat/drain-bank-junk)
+
+Executed exactly per the recipe. The `.withdrawItem` ActionKind already existed
+(unused by other means), so NO new ActionKind / no `productionActionKinds` count
+change — drainBankJunk routes to it and `applyActionKind .withdrawItem` flips the
+new `bankJunkNonempty` flag false (fire-and-lose, mirroring `.recycle`).
+
+- Python: `bank_drain.bank_drain_excess` (total-holdings cap), `DrainBankJunkGoal`,
+  `MeansKind.DRAIN_BANK_JUNK` (enum-last for index stability; DISCRETIONARY_ORDER
+  slot below RECYCLE_SURPLUS), `_fires`, `map_means`, decide_key repr. 11 unit
+  tests, 100% coverage on both new modules.
+- Lean: `State.bankJunkNonempty`; `drainBankJunkFires` + `fires`; CycleStep
+  planFor + measure-descent case; CumulativeProgress / CycleStepCharacterization
+  cases; FightFairness suffix; allInLadderOrder = 26; LadderEval / GameDataFixture
+  literals; DecideKey enum + repr. Root `lake build` green (6289 jobs).
+- Oracle/diff/mutation: Oracle State arg[31] + decide_key index 13; sim mirror;
+  ladder-fires differential arg[31] from the REAL `bank_drain_excess` helper +
+  3 drive/near-miss tests + 1 fill-boundary test; decide_key `_MEANS_INDEX` 13;
+  2 mutation anchors (comparator + drop-conjunct), both verified KILLED.
+
+Remaining: full `formal/gate.sh` pass, then merge.
+
 ## Note
 This is the same "value/need cap on TOTAL holdings" the inventory fix applied to
 the bag — now extended to the bank. The 228 sap clears over a few bag-loads once

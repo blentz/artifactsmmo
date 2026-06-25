@@ -1132,6 +1132,18 @@ def test_drain_bank_junk_near_miss_empty_bank() -> None:
     assert lean[LadderMeans.DRAIN_BANK_JUNK] is False
 
 
+def test_drain_bank_junk_fill_boundary() -> None:
+    # Bank holds a drainable junk item (count 1, cap 0). DRAIN_BANK_JUNK gates on
+    # the SAME strict `< 0.85` fill as recycleSurplus/sellIdle: fill 17/20 = 0.85
+    # does NOT fire (no room to withdraw); 16/20 = 0.80 fires. Pins the comparator.
+    _assert_full_agreement(_base_scn(bank_accessible=True, bank_known=True,
+                                     bank_capacity=50, bank_items_count=1,
+                                     inventory_max=20, junk_qty=17))
+    _assert_full_agreement(_base_scn(bank_accessible=True, bank_known=True,
+                                     bank_capacity=50, bank_items_count=1,
+                                     inventory_max=20, junk_qty=16))
+
+
 # ===========================================================================
 # Brick 4b — Cluster A (combat / predict_win): restForCombat + maintainConsumables.
 #
