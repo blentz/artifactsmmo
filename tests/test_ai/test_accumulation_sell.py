@@ -1,9 +1,26 @@
 from artifactsmmo_cli.ai.accumulation_sell import (
-    ACCUM_MULT, SEVERE_STEPS, accumulation_excess, accumulation_steps,
+    ACCUM_MULT, SEVERE_STEPS, _is_sellable, accumulation_excess, accumulation_steps,
     sellable_accumulation, worst_accumulation_steps,
 )
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from tests.test_ai.fixtures import make_state
+
+
+def test_is_sellable_requires_a_reachable_buyer():
+    """A buyer in the price table whose npc_location is None (dormant event
+    merchant) does NOT make the item sellable; a reachable buyer does."""
+    gd = GameData()
+    gd._item_stats = {"x": ItemStats(code="x", level=1, type_="resource", tradeable=True)}
+    gd._npc_sell_prices = {"dormant": {"x": 5}}
+    gd._crafting_recipes = {}
+    gd._npc_locations = {}                       # buyer exists but unreachable
+    assert _is_sellable("x", gd) is False
+    gd._npc_locations = {"dormant": (1, 1)}      # now reachable
+    assert _is_sellable("x", gd) is True
+    # also excluded from the accumulation set when unreachable
+    gd._npc_locations = {}
+    state = make_state(level=1, inventory={"x": 40})
+    assert sellable_accumulation(state, gd) == {}
 
 
 def _gd_with_buyer() -> GameData:
