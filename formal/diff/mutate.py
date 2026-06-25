@@ -21,6 +21,7 @@ SRC = ROOT / "src" / "artifactsmmo_cli" / "utils" / "pathfinding.py"
 TASK_BATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_batch.py"
 INVENTORY_CAPS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_caps.py"
 ACCUMULATION_SELL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "accumulation_sell.py"
+DOMINANCE_PARETO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "dominance_pareto.py"
 COMBAT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat.py"
 PROJECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "projection.py"
 GATHERING_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gathering.py"
@@ -336,6 +337,25 @@ ACCUMULATION_SELL_MUTATIONS = [
     ("accumulation_sell: keep eff_cap not true cap",
      "    keep = cap if cap > 0 else 0",
      "    keep = cap if cap > 0 else 1"),
+]
+
+
+# dominance_pareto (pareto_dominates) mutations. Killed by
+# formal/diff/test_dominance_pareto_diff.py (real core vs the proved
+# Formal.DominancePareto.paretoDominates through the `pareto_dominates` oracle).
+DOMINANCE_PARETO_MUTATIONS = [
+    # drop the strict-win requirement: an equal-everywhere peer wrongly dominates.
+    ("dominance_pareto: drop gt_some (ties dominate)",
+     "    return geq_all and gt_some",
+     "    return geq_all"),
+    # geq comparator >= -> > : a tie on one component wrongly un-dominates.
+    ("dominance_pareto: geq_all >= -> >",
+     "    geq_all = all(p >= i for p, i in zip(peer_scores, item_scores))",
+     "    geq_all = all(p > i for p, i in zip(peer_scores, item_scores))"),
+    # strict comparator > -> >= : equal vectors wrongly dominate.
+    ("dominance_pareto: gt_some > -> >=",
+     "    gt_some = any(p > i for p, i in zip(peer_scores, item_scores))",
+     "    gt_some = any(p >= i for p, i in zip(peer_scores, item_scores))"),
 ]
 
 
@@ -3643,6 +3663,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_inventory_profile_diff.py", survivors)
     run_group(ACCUMULATION_SELL_SRC, ACCUMULATION_SELL_MUTATIONS,
               "formal/diff/test_accumulation_sell_diff.py", survivors)
+    run_group(DOMINANCE_PARETO_SRC, DOMINANCE_PARETO_MUTATIONS,
+              "formal/diff/test_dominance_pareto_diff.py", survivors)
     run_group(COMBAT_SRC, PREDICT_WIN_MUTATIONS,
               "formal/diff/test_predict_win_diff.py", survivors)
     run_group(COMBAT_SRC, PREDICT_WIN_LIFESTEAL_MUTATIONS,
