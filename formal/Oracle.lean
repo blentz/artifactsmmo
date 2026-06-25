@@ -1085,7 +1085,8 @@ def runDecideKey (args : Array Json) : Json :=
       | 9 => .recycleSurplus
       | 10 => .bankExpand
       | 11 => .wait
-      | _ => .maintainConsumables
+      | 12 => .maintainConsumables
+      | _ => .drainBankJunk
     Json.mkObj [("repr", Json.str (Formal.DecideKey.goalReprOfMeans k))]
 
 /-- progression_reserve: args layout (all Nat ≥ 0):
@@ -2058,9 +2059,10 @@ ARG LAYOUT (flat ints; index → field):
 * `[28]` objectiveStepFires           (Bool 0/1)
 * `[29]` maintainConsumablesFires     (Bool 0/1)
 * `[30]` bankItemsKnown               (Bool 0/1)
+* `[31]` bankJunkNonempty             (Bool 0/1)
 
 Emits a JSON object: one Bool field per MeansKind keyed by `meansKindName`
-(23 fields), plus `"selected"`: the name of `productionLadder s` or `null`. -/
+(26 fields), plus `"selected"`: the name of `productionLadder s` or `null`. -/
 def runLadder (args : Array Json) : Json :=
   let n := fun i => (intArg args i).toNat
   let b := fun i => intArg args i != 0
@@ -2084,7 +2086,8 @@ def runLadder (args : Array Json) : Json :=
     recyclableSurplusNonempty := b 23, taskFeasibleProjected := b 24,
     restForCombatReady := b 25, gearReviewFires := b 26,
     craftReliefFires := b 27, objectiveStepFires := b 28,
-    maintainConsumablesFires := b 29, bankItemsKnown := b 30 }
+    maintainConsumablesFires := b 29, bankItemsKnown := b 30,
+    bankJunkNonempty := b 31 }
   let firesFields : List (String × Json) :=
     allInLadderOrder.map (fun k => (meansKindName k, Json.bool (fires k s)))
   let selected : Json := match productionLadder s with

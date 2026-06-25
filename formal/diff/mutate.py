@@ -2843,6 +2843,19 @@ LADDER_MEANS_FIRES_MUTATIONS = [
         "        return state.gold >= game_data.next_expansion_cost",
         "        return state.gold > game_data.next_expansion_cost",
     ),
+    (
+        "ladder/means: DRAIN_BANK_JUNK fill comparator < -> <= (boundary 0.85 leaks)",
+        "        return (_used_fraction(state) < SELL_PRESSURE_FRACTION\n"
+        "                and bool(bank_drain_excess(",
+        "        return (_used_fraction(state) <= SELL_PRESSURE_FRACTION\n"
+        "                and bool(bank_drain_excess(",
+    ),
+    (
+        "ladder/means: DRAIN_BANK_JUNK drop bank_drain_excess conjunct (fires on empty bank)",
+        "                and bool(bank_drain_excess(\n"
+        "                    state, game_data, ctx.target_gear | ctx.target_tools)))",
+        "                and True)",
+    ),
 ]
 
 

@@ -706,6 +706,9 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
     | recycleSurplus =>
       show (applyActionKind .recycle s).level ≥ s.level
       simp [applyActionKind]
+    | drainBankJunk =>
+      show (applyActionKind .withdrawItem s).level ≥ s.level
+      simp [applyActionKind]
     | bankExpand =>
       show (applyActionKind .buyBankExpansion s).level ≥ s.level
       simp [applyActionKind]
@@ -1110,6 +1113,7 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
   -- Out-of-scope kinds: ruled out by hmem.
   | completeTask    => exfalso; revert hmem; unfold progressMeans; decide
   | recycleSurplus  => exfalso; revert hmem; unfold progressMeans; decide
+  | drainBankJunk   => exfalso; revert hmem; unfold progressMeans; decide
   | recycleRelief   => exfalso; revert hmem; unfold progressMeans; decide
   | sellRelief      => exfalso; revert hmem; unfold progressMeans; decide
   | maintainConsumables => exfalso; revert hmem; unfold progressMeans; decide

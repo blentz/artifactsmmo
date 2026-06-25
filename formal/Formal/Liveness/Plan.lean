@@ -460,7 +460,12 @@ noncomputable def applyActionKind : ActionKind → State → State
   -- recyclable-surplus signal (single-action semantics, like .npcSell clears
   -- sellable). Sufficient to flip `recycleSurplusFires` off post-recycle.
   | .recycle, s => { s with recyclableSurplusNonempty := false }
-  -- All other 5 kinds: no-op (see module docstring; future phases will
+  -- WithdrawItemAction (withdraw_item.py) used by DRAIN_BANK_JUNK: pulls the
+  -- over-cap bank junk into the bag, clearing the bank-junk signal (single-
+  -- action semantics, like .recycle clears recyclable-surplus). Sufficient to
+  -- flip `drainBankJunkFires` off post-withdraw — fire-and-lose.
+  | .withdrawItem, s => { s with bankJunkNonempty := false }
+  -- All other 4 kinds: no-op (see module docstring; future phases will
   -- replace each with its specific semantics).
   | _, s => s
 

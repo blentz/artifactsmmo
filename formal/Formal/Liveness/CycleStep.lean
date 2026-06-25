@@ -142,6 +142,7 @@ noncomputable def planFor : MeansKind → State → Plan
   | .maintainConsumables , _ => [.craft]  -- PLAN #6a: cook/brew a heal
   | .sellIdle         , _ => [.npcSell]
   | .recycleSurplus   , _ => [.recycle]
+  | .drainBankJunk    , _ => [.withdrawItem]
   | .bankExpand       , _ => [.buyBankExpansion]
   | .wait             , _ => [.wait]
 
@@ -598,6 +599,20 @@ theorem cycleStep_progress_or_waits
                   = false := rfl
     have hpre' : s.recyclableSurplusNonempty = false := by
       have : (applyActionKind .recycle s).recyclableSurplusNonempty = false := hpost
+      rw [heq] at this; exact this
+    rw [hpre] at hpre'; cases hpre'
+  | drainBankJunk =>
+    left
+    have hcs : cycleStep s = applyActionKind .withdrawItem s := by
+      unfold cycleStep; rw [hk]; rfl
+    rw [hcs]
+    simp only [fires, drainBankJunkFires, Bool.and_eq_true] at hfires
+    have hpre : s.bankJunkNonempty = true := hfires.2
+    intro heq
+    have hpost : ({s with bankJunkNonempty := false} : State).bankJunkNonempty
+                  = false := rfl
+    have hpre' : s.bankJunkNonempty = false := by
+      have : (applyActionKind .withdrawItem s).bankJunkNonempty = false := hpost
       rw [heq] at this; exact this
     rw [hpre] at hpre'; cases hpre'
   | bankExpand =>

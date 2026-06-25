@@ -84,6 +84,9 @@ inductive MeansKind where
                         --                     heals when combat-active + under-stocked
   | sellIdle            -- SELL_IDLE,          means.py:100
   | recycleSurplus      -- RECYCLE_SURPLUS,    means.py (2026-06-14)
+  | drainBankJunk       -- DRAIN_BANK_JUNK,    means.py (2026-06-24): withdraw
+                        --                     over-cap bank junk so DiscardOverstock
+                        --                     can shed it (fire-and-lose, like recycle)
   | bankExpand          -- BANK_EXPAND,        means.py:103
   -- Last-resort fallback (Phase 20e-v2 step 1, means.py:32, means.py:115)
   | wait                -- WAIT,               always fires
@@ -98,10 +101,10 @@ def allInLadderOrder : List MeansKind :=
    .claimPending, .completeTask, .sellPressured, .lowYieldCancel, .taskCancel,
    .objectiveStep,
    .pursueTask, .acceptTask, .taskExchange, .maintainConsumables,
-   .sellIdle, .recycleSurplus, .bankExpand,
+   .sellIdle, .recycleSurplus, .drainBankJunk, .bankExpand,
    .wait]
 
-/-- Sanity: 25 constructors. -/
-example : allInLadderOrder.length = 25 := by decide
+/-- Sanity: 26 constructors. -/
+example : allInLadderOrder.length = 26 := by decide
 
 end Formal.Liveness.MeansKind
