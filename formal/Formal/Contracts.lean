@@ -4,6 +4,7 @@ import Formal.Liveness.ItemsTaskRun
 import Formal.TaskBatch
 import Formal.InventoryCaps
 import Formal.AccumulationSell
+import Formal.DominancePareto
 import Formal.InventoryProfile
 import Formal.PredictWin
 import Formal.LoadoutProjection
@@ -232,6 +233,25 @@ example : ∀ (held cap : Nat),
     Formal.AccumulationSell.severeSteps ≤ Formal.AccumulationSell.accumulationSteps held cap →
     max cap 1 * 32 ≤ held :=
   @Formal.AccumulationSell.steps_threshold
+
+/-! ### DominancePareto role contracts (per-stat Pareto-domination sell gate).
+
+Fully-qualified — `Formal.DominancePareto` is NOT opened, so these pin the exact
+List-Int statements without name clashes. -/
+
+-- pareto_implies_geq: a dominating peer is ≥ the item at every common index.
+example : ∀ (peer item : List Int) (k : Nat) (hk : k < peer.length) (hk2 : k < item.length),
+    Formal.DominancePareto.paretoDominates peer item = true →
+    item.get ⟨k, hk2⟩ ≤ peer.get ⟨k, hk⟩ :=
+  @Formal.DominancePareto.pareto_implies_geq
+-- pareto_needs_strict: domination requires a strict win somewhere (ties never dominate).
+example : ∀ (peer item : List Int),
+    Formal.DominancePareto.paretoDominates peer item = true →
+    Formal.DominancePareto.gtSome peer item = true :=
+  @Formal.DominancePareto.pareto_needs_strict
+-- pareto_irreflexive: a vector never dominates itself (no piece sells itself).
+example : ∀ (v : List Int), Formal.DominancePareto.paretoDominates v v = false :=
+  @Formal.DominancePareto.pareto_irreflexive
 
 /-! ### InventoryProfile role contracts (per-goal soft-target overstock, spec 2026-06-07).
 

@@ -26,6 +26,7 @@ import Formal.SkillGateFastFail
 import Formal.LeafAttainable
 import Formal.CompleteTaskIncome
 import Formal.AccumulationSell
+import Formal.DominancePareto
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
@@ -62,6 +63,10 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.AccumulationSell.excess_sells_down_to_cap      -- fired branch ⇒ shed leaves exactly cap held
 #check @Formal.AccumulationSell.excess_monotone              -- ↑held ⇒ ≥ excess (monotone shed)
 #check @Formal.AccumulationSell.steps_threshold             -- severeSteps ≤ steps ⇒ max(cap,1)*32 ≤ held
+-- DominancePareto required roles (per-stat Pareto-domination sell gate):
+#check @Formal.DominancePareto.pareto_implies_geq           -- dominating peer ≥ item at every common index
+#check @Formal.DominancePareto.pareto_needs_strict          -- domination requires a strict win somewhere
+#check @Formal.DominancePareto.pareto_irreflexive           -- a vector never dominates itself (no self-sell)
 -- InventoryProfile required roles (per-goal soft-target overstock core, spec 2026-06-07):
 #check @Formal.InventoryProfile.overstock_exact            -- pins the space-driven overstock formula
 #check @Formal.InventoryProfile.no_overstock_below_watermark -- below watermark ⇒ 0 overstock (space-driven)
