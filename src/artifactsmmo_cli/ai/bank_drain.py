@@ -38,7 +38,10 @@ Pure: reads state/game_data only, no I/O.
 """
 
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.inventory_caps import useful_quantity_cap
+from artifactsmmo_cli.ai.inventory_caps import (
+    level_distance_keep_ceiling,
+    useful_quantity_cap,
+)
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -61,6 +64,12 @@ def bank_drain_excess(
         # cap is 0 for them, which is why they deposit here in the first place).
         cap = max(useful_quantity_cap(code, state, game_data),
                   game_data.max_recipe_demand(code))
+        # "Only keep currently useful items": the level-distance ceiling caps how
+        # much of a non-unique far-out-of-band material the bank hoards (a level-10+
+        # drop is held to <=5/10, not its full recipe demand — re-gather when in band).
+        ceiling = level_distance_keep_ceiling(game_data.item_stats(code), state.level)
+        if ceiling is not None and cap > ceiling:
+            cap = ceiling
         inv_qty = state.inventory.get(code, 0)
         room_under_cap = cap - inv_qty
         allowed_in_bank = room_under_cap if room_under_cap > 0 else 0

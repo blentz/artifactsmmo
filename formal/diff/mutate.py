@@ -286,6 +286,25 @@ INVENTORY_CAPS_MUTATIONS = [
      "            return CONSUMABLE_KEEP",
      '        if stats.type_ == "consumable":\n'
      "            return 0"),
+    # drop the level-distance ceiling clamp: far-out-of-band items keep their
+    # full base cap (999 / full recipe demand) instead of <=10/<=5.
+    ("inventory_caps: drop level-distance ceiling clamp",
+     "    ceiling = level_distance_keep_ceiling(stats, state.level)\n"
+     "    if ceiling is not None and base > ceiling:\n"
+     "        return ceiling\n"
+     "    return base",
+     "    return base"),
+    # drop the unique (non-tradeable) exemption: bound/unique items wrongly get
+    # the level ceiling applied.
+    ("inventory_caps: drop unique exemption in level ceiling",
+     "    if stats is None or stats.tradeable is False:\n"
+     "        return None",
+     "    if stats is None:\n"
+     "        return None"),
+    # weaken the far ceiling (5 -> 6): keep one too many of a 10+-levels item.
+    ("inventory_caps: KEEP_CEILING_FAR 5 -> 6",
+     "KEEP_CEILING_FAR = 5",
+     "KEEP_CEILING_FAR = 6"),
 ]
 
 

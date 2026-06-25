@@ -58,6 +58,27 @@ def test_excess_keeps_eventual_recipe_demand_for_far_gated_material():
     assert bank_drain_excess(within, gd, protected_codes=frozenset()) == {}
 
 
+def test_excess_caps_far_level_material_by_distance_ceiling():
+    """A far-out-of-band non-unique material is NOT hoarded at its full recipe
+    demand: the level-distance ceiling clamps the bank keep to 5 (10+ levels)
+    so a level-10+ drop is held to a token amount, not its 80-unit demand."""
+    gd = GameData()
+    gd._item_stats = {
+        "future_ore": ItemStats(code="future_ore", level=20, type_="resource"),
+        "future_bar": ItemStats(code="future_bar", level=20, type_="resource",
+                                crafting_skill="mining", crafting_level=20),
+    }
+    gd._crafting_recipes = {"future_bar": {"future_ore": 80}}
+    # char level 5, item level 20 -> |Δ|=15 >= 10 -> ceiling 5. Demand is 80 but
+    # the ceiling caps the keep at 5 -> drain 100 - 5 = 95.
+    state = make_state(level=5, bank_items={"future_ore": 100})
+    assert bank_drain_excess(state, gd, protected_codes=frozenset()) == {"future_ore": 95}
+    # When the character is in band (level 18, |Δ|=2), no ceiling -> keep full
+    # demand 80 -> drain 100 - 80 = 20.
+    in_band = make_state(level=18, bank_items={"future_ore": 100})
+    assert bank_drain_excess(in_band, gd, protected_codes=frozenset()) == {"future_ore": 20}
+
+
 def test_excess_never_drains_currency_or_consumable_from_bank():
     """Currency and (non-hp) consumables are protected by useful_quantity_cap's
     type-driven floor, so the bank never drains them as junk."""
