@@ -1,6 +1,7 @@
 import Formal
 import Formal.AccumulationSell
 import Formal.CraftPlanDriver
+import Formal.DominancePareto
 import Lean.Data.Json
 
 open Lean Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin
@@ -124,6 +125,15 @@ def intArg (xs : Array Json) (i : Nat) : Int := (xs[i]!.getInt?).toOption.getD 0
 encodes strings directly as `Json.str`, so this reads the REAL string (no
 interning), letting the oracle call String-keyed extracted cores unchanged. -/
 def strArg (xs : Array Json) (i : Nat) : String := (xs[i]!.getStr?).toOption.getD ""
+
+/-- Pareto-dominance: mirror `dominance_pareto.pareto_dominates` over the proved
+    `Formal.DominancePareto.paretoDominates` def.
+    args layout: [n, peer_0..peer_{n-1}, item_0..item_{n-1}] -/
+def runParetoDominates (args : Array Json) : Json :=
+  let n := (intArg args 0).toNat
+  let peer := (List.range n).map (fun i => intArg args (i + 1))
+  let item := (List.range n).map (fun i => intArg args (n + 1 + i))
+  Json.mkObj [("dominated", Json.bool (Formal.DominancePareto.paretoDominates peer item))]
 
 /-- Evaluate the `equipCapValue` predicate-level model in Lean.
     args layout (2 ints): equippable(0/1), dominated(0/1).
@@ -2293,6 +2303,9 @@ def runOne (item : Json) : Json :=
   else if kind == "accumulation_sell" then
     -- args: [held, cap]
     runAccumulationSell (intArg args 0) (intArg args 1)
+  else if kind == "pareto_dominates" then
+    -- args: [n, peer_0..peer_{n-1}, item_0..item_{n-1}]
+    runParetoDominates args
   else if kind == "equip_cap_value" then
     -- args: [equippable(0/1), dominated(0/1)]
     runEquipCapValue (intArg args 0) (intArg args 1)
