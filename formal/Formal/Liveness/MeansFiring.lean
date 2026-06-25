@@ -222,7 +222,7 @@ theorem _fires_discardCritical_implies_discardOverstock_positive (s : State) :
   intro h
   unfold fires discardCriticalFires at h
   simp only [Bool.not_eq_true', Bool.and_eq_true, decide_eq_true_eq] at h
-  obtain ⟨⟨⟨_, hover⟩, _⟩, _⟩ := h
+  obtain ⟨⟨hover, _⟩, _⟩ := h
   unfold discardOverstockSatisfied
   rw [hover]
   simp only [Bool.not_true]
@@ -277,7 +277,7 @@ theorem _fires_discardHigh_implies_discardOverstock_positive (s : State) :
   intro h
   unfold fires discardHighFires at h
   simp only [Bool.not_eq_true', Bool.and_eq_true, decide_eq_true_eq] at h
-  obtain ⟨⟨⟨_, hover⟩, _⟩, _⟩ := h
+  obtain ⟨⟨hover, _⟩, _⟩ := h
   unfold discardOverstockSatisfied
   rw [hover]
   simp only [Bool.not_true]
