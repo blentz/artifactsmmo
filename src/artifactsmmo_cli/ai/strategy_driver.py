@@ -652,7 +652,24 @@ def objective_step_goal(
         # Items the bot WANTS a keeper of right now: the usable-now near-term gear
         # and tool targets plus the committed objective item(s). The grind prefers
         # crafting one of these over a throwaway (same skill XP, plus a keeper).
-        wanted_targets = ctx.near_term_targets | committed_codes
+        # SATISFIED filter (trace 2026-06-24 cyc319-344): a wanted item stays
+        # `wanted` only while the bot does NOT yet hold enough to fill its slot(s)
+        # (rings/utility = 2, else 1). Without this, the `held + 1` grind quantity
+        # ratchets a wanted single-slot item forever — Robby ground 11 wooden_shields
+        # (6 ash_plank each), stuffing the bag until an expensive craft could not
+        # fit (5 free < 6 needed) and the loop became Withdraw(ash_plank)↔DepositAll.
+        # Once satisfied, the item is no longer wanted and the grind reverts to the
+        # cheap throwaway (copper_helmet, 1 mat), which fits and skills up.
+        equipped_now = [c for c in state.equipment.values() if c is not None]
+
+        def _unsatisfied(code: str) -> bool:
+            stats = game_data.item_stats(code)
+            slots = ITEM_TYPE_TO_SLOTS.get(stats.type_) if stats is not None else None
+            demand = len(slots) if slots else 1
+            return owned_count_pure(state.inventory, state.bank_items, equipped_now, code) < demand
+
+        wanted_targets = frozenset(
+            c for c in (ctx.near_term_targets | committed_codes) if _unsatisfied(c))
         source_codes: list[str] = list(committed_codes)
         source_codes += list(ctx.target_gear | ctx.target_tools)
         reserved_full: set[str] = set()
