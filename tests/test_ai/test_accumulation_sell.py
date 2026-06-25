@@ -1,6 +1,44 @@
 from artifactsmmo_cli.ai.accumulation_sell import (
     ACCUM_MULT, SEVERE_STEPS, accumulation_excess, accumulation_steps,
+    sellable_accumulation, worst_accumulation_steps,
 )
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from tests.test_ai.fixtures import make_state
+
+
+def _gd_with_buyer() -> GameData:
+    gd = GameData()
+    gd._item_stats = {
+        "wooden_shield": ItemStats(code="wooden_shield", level=1, type_="shield",
+                                   crafting_skill="gearcrafting", crafting_level=1,
+                                   tradeable=True),
+        "gold_coin": ItemStats(code="gold_coin", level=1, type_="currency"),
+    }
+    gd._crafting_recipes = {}
+    gd._npc_sell_prices = {"vendor": {"wooden_shield": 2}}
+    gd._npc_locations = {"vendor": (1, 1)}
+    return gd
+
+
+def test_sellable_accumulation_targets_over_ratio_sellable_gear():
+    gd = _gd_with_buyer()
+    # 14 shields, cap 1 (equippable keep, not dominated) -> r=14 -> excess 13.
+    state = make_state(level=1, inventory={"wooden_shield": 14})
+    assert sellable_accumulation(state, gd) == {"wooden_shield": 13}
+
+
+def test_sellable_accumulation_skips_unsellable_and_below_gate():
+    gd = _gd_with_buyer()
+    # gold_coin has no buyer -> skipped even if accumulated.
+    state = make_state(level=1, inventory={"wooden_shield": 4, "gold_coin": 999})
+    assert sellable_accumulation(state, gd) == {}  # 4 < 5*1; coin not sellable
+
+
+def test_worst_accumulation_steps_is_max_over_items():
+    gd = _gd_with_buyer()
+    state = make_state(level=1, inventory={"wooden_shield": 40})  # steps 5
+    assert worst_accumulation_steps(state, gd) == 5
+    assert worst_accumulation_steps(make_state(level=1), gd) == 0
 
 
 def test_steps_is_floor_log2_ratio():
