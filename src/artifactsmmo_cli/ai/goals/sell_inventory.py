@@ -2,7 +2,11 @@
 
 from datetime import datetime, timezone
 
-from artifactsmmo_cli.ai.accumulation_sell import sellable_accumulation, worst_accumulation_steps
+from artifactsmmo_cli.ai.accumulation_sell import (
+    SEVERE_STEPS,
+    sellable_accumulation,
+    worst_accumulation_steps,
+)
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
@@ -20,10 +24,11 @@ below the bank-locked near-full urgency (which can reach ~100)."""
 ACCUM_BASE = 18.0
 ACCUM_STEP = 3.0
 DISCRETIONARY_CEIL = 48.0
-"""Moderate (idle) accumulation-sell value: min(ACCUM_BASE + steps*ACCUM_STEP,
-DISCRETIONARY_CEIL), strictly below progression (50) / survival (70). The SEVERE
-regime (steps>=SEVERE_STEPS) is handled by the SELL_PRESSURED ladder disjunct,
-not this value."""
+"""Idle accumulation-sell value, all within the discretionary band (strictly
+below progression 50 / survival 70 — never derails active leveling): a SEVERE
+hoard (`steps >= SEVERE_STEPS`, i.e. held >= 32x the keep-cap) goes straight to
+`DISCRETIONARY_CEIL` so it sheds first among housekeeping; a moderate hoard
+ramps `min(ACCUM_BASE + steps*ACCUM_STEP, DISCRETIONARY_CEIL)`."""
 
 
 class SellInventoryGoal(Goal):
@@ -55,7 +60,12 @@ class SellInventoryGoal(Goal):
         if not sellable:
             return 0.0
         steps = worst_accumulation_steps(state, game_data)
-        accum_value = min(ACCUM_BASE + steps * ACCUM_STEP, DISCRETIONARY_CEIL) if steps > 0 else 0.0
+        if steps >= SEVERE_STEPS:
+            accum_value = DISCRETIONARY_CEIL
+        elif steps > 0:
+            accum_value = min(ACCUM_BASE + steps * ACCUM_STEP, DISCRETIONARY_CEIL)
+        else:
+            accum_value = 0.0
         if self.is_satisfied(state) and accum_value == 0.0:
             return 0.0
         used_fraction = state.inventory_used / state.inventory_max

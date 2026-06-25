@@ -7,7 +7,6 @@ No Goal-class imports — the driver (StrategyArbiter) maps MeansKind to goals.
 
 from enum import Enum
 
-from artifactsmmo_cli.ai.accumulation_sell import SEVERE_STEPS, worst_accumulation_steps
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
 from artifactsmmo_cli.ai.consumable_supply import maintain_consumables_fires
 from artifactsmmo_cli.ai.game_data import GameData
@@ -83,10 +82,7 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
                 and state.task_progress >= state.task_total)
 
     if kind is MeansKind.SELL_PRESSURED:
-        if not _has_sellable(state, game_data):
-            return False
-        return (_used_fraction(state) >= SELL_PRESSURE_FRACTION
-                or worst_accumulation_steps(state, game_data) >= SEVERE_STEPS)
+        return _used_fraction(state) >= SELL_PRESSURE_FRACTION and _has_sellable(state, game_data)
 
     if kind is MeansKind.LOW_YIELD_CANCEL:
         return low_yield_cancel_fires(state, history)

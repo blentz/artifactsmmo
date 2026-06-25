@@ -18,8 +18,10 @@ ACCUM_MULT = 5
 """Fire the accumulation sell when `held >= ACCUM_MULT * max(cap, 1)`."""
 
 SEVERE_STEPS = 5
-"""`accumulation_steps >= SEVERE_STEPS` (held >= cap*32) escalates the sell above
-the progression band (see `tiers/means.py` SELL_PRESSURED)."""
+"""`accumulation_steps >= SEVERE_STEPS` (held >= cap*32) marks a SEVERE hoard:
+`SellInventoryGoal.value` sends it straight to the top of the discretionary band
+so it sheds first among housekeeping (still below progression — it never
+preempts active leveling)."""
 
 
 def accumulation_steps(held: int, cap: int) -> int:

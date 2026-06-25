@@ -4,7 +4,12 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.goals.sell_inventory import ACCUM_BASE, ACCUM_STEP, SellInventoryGoal
+from artifactsmmo_cli.ai.goals.sell_inventory import (
+    ACCUM_BASE,
+    ACCUM_STEP,
+    DISCRETIONARY_CEIL,
+    SellInventoryGoal,
+)
 from tests.test_ai.fixtures import make_state
 
 
@@ -117,6 +122,15 @@ class TestSellInventoryAccumulation:
         assert goal.is_satisfied(state) is True
         expected = min(ACCUM_BASE + 3 * ACCUM_STEP, 48.0)  # min(27.0, 48.0) = 27.0
         assert goal.value(state, gd) == expected
+
+    def test_value_tops_discretionary_band_when_severe(self):
+        """40 wooden_shields → steps=5 == SEVERE_STEPS → value jumps to the
+        discretionary ceiling (48), still strictly below progression (50)."""
+        gd = _gd_with_buyer()
+        state = make_state(level=1, inventory={"wooden_shield": 40}, inventory_max=200)
+        goal = SellInventoryGoal(bank_accessible=True)
+        assert goal.value(state, gd) == DISCRETIONARY_CEIL
+        assert DISCRETIONARY_CEIL < 50.0
 
     def test_value_zero_when_below_accum_threshold(self):
         """Item count below ACCUM_MULT * cap → no accumulation value (steps=0)."""
