@@ -36,8 +36,20 @@ see the P3c scope note in docs/PLAN_mechanical_extraction.md.
 from collections.abc import Mapping, Sequence
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.combat_targets import combat_target_monsters
+from artifactsmmo_cli.ai.dominance_pareto import pareto_dominates
+from artifactsmmo_cli.ai.equipment.scoring import armor_score, weapon_score
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
+
+_ARMOR_TYPES = frozenset({"helmet", "body_armor", "leg_armor", "boots", "shield"})
+
+
+def _score_vector(stats: ItemStats, monsters: list[str], game_data: GameData) -> list[int]:
+    """Per-monster combat score for a weapon (offense) or armor (defense) piece."""
+    if stats.type_ == "weapon":
+        return [weapon_score(stats, game_data.monster_resistance(m)) for m in monsters]
+    return [armor_score(stats, game_data.monster_attack(m)) for m in monsters]
 
 BATCH_BUFFER = 5
 """How many craft batches worth of material to keep on hand. With BATCH=5 and
@@ -285,6 +297,9 @@ def _is_equippable_dominated(item_code: str, state: WorldState,
     slots = ITEM_TYPE_TO_SLOTS.get(stats.type_, [])
     if not slots:
         return False
+    monsters = combat_target_monsters(state, game_data)
+    per_monster = bool(monsters) and (stats.type_ == "weapon" or stats.type_ in _ARMOR_TYPES)
+    item_vec = _score_vector(stats, monsters, game_data) if per_monster else []
     my_value = _equip_value(stats)
     my_effects = stats.skill_effects or {}
     candidates: set[str] = set(state.inventory)
@@ -302,7 +317,10 @@ def _is_equippable_dominated(item_code: str, state: WorldState,
         peer_slots = ITEM_TYPE_TO_SLOTS.get(peer.type_, [])
         # Peer must fit every slot this item fits (so it can substitute everywhere).
         fits = all(s in peer_slots for s in slots)
-        higher = _equip_value(peer) > my_value
+        if per_monster and fits:
+            higher = pareto_dominates(_score_vector(peer, monsters, game_data), item_vec)
+        else:
+            higher = _equip_value(peer) > my_value
         # Peer must cover this item's skill_effects (else dropping a tool
         # in favor of a higher-attack weapon would silently lose a skill
         # bonus the bot relies on). Skill effect values are NEGATIVE
