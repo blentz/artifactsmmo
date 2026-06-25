@@ -16,6 +16,7 @@ from artifactsmmo_cli.ai.inventory_caps import (
     _is_dominated_pure,
     _is_equippable_dominated,
     _task_chain_demand_pure,
+    level_distance_keep_ceiling,
     overstocked_items,
     reachable_recipe_demand,
     useful_quantity_cap,
@@ -23,6 +24,62 @@ from artifactsmmo_cli.ai.inventory_caps import (
 )
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 from tests.test_ai.fixtures import make_state
+
+
+class TestLevelDistanceKeepCeiling:
+    def test_ceiling_none_when_currently_useful(self):
+        """Within 5 levels (above or below) → currently useful → no ceiling."""
+        for lvl in (5, 8, 9):  # char 5: |Δ| = 0, 3, 4 -> all < 5
+            s = ItemStats(code="x", level=lvl, type_="resource")
+            assert level_distance_keep_ceiling(s, char_level=5) is None
+
+    def test_ceiling_10_for_mid_distance_above_and_below(self):
+        """5..9 levels above OR below → keep no more than 10."""
+        above = ItemStats(code="x", level=15, type_="resource")   # |Δ|=10? no, char 8
+        assert level_distance_keep_ceiling(above, char_level=8) == 10  # |Δ|=7
+        below = ItemStats(code="x", level=1, type_="resource")
+        assert level_distance_keep_ceiling(below, char_level=6) == 10  # |Δ|=5
+
+    def test_ceiling_5_for_far_distance_above_and_below(self):
+        """10+ levels above OR below → keep no more than 5."""
+        above = ItemStats(code="x", level=20, type_="resource")
+        assert level_distance_keep_ceiling(above, char_level=5) == 5   # |Δ|=15
+        below = ItemStats(code="x", level=1, type_="resource")
+        assert level_distance_keep_ceiling(below, char_level=11) == 5  # |Δ|=10
+
+    def test_unique_item_exempt(self):
+        """A unique (non-tradeable / bound) item is exempt — no ceiling even
+        when far out of band."""
+        s = ItemStats(code="bound", level=1, type_="weapon", tradeable=False)
+        assert level_distance_keep_ceiling(s, char_level=30) is None
+
+    def test_missing_stats_no_ceiling(self):
+        assert level_distance_keep_ceiling(None, char_level=10) is None
+
+
+class TestUsefulCapAppliesCeiling:
+    def test_far_consumable_capped_to_five(self):
+        """A non-unique consumable (base cap 999) 10+ levels below the character
+        is clamped to 5 — 'only keep currently useful items'."""
+        gd = GameData()
+        gd._item_stats = {"old_potion": ItemStats(code="old_potion", level=1,
+                                                   type_="consumable", hp_restore=20)}
+        gd._crafting_recipes = {}
+        far = make_state(level=15)  # |Δ| = 14 -> far ceiling 5
+        assert useful_quantity_cap("old_potion", far, gd) == 5
+        mid = make_state(level=7)   # |Δ| = 6 -> mid ceiling 10
+        assert useful_quantity_cap("old_potion", mid, gd) == 10
+        near = make_state(level=3)  # |Δ| = 2 -> no ceiling, base 999
+        assert useful_quantity_cap("old_potion", near, gd) == 999
+
+    def test_unique_consumable_not_clamped(self):
+        """A bound consumable keeps its base cap regardless of level distance."""
+        gd = GameData()
+        gd._item_stats = {"bound_potion": ItemStats(code="bound_potion", level=1,
+                                                     type_="consumable", hp_restore=20,
+                                                     tradeable=False)}
+        gd._crafting_recipes = {}
+        assert useful_quantity_cap("bound_potion", make_state(level=30), gd) == 999
 
 
 def test_equip_value_counts_utility_stats_so_artifact_not_discarded():

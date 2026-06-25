@@ -35,7 +35,8 @@ from artifactsmmo_cli.ai.world_state import WorldState
 from formal.diff.oracle_client import run_oracle
 
 
-def _make_state(code: str, task_remaining: int, equipped: bool, qty: int) -> WorldState:
+def _make_state(code: str, task_remaining: int, equipped: bool, qty: int,
+                char_level: int = 1) -> WorldState:
     if task_remaining > 0:
         task_type = "items"
         task_code = code
@@ -59,7 +60,7 @@ def _make_state(code: str, task_remaining: int, equipped: bool, qty: int) -> Wor
     # test_inventory_profile_diff.py.
     inventory_max = max(1, qty)
     return WorldState(
-        character="c", level=1, xp=0, max_xp=100, hp=10, max_hp=10, gold=0,
+        character="c", level=char_level, xp=0, max_xp=100, hp=10, max_hp=10, gold=0,
         skills={}, x=0, y=0, inventory=inventory, inventory_max=inventory_max,
         equipment=equipment, cooldown_expires=None, task_code=task_code,
         task_type=task_type, task_progress=task_progress, task_total=task_total,
@@ -95,16 +96,21 @@ def _gd(code: str, recipe_demand: int, stats: ItemStats) -> GameData:
     # actually exercised: with buffer 1 and demand 1, recipe_cap=1 < floor 3.
     batch_buffer=st.integers(min_value=1, max_value=5),
     safety_floor=st.integers(min_value=1, max_value=5),
+    # vary item/character level + tradeable so the SHELL's level-distance keep
+    # ceiling (only-keep-currently-useful) is exercised across all three bands.
+    item_level=st.integers(min_value=1, max_value=40),
+    char_level=st.integers(min_value=1, max_value=40),
+    tradeable=st.booleans(),
 )
 def test_python_matches_lean(recipe_demand, item_type, is_healing,
                              task_remaining, equipped, qty, batch_buffer,
-                             safety_floor):
+                             safety_floor, item_level, char_level, tradeable):
     code = "X"
     # hp_restore activates the consumable cap (f1f8941, c3b8dfa). Generate
     # both branches: hp_restore=0 (cap inert) AND hp_restore>0 (cap kicks in).
     hp_restore_val = 20 if is_healing else 0
-    stats = ItemStats(code=code, level=1, type_=item_type,
-                       hp_restore=hp_restore_val)
+    stats = ItemStats(code=code, level=item_level, type_=item_type,
+                       hp_restore=hp_restore_val, tradeable=tradeable)
     # action_cap is whatever the SHELL feeds the proven core. Reimplement the
     # type-driven rule INDEPENDENTLY here (NOT by calling _non_recipe_keep_floor)
     # so a mutation of the production helper diverges py_cap from the oracle —
@@ -117,11 +123,22 @@ def test_python_matches_lean(recipe_demand, item_type, is_healing,
         action_cap = ic_mod.ACTION_CONSUMABLES_CAP.get(code, 0)
 
     game_data = _gd(code, recipe_demand, stats)
-    state = _make_state(code, task_remaining, equipped, qty)
+    state = _make_state(code, task_remaining, equipped, qty, char_level=char_level)
     py_cap = ic_mod.useful_quantity_cap(code, state, game_data,
                                         batch_buffer, safety_floor)
     py_over = ic_mod.overstocked_items(state, game_data,
                                        batch_buffer, safety_floor)
+
+    # The shell clamps the proven-core cap by the level-distance ceiling.
+    # Reimplement the rule INDEPENDENTLY (not via level_distance_keep_ceiling)
+    # so a mutation of the production helper diverges — TEETH on the ceiling.
+    ceiling = None
+    if tradeable:
+        d = abs(item_level - char_level)
+        if d >= 10:
+            ceiling = 5
+        elif d >= 5:
+            ceiling = 10
 
     # Compute the per-component values Python would feed to the Lean
     # model: equippable_cap and consumable_cap come from the same
@@ -145,16 +162,23 @@ def test_python_matches_lean(recipe_demand, item_type, is_healing,
           1 if equipped else 0, qty]],
     )[0]
 
-    assert py_cap == lean["cap"], (
-        f"cap mismatch: py={py_cap} lean={lean['cap']} "
-        f"recipe={recipe_demand} equippable_cap={equippable_cap} "
-        f"consumable_cap={consumable_cap} action={action_cap} "
+    # Expected cap = proven-core cap (lean) clamped by the level ceiling.
+    expected_cap = lean["cap"]
+    if ceiling is not None and expected_cap > ceiling:
+        expected_cap = ceiling
+    assert py_cap == expected_cap, (
+        f"cap mismatch: py={py_cap} expected={expected_cap} lean_core={lean['cap']} "
+        f"ceiling={ceiling} item_lvl={item_level} char_lvl={char_level} "
+        f"tradeable={tradeable} recipe={recipe_demand} action={action_cap} "
         f"task_rem={task_remaining} equipped={equipped}"
     )
-    # overstocked_items records excess only when qty > 0 and qty > cap.
+    # overstocked_items records excess only when qty > 0 and qty > the (clamped)
+    # cap; _make_state holds the bag at full pressure so the space gate is open.
     py_excess = py_over.get(code, 0)
-    assert py_excess == lean["overstock"], (
-        f"overstock mismatch: py={py_excess} lean={lean['overstock']}"
+    expected_excess = max(0, qty - expected_cap) if qty > 0 else 0
+    assert py_excess == expected_excess, (
+        f"overstock mismatch: py={py_excess} expected={expected_excess} "
+        f"expected_cap={expected_cap} qty={qty} ceiling={ceiling}"
     )
 
 

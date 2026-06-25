@@ -179,6 +179,43 @@ def _non_recipe_keep_floor(item_code: str, stats: ItemStats | None) -> int:
     return ACTION_CONSUMABLES_CAP.get(item_code, 0)
 
 
+LEVEL_BAND_NEAR = 5
+"""`|item.level - character.level|` strictly below this is "currently useful" —
+no level-distance ceiling, the base keep-cap stands."""
+LEVEL_BAND_FAR = 10
+"""At/above this level distance the item is far out of band — tightest ceiling."""
+KEEP_CEILING_MID = 10
+"""Max kept of a NON-UNIQUE item 5..9 levels above/below the character."""
+KEEP_CEILING_FAR = 5
+"""Max kept of a NON-UNIQUE item 10+ levels above/below the character."""
+
+
+def level_distance_keep_ceiling(stats: ItemStats | None, char_level: int) -> int | None:
+    """Upper bound on how many of an item to keep, scaled by how far its level
+    sits from the character's — "only keep currently useful items". Returns
+    `None` for NO ceiling (the base cap stands):
+
+      * UNIQUE items (`tradeable is False` — the API's only bound/unique signal:
+        currencies + a few bound gear) are exempt — keep per the base rules.
+      * `|item.level - char_level| >= LEVEL_BAND_FAR (10)`  -> KEEP_CEILING_FAR (5)
+      * `|item.level - char_level| >= LEVEL_BAND_NEAR (5)`  -> KEEP_CEILING_MID (10)
+      * within LEVEL_BAND_NEAR (currently useful)           -> None (no ceiling)
+
+    A missing catalog entry yields `None` (the bot fails loud elsewhere if it
+    must act on an unknown item; here we do not impose a ceiling we cannot
+    justify). Applied as a `min` clamp ON TOP of the base cap by the cap shell
+    and the bank keep-floor — never lifts a cap, only lowers it, and never
+    below an equipped/currency floor (those exceed the ceilings)."""
+    if stats is None or stats.tradeable is False:
+        return None
+    distance = abs(stats.level - char_level)
+    if distance >= LEVEL_BAND_FAR:
+        return KEEP_CEILING_FAR
+    if distance >= LEVEL_BAND_NEAR:
+        return KEEP_CEILING_MID
+    return None
+
+
 def _is_dominated_pure(peers: Sequence[tuple[bool, bool, bool, int]],
                        slot_count: int) -> bool:
     """Pure core of the dominance walk (the hand model's `Peer` fold,
@@ -433,12 +470,18 @@ def _cap_from_state(item_code: str, state: WorldState, game_data: GameData,
             is_equippable = True
             is_dominated = _is_equippable_dominated(item_code, state, game_data)
         hp_restore = stats.hp_restore
-    return useful_quantity_cap_pure(
+    base = useful_quantity_cap_pure(
         item_code, reachable_recipe_demand(item_code, state, game_data), batch_buffer,
         safety_floor, state.task_type or "", state.task_code or "",
         state.task_total, state.task_progress, game_data.crafting_recipes,
         _non_recipe_keep_floor(item_code, stats),
         is_equippable, is_dominated, hp_restore, equipped)
+    # "Only keep currently useful items": clamp the base cap by the level-distance
+    # ceiling for non-unique items far above/below the character's level.
+    ceiling = level_distance_keep_ceiling(stats, state.level)
+    if ceiling is not None and base > ceiling:
+        return ceiling
+    return base
 
 
 def useful_quantity_cap_excl_equipped(
