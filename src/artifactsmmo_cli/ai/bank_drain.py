@@ -10,9 +10,17 @@ sat in the bank forever. This is the bank-side counterpart to
 
 A code is BANK JUNK when the character holds it in the bank ABOVE its total
 useful keep-cap:
-  * `cap = useful_quantity_cap(code)` — the SAME value/need cap the inventory
-    overstock logic uses (recipe demand × batch buffer, task demand, equippable
-    swap-floor, consumable floor; 0 for a far-skill-gated material like sap);
+  * `cap = max(useful_quantity_cap(code), max_recipe_demand(code))` — the bank
+    keep-floor. `useful_quantity_cap` supplies the NEAR-term value/need cap
+    (recipe demand × batch buffer, task demand, equippable swap-floor, consumable
+    and currency floors). The `max_recipe_demand` term is what makes the bank
+    SAFE for far-future materials: the inventory cap is 0 for a skill-gated
+    material (so it deposits to the bank), but the bank must KEEP enough to craft
+    with later — else a banked level-10 drop (gold_ore, jasper_crystal, magic_wood)
+    would be deleted before its recipe is ever reachable. So the bank keeps the
+    item's FULL eventual recipe demand; only the surplus beyond it drains.
+    An item with NO recipe consumer at any level, and not currency/consumable/
+    equippable, has cap 0 — genuine junk that fully drains;
   * the cap covers TOTAL holdings, so the inventory already holding some toward
     the cap shrinks the bank allowance:
       `bank_excess = bank_qty - max(0, cap - inv_qty)`;
@@ -47,7 +55,12 @@ def bank_drain_excess(
     for code, bank_qty in bank.items():
         if bank_qty <= 0 or code in protected_codes:
             continue
-        cap = useful_quantity_cap(code, state, game_data)
+        # Bank keep-floor: the near-term value/need cap OR the item's full
+        # eventual recipe demand, whichever is larger. The recipe term protects
+        # far-skill-gated-but-future-useful materials from deletion (the inventory
+        # cap is 0 for them, which is why they deposit here in the first place).
+        cap = max(useful_quantity_cap(code, state, game_data),
+                  game_data.max_recipe_demand(code))
         inv_qty = state.inventory.get(code, 0)
         room_under_cap = cap - inv_qty
         allowed_in_bank = room_under_cap if room_under_cap > 0 else 0

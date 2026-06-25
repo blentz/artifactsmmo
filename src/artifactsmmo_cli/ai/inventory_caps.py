@@ -128,6 +128,15 @@ since stacking-items don't cost slots per unit. Original prior cap was
 0 (everything deleted, fixed in f1f8941) → 10 (insufficient, still
 delete-heavy) → 999 (stack-aware floor)."""
 
+CURRENCY_KEEP = 999
+"""Keep effectively unlimited of any CURRENCY-type item (tasks_coin,
+event_ticket, corrupted_gem, sandwhisper_coin, …). Currencies are pure economic
+value spent at NPCs / events; auto-deleting or bank-draining them as "junk" is
+an unrecoverable loss. API `type`-driven (see `_non_recipe_keep_floor`) so EVERY
+current and future currency the server defines is protected — not a hardcoded
+code list (the bug: only tasks_coin was protected, by code, so the other three
+live currencies fell to cap 0 and were delete-eligible)."""
+
 # Items consumed by API actions (not recipes). Keep enough to use them.
 ACTION_CONSUMABLES_CAP = {
     # Tasks-coins stack in a single inventory slot regardless of quantity,
@@ -141,6 +150,33 @@ ACTION_CONSUMABLES_CAP = {
     # protected from bank-deposit too.
     TASKS_COIN_CODE: 999,
 }
+
+
+def _non_recipe_keep_floor(item_code: str, stats: ItemStats | None) -> int:
+    """Keep-floor for an item whose value is NOT captured by the recipe /
+    equippable / task / hp-consumable components — driven by the API item
+    `type` so categorization is GENERIC across every item the server defines
+    (not a hardcoded code list):
+
+      * `type == "currency"`   -> CURRENCY_KEEP   (never auto-delete currency)
+      * `type == "consumable"` -> CONSUMABLE_KEEP (heals AND non-hp consumables
+                                  like teleport / gold-bag potions are used
+                                  deliberately, never junked — `hp_restore`
+                                  alone missed the non-hp ones)
+      * otherwise              -> ACTION_CONSUMABLES_CAP code override, else 0
+
+    Raw `resource`-type materials get 0 here — their cap comes from recipe
+    demand — so a far-skill-gated byproduct stays drain-eligible from the bag.
+    The bank-side keep (see `ai/bank_drain`) additionally protects a material's
+    eventual recipe demand so future-useful mats are not deleted from the bank.
+    `stats is None` (item missing from the catalog) falls through to the code
+    override / 0; the bot fails loud elsewhere if it must act on an unknown item."""
+    if stats is not None:
+        if stats.type_ == "currency":
+            return CURRENCY_KEEP
+        if stats.type_ == "consumable":
+            return CONSUMABLE_KEEP
+    return ACTION_CONSUMABLES_CAP.get(item_code, 0)
 
 
 def _is_dominated_pure(peers: Sequence[tuple[bool, bool, bool, int]],
@@ -401,7 +437,7 @@ def _cap_from_state(item_code: str, state: WorldState, game_data: GameData,
         item_code, reachable_recipe_demand(item_code, state, game_data), batch_buffer,
         safety_floor, state.task_type or "", state.task_code or "",
         state.task_total, state.task_progress, game_data.crafting_recipes,
-        ACTION_CONSUMABLES_CAP.get(item_code, 0),
+        _non_recipe_keep_floor(item_code, stats),
         is_equippable, is_dominated, hp_restore, equipped)
 
 
