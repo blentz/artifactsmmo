@@ -86,15 +86,18 @@ class SellInventoryGoal(Goal):
                                              and state.inventory.get(action.item_code, 0) > 0):
                 result.append(action)
         for code, excess in sellable_accumulation(state, game_data).items():
-            buyers = game_data.npcs_buying_item(code)
-            npc_code = buyers[0][0]
-            loc = game_data.npc_location(npc_code)
-            if loc is None:
-                continue
-            act = NpcSellAction(npc_code=npc_code, item_code=code,
-                                quantity=excess, npc_location=loc)
-            if act.is_applicable(state, game_data):
-                result.append(act)
+            # `sellable_accumulation` guarantees at least one buyer is reachable;
+            # pick the highest-price buyer that actually has a location (a
+            # higher-price buyer may be a dormant event merchant with no tile).
+            for npc_code, _price in game_data.npcs_buying_item(code):
+                loc = game_data.npc_location(npc_code)
+                if loc is None:
+                    continue
+                act = NpcSellAction(npc_code=npc_code, item_code=code,
+                                    quantity=excess, npc_location=loc)
+                if act.is_applicable(state, game_data):
+                    result.append(act)
+                    break
         return result
 
     def __repr__(self) -> str:

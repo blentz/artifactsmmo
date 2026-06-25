@@ -52,12 +52,15 @@ def accumulation_excess(held: int, cap: int) -> int:
 
 
 def _is_sellable(code: str, game_data: GameData) -> bool:
-    """An item with a reachable NPC buyer that is tradeable — the per-item rule
-    behind `tiers/guards._has_sellable`."""
+    """An item with a REACHABLE NPC buyer that is tradeable — the per-item rule
+    behind `tiers/guards._has_sellable`. A buyer in the price table whose
+    `npc_location` is None (a dormant event merchant) does NOT count, matching
+    `NpcSellAction.is_applicable`."""
     stats = game_data.item_stats(code)
     if stats is not None and not stats.tradeable:
         return False
-    return bool(game_data.npcs_buying_item(code))
+    return any(game_data.npc_location(npc) is not None
+               for npc, _price in game_data.npcs_buying_item(code))
 
 
 def sellable_accumulation(state: WorldState, game_data: GameData) -> dict[str, int]:

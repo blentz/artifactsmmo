@@ -159,6 +159,25 @@ class TestSellInventoryAccumulation:
         assert len(sells) == 1
         assert sells[0].quantity == 13
 
+    def test_relevant_actions_picks_reachable_buyer_when_top_price_dormant(self):
+        """The highest-price buyer is a dormant event merchant (no location); the
+        sell still emits via the lower-price REACHABLE buyer, not skipped."""
+        gd = GameData()
+        # dormant pays 9 (no tile); reachable_vendor pays 2 (has a tile).
+        gd._npc_sell_prices = {"dormant": {"wooden_shield": 9},
+                               "reachable_vendor": {"wooden_shield": 2}}
+        gd._npc_locations = {"reachable_vendor": (3, 4)}  # dormant absent → None
+        gd._item_stats = {"wooden_shield": ItemStats(
+            code="wooden_shield", level=1, type_="shield", tradeable=True)}
+        gd._crafting_recipes = {}
+        state = make_state(level=1, inventory={"wooden_shield": 14}, inventory_max=50)
+        goal = SellInventoryGoal(bank_accessible=True)
+        sells = [a for a in goal.relevant_actions([], state, gd)
+                 if isinstance(a, NpcSellAction) and a.item_code == "wooden_shield"]
+        assert len(sells) == 1
+        assert sells[0].npc_code == "reachable_vendor"
+        assert sells[0].quantity == 13
+
     def test_relevant_actions_no_sell_when_below_threshold(self):
         """4 shields (below threshold) → no accumulation NpcSellAction emitted."""
         gd = _gd_with_buyer()
