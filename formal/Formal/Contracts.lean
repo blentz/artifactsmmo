@@ -3,6 +3,7 @@ import Formal.Liveness.ItemsTaskTermination
 import Formal.Liveness.ItemsTaskRun
 import Formal.TaskBatch
 import Formal.InventoryCaps
+import Formal.AccumulationSell
 import Formal.InventoryProfile
 import Formal.PredictWin
 import Formal.LoadoutProjection
@@ -202,6 +203,35 @@ example : ∀ (isEquippable : Bool) (peers : List Peer) (slotCount : Int),
 example : ∀ (slotCount : Int), slotCount ≥ 1 →
     isDominatedBy [] slotCount = false :=
   @isDominatedBy_nil_of_positive_slot
+
+/-! ### AccumulationSell role contracts (ratio-driven sell-down, over Nat).
+
+Fully-qualified — `Formal.AccumulationSell` is NOT opened, so these pin the exact
+Nat statements without name clashes against the opened `InventoryCaps`. -/
+
+-- below_gate_quiet: below the ratio gate ⇒ excess = 0 (no accumulation sell action).
+example : ∀ (held cap : Nat), held < Formal.AccumulationSell.accMult * max cap 1 →
+    Formal.AccumulationSell.accumulationExcess held cap = 0 :=
+  @Formal.AccumulationSell.below_gate_quiet
+-- fires_implies_excess_positive: gate fires on a kept item (cap > 0) ⇒ excess > 0.
+example : ∀ (held cap : Nat), 0 < cap →
+    Formal.AccumulationSell.accMult * max cap 1 ≤ held →
+    0 < Formal.AccumulationSell.accumulationExcess held cap :=
+  @Formal.AccumulationSell.fires_implies_excess_positive
+-- excess_sells_down_to_cap: on the fired branch, shedding the excess leaves exactly cap.
+example : ∀ (held cap : Nat),
+    Formal.AccumulationSell.accMult * max cap 1 ≤ held →
+    held - Formal.AccumulationSell.accumulationExcess held cap = cap :=
+  @Formal.AccumulationSell.excess_sells_down_to_cap
+-- excess_monotone: more held never reduces the reported excess.
+example : ∀ (h1 h2 cap : Nat), h1 ≤ h2 →
+    Formal.AccumulationSell.accumulationExcess h1 cap ≤ Formal.AccumulationSell.accumulationExcess h2 cap :=
+  @Formal.AccumulationSell.excess_monotone
+-- steps_threshold: reaching severeSteps (5) ⇒ held ≥ max(cap,1) * 32 (= 2^5 × eff_cap).
+example : ∀ (held cap : Nat),
+    Formal.AccumulationSell.severeSteps ≤ Formal.AccumulationSell.accumulationSteps held cap →
+    max cap 1 * 32 ≤ held :=
+  @Formal.AccumulationSell.steps_threshold
 
 /-! ### InventoryProfile role contracts (per-goal soft-target overstock, spec 2026-06-07).
 
