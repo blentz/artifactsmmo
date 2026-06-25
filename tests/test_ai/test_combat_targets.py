@@ -40,3 +40,19 @@ def test_memoized_per_level_and_equipment(monkeypatch):
     n_after_first = calls["n"]
     combat_target_monsters(state, gd)            # same key → cache hit
     assert calls["n"] == n_after_first
+
+
+def test_returned_list_independent_of_cache(monkeypatch):
+    """Verify that mutating the returned list does not poison the cache."""
+    _clear_cache()
+    monkeypatch.setattr(ct, "is_winnable", lambda s, g, code, h=None: True)
+    gd = _gd({"wolf": 9})
+    state = make_state(level=10)
+    # First call: populate the cache
+    first_result = combat_target_monsters(state, gd)
+    # Mutate the returned list
+    first_result.append("poison")
+    # Second call: should return a fresh list without the mutation
+    second_result = combat_target_monsters(state, gd)
+    assert "poison" not in second_result
+    assert "wolf" in second_result

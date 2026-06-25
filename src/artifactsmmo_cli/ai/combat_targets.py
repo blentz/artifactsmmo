@@ -29,10 +29,12 @@ def combat_target_monsters(state: WorldState, game_data: GameData) -> list[str]:
     equip_sig = tuple(sorted(c for c in state.equipment.values() if c is not None))
     key = (id(game_data), state.level, equip_sig)
     if _cache.get("key") == key:
-        return _cache["val"]  # type: ignore[return-value]
+        cached_val = _cache["val"]
+        if isinstance(cached_val, list):
+            return list(cached_val)
     floor = state.level - LEVEL_BAND_BELOW
     out = [code for code, level in game_data.monster_levels.items()
            if level >= floor and is_winnable(state, game_data, code, None)]
     _cache["key"] = key
     _cache["val"] = out
-    return out
+    return list(out)
