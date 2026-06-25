@@ -55,8 +55,10 @@ DISCRETIONARY_ORDER: tuple[MeansKind, ...] = (
     MeansKind.MAINTAIN_CONSUMABLES,  # prep heals for combat before idle housekeeping
     MeansKind.SELL_IDLE,
     MeansKind.RECYCLE_SURPLUS,
-    MeansKind.DRAIN_BANK_JUNK,
     MeansKind.BANK_EXPAND,
+    # Lowest-value housekeeping (15), just above WAIT: drain over-cap bank junk
+    # only when nothing better — incl. a bank-expansion investment — is pending.
+    MeansKind.DRAIN_BANK_JUNK,
     MeansKind.WAIT,
 )
 

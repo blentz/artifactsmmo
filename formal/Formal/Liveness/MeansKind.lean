@@ -101,7 +101,7 @@ def allInLadderOrder : List MeansKind :=
    .claimPending, .completeTask, .sellPressured, .lowYieldCancel, .taskCancel,
    .objectiveStep,
    .pursueTask, .acceptTask, .taskExchange, .maintainConsumables,
-   .sellIdle, .recycleSurplus, .drainBankJunk, .bankExpand,
+   .sellIdle, .recycleSurplus, .bankExpand, .drainBankJunk,
    .wait]
 
 /-- Sanity: 26 constructors. -/

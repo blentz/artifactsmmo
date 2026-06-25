@@ -52,7 +52,7 @@ def objectiveStepBlockers : List MeansKind :=
 /-- The means at/after `objectiveStep` (idx 15–24). -/
 def objectiveStepSuffix : List MeansKind :=
   [.pursueTask, .acceptTask, .taskExchange, .maintainConsumables, .sellIdle, .recycleSurplus,
-   .drainBankJunk, .bankExpand, .wait]
+   .bankExpand, .drainBankJunk, .wait]
 
 /-- `allInLadderOrder` factors around `objectiveStep`. -/
 theorem ladder_split_objectiveStep :

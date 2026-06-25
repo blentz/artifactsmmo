@@ -91,8 +91,8 @@ ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
     LadderMeans.MAINTAIN_CONSUMABLES,
     LadderMeans.SELL_IDLE,
     LadderMeans.RECYCLE_SURPLUS,
-    LadderMeans.DRAIN_BANK_JUNK,
     LadderMeans.BANK_EXPAND,
+    LadderMeans.DRAIN_BANK_JUNK,
     LadderMeans.WAIT,
 )
 
@@ -159,8 +159,8 @@ assert DISCRETIONARY_ORDER == (
     MeansKind.MAINTAIN_CONSUMABLES,
     MeansKind.SELL_IDLE,
     MeansKind.RECYCLE_SURPLUS,
-    MeansKind.DRAIN_BANK_JUNK,
     MeansKind.BANK_EXPAND,
+    MeansKind.DRAIN_BANK_JUNK,
     MeansKind.WAIT,
 ), "DISCRETIONARY_ORDER drift — Lean MeansKind.allInLadderOrder is stale"
 
