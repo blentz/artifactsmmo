@@ -204,6 +204,8 @@ inductive MeansKind where
   | maintainConsumables  -- PLAN #6a: cook/brew heals when combat-active and
                          -- under-stocked. Appended LAST to keep the oracle's
                          -- index dispatch (0..11) stable.
+  | drainBankJunk  -- 2026-06-24: withdraw over-cap bank junk. Appended LAST
+                   -- (oracle index 13) to keep earlier index dispatch stable.
 deriving Repr, DecidableEq
 
 /-- TOTAL `match`: every `GuardKind` variant maps to a non-empty repr string.
@@ -238,6 +240,7 @@ def goalReprOfMeans : MeansKind → String
   | .bankExpand      => "ExpandBank"
   | .wait            => "Wait"
   | .maintainConsumables => "MaintainConsumables"
+  | .drainBankJunk   => "DrainBankJunk"
 
 /-! ### Exhaustiveness intent theorems (totality witnesses). -/
 

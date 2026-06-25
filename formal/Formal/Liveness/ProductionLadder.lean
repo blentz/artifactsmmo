@@ -279,6 +279,14 @@ def recycleSurplusFires (s : State) : Bool :=
                < SELL_PRESSURE_NUM * s.inventoryMax))
   && s.recyclableSurplusNonempty
 
+/-- DRAIN_BANK_JUNK. Mirrors `means.py::_fires(DRAIN_BANK_JUNK, …)`:
+      used/max < 0.85 ∧ bank_drain_excess nonempty -/
+def drainBankJunkFires (s : State) : Bool :=
+  (decide (s.inventoryMax = 0)
+   || decide (SELL_PRESSURE_DEN * s.inventoryUsed
+               < SELL_PRESSURE_NUM * s.inventoryMax))
+  && s.bankJunkNonempty
+
 /-- MAINTAIN_CONSUMABLES (PLAN #6a). Mirrors `means.py::_fires(MAINTAIN_CONSUMABLES, …)`:
     combat-active ∧ heal-stock < floor ∧ a better heal is craftable. Opaque
     State-carried Bool (see `Measure.State.maintainConsumablesFires`). -/
@@ -349,6 +357,7 @@ def fires (k : MeansKind) (s : State) : Bool :=
   | .maintainConsumables => maintainConsumablesFires s
   | .sellIdle         => sellIdleFires s
   | .recycleSurplus   => recycleSurplusFires s
+  | .drainBankJunk    => drainBankJunkFires s
   | .bankExpand       => bankExpandFires s
   | .wait             => waitFires s
 

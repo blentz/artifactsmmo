@@ -105,6 +105,7 @@ MIRROR_PLAN_FOR: dict[LadderMeans, str] = {
     LadderMeans.MAINTAIN_CONSUMABLES: "craft",  # PLAN #6a: cook/brew a heal
     LadderMeans.SELL_IDLE:          "npcSell",
     LadderMeans.RECYCLE_SURPLUS:    "recycle",
+    LadderMeans.DRAIN_BANK_JUNK:    "withdrawItem",
     LadderMeans.BANK_EXPAND:        "buyBankExpansion",
     LadderMeans.WAIT:               "wait",
 }

@@ -49,10 +49,10 @@ def objectiveStepBlockers : List MeansKind :=
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull, .discardHigh, .gearReview,
    .claimPending, .completeTask, .sellPressured, .lowYieldCancel, .taskCancel]
 
-/-- The means at/after `objectiveStep` (idx 15–23). -/
+/-- The means at/after `objectiveStep` (idx 15–24). -/
 def objectiveStepSuffix : List MeansKind :=
   [.pursueTask, .acceptTask, .taskExchange, .maintainConsumables, .sellIdle, .recycleSurplus,
-   .bankExpand, .wait]
+   .bankExpand, .drainBankJunk, .wait]
 
 /-- `allInLadderOrder` factors around `objectiveStep`. -/
 theorem ladder_split_objectiveStep :

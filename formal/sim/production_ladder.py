@@ -62,6 +62,7 @@ class LadderMeans(Enum):
     MAINTAIN_CONSUMABLES = "maintain_consumables"
     SELL_IDLE = "sell_idle"
     RECYCLE_SURPLUS = "recycle_surplus"
+    DRAIN_BANK_JUNK = "drain_bank_junk"
     BANK_EXPAND = "bank_expand"
     WAIT = "wait"
 
@@ -91,6 +92,7 @@ ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
     LadderMeans.SELL_IDLE,
     LadderMeans.RECYCLE_SURPLUS,
     LadderMeans.BANK_EXPAND,
+    LadderMeans.DRAIN_BANK_JUNK,
     LadderMeans.WAIT,
 )
 
@@ -121,6 +123,7 @@ _MEANS_MAP: dict[LadderMeans, MeansKind] = {
     LadderMeans.MAINTAIN_CONSUMABLES: MeansKind.MAINTAIN_CONSUMABLES,
     LadderMeans.SELL_IDLE: MeansKind.SELL_IDLE,
     LadderMeans.RECYCLE_SURPLUS: MeansKind.RECYCLE_SURPLUS,
+    LadderMeans.DRAIN_BANK_JUNK: MeansKind.DRAIN_BANK_JUNK,
     LadderMeans.BANK_EXPAND: MeansKind.BANK_EXPAND,
     LadderMeans.WAIT: MeansKind.WAIT,
 }
@@ -157,6 +160,7 @@ assert DISCRETIONARY_ORDER == (
     MeansKind.SELL_IDLE,
     MeansKind.RECYCLE_SURPLUS,
     MeansKind.BANK_EXPAND,
+    MeansKind.DRAIN_BANK_JUNK,
     MeansKind.WAIT,
 ), "DISCRETIONARY_ORDER drift — Lean MeansKind.allInLadderOrder is stale"
 

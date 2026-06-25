@@ -164,6 +164,7 @@ _MEANS_INDEX = {
     MeansKind.BANK_EXPAND: 10,
     MeansKind.WAIT: 11,  # Phase 20e-v2 step 1: always-firing sentinel.
     MeansKind.MAINTAIN_CONSUMABLES: 12,  # PLAN #6a: cook/brew heals (combat-active).
+    MeansKind.DRAIN_BANK_JUNK: 13,  # 2026-06-24: drain over-cap bank junk.
 }
 
 

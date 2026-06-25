@@ -159,6 +159,7 @@ import dataclasses
 
 from hypothesis import given, settings, strategies as st
 
+from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.inventory_caps import overstocked_items
@@ -215,6 +216,7 @@ _ORACLE_KEY: dict[LadderMeans, str] = {
     LadderMeans.MAINTAIN_CONSUMABLES: "maintainConsumables",
     LadderMeans.SELL_IDLE: "sellIdle",
     LadderMeans.RECYCLE_SURPLUS: "recycleSurplus",
+    LadderMeans.DRAIN_BANK_JUNK: "drainBankJunk",
     LadderMeans.BANK_EXPAND: "bankExpand",
     LadderMeans.WAIT: "wait",
 }
@@ -382,7 +384,7 @@ _PHASE_INT = {"none": 0, "accepted": 1, "inProgress": 2, "complete": 3}
 
 
 def _oracle_args(scn: Scenario, w: WorldState) -> list[int]:
-    """Build the 31-int oracle arg array reading the STRUCTURAL facts off the
+    """Build the 32-int oracle arg array reading the STRUCTURAL facts off the
     same constructed `WorldState` production reads (coin total, bank item
     count), so neither side can drift on how those are derived. The opaque
     Bools (overstock/deposit/sellable/passthroughs) are computed by helpers
@@ -424,7 +426,19 @@ def _oracle_args(scn: Scenario, w: WorldState) -> list[int]:
         1 if scn.objective_step else 0,          # 28 objectiveStepFires (passed identically)
         0,                                       # 29 maintainConsumablesFires (deferred)
         1 if scn.bank_known else 0,              # 30 bankItemsKnown
+        1 if _bank_junk_nonempty(scn) else 0,    # 31 bankJunkNonempty
     ]
+
+
+def _bank_junk_nonempty(scn: Scenario) -> bool:
+    """Empty-catalog `bank_drain_excess`: the bank's synthetic `b_i` items have
+    no catalog stats ⇒ `useful_quantity_cap` 0 ⇒ every banked unit is over-cap
+    excess. tasks_coin has cap 999 (never excess at these counts). So the bank
+    holds drainable junk iff at least one non-coin item is banked."""
+    if not scn.bank_known:
+        return False
+    coin_in_bank = 1 if (scn.bank_coin_qty > 0 and scn.bank_items_count > 0) else 0
+    return scn.bank_items_count - coin_in_bank >= 1
 
 
 def _has_overstock(scn: Scenario) -> bool:
@@ -784,6 +798,9 @@ def _rich_oracle_args(
         1 if objective_step else 0,                  # 28 objectiveStepFires
         1 if prod[LadderMeans.MAINTAIN_CONSUMABLES] else 0,  # 29 maintainConsumablesFires
         1 if w.bank_items is not None else 0,        # 30 bankItemsKnown
+        # 31: derive from production's REAL bank_drain_excess helper (like 19/20/22),
+        # NOT the slot verdict — the helper IS the opaque nonempty signal.
+        1 if bank_drain_excess(w, gd, frozenset(ctx.target_gear | ctx.target_tools)) else 0,  # 31 bankJunkNonempty
     ]
 
 
@@ -1037,6 +1054,94 @@ def test_recycle_surplus_near_miss_at_cap() -> None:
     prod, _, lean, _ = drive_and_contest(w, gd, _recycle_ctx())
     assert prod[LadderMeans.RECYCLE_SURPLUS] is False
     assert lean[LadderMeans.RECYCLE_SURPLUS] is False
+
+
+# ---------------------------------------------------------------------------
+# Slot 3 — drainBankJunk (arg[31]).  Production DRAIN_BANK_JUNK fires iff
+# `_used_fraction < 0.85` AND `bank_drain_excess(...)` non-empty (tiers/means.py
+# + bank_drain.py): a non-objective code held in the BANK above its useful cap.
+# Like recycleSurplus it sits below the lifecycle slots and can only fire-and-
+# lose; the contest drives it TRUE under phase=none where BOTH ladders select
+# acceptTask (selection agreement at the winner). arg[31] is derived from the
+# REAL bank_drain_excess helper (not the slot verdict).
+# ---------------------------------------------------------------------------
+
+
+def _drain_gd() -> GameData:
+    # Empty catalog: the banked "sap" has no stats ⇒ useful_quantity_cap 0 ⇒
+    # every banked unit is over-cap junk. bank_capacity large ⇒ bank has room ⇒
+    # RECYCLE_RELIEF / SELL_RELIEF quiet so DRAIN_BANK_JUNK wins the slot contest.
+    gd = GameData()
+    gd._bank_capacity = 50
+    return gd
+
+
+def _drain_ctx(*, protect_sap: bool = False) -> SelectionContext:
+    # Protect via target_TOOLS (like the recycle test): bank_drain_excess protects
+    # on `target_gear | target_tools`, and using target_tools keeps the acceptTask
+    # gear-deferral (which reads only target_gear) == Lean at phase none.
+    return SelectionContext(
+        bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
+        initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
+        target_gear=frozenset(),
+        target_tools=frozenset({"sap"}) if protect_sap else frozenset(),
+        gear_review_active=False)
+
+
+def _drain_world(bank_sap_qty: int) -> WorldState:
+    # No task (phase NONE), empty bag (fill 0/20 = 0 < 0.85), bank holds sap.
+    return WorldState(
+        character="diff", level=5, xp=0, max_xp=999999, hp=100, max_hp=100,
+        gold=0, skills={}, x=0, y=0, inventory={}, inventory_max=20,
+        equipment={}, cooldown_expires=None,
+        bank_items={"sap": bank_sap_qty} if bank_sap_qty > 0 else {},
+        bank_gold=None, pending_items=None,
+        task_code=None, task_type=None, task_progress=0, task_total=0)
+
+
+def test_drain_bank_junk_drives_true() -> None:
+    """TRUE fixture: 5 sap banked (over cap 0), empty bag under 0.85 fill,
+    unprotected -> production DRAIN_BANK_JUNK fires. It loses selection to
+    ACCEPT_TASK (phase NONE) on BOTH ladders, binding arg[31] per-slot."""
+    w = _drain_world(bank_sap_qty=5)
+    gd = _drain_gd()
+    prod, prod_sel, lean, lean_sel = drive_and_contest(
+        w, gd, _drain_ctx(), driven=frozenset({LadderMeans.DRAIN_BANK_JUNK}))
+    assert prod[LadderMeans.DRAIN_BANK_JUNK] is True
+    assert lean[LadderMeans.DRAIN_BANK_JUNK] is True
+    assert prod_sel is LadderMeans.ACCEPT_TASK
+    assert lean_sel is LadderMeans.ACCEPT_TASK
+
+
+def test_drain_bank_junk_near_miss_protected() -> None:
+    """Near-miss: sap IS a committed objective code -> bank_drain_excess excludes
+    it -> DRAIN_BANK_JUNK does NOT fire."""
+    w = _drain_world(bank_sap_qty=5)
+    gd = _drain_gd()
+    prod, _, lean, _ = drive_and_contest(w, gd, _drain_ctx(protect_sap=True))
+    assert prod[LadderMeans.DRAIN_BANK_JUNK] is False
+    assert lean[LadderMeans.DRAIN_BANK_JUNK] is False
+
+
+def test_drain_bank_junk_near_miss_empty_bank() -> None:
+    """Near-miss: nothing over-cap in the bank -> DRAIN_BANK_JUNK does NOT fire."""
+    w = _drain_world(bank_sap_qty=0)
+    gd = _drain_gd()
+    prod, _, lean, _ = drive_and_contest(w, gd, _drain_ctx())
+    assert prod[LadderMeans.DRAIN_BANK_JUNK] is False
+    assert lean[LadderMeans.DRAIN_BANK_JUNK] is False
+
+
+def test_drain_bank_junk_fill_boundary() -> None:
+    # Bank holds a drainable junk item (count 1, cap 0). DRAIN_BANK_JUNK gates on
+    # the SAME strict `< 0.85` fill as recycleSurplus/sellIdle: fill 17/20 = 0.85
+    # does NOT fire (no room to withdraw); 16/20 = 0.80 fires. Pins the comparator.
+    _assert_full_agreement(_base_scn(bank_accessible=True, bank_known=True,
+                                     bank_capacity=50, bank_items_count=1,
+                                     inventory_max=20, junk_qty=17))
+    _assert_full_agreement(_base_scn(bank_accessible=True, bank_known=True,
+                                     bank_capacity=50, bank_items_count=1,
+                                     inventory_max=20, junk_qty=16))
 
 
 # ===========================================================================

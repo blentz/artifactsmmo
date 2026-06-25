@@ -132,6 +132,11 @@ structure State where
   /-- `recyclable_surplus(state, game_data, …)` nonempty (recycle_surplus.py): a
       craftable surplus gear item can be recycled for materials (2026-06-14). -/
   recyclableSurplusNonempty : Bool
+  /-- `bank_drain_excess(state, game_data, …)` nonempty (bank_drain.py): the bank
+      holds a non-objective code above its useful keep-cap (2026-06-24). Flipped
+      false by `applyActionKind .withdrawItem` — fire-and-lose, like
+      `recyclableSurplusNonempty`. -/
+  bankJunkNonempty : Bool
   /-- `_tasks_coin_total(state)` (means.py:61-62): inventory + bank. -/
   taskCoinsTotal : Nat
   /-- ctx — `SelectionContext.task_exchange_min_coins` (guards.py:30). -/
