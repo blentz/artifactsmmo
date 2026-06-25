@@ -20,6 +20,7 @@ MUTATION_LOCKFILE = ROOT / ".mutation-run.lock"
 SRC = ROOT / "src" / "artifactsmmo_cli" / "utils" / "pathfinding.py"
 TASK_BATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_batch.py"
 INVENTORY_CAPS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_caps.py"
+ACCUMULATION_SELL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "accumulation_sell.py"
 COMBAT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat.py"
 PROJECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "projection.py"
 GATHERING_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gathering.py"
@@ -305,6 +306,36 @@ INVENTORY_CAPS_MUTATIONS = [
     ("inventory_caps: KEEP_CEILING_FAR 5 -> 6",
      "KEEP_CEILING_FAR = 5",
      "KEEP_CEILING_FAR = 6"),
+]
+
+
+# accumulation_sell (ratio-driven sell-down) mutations. Killed by
+# formal/diff/test_accumulation_sell_diff.py (real core vs the proved
+# Formal.AccumulationSell defs through the `accumulation_sell` oracle).
+ACCUMULATION_SELL_MUTATIONS = [
+    # weaken the ratio gate (5 -> 3): items below 5x cap wrongly become excess.
+    ("accumulation_sell: ACCUM_MULT 5 -> 3",
+     "ACCUM_MULT = 5",
+     "ACCUM_MULT = 3"),
+    # drop the ratio gate entirely: every held quantity reports excess.
+    ("accumulation_sell: drop ratio gate",
+     "    if held < ACCUM_MULT * eff_cap:\n"
+     "        return 0",
+     "    if False:\n"
+     "        return 0"),
+    # steps off-by-one: geometric severity over-counts every doubling.
+    ("accumulation_sell: steps k+1 -> k+2",
+     "        k = k + 1",
+     "        k = k + 2"),
+    # steps loop boundary < instead of <=: under-counts at exact powers.
+    ("accumulation_sell: steps loop <= -> <",
+     "    while bound * 2 <= held:",
+     "    while bound * 2 < held:"),
+    # keep the eff_cap instead of the true cap: a dominated item (cap 0) keeps
+    # 1 instead of selling to 0.
+    ("accumulation_sell: keep eff_cap not true cap",
+     "    keep = cap if cap > 0 else 0",
+     "    keep = cap if cap > 0 else 1"),
 ]
 
 
@@ -3610,6 +3641,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_inventory_caps_diff.py", survivors)
     run_group(INVENTORY_CAPS_SRC, INVENTORY_PROFILE_MUTATIONS,
               "formal/diff/test_inventory_profile_diff.py", survivors)
+    run_group(ACCUMULATION_SELL_SRC, ACCUMULATION_SELL_MUTATIONS,
+              "formal/diff/test_accumulation_sell_diff.py", survivors)
     run_group(COMBAT_SRC, PREDICT_WIN_MUTATIONS,
               "formal/diff/test_predict_win_diff.py", survivors)
     run_group(COMBAT_SRC, PREDICT_WIN_LIFESTEAL_MUTATIONS,

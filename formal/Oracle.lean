@@ -1,4 +1,5 @@
 import Formal
+import Formal.AccumulationSell
 import Formal.CraftPlanDriver
 import Lean.Data.Json
 
@@ -58,6 +59,13 @@ def runInventoryCaps (batchBuf safetyFlr recipeDemand : Int)
   let o := overstockWith batchBuf safetyFlr recipeDemand
               equippableCap consumableCap actionCap taskRemaining equipped qty
   Json.mkObj [("cap", Json.num c), ("overstock", Json.num o)]
+
+/-- Accumulation-sell core: mirror `accumulation_sell.accumulation_steps` /
+    `accumulation_excess` over the proved Lean defs. args: [held, cap]. -/
+def runAccumulationSell (held cap : Int) : Json :=
+  let s := Formal.AccumulationSell.accumulationSteps held.toNat cap.toNat
+  let e := Formal.AccumulationSell.accumulationExcess held.toNat cap.toNat
+  Json.mkObj [("steps", Json.num (Int.ofNat s)), ("excess", Json.num (Int.ofNat e))]
 
 /-- Compute one predict_win verdict using the SAME proved `predictWin`/`rawHit`.
 
@@ -2282,6 +2290,9 @@ def runOne (item : Json) : Json :=
     runInventoryCaps (intArg args 0) (intArg args 1) (intArg args 2)
       (intArg args 3) (intArg args 4) (intArg args 5) (intArg args 6)
       (intArg args 7 != 0) (intArg args 8)
+  else if kind == "accumulation_sell" then
+    -- args: [held, cap]
+    runAccumulationSell (intArg args 0) (intArg args 1)
   else if kind == "equip_cap_value" then
     -- args: [equippable(0/1), dominated(0/1)]
     runEquipCapValue (intArg args 0) (intArg args 1)
