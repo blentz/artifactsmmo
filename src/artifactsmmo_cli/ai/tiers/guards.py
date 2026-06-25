@@ -190,11 +190,16 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
                 and state.level < ctx.bank_required_level
                 and ctx.bank_required_level - state.level <= MAX_ACHIEVABLE_GAP)
     if kind is GuardKind.DISCARD_CRITICAL:
-        return (not bank_has_room(ctx.bank_accessible, state.bank_items,
-                                  game_data.bank_capacity)
-                and bool(overstocked_items(state, game_data,
-                                           profile=active_profile(state, game_data, ctx,
-                                                                  step_profile)))
+        # Overstock is genuine excess ABOVE the need/value inventory cap (the
+        # active profile protects everything the goal still needs), so shedding it
+        # is correct whether or not the bank has room — banking junk we will not
+        # use for ~15 levels (e.g. 62 sap, target 1) just hoards it and, when the
+        # bag is full, lets the deposit thrash on the active craft input instead
+        # of clearing the junk (live Robby 2026-06-24: Withdraw(ash_plank)↔Deposit
+        # loop, all "ok", no stuck signal). NOT gated on bank-full anymore.
+        return (bool(overstocked_items(state, game_data,
+                                       profile=active_profile(state, game_data, ctx,
+                                                              step_profile)))
                 and _used_fraction(state) >= DISCARD_CRITICAL_FRACTION)
     if kind is GuardKind.CRAFT_RELIEF:
         if _used_fraction(state) < CRAFT_RELIEF_FRACTION:
@@ -221,11 +226,14 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
                     state, game_data,
                     frozenset(active_profile(state, game_data, ctx, step_profile)))))
     if kind is GuardKind.DISCARD_HIGH:
-        return (not bank_has_room(ctx.bank_accessible, state.bank_items,
-                                  game_data.bank_capacity)
-                and bool(overstocked_items(state, game_data,
-                                           profile=active_profile(state, game_data, ctx,
-                                                                  step_profile)))
+        # Same as DISCARD_CRITICAL: overstock above the need/value cap is shed
+        # regardless of bank room (don't hoard junk). Fires at the lower
+        # DISCARD_HIGH watermark, BELOW DEPOSIT_FULL in priority — so a bag merely
+        # high (not critical) deposits its retrievable buffer first, then sheds
+        # the residual junk overstock.
+        return (bool(overstocked_items(state, game_data,
+                                       profile=active_profile(state, game_data, ctx,
+                                                              step_profile)))
                 and _used_fraction(state) >= DISCARD_HIGH_FRACTION)
     if kind is GuardKind.GEAR_REVIEW:
         return ctx.gear_review_active

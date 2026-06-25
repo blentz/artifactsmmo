@@ -220,19 +220,21 @@ def test_deposit_full_fires_when_bank_has_room():
     assert _fires(GuardKind.DEPOSIT_FULL, state, gd, None, ctx) is True
 
 
-def test_discard_quiet_when_bank_has_room():
-    """With bank room, overstock is deposited, not discarded — both DISCARD
-    guards must be silent even when overstock is present."""
+def test_discard_fires_on_overstock_even_with_bank_room():
+    """2026-06-24: genuine overstock (above the need/value cap) is shed REGARDLESS
+    of bank room — banking far-future junk just hoards it and, when the bag is
+    full, lets the deposit thrash on the active craft input. Both DISCARD guards
+    fire on overstock at their watermark even when the bank has free slots."""
     gd = GameData()
     gd._bank_capacity = 50
     # inventory={"junk": 100}, inventory_max=100 → 100% fill, junk is overstock
     # (empty catalog → cap 0, any quantity is overstock under pressure).
-    # bank has room: 1 item < capacity 50.
+    # bank has room: 1 item < capacity 50 — discard no longer waits for bank-full.
     state = make_state(inventory={"junk": 100}, inventory_max=100,
                        bank_items={"x": 1})
     ctx = _ctx()  # bank_accessible=True
-    assert _fires(GuardKind.DISCARD_CRITICAL, state, gd, None, ctx) is False
-    assert _fires(GuardKind.DISCARD_HIGH, state, gd, None, ctx) is False
+    assert _fires(GuardKind.DISCARD_CRITICAL, state, gd, None, ctx) is True
+    assert _fires(GuardKind.DISCARD_HIGH, state, gd, None, ctx) is True
 
 
 def test_discard_fires_when_bank_full():
@@ -596,11 +598,17 @@ def test_bank_full_cascade_order():
     )
     assert GuardKind.DEPOSIT_FULL not in fired, "DEPOSIT_FULL must not fire when bank is full"
 
-    # Sub-case 5: bank has room → DEPOSIT_FULL fires; relief/discard guards silent.
+    # Sub-case 5: bank has room → DEPOSIT_FULL fires (the retrievable buffer) and
+    # precedes any DISCARD_HIGH; the bank-full-only relief guards stay silent.
+    # 2026-06-24: DISCARD_HIGH may now ALSO fire on overstock with bank room
+    # (junk is shed, not hoarded) — but it ranks BELOW DEPOSIT_FULL, so the buffer
+    # deposits first and only the residual junk overstock discards.
     gd, state = _state_bank_has_room()
     fired = active_guards(state, gd, None, ctx)
     assert GuardKind.DEPOSIT_FULL in fired, f"expected DEPOSIT_FULL in {fired}"
     assert GuardKind.RECYCLE_RELIEF not in fired, "RECYCLE_RELIEF must not fire with room"
     assert GuardKind.SELL_RELIEF not in fired, "SELL_RELIEF must not fire with room"
-    assert GuardKind.DISCARD_HIGH not in fired, "DISCARD_HIGH must not fire with room"
+    if GuardKind.DISCARD_HIGH in fired:
+        assert fired.index(GuardKind.DEPOSIT_FULL) < fired.index(GuardKind.DISCARD_HIGH), (
+            f"DEPOSIT_FULL (buffer) must precede DISCARD_HIGH, got {fired}")
     assert GuardKind.DISCARD_CRITICAL not in fired, "DISCARD_CRITICAL must not fire with room"

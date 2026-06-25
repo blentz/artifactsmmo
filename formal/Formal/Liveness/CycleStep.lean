@@ -298,7 +298,7 @@ theorem cycleStep_progress_or_waits
     rw [hcs]
     simp only [fires, discardCriticalFires, Bool.not_eq_true', Bool.and_eq_true,
                decide_eq_true_eq] at hfires
-    have hpre : s.hasOverstockItems = true := hfires.1.1.2
+    have hpre : s.hasOverstockItems = true := hfires.1.1
     intro heq
     have hpost : ({s with hasOverstockItems := false} : State).hasOverstockItems = false := rfl
     have hpre' : s.hasOverstockItems = false := by
@@ -390,7 +390,7 @@ theorem cycleStep_progress_or_waits
     rw [hcs]
     simp only [fires, discardHighFires, Bool.not_eq_true', Bool.and_eq_true,
                decide_eq_true_eq] at hfires
-    have hpre : s.hasOverstockItems = true := hfires.1.1.2
+    have hpre : s.hasOverstockItems = true := hfires.1.1
     intro heq
     have hpost : ({s with hasOverstockItems := false} : State).hasOverstockItems = false := rfl
     have hpre' : s.hasOverstockItems = false := by

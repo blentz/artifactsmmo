@@ -113,19 +113,27 @@ class DiscardOverstockGoal(Goal):
                 ))
                 ge_action_available = True
 
+            sell_action: NpcSellAction | None = None
             if npc_code is not None and npc_loc is not None:
-                result.append(NpcSellAction(
+                sell_action = NpcSellAction(
                     npc_code=npc_code, item_code=code, quantity=excess_qty,
                     npc_location=npc_loc,
-                ))
-            elif not ge_action_available and npc_loc is None:
-                # No reachable NPC buyer AND no fillable GE order — Delete is
-                # the only action the planner can execute for a truly-worthless-
-                # NOW item.  A buyer whose npc_location is None is a dormant
-                # event merchant (spawn window closed); NpcSellAction.is_applicable
-                # rejects them on the same check, so protecting those items from
-                # deletion causes a permanent bag-full livelock.  They are
-                # deletable (worthless-now) — the slot must be freed.
+                )
+                result.append(sell_action)
+            # Delete fallback: emit a Delete whenever there is no fillable GE order
+            # AND no EXECUTABLE sell — i.e. no sell action at all, OR the sell
+            # action is not currently applicable. The latter is the dormant
+            # event-merchant case (trace 2026-06-24): sap's only buyer is the
+            # `timber_merchant` event NPC — it HAS a location (so the old
+            # `npc_loc is None` guard left Delete unoffered) but its spawn window
+            # is closed, so NpcSellAction.is_applicable is False. With neither sell
+            # nor delete executable the overstock never clears → the bag-full
+            # Withdraw↔Deposit livelock. Delete frees the slot for a worthless-NOW
+            # item; when the event later spawns, the sell (gold) is preferred.
+            if not ge_action_available and (
+                sell_action is None
+                or not sell_action.is_applicable(state, game_data)
+            ):
                 result.append(DeleteItemAction(code=code, quantity=excess_qty))
         return result
 

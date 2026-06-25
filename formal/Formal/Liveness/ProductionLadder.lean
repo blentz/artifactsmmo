@@ -152,11 +152,13 @@ def bankHasRoom (s : State) : Bool :=
       ¬bank_has_room AND overstocked AND used/max ≥ 0.95
     Nat form: `100 * inventoryUsed ≥ 95 * inventoryMax`, treating
     `inventoryMax == 0` as ratio 0 (NOT firing).
-    Task 3: added `!(bankHasRoom s)` so discard only fires when the bank
-    cannot accept deposits — deposits take priority when bank has room. -/
+    2026-06-24: dropped the `!(bankHasRoom s)` gate — genuine overstock (above
+    the need/value cap; the active profile protects what the goal needs) is shed
+    regardless of bank room (don't hoard junk). DISCARD_CRITICAL outranks
+    DEPOSIT_FULL in the ladder, so it now preempts the deposit when overstocked
+    at the critical watermark. -/
 def discardCriticalFires (s : State) : Bool :=
-  !(bankHasRoom s)
-  && s.hasOverstockItems
+  s.hasOverstockItems
   && decide (s.inventoryMax > 0)
   && decide (DISCARD_CRITICAL_DEN * s.inventoryUsed
               ≥ DISCARD_CRITICAL_NUM * s.inventoryMax)
@@ -175,11 +177,11 @@ def depositFullFires (s : State) : Bool :=
 
 /-- DISCARD_HIGH guard. Mirrors `guards.py` DISCARD_HIGH branch:
       ¬bank_has_room AND overstocked AND used/max ≥ 0.85
-    Task 3: added `!(bankHasRoom s)` so discard only fires when the bank
-    cannot accept deposits — deposits take priority when bank has room. -/
+    2026-06-24: dropped the `!(bankHasRoom s)` gate (see discardCriticalFires).
+    DISCARD_HIGH is BELOW DEPOSIT_FULL in the ladder, so the deposit buffer fires
+    first and DISCARD_HIGH sheds the residual junk overstock. -/
 def discardHighFires (s : State) : Bool :=
-  !(bankHasRoom s)
-  && s.hasOverstockItems
+  s.hasOverstockItems
   && decide (s.inventoryMax > 0)
   && decide (DISCARD_HIGH_DEN * s.inventoryUsed
               ≥ DISCARD_HIGH_NUM * s.inventoryMax)
