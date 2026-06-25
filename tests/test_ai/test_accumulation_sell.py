@@ -68,3 +68,44 @@ def test_excess_zero_below_ratio_gate():
 def test_constants():
     assert ACCUM_MULT == 5
     assert SEVERE_STEPS == 5
+
+
+def test_sellable_accumulation_excludes_non_tradeable_even_with_buyer():
+    """A non-tradeable item with a buyer is excluded by sellable_accumulation."""
+    from artifactsmmo_cli.ai.accumulation_sell import _is_sellable
+    gd = GameData()
+    gd._item_stats = {
+        "bound_blade": ItemStats(code="bound_blade", level=1, type_="weapon",
+                                 crafting_skill="weaponcrafting", crafting_level=1,
+                                 tradeable=False),
+    }
+    gd._crafting_recipes = {}
+    gd._npc_sell_prices = {"vendor": {"bound_blade": 3}}
+    gd._npc_locations = {"vendor": (1, 1)}
+
+    # Verify the item is NOT sellable because not tradeable.
+    assert _is_sellable("bound_blade", gd) is False
+
+    # Even with held=20 (well above gate 5*1), it should be excluded.
+    state = make_state(level=1, inventory={"bound_blade": 20})
+    assert sellable_accumulation(state, gd) == {}
+
+
+def test_worst_accumulation_steps_skips_unsellable_and_zero_qty():
+    """worst_accumulation_steps skips items with held <= 0 or not sellable."""
+    gd = GameData()
+    gd._item_stats = {
+        "unsellable_item": ItemStats(code="unsellable_item", level=1, type_="misc"),
+    }
+    gd._crafting_recipes = {}
+    # unsellable_item has no buyer, so it's not sellable
+    gd._npc_sell_prices = {}
+    gd._npc_locations = {}
+
+    # State with zero qty and one unsellable item -> worst_accumulation_steps returns 0
+    state = make_state(level=1, inventory={"unsellable_item": 0})
+    assert worst_accumulation_steps(state, gd) == 0
+
+    # Also test with negative qty (edge case, but ensures continue is exercised)
+    state = make_state(level=1, inventory={"unsellable_item": -5})
+    assert worst_accumulation_steps(state, gd) == 0
