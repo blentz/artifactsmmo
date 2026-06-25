@@ -1,3 +1,4 @@
+-- @concept: inventory, selling @property: safety, monotonicity
 /-
 Formal model of `accumulation_steps` / `accumulation_excess` from
 `src/artifactsmmo_cli/ai/accumulation_sell.py`.
