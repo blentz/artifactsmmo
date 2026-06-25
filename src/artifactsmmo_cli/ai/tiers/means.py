@@ -7,6 +7,7 @@ No Goal-class imports — the driver (StrategyArbiter) maps MeansKind to goals.
 
 from enum import Enum
 
+from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
 from artifactsmmo_cli.ai.consumable_supply import maintain_consumables_fires
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.projections import low_yield_cancel_fires
@@ -33,10 +34,11 @@ class MeansKind(Enum):
     RECYCLE_SURPLUS = "recycle_surplus"
     BANK_EXPAND = "bank_expand"
     WAIT = "wait"
-    # Appended LAST so the DecideKey oracle's index dispatch (0..11) and the diff
-    # test's _MEANS_INDEX stay stable — enum identity is independent of the
+    # Appended LAST so the DecideKey oracle's index dispatch and the diff test's
+    # _MEANS_INDEX stay stable — enum identity is independent of the
     # DISCRETIONARY_ORDER priority slot below (PLAN #6a).
     MAINTAIN_CONSUMABLES = "maintain_consumables"
+    DRAIN_BANK_JUNK = "drain_bank_junk"  # 2026-06-24: drain over-cap bank junk.
 
 
 COLLECT_REWARD_ORDER: tuple[MeansKind, ...] = (
@@ -53,6 +55,7 @@ DISCRETIONARY_ORDER: tuple[MeansKind, ...] = (
     MeansKind.MAINTAIN_CONSUMABLES,  # prep heals for combat before idle housekeeping
     MeansKind.SELL_IDLE,
     MeansKind.RECYCLE_SURPLUS,
+    MeansKind.DRAIN_BANK_JUNK,
     MeansKind.BANK_EXPAND,
     MeansKind.WAIT,
 )
@@ -139,6 +142,15 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         # craftable gear (not the committed objective) can be recycled for mats.
         return (_used_fraction(state) < SELL_PRESSURE_FRACTION
                 and bool(recyclable_surplus(
+                    state, game_data, ctx.target_gear | ctx.target_tools)))
+
+    if kind is MeansKind.DRAIN_BANK_JUNK:
+        # Idle/low-pressure only: the withdraw mints items into the bag, so it
+        # needs free slots to land (under pressure the deposit/discard guards
+        # handle space). Fires when over-cap bank junk exists that is not the
+        # committed objective gear.
+        return (_used_fraction(state) < SELL_PRESSURE_FRACTION
+                and bool(bank_drain_excess(
                     state, game_data, ctx.target_gear | ctx.target_tools)))
 
     if kind is MeansKind.MAINTAIN_CONSUMABLES:

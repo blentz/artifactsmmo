@@ -31,6 +31,7 @@ from artifactsmmo_cli.ai.goals.reach_currency import ReachCurrencyGoal
 from artifactsmmo_cli.ai.goals.maintain_consumables import MaintainConsumablesGoal
 from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
+from artifactsmmo_cli.ai.goals.drain_bank_junk import DrainBankJunkGoal
 from artifactsmmo_cli.ai.goals.recycle_surplus import RecycleSurplusGoal
 from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
@@ -349,6 +350,10 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
     if kind is MeansKind.RECYCLE_SURPLUS:
         return RecycleSurplusGoal(game_data=game_data,
                                   protected_codes=ctx.target_gear | ctx.target_tools)
+    if kind is MeansKind.DRAIN_BANK_JUNK:
+        return DrainBankJunkGoal(game_data=game_data,
+                                 protected_codes=ctx.target_gear | ctx.target_tools,
+                                 bank_accessible=ctx.bank_accessible)
     if kind is MeansKind.LOW_YIELD_CANCEL:
         return LowYieldCancelGoal()
     if kind is MeansKind.TASK_CANCEL:
