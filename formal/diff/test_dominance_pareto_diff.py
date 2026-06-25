@@ -5,7 +5,7 @@ the proved Lean `Formal.DominancePareto.paretoDominates`, via the
 This bridges the model↔code gap for the per-monster dominance filter: the live
 function that decides whether a peer stat-vector strictly dominates an item
 stat-vector (`pareto_dominates`) is the SAME function the kernel proved
-(`pareto_irreflexive`, `geqAll_of_paretoDominates`, `gtSome_of_paretoDominates`, …).
+(`pareto_implies_geq`, `pareto_needs_strict`, `pareto_irreflexive`).
 """
 from hypothesis import given, settings
 from hypothesis import strategies as st
