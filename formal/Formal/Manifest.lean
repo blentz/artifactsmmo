@@ -25,6 +25,7 @@ import Formal.DoomedMemo
 import Formal.SkillGateFastFail
 import Formal.LeafAttainable
 import Formal.CompleteTaskIncome
+import Formal.AccumulationSell
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
@@ -55,6 +56,12 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @consumableCap_eq_keep_of_healing  -- hp_restore > 0 ⇒ consumableCap = CONSUMABLE_KEEP
 #check @equipCapFromPeers_dominated       -- dominator-owned ≥ slotCount ⇒ equippableCap = 0
 #check @isDominatedBy_nil_of_positive_slot -- empty peer list, slot ≥ 1 ⇒ ¬dominated
+-- AccumulationSell required roles (ratio-driven sell-down of accumulated multiples):
+#check @Formal.AccumulationSell.below_gate_quiet              -- below ratio gate ⇒ excess = 0 (no action)
+#check @Formal.AccumulationSell.fires_implies_excess_positive -- gate fires on kept item ⇒ excess > 0
+#check @Formal.AccumulationSell.excess_sells_down_to_cap      -- fired branch ⇒ shed leaves exactly cap held
+#check @Formal.AccumulationSell.excess_monotone              -- ↑held ⇒ ≥ excess (monotone shed)
+#check @Formal.AccumulationSell.steps_threshold             -- severeSteps ≤ steps ⇒ max(cap,1)*32 ≤ held
 -- InventoryProfile required roles (per-goal soft-target overstock core, spec 2026-06-07):
 #check @Formal.InventoryProfile.overstock_exact            -- pins the space-driven overstock formula
 #check @Formal.InventoryProfile.no_overstock_below_watermark -- below watermark ⇒ 0 overstock (space-driven)

@@ -51,14 +51,15 @@ class TestSellInventorySeize:
             assert goal.value(state, gd) >= SEIZE_WINDOW_VALUE
 
     def test_no_boost_when_no_window_and_bank_accessible(self):
-        """Bank accessible and no active event -> value == 0."""
+        """Bank accessible, no active event, and no accumulation -> value == 0."""
         gd = _gd()
-        # 101 used out of 104 max -> free=3 < MIN_FREE_SLOTS(5) -> NOT satisfied
+        # 4 copper_ore < ACCUM_MULT * eff_cap (5*1=5) -> no accumulation
+        # inventory_max=7, free=3 < MIN_FREE_SLOTS(5) -> NOT satisfied
         state = make_state(
             x=6,
             y=-1,
-            inventory={"copper_ore": 101},
-            inventory_max=104,
+            inventory={"copper_ore": 4},
+            inventory_max=7,
             active_events={},
         )
         with patch("artifactsmmo_cli.ai.goals.sell_inventory.datetime") as dt:
@@ -84,15 +85,15 @@ class TestSellInventorySeize:
             expected = 96 / 100 * 100.0
             assert goal.value(state, gd) == expected
 
-    def test_satisfied_returns_zero_even_with_window(self):
-        """When is_satisfied(state), value is 0 regardless of window."""
+    def test_satisfied_returns_zero_when_no_accumulation_even_with_window(self):
+        """When satisfied and no accumulation, value is 0 regardless of window."""
         gd = _gd()
-        # inventory_free = inventory_max - inventory_used; need free >= MIN_FREE_SLOTS(5)
-        # inventory_max=104, copper_ore=10 -> used=10, free=94 -> satisfied
+        # 4 copper_ore < ACCUM_MULT * eff_cap (5*1=5) -> no accumulation
+        # inventory_max=104, free=100 >= MIN_FREE_SLOTS(5) -> satisfied
         state = make_state(
             x=6,
             y=-1,
-            inventory={"copper_ore": 10},
+            inventory={"copper_ore": 4},
             inventory_max=104,
             active_events={"gemstone_merchant": FIXED_NOW + timedelta(minutes=30)},
         )
@@ -135,14 +136,15 @@ class TestSellInventorySeize:
             assert result == max(96.0, SEIZE_WINDOW_VALUE)
 
     def test_expired_event_no_boost(self):
-        """Expired event (expiry in the past) -> no boost when bank accessible."""
+        """Expired event (expiry in the past) -> no boost when bank accessible and no accumulation."""
         gd = _gd()
-        # 96 used / 100 max -> free=4 < MIN_FREE_SLOTS(5) -> NOT satisfied
+        # 4 copper_ore < ACCUM_MULT * eff_cap (5*1=5) -> no accumulation
+        # inventory_max=7, free=3 < MIN_FREE_SLOTS(5) -> NOT satisfied
         state = make_state(
             x=6,
             y=-1,
-            inventory={"copper_ore": 96},
-            inventory_max=100,
+            inventory={"copper_ore": 4},
+            inventory_max=7,
             active_events={"gemstone_merchant": FIXED_NOW - timedelta(minutes=5)},
         )
         with patch("artifactsmmo_cli.ai.goals.sell_inventory.datetime") as dt:

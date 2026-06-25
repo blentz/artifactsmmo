@@ -2,6 +2,11 @@
 
 from datetime import datetime, timezone
 
+from artifactsmmo_cli.ai.accumulation_sell import (
+    SEVERE_STEPS,
+    sellable_accumulation,
+    worst_accumulation_steps,
+)
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.event_availability import event_npc_tradeable
@@ -15,6 +20,15 @@ SEIZE_WINDOW_VALUE = 60.0
 """Goal value when a reachable merchant event is live and we hold sellable
 stock — high enough to opportunistically sell during the rare window, but
 below the bank-locked near-full urgency (which can reach ~100)."""
+
+ACCUM_BASE = 18.0
+ACCUM_STEP = 3.0
+DISCRETIONARY_CEIL = 48.0
+"""Idle accumulation-sell value, all within the discretionary band (strictly
+below progression 50 / survival 70 — never derails active leveling): a SEVERE
+hoard (`steps >= SEVERE_STEPS`, i.e. held >= 32x the keep-cap) goes straight to
+`DISCRETIONARY_CEIL` so it sheds first among housekeeping; a moderate hoard
+ramps `min(ACCUM_BASE + steps*ACCUM_STEP, DISCRETIONARY_CEIL)`."""
 
 
 class SellInventoryGoal(Goal):
@@ -39,17 +53,25 @@ class SellInventoryGoal(Goal):
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
-        if state.inventory_max == 0 or self.is_satisfied(state):
+        if state.inventory_max == 0:
             return 0.0
         sellable = any(game_data.npcs_buying_item(code)
                        for code in state.inventory if state.inventory[code] > 0)
         if not sellable:
             return 0.0
+        steps = worst_accumulation_steps(state, game_data)
+        if steps >= SEVERE_STEPS:
+            accum_value = DISCRETIONARY_CEIL
+        elif steps > 0:
+            accum_value = min(ACCUM_BASE + steps * ACCUM_STEP, DISCRETIONARY_CEIL)
+        else:
+            accum_value = 0.0
+        if self.is_satisfied(state) and accum_value == 0.0:
+            return 0.0
         used_fraction = state.inventory_used / state.inventory_max
         bank_locked_value = 0.0 if self._bank_accessible else used_fraction * 100.0
-        if self._active_window_for_inventory(state, game_data):
-            return max(bank_locked_value, SEIZE_WINDOW_VALUE)
-        return bank_locked_value
+        window_value = SEIZE_WINDOW_VALUE if self._active_window_for_inventory(state, game_data) else 0.0
+        return max(bank_locked_value, accum_value, window_value)
 
     def is_satisfied(self, state: WorldState) -> bool:
         return state.inventory_free >= MIN_FREE_SLOTS
@@ -63,6 +85,16 @@ class SellInventoryGoal(Goal):
             if "recovery" in action.tags or (isinstance(action, NpcSellAction)
                                              and state.inventory.get(action.item_code, 0) > 0):
                 result.append(action)
+        for code, excess in sellable_accumulation(state, game_data).items():
+            buyers = game_data.npcs_buying_item(code)
+            npc_code = buyers[0][0]
+            loc = game_data.npc_location(npc_code)
+            if loc is None:
+                continue
+            act = NpcSellAction(npc_code=npc_code, item_code=code,
+                                quantity=excess, npc_location=loc)
+            if act.is_applicable(state, game_data):
+                result.append(act)
         return result
 
     def __repr__(self) -> str:
