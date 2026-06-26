@@ -9,6 +9,10 @@ from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.inventory_caps import overstocked_items
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.liquidation_venue import Venue, liquidation_venue
+from artifactsmmo_cli.ai.thresholds import (
+    PRESSURE_CRITICAL_FRACTION,
+    PRESSURE_HIGH_FRACTION,
+)
 from artifactsmmo_cli.ai.world_state import WorldState
 
 # Value constants (inlined from retired priorities.py).
@@ -22,14 +26,16 @@ _DISCARD_OVERSTOCK_CRITICAL = 85.0
 PRIORITY_WHEN_OVERSTOCKED = _DISCARD_OVERSTOCK_BASE
 """Baseline. Pressure-scaled tiers use _DISCARD_OVERSTOCK_* module constants."""
 
-HIGH_PRESSURE_FRACTION = 0.85
+HIGH_PRESSURE_FRACTION = PRESSURE_HIGH_FRACTION
 """inventory_used/max above this → _DISCARD_OVERSTOCK_HIGH_PRESSURE (55).
 Preempts gather (50) so bag-near-full triggers a sell/delete cycle before
-gather actions start failing on full inventory."""
+gather actions start failing on full inventory. The 0.85 value is the shared
+pressure-ladder HIGH rung (single source: ai/thresholds.py)."""
 
-CRITICAL_PRESSURE_FRACTION = 0.95
+CRITICAL_PRESSURE_FRACTION = PRESSURE_CRITICAL_FRACTION
 """inventory_used/max above this → _DISCARD_OVERSTOCK_CRITICAL (85). Any
-further Gather will fail; clear overstock immediately."""
+further Gather will fail; clear overstock immediately. The 0.95 value is the
+shared pressure-ladder CRITICAL rung (single source: ai/thresholds.py)."""
 
 
 class DiscardOverstockGoal(Goal):
