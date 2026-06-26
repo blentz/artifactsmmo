@@ -2087,7 +2087,7 @@ CHEAPEST_PATH_MUTATIONS = [
     # Python picks the unwinnable 'hard' monster while Lean (still filtering via
     # winnable=0) picks 'easy' — divergence kills this mutant.
     ("cheapest_path: drop is_winnable beatability filter",
-     "            and is_winnable(state, game_data, code, store)",
+     "            and is_winnable(rested, game_data, code, store)",
      ""),
 ]
 
