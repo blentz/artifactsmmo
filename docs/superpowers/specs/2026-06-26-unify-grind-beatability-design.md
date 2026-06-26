@@ -49,13 +49,16 @@ beatable = [ (code, lvl) for code, lvl in game_data.monster_levels.items()
 
 ### 2. Proven core (`formal/Formal/CheapestPath.lean`)
 
-The core currently hardcodes the beatability gate (`beatable simLevel level := 1 ≤ level ∧ level ≤ simLevel + 1`). Refactor so the core operates over a
-**pre-filtered candidate list** supplied by the shell (each candidate already
-beatable per §1). The greedy-pick, strict `sim_level` termination, and
-`blocked`-when-no-candidate theorems are unchanged — they hold for any candidate
-list. This removes the duplicated beatability MODEL from the proof too: the gate
-`1 ≤ level ≤ simLevel+1` is no longer a proof concern; "is this monster a
-candidate" is decided once, in the shell, by `is_winnable`.
+The missing piece was *winnability*, not the level gate (the `1 ≤ level ≤
+simLevel+1` applicability gate is already mirrored consistently in both the
+projection and `FightAction`, and differential-tested). So carry the
+`is_winnable` verdict into the core as DATA: add a `winnable : Bool` field to the
+`Monster` candidate and make `isBeatable simLevel m := (1 ≤ level) ∧ (level ≤
+simLevel+1) ∧ m.winnable`. The shell computes `m.winnable = is_winnable(state,
+game_data, code, store)` — the single beatability source. The greedy-pick, strict
+`sim_level` termination, and `blocked`-when-no-candidate theorems are unchanged in
+statement; ANDing a conjunct into `isBeatable` only shrinks the filtered set,
+which those proofs already quantify over generically.
 
 The `predict_win` / `is_winnable` cores are reused UNCHANGED (already proven).
 
@@ -72,7 +75,7 @@ change to player.py or the snapshot — the fix flows through.
 | File | Change |
 |---|---|
 | `learning/projections.py` | `cheapest_path_to_level` beatable filter → `is_winnable`; delete the win-rate filter; import `combat.is_winnable` |
-| `formal/Formal/CheapestPath.lean` | parametrize the candidate list (remove the hardcoded level gate from the proof); re-prove greedy/termination/blocked |
+| `formal/Formal/CheapestPath.lean` | add `Monster.winnable : Bool`; `isBeatable` ANDs it (level gate kept as the mirrored FightAction invariant); theorem statements unchanged |
 | `formal/Oracle.lean` + `formal/diff/test_cheapest_path_diff.py` | update for the new core input shape; the differential now feeds pre-filtered candidates |
 | `formal/diff/mutate.py` | refresh CheapestPath anchors for the new shape |
 
