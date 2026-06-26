@@ -222,6 +222,11 @@ def cheapest_path_to_level(
         # Beatable monsters at sim_level: FightAction.is_applicable allows
         # monster_level <= state.level + 1, AND is_winnable (the same verdict
         # the runtime uses) so projection and executor agree on the monster.
+        # NOTE: this filters at the CURRENT `state.hp`, whereas the runtime
+        # `_winnable_farm_target` rests to max_hp before its `is_winnable` check.
+        # The projection is therefore the STRICTER filter at low HP — never
+        # optimistic — so whatever it emits the runtime re-validates as winnable.
+        # Not a bug: same `is_winnable` function, intentionally current-state args.
         beatable = [
             (code, lvl) for code, lvl in game_data.monster_levels.items()
             if 1 <= lvl <= sim_level + 1
