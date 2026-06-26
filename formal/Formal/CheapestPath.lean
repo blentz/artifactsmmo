@@ -43,6 +43,8 @@ structure Monster where
   code : Nat               -- abstract code id (Nat for decidability)
   level : Nat              -- monster level
   xpPerCycle : Nat         -- precomputed xp per cycle (observed or formula)
+  winnable : Bool          -- combat.is_winnable verdict (shell-computed); the
+                           -- single beatability source shared with the runtime
   deriving Repr, DecidableEq
 
 /-- A path segment. -/
@@ -66,7 +68,7 @@ structure PathPlan where
 /-- A monster is beatable at `simLevel` iff `1 ≤ level ≤ simLevel + 1`.
 Matches `FightAction.is_applicable` precondition (the +1 margin). -/
 def isBeatable (simLevel : Nat) (m : Monster) : Bool :=
-  decide (1 ≤ m.level) && decide (m.level ≤ simLevel + 1)
+  decide (1 ≤ m.level) && decide (m.level ≤ simLevel + 1) && m.winnable
 
 /-- Foldl-max over a non-empty candidate list. A later candidate
 replaces the running best ONLY when its `xpPerCycle` is STRICTLY
@@ -260,12 +262,14 @@ theorem pickBest_max (simLevel : Nat) (monsters : List Monster) (m : Monster)
     | tail _ hin =>
       rw [← h]; exact foldMax_ge_mem c cs x hin
 
-/-- The +1 beatability margin: a monster at simLevel + 1 IS beatable. -/
+/-- The +1 beatability margin: a winnable monster at simLevel + 1 IS beatable.
+The `winnable` hypothesis is the shell-computed `combat.is_winnable` verdict —
+the single beatability source now ANDed into `isBeatable`. -/
 theorem isBeatable_plus_one (simLevel : Nat) (m : Monster)
-    (_h1 : 1 ≤ m.level) (h2 : m.level = simLevel + 1) :
+    (_h1 : 1 ≤ m.level) (h2 : m.level = simLevel + 1) (hw : m.winnable = true) :
     isBeatable simLevel m = true := by
   unfold isBeatable
-  simp [h2]
+  simp [h2, hw]
 
 /-- Off-boundary: a monster at simLevel + 2 is NOT beatable. -/
 theorem isBeatable_off_boundary (simLevel : Nat) (m : Monster)
@@ -314,31 +318,31 @@ theorem stepLevel_all_zero_blocks (simLevel xpToNext : Nat) (monsters : List Mon
 /-! ### Boundary witnesses (non-vacuous probes) -/
 
 theorem beatable_plus_one_witness :
-    isBeatable 3 { code := 1, level := 4, xpPerCycle := 10 } = true := by decide
+    isBeatable 3 { code := 1, level := 4, xpPerCycle := 10, winnable := true } = true := by decide
 
 theorem beatable_plus_two_refused_witness :
-    isBeatable 3 { code := 1, level := 5, xpPerCycle := 10 } = false := by decide
+    isBeatable 3 { code := 1, level := 5, xpPerCycle := 10, winnable := true } = false := by decide
 
 theorem beatable_level_zero_refused_witness :
-    isBeatable 3 { code := 1, level := 0, xpPerCycle := 10 } = false := by decide
+    isBeatable 3 { code := 1, level := 0, xpPerCycle := 10, winnable := true } = false := by decide
 
 theorem tie_break_first_wins_witness :
     pickBest 1
-      [{ code := 1, level := 1, xpPerCycle := 5 },
-       { code := 2, level := 1, xpPerCycle := 5 }]
-      = some { code := 1, level := 1, xpPerCycle := 5 } := by decide
+      [{ code := 1, level := 1, xpPerCycle := 5, winnable := true },
+       { code := 2, level := 1, xpPerCycle := 5, winnable := true }]
+      = some { code := 1, level := 1, xpPerCycle := 5, winnable := true } := by decide
 
 theorem strict_greater_replaces_witness :
     pickBest 1
-      [{ code := 1, level := 1, xpPerCycle := 3 },
-       { code := 2, level := 1, xpPerCycle := 8 }]
-      = some { code := 2, level := 1, xpPerCycle := 8 } := by decide
+      [{ code := 1, level := 1, xpPerCycle := 3, winnable := true },
+       { code := 2, level := 1, xpPerCycle := 8, winnable := true }]
+      = some { code := 2, level := 1, xpPerCycle := 8, winnable := true } := by decide
 
 theorem greedy_filters_unbeatable_witness :
     pickBest 1
-      [{ code := 1, level := 1, xpPerCycle := 3 },
-       { code := 2, level := 5, xpPerCycle := 100 }]
-      = some { code := 1, level := 1, xpPerCycle := 3 } := by decide
+      [{ code := 1, level := 1, xpPerCycle := 3, winnable := true },
+       { code := 2, level := 5, xpPerCycle := 100, winnable := true }]
+      = some { code := 1, level := 1, xpPerCycle := 3, winnable := true } := by decide
 
 theorem target_met_witness :
     cheapestPath 5 5 100 0 [] =
@@ -354,26 +358,26 @@ theorem empty_blocks_witness :
     (cheapestPath 1 2 100 0 []).blocked = true := by decide
 
 theorem all_zero_blocks_witness :
-    (cheapestPath 1 2 100 0 [{ code := 1, level := 1, xpPerCycle := 0 }]).blocked = true := by
+    (cheapestPath 1 2 100 0 [{ code := 1, level := 1, xpPerCycle := 0, winnable := true }]).blocked = true := by
   decide
 
 /-- Single-step success: chicken at L1, 22 xp/cycle, 100 xp needed.
 ceil(100/22) = 5. -/
 theorem single_step_witness :
-    cheapestPath 1 2 100 0 [{ code := 1, level := 1, xpPerCycle := 22 }] =
+    cheapestPath 1 2 100 0 [{ code := 1, level := 1, xpPerCycle := 22, winnable := true }] =
       { targetLevel := 2
       , segments := [{ fromLevel := 1, toLevel := 2
-                     , monster := { code := 1, level := 1, xpPerCycle := 22 }
+                     , monster := { code := 1, level := 1, xpPerCycle := 22, winnable := true }
                      , cycles := 5 }]
       , blocked := false, totalCycles := 5 } := by decide
 
 theorem two_step_witness :
-    let m := { code := 1, level := 1, xpPerCycle := 10 : Monster }
+    let m := { code := 1, level := 1, xpPerCycle := 10, winnable := true : Monster }
     (cheapestPath 1 3 100 0 [m]).segments.length = 2 := by decide
 
 theorem greedy_pick_witness :
-    let chicken := { code := 1, level := 1, xpPerCycle := 2 : Monster }
-    let slime := { code := 2, level := 2, xpPerCycle := 15 : Monster }
+    let chicken := { code := 1, level := 1, xpPerCycle := 2, winnable := true : Monster }
+    let slime := { code := 2, level := 2, xpPerCycle := 15, winnable := true : Monster }
     (cheapestPath 1 2 100 0 [chicken, slime]).segments.head? =
       some { fromLevel := 1, toLevel := 2, monster := slime, cycles := 7 } := by
   decide
