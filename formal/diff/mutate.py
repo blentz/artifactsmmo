@@ -80,6 +80,7 @@ APPLY_TELEPORT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "tel
 CONSUMABLE_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_supply.py"
 MEANS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "means.py"
 GUARDS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "guards.py"
+THRESHOLDS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "thresholds.py"
 WITHDRAW_ITEM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "withdraw_item.py"
 UNEQUIP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "unequip.py"
 TASK_EXCHANGE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "task_exchange.py"
@@ -2020,7 +2021,7 @@ _ALL_SRCS = [
     TASK_TRADE_CORE_SRC,
     APPLY_MOVE_SRC, APPLY_EQUIP_SRC, APPLY_CLAIM_SRC,
     APPLY_REST_SRC, APPLY_FIGHT_SRC, APPLY_BANK_EXPANSION_SRC, APPLY_TELEPORT_SRC,
-    CONSUMABLE_SUPPLY_SRC, MEANS_SRC, GUARDS_SRC,
+    CONSUMABLE_SUPPLY_SRC, MEANS_SRC, GUARDS_SRC, THRESHOLDS_SRC,
     WITHDRAW_ITEM_SRC, UNEQUIP_SRC, TASK_EXCHANGE_SRC, TASK_CANCEL_SRC,
     GATHERING_APPLY_SRC, LEVEL_SKILL_GOAL_SRC,
     MONSTER_CATALOG_SRC,
@@ -2835,11 +2836,6 @@ LADDER_GUARD_FIRES_MUTATIONS = [
         "        return state.hp_percent <= CRITICAL_HP_FRACTION",
     ),
     (
-        "ladder/guards: HP_CRITICAL threshold 0.25 -> 0.50 (widens critical band)",
-        "CRITICAL_HP_FRACTION = 0.25",
-        "CRITICAL_HP_FRACTION = 0.50",
-    ),
-    (
         "ladder/guards: BANK_UNLOCK xp-gate > -> >= (fires when xp == initial_xp)",
         "        if state.xp > ctx.initial_xp:",
         "        if state.xp >= ctx.initial_xp:",
@@ -2865,11 +2861,6 @@ LADDER_GUARD_FIRES_MUTATIONS = [
         "                and _used_fraction(state) > DISCARD_CRITICAL_FRACTION)",
     ),
     (
-        "ladder/guards: DISCARD_CRITICAL threshold 0.95 -> 0.85 (fires too early)",
-        "DISCARD_CRITICAL_FRACTION = 0.95",
-        "DISCARD_CRITICAL_FRACTION = 0.85",
-    ),
-    (
         "ladder/guards: DEPOSIT_FULL fill comparator >= -> > (boundary 0.90 leaks)",
         "                and _used_fraction(state) >= DEPOSIT_FULL_FRACTION\n"
         "                and bool(select_bank_deposits(",
@@ -2877,19 +2868,40 @@ LADDER_GUARD_FIRES_MUTATIONS = [
         "                and bool(select_bank_deposits(",
     ),
     (
-        "ladder/guards: DEPOSIT_FULL threshold 0.90 -> 0.85 (fires at discard ramp)",
-        "DEPOSIT_FULL_FRACTION = 0.90",
-        "DEPOSIT_FULL_FRACTION = 0.85",
-    ),
-    (
         "ladder/guards: DISCARD_HIGH fill comparator >= -> > (boundary 0.85 leaks)",
         "                and _used_fraction(state) >= DISCARD_HIGH_FRACTION)",
         "                and _used_fraction(state) > DISCARD_HIGH_FRACTION)",
     ),
+]
+
+
+# The ladder threshold VALUES now live in the neutral leaf ai/thresholds.py
+# (Group A DRY consolidation): guards/strategy/deposit_inventory/unlock_bank and
+# inventory_caps import them instead of re-typing the literals. These mutations
+# perturb the single source; the change flows through the imports into the guard
+# `_fires` predicates and is killed by the SAME ladder_fires differential. The
+# pressure rungs are stored as exact num/den ints, so a value shift mutates the
+# numerator (e.g. PRESSURE_HIGH_NUM 17 -> 19 makes 17/20=0.85 into 19/20=0.95).
+LADDER_THRESHOLD_VALUE_MUTATIONS = [
     (
-        "ladder/guards: DISCARD_HIGH threshold 0.85 -> 0.95 (fires too late)",
-        "DISCARD_HIGH_FRACTION = 0.85",
-        "DISCARD_HIGH_FRACTION = 0.95",
+        "ladder/thresholds: HP_CRITICAL threshold 0.25 -> 0.50 (widens critical band)",
+        "CRITICAL_HP_FRACTION = 0.25",
+        "CRITICAL_HP_FRACTION = 0.50",
+    ),
+    (
+        "ladder/thresholds: DISCARD_CRITICAL threshold 0.95 -> 0.85 (fires too early)",
+        "PRESSURE_CRITICAL_NUM = 19",
+        "PRESSURE_CRITICAL_NUM = 17",
+    ),
+    (
+        "ladder/thresholds: DEPOSIT_FULL threshold 0.90 -> 0.85 (fires at discard ramp)",
+        "DEPOSIT_FULL_NUM = 18",
+        "DEPOSIT_FULL_NUM = 17",
+    ),
+    (
+        "ladder/thresholds: DISCARD_HIGH threshold 0.85 -> 0.95 (fires too late)",
+        "PRESSURE_HIGH_NUM = 17",
+        "PRESSURE_HIGH_NUM = 19",
     ),
 ]
 
@@ -3801,6 +3813,8 @@ def _run_all_groups() -> int:
     # mutations, killed by the SELECT-side differential (binds the Lean ladder
     # to these `_fires` predicates through the ladder_fires oracle).
     run_group(GUARDS_SRC, LADDER_GUARD_FIRES_MUTATIONS,
+              "formal/diff/test_ladder_fires_diff.py", survivors)
+    run_group(THRESHOLDS_SRC, LADDER_THRESHOLD_VALUE_MUTATIONS,
               "formal/diff/test_ladder_fires_diff.py", survivors)
     run_group(MEANS_SRC, LADDER_MEANS_FIRES_MUTATIONS,
               "formal/diff/test_ladder_fires_diff.py", survivors)
