@@ -5,6 +5,7 @@ import json
 from sqlalchemy.exc import OperationalError
 from sqlmodel import Session
 
+import artifactsmmo_cli.ai.learning.projections as proj
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
@@ -263,7 +264,6 @@ class TestCheapestPathToLevel:
         return gd
 
     def test_returns_empty_path_when_already_at_target(self, monkeypatch, tmp_path):
-        import artifactsmmo_cli.ai.learning.projections as proj
         monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         state = make_state(level=10)
@@ -276,7 +276,6 @@ class TestCheapestPathToLevel:
     def test_uses_documented_xp_formula_when_no_observations(self, monkeypatch, tmp_path):
         """No store data → use game_data.xp_per_kill (documented formula)
         instead of magic constants."""
-        import artifactsmmo_cli.ai.learning.projections as proj
         monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         gd = self._gd_with_monsters({"chicken": 1})
@@ -295,7 +294,6 @@ class TestCheapestPathToLevel:
         assert 100 < plan.total_cycles < 200
 
     def test_uses_observed_xp_when_available(self, monkeypatch, tmp_path):
-        import artifactsmmo_cli.ai.learning.projections as proj
         monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         # Seed 5 FarmMonster(chicken) cycles at 20 char-xp each
@@ -311,7 +309,6 @@ class TestCheapestPathToLevel:
         assert plan.total_cycles == 5.0
 
     def test_blocked_when_no_beatable_monster(self, monkeypatch, tmp_path):
-        import artifactsmmo_cli.ai.learning.projections as proj
         # Level-gate blocks these high-level monsters (ogre L50 > L1+1, dragon L80
         # similarly), so is_winnable is never reached for them — monkeypatch is still
         # correct for completeness but the level gate fires first.
@@ -325,7 +322,6 @@ class TestCheapestPathToLevel:
         assert plan.total_cycles == float("inf")
 
     def test_picks_highest_xp_monster(self, monkeypatch, tmp_path):
-        import artifactsmmo_cli.ai.learning.projections as proj
         monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         _populate(store, (
@@ -340,7 +336,6 @@ class TestCheapestPathToLevel:
         assert plan.segments[0].monster_code == "yellow_slime"
 
     def test_extends_across_levels(self, monkeypatch, tmp_path):
-        import artifactsmmo_cli.ai.learning.projections as proj
         monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         gd = self._gd_with_monsters({"chicken": 1, "wolf": 5})
@@ -351,7 +346,6 @@ class TestCheapestPathToLevel:
         assert len(plan.segments) == 2
 
     def test_next_action_monster_property(self, monkeypatch, tmp_path):
-        import artifactsmmo_cli.ai.learning.projections as proj
         monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         gd = self._gd_with_monsters({"chicken": 1})
@@ -367,7 +361,6 @@ class TestCheapestPathToLevel:
         """Line 253: beatable is non-empty but all candidates produce 0 XP per cycle.
         Char L20 vs L1 monster: diff=19 >= 10 → penalty=0.0 → xp_per_kill=0
         → xp_per_cycle=0 → best_code stays None → blocked."""
-        import artifactsmmo_cli.ai.learning.projections as proj
         monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         gd = self._gd_with_monsters({"chicken": 1})
@@ -392,7 +385,6 @@ class TestPathSuccessRateFilter:
     """
 
     def test_low_win_rate_monster_skipped(self, monkeypatch, tmp_path):
-        import artifactsmmo_cli.ai.learning.projections as proj
         # is_winnable returns False for yellow_slime (learned-loss veto fired),
         # True for chicken — identical to what the old MIN_PATH_SUCCESS_RATE
         # filter produced, but now routed through the shared runtime verdict.
@@ -416,7 +408,6 @@ class TestIsWinnableFilter:
     def test_unwinnable_high_xp_monster_excluded(self, monkeypatch, tmp_path):
         # cow: level 8 (==char), high XP; green_slime: level 4, lower XP. is_winnable
         # says only green_slime is winnable → path picks green_slime despite cow's XP.
-        import artifactsmmo_cli.ai.learning.projections as proj
         gd = GameData()
         gd._monster_level = {"cow": 8, "green_slime": 4}
         monkeypatch.setattr(proj, "is_winnable",
@@ -429,7 +420,6 @@ class TestIsWinnableFilter:
         assert plan.blocked is False
 
     def test_blocked_when_nothing_winnable(self, monkeypatch, tmp_path):
-        import artifactsmmo_cli.ai.learning.projections as proj
         gd = GameData()
         gd._monster_level = {"cow": 8}
         monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: False)
@@ -442,7 +432,6 @@ class TestIsWinnableFilter:
     def test_next_monster_is_always_winnable(self, monkeypatch, tmp_path):
         # Regression lock: the projection's emitted next monster MUST pass
         # is_winnable, so the runtime cascade returns the SAME monster.
-        import artifactsmmo_cli.ai.learning.projections as proj
         gd = GameData()
         gd._monster_level = {"cow": 8, "green_slime": 4}
         monkeypatch.setattr(proj, "is_winnable",
@@ -576,12 +565,11 @@ class TestLowYieldCancelFires:
     def test_no_fire_when_alt_yield_has_zero_samples(self, monkeypatch, tmp_path):
         """Line 378: _best_alternative_repr returns a repr but expected_yield_per_cycle
         finds zero samples for it → returns False without firing."""
-        import artifactsmmo_cli.ai.learning.projections as proj_mod
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         cycles = [self._cycle(i, "FarmItems", delta_xp=1, task_progress=i) for i in range(5)]
         self._seed(store, cycles)
         # Return a repr that has no cycles in the store for this character.
-        monkeypatch.setattr(proj_mod, "_best_alternative_repr",
+        monkeypatch.setattr(proj, "_best_alternative_repr",
                             lambda h: "FarmMonster(ghost_that_does_not_exist)")
         state = make_state(task_code="x", task_total=50, task_progress=5)
         assert low_yield_cancel_fires(state, store) is False

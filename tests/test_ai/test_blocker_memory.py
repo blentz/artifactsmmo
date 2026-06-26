@@ -2,6 +2,7 @@
 
 from sqlmodel import Session
 
+import artifactsmmo_cli.ai.learning.projections as proj
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
@@ -263,7 +264,6 @@ class TestPathAlignedMonster:
     def test_uses_path_recommendation_when_available(self, monkeypatch, tmp_path):
         # Both chicken and yellow_slime beatable (is_winnable monkeypatched to
         # True for both). Path picks higher-yield one by XP formula.
-        import artifactsmmo_cli.ai.learning.projections as proj
         monkeypatch.setattr(proj, "is_winnable", lambda s, g, code, h: True)
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         player = GamePlayer(character="hero", history=store)
