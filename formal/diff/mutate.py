@@ -2062,7 +2062,8 @@ _ALL_SRCS = [
 
 # Phase 12 Target A: cheapest_path_to_level greedy contract. Mutants test
 # (a) the +1 beatability margin, (b) strict-> tie-break, (c) the
-# `best_xp_per_cycle <= 0` blocked branch. The diff test must kill all three.
+# `best_xp_per_cycle <= 0` blocked branch, (d) the is_winnable beatability
+# filter. The diff test must kill all four.
 CHEAPEST_PATH_MUTATIONS = [
     # Mutation 1: shrink the beatability bound from `lvl <= sim_level + 1` to
     # `lvl <= sim_level`. test_plus_one_boundary_beatable now blocks (Python)
@@ -2081,6 +2082,13 @@ CHEAPEST_PATH_MUTATIONS = [
     ("cheapest_path: invert greedy direction (> -> <)",
      "            if xp_per_cycle > best_xp_per_cycle:",
      "            if xp_per_cycle < best_xp_per_cycle:"),
+    # Mutation 4: drop the is_winnable beatability filter so unwinnable monsters
+    # are included as candidates. test_winnable_false_skips_to_winnable fires:
+    # Python picks the unwinnable 'hard' monster while Lean (still filtering via
+    # winnable=0) picks 'easy' — divergence kills this mutant.
+    ("cheapest_path: drop is_winnable beatability filter",
+     "            and is_winnable(state, game_data, code, store)",
+     ""),
 ]
 
 

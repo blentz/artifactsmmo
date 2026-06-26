@@ -1756,8 +1756,8 @@ def runCombatPicker (args : Array Json) : Json :=
 /-- Run the cheapest-path greedy model.
 args layout:
   [current, target, maxXp, xpInLevel, nMonsters,
-   m0.code, m0.level, m0.xpPerCycle,
-   m1.code, m1.level, m1.xpPerCycle, ...]
+   m0.code, m0.level, m0.xpPerCycle, m0.winnable,
+   m1.code, m1.level, m1.xpPerCycle, m1.winnable, ...]
 Output: { blocked: bool, n_segments: int, monster_codes: [int] } -/
 def runCheapestPath (args : Array Json) : Json :=
   let current := (intArg args 0).toNat
@@ -1767,9 +1767,10 @@ def runCheapestPath (args : Array Json) : Json :=
   let nMonsters := (intArg args 4).toNat
   let monsters : List Formal.CheapestPath.Monster :=
     (List.range nMonsters).map (fun k =>
-      { code := (intArg args (5 + 3 * k)).toNat
-        level := (intArg args (5 + 3 * k + 1)).toNat
-        xpPerCycle := (intArg args (5 + 3 * k + 2)).toNat })
+      { code := (intArg args (5 + 4 * k)).toNat
+        level := (intArg args (5 + 4 * k + 1)).toNat
+        xpPerCycle := (intArg args (5 + 4 * k + 2)).toNat
+        winnable := intArg args (5 + 4 * k + 3) != 0 })
   let plan := Formal.CheapestPath.cheapestPath current target maxXp xpInLevel monsters
   Json.mkObj
     [ ("blocked", Json.bool plan.blocked)
