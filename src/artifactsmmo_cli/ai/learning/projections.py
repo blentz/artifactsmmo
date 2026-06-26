@@ -8,6 +8,7 @@ Spec: docs/superpowers/specs/2026-05-18-strategic-reasoning-design.md §2.
 """
 
 import json
+from dataclasses import replace
 
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
@@ -217,20 +218,23 @@ def cheapest_path_to_level(
     sim_level = state.level
     xp_to_next = max(1, state.max_xp - state.xp)
     wisdom = state.wisdom
+    # Project beatability at FULL HP — identical to the runtime
+    # `GamePlayer._is_winnable`, which rests to max_hp before the verdict
+    # because the planner inserts a Rest step before FightAction. Filtering at a
+    # mid-damage `state.hp` would disagree with the executor and narrow the path
+    # to lower monsters than the bot actually grinds (the 278-cycle parked bug).
+    # HP is a recoverable resource, not equipment/inventory — so resting is not
+    # speculative gear progression, just the normal pre-fight recovery.
+    rested = replace(state, hp=state.max_hp)
 
     while sim_level < target_level:
         # Beatable monsters at sim_level: FightAction.is_applicable allows
-        # monster_level <= state.level + 1, AND is_winnable (the same verdict
-        # the runtime uses) so projection and executor agree on the monster.
-        # NOTE: this filters at the CURRENT `state.hp`, whereas the runtime
-        # `_winnable_farm_target` rests to max_hp before its `is_winnable` check.
-        # The projection is therefore the STRICTER filter at low HP — never
-        # optimistic — so whatever it emits the runtime re-validates as winnable.
-        # Not a bug: same `is_winnable` function, intentionally current-state args.
+        # monster_level <= state.level + 1, AND is_winnable (the same rested
+        # verdict the runtime uses) so projection and executor agree on the monster.
         beatable = [
             (code, lvl) for code, lvl in game_data.monster_levels.items()
             if 1 <= lvl <= sim_level + 1
-            and is_winnable(state, game_data, code, store)
+            and is_winnable(rested, game_data, code, store)
         ]
         if not beatable:
             return PathPlan(target_level=target_level, total_cycles=float("inf"),

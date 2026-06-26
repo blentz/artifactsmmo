@@ -429,6 +429,23 @@ class TestIsWinnableFilter:
         store.close()
         assert plan.blocked is True
 
+    def test_beatability_projected_at_full_hp(self, monkeypatch, tmp_path):
+        # The projection rests to max_hp before is_winnable, identical to the
+        # runtime `_is_winnable`. A monster winnable WHEN RESTED must stay on the
+        # path even from a mid-damage state — else the plan screen would show a
+        # lower monster than the bot (which rests first) actually grinds.
+        gd = GameData()
+        gd._monster_level = {"green_slime": 4}
+        # winnable ONLY at full hp — proves the projection passes the rested state.
+        monkeypatch.setattr(proj, "is_winnable",
+                            lambda s, g, code, h: s.hp == s.max_hp)
+        store = LearningStore(db_path=str(tmp_path / "p.db"), character="r")
+        damaged = make_state(level=8, xp=0, max_xp=100, hp=10, max_hp=200)
+        plan = cheapest_path_to_level(9, damaged, store, gd)
+        store.close()
+        assert plan.next_action_monster == "green_slime"
+        assert plan.blocked is False
+
     def test_next_monster_is_always_winnable(self, monkeypatch, tmp_path):
         # Regression lock: the projection's emitted next monster MUST pass
         # is_winnable, so the runtime cascade returns the SAME monster.
