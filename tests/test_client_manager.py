@@ -29,11 +29,14 @@ def test_client_manager_initialization():
         manager.initialize(config)
 
         # Verify API client was created with correct parameters
+        from artifactsmmo_cli.maintenance_detector import detect_maintenance_response
+
         mock_client.assert_called_once_with(
             base_url="https://api.artifactsmmo.com",
             token="test-token",
             timeout=httpx.Timeout(30),
             raise_on_unexpected_status=False,
+            httpx_args={"event_hooks": {"response": [detect_maintenance_response]}},
         )
 
         assert manager.is_initialized()
@@ -107,6 +110,22 @@ def test_client_manager_client_property():
         mock_client_cls.return_value = mock_client_instance
         manager.initialize(config)
         assert manager.client is mock_client_instance
+
+
+def test_client_has_maintenance_response_hook():
+    """Test that the maintenance response hook is installed on the API client."""
+    from artifactsmmo_cli.maintenance_detector import detect_maintenance_response
+
+    ClientManager._instance = None
+    ClientManager._client = None
+    ClientManager._api = None
+    ClientManager._config = None
+    manager = ClientManager()
+
+    config = Config(token="test-token")
+    manager.initialize(config)
+    hooks = manager.client.get_httpx_client().event_hooks["response"]
+    assert detect_maintenance_response in hooks
 
 
 # ──────────────────────────────────────────────
