@@ -11,6 +11,7 @@ from artifactsmmo_api_client.models.fight_request_schema import FightRequestSche
 from artifactsmmo_cli.api_wrapper import APIWrapper
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.config import Config
+from artifactsmmo_cli.maintenance_detector import detect_maintenance_response
 
 
 def test_client_manager_singleton():
@@ -29,8 +30,6 @@ def test_client_manager_initialization():
         manager.initialize(config)
 
         # Verify API client was created with correct parameters
-        from artifactsmmo_cli.maintenance_detector import detect_maintenance_response
-
         mock_client.assert_called_once_with(
             base_url="https://api.artifactsmmo.com",
             token="test-token",
@@ -114,8 +113,6 @@ def test_client_manager_client_property():
 
 def test_client_has_maintenance_response_hook():
     """Test that the maintenance response hook is installed on the API client."""
-    from artifactsmmo_cli.maintenance_detector import detect_maintenance_response
-
     ClientManager._instance = None
     ClientManager._client = None
     ClientManager._api = None
