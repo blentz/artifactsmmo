@@ -9,6 +9,7 @@ import httpx
 import pytest
 from typer.testing import CliRunner
 
+from artifactsmmo_cli import main as main_mod
 from artifactsmmo_cli.main import app
 from artifactsmmo_cli.server_unavailable_error import ServerUnavailableError
 
@@ -199,8 +200,6 @@ def test_main_module_run_as_script_invokes_app():
 
 
 def test_run_renders_and_exits_on_server_unavailable(monkeypatch, capsys):
-    from artifactsmmo_cli import main as main_mod
-
     def _boom():
         raise ServerUnavailableError("Down for maintenance", url="https://api.example.com/")
 
@@ -213,8 +212,19 @@ def test_run_renders_and_exits_on_server_unavailable(monkeypatch, capsys):
     assert "https://api.example.com/" in out
 
 
-def test_run_passes_through_on_normal_exit(monkeypatch):
-    from artifactsmmo_cli import main as main_mod
+def test_run_renders_fallback_on_empty_page_text(monkeypatch, capsys):
+    def _boom():
+        raise ServerUnavailableError("", url="https://api.example.com/")
 
+    monkeypatch.setattr(main_mod, "app", _boom)
+    with pytest.raises(SystemExit) as exc:
+        main_mod.run()
+    assert exc.value.code == 3
+    out = capsys.readouterr().out
+    assert "no readable text" in out
+    assert "https://api.example.com/" in out
+
+
+def test_run_passes_through_on_normal_exit(monkeypatch):
     monkeypatch.setattr(main_mod, "app", lambda: None)
     main_mod.run()  # no exception, no SystemExit
