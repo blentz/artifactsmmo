@@ -1,5 +1,6 @@
 """Main CLI entry point for ArtifactsMMO CLI."""
 
+import sys
 from pathlib import Path
 
 import httpx
@@ -14,6 +15,7 @@ from artifactsmmo_cli.commands.macro_research import macro_research as macro_res
 from artifactsmmo_cli.commands.plan import plan as plan_command
 from artifactsmmo_cli.commands.play import play as play_command
 from artifactsmmo_cli.config import Config
+from artifactsmmo_cli.server_unavailable_error import ServerUnavailableError
 from artifactsmmo_cli.utils.formatters import format_error_message
 
 # Create the main Typer app
@@ -22,6 +24,27 @@ app = typer.Typer(
 )
 
 console = Console()
+
+SERVER_UNAVAILABLE_EXIT_CODE = 3
+
+
+def _render_server_unavailable(exc: ServerUnavailableError) -> None:
+    console.print(format_error_message(
+        "ArtifactsMMO server is unavailable — it returned a maintenance page:"))
+    page = exc.page_text.strip()
+    console.print(page if page else "(the server returned an HTML page with no readable text)")
+    console.print(f"[dim]{exc.url}[/dim]")
+
+
+def run() -> None:
+    """Console entrypoint: the single boundary that turns a server maintenance
+    page into a clean rendered message + non-zero exit instead of a traceback."""
+    try:
+        app()
+    except ServerUnavailableError as exc:
+        _render_server_unavailable(exc)
+        sys.exit(SERVER_UNAVAILABLE_EXIT_CODE)
+
 
 # Register command groups
 app.add_typer(character.app, name="character", help="Character management commands")
@@ -110,4 +133,4 @@ def status() -> None:
 
 
 if __name__ == "__main__":
-    app()
+    run()
