@@ -11,6 +11,7 @@ from artifactsmmo_api_client.models.fight_request_schema import FightRequestSche
 from artifactsmmo_cli.api_wrapper import APIWrapper
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.config import Config
+from artifactsmmo_cli.maintenance_detector import detect_maintenance_response
 
 
 def test_client_manager_singleton():
@@ -34,6 +35,7 @@ def test_client_manager_initialization():
             token="test-token",
             timeout=httpx.Timeout(30),
             raise_on_unexpected_status=False,
+            httpx_args={"event_hooks": {"response": [detect_maintenance_response]}},
         )
 
         assert manager.is_initialized()
@@ -107,6 +109,26 @@ def test_client_manager_client_property():
         mock_client_cls.return_value = mock_client_instance
         manager.initialize(config)
         assert manager.client is mock_client_instance
+
+
+def test_client_has_maintenance_response_hook():
+    """Test that the maintenance response hook is installed on the API client."""
+    ClientManager._instance = None
+    ClientManager._client = None
+    ClientManager._api = None
+    ClientManager._config = None
+    manager = ClientManager()
+
+    config = Config(token="test-token")
+    manager.initialize(config)
+    http_client = manager.client.get_httpx_client()
+    try:
+        assert detect_maintenance_response in http_client.event_hooks["response"]
+    finally:
+        # Close the real httpx client so its connection pool does not leak an
+        # unclosed SSL socket into a later test (pytest's unraisableexception
+        # plugin promotes that ResourceWarning to an error).
+        http_client.close()
 
 
 # ──────────────────────────────────────────────

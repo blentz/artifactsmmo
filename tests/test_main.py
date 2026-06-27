@@ -6,9 +6,12 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import httpx
+import pytest
 from typer.testing import CliRunner
 
+from artifactsmmo_cli import main as main_mod
 from artifactsmmo_cli.main import app
+from artifactsmmo_cli.server_unavailable_error import ServerUnavailableError
 
 runner = CliRunner()
 
@@ -194,3 +197,34 @@ def test_main_module_run_as_script_invokes_app():
     with patch("typer.Typer.__call__") as mock_call:
         runpy.run_path(module_path, run_name="__main__")
         mock_call.assert_called_once_with()
+
+
+def test_run_renders_and_exits_on_server_unavailable(monkeypatch, capsys):
+    def _boom():
+        raise ServerUnavailableError("Down for maintenance", url="https://api.example.com/")
+
+    monkeypatch.setattr(main_mod, "app", _boom)
+    with pytest.raises(SystemExit) as exc:
+        main_mod.run()
+    assert exc.value.code == main_mod.SERVER_UNAVAILABLE_EXIT_CODE == 3
+    out = capsys.readouterr().out
+    assert "Down for maintenance" in out
+    assert "https://api.example.com/" in out
+
+
+def test_run_renders_fallback_on_empty_page_text(monkeypatch, capsys):
+    def _boom():
+        raise ServerUnavailableError("", url="https://api.example.com/")
+
+    monkeypatch.setattr(main_mod, "app", _boom)
+    with pytest.raises(SystemExit) as exc:
+        main_mod.run()
+    assert exc.value.code == 3
+    out = capsys.readouterr().out
+    assert "no readable text" in out
+    assert "https://api.example.com/" in out
+
+
+def test_run_passes_through_on_normal_exit(monkeypatch):
+    monkeypatch.setattr(main_mod, "app", lambda: None)
+    main_mod.run()  # no exception, no SystemExit

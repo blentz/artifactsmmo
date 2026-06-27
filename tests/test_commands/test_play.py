@@ -18,6 +18,7 @@ from artifactsmmo_cli.ai.null_tracer import NullTracer
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.recovery import CycleRecord, StuckExit, StuckSignal
 from artifactsmmo_cli.commands.play import default_learn_db_path, play
+from artifactsmmo_cli.server_unavailable_error import ServerUnavailableError
 
 # `play` is a plain command function registered directly on the root app in
 # main.py (`app.command("play")(play)`) — it is no longer its own Typer group
@@ -254,6 +255,26 @@ class TestPlayCommandWiring:
 
                 assert result.exit_code != 0
                 mock_store.end_session.assert_called_once_with(exit_reason="keyboard_interrupt")
+                mock_store.close.assert_called_once_with()
+
+    def test_play_propagates_server_unavailable_with_reason(self, runner):
+        """ServerUnavailableError propagates with exit_reason=server_unavailable recorded."""
+        with patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls:
+            mock_player = Mock()
+            mock_player.run.side_effect = ServerUnavailableError(
+                "Down for maintenance", url="https://api.example.com/")
+            mock_player_cls.return_value = mock_player
+            with patch("artifactsmmo_cli.commands.play.LearningStore") as mock_store_cls:
+                mock_store = Mock()
+                mock_store_cls.return_value = mock_store
+
+                result = runner.invoke(app, ["hero"])
+
+                # ServerUnavailableError propagates (non-zero), not swallowed.
+                assert result.exit_code != 0
+                assert isinstance(result.exception, ServerUnavailableError)
+                # The session recorded the honest exit reason.
+                mock_store.end_session.assert_called_once_with(exit_reason="server_unavailable")
                 mock_store.close.assert_called_once_with()
 
     def test_stuck_exit_records_stuck_exit_reason_in_real_store(self, runner, tmp_path):
@@ -527,6 +548,47 @@ class TestRunWithTui:
                 # The session recorded the truthful exit reason.
                 mock_store.end_session.assert_called_once_with(exit_reason="stuck_exit")
                 mock_store.close.assert_called_once_with()
+        assert threading.excepthook is hook_before
+
+    def test_tui_worker_server_unavailable_tears_down_cleanly(self, runner):
+        """A worker ServerUnavailableError tears down the TUI cleanly:
+        the excepthook records a 'Server unavailable' (not 'crashed') message,
+        the if-crashes block does NOT print a traceback, and the error
+        re-raises so play() records exit_reason='server_unavailable'."""
+        fake_app = FakeWatchApp()
+        hook_before = threading.excepthook
+        with patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls:
+            mock_player = Mock()
+            mock_player.run.side_effect = ServerUnavailableError(
+                "Maintenance page", url="https://api.example.com/")
+            mock_player_cls.return_value = mock_player
+            with (
+                patch("artifactsmmo_cli.commands.play.ClientManager"),
+                patch("artifactsmmo_cli.commands.play.GameData"),
+                patch("artifactsmmo_cli.commands.play.WatchApp", return_value=fake_app),
+                patch("artifactsmmo_cli.commands.play.ThreadSafeBridge"),
+                patch("artifactsmmo_cli.commands.play.LearningStore") as mock_store_cls,
+            ):
+                mock_store = Mock()
+                mock_store_cls.return_value = mock_store
+
+                result = runner.invoke(app, ["hero", "--tui"])
+
+                # The error propagated out of play() (non-zero exit).
+                assert result.exit_code != 0
+                assert isinstance(result.exception, ServerUnavailableError)
+                # The app was torn down via its thread-safe channel with the
+                # clean 'Server unavailable' message (not 'crashed').
+                assert len(fake_app.exit_calls) == 1
+                _, exit_kwargs = fake_app.exit_calls[0]
+                assert "Server unavailable" in exit_kwargs["message"]
+                assert "crashed" not in exit_kwargs["message"]
+                # No traceback dumped to terminal (run() handles rendering).
+                assert "crashed; traceback" not in result.output
+                # The session recorded the honest exit reason.
+                mock_store.end_session.assert_called_once_with(exit_reason="server_unavailable")
+                mock_store.close.assert_called_once_with()
+        # The process-global hook was restored.
         assert threading.excepthook is hook_before
 
     def test_tui_worker_crash_with_app_already_torn_down(self, runner):

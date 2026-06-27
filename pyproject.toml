@@ -27,7 +27,7 @@ dev = [
 ]
 
 [project.scripts]
-artifactsmmo = "artifactsmmo_cli.main:app"
+artifactsmmo = "artifactsmmo_cli.main:run"
 
 [build-system]
 requires = ["hatchling"]

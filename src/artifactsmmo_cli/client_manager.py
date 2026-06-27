@@ -7,6 +7,7 @@ from artifactsmmo_api_client import AuthenticatedClient
 
 from artifactsmmo_cli.api_wrapper import APIWrapper
 from artifactsmmo_cli.config import Config
+from artifactsmmo_cli.maintenance_detector import detect_maintenance_response
 
 
 class ClientManager:
@@ -37,6 +38,7 @@ class ClientManager:
             # value explicitly (httpx.Timeout(int) is the canonical form).
             timeout=httpx.Timeout(config.timeout),
             raise_on_unexpected_status=False,
+            httpx_args={"event_hooks": {"response": [detect_maintenance_response]}},
         )
 
         # Create the API wrapper
