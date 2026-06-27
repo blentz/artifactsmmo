@@ -121,8 +121,14 @@ def test_client_has_maintenance_response_hook():
 
     config = Config(token="test-token")
     manager.initialize(config)
-    hooks = manager.client.get_httpx_client().event_hooks["response"]
-    assert detect_maintenance_response in hooks
+    http_client = manager.client.get_httpx_client()
+    try:
+        assert detect_maintenance_response in http_client.event_hooks["response"]
+    finally:
+        # Close the real httpx client so its connection pool does not leak an
+        # unclosed SSL socket into a later test (pytest's unraisableexception
+        # plugin promotes that ResourceWarning to an error).
+        http_client.close()
 
 
 # ──────────────────────────────────────────────
