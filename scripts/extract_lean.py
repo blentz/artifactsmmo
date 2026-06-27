@@ -344,6 +344,13 @@ MODULES: tuple[ModuleSpec, ...] = (
         imports=("_closure_demand",),
     ),
     ModuleSpec(
+        source="src/artifactsmmo_cli/ai/thresholds.py",
+        output=f"{GENERATED_DIR}/Thresholds.lean",
+        core_name="Thresholds",
+        functions=(),
+        constants=("PRESSURE_HIGH_NUM", "PRESSURE_HIGH_DEN"),
+    ),
+    ModuleSpec(
         source="src/artifactsmmo_cli/ai/inventory_caps.py",
         output=f"{GENERATED_DIR}/InventoryCaps.lean",
         core_name="InventoryCaps",
@@ -351,8 +358,7 @@ MODULES: tuple[ModuleSpec, ...] = (
                    "_task_chain_demand_pure",
                    "useful_quantity_cap_excl_equipped_pure",
                    "useful_quantity_cap_pure"),
-        constants=("DISCARD_WATERMARK_NUM", "DISCARD_WATERMARK_DEN",
-                   "EQUIPPABLE_KEEP", "CONSUMABLE_KEEP"),
+        constants=("EQUIPPABLE_KEEP", "CONSUMABLE_KEEP"),
     ),
     ModuleSpec(
         source="src/artifactsmmo_cli/ai/learning/cycles_for_progress_core.py",
@@ -1939,21 +1945,23 @@ def emit_if(ctx: Ctx, s: ast.If, rest: list[ast.stmt], indent: int) -> str:
 def extract_function(env: TypeEnv, src: str, fd: ast.FunctionDef, helpers: set[str],
                      module_sigs: dict[str, tuple[tuple[LType, ...], LType, bool]],
                      import_sigs: dict[str, tuple[str, tuple[LType, ...], LType, bool]],
-                     consts: dict[str, LType]) -> str:
+                     consts: dict[str, LType],
+                     global_consts: set[str] | None = None) -> str:
     if fd.decorator_list:
         reject(src, fd, "decorated function")
     a = fd.args
     if a.vararg or a.kwarg or a.kwonlyargs or a.posonlyargs or a.kw_defaults:
         reject(src, fd, "*args/**kwargs/keyword-only parameters")
     # Parameter defaults are allowed only for int literals / registered int
-    # constants, and are IGNORED: default application happens at Python call
-    # sites outside the extraction boundary, so the Lean def takes every
-    # parameter explicitly (extracted call sites must pass full arity).
+    # constants (from this module or already-extracted earlier modules), and
+    # are IGNORED: default application happens at Python call sites outside
+    # the extraction boundary, so the Lean def takes every parameter explicitly.
+    _all_consts: set[str] = set(consts) | (global_consts or set())
     for default in a.defaults:
         if isinstance(default, ast.Constant) and isinstance(default.value, int) \
                 and not isinstance(default.value, bool):
             continue
-        if isinstance(default, ast.Name) and default.id in consts:
+        if isinstance(default, ast.Name) and default.id in _all_consts:
             continue
         reject(src, default,
                "parameter default outside int literals / registered constants")
@@ -2130,7 +2138,8 @@ def _extract_constants(spec: ModuleSpec, tree: ast.Module) -> tuple[list[str], d
 
 
 def extract_module(spec: ModuleSpec,
-                   global_sigs: dict[str, tuple[str, tuple[LType, ...], LType, bool]]) -> str:
+                   global_sigs: dict[str, tuple[str, tuple[LType, ...], LType, bool]],
+                   global_consts: set[str] | None = None) -> str:
     path = ROOT / spec.source
     text = path.read_text()
     digest = hashlib.sha256(text.encode()).hexdigest()
@@ -2157,7 +2166,7 @@ def extract_module(spec: ModuleSpec,
     helpers: set[str] = set()
     module_sigs: dict[str, tuple[tuple[LType, ...], LType, bool]] = {}
     defs = [extract_function(env, spec.source, by_name[f], helpers, module_sigs,
-                             import_sigs, consts)
+                             import_sigs, consts, global_consts)
             for f in spec.functions]
     for fname, (fparams, fret, ffueled) in module_sigs.items():
         if fname in global_sigs:
@@ -2191,8 +2200,10 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
     drift = False
     global_sigs: dict[str, tuple[str, tuple[LType, ...], LType, bool]] = {}
+    global_consts: set[str] = set()
     for spec in MODULES:
-        generated = extract_module(spec, global_sigs)
+        generated = extract_module(spec, global_sigs, global_consts)
+        global_consts.update(spec.constants)
         out = ROOT / spec.output
         if args.check:
             on_disk = out.read_text() if out.exists() else ""

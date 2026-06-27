@@ -28,10 +28,12 @@ stronger replay test belongs in Phase 24.
 Behaviour:
   * Reachable server → assert what we can; if the player snapshot is
     available, also assert `max_xp > 0` (per-character sample at one level).
-  * Unreachable server → `pytest.skip(...)` with a concrete reason. NEVER
-    silently passes.
+  * Unreachable server, OR a reachable server returning a non-JSON body
+    (HTML maintenance/landing page, gateway error) → `pytest.skip(...)`
+    with a concrete reason. NEVER silently passes.
 """
 
+import json
 import os
 
 import httpx
@@ -66,6 +68,8 @@ def test_liv001_replay_conformance_max_level_positive() -> None:
         pytest.skip(f"server unreachable: {exc!r}")
     except httpx.HTTPError as exc:
         pytest.skip(f"server returned http error: {exc!r}")
+    except json.JSONDecodeError as exc:
+        pytest.skip(f"server returned a non-JSON body (HTML/maintenance page): {exc!r}")
     if response is None:
         pytest.skip("server returned None (unexpected status)")
     status = response.data

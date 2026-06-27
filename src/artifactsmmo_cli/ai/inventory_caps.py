@@ -40,6 +40,7 @@ from artifactsmmo_cli.ai.combat_targets import combat_target_monsters
 from artifactsmmo_cli.ai.dominance_pareto import pareto_dominates
 from artifactsmmo_cli.ai.equipment.scoring import armor_score, weapon_score
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.thresholds import PRESSURE_HIGH_DEN, PRESSURE_HIGH_NUM
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 _ARMOR_TYPES = frozenset({"helmet", "body_armor", "leg_armor", "boots", "shield"})
@@ -72,8 +73,8 @@ bag. See docs/PLAN_gem_inventory_strategy.md."""
 # overstock decision compares `used / cap >= num / den` by cross-multiplication
 # over integers — exact, no float drift at the boundary (mirrored by the proved
 # Lean core overstockExcess in formal/Formal/InventoryProfile.lean).
-DISCARD_WATERMARK_NUM = 17
-DISCARD_WATERMARK_DEN = 20
+DISCARD_WATERMARK_NUM = PRESSURE_HIGH_NUM  # canonical value lives in thresholds.py
+DISCARD_WATERMARK_DEN = PRESSURE_HIGH_DEN
 DISCARD_WATERMARK = DISCARD_WATERMARK_NUM / DISCARD_WATERMARK_DEN
 """inventory_used/inventory_max at or above which an over-floor item becomes
 overstock (== 0.85). Below this watermark the bag has real free slots, so
@@ -88,8 +89,8 @@ genuine space pressure."""
 def overstock_excess(
     held: int, profile_target: int, useful_floor: int,
     used: int, cap: int,
-    watermark_num: int = DISCARD_WATERMARK_NUM,
-    watermark_den: int = DISCARD_WATERMARK_DEN,
+    watermark_num: int = PRESSURE_HIGH_NUM,
+    watermark_den: int = PRESSURE_HIGH_DEN,
 ) -> int:
     """Pure space-driven overstock decision (proved in
     formal/Formal/InventoryProfile.lean as `overstockExcess`; mechanically

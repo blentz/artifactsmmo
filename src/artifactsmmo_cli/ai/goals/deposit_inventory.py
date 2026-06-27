@@ -8,6 +8,7 @@ from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.thresholds import PRESSURE_HIGH_FRACTION
 from artifactsmmo_cli.ai.world_state import WorldState
 
 MIN_FREE_SLOTS = 5
@@ -30,7 +31,7 @@ class DepositInventoryGoal(Goal):
     cycle after it was withdrawn).
     """
 
-    _RAMP_START = 0.85  # fraction used below which the goal is inactive
+    _RAMP_START = PRESSURE_HIGH_FRACTION  # fraction used below which the goal is inactive
     _MAX_VALUE = 80.0   # value at 100% used; outranks FarmItems(35) once near cap
 
     def __init__(self, bank_accessible: bool = True, game_data: GameData | None = None,

@@ -20,20 +20,27 @@ from artifactsmmo_cli.ai.inventory_profile import inventory_profile
 from artifactsmmo_cli.ai.learning.skill_xp_curve import SkillXpCurve
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
+from artifactsmmo_cli.ai.thresholds import (
+    CRITICAL_HP_FRACTION,
+    DEPOSIT_FULL_FRACTION,
+    PRESSURE_CRITICAL_FRACTION,
+    PRESSURE_HIGH_FRACTION,
+)
 from artifactsmmo_cli.ai.world_state import WorldState
 
-CRITICAL_HP_FRACTION = 0.25
-# CRAFT_RELIEF_FRACTION (0.70) lives in craft_relief.py (re-imported above)
-# so the candidate batch sizing and the guard predicate share one threshold.
-DEPOSIT_FULL_FRACTION = 0.90
-"""Space-driven (spec 2026-06-07): deposit pressure only appears near-full so
-the player uses most of the bag. Kept STRICTLY ABOVE
-DepositInventoryGoal._RAMP_START (0.85) so the DEPOSIT_FULL guard only fires
-where the deposit goal already has strictly-positive value — the proven
-liveness invariant `fires(DEPOSIT_FULL) ⇒ depositInventoryValue > 0`
-(Formal.Liveness.MeansFiring) requires DEPOSIT_FULL_FRACTION > _RAMP_START."""
-DISCARD_HIGH_FRACTION = 0.85
-DISCARD_CRITICAL_FRACTION = 0.95
+# CRITICAL_HP_FRACTION, DEPOSIT_FULL_FRACTION are imported from thresholds above.
+# CRAFT_RELIEF_FRACTION (0.70) is re-imported from craft_relief.py (which now
+# re-exports it from thresholds) so batch sizing and the guard share one value.
+#
+# DEPOSIT_FULL_FRACTION (0.90) is space-driven (spec 2026-06-07): deposit pressure
+# only appears near-full so the player uses most of the bag. It is kept STRICTLY
+# ABOVE DepositInventoryGoal._RAMP_START / PRESSURE_HIGH_FRACTION (0.85) so the
+# DEPOSIT_FULL guard only fires where the deposit goal already has strictly-positive
+# value — the proven liveness invariant `fires(DEPOSIT_FULL) ⇒ depositInventoryValue
+# > 0` (Formal.Liveness.MeansFiring) requires DEPOSIT_FULL_FRACTION > PRESSURE_HIGH.
+# The thresholds ladder enforces this ordering in one ascending block.
+DISCARD_HIGH_FRACTION = PRESSURE_HIGH_FRACTION
+DISCARD_CRITICAL_FRACTION = PRESSURE_CRITICAL_FRACTION
 MAX_ACHIEVABLE_GAP = 5
 
 

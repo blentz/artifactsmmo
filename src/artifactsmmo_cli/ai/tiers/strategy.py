@@ -40,11 +40,8 @@ from artifactsmmo_cli.ai.tiers.strategy_blend import (
 from artifactsmmo_cli.ai.tiers.strategy_blend import (
     learned_blend as _learned_blend_pure,
 )
+from artifactsmmo_cli.ai.thresholds import CRITICAL_HP_FRACTION
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, WorldState
-
-# Mirrors RestoreHPGoal.CRITICAL_HP_FRACTION. Kept local so the tiers layer does
-# not depend on goals/ (which P3c retires); P3c unifies the source.
-CRITICAL_HP_FRACTION = 0.25
 
 # P4a: all score constants are exact Fractions — the ranking pipeline
 # (_base_prior * _marginal * _balancing, the learned blend, the sticky

@@ -35,16 +35,8 @@ from dataclasses import dataclass
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.task_reservation import consumes_reserved
+from artifactsmmo_cli.ai.thresholds import CRAFT_RELIEF_FRACTION as CRAFT_RELIEF_FRACTION
 from artifactsmmo_cli.ai.world_state import WorldState
-
-CRAFT_RELIEF_FRACTION = 0.70
-"""When inv pressure crosses this fraction AND a goal-item is craftable
-from current inventory with net relief, the CRAFT_RELIEF guard fires AHEAD
-of DEPOSIT_FULL. Catches the case where raw materials would otherwise be
-banked or deleted while the bot was one Craft action from converting them
-into task progress. Defined here (not tiers/guards.py) so the candidate
-quantity computation can size batches against the same threshold;
-tiers/guards.py re-imports it."""
 
 
 @dataclass(frozen=True)

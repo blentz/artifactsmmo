@@ -53,6 +53,7 @@ import Formal.Extracted.ArbiterSelect
 import Formal.Extracted.RecipeClosure
 import Formal.Extracted.TaskBatch
 import Formal.Extracted.TaskReservation
+import Formal.Extracted.Thresholds
 import Formal.Extracted.InventoryCaps
 import Formal.Extracted.CyclesForProgress
 import Formal.Extracted.ScalarCore

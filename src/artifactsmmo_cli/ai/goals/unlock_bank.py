@@ -5,6 +5,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.thresholds import PRESSURE_HIGH_FRACTION
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -29,7 +30,7 @@ class UnlockBankGoal(Goal):
         # defer to SellInventoryGoal — selling is faster than grinding achievement.
         if state.inventory_max > 0:
             used_fraction = state.inventory_used / state.inventory_max
-            if used_fraction >= 0.85:
+            if used_fraction >= PRESSURE_HIGH_FRACTION:
                 has_sellable = any(
                     game_data.npcs_buying_item(code)
                     for code, qty in state.inventory.items() if qty > 0

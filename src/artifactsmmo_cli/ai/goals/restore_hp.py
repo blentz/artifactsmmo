@@ -3,6 +3,7 @@
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.thresholds import CRITICAL_HP_FRACTION
 from artifactsmmo_cli.ai.world_state import WorldState
 
 # Value returned when HP is critically low (< CRITICAL_HP_FRACTION).
@@ -23,7 +24,7 @@ class RestoreHPGoal(Goal):
 
     preemptive = True  # HP-critical may interrupt a committed goal when it outranks it
 
-    CRITICAL_HP_FRACTION = 0.25
+    CRITICAL_HP_FRACTION = CRITICAL_HP_FRACTION  # from thresholds (module global)
     CRITICAL_HP_VALUE = _HP_CRITICAL
 
     def value(self, state: WorldState, game_data: GameData,
