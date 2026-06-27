@@ -14,6 +14,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.null_tracer import NullTracer
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.recovery import StuckExit
+from artifactsmmo_cli.server_unavailable_error import ServerUnavailableError
 from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.config import Config
@@ -95,6 +96,11 @@ def play(
         else:
             player.run()
         exit_reason = "normal"
+    except ServerUnavailableError:
+        # Server returned a maintenance page. run() (the console entrypoint)
+        # renders it and exits 3; here we only record the honest exit reason.
+        exit_reason = "server_unavailable"
+        raise
     except StuckExit as exc:
         # Honest terminal path: stuck recovery exhausted its escalation
         # ladder. This is a deliberate, clean stop — NOT a crash — so the
@@ -156,6 +162,8 @@ def _run_with_tui(
         # not a crash — say so honestly.
         if isinstance(hook_args.exc_value, StuckExit):
             message = f"Bot stopped: {hook_args.exc_value}"
+        elif isinstance(hook_args.exc_value, ServerUnavailableError):
+            message = "Server unavailable — stopping bot."
         else:
             message = f"Bot worker thread crashed: {hook_args.exc_value!r}"
         with contextlib.suppress(RuntimeError):
@@ -170,9 +178,13 @@ def _run_with_tui(
     if crashes:
         # Print on the real terminal (after the alternate screen is gone),
         # then re-raise so play() records the honest exit_reason: "stuck_exit"
-        # for a deliberate StuckExit stop, "crash" for everything else.
+        # for a deliberate StuckExit stop, "server_unavailable" for a
+        # maintenance page (run() renders it), "crash" for everything else.
         if isinstance(crashes[0], StuckExit):
             print(f"Bot for {character!r} stopped: {crashes[0]}")
+        elif isinstance(crashes[0], ServerUnavailableError):
+            # Clean stop: run() renders the maintenance page and exits 3.
+            pass
         else:
             print(f"Bot worker thread for {character!r} crashed; traceback:")
             traceback.print_exception(crashes[0])
