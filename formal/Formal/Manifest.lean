@@ -27,6 +27,7 @@ import Formal.LeafAttainable
 import Formal.CompleteTaskIncome
 import Formal.AccumulationSell
 import Formal.DominancePareto
+import Formal.GearTaxonomy
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 -- CalculatePath required roles:
 #check @pathFrom_valid         -- validity
@@ -1182,3 +1183,9 @@ open Formal.PriorityBand
 #check @Formal.Liveness.GatedArming.gatedArming_eq_top_of_released    -- released ⇒ arming = top root's fight status
 #check @Formal.Liveness.GatedArming.arming_false_of_held_nonfight     -- held non-fight root ⇒ arming suppressed
 #check @Formal.Liveness.GatedArming.no_infinite_zombie_suppression    -- no infinite zombie suppression of the arming
+-- GearTaxonomy required roles (pure gear-classification core;
+-- src/artifactsmmo_cli/ai/gear_taxonomy_core.py::combat_gear_types):
+#check @Formal.GearTaxonomy.combatGear_mem_iff           -- membership: classified ⇔ combat-bearing ∧ no consumable item
+#check @Formal.GearTaxonomy.combatGear_combat_mono       -- combat-monotone: false→true combat never removes a type
+#check @Formal.GearTaxonomy.combatGear_consumable_anti   -- consumable-antitone: a consumable item only removes a type
+#check @Formal.GearTaxonomy.combatGear_subset_equippable -- every classified type appears as some row's type

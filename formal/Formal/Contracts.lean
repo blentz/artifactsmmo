@@ -72,6 +72,7 @@ import Formal.Liveness.ObtainProgress
 import Formal.Liveness.GearBuildTermination
 import Formal.ServableFilter
 import Formal.StrategicValue
+import Formal.GearTaxonomy
 import Formal.Extracted.Bridges9
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
@@ -3216,3 +3217,36 @@ example : ∀ (combatRaw wisdom prospecting inventorySpace haste
         combatRaw wisdom prospecting x' haste
         combatW wisdomW prospectingW inventoryW hasteW :=
   @Extracted.Bridges.strategic_value_mono_inventorySpace_extracted
+
+/-! ### GearTaxonomy role contracts (pure gear-classification core).
+
+Fully-qualified — `Formal.GearTaxonomy` is NOT opened. These pin the four
+carving theorems at their EXACT statements (membership characterization +
+combat-monotone + consumable-antitone + subset-of-equippable). -/
+
+-- combatGear_mem_iff: a type is durable combat gear ⇔ it has a combat-bearing
+-- item AND no consumable item.
+example : ∀ (rows : List Formal.GearTaxonomy.Row) (t : String),
+    t ∈ Formal.GearTaxonomy.combatGearTypes rows ↔
+      (∃ r ∈ rows, r.type = t ∧ r.combatBearing = true) ∧
+      ¬ (∃ r ∈ rows, r.type = t ∧ r.consumable = true) :=
+  @Formal.GearTaxonomy.combatGear_mem_iff
+-- combatGear_combat_mono: combat-witness-preserving + consumable-reflecting ⇒
+-- no classified type is lost (flipping combatBearing false→true never removes).
+example : ∀ (rows rows' : List Formal.GearTaxonomy.Row),
+    (∀ t, (∃ r ∈ rows, r.type = t ∧ r.combatBearing = true) →
+          (∃ r ∈ rows', r.type = t ∧ r.combatBearing = true)) →
+    (∀ t, (∃ r ∈ rows', r.type = t ∧ r.consumable = true) →
+          (∃ r ∈ rows, r.type = t ∧ r.consumable = true)) →
+    ∀ t, t ∈ Formal.GearTaxonomy.combatGearTypes rows →
+         t ∈ Formal.GearTaxonomy.combatGearTypes rows' :=
+  @Formal.GearTaxonomy.combatGear_combat_mono
+-- combatGear_consumable_anti: a classified type provably has NO consumable item.
+example : ∀ (rows : List Formal.GearTaxonomy.Row) (t : String),
+    t ∈ Formal.GearTaxonomy.combatGearTypes rows →
+    ¬ (∃ r ∈ rows, r.type = t ∧ r.consumable = true) :=
+  @Formal.GearTaxonomy.combatGear_consumable_anti
+-- combatGear_subset_equippable: every classified type appears as some row's type.
+example : ∀ (rows : List Formal.GearTaxonomy.Row) (t : String),
+    t ∈ Formal.GearTaxonomy.combatGearTypes rows → ∃ r ∈ rows, r.type = t :=
+  @Formal.GearTaxonomy.combatGear_subset_equippable
