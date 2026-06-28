@@ -165,6 +165,13 @@ Scope:
 **Done when:** a recipe with yield 2 schedules ⌈need/2⌉ crafts, apply/XP/task-progress credit
 the true yield, all gates green. Verifiable offline against synthetic yield-2 fixtures.
 
+> **P2 DONE 2026-06-28** (branch `feat/batch-craft-yield`, atop the season8 chain, commits
+> e97ee871..c77aae69; NOT merged). Learned>prior(`CraftSchema.quantity`)>1 yield resolution;
+> ceil-batch ⌈need/Y⌉ threaded through the proved RecipeClosure/closureDemand cores (Lean
+> re-proved, extraction regenerated, Y>1 differential + 4 yield/ceil mutants). Wrappers default
+> to the prior map so the fix is live for all callers under v8. Full suite 4092 pass/100% cov;
+> full formal gate green. See docs/superpowers/plans/2026-06-26-batch-craft-yield.md.
+
 ---
 
 ## P3 — Silent-gap hardening (genericity + new abilities)
