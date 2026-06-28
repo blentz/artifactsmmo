@@ -21,16 +21,16 @@ insertion-ordered `dict[str, int]` membership maps (`code -> 1`): the
 extracted image is an association list, and all reads go through
 order-independent `dict.get`.
 
-EXACT VALUE SEAM (P3c, closing the P3b float-boundary note): `_equip_value`
-now returns `int` — every summand (attack, resistance, hp_restore) is an int,
-so the strictly-higher dominance criterion is EXACT integer arithmetic with no
-float seam. It still stays OUTSIDE the extracted core as data plumbing
-(`_is_equippable_dominated` evaluates each peer's criteria into plain bools
-and hands `_is_dominated_pure` the verdict list, exactly the hand model's
-`Peer` encoding — the hand model has always taken the verdicts as Bools).
-The tiers-side `tiers/equip_value.equip_value` (augmented combat formula) and
-the wider float-typed equipment-scoring system are deliberately NOT cascaded —
-see the P3c scope note in docs/PLAN_mechanical_extraction.md.
+EXACT VALUE SEAM (P3c, updated Task 2 2026-06-28): the dominance gate routes
+through `gear_value(stats, Rank)` (leaf module `ai/gear_value.py`), which
+returns `int` — every summand is an int, so the strictly-higher dominance
+criterion is EXACT integer arithmetic with no float seam. The local `_equip_value`
+duplicate (which omitted dmg+critical_strike) is deleted; the import cycle that
+forced the duplicate is resolved because `gear_value` is a LEAF module (imports
+only stdlib + item_catalog). `_is_equippable_dominated` evaluates each peer's
+criteria into plain bools and hands `_is_dominated_pure` the verdict list,
+exactly the hand model's `Peer` encoding — the hand model has always taken the
+verdicts as Bools. Spec: docs/superpowers/specs/2026-06-28-gear-unified-ruler-design.md.
 """
 
 from collections.abc import Mapping, Sequence
@@ -40,6 +40,8 @@ from artifactsmmo_cli.ai.combat_targets import combat_target_monsters
 from artifactsmmo_cli.ai.dominance_pareto import pareto_dominates
 from artifactsmmo_cli.ai.equipment.scoring import armor_score, weapon_score
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.gear_value import gear_value
+from artifactsmmo_cli.ai.gear_value_core import Rank
 from artifactsmmo_cli.ai.thresholds import PRESSURE_HIGH_DEN, PRESSURE_HIGH_NUM
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
@@ -285,7 +287,7 @@ def _is_equippable_dominated(item_code: str, state: WorldState,
     qualifying peers must be >= len(slots_for_type).
 
     This wrapper evaluates each candidate peer's three criteria (the
-    strictly-higher test goes through the exact int-typed `_equip_value`;
+    strictly-higher test goes through the exact int-typed `gear_value(Rank)`;
     the per-peer GameData stats reads keep it outside the extracted core)
     and hands the verdict list to the extracted `_is_dominated_pure` fold.
     """
@@ -298,7 +300,7 @@ def _is_equippable_dominated(item_code: str, state: WorldState,
     monsters = combat_target_monsters(state, game_data)
     per_monster = bool(monsters) and stats.type_ in game_data.combat_gear_types
     item_vec = _score_vector(stats, monsters, game_data) if per_monster else []
-    my_value = _equip_value(stats)
+    my_value = gear_value(stats, Rank)
     my_effects = stats.skill_effects or {}
     candidates: set[str] = set(state.inventory)
     if state.bank_items:
@@ -318,7 +320,7 @@ def _is_equippable_dominated(item_code: str, state: WorldState,
         if per_monster and fits:
             higher = pareto_dominates(_score_vector(peer, monsters, game_data), item_vec)
         else:
-            higher = _equip_value(peer) > my_value
+            higher = gear_value(peer, Rank) > my_value
         # Peer must cover this item's skill_effects (else dropping a tool
         # in favor of a higher-attack weapon would silently lose a skill
         # bonus the bot relies on). Skill effect values are NEGATIVE
@@ -336,26 +338,6 @@ def _is_equippable_dominated(item_code: str, state: WorldState,
         )
         peers.append((fits, higher, covers, peer_count))
     return _is_dominated_pure(peers, len(slots))
-
-
-def _equip_value(stats: ItemStats) -> int:
-    """Dominance-gate equip value: attack + resistance + hp_restore + hp_bonus +
-    wisdom + prospecting — kept local here to avoid a tiers→inventory_caps import
-    cycle. EXACT integer arithmetic (P3c): every summand is an int, so the
-    strictly-higher comparison feeding the dominance Bool is exact.
-
-    Includes the flat utility stats (hp_bonus/wisdom/prospecting) so a
-    utility-only ARTIFACT (novice_guide: attack/resistance/hp_restore all 0,
-    wisdom 25, prospecting 25, hp_bonus 25) is no longer valued 0 → no longer
-    trivially dominated → no longer discarded as worthless overstock (the
-    Delete(novice_guide×4) bug, trace 2026-06-15). Mirrors the contributors the
-    augmented `tiers/equip_value.equip_value` ranks on."""
-    attack = sum(stats.attack.values()) if stats.attack else 0
-    resistance = sum(stats.resistance.values()) if stats.resistance else 0
-    hp = stats.hp_restore
-    return (attack + resistance + hp + stats.hp_bonus + stats.wisdom
-            + stats.prospecting + stats.inventory_space + stats.haste + stats.lifesteal
-            + stats.combat_buff)
 
 
 def _task_chain_demand_pure(fuel: int, target_item: str, root_item: str,

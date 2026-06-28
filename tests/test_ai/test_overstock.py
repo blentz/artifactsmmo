@@ -3,6 +3,8 @@
 from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.gear_value import gear_value
+from artifactsmmo_cli.ai.gear_value_core import Rank
 from artifactsmmo_cli.ai.goals.discard_overstock import (
     _DISCARD_OVERSTOCK_CRITICAL,
     _DISCARD_OVERSTOCK_HIGH_PRESSURE,
@@ -12,7 +14,6 @@ from artifactsmmo_cli.ai.inventory_caps import (
     BATCH_BUFFER,
     CONSUMABLE_KEEP,
     SAFETY_FLOOR,
-    _equip_value,
     _is_dominated_pure,
     _is_equippable_dominated,
     _task_chain_demand_pure,
@@ -82,29 +83,42 @@ class TestUsefulCapAppliesCeiling:
         assert useful_quantity_cap("bound_potion", make_state(level=30), gd) == 999
 
 
-def test_equip_value_counts_utility_stats_so_artifact_not_discarded():
-    """The dominance value includes hp_bonus + wisdom + prospecting, so a
-    utility-only artifact (novice_guide: combat stats 0, wisdom/prospecting/hp 25)
-    is valued 75 — not 0 — and is therefore not trivially dominated and discarded
-    as worthless overstock (the Delete(novice_guide×4) trace bug)."""
+def test_gear_value_counts_utility_stats_so_artifact_not_discarded():
+    """The dominance gate uses gear_value(Rank) — utility stats (hp_bonus, wisdom,
+    prospecting, inventory_space, haste, lifesteal, combat_buff) count so utility-only
+    artifacts (novice_guide: combat stats 0, wisdom/prospecting/hp 25) are not
+    trivially dominated and discarded (the Delete(novice_guide×4) trace bug).
+
+    Behavior change vs. the old _equip_value: gear_value applies 2× + nonToolBonus
+    (all items here are non-tool, subtype="") so the absolute values differ from the
+    old formula, but the ordering and non-zero property are preserved.
+    Spec: docs/superpowers/specs/2026-06-28-gear-unified-ruler-design.md —
+    "the delete-dominance gate now scores on dmg + critical_strike" (the nonToolBonus
+    change is part of the unified ruler).
+    """
     art = ItemStats(code="novice_guide", level=10, type_="artifact",
                     hp_bonus=25, wisdom=25, prospecting=25)
-    assert _equip_value(art) == 75
+    # raw = 25 (hp_bonus); rank_value(25, 25, 25, 0, 0, "") = 2*(25+25+25)+1 = 151
+    assert gear_value(art, Rank) == 151
     # A combat peer with a small attack no longer out-values it.
     weak = ItemStats(code="w", level=1, type_="weapon", attack={"fire": 10})
-    assert _equip_value(art) > _equip_value(weak)
+    assert gear_value(art, Rank) > gear_value(weak, Rank)
     # A bag's inventory_space also counts → not valued 0 / discarded.
+    # rank_value(0, 0, 0, 35, 0, "") = 2*(35)+1 = 71
     bag = ItemStats(code="backpack", level=10, type_="bag", inventory_space=35)
-    assert _equip_value(bag) == 35
+    assert gear_value(bag, Rank) == 71
     # Haste (cooldown reduction) also counts.
+    # rank_value(0, 0, 0, 0, 8, "") = 2*(8)+1 = 17
     legs = ItemStats(code="haste_legs", level=1, type_="leg_armor", haste=8)
-    assert _equip_value(legs) == 8
-    # Lifesteal (combat sustain) also counts.
+    assert gear_value(legs, Rank) == 17
+    # Lifesteal (combat sustain) also counts (it's part of combat_raw).
+    # combat_raw(lifesteal=15)=15; rank_value(15, 0, 0, 0, 0, "") = 2*15+1 = 31
     ring = ItemStats(code="vampiric_ring", level=1, type_="ring", lifesteal=15)
-    assert _equip_value(ring) == 15
+    assert gear_value(ring, Rank) == 31
     # Combat-buff potions count so they aren't discarded as worthless (PLAN #3a).
+    # combat_raw(combat_buff=20)=20; rank_value(20, 0, 0, 0, 0, "") = 2*20+1 = 41
     pot = ItemStats(code="enchanted_boost_potion", level=1, type_="utility", combat_buff=20)
-    assert _equip_value(pot) == 20
+    assert gear_value(pot, Rank) == 41
 
 
 def _gd_with_sap_recipes() -> GameData:
