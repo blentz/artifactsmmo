@@ -145,17 +145,6 @@ commitment: only switch when the new winner dominates by 50%+. Prevents
 single-cycle objective flap from transient predicate flips (e.g.
 combat_capable=False momentarily because pick_loadout's inventory
 projection changes when inventory composition shifts)."""
-# Combat gear occupies these item TYPES (policy: excludes artifact/utility/rune/
-# bag, which aren't combat-urgency gear). The SLOT names are derived from the
-# schema-backed ITEM_TYPE_TO_SLOTS, so a new slot for a combat type (e.g. a 3rd
-# ring) is included without editing a slot list here.
-_COMBAT_GEAR_TYPES = frozenset({
-    "weapon", "shield", "helmet", "body_armor", "leg_armor", "boots", "ring", "amulet",
-})
-_COMBAT_GEAR_SLOTS = frozenset(
-    slot for t in _COMBAT_GEAR_TYPES for slot in ITEM_TYPE_TO_SLOTS.get(t, [])
-)
-
 LEARN_W_MAX = Fraction(1, 2)
 LEARN_SAMPLE_FULL = 20
 XP_RATE_REFERENCE = Fraction(10)
@@ -389,6 +378,19 @@ class StrategyEngine:
         code = root.code if isinstance(root, ObtainItem) else ""
         return self._gear_slot(code, state, game_data)
 
+    def _combat_gear_slots(self, game_data: GameData) -> frozenset[str]:
+        """Slot names for all effect-derived combat gear types.
+        Derived from game_data.combat_gear_types (which includes rune/artifact after
+        the approved gear reclassification) via ITEM_TYPE_TO_SLOTS — a new slot for
+        a combat type (e.g. a 3rd ring) is included without editing any slot list.
+        Spec: docs/superpowers/plans/2026-06-28-gear-taxonomy.md
+        """
+        return frozenset(
+            slot
+            for t in game_data.combat_gear_types
+            for slot in ITEM_TYPE_TO_SLOTS.get(t, [])
+        )
+
     def _base_prior(self, root: MetaGoal, state: WorldState,
                     game_data: GameData) -> Fraction:
         category = root_category(root)
@@ -406,7 +408,7 @@ class StrategyEngine:
                 tier = Fraction(0)   # unknown skill — no prior, scores zero
         elif isinstance(root, ObtainItem):
             slot = self._root_slot(root, state, game_data)
-            tier = PRIOR_COMBAT_GEAR if slot in _COMBAT_GEAR_SLOTS else PRIOR_UTILITY_GEAR
+            tier = PRIOR_COMBAT_GEAR if slot in self._combat_gear_slots(game_data) else PRIOR_UTILITY_GEAR
         else:
             tier = Fraction(0)
         return tier * weight
@@ -418,8 +420,9 @@ class StrategyEngine:
         (combat_monster is None). Gates the char-level boost: while such a slot
         remains, leveling stays at the lower rate so empty-slot armor wins;
         once equipped, char leveling rises above general skill grinding."""
+        combat_slots = self._combat_gear_slots(game_data)
         for slot, code in self.objective.target_gear.items():
-            if slot == "weapon_slot" or slot not in _COMBAT_GEAR_SLOTS:
+            if slot == "weapon_slot" or slot not in combat_slots:
                 continue
             if state.equipment.get(slot) is not None:
                 continue
@@ -531,7 +534,7 @@ class StrategyEngine:
             # see EMPTY_SLOT_URGENCY). Excludes weapon_slot: the weapon has
             # its own combat-readiness path above, and tools (type
             # "weapon") must not ride this boost into the slot.
-            elif (slot in _COMBAT_GEAR_SLOTS and slot != "weapon_slot"
+            elif (slot in self._combat_gear_slots(game_data) and slot != "weapon_slot"
                     and current_code is None
                     and stats.level <= state.level and gain > 0):
                 marginal = max(marginal, Fraction(1)) * EMPTY_SLOT_URGENCY

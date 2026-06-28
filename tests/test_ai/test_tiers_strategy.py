@@ -407,7 +407,12 @@ class TestBasePrior:
 
     def test_gear_prior_combat_vs_utility(self):
         gd = GameData()
-        gd._item_stats = {"copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon"),
+        # combat_gear_types is now data-derived: weapon must have actual combat stats
+        # (attack/resistance/hp_bonus/etc.) to appear in combat_gear_types and thus
+        # get PRIOR_COMBAT_GEAR. A weapon with no stats would score PRIOR_UTILITY_GEAR,
+        # which is correct — such an item has no combat value.
+        gd._item_stats = {"copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
+                                                      attack={"fire": 6}),
                           "small_potion": ItemStats(code="small_potion", level=1, type_="utility")}
         eng = _eng(gd, target_gear={"weapon_slot": "copper_dagger", "utility1_slot": "small_potion"})
         st = make_state()

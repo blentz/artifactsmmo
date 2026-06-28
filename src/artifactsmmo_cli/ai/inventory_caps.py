@@ -43,9 +43,6 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.thresholds import PRESSURE_HIGH_DEN, PRESSURE_HIGH_NUM
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
-_ARMOR_TYPES = frozenset({"helmet", "body_armor", "leg_armor", "boots", "shield"})
-
-
 def _score_vector(stats: ItemStats, monsters: list[str], game_data: GameData) -> list[int]:
     """Per-monster combat score for a weapon (offense) or armor (defense) piece."""
     if stats.type_ == "weapon":
@@ -299,7 +296,7 @@ def _is_equippable_dominated(item_code: str, state: WorldState,
     if not slots:
         return False
     monsters = combat_target_monsters(state, game_data)
-    per_monster = bool(monsters) and (stats.type_ == "weapon" or stats.type_ in _ARMOR_TYPES)
+    per_monster = bool(monsters) and stats.type_ in game_data.combat_gear_types
     item_vec = _score_vector(stats, monsters, game_data) if per_monster else []
     my_value = _equip_value(stats)
     my_effects = stats.skill_effects or {}
