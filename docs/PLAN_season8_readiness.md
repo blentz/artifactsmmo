@@ -32,7 +32,10 @@ brainstorm → spec → plan → subagent-driven cycle when executed; the mechan
     {value}% damage for the rest of the fight.
   - `sun_shield` (sonnengott): the first hit the monster takes each turn is reduced by {value}%.
   Each needs the proven-core `predict_win` restructure + Lean lockstep (see P3.3 below).
-  **The bot hard-fails on live data until all 3 are modeled** — this is the live-boot blocker.
+  ~~**The bot hard-fails on live data until all 3 are modeled** — this is the live-boot blocker.~~
+  **P3.3 DONE 2026-06-27** (branch `feat/season8-p33-monster-abilities`, commit 7ecb7ec7):
+  all 3 modeled in predict_win, full formal gate green, live boot verified. See
+  docs/PLAN_p33_monster_abilities.md. **Live-boot blocker cleared.**
 - P2 (batch-craft), P3.1/P3.2 (genericity/item-effect guard), P4 (cooldown cost): unchanged.
 
 ## What changed in v8.0.0 (relevant to our reach-50 leveling bot)

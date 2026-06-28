@@ -2,6 +2,14 @@
 
 **Created:** 2026-06-27 · **Parent:** docs/PLAN_season8_readiness.md (P3.3) · **Branch:** `feat/season8-p33-monster-abilities` (off `feat/season8-client-regen`)
 
+> **STATUS: DONE 2026-06-27** (commit 7ecb7ec7). Full `formal/gate.sh` green (lake build,
+> standard axioms, manifest, contracts, differential 18, mutation — 3 new drop-term mutants
+> killed). Unit suite 4060 pass / 100% cov / mypy clean. Live boot verified (no
+> GameDataCoverageError). A real double-rounding bug was found mid-proof (two separate `// 2`
+> floors break kill_step monotonicity; counterexample bub=1,sun=99) → fixed by merging
+> bubble+sun_shield under one floor in BOTH Lean and Python. mono_player carries exactly the
+> 3 documented hypotheses; eq_sim/mono_monsterhp stayed fully general (adversarial review passed).
+
 ## Context
 
 Season 8 (API v8.0.0) added 3 monster ability codes the parser does not model.
