@@ -51,7 +51,8 @@ def _elem_args(attack: dict, dmg_global: int, dmg_elements: dict, resist: dict) 
 def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
          m_hp, m_attack, m_resist, m_crit, m_init,
          p_lifesteal=0, m_lifesteal=0, m_poison=0, m_barrier=0, m_burn=0, m_healing=0,
-         m_recon=0, m_void=0, m_berserk=0, m_frenzy=0, m_bubble=0, p_antipoison=0):
+         m_recon=0, m_void=0, m_berserk=0, m_frenzy=0, m_bubble=0, p_antipoison=0,
+         m_sun_shield=0, m_greed=0, m_enchanted_mirror=0):
     stats = ProjectedStats(
         attack=dict(p_attack), dmg=p_dmg, dmg_elements=dict(p_dmg_elem),
         resistance=dict(p_resist), critical_strike=p_crit, initiative=p_init,
@@ -110,6 +111,15 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
         def monster_protective_bubble(self, c):
             return m_bubble
 
+        def monster_sun_shield(self, c):
+            return m_sun_shield
+
+        def monster_greed(self, c):
+            return m_greed
+
+        def monster_enchanted_mirror(self, c):
+            return m_enchanted_mirror
+
         def item_stats(self, c):
             return (ItemStats(code=c, level=1, type_="weapon", lifesteal=p_lifesteal,
                               antipoison=p_antipoison)
@@ -138,6 +148,7 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
         + [p_lifesteal, p_atk_sum, m_lifesteal, m_atk_sum]
         + [m_poison, m_barrier, m_burn, m_healing, m_recon, m_void, m_berserk, m_frenzy, m_bubble]
         + [p_antipoison]
+        + [m_sun_shield, m_greed, m_enchanted_mirror]
     )
     lean = run_oracle("predict_win", [args])[0]
     return py, lean
@@ -195,11 +206,22 @@ def test_python_matches_lean(seed):
     # Player antipoison: 0 most of the time, else enough to partially/fully cancel the
     # monster poison (exercises max(0, poison - antipoison) incl. over-cancel to 0).
     p_antipoison = rng.choice([0, 0, rng.randint(1, 120)])
+    # Sun-shield: 0 most of the time, else a reduction % in [1, 100]. Merged with bubble
+    # into the single (bubble+sun_shield) killStep reduction — drawn independently so the
+    # sum can exceed 100 (Python and Lean both floor the merged term, so they still agree).
+    m_sun_shield = rng.choice([0, 0, rng.randint(1, 100)])
+    # Greed: 0 most of the time, else a ramp % in [1, 30] — exercises the 9-stack dieStep
+    # boost (incl. the // 2 floor and driving the death faster than the kill).
+    m_greed = rng.choice([0, 0, rng.randint(1, 30)])
+    # Enchanted-mirror: 0 most of the time, else a reflect % in [1, 100] — exercises the
+    # only dieStep term scaled by the player's own raw output (raw_player, p_crit).
+    m_enchanted_mirror = rng.choice([0, 0, rng.randint(1, 100)])
 
     py, lean = _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp,
                     p_init, m_hp, m_attack, m_resist, m_crit, m_init,
                     p_lifesteal, m_lifesteal, m_poison, m_barrier, m_burn, m_healing, m_recon,
-                    m_void, m_berserk, m_frenzy, m_bubble, p_antipoison=p_antipoison)
+                    m_void, m_berserk, m_frenzy, m_bubble, p_antipoison=p_antipoison,
+                    m_sun_shield=m_sun_shield, m_greed=m_greed, m_enchanted_mirror=m_enchanted_mirror)
     assert py == lean["win"], (
         f"verdict mismatch py={py} lean={lean} "
         f"p_attack={p_attack} p_dmg={p_dmg} p_dmg_elem={p_dmg_elem} "
@@ -208,7 +230,8 @@ def test_python_matches_lean(seed):
         f"p_lifesteal={p_lifesteal} m_lifesteal={m_lifesteal} m_poison={m_poison} "
         f"m_barrier={m_barrier} m_burn={m_burn} m_healing={m_healing} m_recon={m_recon} "
         f"m_void={m_void} m_berserk={m_berserk} m_frenzy={m_frenzy} m_bubble={m_bubble} "
-        f"p_antipoison={p_antipoison}"
+        f"p_antipoison={p_antipoison} m_sun_shield={m_sun_shield} m_greed={m_greed} "
+        f"m_enchanted_mirror={m_enchanted_mirror}"
     )
 
 
@@ -267,6 +290,66 @@ def test_berserker_rage_flips_winnable_fight_against_lean():
                         m_berserk=100)
     assert py_b is False
     assert py_b == lean_b["win"]
+
+
+def test_greed_flips_winnable_fight_against_lean():
+    """Greed's 9-stack monster-damage boost raises dieStep, flipping a won tiebreak
+    (rtk == rtd == 2) to a loss. Pins the greed term (9× stacks, incl. the `/ 2` floor)
+    against Lean. Player hp 100, raw 50 vs hp 100; greed 20 => dieStep 5e5 + 9*20*50*200/2
+    = 5e5 + 9e5 = 1.4e6 => rtd 1 < rtk 2."""
+    p = dict(attack={"fire": 50}, dmg=0, dmg_elem={}, resist={}, crit=0,
+             max_hp=100, init=10)
+    m = dict(hp=100, attack={"fire": 50}, resist={}, crit=0, init=10)
+    py_no, lean_no = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
+                          p["crit"], p["max_hp"], p["init"], m["hp"],
+                          m["attack"], m["resist"], m["crit"], m["init"])
+    assert py_no is True and py_no == lean_no["win"]
+    py_g, lean_g = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
+                        p["crit"], p["max_hp"], p["init"], m["hp"],
+                        m["attack"], m["resist"], m["crit"], m["init"],
+                        m_greed=20)
+    assert py_g is False
+    assert py_g == lean_g["win"]
+
+
+def test_sun_shield_flips_winnable_fight_against_lean():
+    """Sun-shield reduces the player's per-turn damage; at 100% it zeroes killStep so the
+    monster is unkillable, flipping a win to a loss. Pins the (bubble+sun_shield) merged
+    killStep reduction against Lean with bubble held at 0. Monster deals no direct damage
+    (raw_monster 0 => die_step<=0 => win) until sun_shield 100% makes killStep 0 => loss."""
+    p = dict(attack={"fire": 50}, dmg=0, dmg_elem={}, resist={}, crit=0,
+             max_hp=100, init=10)
+    m = dict(hp=100, attack={}, resist={}, crit=0, init=10)
+    py_no, lean_no = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
+                          p["crit"], p["max_hp"], p["init"], m["hp"],
+                          m["attack"], m["resist"], m["crit"], m["init"])
+    assert py_no is True and py_no == lean_no["win"]
+    py_s, lean_s = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
+                        p["crit"], p["max_hp"], p["init"], m["hp"],
+                        m["attack"], m["resist"], m["crit"], m["init"],
+                        m_sun_shield=100)
+    assert py_s is False
+    assert py_s == lean_s["win"]
+
+
+def test_enchanted_mirror_flips_winnable_fight_against_lean():
+    """Enchanted-mirror reflects a % of the player's own output back as player damage —
+    the only dieStep term scaled by raw_player. The monster deals no direct damage, but
+    at 50% reflect the player dies in 2 rounds while the kill takes 4 (monster hp 200),
+    flipping a win to a loss. Pins the reflect term against Lean."""
+    p = dict(attack={"fire": 50}, dmg=0, dmg_elem={}, resist={}, crit=0,
+             max_hp=50, init=10)
+    m = dict(hp=200, attack={}, resist={}, crit=0, init=10)
+    py_no, lean_no = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
+                          p["crit"], p["max_hp"], p["init"], m["hp"],
+                          m["attack"], m["resist"], m["crit"], m["init"])
+    assert py_no is True and py_no == lean_no["win"]
+    py_e, lean_e = _run(p["attack"], p["dmg"], p["dmg_elem"], p["resist"],
+                        p["crit"], p["max_hp"], p["init"], m["hp"],
+                        m["attack"], m["resist"], m["crit"], m["init"],
+                        m_enchanted_mirror=50)
+    assert py_e is False
+    assert py_e == lean_e["win"]
 
 
 def test_frenzy_flips_winnable_fight_against_lean():

@@ -859,6 +859,61 @@ class TestGameDataLoadMonsters:
         assert gd.monster_protective_bubble("corrupted_ogre") == 0
         assert gd.monster_frenzy("corrupted_ogre") == 0
 
+    def test_loads_monster_sun_shield_from_effect(self):
+        """A monster's `sun_shield` ABILITY (Season 8) parses so predict_win sees its
+        per-turn player-damage reduction. Absent ⇒ 0."""
+        gd = GameData()
+        monster = MagicMock()
+        monster.code = "sonnengott"
+        monster.level = 55
+        monster.hp = 1500000
+        monster.critical_strike = 0
+        monster.initiative = 100
+        eff = MagicMock(); eff.code = "sun_shield"; eff.value = 50
+        monster.effects = [eff]
+        with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=make_page([monster])):
+            gd._load_monsters(MagicMock())
+        assert gd.monster_sun_shield("sonnengott") == 50
+        assert gd.monster_sun_shield("no_such_monster") == 0
+        assert gd.monster_greed("sonnengott") == 0
+        assert gd.monster_enchanted_mirror("sonnengott") == 0
+
+    def test_loads_monster_greed_from_effect(self):
+        """A monster's `greed` ABILITY (Season 8) parses so predict_win sees its
+        HP-loss-ramped damage boost. Absent ⇒ 0."""
+        gd = GameData()
+        monster = MagicMock()
+        monster.code = "red_dragon"
+        monster.level = 51
+        monster.hp = 5000
+        monster.critical_strike = 0
+        monster.initiative = 100
+        eff = MagicMock(); eff.code = "greed"; eff.value = 20
+        monster.effects = [eff]
+        with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=make_page([monster])):
+            gd._load_monsters(MagicMock())
+        assert gd.monster_greed("red_dragon") == 20
+        assert gd.monster_greed("no_such_monster") == 0
+        assert gd.monster_sun_shield("red_dragon") == 0
+
+    def test_loads_monster_enchanted_mirror_from_effect(self):
+        """A monster's `enchanted_mirror` ABILITY (Season 8) parses so predict_win sees
+        its reflected-damage term. Absent ⇒ 0."""
+        gd = GameData()
+        monster = MagicMock()
+        monster.code = "pixie"
+        monster.level = 40
+        monster.hp = 600000
+        monster.critical_strike = 0
+        monster.initiative = 100
+        eff = MagicMock(); eff.code = "enchanted_mirror"; eff.value = 50
+        monster.effects = [eff]
+        with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=make_page([monster])):
+            gd._load_monsters(MagicMock())
+        assert gd.monster_enchanted_mirror("pixie") == 50
+        assert gd.monster_enchanted_mirror("no_such_monster") == 0
+        assert gd.monster_greed("pixie") == 0
+
     def test_unmapped_monster_effect_code_raises(self):
         """Parser-coverage guard: a monster ability the parser does NOT map (and
         is not carved out) must FAIL loudly, naming the monster + code, rather than

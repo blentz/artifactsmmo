@@ -321,6 +321,30 @@ class GameData:
         self.monsters.corrupted = value
 
     @property
+    def _monster_sun_shield(self) -> dict[str, int]:
+        return self.monsters.sun_shield
+
+    @_monster_sun_shield.setter
+    def _monster_sun_shield(self, value: dict[str, int]) -> None:
+        self.monsters.sun_shield = value
+
+    @property
+    def _monster_greed(self) -> dict[str, int]:
+        return self.monsters.greed
+
+    @_monster_greed.setter
+    def _monster_greed(self, value: dict[str, int]) -> None:
+        self.monsters.greed = value
+
+    @property
+    def _monster_enchanted_mirror(self) -> dict[str, int]:
+        return self.monsters.enchanted_mirror
+
+    @_monster_enchanted_mirror.setter
+    def _monster_enchanted_mirror(self, value: dict[str, int]) -> None:
+        self.monsters.enchanted_mirror = value
+
+    @property
     def _monster_initiative(self) -> dict[str, int]:
         return self.monsters.initiative
 
@@ -652,6 +676,24 @@ class GameData:
         does NOT credit it (models pre-corruption minimum damage). Parsed/covered, not
         used by the win prediction — see monster_catalog.monster_corrupted."""
         return self.monsters.monster_corrupted(code)
+
+    def monster_sun_shield(self, code: str) -> int:
+        """First-hit-per-turn damage-reduction percent of a monster (optional
+        `sun_shield` effect; 0 if absent). Feeds predict_win: modeled like
+        protective_bubble as an always-on player-damage reduction (lowers our kill rate)."""
+        return self.monsters.monster_sun_shield(code)
+
+    def monster_greed(self, code: str) -> int:
+        """Greed ramp percent of a monster (optional `greed` effect; 0 if absent):
+        +value% damage per 10% max-HP lost. Feeds predict_win: modeled at the max
+        9-stack bound (conservative always-on monster damage boost, raises death rate)."""
+        return self.monsters.monster_greed(code)
+
+    def monster_enchanted_mirror(self, code: str) -> int:
+        """Enchanted-mirror reflect percent of a monster (optional `enchanted_mirror`
+        effect; 0 if absent): reflects value% of damage taken back at the player. Feeds
+        predict_win: modeled as every-turn reflect of player output (raises death rate)."""
+        return self.monsters.monster_enchanted_mirror(code)
 
     def monster_initiative(self, code: str) -> int:
         """Initiative (turn-order) stat of a monster. Raises `KeyError` when
@@ -1456,6 +1498,9 @@ class GameData:
             self._monster_frenzy[mon.code] = 0
             self._monster_protective_bubble[mon.code] = 0
             self._monster_corrupted[mon.code] = 0
+            self._monster_sun_shield[mon.code] = 0
+            self._monster_greed[mon.code] = 0
+            self._monster_enchanted_mirror[mon.code] = 0
             mon_effects = getattr(mon, "effects", None)
             if mon_effects and not isinstance(mon_effects, Unset):
                 for effect in mon_effects:
@@ -1484,6 +1529,12 @@ class GameData:
                         # corrupted HELPS the player; predict_win conservatively ignores
                         # it (parsed/covered here so it is not silently dropped).
                         self._monster_corrupted[mon.code] = effect.value
+                    elif code == "sun_shield":
+                        self._monster_sun_shield[mon.code] = effect.value
+                    elif code == "greed":
+                        self._monster_greed[mon.code] = effect.value
+                    elif code == "enchanted_mirror":
+                        self._monster_enchanted_mirror[mon.code] = effect.value
                     elif code not in _MONSTER_EFFECT_CARVEOUTS:
                         # Parser-coverage guard: an unmapped monster ability would
                         # silently corrupt predict_win (the combat veto the whole bot

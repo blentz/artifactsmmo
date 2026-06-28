@@ -58,7 +58,7 @@ def rowWinnable (r : WitnessRow) : Bool :=
   predictWin r.rawPlayer r.pCrit r.monsterHp r.rawMonster r.mCrit r.pMaxHp
     r.pLifesteal r.pAtkSum r.mLifesteal r.mAtkSum r.mPoison r.mBarrier r.mBurn
     r.mHealing r.mReconstitution r.mVoidDrain r.mBerserk r.mFrenzy r.mBubble
-    r.pAntipoison r.playerFirst
+    r.pAntipoison r.mSunShield r.mGreed r.mEnchantedMirror r.playerFirst
 
 /-- The witness catalog as abstract `Monster`s: one entry per witness row, the
 `code` a stable row index, the `level` the row's winning monster level. Every

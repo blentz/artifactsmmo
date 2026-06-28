@@ -40,7 +40,8 @@ def _record_mixed(store: LearningStore, action_repr: str, wins: int, losses: int
 
 def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob", lifesteal=0,
         poison=0, barrier=0, burn=0, healing=0, reconstitution=0, void_drain=0,
-        berserker_rage=0, frenzy=0, protective_bubble=0, corrupted=0):
+        berserker_rage=0, frenzy=0, protective_bubble=0, corrupted=0,
+        sun_shield=0, greed=0, enchanted_mirror=0):
     gd = GameData()
     gd._monster_hp = {code: hp}
     gd._monster_attack = {code: attack or {}}
@@ -58,6 +59,9 @@ def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob", lifestea
     gd._monster_frenzy = {code: frenzy}
     gd._monster_protective_bubble = {code: protective_bubble}
     gd._monster_corrupted = {code: corrupted}
+    gd._monster_sun_shield = {code: sun_shield}
+    gd._monster_greed = {code: greed}
+    gd._monster_enchanted_mirror = {code: enchanted_mirror}
     return gd
 
 
@@ -98,6 +102,42 @@ def test_predict_win_false_when_poison_outpaces_the_kill():
     assert predict_win(state, gd_no, "mob") is True
     gd_psn = _gd(hp=100, attack={"fire": 50}, initiative=10, poison=100)
     assert predict_win(state, gd_psn, "mob") is False
+
+
+def test_predict_win_false_when_sun_shield_zeroes_kill_step():
+    """dieStep sun_shield term (Season 8): a monster that deals no direct damage is
+    winnable, but sun_shield 100% halves-then-zeroes the player's per-turn damage so
+    killStep ≤ 0 ⇒ unkillable ⇒ loss. WITHOUT the sun_shield term the bot predicts a
+    win — the mutation gate checks the term flips it."""
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    gd_no = _gd(hp=100, attack={}, initiative=10)
+    assert predict_win(state, gd_no, "mob") is True
+    gd_ss = _gd(hp=100, attack={}, initiative=10, sun_shield=100)
+    assert predict_win(state, gd_ss, "mob") is False
+
+
+def test_predict_win_false_when_greed_outpaces_the_kill():
+    """dieStep greed term (Season 8): a fight won on the initiative tiebreak (rtk == rtd
+    == 2) becomes a loss once the monster's 9-stack greed boost shortens rounds_to_die.
+    Player raw 50 vs hp 100 ⇒ 2 rounds; symmetric monster ⇒ 2 rounds (win, player first);
+    greed 20 ⇒ +9*20% monster damage ⇒ 1 round to die ⇒ loss."""
+    state = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    gd_no = _gd(hp=100, attack={"fire": 50}, initiative=10)
+    assert predict_win(state, gd_no, "mob") is True
+    gd_greed = _gd(hp=100, attack={"fire": 50}, initiative=10, greed=20)
+    assert predict_win(state, gd_greed, "mob") is False
+
+
+def test_predict_win_false_when_enchanted_mirror_reflects_to_death():
+    """dieStep enchanted_mirror term (Season 8): a monster that deals no direct damage is
+    winnable, but reflecting 50% of the player's own output kills the (low-HP) player in 2
+    rounds while the kill takes 4 (monster hp 200) ⇒ loss. WITHOUT the reflect term the bot
+    predicts a win — the mutation gate checks the term flips it."""
+    state = make_state(hp=50, max_hp=50, attack={"fire": 50}, initiative=10)
+    gd_no = _gd(hp=200, attack={}, initiative=10)
+    assert predict_win(state, gd_no, "mob") is True
+    gd_mirror = _gd(hp=200, attack={}, initiative=10, enchanted_mirror=50)
+    assert predict_win(state, gd_mirror, "mob") is False
 
 
 def test_predict_win_antipoison_cancels_monster_poison():

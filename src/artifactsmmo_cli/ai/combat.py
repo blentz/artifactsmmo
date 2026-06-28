@@ -17,6 +17,15 @@ from artifactsmmo_cli.ai.world_state import WorldState
 MAX_TURNS = 100
 """A fight unresolved by turn 100 is a loss (documented combat cap)."""
 
+GREED_MAX_STACKS = 9
+"""Max `greed` stacks the closed-form model assumes (conservative upper bound).
+
+`greed` gives the monster +value% damage for each 10% max-HP it has lost. A monster
+triggers it at 10%..90% HP lost = 9 times while still alive and dealing damage (the
+10th, at 100% lost, coincides with death). predict_win has no turn counter, so it
+models the monster as ALWAYS at this max-stack count — an upper bound on monster
+damage that keeps the verdict a safe veto."""
+
 WIN_RATE_THRESHOLD = 0.9
 """Below this observed Fight success rate, the learned-loss veto fires. Set high
 (0.9) because `predict_win` is an EXPECTED-value verdict: a marginal monster the
@@ -106,11 +115,19 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
     # modeled conservatively as the bubble always covering the player's damage (value%
     # reduction every turn) ⇒ reduce killStep by value% of the player-damage term
     # (= value * raw_player * (200+crit) / 2). // 2 matches the Lean `/ 2` on non-negs.
+    # Sun-shield reduces the FIRST hit the monster takes each turn by value%; modeled
+    # conservatively as a value% reduction of the player's damage EVERY turn (same shape
+    # as protective_bubble). bubble and sun_shield both reduce the player's per-turn
+    # damage, so they are SUMMED into one (bubble+sun_shield)% reduction inside a SINGLE
+    # floor-divide — two separate `// 2` floors would double-round and break the proved
+    # monotonicity of kill_step in raw_player (real monsters carry at most one of them,
+    # so this is identical for live data). // 2 matches the Lean `/ 2` on non-negatives.
     kill_step = (50 * raw_player * (200 + p.critical_strike)
                  - m_crit * game_data.monster_lifesteal(monster_code) * m_atk_sum
                  - game_data.monster_healing(monster_code) * game_data.monster_hp(monster_code) * 100
                  - game_data.monster_void_drain(monster_code) * p.max_hp * 100
-                 - game_data.monster_protective_bubble(monster_code) * raw_player * (200 + p.critical_strike) // 2)
+                 - (game_data.monster_protective_bubble(monster_code)
+                    + game_data.monster_sun_shield(monster_code)) * raw_player * (200 + p.critical_strike) // 2)
     if kill_step <= 0:
         return False  # the monster out-damages/out-heals/out-resists us — unkillable
     # Barrier is an absorbing shield: model it conservatively as extra effective HP
@@ -153,13 +170,21 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
     # both raise monster damage; modeled conservatively as ALWAYS active — each adds
     # value% of the monster's per-turn damage (= value * raw_monster * (200+m_crit) / 2,
     # the 50*...*value/100 reduced). Floor (//) matches the Lean `/ 2` on non-negatives.
+    # Greed adds +value% monster damage per 10% max-HP lost; modeled at the max
+    # GREED_MAX_STACKS=9 stacks always active (= 9 * value% of monster damage).
+    # Enchanted-mirror reflects value% of the damage the MONSTER takes (= the player's
+    # output) back at the player, once per 3 turns; modeled conservatively as every turn
+    # (3× upper bound, mirroring healing) ⇒ add value% of the player-damage term. This is
+    # the only die_step term scaled by the player's raw output (raw_player, p.crit).
     die_step = (50 * raw_monster * (200 + m_crit)
                 - p.critical_strike * player_lifesteal * p_atk_sum
                 + max(0, game_data.monster_poison(monster_code) - player_antipoison) * 10000
                 + game_data.monster_burn(monster_code) * p_atk_sum * 100
                 + game_data.monster_void_drain(monster_code) * p.max_hp * 100
                 + game_data.monster_berserker_rage(monster_code) * raw_monster * (200 + m_crit) // 2
-                + game_data.monster_frenzy(monster_code) * raw_monster * (200 + m_crit) // 2)
+                + game_data.monster_frenzy(monster_code) * raw_monster * (200 + m_crit) // 2
+                + GREED_MAX_STACKS * game_data.monster_greed(monster_code) * raw_monster * (200 + m_crit) // 2
+                + game_data.monster_enchanted_mirror(monster_code) * raw_player * (200 + p.critical_strike) // 2)
     if die_step <= 0:
         return True  # we out-sustain the monster's damage (poison-inclusive)
     effective_hp = min(state.hp, p.max_hp) if state.hp > 0 else 0

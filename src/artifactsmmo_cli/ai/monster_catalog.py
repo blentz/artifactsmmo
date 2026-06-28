@@ -26,6 +26,9 @@ class MonsterCatalog:
     frenzy: dict[str, int] = field(default_factory=dict)  # code -> +% damage on crit (effect; 0 if absent)
     protective_bubble: dict[str, int] = field(default_factory=dict)  # code -> % resist on rotating element (effect; 0 if absent)
     corrupted: dict[str, int] = field(default_factory=dict)  # code -> per-hit resist-reduction % (effect; 0 if absent). HELPS the player.
+    sun_shield: dict[str, int] = field(default_factory=dict)  # code -> first-hit-per-turn damage-reduction % (effect; 0 if absent)
+    greed: dict[str, int] = field(default_factory=dict)  # code -> +% damage per 10% max-HP lost (effect; 0 if absent)
+    enchanted_mirror: dict[str, int] = field(default_factory=dict)  # code -> reflect % of damage taken, once/3 turns (effect; 0 if absent)
     # OpenAPI conformance (Item 14 remediation): monster reward + loot fields.
     drops: dict[str, list[tuple[str, int, int, int]]] = field(default_factory=dict)
     """code -> [(item_code, rate, min_quantity, max_quantity), ...]. Drop rate is
@@ -172,6 +175,26 @@ class MonsterCatalog:
         it conservatively models the player's pre-corruption (minimum) damage. This
         accessor exists so the effect is parsed/covered, not silently dropped."""
         return self.corrupted.get(code, 0)
+
+    def monster_sun_shield(self, code: str) -> int:
+        """First-hit-per-turn damage-reduction percent of a monster (the `sun_shield`
+        effect). Returns 0 when absent — an OPTIONAL monster ability (most monsters
+        have none), so unlike the always-present combat stats this does not raise."""
+        return self.sun_shield.get(code, 0)
+
+    def monster_greed(self, code: str) -> int:
+        """Greed ramp percent of a monster (the `greed` effect): +value% damage per
+        10% max-HP the monster has lost. Returns 0 when absent — an OPTIONAL monster
+        ability (most monsters have none), so unlike the always-present combat stats
+        this does not raise."""
+        return self.greed.get(code, 0)
+
+    def monster_enchanted_mirror(self, code: str) -> int:
+        """Enchanted-mirror reflect percent of a monster (the `enchanted_mirror`
+        effect): reflects value% of damage taken back at the player. Returns 0 when
+        absent — an OPTIONAL monster ability (most monsters have none), so unlike the
+        always-present combat stats this does not raise."""
+        return self.enchanted_mirror.get(code, 0)
 
     def monster_initiative(self, code: str) -> int:
         """Initiative (turn-order) stat of a monster. Raises `KeyError` when

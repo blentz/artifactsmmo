@@ -82,6 +82,10 @@ structure WitnessRow where
   mBerserk : Int
   mFrenzy : Int
   mBubble : Int
+  -- New Season-8 abilities: default 0 so existing witness rows need no update.
+  mSunShield : Int := 0
+  mGreed : Int := 0
+  mEnchantedMirror : Int := 0
   playerFirst : Bool
 deriving Repr, DecidableEq
 

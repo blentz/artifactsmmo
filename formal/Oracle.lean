@@ -113,8 +113,16 @@ def runPredictWin (g : Nat → Int) : Json :=
   let monsterBubble := g 41
   -- player antipoison [42]: equipped antidote total; caps the monster poison DoT
   let playerAntipoison := g 42
+  -- sun_shield [43]: % resist to player attacks (conservative always-on; killStep)
+  let monsterSunShield := g 43
+  -- greed [44]: % bonus monster damage (scales rawMonster; dieStep)
+  let monsterGreed := g 44
+  -- enchanted_mirror [45]: % of player damage reflected back (dieStep)
+  let monsterEnchantedMirror := g 45
   let verdict := predictWin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
-    pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy monsterBubble playerAntipoison playerFirst
+    pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing
+    monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy monsterBubble playerAntipoison
+    monsterSunShield monsterGreed monsterEnchantedMirror playerFirst
   Json.mkObj [("win", Json.bool verdict), ("raw_player", Json.num rawPlayer),
     ("raw_monster", Json.num rawMonster)]
 
