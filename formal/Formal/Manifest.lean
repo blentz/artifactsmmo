@@ -860,6 +860,13 @@ open Formal.PriorityBand
 #check @Formal.GearValue.gatherValue_pickGatherSlot_optimal -- pickGatherSlot_score_optimal on gear_value(Gather)
 #check @Formal.GearValue.combatScore_eq_combatValue         -- combatScore = 2*combatValue + nonToolBonus
 #check @Formal.GearValue.gatherValue_eq_gatherScore         -- gatherValue = PurposeRouting.gatherScore
+-- GearValue unified purpose picker (Task 3, 2026-06-28): per-slot optimality ∀ purpose
+#check @Formal.GearValue.pickSlot_score_optimal_purpose     -- unified argmax: best maximizes benefit ∀ purpose
+#check @Formal.GearValue.pickSlot_purpose_combat_optimal    -- Combat instance (subsumes combatValue_pickslot_optimal)
+#check @Formal.GearValue.pickSlot_purpose_rank_optimal      -- Rank instance (monster-independent ruler argmax)
+#check @Formal.GearValue.argmaxBy_neg_eq_argminBy           -- duality: argmax(-score) = argmin(score)
+#check @Formal.GearValue.pickSlot_purpose_gather_optimal    -- Gather fold: argmax(-gather) minimizes gatherValue
+#check @Formal.GearValue.pickSlotForPurpose_gather_eq       -- Gather fold: unified picker = pickGatherSlot
 
 -- FallbackChain (two-pass arbiter walk proof):
 #check @Formal.FallbackChain.walk_some_of_nonNone_exists

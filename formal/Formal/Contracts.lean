@@ -3299,3 +3299,63 @@ example : ∀ (skillEffect : Formal.EquipmentScoring.Item → Int) (playerLevel 
     ∀ c ∈ Formal.EquipmentScoring.candidates playerLevel items,
       Formal.GearValue.gatherValue skillEffect picked ≤ Formal.GearValue.gatherValue skillEffect c :=
   @Formal.GearValue.gatherValue_pickGatherSlot_optimal
+
+-- GearValue unified purpose picker (Task 3, 2026-06-28). ONE picker over ANY benefit;
+-- the Gather argmin folds into the unified argmax via the argmax/argmin duality.
+-- pickSlot_score_optimal_purpose: the picked best maximizes the purpose benefit ∀ purpose.
+example : ∀ (p : Formal.GearValue.Purpose) (playerLevel : Int)
+    (items : List Formal.EquipmentScoring.Item) (c : Formal.EquipmentScoring.Item)
+    (cs : List Formal.EquipmentScoring.Item),
+    Formal.EquipmentScoring.candidates playerLevel items = c :: cs →
+    ∀ y ∈ Formal.EquipmentScoring.candidates playerLevel items,
+      Formal.GearValue.purposeBenefit p y
+        ≤ Formal.GearValue.purposeBenefit p
+            (Formal.EquipmentScoring.argmaxBy (Formal.GearValue.purposeBenefit p) c cs) :=
+  @Formal.GearValue.pickSlot_score_optimal_purpose
+-- pickSlot_purpose_combat_optimal: Combat instance (weapon OR armor), subsumes the existing pin.
+example : ∀ (monsterAtk monsterRes : Formal.EquipmentScoring.ElemStats) (isWeapon : Bool)
+    (playerLevel : Int) (items : List Formal.EquipmentScoring.Item)
+    (c : Formal.EquipmentScoring.Item) (cs : List Formal.EquipmentScoring.Item),
+    Formal.EquipmentScoring.candidates playerLevel items = c :: cs →
+    ∀ y ∈ Formal.EquipmentScoring.candidates playerLevel items,
+      Formal.GearValue.combatValue isWeapon y monsterAtk monsterRes
+        ≤ Formal.GearValue.combatValue isWeapon
+            (Formal.EquipmentScoring.argmaxBy
+              (Formal.GearValue.purposeBenefit
+                (Formal.GearValue.Purpose.combat monsterAtk monsterRes isWeapon)) c cs)
+            monsterAtk monsterRes :=
+  @Formal.GearValue.pickSlot_purpose_combat_optimal
+-- pickSlot_purpose_rank_optimal: Rank instance (monster-independent ruler argmax).
+example : ∀ (rankOf : Formal.EquipmentScoring.Item → Int) (playerLevel : Int)
+    (items : List Formal.EquipmentScoring.Item) (c : Formal.EquipmentScoring.Item)
+    (cs : List Formal.EquipmentScoring.Item),
+    Formal.EquipmentScoring.candidates playerLevel items = c :: cs →
+    ∀ y ∈ Formal.EquipmentScoring.candidates playerLevel items,
+      rankOf y ≤ rankOf
+        (Formal.EquipmentScoring.argmaxBy
+          (Formal.GearValue.purposeBenefit (Formal.GearValue.Purpose.rank rankOf)) c cs) :=
+  @Formal.GearValue.pickSlot_purpose_rank_optimal
+-- argmaxBy_neg_eq_argminBy: the duality — maximizing the negated score selects the argmin item.
+example : ∀ (score : Formal.EquipmentScoring.Item → Int) (best : Formal.EquipmentScoring.Item)
+    (xs : List Formal.EquipmentScoring.Item),
+    Formal.EquipmentScoring.argmaxBy (fun i => - score i) best xs
+      = Formal.PurposeRouting.argminBy score best xs :=
+  @Formal.GearValue.argmaxBy_neg_eq_argminBy
+-- pickSlot_purpose_gather_optimal: Gather fold — argmax(-gather) MINIMIZES gatherValue over candidates.
+example : ∀ (skillEffect : Formal.EquipmentScoring.Item → Int) (playerLevel : Int)
+    (items : List Formal.EquipmentScoring.Item) (c : Formal.EquipmentScoring.Item)
+    (cs : List Formal.EquipmentScoring.Item),
+    Formal.EquipmentScoring.candidates playerLevel items = c :: cs →
+    ∀ y ∈ Formal.EquipmentScoring.candidates playerLevel items,
+      Formal.GearValue.gatherValue skillEffect
+          (Formal.EquipmentScoring.argmaxBy
+            (Formal.GearValue.purposeBenefit (Formal.GearValue.Purpose.gather skillEffect)) c cs)
+        ≤ Formal.GearValue.gatherValue skillEffect y :=
+  @Formal.GearValue.pickSlot_purpose_gather_optimal
+-- pickSlotForPurpose_gather_eq: Gather fold — unified picker output = dedicated pickGatherSlot output.
+example : ∀ (skillEffect : Formal.EquipmentScoring.Item → Int) (playerLevel : Int)
+    (current : Option Formal.EquipmentScoring.Item) (items : List Formal.EquipmentScoring.Item),
+    Formal.GearValue.pickSlotForPurpose
+        (Formal.GearValue.Purpose.gather skillEffect) playerLevel current items
+      = Formal.PurposeRouting.pickGatherSlot skillEffect playerLevel current items :=
+  @Formal.GearValue.pickSlotForPurpose_gather_eq

@@ -656,6 +656,13 @@ open Formal.WeightedRemaining in
 #print axioms Formal.GearValue.gatherValue_pickGatherSlot_optimal
 #print axioms Formal.GearValue.combatScore_eq_combatValue
 #print axioms Formal.GearValue.gatherValue_eq_gatherScore
+-- GearValue unified purpose picker (Task 3, 2026-06-28): per-slot optimality ∀ purpose
+#print axioms Formal.GearValue.pickSlot_score_optimal_purpose
+#print axioms Formal.GearValue.pickSlot_purpose_combat_optimal
+#print axioms Formal.GearValue.pickSlot_purpose_rank_optimal
+#print axioms Formal.GearValue.argmaxBy_neg_eq_argminBy
+#print axioms Formal.GearValue.pickSlot_purpose_gather_optimal
+#print axioms Formal.GearValue.pickSlotForPurpose_gather_eq
 -- FallbackChain (de-Mathlib'd safety module)
 #print axioms Formal.FallbackChain.walk_some_of_nonNone_exists
 #print axioms Formal.FallbackChain.walk_picks_upgrade_when_present
