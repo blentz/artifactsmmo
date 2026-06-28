@@ -17,10 +17,23 @@ from artifactsmmo_cli.ai.actions.gather_apply_core import (
     gather_is_applicable_pure,
 )
 from artifactsmmo_cli.ai.actions.movement import MoveAction
+from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_value_core import Gather
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.world_state import WorldState
+
+GATHER_LOADOUT_PENALTY = 5.0
+"""Added to GatherAction cost when the equipped loadout is suboptimal for the
+resource's skill, so the planner sequences OptimizeLoadout(Gather) before the
+gather action. Mirrors LOADOUT_PENALTY in actions/combat.py:
+  - Must stay < SWAP_COST_PER_SLOT * 2 (10.0) so the penalty favors swap-before-
+    gather over multiple gathers without swapping, without making a one-shot swap
+    never worthwhile.
+  - Must stay << _BANKED_REGATHER_PENALTY (100.0) so a banked-material withdraw
+    still wins over re-gathering regardless of tool mismatch.
+The penalty fires ONLY on GatherAction — never mid-combat."""
 
 
 @dataclass
@@ -105,6 +118,18 @@ class GatherAction(Action):
         banked = (state.bank_items or {}).get(drop_item, 0)
         if banked > 0:
             static += self._BANKED_REGATHER_PENALTY
+        # Penalize gathering with a suboptimal tool, mirroring LOADOUT_PENALTY in
+        # FightAction.cost: add GATHER_LOADOUT_PENALTY when pick_loadout(Gather)
+        # differs from the current equipment in any slot, so the planner sequences
+        # OptimizeLoadout(Gather) before the gather.  Fires only when the resource
+        # has a known skill requirement (resources without skill data carry no
+        # tool preference, so no penalty).
+        skill_req = game_data.resource_skill_level(self.resource_code)
+        if skill_req is not None:
+            skill, _ = skill_req
+            optimal = pick_loadout(Gather(skill), state, game_data)
+            if any(state.equipment.get(slot) != code for slot, code in optimal.items()):
+                static += GATHER_LOADOUT_PENALTY
         if history is None:
             return learned_cost_pure(static, 0.0, 1.0, has_history=False)
         learned = history.action_cost(repr(self), default=static, window=50)

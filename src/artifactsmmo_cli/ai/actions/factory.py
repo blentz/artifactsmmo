@@ -32,6 +32,7 @@ from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS
 from artifactsmmo_cli.ai.player_helpers import delete_cost
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
@@ -67,6 +68,12 @@ def build_actions(
 
     for resource_code, locs in game_data.all_resource_locations.items():
         actions.append(GatherAction(resource_code=resource_code, locations=frozenset(locs)))
+
+    # One gather-loadout optimizer per gathering skill — lets the planner re-arm
+    # with the best tool before a gather session (mirrors the per-monster combat
+    # optimizers above).
+    for skill in sorted(_GATHERING_SKILLS):
+        actions.append(OptimizeLoadoutAction(target_skill=skill, game_data=game_data))
 
     # Craft, equip, and withdraw actions carry workshop/bank locations
     materials_to_withdraw: dict[str, int] = {}

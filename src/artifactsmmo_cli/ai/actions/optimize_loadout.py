@@ -13,7 +13,7 @@ from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.constants import ERROR_CODE_ALREADY_EQUIPPED
 from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.gear_value_core import Combat
+from artifactsmmo_cli.ai.gear_value_core import Combat, Gather
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -23,32 +23,38 @@ SWAP_COST_PER_SLOT = 5.0
 
 @dataclass
 class OptimizeLoadoutAction(Action):
-    """Equip the best owned loadout for fighting `target_monster_code`.
+    """Equip the best owned loadout for a target monster or gathering skill.
 
     The action is the planner's way to spend a few cooldown cycles re-arming
-    before a fight. Compares per-fight expected damage (weapon) and damage
-    reduction (armor) against the monster's element profile.
+    before a fight or gather. Compares per-fight expected damage (weapon) and
+    damage reduction (armor) against the monster's element profile for combat,
+    or picks the best gather tool for the skill.
     """
 
     tags: ClassVar[frozenset[str]] = frozenset({"equip"})
 
     target_monster_code: str = ""
+    target_skill: str = ""
     game_data: GameData | None = field(default=None, repr=False, compare=False)
 
     def _swap_plan(self, state: WorldState, game_data: GameData) -> dict[str, str | None]:
         """Slots that would change in the optimal loadout. Empty when nothing to do.
 
-        Empty `target_monster_code` is the documented "no target" sentinel — no
-        swap is computed (would raise from the post-Phase-9 monster_attack
-        accessor, which only knows real monster codes). This single-locus check
-        is the action's precondition, not multi-level error handling."""
-        if not self.target_monster_code:
+        Monster key set → Combat purpose; skill key set → Gather purpose; both
+        empty is the documented "no target" sentinel — no swap is computed.
+        This single-locus check is the action's precondition, not multi-level
+        error handling."""
+        purpose: Combat | Gather
+        if self.target_monster_code:
+            purpose = Combat(
+                game_data.monster_attack(self.target_monster_code),
+                game_data.monster_resistance(self.target_monster_code),
+            )
+        elif self.target_skill:
+            purpose = Gather(self.target_skill)
+        else:
             return {}
-        optimal = pick_loadout(
-            Combat(game_data.monster_attack(self.target_monster_code),
-                   game_data.monster_resistance(self.target_monster_code)),
-            state, game_data,
-        )
+        optimal = pick_loadout(purpose, state, game_data)
         return {
             slot: new_code
             for slot, new_code in optimal.items()
@@ -158,4 +164,5 @@ class OptimizeLoadoutAction(Action):
         return state
 
     def __repr__(self) -> str:
-        return f"OptimizeLoadout({self.target_monster_code})"
+        key = self.target_monster_code or "gather:" + self.target_skill
+        return f"OptimizeLoadout({key})"
