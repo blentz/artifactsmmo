@@ -3263,3 +3263,39 @@ example : ∀ (s : Formal.EquipValueAugmented.RawStats),
 example : ∀ (s : Formal.EquipValueAugmented.RawStats) (isTool : Bool),
     Formal.GearValue.rankValue s isTool = Formal.EquipValueAugmented.equipValue s isTool :=
   @Formal.GearValue.rank_eq_equipValue
+
+-- GearValue Combat/Gather: gear_value(Combat/Gather) subsumes the per-monster
+-- scorers; the EquipmentScoring trio role theorems restate on the gear_value forms.
+-- combatValue_weapon_nonneg: nonneg attacks + crit ⇒ gear_value(Combat) weapon ≥ 0.
+example : ∀ (item : Formal.EquipmentScoring.Item) (monsterAtk monsterRes : Formal.EquipmentScoring.ElemStats),
+    (∀ e ∈ Formal.EquipmentScoring.elements, 0 ≤ Formal.EquipmentScoring.elemGet item.attack e) →
+    0 ≤ item.crit →
+    0 ≤ Formal.GearValue.combatValue true item monsterAtk monsterRes :=
+  @Formal.GearValue.combatValue_weapon_nonneg
+-- combatValue_armor_nonneg: nonneg monster attack + armor resistance + flatUtil ⇒
+-- gear_value(Combat) armor ≥ 0.
+example : ∀ (item : Formal.EquipmentScoring.Item) (monsterAtk monsterRes : Formal.EquipmentScoring.ElemStats),
+    (∀ e ∈ Formal.EquipmentScoring.elements, 0 ≤ Formal.EquipmentScoring.elemGet monsterAtk e) →
+    (∀ e ∈ Formal.EquipmentScoring.elements, 0 ≤ Formal.EquipmentScoring.elemGet item.resistance e) →
+    0 ≤ item.flatUtil →
+    0 ≤ Formal.GearValue.combatValue false item monsterAtk monsterRes :=
+  @Formal.GearValue.combatValue_armor_nonneg
+-- combatValue_pickslot_optimal: weapon-slot pick maximizes gear_value(Combat) over candidates.
+example : ∀ (playerLevel : Int) (monsterAtk monsterRes : Formal.EquipmentScoring.ElemStats)
+    (items : List Formal.EquipmentScoring.Item) (c : Formal.EquipmentScoring.Item)
+    (cs : List Formal.EquipmentScoring.Item),
+    Formal.EquipmentScoring.candidates playerLevel items = c :: cs →
+    ∀ y ∈ Formal.EquipmentScoring.candidates playerLevel items,
+      Formal.GearValue.combatValue true y monsterAtk monsterRes
+        ≤ Formal.GearValue.combatValue true
+            (Formal.EquipmentScoring.argmaxBy
+              (fun i => Formal.GearValue.combatValue true i monsterAtk monsterRes) c cs)
+            monsterAtk monsterRes :=
+  @Formal.GearValue.combatValue_pickslot_optimal
+-- gatherValue_pickGatherSlot_optimal: gather pick minimizes gear_value(Gather) over candidates.
+example : ∀ (skillEffect : Formal.EquipmentScoring.Item → Int) (playerLevel : Int)
+    (items : List Formal.EquipmentScoring.Item) (picked : Formal.EquipmentScoring.Item),
+    Formal.PurposeRouting.pickGatherSlot skillEffect playerLevel none items = some picked →
+    ∀ c ∈ Formal.EquipmentScoring.candidates playerLevel items,
+      Formal.GearValue.gatherValue skillEffect picked ≤ Formal.GearValue.gatherValue skillEffect c :=
+  @Formal.GearValue.gatherValue_pickGatherSlot_optimal

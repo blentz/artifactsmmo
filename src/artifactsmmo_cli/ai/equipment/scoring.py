@@ -1,4 +1,12 @@
-"""Score equipment against a monster's element profile and pick the best loadout."""
+"""Score equipment against a monster's element profile and pick the best loadout.
+
+LAYERING DIRECTION: ``ai/gear_value.gear_value`` delegates TO the
+``weapon_score``/``armor_score``/``gather_score`` functions here for its
+Combat/Gather purposes (gear_value -> scoring, one direction). This module must
+NOT import ``gear_value`` — that would cycle, and ``pick_loadout`` /
+``pick_gather_loadout`` stay on these scorers. They are the specializations
+``gear_value(Combat/Gather)`` unifies.
+"""
 
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.equipment.elements import ELEMENTS

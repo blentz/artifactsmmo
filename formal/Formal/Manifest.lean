@@ -852,6 +852,14 @@ open Formal.PriorityBand
 -- GearValue (unified Rank ruler core; equip_value delegates to gear_value(_, Rank)):
 #check @Formal.GearValue.rawSum_decomp          -- rawSum = combatRaw + efficiency stats
 #check @Formal.GearValue.rank_eq_equipValue     -- rankValue = augmented equipValue (bit-identical)
+-- GearValue Combat/Gather (gear_value(Combat/Gather) subsumes the per-monster scorers;
+-- the EquipmentScoring trio restated on the gear_value forms):
+#check @Formal.GearValue.combatValue_weapon_nonneg          -- weapon_score_nonneg on gear_value(Combat) weapon
+#check @Formal.GearValue.combatValue_armor_nonneg           -- armor_score_nonneg on gear_value(Combat) armor
+#check @Formal.GearValue.combatValue_pickslot_optimal       -- pickslot_score_optimal on gear_value(Combat)
+#check @Formal.GearValue.gatherValue_pickGatherSlot_optimal -- pickGatherSlot_score_optimal on gear_value(Gather)
+#check @Formal.GearValue.combatScore_eq_combatValue         -- combatScore = 2*combatValue + nonToolBonus
+#check @Formal.GearValue.gatherValue_eq_gatherScore         -- gatherValue = PurposeRouting.gatherScore
 
 -- FallbackChain (two-pass arbiter walk proof):
 #check @Formal.FallbackChain.walk_some_of_nonNone_exists

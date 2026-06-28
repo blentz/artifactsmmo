@@ -1,8 +1,9 @@
 """Tests for the unified gear value ruler core (combat_raw + rank_value) and
 its ItemStats adapter/dispatch. Mirrors Formal/GearValue.lean."""
 
+from artifactsmmo_cli.ai.equipment.scoring import armor_score, gather_score, weapon_score
 from artifactsmmo_cli.ai.gear_value import gear_value
-from artifactsmmo_cli.ai.gear_value_core import Rank, combat_raw, rank_value
+from artifactsmmo_cli.ai.gear_value_core import Combat, Gather, Rank, combat_raw, rank_value
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 
@@ -58,3 +59,20 @@ def test_gear_value_rank_full_utility_stats() -> None:
     # raw = 25 (hp_bonus) + 25 wisdom + 25 prospecting -> 2*75 + 1 = 151
     assert gear_value(s, Rank) == 151
     assert gear_value(s, Rank) == equip_value(s)
+
+
+def test_combat_purpose_matches_weapon_and_armor_score() -> None:
+    weapon = ItemStats(code="w", level=1, type_="weapon", attack={"fire": 6},
+                       critical_strike=20)
+    armor = ItemStats(code="a", level=1, type_="body_armor", resistance={"fire": 30},
+                      hp_bonus=15)
+    m_res = {"fire": 25}
+    m_atk = {"fire": 40}
+    assert gear_value(weapon, Combat(m_atk, m_res)) == weapon_score(weapon, m_res)
+    assert gear_value(armor, Combat(m_atk, m_res)) == armor_score(armor, m_atk)
+
+
+def test_gather_purpose_matches_gather_score() -> None:
+    tool = ItemStats(code="axe", level=1, type_="weapon",
+                     skill_effects={"woodcutting": -10})
+    assert gear_value(tool, Gather("woodcutting")) == gather_score(tool, "woodcutting")
