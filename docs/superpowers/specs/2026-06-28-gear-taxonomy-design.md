@@ -66,12 +66,31 @@ import-time `frozenset`; it is computed once from the loaded item catalog (like
   **Excluded** (pure utility/gather, keep the utility prior, stay out of
   combat_gear): `wisdom`, `prospecting`, `inventory_space`, `haste`,
   `hp_restore`, `teleport_map_id`, `skill_effects`.
-- **`combat_gear_types`** = `{ type : ∃ live equippable item of that type with
-  is_combat_bearing }`. Effect-derived, auto-extends on client regen. Per the
-  live v8 audit this reclassifies **rune** (lifesteal) and **artifact** IN.
+- **`is_consumable_type(type)`** = a type whose live items carry a
+  **consumable-family** effect code (`heal`, `restore`, `splash_restore`,
+  `boost_dmg_*`, `boost_res_*`, `boost_hp`, `antipoison`, `teleport`). Detected
+  at ingest from the **raw** effect codes (the `boost_*` provenance is lost once
+  folded into `ItemStats`), stored as `GameData.consumable_types`. Generic,
+  data-derived — the consumable axis, not a hardcoded `"utility"`.
+- **`combat_gear_types`** = `{ type : (∃ item of type with is_combat_bearing) ∧
+  ¬is_consumable_type(type) }`. Effect-derived, auto-extends on client regen.
+  The consumable carve excludes **`utility`** (boost/restore potions write combat
+  fields but are the consumable axis, not durable combat gear — the existing
+  `_COMBAT_GEAR_TYPES` excluded it deliberately).
 - **`defensive_gear_types`** = `combat_gear_types − {weapon}` — replaces
   `_ARMOR_TYPES` at the dominance gate. Ring/amulet/rune/artifact now score via
   per-monster `armor_score` (which already folds hp/lifesteal/etc.).
+
+**Live v8 audit (2026-06-28, the actual derived result):**
+```
+equippable types : amulet artifact bag body_armor boots helmet leg_armor
+                   ring rune shield utility weapon
+combat_gear      : amulet artifact body_armor boots helmet leg_armor ring
+                   rune shield weapon          (reclassifies rune + artifact IN)
+excluded         : bag (no combat stat), utility (consumable type)
+```
+`rune` enters combat_gear via `lifesteal` (the one modeled combat field its items
+carry); its other abilities are carved (below) but do not affect type membership.
 
 ## Coverage guard + audit-first (the cascade)
 
@@ -80,25 +99,35 @@ The item-effect ingestion (`game_data.py:1190-1271`) is an elif-chain ending in
 dropped today, and there is no `frenzy`/`greed`/`enchanted_mirror` branch (those
 v8 abilities, if items carry them to the player, are dropped now).
 
-Add an `else` that raises `GameDataCoverageError` for an unmodeled effect code on
-an **equippable** item (mirrors the monster-effect guard). Non-equippable items
-(consumables, resources) and the already-carved `threat` stay exempt/carved.
+Add an `else` that raises `GameDataCoverageError` for an effect code on an
+**equippable** item that is in **neither** the modeled set **nor** the explicit
+carve set (mirrors the monster-effect guard). The guard fires only on
+truly-unknown codes, so the bot still boots.
 
-**Audit is task 1.** Load live v8 data; enumerate every effect code on every
-equippable item. Per code, one of:
-- **Already modeled** → fine.
-- **Combat-relevant but unmodeled** (e.g. `frenzy`/`greed`/`enchanted_mirror` on
-  a rune granting the *player* that ability) → model as a new `ItemStats` field
-  **and** a player-side `predict_win` term. This is the cascade risk.
-- **Irrelevant** (party/solo-N/A) → carve out explicitly like `threat`, with a
-  comment.
+**The audit ran (2026-06-28).** Every equippable effect code is already modeled
+**except 9 player-side rune abilities**, none with an else-branch today (all
+silently dropped now):
+```
+burn  enchanted_mirror  frenzy  greed  guard  healing  healing_aura
+shell  vampiric_strike
+```
+These are real combat mechanics (the mirror of P3.3's monster abilities, plus
+new ones). Modeling all 9 in `predict_win` is a multi-ability project on its own
+— **out of A's scope.**
 
-The guard is fail-loud, so A cannot boot green on live data until every code is
-resolved — making the audit the sizing gate for A. Player-grantable combat
-modeling, if the audit finds any, is **in A's scope** (A owns "no equippable
-effect silently mis-scores gear"). If that modeling balloons into multi-ability
-`predict_win` work, flag it at that point as a candidate split rather than
-silently absorbing it.
+**Decision (approved): carve + defer.** A registers the 9 codes as documented
+carve-outs (a named `_DEFERRED_RUNE_ABILITIES` set + comment, like `threat`), so
+the coverage guard treats them as known and the bot boots. `rune` still
+classifies into combat_gear via `lifesteal`, so the type taxonomy is correct.
+**Per-item rune VALUE stays degraded** (a `burn_rune` with no modeled combat
+field scores ~0 and won't be equipped) until a follow-on sub-project models the
+abilities. This is honest and documented, not a silent drop.
+
+**Follow-on sub-project (recommended addition to the epic): "Player rune
+abilities"** — model the 9 carved codes as new `ItemStats` fields + player-side
+`predict_win` terms (the P3.3 pattern, player side). Sequence it with/after the
+unified value ruler (it needs the ruler to score the new stats). Until it lands,
+the carve keeps A correct-but-conservative on runes.
 
 ## Consumer migration
 
@@ -116,14 +145,18 @@ silently absorbing it.
 ## Formal lockstep
 
 `Formal/GearTaxonomy.lean`:
-- `def isCombatBearing` (OR of field predicates) + `def combatGearTypes` (fold
-  over the catalog).
+- `def isCombatBearing` (OR of durable combat-field predicates) +
+  `def combatGearTypes` (fold over the catalog; a type qualifies when it has a
+  combat-bearing item **and** no consumable item).
 - Role theorems:
   - **(a) membership characterization** —
-    `t ∈ combatGearTypes items ↔ ∃ i ∈ items, i.type = t ∧ isCombatBearing i`.
-  - **(b) monotonicity** — pointwise-stronger combat stats can only grow the set
-    (a new combat field never *removes* a type).
-  - **(c) subset** — `combatGearTypes ⊆ equippableTypes`.
+    `t ∈ combatGearTypes rows ↔ (∃ r ∈ rows, r.type = t ∧ r.combatBearing) ∧
+    ¬(∃ r ∈ rows, r.type = t ∧ r.consumable)`.
+  - **(b) combat-monotonicity** — pointwise-stronger combat stats can only grow
+    the set (a new combat field never *removes* a non-consumable type).
+  - **(c) consumable-antitonicity** — marking a type's item consumable can only
+    *remove* that type (the carve never adds).
+  - **(d) subset** — `combatGearTypes ⊆ equippableTypes`.
 - `Contracts.lean` exact-statement pins + `Manifest.lean` roster.
 - Differential: Python `is_combat_bearing` / `combat_gear_types` ≡ oracle on
   Hypothesis-drawn catalogs (oracle runs the hand Lean def).
@@ -150,21 +183,25 @@ live audit, not Lean.
 - The two divergent `equip_value` rulers — reconciled by the **unified value
   ruler** sub-project (next).
 - Profiles, dedup, bank-space, learned loadouts — sub-projects C and D.
+- Modeling the 9 carved rune abilities in `predict_win` — the recommended
+  "Player rune abilities" follow-on sub-project (sequenced with/after the ruler).
 - `DUPLICATE_SLOT_TYPES` and `ITEM_TYPE_TO_SLOTS` (already correct/derived).
 - Subtype-aware scoring (`ItemStats.subtype` exists but is display-only here).
 
-## Task roadmap (implementation plan fills in)
+## Task roadmap (implementation plan fills in; audit already done)
 
-1. **Live-data audit** — enumerate equippable effect codes; classify
-   modeled/combat-unmodeled/irrelevant. Sizes the cascade.
-2. **Resolve unmodeled codes** — model (ItemStats field + predict_win term) or
-   carve, per audit.
-3. **Coverage guard** — `else`-branch `GameDataCoverageError` for equippable
-   unmodeled effects.
-4. **Pure core + Lean** — `gear_taxonomy_core.py` + `Formal/GearTaxonomy.lean`
-   (def + 3 role theorems) + Contracts + Manifest + extraction.
-5. **GameData properties** — `equippable_types`, `combat_gear_types`,
-   `defensive_gear_types` (memoized).
-6. **Consumer migration** — `inventory_caps:302`, `strategy:152-157`.
-7. **Differential + mutation + tests** — oracle harness, drop-field mutants,
-   live-data audit test, regression tests.
+1. **Rune-ability carve + coverage guard** — `_DEFERRED_RUNE_ABILITIES` set;
+   `else`-branch `GameDataCoverageError` for equippable codes in neither the
+   modeled nor carved set; unit tests (boots green on live data).
+2. **Pure core + Lean** — `gear_taxonomy_core.py` (`is_combat_bearing`,
+   `is_consumable`, `combat_gear_types`) + `Formal/GearTaxonomy.lean` (defs + 4
+   role theorems) + Contracts + Manifest + extraction.
+3. **GameData properties** — `equippable_types`, `consumable_types`,
+   `combat_gear_types`, `defensive_gear_types` (memoized; consumable_types built
+   from raw effect codes at ingest).
+4. **Consumer migration** — `inventory_caps:302` (`_ARMOR_TYPES` →
+   `defensive_gear_types`), `strategy:152-157` (`_COMBAT_GEAR_TYPES` →
+   `combat_gear_types`).
+5. **Differential + mutation + tests** — oracle harness, drop-field mutants,
+   live-data audit test (asserts the derived sets above), regression tests for
+   the ring/amulet/rune/artifact reclassification.
