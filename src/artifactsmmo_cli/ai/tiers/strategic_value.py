@@ -19,6 +19,7 @@ and Formal/Extracted/StrategicValue.lean (extracted), bridged in Bridges9.lean.
 """
 
 from artifactsmmo_cli.ai.game_data import ItemStats
+from artifactsmmo_cli.ai.gear_value import combat_raw_of
 
 # Fixed-point scale for the efficiency weights. The documented per-point rates
 # are sub-unit (openapi: wisdom/prospecting = "1% extra per 10 points" = 0.001
@@ -51,6 +52,15 @@ DEFAULT_STRATEGIC_WEIGHTS: tuple[int, int, int, int, int] = (
     _COMBAT_WEIGHT, _WISDOM_WEIGHT, _PROSPECTING_WEIGHT,
     _INVENTORY_WEIGHT_DEFERRED, _HASTE_WEIGHT_DEFERRED,
 )
+
+
+def _combat_raw_of_stats(stats: ItemStats) -> int:
+    """The genuine-combat signal for an equippable, via the ONE shared
+    `combat_raw` primitive (`ai/gear_value.combat_raw_of`). strategic_value's
+    combat input MUST be this exact atom so it can never drift into a third
+    combat ruler: the 8-stat sum (attack + resistance + hp_restore + hp_bonus +
+    dmg + critical_strike + lifesteal + combat_buff) is owned in one place."""
+    return combat_raw_of(stats)
 
 
 def strategic_value_pure(
@@ -126,11 +136,7 @@ def strategic_value(
     weapon is needed regardless of horizon. Scaling only shrinks the (already
     capped) efficiency block, so combat dominance is preserved. `None` ⇒ factor 1.
     """
-    attack = sum(stats.attack.values()) if stats.attack else 0
-    resistance = sum(stats.resistance.values()) if stats.resistance else 0
-    combat_raw = (attack + resistance + stats.hp_restore + stats.hp_bonus
-                  + stats.dmg + stats.critical_strike + stats.lifesteal
-                  + stats.combat_buff)
+    combat_raw = _combat_raw_of_stats(stats)
     combat_w, wisdom_w, prospecting_w, inventory_w, haste_w = weights
     combat_part = combat_raw * combat_w
     # Efficiency block via the proved core with combat zeroed out, then capped,

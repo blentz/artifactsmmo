@@ -1100,6 +1100,10 @@ open Formal.PriorityBand
 -- model Formal/StrategicValue.lean and bridged in Formal/Extracted/Bridges9.lean.
 -- Separate from equip_value (combat scorer) — re-weights non-combat efficiency
 -- stats so bags/runes get a meaningful, non-1:1 cross-slot value.
+#check @Formal.StrategicValue.combatRawOf                             -- shared combat-raw input = GearValue.combatRaw (one ruler)
+#check @Formal.StrategicValue.combatRawOf_eq                          -- combatRawOf is definitionally GearValue.combatRaw
+#check @Formal.StrategicValue.combatRawOf_nonneg                      -- shared combat-raw nonneg under nonneg combat fields
+#check @Formal.StrategicValue.strategicValue_combatRawOf             -- strategic_value fed shared combat-raw = genuine-combat sum × weight + efficiency
 #check @Formal.StrategicValue.strategicValue_nonneg                   -- hand: nonneg stats+weights ⇒ nonneg (gap-bound precond)
 #check @Formal.StrategicValue.strategicValue_mono_combatRaw           -- hand: monotone in combat_raw
 #check @Formal.StrategicValue.strategicValue_mono_wisdom              -- hand: monotone in wisdom

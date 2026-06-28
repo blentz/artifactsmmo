@@ -1,4 +1,5 @@
 -- @concept: items, characters @property: safety, monotonicity
+import Formal.GearValue
 /-!
 # Formal.StrategicValue
 
@@ -31,6 +32,11 @@ efficiency so combat ordering is preserved).
 
 These are transferred onto the extracted `Extracted.StrategicValue` def by the
 Bridges9 bridge.
+
+`combatRaw` is the ONE shared genuine-combat primitive: `combatRawOf` below
+delegates to `Formal.GearValue.combatRaw` (the same atom the `equip_value`
+ranker uses, mirrored by `ai/gear_value.combat_raw_of` in Python), so
+strategic_value's combat input cannot drift into a third combat ruler.
 -/
 
 namespace Formal.StrategicValue
@@ -60,6 +66,45 @@ def strategicValue (s : Stats) (w : Weights) : Int :=
     + s.prospecting * w.prospecting
     + s.inventorySpace * w.inventory
     + s.haste * w.haste
+
+/-! ## The shared combat-raw primitive.
+
+`combatRawOf` is strategic_value's combat input, defined as `Formal.GearValue.combatRaw`
+— the SAME genuine-combat atom the unified Rank ruler (`equip_value`) uses.
+Python mirror: `tiers/strategic_value._combat_raw_of_stats` → `gear_value.combat_raw_of`
+→ `gear_value_core.combat_raw`. There is exactly ONE combat_raw definition, so
+strategic_value's combat ordering cannot diverge from equip_value's. -/
+
+/-- strategic_value's combat input = the unified `GearValue.combatRaw` primitive. -/
+def combatRawOf (s : Formal.EquipValueAugmented.RawStats) : Int :=
+  Formal.GearValue.combatRaw s
+
+/-- `combatRawOf` is definitionally the one shared `GearValue.combatRaw`. -/
+theorem combatRawOf_eq (s : Formal.EquipValueAugmented.RawStats) :
+    combatRawOf s = Formal.GearValue.combatRaw s := rfl
+
+/-- The shared combat-raw is nonneg when its combat fields are, so feeding it as
+strategic_value's `combatRaw` input keeps the nonneg contract satisfiable. -/
+theorem combatRawOf_nonneg (s : Formal.EquipValueAugmented.RawStats)
+    (ha : 0 ≤ s.attack) (hr : 0 ≤ s.resistance) (hhr : 0 ≤ s.hpRestore)
+    (hhb : 0 ≤ s.hpBonus) (hd : 0 ≤ s.dmg) (hc : 0 ≤ s.crit)
+    (hl : 0 ≤ s.lifesteal) (hcb : 0 ≤ s.combatBuff) :
+    0 ≤ combatRawOf s := by
+  unfold combatRawOf Formal.GearValue.combatRaw
+  omega
+
+/-- strategic_value fed the shared `combatRawOf` is well-defined and expands to the
+genuine-combat sum × combat weight plus the efficiency block — i.e. the combat
+input is literally the one shared `combat_raw` definition, not a re-derived sum. -/
+theorem strategicValue_combatRawOf
+    (rs : Formal.EquipValueAugmented.RawStats) (w : Weights)
+    (wi pr inv ha : Int) :
+    strategicValue ⟨combatRawOf rs, wi, pr, inv, ha⟩ w
+      = (rs.attack + rs.resistance + rs.hpRestore + rs.hpBonus + rs.dmg + rs.crit
+          + rs.lifesteal + rs.combatBuff) * w.combat
+        + wi * w.wisdom + pr * w.prospecting + inv * w.inventory + ha * w.haste := by
+  unfold strategicValue combatRawOf Formal.GearValue.combatRaw
+  rfl
 
 /-! ## Nonnegativity. -/
 

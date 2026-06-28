@@ -1,9 +1,9 @@
--- GENERATED from src/artifactsmmo_cli/ai/tiers/strategic_value.py (sha256: 53abc983b1e48ac190579fb8da437eb6f3ebd5bba0017d43711d454f940be368) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/tiers/strategic_value.py (sha256: b55549fa708a817d8342340e9bfe4fac0c995d2cf3b1bbbe62e5a3839838a096) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.StrategicValue
 
-/-- Extracted from `strategic_value_pure` (line 56). -/
+/-- Extracted from `strategic_value_pure` (line 66). -/
 def strategic_value_pure (combat_raw : Int) (wisdom : Int) (prospecting : Int) (inventory_space : Int) (haste : Int) (combat_weight : Int) (wisdom_weight : Int) (prospecting_weight : Int) (inventory_weight : Int) (haste_weight : Int) :
     Int :=
   (((((combat_raw * combat_weight) + (wisdom * wisdom_weight)) + (prospecting * prospecting_weight)) + (inventory_space * inventory_weight)) + (haste * haste_weight))
