@@ -66,11 +66,15 @@ def _closure_visited(fuel: int, material: str, recipes: Mapping[str, dict[str, i
 
 
 def _raw_units(fuel: int, item: str, recipes: Mapping[str, dict[str, int]],
-               visited: dict[str, int]) -> int:
+               yields: Mapping[str, int], visited: dict[str, int]) -> int:
     """Total raw-resource quantity gathered to craft one `item`, multiplying
     ingredient quantities down the recipe tree. A raw (gathered) or unknown
     item costs 1. `visited` is PER-PATH (each child gets a copy extended with
-    `item`), so cyclic recipes terminate via the revisit guard (revisit -> 1)."""
+    `item`), so cyclic recipes terminate via the revisit guard (revisit -> 1).
+
+    `yields` maps item code to output quantity per craft run (default 1 when
+    absent). Per-item raw cost = ⌈(raw inputs per batch) / Y⌉ where Y is the
+    node's yield. Consistent with `_closure_demand`'s ceil-batch semantics."""
     if fuel <= 0:
         return 1
     if visited.get(item, 0) == 1:
@@ -82,18 +86,25 @@ def _raw_units(fuel: int, item: str, recipes: Mapping[str, dict[str, int]],
     deeper[item] = 1
     total = 0
     for sub, qty in recipe.items():
-        total = total + qty * _raw_units(fuel - 1, sub, recipes, deeper)
-    return total
+        total = total + qty * _raw_units(fuel - 1, sub, recipes, yields, deeper)
+    y = yields.get(item, 1)
+    return -(-total // y)  # ⌈total / y⌉
 
 
 def _closure_demand(fuel: int, root: str, multiplier: int,
                     recipes: Mapping[str, dict[str, int]],
+                    yields: Mapping[str, int],
                     visited: dict[str, int], out: dict[str, int]) -> dict[str, int]:
     """Accumulate the recipe-closure demand of `root` (x `multiplier`) into the
     THREADED `out` map: the root and every transitive material at its cumulative
     required quantity (max across contributing paths). `visited` is PER-PATH
     (each child walk gets a copy extended with `root`), so cyclic recipes
-    terminate; zero/negative-quantity edges are skipped."""
+    terminate; zero/negative-quantity edges are skipped.
+
+    `yields` maps item code to output quantity per craft run (default 1 when
+    absent). Children scale by ⌈multiplier / Y⌉ × qty_per (ceil-batch
+    semantics): to produce `multiplier` of a yield-Y node we need ⌈m/Y⌉ craft
+    runs, each consuming `qty_per` of each ingredient."""
     if fuel <= 0:
         return out
     if visited.get(root, 0) == 1:
@@ -104,10 +115,13 @@ def _closure_demand(fuel: int, root: str, multiplier: int,
     if multiplier > out.get(root, 0):
         out[root] = multiplier
     recipe = recipes.get(root, {})
+    y = yields.get(root, 1)
+    batches = -(-multiplier // y)  # ⌈multiplier / y⌉ craft runs needed
     for mat, qty_per in recipe.items():
         if qty_per <= 0:
             continue
-        out = _closure_demand(fuel - 1, mat, multiplier * qty_per, recipes, sub_visited, out)
+        out = _closure_demand(fuel - 1, mat, batches * qty_per, recipes, yields,
+                              sub_visited, out)
     return out
 
 
@@ -139,20 +153,39 @@ def recipe_closure(game_data: _HasRecipes, roots: Iterable[str]) -> tuple[set[st
                                game_data.resource_drops)
 
 
-def raw_material_units(game_data: _HasRecipes, item: str, visited: frozenset[str] | None = None) -> int:
+def raw_material_units(
+    game_data: _HasRecipes,
+    item: str,
+    visited: frozenset[str] | None = None,
+    yields: Mapping[str, int] | None = None,
+) -> int:
     """Total raw-resource quantity gathered to craft one `item`, multiplying
     ingredient quantities down the recipe tree. A raw (gathered) or unknown item
-    costs 1. Cyclic recipes terminate via the visited guard (revisit -> 1)."""
+    costs 1. Cyclic recipes terminate via the visited guard (revisit -> 1).
+
+    `yields` maps item code to output quantity per craft run; omit (or pass None)
+    for all-Y=1 behaviour (today's data, exact no-op)."""
     visited = visited or frozenset()
     recipes = game_data.crafting_recipes
-    return _raw_units(len(recipes) + 1, item, recipes, {code: 1 for code in visited})
+    return _raw_units(len(recipes) + 1, item, recipes,
+                      yields if yields is not None else {},
+                      {code: 1 for code in visited})
 
 
-def closure_demand(root: str, multiplier: int, game_data: _HasRecipes,
-                   out: dict[str, int], visited: frozenset[str]) -> None:
+def closure_demand(
+    root: str,
+    multiplier: int,
+    game_data: _HasRecipes,
+    out: dict[str, int],
+    visited: frozenset[str],
+    yields: Mapping[str, int] | None = None,
+) -> None:
     """Accumulate the recipe-closure demand of `root` (x `multiplier`) into
     `out`. The root itself and every transitive material are recorded at their
     cumulative required quantity (max across roots). Cycle-safe via `visited`.
+
+    `yields` maps item code to output quantity per craft run; omit (or pass None)
+    for all-Y=1 behaviour (today's data, exact no-op).
 
     The ONE shared closure-demand implementation: `inventory_profile` (soft
     keep-targets) and `task_reservation` (step-tier reservation) both consume
@@ -160,6 +193,7 @@ def closure_demand(root: str, multiplier: int, game_data: _HasRecipes,
     (formal/Formal/TaskReservation.lean)."""
     recipes = game_data.crafting_recipes
     result = _closure_demand(len(recipes) + 1, root, multiplier, recipes,
+                             yields if yields is not None else {},
                              {code: 1 for code in visited}, dict(out))
     out.clear()
     out.update(result)

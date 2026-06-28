@@ -49,7 +49,7 @@ def task_batch_size_pure(
     if remaining <= 0:
         return 1
     no_visited: dict[str, int] = {}
-    mats_per_unit = _raw_units(len(recipes) + 1, task_code, recipes, no_visited)
+    mats_per_unit = _raw_units(len(recipes) + 1, task_code, recipes, {}, no_visited)
     closure: dict[str, int] = {}
     closure = _closure_visited(len(recipes) + 1, task_code, recipes, closure)
     held_recipe = 0

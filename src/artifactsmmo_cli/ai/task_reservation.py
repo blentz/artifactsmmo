@@ -52,7 +52,7 @@ def task_reserved_demand_pure(
     no_visited: dict[str, int] = {}
     demand: dict[str, int] = {}
     demand = _closure_demand(len(recipes) + 1, task_code, remaining, recipes,
-                             no_visited, demand)
+                             {}, no_visited, demand)
     return demand
 
 
@@ -81,7 +81,7 @@ def consumes_reserved_pure(
     conflict: dict[str, int] = {}
     for item, _qty in needed.items():
         conflict = _closure_demand(len(recipes) + 1, item, 1, recipes,
-                                   no_visited, conflict)
+                                   {}, no_visited, conflict)
     bank: Mapping[str, int] = {}
     if bank_items is not None:
         bank = bank_items

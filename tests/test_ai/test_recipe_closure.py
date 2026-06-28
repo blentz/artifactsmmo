@@ -109,9 +109,9 @@ def test_pure_cores_fuel_zero_base_cases():
     recipes = {"a": {"b": 2}, "b": {"a": 3}}
     visited = {"seed": 1}
     assert _closure_visited(0, "a", recipes, dict(visited)) == visited
-    assert _raw_units(0, "a", recipes, dict(visited)) == 1
+    assert _raw_units(0, "a", recipes, {}, dict(visited)) == 1
     out = {"seed": 4}
-    assert _closure_demand(0, "a", 5, recipes, dict(visited), dict(out)) == out
+    assert _closure_demand(0, "a", 5, recipes, {}, dict(visited), dict(out)) == out
 
 
 def test_cyclic_recipe_terminates_via_visited_guard_not_fuel():
@@ -124,10 +124,52 @@ def test_cyclic_recipe_terminates_via_visited_guard_not_fuel():
     assert craftable == {"a", "b"}
     # units(a) = 2 * units(b, {a}) = 2 * (3 * units(a, {a,b}) = 1) = 6
     assert raw_material_units(gd, "a") == 6
-    assert _raw_units(6, "a", recipes, {}) == _raw_units(3, "a", recipes, {}) == 6
+    assert _raw_units(6, "a", recipes, {}, {}) == _raw_units(3, "a", recipes, {}, {}) == 6
     assert _closure_visited(6, "a", recipes, {}) == _closure_visited(3, "a", recipes, {})
     # demand: a recorded at 1, b at 1*2; the cycle edge back to a is cut by
     # the per-path visited guard (a is on the path), at any adequate fuel.
-    assert (_closure_demand(6, "a", 1, recipes, {}, {})
-            == _closure_demand(3, "a", 1, recipes, {}, {})
+    assert (_closure_demand(6, "a", 1, recipes, {}, {}, {})
+            == _closure_demand(3, "a", 1, recipes, {}, {}, {})
             == {"a": 1, "b": 2})
+
+
+# ---------------------------------------------------------------------------
+# Task 4: ceil-batch yield semantics in the pure cores.
+# `yields` is the new parameter; {} → Y=1 everywhere (exact current behaviour).
+# ---------------------------------------------------------------------------
+
+
+def test_closure_demand_ceil_batches_with_yield():
+    # Need 3 potions, yield=2 → ⌈3/2⌉ = 2 crafts → 2 herbs (not 3).
+    recipes = {"potion": {"herb": 1}}
+    yields = {"potion": 2}
+    out = _closure_demand(len(recipes) + 1, "potion", 3, recipes, yields, {}, {})
+    assert out["potion"] == 3
+    assert out["herb"] == 2
+
+
+def test_closure_demand_yield_one_unchanged():
+    # Y=1 (empty yields dict → default 1): existing behaviour unchanged.
+    recipes = {"bar": {"ore": 2}}
+    out = _closure_demand(len(recipes) + 1, "bar", 3, recipes, {}, {}, {})
+    assert out["bar"] == 3 and out["ore"] == 6
+
+
+def test_raw_units_ceil_batch_with_yield():
+    # 4 ore per craft, yield=2 → ⌈4/2⌉ = 2 ore per bar
+    recipes = {"bar": {"ore": 4}}
+    yields = {"bar": 2}
+    assert _raw_units(2, "bar", recipes, yields, {}) == 2
+
+
+def test_raw_units_ceil_non_divisible():
+    # 3 ore per craft, yield=2 → ⌈3/2⌉ = 2 ore per bar (ceil, not floor)
+    recipes = {"bar": {"ore": 3}}
+    yields = {"bar": 2}
+    assert _raw_units(2, "bar", recipes, yields, {}) == 2
+
+
+def test_raw_units_yield_one_unchanged():
+    # Y=1 (empty yields dict): same as current behavior
+    recipes = {"bar": {"ore": 2}}
+    assert _raw_units(2, "bar", recipes, {}, {}) == 2
