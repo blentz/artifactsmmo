@@ -118,6 +118,7 @@ MEASURE_SRC = ROOT / "formal" / "sim" / "measure.py"
 CYCLE_STEP_SRC = ROOT / "formal" / "sim" / "cycle_step.py"
 
 EQUIP_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "equip_value.py"
+GEAR_VALUE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_value_core.py"
 GAME_DATA_PARSE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "game_data.py"
 LOCATION_CATALOG_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "location_catalog.py"
 PROGRESSION_RESERVE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression_reserve_core.py"
@@ -2050,33 +2051,34 @@ ARMOR_UTILITY_MUTATIONS = [
      "            + lifesteal + combat_buff)",
      "            + lifesteal)"),
 ]
-EQUIP_VALUE_UTILITY_MUTATIONS = [
-    ("equip_value: drop whole utility tail from raw — utility/bags/haste/lifesteal/combat_buff undervalued",
-     "           + hp_bonus + dmg + critical_strike + wisdom + prospecting + inventory_space + haste\n"
-     "           + lifesteal + combat_buff)",
-     "           + hp_bonus + dmg + critical_strike)"),
-    ("equip_value: drop lifesteal from raw — lifesteal gear undervalued",
-     "           + lifesteal + combat_buff)",
-     "           + combat_buff)"),
-    ("equip_value: drop combat_buff from raw — buff potions undervalued",
-     "           + lifesteal + combat_buff)",
-     "           + lifesteal)"),
-]
-EQUIP_VALUE_DOMINANCE_MUTATIONS = [
-    ("dominance _equip_value: drop whole utility — artifact/bag/haste/lifesteal/combat_buff valued 0",
-     "    return (attack + resistance + hp + stats.hp_bonus + stats.wisdom\n"
-     "            + stats.prospecting + stats.inventory_space + stats.haste + stats.lifesteal\n"
-     "            + stats.combat_buff)",
-     "    return attack + resistance + hp"),
-    ("dominance _equip_value: drop lifesteal — lifesteal gear valued 0",
-     "            + stats.prospecting + stats.inventory_space + stats.haste + stats.lifesteal\n"
-     "            + stats.combat_buff)",
-     "            + stats.prospecting + stats.inventory_space + stats.haste\n"
-     "            + stats.combat_buff)"),
-    ("dominance _equip_value: drop combat_buff — buff potions valued 0",
-     "+ stats.lifesteal\n"
-     "            + stats.combat_buff)",
-     "+ stats.lifesteal)"),
+# Unified gear-value core (gear_value_core.py): the shared `combat_raw` atom and
+# the `rank_value` Rank ruler that `equip_value` AND the inventory_caps dominance
+# gate now both route through (replaces the retired `equip_value_pure` mutants and
+# the deleted inventory_caps `_equip_value` dominance mutants). Each dropped
+# `combat_raw` summand is killed by the `combat_raw` differential vs the oracle's
+# `Formal.GearValue.combatRaw`; the `nonToolBonus` + `2 *` scale are killed by the
+# `rank_value` differential vs `Formal.GearValue.rankValue`.
+GEAR_VALUE_CORE_MUTATIONS = [
+    ("combat_raw: drop attack — weapon attack uncounted",
+     "    return (attack + resistance + hp_restore", "    return (resistance + hp_restore"),
+    ("combat_raw: drop resistance — armor resistance uncounted",
+     "attack + resistance + hp_restore + hp_bonus", "attack + hp_restore + hp_bonus"),
+    ("combat_raw: drop hp_restore — heal-on-use uncounted",
+     "resistance + hp_restore + hp_bonus + dmg", "resistance + hp_bonus + dmg"),
+    ("combat_raw: drop hp_bonus — max-hp gear uncounted",
+     "hp_restore + hp_bonus + dmg + critical_strike", "hp_restore + dmg + critical_strike"),
+    ("combat_raw: drop dmg — the dominance divergence regression",
+     "hp_bonus + dmg + critical_strike", "hp_bonus + critical_strike"),
+    ("combat_raw: drop critical_strike — crit gear uncounted",
+     "+ dmg + critical_strike\n", "+ dmg\n"),
+    ("combat_raw: drop lifesteal — lifesteal gear uncounted",
+     "+ lifesteal + combat_buff)", "+ combat_buff)"),
+    ("combat_raw: drop combat_buff — buff potions uncounted",
+     "+ lifesteal + combat_buff)", "+ lifesteal)"),
+    ("rank_value: drop nonToolBonus — non-tool tiebreak lost",
+     "+ haste) + non_tool_bonus", "+ haste)"),
+    ("rank_value: drop the 2 * scale — strict-raw tiebreak unprotected",
+     "return 2 * (combat_raw_value", "return (combat_raw_value"),
 ]
 
 
@@ -2094,6 +2096,7 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 
 _ALL_SRCS = [
     GATHER_PLANNABLE_CORE_SRC, DOOMED_MEMO_SRC, STRATEGY_DRIVER_SRC, EQUIP_VALUE_SRC,
+    GEAR_VALUE_CORE_SRC,
     GAME_DATA_PARSE_SRC, LOCATION_CATALOG_SRC,
     SRC, TASK_BATCH_SRC, INVENTORY_CAPS_SRC, COMBAT_SRC, PROJECTION_SRC, SCORING_SRC,
     SKILL_XP_CURVE_SRC, RECIPE_CLOSURE_SRC, TASK_FEASIBILITY_SRC, PREREQUISITE_GRAPH_SRC,
@@ -4014,10 +4017,8 @@ def _run_all_groups() -> int:
               "tests/test_ai/test_combat.py", survivors)
     run_group(SCORING_SRC, ARMOR_UTILITY_MUTATIONS,
               "formal/diff/test_equipment_scoring_diff.py", survivors)
-    run_group(EQUIP_VALUE_SRC, EQUIP_VALUE_UTILITY_MUTATIONS,
-              "tests/test_ai/test_tiers_equip_value.py", survivors)
-    run_group(INVENTORY_CAPS_SRC, EQUIP_VALUE_DOMINANCE_MUTATIONS,
-              "tests/test_ai/test_overstock.py", survivors)
+    run_group(GEAR_VALUE_CORE_SRC, GEAR_VALUE_CORE_MUTATIONS,
+              "formal/diff/test_gear_value_diff.py", survivors)
     run_group(GAME_DATA_PARSE_SRC, RESTORE_FAMILY_MUTATIONS,
               "tests/test_ai/test_game_data.py", survivors)
     run_group(LOCATION_CATALOG_SRC, EVENT_VISIBILITY_MUTATIONS,

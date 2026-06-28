@@ -99,6 +99,7 @@ import Formal.CycleInvariants
 import Formal.NoActionDeadlock
 import Formal.MultiCycleLiveness
 import Formal.EquipValueAugmented
+import Formal.GearValue
 import Formal.StrategicValue
 import Formal.GearPolicy
 import Formal.RankingComposition

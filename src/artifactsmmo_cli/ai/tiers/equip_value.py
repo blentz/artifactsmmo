@@ -5,27 +5,6 @@ from artifactsmmo_cli.ai.gear_value import gear_value
 from artifactsmmo_cli.ai.gear_value_core import Rank
 
 
-def equip_value_pure(attack: int, resistance: int, hp_restore: int, hp_bonus: int,
-                     dmg: int, critical_strike: int, wisdom: int, prospecting: int,
-                     inventory_space: int, haste: int, lifesteal: int,
-                     combat_buff: int, subtype: str) -> int:
-    """PURE CORE (mechanically extracted, P4b): ``2 * raw + nonToolBonus``.
-
-    The ItemStats reads (and the dict-value sums for attack/resistance) are
-    hoisted to plain int parameters by the ``equip_value`` wrapper — the
-    same already-summed shape the hand model takes. Extracted to
-    ``Formal/Extracted/EquipValue.lean``; the bridge proves it equal to the
-    hand ``Formal.EquipValueAugmented.equipValue`` (RawStats + isTool),
-    transferring strict-raw preservation and the non-tool tie-break onto
-    the extracted definition.
-    """
-    raw = (attack + resistance + hp_restore
-           + hp_bonus + dmg + critical_strike + wisdom + prospecting + inventory_space + haste
-           + lifesteal + combat_buff)
-    non_tool_bonus = 0 if subtype == "tool" else 1
-    return 2 * raw + non_tool_bonus
-
-
 def tool_value_pure(skill_effects: dict[str, int], skill: str) -> int:
     """PURE CORE (mechanically extracted, P4b): ``abs(skill_effects[skill])``.
 
@@ -59,10 +38,10 @@ def equip_value(stats: ItemStats) -> int:
     """
     # Unified Rank ruler: delegate to the single gear_value(stats, Rank) core
     # (gear_value_core.rank_value, mirrored by Formal.GearValue.rankValue) so
-    # there is ONE Rank computation shared with strategic_value. Bit-identical
-    # to the prior equip_value_pure path: 2 * raw + nonToolBonus over the same
-    # summed stats (attack+resistance+hp_restore+hp_bonus+dmg+critical_strike
-    # +wisdom+prospecting+inventory_space+haste+lifesteal+combat_buff).
+    # there is ONE Rank computation shared with strategic_value: 2 * raw +
+    # nonToolBonus over the summed stats (attack+resistance+hp_restore+hp_bonus
+    # +dmg+critical_strike+wisdom+prospecting+inventory_space+haste+lifesteal
+    # +combat_buff).
     return gear_value(stats, Rank)
 
 

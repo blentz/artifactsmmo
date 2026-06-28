@@ -1076,9 +1076,9 @@ open Formal.PriorityBand
 -- src/artifactsmmo_cli/ai/tiers/equip_value.py and proved against the hand
 -- models (Formal/Extracted/Bridges7.lean). The element-keyed score bridges
 -- are universal over an arbitrary INJECTIVE Int→String element embedding
--- (the CombatPicker code-embedding precedent); equip_value is a FULL
--- pointwise universal (the wrapper hoists the dict-value sums to the
--- already-summed ints the hand RawStats model takes).
+-- (the CombatPicker code-embedding precedent). The augmented Rank value
+-- (`equip_value_pure`) was retired onto the unified GearValue hand pins
+-- below; only the live `tool_value_pure` duality remains extracted here.
 #check @Extracted.Bridges.weapon_score_raw_bridge                     -- extracted = hand WScore, ∀ profiles/embeddings
 #check @Extracted.Bridges.armor_score_bridge                          -- extracted = hand AScore (no clamp), ∀ profiles
 #check @Extracted.Bridges.weapon_score_bridge                         -- extracted composite = combatScore (isTool = subtype)
@@ -1088,9 +1088,6 @@ open Formal.PriorityBand
 #check @Extracted.Bridges.pickslot_no_downgrade_extracted             -- per-slot pick never downgrades (transferred)
 #check @Extracted.Bridges.gather_score_absent_zero                    -- no skill entry ⇒ score 0 (docstring contract)
 #check @Extracted.Bridges.gather_pick_optimal_extracted               -- gather pick minimizes extracted score (transferred)
-#check @Extracted.Bridges.equip_value_bridge                          -- extracted = hand equipValue, ∀ stats (FULL universal)
-#check @Extracted.Bridges.equip_value_strict_extracted                -- strict raw order survives tiebreaker (transferred)
-#check @Extracted.Bridges.equip_value_tiebreak_extracted              -- non-tool outranks raw-tied tool (transferred)
 #check @Extracted.Bridges.tool_value_abs_gather                       -- tool_value = |gather_score| (cross-core duality)
 #check @Extracted.Bridges.tool_value_neg_gather_on_tools              -- tool domain: max tool_value ≡ min gather_score
 

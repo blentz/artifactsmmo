@@ -1,4 +1,4 @@
--- @concept: items, gear @property: unified-ruler, decomposition
+-- @concept: items, gear @property: validity, dominance
 import Formal.EquipValueAugmented
 import Formal.PurposeRouting
 /-!

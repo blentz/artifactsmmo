@@ -908,9 +908,6 @@ open Formal.WeightedRemaining in
 #print axioms Extracted.Bridges.pickslot_no_downgrade_extracted
 #print axioms Extracted.Bridges.gather_score_absent_zero
 #print axioms Extracted.Bridges.gather_pick_optimal_extracted
-#print axioms Extracted.Bridges.equip_value_bridge
-#print axioms Extracted.Bridges.equip_value_strict_extracted
-#print axioms Extracted.Bridges.equip_value_tiebreak_extracted
 #print axioms Extracted.Bridges.tool_value_abs_gather
 #print axioms Extracted.Bridges.tool_value_neg_gather_on_tools
 #print axioms Formal.DoomedMemo.ttl_base

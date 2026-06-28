@@ -8,8 +8,9 @@ import Formal.Extracted.EquipValue
 
 P4a made `equipment/scoring.py` and `tiers/equip_value.py` exact-integer;
 P4b extracts their pure cores (`weapon_score_raw_pure` / `weapon_score_pure`
-/ `gather_score_pure` / `armor_score_pure` and `equip_value_pure` /
-`tool_value_pure`) and bridges them to the hand models:
+/ `gather_score_pure` / `armor_score_pure` and `tool_value_pure`) and bridges
+them to the hand models (the augmented `equip_value_pure` Rank core was retired
+onto the unified `Formal.GearValue.rankValue` hand pin):
 
 * `Formal.EquipmentScoring.WScore` / `AScore` — the hand models key elements
   by `Int` (fire/earth/water/air as 0..3) while the Python (and therefore
@@ -25,9 +26,6 @@ P4b extracts their pure cores (`weapon_score_raw_pure` / `weapon_score_pure`
 * `Formal.PurposeRouting.gatherScore` — parametric in the per-item effect
   read; the extracted `gather_score_pure` IS that read, so the gather
   optimality contract is restated on the extracted def directly.
-* `Formal.EquipValueAugmented.equipValue` — the hand model already takes
-  the summed `RawStats` ints + `isTool`; the wrapper hoists the dict-value
-  sums, so the bridge is a FULL universal pointwise equality.
 * `tool_value_pure` has no standalone hand model; its load-bearing content
   is the DUALITY with the gather score (`tool_value = |gather_score|`,
   and `= -gather_score` on the tool domain of non-positive effects), so
@@ -37,8 +35,7 @@ Transferred hand theorems (the load-bearing contracts, restated on the
 extracted defs): `weapon_score_nonneg` (THE clamp theorem),
 `combatScore_strict_of_strict_wscore`, `combatScore_tiebreaks_nontool_over_tool`
 (the fishing_net invariant), `pickslot_no_downgrade` (instantiated at the
-extracted scores), `pickGatherSlot_score_optimal`, and
-`equipValue_strict_of_strict_raw` / `equipValue_tiebreaks_nontool_over_tool`.
+extracted scores), and `pickGatherSlot_score_optimal`.
 
 No sorry/admit, no new axioms; core-only (safety-module convention).
 -/
@@ -256,58 +253,13 @@ theorem gather_pick_optimal_extracted
     playerLevel items picked hPick
   simpa [Formal.PurposeRouting.gatherScore] using h
 
-/-! ## equip_value.py: the augmented composite value + the tool duality. -/
+/-! ## equip_value.py: the tool duality.
 
-/-- BRIDGE (FULL universal, pointwise): the extracted `equip_value_pure`
-equals the hand `Formal.EquipValueAugmented.equipValue` on every stat
-profile, with `isTool` the Python `subtype == "tool"` test. The wrapper
-hoists the ItemStats dict-value sums to the already-summed ints the hand
-model takes, so the two encodings coincide directly. -/
-theorem equip_value_bridge (attack resistance hpRestore hpBonus dmg crit wisdom prospecting inventorySpace haste lifesteal combatBuff : Int)
-    (subtype : String) :
-    Extracted.EquipValue.equip_value_pure
-        attack resistance hpRestore hpBonus dmg crit wisdom prospecting inventorySpace haste lifesteal combatBuff subtype
-      = Formal.EquipValueAugmented.equipValue
-        ⟨attack, resistance, hpRestore, hpBonus, dmg, crit, wisdom, prospecting, inventorySpace, haste, lifesteal, combatBuff⟩
-        (subtype == "tool") := by
-  unfold Extracted.EquipValue.equip_value_pure
-    Formal.EquipValueAugmented.equipValue Formal.EquipValueAugmented.rawSum
-    Formal.EquipValueAugmented.nonToolBonus
-  by_cases h : subtype = "tool" <;> simp [h]
-
-/-- TRANSFERRED (`equipValue_strict_of_strict_raw`): a strict raw-signal
-inequality survives the +0/+1 tiebreaker in the extracted value — the
-`2 *` factor protects it, for ANY two subtypes. -/
-theorem equip_value_strict_extracted
-    (s t : Formal.EquipValueAugmented.RawStats) (subS subT : String)
-    (hStrict : Formal.EquipValueAugmented.rawSum s
-      < Formal.EquipValueAugmented.rawSum t) :
-    Extracted.EquipValue.equip_value_pure
-        s.attack s.resistance s.hpRestore s.hpBonus s.dmg s.crit s.wisdom s.prospecting s.inventorySpace s.haste s.lifesteal s.combatBuff subS
-      < Extracted.EquipValue.equip_value_pure
-        t.attack t.resistance t.hpRestore t.hpBonus t.dmg t.crit t.wisdom t.prospecting t.inventorySpace t.haste t.lifesteal t.combatBuff subT := by
-  rw [equip_value_bridge, equip_value_bridge]
-  exact Formal.EquipValueAugmented.equipValue_strict_of_strict_raw
-    s t (subS == "tool") (subT == "tool") hStrict
-
-/-- TRANSFERRED (`equipValue_tiebreaks_nontool_over_tool`): equal raw
-signals, tool vs non-tool — the non-tool strictly outranks in the
-extracted value (the copper_dagger-over-fishing_net closure). -/
-theorem equip_value_tiebreak_extracted
-    (s t : Formal.EquipValueAugmented.RawStats) (subT : String)
-    (hN : subT ≠ "tool")
-    (hTie : Formal.EquipValueAugmented.rawSum s
-      = Formal.EquipValueAugmented.rawSum t) :
-    Extracted.EquipValue.equip_value_pure
-        s.attack s.resistance s.hpRestore s.hpBonus s.dmg s.crit s.wisdom s.prospecting s.inventorySpace s.haste s.lifesteal s.combatBuff "tool"
-      < Extracted.EquipValue.equip_value_pure
-        t.attack t.resistance t.hpRestore t.hpBonus t.dmg t.crit t.wisdom t.prospecting t.inventorySpace t.haste t.lifesteal t.combatBuff subT := by
-  rw [equip_value_bridge, equip_value_bridge]
-  have hTool : ("tool" == "tool") = true := by simp
-  have hNon : (subT == "tool") = false := by simpa using hN
-  rw [hTool, hNon]
-  exact Formal.EquipValueAugmented.equipValue_tiebreaks_nontool_over_tool
-    s t hTie
+The augmented composite Rank value (`equip_value_pure`) was retired when the
+Python `equip_value` collapsed onto the unified `gear_value(_, Rank)` core; its
+soundness now rides the HAND `Formal.GearValue.rankValue` / `rank_eq_equipValue`
+pins (Contracts) + the `gear_value_core` differential, not a mechanical
+extraction. Only the live `tool_value_pure` core remains extracted here. -/
 
 /-- The two cores read dicts through their own emitted `_dictGetD` copies;
 the copies have identical equations. -/

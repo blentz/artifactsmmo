@@ -1,4 +1,5 @@
 import Formal
+import Formal.GearValue
 import Formal.AccumulationSell
 import Formal.CraftPlanDriver
 import Formal.DominancePareto
@@ -165,6 +166,32 @@ def runStrategicValue (args : Array Json) : Json :=
   Json.mkObj [("value", Json.num (Extracted.StrategicValue.strategic_value_pure
     (intArg args 0) (intArg args 1) (intArg args 2) (intArg args 3) (intArg args 4)
     (intArg args 5) (intArg args 6) (intArg args 7) (intArg args 8) (intArg args 9)))]
+
+/-- Evaluate the HAND `Formal.GearValue.combatRaw` (the shared genuine-combat
+    signal) on the 8 combat summands. args layout (8 ints): attack, resistance,
+    hp_restore, hp_bonus, dmg, critical_strike, lifesteal, combat_buff. The four
+    efficiency fields are irrelevant to `combatRaw` and set to 0. Returns the
+    Lean-computed combat raw — the differential pins `gear_value_core.combat_raw`
+    to this def (every dropped summand diverges). -/
+def runCombatRaw (args : Array Json) : Json :=
+  let s : Formal.EquipValueAugmented.RawStats :=
+    ⟨intArg args 0, intArg args 1, intArg args 2, intArg args 3, intArg args 4,
+     intArg args 5, 0, 0, 0, 0, intArg args 6, intArg args 7⟩
+  Json.mkObj [("value", Json.num (Formal.GearValue.combatRaw s))]
+
+/-- Evaluate the HAND `Formal.GearValue.rankValue` (the unified Rank ruler) on a
+    PRECOMPUTED combat_raw scalar plus the efficiency stats. args layout (6 ints):
+    combat_raw, wisdom, prospecting, inventory_space, haste, is_tool(0/1). The
+    combat_raw scalar is carried in the `attack` field (the other 7 combat fields
+    are 0) so `combatRaw s = combat_raw`; `rankValue` then recomposes
+    `2 * (combat_raw + wisdom + prospecting + inventory_space + haste) +
+    nonToolBonus`. Pins `gear_value_core.rank_value` (the `2 *` scale + the
+    nonToolBonus term). -/
+def runRankValue (args : Array Json) : Json :=
+  let s : Formal.EquipValueAugmented.RawStats :=
+    ⟨intArg args 0, 0, 0, 0, 0, 0,
+     intArg args 1, intArg args 2, intArg args 3, intArg args 4, 0, 0⟩
+  Json.mkObj [("value", Json.num (Formal.GearValue.rankValue s (intArg args 5 != 0)))]
 
 /-- Evaluate the `equipCapFromPeers` (dominance + slot gate) model in Lean.
     args layout: equippable(0/1), slotCount, peer_count, then for each
@@ -2400,6 +2427,10 @@ def runOne (item : Json) : Json :=
     runEquipCapValue (intArg args 0) (intArg args 1)
   else if kind == "strategic_value" then
     runStrategicValue args
+  else if kind == "combat_raw" then
+    runCombatRaw args
+  else if kind == "rank_value" then
+    runRankValue args
   else if kind == "consumable_cap_value" then
     -- args: [hpRestore]
     runConsumableCapValue (intArg args 0)
