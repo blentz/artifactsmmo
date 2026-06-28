@@ -833,8 +833,38 @@ RECIPE_CLOSURE_MUTATIONS = [
     # alter the qty factor in _raw_units: drop the qty multiplier so quantities
     # no longer multiply down the tree (wrong units total).
     ("raw_material_units: drop qty factor (qty * units -> units)",
-     "        total = total + qty * _raw_units(fuel - 1, sub, recipes, deeper)",
-     "        total = total + _raw_units(fuel - 1, sub, recipes, deeper)"),
+     "        total = total + qty * _raw_units(fuel - 1, sub, recipes, yields, deeper)",
+     "        total = total + _raw_units(fuel - 1, sub, recipes, yields, deeper)"),
+]
+
+
+# recipe_closure yield/ceil mutations (Task 6 / feat/batch-craft-yield).
+# Each perturbs the ⌈m/Y⌉ / batches arithmetic in `_raw_units` / `_closure_demand`
+# and is killed by the yield-2 / yield-3 pin tests in test_recipe_closure_diff.py.
+RECIPE_CLOSURE_YIELD_MUTATIONS = [
+    # _raw_units: floor instead of ceil → ⌈total/y⌉ → total//y.
+    # Non-divisible case: total=4, y=3 → ceil=2, floor=1 (test_pin_yield3 kills).
+    ("raw_units: drop ceil in yield division (-(-total//y) -> total//y)",
+     "    return -(-total // y)  # ⌈total / y⌉",
+     "    return total // y"),
+    # _raw_units: no yield division at all → return raw total.
+    # For Y>1 raw_units overcounts by factor Y (test_pin_yield3: 4 ≠ 2).
+    ("raw_units: drop yield division entirely (return total)",
+     "    return -(-total // y)  # ⌈total / y⌉",
+     "    return total"),
+    # _closure_demand: floor instead of ceil for batch count.
+    # multiplier=3, y=2 → floor=1 vs ceil=2; child demand halved (test_pin_yield2 kills).
+    ("closure_demand: drop ceil in batches (-(-m//y) -> m//y)",
+     "    batches = -(-multiplier // y)  # ⌈multiplier / y⌉ craft runs needed",
+     "    batches = multiplier // y"),
+    # _closure_demand: use multiplier instead of batches for child demand.
+    # Ignores ceil-batch; child gets multiplier*qty instead of batches*qty.
+    # For Y=2, mult=3: batches=2 but multiplier=3 → 3 herbs instead of 2 (test_pin_yield2 kills).
+    ("closure_demand: drop batch scaling (batches*qty_per -> multiplier*qty_per)",
+     "        out = _closure_demand(fuel - 1, mat, batches * qty_per, recipes, yields,\n"
+     "                              sub_visited, out)",
+     "        out = _closure_demand(fuel - 1, mat, multiplier * qty_per, recipes, yields,\n"
+     "                              sub_visited, out)"),
 ]
 
 
@@ -3716,7 +3746,7 @@ def _run_all_groups() -> int:
               "formal/diff/test_strategic_value_diff.py", survivors)
     run_group(SKILL_STEP_DISPATCH_SRC, GRIND_LADDER_MUTATIONS,
               "formal/diff/test_grind_ladder_diff.py", survivors)
-    run_group(RECIPE_CLOSURE_SRC, RECIPE_CLOSURE_MUTATIONS,
+    run_group(RECIPE_CLOSURE_SRC, RECIPE_CLOSURE_MUTATIONS + RECIPE_CLOSURE_YIELD_MUTATIONS,
               "formal/diff/test_recipe_closure_diff.py", survivors)
     run_group(TASK_FEASIBILITY_SRC, TASK_FEASIBILITY_MUTATIONS,
               "formal/diff/test_task_feasibility_diff.py", survivors)

@@ -20,7 +20,7 @@ import random
 from hypothesis import given, settings, strategies as st
 
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.recipe_closure import raw_material_units, recipe_closure
+from artifactsmmo_cli.ai.recipe_closure import _closure_demand, raw_material_units, recipe_closure
 from formal.diff.oracle_client import run_oracle
 
 
@@ -136,3 +136,194 @@ def test_cyclic_graph_terminates_and_binds():
     assert py_needed == sorted(lean["needed_resources"]) == [100, 101]
     # units(0) = 2 * units(1, visited={0}) = 2 * (3 * units(0, visited={0,1})=1) = 2*3 = 6
     assert py_units == lean["raw_material_units"] == 6
+
+
+# ---------------------------------------------------------------------------
+# Yield-parameterised differential tests (Task 6 / feat/batch-craft-yield).
+# Exercises the ⌈m/Y⌉ ceil-batch semantics added to `_raw_units` /
+# `_closure_demand` in Tasks 4-5.  The oracle routes:
+#   * raw_material_units → recipe_closure kind (parseYieldFn at p3+2)
+#   * _closure_demand    → task_reservation kind (parseYieldFn at qBase+2+nQuery)
+#     via reservedDemand(r, y, fuel, {taskCode=root, taskTotal=multiplier,
+#     taskProgress=0, taskIsItems=True}).
+# ---------------------------------------------------------------------------
+
+
+def _gd_with_yields(
+    recipes: dict[int, dict[int, int]],
+    drops: dict[int, int],
+    yields: dict[int, int],
+) -> GameData:
+    """GameData with string-keyed recipes, drops, AND craft_yields."""
+    gd = _gd(recipes, drops)
+    gd._craft_yields = {str(k): v for k, v in yields.items()}
+    return gd
+
+
+def _encode_args_yield(
+    recipes: dict[int, dict[int, int]],
+    drops: dict[int, int],
+    roots: list[int],
+    query: int,
+    fuel: int,
+    yields: dict[int, int],
+) -> list[int]:
+    """Base recipe_closure encoding + optional trailing yield block
+    [nY, item0, y0, item1, y1, ...] appended after fuel."""
+    args = _encode_args(recipes, drops, roots, query, fuel)
+    if yields:
+        args.append(len(yields))
+        for item, y in yields.items():
+            args += [item, y]
+    return args
+
+
+def _encode_demand_via_tr(
+    recipes: dict[int, dict[int, int]],
+    root: int,
+    multiplier: int,
+    queries: list[int],
+    fuel: int,
+    yields: dict[int, int],
+) -> list[int]:
+    """Encode a task_reservation request that exercises closureDemand(root, multiplier)
+    via reservedDemand with taskIsItems=1, taskTotal=multiplier, taskProgress=0,
+    nNeeded=0, nOwned=0, then a trailing yield block [nY, item, y, ...]."""
+    triples = [(item, sub, qty) for item, subs in recipes.items()
+               for sub, qty in subs.items()]
+    args: list[int] = [len(triples)]
+    for item, sub, qty in triples:
+        args += [item, sub, qty]
+    # taskIsItems=1, taskCode=root, taskTotal=multiplier, taskProgress=0
+    args += [1, root, multiplier, 0]
+    args += [0]                          # nNeeded
+    args += [0]                          # nOwned
+    args += [len(queries)] + list(queries)
+    args += [fuel]
+    if yields:
+        args += [len(yields)]
+        for item, y in yields.items():
+            args += [item, y]
+    return args
+
+
+def _rand_yields_nonempty(
+    rng: random.Random,
+    recipes: dict[int, dict[int, int]],
+) -> dict[int, int]:
+    """Yields for items with recipes — at least one Y>1 entry (2, 3, or 4)."""
+    crafted = list(recipes.keys())
+    yields: dict[int, int] = {rng.choice(crafted): rng.choice([2, 3, 4])}
+    for item in crafted:
+        if item not in yields and rng.random() < 0.5:
+            yields[item] = rng.randint(2, 4)
+    return yields
+
+
+@settings(max_examples=200, deadline=None)
+@given(seed=st.integers(min_value=0, max_value=2**31 - 1))
+def test_yield_raw_units_matches_lean(seed):
+    """raw_material_units with Y>1 yields must agree with the recipe_closure oracle.
+    Exercises the parseYieldFn + rawUnits ceil-batch arithmetic path."""
+    rng = random.Random(seed)
+    recipes, drops, roots, query, fuel = _rand_graph(rng, allow_cycle=False)
+    if not recipes:
+        return
+    yields = _rand_yields_nonempty(rng, recipes)
+    gd = _gd_with_yields(recipes, drops, yields)
+    py_units = raw_material_units(gd, str(query))
+    args = _encode_args_yield(recipes, drops, roots, query, fuel, yields)
+    lean = run_oracle("recipe_closure", [args])[0]
+    ctx = f"recipes={recipes} yields={yields} query={query}"
+    assert py_units == lean["raw_material_units"], f"raw_units mismatch: {ctx} lean={lean}"
+
+
+@settings(max_examples=200, deadline=None)
+@given(seed=st.integers(min_value=0, max_value=2**31 - 1))
+def test_yield_closure_demand_matches_lean(seed):
+    """_closure_demand with Y>1 yields must agree with the task_reservation oracle.
+    Exercises the parseYieldFn + closureDemand ceil-batch arithmetic path."""
+    rng = random.Random(seed)
+    recipes, drops, roots, query, fuel = _rand_graph(rng, allow_cycle=False)
+    if not recipes:
+        return
+    crafted = list(recipes.keys())
+    yields = _rand_yields_nonempty(rng, recipes)
+    root = rng.choice(crafted)
+    multiplier = rng.randint(1, 12)
+    all_codes: set[int] = set(recipes.keys())
+    for subs in recipes.values():
+        all_codes.update(subs.keys())
+    all_items = list(range(max(all_codes) + 1))
+    str_recipes = {str(k): {str(s): q for s, q in v.items()} for k, v in recipes.items()}
+    str_yields = {str(k): v for k, v in yields.items()}
+    py_demand = _closure_demand(fuel, str(root), multiplier, str_recipes, str_yields, {}, {})
+    args = _encode_demand_via_tr(recipes, root, multiplier, all_items, fuel, yields)
+    lean = run_oracle("task_reservation", [args])[0]
+    ctx = f"recipes={recipes} yields={yields} root={root} mult={multiplier}"
+    for idx, q in enumerate(all_items):
+        lean_val = lean["demand_vals"][idx]
+        py_val = py_demand.get(str(q), 0)
+        assert py_val == lean_val, f"demand mismatch at {q}: py={py_val} lean={lean_val} {ctx}"
+
+
+def test_pin_yield2_ceil_demand():
+    """Deterministic pin: yield-2 root (potion), need 3 → ⌈3/2⌉=2 crafts → 2 herbs.
+
+    Kills the 'drop ceil in batches' mutant (floor(3/2)=1 → 1 herb ≠ 2)
+    and the 'drop batch scaling' mutant (3*1=3 herbs ≠ 2).
+    Also pins raw_units of potion: herb is raw (cost 1); ⌈1/2⌉=1."""
+    # potion(0) needs herb(1)×1 per craft; 2 potions per craft.
+    recipes = {0: {1: 1}}
+    drops: dict[int, int] = {}
+    yields = {0: 2}
+    multiplier = 3
+    fuel = 4
+    queries = [0, 1]
+    py_demand = _closure_demand(
+        fuel, "0", multiplier, {"0": {"1": 1}}, {"0": 2}, {}, {}
+    )
+    lean = run_oracle("task_reservation", [
+        _encode_demand_via_tr(recipes, 0, multiplier, queries, fuel, yields)
+    ])[0]
+    assert py_demand == {"0": 3, "1": 2}, f"closure demand wrong: {py_demand}"
+    assert py_demand.get("0", 0) == lean["demand_vals"][0], f"oracle q=0 mismatch: {lean}"
+    assert py_demand.get("1", 0) == lean["demand_vals"][1], f"oracle q=1 mismatch: {lean}"
+    gd = _gd_with_yields(recipes, drops, yields)
+    py_units = raw_material_units(gd, "0")
+    lean_rc = run_oracle("recipe_closure", [
+        _encode_args_yield(recipes, drops, [0], 0, fuel, yields)
+    ])[0]
+    assert py_units == 1, f"raw_units of potion should be ⌈1/2⌉=1, got {py_units}"
+    assert py_units == lean_rc["raw_material_units"], f"oracle raw_units mismatch: {lean_rc}"
+
+
+def test_pin_yield3_nondivisible():
+    """Deterministic pin: yield-3 root (bar), need 5 → ⌈5/3⌉=2 crafts → 2×4=8 ore.
+
+    Kills the 'drop ceil in batches' mutant (floor(5/3)=1 → 4 ore ≠ 8)
+    and the 'drop batch scaling' mutant (5*4=20 ore ≠ 8).
+    Also pins raw_units of bar: total=4×1=4; ⌈4/3⌉=2."""
+    # bar(0) needs ore(1)×4 per craft; 3 bars per craft.
+    recipes = {0: {1: 4}}
+    drops: dict[int, int] = {}
+    yields = {0: 3}
+    multiplier = 5
+    fuel = 4
+    queries = [0, 1]
+    py_demand = _closure_demand(
+        fuel, "0", multiplier, {"0": {"1": 4}}, {"0": 3}, {}, {}
+    )
+    lean = run_oracle("task_reservation", [
+        _encode_demand_via_tr(recipes, 0, multiplier, queries, fuel, yields)
+    ])[0]
+    assert py_demand == {"0": 5, "1": 8}, f"closure demand wrong: {py_demand}"
+    assert py_demand.get("0", 0) == lean["demand_vals"][0], f"oracle q=0 mismatch: {lean}"
+    assert py_demand.get("1", 0) == lean["demand_vals"][1], f"oracle q=1 mismatch: {lean}"
+    gd = _gd_with_yields(recipes, drops, yields)
+    py_units = raw_material_units(gd, "0")
+    lean_rc = run_oracle("recipe_closure", [
+        _encode_args_yield(recipes, drops, [0], 0, fuel, yields)
+    ])[0]
+    assert py_units == 2, f"raw_units of bar should be ⌈4/3⌉=2, got {py_units}"
+    assert py_units == lean_rc["raw_material_units"], f"oracle raw_units mismatch: {lean_rc}"
