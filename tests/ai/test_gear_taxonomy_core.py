@@ -14,7 +14,9 @@ def test_combat_bearing_each_field_independently():
 
 
 def test_is_consumable_families():
+    assert is_consumable(["heal"])
     assert is_consumable(["restore"])
+    assert is_consumable(["splash_restore"])
     assert is_consumable(["boost_dmg_fire"])
     assert is_consumable(["boost_res_air"])
     assert is_consumable(["boost_hp"])

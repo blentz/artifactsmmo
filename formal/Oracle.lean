@@ -2,6 +2,7 @@ import Formal
 import Formal.AccumulationSell
 import Formal.CraftPlanDriver
 import Formal.DominancePareto
+import Formal.GearTaxonomy
 import Lean.Data.Json
 
 open Lean Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin
@@ -2305,6 +2306,68 @@ def runCraftPlan (args : Array Json) : Json :=
                 ("qty", Json.num (Int.ofNat na.qty))]
   Json.arr ((plan.map naJson).toArray)
 
+/-! ### Gear taxonomy (`Formal.GearTaxonomy`). -/
+
+/-- Compute `combatGearTypes` over a catalog of classification rows.
+
+`args[0]` is a JSON ARRAY of rows, each row a 3-element array
+`[type(string), combatBearing(bool), consumable(bool)]`. Emits the JSON array
+of durable-combat-gear types (those with a combat-bearing item AND no consumable
+item). Mirrors `gear_taxonomy_core.combat_gear_types`. -/
+def runCombatGear (args : Array Json) : Json :=
+  let rows : List Formal.GearTaxonomy.Row :=
+    match args[0]!.getArr? with
+    | .error _ => []
+    | .ok rowArr =>
+        rowArr.toList.filterMap (fun rowJson =>
+          match rowJson.getArr? with
+          | .error _ => none
+          | .ok triple =>
+            if triple.size < 3 then none
+            else
+              match (triple[0]!.getStr?).toOption with
+              | none => none
+              | some t =>
+                let cb := match triple[1]! with | Json.bool b => b | _ => false
+                let cons := match triple[2]! with | Json.bool b => b | _ => false
+                some { type := t, combatBearing := cb, consumable := cons })
+  Json.arr (((Formal.GearTaxonomy.combatGearTypes rows).map Json.str).toArray)
+
+/-- Compute `isConsumable` over a single record's effect codes.
+
+`args[0]` is a JSON ARRAY of effect-code strings. Emits `{"consumable": bool}`.
+Mirrors `gear_taxonomy_core.is_consumable`. -/
+def runIsConsumable (args : Array Json) : Json :=
+  let codes : List String :=
+    match args[0]!.getArr? with
+    | .error _ => []
+    | .ok arr => arr.toList.filterMap (fun j => (j.getStr?).toOption)
+  Json.mkObj [("consumable", Json.bool (Formal.GearTaxonomy.isConsumable codes))]
+
+/-- Compute `isCombatBearing` over a single record's durable combat fields.
+
+Arg layout: `args[0]` attack assoc array (`[[key,val],...]`), `args[1]`
+resistance assoc array, `args[2]` dmgElements assoc array, then scalars
+`args[3]` hpBonus, `args[4]` dmg, `args[5]` criticalStrike, `args[6]`
+initiative, `args[7]` lifesteal. Emits `{"combat_bearing": bool}`. Mirrors
+`gear_taxonomy_core.is_combat_bearing`. -/
+def runIsCombatBearing (args : Array Json) : Json :=
+  let parsePairs : Json → List (String × Int) := fun j =>
+    match j.getArr? with
+    | .error _ => []
+    | .ok arr => arr.toList.filterMap (fun pj =>
+        match pj.getArr? with
+        | .error _ => none
+        | .ok p =>
+          if p.size < 2 then none
+          else match (p[0]!.getStr?).toOption, (p[1]!.getInt?).toOption with
+            | some k, some v => some (k, v)
+            | _, _ => none)
+  Json.mkObj [("combat_bearing", Json.bool
+    (Formal.GearTaxonomy.isCombatBearing (parsePairs args[0]!) (parsePairs args[1]!)
+      (parsePairs args[2]!) (intArg args 3) (intArg args 4) (intArg args 5)
+      (intArg args 6) (intArg args 7)))]
+
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
   let args := ((item.getObjValD "args" |>.getArr?).toOption.getD #[])
@@ -2489,6 +2552,12 @@ def runOne (item : Json) : Json :=
     runNextCraft args
   else if kind == "craft_plan" then
     runCraftPlan args
+  else if kind == "combat_gear" then
+    runCombatGear args
+  else if kind == "is_combat_bearing" then
+    runIsCombatBearing args
+  else if kind == "is_consumable" then
+    runIsConsumable args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

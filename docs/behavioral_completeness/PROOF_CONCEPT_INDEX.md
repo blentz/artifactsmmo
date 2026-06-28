@@ -36,6 +36,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | GatherSelection | resources | dominance, monotonicity, totality, reachability |
 | GearLatch | items, characters | safety, monotonicity |
 | GearPolicy | items, characters | dominance, safety |
+| GearTaxonomy | core, gear | validity, monotonicity, safety |
 | GoalSystem | core, planner | safety |
 | GoalValueBands | core, planner | safety, monotonicity |
 | GrindLadder | crafting, planner | liveness, safety |

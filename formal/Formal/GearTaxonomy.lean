@@ -1,3 +1,4 @@
+-- @concept: core, gear @property: validity, monotonicity, safety
 /-
 Formal model of the PURE gear-taxonomy classification core from
 `src/artifactsmmo_cli/ai/gear_taxonomy_core.py`.

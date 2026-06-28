@@ -123,6 +123,7 @@ LOCATION_CATALOG_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "location_cata
 PROGRESSION_RESERVE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progression_reserve_core.py"
 NEXT_CRAFT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "next_craft_core.py"
 CRAFT_PLAN_DRIVER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_plan_driver_core.py"
+GEAR_TAXONOMY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_taxonomy_core.py"
 
 # craft_plan_full / _apply_state mutations (B2 full-plan driver). The CONSUMING
 # model is the soundness-critical part; killed by
@@ -166,6 +167,60 @@ NEXT_CRAFT_MUTATIONS = [
     ("next_craft: withdraw qty min -> max (over-withdraw)",
      '            return NextAction(inp, "withdraw", min(bank.get(inp, 0), required - owned.get(inp, 0)))',
      '            return NextAction(inp, "withdraw", max(bank.get(inp, 0), required - owned.get(inp, 0)))'),
+]
+
+# gear_taxonomy_core mutations -- the proved gear-classification core.
+# The is_combat_bearing disjunct drops + the consumable-family drops are killed
+# by the unit test tests/ai/test_gear_taxonomy_core.py (each field / family
+# member tested independently); the combat-minus-consumable set-difference drop
+# is killed by the differential formal/diff/test_gear_taxonomy_diff.py (which
+# binds the live Python core to Formal.GearTaxonomy.combatGearTypes).
+GEAR_TAXONOMY_CORE_MUTATIONS = [
+    # --- each disjunct of is_combat_bearing (drop the field -> False) ---
+    ("gear_taxonomy: drop attack disjunct",
+     "bool(attack or resistance", "bool(False or resistance"),
+    ("gear_taxonomy: drop resistance disjunct",
+     "attack or resistance or hp_bonus", "attack or False or hp_bonus"),
+    ("gear_taxonomy: drop hp_bonus disjunct",
+     "resistance or hp_bonus or dmg", "resistance or False or dmg"),
+    ("gear_taxonomy: drop dmg disjunct",
+     "hp_bonus or dmg or dmg_elements", "hp_bonus or False or dmg_elements"),
+    ("gear_taxonomy: drop dmg_elements disjunct",
+     "or dmg_elements\n", "or False\n"),
+    ("gear_taxonomy: drop critical_strike disjunct",
+     "or critical_strike or initiative", "or False or initiative"),
+    ("gear_taxonomy: drop initiative disjunct",
+     "or initiative or lifesteal", "or False or lifesteal"),
+    ("gear_taxonomy: drop lifesteal disjunct",
+     "or initiative or lifesteal)", "or initiative or False)"),
+    # --- each consumable-family exact member (drop from the frozenset) ---
+    ("gear_taxonomy: drop heal from consumable exact set",
+     '{"heal", "restore"', '{"restore"'),
+    ("gear_taxonomy: drop restore from consumable exact set",
+     '"restore", "splash_restore"', '"splash_restore"'),
+    ("gear_taxonomy: drop splash_restore from consumable exact set",
+     '"splash_restore", "antipoison"', '"antipoison"'),
+    ("gear_taxonomy: drop antipoison from consumable exact set",
+     '"antipoison",', ''),
+    ("gear_taxonomy: drop teleport from consumable exact set",
+     '"teleport", ', ''),
+    ("gear_taxonomy: drop boost_hp from consumable exact set",
+     ', "boost_hp"})', '})'),
+    # --- each consumable-family prefix (drop from the prefix tuple) ---
+    ("gear_taxonomy: drop boost_dmg_ consumable prefix",
+     '_CONSUMABLE_PREFIX = ("boost_dmg_", "boost_res_")',
+     '_CONSUMABLE_PREFIX = ("boost_res_",)'),
+    ("gear_taxonomy: drop boost_res_ consumable prefix",
+     '_CONSUMABLE_PREFIX = ("boost_dmg_", "boost_res_")',
+     '_CONSUMABLE_PREFIX = ("boost_dmg_",)'),
+]
+
+# Killed by the differential (the consumable carve is the load-bearing semantics
+# bound to Formal.GearTaxonomy.combatGearTypes): dropping the set-difference
+# leaks consumable-bearing types through.
+GEAR_TAXONOMY_SETDIFF_MUTATIONS = [
+    ("gear_taxonomy: drop combat-minus-consumable set difference",
+     "return frozenset(combat - consumable)", "return frozenset(combat)"),
 ]
 
 # Effect-parser coverage (stat-audit fixes).
@@ -2097,6 +2152,8 @@ _ALL_SRCS = [
     CURRENCY_AFFORD_CORE_SRC,
     # C5 — next_craft_target_pure: churn fix (replaces 52K-node A* re-run).
     NEXT_CRAFT_CORE_SRC,
+    # Gear taxonomy: proved gear-classification core.
+    GEAR_TAXONOMY_CORE_SRC,
 ]
 
 
@@ -3971,6 +4028,12 @@ def _run_all_groups() -> int:
     # B2 — craft_plan_full full-plan driver (consuming model) differential.
     run_group(CRAFT_PLAN_DRIVER_SRC, CRAFT_PLAN_DRIVER_MUTATIONS,
               "formal/diff/test_craft_plan_driver_diff.py", survivors)
+    # Gear taxonomy: field/family drops killed by the unit test; the
+    # combat-minus-consumable set difference killed by the differential.
+    run_group(GEAR_TAXONOMY_CORE_SRC, GEAR_TAXONOMY_CORE_MUTATIONS,
+              "tests/ai/test_gear_taxonomy_core.py", survivors)
+    run_group(GEAR_TAXONOMY_CORE_SRC, GEAR_TAXONOMY_SETDIFF_MUTATIONS,
+              "formal/diff/test_gear_taxonomy_diff.py", survivors)
     _execute(_UNITS, survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
