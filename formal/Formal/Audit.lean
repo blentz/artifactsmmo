@@ -647,6 +647,15 @@ open Formal.WeightedRemaining in
 #print axioms Formal.EquipValueAugmented.equipValue_nontool_zero_eq_one
 #print axioms Formal.EquipValueAugmented.equipValue_tool_zero_eq_zero
 #print axioms Formal.EquipValueAugmented.copper_dagger_strictly_outranks_fishing_net
+-- GearValue (unified Rank ruler core; equip_value delegates to gear_value(_, Rank))
+#print axioms Formal.GearValue.rawSum_decomp
+#print axioms Formal.GearValue.rank_eq_equipValue
+#print axioms Formal.GearValue.combatValue_weapon_nonneg
+#print axioms Formal.GearValue.combatValue_armor_nonneg
+#print axioms Formal.GearValue.combatValue_pickslot_optimal
+#print axioms Formal.GearValue.gatherValue_pickGatherSlot_optimal
+#print axioms Formal.GearValue.combatScore_eq_combatValue
+#print axioms Formal.GearValue.gatherValue_eq_gatherScore
 -- FallbackChain (de-Mathlib'd safety module)
 #print axioms Formal.FallbackChain.walk_some_of_nonNone_exists
 #print axioms Formal.FallbackChain.walk_picks_upgrade_when_present

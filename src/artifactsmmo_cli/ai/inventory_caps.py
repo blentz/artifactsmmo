@@ -24,13 +24,11 @@ order-independent `dict.get`.
 EXACT VALUE SEAM (P3c, updated Task 2 2026-06-28): the dominance gate routes
 through `gear_value(stats, Rank)` (leaf module `ai/gear_value.py`), which
 returns `int` — every summand is an int, so the strictly-higher dominance
-criterion is EXACT integer arithmetic with no float seam. The local `_equip_value`
-duplicate (which omitted dmg+critical_strike) is deleted; the import cycle that
-forced the duplicate is resolved because `gear_value` is a LEAF module (imports
-only stdlib + item_catalog). `_is_equippable_dominated` evaluates each peer's
-criteria into plain bools and hands `_is_dominated_pure` the verdict list,
-exactly the hand model's `Peer` encoding — the hand model has always taken the
-verdicts as Bools. Spec: docs/superpowers/specs/2026-06-28-gear-unified-ruler-design.md.
+criterion is EXACT integer arithmetic with no float seam. `_is_equippable_dominated`
+evaluates each peer's criteria into plain bools and hands `_is_dominated_pure`
+the verdict list, exactly the hand model's `Peer` encoding — the hand model has
+always taken the verdicts as Bools. Spec:
+docs/superpowers/specs/2026-06-28-gear-unified-ruler-design.md.
 """
 
 from collections.abc import Mapping, Sequence
