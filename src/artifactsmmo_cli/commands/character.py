@@ -6,7 +6,6 @@ import httpx
 import typer
 from artifactsmmo_api_client.errors import UnexpectedStatus
 from artifactsmmo_api_client.models.add_character_schema import AddCharacterSchema
-from artifactsmmo_api_client.models.character_skin import CharacterSkin
 from artifactsmmo_api_client.models.delete_character_schema import DeleteCharacterSchema
 from rich.console import Console
 
@@ -20,7 +19,7 @@ from artifactsmmo_cli.utils.formatters import (
     format_time_duration,
 )
 from artifactsmmo_cli.utils.helpers import handle_api_error, handle_api_response
-from artifactsmmo_cli.utils.validators import validate_character_name
+from artifactsmmo_cli.utils.validators import validate_character_name, validate_skin_code
 
 app = typer.Typer(help="Character management commands")
 console = Console()
@@ -47,7 +46,7 @@ def list_characters() -> None:
 @app.command("create")
 def create_character(
     name: str = typer.Argument(..., help="Character name (4-12 chars, alphanumeric + underscores)"),
-    skin: CharacterSkin = typer.Argument(..., help="Character skin (required by API)"),
+    skin: str = typer.Argument(..., help="Character skin code (required by API)"),
 ) -> None:
     """Create a new character."""
     try:
@@ -55,6 +54,7 @@ def create_character(
         name = validate_character_name(name)
 
         api = ClientManager().api
+        skin = validate_skin_code(skin, api)
 
         character_data = AddCharacterSchema(name=name, skin=skin)
         response = api.create_character(character_data)

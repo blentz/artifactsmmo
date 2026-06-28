@@ -59,7 +59,7 @@ class UnequipAction(Action):
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         body = UnequipSchema(slot=ItemSlot(self.slot.replace("_slot", "")))
-        result = action_unequip(client=client, name=state.character, body=body)
+        result = action_unequip(client=client, name=state.character, body=[body])
         result = Action._raise_for_error(result, f"Unequip {self.slot}")
         return WorldState.from_character_schema(
             result.data.character,

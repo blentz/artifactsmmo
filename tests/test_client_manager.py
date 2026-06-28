@@ -155,6 +155,18 @@ def test_api_wrapper_get_server_details():
     assert result is sentinel
 
 
+def test_api_wrapper_get_all_skins():
+    wrapper = _make_wrapper()
+    sentinel = object()
+    with patch(
+        "artifactsmmo_cli.api_wrapper.get_all_skins_sync",
+        return_value=sentinel,
+    ) as mock_sync:
+        result = wrapper.get_all_skins(page=2, size=25)
+    mock_sync.assert_called_once_with(client=wrapper._client, page=2, size=25)
+    assert result is sentinel
+
+
 def test_api_wrapper_get_my_characters():
     wrapper = _make_wrapper()
     sentinel = object()

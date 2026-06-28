@@ -1434,7 +1434,7 @@ def _make_event_catalog() -> StaticDataPageEventSchema:
         duration=120,
         rate=1500,
     )
-    return StaticDataPageEventSchema(data=[npc_event, monster_event])
+    return StaticDataPageEventSchema(data=[npc_event, monster_event], total=2, page=1, size=50, pages=1)
 
 
 def test_load_events_indexes_npc_events_only():
@@ -1444,6 +1444,23 @@ def test_load_events_indexes_npc_events_only():
     assert gd.is_event_npc("gemstone_merchant") is True
     assert gd.is_event_npc("bandit_lizard") is False
     assert gd.npc_event_code("gemstone_merchant") == "gemstone_merchant"
+
+
+def test_load_events_skips_contentless_event():
+    """An event with no content (nullable in API v8.0.0) is skipped, not crashed on."""
+    contentless = EventSchema(
+        name="Empty Event",
+        code="empty_event",
+        content=UNSET,
+        maps=[EventMapSchema(map_id=1, x=0, y=0, layer="overworld", skin="z")],
+        duration=60,
+        rate=1500,
+    )
+    catalog = StaticDataPageEventSchema(data=[contentless], total=1, page=1, size=50, pages=1)
+    gd = GameData()
+    with patch("artifactsmmo_cli.ai.game_data.get_all_events", return_value=catalog):
+        gd._load_events(client=None)
+    assert gd.is_event_npc("empty_event") is False
 
 
 def test_npc_location_falls_back_to_event_spawn():
@@ -1473,8 +1490,10 @@ def test_load_events_paginates_past_full_page():
             rate=1500,
         )
 
-    full_page = StaticDataPageEventSchema(data=[_npc_event(f"merchant_{i}") for i in range(100)])
-    last_page = StaticDataPageEventSchema(data=[_npc_event("merchant_last")])
+    full_page = StaticDataPageEventSchema(
+        data=[_npc_event(f"merchant_{i}") for i in range(100)], total=101, page=1, size=100, pages=2
+    )
+    last_page = StaticDataPageEventSchema(data=[_npc_event("merchant_last")], total=101, page=2, size=100, pages=2)
     gd = GameData()
     with patch("artifactsmmo_cli.ai.game_data.get_all_events", side_effect=[full_page, last_page]):
         gd._load_events(client=None)

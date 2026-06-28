@@ -33,7 +33,7 @@ from artifactsmmo_api_client.models.map_content_type import MapContentType
 from artifactsmmo_api_client.models.map_layer import MapLayer
 from artifactsmmo_api_client.models.map_schema import MapSchema
 from artifactsmmo_api_client.models.monster_schema import MonsterSchema
-from artifactsmmo_api_client.models.npc_item import NPCItem
+from artifactsmmo_api_client.models.npc_item_schema import NPCItemSchema
 from artifactsmmo_api_client.models.resource_schema import ResourceSchema
 from artifactsmmo_api_client.types import Unset
 
@@ -988,7 +988,7 @@ class GameData:
                 "items": [ItemSchema.from_dict(d) for d in raw["items"]],
                 "resources": [ResourceSchema.from_dict(d) for d in raw["resources"]],
                 "monsters": [MonsterSchema.from_dict(d) for d in raw["monsters"]],
-                "npcs": [NPCItem.from_dict(d) for d in raw["npcs"]],
+                "npcs": [NPCItemSchema.from_dict(d) for d in raw["npcs"]],
                 "tasks": [TaskFullSchema.from_dict(d) for d in raw["tasks"]],
                 "events": [EventSchema.from_dict(d) for d in raw["events"]],
                 "bank": BankSchema.from_dict(raw["bank"]) if raw["bank"] is not None else None,
@@ -1252,9 +1252,9 @@ class GameData:
         """Fetch all resources and build skill requirement and drop item indexes."""
         self._build_resources(self._fetch_resources(client))
 
-    def _fetch_npcs(self, client: AuthenticatedClient) -> list[NPCItem]:
+    def _fetch_npcs(self, client: AuthenticatedClient) -> list[NPCItemSchema]:
         """Page all NPC items; return the list of schema objects."""
-        out: list[NPCItem] = []
+        out: list[NPCItemSchema] = []
         page = 1
         while True:
             result = get_all_npc_items(client=client, page=page, size=100)
@@ -1266,7 +1266,7 @@ class GameData:
             page += 1
         return out
 
-    def _build_npcs(self, entries: list[NPCItem]) -> None:
+    def _build_npcs(self, entries: list[NPCItemSchema]) -> None:
         """Build buy and sell stock indexes from NPC item schema objects."""
         for entry in entries:
             buy_price = entry.buy_price
@@ -1393,6 +1393,8 @@ class GameData:
         """
         for ev in events:
             if not ev.maps:
+                continue
+            if ev.content is None or isinstance(ev.content, Unset):
                 continue
             ctype = ev.content.type_
             code = ev.content.code

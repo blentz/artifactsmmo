@@ -62,6 +62,9 @@ from artifactsmmo_api_client.api.my_characters.get_my_characters_my_characters_g
 from artifactsmmo_api_client.api.server_details.get_server_details_get import (
     sync as get_server_details_sync,
 )
+from artifactsmmo_api_client.api.skins.get_all_skins_skins_get import (
+    sync as get_all_skins_sync,
+)
 from artifactsmmo_api_client.errors import UnexpectedStatus
 from artifactsmmo_api_client.models.fight_request_schema import FightRequestSchema
 
@@ -75,6 +78,10 @@ class APIWrapper:
     # Server details
     def get_server_details(self) -> Any:
         return get_server_details_sync(client=self._client)
+
+    # Static data
+    def get_all_skins(self, page: int = 1, size: int = 100) -> Any:
+        return get_all_skins_sync(client=self._client, page=page, size=size)
 
     # Character management
     def get_my_characters(self) -> Any:

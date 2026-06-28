@@ -265,7 +265,7 @@ class TestEquipCommand:
 
         assert result.exit_code == 0
         assert "Equipped arrow on testchar" in result.stdout
-        assert stub_api.action_equip_item.call_args.kwargs["body"].quantity == 50
+        assert stub_api.action_equip_item.call_args.kwargs["body"][0].quantity == 50
 
     def test_equip_error(self, runner, stub_api):
         """Test equip command with error."""
@@ -320,7 +320,7 @@ class TestUnequipCommand:
 
         assert result.exit_code == 0
         assert "Unequipped utility1 from testchar" in result.stdout
-        assert stub_api.action_unequip_item.call_args.kwargs["body"].quantity == 25
+        assert stub_api.action_unequip_item.call_args.kwargs["body"][0].quantity == 25
 
     def test_unequip_error(self, runner, stub_api):
         """Test unequip command with error."""

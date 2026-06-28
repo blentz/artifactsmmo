@@ -1,9 +1,17 @@
 """Tests for character commands."""
 
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from artifactsmmo_cli.commands.character import app
 from tests.test_commands.conftest import api_error, api_response, unexpected_status
+
+
+def _set_skins(stub_api, *codes: str) -> None:
+    """Configure stub_api's /skins catalog so validate_skin_code can run."""
+    stub_api.get_all_skins.return_value = SimpleNamespace(
+        data=[SimpleNamespace(code=c) for c in codes], pages=1
+    )
 
 
 class TestListCommand:
@@ -61,6 +69,7 @@ class TestCreateCommand:
 
     def test_create_success(self, runner, stub_api):
         """Test successful create command."""
+        _set_skins(stub_api, "men1", "women2")
         stub_api.create_character.return_value = True
 
         result = runner.invoke(app, ["create", "newchar", "men1"])
@@ -70,6 +79,7 @@ class TestCreateCommand:
 
     def test_create_with_skin(self, runner, stub_api):
         """Test create command with custom skin."""
+        _set_skins(stub_api, "men1", "women2")
         stub_api.create_character.return_value = True
 
         result = runner.invoke(app, ["create", "newchar", "women2"])
@@ -79,6 +89,7 @@ class TestCreateCommand:
 
     def test_create_failure(self, runner, stub_api):
         """Test create command failure."""
+        _set_skins(stub_api, "men1", "women2")
         stub_api.create_character.return_value = False
 
         result = runner.invoke(app, ["create", "newchar", "men1"])
@@ -91,8 +102,9 @@ class TestCreateCommand:
         result = runner.invoke(app, ["create", "newchar"])
         assert result.exit_code != 0
 
-    def test_create_invalid_skin(self, runner):
-        """Invalid skin value rejected by typer enum validation."""
+    def test_create_invalid_skin(self, runner, stub_api):
+        """A skin code absent from the live /skins catalog is rejected."""
+        _set_skins(stub_api, "men1", "women2")
         result = runner.invoke(app, ["create", "newchar", "human1"])
         assert result.exit_code != 0
 
@@ -103,6 +115,7 @@ class TestCreateCommand:
 
     def test_create_api_exception(self, runner, stub_api):
         """Test create command with API exception."""
+        _set_skins(stub_api, "men1", "women2")
         stub_api.create_character.side_effect = unexpected_status(500, "API Error")
 
         result = runner.invoke(app, ["create", "newchar", "men1"])

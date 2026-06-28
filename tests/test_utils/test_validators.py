@@ -1,5 +1,7 @@
 """Tests for validation utilities."""
 
+from types import SimpleNamespace
+
 import pytest
 import typer
 
@@ -216,28 +218,46 @@ class TestValidateGoldAmount:
             validate_gold_amount(1000000001)
 
 
+def _skins_api(*pages: list[str]) -> SimpleNamespace:
+    """Build a fake APIWrapper whose get_all_skins paginates the given code pages.
+
+    Each positional arg is one page's list of skin codes; the catalog spans len(pages).
+    """
+
+    def get_all_skins(page: int = 1, size: int = 100) -> SimpleNamespace:
+        codes = pages[page - 1]
+        return SimpleNamespace(data=[SimpleNamespace(code=c) for c in codes], pages=len(pages))
+
+    return SimpleNamespace(get_all_skins=get_all_skins)
+
+
 class TestValidateSkinCode:
-    """Test validate_skin_code function."""
+    """Test validate_skin_code function (validates against the live /skins catalog)."""
 
     def test_valid_skin_code(self):
-        """Test valid skin code."""
-        result = validate_skin_code("men1")
+        """A code present in a single-page catalog is accepted."""
+        result = validate_skin_code("men1", _skins_api(["men1", "women2"]))
         assert result == "men1"
 
-    def test_another_valid_skin_code(self):
-        """Test another valid skin code."""
-        result = validate_skin_code("women2")
+    def test_valid_skin_code_on_later_page(self):
+        """Pagination walks every page to find a code on a later one."""
+        result = validate_skin_code("women2", _skins_api(["men1"], ["women2"]))
         assert result == "women2"
 
     def test_invalid_skin_code(self):
-        """Test invalid skin code."""
+        """A code absent from a non-empty catalog is rejected."""
         with pytest.raises(typer.BadParameter, match="Invalid skin 'invalid_skin'"):
-            validate_skin_code("invalid_skin")
+            validate_skin_code("invalid_skin", _skins_api(["men1", "women2"]))
+
+    def test_empty_catalog_rejects(self):
+        """An empty catalog page short-circuits and rejects any code."""
+        with pytest.raises(typer.BadParameter, match="Invalid skin 'men1'"):
+            validate_skin_code("men1", _skins_api([]))
 
     def test_empty_skin_code(self):
-        """Test empty skin code."""
+        """An empty string is rejected."""
         with pytest.raises(typer.BadParameter, match="Invalid skin ''"):
-            validate_skin_code("")
+            validate_skin_code("", _skins_api(["men1", "women2"]))
 
 
 class TestValidateItemSlot:

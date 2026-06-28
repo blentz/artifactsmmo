@@ -3,8 +3,9 @@
 import re
 
 import typer
-from artifactsmmo_api_client.models.character_skin import CharacterSkin
 from artifactsmmo_api_client.models.item_slot import ItemSlot
+
+from artifactsmmo_cli.api_wrapper import APIWrapper
 
 
 def validate_coordinates(x: int, y: int) -> tuple[int, int]:
@@ -69,9 +70,22 @@ def validate_gold_amount(amount: int) -> int:
     return amount
 
 
-def validate_skin_code(skin: str) -> str:
-    """Validate character skin code."""
-    valid_skins = [s.value for s in CharacterSkin]
+def validate_skin_code(skin: str, api: APIWrapper) -> str:
+    """Validate character skin code against the live skins catalog.
+
+    Skins became dynamic data in API v8.0.0 (the static CharacterSkin enum was removed),
+    so the valid set must come from the /skins endpoint rather than a hardcoded list.
+    """
+    valid_skins: list[str] = []
+    page = 1
+    while True:
+        response = api.get_all_skins(page=page)
+        if response is None or not response.data:
+            break
+        valid_skins.extend(s.code for s in response.data)
+        if page >= response.pages:
+            break
+        page += 1
 
     if skin not in valid_skins:
         raise typer.BadParameter(f"Invalid skin '{skin}'. Valid skins: {', '.join(valid_skins)}")

@@ -17,7 +17,6 @@ selected with ``-m integration`` when desired.
 import attr
 import pytest
 from artifactsmmo_api_client.models.character_schema import CharacterSchema
-from artifactsmmo_api_client.models.character_skin import CharacterSkin
 from artifactsmmo_api_client.models.item_schema import ItemSchema
 from artifactsmmo_api_client.models.map_layer import MapLayer
 from artifactsmmo_api_client.models.monster_schema import MonsterSchema
@@ -50,7 +49,7 @@ def _make_character(name: str = "Hero", level: int = 10, hp: int = 200, x: int =
     explicitly and default every remaining str field to "" and int field to 0,
     then override the handful the tests actually assert on.
     """
-    enum_values = {"skin": CharacterSkin.MEN1, "layer": MapLayer.OVERWORLD}
+    enum_values = {"layer": MapLayer.OVERWORLD}
     string_values = {"name": name, "account": "test-account", "task_type": ""}
 
     kwargs: dict[str, object] = {}

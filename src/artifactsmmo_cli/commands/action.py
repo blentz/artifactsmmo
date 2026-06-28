@@ -312,7 +312,7 @@ def equip_item(
         api = ClientManager().api
 
         equip_data = EquipSchema(code=item_code, slot=ItemSlot(slot), quantity=quantity)
-        response = api.action_equip_item(name=character, body=equip_data)
+        response = api.action_equip_item(name=character, body=[equip_data])
 
         cli_response = handle_api_response(response, f"Equipped {item_code} on {character}")
         if cli_response.success:
@@ -345,7 +345,7 @@ def unequip_item(
         api = ClientManager().api
 
         unequip_data = UnequipSchema(slot=ItemSlot(slot), quantity=quantity)
-        response = api.action_unequip_item(name=character, body=unequip_data)
+        response = api.action_unequip_item(name=character, body=[unequip_data])
 
         cli_response = handle_api_response(response, f"Unequipped {slot} from {character}")
         if cli_response.success:

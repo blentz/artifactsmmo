@@ -125,7 +125,7 @@ class EquipAction(Action):
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
         body = EquipSchema(code=self.code, slot=ItemSlot(self.slot.replace("_slot", "")))
-        result = action_equip(client=client, name=state.character, body=body)
+        result = action_equip(client=client, name=state.character, body=[body])
         result = Action._raise_for_error(result, f"Equip {self.code} to {self.slot}")
         return WorldState.from_character_schema(
             result.data.character,

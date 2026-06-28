@@ -21,11 +21,11 @@ from artifactsmmo_api_client.api.my_characters import (
     action_ge_create_sell_order_my_name_action_grandexchange_create_sell_order_post,
 )
 from artifactsmmo_api_client.errors import UnexpectedStatus
-from artifactsmmo_api_client.models.data_page_ge_order_history_schema import DataPageGeOrderHistorySchema
+from artifactsmmo_api_client.models.data_page_ge_order_history_schema import DataPageGEOrderHistorySchema
 from artifactsmmo_api_client.models.error_response_schema import ErrorResponseSchema
 from artifactsmmo_api_client.models.ge_buy_order_schema import GEBuyOrderSchema
 from artifactsmmo_api_client.models.ge_cancel_order_schema import GECancelOrderSchema
-from artifactsmmo_api_client.models.ge_order_creationr_schema import GEOrderCreationrSchema
+from artifactsmmo_api_client.models.ge_order_creation_schema import GEOrderCreationSchema
 from artifactsmmo_api_client.types import UNSET
 from rich.console import Console
 from rich.panel import Panel
@@ -247,7 +247,7 @@ def sell_on_ge(
 
         client = ClientManager().client
 
-        sell_data = GEOrderCreationrSchema(code=item_code, quantity=quantity, price=price)
+        sell_data = GEOrderCreationSchema(code=item_code, quantity=quantity, price=price)
         response = action_ge_create_sell_order_my_name_action_grandexchange_create_sell_order_post.sync(
             client=client, name=character, body=sell_data
         )
@@ -476,7 +476,7 @@ def show_trading_history(
 
         client = ClientManager().client
 
-        response: DataPageGeOrderHistorySchema | ErrorResponseSchema | None
+        response: DataPageGEOrderHistorySchema | ErrorResponseSchema | None
         if character:
             # Show personal trading history
             response = get_ge_history_my_grandexchange_history_get.sync(
