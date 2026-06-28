@@ -40,7 +40,11 @@ from artifactsmmo_api_client.types import Unset
 from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.game_data_cache import GameDataCache
 from artifactsmmo_cli.ai.game_data_error import GameDataCoverageError
-from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOTS, stats_is_combat_bearing
+from artifactsmmo_cli.ai.gear_taxonomy_core import (
+    combat_gear_types as _core_combat_gear_types,
+    is_consumable,
+)
 from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS, ItemCatalog, ItemStats
 from artifactsmmo_cli.ai.location_catalog import LocationCatalog
 from artifactsmmo_cli.ai.monster_catalog import MonsterCatalog
@@ -91,6 +95,7 @@ class GameData:
     _task_reward_item_codes: frozenset[str] = field(default_factory=frozenset)
     _task_coin_rewards: dict[str, int] = field(default_factory=dict)
     _recipe_cost_memo: RecipeCostMemo | None = field(default=None, init=False, repr=False)
+    _consumable_effect_codes: dict[str, list[str]] = field(default_factory=dict, init=False, repr=False)
 
     # === Legacy private-state accessors ===
     # Tests and fixtures seed GameData through these historical private
@@ -882,6 +887,34 @@ class GameData:
         return self._craft_yields
 
     @property
+    def equippable_types(self) -> frozenset[str]:
+        """All item types that occupy an equipment slot (derived from CharacterSchema)."""
+        return frozenset(ITEM_TYPE_TO_SLOTS)
+
+    @property
+    def consumable_types(self) -> frozenset[str]:
+        """Item types whose items carry consumable (temporary-buff/restore) effects."""
+        return frozenset(
+            s.type_
+            for code, codes in self._consumable_effect_codes.items()
+            if (s := self.item_stats(code)) is not None and is_consumable(codes))
+
+    @property
+    def combat_gear_types(self) -> frozenset[str]:
+        """Equippable types that carry durable combat stats (not consumables)."""
+        rows = [
+            (s.type_, stats_is_combat_bearing(s), s.type_ in self.consumable_types)
+            for s in self.all_item_stats.values()
+            if s.type_ in self.equippable_types
+        ]
+        return _core_combat_gear_types(rows)
+
+    @property
+    def defensive_gear_types(self) -> frozenset[str]:
+        """Combat gear types excluding weapon (armor/accessory slots)."""
+        return self.combat_gear_types - frozenset({"weapon"})
+
+    @property
     def recipe_cost(self) -> RecipeCostMemo:
         """Lazily-built memoized transitive recipe demand (one unit per item).
 
@@ -1200,7 +1233,9 @@ class GameData:
                         stats.conditions.append((str(code), int(value)))
 
             if not isinstance(item.effects, Unset) and item.effects:
+                effect_codes = self._consumable_effect_codes.setdefault(item.code, [])
                 for effect in item.effects:
+                    effect_codes.append(effect.code)
                     if effect.code in ("heal", "restore", "splash_restore"):
                         # The HP-restoration family: `heal` (cooked food), `restore`
                         # (potions, e.g. enchanted_health_potion=300), `splash_restore`

@@ -1,14 +1,17 @@
 """Leaf module: item-type-to-slot mappings derived from CharacterSchema.
 
-This is a LEAF — it imports only `attrs` and `CharacterSchema` so that
-`game_data.py` can import from here without the cycle that would arise if it
-imported from `actions/equip.py` (which itself imports `GameData` from
-`game_data`). `actions/equip.py` re-exports these names from here for the 16+
-sites that import from that path.
+This is a LEAF — it imports only `attrs`, `CharacterSchema`, `ItemStats` (from
+item_catalog), and `gear_taxonomy_core` so that `game_data.py` can import from
+here without the cycle that would arise if it imported from `actions/equip.py`
+(which itself imports `GameData` from `game_data`). `actions/equip.py`
+re-exports these names from here for the 16+ sites that import from that path.
 """
 
 import attrs
 from artifactsmmo_api_client.models.character_schema import CharacterSchema
+
+from artifactsmmo_cli.ai.gear_taxonomy_core import is_combat_bearing
+from artifactsmmo_cli.ai.item_catalog import ItemStats
 
 _SLOT_SUFFIX = "_slot"
 
@@ -38,3 +41,12 @@ def _derive_type_to_slots() -> dict[str, list[str]]:
 # derived from CharacterSchema (see _derive_type_to_slots).
 ITEM_TYPE_TO_SLOTS: dict[str, list[str]] = _derive_type_to_slots()
 ITEM_TYPE_TO_SLOT: dict[str, str] = {t: slots[0] for t, slots in ITEM_TYPE_TO_SLOTS.items()}
+
+
+def stats_is_combat_bearing(stats: ItemStats) -> bool:
+    """Adapt ItemStats fields into the pure core's combat-bearing predicate."""
+    return is_combat_bearing(
+        attack=stats.attack, resistance=stats.resistance, hp_bonus=stats.hp_bonus,
+        dmg=stats.dmg, dmg_elements=stats.dmg_elements,
+        critical_strike=stats.critical_strike, initiative=stats.initiative,
+        lifesteal=stats.lifesteal)
