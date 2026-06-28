@@ -14,6 +14,7 @@ import Formal.NoActionDeadlock
 import Formal.GuardCoverage
 import Formal.ActionSetCompleteness
 import Formal.EquipValueAugmented
+import Formal.GearValue
 import Formal.FallbackChain
 import Formal.AcceptTaskGate
 import Formal.TaskTradeReadyPriority
@@ -847,6 +848,10 @@ open Formal.PriorityBand
 #check @Formal.EquipValueAugmented.equipValue_nontool_zero_eq_one
 #check @Formal.EquipValueAugmented.equipValue_tool_zero_eq_zero
 #check @Formal.EquipValueAugmented.copper_dagger_strictly_outranks_fishing_net
+
+-- GearValue (unified Rank ruler core; equip_value delegates to gear_value(_, Rank)):
+#check @Formal.GearValue.rawSum_decomp          -- rawSum = combatRaw + efficiency stats
+#check @Formal.GearValue.rank_eq_equipValue     -- rankValue = augmented equipValue (bit-identical)
 
 -- FallbackChain (two-pass arbiter walk proof):
 #check @Formal.FallbackChain.walk_some_of_nonNone_exists

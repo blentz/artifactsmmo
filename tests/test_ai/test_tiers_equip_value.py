@@ -1,5 +1,5 @@
 from artifactsmmo_cli.ai.game_data import ItemStats
-from artifactsmmo_cli.ai.tiers.equip_value import equip_value, tool_value
+from artifactsmmo_cli.ai.tiers.equip_value import equip_value, equip_value_pure, tool_value
 
 
 def test_sums_attack_resistance_hp_restore_with_nontool_bonus():
@@ -74,6 +74,23 @@ def test_pure_tool_scores_zero():
     pickaxe = ItemStats(code="copper_pickaxe", level=1, type_="weapon",
                         subtype="tool", skill_effects={"mining": -1})
     assert equip_value(pickaxe) == 0.0
+
+
+def test_equip_value_pure_matches_legacy_formula():
+    """`equip_value_pure` (the mechanically-extracted legacy core, retained until
+    Task 5 reconciles extraction) still computes 2 * raw + nonToolBonus over the
+    same summed stats. `equip_value` now routes through the unified gear_value(Rank)
+    core, so the two are exercised independently but must agree on every stat."""
+    # raw = 6+3+2+5+4+7+9+11+13+15+17+19 = 111; non-tool → 2*111+1 = 223.
+    assert equip_value_pure(attack=6, resistance=3, hp_restore=2, hp_bonus=5,
+                            dmg=4, critical_strike=7, wisdom=9, prospecting=11,
+                            inventory_space=13, haste=15, lifesteal=17,
+                            combat_buff=19, subtype="weapon") == 223
+    # tool subtype drops the +1 bonus.
+    assert equip_value_pure(attack=6, resistance=3, hp_restore=2, hp_bonus=5,
+                            dmg=4, critical_strike=7, wisdom=9, prospecting=11,
+                            inventory_space=13, haste=15, lifesteal=17,
+                            combat_buff=19, subtype="tool") == 222
 
 
 def test_tool_value_returns_effect_magnitude_for_matching_skill():

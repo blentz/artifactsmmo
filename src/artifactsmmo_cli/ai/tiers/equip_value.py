@@ -1,6 +1,8 @@
 """Shared equippable-item value: combat score + per-skill tool score."""
 
 from artifactsmmo_cli.ai.game_data import ItemStats
+from artifactsmmo_cli.ai.gear_value import gear_value
+from artifactsmmo_cli.ai.gear_value_core import Rank
 
 
 def equip_value_pure(attack: int, resistance: int, hp_restore: int, hp_bonus: int,
@@ -55,27 +57,13 @@ def equip_value(stats: ItemStats) -> int:
     monster at his level, ObtainItem(copper_dagger) scored 0 → no gear
     progression visible to the ranker → 50+ cycles of pure PursueTask.
     """
-    attack = sum(stats.attack.values()) if stats.attack else 0
-    resistance = sum(stats.resistance.values()) if stats.resistance else 0
-    # 2026-06-06 trace 09:59: copper_boots(hp_bonus=10), copper_helmet
-    # (dmg=3, hp_bonus=20), copper_ring(dmg=2) all scored equip_value=0
-    # (later =1 after the nonToolBonus augment) because raw summed ONLY
-    # attack+resistance+hp_restore. Armor with no per-element resistance
-    # but real defensive stats (max-HP bonus, damage bonus %, crit %) was
-    # invisible to the ranker → ObtainItem(copper_boots) marginal stuck
-    # at 0.05 → ranked below 8 ReachSkillLevel roots → never pursued.
-    # Folding hp_bonus, dmg, critical_strike into the raw signal closes
-    # the armor-pursuit gap. The mixed units (flat hp vs %) are intentional:
-    # only ARGMAX ORDERING matters for ranker decisions, and every modeled
-    # contributor is positively correlated with combat capability.
-    # P4a: every summand is an int (ItemStats stats are ints) — the value is
-    # EXACT integer arithmetic, matching the Lean EquipValueAugmented.equipValue
-    # (Int) model directly. The historical float() wrapper added nothing.
-    # P4b: the arithmetic lives in the extracted `equip_value_pure` core.
-    return equip_value_pure(attack, resistance, stats.hp_restore, stats.hp_bonus,
-                            stats.dmg, stats.critical_strike, stats.wisdom,
-                            stats.prospecting, stats.inventory_space, stats.haste,
-                            stats.lifesteal, stats.combat_buff, stats.subtype)
+    # Unified Rank ruler: delegate to the single gear_value(stats, Rank) core
+    # (gear_value_core.rank_value, mirrored by Formal.GearValue.rankValue) so
+    # there is ONE Rank computation shared with strategic_value. Bit-identical
+    # to the prior equip_value_pure path: 2 * raw + nonToolBonus over the same
+    # summed stats (attack+resistance+hp_restore+hp_bonus+dmg+critical_strike
+    # +wisdom+prospecting+inventory_space+haste+lifesteal+combat_buff).
+    return gear_value(stats, Rank)
 
 
 def tool_value(stats: ItemStats, skill: str) -> int:

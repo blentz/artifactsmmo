@@ -73,6 +73,7 @@ import Formal.Liveness.GearBuildTermination
 import Formal.ServableFilter
 import Formal.StrategicValue
 import Formal.GearTaxonomy
+import Formal.GearValue
 import Formal.Extracted.Bridges9
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
@@ -3250,3 +3251,15 @@ example : ∀ (rows : List Formal.GearTaxonomy.Row) (t : String),
 example : ∀ (rows : List Formal.GearTaxonomy.Row) (t : String),
     t ∈ Formal.GearTaxonomy.combatGearTypes rows → ∃ r ∈ rows, r.type = t :=
   @Formal.GearTaxonomy.combatGear_subset_equippable
+
+-- GearValue (unified Rank ruler core). The Python equip_value delegates to
+-- gear_value(_, Rank); these pin the two arithmetic identities that justify it.
+-- rawSum_decomp: rawSum splits into the combat signal + the four efficiency stats.
+example : ∀ (s : Formal.EquipValueAugmented.RawStats),
+    Formal.EquipValueAugmented.rawSum s =
+      Formal.GearValue.combatRaw s + s.wisdom + s.prospecting + s.inventorySpace + s.haste :=
+  @Formal.GearValue.rawSum_decomp
+-- rank_eq_equipValue: the Rank ruler is bit-identical to the augmented equipValue.
+example : ∀ (s : Formal.EquipValueAugmented.RawStats) (isTool : Bool),
+    Formal.GearValue.rankValue s isTool = Formal.EquipValueAugmented.equipValue s isTool :=
+  @Formal.GearValue.rank_eq_equipValue
