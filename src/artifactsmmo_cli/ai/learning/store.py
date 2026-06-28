@@ -15,6 +15,7 @@ from sqlmodel import SQLModel, col, create_engine, select
 
 from artifactsmmo_cli.ai.learning.models import (
     Blocker,
+    CraftYieldObservation,
     Cycle,
     LearnedSetting,
     PlanBodyLog,
@@ -559,6 +560,43 @@ class LearningStore:
             return {row.level: row.max_xp for row in rows}
         except SQLAlchemyError:
             return {}
+
+    def record_craft_yield(self, item_code: str, quantity: int, xp: int) -> None:
+        """Upsert observed (quantity, xp) for (character, item_code). Last write wins."""
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = select(CraftYieldObservation).where(
+                    CraftYieldObservation.character == self._character,
+                    CraftYieldObservation.item_code == item_code,
+                )
+                existing = s.exec(stmt).first()
+                if existing is not None:
+                    existing.quantity = quantity
+                    existing.xp = xp
+                    s.add(existing)
+                else:
+                    s.add(CraftYieldObservation(
+                        character=self._character,
+                        item_code=item_code,
+                        quantity=quantity,
+                        xp=xp,
+                    ))
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[learning] record_craft_yield failed: {e}")
+
+    def observed_craft_yield(self, item_code: str) -> tuple[int, int] | None:
+        """Observed (quantity, xp) for (character, item_code), or None."""
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = select(CraftYieldObservation).where(
+                    CraftYieldObservation.character == self._character,
+                    CraftYieldObservation.item_code == item_code,
+                )
+                row = s.exec(stmt).first()
+            return (row.quantity, row.xp) if row is not None else None
+        except SQLAlchemyError:
+            return None
 
     def record_task_reward_value(self, value: float) -> None:
         """Append one completed-task reward observation for this character."""

@@ -23,6 +23,7 @@ from artifactsmmo_api_client.types import Unset
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
+from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
@@ -723,6 +724,8 @@ class GamePlayer:
         don't conflate wins with losses.
         """
         assert self.state is not None
+        if isinstance(action, CraftAction):
+            action.history = self.history
         try:
             new_state = action.execute(self.state, client)
             # Re-sync bank state after visiting bank

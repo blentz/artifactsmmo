@@ -1007,3 +1007,34 @@ class TestLearnedInt:
 def test_parse_skill_xp_value_none_returns_zero():
     """A None raw delta-json yields 0 without attempting to parse (line 40-41)."""
     assert _parse_skill_xp_value(None, "mining") == 0
+
+
+class TestCraftYield:
+    def test_record_and_read_craft_yield(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="Robby")
+        assert store.observed_craft_yield("potion") is None
+        store.record_craft_yield("potion", quantity=2, xp=15)
+        assert store.observed_craft_yield("potion") == (2, 15)
+        store.record_craft_yield("potion", quantity=3, xp=20)   # last write wins
+        assert store.observed_craft_yield("potion") == (3, 20)
+        store.close()
+
+    def test_craft_yield_is_per_character(self, tmp_db_path):
+        a = LearningStore(db_path=tmp_db_path, character="alice")
+        b = LearningStore(db_path=tmp_db_path, character="bob")
+        a.record_craft_yield("bar", quantity=2, xp=10)
+        assert a.observed_craft_yield("bar") == (2, 10)
+        assert b.observed_craft_yield("bar") is None
+        a.close()
+        b.close()
+
+    def test_record_craft_yield_swallows_error(self, tmp_db_path, capsys):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        store.record_craft_yield("potion", quantity=1, xp=5)
+        assert "record_craft_yield" in capsys.readouterr().out
+
+    def test_observed_craft_yield_returns_none_on_error(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        assert store.observed_craft_yield("potion") is None

@@ -26,6 +26,7 @@ class CraftAction(Action):
     code: str
     quantity: int = 1
     workshop_location: tuple[int, int] | None = field(default=None, repr=False)
+    history: LearningStore | None = field(default=None, repr=False)
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         if self.workshop_location is None:
@@ -101,6 +102,10 @@ class CraftAction(Action):
         body = CraftingSchema(code=self.code, quantity=self.quantity)
         result = action_crafting(client=client, name=state.character, body=body)
         result = Action._raise_for_error(result, f"Craft {self.code}×{self.quantity}")
+        if self.history is not None:
+            details = result.data.details
+            produced = sum(d.quantity for d in details.items if d.code == self.code)
+            self.history.record_craft_yield(self.code, produced, details.xp)
         return WorldState.from_character_schema(
             result.data.character,
             bank_items=state.bank_items,

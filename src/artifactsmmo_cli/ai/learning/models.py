@@ -186,3 +186,18 @@ class PlanCommitmentBase(SQLModel):
 
 class PlanCommitment(PlanCommitmentBase, table=True):
     __tablename__ = "plan_commitment"
+
+
+class CraftYieldObservation(SQLModel, table=True):
+    """Observed output quantity and XP per craft run, per character + item.
+
+    One row per (character, item_code); last write wins. The bot records this
+    from real craft responses so the planner can ground-truth CraftSchema.quantity.
+    """
+
+    __tablename__ = "craft_yield"
+
+    character: str = Field(primary_key=True)
+    item_code: str = Field(primary_key=True)
+    quantity: int
+    xp: int

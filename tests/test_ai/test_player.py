@@ -893,6 +893,34 @@ class TestExecute:
         assert outcome == "error:fight_lost"
         assert isinstance(new_state, WorldState)
 
+    def test_execute_craft_action_wires_history(self, tmp_path):
+        """_execute sets action.history before calling execute on a CraftAction."""
+        import os
+        from artifactsmmo_cli.ai.actions.crafting import CraftAction
+        from artifactsmmo_cli.ai.learning.store import LearningStore
+        from artifactsmmo_api_client.models.drop_schema import DropSchema
+        from artifactsmmo_api_client.models.skill_info_schema import SkillInfoSchema
+
+        store = LearningStore(db_path=str(tmp_path / "l.db"), character="hero")
+        player = GamePlayer(character="hero", history=store)
+        player.state = make_state(x=3, y=0)
+        player.game_data = make_game_data_mock()
+
+        action = CraftAction(code="copper_dagger", quantity=1, workshop_location=(3, 0))
+        char = make_char_schema()
+        details = SkillInfoSchema(xp=10, items=[DropSchema(code="copper_dagger", quantity=1)])
+        result = MagicMock()
+        result.data = MagicMock()
+        result.data.character = char
+        result.data.details = details
+
+        with patch("artifactsmmo_cli.ai.actions.crafting.action_crafting", return_value=result):
+            new_state, outcome = player._execute(action, client=MagicMock())
+
+        assert outcome == "ok"
+        assert store.observed_craft_yield("copper_dagger") == (1, 10)
+        store.close()
+
 
 class TestNow:
     def test_returns_time_string(self):
