@@ -57,10 +57,12 @@ class CraftAction(Action):
             if new_inventory[mat_code] <= 0:
                 del new_inventory[mat_code]
 
-        new_inventory[self.code] = new_inventory.get(self.code, 0) + self.quantity
+        y = game_data.craft_yield(self.code)
+        produced = self.quantity * y
+        new_inventory[self.code] = new_inventory.get(self.code, 0) + produced
 
         new_progress = (
-            state.task_progress + self.quantity
+            state.task_progress + produced
             if state.task_type == "crafting" and state.task_code == self.code
             else state.task_progress
         )
@@ -77,7 +79,7 @@ class CraftAction(Action):
         stats = game_data.item_stats(self.code)
         if stats is not None and stats.crafting_skill is not None:
             new_delta[stats.crafting_skill] = (
-                new_delta.get(stats.crafting_skill, 0) + self.quantity
+                new_delta.get(stats.crafting_skill, 0) + produced
             )
 
         return dataclasses.replace(

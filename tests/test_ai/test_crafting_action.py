@@ -1,4 +1,4 @@
-"""Tests for CraftAction execute yield-recording (Task 2)."""
+"""Tests for CraftAction apply (yield credits) and execute yield-recording."""
 
 import os
 import tempfile
@@ -8,9 +8,40 @@ from artifactsmmo_api_client.models.drop_schema import DropSchema
 from artifactsmmo_api_client.models.skill_info_schema import SkillInfoSchema
 
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_actions_execute import make_char_schema
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
+
+
+def _make_crafting_game_data(
+    code: str,
+    recipe: dict[str, int],
+    craft_yield_value: int = 1,
+    crafting_skill: str = "weaponcrafting",
+    crafting_level: int = 1,
+) -> GameData:
+    """Build a minimal GameData with one craftable item."""
+    gd = GameData()
+    gd._item_stats = {
+        code: ItemStats(
+            code=code,
+            level=1,
+            type_="weapon",
+            crafting_skill=crafting_skill,
+            crafting_level=crafting_level,
+        )
+    }
+    gd._crafting_recipes = {code: recipe}
+    gd._craft_yields = {code: craft_yield_value} if craft_yield_value != 1 else {}
+    gd._resource_skill = {}
+    gd._monster_level = {}
+    gd._workshop_locations = {}
+    gd._bank_location = (4, 0)
+    gd._taskmaster_location = (1, 2)
+    fill_monster_stat_defaults(gd)
+    return gd
 
 
 def _make_craft_api_result(char, *, item_code: str, produced: int, xp: int):
@@ -117,3 +148,105 @@ class TestCraftActionExecuteRecordsYield:
 
         assert store.observed_craft_yield("copper_dagger") == (3, 12)
         store.close()
+
+
+class TestCraftActionApplyYield:
+    """Task 3: apply credits runs×Y for inventory, task_progress, xp-proxy."""
+
+    def test_apply_yield2_credits_runs_times_Y_to_inventory(self):
+        """Crafting 3 runs of a yield-2 item credits 6 to inventory."""
+        gd = _make_crafting_game_data("potion", {"herb": 1}, craft_yield_value=2)
+        state = make_state(inventory={"herb": 10})
+        action = CraftAction(code="potion", quantity=3)
+
+        new_state = action.apply(state, gd)
+
+        assert new_state.inventory.get("potion", 0) == 6  # 3 runs × 2 yield
+
+    def test_apply_yield1_unchanged_from_today(self):
+        """Y=1 (all live recipes today): credits runs×1, same as before."""
+        gd = _make_crafting_game_data("copper_dagger", {"copper_ore": 6}, craft_yield_value=1)
+        state = make_state(inventory={"copper_ore": 18})
+        action = CraftAction(code="copper_dagger", quantity=3)
+
+        new_state = action.apply(state, gd)
+
+        assert new_state.inventory.get("copper_dagger", 0) == 3  # 3 runs × 1
+        assert new_state.inventory.get("copper_ore", 0) == 0     # 18 consumed
+
+    def test_apply_yield2_task_progress_uses_produced(self):
+        """task_progress advances by runs×Y when task matches crafted item."""
+        gd = _make_crafting_game_data("potion", {"herb": 1}, craft_yield_value=2)
+        state = make_state(
+            inventory={"herb": 10},
+            task_code="potion",
+            task_type="crafting",
+            task_progress=0,
+            task_total=20,
+        )
+        action = CraftAction(code="potion", quantity=3)
+
+        new_state = action.apply(state, gd)
+
+        assert new_state.task_progress == 6  # 3 runs × 2
+
+    def test_apply_yield1_task_progress_unchanged(self):
+        """Y=1: task_progress advances by quantity (same as before)."""
+        gd = _make_crafting_game_data("copper_dagger", {"copper_ore": 6}, craft_yield_value=1)
+        state = make_state(
+            inventory={"copper_ore": 18},
+            task_code="copper_dagger",
+            task_type="crafting",
+            task_progress=0,
+            task_total=10,
+        )
+        action = CraftAction(code="copper_dagger", quantity=3)
+
+        new_state = action.apply(state, gd)
+
+        assert new_state.task_progress == 3  # 3 runs × 1
+
+    def test_apply_yield2_xp_proxy_uses_produced(self):
+        """projected_skill_xp_delta advances by runs×Y (prior path)."""
+        gd = _make_crafting_game_data(
+            "potion", {"herb": 1}, craft_yield_value=2,
+            crafting_skill="alchemy",
+        )
+        state = make_state(
+            inventory={"herb": 10},
+            skills={"alchemy": 1},
+        )
+        action = CraftAction(code="potion", quantity=3)
+
+        new_state = action.apply(state, gd)
+
+        assert new_state.projected_skill_xp_delta.get("alchemy", 0) == 6  # 3×2
+
+    def test_apply_yield1_xp_proxy_unchanged(self):
+        """Y=1: xp proxy advances by quantity (same as before)."""
+        gd = _make_crafting_game_data(
+            "copper_dagger", {"copper_ore": 6}, craft_yield_value=1,
+            crafting_skill="weaponcrafting",
+        )
+        state = make_state(
+            inventory={"copper_ore": 18},
+            skills={"weaponcrafting": 1},
+        )
+        action = CraftAction(code="copper_dagger", quantity=3)
+
+        new_state = action.apply(state, gd)
+
+        assert new_state.projected_skill_xp_delta.get("weaponcrafting", 0) == 3  # 3×1
+
+    def test_apply_ingredient_consumption_unchanged(self):
+        """Ingredient consumption is per-run (mat_qty × quantity), unaffected by yield."""
+        gd = _make_crafting_game_data("potion", {"herb": 2}, craft_yield_value=2)
+        state = make_state(inventory={"herb": 20})
+        action = CraftAction(code="potion", quantity=4)
+
+        new_state = action.apply(state, gd)
+
+        # ingredients: 2 herb/run × 4 runs = 8 consumed; 20 - 8 = 12 remaining
+        assert new_state.inventory.get("herb", 0) == 12
+        # output: 4 runs × 2 yield = 8
+        assert new_state.inventory.get("potion", 0) == 8
