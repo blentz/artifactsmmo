@@ -9,7 +9,7 @@ import math
 
 from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
-from artifactsmmo_cli.ai.equipment.scoring import pick_loadout
+from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState

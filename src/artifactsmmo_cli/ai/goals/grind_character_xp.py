@@ -10,7 +10,7 @@ from fractions import Fraction
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
-from artifactsmmo_cli.ai.equipment.scoring import pick_loadout
+from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.projections import expected_yield_per_cycle

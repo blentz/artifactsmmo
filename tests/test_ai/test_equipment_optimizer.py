@@ -7,9 +7,10 @@ import pytest
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.constants import ERROR_CODE_ALREADY_EQUIPPED
+from artifactsmmo_cli.ai.equipment.loadout_picker import pick_gather_loadout, pick_loadout
 from artifactsmmo_cli.ai.equipment.scoring import (
     armor_score,
-    pick_loadout,
+    gather_score,
     weapon_score,
 )
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -150,7 +151,6 @@ class TestGatherScore:
     """Specs from Formal/PurposeRouting.lean — gather picker = argmin gatherScore."""
 
     def test_picks_skill_specific_tool_when_owned(self):
-        from artifactsmmo_cli.ai.equipment.scoring import pick_gather_loadout
         gd = _gd_with_combat_items()
         state = make_state(
             level=1, inventory={"copper_axe": 1},
@@ -160,7 +160,6 @@ class TestGatherScore:
         assert loadout["weapon_slot"] == "copper_axe"
 
     def test_keeps_current_when_no_gather_tool_owned(self):
-        from artifactsmmo_cli.ai.equipment.scoring import pick_gather_loadout
         gd = _gd_with_combat_items()
         state = make_state(
             level=1, inventory={},
@@ -170,7 +169,6 @@ class TestGatherScore:
         assert loadout["weapon_slot"] == "wooden_stick"
 
     def test_argmin_picks_most_negative_skill_effect(self):
-        from artifactsmmo_cli.ai.equipment.scoring import gather_score, pick_gather_loadout
         gd = GameData()
         gd._item_stats = {
             "weak_axe": ItemStats(code="weak_axe", level=1, type_="weapon",

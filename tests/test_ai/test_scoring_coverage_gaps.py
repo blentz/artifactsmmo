@@ -3,10 +3,9 @@
 Covers armor-slot optimization and the empty-slot (no current stats) path.
 """
 
+from artifactsmmo_cli.ai.equipment.loadout_picker import pick_gather_loadout, pick_loadout
 from artifactsmmo_cli.ai.equipment.scoring import (
     armor_score_pure,
-    pick_gather_loadout,
-    pick_loadout,
     weapon_score,
     weapon_score_raw,
 )
