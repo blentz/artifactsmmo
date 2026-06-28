@@ -204,7 +204,7 @@ class CharacterObjective:
 
     `target_tools` was added to fix a slow-mining bug: the API encodes tools
     as `type_="weapon"` so they competed with combat weapons in `target_gear`
-    by `equip_value` (attack + resistance + hp_restore) and always lost.
+    by `equip_value` (the unified 8-stat ``combat_raw`` ruler) and always lost.
     Tools are now picked on a separate `tool_value` axis (per-skill effect
     magnitude), pursued as independent objective roots, and swapped in by
     OptimizeLoadout when the active task needs the matching gathering skill.

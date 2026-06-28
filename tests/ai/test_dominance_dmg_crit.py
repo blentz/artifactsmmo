@@ -12,9 +12,9 @@ from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, WorldState
 
 
-def _make_state(**overrides) -> WorldState:
+def _make_state(**overrides: object) -> WorldState:
     """Minimal WorldState for dominance-gate tests (mirrors test_ai/fixtures.py)."""
-    defaults: dict = dict(
+    defaults: dict[str, object] = dict(
         character="testchar",
         level=5,
         xp=100,
@@ -43,10 +43,10 @@ def _make_state(**overrides) -> WorldState:
     defaults.setdefault(
         "task_lifecycle_phase",
         derive_task_lifecycle_phase(
-            defaults["task_code"], defaults["task_progress"], defaults["task_total"]
+            defaults["task_code"], defaults["task_progress"], defaults["task_total"]  # type: ignore[arg-type]
         ),
     )
-    return WorldState(**defaults)
+    return WorldState(**defaults)  # type: ignore[arg-type]
 
 
 def test_higher_dmg_crit_now_outvalues_at_gate() -> None:

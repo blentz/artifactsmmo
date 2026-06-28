@@ -22,8 +22,11 @@ def equip_value(stats: ItemStats) -> int:
     tools that score the same on raw attack. Single source shared by the
     UpgradeEquipment goal and the Tier-1 objective.
 
-    Combat score: 2 * (attack + resistance + hp_restore) + nonToolBonus,
-    where nonToolBonus = 0 if subtype == 'tool' else 1. Augmented for
+    Ranks on ``2 * (combat_raw + wisdom + prospecting + inventory_space +
+    haste) + nonToolBonus``, where ``combat_raw`` sums the 8 genuine-combat
+    stats (attack + resistance + hp_restore + hp_bonus + dmg +
+    critical_strike + lifesteal + combat_buff) and nonToolBonus = 0 if
+    subtype == 'tool' else 1. Augmented for
     composition with the kernel-checked combat scorer
     (Formal/PurposeRouting.combatScore): a non-tool weapon strictly
     outranks an attack-equivalent tool, and any strict attack inequality
