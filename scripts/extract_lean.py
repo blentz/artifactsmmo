@@ -1141,6 +1141,19 @@ def emit_recursive_call(ctx: Ctx, e: ast.Call, fname: str) -> tuple[str, LType]:
     return "(" + " ".join(rendered) + ")", ctx.ret
 
 
+def _emit_call_arg(ctx: Ctx, arg_node: ast.expr, want: LType, fname: str) -> str:
+    """Render one positional call argument, type-checked against the parameter
+    type `want`. An empty dict literal `{}` in a Dict-typed parameter slot is
+    pinned by that parameter type (the same rationale as a `dict.get` default or
+    a dict-returning `return {}`) and renders `[]`."""
+    if isinstance(arg_node, ast.Dict) and not arg_node.keys and want.kind == "Dict":
+        return "[]"
+    arg_code, got = emit_expr(ctx, arg_node)
+    if got != want:
+        reject(ctx.src, arg_node, f"argument type mismatch in call to {fname!r}")
+    return arg_code
+
+
 def emit_module_call(ctx: Ctx, e: ast.Call, fname: str) -> tuple[str, LType]:
     """A call to a PREVIOUSLY-extracted function of the same module. A fueled
     callee's leading Int fuel is bridged with `Int.toNat` (Python's `fuel <= 0`
@@ -1162,10 +1175,7 @@ def emit_module_call(ctx: Ctx, e: ast.Call, fname: str) -> tuple[str, LType]:
     elif len(args) != len(params):
         reject(src, e, f"call arity mismatch for {fname!r}")
     for arg_node, want in zip(args, params, strict=True):
-        arg_code, got = emit_expr(ctx, arg_node)
-        if got != want:
-            reject(src, e, f"argument type mismatch in call to {fname!r}")
-        rendered.append(arg_code)
+        rendered.append(_emit_call_arg(ctx, arg_node, want, fname))
     return "(" + " ".join(rendered) + ")", ret
 
 
@@ -1190,10 +1200,7 @@ def emit_import_call(ctx: Ctx, e: ast.Call, fname: str) -> tuple[str, LType]:
     elif len(args) != len(params):
         reject(src, e, f"call arity mismatch for {fname!r}")
     for arg_node, want in zip(args, params, strict=True):
-        arg_code, got = emit_expr(ctx, arg_node)
-        if got != want:
-            reject(src, e, f"argument type mismatch in call to {fname!r}")
-        rendered.append(arg_code)
+        rendered.append(_emit_call_arg(ctx, arg_node, want, fname))
     return "(" + " ".join(rendered) + ")", ret
 
 

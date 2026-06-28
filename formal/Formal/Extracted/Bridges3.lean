@@ -275,9 +275,10 @@ recipe-plumbing inputs. -/
 def eFuel (recipes : List (String × List (String × Int))) : Nat :=
   Int.toNat ((Int.ofNat (List.length recipes)) + 1)
 
-/-- `mats_per_unit` exactly as the extracted core computes it. -/
+/-- `mats_per_unit` exactly as the extracted core computes it. The yield map is
+`[]` (the Python `task_batch` passes `{}` — all-`Y=1`). -/
 def eMats (recipes : List (String × List (String × Int))) (code : String) : Int :=
-  Extracted.RecipeClosure._raw_units (eFuel recipes) code recipes []
+  Extracted.RecipeClosure._raw_units (eFuel recipes) code recipes [] []
 
 /-- The task item's closure exactly as the extracted core computes it. -/
 def eClosure (recipes : List (String × List (String × Int))) (code : String) :
@@ -348,7 +349,7 @@ theorem task_batch_bridge (task_type : Option String) (c : String)
            else
             let no_visited : List (String × Int) := []
             let mats_per_unit := (Extracted.RecipeClosure._raw_units
-              (Int.toNat ((Int.ofNat (List.length recipes)) + 1)) c recipes no_visited)
+              (Int.toNat ((Int.ofNat (List.length recipes)) + 1)) c recipes [] no_visited)
             let closure : List (String × Int) := []
             let closure := (Extracted.RecipeClosure._closure_visited
               (Int.toNat ((Int.ofNat (List.length recipes)) + 1)) c recipes closure)
@@ -557,15 +558,15 @@ private theorem dpos_record (ho : Formal.TaskReservation.Demand)
     · exact absurd (of_decide_eq_true h') hik
     · exact h i h'
 
-private theorem foldl_children_dpos (r : Formal.TaskReservation.Recipe) (fuel : Nat)
+private theorem foldl_children_dpos (r : Formal.TaskReservation.Recipe) (y : Nat → Nat) (fuel : Nat)
     (hcd : ∀ (root mult : Nat) (visited : List Nat)
         (out : Formal.TaskReservation.Demand), DPos out → 1 ≤ mult →
-        DPos (Formal.TaskReservation.closureDemand r fuel root mult visited out)) :
+        DPos (Formal.TaskReservation.closureDemand r y fuel root mult visited out)) :
     ∀ (l : List (Nat × Nat)) (mult : Nat) (visited : List Nat)
       (out : Formal.TaskReservation.Demand), DPos out → 1 ≤ mult →
       DPos (l.foldl
         (fun acc p => if p.2 = 0 then acc
-          else Formal.TaskReservation.closureDemand r fuel p.1 (mult * p.2) visited acc)
+          else Formal.TaskReservation.closureDemand r y fuel p.1 (mult * p.2) visited acc)
         out) := by
   intro l
   induction l with
@@ -582,11 +583,12 @@ private theorem foldl_children_dpos (r : Formal.TaskReservation.Recipe) (fuel : 
       exact ihl mult visited _ (hcd p.1 (mult * p.2) visited out hout hm') hm
 
 /-- The hand `closureDemand` preserves the positivity invariant for any
-multiplier ≥ 1. -/
-private theorem closureDemand_dpos (r : Formal.TaskReservation.Recipe) :
+multiplier ≥ 1, given every yield is ≥ 1 (so each batch count is ≥ 1). -/
+private theorem closureDemand_dpos (r : Formal.TaskReservation.Recipe) (y : Nat → Nat)
+    (hy : ∀ k, 1 ≤ y k) :
     ∀ (fuel root mult : Nat) (visited : List Nat)
       (out : Formal.TaskReservation.Demand), DPos out → 1 ≤ mult →
-      DPos (Formal.TaskReservation.closureDemand r fuel root mult visited out) := by
+      DPos (Formal.TaskReservation.closureDemand r y fuel root mult visited out) := by
   intro fuel
   induction fuel with
   | zero => intro root mult visited out hout _; exact hout
@@ -597,9 +599,11 @@ private theorem closureDemand_dpos (r : Formal.TaskReservation.Recipe) :
     · rw [if_pos hv]
       exact hout
     · rw [if_neg hv]
-      exact foldl_children_dpos r fuel ih (r root) mult (root :: visited)
+      exact foldl_children_dpos r y fuel ih (r root)
+        (Formal.TaskReservation.ceilDiv mult (y root)) (root :: visited)
         (Formal.TaskReservation.record out root mult)
-        (dpos_record out root mult hm hout) hm
+        (dpos_record out root mult hm hout)
+        (Formal.TaskReservation.one_le_ceilDiv hm (hy root))
 
 /-- Demand-map correspondence: pointwise lookup equality at every encoded key
 plus key-set equivalence in both directions. -/
@@ -694,7 +698,7 @@ private def eChild (fuel : Nat) (multiplier : Int)
   fun out _x =>
     if (decide ((_x.2 : Int) ≤ 0)) then out
     else Extracted.RecipeClosure._closure_demand fuel (_x.1) (multiplier * (_x.2))
-      recipes sub_visited out
+      recipes [] sub_visited out
 
 /-- Children-walk correspondence, GIVEN node-level correspondence at the same
 fuel (fuel induction is outside, list induction here — the hand
@@ -706,8 +710,8 @@ private theorem foldl_children_bridge (f : Nat → String)
         VisRel f ev hv → DemRel f eo ho → DPos ho → 1 ≤ mult →
         DemRel f
           (Extracted.RecipeClosure._closure_demand fuel (f root) (Int.ofNat mult)
-            (encRecipes f es) ev eo)
-          (Formal.TaskReservation.closureDemand (rOf es) fuel root mult hv ho)) :
+            (encRecipes f es) [] ev eo)
+          (Formal.TaskReservation.closureDemand (rOf es) (fun _ => 1) fuel root mult hv ho)) :
     ∀ (l : List (Nat × Nat)) (mult : Nat) (hv : List Nat)
       (ev : List (String × Int)) (ho : Formal.TaskReservation.Demand)
       (eo : List (String × Int)),
@@ -716,7 +720,8 @@ private theorem foldl_children_bridge (f : Nat → String)
         (List.foldl (eChild fuel (Int.ofNat mult) (encRecipes f es) ev) eo (encRcp f l))
         (l.foldl
           (fun acc p => if p.2 = 0 then acc
-            else Formal.TaskReservation.closureDemand (rOf es) fuel p.1 (mult * p.2) hv acc)
+            else Formal.TaskReservation.closureDemand (rOf es) (fun _ => 1) fuel p.1 (mult * p.2)
+              hv acc)
           ho) := by
   intro l
   induction l with
@@ -738,7 +743,7 @@ private theorem foldl_children_bridge (f : Nat → String)
     · have hq1 : 1 ≤ p.2 := Nat.one_le_iff_ne_zero.mpr hq
       have he : eChild fuel (Int.ofNat mult) (encRecipes f es) ev eo (f p.1, Int.ofNat p.2)
           = Extracted.RecipeClosure._closure_demand fuel (f p.1) (Int.ofNat (mult * p.2))
-              (encRecipes f es) ev eo := by
+              (encRecipes f es) [] ev eo := by
         unfold eChild
         rw [if_neg (show ¬ (decide (((f p.1, Int.ofNat p.2).2 : Int) ≤ 0)) = true by
           simp; omega)]
@@ -748,13 +753,30 @@ private theorem foldl_children_bridge (f : Nat → String)
         (Nat.mul_ne_zero (Nat.one_le_iff_ne_zero.mp hm) hq)
       exact ihl mult hv ev _ _ hvr
         (hcd p.1 (mult * p.2) hv ev ho eo hvr hrel hpos hm')
-        (closureDemand_dpos (rOf es) fuel p.1 (mult * p.2) hv ho hpos hm') hm
+        (closureDemand_dpos (rOf es) (fun _ => 1) (fun _ => Nat.le_refl 1) fuel p.1 (mult * p.2)
+          hv ho hpos hm') hm
+
+/-- The extracted ceil-batch `-(fdiv (-mult) (yields.get root 1))` at the
+all-`Y=1` integration yield (`yields = []`, so the lookup is the default `1`)
+is exactly `mult` — `Int.fdiv _ 1` is the identity. -/
+private theorem batches_one (m : Nat) (k : String) :
+    -(Int.fdiv (-(Int.ofNat m))
+        (Extracted.RecipeClosure._dictGetD ([] : List (String × Int)) k 1)) = Int.ofNat m := by
+  show -(Int.fdiv (-(Int.ofNat m)) 1) = Int.ofNat m
+  rw [Int.fdiv_one]; omega
 
 /-- BRIDGE: the extracted `_closure_demand` (threaded dict, replace-or-append
 writes, fall-through max-record `if`) computes the SAME demand map as the
 proved hand `Formal.TaskReservation.closureDemand` (prepend-record list) —
 pointwise lookups and key sets — for EVERY fuel, root, multiplier ≥ 1,
-encoded recipe graph and corresponding visited/accumulator states. -/
+encoded recipe graph and corresponding visited/accumulator states.
+
+The yield map is the all-`Y=1` integration value (`[]` on the extracted side,
+`fun _ => 1` on the hand side): both the Python `task_reservation` and the
+extracted closure pass `{}` / `[]`, so the ceil-batch reduces to the identity
+(`batches_one` / `ceilDiv_one`) and the demand math matches the original. The
+general-`Y` ceil-batch correctness lives in the hand role theorem
+`closureDemand_mono` (kernel, ∀ yield) and the Python differential. -/
 theorem closure_demand_bridge (f : Nat → String)
     (hf : ∀ {a b : Nat}, f a = f b → a = b)
     (es : List (Nat × List (Nat × Nat))) :
@@ -763,8 +785,8 @@ theorem closure_demand_bridge (f : Nat → String)
       VisRel f ev hv → DemRel f eo ho → DPos ho → 1 ≤ mult →
       DemRel f
         (Extracted.RecipeClosure._closure_demand fuel (f root) (Int.ofNat mult)
-          (encRecipes f es) ev eo)
-        (Formal.TaskReservation.closureDemand (rOf es) fuel root mult hv ho) := by
+          (encRecipes f es) [] ev eo)
+        (Formal.TaskReservation.closureDemand (rOf es) (fun _ => 1) fuel root mult hv ho) := by
   intro fuel
   induction fuel with
   | zero =>
@@ -774,7 +796,8 @@ theorem closure_demand_bridge (f : Nat → String)
     intro root mult hv ev ho eo hvr hrel hpos hm
     have hguard := hvr root
     simp only [Extracted.RecipeClosure._closure_demand,
-      Formal.TaskReservation.closureDemand]
+      Formal.TaskReservation.closureDemand, batches_one,
+      Formal.TaskReservation.ceilDiv_one]
     by_cases hcv : hv.contains root = true
     · -- revisit: both sides return their accumulators untouched.
       have hguard1 : Extracted.RecipeClosure._dictGetD ev (f root) 0 = 1 := by
@@ -838,7 +861,7 @@ theorem reserved_demand_bridge (f : Nat → String)
     DemRel f
       (Extracted.TaskReservation.task_reserved_demand_pure tt (some (f code))
         (Int.ofNat total) (Int.ofNat progress) (encRecipes f es))
-      (Formal.TaskReservation.reservedDemand (rOf es) (es.length + 1)
+      (Formal.TaskReservation.reservedDemand (rOf es) (fun _ => 1) (es.length + 1)
         (encCtx tt code total progress)) := by
   show DemRel f
     (if ((!(decide (tt = some "items"))) || (decide (f code = "")))
@@ -850,7 +873,7 @@ theorem reserved_demand_bridge (f : Nat → String)
        else
         Extracted.RecipeClosure._closure_demand
           (Int.toNat ((Int.ofNat (List.length (encRecipes f es))) + 1)) (f code) remaining
-          (encRecipes f es) [] []))
+          (encRecipes f es) [] [] []))
     _
   unfold Formal.TaskReservation.reservedDemand
   by_cases htt : tt = some "items"
@@ -898,13 +921,13 @@ theorem reserved_demand_bridge (f : Nat → String)
     exact demRel_nil f
 
 /-- The hand `reservedDemand` satisfies the ≥ 1 invariant. -/
-private theorem reserved_demand_dpos (r : Formal.TaskReservation.Recipe)
-    (fuel : Nat) (t : Formal.TaskReservation.TaskCtx) :
-    DPos (Formal.TaskReservation.reservedDemand r fuel t) := by
+private theorem reserved_demand_dpos (r : Formal.TaskReservation.Recipe) (y : Nat → Nat)
+    (hy : ∀ k, 1 ≤ y k) (fuel : Nat) (t : Formal.TaskReservation.TaskCtx) :
+    DPos (Formal.TaskReservation.reservedDemand r y fuel t) := by
   unfold Formal.TaskReservation.reservedDemand
   by_cases h : t.taskIsItems = true ∧ 0 < Formal.TaskReservation.remaining t
   · rw [if_pos h]
-    exact closureDemand_dpos r fuel t.taskCode (Formal.TaskReservation.remaining t) []
+    exact closureDemand_dpos r y hy fuel t.taskCode (Formal.TaskReservation.remaining t) []
       [] dpos_nil h.2
   · rw [if_neg h]
     exact dpos_nil
@@ -964,10 +987,10 @@ private theorem conflict_fold_bridge (f : Nat → String)
         (List.foldl
           (fun conflict _x => Extracted.RecipeClosure._closure_demand
             (Int.toNat ((Int.ofNat (List.length (encRecipes f es))) + 1)) (_x.1) 1
-            (encRecipes f es) [] conflict)
+            (encRecipes f es) [] [] conflict)
           eo (ns.map (fun i => (f i, (1 : Int)))))
         (ns.foldl
-          (fun acc root => Formal.TaskReservation.closureDemand (rOf es)
+          (fun acc root => Formal.TaskReservation.closureDemand (rOf es) (fun _ => 1)
             (es.length + 1) root 1 [] acc)
           ho) := by
   intro ns
@@ -984,7 +1007,8 @@ private theorem conflict_fold_bridge (f : Nat → String)
             = es.length + 1 from eFuel_enc f es]
         exact closure_demand_bridge f hf es (es.length + 1) i 1 [] [] ho eo (visRel_nil f)
           hrel hpos (Nat.le_refl 1))
-      (closureDemand_dpos (rOf es) (es.length + 1) i 1 [] ho hpos (Nat.le_refl 1))
+      (closureDemand_dpos (rOf es) (fun _ => 1) (fun _ => Nat.le_refl 1) (es.length + 1) i 1 []
+        ho hpos (Nat.le_refl 1))
 
 /-- The suppression-loop body of `consumes_reserved_pure` (the generated
 `_findSome` lambda, zeta-reduced), named so the loop lemma can quantify it. -/
@@ -1142,13 +1166,14 @@ theorem consumes_reserved_bridge (f : Nat → String)
         (encAssoc f Int.ofNat invE)
         (if bank_present then some (encAssoc f Int.ofNat bankE) else none)
         (encRecipes f es)
-      = Formal.TaskReservation.consumesReserved (rOf es) (es.length + 1)
+      = Formal.TaskReservation.consumesReserved (rOf es) (fun _ => 1) (es.length + 1)
           (encCtx tt code total progress)
           (fun i => lookAssoc invE i 0
             + (if bank_present then lookAssoc bankE i 0 else 0))
           ns := by
   have hd := reserved_demand_bridge f hf code hne es tt total progress
-  have hdp' := reserved_demand_dpos (rOf es) (es.length + 1) (encCtx tt code total progress)
+  have hdp' := reserved_demand_dpos (rOf es) (fun _ => 1) (fun _ => Nat.le_refl 1)
+    (es.length + 1) (encCtx tt code total progress)
   cases hde : Extracted.TaskReservation.task_reserved_demand_pure tt (some (f code))
       (Int.ofNat total) (Int.ofNat progress) (encRecipes f es) with
   | nil =>
@@ -1159,11 +1184,11 @@ theorem consumes_reserved_bridge (f : Nat → String)
     rw [if_pos (show (decide ((Int.ofNat (List.length ([] : List (String × Int)))) = 0))
         = true from by decide)]
     have hknone : ∀ i, Formal.TaskReservation.hasKey
-        (Formal.TaskReservation.reservedDemand (rOf es) (es.length + 1)
+        (Formal.TaskReservation.reservedDemand (rOf es) (fun _ => 1) (es.length + 1)
           (encCtx tt code total progress)) i = false := by
       intro i
       by_cases hk : Formal.TaskReservation.hasKey
-          (Formal.TaskReservation.reservedDemand (rOf es) (es.length + 1)
+          (Formal.TaskReservation.reservedDemand (rOf es) (fun _ => 1) (es.length + 1)
             (encCtx tt code total progress)) i = true
       · obtain ⟨v, hv⟩ := hd.2.2 i hk
         exact absurd hv (List.not_mem_nil)
@@ -1237,7 +1262,7 @@ theorem task_reservation_done_inert_extracted (f : Nat → String)
         (encRecipes f es)
       = false := by
   rw [consumes_reserved_bridge f hf code hne es tt total progress ns invE bankE bank_present]
-  exact (Formal.TaskReservation.remaining_zero_no_reserve (rOf es) (es.length + 1)
+  exact (Formal.TaskReservation.remaining_zero_no_reserve (rOf es) (fun _ => 1) (es.length + 1)
     (encCtx tt code total progress) _ ns
     (by show total - progress = 0; omega)).2
 
@@ -1282,17 +1307,17 @@ private theorem foldl_units_bridge (f : Nat → String)
     (es : List (Nat × List (Nat × Nat))) (fuel : Nat)
     (deeper : List (String × Int)) (hv' : List Nat)
     (hEH : ∀ j : Nat,
-      Extracted.RecipeClosure._raw_units fuel (f j) (encRecipes f es) deeper
-        = Int.ofNat (Formal.RecipeClosure.rawUnitsAux (rOf es) fuel hv' j)) :
+      Extracted.RecipeClosure._raw_units fuel (f j) (encRecipes f es) [] deeper
+        = Int.ofNat (Formal.RecipeClosure.rawUnitsAux (rOf es) (fun _ => 1) fuel hv' j)) :
     ∀ (l : List (Nat × Nat)) (acc : Nat),
       List.foldl
         (fun total _x => total
           + ((_x.2 : Int)
-            * (Extracted.RecipeClosure._raw_units fuel (_x.1) (encRecipes f es) deeper)))
+            * (Extracted.RecipeClosure._raw_units fuel (_x.1) (encRecipes f es) [] deeper)))
         (Int.ofNat acc) (encRcp f l)
         = Int.ofNat (acc
             + (l.map (fun p =>
-                p.2 * Formal.RecipeClosure.rawUnitsAux (rOf es) fuel hv' p.1)).sum) := by
+                p.2 * Formal.RecipeClosure.rawUnitsAux (rOf es) (fun _ => 1) fuel hv' p.1)).sum) := by
   intro l
   induction l with
   | nil =>
@@ -1306,12 +1331,13 @@ private theorem foldl_units_bridge (f : Nat → String)
     rw [show ((Int.ofNat acc : Int)
           + (((f p.1, Int.ofNat p.2) : String × Int).2
             * (Extracted.RecipeClosure._raw_units fuel
-                ((f p.1, Int.ofNat p.2) : String × Int).1 (encRecipes f es) deeper)))
-        = Int.ofNat (acc + p.2 * Formal.RecipeClosure.rawUnitsAux (rOf es) fuel hv' p.1) by
+                ((f p.1, Int.ofNat p.2) : String × Int).1 (encRecipes f es) [] deeper)))
+        = Int.ofNat (acc + p.2
+            * Formal.RecipeClosure.rawUnitsAux (rOf es) (fun _ => 1) fuel hv' p.1) by
       rw [show ((f p.1, Int.ofNat p.2) : String × Int).1 = f p.1 from rfl,
           show ((f p.1, Int.ofNat p.2) : String × Int).2 = Int.ofNat p.2 from rfl, hEH p.1]
       simp only [Int.ofNat_eq_natCast, Int.natCast_add, Int.natCast_mul]]
-    rw [ihl (acc + p.2 * Formal.RecipeClosure.rawUnitsAux (rOf es) fuel hv' p.1)]
+    rw [ihl (acc + p.2 * Formal.RecipeClosure.rawUnitsAux (rOf es) (fun _ => 1) fuel hv' p.1)]
     rw [List.map_cons, List.sum_cons, Nat.add_assoc]
 
 /-- BRIDGE: the extracted `_raw_units` equals the hand
@@ -1324,8 +1350,8 @@ theorem raw_units_bridge (f : Nat → String)
     (es : List (Nat × List (Nat × Nat))) :
     ∀ (fuel : Nat) (hv : List Nat) (ev : List (String × Int)),
       VisRel f ev hv → ∀ (i : Nat),
-      Extracted.RecipeClosure._raw_units fuel (f i) (encRecipes f es) ev
-        = Int.ofNat (Formal.RecipeClosure.rawUnitsAux (rOf es) fuel hv i) := by
+      Extracted.RecipeClosure._raw_units fuel (f i) (encRecipes f es) [] ev
+        = Int.ofNat (Formal.RecipeClosure.rawUnitsAux (rOf es) (fun _ => 1) fuel hv i) := by
   intro fuel
   induction fuel with
   | zero =>
@@ -1338,7 +1364,8 @@ theorem raw_units_bridge (f : Nat → String)
     by_cases hcv : hv.contains i = true
     · rw [if_pos (show (decide ((Extracted.RecipeClosure._dictGetD ev (f i) 0) = 1)) = true
         by rw [hguard, if_pos hcv]; decide)]
-      rw [Formal.RecipeClosure.rawUnits_revisit (rOf es) fuel hv i (mem_of_contains_true hcv)]
+      rw [Formal.RecipeClosure.rawUnits_revisit (rOf es) (fun _ => 1) fuel hv i
+        (mem_of_contains_true hcv)]
       rfl
     · rw [Bool.not_eq_true] at hcv
       have hguard0 : Extracted.RecipeClosure._dictGetD ev (f i) 0 = 0 := by
@@ -1353,7 +1380,7 @@ theorem raw_units_bridge (f : Nat → String)
         rw [if_pos (show (decide ((Int.ofNat (List.length (encRcp f ([] : List (Nat × Nat)))))
             = 0)) = true from decide_eq_true (show (Int.ofNat (List.length
               (encRcp f ([] : List (Nat × Nat))))) = 0 from rfl))]
-        rw [Formal.RecipeClosure.rawUnits_raw (rOf es) fuel hv i hmem hrcp]
+        rw [Formal.RecipeClosure.rawUnits_raw (rOf es) (fun _ => 1) fuel hv i hmem hrcp]
         rfl
       | cons phead ptail =>
         rw [if_neg (show ¬ ((decide ((Int.ofNat (List.length (encRcp f (phead :: ptail))))
@@ -1363,8 +1390,8 @@ theorem raw_units_bridge (f : Nat → String)
           simp only [encRcp, encAssoc, List.length_map, List.length_cons,
             Int.ofNat_eq_natCast] at this
           omega)]
-        rw [Formal.RecipeClosure.rawUnits_eq_cost (rOf es) fuel hv i hmem (phead :: ptail)
-          hrcp (by intro hc; cases hc)]
+        rw [Formal.RecipeClosure.rawUnits_eq_cost (rOf es) (fun _ => 1) fuel hv i hmem
+          (phead :: ptail) hrcp (by intro hc; cases hc)]
         have hvr' : VisRel f (Extracted.RecipeClosure._dictSet ev (f i) 1) (i :: hv) :=
           visRel_mark f hf ev hv i hvr
         have hfold := foldl_units_bridge f es fuel
@@ -1372,6 +1399,11 @@ theorem raw_units_bridge (f : Nat → String)
           (fun j => ihf (i :: hv) (Extracted.RecipeClosure._dictSet ev (f i) 1) hvr' j)
           (phead :: ptail) 0
         rw [Nat.zero_add] at hfold
+        -- extracted ceil `-(fdiv (-Σ) (yields.get i 1))` at yields=[] is Σ (fdiv by 1);
+        -- hand `ceilDiv Σ ((fun _=>1) i)` is Σ (ceilDiv_one): both the bare map-sum.
+        simp only [Formal.RecipeClosure.ceilDiv_one]
+        rw [show Extracted.RecipeClosure._dictGetD ([] : List (String × Int)) (f i) (1 : Int) = 1
+          from rfl, Int.fdiv_one, Int.neg_neg]
         exact hfold
 
 /-- Every key of an extracted visited map is the encoding of a reachable
@@ -2017,11 +2049,11 @@ private def pinRDiamond : Formal.RecipeClosure.Recipe := fun i =>
   if i = 0 then [(1, 2), (2, 3)] else if i = 1 then [(3, 5)]
   else if i = 2 then [(3, 7)] else []
 
-/-- The diamond quantity math agrees end-to-end: 2·5 + 3·7 = 31. -/
+/-- The diamond quantity math agrees end-to-end: 2·5 + 3·7 = 31 (all-`Y=1`). -/
 theorem raw_units_pin_diamond :
-    Extracted.RecipeClosure._raw_units 4 "0" pinRecipesDiamond []
-      = Int.ofNat (Formal.RecipeClosure.rawUnits pinRDiamond 4 0)
-      ∧ Extracted.RecipeClosure._raw_units 4 "0" pinRecipesDiamond [] = 31 := by decide
+    Extracted.RecipeClosure._raw_units 4 "0" pinRecipesDiamond [] []
+      = Int.ofNat (Formal.RecipeClosure.rawUnits pinRDiamond (fun _ => 1) 4 0)
+      ∧ Extracted.RecipeClosure._raw_units 4 "0" pinRecipesDiamond [] [] = 31 := by decide
 
 /-- Cycle: 0 ← 1 x2; 1 ← 0 x3 (the registered visited-guard mutant diverges
 here: dropping the `_raw_units` revisit short-circuit yields 12, not 6). -/
@@ -2033,8 +2065,8 @@ private def pinRCycle : Formal.RecipeClosure.Recipe := fun i =>
 
 /-- Cyclic quantity math: units(0) = 2 · (3 · 1) = 6 on both sides. -/
 theorem raw_units_pin_cycle :
-    Extracted.RecipeClosure._raw_units 3 "0" pinRecipesCycle []
-      = Int.ofNat (Formal.RecipeClosure.rawUnits pinRCycle 3 0)
-      ∧ Extracted.RecipeClosure._raw_units 3 "0" pinRecipesCycle [] = 6 := by decide
+    Extracted.RecipeClosure._raw_units 3 "0" pinRecipesCycle [] []
+      = Int.ofNat (Formal.RecipeClosure.rawUnits pinRCycle (fun _ => 1) 3 0)
+      ∧ Extracted.RecipeClosure._raw_units 3 "0" pinRecipesCycle [] [] = 6 := by decide
 
 end Extracted.Bridges

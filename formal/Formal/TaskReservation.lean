@@ -71,14 +71,40 @@ theorem lookup_record (out : Demand) (k v i : Nat) :
   · subst h; simp [record, lookup]
   · simp [record, lookup, h]
 
+/-- Ceil-division `⌈a / b⌉` on `Nat` (the batch-yield arithmetic). Mirrors the
+Python `-(-a // b)` / extracted `-(Int.fdiv (-a) b)`. Identity at `b = 1`. -/
+def ceilDiv (a b : Nat) : Nat := (a + b - 1) / b
+
+/-- `ceilDiv` is monotone in the numerator (Nat division is). -/
+theorem ceilDiv_mono {a b : Nat} (c : Nat) (h : a ≤ b) : ceilDiv a c ≤ ceilDiv b c := by
+  unfold ceilDiv
+  apply Nat.div_le_div_right
+  omega
+
+/-- `ceilDiv a 1 = a` — the all-`Y=1` no-op (used by the extracted↔hand bridge). -/
+theorem ceilDiv_one (a : Nat) : ceilDiv a 1 = a := by unfold ceilDiv; omega
+
+/-- A positive multiplier over a positive yield needs at least one craft run. -/
+theorem one_le_ceilDiv {mult c : Nat} (hm : 1 ≤ mult) (hc : 1 ≤ c) : 1 ≤ ceilDiv mult c := by
+  unfold ceilDiv
+  rw [Nat.one_le_div_iff (by omega)]
+  omega
+
 /-- Closure demand of `root` x `mult` accumulated into `out`: the root and
 every transitive recipe material at its cumulative required quantity
 (max-merged across contributing paths). The foldl over `r root` is the
 Python `for mat, qty_per in recipe.items()` walk (zero-qty edges skipped,
 mirroring `if qty_per <= 0: continue`); the per-path `visited` makes cyclic
 recipes terminate exactly like the Python frozenset guard; `fuel` only
-bounds Lean recursion (never binding when fuel ≥ #items). -/
-def closureDemand (r : Recipe) : Nat → Nat → Nat → List Nat → Demand → Demand
+bounds Lean recursion (never binding when fuel ≥ #items).
+
+`y` is the per-item yield map (default 1). To produce `mult` of a yield-`y root`
+node needs `⌈mult / y root⌉` craft runs (`ceilDiv mult (y root)`), each
+consuming `qty_per` of each ingredient — so children scale by
+`ceilDiv mult (y root) * qty_per` (the Python `batches * qty_per`). The root is
+still recorded at `mult` (the demanded item count). At `y root = 1`,
+`ceilDiv mult 1 = mult`, recovering the original `mult * qty_per`. -/
+def closureDemand (r : Recipe) (y : Nat → Nat) : Nat → Nat → Nat → List Nat → Demand → Demand
   | 0, _, _, _, out => out
   | fuel + 1, root, mult, visited, out =>
     if visited.contains root then out
@@ -86,25 +112,25 @@ def closureDemand (r : Recipe) : Nat → Nat → Nat → List Nat → Demand →
       (r root).foldl
         (fun acc p =>
           if p.2 = 0 then acc
-          else closureDemand r fuel p.1 (mult * p.2) (root :: visited) acc)
+          else closureDemand r y fuel p.1 (ceilDiv mult (y root) * p.2) (root :: visited) acc)
         (record out root mult)
 
 /-- Children-walk monotonicity, GIVEN node-level monotonicity at the same
 fuel (the induction is on fuel outside, on the child list here). -/
-theorem foldl_children_mono (r : Recipe) (fuel : Nat)
+theorem foldl_children_mono (r : Recipe) (y : Nat → Nat) (fuel : Nat)
     (hcd : ∀ (root m₁ m₂ : Nat) (visited : List Nat) (out₁ out₂ : Demand),
       m₁ ≤ m₂ → (∀ j, lookup out₁ j ≤ lookup out₂ j) →
-      ∀ i, lookup (closureDemand r fuel root m₁ visited out₁) i
-            ≤ lookup (closureDemand r fuel root m₂ visited out₂) i) :
+      ∀ i, lookup (closureDemand r y fuel root m₁ visited out₁) i
+            ≤ lookup (closureDemand r y fuel root m₂ visited out₂) i) :
     ∀ (l : List (Nat × Nat)) (m₁ m₂ : Nat) (visited : List Nat)
       (out₁ out₂ : Demand),
       m₁ ≤ m₂ → (∀ j, lookup out₁ j ≤ lookup out₂ j) →
       ∀ i, lookup (l.foldl
               (fun acc p => if p.2 = 0 then acc
-                else closureDemand r fuel p.1 (m₁ * p.2) visited acc) out₁) i
+                else closureDemand r y fuel p.1 (m₁ * p.2) visited acc) out₁) i
             ≤ lookup (l.foldl
               (fun acc p => if p.2 = 0 then acc
-                else closureDemand r fuel p.1 (m₂ * p.2) visited acc) out₂) i := by
+                else closureDemand r y fuel p.1 (m₂ * p.2) visited acc) out₂) i := by
   intro l
   induction l with
   | nil =>
@@ -124,11 +150,11 @@ theorem foldl_children_mono (r : Recipe) (fuel : Nat)
 /-- KEY LEMMA: `closureDemand` is pointwise monotone in the multiplier (and
 the accumulator). Same recipe/root/visited/fuel ⇒ same traversal; a smaller
 multiplier never yields a larger demand anywhere. -/
-theorem closureDemand_mono (r : Recipe) :
+theorem closureDemand_mono (r : Recipe) (y : Nat → Nat) :
     ∀ (fuel root m₁ m₂ : Nat) (visited : List Nat) (out₁ out₂ : Demand),
       m₁ ≤ m₂ → (∀ j, lookup out₁ j ≤ lookup out₂ j) →
-      ∀ i, lookup (closureDemand r fuel root m₁ visited out₁) i
-            ≤ lookup (closureDemand r fuel root m₂ visited out₂) i := by
+      ∀ i, lookup (closureDemand r y fuel root m₁ visited out₁) i
+            ≤ lookup (closureDemand r y fuel root m₂ visited out₂) i := by
   intro fuel
   induction fuel with
   | zero =>
@@ -153,8 +179,9 @@ theorem closureDemand_mono (r : Recipe) :
           exact hout j
       simp only [closureDemand]
       rw [if_neg hv, if_neg hv]
-      exact foldl_children_mono r fuel ih (r root) m₁ m₂ (root :: visited)
-        (record out₁ root m₁) (record out₂ root m₂) hm hrec i
+      exact foldl_children_mono r y fuel ih (r root) (ceilDiv m₁ (y root)) (ceilDiv m₂ (y root))
+        (root :: visited) (record out₁ root m₁) (record out₂ root m₂)
+        (ceilDiv_mono (y root) hm) hrec i
 
 /-- The active-task context (the slice of WorldState the reservation reads). -/
 structure TaskCtx where
@@ -167,26 +194,27 @@ structure TaskCtx where
 def remaining (t : TaskCtx) : Nat := t.taskTotal - t.taskProgress
 
 /-- `task_reserved_demand`: {} unless an items task is active with
-remaining > 0; else the closure demand of the task item x remaining. -/
-def reservedDemand (r : Recipe) (fuel : Nat) (t : TaskCtx) : Demand :=
+remaining > 0; else the closure demand of the task item x remaining. `y` is the
+per-item yield map (default 1). -/
+def reservedDemand (r : Recipe) (y : Nat → Nat) (fuel : Nat) (t : TaskCtx) : Demand :=
   if t.taskIsItems = true ∧ 0 < remaining t then
-    closureDemand r fuel t.taskCode (remaining t) [] []
+    closureDemand r y fuel t.taskCode (remaining t) [] []
   else []
 
 /-- The conflict set of a goal's `needed` keys: each key's own closure
 (keys(needed) ∪ closure_inputs(needed); the multiplier is irrelevant — only
 key membership is read — and the Python uses 1). -/
-def conflictClosure (r : Recipe) (fuel : Nat) (needed : List Nat) : Demand :=
-  needed.foldl (fun acc root => closureDemand r fuel root 1 [] acc) []
+def conflictClosure (r : Recipe) (y : Nat → Nat) (fuel : Nat) (needed : List Nat) : Demand :=
+  needed.foldl (fun acc root => closureDemand r y fuel root 1 [] acc) []
 
 /-- `consumes_reserved`: some conflict item is reserved, owned, and owned at
 or below its reserved demand (no surplus). -/
-def consumesReserved (r : Recipe) (fuel : Nat) (t : TaskCtx)
+def consumesReserved (r : Recipe) (y : Nat → Nat) (fuel : Nat) (t : TaskCtx)
     (owned : Nat → Nat) (needed : List Nat) : Bool :=
-  (conflictClosure r fuel needed).any (fun p =>
-    hasKey (reservedDemand r fuel t) p.1
+  (conflictClosure r y fuel needed).any (fun p =>
+    hasKey (reservedDemand r y fuel t) p.1
       && decide (0 < owned p.1)
-      && decide (owned p.1 ≤ lookup (reservedDemand r fuel t) p.1))
+      && decide (owned p.1 ≤ lookup (reservedDemand r y fuel t) p.1))
 
 /-- `List.any` is false when the predicate is false on every element
 (core-only helper; avoids a Mathlib dependency). -/
@@ -201,11 +229,11 @@ theorem any_false {α : Type} (l : List α) (p : α → Bool)
 
 /-! ### (1) Task done ⇒ nothing reserved, nothing suppressed. -/
 
-theorem remaining_zero_no_reserve (r : Recipe) (fuel : Nat) (t : TaskCtx)
+theorem remaining_zero_no_reserve (r : Recipe) (y : Nat → Nat) (fuel : Nat) (t : TaskCtx)
     (owned : Nat → Nat) (needed : List Nat) (h : remaining t = 0) :
-    reservedDemand r fuel t = []
-      ∧ consumesReserved r fuel t owned needed = false := by
-  have hres : reservedDemand r fuel t = [] := by
+    reservedDemand r y fuel t = []
+      ∧ consumesReserved r y fuel t owned needed = false := by
+  have hres : reservedDemand r y fuel t = [] := by
     unfold reservedDemand
     have hng : ¬ (t.taskIsItems = true ∧ 0 < remaining t) :=
       fun hc => absurd hc.2 (by omega)
@@ -218,30 +246,30 @@ theorem remaining_zero_no_reserve (r : Recipe) (fuel : Nat) (t : TaskCtx)
 
 /-! ### (2) Surplus passes: strictly above demand everywhere ⇒ free. -/
 
-theorem surplus_passes (r : Recipe) (fuel : Nat) (t : TaskCtx)
+theorem surplus_passes (r : Recipe) (y : Nat → Nat) (fuel : Nat) (t : TaskCtx)
     (owned : Nat → Nat) (needed : List Nat)
-    (h : ∀ i, hasKey (reservedDemand r fuel t) i = true →
-          lookup (reservedDemand r fuel t) i < owned i) :
-    consumesReserved r fuel t owned needed = false := by
+    (h : ∀ i, hasKey (reservedDemand r y fuel t) i = true →
+          lookup (reservedDemand r y fuel t) i < owned i) :
+    consumesReserved r y fuel t owned needed = false := by
   unfold consumesReserved
   apply any_false
   intro p _hp
-  by_cases hk : hasKey (reservedDemand r fuel t) p.1 = true
+  by_cases hk : hasKey (reservedDemand r y fuel t) p.1 = true
   · have hlt := h p.1 hk
-    have hle : ¬ (owned p.1 ≤ lookup (reservedDemand r fuel t) p.1) := by omega
+    have hle : ¬ (owned p.1 ≤ lookup (reservedDemand r y fuel t) p.1) := by omega
     simp [hle]
   · simp only [Bool.not_eq_true] at hk
     simp [hk]
 
 /-! ### (3) Demand is monotone: progress↑ ⇒ reservation pointwise ≤. -/
 
-theorem demand_monotone (r : Recipe) (fuel : Nat) (t₁ t₂ : TaskCtx)
+theorem demand_monotone (r : Recipe) (y : Nat → Nat) (fuel : Nat) (t₁ t₂ : TaskCtx)
     (hitems : t₁.taskIsItems = t₂.taskIsItems)
     (hcode : t₁.taskCode = t₂.taskCode)
     (htotal : t₁.taskTotal = t₂.taskTotal)
     (hprog : t₁.taskProgress ≤ t₂.taskProgress) :
-    ∀ i, lookup (reservedDemand r fuel t₂) i
-          ≤ lookup (reservedDemand r fuel t₁) i := by
+    ∀ i, lookup (reservedDemand r y fuel t₂) i
+          ≤ lookup (reservedDemand r y fuel t₁) i := by
   intro i
   have hrem : remaining t₂ ≤ remaining t₁ := by
     unfold remaining
@@ -251,7 +279,7 @@ theorem demand_monotone (r : Recipe) (fuel : Nat) (t₁ t₂ : TaskCtx)
   · have h1 : t₁.taskIsItems = true ∧ 0 < remaining t₁ :=
       ⟨by rw [hitems]; exact h2.1, by omega⟩
     rw [if_pos h1, if_pos h2, hcode]
-    exact closureDemand_mono r fuel t₂.taskCode (remaining t₂) (remaining t₁)
+    exact closureDemand_mono r y fuel t₂.taskCode (remaining t₂) (remaining t₁)
       [] [] [] hrem (fun _ => Nat.le_refl 0) i
   · rw [if_neg h2]
     exact Nat.zero_le _
@@ -263,19 +291,20 @@ Recipe: helmet (2) ← 6 x bar (1) ← 10 x ore (0); items task = bar, 0/11. -/
 def traceRecipe : Recipe := fun i =>
   if i = 2 then [(1, 6)] else if i = 1 then [(0, 10)] else []
 
-/-- 5 bars held, task 0/11 → the helmet step IS deferred (5 ≤ demand 11). -/
+/-- 5 bars held, task 0/11 → the helmet step IS deferred (5 ≤ demand 11).
+All-`Y=1` (`fun _ => 1`): the ceil-batch reduces to the original demand. -/
 theorem trace_helmet_deferred :
-    consumesReserved traceRecipe 8 ⟨true, 1, 11, 0⟩
+    consumesReserved traceRecipe (fun _ => 1) 8 ⟨true, 1, 11, 0⟩
       (fun i => if i = 1 then 5 else 0) [2] = true := by decide
 
 /-- 17 bars held (surplus over demand 11) → the helmet step is allowed. -/
 theorem trace_surplus_allowed :
-    consumesReserved traceRecipe 8 ⟨true, 1, 11, 0⟩
+    consumesReserved traceRecipe (fun _ => 1) 8 ⟨true, 1, 11, 0⟩
       (fun i => if i = 1 then 17 else 0) [2] = false := by decide
 
 /-- Task complete (11/11) → nothing reserved, the helmet step is allowed. -/
 theorem trace_done_allowed :
-    consumesReserved traceRecipe 8 ⟨true, 1, 11, 11⟩
+    consumesReserved traceRecipe (fun _ => 1) 8 ⟨true, 1, 11, 11⟩
       (fun i => if i = 1 then 5 else 0) [2] = false := by decide
 
 end Formal.TaskReservation

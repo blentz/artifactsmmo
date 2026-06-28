@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/recipe_closure.py (sha256: 064275bf67f6cc6254d2313b1859bebec55717d2f8b1b02118ed66ac2df3735b) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/recipe_closure.py (sha256: 6900af933f8e225f86988909d498928d15ca946b2a8d54bfce654f4365bc5276) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.RecipeClosure
@@ -18,7 +18,7 @@ def _dictSet {α : Type} (m : List (String × α)) (k : String) (v : α) : List 
   | [] => [(k, v)]
   | (k', v') :: rest => if k' == k then (k', v) :: rest else (k', v') :: _dictSet rest k v
 
-/-- Extracted from `_closure_visited` (line 52; the Python `fuel <= 0` guard
+/-- Extracted from `_closure_visited` (line 55; the Python `fuel <= 0` guard
 is the `Nat` fuel-zero arm — recursion is structural on the fuel). -/
 def _closure_visited :
     Nat → String → (List (String × List (String × Int))) → (List (String × Int)) → (List (String × Int))
@@ -40,13 +40,13 @@ def _closure_visited :
         visited recipe
       visited)
 
-/-- Extracted from `_raw_units` (line 68; the Python `fuel <= 0` guard
+/-- Extracted from `_raw_units` (line 71; the Python `fuel <= 0` guard
 is the `Nat` fuel-zero arm — recursion is structural on the fuel). -/
 def _raw_units :
-    Nat → String → (List (String × List (String × Int))) → (List (String × Int)) → Int
-  | 0, _, _, _ =>
+    Nat → String → (List (String × List (String × Int))) → (List (String × Int)) → (List (String × Int)) → Int
+  | 0, _, _, _, _ =>
     1
-  | fuel + 1, item, recipes, visited =>
+  | fuel + 1, item, recipes, yields, visited =>
     (if (decide ((_dictGetD visited item 0) = 1))
      then
       1
@@ -63,18 +63,19 @@ def _raw_units :
           (fun total _x =>
             let sub := (_x.1)
             let qty := (_x.2)
-            let total := (total + (qty * (_raw_units fuel sub recipes deeper)))
+            let total := (total + (qty * (_raw_units fuel sub recipes yields deeper)))
             total)
           total recipe
-        total))
+        let y := (_dictGetD yields item 1)
+        (-(Int.fdiv (-total) y))))
 
-/-- Extracted from `_closure_demand` (line 89; the Python `fuel <= 0` guard
+/-- Extracted from `_closure_demand` (line 97; the Python `fuel <= 0` guard
 is the `Nat` fuel-zero arm — recursion is structural on the fuel). -/
 def _closure_demand :
-    Nat → String → Int → (List (String × List (String × Int))) → (List (String × Int)) → (List (String × Int)) → (List (String × Int))
-  | 0, _, _, _, _, out =>
+    Nat → String → Int → (List (String × List (String × Int))) → (List (String × Int)) → (List (String × Int)) → (List (String × Int)) → (List (String × Int))
+  | 0, _, _, _, _, _, out =>
     out
-  | fuel + 1, root, multiplier, recipes, visited, out =>
+  | fuel + 1, root, multiplier, recipes, yields, visited, out =>
     (if (decide ((_dictGetD visited root 0) = 1))
      then
       out
@@ -85,6 +86,8 @@ def _closure_demand :
        then
         let out := (_dictSet out root multiplier)
         let recipe := (_dictGetD recipes root [])
+        let y := (_dictGetD yields root 1)
+        let batches := (-(Int.fdiv (-multiplier) y))
         let out := List.foldl
           (fun out _x =>
             let mat := (_x.1)
@@ -93,12 +96,14 @@ def _closure_demand :
              then
               out
              else
-              let out := (_closure_demand fuel mat (multiplier * qty_per) recipes sub_visited out)
+              let out := (_closure_demand fuel mat (batches * qty_per) recipes yields sub_visited out)
               out))
           out recipe
         out
        else
         let recipe := (_dictGetD recipes root [])
+        let y := (_dictGetD yields root 1)
+        let batches := (-(Int.fdiv (-multiplier) y))
         let out := List.foldl
           (fun out _x =>
             let mat := (_x.1)
@@ -107,12 +112,12 @@ def _closure_demand :
              then
               out
              else
-              let out := (_closure_demand fuel mat (multiplier * qty_per) recipes sub_visited out)
+              let out := (_closure_demand fuel mat (batches * qty_per) recipes yields sub_visited out)
               out))
           out recipe
         out))
 
-/-- Extracted from `recipe_closure_pure` (line 114). -/
+/-- Extracted from `recipe_closure_pure` (line 131). -/
 def recipe_closure_pure (roots : List String) (recipes : List (String × List (String × Int))) (drops : List (String × String)) :
     ((List String) × (List String)) :=
   let visited : List (String × Int) := []

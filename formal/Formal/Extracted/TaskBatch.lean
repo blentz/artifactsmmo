@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/task_batch.py (sha256: 0b83caaa8fd7ece00de6bd3a3d94606d9a9b046e13d1825577aa356dc6336648) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/task_batch.py (sha256: a196cf0ed908c1da333d5d1f84d3dd7a1a73cca392fac1a27262dac944856cd4) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 import Formal.Extracted.RecipeClosure
 
@@ -34,7 +34,7 @@ def task_batch_size_pure (task_type : Option String) (task_code : Option String)
         1
        else
         let no_visited : List (String × Int) := []
-        let mats_per_unit := (Extracted.RecipeClosure._raw_units (Int.toNat ((Int.ofNat (List.length recipes)) + 1)) task_code_1 recipes no_visited)
+        let mats_per_unit := (Extracted.RecipeClosure._raw_units (Int.toNat ((Int.ofNat (List.length recipes)) + 1)) task_code_1 recipes [] no_visited)
         let closure : List (String × Int) := []
         let closure := (Extracted.RecipeClosure._closure_visited (Int.toNat ((Int.ofNat (List.length recipes)) + 1)) task_code_1 recipes closure)
         let held_recipe := 0

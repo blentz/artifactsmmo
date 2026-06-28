@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/task_reservation.py (sha256: 803091ed686af9a90e405725837d3e4947703105ecabe941b26f09dc5253e3d7) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/task_reservation.py (sha256: 3484dd13fb3eba6a5dcd63d78555ef49fe1bfedb7c41df36609d562695ea3c81) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 import Formal.Extracted.RecipeClosure
 
@@ -40,7 +40,7 @@ def task_reserved_demand_pure (task_type : Option String) (task_code : Option St
        else
         let no_visited : List (String × Int) := []
         let demand : List (String × Int) := []
-        let demand := (Extracted.RecipeClosure._closure_demand (Int.toNat ((Int.ofNat (List.length recipes)) + 1)) task_code_1 remaining recipes no_visited demand)
+        let demand := (Extracted.RecipeClosure._closure_demand (Int.toNat ((Int.ofNat (List.length recipes)) + 1)) task_code_1 remaining recipes [] no_visited demand)
         demand)))
 
 /-- Extracted from `consumes_reserved_pure` (line 59). -/
@@ -57,7 +57,7 @@ def consumes_reserved_pure (needed : List (String × Int)) (task_type : Option S
       (fun conflict _x =>
         let item := (_x.1)
         let _qty := (_x.2)
-        let conflict := (Extracted.RecipeClosure._closure_demand (Int.toNat ((Int.ofNat (List.length recipes)) + 1)) item 1 recipes no_visited conflict)
+        let conflict := (Extracted.RecipeClosure._closure_demand (Int.toNat ((Int.ofNat (List.length recipes)) + 1)) item 1 recipes [] no_visited conflict)
         conflict)
       conflict needed
     let bank : List (String × Int) := []

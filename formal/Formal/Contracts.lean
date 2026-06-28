@@ -715,15 +715,17 @@ example : ∀ (r : Recipe) (roots : List Nat) (fuel : Nat) {m : Nat},
 example : ∀ (r : Recipe) (roots : List Nat) (drops : List (Nat × Nat)) (fuel : Nat) {res : Nat},
     res ∈ neededList r roots drops fuel → isNeeded r roots drops res :=
   @neededList_isNeeded
--- raw_units_eq_cost: documented quantity math — Σ qty * units(sub) over the recipe.
-example : ∀ (r : Recipe) (n : Nat) (visited : List Nat) (item : Nat),
+-- raw_units_eq_cost: documented ceil-batch quantity math — ⌈Σ qty * units(sub) / y item⌉
+-- over the recipe (yield-parameterised; at `y item = 1` the `ceilDiv` is the identity).
+example : ∀ (r : Recipe) (y : Nat → Nat) (n : Nat) (visited : List Nat) (item : Nat),
     item ∉ visited → ∀ (rcp : List (Nat × Nat)), r item = rcp → rcp ≠ [] →
-    rawUnitsAux r (n + 1) visited item
-      = (rcp.map (fun p => p.2 * rawUnitsAux r n (item :: visited) p.1)).sum :=
+    rawUnitsAux r y (n + 1) visited item
+      = Formal.RecipeClosure.ceilDiv
+          (rcp.map (fun p => p.2 * rawUnitsAux r y n (item :: visited) p.1)).sum (y item) :=
   @rawUnits_eq_cost
 -- raw_units cyclic guard: a revisited item costs exactly 1 (cycle-safe).
-example : ∀ (r : Recipe) (n : Nat) (visited : List Nat) (item : Nat),
-    item ∈ visited → rawUnitsAux r (n + 1) visited item = 1 :=
+example : ∀ (r : Recipe) (y : Nat → Nat) (n : Nat) (visited : List Nat) (item : Nat),
+    item ∈ visited → rawUnitsAux r y (n + 1) visited item = 1 :=
   @rawUnits_revisit
 -- TERMINATION on cyclic recipes: the remaining-universe measure strictly
 -- decreases on each recursive descent (well-founded ⇒ terminates).
@@ -734,10 +736,10 @@ example : ∀ (univ visited : List Nat) (item : Nat),
 -- TERMINATION / well-definedness: with adequate fuel (≥ remaining universe) the
 -- cost is fuel-independent — the recursion has fully bottomed out (no divergence
 -- even on cycles).
-example : ∀ (r : Recipe) (univ : List Nat), UnivClosed r univ →
+example : ∀ (r : Recipe) (y : Nat → Nat) (univ : List Nat), UnivClosed r univ →
     ∀ (f f' : Nat) (visited : List Nat) (item : Nat),
       item ∈ univ → remaining univ visited ≤ f → remaining univ visited ≤ f' →
-      rawUnitsAux r f visited item = rawUnitsAux r f' visited item :=
+      rawUnitsAux r y f visited item = rawUnitsAux r y f' visited item :=
   @rawUnits_fuel_stable
 
 /-! ### TaskFeasibility role contracts.
@@ -3145,23 +3147,23 @@ example : ∀ {σ β : Type} (r : β → β → Prop), WellFounded r → ∀ (μ
 -- raises the witness. Weakening to ≤ (dropping strictness) fails to elaborate. This is
 -- the theorem that makes ore-gathering toward copper_boots register as progress — the
 -- false-flat that released the sticky anchor (cannibalisation livelock) is impossible.
-example : ∀ (r : Formal.RecipeClosure.Recipe) (fuel : Nat) (owned : Nat → Nat)
+example : ∀ (r : Formal.RecipeClosure.Recipe) (y : Nat → Nat) (fuel : Nat) (owned : Nat → Nat)
     (nodes : List Nat) (g : Nat), g ∈ nodes → nodes.Nodup →
-    0 < Formal.RecipeClosure.rawUnits r fuel g →
-    Formal.Liveness.ObtainProgress.obtainProgress r fuel owned nodes
-      < Formal.Liveness.ObtainProgress.obtainProgress r fuel
+    0 < Formal.RecipeClosure.rawUnits r y fuel g →
+    Formal.Liveness.ObtainProgress.obtainProgress r y fuel owned nodes
+      < Formal.Liveness.ObtainProgress.obtainProgress r y fuel
           (fun j => owned j + (if j = g then 1 else 0)) nodes :=
   @Formal.Liveness.ObtainProgress.obtainProgress_gather_strict
 -- CRAFT INVARIANT: a single-intermediate craft (produce 1 `o`, consume `qty` of child `c`
 -- with rawUnits o = qty·rawUnits c) leaves the witness unchanged. Weakening the
 -- conservation hypothesis or the conclusion (to ≤/≥) fails to elaborate.
-example : ∀ (r : Formal.RecipeClosure.Recipe) (fuel : Nat) (owned : Nat → Nat)
+example : ∀ (r : Formal.RecipeClosure.Recipe) (y : Nat → Nat) (fuel : Nat) (owned : Nat → Nat)
     (nodes : List Nat) (o c qty : Nat), o ∈ nodes → c ∈ nodes → o ≠ c → nodes.Nodup →
     qty ≤ owned c →
-    Formal.RecipeClosure.rawUnits r fuel o = qty * Formal.RecipeClosure.rawUnits r fuel c →
-    Formal.Liveness.ObtainProgress.obtainProgress r fuel
+    Formal.RecipeClosure.rawUnits r y fuel o = qty * Formal.RecipeClosure.rawUnits r y fuel c →
+    Formal.Liveness.ObtainProgress.obtainProgress r y fuel
         (fun j => (owned j + (if j = o then 1 else 0)) - (if j = c then qty else 0)) nodes
-      = Formal.Liveness.ObtainProgress.obtainProgress r fuel owned nodes :=
+      = Formal.Liveness.ObtainProgress.obtainProgress r y fuel owned nodes :=
   @Formal.Liveness.ObtainProgress.obtainProgress_craft_invariant
 
 -- ─── GearBuildTermination (buildable gear target is BUILT in finite steps) pin ───

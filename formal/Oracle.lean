@@ -316,6 +316,20 @@ in encounter order (mirrors a Python dict's insertion-ordered ingredient map). -
 def recipeFromTriples (triples : List (Nat × Nat × Nat)) : Recipe :=
   fun item => (triples.filter (fun t => decide (t.1 = item))).map (fun t => (t.2.1, t.2.2))
 
+/-- Decode an OPTIONAL trailing yield block `[nY, (item, yield)*]` at offset
+`base` into a per-item yield function (default 1). When the args array is too
+short to hold the block (the harness sent no yields), the all-`Y=1` function is
+returned — so the yield-parameterised cores stay backward-compatible. -/
+def parseYieldFn (args : Array Json) (base : Nat) : Nat → Nat :=
+  if args.size ≤ base then (fun _ => 1)
+  else
+    let nY := (intArg args base).toNat
+    let pairs : List (Nat × Nat) := (List.range nY).map (fun k =>
+      ((intArg args (base + 1 + 2 * k)).toNat, (intArg args (base + 2 + 2 * k)).toNat))
+    fun k => match pairs.find? (fun p => decide (p.1 = k)) with
+      | some p => p.2
+      | none => 1
+
 /-- Compute one recipe_closure result using the proved `craftableList` /
 `neededList` / `rawUnits`.
 
@@ -348,7 +362,8 @@ def runRecipeClosure (args : Array Json) : Json :=
   let craft := (craftableList r roots fuel).mergeSort (· ≤ ·) |>.eraseDups
   let toJson := fun (xs : List Nat) => Json.arr ((xs.map (fun n => Json.num (Int.ofNat n))).toArray)
   Json.mkObj [("needed_resources", toJson needed), ("craftable_mats", toJson craft),
-    ("raw_material_units", Json.num (Int.ofNat (rawUnits r fuel queryItem)))]
+    ("raw_material_units",
+      Json.num (Int.ofNat (rawUnits r (parseYieldFn args (p3 + 2)) fuel queryItem)))]
 
 /-- Compute `obtainProgress r fuel owned nodes` — the deepened gear-root progress witness
 (`Formal.Liveness.ObtainProgress.obtainProgress`). Bridges the real Python
@@ -377,7 +392,8 @@ def runObtainProgress (args : Array Json) : Json :=
   let owned := fun j =>
     (ownedPairs.filter (fun pr => decide (pr.1 = j))).foldl (fun acc pr => acc + pr.2) 0
   Json.mkObj [("obtain_progress",
-    Json.num (Int.ofNat (Formal.Liveness.ObtainProgress.obtainProgress r fuel owned nodes)))]
+    Json.num (Int.ofNat (Formal.Liveness.ObtainProgress.obtainProgress r
+      (parseYieldFn args (p3 + 1)) fuel owned nodes)))]
 
 /-- Build a `TaskFeasibility.Recipe` (Nat → List Nat, ingredient codes only)
 from a list of `(item, sub)` pairs: `r item` = every `sub` whose pair's first
@@ -1859,9 +1875,10 @@ def runTaskReservation (args : Array Json) : Json :=
     (triples.filter (fun tr => tr.1 == i)).map (fun tr => (tr.2.1, tr.2.2))
   let owned : Nat → Nat := fun i =>
     ((ownedPairs.find? (fun p => p.1 == i)).map (fun p => p.2)).getD 0
-  let demand := Formal.TaskReservation.reservedDemand recipe fuel t
+  let yieldFn := parseYieldFn args (qBase + 2 + nQuery)
+  let demand := Formal.TaskReservation.reservedDemand recipe yieldFn fuel t
   let consumes :=
-    Formal.TaskReservation.consumesReserved recipe fuel t owned needed
+    Formal.TaskReservation.consumesReserved recipe yieldFn fuel t owned needed
   Json.mkObj
     [ ("consumes", Json.bool consumes)
     , ("demand_vals", Json.arr ((queries.map (fun q =>

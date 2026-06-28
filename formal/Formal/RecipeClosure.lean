@@ -118,23 +118,36 @@ strictly decreases on every recursive descent (`remaining_decreasing`), and for
 any `fuel` exceeding that measure the result is fuel-independent
 (`rawUnits_fuel_stable`) — i.e. the recursion bottoms out even on cycles. -/
 
-/-- Fuel-threaded cost. At fuel 0 we return 1 (defensive; reached only if fuel
-underflows — the lemmas show adequate fuel never underflows). At fuel `n+1`:
-revisit → 1; raw/unknown (empty recipe) → 1; otherwise
-`Σ_{(sub,qty)} qty * rec(sub, item :: visited)`. The `item :: visited` mirrors
-Python's `visited | {item}`. -/
-def rawUnitsAux (r : Recipe) : Nat → List Nat → Nat → Nat
+/-- Ceil-division `⌈a / b⌉` on `Nat` (the batch-yield arithmetic). Mirrors the
+Python `-(-a // b)` and the extracted `-(Int.fdiv (-a) b)`. At `b = 1` it is the
+identity (`(a + 1 - 1) / 1 = a`), so the all-`Y=1` path is an exact no-op. At
+`b = 0` (never produced — yields are ≥ 1) it is `0`. -/
+def ceilDiv (a b : Nat) : Nat := (a + b - 1) / b
+
+/-- `ceilDiv a 1 = a` — the all-`Y=1` no-op (used by the extracted↔hand bridge). -/
+theorem ceilDiv_one (a : Nat) : ceilDiv a 1 = a := by unfold ceilDiv; omega
+
+/-- Fuel-threaded cost, parameterised by the per-item output yield `y` (`y item`
+items produced per craft run; `1` for raw/unknown by the caller's default map).
+At fuel 0 we return 1 (defensive; reached only if fuel underflows — the lemmas
+show adequate fuel never underflows). At fuel `n+1`: revisit → 1; raw/unknown
+(empty recipe) → 1; otherwise `⌈(Σ_{(sub,qty)} qty * rec(sub, item :: visited))
+/ y item⌉` — the per-batch raw inputs divided (ceil) by the node's yield,
+mirroring the Python `_raw_units` ceil-batch semantics. The `item :: visited`
+mirrors Python's `visited | {item}`. -/
+def rawUnitsAux (r : Recipe) (y : Nat → Nat) : Nat → List Nat → Nat → Nat
   | 0, _, _ => 1
   | n + 1, visited, item =>
     if item ∈ visited then 1
     else match r item with
       | [] => 1
-      | rcp => (rcp.map (fun p => p.2 * rawUnitsAux r n (item :: visited) p.1)).sum
+      | rcp => ceilDiv (rcp.map (fun p => p.2 * rawUnitsAux r y n (item :: visited) p.1)).sum (y item)
 
 /-- `raw_material_units(item)` at the top level: empty visited set. The fuel is
-the universe size `fuel`; callers pass `univ.length`. -/
-def rawUnits (r : Recipe) (fuel : Nat) (item : Nat) : Nat :=
-  rawUnitsAux r fuel [] item
+the universe size `fuel`; callers pass `univ.length`. `y` is the per-item yield
+map (default 1). -/
+def rawUnits (r : Recipe) (y : Nat → Nat) (fuel : Nat) (item : Nat) : Nat :=
+  rawUnitsAux r y fuel [] item
 
 /-! ### Computable closure (for the oracle) and its correspondence to `Reachable`.
 
@@ -283,34 +296,37 @@ theorem reachable_least (r : Recipe) (roots : List Nat) (S : Nat → Prop)
 /-! ### Theorems for `raw_material_units`. -/
 
 /-- `raw_units_eq_cost`: with fuel `n+1` and an unvisited item that HAS a recipe,
-the cost is exactly `Σ qty * rec(sub, item :: visited)` — the documented
-quantity math (multiply ingredient quantities down the tree). -/
-theorem rawUnits_eq_cost (r : Recipe) (n : Nat) (visited : List Nat) (item : Nat)
+the cost is exactly `⌈(Σ qty * rec(sub, item :: visited)) / y item⌉` — the
+documented ceil-batch quantity math (multiply ingredient quantities down the
+tree, divide-ceil by the node's yield). At `y item = 1` the `ceilDiv` is the
+identity, recovering the original `Σ qty * units(sub)`. -/
+theorem rawUnits_eq_cost (r : Recipe) (y : Nat → Nat) (n : Nat) (visited : List Nat) (item : Nat)
     (hv : item ∉ visited) (rcp : List (Nat × Nat)) (hr : r item = rcp) (hne : rcp ≠ []) :
-    rawUnitsAux r (n + 1) visited item
-      = (rcp.map (fun p => p.2 * rawUnitsAux r n (item :: visited) p.1)).sum := by
+    rawUnitsAux r y (n + 1) visited item
+      = ceilDiv (rcp.map (fun p => p.2 * rawUnitsAux r y n (item :: visited) p.1)).sum (y item) := by
   cases rcp with
   | nil => exact absurd rfl hne
   | cons hd tl =>
     show (if item ∈ visited then 1
       else match r item with
         | [] => 1
-        | rcp => (rcp.map (fun p => p.2 * rawUnitsAux r n (item :: visited) p.1)).sum) = _
+        | rcp => ceilDiv (rcp.map (fun p => p.2 * rawUnitsAux r y n (item :: visited) p.1)).sum
+            (y item)) = _
     simp only [hv, if_false]
     rw [hr]
 
 /-- `raw_units_revisit`: a revisited item (in `visited`) costs exactly 1,
 REGARDLESS of fuel `n+1` — this is the cyclic-safety guard (Python's
 `if item in visited: return 1`). -/
-theorem rawUnits_revisit (r : Recipe) (n : Nat) (visited : List Nat) (item : Nat)
-    (hv : item ∈ visited) : rawUnitsAux r (n + 1) visited item = 1 := by
+theorem rawUnits_revisit (r : Recipe) (y : Nat → Nat) (n : Nat) (visited : List Nat) (item : Nat)
+    (hv : item ∈ visited) : rawUnitsAux r y (n + 1) visited item = 1 := by
   unfold rawUnitsAux
   simp only [hv, if_true]
 
 /-- `raw_units_raw`: a raw/unknown item (empty recipe) costs exactly 1. -/
-theorem rawUnits_raw (r : Recipe) (n : Nat) (visited : List Nat) (item : Nat)
+theorem rawUnits_raw (r : Recipe) (y : Nat → Nat) (n : Nat) (visited : List Nat) (item : Nat)
     (hv : item ∉ visited) (hr : r item = []) :
-    rawUnitsAux r (n + 1) visited item = 1 := by
+    rawUnitsAux r y (n + 1) visited item = 1 := by
   unfold rawUnitsAux
   simp only [hv, if_false, hr]
 
@@ -380,10 +396,11 @@ measure, the cost no longer depends on the exact fuel value — the recursion ha
 fully bottomed out. Proven by strong induction on fuel, using
 `remaining_decreasing` as the well-founded measure; cycles are handled because a
 revisited item returns 1 without recursing (the `item ∈ visited` guard). -/
-theorem rawUnits_fuel_stable (r : Recipe) (univ : List Nat) (hclosed : UnivClosed r univ) :
+theorem rawUnits_fuel_stable (r : Recipe) (y : Nat → Nat) (univ : List Nat)
+    (hclosed : UnivClosed r univ) :
     ∀ (f f' : Nat) (visited : List Nat) (item : Nat),
       item ∈ univ → remaining univ visited ≤ f → remaining univ visited ≤ f' →
-      rawUnitsAux r f visited item = rawUnitsAux r f' visited item := by
+      rawUnitsAux r y f visited item = rawUnitsAux r y f' visited item := by
   intro f
   induction f using Nat.strongRecOn with
   | ind f ih =>
@@ -418,11 +435,13 @@ theorem rawUnits_fuel_stable (r : Recipe) (univ : List Nat) (hclosed : UnivClose
         show (if item ∈ visited then 1
           else match r item with
             | [] => 1
-            | rcp => (rcp.map (fun p => p.2 * rawUnitsAux r a (item :: visited) p.1)).sum) =
+            | rcp => ceilDiv (rcp.map (fun p => p.2 * rawUnitsAux r y a (item :: visited) p.1)).sum
+                (y item)) =
           (if item ∈ visited then 1
           else match r item with
             | [] => 1
-            | rcp => (rcp.map (fun p => p.2 * rawUnitsAux r b (item :: visited) p.1)).sum)
+            | rcp => ceilDiv (rcp.map (fun p => p.2 * rawUnitsAux r y b (item :: visited) p.1)).sum
+                (y item))
         simp only [hv, if_false, hrcp]
         -- recurse on each sub-material: measure strictly decreased
         have hrem_dec : remaining univ (item :: visited) ≤ a ∧ remaining univ (item :: visited) ≤ b := by
@@ -430,14 +449,16 @@ theorem rawUnits_fuel_stable (r : Recipe) (univ : List Nat) (hclosed : UnivClose
           constructor
           · exact Nat.le_of_lt_succ (Nat.lt_of_lt_of_le hlt hf)
           · exact Nat.le_of_lt_succ (Nat.lt_of_lt_of_le hlt hf')
-        congr 1
-        apply List.map_congr_left
-        intro p hp
-        have hchild : p.1 ∈ (r item).map Prod.fst := by
-          rw [hrcp]; exact List.mem_map_of_mem (f := Prod.fst) hp
-        have hpmem : p.1 ∈ univ := hclosed item hmem p.1 hchild
-        have hless : a < a + 1 := Nat.lt_succ_self a
-        rw [ih a hless b (item :: visited) p.1 hpmem hrem_dec.1 hrem_dec.2]
+        have hmapeq : (hd :: tl).map (fun p => p.2 * rawUnitsAux r y a (item :: visited) p.1)
+            = (hd :: tl).map (fun p => p.2 * rawUnitsAux r y b (item :: visited) p.1) := by
+          apply List.map_congr_left
+          intro p hp
+          have hchild : p.1 ∈ (r item).map Prod.fst := by
+            rw [hrcp]; exact List.mem_map_of_mem (f := Prod.fst) hp
+          have hpmem : p.1 ∈ univ := hclosed item hmem p.1 hchild
+          have hless : a < a + 1 := Nat.lt_succ_self a
+          rw [ih a hless b (item :: visited) p.1 hpmem hrem_dec.1 hrem_dec.2]
+        rw [hmapeq]
 
 /-- A concrete CYCLIC recipe `a → b → a` (with quantities) — the cost is a
 DEFINITE finite value, demonstrating termination on a cycle. With
@@ -446,15 +467,16 @@ DEFINITE finite value, demonstrating termination on a cycle. With
 `rawUnits a = 1`. The recursion does NOT diverge. -/
 example :
     let r : Recipe := fun n => if n = 0 then [(1, 1)] else if n = 1 then [(0, 1)] else []
-    rawUnits r 3 0 = 1 := by decide
+    rawUnits r (fun _ => 1) 3 0 = 1 := by decide
 
 /-- The DFS-computed cost at the top level (empty visited) equals the documented
-recipe sum for an item WITH a recipe and adequate fuel. -/
-theorem rawUnits_top_eq_cost (r : Recipe) (n : Nat) (item : Nat)
+ceil-batch recipe sum for an item WITH a recipe and adequate fuel. At `y item =
+1` the `ceilDiv` is the identity, recovering `Σ qty * units(sub)`. -/
+theorem rawUnits_top_eq_cost (r : Recipe) (y : Nat → Nat) (n : Nat) (item : Nat)
     (rcp : List (Nat × Nat)) (hr : r item = rcp) (hne : rcp ≠ []) :
-    rawUnits r (n + 1) item
-      = (rcp.map (fun p => p.2 * rawUnitsAux r n [item] p.1)).sum := by
+    rawUnits r y (n + 1) item
+      = ceilDiv (rcp.map (fun p => p.2 * rawUnitsAux r y n [item] p.1)).sum (y item) := by
   unfold rawUnits
-  rw [rawUnits_eq_cost r n [] item (List.not_mem_nil) rcp hr hne]
+  rw [rawUnits_eq_cost r y n [] item (List.not_mem_nil) rcp hr hne]
 
 end Formal.RecipeClosure
