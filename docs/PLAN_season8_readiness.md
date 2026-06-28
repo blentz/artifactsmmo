@@ -8,6 +8,33 @@ This is a cross-session roadmap. Each formal-gated phase (P2, parts of P3) gets 
 brainstorm → spec → plan → subagent-driven cycle when executed; the mechanical phases
 (P0, P1, P4) are executed directly. Phases are ordered by priority and by what blocks what.
 
+## Status (updated 2026-06-27 — server live at v8.0.0)
+
+- **P0 DONE** (branch `feat/season8-client-regen`, commit 3b04dec8). Surprise: the
+  vendored *client code* was already v8-generated; only `openapi.json` was stale at 7.0.4.
+  Regen left the client tree byte-identical and refreshed the spec → lockstep restored.
+  Both generator spec-patches still apply.
+- **P1 DONE** (same commit). The actual breakage was NOT the predicted GE/pending-items
+  module renames (those already matched the v8 client). Real breaks surfaced by
+  `import` + `mypy --strict`: (a) model renames `NPCItem→NPCItemSchema`,
+  `GEOrderCreationrSchema→GEOrderCreationSchema` (v8 fixed the typo),
+  `DataPageGeOrderHistorySchema→DataPageGEOrderHistorySchema`; (b) equip/unequip bodies
+  now **arrays** — wrapped at all 4 call sites; (c) `EventSchema.content` nullable —
+  guarded `_build_events`; (d) `CharacterSkin` enum removed (skins now dynamic `/skins`
+  data) — dropped enum, added `APIWrapper.get_all_skins` + live-catalog
+  `validate_skin_code(skin, api)`. Suite green: 4054 passed, 100% cov, mypy clean.
+  *Lesson:* an import smoke test misses array/nullable/Any-typed mismatches — `mypy
+  --strict` is the real P1 enumerator.
+- **P3.3 SCOPED (not done)** — live v8 load raises `GameDataCoverageError`. Exactly **3**
+  new monster ability codes, mechanics confirmed from `/effects`:
+  - `enchanted_mirror` (pixie): monster reflects {value}% of damage taken, once per 3 turns.
+  - `greed` (baby_red_dragon, red_dragon): each time monster loses 10% max HP it gains
+    {value}% damage for the rest of the fight.
+  - `sun_shield` (sonnengott): the first hit the monster takes each turn is reduced by {value}%.
+  Each needs the proven-core `predict_win` restructure + Lean lockstep (see P3.3 below).
+  **The bot hard-fails on live data until all 3 are modeled** — this is the live-boot blocker.
+- P2 (batch-craft), P3.1/P3.2 (genericity/item-effect guard), P4 (cooldown cost): unchanged.
+
 ## What changed in v8.0.0 (relevant to our reach-50 leveling bot)
 
 **Breaking API changes** (will break our generated client on contact):
