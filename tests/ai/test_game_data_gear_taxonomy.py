@@ -9,7 +9,7 @@ def _gd_with(items):
     return gd
 
 
-def test_properties_classify_durable_vs_consumable(monkeypatch):
+def test_properties_classify_durable_vs_consumable():
     weapon = ItemStats(code="sword", level=1, type_="weapon", attack={"fire": 5})
     ring = ItemStats(code="ring1", level=1, type_="ring", hp_bonus=3)
     potion = ItemStats(code="boostpot", level=1, type_="utility", dmg_elements={"fire": 5})

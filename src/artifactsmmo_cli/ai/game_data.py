@@ -10,6 +10,7 @@ logic and delegates everything else.
 from collections.abc import Mapping
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Any
 
 from artifactsmmo_api_client import AuthenticatedClient
@@ -886,12 +887,12 @@ class GameData:
         """
         return self._craft_yields
 
-    @property
+    @cached_property
     def equippable_types(self) -> frozenset[str]:
         """All item types that occupy an equipment slot (derived from CharacterSchema)."""
         return frozenset(ITEM_TYPE_TO_SLOTS)
 
-    @property
+    @cached_property
     def consumable_types(self) -> frozenset[str]:
         """Item types whose items carry consumable (temporary-buff/restore) effects."""
         return frozenset(
@@ -899,7 +900,7 @@ class GameData:
             for code, codes in self._consumable_effect_codes.items()
             if (s := self.item_stats(code)) is not None and is_consumable(codes))
 
-    @property
+    @cached_property
     def combat_gear_types(self) -> frozenset[str]:
         """Equippable types that carry durable combat stats (not consumables)."""
         rows = [
@@ -909,7 +910,7 @@ class GameData:
         ]
         return _core_combat_gear_types(rows)
 
-    @property
+    @cached_property
     def defensive_gear_types(self) -> frozenset[str]:
         """Combat gear types excluding weapon (armor/accessory slots)."""
         return self.combat_gear_types - frozenset({"weapon"})

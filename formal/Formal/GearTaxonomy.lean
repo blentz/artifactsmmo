@@ -27,7 +27,7 @@ The `def`s are COMPUTABLE (they run in the oracle). Lean core only — no mathli
 
 NOTE on the spec `def`: the brief wrote the filter predicate as
 `fun t => ¬ cons.contains t`, but `List.filter` needs a `Bool` predicate, so we
-use the (decidably) equivalent `fun t => decide (t ∉ cons)`; and we deduplicate
+use the directly equivalent `fun t => !cons.contains t`; and we deduplicate
 with `eraseDups` (the mathlib-free dedup used by `Formal.RecipeClosure`) rather
 than `dedup`. Membership semantics are identical, so the theorem statements are
 unchanged.

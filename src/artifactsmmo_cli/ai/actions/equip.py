@@ -13,7 +13,6 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOT as ITEM_TYPE_TO_SLOT
 from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOTS as ITEM_TYPE_TO_SLOTS
-from artifactsmmo_cli.ai.gear_taxonomy import _derive_type_to_slots as _derive_type_to_slots
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
