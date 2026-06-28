@@ -1953,3 +1953,13 @@ def test_warm_and_cold_events_build_equal(monkeypatch, tmp_path):
     assert cold._npc_event_code == warm._npc_event_code
     assert cold._event_npc_spawns == warm._event_npc_spawns
     assert warm._event_npc_spawns  # non-empty -> the round-trip really happened
+
+
+def test_craft_yield_reads_quantity_default_one():
+    """craft_yield returns stored yield when present, 1 otherwise (no recipe or UNSET)."""
+    gd = GameData()
+    gd._crafting_recipes = {"potion": {"herb": 1}, "bar": {"ore": 2}}
+    gd._craft_yields = {"potion": 2}  # bar omitted -> default 1
+    assert gd.craft_yield("potion") == 2
+    assert gd.craft_yield("bar") == 1      # present recipe, no yield -> 1
+    assert gd.craft_yield("ore") == 1      # raw, no recipe -> 1

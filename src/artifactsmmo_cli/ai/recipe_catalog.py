@@ -8,6 +8,7 @@ class RecipeCatalog:
     """Crafting-recipe and resource slice of the static game-world cache."""
 
     crafting_recipes: dict[str, dict[str, int]] = field(default_factory=dict)
+    craft_yields: dict[str, int] = field(default_factory=dict)
     resource_skill: dict[str, tuple[str, int]] = field(default_factory=dict)  # code -> (skill, level)
     resource_drops: dict[str, str] = field(default_factory=dict)  # resource_code -> primary drop item
     resource_drops_full: dict[str, list[tuple[str, int, int, int]]] = field(default_factory=dict)

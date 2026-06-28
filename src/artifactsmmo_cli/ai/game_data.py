@@ -161,6 +161,14 @@ class GameData:
             self._recipe_cost_memo.clear()
 
     @property
+    def _craft_yields(self) -> dict[str, int]:
+        return self.recipes_catalog.craft_yields
+
+    @_craft_yields.setter
+    def _craft_yields(self, value: dict[str, int]) -> None:
+        self.recipes_catalog.craft_yields = value
+
+    @property
     def _resource_skill(self) -> dict[str, tuple[str, int]]:
         return self.recipes_catalog.resource_skill
 
@@ -847,6 +855,10 @@ class GameData:
         """item_code -> {material: quantity} for every craftable item."""
         return self.recipes_catalog.crafting_recipes
 
+    def craft_yield(self, code: str) -> int:
+        """Items produced per craft run of `code` (CraftSchema.quantity); 1 by default."""
+        return self.recipes_catalog.craft_yields.get(code, 1)
+
     @property
     def recipe_cost(self) -> RecipeCostMemo:
         """Lazily-built memoized transitive recipe demand (one unit per item).
@@ -1260,6 +1272,8 @@ class GameData:
                     for mat in craft.items:
                         recipe[mat.code] = mat.quantity
                     self._crafting_recipes[item.code] = recipe
+                    if not isinstance(craft.quantity, Unset) and craft.quantity:
+                        self._craft_yields[item.code] = craft.quantity
 
     def _load_items(self, client: AuthenticatedClient) -> None:
         """Fetch all items and build stats + recipe indexes."""
