@@ -1,16 +1,16 @@
-"""Pick the best loadout from owned items for a given combat or gather target.
+"""Pick the best loadout from owned items for a given combat or gather purpose.
 
-LAYERING DIRECTION: ``loadout_picker`` imports ``equipment.scoring`` for the
-per-slot scorers (``weapon_score``, ``armor_score``, ``gather_score``).  Task 2
-will add a dependency on ``ai.gear_value``; this module lives ABOVE both
+LAYERING DIRECTION: ``loadout_picker`` imports ``equipment.scoring`` (via
+``gear_value``) for the per-slot scorers.  This module lives ABOVE both
 ``scoring`` and ``gear_value`` in the dependency graph.  No module in
 ``equipment.scoring`` or ``ai.gear_value`` may import from here.
 """
 
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.equipment.realizable_loadout import ownership
-from artifactsmmo_cli.ai.equipment.scoring import armor_score, gather_score, weapon_score
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.gear_value import gear_value
+from artifactsmmo_cli.ai.gear_value_core import Gather
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -56,40 +56,37 @@ def _ordered_slots() -> list[str]:
     return sorted(out)
 
 
-def pick_gather_loadout(
-    skill: str, state: WorldState, game_data: GameData,
-) -> dict[str, str | None]:
-    """Best {slot: code | None} loadout for the gather skill `skill`.
+def _benefit(stats: ItemStats, purpose: object) -> int:
+    """Higher = better candidate for `purpose`, used as argmax key per slot.
 
-    Mirrors `pick_loadout` but uses `gather_score` (argmin) for the
-    weapon slot — pick the tool with the most-negative skill_effect on
-    `skill`. Armor slots fall through to the existing combat picker
-    against an empty monster_attack (no monster). Strict-improvement
-    semantics are preserved per slot (no-downgrade, ties keep current).
+    For Combat/Rank purposes: delegates directly to gear_value (weapon_score
+    for weapons, armor_score for armor — bit-identical to the old per-slot
+    weapon/armor_score branch, preserving the PurposeRouting duality proved
+    in Formal/PurposeRouting.lean).
 
-    Spec: Formal/PurposeRouting.lean's pickGatherSlot_score_optimal —
-    the chosen item minimizes gatherScore over feasible candidates.
+    For Gather purposes: negates gear_value (= gather_score) so that the
+    tool with the most-negative skill_effect (fastest cooldown) has the
+    highest benefit. Armor candidates have gather_score=0, so their benefit
+    is also 0 — the empty-slot gate (best_score <= 0 → skip) and the
+    strict-improvement rule (> current_score) together guarantee that armor
+    slots keep their current item unchanged for Gather purposes.
     """
-    result: dict[str, str | None] = dict(state.equipment)
-    candidates = _candidates_for_slot("weapon_slot", state, game_data)
-    if not candidates:
-        return result
-    # argmin of gather_score across owned weapon-slot candidates.
-    best = min(candidates, key=lambda s: gather_score(s, skill))
-    current_code = state.equipment.get("weapon_slot")
-    current_stats = game_data.item_stats(current_code) if current_code else None
-    if current_stats is None:
-        result["weapon_slot"] = best.code
-        return result
-    if gather_score(best, skill) < gather_score(current_stats, skill):
-        result["weapon_slot"] = best.code
-    return result
+    value = gear_value(stats, purpose)
+    return -value if isinstance(purpose, Gather) else value
 
 
 def pick_loadout(
-    monster_code: str, state: WorldState, game_data: GameData,
+    purpose: object, state: WorldState, game_data: GameData,
 ) -> dict[str, str | None]:
-    """Best {slot: item_code | None} loadout from owned items against `monster_code`.
+    """Best {slot: item_code | None} loadout from owned items for `purpose`.
+
+    `purpose` is one of ``Combat(monster_attack, monster_resistance)``,
+    ``Gather(skill)``, or ``Rank`` (see ``ai/gear_value_core.py``).  Each slot
+    is scored by ``_benefit(candidate, purpose)`` — an argmax that is
+    bit-identical to the old per-slot ``weapon_score``/``armor_score`` branch
+    for Combat purposes (proven in Formal/PurposeRouting.lean), and extends
+    naturally to Gather (weapon slot takes the best tool; armor slots stay
+    unchanged due to zero benefit).
 
     Each slot is optimized in a deterministic order against the PROJECTED
     RESULT, enforcing a per-code OCCUPANCY CAP: an item code C is infeasible for
@@ -115,8 +112,8 @@ def pick_loadout(
     ownership. Mirrors Formal.RealizableLoadout (capOf / pickLoadout_realizable
     + pickLoadout_one_slot_per_code → dupFreeExcept).
 
-    Empty slots are only filled by a candidate whose score is strictly
-    positive: a zero-score equip buys nothing against this monster and burns
+    Empty slots are only filled by a candidate whose benefit is strictly
+    positive: a zero-benefit equip buys nothing for this purpose and burns
     the code's single legal slot.
 
     Slots whose feasible argmax does not strictly beat their current item keep
@@ -124,9 +121,6 @@ def pick_loadout(
 
     Caller compares with `state.equipment` to find the swap delta.
     """
-    monster_atk = game_data.monster_attack(monster_code)
-    monster_res = game_data.monster_resistance(monster_code)
-
     result: dict[str, str | None] = dict(state.equipment)
 
     def _dup_allowed(code: str) -> bool:
@@ -165,13 +159,8 @@ def pick_loadout(
             # rule prevents any other slot from having taken its code.
             continue
 
-        weapon = slot == "weapon_slot"
-        if weapon:
-            best = max(feasible, key=lambda s: weapon_score(s, monster_res))
-        else:
-            best = max(feasible, key=lambda s: armor_score(s, monster_atk))
-        best_score = (weapon_score(best, monster_res) if weapon
-                      else armor_score(best, monster_atk))
+        best = max(feasible, key=lambda s: _benefit(s, purpose))
+        best_score = _benefit(best, purpose)
 
         if current_code == best.code:
             continue
@@ -179,13 +168,12 @@ def pick_loadout(
         current_stats = game_data.item_stats(current_code) if current_code else None
         if current_stats is None:
             if current_code is None and best_score <= 0:
-                # Zero-score fill of an empty slot buys nothing against this
-                # monster and burns the code's one legal slot — skip it.
+                # Zero-benefit fill of an empty slot buys nothing for this
+                # purpose and burns the code's one legal slot — skip it.
                 continue
             result[slot] = best.code
             continue
-        current_score = (weapon_score(current_stats, monster_res) if weapon
-                         else armor_score(current_stats, monster_atk))
+        current_score = _benefit(current_stats, purpose)
         if best_score > current_score:
             result[slot] = best.code
     return result

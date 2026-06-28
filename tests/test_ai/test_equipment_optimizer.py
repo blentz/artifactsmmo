@@ -7,13 +7,14 @@ import pytest
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.constants import ERROR_CODE_ALREADY_EQUIPPED
-from artifactsmmo_cli.ai.equipment.loadout_picker import pick_gather_loadout, pick_loadout
+from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.equipment.scoring import (
     armor_score,
     gather_score,
     weapon_score,
 )
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.gear_value_core import Combat, Gather
 from tests.test_ai.fixtures import make_state
 
 
@@ -132,7 +133,10 @@ class TestWeaponScore:
             equipment=_equipment_with("copper_pickaxe"),
             inventory={"copper_dagger": 2},
         )
-        result = pick_loadout("green_slime", state, gd)
+        result = pick_loadout(
+            Combat(gd.monster_attack("green_slime"), gd.monster_resistance("green_slime")),
+            state, gd,
+        )
         assert result["weapon_slot"] == "copper_dagger", result
 
 
@@ -156,7 +160,7 @@ class TestGatherScore:
             level=1, inventory={"copper_axe": 1},
             equipment=_equipment_with(weapon_slot="wooden_stick"),
         )
-        loadout = pick_gather_loadout("woodcutting", state, gd)
+        loadout = pick_loadout(Gather("woodcutting"), state, gd)
         assert loadout["weapon_slot"] == "copper_axe"
 
     def test_keeps_current_when_no_gather_tool_owned(self):
@@ -165,7 +169,7 @@ class TestGatherScore:
             level=1, inventory={},
             equipment=_equipment_with(weapon_slot="wooden_stick"),
         )
-        loadout = pick_gather_loadout("fishing", state, gd)
+        loadout = pick_loadout(Gather("fishing"), state, gd)
         assert loadout["weapon_slot"] == "wooden_stick"
 
     def test_argmin_picks_most_negative_skill_effect(self):
@@ -184,7 +188,7 @@ class TestGatherScore:
             level=1, inventory={"weak_axe": 1, "strong_axe": 1},
             equipment=_equipment_with(weapon_slot=None),
         )
-        loadout = pick_gather_loadout("woodcutting", state, gd)
+        loadout = pick_loadout(Gather("woodcutting"), state, gd)
         assert loadout["weapon_slot"] == "strong_axe"
 
 
@@ -207,7 +211,10 @@ class TestPickLoadout:
             inventory={"fishing_net": 1},
             equipment={"weapon_slot": "wooden_stick"},
         )
-        loadout = pick_loadout("yellow_slime", state, gd)
+        loadout = pick_loadout(
+            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime")),
+            state, gd,
+        )
         # fishing_net beats wooden_stick vs yellow_slime
         assert loadout["weapon_slot"] == "fishing_net"
 
@@ -218,7 +225,10 @@ class TestPickLoadout:
             level=1, inventory={},
             equipment={"weapon_slot": "wooden_stick"},
         )
-        loadout = pick_loadout("yellow_slime", state, gd)
+        loadout = pick_loadout(
+            Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime")),
+            state, gd,
+        )
         assert loadout["weapon_slot"] == "wooden_stick"
 
 

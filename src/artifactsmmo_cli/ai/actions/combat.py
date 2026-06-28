@@ -18,6 +18,7 @@ from artifactsmmo_cli.ai.actions.gather_apply_core import (
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
@@ -126,7 +127,11 @@ class FightAction(Action):
         # dict-equality always disagrees on shape. Match the per-slot pattern
         # used in GrindCharacterXPGoal._loadout_optimal and
         # OptimizeLoadoutAction._swap_plan.
-        optimal = pick_loadout(self.monster_code, state, game_data)
+        optimal = pick_loadout(
+            Combat(game_data.monster_attack(self.monster_code),
+                   game_data.monster_resistance(self.monster_code)),
+            state, game_data,
+        )
         if any(state.equipment.get(slot) != code for slot, code in optimal.items()):
             base += LOADOUT_PENALTY
         return base

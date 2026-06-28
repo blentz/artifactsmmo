@@ -3,13 +3,14 @@
 Covers armor-slot optimization and the empty-slot (no current stats) path.
 """
 
-from artifactsmmo_cli.ai.equipment.loadout_picker import pick_gather_loadout, pick_loadout
+from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.equipment.scoring import (
     armor_score_pure,
     weapon_score,
     weapon_score_raw,
 )
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.gear_value_core import Combat, Gather
 from tests.test_ai.fixtures import make_state
 
 
@@ -54,7 +55,7 @@ class TestArmorSlotLoadout:
             inventory={"leather_armor": 1, "water_robe": 1},
             equipment={"body_armor_slot": None},
         )
-        loadout = pick_loadout("yellow_slime", state, gd)
+        loadout = pick_loadout(Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime")), state, gd)
         # vs earth-attacking slime, leather (res earth 10) reduces damage;
         # water_robe (res water) does nothing -> leather chosen.
         assert loadout["body_armor_slot"] == "leather_armor"
@@ -68,7 +69,7 @@ class TestArmorSlotLoadout:
             inventory={"iron_armor": 1},
             equipment={"body_armor_slot": "leather_armor"},
         )
-        loadout = pick_loadout("yellow_slime", state, gd)
+        loadout = pick_loadout(Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime")), state, gd)
         assert loadout["body_armor_slot"] == "iron_armor"
 
     def test_keeps_armor_when_no_candidate_improves(self):
@@ -79,7 +80,7 @@ class TestArmorSlotLoadout:
             inventory={"leather_armor": 1},
             equipment={"body_armor_slot": "iron_armor"},
         )
-        loadout = pick_loadout("yellow_slime", state, gd)
+        loadout = pick_loadout(Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime")), state, gd)
         assert loadout["body_armor_slot"] == "iron_armor"
 
 
@@ -118,7 +119,7 @@ class TestMultiSlotContention:
             inventory={"beta_ring": 1},
             equipment={"ring1_slot": "alpha_ring", "ring2_slot": None},
         )
-        loadout = pick_loadout("yellow_slime", state, gd)
+        loadout = pick_loadout(Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime")), state, gd)
         assert loadout["ring1_slot"] == "alpha_ring"
         # ring2 (empty current) then takes beta_ring — it sits nowhere else
         # in the projected result, so it is feasible there.
@@ -137,7 +138,7 @@ class TestMultiSlotContention:
             inventory={},
             equipment={"ring1_slot": None, "ring2_slot": "alpha_ring"},
         )
-        loadout = pick_loadout("yellow_slime", state, gd)
+        loadout = pick_loadout(Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime")), state, gd)
         assert loadout["ring1_slot"] is None
         assert loadout["ring2_slot"] == "alpha_ring"
 
@@ -153,7 +154,7 @@ class TestMultiSlotContention:
             inventory={"weak_ring": 1},
             equipment={"ring1_slot": None, "ring2_slot": "alpha_ring"},
         )
-        loadout = pick_loadout("yellow_slime", state, gd)
+        loadout = pick_loadout(Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime")), state, gd)
         # ring1's feasible pool excludes the worn alpha_ring; weak_ring scores
         # 8 * 5 = 40 > 0 against the earth attacker, so it fills the slot.
         assert loadout["ring1_slot"] == "weak_ring"
@@ -182,7 +183,7 @@ class TestMultiSlotContention:
             inventory={"copper_ring": 1},
             equipment={"ring1_slot": "copper_ring", "ring2_slot": None},
         )
-        loadout = pick_loadout("yellow_slime", state, gd)
+        loadout = pick_loadout(Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime")), state, gd)
         assert loadout["ring1_slot"] == "copper_ring"
         assert loadout["ring2_slot"] == "copper_ring"
 
@@ -207,7 +208,7 @@ class TestMultiSlotContention:
             inventory={"water_ring": 1},
             equipment={"ring1_slot": None, "ring2_slot": None},
         )
-        loadout = pick_loadout("yellow_slime", state, gd)
+        loadout = pick_loadout(Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime")), state, gd)
         assert loadout["ring1_slot"] is None
         assert loadout["ring2_slot"] is None
 
@@ -233,7 +234,7 @@ class TestMultiSlotContention:
             level=1, inventory={},
             equipment={"ring1_slot": "high_ring", "ring2_slot": None},
         )
-        loadout = pick_loadout("yellow_slime", state, gd)
+        loadout = pick_loadout(Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime")), state, gd)
         # No candidate fits, but the player still owns the ring -> it stays.
         assert loadout["ring1_slot"] == "high_ring"
 
@@ -259,7 +260,7 @@ class TestMultiSlotContention:
             level=1, inventory={"weak_ring": 1},
             equipment={"ring1_slot": "high_ring", "ring2_slot": None},
         )
-        loadout = pick_loadout("yellow_slime", state, gd)
+        loadout = pick_loadout(Combat(gd.monster_attack("yellow_slime"), gd.monster_resistance("yellow_slime")), state, gd)
         # weak_ring is the only feasible candidate but scores worse than the
         # equipped (level-gated) high_ring, so high_ring is retained.
         assert loadout["ring1_slot"] == "high_ring"
@@ -292,5 +293,5 @@ class TestGatherLoadout:
         state = make_state(
             level=1, inventory={}, equipment={"weapon_slot": None},
         )
-        loadout = pick_gather_loadout("mining", state, gd)
+        loadout = pick_loadout(Gather("mining"), state, gd)
         assert loadout["weapon_slot"] is None

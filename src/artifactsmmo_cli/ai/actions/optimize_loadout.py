@@ -13,6 +13,7 @@ from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.constants import ERROR_CODE_ALREADY_EQUIPPED
 from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -43,7 +44,11 @@ class OptimizeLoadoutAction(Action):
         is the action's precondition, not multi-level error handling."""
         if not self.target_monster_code:
             return {}
-        optimal = pick_loadout(self.target_monster_code, state, game_data)
+        optimal = pick_loadout(
+            Combat(game_data.monster_attack(self.target_monster_code),
+                   game_data.monster_resistance(self.target_monster_code)),
+            state, game_data,
+        )
         return {
             slot: new_code
             for slot, new_code in optimal.items()

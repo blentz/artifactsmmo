@@ -12,6 +12,7 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.projections import expected_yield_per_cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -45,7 +46,11 @@ class GrindCharacterXPGoal(Goal):
     def _loadout_optimal(self, state: WorldState) -> bool:
         if self._game_data is None:
             return True
-        optimal = pick_loadout(self._target_monster, state, self._game_data)
+        optimal = pick_loadout(
+            Combat(self._game_data.monster_attack(self._target_monster),
+                   self._game_data.monster_resistance(self._target_monster)),
+            state, self._game_data,
+        )
         return all(state.equipment.get(slot) == code for slot, code in optimal.items())
 
     def value(self, state: WorldState, game_data: GameData,

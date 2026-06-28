@@ -8,9 +8,10 @@ a stable verdict, not a sampled fight."""
 import math
 
 from artifactsmmo_cli.ai.elements import ELEMENTS
-from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
 from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
+from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -87,7 +88,10 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
     predicted to win a chicken fight, fought, lost. The fight starts at
     state.hp, not max_hp; project_loadout_stats may raise max_hp via
     equipment but doesn't refill current hp."""
-    loadout = pick_loadout(monster_code, state, game_data)
+    loadout = pick_loadout(
+        Combat(game_data.monster_attack(monster_code), game_data.monster_resistance(monster_code)),
+        state, game_data,
+    )
     p = project_loadout_stats(state, loadout, game_data)
     m_resist = game_data.monster_resistance(monster_code)
     m_crit = game_data.monster_critical_strike(monster_code)
