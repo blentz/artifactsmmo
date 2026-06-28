@@ -64,14 +64,19 @@ already hold:
 - **`OptimizeLoadoutAction(Gather(skill))` created per gather skill** — the 4 `GatheringSkill`
   enum values (mining/woodcutting/fishing/alchemy), derived generically from the enum (not
   hardcoded), the way combat creates one per monster.
-- **Gating on the active gather activity.** There is no "current gather skill" signal at
-  loadout time today (only `SelectionContext.combat_monster`). B adds one: the active gather
-  goal/step exposes the skill it is gathering (the targeted resource's skill), and a gather
-  goal's satisfaction includes "gather-loadout optimal for that skill" (mirroring
-  `GrindCharacterXPGoal._loadout_optimal`), so the planner inserts `OptimizeLoadout(Gather(skill))`
-  before gathering — and the gather loadout NEVER fires while fighting (gated to gather
-  activity). Pinning the exact goal/step hook is the implementation's main integration task
-  (locate the gather-driving goal/step, expose its skill, add the loadout-optimal gate).
+- **Cost-penalty gating (not a satisfaction gate).** The combat satisfaction-gate
+  (`GrindCharacterXPGoal._loadout_optimal`) works because that goal has ONE target monster.
+  `GatherMaterialsGoal` is **multi-skill** (its recipe closure spans resources across several
+  gather skills), so "loadout optimal" for all of them at once is impossible (one tool slot).
+  And gather-loadout is purely an **efficiency** win (the tool reduces gather cooldown), never
+  a correctness one. So B uses the **cost-penalty** pattern already in the codebase for combat
+  (`FightAction.cost` at `actions/combat.py:129`): **`GatherAction.cost(resource)` adds a
+  penalty proportional to how sub-optimal the currently-worn tool is for the resource's gather
+  skill** (compare `pick_loadout(Gather(skill))` vs current). The planner then inserts
+  `OptimizeLoadout(Gather(skill))` before sustained gathering exactly when the cooldown saving
+  outweighs the swap cost — per-resource, no multi-skill conflict, and the gather loadout never
+  fires while fighting (only a `GatherAction` carries the penalty). `GatherAction` already
+  resolves its skill via `game_data.resource_skill_level(self.resource_code)`.
 
 ## Module layout (the layering-cycle resolution)
 
@@ -110,8 +115,10 @@ the epic meant to invert.
 
 - **Combat regression lock**: `pick_loadout(Combat(m))` reproduces today's `pick_loadout(m)`
   selection EXACTLY on live data (no combat loadout change).
-- **Gather behavior**: `pick_loadout(Gather(skill))` equips the best tool for that skill; a
-  test that the gather loadout fires ONLY under gather activity and never mid-combat.
+- **Gather behavior**: `pick_loadout(Gather(skill))` equips the best tool for that skill;
+  `GatherAction.cost` penalizes a sub-optimal gather tool (so the planner swaps before
+  gathering) while a non-gather action carries no such penalty (the gather loadout never fires
+  mid-combat).
 - **`pick_gather_loadout` removed** (dead code folded into the generalized picker) — confirm no
   surviving caller.
 - Full unit suite ≥ current bar (100%); full `formal/gate.sh` green; serialize gate/mutation vs
