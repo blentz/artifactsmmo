@@ -152,3 +152,11 @@ class _FakeGameData:
     @property
     def crafting_recipes(self) -> dict[str, dict[str, int]]:
         return self._recipes
+
+    @property
+    def craft_yields(self) -> dict[str, int]:
+        return {}
+
+    @property
+    def resource_drops(self) -> dict[str, str]:
+        return {}

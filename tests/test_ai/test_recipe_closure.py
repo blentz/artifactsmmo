@@ -5,15 +5,18 @@ from artifactsmmo_cli.ai.recipe_closure import (
     _closure_demand,
     _closure_visited,
     _raw_units,
+    closure_demand,
     raw_material_units,
     recipe_closure,
 )
 
 
-def _gd(recipes, drops):
+def _gd(recipes, drops, yields=None):
     gd = GameData()
     gd._crafting_recipes = recipes
     gd._resource_drops = drops
+    if yields is not None:
+        gd._craft_yields = yields
     return gd
 
 
@@ -173,3 +176,57 @@ def test_raw_units_yield_one_unchanged():
     # Y=1 (empty yields dict): same as current behavior
     recipes = {"bar": {"ore": 2}}
     assert _raw_units(2, "bar", recipes, {}, {}) == 2
+
+
+# ---------------------------------------------------------------------------
+# Task 4 spec-compliance: public wrappers default to game_data.craft_yields
+# (the prior map), not {} — so the feature is live for all 10 callers that
+# omit yields. Explicit yields arg still overrides.
+# ---------------------------------------------------------------------------
+
+
+def test_raw_material_units_uses_prior_map_by_default():
+    # craft_yields has potion=2; omitting yields arg must use that prior map.
+    # Need 1 potion, yield=2 → ⌈4/2⌉ = 2 ore (4 ore per batch, 1 potion wanted)
+    gd = _gd({"potion": {"herb": 4}}, {}, yields={"potion": 2})
+    # Without prior map default: would return 4 (Y=1). With prior map: ⌈4/2⌉=2.
+    assert raw_material_units(gd, "potion") == 2
+
+
+def test_raw_material_units_explicit_yields_overrides_prior():
+    # game_data prior says potion=2, but caller passes yields={"potion": 4}.
+    # Explicit override must win: ⌈4/4⌉ = 1 ore.
+    gd = _gd({"potion": {"herb": 4}}, {}, yields={"potion": 2})
+    assert raw_material_units(gd, "potion", yields={"potion": 4}) == 1
+
+
+def test_raw_material_units_empty_prior_is_noop():
+    # Empty craft_yields (today's all-Y=1 data) ⇒ exact same result as before.
+    gd = _gd({"bar": {"ore": 2}}, {})
+    assert raw_material_units(gd, "bar") == 2
+
+
+def test_closure_demand_uses_prior_map_by_default():
+    # Need 3 potions, prior yields=2 → ⌈3/2⌉=2 crafts → 2 herbs.
+    gd = _gd({"potion": {"herb": 1}}, {}, yields={"potion": 2})
+    out: dict[str, int] = {}
+    closure_demand("potion", 3, gd, out, frozenset())
+    assert out["potion"] == 3
+    assert out["herb"] == 2  # not 3
+
+
+def test_closure_demand_explicit_yields_overrides_prior():
+    # Prior says potion=2, caller passes yields={"potion": 3}.
+    # Override: ⌈3/3⌉=1 craft → 1 herb.
+    gd = _gd({"potion": {"herb": 1}}, {}, yields={"potion": 2})
+    out: dict[str, int] = {}
+    closure_demand("potion", 3, gd, out, frozenset(), yields={"potion": 3})
+    assert out["herb"] == 1
+
+
+def test_closure_demand_empty_prior_is_noop():
+    # Empty craft_yields (today's data) ⇒ same result as Y=1.
+    gd = _gd({"bar": {"ore": 2}}, {})
+    out: dict[str, int] = {}
+    closure_demand("bar", 3, gd, out, frozenset())
+    assert out["bar"] == 3 and out["ore"] == 6

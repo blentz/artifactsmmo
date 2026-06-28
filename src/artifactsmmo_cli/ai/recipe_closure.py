@@ -46,6 +46,9 @@ class _HasRecipes(Protocol):
     def crafting_recipes(self) -> Mapping[str, dict[str, int]]: ...
 
     @property
+    def craft_yields(self) -> Mapping[str, int]: ...
+
+    @property
     def resource_drops(self) -> Mapping[str, str]: ...
 
 
@@ -168,7 +171,7 @@ def raw_material_units(
     visited = visited or frozenset()
     recipes = game_data.crafting_recipes
     return _raw_units(len(recipes) + 1, item, recipes,
-                      yields if yields is not None else {},
+                      yields if yields is not None else game_data.craft_yields,
                       {code: 1 for code in visited})
 
 
@@ -193,7 +196,7 @@ def closure_demand(
     (formal/Formal/TaskReservation.lean)."""
     recipes = game_data.crafting_recipes
     result = _closure_demand(len(recipes) + 1, root, multiplier, recipes,
-                             yields if yields is not None else {},
+                             yields if yields is not None else game_data.craft_yields,
                              {code: 1 for code in visited}, dict(out))
     out.clear()
     out.update(result)

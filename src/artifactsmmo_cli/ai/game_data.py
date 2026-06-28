@@ -860,6 +860,16 @@ class GameData:
         return self.recipes_catalog.craft_yields.get(code, 1)
 
     @property
+    def craft_yields(self) -> Mapping[str, int]:
+        """item_code -> craft output quantity (prior map from CraftSchema.quantity).
+
+        Empty for today's all-quantity-1 data; populated from API v8 recipes
+        where CraftSchema.quantity > 1. Read-only view; callers must not mutate.
+        Mirrors ``crafting_recipes``.
+        """
+        return self._craft_yields
+
+    @property
     def recipe_cost(self) -> RecipeCostMemo:
         """Lazily-built memoized transitive recipe demand (one unit per item).
 
