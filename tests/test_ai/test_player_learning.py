@@ -11,6 +11,7 @@ from sqlmodel import Session as SqlSession
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
+from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -222,3 +223,89 @@ def test_record_loadout_no_op_without_history():
     action = FightAction(monster_code="chicken", locations=frozenset({(0, 0)}))
     # Should not raise
     player._record_loadout_for_action(action, state)
+
+
+def _make_chicken_game_data() -> GameData:
+    """Minimal GameData with a chicken monster and wooden_stick weapon.
+
+    Populates the always-present stats (attack, resistance, hp, critical_strike,
+    initiative) that predict_win raises KeyError on when missing.
+    """
+    gd = GameData()
+    gd._monster_attack = {"chicken": {"fire": 0, "water": 0, "earth": 0, "air": 0}}
+    gd._monster_resistance = {"chicken": {"fire": 0, "water": 0, "earth": 0, "air": 0}}
+    gd._monster_hp = {"chicken": 1}
+    gd.monsters.critical_strike["chicken"] = 0
+    gd.monsters.initiative["chicken"] = 0
+    gd._item_stats = {
+        "wooden_stick": ItemStats(code="wooden_stick", level=1, type_="weapon",
+                                  attack={"earth": 100}),
+    }
+    return gd
+
+
+def test_records_combat_outcome_on_win(tmp_path):
+    """_record_combat_outcome stores one row with actual_win=True on 'ok'."""
+    store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
+    player = GamePlayer(character="Robby", history=store)
+    gd = _make_chicken_game_data()
+    player.game_data = gd
+
+    equipment = {
+        "weapon_slot": "wooden_stick",
+        "shield_slot": None, "helmet_slot": None,
+        "body_armor_slot": None, "leg_armor_slot": None, "boots_slot": None,
+        "ring1_slot": None, "ring2_slot": None, "amulet_slot": None,
+        "artifact1_slot": None, "artifact2_slot": None, "artifact3_slot": None,
+        "utility1_slot": None, "utility2_slot": None, "bag_slot": None, "rune_slot": None,
+    }
+    state = make_state(equipment=equipment)
+    action = FightAction(monster_code="chicken", locations=frozenset({(0, 0)}))
+
+    player._record_combat_outcome(action, state, "ok")
+
+    rows = store.combat_loadout_outcomes()
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.task_key == "combat:chicken"
+    assert row.actual_win is True
+    assert row.predicted_win == predict_win(state, gd, "chicken")
+    assert row.loadout == {"weapon_slot": "wooden_stick"}
+    store.close()
+
+
+def test_records_combat_outcome_on_loss(tmp_path):
+    """_record_combat_outcome stores one row with actual_win=False on 'error:fight_lost'."""
+    store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
+    player = GamePlayer(character="Robby", history=store)
+    gd = _make_chicken_game_data()
+    player.game_data = gd
+
+    state = make_state()
+    action = FightAction(monster_code="chicken", locations=frozenset({(0, 0)}))
+
+    player._record_combat_outcome(action, state, "error:fight_lost")
+
+    rows = store.combat_loadout_outcomes()
+    assert len(rows) == 1
+    assert rows[0].task_key == "combat:chicken"
+    assert rows[0].actual_win is False
+    store.close()
+
+
+def test_no_combat_outcome_on_cooldown_or_nonfight(tmp_path):
+    """_record_combat_outcome is a no-op for error:cooldown outcomes or non-FightAction."""
+    store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
+    player = GamePlayer(character="Robby", history=store)
+    gd = _make_chicken_game_data()
+    player.game_data = gd
+
+    state = make_state()
+    fight_action = FightAction(monster_code="chicken", locations=frozenset({(0, 0)}))
+    move_action = MoveAction(x=1, y=1)
+
+    player._record_combat_outcome(fight_action, state, "error:cooldown")
+    player._record_combat_outcome(move_action, state, "ok")
+
+    assert store.combat_loadout_outcomes() == []
+    store.close()

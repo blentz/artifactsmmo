@@ -31,7 +31,7 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
-from artifactsmmo_cli.ai.combat import is_winnable
+from artifactsmmo_cli.ai.combat import is_winnable, predict_win
 from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
 from artifactsmmo_cli.ai.constants import (
     BANK_REFRESH_FORCE_SENTINEL,
@@ -666,6 +666,7 @@ class GamePlayer:
                 # active-profile keep economy can protect the correct gear.
                 if outcome == "ok":
                     self._record_loadout_for_action(action, prev_state_for_learning)
+                self._record_combat_outcome(action, prev_state_for_learning, outcome)
                 # Record the action outcome so the next cycle's gear-latch
                 # update can detect a fight loss ("error:fight_lost"). Only set
                 # on the action-execution path — no_plan cycles leave the
@@ -1702,6 +1703,22 @@ class GamePlayer:
             if code is not None
         }
         self.history.record_loadout_profile(task_key, loadout)
+
+    def _record_combat_outcome(self, action: Action, state: WorldState, outcome: str) -> None:
+        """Record a resolved fight's worn loadout, predict_win verdict, and actual
+        result for diagnostics (sub-project D).  Fires on win ('ok') and loss
+        ('error:fight_lost') only — other outcomes mean no fight resolved.
+        Best-effort; drives no behavior."""
+        if self.history is None or self.game_data is None:
+            return
+        if not isinstance(action, FightAction):
+            return
+        if outcome not in ("ok", "error:fight_lost"):
+            return
+        loadout = {slot: code for slot, code in state.equipment.items() if code is not None}
+        predicted = predict_win(state, self.game_data, action.monster_code)
+        self.history.record_combat_outcome(
+            combat_key(action.monster_code), loadout, predicted, outcome == "ok")
 
     def _record_learning_cycle(
         self,
