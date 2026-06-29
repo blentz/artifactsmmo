@@ -422,7 +422,6 @@ open Formal.PriorityBand
 -- LoadoutProfiles required roles (pure dedup + bank-space cost;
 -- src/artifactsmmo_cli/ai/loadout_profiles_core.py::gear_demand/bank_space_cost):
 #check @Formal.LoadoutProfiles.gearDemand_eq_max                  -- characterization: demand = per-code max over loadouts
-#check @Formal.LoadoutProfiles.gearDemand_dedup_bound            -- dedup "held once": demand ≤ max single-loadout count
 #check @Formal.LoadoutProfiles.gearDemand_mono                   -- monotonicity: adding a loadout never lowers demand
 #check @Formal.LoadoutProfiles.bankSpaceCost_nonneg             -- non-negativity: cost ≥ 0
 #check @Formal.LoadoutProfiles.bankSpaceCost_le_distinct        -- bound: cost ≤ #distinct active codes

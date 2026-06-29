@@ -54,13 +54,6 @@ never the cross-loadout sum). -/
 theorem gearDemand_eq_max (loadouts : List (List String)) (c : String) :
     gearDemand loadouts c = (loadouts.map (fun l => l.count c)).foldl max 0 := rfl
 
-/-- DEDUP BOUND ("held once"): the demand never exceeds the max single-loadout
-count of `c` — i.e. sharing a code across loadouts does NOT add demand (the
-result is bounded by ONE loadout's count, not the sum of counts). -/
-theorem gearDemand_dedup_bound (loadouts : List (List String)) (c : String) :
-    gearDemand loadouts c ≤ (loadouts.map (fun l => l.count c)).foldl max 0 :=
-  Nat.le_of_eq (gearDemand_eq_max loadouts c)
-
 /-- MONOTONICITY: adding a loadout never decreases a code's demand (more active
 profiles ⇒ at least as much bank room needed for `c`). -/
 theorem gearDemand_mono (loadouts : List (List String)) (l : List String) (c : String) :

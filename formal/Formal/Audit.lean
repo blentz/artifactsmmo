@@ -826,7 +826,6 @@ open Formal.WeightedRemaining in
 #print axioms Formal.BankExpansionTiming.expand_true_witness
 -- LoadoutProfiles (pure gear-demand dedup + bank-space cost cores)
 #print axioms Formal.LoadoutProfiles.gearDemand_eq_max
-#print axioms Formal.LoadoutProfiles.gearDemand_dedup_bound
 #print axioms Formal.LoadoutProfiles.gearDemand_mono
 #print axioms Formal.LoadoutProfiles.bankSpaceCost_nonneg
 #print axioms Formal.LoadoutProfiles.bankSpaceCost_le_distinct

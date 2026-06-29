@@ -2853,11 +2853,6 @@ example : ∀ (loadouts : List (List String)) (c : String),
     Formal.LoadoutProfiles.gearDemand loadouts c
       = (loadouts.map (fun l => l.count c)).foldl max 0 :=
   @Formal.LoadoutProfiles.gearDemand_eq_max
--- gearDemand_dedup_bound: DEDUP — demand ≤ max single-loadout count ("held once").
-example : ∀ (loadouts : List (List String)) (c : String),
-    Formal.LoadoutProfiles.gearDemand loadouts c
-      ≤ (loadouts.map (fun l => l.count c)).foldl max 0 :=
-  @Formal.LoadoutProfiles.gearDemand_dedup_bound
 -- gearDemand_mono: MONOTONICITY — adding a loadout never lowers demand.
 example : ∀ (loadouts : List (List String)) (l : List String) (c : String),
     Formal.LoadoutProfiles.gearDemand loadouts c
