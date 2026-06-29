@@ -51,3 +51,33 @@ def test_loadout_profiles_returns_empty_on_error(tmp_path):
     store = LearningStore(db_path=str(tmp_path / "t.db"), character="hero")
     _break_engine(store)
     assert store.loadout_profiles() == {}
+
+
+def test_recent_selected_goals_returns_goals(tmp_path):
+    """recent_selected_goals returns the last N selected_goal strings."""
+    from datetime import datetime, timezone
+    from artifactsmmo_cli.ai.learning.models import Cycle
+    store = LearningStore(db_path=str(tmp_path / "t.db"), character="X")
+    store.start_session()
+    for goal in ("GrindCharacterXP(chicken)", "LevelSkill(mining->5)"):
+        store.record_cycle(Cycle(
+            ts=datetime.now(tz=timezone.utc).isoformat(),
+            session_id="s",
+            cycle_index=0,
+            character="X",
+            selected_goal=goal,
+            action_repr="<none>",
+            action_class="NoPlan",
+            outcome="ok",
+        ))
+    goals = store.recent_selected_goals(window=10)
+    assert "GrindCharacterXP(chicken)" in goals
+    assert "LevelSkill(mining->5)" in goals
+    store.close()
+
+
+def test_recent_selected_goals_returns_empty_on_error(tmp_path):
+    """recent_selected_goals returns [] when the DB is broken."""
+    store = LearningStore(db_path=str(tmp_path / "t.db"), character="hero")
+    _break_engine(store)
+    assert store.recent_selected_goals(window=50) == []

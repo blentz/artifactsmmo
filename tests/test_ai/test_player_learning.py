@@ -8,7 +8,9 @@ import pytest
 from sqlmodel import Session, select
 from sqlmodel import Session as SqlSession
 
-from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -133,3 +135,90 @@ def test_record_learning_cycle_empty_skill_delta_when_no_change(tmp_path):
     assert len(rows) == 1
     assert json.loads(rows[0].delta_skill_xp_json) == {}
     store.close()
+
+
+def test_fight_records_combat_loadout_profile(tmp_path):
+    """_record_loadout_for_action stores 'combat:<monster>' for a FightAction."""
+    store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
+    player = GamePlayer(character="Robby", history=store)
+
+    gd = GameData()
+    gd._monster_attack = {"chicken": {"fire": 0, "water": 0, "earth": 0, "air": 0}}
+    gd._monster_resistance = {"chicken": {"fire": 0, "water": 0, "earth": 0, "air": 0}}
+    gd._item_stats = {
+        "wooden_stick": ItemStats(code="wooden_stick", level=1, type_="weapon",
+                                  attack={"earth": 4}),
+    }
+    player.game_data = gd
+
+    state = make_state(inventory={"wooden_stick": 1})
+    action = FightAction(monster_code="chicken", locations=frozenset({(0, 0)}))
+    player._record_loadout_for_action(action, state)
+
+    profiles = store.loadout_profiles()
+    assert "combat:chicken" in profiles
+    # The stored loadout reflects pick_loadout(Combat(chicken), state, gd)
+    # which with wooden_stick in inventory equips it in weapon_slot.
+    assert profiles["combat:chicken"].get("weapon_slot") == "wooden_stick"
+    store.close()
+
+
+def test_gather_records_gather_loadout_profile(tmp_path):
+    """_record_loadout_for_action stores 'gather:<skill>' for a GatherAction."""
+    store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
+    player = GamePlayer(character="Robby", history=store)
+
+    gd = GameData()
+    gd._resource_skill = {"copper_ore": ("mining", 1)}
+    player.game_data = gd
+
+    state = make_state()
+    action = GatherAction(resource_code="copper_ore", locations=frozenset({(0, 0)}))
+    player._record_loadout_for_action(action, state)
+
+    profiles = store.loadout_profiles()
+    assert "gather:mining" in profiles
+    store.close()
+
+
+def test_record_loadout_skips_unknown_resource(tmp_path):
+    """_record_loadout_for_action does not record when resource has no skill."""
+    store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
+    player = GamePlayer(character="Robby", history=store)
+
+    gd = GameData()
+    gd._resource_skill = {}   # copper_ore has no skill data
+    player.game_data = gd
+
+    state = make_state()
+    action = GatherAction(resource_code="copper_ore", locations=frozenset({(0, 0)}))
+    player._record_loadout_for_action(action, state)
+
+    # No profile should be stored when skill is unknown
+    assert store.loadout_profiles() == {}
+    store.close()
+
+
+def test_record_loadout_skips_non_combat_gather_actions(tmp_path):
+    """_record_loadout_for_action is a no-op for other action types."""
+    from artifactsmmo_cli.ai.actions.movement import MoveAction
+    store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
+    player = GamePlayer(character="Robby", history=store)
+    player.game_data = GameData()
+
+    state = make_state()
+    action = MoveAction(x=1, y=1)
+    player._record_loadout_for_action(action, state)
+
+    assert store.loadout_profiles() == {}
+    store.close()
+
+
+def test_record_loadout_no_op_without_history():
+    """_record_loadout_for_action is a no-op when history is None."""
+    player = GamePlayer(character="Robby", history=None)
+    player.game_data = GameData()
+    state = make_state()
+    action = FightAction(monster_code="chicken", locations=frozenset({(0, 0)}))
+    # Should not raise
+    player._record_loadout_for_action(action, state)

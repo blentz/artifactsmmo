@@ -23,9 +23,11 @@ from artifactsmmo_api_client.types import Unset
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
+from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.factory import build_actions
+from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
@@ -42,8 +44,11 @@ from artifactsmmo_cli.ai.constants import (
 )
 from artifactsmmo_cli.ai.action_kind import action_kind_of
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, GoalAttempt, GoalRankEntry, RootScoreView
+from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_latch import GearLatch
+from artifactsmmo_cli.ai.gear_value_core import Combat, Gather
+from artifactsmmo_cli.ai.loadout_profiles import combat_key, gather_key
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.projections import PathPlan, cheapest_path_to_level
@@ -653,6 +658,10 @@ class GamePlayer:
                     plan_len=len(plan),
                     cycles_to_satisfy=cycles_to_satisfy,
                 )
+                # Auto-record loadout profile for fight/gather tasks so the
+                # active-profile keep economy can protect the correct gear.
+                if outcome == "ok":
+                    self._record_loadout_for_action(action, prev_state_for_learning)
                 # Record the action outcome so the next cycle's gear-latch
                 # update can detect a fight loss ("error:fight_lost"). Only set
                 # on the action-execution path — no_plan cycles leave the
@@ -1615,6 +1624,44 @@ class GamePlayer:
         if first is None:
             return None
         return current_cycle - first
+
+    def _record_loadout_for_action(self, action: Action, state: WorldState) -> None:
+        """Upsert a loadout profile for the task performed by `action`.
+
+        Called after a successful action execute so the loadout the bot used
+        for this fight/gather cycle is persisted.  Best-effort: the underlying
+        ``record_loadout_profile`` already swallows ``SQLAlchemyError``.
+
+        Only ``FightAction`` and ``GatherAction`` produce loadout profiles;
+        all other action types are silently skipped.  Gather actions without a
+        known resource→skill mapping (``game_data.resource_skill_level`` returns
+        ``None``) are also skipped.
+        """
+        if self.history is None or self.game_data is None:
+            return
+        purpose: Combat | Gather
+        task_key: str
+        if isinstance(action, FightAction):
+            purpose = Combat(
+                self.game_data.monster_attack(action.monster_code),
+                self.game_data.monster_resistance(action.monster_code),
+            )
+            task_key = combat_key(action.monster_code)
+        elif isinstance(action, GatherAction):
+            skill_req = self.game_data.resource_skill_level(action.resource_code)
+            if skill_req is None:
+                return
+            skill, _ = skill_req
+            purpose = Gather(skill)
+            task_key = gather_key(skill)
+        else:
+            return
+        loadout = {
+            slot: code
+            for slot, code in pick_loadout(purpose, state, self.game_data).items()
+            if code is not None
+        }
+        self.history.record_loadout_profile(task_key, loadout)
 
     def _record_learning_cycle(
         self,

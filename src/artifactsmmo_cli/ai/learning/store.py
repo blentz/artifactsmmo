@@ -372,6 +372,27 @@ class LearningStore:
         except SQLAlchemyError:
             return []
 
+    def recent_selected_goals(self, window: int) -> list[str]:
+        """Return up to `window` most recent non-None Cycle.selected_goal values for
+        this character, newest first.  Used by loadout_profiles._recent_task_keys to
+        parse combat/gather keys from recent activity without filtering by a specific
+        goal repr."""
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = (
+                    select(Cycle.selected_goal)
+                    .where(
+                        col(Cycle.character) == self._character,
+                        col(Cycle.selected_goal).is_not(None),
+                    )
+                    .order_by(col(Cycle.id).desc())
+                    .limit(window)
+                )
+                rows = list(s.exec(stmt))
+            return [r for r in rows if r is not None]
+        except SQLAlchemyError:
+            return []
+
     def skill_xp_per_cycle(self, skill: str, window: int = WINDOW_RECENT) -> float | None:
         """Mean positive per-cycle XP gain for `skill` over the most recent `window` cycles.
 
