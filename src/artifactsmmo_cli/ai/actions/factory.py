@@ -12,6 +12,7 @@ from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.complete_task import CompleteTaskAction
 from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
+from artifactsmmo_cli.ai.actions.use_gold_bag import UseGoldBagAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
@@ -54,6 +55,7 @@ def build_actions(
     actions: list[Action] = [
         RestAction(),
         UseConsumableAction(_item_stats=game_data.all_item_stats),
+        UseGoldBagAction(_item_stats=game_data.all_item_stats),
         DepositAllAction(bank_location=bank, accessible=bank_accessible, game_data=game_data),
         AcceptTaskAction(taskmaster_location=taskmaster),
         CompleteTaskAction(taskmaster_location=taskmaster),
