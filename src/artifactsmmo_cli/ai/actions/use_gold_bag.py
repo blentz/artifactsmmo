@@ -25,8 +25,8 @@ class UseGoldBagAction(Action):
     """Consume the highest-value owned gold-bag (effect `gold`) to add its gold to pocket.
 
     Tiebreak: when multiple gold-bags are in inventory, picks max by
-    ``(gold_value, code)`` — highest gold_value wins; code breaks value ties
-    lexicographically-descending so the result is always deterministic.
+    ``(gold_value, code)`` — highest gold_value wins; on a value tie the
+    lexicographically largest code wins, making the result deterministic.
     """
 
     tags: ClassVar[frozenset[str]] = frozenset({"currency"})

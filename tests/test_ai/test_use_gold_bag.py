@@ -98,8 +98,8 @@ class TestUseGoldBagApply:
     def test_apply_picks_highest_gold_value_bag(self, gold_fixture):
         """When both bag_of_gold (2500) and small_bag_of_gold (1000) are owned,
         apply credits 2500 (the bigger bag) and leaves the smaller untouched.
-        Tiebreak: max by (gold_value, code) — highest value wins; code breaks ties
-        lexicographically-descending so the result is deterministic when values match.
+        Tiebreak: max by (gold_value, code) — highest value wins; on a value tie
+        the lexicographically largest code wins, making the result deterministic.
         """
         state, game_data = gold_fixture
         multi = dataclasses.replace(state, inventory={"bag_of_gold": 1,
@@ -220,6 +220,34 @@ class _ReachGoldGoal(Goal):
         return 3
 
 
+class _ExpandBankGoal(Goal):
+    """Satisfied when bank_capacity has reached a target slot count.
+
+    Used to wire a genuine UseGoldBag→BuyBankExpansion chain in the planner
+    test: only BuyBankExpansionAction can satisfy this goal, while
+    UseGoldBagAction is the prerequisite that raises gold high enough to
+    afford the purchase.
+    """
+
+    def __init__(self, target_capacity: int) -> None:
+        self._target = target_capacity
+
+    def value(self, state: WorldState, game_data: GameData,
+              history=None) -> float:
+        return 1.0 if not self.is_satisfied(state) else 0.0
+
+    def is_satisfied(self, state: WorldState) -> bool:
+        cap = state.bank_capacity if state.bank_capacity is not None else 0
+        return cap >= self._target
+
+    def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
+        return {"bank_capacity": self._target}
+
+    @property
+    def max_depth(self) -> int:
+        return 3
+
+
 class TestUseGoldBagPlannerChain:
     def test_planner_uses_gold_bag_when_gold_short(self, gold_fixture):
         """The GOAP planner finds UseGoldBag as the sole action when gold is below the
@@ -236,25 +264,32 @@ class TestUseGoldBagPlannerChain:
         assert isinstance(plan[0], UseGoldBagAction)
 
     def test_planner_chains_gold_bag_before_bank_expansion(self, gold_fixture):
-        """The GOAP planner chains UseGoldBag before BuyBankExpansion when the
+        """The GOAP planner chains UseGoldBag THEN BuyBankExpansion when the
         character has a gold-bag but insufficient pocket gold to buy the expansion.
 
         Setup: gold=100 < expansion_cost=1000, bag_of_gold gives +2500 →
-        after UseGoldBag gold=2600 >= 1000 → BuyBankExpansion becomes applicable.
-        The plan must start with UseGoldBag.
+        after UseGoldBag gold=2600 >= 1000 → BuyBankExpansion becomes applicable
+        and satisfies the bank-capacity goal (20 slots → 40 slots).
+
+        This is a genuine 2-action chain: UseGoldBag alone cannot satisfy
+        _ExpandBankGoal (it never touches bank_capacity), and BuyBankExpansion
+        alone is blocked by insufficient gold.  Both actions must appear in the
+        plan in this order.
         """
-        state, game_data = gold_fixture  # gold=100, inventory={"bag_of_gold": 1}
+        state, _ = gold_fixture  # gold=100, inventory={"bag_of_gold": 1}
         gd = _make_gd()
         gd._bank_location = (4, 0)
         gd._next_expansion_cost = 1000
         gd._bank_capacity = 20
-        # Place character at the bank so movement cost doesn't dominate
+        # Place character at the bank so movement cost is zero
         at_bank = dataclasses.replace(state, x=4, y=0)
-        goal = _ReachGoldGoal(threshold=1000)
+        # Goal requires bank_capacity >= 40; only BuyBankExpansion raises it.
+        goal = _ExpandBankGoal(target_capacity=40)
         actions = [
             UseGoldBagAction(_item_stats=gd.all_item_stats),
             BuyBankExpansionAction(bank_location=(4, 0), accessible=True),
         ]
         plan = GOAPPlanner().plan(at_bank, goal, actions, gd)
-        assert len(plan) >= 1
+        assert len(plan) == 2
         assert isinstance(plan[0], UseGoldBagAction)
+        assert isinstance(plan[1], BuyBankExpansionAction)
