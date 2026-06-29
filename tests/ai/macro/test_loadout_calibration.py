@@ -70,6 +70,5 @@ def test_report_per_loadout_win_loss_counts() -> None:
         _row("combat:chicken", {"weapon_slot": "stick"}, True, False),
     ]
     report = loadout_calibration_report(rows)
-    # 2 wins and 1 loss for stick loadout — both numbers should appear
-    assert "2" in report
-    assert "1" in report
+    # 2 wins and 1 loss for stick loadout — the exact tally row must appear
+    assert "| weapon_slot=stick | 2 | 1 |" in report
