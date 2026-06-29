@@ -27,6 +27,8 @@ PROJECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "proje
 GATHERING_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gathering.py"
 LEVEL_SKILL_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "level_skill.py"
 SCORING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "scoring.py"
+LOADOUT_PICKER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "loadout_picker.py"
+GEAR_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_value.py"
 SKILL_XP_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "skill_xp_curve.py"
 SKILL_TARGET_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "skill_target_curve.py"
 SKILL_GRIND_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "skill_grind_selection.py"
@@ -553,22 +555,11 @@ PROJECTION_MUTATIONS = [
 
 
 # equipment_scoring mutations -- old strings matched to current scoring.py text.
+# (The pick_loadout-resident mutants moved to LOADOUT_PICKER_* / GEAR_VALUE_*
+# below when Task 1 relocated the picker to loadout_picker.py and Task 2
+# generalized the per-slot scorer through gear_value; the score-FORMULA mutants
+# below stay on scoring.py.)
 SCORING_MUTATIONS = [
-    # drop the level filter in _candidates_for_slot: below-level items become
-    # eligible, so an above-level higher-score item can be (wrongly) picked.
-    ("equipment_scoring: drop level filter in _candidates_for_slot",
-     "        if stats is None or state.level < stats.level:",
-     "        if stats is None:"),
-    # drop the no-downgrade guard: force the swap branch so the selector
-    # always swaps to the argmax candidate even when it is strictly WORSE than
-    # the equipped item. 2026-06-11 re-anchor: the per-slot `improves` flag
-    # collapsed into the shared `best_score > current_score` comparison when
-    # pick_loadout moved to the one-slot-per-code projected-result rule.
-    ("equipment_scoring: drop no-downgrade guard (swap forced True)",
-     "        if best_score > current_score:\n"
-     "            result[slot] = best.code",
-     "        if True:\n"
-     "            result[slot] = best.code"),
     # drop the weapon clamp: max(0, 100 - res) -> (100 - res), letting a
     # high-resistance monster make a strong weapon score NEGATIVE (so a weak weapon
     # could be preferred / scores go below 0). P4b re-anchor: the formula moved
@@ -665,21 +656,57 @@ REALIZABLE_LOADOUT_MUTATIONS = [
      "            result[slot] = best.code",
      "        if best_score >= current_score:\n"
      "            result[slot] = best.code"),
-    # Swap weapon_score and armor_score per slot: weapon_slot uses armor_score
-    # (defense-oriented) and the rest use weapon_score (offense-oriented).
-    # Violates Property 3 (per-slot argmax under the SLOT-CORRECT score
-    # function; Lean `pickSlotStep_optimal` is parameterised by the score).
-    # 2026-06-11 re-anchor: the `if slot == "weapon_slot":` dispatch became
-    # the hoisted `weapon` flag.
-    ("realizable_loadout: swap weapon_score and armor_score per slot",
-     "        if weapon:\n"
-     "            best = max(feasible, key=lambda s: weapon_score(s, monster_res))\n"
-     "        else:\n"
-     "            best = max(feasible, key=lambda s: armor_score(s, monster_atk))",
-     "        if weapon:\n"
-     "            best = max(feasible, key=lambda s: armor_score(s, monster_atk))\n"
-     "        else:\n"
-     "            best = max(feasible, key=lambda s: weapon_score(s, monster_res))"),
+]
+
+
+# loadout_picker (combat-killed) mutations -- the picker structure that moved out
+# of scoring.py into loadout_picker.py (Task 1 relocation). Killed by the COMBAT
+# differential test_equipment_scoring_diff.py (now routed through Combat purpose).
+LOADOUT_PICKER_COMBAT_MUTATIONS = [
+    # drop the level filter in _candidates_for_slot: below-level items become
+    # eligible, so an above-level higher-score item can be (wrongly) picked.
+    ("loadout_picker: drop level filter in _candidates_for_slot",
+     "        if stats is None or state.level < stats.level:",
+     "        if stats is None:"),
+    # drop the no-downgrade guard: force the swap branch so the selector always
+    # swaps to the argmax candidate even when it is strictly WORSE than the
+    # equipped item (the shared `best_score > current_score` comparison).
+    ("loadout_picker: drop no-downgrade guard (swap forced True)",
+     "        if best_score > current_score:\n"
+     "            result[slot] = best.code",
+     "        if True:\n"
+     "            result[slot] = best.code"),
+]
+
+
+# loadout_picker (gather-killed) mutations -- the purpose-specific Gather benefit
+# line. Killed by the GATHER differential test_loadout_picker_diff.py.
+LOADOUT_PICKER_GATHER_MUTATIONS = [
+    # DROP THE GATHER NEGATION: `_benefit` returns the raw (signed) gather_score
+    # instead of its negation, so the picker MAXIMIZES gather_score and selects
+    # the WORST tool (least-negative effect) — the opposite of the proved
+    # `argmax(-gatherScore) = argmin(gatherScore)` duality. The gather pick
+    # diverges from the oracle and the swap-in-tool anchor flips → killed.
+    ("loadout_picker: drop the Gather benefit negation (-value -> value)",
+     "    return -value if isinstance(purpose, Gather) else value",
+     "    return value if isinstance(purpose, Gather) else value"),
+]
+
+
+# gear_value dispatch mutation -- the per-slot SCORE-FUNCTION choice that moved
+# into gear_value.py (Task 2): the weapon slot must score by weapon_score
+# (offense vs monster resistance), every other slot by armor_score (defense vs
+# monster attack). Swapping the two branches makes the weapon slot pick the
+# defensive item. Killed by test_realizable_loadout_diff.py's weapon/armor-slot
+# score anchors (which route through pick_loadout -> gear_value(Combat)).
+GEAR_VALUE_DISPATCH_MUTATIONS = [
+    ("gear_value: swap weapon_score and armor_score dispatch",
+     "        if stats.type_ == \"weapon\":\n"
+     "            return weapon_score(stats, dict(purpose.monster_resistance))\n"
+     "        return armor_score(stats, dict(purpose.monster_attack))",
+     "        if stats.type_ == \"weapon\":\n"
+     "            return armor_score(stats, dict(purpose.monster_attack))\n"
+     "        return weapon_score(stats, dict(purpose.monster_resistance))"),
 ]
 
 
@@ -2099,6 +2126,7 @@ _ALL_SRCS = [
     GEAR_VALUE_CORE_SRC,
     GAME_DATA_PARSE_SRC, LOCATION_CATALOG_SRC,
     SRC, TASK_BATCH_SRC, INVENTORY_CAPS_SRC, COMBAT_SRC, PROJECTION_SRC, SCORING_SRC,
+    LOADOUT_PICKER_SRC, GEAR_VALUE_SRC,
     SKILL_XP_CURVE_SRC, RECIPE_CLOSURE_SRC, TASK_FEASIBILITY_SRC, PREREQUISITE_GRAPH_SRC,
     OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, STUCK_DETECTOR_SRC,
     PRIORITY_BAND_SRC, OWNED_COUNT_SRC, ROOT_PROGRESS_SRC, UPGRADE_SELECTION_SRC, SCALAR_CORE_SRC,
@@ -3792,7 +3820,13 @@ def _run_all_groups() -> int:
               "formal/diff/test_loadout_projection_diff.py", survivors)
     run_group(SCORING_SRC, SCORING_MUTATIONS,
               "formal/diff/test_equipment_scoring_diff.py", survivors)
-    run_group(SCORING_SRC, REALIZABLE_LOADOUT_MUTATIONS,
+    run_group(LOADOUT_PICKER_SRC, LOADOUT_PICKER_COMBAT_MUTATIONS,
+              "formal/diff/test_equipment_scoring_diff.py", survivors)
+    run_group(LOADOUT_PICKER_SRC, LOADOUT_PICKER_GATHER_MUTATIONS,
+              "formal/diff/test_loadout_picker_diff.py", survivors)
+    run_group(GEAR_VALUE_SRC, GEAR_VALUE_DISPATCH_MUTATIONS,
+              "formal/diff/test_realizable_loadout_diff.py", survivors)
+    run_group(LOADOUT_PICKER_SRC, REALIZABLE_LOADOUT_MUTATIONS,
               "formal/diff/test_realizable_loadout_diff.py", survivors)
     run_group(SKILL_XP_CURVE_SRC, SKILL_XP_CURVE_MUTATIONS,
               "formal/diff/test_skill_xp_curve_diff.py", survivors)

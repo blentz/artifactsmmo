@@ -276,6 +276,62 @@ def runEquipmentScoring (args : Array Json) : Json :=
   Json.mkObj [("picked_code", Json.num pickedCode), ("picked_score", Json.num pickedScore),
     ("max_score", Json.num maxScore), ("cur_score", Json.num curScore)]
 
+/-- Compute one UNIFIED purpose-picker per-slot pick using the SAME proved
+`Formal.GearValue.pickSlotForPurpose` / `purposeBenefit` (Task 5, 2026-06-28).
+
+The unified picker maximizes ONE per-slot benefit dispatched on the purpose:
+Combat → `combatValue` (= raw `WScore`/`AScore`), Gather → `-gatherValue`
+(`-skillEffect`, so the most-negative gather effect is the biggest benefit).
+
+args layout:
+* 0:        purposeKind (0 = combat, 1 = gather)
+* 1:        playerLevel
+* 2:        isWeapon (0/1)  — combat weapon-vs-armor dispatch; ignored for gather
+* 3..6:     monster element stats (resistance for weapon, attack for armor)
+* 7:        currentPresent (0/1)
+* 8..21:    current EXTENDED block: 13-int item block + 1 skillEffect int
+* 22..:     candidate EXTENDED blocks, 14 ints each (13-int item + skillEffect)
+
+The skill effect is carried per item (the 14th int) and reassembled into the
+abstract `skillEffect : Item → Int` keyed by item code — binding the abstract
+Gather benefit to the per-item integer the live Python `gather_score` returns.
+
+Emits the picked item's CODE (or -1 = none / leave-as-is), its BENEFIT, the MAX
+feasible benefit, and the current item's benefit (for the no-downgrade assertion). -/
+def runLoadoutPicker (args : Array Json) : Json :=
+  let purposeKind := intArg args 0
+  let playerLevel := intArg args 1
+  let isWeapon := intArg args 2 != 0
+  let monStats := elemFromArgs args 3
+  let curPresent := intArg args 7 != 0
+  let curPair : Option (Item × Int) :=
+    if curPresent then some (itemFromBlock (fun i => intArg args (8 + i)), intArg args 21)
+    else none
+  let nCand := (args.size - 22) / 14
+  let candPairs : List (Item × Int) :=
+    (List.range nCand).map (fun k =>
+      (itemFromBlock (fun i => intArg args (22 + k * 14 + i)), intArg args (22 + k * 14 + 13)))
+  let allPairs : List (Item × Int) :=
+    (match curPair with | some p => [p] | none => []) ++ candPairs
+  let skillEffect : Item → Int := fun it =>
+    ((allPairs.find? (fun p => p.1.code == it.code)).map (fun p => p.2)).getD 0
+  let p : Formal.GearValue.Purpose :=
+    if purposeKind == 1 then Formal.GearValue.Purpose.gather skillEffect
+    else Formal.GearValue.Purpose.combat monStats monStats isWeapon
+  let benefit := Formal.GearValue.purposeBenefit p
+  let current : Option Item := curPair.map (fun p => p.1)
+  let items : List Item := candPairs.map (fun p => p.1)
+  let picked := Formal.GearValue.pickSlotForPurpose p playerLevel current items
+  let pickedCode : Int := match picked with | some it => it.code | none => -1
+  let pickedBenefit : Int := match picked with | some it => benefit it | none => 0
+  let cands := candidates playerLevel items
+  let maxBenefit : Int := match cands with
+    | [] => (match current with | some it => benefit it | none => 0)
+    | c :: cs => benefit (argmaxBy benefit c cs)
+  let curBenefit : Int := match current with | some it => benefit it | none => 0
+  Json.mkObj [("picked_code", Json.num pickedCode), ("picked_benefit", Json.num pickedBenefit),
+    ("max_benefit", Json.num maxBenefit), ("cur_benefit", Json.num curBenefit)]
+
 /-- Compute one skill_target_curve result using the proved `skillCurveTarget`.
 
 args layout (Ints):
@@ -2445,6 +2501,8 @@ def runOne (item : Json) : Json :=
     runLoadoutProjection args
   else if kind == "equipment_scoring" then
     runEquipmentScoring args
+  else if kind == "loadout_picker" then
+    runLoadoutPicker args
   else if kind == "skill_target_curve" then
     runSkillTargetCurve args
   else if kind == "skill_xp_curve" then

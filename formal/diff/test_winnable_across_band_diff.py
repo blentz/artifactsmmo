@@ -110,9 +110,10 @@ from artifactsmmo_cli.ai.equipment.level_loadout import (
     obtainable_hp_bonus_ceiling,
     obtainable_inventory_for_level,
 )
+from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
-from artifactsmmo_cli.ai.equipment.scoring import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -460,7 +461,9 @@ def test_synthetic_harness_reports_monster_winnable() -> None:
 
     # The projected totals are base + iron_sword (the construction is faithful):
     # base attack {} + iron_sword fire 40 ⇒ projected fire attack 40.
-    loadout = pick_loadout("chicken", state, game_data)
+    loadout = pick_loadout(
+        Combat(game_data.monster_attack("chicken"),
+               game_data.monster_resistance("chicken")), state, game_data)
     projected = project_loadout_stats(state, loadout, game_data)
     assert projected.attack.get("fire") == 40, projected.attack
     assert projected.max_hp == 145  # base.max_hp(145) + iron_sword.hp_bonus(0)

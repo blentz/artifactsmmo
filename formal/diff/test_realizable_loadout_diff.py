@@ -32,9 +32,11 @@ from hypothesis import given, settings, strategies as st
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.equipment.elements import ELEMENTS
+from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.equipment.realizable_loadout import is_realizable, ownership
-from artifactsmmo_cli.ai.equipment.scoring import armor_score, pick_loadout, weapon_score
+from artifactsmmo_cli.ai.equipment.scoring import armor_score, weapon_score
 from artifactsmmo_cli.ai.game_data import ItemStats
+from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -82,7 +84,7 @@ def test_regression_ring1_a_ring2_b_inventory_empty_fire_100():
     gd = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(level=1, inventory={},
                         equipment={"ring1_slot": "A", "ring2_slot": "B"})
-    loadout = pick_loadout("ogre", state, gd)
+    loadout = pick_loadout(Combat(monster_atk, monster_res), state, gd)
     assert is_realizable(loadout, state.inventory, state.equipment), loadout
     # The chosen codes are exactly the two physical rings owned (A and B), one
     # each — no slot duplicates the other's item.
@@ -162,7 +164,7 @@ def test_pick_loadout_is_always_realizable(item_types, item_levels, item_atks,
                                          zip(_ALL_SLOTS, equip_picks, strict=True)}
     gd = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(level, inventory, equipment)
-    loadout = pick_loadout("mon", state, gd)
+    loadout = pick_loadout(Combat(monster_atk, monster_res), state, gd)
     # Headline contract: every chosen code's count in the loadout is bounded
     # by its physical ownership (inventory + currently-equipped copies).
     assert is_realizable(loadout, state.inventory, state.equipment), {
@@ -326,10 +328,10 @@ def test_pick_loadout_deterministic_no_dict_leak(item_types, item_levels, item_a
                                          zip(_ALL_SLOTS, equip_picks, strict=True)}
     gd = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(level, inventory, equipment)
-    out_a = pick_loadout("mon", state, gd)
+    out_a = pick_loadout(Combat(monster_atk, monster_res), state, gd)
     # Re-build a structurally identical state and call again; the result must match.
     state_b = _make_state(level, dict(inventory), dict(equipment))
-    out_b = pick_loadout("mon", state_b, gd)
+    out_b = pick_loadout(Combat(monster_atk, monster_res), state_b, gd)
     assert out_a == out_b
 
 
@@ -375,7 +377,7 @@ def test_pick_loadout_no_downgrade_or_stolen(item_types, item_levels, item_atks,
                                          zip(_ALL_SLOTS, equip_picks, strict=True)}
     gd = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(level, inventory, equipment)
-    loadout = pick_loadout("mon", state, gd)
+    loadout = pick_loadout(Combat(monster_atk, monster_res), state, gd)
     for slot, chosen in loadout.items():
         current = state.equipment.get(slot)
         if chosen is None or chosen == current:
@@ -442,7 +444,7 @@ def test_pick_loadout_optimal_among_feasible(item_types, item_levels, item_atks,
     gd = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(level, inventory, equipment)
     pools = _candidate_pool(state, gd, ITEM_TYPE_TO_SLOTS)
-    loadout = pick_loadout("mon", state, gd)
+    loadout = pick_loadout(Combat(monster_atk, monster_res), state, gd)
     # Sanity check: every chosen code is from the candidate pool for its slot.
     for slot, chosen in loadout.items():
         if chosen is None:
@@ -479,7 +481,7 @@ def test_pick_loadout_weapon_slot_uses_weapon_score_not_armor_score():
     gd = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(level=1, inventory={"WHIGH": 1, "WLOW": 1},
                         equipment={"weapon_slot": None})
-    loadout = pick_loadout("mon", state, gd)
+    loadout = pick_loadout(Combat(monster_atk, monster_res), state, gd)
     assert loadout["weapon_slot"] == "WHIGH", loadout
 
 
@@ -547,7 +549,7 @@ def test_pick_loadout_dup_free_except_rings(item_types, item_levels, item_atks,
         {s: c for s, c in zip(_ALL_SLOTS, equip_picks, strict=True)})
     gd = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(level, inventory, equipment)
-    loadout = pick_loadout("mon", state, gd)
+    loadout = pick_loadout(Combat(monster_atk, monster_res), state, gd)
     counts: dict[str, int] = {}
     for code in loadout.values():
         if code is not None:
@@ -612,7 +614,7 @@ def test_pick_loadout_empty_fill_strictly_positive(item_types, item_levels,
                                          zip(_ALL_SLOTS, equip_picks, strict=True)}
     gd = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(level, inventory, equipment)
-    loadout = pick_loadout("mon", state, gd)
+    loadout = pick_loadout(Combat(monster_atk, monster_res), state, gd)
     for slot, chosen in loadout.items():
         if state.equipment.get(slot) is not None or chosen is None:
             continue
@@ -644,7 +646,7 @@ def test_dual_ring_fills_sibling_when_two_owned():
     gd = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(level=1, inventory={"copper_ring": 1},
                         equipment={"ring1_slot": "copper_ring", "ring2_slot": None})
-    loadout = pick_loadout("mon", state, gd)
+    loadout = pick_loadout(Combat(monster_atk, monster_res), state, gd)
     assert loadout["ring1_slot"] == "copper_ring", loadout
     assert loadout["ring2_slot"] == "copper_ring", loadout
     assert is_realizable(loadout, state.inventory, state.equipment), loadout
@@ -666,7 +668,7 @@ def test_single_ring_no_spare_leaves_sibling_empty():
     gd = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(level=1, inventory={},
                         equipment={"ring1_slot": "copper_ring", "ring2_slot": None})
-    loadout = pick_loadout("mon", state, gd)
+    loadout = pick_loadout(Combat(monster_atk, monster_res), state, gd)
     assert loadout["ring1_slot"] == "copper_ring", loadout
     assert loadout["ring2_slot"] is None, loadout
     assert is_realizable(loadout, state.inventory, state.equipment), loadout
@@ -685,7 +687,7 @@ def test_zero_score_candidate_leaves_empty_slot_empty():
     gd = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(level=1, inventory={"water_ring": 1},
                         equipment={"ring1_slot": None, "ring2_slot": None})
-    loadout = pick_loadout("mon", state, gd)
+    loadout = pick_loadout(Combat(monster_atk, monster_res), state, gd)
     assert loadout["ring1_slot"] is None, loadout
     assert loadout["ring2_slot"] is None, loadout
 
@@ -709,7 +711,7 @@ def test_score_tie_keeps_current_no_swap():
     gd = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(level=1, inventory={"beta_ring": 1},
                         equipment={"ring1_slot": "high_ring", "ring2_slot": None})
-    loadout = pick_loadout("mon", state, gd)
+    loadout = pick_loadout(Combat(monster_atk, monster_res), state, gd)
     assert loadout["ring1_slot"] == "high_ring", loadout
     # The tying beta_ring is a DIFFERENT code, so it legitimately fills ring2.
     assert loadout["ring2_slot"] == "beta_ring", loadout
@@ -730,7 +732,7 @@ def test_single_copy_fills_only_one_empty_sibling_slot():
     gd = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(level=1, inventory={"solo_ring": 1},
                         equipment={"ring1_slot": None, "ring2_slot": None})
-    loadout = pick_loadout("mon", state, gd)
+    loadout = pick_loadout(Combat(monster_atk, monster_res), state, gd)
     filled = [s for s in ("ring1_slot", "ring2_slot") if loadout[s] == "solo_ring"]
     assert len(filled) == 1, loadout
     assert is_realizable(loadout, state.inventory, state.equipment), loadout
@@ -753,5 +755,5 @@ def test_pick_loadout_armor_slot_uses_armor_score_not_weapon_score():
     gd = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(level=1, inventory={"BIGRES": 1, "BIGATK": 1},
                         equipment={"body_armor_slot": None})
-    loadout = pick_loadout("mon", state, gd)
+    loadout = pick_loadout(Combat(monster_atk, monster_res), state, gd)
     assert loadout["body_armor_slot"] == "BIGRES", loadout

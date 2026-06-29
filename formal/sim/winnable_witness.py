@@ -39,9 +39,10 @@ from artifactsmmo_cli.ai.equipment.level_loadout import (
     obtainable_hp_bonus_ceiling,
     obtainable_inventory_for_level,
 )
+from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
-from artifactsmmo_cli.ai.equipment.scoring import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -197,7 +198,9 @@ def build_witness_row(
     if monster_code is None:
         return None
 
-    loadout = pick_loadout(monster_code, state, game_data)
+    loadout = pick_loadout(
+        Combat(game_data.monster_attack(monster_code),
+               game_data.monster_resistance(monster_code)), state, game_data)
     p = project_loadout_stats(state, loadout, game_data)
     m_resist = game_data.monster_resistance(monster_code)
     m_attack = game_data.monster_attack(monster_code)

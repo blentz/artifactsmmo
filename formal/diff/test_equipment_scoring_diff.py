@@ -32,8 +32,10 @@ from hypothesis import given, settings, strategies as st
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.equipment.elements import ELEMENTS
-from artifactsmmo_cli.ai.equipment.scoring import armor_score, pick_loadout, weapon_score_raw
+from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
+from artifactsmmo_cli.ai.equipment.scoring import armor_score, weapon_score_raw
 from artifactsmmo_cli.ai.game_data import ItemStats
+from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.world_state import WorldState
 from formal.diff.oracle_client import run_oracle
 
@@ -112,7 +114,7 @@ def _owned_codes(state: WorldState) -> set[str]:
 def _check(table, monster_atk, monster_res, level, inventory, equipment, slots):
     game_data = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(level, inventory, equipment)
-    result = pick_loadout("mon", state, game_data)
+    result = pick_loadout(Combat(monster_atk, monster_res), state, game_data)
 
     # Intern codes to small ints so the Lean `changed`/identity guards line up.
     code_ids: dict[str, int] = {}
@@ -257,7 +259,7 @@ def test_below_level_not_chosen():
     equipment = {"weapon_slot": None, "body_armor_slot": None}
     game_data = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(5, inventory, equipment)
-    result = pick_loadout("mon", state, game_data)
+    result = pick_loadout(Combat(monster_atk, monster_res), state, game_data)
     assert result["weapon_slot"] == "w_lo"
     _check(table, monster_atk, monster_res, 5, inventory, equipment, ["weapon_slot"])
 
@@ -278,7 +280,7 @@ def test_utility_artifact_fills_empty_slot():
     equipment = {"artifact1_slot": None}
     game_data = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(10, inventory, equipment)
-    result = pick_loadout("mon", state, game_data)
+    result = pick_loadout(Combat(monster_atk, monster_res), state, game_data)
     assert result.get("artifact1_slot") == "novice_guide"
     _check(table, monster_atk, monster_res, 10, inventory, equipment, ["artifact1_slot"])
 
@@ -297,7 +299,7 @@ def test_bag_fills_empty_slot_via_inventory_space():
     equipment = {"bag_slot": None}
     game_data = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(10, inventory, equipment)
-    result = pick_loadout("mon", state, game_data)
+    result = pick_loadout(Combat(monster_atk, monster_res), state, game_data)
     assert result.get("bag_slot") == "backpack"
     _check(table, monster_atk, monster_res, 10, inventory, equipment, ["bag_slot"])
 
@@ -316,7 +318,7 @@ def test_haste_armor_scores_its_efficiency_value():
     equipment = {"leg_armor_slot": None}
     game_data = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(5, inventory, equipment)
-    result = pick_loadout("mon", state, game_data)
+    result = pick_loadout(Combat(monster_atk, monster_res), state, game_data)
     assert result.get("leg_armor_slot") == "haste_legs"
     _check(table, monster_atk, monster_res, 5, inventory, equipment, ["leg_armor_slot"])
 
@@ -335,7 +337,7 @@ def test_lifesteal_armor_scores_its_sustain_value():
     equipment = {"ring1_slot": None}
     game_data = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(5, inventory, equipment)
-    result = pick_loadout("mon", state, game_data)
+    result = pick_loadout(Combat(monster_atk, monster_res), state, game_data)
     assert result.get("ring1_slot") == "vamp_ring"
     _check(table, monster_atk, monster_res, 5, inventory, equipment, ["ring1_slot"])
 
@@ -355,7 +357,7 @@ def test_combat_buff_potion_scores_its_utility_value():
     equipment = {"ring1_slot": None}
     game_data = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(5, inventory, equipment)
-    result = pick_loadout("mon", state, game_data)
+    result = pick_loadout(Combat(monster_atk, monster_res), state, game_data)
     assert result.get("ring1_slot") == "boost_pot"
     _check(table, monster_atk, monster_res, 5, inventory, equipment, ["ring1_slot"])
 
@@ -372,7 +374,7 @@ def test_upgrade_swaps():
     equipment = {"weapon_slot": "w_old", "body_armor_slot": None}
     game_data = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(5, inventory, equipment)
-    result = pick_loadout("mon", state, game_data)
+    result = pick_loadout(Combat(monster_atk, monster_res), state, game_data)
     assert result["weapon_slot"] == "w_new"
     _check(table, monster_atk, monster_res, 5, inventory, equipment, ["weapon_slot"])
 
@@ -389,7 +391,7 @@ def test_downgrade_rejected():
     equipment = {"weapon_slot": "w_good", "body_armor_slot": None}
     game_data = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(5, inventory, equipment)
-    result = pick_loadout("mon", state, game_data)
+    result = pick_loadout(Combat(monster_atk, monster_res), state, game_data)
     assert result["weapon_slot"] == "w_good"
     _check(table, monster_atk, monster_res, 5, inventory, equipment, ["weapon_slot"])
 
@@ -405,7 +407,7 @@ def test_empty_slot_fill():
     equipment = {"weapon_slot": None, "body_armor_slot": None}
     game_data = _FakeGameData(table, monster_atk, monster_res)
     state = _make_state(5, inventory, equipment)
-    result = pick_loadout("mon", state, game_data)
+    result = pick_loadout(Combat(monster_atk, monster_res), state, game_data)
     assert result["body_armor_slot"] == "b_armor"
     _check(table, monster_atk, monster_res, 5, inventory, equipment, ["body_armor_slot"])
 
