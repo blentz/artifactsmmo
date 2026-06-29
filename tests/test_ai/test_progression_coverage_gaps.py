@@ -129,14 +129,16 @@ class TestInventoryUpgradeSkipsZeroQty:
         assert goal._find_inventory_upgrade(state, gd) == ("copper_dagger", "weapon_slot")
 
 
-class TestWornCodeNeverASiblingSlotTarget:
-    def test_no_second_ring_craft_target_when_same_ring_worn(self):
-        """THE 2026-06-10/11 485-LIVELOCK TRACE LOCK (gear-target derivation):
-        a copper_ring worn in ring1 must NOT make ring2 a craft target for a
-        second copper_ring. The server's one-slot-per-code rule (HTTP 485)
-        means that crafted ring could never be equipped — pre-fix the goal
-        committed to exactly this target and its final EquipAction was
-        forever inapplicable."""
+class TestSiblingSlotTargeting:
+    def test_second_ring_is_a_craft_target_when_same_ring_worn(self):
+        """DUAL-RING (live probe 2026-06-14, HTTP 200): a copper_ring worn in
+        ring1 DOES make ring2 a craft target for a SECOND copper_ring — the
+        server allows the same code in both ring slots up to ownership. This is
+        Robby's level-3 stall (2026-06-29): the upgrade selector wrongly applied
+        the one-slot-per-code (HTTP 485) rule to rings (a stale pre-dual-ring
+        assumption in `_worn_in_other_slot`), dropped the ring2 target, and the
+        bot ground throwaway wooden_shields instead of crafting the 2nd ring.
+        `_worn_in_other_slot` now carves out DUPLICATE_SLOT_TYPES."""
         gd = GameData()
         gd._item_stats = {
             "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
@@ -149,7 +151,7 @@ class TestWornCodeNeverASiblingSlotTarget:
             inventory={},
             equipment={"ring1_slot": "copper_ring", "ring2_slot": None},
         )
-        assert goal._find_craftable_upgrade_target(state, gd) is None
+        assert goal._find_craftable_upgrade_target(state, gd) == ("copper_ring", "ring2_slot")
 
     def test_different_code_still_targets_the_sibling_slot(self):
         """One-slot-per-code only forbids the SAME code: a different craftable
@@ -173,10 +175,11 @@ class TestWornCodeNeverASiblingSlotTarget:
         )
         assert goal._find_craftable_upgrade_target(state, gd) == ("iron_ring", "ring2_slot")
 
-    def test_no_inventory_upgrade_into_sibling_slot_for_worn_code(self):
-        """The inventory-upgrade path obeys the same rule: a spare copy of the
-        worn copper_ring in inventory is NOT an upgrade target for ring2 (it
-        can never be equipped there), so no gear target is derived at all."""
+    def test_inventory_spare_ring_is_an_upgrade_into_sibling_slot(self):
+        """Dual-ring: a spare copy of the worn copper_ring in inventory IS an
+        upgrade target for the empty ring2 — it can be equipped there (HTTP 200,
+        capped at ownership). (Previously this path also mis-applied the
+        one-slot-per-code rule to rings and derived no target.)"""
         gd = GameData()
         gd._item_stats = {
             "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
@@ -189,7 +192,7 @@ class TestWornCodeNeverASiblingSlotTarget:
             inventory={"copper_ring": 1},
             equipment={"ring1_slot": "copper_ring", "ring2_slot": None},
         )
-        assert goal._find_inventory_upgrade(state, gd) is None
+        assert goal._find_inventory_upgrade(state, gd) == ("copper_ring", "ring2_slot")
 
     def test_no_recraft_when_both_multi_slots_filled(self):
         """When both ring slots already hold the item, there is no empty slot to
@@ -224,6 +227,45 @@ class TestWornCodeNeverASiblingSlotTarget:
             equipment={"ring1_slot": "copper_ring", "ring2_slot": None},
         )
         assert goal._find_craftable_upgrade_target(state, gd) is None
+
+    def test_worn_NON_dup_type_still_blocks_sibling_slot_craft(self):
+        """The dual-ring carve is RING-SPECIFIC: a NON-duplicate multi-slot type
+        (artifact) worn in artifact1 still can't fill artifact2 (server HTTP 485
+        one-slot-per-code), so it is not a craft target — `_worn_in_other_slot`
+        returns True for non-dup types and the per-slot candidate is dropped."""
+        gd = GameData()
+        gd._item_stats = {
+            "novice_guide": ItemStats(code="novice_guide", level=1, type_="artifact",
+                                      crafting_skill="jewelrycrafting", crafting_level=1,
+                                      hp_bonus=25),
+        }
+        gd._crafting_recipes = {"novice_guide": {"copper_bar": 6}}
+        goal = UpgradeEquipmentGoal()
+        state = make_state(
+            level=5, skills={"jewelrycrafting": 1},
+            inventory={},
+            equipment={"artifact1_slot": "novice_guide", "artifact2_slot": None,
+                       "artifact3_slot": None},
+        )
+        assert goal._find_craftable_upgrade_target(state, gd) is None
+
+    def test_worn_NON_dup_type_still_blocks_sibling_slot_inventory(self):
+        """Same for the inventory path: a spare artifact in inventory while one is
+        worn can NOT go into a sibling artifact slot (non-dup one-slot-per-code)."""
+        gd = GameData()
+        gd._item_stats = {
+            "novice_guide": ItemStats(code="novice_guide", level=1, type_="artifact",
+                                      hp_bonus=25),
+        }
+        gd._crafting_recipes = {}
+        goal = UpgradeEquipmentGoal()
+        state = make_state(
+            level=5,
+            inventory={"novice_guide": 1},
+            equipment={"artifact1_slot": "novice_guide", "artifact2_slot": None,
+                       "artifact3_slot": None},
+        )
+        assert goal._find_inventory_upgrade(state, gd) is None
 
 
 class TestCraftableUpgradeSkipsNonUpgrade:

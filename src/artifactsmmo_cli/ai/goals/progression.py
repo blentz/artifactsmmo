@@ -2,7 +2,7 @@
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
-from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS, EquipAction
+from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS, EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
@@ -313,13 +313,23 @@ class UpgradeEquipmentGoal(Goal):
         return None
 
     @staticmethod
-    def _worn_in_other_slot(item_code: str, slot: str, state: WorldState) -> bool:
-        """One slot per code (server HTTP 485): a code worn in ANY other slot
-        can never be equipped into `slot`, regardless of copies owned. Such a
-        (item, slot) pair is not a valid upgrade target — pre-fix the goal
-        derived ring2_slot targets for a code already worn in ring1_slot and
-        committed to an upgrade whose final EquipAction is forever
-        inapplicable. A DIFFERENT code of the same type stays targetable."""
+    def _worn_in_other_slot(item_code: str, slot: str, state: WorldState,
+                            game_data: GameData) -> bool:
+        """One slot per code (server HTTP 485): a code worn in ANY other slot can
+        never be equipped into `slot` — EXCEPT duplicate-allowed types (rings).
+
+        For rings the server permits the SAME code in multiple slots up to
+        physical ownership (HTTP 200, live probe 2026-06-14; see
+        `equip.py:DUPLICATE_SLOT_TYPES`, `EquipAction.is_applicable`, and
+        `RealizableLoadout`). So copper_ring worn in ring1_slot does NOT block
+        crafting/equipping a SECOND copper_ring for the empty ring2_slot — the
+        whole point of the dual-ring carve-out. Without this carve the upgrade
+        selector dropped the ring2 target and the bot never pursued the 2nd ring
+        (it ground throwaway skill items instead). A NON-dup code worn elsewhere
+        is still a dead target (its final EquipAction would 485 forever)."""
+        stats = game_data.item_stats(item_code)
+        if stats is not None and stats.type_ in DUPLICATE_SLOT_TYPES:
+            return False
         return any(worn == item_code for s, worn in state.equipment.items() if s != slot)
 
     def _find_inventory_upgrade(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
@@ -343,7 +353,7 @@ class UpgradeEquipmentGoal(Goal):
             relevant = bool(active and any(s in active for s in stats.skill_effects))
             value = self._upgrade_value(stats)
             for slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):
-                if self._worn_in_other_slot(item_code, slot, state):
+                if self._worn_in_other_slot(item_code, slot, state, game_data):
                     continue
                 current = state.equipment.get(slot)
                 current_stats = game_data.item_stats(current) if current else None
@@ -379,13 +389,14 @@ class UpgradeEquipmentGoal(Goal):
             # Skip only if a copy is already in inventory/bank waiting to equip —
             # otherwise the bot re-crafts duplicates of an item it already holds
             # (the inventory-upgrade path equips that copy). A code WORN in a
-            # slot is handled per-slot below: the server's one-slot-per-code
-            # rule (HTTP 485) means a worn code can never fill a sibling slot
-            # (e.g. copper_ring in ring1 can NOT also go into ring2 no matter
-            # how many copies exist), so `_worn_in_other_slot` drops those slot
-            # targets and `_is_upgrade_over` rejects the code's own slot — a
-            # second copy of a worn item is never a craft target. A DIFFERENT
-            # code of the same type remains a valid sibling-slot target.
+            # slot is handled per-slot below by `_worn_in_other_slot`: for a
+            # NON-duplicate type the server's one-slot-per-code rule (HTTP 485)
+            # means it can never fill a sibling slot, so those targets are
+            # dropped; but for DUPLICATE_SLOT_TYPES (rings) the server allows the
+            # SAME code in multiple slots up to ownership (HTTP 200), so a 2nd
+            # copper_ring IS a valid craft target for the empty ring2 — the
+            # dual-ring case. `_is_upgrade_over` still rejects a code for its own
+            # already-filled slot.
             if (
                 state.inventory.get(item_code, 0) > 0
                 or bank.get(item_code, 0) > 0
@@ -402,7 +413,7 @@ class UpgradeEquipmentGoal(Goal):
             relevant_tool = bool(active and any(s in active for s in stats.skill_effects))
             value = self._upgrade_value(stats)
             for slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):
-                if self._worn_in_other_slot(item_code, slot, state):
+                if self._worn_in_other_slot(item_code, slot, state, game_data):
                     continue
                 current = state.equipment.get(slot)
                 current_stats = game_data.item_stats(current) if current else None
