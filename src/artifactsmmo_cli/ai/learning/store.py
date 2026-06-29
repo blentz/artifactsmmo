@@ -4,6 +4,7 @@ import json
 import weakref
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TypeVar
@@ -15,6 +16,7 @@ from sqlmodel import SQLModel, col, create_engine, select
 
 from artifactsmmo_cli.ai.learning.models import (
     Blocker,
+    CombatLoadoutOutcome,
     CraftYieldObservation,
     Cycle,
     LearnedSetting,
@@ -34,6 +36,21 @@ from artifactsmmo_cli.ai.learning.store_warmup_core import (
 from artifactsmmo_cli.ai.learning.types import ActionStats, GoalStats
 
 _T = TypeVar("_T")
+
+
+@dataclass(frozen=True)
+class CombatLoadoutOutcomeRow:
+    """Decoupled pure-data row returned by LearningStore.combat_loadout_outcomes().
+
+    Callers see parsed Python types (loadout as dict, bools as bool) and never
+    the SQLModel table row or raw JSON. Pure data; exempt from one-class-per-file.
+    """
+
+    character: str
+    task_key: str
+    loadout: dict[str, str]
+    predicted_win: bool
+    actual_win: bool
 
 
 def _parse_skill_xp_value(raw: str | None, skill: str) -> int:
@@ -679,6 +696,43 @@ class LearningStore:
         """Mean reward value over all observations, or `default` if none recorded."""
         vals = self._task_reward_values()
         return sum(vals) / len(vals) if vals else default
+
+    def record_combat_outcome(self, task_key: str, loadout: dict[str, str],
+                              predicted_win: bool, actual_win: bool) -> None:
+        """Append one fight outcome row. APPEND (calibration history); NOT upsert.
+        Best-effort: SQLAlchemyError is caught and printed; never raised."""
+        try:
+            with SqlSession(self._engine) as s:
+                s.add(CombatLoadoutOutcome(
+                    character=self._character,
+                    task_key=task_key,
+                    loadout=json.dumps(loadout, sort_keys=True),
+                    predicted_win=predicted_win,
+                    actual_win=actual_win,
+                ))
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[learning] record_combat_outcome failed: {e}")
+
+    def combat_loadout_outcomes(self) -> list[CombatLoadoutOutcomeRow]:
+        """All recorded fight outcome rows for this character, insertion order.
+        Best-effort: returns [] on SQLAlchemyError."""
+        try:
+            with SqlSession(self._engine) as s:
+                rows = s.exec(select(CombatLoadoutOutcome).where(
+                    CombatLoadoutOutcome.character == self._character)).all()
+            return [
+                CombatLoadoutOutcomeRow(
+                    character=r.character,
+                    task_key=r.task_key,
+                    loadout=json.loads(r.loadout),
+                    predicted_win=r.predicted_win,
+                    actual_win=r.actual_win,
+                )
+                for r in rows
+            ]
+        except SQLAlchemyError:
+            return []
 
     def close(self) -> None:
         self._engine.dispose()

@@ -214,3 +214,19 @@ class LoadoutProfileObservation(SQLModel, table=True):
     character: str = Field(primary_key=True)
     task_key: str = Field(primary_key=True)
     loadout: str  # JSON-encoded dict[slot, code]
+
+
+class CombatLoadoutOutcome(SQLModel, table=True):
+    """One row per resolved fight: the worn loadout, predict_win's verdict, and the
+    actual result. APPEND (calibration history; NOT last-write). task_key is
+    'combat:<monster>'. `loadout` is JSON {slot: code}. Read-only diagnostics
+    (sub-project D); drives no bot behavior."""
+
+    __tablename__ = "combat_loadout_outcome"
+
+    id: int | None = Field(default=None, primary_key=True)  # autoincrement
+    character: str = Field(index=True)
+    task_key: str
+    loadout: str  # JSON {slot: code}
+    predicted_win: bool
+    actual_win: bool
