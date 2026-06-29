@@ -1,8 +1,8 @@
-"""The item-effect coverage guard fails loudly on an unknown equippable effect."""
+"""The item-effect coverage guard fails loudly on an unknown item effect."""
 
 import pytest
 
-from artifactsmmo_cli.ai.game_data import GameData, _RUNE_ABILITY_CARVEOUTS
+from artifactsmmo_cli.ai.game_data import GameData, _ITEM_EFFECT_CARVEOUTS, _RUNE_ABILITY_CARVEOUTS
 from artifactsmmo_cli.ai.game_data_error import GameDataCoverageError
 
 
@@ -54,8 +54,23 @@ def test_all_carved_rune_abilities_ingest_without_coverage_error():
         assert gd.item_stats(f"{code}_rune") is not None
 
 
-def test_unknown_effect_on_nonequippable_is_ignored():
+def test_gold_effect_sets_gold_value():
     gd = GameData()
-    # resources/consumables outside the equippable types keep today's silent-drop.
-    gd._build_items([_item("weird_resource", "resource", ["totally_new_code"])])
-    assert gd.item_stats("weird_resource") is not None
+    gd._build_items([_item("bag_of_gold", "consumable", ["gold"])])  # _item sets value=1
+    assert gd.item_stats("bag_of_gold").gold_value == 1   # the _Eff value
+
+
+def test_gems_and_christmas_magic_are_carved_not_fatal():
+    gd = GameData()
+    gd._build_items([_item("bag_of_gems", "consumable", ["gems"]),
+                     _item("christmas_cane", "weapon", ["christmas_magic", "attack_fire"])])
+    assert gd.item_stats("bag_of_gems") is not None
+    assert gd.item_stats("christmas_cane") is not None
+
+
+def test_unknown_effect_on_CONSUMABLE_now_raises():
+    # the structural fix: the guard is no longer equippable-only.
+    gd = GameData()
+    with pytest.raises(GameDataCoverageError) as exc:
+        gd._build_items([_item("weird_potion", "consumable", ["totally_new_code"])])
+    assert "weird_potion" in str(exc.value) and "totally_new_code" in str(exc.value)

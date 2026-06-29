@@ -109,6 +109,15 @@ _RUNE_ABILITY_CARVEOUTS: frozenset[str] = frozenset({
     "healing", "healing_aura", "shell", "vampiric_strike",
 })
 
+# Item effect codes intentionally NOT modeled (documented carves), checked before
+# the all-items coverage guard so they don't raise:
+#   gems            — account meta-currency (skins/subscription/event-spawn); no use
+#                     in the autonomous reach-50 loop.
+#   christmas_magic — event weapon `christmas_cane` effect; the player's hits BUFF the
+#                     enemy (a self-debuff). Never modeled; carved so the cane (if it
+#                     ever goes live) doesn't trip the equippable guard.
+_ITEM_EFFECT_CARVEOUTS: frozenset[str] = frozenset({"gems", "christmas_magic"})
+
 
 @dataclass
 class GameData:
@@ -1336,6 +1345,11 @@ class GameData:
                         # via game_data.teleport_destination and lets the planner prefer a
                         # warp over a long walk.
                         stats.teleport_map_id = effect.value
+                    elif effect.code == "gold":
+                        # Gold-bag consumable (bag_of_gold +2500, small_bag_of_gold
+                        # +1000): grants gold when used. Modeled so UseGoldBagAction
+                        # can credit it; not a combat/gear stat.
+                        stats.gold_value = effect.value
                     elif effect.code == "threat":
                         # PLAN #6c carve-out: `threat` is aggro/taunt (pulls a monster's
                         # focus off allies). Irrelevant for a SOLO bot — no allies to
@@ -1348,18 +1362,14 @@ class GameData:
                         # (not silently dropped) so the guard below stays meaningful; see
                         # _RUNE_ABILITY_CARVEOUTS for the per-code rationale.
                         pass
+                    elif effect.code in _ITEM_EFFECT_CARVEOUTS:
+                        pass   # documented intentional carve — see _ITEM_EFFECT_CARVEOUTS
                     else:
                         item_type = getattr(item.type_, "value", item.type_)
-                        if item_type in ITEM_TYPE_TO_SLOTS:
-                            # Parser-coverage guard (equippable only): an unmapped
-                            # effect on a wearable item would silently zero its gear
-                            # score / mis-classify its type. Fail loudly so it gets
-                            # modeled or carved before the bot acts on it. Mirrors the
-                            # monster guard (_MONSTER_EFFECT_CARVEOUTS).
-                            raise GameDataCoverageError(
-                                f"equippable item {item.code!r} ({item_type}) carries "
-                                f"unmapped effect code {effect.code!r}: model it or add "
-                                "a documented entry to _RUNE_ABILITY_CARVEOUTS")
+                        raise GameDataCoverageError(
+                            f"item {item.code!r} ({item_type}) carries unmapped effect "
+                            f"code {effect.code!r}: model it, or add a documented entry to "
+                            "_ITEM_EFFECT_CARVEOUTS / _RUNE_ABILITY_CARVEOUTS")
 
             if not isinstance(item.craft, Unset) and item.craft is not None:
                 craft = item.craft
