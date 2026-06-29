@@ -31,8 +31,16 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 def recyclable_surplus(
     state: WorldState, game_data: GameData, protected_codes: frozenset[str],
+    gear_keep: dict[str, int] | None = None,
 ) -> dict[str, int]:
-    """Map each recyclable-surplus code to the quantity held above its useful cap."""
+    """Map each recyclable-surplus code to the quantity held above its useful cap.
+
+    `gear_keep` (active-profile gear-demand keep map, spec
+    2026-06-28-gear-loadout-profiles) is forwarded to `useful_quantity_cap`: in
+    profiles-aware mode the equippable cap is the active-profile demand (+1
+    in-flight spare) rather than the blanket 1, so equippable gear in no active
+    profile and not in-flight has cap 0 and its full held count is reclaimable.
+    `None` keeps the legacy blanket-1 cap."""
     equipped = {code for code in state.equipment.values() if code is not None}
     out: dict[str, int] = {}
     for code, qty in state.inventory.items():
@@ -49,7 +57,7 @@ def recyclable_surplus(
             continue  # skill gate: cannot recycle
         if game_data.workshop_location(stats.crafting_skill) is None:
             continue  # no workshop known → cannot recycle
-        cap = useful_quantity_cap(code, state, game_data)
+        cap = useful_quantity_cap(code, state, game_data, gear_keep=gear_keep)
         if qty > cap:
             out[code] = qty - cap
     return out

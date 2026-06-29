@@ -45,6 +45,7 @@ def build_actions(
     objective: CharacterObjective | None,
     bank_accessible: bool,
     task_exchange_min_coins: int,
+    protected_gear: frozenset[str] = frozenset(),
 ) -> list[Action]:
     """Build the action list. Each action handles its own movement in execute() and cost()."""
     bank = game_data.bank_location()
@@ -187,8 +188,13 @@ def build_actions(
     # slots / recover bars for boots crafting. That trades long-term
     # gathering capability for a one-shot copper_bar windfall — net
     # loss because the recycled tools take dozens of cycles to remake.
-    protected_codes: set[str] = set()
-    if objective is not None:
+    # Gear protection (spec 2026-06-28-gear-loadout-profiles): the active-profile
+    # gear set ∪ in-flight upgrade (`protected_gear`, threaded in by the player)
+    # is the recycle exclusion. When absent (legacy callers / no profile info)
+    # fall back to the objective's target_gear/target_tools so a profile-less bot
+    # keeps the original protection.
+    protected_codes: set[str] = set(protected_gear)
+    if not protected_codes and objective is not None:
         protected_codes.update(objective.target_gear.values())
         protected_codes.update(objective.target_tools.values())
     for item_code in game_data.crafting_recipes:

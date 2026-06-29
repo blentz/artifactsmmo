@@ -63,28 +63,36 @@ def _is_sellable(code: str, game_data: GameData) -> bool:
                for npc, _price in game_data.npcs_buying_item(code))
 
 
-def sellable_accumulation(state: WorldState, game_data: GameData) -> dict[str, int]:
-    """Map each SELLABLE over-ratio inventory code to its sell-down-to-cap excess."""
+def sellable_accumulation(state: WorldState, game_data: GameData,
+                          gear_keep: dict[str, int] | None = None) -> dict[str, int]:
+    """Map each SELLABLE over-ratio inventory code to its sell-down-to-cap excess.
+
+    `gear_keep` (active-profile gear-demand keep map) is forwarded to
+    `useful_quantity_cap` so accumulation-sell sells equippable gear down to its
+    active-profile demand (0 when un-profiled and not in-flight) rather than the
+    blanket 1; None keeps the legacy cap (spec 2026-06-28-gear-loadout-profiles)."""
     out: dict[str, int] = {}
     for code, held in state.inventory.items():
         if held <= 0 or not _is_sellable(code, game_data):
             continue
-        cap = useful_quantity_cap(code, state, game_data)
+        cap = useful_quantity_cap(code, state, game_data, gear_keep=gear_keep)
         excess = accumulation_excess(held, cap)
         if excess > 0:
             out[code] = excess
     return out
 
 
-def worst_accumulation_steps(state: WorldState, game_data: GameData) -> int:
+def worst_accumulation_steps(state: WorldState, game_data: GameData,
+                             gear_keep: dict[str, int] | None = None) -> int:
     """Max `accumulation_steps` over sellable over-ratio items (0 if none) —
     the severity signal driving `SellInventoryGoal.value` (a SEVERE hoard, steps
-    >= SEVERE_STEPS, takes the top of the discretionary band)."""
+    >= SEVERE_STEPS, takes the top of the discretionary band). `gear_keep` is
+    forwarded to `useful_quantity_cap` (see `sellable_accumulation`)."""
     worst = 0
     for code, held in state.inventory.items():
         if held <= 0 or not _is_sellable(code, game_data):
             continue
-        cap = useful_quantity_cap(code, state, game_data)
+        cap = useful_quantity_cap(code, state, game_data, gear_keep=gear_keep)
         if accumulation_excess(held, cap) > 0:
             steps = accumulation_steps(held, cap)
             if steps > worst:

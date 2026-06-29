@@ -119,8 +119,12 @@ class TestInventoryProfile:
         }
         gd._crafting_recipes = {"copper_helmet": {"copper_bar": 6}}
         state = make_state()
+        # Task 5 migration (spec 2026-06-28-gear-loadout-profiles): the gear
+        # roots are now the active-profile gear set, passed via `gear_codes`
+        # (replaces the former `target_gear`/`target_tools` kwargs). Closure
+        # behavior is unchanged.
         profile = inventory_profile(state, gd,
-                                    target_gear=frozenset({"copper_helmet"}))
+                                    gear_codes=frozenset({"copper_helmet"}))
         assert profile.get("copper_bar", 0) == 6
 
     def test_deep_chain_multiplies_quantities(self):

@@ -48,7 +48,11 @@ from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_latch import GearLatch
 from artifactsmmo_cli.ai.gear_value_core import Combat, Gather
-from artifactsmmo_cli.ai.loadout_profiles import combat_key, gather_key
+from artifactsmmo_cli.ai.loadout_profiles import (
+    active_profile_gear,
+    combat_key,
+    gather_key,
+)
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.projections import PathPlan, cheapest_path_to_level
@@ -1232,12 +1236,24 @@ class GamePlayer:
     def _build_actions(self) -> list[Action]:
         """Build the action list (delegates to the actions factory)."""
         assert self.game_data is not None
+        # The factory recycle-exclusion is the ACTIVE-PROFILE gear set (spec
+        # 2026-06-28-gear-loadout-profiles). Empty for a profile-less bot (no
+        # history / no recorded profiles), in which case the factory falls back
+        # to the objective's target_gear/target_tools protection. The in-flight
+        # +1 spare is enforced at the goal/cap level (recyclable_surplus), not
+        # here, so action-building stays decoupled from the objective.
+        protected_gear: frozenset[str] = frozenset()
+        if self.state is not None and self.history is not None:
+            protected_gear = frozenset(active_profile_gear(
+                self.state, self.game_data, self.history,
+                self._winnable_farm_target(), frozenset()))
         return build_actions(
             game_data=self.game_data,
             state=self.state,
             objective=self._objective,
             bank_accessible=self._bank_accessible,
             task_exchange_min_coins=self._task_exchange_min_coins,
+            protected_gear=protected_gear,
         )
 
     def _notify_observer(
@@ -1519,6 +1535,28 @@ class GamePlayer:
                 and self.state.level > self._bank_blocked_at_level):
             self._blockers.clear("bank")
 
+    def _active_gear_keep(self, combat_monster: str | None,
+                          near_term_targets: frozenset[str]) -> dict[str, int]:
+        """The active-profile gear-demand KEEP map {code: keep_count} threaded to
+        the keep economy (spec 2026-06-28-gear-loadout-profiles): the deduped
+        per-code demand across the active loadout profiles UNION the in-flight
+        upgrade codes (near_term gear + tools currently being pursued, kept at 1
+        spare). Empty when no profiles are recorded and no in-flight upgrade — the
+        consumers then fall back to the legacy blanket equippable keep.
+
+        `gather_skills` is passed empty (mirrors the BANK_EXPAND wiring): the
+        recent-window inside `active_profile_gear` still contributes gather task
+        profiles via the learning history."""
+        assert self.state is not None and self.game_data is not None
+        keep: dict[str, int] = {}
+        if self.history is not None:
+            keep = dict(active_profile_gear(
+                self.state, self.game_data, self.history,
+                combat_monster, frozenset()))
+        for code in near_term_targets:
+            keep.setdefault(code, 1)
+        return keep
+
     def _selection_context(self, combat_monster: str | None = None) -> SelectionContext:
         assert self.state is not None
         if combat_monster is None:
@@ -1544,6 +1582,7 @@ class GamePlayer:
             # Usable-now keepers for the skill-grind `wanted` preference.
             near_term_targets = frozenset(
                 self._objective.near_term_gear(self.state).values()) | target_tools
+        gear_keep = self._active_gear_keep(combat_monster, near_term_targets)
         return SelectionContext(
             bank_accessible=self._bank_accessible,
             bank_required_level=self._bank_required_level,
@@ -1556,6 +1595,7 @@ class GamePlayer:
             target_tools=target_tools,
             near_term_targets=near_term_targets,
             gear_review_active=self._gear_latch.active,
+            gear_keep=gear_keep,
         )
 
     def _log_action(self, action: Action, goal: Goal, plan: list[Action]) -> None:

@@ -14,7 +14,11 @@ from artifactsmmo_cli.ai.learning.projections import low_yield_cancel_fires
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.task_decision import PIVOT, PURSUE, task_decision
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext, _has_sellable
+from artifactsmmo_cli.ai.tiers.guards import (
+    SelectionContext,
+    _has_sellable,
+    protected_gear_codes,
+)
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 SELL_PRESSURE_FRACTION = 0.85
@@ -142,18 +146,25 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         # Idle/low-pressure only: recovered materials need room to land (under
         # pressure the deposit/discard guards handle space). Fires when surplus
         # craftable gear (not the committed objective) can be recycled for mats.
+        # Gear protection (spec 2026-06-28-gear-loadout-profiles): active-profile
+        # gear set + cap when available, else the legacy target_gear fallback.
+        recycle_protected = (protected_gear_codes(ctx) if ctx.gear_keep
+                             else ctx.target_gear | ctx.target_tools)
         return (_used_fraction(state) < SELL_PRESSURE_FRACTION
                 and bool(recyclable_surplus(
-                    state, game_data, ctx.target_gear | ctx.target_tools)))
+                    state, game_data, recycle_protected,
+                    gear_keep=ctx.gear_keep or None)))
 
     if kind is MeansKind.DRAIN_BANK_JUNK:
         # Idle/low-pressure only: the withdraw mints items into the bag, so it
         # needs free slots to land (under pressure the deposit/discard guards
         # handle space). Fires when over-cap bank junk exists that is not the
         # committed objective gear.
+        drain_protected = (protected_gear_codes(ctx) if ctx.gear_keep
+                           else ctx.target_gear | ctx.target_tools)
         return (_used_fraction(state) < SELL_PRESSURE_FRACTION
                 and bool(bank_drain_excess(
-                    state, game_data, ctx.target_gear | ctx.target_tools)))
+                    state, game_data, drain_protected)))
 
     if kind is MeansKind.MAINTAIN_CONSUMABLES:
         # Only when combat is the active means (a target is selected): keep a

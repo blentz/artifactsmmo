@@ -34,8 +34,14 @@ ramps `min(ACCUM_BASE + steps*ACCUM_STEP, DISCRETIONARY_CEIL)`."""
 class SellInventoryGoal(Goal):
     """Recover gold by selling inventory items when the bank is locked."""
 
-    def __init__(self, bank_accessible: bool = True) -> None:
+    def __init__(self, bank_accessible: bool = True,
+                 gear_keep: dict[str, int] | None = None) -> None:
         self._bank_accessible = bank_accessible
+        # Active-profile gear-demand keep map (spec
+        # 2026-06-28-gear-loadout-profiles): forwarded to the accumulation-sell
+        # cap so equippable gear sells down to its active-profile demand
+        # (un-profiled, not-in-flight gear is sellable). None = legacy cap.
+        self._gear_keep = gear_keep
 
     def _active_window_for_inventory(self, state: WorldState, game_data: GameData) -> bool:
         """True if some held item can be sold to a currently-active reachable merchant."""
@@ -59,7 +65,7 @@ class SellInventoryGoal(Goal):
                        for code in state.inventory if state.inventory[code] > 0)
         if not sellable:
             return 0.0
-        steps = worst_accumulation_steps(state, game_data)
+        steps = worst_accumulation_steps(state, game_data, gear_keep=self._gear_keep)
         if steps >= SEVERE_STEPS:
             accum_value = DISCRETIONARY_CEIL
         elif steps > 0:
@@ -85,7 +91,8 @@ class SellInventoryGoal(Goal):
             if "recovery" in action.tags or (isinstance(action, NpcSellAction)
                                              and state.inventory.get(action.item_code, 0) > 0):
                 result.append(action)
-        for code, excess in sellable_accumulation(state, game_data).items():
+        for code, excess in sellable_accumulation(state, game_data,
+                                                  gear_keep=self._gear_keep).items():
             # `sellable_accumulation` guarantees at least one buyer is reachable;
             # pick the highest-price buyer that actually has a location (a
             # higher-price buyer may be a dormant event merchant with no tile).

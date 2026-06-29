@@ -25,9 +25,14 @@ class RecycleSurplusGoal(Goal):
     `ai/recycle_surplus.recyclable_surplus` for the eligibility rule.
     """
 
-    def __init__(self, game_data: GameData, protected_codes: frozenset[str]) -> None:
+    def __init__(self, game_data: GameData, protected_codes: frozenset[str],
+                 gear_keep: dict[str, int] | None = None) -> None:
         self._gd = game_data
         self._protected = protected_codes
+        # Active-profile gear-demand keep map (spec
+        # 2026-06-28-gear-loadout-profiles): rerouted the equippable cap so
+        # un-profiled, not-in-flight gear is reclaimable. None = legacy cap.
+        self._gear_keep = gear_keep
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
@@ -36,7 +41,8 @@ class RecycleSurplusGoal(Goal):
         return RECYCLE_SURPLUS_VALUE
 
     def is_satisfied(self, state: WorldState) -> bool:
-        return not recyclable_surplus(state, self._gd, self._protected)
+        return not recyclable_surplus(state, self._gd, self._protected,
+                                      gear_keep=self._gear_keep)
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"surplus_gear_recycled": True}
@@ -51,7 +57,8 @@ class RecycleSurplusGoal(Goal):
         slots (server HTTP 497). The remainder is reclaimed on a later idle
         cycle once the recovered materials are deposited.
         """
-        surplus = recyclable_surplus(state, game_data, self._protected)
+        surplus = recyclable_surplus(state, game_data, self._protected,
+                                     gear_keep=self._gear_keep)
         result: list[Action] = []
         for code, surplus_qty in surplus.items():
             # recyclable_surplus guarantees a non-None stats with a crafting

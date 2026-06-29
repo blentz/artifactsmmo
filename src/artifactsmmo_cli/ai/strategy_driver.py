@@ -49,6 +49,7 @@ from artifactsmmo_cli.ai.tiers.guards import (
     SelectionContext,
     active_guards,
     active_profile,
+    protected_gear_codes,
 )
 from artifactsmmo_cli.ai.tiers.means import MeansKind, active_means
 from artifactsmmo_cli.ai.tiers.means_worth import means_serves
@@ -256,6 +257,16 @@ def _skill_dispatch_candidates(
 # Flat map functions + StrategyArbiter
 # ---------------------------------------------------------------------------
 
+def _gear_protected(ctx: SelectionContext) -> frozenset[str]:
+    """The GEAR codes the keep economy protects (recycle/sell/drain exclusion):
+    the active-profile gear set ∪ in-flight upgrade (spec
+    2026-06-28-gear-loadout-profiles) when profile info exists, else the legacy
+    `target_gear | target_tools` fallback so a profile-less bot is unchanged."""
+    if ctx.gear_keep:
+        return protected_gear_codes(ctx)
+    return ctx.target_gear | ctx.target_tools
+
+
 def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
               state: WorldState | None = None,
               step_profile: dict[str, int] | None = None) -> Goal:
@@ -308,9 +319,11 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
         )
     if kind is GuardKind.RECYCLE_RELIEF:
         return RecycleSurplusGoal(game_data=game_data,
-                                  protected_codes=frozenset(ctx.target_gear | ctx.target_tools))
+                                  protected_codes=_gear_protected(ctx),
+                                  gear_keep=ctx.gear_keep or None)
     if kind is GuardKind.SELL_RELIEF:
-        return SellInventoryGoal(bank_accessible=ctx.bank_accessible)
+        return SellInventoryGoal(bank_accessible=ctx.bank_accessible,
+                                 gear_keep=ctx.gear_keep or None)
     if kind is GuardKind.GEAR_REVIEW:
         if state is None:
             raise ValueError("GEAR_REVIEW guard requires a state")
@@ -346,13 +359,15 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
     if kind is MeansKind.COMPLETE_TASK:
         return CompleteTaskGoal()
     if kind is MeansKind.SELL_PRESSURED or kind is MeansKind.SELL_IDLE:
-        return SellInventoryGoal(bank_accessible=ctx.bank_accessible)
+        return SellInventoryGoal(bank_accessible=ctx.bank_accessible,
+                                 gear_keep=ctx.gear_keep or None)
     if kind is MeansKind.RECYCLE_SURPLUS:
         return RecycleSurplusGoal(game_data=game_data,
-                                  protected_codes=ctx.target_gear | ctx.target_tools)
+                                  protected_codes=_gear_protected(ctx),
+                                  gear_keep=ctx.gear_keep or None)
     if kind is MeansKind.DRAIN_BANK_JUNK:
         return DrainBankJunkGoal(game_data=game_data,
-                                 protected_codes=ctx.target_gear | ctx.target_tools,
+                                 protected_codes=_gear_protected(ctx),
                                  bank_accessible=ctx.bank_accessible)
     if kind is MeansKind.LOW_YIELD_CANCEL:
         return LowYieldCancelGoal()

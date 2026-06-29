@@ -249,6 +249,7 @@ def _is_dominated_pure(peers: Sequence[tuple[bool, bool, bool, int]],
 def useful_quantity_cap(
     item_code: str, state: WorldState, game_data: GameData,
     batch_buffer: int = BATCH_BUFFER, safety_floor: int = SAFETY_FLOOR,
+    gear_keep: dict[str, int] | None = None,
 ) -> int:
     """Return the maximum count of `item_code` worth keeping.
 
@@ -258,11 +259,20 @@ def useful_quantity_cap(
       - Current task demand (`state.task_code == item_code` means keep enough
         for completion)
       - Equipped items (always keep at least 1 of each equipped code)
+
+    `gear_keep` is the active-profile gear-demand keep map (spec
+    2026-06-28-gear-loadout-profiles): when supplied (profiles-aware mode), the
+    EQUIPPABLE keep component is REPLACED by `gear_keep.get(item_code, 0)` — the
+    deduped per-code demand across active loadout profiles plus the +1 in-flight
+    spare — instead of the blanket `EQUIPPABLE_KEEP=1`. Equippable gear that is
+    in no active profile and not in-flight then has keep 0 (becomes reclaimable).
+    `None` (the default) keeps the legacy blanket-1 + dominance behavior so every
+    pre-migration caller is unchanged.
     """
     # Equipped items: never count below 1
     equipped = {code for code in state.equipment.values() if code}
     return _cap_from_state(item_code, state, game_data, batch_buffer,
-                           safety_floor, item_code in equipped)
+                           safety_floor, item_code in equipped, gear_keep)
 
 
 def _is_equippable_dominated(item_code: str, state: WorldState,
@@ -454,23 +464,41 @@ def reachable_recipe_demand(item_code: str, state: WorldState, game_data: GameDa
 
 
 def _cap_from_state(item_code: str, state: WorldState, game_data: GameData,
-                    batch_buffer: int, safety_floor: int, equipped: bool) -> int:
+                    batch_buffer: int, safety_floor: int, equipped: bool,
+                    gear_keep: dict[str, int] | None = None) -> int:
     """Assemble the plain-data inputs of `useful_quantity_cap_pure` from the
-    GameData/WorldState accessors (the impure shell of the cap decision)."""
-    is_equippable = False
-    is_dominated = False
+    GameData/WorldState accessors (the impure shell of the cap decision).
+
+    `gear_keep` (active-profile gear-demand keep map) reroutes the equippable
+    keep component: in profiles-aware mode the blanket EQUIPPABLE_KEEP + the
+    dominance gate are suppressed (`is_equippable`/`is_dominated` set False) and
+    the profile demand `gear_keep.get(item_code, 0)` is injected as a keep floor
+    through the `action_cap` slot of the unchanged pure core — un-profiled,
+    not-in-flight gear thus drops to keep 0 (reclaimable). Legacy when None."""
     hp_restore = 0
     stats = game_data.item_stats(item_code)
     if stats is not None:
-        if ITEM_TYPE_TO_SLOTS.get(stats.type_):
+        hp_restore = stats.hp_restore
+    action_cap = _non_recipe_keep_floor(item_code, stats)
+    if gear_keep is None:
+        is_equippable = False
+        is_dominated = False
+        if stats is not None and ITEM_TYPE_TO_SLOTS.get(stats.type_):
             is_equippable = True
             is_dominated = _is_equippable_dominated(item_code, state, game_data)
-        hp_restore = stats.hp_restore
+    else:
+        # Profiles-aware: the active-profile gear demand (+1 in-flight spare)
+        # replaces the blanket equippable keep, injected via the action-cap floor.
+        is_equippable = False
+        is_dominated = False
+        gear_floor = gear_keep.get(item_code, 0)
+        if gear_floor > action_cap:
+            action_cap = gear_floor
     base = useful_quantity_cap_pure(
         item_code, reachable_recipe_demand(item_code, state, game_data), batch_buffer,
         safety_floor, state.task_type or "", state.task_code or "",
         state.task_total, state.task_progress, game_data.crafting_recipes,
-        _non_recipe_keep_floor(item_code, stats),
+        action_cap,
         is_equippable, is_dominated, hp_restore, equipped)
     # "Only keep currently useful items": clamp the base cap by the level-distance
     # ceiling for non-unique items far above/below the character's level.
@@ -483,10 +511,14 @@ def _cap_from_state(item_code: str, state: WorldState, game_data: GameData,
 def useful_quantity_cap_excl_equipped(
     item_code: str, state: WorldState, game_data: GameData,
     batch_buffer: int = BATCH_BUFFER, safety_floor: int = SAFETY_FLOOR,
+    gear_keep: dict[str, int] | None = None,
 ) -> int:
-    """useful_quantity_cap without the equipped-floor adjustment."""
+    """useful_quantity_cap without the equipped-floor adjustment.
+
+    `gear_keep` reroutes the equippable keep to the active-profile gear demand
+    (see `useful_quantity_cap`); None keeps the legacy behavior."""
     return _cap_from_state(item_code, state, game_data, batch_buffer,
-                           safety_floor, False)
+                           safety_floor, False, gear_keep)
 
 
 def overstocked_items(

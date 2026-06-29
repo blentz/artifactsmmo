@@ -9,8 +9,11 @@ guarantee). See spec docs/superpowers/specs/2026-06-07-inventory-profiles-design
 
 Sources of the active profile (all derived purely from state + ctx flags):
   * `state.crafting_target` — the committed upgrade/craft target.
-  * `target_gear` / `target_tools` — the CharacterObjective's long-term gear
-    and tool codes (from the SelectionContext).
+  * `gear_codes` — the ACTIVE-PROFILE gear set ∪ in-flight upgrade codes (spec
+    2026-06-28-gear-loadout-profiles), threaded in by the SelectionContext.
+    Replaces the former `target_gear` / `target_tools` recipe-closure roots:
+    the gear portion of protection now follows the per-task loadout profiles,
+    not the endgame `target_gear` closure.
   * the active items-task item + its recipe inputs (sized to the remaining
     task quantity).
 
@@ -26,26 +29,24 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 def inventory_profile(
     state: WorldState, game_data: GameData,
-    target_gear: Iterable[str] = (),
-    target_tools: Iterable[str] = (),
+    gear_codes: Iterable[str] = (),
 ) -> dict[str, int]:
     """Return the active goal's SOFT inventory profile: item_code -> target_qty.
 
     Pure. Combines the recipe closures of `state.crafting_target`, the
-    `target_gear` / `target_tools` codes, and the active items-task item
-    (sized to its remaining quantity). The result is the set of materials the
-    active goal wants on hand AND how many — the floor deposit/discard must
-    never bank/delete below.
+    `gear_codes` (active-profile gear ∪ in-flight upgrade), and the active
+    items-task item (sized to its remaining quantity). The result is the set of
+    materials the active goal wants on hand AND how many — the floor
+    deposit/discard must never bank/delete below.
     """
     profile: dict[str, int] = {}
 
-    # crafting_target / gear / tools: one batch each (the goal accumulates a
-    # craft's worth of materials at a time).
+    # crafting_target / active-profile gear: one batch each (the goal accumulates
+    # a craft's worth of materials at a time).
     roots: list[str] = []
     if state.crafting_target:
         roots.append(state.crafting_target)
-    roots.extend(target_gear)
-    roots.extend(target_tools)
+    roots.extend(gear_codes)
     for root in roots:
         closure_demand(root, 1, game_data, profile, frozenset())
 

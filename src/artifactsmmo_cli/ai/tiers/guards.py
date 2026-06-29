@@ -72,6 +72,22 @@ class SelectionContext:
     # Post-level-up / post-fight-loss gear prioritization latch. Set by the
     # player's GearLatch and cleared when no craftable upgrade remains.
     gear_review_active: bool = False
+    # Active-profile gear-demand KEEP map {code: keep_count} (spec
+    # 2026-06-28-gear-loadout-profiles): the deduped per-code demand across the
+    # active loadout profiles UNION the in-flight upgrade codes (+1 spare). This
+    # is the GEAR portion of every keep/recycle/deposit/sell protection — it
+    # REPLACES the `target_gear`/`target_tools` recipe-closure protection (which
+    # remains the PURSUIT target for crafting). Empty (the default) means no
+    # profile info → consumers fall back to the legacy blanket equippable keep,
+    # so a freshly-started bot with no recorded profiles never strips its gear.
+    gear_keep: dict[str, int] = field(default_factory=dict)
+
+
+def protected_gear_codes(ctx: SelectionContext) -> frozenset[str]:
+    """The set of gear codes the keep economy protects: the active-profile gear
+    set UNION the in-flight upgrade codes (the keys of `ctx.gear_keep`). Empty
+    when no profile info is available — callers then use their legacy fallback."""
+    return frozenset(ctx.gear_keep)
 
 
 class GuardKind(Enum):
@@ -148,10 +164,21 @@ def active_profile(state: WorldState, game_data: GameData,
     (cycle 30): DISCARD_HIGH deleted a wooden_shield the active
     GatherMaterials grind goal was accumulating (held 2, needed 3) because the
     step goal's targets were invisible to this profile — it only covered
-    crafting_target/gear/tools/task."""
-    profile = inventory_profile(state, game_data,
-                                target_gear=ctx.target_gear,
-                                target_tools=ctx.target_tools)
+    crafting_target/gear/tools/task.
+
+    Gear portion (spec 2026-06-28-gear-loadout-profiles): the recipe-closure
+    roots and the finished-gear floor come from the ACTIVE-PROFILE gear set
+    (`ctx.gear_keep`) when available, REPLACING the `target_gear`/`target_tools`
+    closure. With no profile info (empty `gear_keep`) it falls back to the legacy
+    `target_gear | target_tools` roots so a freshly-started bot is unchanged."""
+    gear_codes: frozenset[str] = (protected_gear_codes(ctx) if ctx.gear_keep
+                                  else ctx.target_gear | ctx.target_tools)
+    profile = inventory_profile(state, game_data, gear_codes=gear_codes)
+    # Active-profile finished gear (and the in-flight +1 spare) is protected at
+    # its demand so deposit/discard never bank/delete it below that count.
+    for code, keep in ctx.gear_keep.items():
+        if keep > profile.get(code, 0):
+            profile[code] = keep
     if step_profile:
         for code, qty in step_profile.items():
             if qty > profile.get(code, 0):
@@ -216,10 +243,16 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
             step_items=frozenset(step_profile or ()),
         ))
     if kind is GuardKind.RECYCLE_RELIEF:
+        # Gear protection (spec 2026-06-28-gear-loadout-profiles): the protected
+        # set + the per-code cap come from the active-profile gear set when
+        # available, else the legacy target_gear/target_tools fallback.
+        recycle_protected = (protected_gear_codes(ctx) if ctx.gear_keep
+                             else ctx.target_gear | ctx.target_tools)
         return (not bank_has_room(ctx.bank_accessible, state.bank_items,
                                   game_data.bank_capacity)
                 and bool(recyclable_surplus(
-                    state, game_data, ctx.target_gear | ctx.target_tools)))
+                    state, game_data, recycle_protected,
+                    gear_keep=ctx.gear_keep or None)))
     if kind is GuardKind.SELL_RELIEF:
         return (not bank_has_room(ctx.bank_accessible, state.bank_items,
                                   game_data.bank_capacity)

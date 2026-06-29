@@ -62,7 +62,10 @@ def test_ash_wood_in_profile_for_target_tool():
     state = make_state(inventory={"ash_wood": 8}, inventory_max=20,
                        task_code="copper_ore", task_type="items",
                        task_total=20, task_progress=5)
-    profile = inventory_profile(state, gd, target_tools=frozenset({"fishing_net"}))
+    # Task 5 migration (spec 2026-06-28-gear-loadout-profiles): gear/tool roots
+    # are the active-profile gear set passed via `gear_codes` (replaces the
+    # `target_gear`/`target_tools` kwargs); closure behavior is unchanged.
+    profile = inventory_profile(state, gd, gear_codes=frozenset({"fishing_net"}))
     assert profile.get("ash_wood", 0) == 10  # fishing_net needs 10
 
 
@@ -75,7 +78,7 @@ def test_ash_wood_not_deposited_when_in_profile():
                        task_code="copper_ore", task_type="items",
                        task_total=20, task_progress=5)
     profile_codes = frozenset(inventory_profile(
-        state, gd, target_tools=frozenset({"fishing_net"})))
+        state, gd, gear_codes=frozenset({"fishing_net"})))
     deposits = select_bank_deposits(state, gd, profile_codes)
     codes = {c for c, _ in deposits}
     assert "ash_wood" not in codes, (
@@ -94,7 +97,7 @@ def test_ash_wood_not_discarded_with_free_slots():
     and even under pressure it is protected up to its profile target."""
     gd = _fishing_net_gd()
     profile = inventory_profile(make_state(), gd,
-                                target_tools=frozenset({"fishing_net"}))
+                                gear_codes=frozenset({"fishing_net"}))
     # Free slots: 8 ash_wood in a 20-slot bag -> nothing overstock.
     state = make_state(inventory={"ash_wood": 8}, inventory_max=20)
     assert overstocked_items(state, gd, profile=profile) == {}
@@ -152,7 +155,7 @@ def test_ash_wood_accumulates_no_oscillation():
     deposit nor discard targets ash_wood."""
     gd = _fishing_net_gd()
     profile = inventory_profile(make_state(), gd,
-                                target_tools=frozenset({"fishing_net"}))
+                                gear_codes=frozenset({"fishing_net"}))
     profile_codes = frozenset(profile)
     deposit_goal = DepositInventoryGoal(game_data=gd, profile_codes=profile_codes)
     discard_goal = DiscardOverstockGoal(game_data=gd, profile=profile)
