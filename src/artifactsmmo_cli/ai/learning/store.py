@@ -18,6 +18,7 @@ from artifactsmmo_cli.ai.learning.models import (
     CraftYieldObservation,
     Cycle,
     LearnedSetting,
+    LoadoutProfileObservation,
     PlanBodyLog,
     PlanBodyLogBase,
     PlanCommitment,
@@ -597,6 +598,36 @@ class LearningStore:
             return (row.quantity, row.xp) if row is not None else None
         except SQLAlchemyError:
             return None
+
+    def record_loadout_profile(self, task_key: str, loadout: dict[str, str]) -> None:
+        """Upsert the loadout for (character, task_key). Last write wins. Best-effort."""
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = select(LoadoutProfileObservation).where(
+                    LoadoutProfileObservation.character == self._character,
+                    LoadoutProfileObservation.task_key == task_key,
+                )
+                existing = s.exec(stmt).first()
+                encoded = json.dumps(loadout, sort_keys=True)
+                if existing is not None:
+                    existing.loadout = encoded
+                    s.add(existing)
+                else:
+                    s.add(LoadoutProfileObservation(
+                        character=self._character, task_key=task_key, loadout=encoded))
+                s.commit()
+        except SQLAlchemyError as e:
+            print(f"[learning] record_loadout_profile failed: {e}")
+
+    def loadout_profiles(self) -> dict[str, dict[str, str]]:
+        """All stored {task_key: {slot: code}} for this character. Best-effort ({} on error)."""
+        try:
+            with SqlSession(self._engine) as s:
+                rows = s.exec(select(LoadoutProfileObservation).where(
+                    LoadoutProfileObservation.character == self._character)).all()
+            return {r.task_key: json.loads(r.loadout) for r in rows}
+        except SQLAlchemyError:
+            return {}
 
     def record_task_reward_value(self, value: float) -> None:
         """Append one completed-task reward observation for this character."""

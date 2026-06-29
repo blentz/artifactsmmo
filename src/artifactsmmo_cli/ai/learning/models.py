@@ -201,3 +201,16 @@ class CraftYieldObservation(SQLModel, table=True):
     item_code: str = Field(primary_key=True)
     quantity: int
     xp: int
+
+
+class LoadoutProfileObservation(SQLModel, table=True):
+    """The loadout the bot uses for a recurring task. One row per (character,
+    task_key); last write wins. task_key is 'combat:<monster>' / 'gather:<skill>'.
+    `loadout` is JSON {slot: code}. Source for sub-project C's keep economy + D's
+    learned loadout."""
+
+    __tablename__ = "loadout_profile"
+
+    character: str = Field(primary_key=True)
+    task_key: str = Field(primary_key=True)
+    loadout: str  # JSON-encoded dict[slot, code]
