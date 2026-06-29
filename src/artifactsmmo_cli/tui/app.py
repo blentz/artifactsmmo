@@ -1,8 +1,10 @@
 """WatchApp: Textual app with four panes for live character observation."""
 
 from collections import deque
+from collections.abc import Callable
 
 from textual.app import App, ComposeResult
+from textual.screen import Screen
 from textual.widgets import Footer, Header
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
@@ -100,24 +102,44 @@ class WatchApp(App[None]):
         if isinstance(top, (CharacterScreen, LogScreen, PlanScreen)):
             top.update_snapshot(snap)
 
-    def action_toggle_character(self) -> None:
-        if isinstance(self.screen, CharacterScreen):
+    # The three modal screens. Each mounts with a FIXED widget id
+    # (character-modal / log-modal / plan-modal), so two of the same kind in the
+    # screen stack collide with DuplicateIds. Toggles enforce ONE modal at a time.
+    _MODAL_SCREENS = (CharacterScreen, LogScreen, PlanScreen)
+
+    def _open_modal(self, screen_type: type[Screen[None]],
+                    factory: Callable[[], Screen[None] | None]) -> None:
+        """Single-modal toggle. Close whatever modal is currently on top, then open
+        `screen_type` only when a DIFFERENT modal (or none) was showing. This is the
+        fix for the DuplicateIds crash from chaining modals (e.g. log -> character ->
+        log): the old per-toggle code only checked the TOP screen, so pressing a
+        second modal pushed it ABOVE the first and a third press re-pushed a screen
+        whose fixed id was still mounted underneath."""
+        top = self.screen
+        was_same = isinstance(top, screen_type)
+        if isinstance(top, self._MODAL_SCREENS):
             self.pop_screen()
-        elif self._last_snapshot is not None:
-            self.push_screen(CharacterScreen(self._last_snapshot))
+        if was_same:
+            return                       # toggled THIS modal off — done
+        new = factory()
+        if new is not None:
+            self.push_screen(new)
+
+    def action_toggle_character(self) -> None:
+        self._open_modal(
+            CharacterScreen,
+            lambda: CharacterScreen(self._last_snapshot)
+            if self._last_snapshot is not None else None)
 
     def action_toggle_log(self) -> None:
-        if isinstance(self.screen, LogScreen):
-            self.pop_screen()
-        else:
-            self.push_screen(LogScreen(self._recent_snapshots))
+        self._open_modal(LogScreen, lambda: LogScreen(self._recent_snapshots))
 
     def set_planning(self, active: bool) -> None:
         """Bot-thread signal (via ThreadSafeBridge): planner is deciding."""
         self.query_one("#map", MapPane).set_planning(active)
 
     def action_toggle_plan(self) -> None:
-        if isinstance(self.screen, PlanScreen):
-            self.pop_screen()
-        elif self._last_snapshot is not None:
-            self.push_screen(PlanScreen(self._last_snapshot, self._game_data))
+        self._open_modal(
+            PlanScreen,
+            lambda: PlanScreen(self._last_snapshot, self._game_data)
+            if self._last_snapshot is not None else None)

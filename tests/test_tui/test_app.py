@@ -250,6 +250,37 @@ class TestWatchAppModals:
             assert not isinstance(app.screen, LogScreen)
 
     @pytest.mark.asyncio
+    async def test_chaining_modals_does_not_duplicate_ids(self):
+        """Regression: pressing log -> character -> log must NOT crash with
+        DuplicateIds (a second LogScreen colliding on the fixed 'log-modal' id).
+        The single-modal toggle closes the open modal before opening another, so
+        at most one modal is in the stack."""
+        app = _make_app()
+        async with app.run_test() as pilot:
+            app.update_snapshot(_snap())
+            await pilot.press("l")                       # log open
+            assert isinstance(app.screen, LogScreen)
+            await pilot.press("c")                       # switch to character
+            assert isinstance(app.screen, CharacterScreen)
+            await pilot.press("l")                        # switch back to log — must not crash
+            assert isinstance(app.screen, LogScreen)
+            # exactly one modal in the stack (base + one modal), no stacked duplicates
+            modals = [s for s in app.screen_stack if isinstance(s, app._MODAL_SCREENS)]
+            assert len(modals) == 1
+
+    @pytest.mark.asyncio
+    async def test_switch_between_modals_replaces_not_stacks(self):
+        """log -> plan replaces the modal (single-modal invariant), not stacks."""
+        app = _make_app()
+        async with app.run_test() as pilot:
+            app.update_snapshot(_snap())
+            await pilot.press("l")
+            await pilot.press("p")
+            assert isinstance(app.screen, PlanScreen)
+            modals = [s for s in app.screen_stack if isinstance(s, app._MODAL_SCREENS)]
+            assert len(modals) == 1
+
+    @pytest.mark.asyncio
     async def test_c_no_op_without_snapshot(self):
         """Pressing 'c' with no snapshot does not push a CharacterScreen (elif guard)."""
         app = _make_app()
