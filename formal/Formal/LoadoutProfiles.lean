@@ -1,4 +1,4 @@
--- @concept: gear @property: dedup, monotonicity, totality, safety
+-- @concept: gear @property: validity, monotonicity, totality, safety
 /-
 Formal model of the pure loadout-profile cores extracted from
 `src/artifactsmmo_cli/ai/loadout_profiles_core.py` (`gear_demand`,

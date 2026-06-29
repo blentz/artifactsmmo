@@ -2451,6 +2451,44 @@ def runIsCombatBearing (args : Array Json) : Json :=
       (parsePairs args[2]!) (intArg args 3) (intArg args 4) (intArg args 5)
       (intArg args 6) (intArg args 7)))]
 
+/-- Parse a JSON array-of-arrays-of-strings into `List (List String)` (the active
+loadouts: each loadout is its list of gear codes). -/
+def parseLoadouts (j : Json) : List (List String) :=
+  match j.getArr? with
+  | .error _ => []
+  | .ok arr => arr.toList.map (fun lj =>
+      match lj.getArr? with
+      | .error _ => []
+      | .ok codes => codes.toList.filterMap (fun cj => (cj.getStr?).toOption))
+
+/-- Parse a JSON array-of-strings into `List String`. -/
+def parseStrings (j : Json) : List String :=
+  match j.getArr? with
+  | .error _ => []
+  | .ok arr => arr.toList.filterMap (fun cj => (cj.getStr?).toOption)
+
+/-- Compute `gearDemand` for one query code over the active loadouts.
+
+`args[0]` is a JSON ARRAY of loadouts (each a JSON array of gear-code strings);
+`args[1]` is the query code string. Emits `{"demand": Nat}`. Mirrors the live
+`loadout_profiles_core.gear_demand(active_loadouts)[code]` (per-code MAX). -/
+def runGearDemand (args : Array Json) : Json :=
+  let loadouts := parseLoadouts args[0]!
+  let c := (args[1]!.getStr?).toOption.getD ""
+  Json.mkObj [("demand", Json.num (Int.ofNat (Formal.LoadoutProfiles.gearDemand loadouts c)))]
+
+/-- Compute `bankSpaceCost` over the active loadouts and currently-equipped gear.
+
+`args[0]` is a JSON ARRAY of loadouts (each a JSON array of gear-code strings);
+`args[1]` is a JSON array of equipped code strings. Emits `{"cost": Nat}`.
+Mirrors the live `loadout_profiles_core.bank_space_cost(active_loadouts,
+equipped)`. -/
+def runBankSpaceCost (args : Array Json) : Json :=
+  let loadouts := parseLoadouts args[0]!
+  let equipped := parseStrings args[1]!
+  Json.mkObj [("cost",
+    Json.num (Int.ofNat (Formal.LoadoutProfiles.bankSpaceCost loadouts equipped)))]
+
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
   let args := ((item.getObjValD "args" |>.getArr?).toOption.getD #[])
@@ -2647,6 +2685,10 @@ def runOne (item : Json) : Json :=
     runIsCombatBearing args
   else if kind == "is_consumable" then
     runIsConsumable args
+  else if kind == "gear_demand" then
+    runGearDemand args
+  else if kind == "bank_space_cost" then
+    runBankSpaceCost args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 

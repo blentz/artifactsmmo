@@ -55,6 +55,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | Liveness.StickySelect | liveness, planner | liveness, safety |
 | Liveness.ZombieFreedom | liveness, planner | liveness |
 | LivenessChain | combat, monsters | reachability, no-deadlock |
+| LoadoutProfiles | gear | validity, monotonicity, totality, safety |
 | LowYieldCancel | tasks | safety, monotonicity |
 | MonsterDropApply | combat, planner | liveness, safety |
 | MonsterDropSelection | monsters | dominance, monotonicity, totality, reachability |

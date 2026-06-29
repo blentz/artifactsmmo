@@ -20,6 +20,7 @@ MUTATION_LOCKFILE = ROOT / ".mutation-run.lock"
 SRC = ROOT / "src" / "artifactsmmo_cli" / "utils" / "pathfinding.py"
 TASK_BATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_batch.py"
 INVENTORY_CAPS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_caps.py"
+LOADOUT_PROFILES_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loadout_profiles_core.py"
 ACCUMULATION_SELL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "accumulation_sell.py"
 DOMINANCE_PARETO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "dominance_pareto.py"
 COMBAT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat.py"
@@ -396,6 +397,44 @@ ACCUMULATION_SELL_MUTATIONS = [
     ("accumulation_sell: keep eff_cap not true cap",
      "    keep = cap if cap > 0 else 0",
      "    keep = cap if cap > 0 else 1"),
+]
+
+
+# loadout_profiles_core (gear dedup + bank-space cost) mutations. The two
+# core-resident drops are killed by formal/diff/test_loadout_profiles_diff.py
+# (real cores vs the proved Formal.LoadoutProfiles.gearDemand / bankSpaceCost
+# through the gear_demand / bank_space_cost oracles).
+LOADOUT_PROFILES_CORE_MUTATIONS = [
+    # drop the per-code MAX comparison in gear_demand: every loadout's count
+    # overwrites the prior one (last-write-wins), so a code worn 2x in an early
+    # loadout and 1x in a later one reports demand 1, not the MAX 2.
+    ("loadout_profiles: drop gear_demand MAX comparison",
+     "            if n > demand.get(code, 0):\n"
+     "                demand[code] = n",
+     "            if True:\n"
+     "                demand[code] = n"),
+    # drop the equipped subtraction in bank_space_cost: already-equipped gear is
+    # wrongly counted as needing bank room (cost overstated).
+    ("loadout_profiles: drop bank_space_cost equipped subtraction",
+     "    return len(distinct - set(equipped))",
+     "    return len(distinct)"),
+]
+
+
+# expand_bank used-floor (Task 4) mutation. The `max(used, profile_cost)` floor
+# in value() — proven additive-only by Lean shouldExpandBank_floor_preserves —
+# is killed by tests/ai/test_expand_bank_profile_floor.py (dropping it lets a
+# profile-overflowed bank fall back below the trigger and NOT fire).
+EXPAND_BANK_FLOOR_MUTATIONS = [
+    ("expand_bank: drop value() profile used-floor (max -> used)",
+     "                state, game_data, self._history,\n"
+     "                self._combat_monster, self._gather_skills,\n"
+     "            )\n"
+     "            used = max(used, profile_cost)",
+     "                state, game_data, self._history,\n"
+     "                self._combat_monster, self._gather_skills,\n"
+     "            )\n"
+     "            used = used"),
 ]
 
 
@@ -3084,7 +3123,8 @@ LADDER_MEANS_FIRES_MUTATIONS = [
     (
         "ladder/means: DRAIN_BANK_JUNK drop bank_drain_excess conjunct (fires on empty bank)",
         "                and bool(bank_drain_excess(\n"
-        "                    state, game_data, ctx.target_gear | ctx.target_tools)))",
+        "                    state, game_data, _gear_protected(ctx),\n"
+        "                    gear_keep=ctx.gear_keep or None)))",
         "                and True)",
     ),
 ]
@@ -3810,6 +3850,10 @@ def _run_all_groups() -> int:
               "formal/diff/test_inventory_profile_diff.py", survivors)
     run_group(ACCUMULATION_SELL_SRC, ACCUMULATION_SELL_MUTATIONS,
               "formal/diff/test_accumulation_sell_diff.py", survivors)
+    run_group(LOADOUT_PROFILES_CORE_SRC, LOADOUT_PROFILES_CORE_MUTATIONS,
+              "formal/diff/test_loadout_profiles_diff.py", survivors)
+    run_group(EXPAND_BANK_GOAL_SRC, EXPAND_BANK_FLOOR_MUTATIONS,
+              "tests/ai/test_expand_bank_profile_floor.py", survivors)
     run_group(DOMINANCE_PARETO_SRC, DOMINANCE_PARETO_MUTATIONS,
               "formal/diff/test_dominance_pareto_diff.py", survivors)
     run_group(COMBAT_SRC, PREDICT_WIN_MUTATIONS,
