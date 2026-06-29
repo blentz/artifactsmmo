@@ -824,6 +824,18 @@ open Formal.WeightedRemaining in
 #print axioms Formal.BankExpansionTiming.expand_stable_under_more_gold
 #print axioms Formal.BankExpansionTiming.expand_stable_under_more_fill
 #print axioms Formal.BankExpansionTiming.expand_true_witness
+-- LoadoutProfiles (pure gear-demand dedup + bank-space cost cores)
+#print axioms Formal.LoadoutProfiles.gearDemand_eq_max
+#print axioms Formal.LoadoutProfiles.gearDemand_dedup_bound
+#print axioms Formal.LoadoutProfiles.gearDemand_mono
+#print axioms Formal.LoadoutProfiles.bankSpaceCost_nonneg
+#print axioms Formal.LoadoutProfiles.bankSpaceCost_le_distinct
+#print axioms Formal.LoadoutProfiles.bankSpaceCost_mono
+#print axioms Formal.LoadoutProfiles.shouldExpandBank_floor_preserves
+#print axioms Formal.LoadoutProfiles.gearDemand_shared_witness
+#print axioms Formal.LoadoutProfiles.gearDemand_ring_witness
+#print axioms Formal.LoadoutProfiles.gearDemand_max_not_sum_witness
+#print axioms Formal.LoadoutProfiles.bankSpaceCost_witness
 -- EventWindow (event-NPC trade-window gate over Int)
 #print axioms Formal.EventWindow.tradeable_total
 #print axioms Formal.EventWindow.non_event_always_tradeable

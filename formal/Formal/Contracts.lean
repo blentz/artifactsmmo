@@ -56,6 +56,7 @@ import Formal.BuySourceVenue
 import Formal.NearestTile
 import Formal.ConsumableSelection
 import Formal.BankExpansionTiming
+import Formal.LoadoutProfiles
 import Formal.EventWindow
 import Formal.NpcBuyInventory
 import Formal.InventoryChainSafe
@@ -2844,6 +2845,43 @@ example : ∀ (u u' c g k r tn td : Int), 0 ≤ td →
     Formal.BankExpansionTiming.shouldExpandBank u c g k r tn td = true → u ≤ u' →
     Formal.BankExpansionTiming.shouldExpandBank u' c g k r tn td = true :=
   @Formal.BankExpansionTiming.expand_stable_under_more_fill
+
+/-! ### LoadoutProfiles role contracts (pure dedup + bank-space cost). -/
+
+-- gearDemand_eq_max: CHARACTERIZATION — demand = per-code max over loadouts.
+example : ∀ (loadouts : List (List String)) (c : String),
+    Formal.LoadoutProfiles.gearDemand loadouts c
+      = (loadouts.map (fun l => l.count c)).foldl max 0 :=
+  @Formal.LoadoutProfiles.gearDemand_eq_max
+-- gearDemand_dedup_bound: DEDUP — demand ≤ max single-loadout count ("held once").
+example : ∀ (loadouts : List (List String)) (c : String),
+    Formal.LoadoutProfiles.gearDemand loadouts c
+      ≤ (loadouts.map (fun l => l.count c)).foldl max 0 :=
+  @Formal.LoadoutProfiles.gearDemand_dedup_bound
+-- gearDemand_mono: MONOTONICITY — adding a loadout never lowers demand.
+example : ∀ (loadouts : List (List String)) (l : List String) (c : String),
+    Formal.LoadoutProfiles.gearDemand loadouts c
+      ≤ Formal.LoadoutProfiles.gearDemand (l :: loadouts) c :=
+  @Formal.LoadoutProfiles.gearDemand_mono
+-- bankSpaceCost_nonneg: NON-NEGATIVITY — cost ≥ 0.
+example : ∀ (loadouts : List (List String)) (equipped : List String),
+    0 ≤ Formal.LoadoutProfiles.bankSpaceCost loadouts equipped :=
+  @Formal.LoadoutProfiles.bankSpaceCost_nonneg
+-- bankSpaceCost_le_distinct: BOUND — cost ≤ #distinct active codes.
+example : ∀ (loadouts : List (List String)) (equipped : List String),
+    Formal.LoadoutProfiles.bankSpaceCost loadouts equipped
+      ≤ (Formal.LoadoutProfiles.distinctCodes loadouts).length :=
+  @Formal.LoadoutProfiles.bankSpaceCost_le_distinct
+-- bankSpaceCost_mono: MONOTONICITY — adding a loadout never lowers cost.
+example : ∀ (loadouts : List (List String)) (l : List String) (equipped : List String),
+    Formal.LoadoutProfiles.bankSpaceCost loadouts equipped
+      ≤ Formal.LoadoutProfiles.bankSpaceCost (l :: loadouts) equipped :=
+  @Formal.LoadoutProfiles.bankSpaceCost_mono
+-- shouldExpandBank_floor_preserves: floor max(used,cost) preserves ExpandBank firing.
+example : ∀ (used cost capacity gold k r tn td : Int), 0 ≤ td → used ≤ max used cost →
+    Formal.BankExpansionTiming.shouldExpandBank used capacity gold k r tn td = true →
+    Formal.BankExpansionTiming.shouldExpandBank (max used cost) capacity gold k r tn td = true :=
+  @Formal.LoadoutProfiles.shouldExpandBank_floor_preserves
 
 /-! ### EventWindow role contracts (event-NPC trade-window gate over Int). -/
 

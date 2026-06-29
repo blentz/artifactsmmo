@@ -21,6 +21,7 @@ import Formal.TaskTradeReadyPriority
 import Formal.WithdrawSetExpansion
 import Formal.RecycleProtection
 import Formal.BankExpansionTiming
+import Formal.LoadoutProfiles
 import Formal.CraftPlanDriver
 import Formal.DoomedMemo
 import Formal.SkillGateFastFail
@@ -418,6 +419,15 @@ open Formal.PriorityBand
 #check @Formal.BankExpansionTiming.expand_stable_under_more_gold  -- monotonicity: ↑gold keeps fire
 #check @Formal.BankExpansionTiming.expand_stable_under_more_fill  -- monotonicity: ↑used keeps fire (0 ≤ tden)
 #check @Formal.BankExpansionTiming.expand_true_witness            -- non-vacuity: concrete true witness
+-- LoadoutProfiles required roles (pure dedup + bank-space cost;
+-- src/artifactsmmo_cli/ai/loadout_profiles_core.py::gear_demand/bank_space_cost):
+#check @Formal.LoadoutProfiles.gearDemand_eq_max                  -- characterization: demand = per-code max over loadouts
+#check @Formal.LoadoutProfiles.gearDemand_dedup_bound            -- dedup "held once": demand ≤ max single-loadout count
+#check @Formal.LoadoutProfiles.gearDemand_mono                   -- monotonicity: adding a loadout never lowers demand
+#check @Formal.LoadoutProfiles.bankSpaceCost_nonneg             -- non-negativity: cost ≥ 0
+#check @Formal.LoadoutProfiles.bankSpaceCost_le_distinct        -- bound: cost ≤ #distinct active codes
+#check @Formal.LoadoutProfiles.bankSpaceCost_mono              -- monotonicity: adding a loadout never lowers cost
+#check @Formal.LoadoutProfiles.shouldExpandBank_floor_preserves -- floor max(used,cost) preserves ExpandBank firing
 -- EventWindow required roles (event-NPC trade-window gate over Int):
 #check @Formal.EventWindow.tradeable_total                    -- totality: always true or false
 #check @Formal.EventWindow.non_event_always_tradeable         -- dominance: non-event NPC always tradeable
