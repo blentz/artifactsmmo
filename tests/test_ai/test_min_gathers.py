@@ -38,7 +38,7 @@ def test_owned_intermediate_short_circuits_subtree():
 
 def test_copper_boots_from_scratch_is_eighty():
     # The bug witness: copper_boots = 8 copper_bar, copper_bar = 10 copper_ore.
-    # From scratch ⇒ 80 copper_ore gathers ≫ UpgradeEquipment max_depth (15).
+    # From scratch ⇒ 80 copper_ore gathers ≫ UpgradeEquipment max_depth (32).
     recipes = {
         "copper_boots": {"copper_bar": 8},
         "copper_bar": {"copper_ore": 10},

@@ -113,7 +113,7 @@ def _shallow_gd() -> GameData:
             crafting_skill="mining", crafting_level=1),
         "tin_ore": ItemStats(code="tin_ore", level=1, type_="resource"),
     }
-    # 1 blade <- 2 bar <- 2 ore each = 4 ore total -> well under max_depth 15.
+    # 1 blade <- 2 bar <- 2 ore each = 4 ore total -> well under max_depth 32.
     gd._crafting_recipes = {"tin_blade": {"tin_bar": 2}, "tin_bar": {"tin_ore": 2}}
     gd._resource_drops = {"tin_rocks": "tin_ore"}
     gd._resource_skill = {"tin_rocks": ("mining", 1)}

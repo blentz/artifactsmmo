@@ -5,7 +5,7 @@ A committed UpgradeEquipment target that needs more gather actions than the
 goal's max_depth can NEVER be planned (the planner never returns a plan longer
 than max_depth), so the arbiter must skip it instead of burning the 90s search
 budget. copper_boots from scratch = 8 copper_bar × 10 copper_ore = 80 gathers ≫
-max_depth 15 — the real Robby first-cycle stall.
+max_depth 32 — the real Robby first-cycle stall.
 """
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -112,7 +112,7 @@ def _gd_feather_coat() -> GameData:
     gd = GameData()
     gd._crafting_recipes = {
         "feather_coat": {"feather": 5, "ash_plank": 2},
-        "ash_plank": {"ash_wood": 10},
+        "ash_plank": {"ash_wood": 20},
     }
     gd._item_stats = {
         "feather_coat": ItemStats(
@@ -124,10 +124,10 @@ def _gd_feather_coat() -> GameData:
 
 
 def test_is_plannable_rejects_from_scratch_feather_coat():
-    """feather_coat from scratch: true plan ~18 > max_depth 15 -> is_plannable False
-    (was wrongly True because min_gathers omitted crafts+equip)."""
-    # owned: ash_wood:10 — covers half the planks but still needs 10 more ash_wood
-    # + 5 feathers; min_plan_length = ceil_gathers(20,1) + min_crafts(2) + equip(1) = 23 > 15
+    """feather_coat from scratch: true plan far exceeds max_depth 32 -> is_plannable
+    False (was wrongly True because min_gathers omitted crafts+equip)."""
+    # owned: ash_wood:10 — 2 planks need 40 ash_wood, so 30 more ash_wood + 5 feathers;
+    # min_plan_length = ceil_gathers(35,1) + min_crafts(3) + equip(1) = 39 > 32
     state = make_state(
         skills={"gearcrafting": 5},
         inventory={"ash_wood": 10},

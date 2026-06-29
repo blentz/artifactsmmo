@@ -95,7 +95,7 @@ class TestTraceRegression:
         """UpgradeEquipmentGoal.relevant_actions has the identical net-0 gather
         prune; the factory's x1 withdraws restore its admissibility too. Bank
         residues (2 ore below the x10 batch, 1 bar below the x6 batch) are
-        extractable only via x1, and the equip plan fits max_depth 15."""
+        extractable only via x1, and the equip plan fits max_depth 32."""
         gd = _copper_chain_gd()
         state = make_state(
             inventory={"copper_ore": 48},

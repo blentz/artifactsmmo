@@ -639,8 +639,8 @@ def test_objective_step_intermediate_chunks_toward_equippable_root():
 
     The old code returned UpgradeEquipmentGoal(root) here, but that hands the whole
     craft+equip chain to the A* at once; when the chain exceeds the planner depth
-    budget (copper_boots: 16 actions > max_depth 15) the one-shot plan returns
-    plan_len 0 and the bot abandons the gear for chicken grind (trace 2026-06-21).
+    budget (copper_boots from scratch: ~96 actions ≫ max_depth 32) the one-shot plan
+    returns plan_len 0 and the bot abandons the gear for chicken grind (trace 2026-06-21).
     The committed root is unchanged — only its EXECUTION is chunked via
     gather_step_target, whose own depth check picks a budget-feasible target."""
     gd = _gd()
@@ -719,7 +719,7 @@ def test_recipe_has_combat_drop_input_is_cycle_safe():
 def test_objective_step_intermediate_unreachable_root_routes_to_deepest_step():
     """From-scratch DEEP equippable chain: the intermediate step maps to the
     equippable ROOT, but the root's UpgradeEquipment is depth-UNREACHABLE
-    (min_gathers 480 >> max_depth 15). The old fallback built
+    (min_gathers 480 >> max_depth 32). The old fallback built
     GatherMaterials(root, root's direct recipe) -> the planner exploded
     (1M+ nodes / 90s timeout / plan_len 0, then fall-through). The fix routes to
     the DEEPEST actionable step (the raw base material) as a FLAT gather that
@@ -765,7 +765,7 @@ def test_objective_step_unreachable_root_credits_bank_then_routes_to_step():
                             "steel_bar": {"iron_bar": 8},
                             "iron_bar": {"iron_ore": 10}}
     gd._resource_drops = {"iron_rocks": "iron_ore"}
-    # Bank has 2 steel_bar (cuts the need to 4) but 4*8*10 = 320 ore >> 15.
+    # Bank has 2 steel_bar (cuts the need to 4) but 4*8*10 = 320 ore >> 32.
     state = make_state(level=5, inventory={}, bank_items={"steel_bar": 2})
     step = ObtainItem("iron_ore", 320)
     root = ObtainItem("steel_boots", 1)
@@ -1365,7 +1365,7 @@ class _SpyPlanner:
 def test_plans_skips_unplannable_goal_without_searching():
     """A goal whose is_plannable() is False is never handed to the planner: the
     arbiter records a skipped attempt and returns [] without the 90s search.
-    UpgradeEquipment(copper_boots) needs 80 gathers ≫ max_depth 15 ⇒ unplannable."""
+    UpgradeEquipment(copper_boots) needs 80 gathers ≫ max_depth 32 ⇒ unplannable."""
     gd = GameData()
     gd._crafting_recipes = {
         "copper_boots": {"copper_bar": 8},
@@ -2335,11 +2335,11 @@ def test_non_ring_keeps_one_slot_per_code():
 def _gd_feather_coat() -> GameData:
     """feather_coat body armour (gearcrafting-5): needs ash_plank×2 + feather×5.
     feather is a monster drop (no crafting recipe). ash_plank is woodcrafted
-    from ash_wood×10 (REAL recipe quantities). With ash_wood×10 in inventory,
-    the full chain still needs 10 more ash_wood (2 planks × 10 = 20 total,
-    minus 10 owned = 10 remaining) plus 5 feathers = 15 raw gathers; add 2
-    crafts + 1 equip → min_plan_length = 18 > max_depth 15 →
-    UpgradeEquipmentGoal.is_plannable returns False by depth-reject alone.
+    from ash_wood×20. With ash_wood×10 in inventory, the full chain still needs
+    30 more ash_wood (2 planks × 20 = 40 total, minus 10 owned = 30 remaining)
+    plus 5 feathers = 35 raw gathers; add crafts + 1 equip → min_plan_length far
+    exceeds max_depth 32 → UpgradeEquipmentGoal.is_plannable returns False by
+    depth-reject alone.
     The router must fall through to branch-3 (GatherMaterials on the step)."""
     gd = GameData()
     gd._item_stats = {
@@ -2352,7 +2352,7 @@ def _gd_feather_coat() -> GameData:
     }
     gd._crafting_recipes = {
         "feather_coat": {"ash_plank": 2, "feather": 5},
-        "ash_plank": {"ash_wood": 10},
+        "ash_plank": {"ash_wood": 20},
     }
     gd._resource_drops = {"ash_tree": "ash_wood"}
     gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
@@ -2363,9 +2363,9 @@ def test_deep_gear_routes_to_incremental_gather_not_empty_upgrade():
     """feather_coat from scratch: objective_step_goal returns a GatherMaterials
     step (incremental progress), not the over-deep UpgradeEquipment.
 
-    Real recipe: feather_coat = {ash_plank:2, feather:5}, ash_plank = {ash_wood:10}.
-    With ash_wood×10 in inventory: need 10 more ash_wood + 5 feathers = 15 gathers
-    + 2 crafts + 1 equip = 18 > max_depth 15. UpgradeEquipmentGoal.is_plannable
+    Recipe: feather_coat = {ash_plank:2, feather:5}, ash_plank = {ash_wood:20}.
+    With ash_wood×10 in inventory: need 30 more ash_wood + 5 feathers = 35 gathers
+    + crafts + 1 equip ≫ max_depth 32. UpgradeEquipmentGoal.is_plannable
     returns False by depth-reject ALONE (no extra guard needed). The router must
     reach branch-3 (gather_step_target → GatherMaterialsGoal)."""
     gd = _gd_feather_coat()
@@ -2377,11 +2377,11 @@ def test_deep_gear_routes_to_incremental_gather_not_empty_upgrade():
     )
     step = ObtainItem("ash_plank", 2)
     root = ObtainItem("feather_coat", 1, slot="body_armor_slot")
-    # Confirm WHY it routes: depth-reject (18 > max_depth 15), not a fixture artifact.
+    # Confirm WHY it routes: depth-reject (≫ max_depth 32), not a fixture artifact.
     upgrade = UpgradeEquipmentGoal(initial_equipment=state.equipment,
                                    committed_target=("feather_coat", "body_armor_slot"))
     assert upgrade.is_plannable(state, gd) is False, (
-        "is_plannable must be False (min_plan_length 18 > max_depth 15) "
+        "is_plannable must be False (min_plan_length ≫ max_depth 32) "
         "so the depth-reject — not any extra guard — drives the route"
     )
     goal = objective_step_goal(step, state, gd, _ctx(), root=root, committed_root=root)

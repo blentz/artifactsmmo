@@ -594,10 +594,10 @@ def objective_step_goal(
                 # hand the whole craft+equip chain to the A* at once. The old code
                 # returned the whole-chain `upgrade` whenever `upgrade.is_plannable`,
                 # but is_plannable means "achievable ever", NOT "the A* finds it within
-                # max_depth". With 6 copper_bar + 8 copper_ore in hand the copper_boots
-                # chain is ~16 actions (gather 12 ore + craft 2 bars + craft boots +
-                # equip) > max_depth 15, so the one-shot plan returned plan_len 0 and the
-                # bot abandoned boots for chicken grind (trace 2026-06-21). A depth
+                # max_depth". A from-scratch copper_boots chain is ~96 actions (80 ore
+                # gathers + 8 bar crafts + boots + equip) ≫ max_depth 32, so the one-shot
+                # plan returned plan_len 0 and the bot abandoned boots for chicken grind
+                # (trace 2026-06-21). A depth
                 # predicate can't save it either: min_plan_length is only a LOWER bound
                 # (omits travel + the final assembly), so `<= max_depth` never PROVES the
                 # plan fits. So we always chunk: when the step is an intermediate, route
@@ -816,7 +816,7 @@ class StrategyArbiter:
         # longer than its max_depth can never be planned (the planner never
         # returns a plan longer than max_depth — formal/Formal/PlannerDepthBound),
         # so skip it instead of burning the full 90s budget. This is what stops
-        # UpgradeEquipment(copper_boots) — 80 gathers vs max_depth 15 — from
+        # UpgradeEquipment(copper_boots) — 80 gathers vs max_depth 32 — from
         # stalling the first cycle.
         if not goal.is_plannable(state, game_data, self._history):
             # A proven-unplannable goal is a CONCLUSIVE no-plan (not a timeout):

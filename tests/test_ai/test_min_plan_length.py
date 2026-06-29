@@ -5,12 +5,12 @@ from artifactsmmo_cli.ai.min_plan_length import min_plan_length
 R = {"feather_coat": {"feather": 5, "ash_plank": 2}, "ash_plank": {"ash_wood": 10}}
 
 
-def test_feather_coat_from_scratch_exceeds_15():
+def test_feather_coat_from_scratch_longer_than_in_hand():
     # mints: 5 feathers + 20 ash_wood... but owned ash_wood=10 -> 5 + 10 = 15 mints
     # (max_gather_yield=1 -> ceil_gathers=15); crafts: ash_plank + coat = 2; equip 1.
     n = min_plan_length("feather_coat", 1, R, {"ash_wood": 10}, 1, equip=True)
     assert n == 18          # 15 + 2 + 1
-    assert n > 15           # > UpgradeEquipmentGoal.max_depth -> correctly rejected
+    assert n <= 32          # within UpgradeEquipmentGoal.max_depth (32) -> admitted
 
 
 def test_short_chain_when_materials_in_hand():

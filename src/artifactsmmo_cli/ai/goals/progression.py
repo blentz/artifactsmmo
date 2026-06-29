@@ -43,6 +43,22 @@ class UpgradeEquipmentGoal(Goal):
         # built from ash_planks meant for a wooden_shield).
         self._committed_target = committed_target
 
+    @property
+    def max_depth(self) -> int:
+        """Deeper than the base 15 so a craft+equip plan whose lower bound sits
+        just under the base bound is actually FOUND by the A*, not falsely
+        admitted then abandoned. is_plannable gates on min_plan_length (a PROVED
+        lower bound, Formal.PlanModel.min_plan_length_le_plan): for a 2nd
+        copper_ring with bar×4/ore×8 in hand the bound is 15 == base max_depth, so
+        the goal was admitted, yet the real plan (gather ×12 → craft bar ×2 →
+        craft ring → equip) is 16 actions > 15 — the planner returned plan_len 0
+        and the bot fell to a discretionary skill-grind (wooden_shield) instead of
+        crafting the ring it could plainly make. 32 covers single-tier gear
+        craft+equip from materials-in-hand while still routing genuinely deep
+        from-scratch chains (copper_boots ≈ 80 gathers, steel_boots ≈ 480) to
+        GatherMaterials accumulation via the unchanged depth-reachability split."""
+        return 32
+
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
         upgrade = self._find_upgrade(state, game_data)
@@ -107,7 +123,7 @@ class UpgradeEquipmentGoal(Goal):
         longer than `max_depth` (formal/Formal/PlannerDepthBound.lean:
         plan_length_le_max_depth), so when `min_gathers > max_depth` no plan can
         exist — running the 90s A* is pure waste. copper_boots from scratch =
-        80 gathers ≫ base max_depth 15: the Robby first-cycle stall. When the
+        80 gathers ≫ max_depth 32: the Robby first-cycle stall. When the
         target (or its materials) is already in hand/bank the count drops and the
         short craft+equip plan IS reachable, so the goal stays plannable and
         GatherMaterials does the accumulating across cycles."""
