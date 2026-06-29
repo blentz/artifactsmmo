@@ -12,7 +12,6 @@ from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.complete_task import CompleteTaskAction
 from artifactsmmo_cli.ai.actions.consumable import UseConsumableAction
-from artifactsmmo_cli.ai.actions.use_gold_bag import UseGoldBagAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
@@ -30,6 +29,7 @@ from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.actions.teleport import TeleportAction
 from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
+from artifactsmmo_cli.ai.actions.use_gold_bag import UseGoldBagAction
 from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData
