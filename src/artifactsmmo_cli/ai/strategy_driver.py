@@ -339,7 +339,7 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
 
 
 def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
-              state: WorldState) -> Goal:
+              state: WorldState, history: LearningStore | None = None) -> Goal:
     """Map a MeansKind to a parameterized Goal instance."""
     if kind is MeansKind.CLAIM_PENDING:
         return ClaimPendingGoal()
@@ -380,7 +380,16 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
         return TaskExchangeGoal(min_coins=ctx.task_exchange_min_coins,
                                 initial_total=tasks_coin_total(state))
     if kind is MeansKind.BANK_EXPAND:
-        return ExpandBankGoal(bank_accessible=ctx.bank_accessible, game_data=game_data)
+        return ExpandBankGoal(
+            bank_accessible=ctx.bank_accessible,
+            game_data=game_data,
+            history=history,
+            combat_monster=ctx.combat_monster,
+            # gather_skills is not in SelectionContext; the recent-window inside
+            # active_bank_space_cost still contributes via history. Pass empty
+            # frozenset for the current-cycle gather parameter.
+            gather_skills=frozenset(),
+        )
     if kind is MeansKind.MAINTAIN_CONSUMABLES:
         return MaintainConsumablesGoal(game_data=game_data)
     if kind is MeansKind.WAIT:
@@ -1053,7 +1062,7 @@ class StrategyArbiter:
             g = map_guard(gk, game_data, ctx, state, step_profile)
             candidates.append(Candidate(goal=g, is_means=False, repr_=repr(g)))
         for mk in collect_kinds:
-            g = map_means(mk, game_data, ctx, state)
+            g = map_means(mk, game_data, ctx, state, self._history)
             candidates.append(Candidate(goal=g, is_means=True, repr_=repr(g)))
         # Append step_goal + every fallback-step goal in ranking order so
         # select_pure walks them all before reaching discretionary. Trace
@@ -1087,7 +1096,7 @@ class StrategyArbiter:
             added_reprs.add(r)
             candidates.append(Candidate(goal=alt_goal, is_means=True, repr_=r))
         for mk in discretionary_kinds:
-            g = map_means(mk, game_data, ctx, state)
+            g = map_means(mk, game_data, ctx, state, self._history)
             candidates.append(Candidate(goal=g, is_means=True, repr_=repr(g)))
         return candidates
 

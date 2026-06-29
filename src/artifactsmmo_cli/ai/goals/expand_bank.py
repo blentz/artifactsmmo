@@ -4,6 +4,7 @@ from artifactsmmo_cli.ai.bank_expansion_timing import should_expand_bank
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.loadout_profiles import active_bank_space_cost
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -24,11 +25,23 @@ def _bank_fill_known(state: WorldState) -> int | None:
 class ExpandBankGoal(Goal):
     """Buy a bank expansion when current bank is near full and gold is sufficient."""
 
-    def __init__(self, bank_accessible: bool = True, game_data: GameData | None = None) -> None:
+    def __init__(
+        self,
+        bank_accessible: bool = True,
+        game_data: GameData | None = None,
+        history: LearningStore | None = None,
+        combat_monster: str | None = None,
+        gather_skills: frozenset[str] = frozenset(),
+    ) -> None:
         self._bank_accessible = bank_accessible
         # Stashed so is_satisfied (which the Goal protocol calls with state
         # only) can use the ACTUAL bank capacity instead of a fixed slot count.
         self._game_data = game_data
+        # Active-profile context for the used-floor calculation (Task 4).
+        # When history is None the floor is skipped (backwards-compatible).
+        self._history = history
+        self._combat_monster = combat_monster
+        self._gather_skills = gather_skills
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
@@ -39,6 +52,17 @@ class ExpandBankGoal(Goal):
         used = _bank_fill_known(state)
         if used is None or game_data.bank_capacity == 0:
             return 0.0
+        # Raise `used` to a floor set by the active-profile bank-space demand.
+        # Proven by Lean `shouldExpandBank_floor_preserves`: max(used, cost) only
+        # ADDS firing — it never suppresses an expansion that would have fired on
+        # the real `used` alone, and it never breaks the reserve gate.
+        # When history is None (no profile context), the floor is a no-op.
+        if self._history is not None:
+            profile_cost = active_bank_space_cost(
+                state, game_data, self._history,
+                self._combat_monster, self._gather_skills,
+            )
+            used = max(used, profile_cost)
         # Fire only at/above the fill threshold AND when buying keeps gold at or
         # above the progression reserve floor. A bank expansion is never a
         # reserved gear code so buying=None applies the full floor.
@@ -69,6 +93,16 @@ class ExpandBankGoal(Goal):
             capacity = 0
         if capacity <= 0:
             return True
+        # Mirror the used-floor from value(): if active-profile gear would
+        # consume more bank slots than currently used, raise the floor.
+        # Requires both history and game_data to be available; when either is
+        # absent the floor is a no-op (backwards-compatible).
+        if self._history is not None and self._game_data is not None:
+            profile_cost = active_bank_space_cost(
+                state, self._game_data, self._history,
+                self._combat_monster, self._gather_skills,
+            )
+            used = max(used, profile_cost)
         return used < capacity * _SATISFIED_FILL
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
