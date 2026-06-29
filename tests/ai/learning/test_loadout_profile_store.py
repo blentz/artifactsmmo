@@ -1,7 +1,9 @@
 """Tests for LearningStore loadout-profile persistence (Task 1)."""
 
 import tempfile
+from datetime import datetime, timezone
 
+from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from sqlmodel import create_engine
 
@@ -55,8 +57,6 @@ def test_loadout_profiles_returns_empty_on_error(tmp_path):
 
 def test_recent_selected_goals_returns_goals(tmp_path):
     """recent_selected_goals returns the last N selected_goal strings."""
-    from datetime import datetime, timezone
-    from artifactsmmo_cli.ai.learning.models import Cycle
     store = LearningStore(db_path=str(tmp_path / "t.db"), character="X")
     store.start_session()
     for goal in ("GrindCharacterXP(chicken)", "LevelSkill(mining->5)"):

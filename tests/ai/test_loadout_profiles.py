@@ -13,6 +13,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loadout_profiles import (
+    RECENT_PROFILE_WINDOW,
     active_bank_space_cost,
     active_loadouts,
     active_profile_gear,
@@ -137,7 +138,6 @@ def test_active_task_keys_picks_up_recent_grind(tmp_path):
 
 def test_active_task_keys_excludes_old_grind(tmp_path):
     """GrindCharacterXP cycles beyond RECENT_PROFILE_WINDOW are not active."""
-    from artifactsmmo_cli.ai.loadout_profiles import RECENT_PROFILE_WINDOW
     history = LearningStore(db_path=str(tmp_path / "t.db"), character="X")
     history.start_session()
     # Insert RECENT_PROFILE_WINDOW + 1 other cycles to push wolf out of the window

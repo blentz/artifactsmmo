@@ -16,7 +16,6 @@ Gather task_keys beyond the parsed window are always available via the
 """
 
 import re
-from collections.abc import Mapping
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore

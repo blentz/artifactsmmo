@@ -10,6 +10,7 @@ from sqlmodel import Session as SqlSession
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -201,7 +202,6 @@ def test_record_loadout_skips_unknown_resource(tmp_path):
 
 def test_record_loadout_skips_non_combat_gather_actions(tmp_path):
     """_record_loadout_for_action is a no-op for other action types."""
-    from artifactsmmo_cli.ai.actions.movement import MoveAction
     store = LearningStore(db_path=str(tmp_path / "t.db"), character="Robby")
     player = GamePlayer(character="Robby", history=store)
     player.game_data = GameData()
