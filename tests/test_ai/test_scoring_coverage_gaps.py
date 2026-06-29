@@ -1,4 +1,4 @@
-"""Behavior tests closing coverage gaps in equipment/scoring.pick_loadout.
+"""Behavior tests closing coverage gaps in equipment/loadout_picker.pick_loadout.
 
 Covers armor-slot optimization and the empty-slot (no current stats) path.
 """

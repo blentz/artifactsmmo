@@ -591,7 +591,7 @@ SCORING_MUTATIONS = [
 
 
 # realizable_loadout mutations -- target the per-code OCCUPANCY-CAP rule in
-# scoring.pick_loadout (2026-06-14 re-anchor: the one-slot-per-code filter is
+# loadout_picker.pick_loadout (2026-06-14 re-anchor: the one-slot-per-code filter is
 # now ownership-capped — cap=1 for non-dup codes, cap=ownership for
 # duplicate-allowed types (rings), so a ring fills a 2nd slot only up to
 # physical ownership). Each mutation breaks realizability, the dup-free-except

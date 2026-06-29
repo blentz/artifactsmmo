@@ -3,7 +3,7 @@
 The sweep (docs/PLAN_faithfulness_modeling.md Workstream B) needs, per character
 level L, the strongest gear the bot could wield at L, so production's real
 `is_winnable` can run against the live monster catalog at that band. The existing
-`scoring.pick_loadout` only scans items the character already OWNS; this helper
+`loadout_picker.pick_loadout` only scans items the character already OWNS; this helper
 scans the WHOLE catalog — an optimistic upper-bound proxy: the best obtainable
 FULL LOADOUT with ``item.level <= L`` (best item per equip slot). The soundness
 caveat — that the bot actually obtains this gear — is the gear-progression

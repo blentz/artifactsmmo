@@ -19,10 +19,10 @@ def gear_value(stats: ItemStats, purpose: object) -> int:
     LAYERING DIRECTION: gear_value -> scoring. The Combat/Gather branches
     DELEGATE to the proven per-monster scorers in ``equipment/scoring.py``
     (`weapon_score`/`armor_score`/`gather_score`). That module must NOT import
-    this one (it would cycle), and `pick_loadout`/`pick_gather_loadout` stay on
-    the `*_score` functions this task. The "scorers are specializations of
-    gear_value" framing is realized by gear_value calling them, one direction
-    only; a later task inverts the call when it generalizes pick_loadout.
+    this one (it would cycle). ``pick_loadout(Gather(...))`` in
+    ``equipment/loadout_picker.py`` selects gear using the `*_score` functions
+    this module delegates to. The "scorers are specializations of gear_value"
+    framing is realized by gear_value calling them, one direction only.
     """
     if purpose is Rank or isinstance(purpose, Rank):
         return rank_value(combat_raw_of(stats), stats.wisdom, stats.prospecting,
