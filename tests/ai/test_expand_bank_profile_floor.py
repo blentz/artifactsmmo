@@ -11,7 +11,7 @@ Three behaviours tested:
 
 import pytest
 
-from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
@@ -96,37 +96,43 @@ class TestExpandBankProfileFloor:
         assert goal.value(state, gd) > 0.0
 
     def test_no_profile_pressure_unchanged(self, expand_fixture):
-        """(b) Without active-profile pressure, behaviour is identical to before.
+        """(b) Without active-profile pressure, value() equals the history=None baseline.
 
         Same state (7/10 bank items), but combat_monster=None → no profile match
         → active_bank_space_cost=0 → used_floor=max(7,0)=7 → 70% < 95% → no fire.
+
+        The assertion is explicit: goal-with-history must equal goal-without-history,
+        which would FAIL if the floor were incorrectly applied even with no pressure
+        (regression-proof: temporarily neutralise the floor and this test detects it).
         """
         state, gd, history = expand_fixture
-        goal = ExpandBankGoal(
+        goal_with_history = ExpandBankGoal(
             bank_accessible=True,
             game_data=gd,
             history=history,
             combat_monster=None,
             gather_skills=frozenset(),
         )
-        assert goal.value(state, gd) == 0.0
+        goal_no_history = ExpandBankGoal(
+            bank_accessible=True,
+            game_data=gd,
+            history=None,
+            combat_monster=None,
+            gather_skills=frozenset(),
+        )
+        assert goal_with_history.value(state, gd) == goal_no_history.value(state, gd)
+        assert goal_with_history.value(state, gd) == 0.0
 
     def test_reserve_gate_blocks_even_with_profile_pressure(self, tmp_path):
         """(c) Reserve gate still blocks when gold < cost + reserve.
 
         Profile cost=10 → used_floor=10 → expansion would fire on fill alone,
-        BUT gold=450, cost=400, iron_armor reserve_floor=500 →
-        post-buy gold 50 < 500 → should_expand_bank returns False.
+        BUT gold=450, cost=400, post-buy gold=50 < _MIN_SAFETY_FLOOR(100) →
+        reserve_floor blocks → should_expand_bank returns False.
         """
         gd = GameData()
         gd._bank_capacity = 10
         gd._next_expansion_cost = 400
-        gd._item_stats = {
-            "iron_armor": ItemStats(
-                code="iron_armor", level=5, type_="body_armor", hp_bonus=40
-            ),
-        }
-        gd._npc_stock = {"merchant": {"iron_armor": 500}}
 
         history = LearningStore(db_path=str(tmp_path / "t.db"), character="X")
         history.record_loadout_profile(
@@ -146,6 +152,6 @@ class TestExpandBankProfileFloor:
             combat_monster="wolf",
             gather_skills=frozenset(),
         )
-        # used_floor=10 → trigger fires, but reserve gate blocks (450-400=50 < 500).
+        # used_floor=10 → trigger fires, but reserve gate blocks (450-400=50 < _MIN_SAFETY_FLOOR=100).
         assert goal.value(state, gd) == 0.0
         history.close()

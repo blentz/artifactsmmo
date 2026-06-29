@@ -45,6 +45,8 @@ class ExpandBankGoal(Goal):
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
+        # history param is the base-Protocol signature; this goal uses self._history
+        # (stashed at construction).
         if not self._bank_accessible:
             return 0.0
         if self.is_satisfied(state):
@@ -56,8 +58,8 @@ class ExpandBankGoal(Goal):
         # Proven by Lean `shouldExpandBank_floor_preserves`: max(used, cost) only
         # ADDS firing — it never suppresses an expansion that would have fired on
         # the real `used` alone, and it never breaks the reserve gate.
-        # When history is None (no profile context), the floor is a no-op.
-        if self._history is not None:
+        # Guard matches is_satisfied(): both history and game_data must be present.
+        if self._history is not None and self._game_data is not None:
             profile_cost = active_bank_space_cost(
                 state, game_data, self._history,
                 self._combat_monster, self._gather_skills,
