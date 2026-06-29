@@ -240,3 +240,17 @@ that is unfaithful to the re-arming real bot, so the in-model discharge is
 REFUSED as a false-story proof). "Modulo only LIV-001" is honestly unreachable.
 The authoritative audit — statements, line citations, why each is irreducible,
 and what discharge would require — is `docs/LEVEL_FIFTY_RESIDUALS.md`.
+
+### Intentionally NOT proved (no decision logic) — gear sub-project D (2026-06-29)
+
+`ai/loadout_profiles_core.py`-style cores get full Lean lockstep, but sub-project
+D (**learned combat-loadout diagnostics**: `learning` `CombatLoadoutOutcome` append
+table + the `_record_combat_outcome` player hook + the read-only
+`combat-loadout-report` CLI / `ai/macro/loadout_calibration.py`) has **no Lean and
+no differential/mutation in the gate — intentionally**. D is observability only:
+it records what loadout fought, what `predict_win` said, and the actual win/loss,
+and renders a read-only report. It drives **no bot decision** (the combat path,
+`predict_win`, `is_winnable`, and loadout choice are untouched), so there is no
+decision function to mirror in Lean. It carries full (100%) unit coverage like the
+rest of the app; the carve is from the FORMAL gate only, justified by "read-only
+diagnostics, no bot decision logic."
