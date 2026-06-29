@@ -291,6 +291,12 @@ def useConsumableApply (s : WorldStateLean) (newHp : Nat)
     (newInv : List (String × Nat)) : WorldStateLean :=
   { s with hp := newHp, inventory := newInv, cooldown_expires := none }
 
+/-- `UseGoldBagAction.apply` model: gold up, inventory down (same shape as
+    `npcSellApply` minus position, like `useConsumableApply` crediting gold not hp). -/
+def useGoldBagApply (s : WorldStateLean) (newGold : Int)
+    (newInv : List (String × Nat)) : WorldStateLean :=
+  { s with gold := newGold, inventory := newInv, cooldown_expires := none }
+
 /-- `DeleteItemAction.apply` model: inventory shrinks. -/
 def deleteApply (s : WorldStateLean) (newInv : List (String × Nat)) : WorldStateLean :=
   { s with inventory := newInv, cooldown_expires := none }
@@ -329,6 +335,12 @@ theorem useConsumableApply_preserves_baseline (s : WorldStateLean) (h : Nat)
     (i : List (String × Nat)) :
     preservesBaseline s (useConsumableApply s h i) := by
   unfold preservesBaseline useConsumableApply
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+theorem useGoldBagApply_preserves_baseline (s : WorldStateLean) (g : Int)
+    (i : List (String × Nat)) :
+    preservesBaseline s (useGoldBagApply s g i) := by
+  unfold preservesBaseline useGoldBagApply
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 theorem deleteApply_preserves_baseline (s : WorldStateLean)
@@ -537,6 +549,7 @@ inductive ModeledApply where
                       (newBank : Option (List (String × Nat)))
                       (newX newY : Int) : ModeledApply
   | useConsumable     (newHp : Nat) (newInv : List (String × Nat)) : ModeledApply
+  | useGoldBag        (newGold : Int) (newInv : List (String × Nat)) : ModeledApply
   | delete            (newInv : List (String × Nat)) : ModeledApply
   -- Family 4: equipment-swap
   | equip             (newInv : List (String × Nat))
@@ -584,6 +597,7 @@ def ModeledApply.run (a : ModeledApply) (s : WorldStateLean) : WorldStateLean :=
   | .depositGold g bg x y           => depositGoldApply s g bg x y
   | .depositAll i b x y             => depositAllApply s i b x y
   | .useConsumable h i              => useConsumableApply s h i
+  | .useGoldBag g i                 => useGoldBagApply s g i
   | .delete i                       => deleteApply s i
   | .equip i e                      => equipApply s i e
   | .unequip i e                    => unequipApply s i e
@@ -617,6 +631,7 @@ theorem all_actions_preserve_baseline (s : WorldStateLean) (a : ModeledApply) :
   | depositGold g bg x y          => exact depositGoldApply_preserves_baseline s g bg x y
   | depositAll i b x y            => exact depositAllApply_preserves_baseline s i b x y
   | useConsumable h i             => exact useConsumableApply_preserves_baseline s h i
+  | useGoldBag g i                => exact useGoldBagApply_preserves_baseline s g i
   | delete i                      => exact deleteApply_preserves_baseline s i
   | equip i e                     => exact equipApply_preserves_baseline s i e
   | unequip i e                   => exact unequipApply_preserves_baseline s i e

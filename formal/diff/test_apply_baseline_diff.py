@@ -52,6 +52,7 @@ from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.actions.teleport import TeleportAction
 from artifactsmmo_cli.ai.actions.transition import MapTransitionAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
+from artifactsmmo_cli.ai.actions.use_gold_bag import UseGoldBagAction
 from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -361,6 +362,19 @@ def test_use_consumable() -> None:
     state = _make_state(hp=50, max_hp=100, inventory={"potion": 2})
     action = UseConsumableAction(_item_stats=stats)
     _assert_preserved(state, action.apply(state, gd))
+
+
+def test_use_gold_bag() -> None:
+    gd = _make_game_data_basic()
+    stats = {"bag_of_gold": ItemStats(code="bag_of_gold", level=1,
+                                      type_="consumable", gold_value=2500)}
+    state = _make_state(gold=100, inventory={"bag_of_gold": 1})
+    action = UseGoldBagAction(_item_stats=stats)
+    after = action.apply(state, gd)
+    _assert_preserved(state, after)
+    # Non-vacuous: gold credited, the bag consumed — only gold/inventory mutate.
+    assert after.gold == state.gold + 2500
+    assert "bag_of_gold" not in after.inventory
 
 
 def test_craft() -> None:

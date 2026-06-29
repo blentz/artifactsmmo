@@ -80,6 +80,7 @@ APPLY_REST_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "rest.py
 APPLY_FIGHT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "combat.py"
 APPLY_BANK_EXPANSION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "bank_expansion.py"
 APPLY_TELEPORT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "teleport.py"
+APPLY_USE_GOLD_BAG_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "use_gold_bag.py"
 CONSUMABLE_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_supply.py"
 MEANS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "means.py"
 GUARDS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "guards.py"
@@ -2942,6 +2943,36 @@ APPLY_TELEPORT_MUTATIONS = [
 ]
 
 
+# Season-8 P2: the 25th modeled action. UseGoldBagAction.apply credits gold +
+# decrements the consumed bag in inventory. The mutant reverts to an explicit
+# WorldState(...) construction that drops the 8 server-snapshot stat-baseline
+# fields (resurrects REAL BUG #5 on the new action) — `_assert_preserved` in
+# `test_use_gold_bag` fires on every dropped field.
+APPLY_USE_GOLD_BAG_MUTATIONS = [
+    (
+        "apply-baseline-use-gold-bag: revert UseGoldBagAction.apply to explicit WorldState(...) dropping baseline",
+        "        return dataclasses.replace(\n"
+        "            state,\n"
+        "            gold=state.gold + gold_value,\n"
+        "            inventory=new_inv,\n"
+        "            cooldown_expires=None,\n"
+        "        )",
+        "        return WorldState(\n"
+        "            character=state.character,\n"
+        "            level=state.level, xp=state.xp, max_xp=state.max_xp,\n"
+        "            hp=state.hp, max_hp=state.max_hp, gold=state.gold + gold_value,\n"
+        "            skills=state.skills, x=state.x, y=state.y,\n"
+        "            inventory=new_inv, inventory_max=state.inventory_max,\n"
+        "            equipment=state.equipment, cooldown_expires=None,\n"
+        "            task_code=state.task_code, task_type=state.task_type,\n"
+        "            task_progress=state.task_progress, task_total=state.task_total,\n"
+        "            bank_items=state.bank_items, bank_gold=state.bank_gold,\n"
+        "            pending_items=state.pending_items, active_events=state.active_events,\n"
+        "        )",
+    ),
+]
+
+
 # PLAN #6b: teleport cost is a flat constant mirroring Lean teleportCost=20. The
 # cost differential test pins TeleportAction.cost == 20.0; perturbing the constant
 # flips that assertion (gives the const-cost contract teeth on the new action).
@@ -3979,6 +4010,8 @@ def _run_all_groups() -> int:
     run_group(APPLY_BANK_EXPANSION_SRC, APPLY_BANK_EXPANSION_MUTATIONS,
               "formal/diff/test_apply_baseline_diff.py", survivors)
     run_group(APPLY_TELEPORT_SRC, APPLY_TELEPORT_MUTATIONS,
+              "formal/diff/test_apply_baseline_diff.py", survivors)
+    run_group(APPLY_USE_GOLD_BAG_SRC, APPLY_USE_GOLD_BAG_MUTATIONS,
               "formal/diff/test_apply_baseline_diff.py", survivors)
     run_group(APPLY_TELEPORT_SRC, TELEPORT_COST_MUTATIONS,
               "formal/diff/test_action_cost_nonneg_diff.py", survivors)

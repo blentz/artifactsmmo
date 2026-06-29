@@ -612,6 +612,7 @@ open Formal.PriorityBand
 #check @Formal.ApplyBaseline.depositGoldApply_preserves_baseline
 #check @Formal.ApplyBaseline.depositAllApply_preserves_baseline
 #check @Formal.ApplyBaseline.useConsumableApply_preserves_baseline
+#check @Formal.ApplyBaseline.useGoldBagApply_preserves_baseline       -- 25th action: gold-bag consume (gold up, inventory down)
 #check @Formal.ApplyBaseline.deleteApply_preserves_baseline
 #check @Formal.ApplyBaseline.equipApply_preserves_baseline            -- Family 4: equipment-swap
 #check @Formal.ApplyBaseline.unequipApply_preserves_baseline
@@ -624,7 +625,7 @@ open Formal.PriorityBand
 #check @Formal.ApplyBaseline.restApply_preserves_baseline             -- Family 6: misc
 #check @Formal.ApplyBaseline.buyBankExpansionApply_preserves_baseline
 #check @Formal.ApplyBaseline.fightApply_preserves_baseline            -- Family 7: fight
-#check @Formal.ApplyBaseline.all_actions_preserve_baseline  -- Phase-14 HEADLINE: ∀ 24 actions
+#check @Formal.ApplyBaseline.all_actions_preserve_baseline  -- Phase-14 HEADLINE: ∀ modeled actions (incl. UseGoldBag)
 #check @Formal.ApplyBaseline.headline_preserves_baseline    -- backwards-compat alias
 #check @Formal.ApplyBaseline.preservesBaseline_refl         -- reflexivity
 #check @Formal.ApplyBaseline.preservesBaseline_trans        -- transitivity

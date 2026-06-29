@@ -1894,11 +1894,17 @@ example : ∀ (s : Formal.ApplyBaseline.WorldStateLean) (i : List (String × Nat
     (newX newY : Int),
     Formal.ApplyBaseline.preservesBaseline s (Formal.ApplyBaseline.teleportApply s i newX newY) :=
   @Formal.ApplyBaseline.teleportApply_preserves_baseline
+-- apply-preserves-baseline-use-gold-bag: UseGoldBagAction.apply (25th modeled action,
+-- gold up + inventory down) preserves all 8 baseline fields.
+example : ∀ (s : Formal.ApplyBaseline.WorldStateLean) (g : Int)
+    (i : List (String × Nat)),
+    Formal.ApplyBaseline.preservesBaseline s (Formal.ApplyBaseline.useGoldBagApply s g i) :=
+  @Formal.ApplyBaseline.useGoldBagApply_preserves_baseline
 -- headline-preserves-baseline: every modeled apply preserves the 8 baseline fields.
 example : ∀ (s : Formal.ApplyBaseline.WorldStateLean) (a : Formal.ApplyBaseline.ModeledApply),
     Formal.ApplyBaseline.preservesBaseline s (a.run s) :=
   @Formal.ApplyBaseline.headline_preserves_baseline
--- Phase-14 HEADLINE: all 24 modeled actions preserve the 8 baseline fields.
+-- Phase-14 HEADLINE: every modeled action (now incl. UseGoldBag) preserves the 8 baseline fields.
 example : ∀ (s : Formal.ApplyBaseline.WorldStateLean) (a : Formal.ApplyBaseline.ModeledApply),
     Formal.ApplyBaseline.preservesBaseline s (a.run s) :=
   @Formal.ApplyBaseline.all_actions_preserve_baseline
