@@ -3,6 +3,8 @@
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
+import httpx
+
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.test_actions_execute import make_char_schema, make_get_character_result
@@ -90,6 +92,42 @@ class TestFetchActiveEvents:
 
         mock_api.assert_called_once()
         assert result == {"festival": expiry}
+
+    def test_retries_transient_httperror_then_succeeds(self):
+        """A one-off ReadTimeout is retried, not fatal — matches get_character resilience."""
+        player = GamePlayer(character="hero")
+        client = MagicMock()
+        expiry = datetime(2026, 5, 20, 12, 0, 0, tzinfo=timezone.utc)
+
+        ev = MagicMock()
+        ev.code = "gemstone_merchant"
+        ev.expiration = expiry
+        page = MagicMock()
+        page.data = [ev]
+
+        with patch(
+            "artifactsmmo_cli.ai.player.get_all_active_events",
+            side_effect=[httpx.ReadTimeout("timed out"), page],
+        ) as mock_api:
+            with patch("artifactsmmo_cli.ai.player.time.sleep"):
+                result = player._fetch_active_events(client)
+
+        assert mock_api.call_count == 2
+        assert result == {"gemstone_merchant": expiry}
+
+    def test_returns_empty_when_httperror_persists(self):
+        """A persistent transient error returns empty (events are non-critical), never raises."""
+        player = GamePlayer(character="hero")
+        client = MagicMock()
+
+        with patch(
+            "artifactsmmo_cli.ai.player.get_all_active_events",
+            side_effect=httpx.ReadTimeout("timed out"),
+        ):
+            with patch("artifactsmmo_cli.ai.player.time.sleep"):
+                result = player._fetch_active_events(client)
+
+        assert result == {}
 
 
 class TestFetchWorldStateActiveEvents:

@@ -823,11 +823,30 @@ class GamePlayer:
             return self._fetch_world_state(client), "error:network"
 
     def _fetch_active_events(self, client: AuthenticatedClient) -> dict[str, datetime]:
-        """Map of currently-active event code -> expiration. Empty on no/failed data."""
+        """Map of currently-active event code -> expiration. Empty on no/failed data.
+
+        Each page request retries on transient transport errors (e.g. a
+        ReadTimeout) with the same backoff schedule as get_character — events
+        are non-critical visibility, so a request that keeps timing out yields
+        the events collected so far (recovers on the next refresh) rather than
+        propagating out of the worker thread and killing the bot (live Robby
+        trace 2026-06-29: a single ReadTimeout here crashed the worker thread).
+        """
         active: dict[str, datetime] = {}
         page = 1
         while True:
-            result = get_all_active_events(client=client, page=page, size=100)
+            result = None
+            backoff = 5.0
+            for attempt in range(1, 4):  # 3 attempts: immediate, +5s, +10s
+                try:
+                    result = get_all_active_events(client=client, page=page, size=100)
+                    break
+                except httpx.HTTPError as e:
+                    if attempt < 3:
+                        print(f"[{self._now()}] get_all_active_events network error: {e!r}; "
+                              f"retry {attempt}/3 in {backoff:.0f}s")
+                        time.sleep(backoff)
+                        backoff *= 2
             if result is None or not result.data:
                 break
             for ev in result.data:
