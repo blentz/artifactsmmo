@@ -2,7 +2,7 @@
 
 import pytest
 
-from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.game_data import GameData, _RUNE_ABILITY_CARVEOUTS
 from artifactsmmo_cli.ai.game_data_error import GameDataCoverageError
 
 
@@ -36,9 +36,22 @@ def test_unknown_equippable_effect_raises():
 
 def test_deferred_rune_ability_is_carved_not_fatal():
     gd = GameData()
-    # burn/frenzy/etc. are known-deferred — must NOT raise.
+    # burn/frenzy/etc. are intentionally carved — must NOT raise.
     gd._build_items([_item("burn_rune", "rune", ["burn", "lifesteal"])])
     assert gd.item_stats("burn_rune") is not None
+
+
+def test_all_carved_rune_abilities_ingest_without_coverage_error():
+    # All 9 player-side rune ability carve-outs ingest on an equippable `rune`
+    # without tripping GameDataCoverageError (the carve is intentional + complete).
+    assert len(_RUNE_ABILITY_CARVEOUTS) == 9
+    gd = GameData()
+    items = [
+        _item(f"{code}_rune", "rune", [code]) for code in sorted(_RUNE_ABILITY_CARVEOUTS)
+    ]
+    gd._build_items(items)  # must not raise
+    for code in _RUNE_ABILITY_CARVEOUTS:
+        assert gd.item_stats(f"{code}_rune") is not None
 
 
 def test_unknown_effect_on_nonequippable_is_ignored():

@@ -73,13 +73,38 @@ _WORKSHOP_SKILLS: frozenset[str] = (
 # after confirming it carries no combat consequence.
 _MONSTER_EFFECT_CARVEOUTS: frozenset[str] = frozenset()
 
-# v8 player-side rune abilities (effect codes carried by `rune` items). Modeling
-# them in predict_win is deferred to the "Player rune abilities" sub-project; they
-# are CARVED here (not silently dropped) so the equippable-effect coverage guard
-# stays meaningful. A `rune` still classifies as combat_gear via `lifesteal`; until
-# the follow-on lands, a rune carrying ONLY a deferred ability scores ~0 and is not
-# equipped. See docs/superpowers/specs/2026-06-28-gear-taxonomy-design.md.
-_DEFERRED_RUNE_ABILITIES: frozenset[str] = frozenset({
+# v8 player-side rune ability effect codes (carried by `rune` items). INTENTIONALLY
+# CARVED from predict_win — not silently dropped (so the equippable-effect coverage
+# guard stays meaningful), and NOT modeled, for documented reasons per the
+# 2026-06-29 brainstorm (docs/superpowers/specs/2026-06-29-player-rune-abilities-design.md):
+#
+#   * predict_win is a CONSERVATIVE veto (over-estimate the monster, under-estimate
+#     the player → safe). The P3.3 pattern modeled MONSTER abilities, which makes the
+#     veto more conservative. These are PLAYER abilities, so crediting them makes the
+#     veto OPTIMISTIC = unsafe (risks the losses the veto prevents). The safety
+#     direction is inverted; the pattern does not transfer.
+#
+# Three groups (live /effects mechanics):
+#   - SOLO-INERT (no effect for a single-character bot, carved like `threat`):
+#       guard         — redirect damage to protect a low-HP ALLY (no allies).
+#       healing_aura  — heal ALLIES, explicitly NOT the caster.
+#       vampiric_strike — on crit, heal lowest-HP ALLY, NOT the caster.
+#       shell         — +resistance below 40% HP, BOSS/RAID fights only.
+#   - PLAYER BUFFS, conservatively UNCREDITED (crediting = unsafe optimism):
+#       burn          — player applies a decaying DoT to the monster (offense).
+#       greed         — player gains damage% per 10% max-HP lost (offense ramp).
+#       enchanted_mirror — reflect % of damage taken (offense; also breaks
+#                          player-monotonicity, cf. PredictWin `enchantedMirror = 0`).
+#       healing       — self-heal % HP every 3 turns (survival).
+#   - PLAYER SELF-HARM:
+#       frenzy        — on a crit, deal damage to SELF. Uncredited; and since rune
+#                       VALUE is not modeled, a self-harm rune is not equipped anyway.
+#
+# A `rune` still classifies as combat_gear via `lifesteal` (a real modeled stat).
+# Gear VALUE for these abilities is DEFERRED to a data-driven sub-project once
+# sub-project D's combat-loadout diagnostics accumulate real win data — flat-valuing
+# combat-dynamic abilities now would be a crude, endgame-only proxy.
+_RUNE_ABILITY_CARVEOUTS: frozenset[str] = frozenset({
     "burn", "enchanted_mirror", "frenzy", "greed", "guard",
     "healing", "healing_aura", "shell", "vampiric_strike",
 })
@@ -1317,9 +1342,11 @@ class GameData:
                         # protect — so it is DELIBERATELY not modeled. Handled here so it
                         # is covered (not silently dropped); revisit if party play lands.
                         pass
-                    elif effect.code in _DEFERRED_RUNE_ABILITIES:
-                        # Carved: modeling deferred to the Player-rune-abilities
-                        # sub-project. Covered so the guard below stays meaningful.
+                    elif effect.code in _RUNE_ABILITY_CARVEOUTS:
+                        # Intentionally carved player-side rune abilities — solo-inert,
+                        # conservatively-uncredited player buffs, or self-harm. Covered
+                        # (not silently dropped) so the guard below stays meaningful; see
+                        # _RUNE_ABILITY_CARVEOUTS for the per-code rationale.
                         pass
                     else:
                         item_type = getattr(item.type_, "value", item.type_)
@@ -1332,7 +1359,7 @@ class GameData:
                             raise GameDataCoverageError(
                                 f"equippable item {item.code!r} ({item_type}) carries "
                                 f"unmapped effect code {effect.code!r}: model it or add "
-                                "a documented entry to _DEFERRED_RUNE_ABILITIES")
+                                "a documented entry to _RUNE_ABILITY_CARVEOUTS")
 
             if not isinstance(item.craft, Unset) and item.craft is not None:
                 craft = item.craft
