@@ -24,7 +24,9 @@ from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loadout_profiles import active_profile_gear
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
+from artifactsmmo_cli.ai.strategy_driver import _gear_protected
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
+from artifactsmmo_cli.ai.tiers.guards import SelectionContext, active_profile
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 _ALL_SLOTS: dict[str, str | None] = {
@@ -101,7 +103,6 @@ def store(tmp_path) -> LearningStore:
 
 
 def _ctx(**kw: object):
-    from artifactsmmo_cli.ai.tiers.guards import SelectionContext
     base: dict[str, object] = dict(
         bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=1, combat_monster=None)
@@ -211,7 +212,6 @@ def test_nongear_protection_unchanged():
 # Wiring: protected-set source + finished-gear deposit/discard floor.
 # --------------------------------------------------------------------------- #
 def test_gear_protected_source_switches_with_profile_presence():
-    from artifactsmmo_cli.ai.strategy_driver import _gear_protected
     # Profiles present → the protected set is the active-profile gear set.
     ctx = _ctx(gear_keep={"copper_dagger": 1},
                target_gear=frozenset({"copper_boots"}))
@@ -223,7 +223,6 @@ def test_gear_protected_source_switches_with_profile_presence():
 
 
 def test_active_profile_protects_finished_profile_gear():
-    from artifactsmmo_cli.ai.tiers.guards import active_profile
     gd = _gd()
     state = make_state(skills={"weaponcrafting": 1}, inventory={"copper_dagger": 1})
     # A profile that wants 2 copper_dagger → the finished gear is floored at 2 in

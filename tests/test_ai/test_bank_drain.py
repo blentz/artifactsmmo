@@ -203,3 +203,39 @@ def test_goal_satisfied_and_metadata():
     assert goal.value(surplus, gd) == 15.0
     assert goal.desired_state(surplus, gd) == {"bank_junk_drained": True}
     assert repr(goal) == "DrainBankJunk"
+
+
+# --------------------------------------------------------------------------- #
+# gear_keep forwarding (site 355 / spec 2026-06-28-gear-loadout-profiles)
+# --------------------------------------------------------------------------- #
+
+def test_bank_drain_unprofiled_gear_drains_fully_with_gear_keep():
+    """With a populated gear_keep map, equippable gear NOT in any profile has
+    demand 0 → no keep floor → drains completely from the bank.
+    Without gear_keep (legacy), EQUIPPABLE_KEEP=1 protects one spare."""
+    gd = _gd()
+    # Legacy (gear_keep=None): EQUIPPABLE_KEEP=1 keeps one copper_helmet → drain 4.
+    state = make_state(level=5, bank_items={"copper_helmet": 5})
+    assert bank_drain_excess(state, gd, protected_codes=frozenset()) == {"copper_helmet": 4}
+    # Profile-aware (copper_helmet not in profile): demand 0 → drain all 5.
+    assert bank_drain_excess(
+        state, gd, protected_codes=frozenset(),
+        gear_keep={"copper_boots": 1},  # copper_helmet absent → demand 0
+    ) == {"copper_helmet": 5}
+
+
+def test_bank_drain_profiled_gear_keeps_demand():
+    """With gear_keep, bank equippable gear is kept UP TO the profile demand
+    (not just the blanket EQUIPPABLE_KEEP=1 spare)."""
+    gd = _gd()
+    # copper_helmet demand=2: keep 2 in bank, drain the 3 surplus.
+    state = make_state(level=5, bank_items={"copper_helmet": 5})
+    assert bank_drain_excess(
+        state, gd, protected_codes=frozenset(),
+        gear_keep={"copper_helmet": 2},
+    ) == {"copper_helmet": 3}
+    # copper_helmet demand=5: keep all 5, nothing drains.
+    assert bank_drain_excess(
+        state, gd, protected_codes=frozenset(),
+        gear_keep={"copper_helmet": 5},
+    ) == {}

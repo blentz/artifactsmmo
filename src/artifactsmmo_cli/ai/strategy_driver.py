@@ -47,6 +47,7 @@ from artifactsmmo_cli.ai.task_reservation import consumes_reserved
 from artifactsmmo_cli.ai.tiers.guards import (
     GuardKind,
     SelectionContext,
+    _gear_protected,
     active_guards,
     active_profile,
     protected_gear_codes,
@@ -256,16 +257,6 @@ def _skill_dispatch_candidates(
 # ---------------------------------------------------------------------------
 # Flat map functions + StrategyArbiter
 # ---------------------------------------------------------------------------
-
-def _gear_protected(ctx: SelectionContext) -> frozenset[str]:
-    """The GEAR codes the keep economy protects (recycle/sell/drain exclusion):
-    the active-profile gear set ∪ in-flight upgrade (spec
-    2026-06-28-gear-loadout-profiles) when profile info exists, else the legacy
-    `target_gear | target_tools` fallback so a profile-less bot is unchanged."""
-    if ctx.gear_keep:
-        return protected_gear_codes(ctx)
-    return ctx.target_gear | ctx.target_tools
-
 
 def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
               state: WorldState | None = None,

@@ -47,11 +47,18 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 def bank_drain_excess(
     state: WorldState, game_data: GameData, protected_codes: frozenset[str],
+    gear_keep: dict[str, int] | None = None,
 ) -> dict[str, int]:
     """Map each over-cap bank code to the bank quantity beyond its useful cap.
 
     `bank_excess(code) = max(0, bank_qty - max(0, cap - inv_qty))` where
     `cap = useful_quantity_cap(code)` bounds TOTAL (inventory + bank) holdings.
+
+    `gear_keep` is the active-profile gear-demand keep map (spec
+    2026-06-28-gear-loadout-profiles): when populated, the EQUIPPABLE keep
+    component for banked gear is replaced by the profile demand, so un-profiled
+    equippable gear drains fully (demand 0) instead of keeping the legacy
+    blanket EQUIPPABLE_KEEP=1 spare.
     """
     bank = state.bank_items or {}
     out: dict[str, int] = {}
@@ -62,7 +69,7 @@ def bank_drain_excess(
         # eventual recipe demand, whichever is larger. The recipe term protects
         # far-skill-gated-but-future-useful materials from deletion (the inventory
         # cap is 0 for them, which is why they deposit here in the first place).
-        cap = max(useful_quantity_cap(code, state, game_data),
+        cap = max(useful_quantity_cap(code, state, game_data, gear_keep=gear_keep),
                   game_data.max_recipe_demand(code))
         # "Only keep currently useful items": the level-distance ceiling caps how
         # much of a non-unique far-out-of-band material the bank hoards (a level-10+

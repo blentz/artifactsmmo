@@ -90,6 +90,16 @@ def protected_gear_codes(ctx: SelectionContext) -> frozenset[str]:
     return frozenset(ctx.gear_keep)
 
 
+def _gear_protected(ctx: SelectionContext) -> frozenset[str]:
+    """The GEAR codes the keep economy protects (recycle/sell/drain exclusion):
+    the active-profile gear set ∪ in-flight upgrade (spec
+    2026-06-28-gear-loadout-profiles) when profile info exists, else the legacy
+    `target_gear | target_tools` fallback so a profile-less bot is unchanged."""
+    if ctx.gear_keep:
+        return protected_gear_codes(ctx)
+    return ctx.target_gear | ctx.target_tools
+
+
 class GuardKind(Enum):
     HP_CRITICAL = "hp_critical"
     REST_FOR_COMBAT = "rest_for_combat"  # combat target winnable at max_hp but not at current_hp
@@ -246,8 +256,7 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
         # Gear protection (spec 2026-06-28-gear-loadout-profiles): the protected
         # set + the per-code cap come from the active-profile gear set when
         # available, else the legacy target_gear/target_tools fallback.
-        recycle_protected = (protected_gear_codes(ctx) if ctx.gear_keep
-                             else ctx.target_gear | ctx.target_tools)
+        recycle_protected = _gear_protected(ctx)
         return (not bank_has_room(ctx.bank_accessible, state.bank_items,
                                   game_data.bank_capacity)
                 and bool(recyclable_surplus(
