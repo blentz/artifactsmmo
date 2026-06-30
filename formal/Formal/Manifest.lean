@@ -757,12 +757,13 @@ open Formal.PriorityBand
 #check @Formal.ActionApplicability.fightApplicable_false_of_low_hp
 #check @Formal.ActionApplicability.fightApplicable_false_of_zero_xp
 #check @Formal.ActionApplicability.fightApplicable_false_of_overleveled_monster
-#check @Formal.ActionApplicability.fightApplicable_false_of_undergear
 #check @Formal.ActionApplicability.fightApplicable_mono_in_hp
 #check @Formal.ActionApplicability.fightApplicable_false_above_level_window
 #check @Formal.ActionApplicability.winnable_does_not_imply_applicable
 #check @Formal.ActionApplicability.fightApplicable_iff
 #check @Formal.ActionApplicability.below_old_window_xp_positive_is_applicable
+#check @Formal.ActionApplicability.winnable_inWindow_imp_fightApplicable
+#check @Formal.ActionApplicability.winnable_inWindow_imp_fightApplicable_nonvacuous
 #check @Formal.ActionApplicability.restApplicable_iff_subfull
 #check @Formal.ActionApplicability.equipApplicable_iff
 

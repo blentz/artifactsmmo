@@ -13,9 +13,10 @@
     * `state.inventory_free >= 1`
     * `state.hp_percent > 0.3`
     * `max(1, state.level - 1) <= monster_level <= state.level + 2`
-    * `best_eq.level >= monster_level - 1` (cheap gear pre-filter; `best_eq`
-       is the max equipped item level)
     * `LOCATIONS` non-empty (omitted here — we assume a target exists)
+
+  The `best_eq.level >= monster_level - 1` gear pre-filter was REMOVED
+  2026-06-29 in lockstep with Python (commits 0cd5407b, 5de3ce42).
 
   `apply(state, gd)`:
     * `xp += 10`                                  (fixed planner projection)
@@ -55,12 +56,17 @@ open Formal.Liveness.Measure.State (inventoryFree hpAboveMinFightFraction)
 
 /-! ## Faithful model of `FightAction.is_applicable` -/
 
-/-- Mirrors `is_applicable` in `combat.py`. `monsterLevel` and
-    `bestEquipLevel` are passed in (they correspond to `gd.monster_level(...)`
-    and the `max(s.level for s in equipped_items)` comprehension). We do
-    not model `locations` being non-empty — callers must establish that. -/
+/-- Mirrors `is_applicable` in `combat.py`. `monsterLevel` is passed in
+    (it corresponds to `gd.monster_level(...)`). We do not model `locations`
+    being non-empty — callers must establish that.
+
+    The gear pre-filter (`best_eq.level >= monster_level - 1`) was REMOVED
+    2026-06-29 in lockstep with Python `FightAction.is_applicable` (commits
+    0cd5407b, 5de3ce42): it starved combat when no owned gear met the
+    window. Dropping a conjunct strictly WEAKENS the guard, so every
+    downstream lemma needs one fewer hypothesis. -/
 def fightIsApplicable
-    (s : State) (monsterLevel bestEquipLevel : Nat) : Bool :=
+    (s : State) (monsterLevel : Nat) : Bool :=
   -- inventory_free >= 1
   s.inventoryFree ≥ 1
   -- hp_percent > 0.3
@@ -69,8 +75,6 @@ def fightIsApplicable
   && max 1 (s.level - 1) ≤ monsterLevel
   -- monsterLevel <= level + 2
   && monsterLevel ≤ s.level + 2
-  -- gear pre-filter: best_eq.level >= monsterLevel - 1
-  && bestEquipLevel + 1 ≥ monsterLevel
 
 /-! ## Faithful model of `FightAction.apply`
 
@@ -123,8 +127,8 @@ set_option linter.unusedVariables false
   unchanged (since `fightApply` does not touch `level`).
 -/
 theorem fight_decreases_measure
-    (s : State) (ml be : Nat) (b : Bool)
-    (happ : fightIsApplicable s ml be = true)
+    (s : State) (ml : Nat) (b : Bool)
+    (happ : fightIsApplicable s ml = true)
     (hlvl : s.level < 50)
     (inv  : s.xp < xpToNextLevel s.level) :
     measureLt (Measure.measure (fightApply s b)) (Measure.measure s) := by

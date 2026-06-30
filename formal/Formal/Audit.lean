@@ -615,12 +615,13 @@ open Formal.WeightedRemaining in
 #print axioms Formal.ActionApplicability.fightApplicable_false_of_low_hp
 #print axioms Formal.ActionApplicability.fightApplicable_false_of_zero_xp
 #print axioms Formal.ActionApplicability.fightApplicable_false_of_overleveled_monster
-#print axioms Formal.ActionApplicability.fightApplicable_false_of_undergear
 #print axioms Formal.ActionApplicability.fightApplicable_mono_in_hp
 #print axioms Formal.ActionApplicability.fightApplicable_false_above_level_window
 #print axioms Formal.ActionApplicability.winnable_does_not_imply_applicable
 #print axioms Formal.ActionApplicability.fightApplicable_iff
 #print axioms Formal.ActionApplicability.below_old_window_xp_positive_is_applicable
+#print axioms Formal.ActionApplicability.winnable_inWindow_imp_fightApplicable
+#print axioms Formal.ActionApplicability.winnable_inWindow_imp_fightApplicable_nonvacuous
 #print axioms Formal.ActionApplicability.restApplicable_iff_subfull
 #print axioms Formal.ActionApplicability.equipApplicable_iff
 -- NoActionDeadlock (de-Mathlib'd safety module)

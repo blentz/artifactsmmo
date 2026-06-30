@@ -22,7 +22,7 @@
   beyond raw applicability. Each branch is a NON-VACUOUS proposition with
   a documented discharge plan:
 
-    * `fight ml be matchesTask`:
+    * `fight ml matchesTask`:
         `s.level < 50 ∧ s.xp < xpToNextLevel s.level`
       — the perception invariant disclosed in `FightProgress`. Discharge:
         Phase 22 cycle model.
@@ -62,7 +62,7 @@ open Formal.Liveness.RestProgress
 /-- A Tier-1 progress action. Constructor parameters mirror the per-action
     lemma signatures. -/
 inductive ProgressAction where
-  | fight   (monsterLevel bestEquip : Nat) (matchesTask : Bool)
+  | fight   (monsterLevel : Nat) (matchesTask : Bool)
   | gather  (skillReq : Option (String × Nat)) (minFree : Nat)
             (drop : String) (skill : Option String)
   | deposit (accessible nonempty : Bool) (depositCount : Nat)
@@ -70,14 +70,14 @@ inductive ProgressAction where
 
 /-- Dispatch `apply` to the per-action model. -/
 def applyAction (s : State) : ProgressAction → State
-  | .fight _ _ m         => fightApply s m
+  | .fight _ m           => fightApply s m
   | .gather _ _ d sk     => gatherApply s d sk
   | .deposit _ _ n       => depositApply s n
   | .rest                => restApply s
 
 /-- Dispatch `is_applicable` to the per-action guard. -/
 def actionIsApplicable (s : State) : ProgressAction → Bool
-  | .fight ml be _       => fightIsApplicable s ml be
+  | .fight ml _          => fightIsApplicable s ml
   | .gather req mf _ _   => gatherIsApplicable s req mf
   | .deposit a n _       => depositIsApplicable s a n
   | .rest                => restIsApplicable s
@@ -86,7 +86,7 @@ def actionIsApplicable (s : State) : ProgressAction → Bool
     docstring). The constructor `vi_*` is the witness; each demands a
     concrete proposition whose discharge is documented above. -/
 def validInvariants (s : State) : ProgressAction → Prop
-  | .fight _ _ _         => s.level < 50 ∧ s.xp < xpToNextLevel s.level
+  | .fight _ _           => s.level < 50 ∧ s.xp < xpToNextLevel s.level
   | .gather _ _ _ skill  => s.targetSkillXp > s.projectedSkillXpDelta
                             ∧ skill.isSome
   | .deposit _ _ n       => n > 0 ∧ s.inventoryUsed ≥ n
@@ -119,10 +119,10 @@ theorem step_decreases_measure
     (hinv : validInvariants s a) :
     measureLt (Measure.measure (applyAction s a)) (Measure.measure s) := by
   cases a with
-  | fight ml be matchesTask =>
+  | fight ml matchesTask =>
     -- hinv : s.level < 50 ∧ s.xp < xpToNextLevel s.level
     obtain ⟨hlvl, hxpInv⟩ := hinv
-    exact fight_decreases_measure s ml be matchesTask happ hlvl hxpInv
+    exact fight_decreases_measure s ml matchesTask happ hlvl hxpInv
   | gather skillReq minFree drop skill =>
     -- hinv : s.targetSkillXp > s.projectedSkillXpDelta ∧ skill.isSome
     obtain ⟨hprog, hskill⟩ := hinv

@@ -13,9 +13,11 @@ two ORTHOGONAL filters, and the bot's target picker conflated them.
 
 This module:
 
-1. Specifies `fightApplicable` as a conjunction of 6 atomic conditions
+1. Specifies `fightApplicable` as a conjunction of 5 atomic conditions
    (mirrors Python `FightAction.is_applicable` in `actions/combat.py`
-   exactly).
+   exactly). The gear pre-filter (`best_eq >= monster_level - 1`) was
+   REMOVED 2026-06-29 in lockstep with Python (commits 0cd5407b,
+   5de3ce42) — it starved combat when no owned gear met the window.
 2. Proves the conditions are independent — each can falsify
    applicability on its own.
 3. Proves applicability is MONOTONE in hp: more current hp never breaks
@@ -60,11 +62,6 @@ def xpPositive (xpPerKill : Int) : Bool :=
 def monsterNotOverleveled (playerLevel monsterLevel : Int) : Bool :=
   decide (monsterLevel ≤ playerLevel + 2)
 
-/-- `best_eq >= monster_level - 1`. The strongest equipped item's level must
-roughly match the monster. -/
-def gearMeetsMonster (bestEqLevel monsterLevel : Int) : Bool :=
-  decide (bestEqLevel ≥ monsterLevel - 1)
-
 /-- Free inventory floor (`inventory_free >= MIN_FREE_SLOTS = 1`). -/
 def hasInventoryRoom (inventoryFree minFreeSlots : Int) : Bool :=
   decide (inventoryFree ≥ minFreeSlots)
@@ -77,20 +74,20 @@ structure FightInputs where
   maxHp         : Int
   playerLevel   : Int
   monsterLevel  : Int
-  bestEqLevel   : Int
   minFreeSlots  : Int
   xpPerKill     : Int       -- game_data.xp_per_kill(monster, playerLevel)
 
 /-- The composite predicate. Matches Python `FightAction.is_applicable`
 term-by-term: locations, inventory room, hp floor, xp>0 lower gate,
-level+2 suicide guard, gear pre-filter. -/
+level+2 suicide guard. The gear pre-filter (`best_eq >= monster_level - 1`)
+was REMOVED 2026-06-29 in lockstep with Python `is_applicable` (commits
+0cd5407b, 5de3ce42): it starved combat when no owned gear met the window. -/
 def fightApplicable (i : FightInputs) : Bool :=
   i.hasLocations
     && hasInventoryRoom i.inventoryFree i.minFreeSlots
     && hpAboveFightFloor i.hp i.maxHp
     && xpPositive i.xpPerKill
     && monsterNotOverleveled i.playerLevel i.monsterLevel
-    && gearMeetsMonster i.bestEqLevel i.monsterLevel
 
 /-! ## Independence of the conditions. -/
 
@@ -136,14 +133,6 @@ theorem fightApplicable_false_of_overleveled_monster (i : FightInputs)
   have : ¬ (i.monsterLevel ≤ i.playerLevel + 2) := by omega
   simp [this]
 
-/-- If best-equipped level is below `monster_level - 1`, the predicate is false. -/
-theorem fightApplicable_false_of_undergear (i : FightInputs)
-    (h : i.bestEqLevel < i.monsterLevel - 1) :
-    fightApplicable i = false := by
-  unfold fightApplicable gearMeetsMonster
-  have : ¬ (i.bestEqLevel ≥ i.monsterLevel - 1) := by omega
-  simp [this]
-
 /-! ## Monotonicity. -/
 
 /-- More current hp never breaks applicability (max_hp held fixed). -/
@@ -153,7 +142,7 @@ theorem fightApplicable_mono_in_hp (i : FightInputs) (hp' : Int)
     fightApplicable { i with hp := hp' } = true := by
   unfold fightApplicable at hApp
   simp only [Bool.and_eq_true] at hApp
-  obtain ⟨⟨⟨⟨⟨hLoc, hInv⟩, hHp⟩, hXp⟩, hLvl⟩, hGear⟩ := hApp
+  obtain ⟨⟨⟨⟨hLoc, hInv⟩, hHp⟩, hXp⟩, hLvl⟩ := hApp
   have hHp' : hpAboveFightFloor hp' i.maxHp = true := by
     unfold hpAboveFightFloor at hHp ⊢
     simp at hHp
@@ -163,7 +152,7 @@ theorem fightApplicable_mono_in_hp (i : FightInputs) (hp' : Int)
     omega
   unfold fightApplicable
   simp only [Bool.and_eq_true]
-  exact ⟨⟨⟨⟨⟨hLoc, hInv⟩, hHp'⟩, hXp⟩, hLvl⟩, hGear⟩
+  exact ⟨⟨⟨⟨hLoc, hInv⟩, hHp'⟩, hXp⟩, hLvl⟩
 
 /-! ## Level-gate structure after the P0 revision.
 
@@ -175,12 +164,12 @@ the only structural level vetoes are ZERO XP (too far below — no
 leveling value) and the `level + 2` suicide guard (too far above). -/
 
 /-- A monster above the `level + 2` suicide guard has NO `fightApplicable`
-no matter how full the bot's hp is or how much gear it owns. (The upper
-bound is *structural*, not hp-recoverable — survives the P0 revision.) -/
+no matter how full the bot's hp is. (The upper bound is *structural*, not
+hp-recoverable — survives the P0 revision.) -/
 theorem fightApplicable_false_above_level_window
-    (i : FightInputs) (hp' bestEq' : Int)
+    (i : FightInputs) (hp' : Int)
     (h : i.monsterLevel > i.playerLevel + 2) :
-    fightApplicable { i with hp := hp', bestEqLevel := bestEq' } = false := by
+    fightApplicable { i with hp := hp' } = false := by
   apply fightApplicable_false_of_overleveled_monster
   exact h
 
@@ -197,16 +186,15 @@ theorem winnable_does_not_imply_applicable
   refine ⟨?_, rfl⟩
   exact fightApplicable_false_of_zero_xp i hZero
 
-/-- Exact characterization of the predicate as a conjunction of the six
+/-- Exact characterization of the predicate as a conjunction of the five
 atomic conditions. Used to show the below-window case is now LIVE. -/
 theorem fightApplicable_iff (i : FightInputs) :
     fightApplicable i = true ↔
       i.hasLocations = true ∧ i.inventoryFree ≥ i.minFreeSlots ∧
       i.hp * 100 > 50 * i.maxHp ∧ i.xpPerKill > 0 ∧
-      i.monsterLevel ≤ i.playerLevel + 2 ∧
-      i.bestEqLevel ≥ i.monsterLevel - 1 := by
+      i.monsterLevel ≤ i.playerLevel + 2 := by
   unfold fightApplicable hasInventoryRoom hpAboveFightFloor xpPositive
-    monsterNotOverleveled gearMeetsMonster
+    monsterNotOverleveled
   simp [and_assoc]
 
 /-- **P0 regression witness (2026-06-09)**: a monster BELOW the old hard
@@ -220,10 +208,51 @@ theorem below_old_window_xp_positive_is_applicable
     (hHp   : i.hp * 100 > 50 * i.maxHp)
     (hXp   : i.xpPerKill > 0)
     (hUp   : i.monsterLevel ≤ i.playerLevel + 2)
-    (hGear : i.bestEqLevel ≥ i.monsterLevel - 1)
     (_hBelow : i.monsterLevel < max 1 (i.playerLevel - 1)) :
     fightApplicable i = true := by
-  exact (fightApplicable_iff i).mpr ⟨hLoc, hInv, hHp, hXp, hUp, hGear⟩
+  exact (fightApplicable_iff i).mpr ⟨hLoc, hInv, hHp, hXp, hUp⟩
+
+/-! ## Capability ⇒ structural applicability (the L50 fight-liveness seam). -/
+
+/-- Capability ⇒ structural applicability: if the picker may return `m`
+(winnable and within `[max(1,lvl-1), lvl+2]`) and the transient/spawn
+preconditions hold, then `fightApplicable` is true. The "fight never
+deadlocks given a winnable in-window target" seam for the L50 proof.
+
+Hypotheses match the five surviving gates of the post-edit `fightApplicable`
+exactly (gear pre-filter removed). They are JOINTLY SATISFIABLE — see
+`winnable_inWindow_imp_fightApplicable_nonvacuous` below for a concrete
+`FightInputs` meeting all five. -/
+theorem winnable_inWindow_imp_fightApplicable
+    (i : FightInputs)
+    (hLoc : i.hasLocations = true)
+    (hInv : hasInventoryRoom i.inventoryFree i.minFreeSlots = true)
+    (hHp  : hpAboveFightFloor i.hp i.maxHp = true)
+    (hWin : i.monsterLevel ≤ i.playerLevel + 2)
+    (hXp  : xpPositive i.xpPerKill = true) :
+    fightApplicable i = true := by
+  unfold fightApplicable
+  simp only [Bool.and_eq_true]
+  exact ⟨⟨⟨⟨hLoc, hInv⟩, hHp⟩, hXp⟩, decide_eq_true hWin⟩
+
+/-- **Non-vacuity witness** for `winnable_inWindow_imp_fightApplicable`:
+a concrete `FightInputs` that simultaneously satisfies all five hypotheses
+(`hasLocations`, full inventory room, full HP, in-window, positive XP). This
+kernel-checks that the consistency lemma's premises are jointly realizable,
+so the lemma is NOT vacuously true. -/
+theorem winnable_inWindow_imp_fightApplicable_nonvacuous :
+    let i : FightInputs :=
+      { hasLocations := true, inventoryFree := 1, hp := 100, maxHp := 100,
+        playerLevel := 5, monsterLevel := 5, minFreeSlots := 1,
+        xpPerKill := 10 }
+    i.hasLocations = true
+      ∧ hasInventoryRoom i.inventoryFree i.minFreeSlots = true
+      ∧ hpAboveFightFloor i.hp i.maxHp = true
+      ∧ i.monsterLevel ≤ i.playerLevel + 2
+      ∧ xpPositive i.xpPerKill = true
+      ∧ fightApplicable i = true := by
+  refine ⟨rfl, by decide, by decide, by decide, by decide, ?_⟩
+  decide
 
 /-! ## RestAction applicability — the simplest action and a useful baseline. -/
 
