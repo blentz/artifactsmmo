@@ -405,27 +405,29 @@ def test_is_winnable_no_veto_below_sample_threshold(tmp_path):
     store.close()
 
 
-def test_is_winnable_vetoes_high_but_imperfect_winrate(tmp_path):
-    """A monster won only ~80% of observed fights (lost >10%) is vetoed even though
-    the stat prediction says win. The cooldown + death cost of marginal fights
-    outweighs the XP — the blue_slime trace bug (13% loss from full HP, bot kept
-    grinding it). Inert at the old 0.5 threshold; caught now."""
+def test_is_winnable_keeps_marginal_grindable_winrate(tmp_path):
+    """A monster won ~80% of observed fights is NOT vetoed: for character-XP
+    grinding a loss only costs a rest cooldown, so a >40% winner is still the best
+    use of cycles. The old 0.9 veto stranded a level-3 character whose ONLY in-window
+    XP source (green_slime, ~80% from low HP) was sub-0.9 — it diverted to an endless
+    gear grind that yields zero character XP (trace 2026-06-29). Threshold now 0.4."""
     state = make_state(max_hp=100, attack={"fire": 30}, initiative=50)
     gd = _gd(hp=30, attack={"fire": 5}, initiative=10)  # predict_win -> True
     store = LearningStore(db_path=str(tmp_path / "l.db"), character="h")
-    _record_mixed(store, "Fight(mob)", wins=8, losses=2)  # 80% < threshold
-    assert is_winnable(state, gd, "mob", store) is False
+    _record_mixed(store, "Fight(mob)", wins=8, losses=2)  # 80% >= 0.4 threshold
+    assert is_winnable(state, gd, "mob", store) is True
     store.close()
 
 
-def test_is_winnable_keeps_reliable_winner(tmp_path):
-    """A reliably-won monster (95%) is NOT vetoed — the threshold deselects only
-    genuinely costly targets, it does not starve the bot of winnable combat."""
+def test_is_winnable_vetoes_genuine_loser(tmp_path):
+    """A monster lost MORE than it wins (30%) IS vetoed — at the 0.4 threshold the
+    veto deselects only genuinely costly targets (loses >60%), it does not starve
+    the bot of marginal-but-grindable combat."""
     state = make_state(max_hp=100, attack={"fire": 30}, initiative=50)
-    gd = _gd(hp=30, attack={"fire": 5}, initiative=10)
+    gd = _gd(hp=30, attack={"fire": 5}, initiative=10)  # predict_win -> True
     store = LearningStore(db_path=str(tmp_path / "l.db"), character="h")
-    _record_mixed(store, "Fight(mob)", wins=19, losses=1)  # 95% >= threshold
-    assert is_winnable(state, gd, "mob", store) is True
+    _record_mixed(store, "Fight(mob)", wins=3, losses=7)  # 30% < 0.4 threshold
+    assert is_winnable(state, gd, "mob", store) is False
     store.close()
 
 
