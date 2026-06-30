@@ -16,8 +16,12 @@ proven overstock core and this source cannot diverge.
 """
 
 # HP-critical preempt threshold (hp / max_hp). Below this the HP-critical guard
-# preempts every other means and RestoreHPGoal returns its ceiling value.
-CRITICAL_HP_FRACTION = 0.25
+# preempts every other means and RestoreHPGoal returns its ceiling value. Set to
+# 0.75 (was 0.25) so the bot rests to full before fighting: low-HP fight starts
+# were the avoidable-loss source that tripped the combat veto (see spec
+# 2026-06-30). _is_winnable (player.py) projects HP to max before the winnability
+# check, so the 2026-06-06 "parked at 76/130" deadlock does not recur.
+CRITICAL_HP_FRACTION = 0.75
 
 # Inventory space-pressure ladder, as exact integer rationals (num/den). The
 # proven overstock core cross-multiplies these ints (float-free at the boundary).
@@ -38,3 +42,8 @@ CRAFT_RELIEF_FRACTION = CRAFT_RELIEF_NUM / CRAFT_RELIEF_DEN
 PRESSURE_HIGH_FRACTION = PRESSURE_HIGH_NUM / PRESSURE_HIGH_DEN
 DEPOSIT_FULL_FRACTION = DEPOSIT_FULL_NUM / DEPOSIT_FULL_DEN
 PRESSURE_CRITICAL_FRACTION = PRESSURE_CRITICAL_NUM / PRESSURE_CRITICAL_DEN
+
+# Marginal-fight potion provisioning (spec 2026-06-30).
+MARGINAL_WINRATE_THRESHOLD = 0.95  # below this observed win-rate, bring potions
+FULL_STACK_WINRATE = 0.50          # at/below this win-rate, bring a full stack
+UTILITY_SLOT_MAX_STACK = 100       # openapi.json EquipSchema.quantity.maximum

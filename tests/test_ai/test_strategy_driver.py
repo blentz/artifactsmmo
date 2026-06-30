@@ -35,6 +35,8 @@ from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
+from artifactsmmo_cli.ai.goals.provision_marginal_fight import ProvisionMarginalFightGoal
+from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner, PlanStats
 from artifactsmmo_cli.ai.strategy_driver import (
@@ -2177,7 +2179,8 @@ def test_worth_gate_breaks_sticky_pursue_task(tmp_path):
     obj = CharacterObjective(target_char_level=50, target_skill_levels={},
                              target_gear={"weapon_slot": "iron_sword"}, _game_data=gd,
                              target_tools={})
-    state = make_state(skills={"weaponcrafting": 1, "cooking": 1},
+    state = make_state(hp=150, max_hp=150,
+                       skills={"weaponcrafting": 1, "cooking": 1},
                        task_type="items", task_code="cooked_gudgeon",
                        task_total=10, task_progress=0)
     decision = type("D", (), {"chosen_step": ReachSkillLevel("weaponcrafting", 5),
@@ -2209,7 +2212,8 @@ def test_worth_gate_bypassed_last_resort_selects_task_when_step_unplannable(tmp_
     obj = CharacterObjective(target_char_level=50, target_skill_levels={},
                              target_gear={"weapon_slot": "iron_sword"}, _game_data=gd,
                              target_tools={})
-    state = make_state(skills={"weaponcrafting": 1, "cooking": 1},
+    state = make_state(hp=150, max_hp=150,
+                       skills={"weaponcrafting": 1, "cooking": 1},
                        task_type="items", task_code="cooked_gudgeon",
                        task_total=10, task_progress=0)
     decision = type("D", (), {"chosen_step": ReachSkillLevel("weaponcrafting", 5),
@@ -2235,7 +2239,8 @@ def test_no_objective_keeps_committed_pursue_task(tmp_path):
     weapon-grind step GatherMaterials(copper_dagger) is present and plannable,
     but the sticky committed task is tried first and kept."""
     gd = _worth_gate_gd()
-    state = make_state(skills={"weaponcrafting": 1, "cooking": 1},
+    state = make_state(hp=150, max_hp=150,
+                       skills={"weaponcrafting": 1, "cooking": 1},
                        task_type="items", task_code="cooked_gudgeon",
                        task_total=10, task_progress=0)
     decision = type("D", (), {"chosen_step": ReachSkillLevel("weaponcrafting", 5),
@@ -2387,3 +2392,113 @@ def test_deep_gear_routes_to_incremental_gather_not_empty_upgrade():
     goal = objective_step_goal(step, state, gd, _ctx(), root=root, committed_root=root)
     assert goal is not None
     assert type(goal).__name__ == "GatherMaterialsGoal"
+
+
+# ---------------------------------------------------------------------------
+# _marginal_provision_goal routing tests (Task 8)
+# ---------------------------------------------------------------------------
+
+def _record_mixed(history: LearningStore, action_repr: str, wins: int, losses: int) -> None:
+    """Seed the history DB with win+loss cycles for action_repr."""
+    session_id = history.start_session()
+    for i in range(wins):
+        history.record_cycle(Cycle(
+            ts=f"2026-01-01T00:{i:02d}:00+00:00",
+            session_id=session_id, cycle_index=i,
+            character="r", action_repr=action_repr, outcome="ok",
+        ))
+    for j in range(losses):
+        history.record_cycle(Cycle(
+            ts=f"2026-01-01T01:{j:02d}:00+00:00",
+            session_id=session_id, cycle_index=wins + j,
+            character="r", action_repr=action_repr, outcome="fail",
+        ))
+
+
+def _gd_with_utility_heal(code: str, hp_restore: int) -> GameData:
+    """Utility-slot-equippable heal (type=utility): the only kind best_held_heal
+    can provision into a utility slot."""
+    gd = GameData()
+    gd._item_stats = {code: ItemStats(code=code, level=1, type_="utility",
+                                      hp_restore=hp_restore)}
+    return gd
+
+
+def _gd_with_food(code: str, hp_restore: int) -> GameData:
+    """Eaten heal (type=consumable): carries hp_restore but is NOT utility-slot
+    equippable, so it can never back a ProvisionMarginalFightGoal."""
+    gd = GameData()
+    gd._item_stats = {code: ItemStats(code=code, level=1, type_="consumable",
+                                      hp_restore=hp_restore)}
+    return gd
+
+
+# Both tests below rely on make_state's default empty utility slots (no explicit equipment kwarg).
+def test_marginal_target_routes_to_provision_goal(tmp_path):
+    state = make_state(level=3, inventory={"small_health_potion": 100})
+    gd = _gd_with_utility_heal("small_health_potion", hp_restore=60)
+    history = LearningStore(db_path=str(tmp_path / "l.db"), character="r")
+    _record_mixed(history, "Fight(green_slime)", wins=8, losses=2)  # 80% < 0.95
+    ctx = _ctx(combat_monster="green_slime")
+    goal = objective_step_goal(ReachCharLevel(level=5), state, gd, ctx, history=history)
+    assert isinstance(goal, ProvisionMarginalFightGoal)
+    history.close()
+
+
+def test_reliable_target_still_grinds(tmp_path):
+    state = make_state(level=3, inventory={"small_health_potion": 100})
+    gd = _gd_with_utility_heal("small_health_potion", hp_restore=60)
+    history = LearningStore(db_path=str(tmp_path / "l.db"), character="r")
+    _record_mixed(history, "Fight(green_slime)", wins=20, losses=0)  # 100% >= 0.95
+    ctx = _ctx(combat_monster="green_slime")
+    goal = objective_step_goal(ReachCharLevel(level=5), state, gd, ctx, history=history)
+    assert isinstance(goal, GrindCharacterXPGoal)
+    history.close()
+
+
+def test_utility_slot_already_filled_routes_to_grind(tmp_path) -> None:
+    """_marginal_provision_goal early-exits when a utility slot is already occupied."""
+    equipment = {
+        "weapon_slot": None, "shield_slot": None, "helmet_slot": None,
+        "body_armor_slot": None, "leg_armor_slot": None, "boots_slot": None,
+        "ring1_slot": None, "ring2_slot": None, "amulet_slot": None,
+        "artifact1_slot": None, "artifact2_slot": None, "artifact3_slot": None,
+        "utility1_slot": "small_health_potion", "utility2_slot": None,
+        "bag_slot": None, "rune_slot": None,
+    }
+    state = make_state(level=3, inventory={"small_health_potion": 100},
+                       equipment=equipment)
+    gd = _gd_with_utility_heal("small_health_potion", hp_restore=60)
+    history = LearningStore(db_path=str(tmp_path / "l.db"), character="r")
+    _record_mixed(history, "Fight(green_slime)", wins=8, losses=2)  # 80% < 0.95
+    ctx = _ctx(combat_monster="green_slime")
+    goal = objective_step_goal(ReachCharLevel(level=5), state, gd, ctx, history=history)
+    assert isinstance(goal, GrindCharacterXPGoal)
+    history.close()
+
+
+def test_marginal_target_with_only_consumable_heal_routes_to_grind(tmp_path) -> None:
+    """An L3 char holding ONLY a consumable-type food (eaten heal, not utility-
+    slot equippable) against a marginal target must NOT build a provision goal
+    (its equip would be unapplicable) — it falls through to an unprovisioned
+    grind, never to discretionary gear (the copper_helmet livelock)."""
+    state = make_state(level=3, inventory={"cooked_fish": 100})
+    gd = _gd_with_food("cooked_fish", hp_restore=60)
+    history = LearningStore(db_path=str(tmp_path / "l.db"), character="r")
+    _record_mixed(history, "Fight(green_slime)", wins=8, losses=2)  # 80% < 0.95
+    ctx = _ctx(combat_monster="green_slime")
+    goal = objective_step_goal(ReachCharLevel(level=5), state, gd, ctx, history=history)
+    assert isinstance(goal, GrindCharacterXPGoal)
+    history.close()
+
+
+def test_no_heal_held_routes_to_grind(tmp_path) -> None:
+    """_marginal_provision_goal early-exits when inventory holds no heal."""
+    state = make_state(level=3, inventory={})  # no heal on hand
+    gd = _gd_with_utility_heal("small_health_potion", hp_restore=60)
+    history = LearningStore(db_path=str(tmp_path / "l.db"), character="r")
+    _record_mixed(history, "Fight(green_slime)", wins=8, losses=2)  # 80% < 0.95
+    ctx = _ctx(combat_monster="green_slime")
+    goal = objective_step_goal(ReachCharLevel(level=5), state, gd, ctx, history=history)
+    assert isinstance(goal, GrindCharacterXPGoal)
+    history.close()

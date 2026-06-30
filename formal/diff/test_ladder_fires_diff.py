@@ -577,9 +577,9 @@ def _assert_full_agreement(scn: Scenario) -> None:
 
 
 def test_hp_critical_boundary() -> None:
-    # 24/100 = 0.24 < 0.25 fires; 25/100 = 0.25 does NOT (strict <).
-    _assert_full_agreement(_base_scn(hp=24, max_hp=100))
-    _assert_full_agreement(_base_scn(hp=25, max_hp=100))
+    # 74/100 = 0.74 < 0.75 fires; 75/100 = 0.75 does NOT (strict <).
+    _assert_full_agreement(_base_scn(hp=74, max_hp=100))
+    _assert_full_agreement(_base_scn(hp=75, max_hp=100))
 
 
 def test_discard_high_boundary() -> None:
@@ -1228,12 +1228,13 @@ def _rest_combat_world(hp: int, max_hp: int) -> WorldState:
 
 
 def test_rest_for_combat_drives_and_selects() -> None:
-    """TRUE fixture: hp 49/100 — predict_win FALSE now (die in 1 round, kill in
-    2) but TRUE at max_hp (die in 2, kill in 2, player first) -> production
-    REST_FOR_COMBAT fires. hpCritical is quiet (0.49 >= 0.25), so restForCombat
+    """TRUE fixture: hp 49/65 (75.4%) — predict_win FALSE now (die in 1 round,
+    player hp 49-50=-1) but TRUE at max_hp=65 (survives round 1 at 15 HP, kills
+    in round 2) -> production REST_FOR_COMBAT fires. hpCritical is quiet
+    (0.754 >= 0.75; Lean: 100*49=4900 NOT < 75*65=4875), so restForCombat
     is the highest firing slot and WINS selection on BOTH ladders. A wrong Lean
     priority for restForCombat would break the selection agreement here."""
-    w = _rest_combat_world(hp=49, max_hp=100)
+    w = _rest_combat_world(hp=49, max_hp=65)
     gd = _rest_combat_gd()
     prod, prod_sel, lean, lean_sel = drive_and_contest(
         w, gd, _rest_combat_ctx(),

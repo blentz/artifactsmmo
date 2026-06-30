@@ -7,6 +7,8 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.arbiter_select import Candidate, select_pure
+from artifactsmmo_cli.ai.combat import MIN_WIN_SAMPLES
+from artifactsmmo_cli.ai.consumable_supply import best_held_heal
 from artifactsmmo_cli.ai.craft_plan_gen import generate_next_craft_action
 from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
 from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
@@ -28,6 +30,7 @@ from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
 from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
 from artifactsmmo_cli.ai.goals.maintain_consumables import MaintainConsumablesGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
+from artifactsmmo_cli.ai.goals.provision_marginal_fight import ProvisionMarginalFightGoal
 from artifactsmmo_cli.ai.goals.pursue_task import PursueTaskGoal
 from artifactsmmo_cli.ai.goals.reach_currency import ReachCurrencyGoal
 from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
@@ -39,12 +42,18 @@ from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal, tasks_coin
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.marginal_potion_qty import marginal_potion_qty_pure
 from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.recipe_closure import closure_demand
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
 from artifactsmmo_cli.ai.task_reservation import consumes_reserved
+from artifactsmmo_cli.ai.thresholds import (
+    FULL_STACK_WINRATE,
+    MARGINAL_WINRATE_THRESHOLD,
+    UTILITY_SLOT_MAX_STACK,
+)
 from artifactsmmo_cli.ai.tiers.guards import (
     GuardKind,
     SelectionContext,
@@ -521,6 +530,33 @@ def monster_drop_inputs(
     return out
 
 
+def _marginal_provision_goal(ctx: SelectionContext, state: WorldState,
+                             game_data: GameData,
+                             history: LearningStore | None) -> Goal | None:
+    """Return ProvisionMarginalFightGoal when the combat target is observed-marginal and
+    no utility slot holds a heal; else None (caller grinds)."""
+    monster = ctx.combat_monster
+    if monster is None or history is None:
+        return None
+    if any(state.equipment.get(s) is not None for s in ("utility1_slot", "utility2_slot")):
+        return None  # already provisioned -> grind
+    heal_code = best_held_heal(state, game_data)
+    if heal_code is None:
+        return None  # no heal held -> fight unprovisioned (never block the grind)
+    held = state.inventory.get(heal_code, 0)
+    repr_ = f"Fight({monster})"
+    samples = history.sample_count(repr_)
+    win_permille = round(history.success_rate(repr_) * 1000)
+    qty = marginal_potion_qty_pure(
+        samples, win_permille, MIN_WIN_SAMPLES,
+        int(MARGINAL_WINRATE_THRESHOLD * 1000), int(FULL_STACK_WINRATE * 1000),
+        UTILITY_SLOT_MAX_STACK, utility_slot_filled=False, held_heal_qty=held)
+    if qty <= 0:
+        return None
+    return ProvisionMarginalFightGoal(target_monster=monster,
+                                      heal_code=heal_code, quantity=qty)
+
+
 def objective_step_goal(
     step: MetaGoal | None,
     state: WorldState,
@@ -528,6 +564,7 @@ def objective_step_goal(
     ctx: SelectionContext,
     root: MetaGoal | None = None,
     committed_root: MetaGoal | None = None,
+    history: LearningStore | None = None,
 ) -> Goal | None:
     """Map the strategy's chosen step to a Goal.
 
@@ -759,6 +796,9 @@ def objective_step_goal(
                 task_total=state.task_total,
                 task_progress=state.task_progress):
             return None        # long-haul grind, items task active → defer
+        provision = _marginal_provision_goal(ctx, state, game_data, history)
+        if provision is not None:
+            return provision
         return GrindCharacterXPGoal(target_monster=ctx.combat_monster, initial_xp=state.xp)
     return None
 
@@ -981,7 +1021,8 @@ class StrategyArbiter:
         # is a ONE-action win (EquipAction) vs a multi-cycle GatherMaterials
         # chain; the ready-to-equip path is always preferable.
         step_goal = objective_step_goal(chosen_step, state, game_data, ctx,
-                                        root=chosen_root, committed_root=chosen_root)
+                                        root=chosen_root, committed_root=chosen_root,
+                                        history=self._history)
         # Aliveness of the COMMITTED root: did its own top step yield a goal? A
         # None here means the chosen_root is inert this cycle (only fallbacks can
         # serve) — the player reads this to release the stickiness anchor.
@@ -992,14 +1033,16 @@ class StrategyArbiter:
         for idx, alt in enumerate(fallback_steps):
             alt_root = fallback_roots[idx] if idx < len(fallback_roots) else None
             candidate = objective_step_goal(alt, state, game_data, ctx, root=alt_root,
-                                          committed_root=chosen_root)
+                                          committed_root=chosen_root,
+                                          history=self._history)
             if isinstance(candidate, UpgradeEquipmentGoal):
                 return candidate
         # Second pass: any non-None goal in ranking order.
         for idx, alt in enumerate(fallback_steps):
             alt_root = fallback_roots[idx] if idx < len(fallback_roots) else None
             candidate = objective_step_goal(alt, state, game_data, ctx, root=alt_root,
-                                          committed_root=chosen_root)
+                                          committed_root=chosen_root,
+                                          history=self._history)
             if candidate is not None:
                 return candidate
         return None
@@ -1096,7 +1139,8 @@ class StrategyArbiter:
         for idx, alt in enumerate(fallback_steps):
             alt_root = fallback_roots[idx] if idx < len(fallback_roots) else None
             alt_goal = objective_step_goal(alt, state, game_data, ctx, root=alt_root,
-                                          committed_root=chosen_root)
+                                          committed_root=chosen_root,
+                                          history=self._history)
             # Route every fallback-alt step goal through the SAME task
             # suppression as the top step (reservation + redundancy +
             # trade-ready). Pre-fix these were re-appended UNSUPPRESSED, so a

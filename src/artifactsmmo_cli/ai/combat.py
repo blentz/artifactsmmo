@@ -27,17 +27,24 @@ triggers it at 10%..90% HP lost = 9 times while still alive and dealing damage (
 models the monster as ALWAYS at this max-stack count — an upper bound on monster
 damage that keeps the verdict a safe veto."""
 
-WIN_RATE_THRESHOLD = 0.9
-"""Below this observed Fight success rate, the learned-loss veto fires. Set high
-(0.9) because `predict_win` is an EXPECTED-value verdict: a marginal monster the
-formula calls winnable can still lose ~10-15% to combat variance (crits), and each
-loss burns a fight cooldown for zero progress and risks death. Trace 2026-06-15:
-the bot ground blue_slime (won 87% from FULL HP, lost 13%) for 200+ cycles because
-the old 0.5 threshold only vetoed monsters lost MORE than half the time. Vetoing
-sub-0.9 win rates redirects the target picker to a reliably-winnable monster
-(green_slime, 0% loss in the same trace). Runtime-only: the veto is applied where
-`history` is passed (target selection), NOT in the stat-only planning gates, so it
-does not perturb Fight-for-drops reachability."""
+WIN_RATE_THRESHOLD = 0.4
+"""Below this observed Fight success rate, the learned-loss veto fires. The veto
+exists to deselect monsters that are GENUINELY costly — lost more often than won —
+not merely imperfect. A loss while grinding character XP costs only a rest cooldown
+(no item / no permanent setback), so a monster won even ~40-60% of the time is still
+the best use of cycles when it is the strongest available XP source.
+
+Set to 0.4 (was 0.9). The 0.9 value over-fired: trace 2026-06-29 showed a level-3
+character whose only in-window XP source was green_slime (~80% win, the losses
+traced to STARTING fights at low HP). A single sub-0.9 loss flipped green_slime to
+"unwinnable", the target picker returned None, and the ReachCharLevel objective stood
+down — diverting the bot into an endless gear grind (copper_helmet) that awards ZERO
+character XP. The right bar for "don't bother" is "loses more than it wins", i.e. 0.4;
+avoidable low-HP losses are addressed at engagement time (pre-fight HP / consumables),
+not by abandoning the only grindable monster.
+
+Runtime-only: the veto is applied where `history` is passed (target selection), NOT
+in the stat-only planning gates, so it does not perturb Fight-for-drops reachability."""
 
 MIN_WIN_SAMPLES = 5
 """Observed fights required before the loss veto overrides the stat prediction.

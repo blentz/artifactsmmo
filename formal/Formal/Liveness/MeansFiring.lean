@@ -154,14 +154,14 @@ theorem _fires_hpCritical_implies_restoreHp_positive (s : State) :
   obtain ⟨hmax, hcrit⟩ := h
   have hmax_ne : s.maxHp ≠ 0 := Nat.pos_iff_ne_zero.mp hmax
   have hmax_pos_rat : (0 : Rat) < (s.maxHp : Rat) := by exact_mod_cast hmax
-  -- hp/maxHp < 25/100 ⇔ 100*hp < 25*maxHp
+  -- hp/maxHp < 75/100 ⇔ 100*hp < 75*maxHp
   have hpct_lt : hpPercentRat s < restoreHpCriticalFraction := by
     unfold hpPercentRat restoreHpCriticalFraction
     simp [hmax_ne]
     have h1 : CRITICAL_HP_DEN * s.hp < CRITICAL_HP_NUM * s.maxHp := hcrit
     unfold CRITICAL_HP_DEN CRITICAL_HP_NUM at h1
-    have h2 : (100 * s.hp : Rat) < (25 * s.maxHp : Rat) := by exact_mod_cast h1
-    -- Goal: hp / maxHp < 25 / 100 ↔ hp * 100 < 25 * maxHp.
+    have h2 : (100 * s.hp : Rat) < (75 * s.maxHp : Rat) := by exact_mod_cast h1
+    -- Goal: hp / maxHp < 75 / 100 ↔ hp * 100 < 75 * maxHp.
     rw [div_lt_div_iff₀ hmax_pos_rat (by norm_num : (0 : Rat) < 100)]
     linarith
   rw [restoreHp_critical_is_110 _ hpct_lt]

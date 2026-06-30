@@ -11,6 +11,8 @@ EATS heals (UseConsumable); this keeps the cupboard stocked.
 """
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
 from artifactsmmo_cli.ai.world_state import WorldState
 
 HEAL_STOCK_FLOOR = 5
@@ -44,6 +46,35 @@ def best_held_heal_restore(state: WorldState, game_data: GameData) -> int:
     return best
 
 
+def best_held_heal(state: WorldState, game_data: GameData) -> str | None:
+    """Held code of the strongest UTILITY-EQUIPPABLE heal (None when none held).
+
+    A heal qualifies only when it both restores HP (hp_restore > 0) AND is a
+    type the schema maps to a utility slot — that is the only kind that can be
+    equipped into a utility slot for marginal-fight provisioning. Eaten heals
+    (cooked food, type=consumable) carry hp_restore but do NOT map to a utility
+    slot, so they are excluded: returning one would build a provision goal whose
+    EquipAction is not applicable, leaving the objective unplannable.
+    Deterministic: ties break on the lexically smallest code."""
+    best_code: str | None = None
+    best_restore = 0
+    for code in sorted(state.inventory):
+        if state.inventory[code] <= 0:
+            continue
+        stats = game_data.item_stats(code)
+        if stats is None or stats.hp_restore <= best_restore:
+            continue
+        if "utility1_slot" not in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):
+            continue
+        best_code, best_restore = code, stats.hp_restore
+    return best_code
+
+
+def heal_stock_target(desired: int) -> int:
+    """Stock target: at least the floor, at most a full utility stack."""
+    return max(HEAL_STOCK_FLOOR, min(desired, UTILITY_SLOT_MAX_STACK))
+
+
 def best_craftable_heal(state: WorldState, game_data: GameData) -> str | None:
     """The craftable-now heal consumable with the highest hp_restore that is at
     least as strong as the best heal already held (so restocking a good heal
@@ -71,12 +102,18 @@ def best_craftable_heal(state: WorldState, game_data: GameData) -> str | None:
     return best_code
 
 
-def maintain_consumables_fires(state: WorldState, game_data: GameData) -> bool:
-    """Under-stocked on heals AND able to craft an at-least-as-good one now.
+def maintain_consumables_fires(state: WorldState, game_data: GameData,
+                               desired_stock: int = HEAL_STOCK_FLOOR) -> bool:
+    """Under the (possibly scaled) stock target AND able to craft a good heal now.
 
     The combat-active condition is applied by the means tier (it holds the
     SelectionContext); this captures the stock + craftability half so the means
-    predicate and the goal share one source of truth."""
-    if heal_stock(state, game_data) >= HEAL_STOCK_FLOOR:
+    predicate and the goal share one source of truth.
+
+    desired_stock defaults to HEAL_STOCK_FLOOR for all production callers today.
+    Per-target stock scaling toward a marginal fight's needed quantity is a
+    planned FOLLOW-UP (see docs/superpowers/specs/2026-06-30-combat-survivability-design.md
+    out-of-scope section); this parameter is the foundation for that extension."""
+    if heal_stock(state, game_data) >= heal_stock_target(desired_stock):
         return False
     return best_craftable_heal(state, game_data) is not None

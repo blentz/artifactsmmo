@@ -2,7 +2,7 @@ from artifactsmmo_cli.ai import thresholds
 
 
 def test_critical_hp_fraction_value():
-    assert thresholds.CRITICAL_HP_FRACTION == 0.25
+    assert thresholds.CRITICAL_HP_FRACTION == 0.75
 
 
 def test_float_views_equal_legacy_literals():

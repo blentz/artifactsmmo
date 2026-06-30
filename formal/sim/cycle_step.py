@@ -147,7 +147,7 @@ MIRROR_LADDER_ORDER: tuple[LadderMeans, ...] = (
 # the abstract `CycleState` opaque-Bools, matching Lean exactly.
 # ---------------------------------------------------------------------------
 
-CRITICAL_HP_NUM = 25
+CRITICAL_HP_NUM = 75
 CRITICAL_HP_DEN = 100
 
 

@@ -69,6 +69,7 @@ LIQUIDATION_VENUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "liquidation_
 BUY_SOURCE_VENUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "buy_source_venue.py"
 NEAREST_TILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "nearest_tile.py"
 CONSUMABLE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_selection.py"
+MARGINAL_POTION_QTY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "marginal_potion_qty.py"
 BANK_EXPANSION_TIMING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_expansion_timing.py"
 EVENT_WINDOW_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "event_availability.py"
 COST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "cost_core.py"
@@ -2136,10 +2137,13 @@ DOOMED_MEMO_MUTATIONS = [
 
 # Killed by tests/test_ai/test_combat.py — the learned-veto threshold that stops the
 # bot grinding marginal monsters (blue_slime 13%-loss trace 2026-06-15).
+# Task 1 lowered threshold 0.9 -> 0.4 so marginal grinds survive; mutation tightens
+# it back to 0.9 which re-blocks the 80%-win case tested by
+# test_is_winnable_at_80pct_not_vetoed.
 COMBAT_VETO_MUTATIONS = [
-    ("combat: weaken learned-veto threshold 0.9 -> 0.5 (re-admits marginal monsters)",
-     "WIN_RATE_THRESHOLD = 0.9",
-     "WIN_RATE_THRESHOLD = 0.5"),
+    ("combat: weaken learned-veto threshold 0.4 -> 0.9 (blocks marginal-but-winnable targets)",
+     "WIN_RATE_THRESHOLD = 0.4",
+     "WIN_RATE_THRESHOLD = 0.9"),
 ]
 
 
@@ -2230,6 +2234,7 @@ _ALL_SRCS = [
     CRAFT_VS_BUY_SRC,
     NEAREST_TILE_SRC,
     CONSUMABLE_SELECTION_SRC,
+    MARGINAL_POTION_QTY_SRC,
     BANK_EXPANSION_TIMING_SRC,
     EVENT_WINDOW_SRC,
     COST_CORE_SRC,
@@ -2760,6 +2765,35 @@ CONSUMABLE_SELECTION_MUTATIONS = [
      "        if qty < 0:\n            continue"),
 ]
 
+# marginal_potion_qty mutations -- old strings matched to current
+# marginal_potion_qty.py text. Each perturbs the held clamp or the integer-ceil so
+# the Python quantity diverges from the Lean `marginalPotionQty` oracle. Killed by
+# formal/diff/test_marginal_potion_qty_diff.py.
+#
+# RETIRED (provably EQUIVALENT mutants under the corrected unconditional bound --
+# the else branch is now a plain ceilDiv with no `max(1, ...)` floor and no clamp).
+# All three comparator-boundary mutants depended on the deleted floor: it turned the
+# boundary's natural ceil of 0 into 1, and that 0-vs-1 gap was their ONLY kill-vector.
+# With the floor gone the boundary value is 0 in both the kept and mutated branch:
+#   * "threshold compare flip (>= -> >)": differs only at win == threshold, where the
+#     fall-through computes ceilDiv((tp-win)*mx, tp-fp) == ceilDiv(0, ..) == 0 == the
+#     not-marginal return. Verified 0 divergences over max_stack 0..120 x held 0..100.
+#   * "full-stack compare flip (<= -> <)": at win == full both branches yield max_stack
+#     (else computes ceilDiv((tp-fp)*mx, tp-fp) == mx exactly), so the flip is a no-op.
+#   * "drop the floor-at-1": the floor was deleted, so there is no line to mutate; it
+#     only ever fired at max_stack==0 (the bug the unconditional bound fixes).
+# Also NOT added: first guard "held_heal_qty <= 0 -> < 0" -- at held==0 the fall-through
+# yields min(desired, 0) == 0 (absorbed by the final held-clamp) and held<0 is outside
+# the Nat/test domain, so it is equivalent for all in-domain inputs.
+MARGINAL_POTION_QTY_MUTATIONS = [
+    ("marginal_potion_qty: drop held clamp",
+     "    return min(desired, held_heal_qty)",
+     "    return desired"),
+    ("marginal_potion_qty: ceil -> floor (drop the +den-1)",
+     "        numerator = (threshold_permille - win_permille) * max_stack",
+     "        numerator = (threshold_permille - win_permille) * max_stack - (denominator - 1)"),
+]
+
 # bank_expansion_timing mutations -- old strings matched to current
 # bank_expansion_timing.py text. Each perturbs the fill-threshold cross-multiply
 # or the reserve-safety gate so the Python verdict diverges from the Lean
@@ -3041,8 +3075,8 @@ TELEPORT_COST_MUTATIONS = [
 CONSUMABLE_SUPPLY_MUTATIONS = [
     (
         "consumable_supply: stock floor >= becomes > (stock == floor wrongly re-fires)",
-        "    if heal_stock(state, game_data) >= HEAL_STOCK_FLOOR:\n        return False",
-        "    if heal_stock(state, game_data) > HEAL_STOCK_FLOOR:\n        return False",
+        "    if heal_stock(state, game_data) >= heal_stock_target(desired_stock):\n        return False",
+        "    if heal_stock(state, game_data) > heal_stock_target(desired_stock):\n        return False",
     ),
     (
         "consumable_supply: weaker-heal filter < becomes <= (drops an equal-strength restock)",
@@ -3132,8 +3166,8 @@ LADDER_GUARD_FIRES_MUTATIONS = [
 # numerator (e.g. PRESSURE_HIGH_NUM 17 -> 19 makes 17/20=0.85 into 19/20=0.95).
 LADDER_THRESHOLD_VALUE_MUTATIONS = [
     (
-        "ladder/thresholds: HP_CRITICAL threshold 0.25 -> 0.50 (widens critical band)",
-        "CRITICAL_HP_FRACTION = 0.25",
+        "ladder/thresholds: HP_CRITICAL threshold 0.75 -> 0.50 (narrows critical band)",
+        "CRITICAL_HP_FRACTION = 0.75",
         "CRITICAL_HP_FRACTION = 0.50",
     ),
     (
@@ -4063,6 +4097,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_nearest_tile_diff.py", survivors)
     run_group(CONSUMABLE_SELECTION_SRC, CONSUMABLE_SELECTION_MUTATIONS,
               "formal/diff/test_consumable_selection_diff.py", survivors)
+    run_group(MARGINAL_POTION_QTY_SRC, MARGINAL_POTION_QTY_MUTATIONS,
+              "formal/diff/test_marginal_potion_qty_diff.py", survivors)
     run_group(BANK_EXPANSION_TIMING_SRC, BANK_EXPANSION_TIMING_MUTATIONS,
               "formal/diff/test_bank_expansion_timing_diff.py", survivors)
     run_group(EVENT_WINDOW_SRC, EVENT_WINDOW_MUTATIONS,

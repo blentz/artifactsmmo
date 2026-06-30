@@ -34,9 +34,10 @@ class EquipAction(Action):
 
     code: str
     slot: str
+    quantity: int = 1
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
-        if state.inventory.get(self.code, 0) <= 0:
+        if state.inventory.get(self.code, 0) < self.quantity:
             return False
         stats = game_data.item_stats(self.code)
         if stats is None:
@@ -72,7 +73,7 @@ class EquipAction(Action):
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         new_inventory = dict(state.inventory)
-        new_inventory[self.code] = new_inventory.get(self.code, 0) - 1
+        new_inventory[self.code] = new_inventory.get(self.code, 0) - self.quantity
         if new_inventory[self.code] <= 0:
             del new_inventory[self.code]
 
@@ -94,7 +95,8 @@ class EquipAction(Action):
         return 1.0
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:
-        body = EquipSchema(code=self.code, slot=ItemSlot(self.slot.replace("_slot", "")))
+        body = EquipSchema(code=self.code, slot=ItemSlot(self.slot.replace("_slot", "")),
+                           quantity=self.quantity)
         result = action_equip(client=client, name=state.character, body=[body])
         result = Action._raise_for_error(result, f"Equip {self.code} to {self.slot}")
         return WorldState.from_character_schema(
@@ -106,4 +108,6 @@ class EquipAction(Action):
         )
 
     def __repr__(self) -> str:
+        if self.quantity > 1:
+            return f"Equip({self.code}x{self.quantity}->{self.slot})"
         return f"Equip({self.code}->{self.slot})"

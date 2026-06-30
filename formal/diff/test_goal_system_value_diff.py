@@ -162,7 +162,9 @@ def upgrade_equipment_value_model(has_upgrade: bool, relevant_tool: bool) -> Fra
 
 
 def restore_hp_value_model(hp_percent: Fraction) -> Fraction:
-    if hp_percent < Fraction(25, 100):
+    # CRITICAL_HP_FRACTION raised 0.25 → 0.75 (Task 2, heal-before-fight fix).
+    # Lean mirror: restoreHpCriticalFraction = 75 / 100 in GoalSystem.lean.
+    if hp_percent < Fraction(75, 100):
         return Fraction(110)
     return (Fraction(1) - hp_percent) * Fraction(100)
 

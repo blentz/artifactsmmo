@@ -64,8 +64,11 @@ theorem lowYieldSampleThreshold_pos : lowYieldSampleThreshold > 0 := by decide
 
 /-! ## Numeric thresholds (mirror production constants) -/
 
-/-- `CRITICAL_HP_FRACTION = 0.25` (guards.py:17). -/
-def CRITICAL_HP_NUM : Nat := 25
+/-- `CRITICAL_HP_FRACTION = 0.75` (thresholds.py). Raised from 0.25; every proof
+using this mirror is an "HP-full ⇒ critical guard does not fire" lemma
+(`¬ (CRITICAL_HP_DEN * maxHp < CRITICAL_HP_NUM * maxHp)`), which closes for any
+`NUM < DEN`, so 75 < 100 keeps them all valid. -/
+def CRITICAL_HP_NUM : Nat := 75
 def CRITICAL_HP_DEN : Nat := 100
 
 /-- `DEPOSIT_FULL_FRACTION = 0.90` (guards.py; raised from 0.80 per spec
@@ -100,9 +103,9 @@ For each `k`, `fires k s = true` iff production's `_fires(k, ...)` would
 return `True` on the same state/ctx/data. Each branch cites its
 production source line. -/
 
-/-- HP-percent strict-less, in Nat: `hp/maxHp < 25/100` with the
+/-- HP-percent strict-less, in Nat: `hp/maxHp < 75/100` with the
     Python-semantics convention `maxHp == 0 ⇒ hp_percent = 1.0` (NOT
-    critical). Equivalent to `100 * hp < 25 * maxHp ∧ maxHp > 0`. -/
+    critical). Equivalent to `100 * hp < 75 * maxHp ∧ maxHp > 0`. -/
 def hpCriticalFires (s : State) : Bool :=
   decide (s.maxHp > 0) && decide (CRITICAL_HP_DEN * s.hp < CRITICAL_HP_NUM * s.maxHp)
 

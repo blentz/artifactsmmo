@@ -1513,7 +1513,8 @@ class GamePlayer:
         demoted below the plannable ReachCharLevel grind."""
         def servable(root: MetaGoal, step: MetaGoal) -> bool:
             goal = objective_step_goal(step, state, game_data, ctx,
-                                       root=root, committed_root=root)
+                                       root=root, committed_root=root,
+                                       history=self.history)
             return goal is not None and goal.is_plannable(state, game_data, self.history)
         return servable
 
