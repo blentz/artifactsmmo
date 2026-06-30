@@ -102,6 +102,15 @@ class TestSatisfaction:
         assert goal.is_satisfied(make_state(xp=100)) is False
 
 
+def test_grind_satisfied_on_xp_gain_even_if_loadout_suboptimal():
+    """Satisfaction = XP gained. A non-optimal loadout (copper_dagger equipped
+    while wooden_staff scores higher vs green_slime) must NOT keep the goal
+    perpetually unsatisfied (the fb929887 coupling deadlock)."""
+    goal = GrindCharacterXPGoal("green_slime", initial_xp=14)
+    state = make_state(level=3, xp=24, equipment={"weapon_slot": "copper_dagger"})
+    assert goal.is_satisfied(state) is True
+
+
 class TestRelevantActions:
     def test_only_target_monster_fights(self):
         goal = GrindCharacterXPGoal("chicken")
@@ -126,43 +135,21 @@ class TestRepr:
 
 
 class TestLoadoutPrerequisite:
-    def test_not_satisfied_until_loadout_optimal(self):
-        gd = _gd_with_monster()
-        gd._monster_attack = {"chicken": {"fire": 2}}
-        gd._monster_resistance = {"chicken": {}}
-        gd._item_stats = {
-            "twig": ItemStats(code="twig", level=1, type_="weapon", attack={"fire": 1}),
-            "sword": ItemStats(code="sword", level=1, type_="weapon", attack={"fire": 9}),
-        }
-        # xp progressed, but a better weapon (sword) sits in inventory -> loadout suboptimal
-        state = make_state(xp=200, task_code=None, level=1,
-                           equipment={"weapon_slot": "twig"}, inventory={"sword": 1})
-        goal = GrindCharacterXPGoal("chicken", initial_xp=100, game_data=gd)
-        assert goal.is_satisfied(state) is False
-
-    def test_satisfied_when_xp_up_and_loadout_optimal(self):
-        gd = _gd_with_monster()
-        gd._monster_attack = {"chicken": {"fire": 2}}
-        gd._monster_resistance = {"chicken": {}}
-        gd._item_stats = {"sword": ItemStats(code="sword", level=1, type_="weapon", attack={"fire": 9})}
+    def test_satisfied_when_xp_up(self):
         state = make_state(xp=200, task_code=None, level=1,
                            equipment={"weapon_slot": "sword"}, inventory={})
-        goal = GrindCharacterXPGoal("chicken", initial_xp=100, game_data=gd)
+        goal = GrindCharacterXPGoal("chicken", initial_xp=100)
         assert goal.is_satisfied(state) is True
 
-    def test_not_satisfied_when_loadout_optimal_but_no_xp(self):
-        gd = _gd_with_monster()
-        gd._monster_attack = {"chicken": {"fire": 2}}
-        gd._monster_resistance = {"chicken": {}}
-        gd._item_stats = {"sword": ItemStats(code="sword", level=1, type_="weapon", attack={"fire": 9})}
-        # loadout optimal (sword equipped, nothing better) but xp NOT advanced
+    def test_not_satisfied_when_no_xp_gained(self):
+        # xp NOT advanced
         state = make_state(xp=100, task_code=None, level=1,
                            equipment={"weapon_slot": "sword"}, inventory={})
-        goal = GrindCharacterXPGoal("chicken", initial_xp=100, game_data=gd)
-        assert goal.is_satisfied(state) is False    # xp not > initial, despite optimal loadout
+        goal = GrindCharacterXPGoal("chicken", initial_xp=100)
+        assert goal.is_satisfied(state) is False
 
-    def test_game_data_none_falls_back_to_xp_only(self):
-        goal = GrindCharacterXPGoal("chicken", initial_xp=100)   # no game_data
+    def test_xp_only_check(self):
+        goal = GrindCharacterXPGoal("chicken", initial_xp=100)
         assert goal.is_satisfied(make_state(xp=200)) is True
         assert goal.is_satisfied(make_state(xp=50)) is False
 
@@ -189,17 +176,19 @@ class TestFightCostPenalty:
         optimal = make_state(level=1, equipment={"weapon_slot": "sword"}, inventory={}, x=0, y=0)
         assert fight.cost(under, gd) == fight.cost(optimal, gd) + LOADOUT_PENALTY
 
-    def test_planner_swaps_loadout_before_fighting(self):
+    def test_planner_fights_directly_regardless_of_loadout(self):
+        """Satisfaction = XP gain only. The planner picks Fight(chicken) in both
+        suboptimal and optimal loadout states — loadout is a cost signal, not a gate."""
         gd = _combat_gd()
         actions = [
             FightAction(monster_code="chicken", locations=frozenset({(0, 0)})),
             OptimizeLoadoutAction(target_monster_code="chicken", game_data=gd),
         ]
-        state = make_state(level=1, xp=0, task_code=None, hp=100, max_hp=100,
-                           equipment={"weapon_slot": "twig"}, inventory={"sword": 1}, x=0, y=0)
-        goal = GrindCharacterXPGoal("chicken", initial_xp=0, game_data=gd)
-        plan = GOAPPlanner().plan(state, goal, actions, gd, None)
-        assert plan and repr(plan[0]) == "OptimizeLoadout(chicken)"
+        suboptimal = make_state(level=1, xp=0, task_code=None, hp=100, max_hp=100,
+                                equipment={"weapon_slot": "twig"}, inventory={"sword": 1}, x=0, y=0)
+        goal = GrindCharacterXPGoal("chicken", initial_xp=0)
+        plan = GOAPPlanner().plan(suboptimal, goal, actions, gd, None)
+        assert plan and repr(plan[0]) == "Fight(chicken)"
 
         equipped = make_state(level=1, xp=0, task_code=None, hp=100, max_hp=100,
                               equipment={"weapon_slot": "sword"}, inventory={}, x=0, y=0)
@@ -224,5 +213,5 @@ class TestTaskAgnosticValue:
         # value normally rather than self-suppress to 0.
         state = make_state(task_code="chicken", task_type="monsters",
                            task_total=20, task_progress=0, xp=0)
-        goal = GrindCharacterXPGoal(target_monster="chicken", initial_xp=0, game_data=GameData())
+        goal = GrindCharacterXPGoal(target_monster="chicken", initial_xp=0)
         assert goal.value(state, GameData(), None) > 0.0

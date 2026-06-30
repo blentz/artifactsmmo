@@ -10,9 +10,7 @@ from fractions import Fraction
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
-from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.projections import expected_yield_per_cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -37,21 +35,9 @@ SCALAR_TO_PRIORITY_GAIN = 5.0
 class GrindCharacterXPGoal(Goal):
     """Farm a specific monster for character XP. Only active when no task held."""
 
-    def __init__(self, target_monster: str, initial_xp: int = 0,
-                 game_data: GameData | None = None) -> None:
+    def __init__(self, target_monster: str, initial_xp: int = 0) -> None:
         self._target_monster = target_monster
         self._initial_xp = initial_xp
-        self._game_data = game_data
-
-    def _loadout_optimal(self, state: WorldState) -> bool:
-        if self._game_data is None:
-            return True
-        optimal = pick_loadout(
-            Combat(self._game_data.monster_attack(self._target_monster),
-                   self._game_data.monster_resistance(self._target_monster)),
-            state, self._game_data,
-        )
-        return all(state.equipment.get(slot) == code for slot, code in optimal.items())
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
@@ -79,7 +65,7 @@ class GrindCharacterXPGoal(Goal):
         return float(clamped)
 
     def is_satisfied(self, state: WorldState) -> bool:
-        return state.xp > self._initial_xp and self._loadout_optimal(state)
+        return state.xp > self._initial_xp
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"xp": self._initial_xp + 10}

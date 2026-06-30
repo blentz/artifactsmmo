@@ -44,8 +44,7 @@ def goal_from_dict(data: dict[str, object], game_data: GameData | None) -> Goal:
     if t == "GrindCharacterXPGoal":
         return GrindCharacterXPGoal(
             cast(str, data["target_monster"]),
-            cast(int, data["initial_xp"]),
-            game_data)
+            cast(int, data["initial_xp"]))
     if t == "LevelSkillGoal":
         return LevelSkillGoal(
             cast(str, data["skill_name"]),

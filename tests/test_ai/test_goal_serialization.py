@@ -44,11 +44,12 @@ def test_craft_relief_defaults_round_trip():
     assert repr(back) == repr(g)
 
 
-def test_grind_injects_game_data():
+def test_grind_round_trips_target_and_xp():
+    """game_data is no longer stored; verify target_monster and initial_xp survive the round-trip."""
     g = GrindCharacterXPGoal("chicken", initial_xp=10)
-    sentinel = object()
-    back = goal_from_dict(goal_to_dict(g), game_data=sentinel)
-    assert back._game_data is sentinel
+    back = goal_from_dict(goal_to_dict(g), game_data=None)
+    assert back._target_monster == "chicken"
+    assert back._initial_xp == 10
     assert repr(back) == repr(g)
 
 

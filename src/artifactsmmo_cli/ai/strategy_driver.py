@@ -748,8 +748,7 @@ def objective_step_goal(
                 state.task_type == "items" and state.task_code
                 and state.task_total > 0 and state.task_progress < state.task_total):
             return None        # long-haul grind, items task active → defer
-        return GrindCharacterXPGoal(target_monster=ctx.combat_monster, initial_xp=state.xp,
-                                    game_data=game_data)
+        return GrindCharacterXPGoal(target_monster=ctx.combat_monster, initial_xp=state.xp)
     return None
 
 
