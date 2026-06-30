@@ -69,6 +69,7 @@ LIQUIDATION_VENUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "liquidation_
 BUY_SOURCE_VENUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "buy_source_venue.py"
 NEAREST_TILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "nearest_tile.py"
 CONSUMABLE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_selection.py"
+MARGINAL_POTION_QTY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "marginal_potion_qty.py"
 BANK_EXPANSION_TIMING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_expansion_timing.py"
 EVENT_WINDOW_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "event_availability.py"
 COST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "cost_core.py"
@@ -2230,6 +2231,7 @@ _ALL_SRCS = [
     CRAFT_VS_BUY_SRC,
     NEAREST_TILE_SRC,
     CONSUMABLE_SELECTION_SRC,
+    MARGINAL_POTION_QTY_SRC,
     BANK_EXPANSION_TIMING_SRC,
     EVENT_WINDOW_SRC,
     COST_CORE_SRC,
@@ -2758,6 +2760,29 @@ CONSUMABLE_SELECTION_MUTATIONS = [
     ("consumable_selection: usability filter qty <= 0 -> < 0 (admits qty==0)",
      "        if qty <= 0:\n            continue",
      "        if qty < 0:\n            continue"),
+]
+
+# marginal_potion_qty mutations -- old strings matched to current
+# marginal_potion_qty.py text. Each perturbs the marginal-fight threshold gate,
+# the full-stack comparator, the floor-at-1, the held clamp, or the integer-ceil
+# so the Python quantity diverges from the Lean `marginalPotionQty` oracle. Killed
+# by formal/diff/test_marginal_potion_qty_diff.py.
+MARGINAL_POTION_QTY_MUTATIONS = [
+    ("marginal_potion_qty: threshold compare flip (>= -> >)",
+     "    if samples < min_samples or win_permille >= threshold_permille:",
+     "    if samples < min_samples or win_permille > threshold_permille:"),
+    ("marginal_potion_qty: full-stack compare flip (<= -> <)",
+     "    if win_permille <= full_stack_permille:",
+     "    if win_permille < full_stack_permille:"),
+    ("marginal_potion_qty: drop the floor-at-1",
+     "        desired = max(1, (numerator + denominator - 1) // denominator)",
+     "        desired = (numerator + denominator - 1) // denominator"),
+    ("marginal_potion_qty: drop held clamp",
+     "    return min(desired, held_heal_qty)",
+     "    return desired"),
+    ("marginal_potion_qty: ceil -> floor (drop the +den-1)",
+     "        numerator = (threshold_permille - win_permille) * max_stack",
+     "        numerator = (threshold_permille - win_permille) * max_stack - (denominator - 1)"),
 ]
 
 # bank_expansion_timing mutations -- old strings matched to current
@@ -4063,6 +4088,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_nearest_tile_diff.py", survivors)
     run_group(CONSUMABLE_SELECTION_SRC, CONSUMABLE_SELECTION_MUTATIONS,
               "formal/diff/test_consumable_selection_diff.py", survivors)
+    run_group(MARGINAL_POTION_QTY_SRC, MARGINAL_POTION_QTY_MUTATIONS,
+              "formal/diff/test_marginal_potion_qty_diff.py", survivors)
     run_group(BANK_EXPANSION_TIMING_SRC, BANK_EXPANSION_TIMING_MUTATIONS,
               "formal/diff/test_bank_expansion_timing_diff.py", survivors)
     run_group(EVENT_WINDOW_SRC, EVENT_WINDOW_MUTATIONS,
