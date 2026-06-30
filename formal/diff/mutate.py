@@ -70,6 +70,7 @@ BUY_SOURCE_VENUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "buy_source_ve
 NEAREST_TILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "nearest_tile.py"
 CONSUMABLE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_selection.py"
 MARGINAL_POTION_QTY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "marginal_potion_qty.py"
+POTION_BASELINE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_baseline.py"
 BANK_EXPANSION_TIMING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_expansion_timing.py"
 EVENT_WINDOW_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "event_availability.py"
 COST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "cost_core.py"
@@ -2794,6 +2795,34 @@ MARGINAL_POTION_QTY_MUTATIONS = [
      "        numerator = (threshold_permille - win_permille) * max_stack - (denominator - 1)"),
 ]
 
+# potion_baseline mutations -- old strings matched to current potion_baseline.py
+# text. Each perturbs a clamp boundary or the floored linear ramp so the Python
+# baseline diverges from the Lean `potionBaseline` oracle. Killed by
+# formal/diff/test_potion_baseline_diff.py (the (5,5,45,100) curve over level 1..60).
+#
+# RETIRED (provably EQUIVALENT mutants -- the linear ramp is EXACT at both
+# endpoints, so the two boundary clamps are redundant at the boundary value and
+# flipping their comparator changes nothing observable for any in-domain input):
+#   * "low-clamp compare flip (<= -> <)": differs only at level == low_level, where
+#     the fall-through ramp computes low_qty + (high_qty-low_qty)*(level-low_level)//.. ==
+#     low_qty + 0 == low_qty -- identical to the clamp's return. Verified 0 divergences
+#     over level 1..60 on the (5,5,45,100) curve.
+#   * "high-clamp compare flip (>= -> >)": differs only at level == high_level, where
+#     the fall-through ramp computes low_qty + (high_qty-low_qty)*(high_level-low_level)//
+#     (high_level-low_level) == low_qty + (high_qty-low_qty) == high_qty exactly (the
+#     division is exact, span/span == 1) -- identical to the clamp's return. Verified
+#     0 divergences over level 1..60 on the (5,5,45,100) curve.
+# The two kept mutants below both perturb the ramp ARITHMETIC, which the differential
+# pins exactly across the whole interior of the curve.
+POTION_BASELINE_MUTATIONS = [
+    ("potion_baseline: drop the low_qty offset",
+     "    return low_qty + (high_qty - low_qty) * (level - low_level) // (high_level - low_level)",
+     "    return (high_qty - low_qty) * (level - low_level) // (high_level - low_level)"),
+    ("potion_baseline: span sign flip (level-low_level -> low_level-level)",
+     "    return low_qty + (high_qty - low_qty) * (level - low_level) // (high_level - low_level)",
+     "    return low_qty + (high_qty - low_qty) * (low_level - level) // (high_level - low_level)"),
+]
+
 # bank_expansion_timing mutations -- old strings matched to current
 # bank_expansion_timing.py text. Each perturbs the fill-threshold cross-multiply
 # or the reserve-safety gate so the Python verdict diverges from the Lean
@@ -4099,6 +4128,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_consumable_selection_diff.py", survivors)
     run_group(MARGINAL_POTION_QTY_SRC, MARGINAL_POTION_QTY_MUTATIONS,
               "formal/diff/test_marginal_potion_qty_diff.py", survivors)
+    run_group(POTION_BASELINE_SRC, POTION_BASELINE_MUTATIONS,
+              "formal/diff/test_potion_baseline_diff.py", survivors)
     run_group(BANK_EXPANSION_TIMING_SRC, BANK_EXPANSION_TIMING_MUTATIONS,
               "formal/diff/test_bank_expansion_timing_diff.py", survivors)
     run_group(EVENT_WINDOW_SRC, EVENT_WINDOW_MUTATIONS,

@@ -5,6 +5,7 @@ import Formal.CraftPlanDriver
 import Formal.DominancePareto
 import Formal.GearTaxonomy
 import Formal.MarginalPotionQty
+import Formal.PotionBaseline
 import Lean.Data.Json
 
 open Lean Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin
@@ -1579,6 +1580,18 @@ def runMarginalPotionQty (args : Array Json) : Json :=
     ((intArg args 6) != 0) (intArg args 7).toNat
   Json.mkObj [("qty", Json.num (Int.ofNat q))]
 
+/-- Compute one potion_baseline result using the SAME proved
+`Formal.PotionBaseline.potionBaseline`.
+
+args layout (5 Ints): `[level, low_level, low_qty, high_level, high_qty]`, all read
+via `.toNat`; emits `{"baseline": <int>}` matching the Python `potion_baseline_pure`
+return in the differential test. -/
+def runPotionBaseline (args : Array Json) : Json :=
+  let b := Formal.PotionBaseline.potionBaseline
+    (intArg args 0).toNat (intArg args 1).toNat (intArg args 2).toNat
+    (intArg args 3).toNat (intArg args 4).toNat
+  Json.mkObj [("baseline", Json.num (Int.ofNat b))]
+
 /-- Compute one bank_expansion_timing result using the SAME proved
 `Formal.BankExpansionTiming.shouldExpandBank`.
 
@@ -2677,6 +2690,8 @@ def runOne (item : Json) : Json :=
     runConsumableSelection args
   else if kind == "marginal_potion_qty" then
     runMarginalPotionQty args
+  else if kind == "potion_baseline" then
+    runPotionBaseline args
   else if kind == "bank_expansion_timing" then
     runBankExpansionTiming args
   else if kind == "event_window" then
