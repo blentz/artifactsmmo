@@ -234,30 +234,59 @@ def _gd_with_craftable_heal(code: str, *, hp_restore: int,
     return gd
 
 
+def _gd_heals() -> GameData:
+    """GameData mixing utility-slot-equippable potions with a stronger
+    consumable-type food. best_held_heal must only ever pick a utility heal,
+    because only utility items equip into a utility slot for marginal-fight
+    provisioning (the consumable food has higher hp_restore on purpose)."""
+    gd = GameData()
+    gd._item_stats = {
+        "weak_potion": ItemStats(code="weak_potion", level=1, type_="utility", hp_restore=20),
+        "strong_potion": ItemStats(code="strong_potion", level=1, type_="utility", hp_restore=50),
+        "zpotion": ItemStats(code="zpotion", level=1, type_="utility", hp_restore=20),
+        "cooked_fish": ItemStats(code="cooked_fish", level=1, type_="consumable", hp_restore=99),
+    }
+    return gd
+
+
 def test_best_held_heal_returns_code_of_strongest():
-    gd = _gd()
-    # cooked_fish (50) beats apple (20)
-    s = _state(inventory={"apple": 2, "cooked_fish": 1})
-    assert best_held_heal(s, gd) == "cooked_fish"
+    gd = _gd_heals()
+    # strong_potion (50) beats weak_potion (20)
+    s = _state(inventory={"weak_potion": 2, "strong_potion": 1})
+    assert best_held_heal(s, gd) == "strong_potion"
 
 
 def test_best_held_heal_returns_none_when_no_heals_held():
-    gd = _gd()
+    gd = _gd_heals()
     assert best_held_heal(_state(inventory={}), gd) is None
 
 
 def test_best_held_heal_skips_zero_qty():
-    gd = _gd()
-    s = _state(inventory={"cooked_fish": 0, "apple": 1})
-    assert best_held_heal(s, gd) == "apple"
+    gd = _gd_heals()
+    s = _state(inventory={"strong_potion": 0, "weak_potion": 1})
+    assert best_held_heal(s, gd) == "weak_potion"
 
 
 def test_best_held_heal_tiebreak_on_smallest_code():
-    gd = _gd()
-    # apple and zfood both hp_restore=20 → "apple" wins lexically
-    gd._item_stats["zfood"] = ItemStats(code="zfood", level=1, type_="consumable", hp_restore=20)
-    s = _state(inventory={"zfood": 1, "apple": 1})
-    assert best_held_heal(s, gd) == "apple"
+    gd = _gd_heals()
+    # weak_potion and zpotion both hp_restore=20 → "weak_potion" wins lexically
+    s = _state(inventory={"zpotion": 1, "weak_potion": 1})
+    assert best_held_heal(s, gd) == "weak_potion"
+
+
+def test_best_held_heal_skips_non_utility_type():
+    """A high-restore consumable food (type=consumable) is NOT utility-slot
+    equippable; the weaker utility potion must win."""
+    gd = _gd_heals()
+    s = _state(inventory={"cooked_fish": 3, "weak_potion": 1})  # food 99 vs potion 20
+    assert best_held_heal(s, gd) == "weak_potion"
+
+
+def test_best_held_heal_none_when_only_non_utility_heal():
+    """Only a consumable-type food held (no utility heal) → None: nothing can be
+    equipped into a utility slot for provisioning."""
+    gd = _gd_heals()
+    assert best_held_heal(_state(inventory={"cooked_fish": 5}), gd) is None
 
 
 # ── heal_stock_target clamp ───────────────────────────────────────────────────

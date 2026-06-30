@@ -72,6 +72,25 @@ def test_goal_plans_the_equip_end_to_end() -> None:
                and a.quantity == 40 for a in plan)
 
 
+def test_consumable_type_heal_yields_no_plan() -> None:
+    """Seam lock: a goal built with a type=consumable heal_code cannot plan — its
+    EquipAction targets a utility slot but a consumable item is not utility-slot
+    equippable, so EquipAction.is_applicable rejects it and the planner returns
+    no equip. This is why best_held_heal must pre-filter to utility heals."""
+    state = make_state(level=5, inventory={"cooked_fish": 100},
+                       equipment={"utility1_slot": None, "utility2_slot": None})
+    gd = GameData()
+    gd._item_stats = {
+        "cooked_fish": ItemStats(code="cooked_fish", level=1, type_="consumable",
+                                 hp_restore=60),
+    }
+    goal = ProvisionMarginalFightGoal(target_monster="green_slime",
+                                      heal_code="cooked_fish", quantity=40)
+    plan = plan_for_goal(goal, state, gd)
+    assert not any(isinstance(a, EquipAction) and a.slot == "utility1_slot"
+                   for a in plan)
+
+
 def test_desired_state_returns_empty_dict() -> None:
     state = make_state()
     gd = GameData()

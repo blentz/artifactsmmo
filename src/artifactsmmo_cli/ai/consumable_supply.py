@@ -11,6 +11,7 @@ EATS heals (UseConsumable); this keeps the cupboard stocked.
 """
 
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -46,7 +47,14 @@ def best_held_heal_restore(state: WorldState, game_data: GameData) -> int:
 
 
 def best_held_heal(state: WorldState, game_data: GameData) -> str | None:
-    """Held item code with the highest hp_restore (None if no heal held).
+    """Held code of the strongest UTILITY-EQUIPPABLE heal (None when none held).
+
+    A heal qualifies only when it both restores HP (hp_restore > 0) AND is a
+    type the schema maps to a utility slot — that is the only kind that can be
+    equipped into a utility slot for marginal-fight provisioning. Eaten heals
+    (cooked food, type=consumable) carry hp_restore but do NOT map to a utility
+    slot, so they are excluded: returning one would build a provision goal whose
+    EquipAction is not applicable, leaving the objective unplannable.
     Deterministic: ties break on the lexically smallest code."""
     best_code: str | None = None
     best_restore = 0
@@ -54,8 +62,11 @@ def best_held_heal(state: WorldState, game_data: GameData) -> str | None:
         if state.inventory[code] <= 0:
             continue
         stats = game_data.item_stats(code)
-        if stats is not None and stats.hp_restore > best_restore:
-            best_code, best_restore = code, stats.hp_restore
+        if stats is None or stats.hp_restore <= best_restore:
+            continue
+        if "utility1_slot" not in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):
+            continue
+        best_code, best_restore = code, stats.hp_restore
     return best_code
 
 

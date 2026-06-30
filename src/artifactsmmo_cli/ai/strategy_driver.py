@@ -546,7 +546,7 @@ def _marginal_provision_goal(ctx: SelectionContext, state: WorldState,
     held = state.inventory.get(heal_code, 0)
     repr_ = f"Fight({monster})"
     samples = history.sample_count(repr_)
-    win_permille = int(history.success_rate(repr_) * 1000)
+    win_permille = round(history.success_rate(repr_) * 1000)
     qty = marginal_potion_qty_pure(
         samples, win_permille, MIN_WIN_SAMPLES,
         int(MARGINAL_WINRATE_THRESHOLD * 1000), int(FULL_STACK_WINRATE * 1000),

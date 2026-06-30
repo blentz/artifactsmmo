@@ -2416,6 +2416,17 @@ def _record_mixed(history: LearningStore, action_repr: str, wins: int, losses: i
 
 
 def _gd_with_consumable(code: str, hp_restore: int) -> GameData:
+    """Utility-slot-equippable heal (type=utility): the only kind best_held_heal
+    can provision into a utility slot."""
+    gd = GameData()
+    gd._item_stats = {code: ItemStats(code=code, level=1, type_="utility",
+                                      hp_restore=hp_restore)}
+    return gd
+
+
+def _gd_with_food(code: str, hp_restore: int) -> GameData:
+    """Eaten heal (type=consumable): carries hp_restore but is NOT utility-slot
+    equippable, so it can never back a ProvisionMarginalFightGoal."""
     gd = GameData()
     gd._item_stats = {code: ItemStats(code=code, level=1, type_="consumable",
                                       hp_restore=hp_restore)}
@@ -2457,6 +2468,21 @@ def test_utility_slot_already_filled_routes_to_grind(tmp_path) -> None:
     state = make_state(level=3, inventory={"small_health_potion": 100},
                        equipment=equipment)
     gd = _gd_with_consumable("small_health_potion", hp_restore=60)
+    history = LearningStore(db_path=str(tmp_path / "l.db"), character="r")
+    _record_mixed(history, "Fight(green_slime)", wins=8, losses=2)  # 80% < 0.95
+    ctx = _ctx(combat_monster="green_slime")
+    goal = objective_step_goal(ReachCharLevel(level=5), state, gd, ctx, history=history)
+    assert isinstance(goal, GrindCharacterXPGoal)
+    history.close()
+
+
+def test_marginal_target_with_only_consumable_heal_routes_to_grind(tmp_path) -> None:
+    """An L3 char holding ONLY a consumable-type food (eaten heal, not utility-
+    slot equippable) against a marginal target must NOT build a provision goal
+    (its equip would be unapplicable) — it falls through to an unprovisioned
+    grind, never to discretionary gear (the copper_helmet livelock)."""
+    state = make_state(level=3, inventory={"cooked_fish": 100})
+    gd = _gd_with_food("cooked_fish", hp_restore=60)
     history = LearningStore(db_path=str(tmp_path / "l.db"), character="r")
     _record_mixed(history, "Fight(green_slime)", wins=8, losses=2)  # 80% < 0.95
     ctx = _ctx(combat_monster="green_slime")
