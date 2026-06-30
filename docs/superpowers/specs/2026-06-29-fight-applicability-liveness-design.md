@@ -123,12 +123,13 @@ No logic change expected — the picker already encodes the intended rule. Work:
 
 ### Component 3 — formal lockstep (`formal/`)
 
-1. **Audit Python↔Lean correspondence.** Determine whether
-   `best_eq >= monster_level - 1` exists in `ActionApplicability.lean`.
-   - If present: remove in lockstep with Component 1.
-   - If absent: the differential gate (`formal/diff/`) should have flagged the
-     Python-only term and did not — investigate the coverage hole (likely
-     `best_eq` abstracted away) and close it, so future rogue gates are caught.
+1. **Remove the modeled gate.** Confirmed present: `gearMeetsMonster
+   (bestEqLevel monsterLevel) := bestEqLevel ≥ monsterLevel - 1`
+   (`ActionApplicability.lean:64-66`), wired into the `fightApplicable`
+   conjunction and **consumed by liveness** (`FightProgress.lean`,
+   `ProgressAction.lean`). Remove it in lockstep with Component 1 and repair the
+   liveness lemmas it fed (each loses one now-vacuous hypothesis — strictly
+   weaker, so consumers simplify).
 2. **Add the consistency lemma:** `winnable(s,m) ∧ inWindowOrFallback(s,m) ⇒
    FightApplicable(s,m)` (capability-side only; HP/inventory remain runtime
    hypotheses). Ties `CombatTargetExistence.pickWinnableWindowed` to
