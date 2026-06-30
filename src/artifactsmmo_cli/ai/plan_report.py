@@ -24,3 +24,9 @@ class PlanReport:
     # monsters, and whether each is winnable with the LIVE loadout. Answers "will the
     # bot actually hunt these?" — an unwinnable drop makes the gear unbuildable.
     drop_inputs: list[dict[str, object]] = field(default_factory=list)
+    # Diagnostic injections: the in-memory arbiter state seeded for THIS plan (via the
+    # `plan --doom/--committed` flags) to reproduce a live divergence offline. Empty
+    # for a normal plan. Echoed so the printed report is honest that the cycle ran
+    # with non-default arbiter state.
+    simulated_doomed: tuple[str, ...] = ()
+    simulated_committed: str | None = None

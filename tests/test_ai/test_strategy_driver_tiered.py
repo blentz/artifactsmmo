@@ -4,7 +4,9 @@ A scripted planner returns a plan for a goal only when given >= its required
 budget, letting us assert pass behavior deterministically."""
 from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
+from artifactsmmo_cli.ai.arbiter_select import Candidate
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.strategy_driver import CHEAP_BUDGET_SECONDS as CHEAP
@@ -159,6 +161,40 @@ def test_record_attempt_never_memoizes_a_guard():
     a._record_attempt(goal, [], timed_out=False, state=state,
                       guard_reprs={repr(goal)}, mark_on_timeout=True)
     assert not a._memo.is_doomed(repr(goal), state, 1)
+
+
+def test_objective_combat_goal_exempt_from_memo_skip():
+    """The objective combat goal (GrindCharacterXPGoal) plans cheaply, but its
+    plannability flips on fast-churning HP / inventory-free that the memo's
+    signature (char level, skill levels) cannot track. A transient no-plan must
+    NOT suppress it for the 20-160-cycle re-probe window — that stranded the bot
+    in a jewelrycraft skill-grind detour under a ReachCharLevel root (2026-06-30).
+    It is memo-exempt: even pre-doomed, the arbiter still attempts and selects it."""
+    combat = GrindCharacterXPGoal(target_monster="green_slime", initial_xp=10**9)
+    planner = _ScriptedPlanner(cheap_ok={repr(combat)}, full_only=set())
+    a = _arbiter_with(planner)
+    state = make_state(task_code=None, task_total=0)
+    a._memo.mark(repr(combat), state, 0)        # a prior transient no-plan poisoned the memo
+    a.set_cycle(1)
+    cands = [Candidate(goal=combat, is_means=True, repr_=repr(combat))]
+    goal, plan, _ = a._arbitrate(cands, set(), set(), state, _make_planner_gd(), [])
+    assert repr(goal) == repr(combat), "memo-exempt combat goal must be selected despite the doom mark"
+    assert len(plan) == 1
+
+
+def test_objective_combat_goal_no_plan_does_not_poison_memo():
+    """The complement: when the objective combat goal yields no plan (a transient
+    HP/inventory state), the arbiter must NOT memoize it — otherwise the stale doom
+    survives the transient (HP recovers but the signature is unchanged) and skips
+    the only char-XP source for up to 160 cycles."""
+    combat = GrindCharacterXPGoal(target_monster="green_slime", initial_xp=10**9)
+    planner = _ScriptedPlanner(cheap_ok=set(), full_only=set())   # nothing plans
+    a = _arbiter_with(planner)
+    state = make_state(task_code=None, task_total=0)
+    cands = [Candidate(goal=combat, is_means=True, repr_=repr(combat))]
+    a._arbitrate(cands, set(), set(), state, _make_planner_gd(), [])
+    assert not a._memo.is_doomed(repr(combat), state, 1), \
+        "the objective combat goal must never be memoized (its no-plan is HP/inventory-transient)"
 
 
 def test_plans_short_circuits_wait_goal_without_invoking_planner():

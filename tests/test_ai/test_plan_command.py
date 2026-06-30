@@ -1,5 +1,6 @@
 """Tests for the offline `plan` CLI command + GamePlayer.plan_once()."""
 
+import contextlib
 from fractions import Fraction
 from unittest.mock import MagicMock, patch
 
@@ -31,6 +32,48 @@ def test_plan_once_returns_report_without_executing():
                                 report = player.plan_once()
     assert isinstance(report, PlanReport)
     execute.assert_not_called()
+
+
+def _plan_once_mocks(player, state):
+    """Context-manager stack shared by plan_once tests: mock the client, game data,
+    sense, refresh, and action build so no server is touched."""
+    cm = MagicMock()
+    return [
+        patch.object(cm, "client", MagicMock()),
+        patch("artifactsmmo_cli.ai.player.ClientManager", return_value=cm),
+        _patch_game_data_load(),
+        patch.object(player, "_fetch_world_state", return_value=state),
+        patch.object(player, "_maybe_periodic_refresh"),
+        patch.object(player, "_build_actions", return_value=[]),
+    ]
+
+
+def test_plan_once_seeds_doomed_memo_for_diagnostics():
+    """plan_once(doomed=[...]) marks those goal reprs in the arbiter's in-memory memo
+    BEFORE selecting, so an offline plan reproduces a live doomed-memo suppression
+    (e.g. a combat goal stuck doomed) that the fresh CLI otherwise never carries.
+    The injection is echoed on the report so the printed plan is honest about it."""
+    player = GamePlayer(character="hero")
+    state = make_state()
+    with contextlib.ExitStack() as stack:
+        for cm in _plan_once_mocks(player, state):
+            stack.enter_context(cm)
+        report = player.plan_once(doomed=["GatherMaterials(copper_ore)"])
+    assert report.simulated_doomed == ("GatherMaterials(copper_ore)",)
+    assert player._arbiter._memo.is_doomed(
+        "GatherMaterials(copper_ore)", state, player._cycle_counter)
+
+
+def test_plan_once_seeds_committed_for_diagnostics():
+    """plan_once(committed=REPR) seeds the arbiter's sticky commitment before select,
+    reproducing a live committed-goal hold; the injection is echoed on the report."""
+    player = GamePlayer(character="hero")
+    state = make_state()
+    with contextlib.ExitStack() as stack:
+        for cm in _plan_once_mocks(player, state):
+            stack.enter_context(cm)
+        report = player.plan_once(committed="GrindCharacterXP(green_slime)")
+    assert report.simulated_committed == "GrindCharacterXP(green_slime)"
 
 
 def test_plan_once_crafting_target_from_fallback():
@@ -138,6 +181,38 @@ def test_plan_command_prints_report(capsys):
     # drop-input winnability section: a winnable feather + an unwinnable scale.
     assert "WINNABLE via ['chicken']" in out
     assert "NOT WINNABLE" in out
+
+
+def test_plan_command_passes_and_prints_simulated_state(capsys):
+    """`--doom` / `--committed` thread into plan_once and the report echoes them; the
+    printed report shows a SIMULATED section so the offline plan is honest about the
+    injected in-memory arbiter state."""
+    report = PlanReport(
+        decision=StrategyDecision(interrupt=None, chosen_root=None, chosen_step=None,
+                                  desired_state={}, ranking=[]),
+        selected_goal=None, plan=[], goals_tried=[],
+        simulated_doomed=("GrindCharacterXP(green_slime)",),
+        simulated_committed="ReachSkillLevel(jewelrycrafting)")
+    with patch.object(plan_cmd, "check_mutation_lock",
+                      return_value=MagicMock(state="clear")):
+        with patch.object(plan_cmd.Config, "from_token_file", return_value=MagicMock()):
+            with patch.object(plan_cmd, "LearningStore") as store_cls:
+                store_cls.return_value = MagicMock()
+                player = MagicMock()
+                player.state = make_state(level=4)
+                player.plan_once.return_value = report
+                with patch.object(plan_cmd, "GamePlayer", return_value=player):
+                    plan_cmd.plan(character="hero", learn=False, learn_db=None,
+                                  refresh_game_data=False,
+                                  doom=["GrindCharacterXP(green_slime)"],
+                                  committed="ReachSkillLevel(jewelrycrafting)")
+    assert player.plan_once.call_args.kwargs == {
+        "doomed": ["GrindCharacterXP(green_slime)"],
+        "committed": "ReachSkillLevel(jewelrycrafting)"}
+    out = capsys.readouterr().out
+    assert "SIMULATED" in out
+    assert "GrindCharacterXP(green_slime)" in out
+    assert "ReachSkillLevel(jewelrycrafting)" in out
 
 
 def test_plan_command_empty_plan_branch(capsys):

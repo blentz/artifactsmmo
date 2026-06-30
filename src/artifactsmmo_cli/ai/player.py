@@ -443,7 +443,8 @@ class GamePlayer:
         # value at/above the periodic threshold triggers the refresh on cycle 0.
         self._actions_since_full_refresh = BANK_REFRESH_FORCE_SENTINEL
 
-    def plan_once(self) -> PlanReport:
+    def plan_once(self, doomed: list[str] | None = None,
+                  committed: str | None = None) -> PlanReport:
         """Sense the world and compute ONE planning cycle WITHOUT executing — the
         `plan` CLI command. Mirrors run()'s per-cycle decide+select (same refresh,
         gear-latch, combat target, servable filter, crafting-target keep-set) so the
@@ -476,6 +477,16 @@ class GamePlayer:
                     break
         self.state = state = replace(state, crafting_target=crafting_target)
         actions = self._build_actions()
+        # Diagnostic injection (the `plan --doom/--committed` flags): seed the
+        # in-memory arbiter state the live bot accumulates but the fresh CLI lacks —
+        # a doomed-memo entry or a sticky commitment — so a live divergence (e.g. a
+        # combat goal stuck doomed -> skill-grind detour) reproduces offline. Seeded
+        # on the SAME `state` select() sees, so the plannability signature matches.
+        sim_doomed = tuple(doomed or ())
+        for goal_repr in sim_doomed:
+            self._arbiter._memo.mark(goal_repr, state, self._cycle_counter)
+        if committed is not None:
+            self._arbiter._committed_repr = committed
         selected_goal, plan, goals_tried = self._arbiter.select(
             decision, state, game_data, actions, ctx,
             suppressed=set(self._suppressed_goals), objective=self._objective)
@@ -495,7 +506,9 @@ class GamePlayer:
                                     "winnable": winnable})
         return PlanReport(decision=decision, selected_goal=selected_goal,
                           plan=list(plan), goals_tried=goals_tried,
-                          drop_inputs=drop_inputs)
+                          drop_inputs=drop_inputs,
+                          simulated_doomed=sim_doomed,
+                          simulated_committed=committed)
 
     def run(self) -> None:
         """Main loop: sense → select goal → plan → act."""

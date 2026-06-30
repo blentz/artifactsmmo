@@ -1214,6 +1214,12 @@ class StrategyArbiter:
         # memo (safety/gear-critical, few, rarely time out). Non-guard candidates
         # go through the cheap pass → escalation → memo machinery.
         guard_reprs = {c.repr_ for c in candidates if not c.is_means}
+        # memo_bypass = guards PLUS memo-exempt goals (their plannability flips on
+        # fast-churning HP/inventory the memo's (level, skills) signature can't
+        # track, so a transient no-plan must not skip or mark them (Goal.memo_exempt).
+        # Distinct from guard_reprs because exempt goals still take the CHEAP budget
+        # (they plan in a few nodes); only guards earn the full budget.
+        memo_bypass = guard_reprs | {c.repr_ for c in candidates if c.goal.memo_exempt}
         non_wait = [c for c in candidates if not isinstance(c.goal, WaitGoal)]
 
         def _budget_for(goal: Goal, cheap: bool) -> float | None:
@@ -1222,8 +1228,8 @@ class StrategyArbiter:
             return CHEAP_BUDGET_SECONDS if cheap else None
 
         def _skip(goal: Goal) -> bool:
-            # Memo only governs non-guard goals; guards are never memo-skipped.
-            return repr(goal) not in guard_reprs and self._memo.is_doomed(
+            # Memo never skips guards or memo-exempt goals.
+            return repr(goal) not in memo_bypass and self._memo.is_doomed(
                 repr(goal), state, self._cycle)
 
         def try_plan_cheap(goal: Goal) -> list[Action]:
@@ -1236,7 +1242,7 @@ class StrategyArbiter:
             # cheap walk (because a LATER goal plans) is now recorded instead of
             # re-exploding every cycle (the full pass that used to mark it never ran).
             return self._record_attempt(goal, plan, self._last_timed_out, state,
-                                        guard_reprs, mark_on_timeout=False)
+                                        memo_bypass, mark_on_timeout=False)
 
         def try_plan_full(goal: Goal) -> list[Action]:
             if _skip(goal):
@@ -1245,7 +1251,7 @@ class StrategyArbiter:
             # Full (last-resort) pass: mark on ANY no-plan, timeout included — the
             # pragmatic backoff trigger (the exponential window re-probes later).
             return self._record_attempt(goal, plan, self._last_timed_out, state,
-                                        guard_reprs, mark_on_timeout=True)
+                                        memo_bypass, mark_on_timeout=True)
 
         def satisfied(goal: Goal) -> bool:
             return goal.is_satisfied(state)

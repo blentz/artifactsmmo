@@ -17,6 +17,15 @@ class Goal(ABC):
     must wait until the committed goal is satisfied or unplannable, which is what
     stops per-cycle goal thrashing."""
 
+    memo_exempt: bool = False
+    """When True, the doomed-memo never skips or marks this goal. The memo
+    invalidates only on `plannability_signature` changes (char level + skill
+    levels), so it must not govern goals whose plannability flips on fast-churning
+    dimensions it cannot see (HP, inventory-free, cooldown). The objective combat
+    goal is the case: a transient post-fight no-plan would otherwise suppress the
+    only char-XP source for the 20-160-cycle re-probe window, stranding the bot in
+    a skill-grind detour under a ReachCharLevel root (2026-06-30)."""
+
     @abstractmethod
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:

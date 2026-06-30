@@ -35,6 +35,13 @@ SCALAR_TO_PRIORITY_GAIN = 5.0
 class GrindCharacterXPGoal(Goal):
     """Farm a specific monster for character XP. Only active when no task held."""
 
+    # Exempt from the doomed-memo: this goal's plannability flips on HP /
+    # inventory-free (FightAction.is_applicable), which the memo's
+    # (char level, skill levels) signature cannot track. A transient post-fight
+    # no-plan must not suppress the only char-XP source across cycles. See
+    # Goal.memo_exempt.
+    memo_exempt = True
+
     def __init__(self, target_monster: str, initial_xp: int = 0) -> None:
         self._target_monster = target_monster
         self._initial_xp = initial_xp

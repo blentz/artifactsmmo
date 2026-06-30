@@ -25,6 +25,13 @@ def _print_report(player: GamePlayer, report: PlanReport) -> None:
     s = player.state
     d = report.decision
     print("=" * 70)
+    if report.simulated_doomed or report.simulated_committed is not None:
+        print("SIMULATED in-memory arbiter state (diagnostic injection):")
+        if report.simulated_doomed:
+            print(f"  doomed-memo: {list(report.simulated_doomed)}")
+        if report.simulated_committed is not None:
+            print(f"  committed (sticky): {report.simulated_committed}")
+        print("-" * 70)
     if s is not None:
         print(f"state: level={s.level} xp={s.xp}/{s.max_xp} hp={s.hp}/{s.max_hp} "
               f"pos=({s.x},{s.y}) inv={s.inventory_used}/{s.inventory_max} gold={s.gold}")
@@ -66,6 +73,13 @@ def plan(
     learn_db: str | None = typer.Option(None, "--learn-db", help="Learning DB path"),
     refresh_game_data: bool = typer.Option(
         False, "--refresh-game-data", help="Re-fetch static game data from the API"),
+    doom: list[str] = typer.Option(
+        [], "--doom", help="Seed the arbiter's doomed-memo with this goal repr "
+        "(repeatable) to reproduce a live in-memory suppression offline, "
+        "e.g. --doom 'GrindCharacterXP(green_slime)'"),
+    committed: str | None = typer.Option(
+        None, "--committed", help="Seed the arbiter's sticky commitment with this "
+        "goal repr to reproduce a live committed-goal hold"),
 ) -> None:
     """Print the plan the bot WOULD execute this cycle for CHARACTER, without acting."""
     lock = check_mutation_lock(default_lock_path())
@@ -84,7 +98,7 @@ def plan(
             game_data_ttl_minutes=config.game_data_ttl_minutes,
             refresh_game_data=refresh_game_data,
         )
-        report = player.plan_once()
+        report = player.plan_once(doomed=doom, committed=committed)
         _print_report(player, report)
     finally:
         store.end_session(exit_reason="normal")
