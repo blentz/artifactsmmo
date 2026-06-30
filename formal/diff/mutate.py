@@ -3132,8 +3132,8 @@ LADDER_GUARD_FIRES_MUTATIONS = [
 # numerator (e.g. PRESSURE_HIGH_NUM 17 -> 19 makes 17/20=0.85 into 19/20=0.95).
 LADDER_THRESHOLD_VALUE_MUTATIONS = [
     (
-        "ladder/thresholds: HP_CRITICAL threshold 0.25 -> 0.50 (widens critical band)",
-        "CRITICAL_HP_FRACTION = 0.25",
+        "ladder/thresholds: HP_CRITICAL threshold 0.75 -> 0.50 (narrows critical band)",
+        "CRITICAL_HP_FRACTION = 0.75",
         "CRITICAL_HP_FRACTION = 0.50",
     ),
     (

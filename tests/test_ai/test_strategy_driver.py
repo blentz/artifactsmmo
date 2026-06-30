@@ -2177,7 +2177,8 @@ def test_worth_gate_breaks_sticky_pursue_task(tmp_path):
     obj = CharacterObjective(target_char_level=50, target_skill_levels={},
                              target_gear={"weapon_slot": "iron_sword"}, _game_data=gd,
                              target_tools={})
-    state = make_state(skills={"weaponcrafting": 1, "cooking": 1},
+    state = make_state(hp=150, max_hp=150,
+                       skills={"weaponcrafting": 1, "cooking": 1},
                        task_type="items", task_code="cooked_gudgeon",
                        task_total=10, task_progress=0)
     decision = type("D", (), {"chosen_step": ReachSkillLevel("weaponcrafting", 5),
@@ -2209,7 +2210,8 @@ def test_worth_gate_bypassed_last_resort_selects_task_when_step_unplannable(tmp_
     obj = CharacterObjective(target_char_level=50, target_skill_levels={},
                              target_gear={"weapon_slot": "iron_sword"}, _game_data=gd,
                              target_tools={})
-    state = make_state(skills={"weaponcrafting": 1, "cooking": 1},
+    state = make_state(hp=150, max_hp=150,
+                       skills={"weaponcrafting": 1, "cooking": 1},
                        task_type="items", task_code="cooked_gudgeon",
                        task_total=10, task_progress=0)
     decision = type("D", (), {"chosen_step": ReachSkillLevel("weaponcrafting", 5),
@@ -2235,7 +2237,8 @@ def test_no_objective_keeps_committed_pursue_task(tmp_path):
     weapon-grind step GatherMaterials(copper_dagger) is present and plannable,
     but the sticky committed task is tried first and kept."""
     gd = _worth_gate_gd()
-    state = make_state(skills={"weaponcrafting": 1, "cooking": 1},
+    state = make_state(hp=150, max_hp=150,
+                       skills={"weaponcrafting": 1, "cooking": 1},
                        task_type="items", task_code="cooked_gudgeon",
                        task_total=10, task_progress=0)
     decision = type("D", (), {"chosen_step": ReachSkillLevel("weaponcrafting", 5),

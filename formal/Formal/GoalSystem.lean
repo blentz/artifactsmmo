@@ -347,7 +347,7 @@ theorem upgradeEquipment_relevant_eq_51 :
 
 /-! ### RestoreHPGoal — value range [0, 110]. -/
 
-def restoreHpCriticalFraction : Rat := 25 / 100
+def restoreHpCriticalFraction : Rat := 75 / 100
 def restoreHpCriticalValue : Rat := 110
 
 def restoreHpValue (hpPercent : Rat) : Rat :=
@@ -358,7 +358,7 @@ theorem restoreHp_value_in_range (hp : Rat)
     (_h0 : 0 ≤ hp) (h1 : hp ≤ 1) :
     0 ≤ restoreHpValue hp ∧ restoreHpValue hp ≤ 110 := by
   unfold restoreHpValue restoreHpCriticalFraction restoreHpCriticalValue
-  by_cases hc : hp < 25 / 100
+  by_cases hc : hp < 75 / 100
   · simp [hc]; grind
   · simp [hc]; grind
 

@@ -50,10 +50,11 @@ class TestRestoreHPGoal:
         state = make_state(hp=150, max_hp=150)
         assert goal.value(state, make_game_data()) == 0.0
 
-    def test_value_half_hp_is_50(self):
+    def test_value_half_hp_is_critical(self):
+        """At 50% HP (below the 0.75 rest threshold) RestoreHP returns its ceiling."""
         goal = RestoreHPGoal()
         state = make_state(hp=75, max_hp=150)
-        assert abs(goal.value(state, make_game_data()) - 50.0) < 0.1
+        assert goal.value(state, make_game_data()) == RestoreHPGoal.CRITICAL_HP_VALUE
 
     def test_value_zero_hp_is_critical_floor(self):
         """Below CRITICAL_HP_FRACTION, value jumps to CRITICAL_HP_VALUE so the
@@ -71,6 +72,13 @@ class TestRestoreHPGoal:
         goal = RestoreHPGoal()
         state = make_state(hp=149, max_hp=150)
         assert goal.is_satisfied(state) is False
+
+    def test_restore_hp_critical_value_at_70_percent(self):
+        """At 70% HP (below the 0.75 rest threshold) RestoreHP returns its ceiling so
+        the bot heals to full before fighting. Guards low-HP fight starts."""
+        goal = RestoreHPGoal()
+        state = make_state(hp=70, max_hp=100)  # 70% < 0.75
+        assert goal.value(state, make_game_data()) == RestoreHPGoal.CRITICAL_HP_VALUE
 
 
 class TestDepositInventoryGoal:

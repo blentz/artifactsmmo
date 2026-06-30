@@ -16,8 +16,12 @@ proven overstock core and this source cannot diverge.
 """
 
 # HP-critical preempt threshold (hp / max_hp). Below this the HP-critical guard
-# preempts every other means and RestoreHPGoal returns its ceiling value.
-CRITICAL_HP_FRACTION = 0.25
+# preempts every other means and RestoreHPGoal returns its ceiling value. Set to
+# 0.75 (was 0.25) so the bot rests to full before fighting: low-HP fight starts
+# were the avoidable-loss source that tripped the combat veto (see spec
+# 2026-06-30). _is_winnable (player.py) projects HP to max before the winnability
+# check, so the 2026-06-06 "parked at 76/130" deadlock does not recur.
+CRITICAL_HP_FRACTION = 0.75
 
 # Inventory space-pressure ladder, as exact integer rationals (num/den). The
 # proven overstock core cross-multiplies these ints (float-free at the boundary).

@@ -482,6 +482,7 @@ def _state_with_craft() -> tuple[GameData, "WorldState"]:
         ),
     }
     state = make_state(
+        hp=150, max_hp=150,
         skills={"woodcutting": 5},
         inventory={"ash_wood": 75},
         inventory_max=100,
@@ -508,6 +509,7 @@ def _state_with_recycle_no_craft() -> tuple[GameData, "WorldState"]:
     gd._crafting_recipes = {"copper_helmet": {"copper_bar": 6}}
     gd._workshop_locations = {"gearcrafting": (2, 1)}
     state = make_state(
+        hp=150, max_hp=150,
         level=5, skills={"gearcrafting": 5},
         inventory={"copper_helmet": 9},  # surplus above cap-1; 75 < 85 → no discard
         inventory_max=12,
@@ -527,6 +529,7 @@ def _state_with_sell_no_craft_recycle() -> tuple[GameData, "WorldState"]:
                                 tradeable=True),
     }
     state = make_state(
+        hp=150, max_hp=150,
         inventory={"copper_ore": 75},
         inventory_max=100,
         bank_items={"x": 1},
@@ -542,6 +545,7 @@ def _state_with_discard_only() -> tuple[GameData, "WorldState"]:
     gd = _cascade_gd_base()
     # "junk" has no recipe, no NPC buyer, no stats → pure overstock
     state = make_state(
+        hp=150, max_hp=150,
         inventory={"junk": 90},
         inventory_max=100,
         bank_items={"x": 1},

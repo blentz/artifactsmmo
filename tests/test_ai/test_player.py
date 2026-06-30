@@ -1719,7 +1719,8 @@ class TestBuildGoalsTaskCancelNeverSuppressed:
             gd._monster_resistance["dragon"] = {}
             gd._monster_critical_strike["dragon"] = 0
             gd._monster_initiative["dragon"] = 0
-            player.state = make_state(level=5, task_type="monsters", task_code="dragon",
+            player.state = make_state(hp=150, max_hp=150,
+                                      level=5, task_type="monsters", task_code="dragon",
                                       task_total=5, task_progress=0)
             player._suppressed_goals = {"TaskCancel": 5}
             decision = player._strategy.decide(player.state, player.game_data)
@@ -1735,7 +1736,8 @@ class TestBuildGoalsTaskCancelNeverSuppressed:
     def test_other_suppressed_goals_are_still_filtered(self):
         """Suppression of goals other than TaskCancel must still work."""
         player = self._arbiter_player()
-        player.state = make_state(task_type="monsters", task_code="chicken",
+        player.state = make_state(hp=150, max_hp=150,
+                                  task_type="monsters", task_code="chicken",
                                   task_total=5, task_progress=5)
         player._suppressed_goals = {"CompleteTask": 5}
         decision = player._strategy.decide(player.state, player.game_data)
