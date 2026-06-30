@@ -3,20 +3,24 @@
 
   Phase 23a/b — Tier 4 cumulative progress.
 
-  ## Phase 23a — weaker form (kept intact)
+  ## Phase 23a — weaker form — RETIRED 2026-06-29
 
-  `cumulative_state_change_under_no_wait`: under three load-bearing
-  hypotheses (`level < 50`, "no wait ever fires", and the `.taskExchange`
-  non-degeneracy lifted pointwise) some iterate of `cycleStep` produces
-  a state different from the starting one.
+  `cumulative_state_change_under_no_wait` (RETIRED): proved only that
+  some iterate of `cycleStep` differs from the start (not a level
+  advance). Audit-only, subsumed by the Phase 23d-1 unrestricted
+  headline `LifecycleBound7.lifecycle_progress_from_bounds_proven`.
 
-  ## Phase 23b — strong form (level strictly advances)
+  ## Phase 23b — strong form (level strictly advances) — RETIRED 2026-06-29
 
-  `cumulative_progress_under_no_wait_restricted`: under FIVE load-bearing
-  hypotheses surfaced in the signature, some iterate of `cycleStep`
-  produces a state whose level is strictly greater than the starting
-  level. The proof goes through well-founded induction on an EXTENDED
-  lex measure (see `ExtMeasure` below).
+  `cumulative_progress_under_no_wait_restricted` (RETIRED): proved a
+  level advance only under a trajectory restriction to the
+  `progressMeans` subset (the 5 task-lifecycle means excluded). It was
+  audit-only (no live proof dependents) and is superseded WITHOUT the
+  restriction by the Phase 23d-1 unrestricted headline
+  `LifecycleBound7.lifecycle_progress_from_bounds_proven`. The
+  paragraphs below are retained as the historical rationale for WHY the
+  restriction existed; the `ExtMeasure` machinery they describe is still
+  LIVE (consumed by `PerceptionInvariant`/`Plan`).
 
   The strong form CANNOT be proved unconditionally for all 17 non-wait
   MeansKinds: the task lifecycle (acceptTask → pursueTask → completeTask
@@ -130,34 +134,15 @@ theorem cycleStepN_add (m n : Nat) (s : State) :
     rw [cycleStepN_succ j s]
     exact ih (cycleStep s)
 
-/-! ## Weaker headline — Phase 23a, kept intact -/
+/-! ## Weaker headline — Phase 23a — RETIRED (2026-06-29)
 
-/-- WEAKER Tier-4 headline shipped in Phase 23a.
-
-    Under three load-bearing hypotheses, some iterate of `cycleStep`
-    produces a state different from the starting one. See the original
-    23a docstring for the full discussion. -/
-theorem cumulative_state_change_under_no_wait
-    (s : State)
-    (_hlvl : s.level < 50)
-    (hnowait : ∀ k, productionLadder (cycleStepN k s) ≠ some .wait)
-    (hex : ∀ k, productionLadder (cycleStepN k s) = some .taskExchange →
-                (cycleStepN k s).taskExchangeMinCoins > 0) :
-    ∃ k, cycleStepN k s ≠ s := by
-  have h22a := cycleStep_progress_or_waits s (hex 0)
-  have hwait0 : productionLadder s ≠ some .wait := by
-    have := hnowait 0
-    simpa [cycleStepN] using this
-  have hne : cycleStep s ≠ s := by
-    cases h22a with
-    | inl h => exact h
-    | inr h => exact absurd h hwait0
-  refine ⟨1, ?_⟩
-  show cycleStepN 1 s ≠ s
-  have hrw : cycleStepN 1 s = cycleStep s := by
-    rw [cycleStepN_succ]; rfl
-  rw [hrw]
-  exact hne
+`cumulative_state_change_under_no_wait` has been RETIRED alongside the
+Phase 23b strong form. It proved only the strictly-weaker claim that
+some iterate of `cycleStep` differs from the start (not that level
+advances). It was audit-only (no live proof dependents) and is wholly
+subsumed by the Phase 23d-1 unrestricted headline
+`LifecycleBound7.lifecycle_progress_from_bounds_proven`. Vacuity-neutral
+retirement: never on the level-50 capstone chain. -/
 
 /-! ## Phase 23b extension — restricted progress-means set -/
 
@@ -1128,193 +1113,25 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
   | restForCombat   => exfalso; revert hmem; unfold progressMeans; decide
   | gearReview      => exfalso; revert hmem; unfold progressMeans; decide
 
-/-! ## Headline — strong form (restricted trajectory)
+/-! ## Headline — strong form (restricted trajectory) — RETIRED (2026-06-29)
 
-Phase 23b's headline. Under SIX load-bearing hypotheses (the original
-three from 23a plus three trajectory restrictions), some iterate of
-`cycleStep` reaches a state with strictly greater level. -/
+Phase 23b's `cumulative_progress_under_no_wait_restricted` has been
+RETIRED. It proved a level advance only under the `hrestricted`
+hypothesis that every firing means stays in the 13-element
+`progressMeans` subset — i.e. it EXCLUDED the five task-lifecycle means
+(`acceptTask`, `pursueTask`, `completeTask`, `taskCancel`,
+`lowYieldCancel`). It had NO live proof dependents: its sole consumer
+was a `#print axioms` audit line. The Phase 23d-1 unrestricted headline
+— `LifecycleBound7.lifecycle_progress_from_bounds_proven`, consumed by
+`LevelFiftyReachable.level_advances_once` — supersedes it WITHOUT the
+restriction.
 
-/-- Strong form of cumulative progress (Phase 23b).
-
-    Load-bearing hypotheses (HONEST disclosure):
-
-    1. `hlvl` — starting level below cap.
-
-    2. `hnowait` — `.wait` never fires along the trajectory (carried
-       from 23a).
-
-    3. `hex` — `.taskExchange` non-degeneracy: when the ladder selects
-       `.taskExchange`, `taskExchangeMinCoins > 0` (carried from 23a).
-
-    4. `hbe` — `.bankExpand` non-degeneracy: when the ladder selects
-       `.bankExpand`, `nextExpansionCost > 0`. NEW in 23b: required
-       so that `gold` strictly decreases on `buyBankExpansion`.
-
-    5. `hrestricted` — the trajectory's firing means are all in
-       `progressMeans` (the 12-element subset). EXCLUDES the five
-       task-lifecycle means (`acceptTask`, `pursueTask`, `completeTask`,
-       `taskCancel`, `lowYieldCancel`) whose treatment is deferred to
-       Phase 23c. The exclusion is HONEST scope reduction, not a hidden
-       sorry — the deferred kinds appear in the theorem signature.
-
-    6. `hperc` — perception invariant on the Fight-firing means: when
-       the ladder selects `.bankUnlock` or `.reachUnlockLevel`,
-       `s.xp < xpToNextLevel s.level` and `s.level < 50`. This is the
-       same perception invariant Phase 19's `fight_decreases_measure`
-       carries; here it is lifted pointwise along the trajectory.
-
-    Conclusion: ∃ k, (cycleStepN k s).level > s.level. -/
-theorem cumulative_progress_under_no_wait_restricted
-    (s : State)
-    (hlvl : s.level < 50)
-    (hnowait : ∀ k, productionLadder (cycleStepN k s) ≠ some .wait)
-    (hex : ∀ k, productionLadder (cycleStepN k s) = some .taskExchange →
-                (cycleStepN k s).taskExchangeMinCoins > 0)
-    (hbe : ∀ k, productionLadder (cycleStepN k s) = some .bankExpand →
-                (cycleStepN k s).nextExpansionCost > 0)
-    (hrestricted : ∀ k k', productionLadder (cycleStepN k s) = some k' →
-                            k' ∈ progressMeans)
-    (hperc : ∀ k k', productionLadder (cycleStepN k s) = some k' →
-                      (k' = .bankUnlock ∨ k' = .reachUnlockLevel
-                        ∨ (k' = .objectiveStep
-                            ∧ (cycleStepN k s).objectiveStepIsFight = true)) →
-                      (cycleStepN k s).xp < xpToNextLevel (cycleStepN k s).level
-                      ∧ (cycleStepN k s).level < 50) :
-    ∃ k, (cycleStepN k s).level > s.level := by
-  -- Well-founded induction on State via the InvImage relation on extMeasure.
-  -- Define R s' s := extMeasureLt (extMeasure s') (extMeasure s); this is
-  -- well-founded by InvImage.wf. WellFounded.induction on R gives the
-  -- state-level induction we want.
-  let R : State → State → Prop := fun s₁ s₂ => extMeasureLt (extMeasure s₁) (extMeasure s₂)
-  have hRwf : WellFounded R := InvImage.wf extMeasure extMeasureLt_wellFounded
-  -- The motive: trajectory hypotheses ⇒ level advances somewhere.
-  -- We thread all the trajectory hypotheses through the induction.
-  suffices hgen :
-      ∀ s' : State,
-        s'.level < 50 →
-        (∀ k, productionLadder (cycleStepN k s') ≠ some .wait) →
-        (∀ k, productionLadder (cycleStepN k s') = some .taskExchange →
-              (cycleStepN k s').taskExchangeMinCoins > 0) →
-        (∀ k, productionLadder (cycleStepN k s') = some .bankExpand →
-              (cycleStepN k s').nextExpansionCost > 0) →
-        (∀ k k', productionLadder (cycleStepN k s') = some k' →
-                  k' ∈ progressMeans) →
-        (∀ k k', productionLadder (cycleStepN k s') = some k' →
-                  (k' = .bankUnlock ∨ k' = .reachUnlockLevel
-                    ∨ (k' = .objectiveStep
-                        ∧ (cycleStepN k s').objectiveStepIsFight = true)) →
-                  (cycleStepN k s').xp < xpToNextLevel (cycleStepN k s').level
-                  ∧ (cycleStepN k s').level < 50) →
-        ∃ k, (cycleStepN k s').level > s'.level by
-    exact hgen s hlvl hnowait hex hbe hrestricted hperc
-  intro s'
-  -- Use WellFounded.induction explicitly with the trajectory hypotheses in the motive.
-  apply hRwf.induction (C := fun s' =>
-    s'.level < 50 →
-    (∀ k, productionLadder (cycleStepN k s') ≠ some .wait) →
-    (∀ k, productionLadder (cycleStepN k s') = some .taskExchange →
-          (cycleStepN k s').taskExchangeMinCoins > 0) →
-    (∀ k, productionLadder (cycleStepN k s') = some .bankExpand →
-          (cycleStepN k s').nextExpansionCost > 0) →
-    (∀ k k', productionLadder (cycleStepN k s') = some k' → k' ∈ progressMeans) →
-    (∀ k k', productionLadder (cycleStepN k s') = some k' →
-              (k' = .bankUnlock ∨ k' = .reachUnlockLevel
-                ∨ (k' = .objectiveStep
-                    ∧ (cycleStepN k s').objectiveStepIsFight = true)) →
-              (cycleStepN k s').xp < xpToNextLevel (cycleStepN k s').level
-              ∧ (cycleStepN k s').level < 50) →
-    ∃ k, (cycleStepN k s').level > s'.level)
-  intro s' ih hlvl' hnowait' hex' hbe' hrestricted' hperc'
-  --
-  -- Pull out the ladder selection at index 0.
-  obtain ⟨k0, hk0⟩ := exists_firing_means s'
-  -- Lift hk0 through cycleStepN 0 (which is rfl-equal to s').
-  have hk0' : productionLadder (cycleStepN 0 s') = some k0 := hk0
-  have hk0_mem : k0 ∈ progressMeans := hrestricted' 0 k0 hk0'
-  have hk0_ne_wait : k0 ≠ .wait := by
-    intro habs
-    have := hnowait' 0
-    rw [habs] at hk0'
-    exact this hk0'
-  -- Discharge hex/hbe/hperc at index 0 for the per-cycle lemma.
-  have hex0 : k0 = .taskExchange → s'.taskExchangeMinCoins > 0 := by
-    intro hk_eq
-    have hkex : productionLadder (cycleStepN 0 s') = some .taskExchange := by
-      rw [← hk_eq]; exact hk0'
-    have := hex' 0 hkex
-    simpa [cycleStepN] using this
-  have hbe0 : k0 = .bankExpand → s'.nextExpansionCost > 0 := by
-    intro hk_eq
-    have hkbe : productionLadder (cycleStepN 0 s') = some .bankExpand := by
-      rw [← hk_eq]; exact hk0'
-    have := hbe' 0 hkbe
-    simpa [cycleStepN] using this
-  have hperc0 : k0 = .bankUnlock ∨ k0 = .reachUnlockLevel
-                  ∨ (k0 = .objectiveStep ∧ s'.objectiveStepIsFight = true) →
-                  s'.xp < xpToNextLevel s'.level ∧ s'.level < 50 := by
-    intro hor
-    have := hperc' 0 k0 hk0' hor
-    simpa [cycleStepN] using this
-  -- Apply the per-cycle progress lemma.
-  have hcycle := progressMeans_decreases_extMeasure_or_advances_level
-                  s' k0 hk0 hk0_mem hex0 hbe0 hperc0
-  cases hcycle with
-  | inl hadv =>
-    -- Level advances after one cycle. Witness k = 1.
-    refine ⟨1, ?_⟩
-    have : cycleStepN 1 s' = cycleStep s' := by
-      rw [cycleStepN_succ]; rfl
-    rw [this]
-    exact hadv
-  | inr hdec =>
-    -- Measure decreases AND level is preserved. Apply IH to cycleStep s'.
-    obtain ⟨hlvl_eq, hdec'⟩ := hdec
-    have hR : R (cycleStep s') s' := hdec'
-    -- Re-derive trajectory hypotheses for cycleStep s' (by re-indexing).
-    have hlvl_succ : (cycleStep s').level < 50 := by
-      rw [hlvl_eq]; exact hlvl'
-    have hnowait_succ : ∀ k, productionLadder (cycleStepN k (cycleStep s')) ≠ some .wait := by
-      intro k
-      have := hnowait' (k + 1)
-      rwa [cycleStepN_succ] at this
-    have hex_succ : ∀ k, productionLadder (cycleStepN k (cycleStep s')) = some .taskExchange →
-                          (cycleStepN k (cycleStep s')).taskExchangeMinCoins > 0 := by
-      intro k hk
-      have := hex' (k + 1)
-      rw [cycleStepN_succ] at this
-      exact this hk
-    have hbe_succ : ∀ k, productionLadder (cycleStepN k (cycleStep s')) = some .bankExpand →
-                          (cycleStepN k (cycleStep s')).nextExpansionCost > 0 := by
-      intro k hk
-      have := hbe' (k + 1)
-      rw [cycleStepN_succ] at this
-      exact this hk
-    have hrestricted_succ : ∀ k k', productionLadder (cycleStepN k (cycleStep s')) = some k' →
-                                     k' ∈ progressMeans := by
-      intro k k' hk
-      have := hrestricted' (k + 1) k'
-      rw [cycleStepN_succ] at this
-      exact this hk
-    have hperc_succ : ∀ k k', productionLadder (cycleStepN k (cycleStep s')) = some k' →
-                                (k' = .bankUnlock ∨ k' = .reachUnlockLevel
-                                  ∨ (k' = .objectiveStep
-                                      ∧ (cycleStepN k (cycleStep s')).objectiveStepIsFight = true)) →
-                                (cycleStepN k (cycleStep s')).xp
-                                  < xpToNextLevel (cycleStepN k (cycleStep s')).level
-                                ∧ (cycleStepN k (cycleStep s')).level < 50 := by
-      intro k k' hk hor
-      have := hperc' (k + 1) k'
-      rw [cycleStepN_succ] at this
-      exact this hk hor
-    obtain ⟨j, hj⟩ := ih (cycleStep s') hR hlvl_succ hnowait_succ hex_succ
-                        hbe_succ hrestricted_succ hperc_succ
-    -- hj : (cycleStepN j (cycleStep s')).level > (cycleStep s').level
-    -- We want : (cycleStepN (j+1) s').level > s'.level
-    refine ⟨j + 1, ?_⟩
-    rw [cycleStepN_succ]
-    -- (cycleStep s').level = s'.level (hlvl_eq), so hj transports directly.
-    rw [hlvl_eq] at hj
-    exact hj
+Retiring it is vacuity-neutral: this theorem never sat on the level-50
+capstone chain (that chain runs through `lifecycle_progress_from_bounds_proven`
+← `FightFairness`, independent of the restricted form). The shared
+machinery it consumed — `progressMeans`, `extMeasure`/`extMeasureLt`,
+and `progressMeans_decreases_extMeasure_or_advances_level` — is RETAINED;
+it is live in `PerceptionInvariant`/`Plan` and still audited below. -/
 
 /-! ## Phase 23d-1 — LIV-003 fat axiom REFACTORED into three smaller pieces
 

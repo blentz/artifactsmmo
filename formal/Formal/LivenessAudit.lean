@@ -192,20 +192,23 @@ open Formal.Liveness.CycleStep
 #print axioms cycleStep_total
 #print axioms cycleStep_progress_or_waits
 
--- Phase 23a — Tier 4 cumulative progress (weaker form).
+-- Phase 23a — Tier 4 cumulative progress. The weaker-form headline
+-- `cumulative_state_change_under_no_wait` was RETIRED (2026-06-29): audit-only,
+-- subsumed by the Phase 23d-1 unrestricted headline.
 open Formal.Liveness.CumulativeProgress
 #print axioms cycleStepN_succ
-#print axioms cumulative_state_change_under_no_wait
 
--- Phase 23b — Tier 4 strong form: level strictly advances under no-wait +
--- progress-means trajectory restriction. Uses an extended 14-tuple lex
--- measure (`ExtMeasure`) for well-founded induction. See
--- `Formal/Liveness/CumulativeProgress.lean` docstring for honest
--- disclosure of the 5 deferred task-lifecycle MeansKinds.
+-- Phase 23b — extended 14-tuple lex measure (`ExtMeasure`) machinery, used
+-- for well-founded induction and still LIVE in `PerceptionInvariant`/`Plan`.
+-- NOTE: the Phase 23b strong-form headline
+-- `cumulative_progress_under_no_wait_restricted` was RETIRED (2026-06-29) —
+-- it had no live proof dependents (audit-only) and is superseded WITHOUT the
+-- trajectory restriction by the Phase 23d-1 unrestricted headline
+-- `LifecycleBound7.lifecycle_progress_from_bounds_proven`. The shared lemmas
+-- it consumed remain audited here.
 #print axioms extMeasureLt_wellFounded
 #print axioms cycleStep_level_ge
 #print axioms progressMeans_decreases_extMeasure_or_advances_level
-#print axioms cumulative_progress_under_no_wait_restricted
 
 -- Phase 23d-1 — LIV-003 fat axiom REFACTORED into three smaller pieces.
 -- The OLD `cumulative_progress_lifecycle_axiom` has been DELETED; the
