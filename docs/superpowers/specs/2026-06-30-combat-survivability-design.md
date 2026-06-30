@@ -97,9 +97,14 @@ HEAL_STOCK_FLOOR, MAX_STACK)` — it crafts/holds toward the active marginal tar
 Provisioning still equips best-effort `min(desired, held)` meanwhile, so the grind is
 never blocked waiting for a full stack.
 
-**Heal choice:** the strongest health item the bot currently holds (inventory item
-with `hp_restore > 0`, max restore). Reuses the existing heal-identification helpers
-(`consumable_supply.heal_stock` / `ItemStats.hp_restore`).
+**Heal choice:** the strongest UTILITY-SLOT-EQUIPPABLE health item the bot currently
+holds — `consumable_supply.best_held_heal` requires `hp_restore > 0` AND that the item
+type maps to a utility slot (`"utility1_slot" in ITEM_TYPE_TO_SLOTS[type_]`, i.e.
+`type_="utility"`). NOTE (amended during build): the type filter is essential —
+cooking food is `type_="consumable"` (carries `hp_restore` but is NOT utility-equippable);
+without the filter, provisioning builds an unplannable equip → `ReachCharLevel` stands
+down → the copper_helmet livelock re-enters. Win-rate estimation (`best_held_heal_restore`)
+still counts food, since food is eatable in combat — only EQUIP selection is filtered.
 
 **Reactive depletion:** utility-slot quantity is NOT modeled in `WorldState`
 (`equipment` maps slot → code, no count). Each cycle refreshes equipment from the
@@ -111,6 +116,21 @@ stack needs slot-quantity in `WorldState` — deferred (see Out of scope).
 = 5 when combat is active and a heal is craftable) feeds the inventory. If no heal is
 held and none is craftable now, provisioning no-ops and the bot fights unprotected —
 the grind is never blocked on potion supply (Parts 1 + 2 still protect it).
+
+**AMENDED — supply-scaling DEFERRED to a follow-up (decided during build).** The
+`heal_stock_target(desired)` clamp and the `desired_stock` parameter were added but are
+NOT wired to a per-target value in this branch (every production caller uses the
+`HEAL_STOCK_FLOOR=5` default). Two findings made true full-stack provisioning a
+separate sub-feature rather than a threading change: (1) `MaintainConsumablesGoal` is a
+discretionary means (value 25), ranked BELOW the objective-step grind (30-45) and
+provision (50), so while the bot grinds/provisions it rarely gets a cycle — raising its
+target alone won't accumulate. (2) Utility-equippable potions are alchemy-gated; at low
+level the bot's heals are cooking food (not equippable), so provisioning is dormant
+until real potions are held. Robust delivery = make `ProvisionMarginalFightGoal` ACQUIRE
+its own deficit (recipe-closure craft / NPC-buy of utility potions, then equip),
+bypassing the outranked maintain. Shipped: win-rate-scaled provisioning of HELD potions
+(1..held, capped at the floor stock). The `heal_stock_target`/`desired_stock` surface is
+retained as the follow-up's foundation, documented as defaulting to the floor today.
 
 **Pure decision core (proven, per `ai/` standard):**
 `marginal_potion_qty_pure(samples, success_rate, min_samples, win_threshold,
