@@ -20,25 +20,26 @@ from artifactsmmo_cli.ai.goals.craft_relief import CraftReliefGoal
 from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
 from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
 from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
+from artifactsmmo_cli.ai.goals.drain_bank_junk import DrainBankJunkGoal
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
 from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
+from artifactsmmo_cli.ai.goals.maintain_consumables import MaintainConsumablesGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.pursue_task import PursueTaskGoal
 from artifactsmmo_cli.ai.goals.reach_currency import ReachCurrencyGoal
-from artifactsmmo_cli.ai.goals.maintain_consumables import MaintainConsumablesGoal
 from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
-from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
-from artifactsmmo_cli.ai.goals.drain_bank_junk import DrainBankJunkGoal
 from artifactsmmo_cli.ai.goals.recycle_surplus import RecycleSurplusGoal
+from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
 from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal, tasks_coin_total
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.recipe_closure import closure_demand
 from artifactsmmo_cli.ai.task_batch import task_batch_size
@@ -743,10 +744,20 @@ def objective_step_goal(
         # be 40+ unbroken combat cycles, which is the wrong trade for
         # an in-progress items task that's paying out gold + skill XP
         # + task rewards every batch.
-        bootstrap_gap = step.level - state.level
-        if bootstrap_gap > 4 and (
-                state.task_type == "items" and state.task_code
-                and state.task_total > 0 and state.task_progress < state.task_total):
+        # Fire-as-Fight decision extracted to the pure boundary
+        # `objective_step_is_fight_pure` (objective_step_fight_core.py) — the
+        # SAME predicate the Lean liveness Bool `objectiveStepIsFight` binds to
+        # via the differential gate. False here = long-haul grind deferred to an
+        # active items task.
+        if not objective_step_is_fight_pure(
+                is_reach_char_level=True,
+                target=step.level,
+                level=state.level,
+                has_combat_monster=ctx.combat_monster is not None,
+                task_type=state.task_type,
+                task_code=state.task_code,
+                task_total=state.task_total,
+                task_progress=state.task_progress):
             return None        # long-haul grind, items task active → defer
         return GrindCharacterXPGoal(target_monster=ctx.combat_monster, initial_xp=state.xp)
     return None
