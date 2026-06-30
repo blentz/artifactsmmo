@@ -681,6 +681,22 @@ class TestEquipAction:
         gd = make_game_data(item_stats={"small_health_potion": stats})
         assert action.is_applicable(state, gd) is True
 
+    def test_equip_action_quantity_requires_enough_inventory(self):
+        state = make_state(inventory={"small_health_potion": 1})
+        stats = ItemStats(code="small_health_potion", level=1, type_="utility")
+        gd = make_game_data(item_stats={"small_health_potion": stats})
+        action = EquipAction(code="small_health_potion", slot="utility1_slot", quantity=2)
+        assert action.is_applicable(state, gd) is False  # only 1 held, want 2
+
+    def test_equip_action_quantity_decrements_by_quantity(self):
+        state = make_state(inventory={"small_health_potion": 5}, level=1)
+        stats = ItemStats(code="small_health_potion", level=1, type_="utility")
+        gd = make_game_data(item_stats={"small_health_potion": stats})
+        action = EquipAction(code="small_health_potion", slot="utility1_slot", quantity=2)
+        result = action.apply(state, gd)
+        assert result.inventory.get("small_health_potion", 0) == 3
+        assert result.equipment["utility1_slot"] == "small_health_potion"
+
 
 def _consumable_stats(code: str = "cooked_chicken", hp_restore: int = 80) -> dict[str, ItemStats]:
     return {code: ItemStats(code=code, level=1, type_="consumable", hp_restore=hp_restore)}
