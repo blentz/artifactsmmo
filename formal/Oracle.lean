@@ -6,6 +6,7 @@ import Formal.DominancePareto
 import Formal.GearTaxonomy
 import Formal.MarginalPotionQty
 import Formal.PotionBaseline
+import Formal.MaxBatchFromHeld
 import Lean.Data.Json
 
 open Lean Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin
@@ -1565,6 +1566,24 @@ def runConsumableSelection (args : Array Json) : Json :=
     | none => -1
   Json.mkObj [("selected", Json.num selected)]
 
+/-- Compute one max_batch_from_held result using the SAME proved
+`Formal.MaxBatchFromHeld.maxBatchFromHeld`.
+
+args layout: `[yield, n, need_0, held_0, need_1, held_1, ...]` — the per-craft
+yield, then `n` ingredients each the 2 ints `[need, held]` (a length-prefixed
+list, mirroring `runConsumableSelection`). Builds the `List (Nat × Nat)` of
+`(need, held)` pairs, runs the min-floor fold, and emits `{"batch": <int>}`
+matching the Python `max_batch_from_held_pure` return in the differential test. -/
+def runMaxBatchFromHeld (args : Array Json) : Json :=
+  let yield_ := (intArg args 0).toNat
+  let n := (intArg args 1).toNat
+  let pairs : List (Nat × Nat) :=
+    (List.range n).map (fun k =>
+      let base := 2 + 2 * k
+      ((intArg args base).toNat, (intArg args (base + 1)).toNat))
+  let batch := Formal.MaxBatchFromHeld.maxBatchFromHeld pairs yield_
+  Json.mkObj [("batch", Json.num (Int.ofNat batch))]
+
 /-- Compute one marginal_potion_qty result using the SAME proved
 `Formal.MarginalPotionQty.marginalPotionQty`.
 
@@ -2656,6 +2675,8 @@ def runOne (item : Json) : Json :=
     runWeightedRemaining args
   else if kind == "low_yield_cancel" then
     runLowYieldCancel args
+  else if kind == "max_batch_from_held" then
+    runMaxBatchFromHeld args
   else if kind == "objective_step_is_fight" then
     runObjectiveStepIsFight args
   else if kind == "bootstrap_char_horizon" then

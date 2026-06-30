@@ -71,6 +71,7 @@ NEAREST_TILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "nearest_tile.py"
 CONSUMABLE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_selection.py"
 MARGINAL_POTION_QTY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "marginal_potion_qty.py"
 POTION_BASELINE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_baseline.py"
+MAX_BATCH_FROM_HELD_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "max_batch_from_held.py"
 BANK_EXPANSION_TIMING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_expansion_timing.py"
 EVENT_WINDOW_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "event_availability.py"
 COST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "cost_core.py"
@@ -2236,6 +2237,7 @@ _ALL_SRCS = [
     NEAREST_TILE_SRC,
     CONSUMABLE_SELECTION_SRC,
     MARGINAL_POTION_QTY_SRC,
+    MAX_BATCH_FROM_HELD_SRC,
     BANK_EXPANSION_TIMING_SRC,
     EVENT_WINDOW_SRC,
     COST_CORE_SRC,
@@ -2821,6 +2823,31 @@ POTION_BASELINE_MUTATIONS = [
     ("potion_baseline: span sign flip (level-low_level -> low_level-level)",
      "    return low_qty + (high_qty - low_qty) * (level - low_level) // (high_level - low_level)",
      "    return low_qty + (high_qty - low_qty) * (low_level - level) // (high_level - low_level)"),
+]
+
+# max_batch_from_held mutations -- old strings matched to current
+# max_batch_from_held.py text. Each perturbs the min-floor / floor-div / yield
+# multiply so the Python batch diverges from the Lean `maxBatchFromHeld` oracle.
+# Killed by formal/diff/test_max_batch_from_held_diff.py (random multi-ingredient
+# recipes + the exact-divisor / short-ingredient / yield anchors).
+MAX_BATCH_FROM_HELD_MUTATIONS = [
+    # floor-div -> ceil-div (add need-1 to the numerator): any non-exact held//need
+    # rounds UP, over-reporting craftable runs. The single-ingredient 10//3 anchor
+    # (floor 3 vs ceil 4) and interior random cases diverge.
+    ("max_batch_from_held: floor-div -> ceil-div (+need-1 on numerator)",
+     "    runs = min(held[i] // needs[i] for i in range(len(needs)))",
+     "    runs = min((held[i] + needs[i] - 1) // needs[i] for i in range(len(needs)))"),
+    # min -> max: take the LARGEST per-ingredient run-count instead of the scarcest,
+    # so a short ingredient no longer caps the batch. The short-ingredient (held 0)
+    # anchor diverges (0 vs the other ingredient's runs).
+    ("max_batch_from_held: min -> max (scarcest -> most-abundant)",
+     "    runs = min(held[i] // needs[i] for i in range(len(needs)))",
+     "    runs = max(held[i] // needs[i] for i in range(len(needs)))"),
+    # drop the yield multiply: report run COUNT instead of potions. Any yield != 1
+    # diverges (the yield-multiplies anchor with yield 5).
+    ("max_batch_from_held: drop yield multiply",
+     "    return runs * yield_per_craft",
+     "    return runs"),
 ]
 
 # bank_expansion_timing mutations -- old strings matched to current
@@ -4128,6 +4155,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_consumable_selection_diff.py", survivors)
     run_group(MARGINAL_POTION_QTY_SRC, MARGINAL_POTION_QTY_MUTATIONS,
               "formal/diff/test_marginal_potion_qty_diff.py", survivors)
+    run_group(MAX_BATCH_FROM_HELD_SRC, MAX_BATCH_FROM_HELD_MUTATIONS,
+              "formal/diff/test_max_batch_from_held_diff.py", survivors)
     run_group(POTION_BASELINE_SRC, POTION_BASELINE_MUTATIONS,
               "formal/diff/test_potion_baseline_diff.py", survivors)
     run_group(BANK_EXPANSION_TIMING_SRC, BANK_EXPANSION_TIMING_MUTATIONS,
