@@ -194,6 +194,7 @@ class TestNoCombatDeadlock:
         # only active filters are xp>0 and the level+2 suicide guard.
         catalog: list[tuple[str, int]] = [(f"m{lvl}", lvl) for lvl in range(1, 13)]
 
+        checked = 0
         for char_level in range(1, 11):
             gd = GameData()
             gd._monster_level = {code: lvl for code, lvl in catalog}
@@ -214,18 +215,22 @@ class TestNoCombatDeadlock:
                 char_level,
                 catalog,
                 is_winnable=lambda _code: True,
-                xp_positive=lambda code, cl=char_level: gd.xp_per_kill(code, cl) > 0,
+                xp_positive=lambda code, cl=char_level, gd=gd: gd.xp_per_kill(code, cl) > 0,
             )
             if target is None:
                 continue
             locations = frozenset({(0, gd._monster_level[target])})
             fight = FightAction(monster_code=target, locations=locations)
+            checked += 1
             assert fight.is_applicable(state, gd), (
                 f"Picker-applicability divergence at char_level={char_level}: "
                 f"picker returned {target!r} (monster_level="
                 f"{gd._monster_level[target]}) but FightAction.is_applicable "
                 f"returned False. Picker and is_applicable gates must stay aligned."
             )
+        assert checked >= 1, (
+            "property test exercised no targets — picker returned None for every level"
+        )
 
     def test_fight_applicable_when_winnable_despite_low_gear_level(self) -> None:
         """Regression: a level-3 char in all level-1 gear must be able to fight a

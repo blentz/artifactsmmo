@@ -102,15 +102,6 @@ class TestSatisfaction:
         assert goal.is_satisfied(make_state(xp=100)) is False
 
 
-def test_grind_satisfied_on_xp_gain_even_if_loadout_suboptimal():
-    """Satisfaction = XP gained. A non-optimal loadout (copper_dagger equipped
-    while wooden_staff scores higher vs green_slime) must NOT keep the goal
-    perpetually unsatisfied (the fb929887 coupling deadlock)."""
-    goal = GrindCharacterXPGoal("green_slime", initial_xp=14)
-    state = make_state(level=3, xp=24, equipment={"weapon_slot": "copper_dagger"})
-    assert goal.is_satisfied(state) is True
-
-
 class TestRelevantActions:
     def test_only_target_monster_fights(self):
         goal = GrindCharacterXPGoal("chicken")
@@ -134,7 +125,7 @@ class TestRepr:
         assert repr(GrindCharacterXPGoal("yellow_slime")) == "GrindCharacterXP(yellow_slime)"
 
 
-class TestLoadoutPrerequisite:
+class TestXpSatisfaction:
     def test_satisfied_when_xp_up(self):
         state = make_state(xp=200, task_code=None, level=1,
                            equipment={"weapon_slot": "sword"}, inventory={})
@@ -152,6 +143,14 @@ class TestLoadoutPrerequisite:
         goal = GrindCharacterXPGoal("chicken", initial_xp=100)
         assert goal.is_satisfied(make_state(xp=200)) is True
         assert goal.is_satisfied(make_state(xp=50)) is False
+
+    def test_grind_satisfied_on_xp_gain_even_if_loadout_suboptimal(self):
+        """Satisfaction = XP gained. A non-optimal loadout (copper_dagger equipped
+        while wooden_staff scores higher vs green_slime) must NOT keep the goal
+        perpetually unsatisfied (the fb929887 coupling deadlock)."""
+        goal = GrindCharacterXPGoal("green_slime", initial_xp=14)
+        state = make_state(level=3, xp=24, equipment={"weapon_slot": "copper_dagger"})
+        assert goal.is_satisfied(state) is True
 
 
 def _combat_gd() -> GameData:

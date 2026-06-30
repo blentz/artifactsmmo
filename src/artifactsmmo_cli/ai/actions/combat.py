@@ -52,21 +52,18 @@ class FightAction(Action):
         if not (state.hp_percent > _MIN_FIGHT_HP_FRACTION and monster_level <= state.level + 2):
             return False
         # LOWER level gate: xp_per_kill > 0, NOT the old hard window
-        # `monster_level >= max(1, level-1)`. The documented XP curve zeroes
-        # out at char_level - monster_level >= 10, so a monster too far below
-        # serves no leveling objective and is naturally excluded — while a
-        # slightly-below monster stays fightable. The old window caused the P0
-        # no-combat deadlock (2026-06-09): at level 4 the only stat-winnable
-        # monsters (chicken L1, yellow_slime L2) were below max(1,4-1)=3, so
-        # neither the picker nor this gate ever admitted a fight. The UPPER
-        # bound (level+2 suicide guard) stays. Lean lockstep:
-        # formal/Formal/ActionApplicability.lean (xpPositive gate).
-        # Capability is decided upstream by is_winnable (predict_win); this gate
-        # stays structural. The XP curve zeroes out at char_level - monster_level
-        # >= 10, so xp_per_kill > 0 is the leveling-relevant lower bound. The old
-        # `best_eq >= monster_level - 1` term conflated GEAR LEVEL with capability
-        # and contradicted is_winnable (deadlock 2026-06-29: L3 char, level-1 gear,
-        # winnable green_slime L4 rejected). Removed; suicide upper bound kept above.
+        # `monster_level >= max(1, level-1)`. The XP curve zeroes out at
+        # char_level - monster_level >= 10, so a monster too far below serves no
+        # leveling objective and is naturally excluded — while a slightly-below
+        # monster stays fightable. The old window caused the P0 no-combat deadlock
+        # (2026-06-09): at level 4 the only stat-winnable monsters (chicken L1,
+        # yellow_slime L2) were below max(1,4-1)=3, so neither the picker nor this
+        # gate ever admitted a fight. The old `best_eq >= monster_level - 1` term
+        # conflated GEAR LEVEL with capability and contradicted is_winnable (deadlock
+        # 2026-06-29: L3 char, level-1 gear, winnable green_slime L4 rejected). Both
+        # removed; UPPER bound (level+2 suicide guard) stays. Capability is decided
+        # upstream by is_winnable (predict_win); this gate stays structural.
+        # Lean lockstep: formal/Formal/ActionApplicability.lean (xpPositive gate).
         return game_data.xp_per_kill(self.monster_code, state.level) > 0
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
@@ -118,8 +115,7 @@ class FightAction(Action):
         # Per-slot comparison: pick_loadout returns every slot (including None
         # placeholders), state.equipment only carries filled slots. Direct
         # dict-equality always disagrees on shape. Match the per-slot pattern
-        # used in GrindCharacterXPGoal._loadout_optimal and
-        # OptimizeLoadoutAction._swap_plan.
+        # used in OptimizeLoadoutAction._swap_plan.
         optimal = pick_loadout(
             Combat(game_data.monster_attack(self.monster_code),
                    game_data.monster_resistance(self.monster_code)),
