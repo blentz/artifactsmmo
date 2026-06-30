@@ -54,6 +54,7 @@ SERVABLE_FILTER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "serv
 TASK_DECISION_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_decision_core.py"
 OBJECTIVE_COMPLETION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "objective_completion.py"
 LOW_YIELD_BOUNDARY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "low_yield_boundary.py"
+OBJECTIVE_STEP_FIGHT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "objective_step_fight_core.py"
 STRATEGY_BLEND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "strategy_blend.py"
 DECIDE_KEY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "decide_key.py"
 CYCLES_FOR_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "cycles_for_progress_core.py"
@@ -1659,6 +1660,45 @@ LOW_YIELD_MUTATIONS = [
      ""),
 ]
 
+# objective_step_fight_core (objectiveStepIsFight perception binding) mutations.
+# Each perturbs the ReachCharLevel Fight-routing predicate so it diverges from the
+# proved Lean oracle Formal.ObjectiveStepFight.objectiveStepIsFightPure; killed by
+# formal/diff/test_objective_step_is_fight_diff.py (250-example property over random
+# inputs + the gap == 4 / gap == 5 boundary tests).
+#
+# NOTE: `task_total > 0` carries NO independent mutation — it is logically implied
+# by `task_progress < task_total` over Nat (progress < total ⇒ total > 0), so any
+# mutation of it would survive. Mutating it would be a dishonest (un-killable)
+# anchor; the spec honestly does not pin a redundant clause.
+OBJECTIVE_STEP_FIGHT_MUTATIONS = [
+    # gap boundary: > 4 -> >= 4. At gap == 4 (bootstrap) the rule fires; >= 4 makes
+    # it defer. The gap==4 boundary test pins this.
+    ("objective_step_fight: gap > 4 -> >= 4 (boundary flip)",
+     "return not (bootstrap_gap > 4 and items_task_active)",
+     "return not (bootstrap_gap >= 4 and items_task_active)"),
+    # drop the stand-down inversion: `not (...)` -> `(...)`. Inverts every verdict.
+    ("objective_step_fight: drop the `not` (invert defer)",
+     "return not (bootstrap_gap > 4 and items_task_active)",
+     "return (bootstrap_gap > 4 and items_task_active)"),
+    # items-type equality flip: a non-items task would now trigger the stand-down.
+    ("objective_step_fight: task_type == \"items\" -> !=",
+     'task_type == "items"',
+     'task_type != "items"'),
+    # progress strict `<` -> `<=`: a COMPLETED task (progress == total) would wrongly
+    # count as active and defer. The completed-task case pins this.
+    ("objective_step_fight: task_progress < total -> <=",
+     "and task_progress < task_total",
+     "and task_progress <= task_total"),
+    # reach-char-level gate inversion: would fire for non-ReachCharLevel steps.
+    ("objective_step_fight: invert is_reach_char_level gate",
+     "    if not is_reach_char_level:",
+     "    if is_reach_char_level:"),
+    # combat-monster gate inversion: would claim a fight with no target monster.
+    ("objective_step_fight: invert has_combat_monster gate",
+     "    if not has_combat_monster:",
+     "    if has_combat_monster:"),
+]
+
 
 # strategy_blend mutations -- old strings matched to current strategy_blend.py text.
 STRATEGY_BLEND_MUTATIONS = [
@@ -2171,7 +2211,7 @@ _ALL_SRCS = [
     OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, STUCK_DETECTOR_SRC,
     PRIORITY_BAND_SRC, OWNED_COUNT_SRC, ROOT_PROGRESS_SRC, UPGRADE_SELECTION_SRC, SCALAR_CORE_SRC,
     PLANNER_SRC, ARBITER_SELECT_SRC, TASK_DECISION_CORE_SRC, OBJECTIVE_COMPLETION_SRC,
-    LOW_YIELD_BOUNDARY_SRC, STRATEGY_BLEND_SRC, DECIDE_KEY_SRC,
+    LOW_YIELD_BOUNDARY_SRC, OBJECTIVE_STEP_FIGHT_CORE_SRC, STRATEGY_BLEND_SRC, DECIDE_KEY_SRC,
     CYCLES_FOR_PROGRESS_SRC,
     GATHER_APPLY_SRC,
     GATHER_SELECTION_SRC,
@@ -3974,6 +4014,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_weighted_remaining_diff.py", survivors)
     run_group(LOW_YIELD_BOUNDARY_SRC, LOW_YIELD_MUTATIONS,
               "formal/diff/test_low_yield_cancel_diff.py", survivors)
+    run_group(OBJECTIVE_STEP_FIGHT_CORE_SRC, OBJECTIVE_STEP_FIGHT_MUTATIONS,
+              "formal/diff/test_objective_step_is_fight_diff.py", survivors)
     run_group(STRATEGY_BLEND_SRC, STRATEGY_BLEND_MUTATIONS,
               "formal/diff/test_strategy_blend_diff.py", survivors)
     run_group(DECIDE_KEY_SRC, DECIDE_KEY_MUTATIONS,

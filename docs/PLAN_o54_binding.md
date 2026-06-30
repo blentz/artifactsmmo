@@ -73,8 +73,18 @@ structural (grind_character_xp.py relevant_actions ⊆ {Fight(target), recovery,
 - [x] 1 Python pure core + TDD (objective_step_fight_core.py; 9 tests; wired into live objective_step_goal)
 - [x] 2 Lean def (Formal/ObjectiveStepFight.lean::objectiveStepIsFightPure, core-only)
 - [x] 3 role theorems (fires_iff characterization + 4 safety/liveness roles; axioms ⊆ {propext, Quot.sound}; 4 non-vacuity witnesses)
-- [ ] 4 oracle (runObjectiveStepIsFight in Oracle.lean)  ← NEXT
-- [ ] 5 differential (formal/diff/test_objective_step_is_fight_diff.py)
+- [x] 4 oracle (runObjectiveStepIsFight in Oracle.lean; "objective_step_is_fight" dispatch; oracle exe builds)
+- [x] 5 differential (formal/diff/test_objective_step_is_fight_diff.py; 250-example property + gap=4/5 boundary; live Python ↔ proved-def oracle agree)
 - [x] 6 contract + manifest (Manifest.lean roster + Contracts.lean exact-statement pins; root import; orphan-free)
-- [ ] 7 mutation
-- [ ] 8 adversarial review
+- [x] 7 mutation (6 mutants in mutate.py, all killed; task_total>0 deliberately NOT mutated — implied by progress<total, would survive)
+- [x] 8 adversarial review (tests live fn; domain unrigged; witnesses concrete; not a surrogate)
+
+## Honest residual (follow-on, separate component)
+The binding proves PRODUCTION's Fight-routing predicate == the proved Lean def
+(`objectiveStepIsFightPure`). It does NOT yet prove the liveness State field
+`objectiveStepIsFight` EQUALS that def on derived inputs — the State-field↔predicate
+wiring (a Lean lemma in the liveness namespace + its own differential row) remains.
+The capstone (`FightFairness`/`CombatPersistent`) still consumes the opaque field;
+this phase grounded the production computation that SETS it. Likewise
+`objectiveStepFires` (the broader plannable-step predicate) is a separate future
+binding.
