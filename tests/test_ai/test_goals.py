@@ -80,6 +80,13 @@ class TestRestoreHPGoal:
         state = make_state(hp=70, max_hp=100)  # 70% < 0.75
         assert goal.value(state, make_game_data()) == RestoreHPGoal.CRITICAL_HP_VALUE
 
+    def test_restore_hp_linear_regime_value(self):
+        """At 90% HP (above the 0.75 critical threshold) value returns the linear
+        branch: (1 - 0.90) * 100 = 10.0."""
+        goal = RestoreHPGoal()
+        state = make_state(hp=90, max_hp=100)  # 90% > 0.75 → linear branch
+        assert abs(goal.value(state, make_game_data()) - 10.0) < 1e-9
+
 
 class TestDepositInventoryGoal:
     # Bankable generic items: a game_data with no recipes/consumables/weapons so

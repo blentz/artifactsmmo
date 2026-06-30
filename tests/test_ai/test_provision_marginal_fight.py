@@ -87,8 +87,7 @@ def test_consumable_type_heal_yields_no_plan() -> None:
     goal = ProvisionMarginalFightGoal(target_monster="green_slime",
                                       heal_code="cooked_fish", quantity=40)
     plan = plan_for_goal(goal, state, gd)
-    assert not any(isinstance(a, EquipAction) and a.slot == "utility1_slot"
-                   for a in plan)
+    assert plan == []
 
 
 def test_desired_state_returns_empty_dict() -> None:

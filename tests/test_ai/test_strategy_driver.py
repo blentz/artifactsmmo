@@ -2415,7 +2415,7 @@ def _record_mixed(history: LearningStore, action_repr: str, wins: int, losses: i
         ))
 
 
-def _gd_with_consumable(code: str, hp_restore: int) -> GameData:
+def _gd_with_utility_heal(code: str, hp_restore: int) -> GameData:
     """Utility-slot-equippable heal (type=utility): the only kind best_held_heal
     can provision into a utility slot."""
     gd = GameData()
@@ -2433,9 +2433,10 @@ def _gd_with_food(code: str, hp_restore: int) -> GameData:
     return gd
 
 
+# Both tests below rely on make_state's default empty utility slots (no explicit equipment kwarg).
 def test_marginal_target_routes_to_provision_goal(tmp_path):
     state = make_state(level=3, inventory={"small_health_potion": 100})
-    gd = _gd_with_consumable("small_health_potion", hp_restore=60)
+    gd = _gd_with_utility_heal("small_health_potion", hp_restore=60)
     history = LearningStore(db_path=str(tmp_path / "l.db"), character="r")
     _record_mixed(history, "Fight(green_slime)", wins=8, losses=2)  # 80% < 0.95
     ctx = _ctx(combat_monster="green_slime")
@@ -2446,7 +2447,7 @@ def test_marginal_target_routes_to_provision_goal(tmp_path):
 
 def test_reliable_target_still_grinds(tmp_path):
     state = make_state(level=3, inventory={"small_health_potion": 100})
-    gd = _gd_with_consumable("small_health_potion", hp_restore=60)
+    gd = _gd_with_utility_heal("small_health_potion", hp_restore=60)
     history = LearningStore(db_path=str(tmp_path / "l.db"), character="r")
     _record_mixed(history, "Fight(green_slime)", wins=20, losses=0)  # 100% >= 0.95
     ctx = _ctx(combat_monster="green_slime")
@@ -2467,7 +2468,7 @@ def test_utility_slot_already_filled_routes_to_grind(tmp_path) -> None:
     }
     state = make_state(level=3, inventory={"small_health_potion": 100},
                        equipment=equipment)
-    gd = _gd_with_consumable("small_health_potion", hp_restore=60)
+    gd = _gd_with_utility_heal("small_health_potion", hp_restore=60)
     history = LearningStore(db_path=str(tmp_path / "l.db"), character="r")
     _record_mixed(history, "Fight(green_slime)", wins=8, losses=2)  # 80% < 0.95
     ctx = _ctx(combat_monster="green_slime")
@@ -2494,7 +2495,7 @@ def test_marginal_target_with_only_consumable_heal_routes_to_grind(tmp_path) -> 
 def test_no_heal_held_routes_to_grind(tmp_path) -> None:
     """_marginal_provision_goal early-exits when inventory holds no heal."""
     state = make_state(level=3, inventory={})  # no heal on hand
-    gd = _gd_with_consumable("small_health_potion", hp_restore=60)
+    gd = _gd_with_utility_heal("small_health_potion", hp_restore=60)
     history = LearningStore(db_path=str(tmp_path / "l.db"), character="r")
     _record_mixed(history, "Fight(green_slime)", wins=8, losses=2)  # 80% < 0.95
     ctx = _ctx(combat_monster="green_slime")

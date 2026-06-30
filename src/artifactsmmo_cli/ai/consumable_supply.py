@@ -110,8 +110,10 @@ def maintain_consumables_fires(state: WorldState, game_data: GameData,
     SelectionContext); this captures the stock + craftability half so the means
     predicate and the goal share one source of truth.
 
-    desired_stock defaults to HEAL_STOCK_FLOOR so existing callers keep working
-    unchanged; Task 8 passes a higher target for marginal-fight scenarios."""
+    desired_stock defaults to HEAL_STOCK_FLOOR for all production callers today.
+    Per-target stock scaling toward a marginal fight's needed quantity is a
+    planned FOLLOW-UP (see docs/superpowers/specs/2026-06-30-combat-survivability-design.md
+    out-of-scope section); this parameter is the foundation for that extension."""
     if heal_stock(state, game_data) >= heal_stock_target(desired_stock):
         return False
     return best_craftable_heal(state, game_data) is not None
