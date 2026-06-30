@@ -11,8 +11,10 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.consumable_supply import (
     HEAL_STOCK_FLOOR,
     best_craftable_heal,
+    best_held_heal,
     best_held_heal_restore,
     heal_stock,
+    heal_stock_target,
     maintain_consumables_fires,
 )
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -212,3 +214,79 @@ def test_goal_relevant_actions_includes_craftable_intermediate():
 
 def test_goal_repr():
     assert repr(MaintainConsumablesGoal(game_data=_gd())) == "MaintainConsumables"
+
+
+# ── best_held_heal (returns code, not value) ─────────────────────────────────
+
+def _gd_with_craftable_heal(code: str, *, hp_restore: int,
+                             craft_skill: str = "cooking") -> GameData:
+    """Minimal GameData where `code` is a craftable heal consumable."""
+    gd = GameData()
+    gd._item_stats = {
+        code: ItemStats(code=code, level=1, type_="consumable",
+                        hp_restore=hp_restore, crafting_skill=craft_skill,
+                        crafting_level=1),
+    }
+    gd._crafting_recipes = {code: {"raw_material": 1}}
+    gd._resource_drops = {}
+    gd._resource_locations = {}
+    gd._workshop_locations = {craft_skill: (0, 0)}
+    return gd
+
+
+def test_best_held_heal_returns_code_of_strongest():
+    gd = _gd()
+    # cooked_fish (50) beats apple (20)
+    s = _state(inventory={"apple": 2, "cooked_fish": 1})
+    assert best_held_heal(s, gd) == "cooked_fish"
+
+
+def test_best_held_heal_returns_none_when_no_heals_held():
+    gd = _gd()
+    assert best_held_heal(_state(inventory={}), gd) is None
+
+
+def test_best_held_heal_skips_zero_qty():
+    gd = _gd()
+    s = _state(inventory={"cooked_fish": 0, "apple": 1})
+    assert best_held_heal(s, gd) == "apple"
+
+
+def test_best_held_heal_tiebreak_on_smallest_code():
+    gd = _gd()
+    # apple and zfood both hp_restore=20 → "apple" wins lexically
+    gd._item_stats["zfood"] = ItemStats(code="zfood", level=1, type_="consumable", hp_restore=20)
+    s = _state(inventory={"zfood": 1, "apple": 1})
+    assert best_held_heal(s, gd) == "apple"
+
+
+# ── heal_stock_target clamp ───────────────────────────────────────────────────
+
+def test_heal_stock_target_clamps_to_floor():
+    assert heal_stock_target(0) == HEAL_STOCK_FLOOR
+    assert heal_stock_target(1) == HEAL_STOCK_FLOOR
+
+
+def test_heal_stock_target_clamps_to_max_stack():
+    assert heal_stock_target(200) == 100
+
+
+def test_heal_stock_target_passthrough_in_range():
+    assert heal_stock_target(50) == 50
+
+
+# ── maintain_consumables_fires with desired_stock ─────────────────────────────
+
+def test_maintain_fires_until_desired_stack_when_marginal_target_demands_more():
+    # holds 8 heals; a marginal target wants 50 -> still under-stocked -> fires
+    state = _state(inventory={"small_health_potion": 8},
+                   skills={"alchemy": 5})
+    gd = _gd_with_craftable_heal("small_health_potion", hp_restore=60, craft_skill="alchemy")
+    assert maintain_consumables_fires(state, gd, desired_stock=50) is True
+
+
+def test_maintain_does_not_fire_when_held_meets_desired():
+    state = _state(inventory={"small_health_potion": 50},
+                   skills={"alchemy": 5})
+    gd = _gd_with_craftable_heal("small_health_potion", hp_restore=60, craft_skill="alchemy")
+    assert maintain_consumables_fires(state, gd, desired_stock=50) is False
