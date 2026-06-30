@@ -289,14 +289,18 @@ class TestArbiterSelection:
             decision, player.state, player.game_data, actions, player._selection_context())
         assert goal is not None and repr(goal) == "CompleteTask"
 
-    def test_idle_no_task_selects_accept_task(self):
+    def test_idle_no_task_winnable_monsters_selects_xp_grind(self):
+        """Step goal (GrindCharacterXP) outranks discretionary AcceptTask when
+        winnable monsters exist. The old `best_eq >= monster_level-1` gear gate
+        used to block cow (L2, best_eq=0) so AcceptTask won; after that gate was
+        removed (2026-06-29) the step goal correctly fires first."""
         player = self._with_strategy(make_game_data_mock(), level=3,
                                      task_type=None, task_code=None)
         decision = player._strategy.decide(player.state, player.game_data)
         actions = player._build_actions()
         goal, _plan, _tried = player._arbiter.select(
             decision, player.state, player.game_data, actions, player._selection_context())
-        assert goal is not None and repr(goal) == "AcceptTask"
+        assert goal is not None and repr(goal) == "GrindCharacterXP(cow)"
 
 
 def _winnable_gd(monsters: dict[str, dict]) -> GameData:

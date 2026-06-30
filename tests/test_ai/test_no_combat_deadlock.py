@@ -177,3 +177,33 @@ class TestNoCombatDeadlock:
         gd._monster_locations = {"sheep": [(0, 3)]}
         player = _player(gd, _trace_state())
         assert player._pick_winnable_monster() is None
+
+    def test_fight_applicable_when_winnable_despite_low_gear_level(self) -> None:
+        """Regression: a level-3 char in all level-1 gear must be able to fight a
+        winnable level-4 monster (green_slime). The old `best_eq >= monster_level-1`
+        gate rejected it, deadlocking GrindCharacterXP -> plan_len=0."""
+        gd = GameData()
+        gd._monster_level = {"green_slime": 4}
+        gd._monster_hp = {"green_slime": 100}
+        gd._monster_attack = {"green_slime": {"water": 5}}
+        gd._monster_resistance = {"green_slime": {}}
+        gd._monster_critical_strike = {"green_slime": 0}
+        gd._monster_initiative = {"green_slime": 0}
+        gd._monster_locations = {"green_slime": [(0, -1)]}
+        gd._item_stats = {
+            "copper_dagger": ItemStats(
+                code="copper_dagger", level=1, type_="weapon", attack={"air": 3},
+            ),
+        }
+        base = make_state()
+        equipment = dict(base.equipment)
+        equipment["weapon_slot"] = "copper_dagger"
+        state = make_state(
+            level=3, hp=160, max_hp=160,
+            inventory={}, inventory_max=100,
+            equipment=equipment,
+        )
+        fight = FightAction(monster_code="green_slime", locations=frozenset({(0, -1)}))
+        # Preconditions: xp gate passes, only the gear-level gate can block.
+        assert gd.xp_per_kill("green_slime", state.level) > 0
+        assert fight.is_applicable(state, gd) is True

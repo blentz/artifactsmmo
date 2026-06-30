@@ -61,20 +61,13 @@ class FightAction(Action):
         # neither the picker nor this gate ever admitted a fight. The UPPER
         # bound (level+2 suicide guard) stays. Lean lockstep:
         # formal/Formal/ActionApplicability.lean (xpPositive gate).
-        if game_data.xp_per_kill(self.monster_code, state.level) <= 0:
-            return False
-        # NOTE: deliberately a CHEAP level+gear pre-filter, not the full predict_win
-        # verdict. predict_win evaluates the best ON-HAND loadout, which makes a
-        # fight applicable before a beneficial weapon swap and lets the planner
-        # fight with a suboptimal loadout (defeating LOADOUT_PENALTY's swap-first
-        # ordering). The authoritative is_winnable verdict is applied upstream at
-        # target selection / feasibility / the prerequisite graph.
-        best_eq = max(
-            (s.level for code in state.equipment.values()
-             if code and (s := game_data.item_stats(code)) is not None),
-            default=0,
-        )
-        return best_eq >= monster_level - 1
+        # Capability is decided upstream by is_winnable (predict_win); this gate
+        # stays structural. The XP curve zeroes out at char_level - monster_level
+        # >= 10, so xp_per_kill > 0 is the leveling-relevant lower bound. The old
+        # `best_eq >= monster_level - 1` term conflated GEAR LEVEL with capability
+        # and contradicted is_winnable (deadlock 2026-06-29: L3 char, level-1 gear,
+        # winnable green_slime L4 rejected). Removed; suicide upper bound kept above.
+        return game_data.xp_per_kill(self.monster_code, state.level) > 0
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         dest = nearest_or_error(state.x, state.y, self.locations, "combat")
