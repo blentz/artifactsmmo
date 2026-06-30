@@ -1,5 +1,6 @@
 """Tests for GOAP actions — pure apply() functions, no mocking needed."""
 
+import dataclasses
 import os
 import tempfile
 from datetime import datetime, timedelta, timezone
@@ -603,6 +604,11 @@ class TestCraftAction:
         assert new_state.projected_skill_xp_delta["weaponcrafting"] == 6
 
 
+def _gd_with_utility_heal(code: str, hp_restore: int) -> GameData:
+    stats = ItemStats(code=code, level=1, type_="utility", hp_restore=hp_restore)
+    return make_game_data(item_stats={code: stats})
+
+
 class TestEquipAction:
     def test_applicable_with_item_in_inventory(self):
         action = EquipAction(code="copper_dagger", slot="weapon_slot")
@@ -704,6 +710,22 @@ class TestEquipAction:
     def test_repr_default_quantity(self):
         action = EquipAction(code="copper_dagger", slot="weapon_slot")
         assert repr(action) == "Equip(copper_dagger->weapon_slot)"
+
+    def test_equip_utility_sets_quantity_on_empty_slot(self):
+        state = make_state(inventory={"small_health_potion": 50}, level=1,
+                           equipment={"utility1_slot": None})
+        gd = _gd_with_utility_heal("small_health_potion", hp_restore=60)
+        out = EquipAction("small_health_potion", "utility1_slot", quantity=30).apply(state, gd)
+        assert out.equipment["utility1_slot"] == "small_health_potion"
+        assert out.utility1_slot_quantity == 30
+
+    def test_equip_utility_adds_to_existing_same_code_stack(self):
+        state = make_state(inventory={"small_health_potion": 50}, level=1,
+                           equipment={"utility1_slot": "small_health_potion"})
+        state = dataclasses.replace(state, utility1_slot_quantity=20)
+        gd = _gd_with_utility_heal("small_health_potion", hp_restore=60)
+        out = EquipAction("small_health_potion", "utility1_slot", quantity=30).apply(state, gd)
+        assert out.utility1_slot_quantity == 50  # 20 + 30
 
 
 def _consumable_stats(code: str = "cooked_chicken", hp_restore: int = 80) -> dict[str, ItemStats]:
