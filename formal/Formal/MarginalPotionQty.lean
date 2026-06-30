@@ -14,13 +14,16 @@ Win-rate is an integer permille so the decision is float-free; this Nat mirror i
 locked to the Python bit-for-bit by `formal/diff/test_marginal_potion_qty_diff.py`
 through the `marginal_potion_qty` oracle kind.
 
-NOTE on `qty_le_max`'s `1 ≤ maxStack` hypothesis: the Python core (and this
-mirror) floor `desired` at 1 (`max 1 ...`) so a marginal fight always provisions
-at least one potion. When `maxStack = 0` ("no stack exists") that floor makes the
-result 1 > 0 = maxStack, so the bound `qty ≤ maxStack` only holds for a real
-stack (`maxStack ≥ 1`). `maxStack` is the per-item server stack size, always ≥ 1
-in live data, so the hypothesis is vacuously satisfied at every call site; it is
-stated explicitly here rather than papered over.
+NOTE on `qty_le_max` (unconditional): the else branch is a plain `ceilDiv`, with
+no floor or clamp. The branch guard gives `fullStackPermille < winPermille <
+thresholdPermille`, so `thresholdPermille - winPermille < thresholdPermille -
+fullStackPermille` (the denominator); hence the ceil of
+`(threshold-win)·maxStack / (threshold-full)` is `≤ maxStack` already. A floor at
+1 (the old `max 1 ...`) was the ONLY thing that ever produced a value `> maxStack`
+— it returned 1 at `maxStack = 0` — so deleting it makes the bound `qty ≤ maxStack`
+hold for all inputs with no hypothesis. Behavior is unchanged for `maxStack ≥ 1`
+(always true in live data — production uses 100), where the ceil is already `≥ 1`;
+at the degenerate `maxStack = 0` the ceil is 0 = maxStack.
 -/
 
 namespace Formal.MarginalPotionQty
@@ -36,12 +39,14 @@ def marginalPotionQty
   else
     let desired :=
       if winPermille ≤ fullStackPermille then maxStack
-      else max 1 (ceilDiv ((thresholdPermille - winPermille) * maxStack)
-                          (thresholdPermille - fullStackPermille))
+      else ceilDiv ((thresholdPermille - winPermille) * maxStack)
+                   (thresholdPermille - fullStackPermille)
     min desired heldHealQty
 
-/-- Bounded above by the full stack (for a real stack `maxStack ≥ 1`). -/
-theorem qty_le_max (s w ms tp fp mx : Nat) (sf : Bool) (h : Nat) (hmx : 1 ≤ mx) :
+/-- Bounded above by the full stack, unconditionally: the else branch is a plain
+    `ceilDiv` whose guard (`fp < w < tp`) forces `ceilDiv ≤ maxStack`, so no floor
+    or clamp is needed and the bound holds even at `maxStack = 0`. -/
+theorem qty_le_max (s w ms tp fp mx : Nat) (sf : Bool) (h : Nat) :
     marginalPotionQty s w ms tp fp mx sf h ≤ mx := by
   unfold marginalPotionQty
   split
@@ -57,8 +62,6 @@ theorem qty_le_max (s w ms tp fp mx : Nat) (sf : Bool) (h : Nat) (hmx : 1 ≤ mx
         simp only [Bool.or_eq_true, decide_eq_true_eq, not_or] at hc2
         obtain ⟨_, htw⟩ := hc2
         have hb : 0 < tp - fp := by omega
-        apply Nat.max_le.2
-        refine ⟨hmx, ?_⟩
         unfold ceilDiv
         -- ((tp - w) * mx + (tp - fp) - 1) / (tp - fp) ≤ mx
         rw [Nat.div_le_iff_le_mul_add_pred hb]

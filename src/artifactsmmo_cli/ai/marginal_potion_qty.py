@@ -30,9 +30,12 @@ def marginal_potion_qty_pure(
         desired = max_stack
     else:
         # fraction = (threshold - win) / (threshold - full), rises as win falls.
-        # desired = ceil(fraction * max_stack), floored at 1. Integer ceil:
-        # (a + b - 1) // b for a, b > 0.
+        # desired = ceil(fraction * max_stack). Integer ceil: (a + b - 1) // b for
+        # a, b > 0. The else-branch guard gives full < win < threshold, so
+        # threshold-win < denominator and thus 0 <= ceil <= max_stack already --
+        # no floor or clamp is needed and the bound stays <= max_stack
+        # unconditionally (ceil >= 1 for max_stack >= 1; ceil == 0 at max_stack == 0).
         numerator = (threshold_permille - win_permille) * max_stack
         denominator = threshold_permille - full_stack_permille
-        desired = max(1, (numerator + denominator - 1) // denominator)
+        desired = (numerator + denominator - 1) // denominator
     return min(desired, held_heal_qty)

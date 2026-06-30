@@ -2763,20 +2763,26 @@ CONSUMABLE_SELECTION_MUTATIONS = [
 ]
 
 # marginal_potion_qty mutations -- old strings matched to current
-# marginal_potion_qty.py text. Each perturbs the marginal-fight threshold gate,
-# the full-stack comparator, the floor-at-1, the held clamp, or the integer-ceil
-# so the Python quantity diverges from the Lean `marginalPotionQty` oracle. Killed
-# by formal/diff/test_marginal_potion_qty_diff.py.
+# marginal_potion_qty.py text. Each perturbs the held clamp or the integer-ceil so
+# the Python quantity diverges from the Lean `marginalPotionQty` oracle. Killed by
+# formal/diff/test_marginal_potion_qty_diff.py.
+#
+# RETIRED (provably EQUIVALENT mutants under the corrected unconditional bound --
+# the else branch is now a plain ceilDiv with no `max(1, ...)` floor and no clamp).
+# All three comparator-boundary mutants depended on the deleted floor: it turned the
+# boundary's natural ceil of 0 into 1, and that 0-vs-1 gap was their ONLY kill-vector.
+# With the floor gone the boundary value is 0 in both the kept and mutated branch:
+#   * "threshold compare flip (>= -> >)": differs only at win == threshold, where the
+#     fall-through computes ceilDiv((tp-win)*mx, tp-fp) == ceilDiv(0, ..) == 0 == the
+#     not-marginal return. Verified 0 divergences over max_stack 0..120 x held 0..100.
+#   * "full-stack compare flip (<= -> <)": at win == full both branches yield max_stack
+#     (else computes ceilDiv((tp-fp)*mx, tp-fp) == mx exactly), so the flip is a no-op.
+#   * "drop the floor-at-1": the floor was deleted, so there is no line to mutate; it
+#     only ever fired at max_stack==0 (the bug the unconditional bound fixes).
+# Also NOT added: first guard "held_heal_qty <= 0 -> < 0" -- at held==0 the fall-through
+# yields min(desired, 0) == 0 (absorbed by the final held-clamp) and held<0 is outside
+# the Nat/test domain, so it is equivalent for all in-domain inputs.
 MARGINAL_POTION_QTY_MUTATIONS = [
-    ("marginal_potion_qty: threshold compare flip (>= -> >)",
-     "    if samples < min_samples or win_permille >= threshold_permille:",
-     "    if samples < min_samples or win_permille > threshold_permille:"),
-    ("marginal_potion_qty: full-stack compare flip (<= -> <)",
-     "    if win_permille <= full_stack_permille:",
-     "    if win_permille < full_stack_permille:"),
-    ("marginal_potion_qty: drop the floor-at-1",
-     "        desired = max(1, (numerator + denominator - 1) // denominator)",
-     "        desired = (numerator + denominator - 1) // denominator"),
     ("marginal_potion_qty: drop held clamp",
      "    return min(desired, held_heal_qty)",
      "    return desired"),
