@@ -565,47 +565,80 @@ A single-purpose goal: when the combat target is marginal and a utility slot lac
 - Create: `tests/test_ai/test_provision_marginal_fight.py`
 
 **Interfaces:**
-- Consumes: `marginal_potion_qty_pure` (Task 4); `consumable_supply.best_held_heal` (strongest held heal code — if it does not exist, add a one-line helper there reusing the `hp_restore` scan); `EquipAction` (Task 3); thresholds constants (Task 7 adds `MARGINAL_WINRATE_THRESHOLD`, `FULL_STACK_WINRATE`, `UTILITY_SLOT_MAX_STACK`).
-- Produces: `ProvisionMarginalFightGoal(target_monster: str)`.
+- Consumes: `EquipAction` (Task 3, with the `quantity` field).
+- Produces: `ProvisionMarginalFightGoal(target_monster: str, heal_code: str, quantity: int)`. The caller (Task 8 glue) computes `heal_code` (strongest held heal) and `quantity` (from `marginal_potion_qty_pure`) and only constructs the goal when `quantity >= 1`. The goal CONSTRUCTS `EquipAction(heal_code, "utility1_slot", quantity=quantity)` in `relevant_actions` — it does NOT filter the global action list (the win-rate-scaled quantity must reach the equip; the default-qty=1 actions from `_build_actions` cannot carry it).
 
-- [ ] **Step 1: Write failing tests**
+**Design note — why construct, not filter:** the whole point of Tasks 4-5 is the win-rate-scaled `quantity`. `_build_actions` generates `EquipAction(code, slot)` at the default `quantity=1` and has no win-rate context, so a filter-style `relevant_actions` would only ever equip 1. The goal therefore emits its own `EquipAction` carrying the caller-supplied quantity. The action is applicable because Task 8 clamps `quantity` to held inventory (`marginal_potion_qty_pure` returns `min(desired, held)`).
+
+- [ ] **Step 1: Verify the planner's goal-completion test**
+
+Read `src/artifactsmmo_cli/ai/planner.py` and find how the A* search decides a node satisfies a goal: does it call `goal.is_satisfied(node_state)`, or does it match `goal.desired_state(...)` against the state? Note which, so Step 3's `desired_state` is correct. Also confirm `EquipAction.apply` sets `state.equipment["utility1_slot"] = code` (it does — Task 3) so a planned equip flips `is_satisfied` to True. Record the finding in your report.
+
+- [ ] **Step 2: Write failing tests**
 
 ```python
-from artifactsmmo_cli.ai.goals.provision_marginal_fight import ProvisionMarginalFightGoal
+from artifactsmmo_cli.ai.actions.equip import EquipAction
+from artifactsmmo_cli.ai.goals.provision_marginal_fight import (
+    ProvisionMarginalFightGoal, PROVISION_MARGINAL_VALUE,
+)
+
+def _goal():
+    return ProvisionMarginalFightGoal(target_monster="green_slime",
+                                      heal_code="small_health_potion", quantity=40)
 
 def test_satisfied_when_a_utility_slot_holds_a_heal():
-    goal = ProvisionMarginalFightGoal(target_monster="green_slime")
     state = make_state(equipment={"utility1_slot": "small_health_potion"})
-    assert goal.is_satisfied(state) is True
+    assert _goal().is_satisfied(state) is True
 
 def test_unsatisfied_when_no_utility_heal():
-    goal = ProvisionMarginalFightGoal(target_monster="green_slime")
     state = make_state(equipment={"utility1_slot": None, "utility2_slot": None})
-    assert goal.is_satisfied(state) is False
+    assert _goal().is_satisfied(state) is False
 
-def test_relevant_actions_keeps_only_equip_of_held_heal_to_utility():
-    goal = ProvisionMarginalFightGoal(target_monster="green_slime")
+def test_value_is_zero_when_satisfied_else_constant():
+    gd = _gd_with_consumable("small_health_potion", hp_restore=60)
+    filled = make_state(equipment={"utility1_slot": "small_health_potion"})
+    empty = make_state(equipment={"utility1_slot": None, "utility2_slot": None})
+    assert _goal().value(filled, gd) == 0.0
+    assert _goal().value(empty, gd) == PROVISION_MARGINAL_VALUE
+
+def test_relevant_actions_constructs_the_scaled_equip():
     state = make_state(inventory={"small_health_potion": 100},
                        equipment={"utility1_slot": None})
     gd = _gd_with_consumable("small_health_potion", hp_restore=60)
-    actions = [EquipAction("small_health_potion", "utility1_slot", quantity=50),
-               EquipAction("copper_helmet", "helmet_slot")]
-    kept = goal.relevant_actions(actions, state, gd)
-    assert all(a.slot.startswith("utility") for a in kept)
-    assert all(a.code == "small_health_potion" for a in kept)
+    # passed actions are ignored — the goal emits its own quantity-bearing equip
+    out = _goal().relevant_actions([EquipAction("copper_helmet", "helmet_slot")], state, gd)
+    assert len(out) == 1
+    a = out[0]
+    assert isinstance(a, EquipAction)
+    assert (a.code, a.slot, a.quantity) == ("small_health_potion", "utility1_slot", 40)
+
+def test_goal_plans_the_equip_end_to_end():
+    """Integration: the goal must actually PLAN its equip (verifies desired_state /
+    is_satisfied wiring against the real planner)."""
+    state = make_state(level=5, inventory={"small_health_potion": 100},
+                       equipment={"utility1_slot": None, "utility2_slot": None})
+    gd = _gd_with_consumable("small_health_potion", hp_restore=60, level=1)
+    goal = _goal()
+    plan = plan_for_goal(goal, state, gd)   # use the repo's planner entrypoint
+    assert any(isinstance(a, EquipAction) and a.slot == "utility1_slot"
+               and a.quantity == 40 for a in plan)
 ```
 
-- [ ] **Step 2: Run — expect FAIL**
+(Match the repo's real fixture + planner-entrypoint helper names — `grep -rn "def plan_for_goal\|planner\|astar\|find_plan" src/artifactsmmo_cli/ai/planner.py tests/test_ai/` and reuse what the existing goal tests use to drive the planner.)
+
+- [ ] **Step 3: Run — expect FAIL**
 
 Run: `uv run pytest tests/test_ai/test_provision_marginal_fight.py -q --no-cov`
 Expected: FAIL — module missing.
 
-- [ ] **Step 3: Implement the goal**
+- [ ] **Step 4: Implement the goal**
 
 ```python
-"""ProvisionMarginalFightGoal: equip win-rate-scaled health potions before a
-marginal fight. Satisfied once a utility slot holds a heal; re-fires after the
-server consumes the stack (observed via per-cycle state refresh)."""
+"""ProvisionMarginalFightGoal: equip a win-rate-scaled stack of health potions into
+a utility slot before a marginal fight. The heal code and quantity are chosen by the
+caller (strategy_driver glue) from the proven `marginal_potion_qty_pure` core and the
+strongest held heal. Satisfied once a utility slot holds a heal; re-fires after the
+server consumes the stack to empty (observed via per-cycle state refresh)."""
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.equip import EquipAction
@@ -618,14 +651,17 @@ from artifactsmmo_cli.ai.world_state import WorldState
 # fight, below survival/RestoreHP (110) so healing still preempts.
 PROVISION_MARGINAL_VALUE = 50.0
 
+_TARGET_SLOT = "utility1_slot"
 _UTILITY_SLOTS = ("utility1_slot", "utility2_slot")
 
 
 class ProvisionMarginalFightGoal(Goal):
-    """Equip potions into a utility slot for a marginal combat target."""
+    """Equip `quantity` of `heal_code` into a utility slot for a marginal target."""
 
-    def __init__(self, target_monster: str) -> None:
+    def __init__(self, target_monster: str, heal_code: str, quantity: int) -> None:
         self._target_monster = target_monster
+        self._heal_code = heal_code
+        self._quantity = quantity
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
@@ -635,43 +671,45 @@ class ProvisionMarginalFightGoal(Goal):
         return any(state.equipment.get(slot) is not None for slot in _UTILITY_SLOTS)
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
-        return {"utility_slot_filled": True}
+        # One-action plan; the planner terminates on is_satisfied after the equip
+        # flips equipment[utility1_slot]. Use the form Step 1 confirmed the planner
+        # honors (return {} if it goal-tests via is_satisfied).
+        return {}
 
     def relevant_actions(self, actions: list[Action], state: WorldState,
                          game_data: GameData) -> list[Action]:
-        result: list[Action] = []
-        for action in actions:
-            if (isinstance(action, EquipAction)
-                    and action.slot in _UTILITY_SLOTS
-                    and game_data.item_stats(action.code) is not None
-                    and game_data.item_stats(action.code).hp_restore > 0):
-                result.append(action)
-        return result
+        return [EquipAction(code=self._heal_code, slot=_TARGET_SLOT,
+                            quantity=self._quantity)]
 
     def serialize(self) -> dict[str, object]:
         return {"type": "ProvisionMarginalFightGoal",
-                "target_monster": self._target_monster}
+                "target_monster": self._target_monster,
+                "heal_code": self._heal_code,
+                "quantity": self._quantity}
 
     def __repr__(self) -> str:
-        return f"ProvisionMarginalFight({self._target_monster})"
+        return (f"ProvisionMarginalFight({self._target_monster},"
+                f"{self._heal_code}x{self._quantity})")
 ```
 
-(If `desired_state` needs to satisfy the planner's projection, verify `EquipAction.apply` sets `equipment[utility1_slot]`; the planner reaches `is_satisfied` via that. If `WorldState` has no `utility_slot_filled` key, target the concrete slot instead — return `{}` and rely on `is_satisfied`; confirm the arbiter treats a satisfied-after-apply plan as valid, matching `RestoreHPGoal` which targets `{"hp": max_hp}`.)
+If Step 1 found the planner goal-tests via `desired_state` matching (not `is_satisfied`), adjust `desired_state` to target the concrete slot in whatever shape the planner matches (mirror the closest existing goal). The Step-2 integration test is the proof it works.
 
-- [ ] **Step 4: Run — expect PASS**
+- [ ] **Step 5: Run — expect PASS**
 
 Run: `uv run pytest tests/test_ai/test_provision_marginal_fight.py -q --no-cov`
-Expected: PASS.
+Expected: PASS (incl. the end-to-end planning test). Then run the full suite once.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add src/artifactsmmo_cli/ai/goals/provision_marginal_fight.py tests/test_ai/test_provision_marginal_fight.py src/artifactsmmo_cli/ai/consumable_supply.py
+git add src/artifactsmmo_cli/ai/goals/provision_marginal_fight.py tests/test_ai/test_provision_marginal_fight.py
 git commit -m "$(cat <<'EOF'
-feat(combat): ProvisionMarginalFightGoal equips potions before marginal fights
+feat(combat): ProvisionMarginalFightGoal equips a scaled potion stack
 
-Single-purpose goal: equip the strongest held heal into a utility slot; satisfied
-once a slot holds a heal, re-fires after mid-fight consumption. Value 50 (above the
+Single-purpose goal carrying caller-chosen heal_code + win-rate-scaled quantity; its
+relevant_actions CONSTRUCTS EquipAction(heal, utility1, quantity) so the scaled count
+reaches the equip (a filter over default-qty=1 actions could not). Satisfied once a
+utility slot holds a heal; re-fires after mid-fight consumption. Value 50 (above the
 grind, below RestoreHP).
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
@@ -689,7 +727,26 @@ EOF
 - Test: `tests/test_ai/test_consumable_supply.py` (`grep -rl "heal_stock\|HEAL_STOCK_FLOOR" tests/`)
 
 **Interfaces:**
-- Produces: `MARGINAL_WINRATE_THRESHOLD = 0.95`, `FULL_STACK_WINRATE = 0.50`, `UTILITY_SLOT_MAX_STACK = 100` in `thresholds.py`. `consumable_supply.heal_stock_target(state, game_data, desired: int) -> int` returning `clamp(desired, HEAL_STOCK_FLOOR, UTILITY_SLOT_MAX_STACK)`; `maintain_consumables_fires` uses it.
+- Produces: `MARGINAL_WINRATE_THRESHOLD = 0.95`, `FULL_STACK_WINRATE = 0.50`, `UTILITY_SLOT_MAX_STACK = 100` in `thresholds.py`. `consumable_supply.heal_stock_target(desired: int) -> int` returning `clamp(desired, HEAL_STOCK_FLOOR, UTILITY_SLOT_MAX_STACK)`; `maintain_consumables_fires` uses it. Also `consumable_supply.best_held_heal(state, game_data) -> str | None` — the held inventory item code with the highest `hp_restore` (None when none held); Task 8 consumes it. This complements the existing `best_held_heal_restore` (which returns the value, not the code) — reuse the same `hp_restore` scan; deterministic tiebreak by code.
+
+- [ ] **Step 0: Add `best_held_heal`**
+
+```python
+def best_held_heal(state: WorldState, game_data: GameData) -> str | None:
+    """Held item code with the highest hp_restore (None if no heal held).
+    Deterministic: ties break on the lexically smallest code."""
+    best_code: str | None = None
+    best_restore = 0
+    for code in sorted(state.inventory):
+        if state.inventory[code] <= 0:
+            continue
+        stats = game_data.item_stats(code)
+        if stats is not None and stats.hp_restore > best_restore:
+            best_code, best_restore = code, stats.hp_restore
+    return best_code
+```
+
+Test it (held strongest among several; None when none held). Stage `consumable_supply.py` + its test in this task's commit.
 
 - [ ] **Step 1: Add the constants**
 
@@ -834,24 +891,28 @@ def _marginal_provision_goal(ctx: SelectionContext, state: WorldState,
         return None
     if any(state.equipment.get(s) is not None for s in ("utility1_slot", "utility2_slot")):
         return None  # already provisioned (or carrying another utility) -> grind
+    heal_code = best_held_heal(state, game_data)
+    if heal_code is None:
+        return None  # no heal held -> fight unprovisioned (never block the grind)
+    held = state.inventory.get(heal_code, 0)
     repr_ = f"Fight({monster})"
     samples = history.sample_count(repr_)
     win_permille = int(history.success_rate(repr_) * 1000)
-    held = heal_stock(state, game_data)
     qty = marginal_potion_qty_pure(
         samples, win_permille, MIN_WIN_SAMPLES,
         int(MARGINAL_WINRATE_THRESHOLD * 1000), int(FULL_STACK_WINRATE * 1000),
         UTILITY_SLOT_MAX_STACK, utility_slot_filled=False, held_heal_qty=held)
     if qty <= 0:
         return None
-    return ProvisionMarginalFightGoal(target_monster=monster)
+    return ProvisionMarginalFightGoal(target_monster=monster,
+                                      heal_code=heal_code, quantity=qty)
 ```
 
 Add imports at the top of `strategy_driver.py`:
 
 ```python
 from artifactsmmo_cli.ai.combat import MIN_WIN_SAMPLES
-from artifactsmmo_cli.ai.consumable_supply import heal_stock
+from artifactsmmo_cli.ai.consumable_supply import best_held_heal
 from artifactsmmo_cli.ai.goals.provision_marginal_fight import ProvisionMarginalFightGoal
 from artifactsmmo_cli.ai.marginal_potion_qty import marginal_potion_qty_pure
 from artifactsmmo_cli.ai.thresholds import (
