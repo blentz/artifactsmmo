@@ -42,6 +42,7 @@ import Formal.TieredSelection
 import Formal.GearLatch
 import Formal.TaskDecision
 import Formal.LowYieldCancel
+import Formal.ObjectiveStepFight
 import Formal.StrategyBlend
 import Formal.DecideKey
 import Formal.ProgressionReserve
@@ -1603,6 +1604,40 @@ example : ∀ (currentXp altXp confidence margin minConfidence : Rat)
         farmSamples altSamples margin minConfidence = true →
     confidence ≥ minConfidence :=
   @Formal.LowYieldCancel.positive_current_fires_implies_confidence
+
+/-! ### ObjectiveStepFight role contracts (O5.4 perception binding). -/
+-- characterization: fires ⇔ ReachCharLevel ∧ combat monster ∧ ¬long-haul-defer.
+example : ∀ (isReachCharLevel hasCombatMonster : Bool)
+    (target level taskTotal taskProgress : Nat) (taskType taskCode : String),
+    Formal.ObjectiveStepFight.objectiveStepIsFightPure isReachCharLevel target level
+        hasCombatMonster taskType taskCode taskTotal taskProgress = true
+      ↔ (isReachCharLevel = true ∧ hasCombatMonster = true ∧
+          ¬ (target - level > 4 ∧
+             Formal.ObjectiveStepFight.itemsTaskActive taskType taskCode taskTotal taskProgress)) :=
+  @Formal.ObjectiveStepFight.fires_iff
+-- safety: not a ReachCharLevel step ⇒ never Fight-led.
+example : ∀ (target level taskTotal taskProgress : Nat)
+    (hasCombatMonster : Bool) (taskType taskCode : String),
+    Formal.ObjectiveStepFight.objectiveStepIsFightPure false target level hasCombatMonster
+        taskType taskCode taskTotal taskProgress = false :=
+  @Formal.ObjectiveStepFight.not_reach_char_level_never_fires
+-- safety: no combat monster ⇒ never Fight-led (model cannot claim a fight with no target).
+example : ∀ (target level taskTotal taskProgress : Nat) (taskType taskCode : String),
+    Formal.ObjectiveStepFight.objectiveStepIsFightPure true target level false
+        taskType taskCode taskTotal taskProgress = false :=
+  @Formal.ObjectiveStepFight.no_combat_monster_never_fires
+-- liveness: ReachCharLevel ∧ monster ∧ gap ≤ 4 ⇒ Fight-led, regardless of items task.
+example : ∀ (target level taskTotal taskProgress : Nat) (taskType taskCode : String),
+    target - level ≤ 4 →
+    Formal.ObjectiveStepFight.objectiveStepIsFightPure true target level true
+        taskType taskCode taskTotal taskProgress = true :=
+  @Formal.ObjectiveStepFight.bootstrap_always_fires
+-- release: items task complete ⇒ stand-down lifts ⇒ Fight-led (deferral is temporary).
+example : ∀ (target level taskTotal taskProgress : Nat) (taskType taskCode : String),
+    taskProgress ≥ taskTotal →
+    Formal.ObjectiveStepFight.objectiveStepIsFightPure true target level true
+        taskType taskCode taskTotal taskProgress = true :=
+  @Formal.ObjectiveStepFight.completed_task_fires
 
 /-! ### StrategyBlend role contracts. -/
 

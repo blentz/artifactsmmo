@@ -304,6 +304,13 @@ open Formal.PriorityBand
 #check @Formal.LowYieldCancel.zero_fast_path_fires_with_low_confidence_witness -- zero-fast-path WITNESS (confidence < gate, alt_samples = 1)
 #check @Formal.LowYieldCancel.positive_current_fires_implies_margin            -- soundness: positive currentXp ∧ fires ⇒ altXp ≥ currentXp * margin
 #check @Formal.LowYieldCancel.positive_current_fires_implies_confidence        -- soundness: positive currentXp ∧ fires ⇒ confidence ≥ minConfidence
+-- ObjectiveStepFight required roles (O5.4 perception binding; pure ReachCharLevel
+-- Fight-routing core: src/artifactsmmo_cli/ai/objective_step_fight_core.py):
+#check @Formal.ObjectiveStepFight.fires_iff                       -- characterization: fires ⇔ ReachCharLevel ∧ monster ∧ ¬long-haul-defer
+#check @Formal.ObjectiveStepFight.not_reach_char_level_never_fires -- safety: ¬ReachCharLevel ⇒ never Fight-led
+#check @Formal.ObjectiveStepFight.no_combat_monster_never_fires    -- safety: no combat monster ⇒ never Fight-led
+#check @Formal.ObjectiveStepFight.bootstrap_always_fires           -- liveness: ReachCharLevel ∧ monster ∧ gap ≤ 4 ⇒ Fight-led (breaks no-combat livelock)
+#check @Formal.ObjectiveStepFight.completed_task_fires            -- release: items-task done ⇒ stand-down lifts ⇒ Fight-led
 -- StrategyBlend required roles:
 #check @Formal.StrategyBlend.balancingScaled_ge_min                -- band-lower: result ≥ balanceMinScaled (= 4 * 0.5 = 2)
 #check @Formal.StrategyBlend.balancingScaled_le_max                -- band-upper: result ≤ balanceMaxScaled (= 4 * 2.0 = 8)

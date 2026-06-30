@@ -70,11 +70,11 @@ structural (grind_character_xp.py relevant_actions ⊆ {Fight(target), recovery,
   `objectiveStepIsFight` field to `objectiveStepIsFightRoute` of the modeled inputs).
 
 ## Status
-- [ ] 1 Python pure core + TDD  ← NEXT
-- [ ] 2 Lean def
-- [ ] 3 role theorems
-- [ ] 4 oracle
-- [ ] 5 differential
-- [ ] 6 contract + manifest
+- [x] 1 Python pure core + TDD (objective_step_fight_core.py; 9 tests; wired into live objective_step_goal)
+- [x] 2 Lean def (Formal/ObjectiveStepFight.lean::objectiveStepIsFightPure, core-only)
+- [x] 3 role theorems (fires_iff characterization + 4 safety/liveness roles; axioms ⊆ {propext, Quot.sound}; 4 non-vacuity witnesses)
+- [ ] 4 oracle (runObjectiveStepIsFight in Oracle.lean)  ← NEXT
+- [ ] 5 differential (formal/diff/test_objective_step_is_fight_diff.py)
+- [x] 6 contract + manifest (Manifest.lean roster + Contracts.lean exact-statement pins; root import; orphan-free)
 - [ ] 7 mutation
 - [ ] 8 adversarial review
