@@ -72,6 +72,7 @@ CONSUMABLE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumabl
 MARGINAL_POTION_QTY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "marginal_potion_qty.py"
 POTION_BASELINE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_baseline.py"
 MAX_BATCH_FROM_HELD_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "max_batch_from_held.py"
+OPTIMAL_BUY_MIX_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "optimal_buy_mix.py"
 BANK_EXPANSION_TIMING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_expansion_timing.py"
 EVENT_WINDOW_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "event_availability.py"
 COST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "cost_core.py"
@@ -2238,6 +2239,7 @@ _ALL_SRCS = [
     CONSUMABLE_SELECTION_SRC,
     MARGINAL_POTION_QTY_SRC,
     MAX_BATCH_FROM_HELD_SRC,
+    OPTIMAL_BUY_MIX_SRC,
     BANK_EXPANSION_TIMING_SRC,
     EVENT_WINDOW_SRC,
     COST_CORE_SRC,
@@ -2848,6 +2850,43 @@ MAX_BATCH_FROM_HELD_MUTATIONS = [
     ("max_batch_from_held: drop yield multiply",
      "    return runs * yield_per_craft",
      "    return runs"),
+]
+
+# optimal_buy_mix mutations -- old strings matched to current optimal_buy_mix.py
+# text. Each KEPT mutant perturbs the feasibility test or the per-ingredient
+# deficit so the Python batch diverges from the Lean `optimalBuyMix` oracle.
+# Killed by formal/diff/test_optimal_buy_mix_diff.py (random recipes + the
+# exact-budget-tie and real-deficit anchors).
+#
+# RETIRED (provably EQUIVALENT mutants -- documented, not fake-killed):
+#   * "drop the break": removing `else: break` makes the scan keep going past the
+#     first unaffordable batch, returning the LARGEST affordable batch in
+#     [1, max_batch] instead of the largest affordable PREFIX. These coincide for
+#     every input because cost(B) is MONOTONE non-decreasing in B (proven in Lean
+#     as `Formal.OptimalBuyMix.cost_mono`): the affordable batches form a
+#     down-closed prefix, so largest-affordable == largest-prefix-affordable. The
+#     break is a pure performance optimisation with no observable effect; no input
+#     can distinguish it, so the differential can never (honestly) kill it.
+#   * "deficit > 0  ->  deficit >= 0": the guarded body adds `prices[i] * deficit`.
+#     The two guards differ ONLY at deficit == 0, where the contribution is
+#     `prices[i] * 0 == 0` either way (and at deficit < 0 both guards are false), so
+#     the total is identical for all inputs -- a behaviour-preserving comparator
+#     change. The genuine sign-flip mutant below (`b*need - held` ->
+#     `held - b*need`) is the one that actually perturbs the deficit and IS killed.
+OPTIMAL_BUY_MIX_MUTATIONS = [
+    # Feasibility `<=` -> `<`: at an exact-budget tie (cost(B) == gold) the batch is
+    # affordable but the mutant rejects it and breaks one batch early. The
+    # need1/held0/price2, gold==4 anchor (cost(2)==4) diverges (2 vs 1).
+    ("optimal_buy_mix: feasibility <= -> < (off-by-one at exact budget)",
+     "        if _cost(needs, held, prices, batch) <= gold:",
+     "        if _cost(needs, held, prices, batch) < gold:"),
+    # Deficit sign flip `b*need - held` -> `held - b*need`: negates every real
+    # shortfall, so the `> 0` guard skips it and the batch looks free. Any recipe
+    # with a genuine deficit (held < batch*need) diverges; the need4/held0 anchor
+    # (cost(1)=8 > gold 3 -> answer 0) fires (0 vs the full max_batch).
+    ("optimal_buy_mix: deficit sign flip (batch*need-held -> held-batch*need)",
+     "        deficit = batch * needs[i] - held[i]",
+     "        deficit = held[i] - batch * needs[i]"),
 ]
 
 # bank_expansion_timing mutations -- old strings matched to current
@@ -4157,6 +4196,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_marginal_potion_qty_diff.py", survivors)
     run_group(MAX_BATCH_FROM_HELD_SRC, MAX_BATCH_FROM_HELD_MUTATIONS,
               "formal/diff/test_max_batch_from_held_diff.py", survivors)
+    run_group(OPTIMAL_BUY_MIX_SRC, OPTIMAL_BUY_MIX_MUTATIONS,
+              "formal/diff/test_optimal_buy_mix_diff.py", survivors)
     run_group(POTION_BASELINE_SRC, POTION_BASELINE_MUTATIONS,
               "formal/diff/test_potion_baseline_diff.py", survivors)
     run_group(BANK_EXPANSION_TIMING_SRC, BANK_EXPANSION_TIMING_MUTATIONS,

@@ -7,6 +7,7 @@ import Formal.GearTaxonomy
 import Formal.MarginalPotionQty
 import Formal.PotionBaseline
 import Formal.MaxBatchFromHeld
+import Formal.OptimalBuyMix
 import Lean.Data.Json
 
 open Lean Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin
@@ -1599,6 +1600,25 @@ def runMarginalPotionQty (args : Array Json) : Json :=
     ((intArg args 6) != 0) (intArg args 7).toNat
   Json.mkObj [("qty", Json.num (Int.ofNat q))]
 
+/-- Compute one optimal_buy_mix result using the SAME proved
+`Formal.OptimalBuyMix.optimalBuyMix`.
+
+args layout (length-prefixed): `[gold, max_batch, n, need_0, held_0, price_0,
+need_1, held_1, price_1, ...]` — the budget and cap, then `n` ingredients each the
+3 ints `[need, held, price]`. Builds the parallel `needs`/`held`/`prices` Nat
+lists, runs the downward feasibility scan, and emits `{"batch": <int>}` matching
+the Python `optimal_buy_mix_pure` return in the differential test. -/
+def runOptimalBuyMix (args : Array Json) : Json :=
+  let gold := (intArg args 0).toNat
+  let maxBatch := (intArg args 1).toNat
+  let n := (intArg args 2).toNat
+  let idx := List.range n
+  let needs := idx.map (fun k => (intArg args (3 + 3 * k)).toNat)
+  let held := idx.map (fun k => (intArg args (3 + 3 * k + 1)).toNat)
+  let prices := idx.map (fun k => (intArg args (3 + 3 * k + 2)).toNat)
+  let b := Formal.OptimalBuyMix.optimalBuyMix needs held prices gold maxBatch
+  Json.mkObj [("batch", Json.num (Int.ofNat b))]
+
 /-- Compute one potion_baseline result using the SAME proved
 `Formal.PotionBaseline.potionBaseline`.
 
@@ -2711,6 +2731,8 @@ def runOne (item : Json) : Json :=
     runConsumableSelection args
   else if kind == "marginal_potion_qty" then
     runMarginalPotionQty args
+  else if kind == "optimal_buy_mix" then
+    runOptimalBuyMix args
   else if kind == "potion_baseline" then
     runPotionBaseline args
   else if kind == "bank_expansion_timing" then
