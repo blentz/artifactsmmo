@@ -1,4 +1,4 @@
--- @concept: liveness @property: safety, characterization
+-- @concept: liveness @property: safety, liveness, validity
 /-
 Formal model of the pure decision boundary extracted from
 `src/artifactsmmo_cli/ai/strategy_driver.py::objective_step_goal` (the

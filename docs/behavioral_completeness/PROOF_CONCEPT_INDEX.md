@@ -65,6 +65,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | NoActionDeadlock | core | no-deadlock, totality |
 | NpcBuyInventory | npcs, items | safety |
 | Objective | crafting, items, characters | reachability, dominance |
+| ObjectiveStepFight | liveness | safety, liveness, validity |
 | OwnedCount | items | safety, monotonicity |
 | PersonalityGrounding | characters, items | dominance |
 | Phase7Invariants | items, core | safety |
