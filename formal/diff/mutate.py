@@ -1699,6 +1699,17 @@ OBJECTIVE_STEP_FIGHT_MUTATIONS = [
      "    if has_combat_monster:"),
 ]
 
+# Bootstrap horizon binding: the production constant must stay ≤ 4 for the
+# unconditional bootstrap-fires guarantee (bootstrap_step_always_fires) to hold.
+# Drift to 5 makes a bootstrap step's gap exceed the stand-down threshold; killed by
+# test_bootstrap_horizon_matches_production (oracle 2 ≠ 5) AND
+# test_bootstrap_step_always_fires_live (gap 5 + active items task no longer fires).
+BOOTSTRAP_HORIZON_MUTATIONS = [
+    ("bootstrap horizon 2 -> 5 (breaks gap ≤ 4)",
+     "_CHAR_LEVEL_BOOTSTRAP_HORIZON = 2",
+     "_CHAR_LEVEL_BOOTSTRAP_HORIZON = 5"),
+]
+
 
 # strategy_blend mutations -- old strings matched to current strategy_blend.py text.
 STRATEGY_BLEND_MUTATIONS = [
@@ -4015,6 +4026,8 @@ def _run_all_groups() -> int:
     run_group(LOW_YIELD_BOUNDARY_SRC, LOW_YIELD_MUTATIONS,
               "formal/diff/test_low_yield_cancel_diff.py", survivors)
     run_group(OBJECTIVE_STEP_FIGHT_CORE_SRC, OBJECTIVE_STEP_FIGHT_MUTATIONS,
+              "formal/diff/test_objective_step_is_fight_diff.py", survivors)
+    run_group(PREREQUISITE_GRAPH_SRC, BOOTSTRAP_HORIZON_MUTATIONS,
               "formal/diff/test_objective_step_is_fight_diff.py", survivors)
     run_group(STRATEGY_BLEND_SRC, STRATEGY_BLEND_MUTATIONS,
               "formal/diff/test_strategy_blend_diff.py", survivors)

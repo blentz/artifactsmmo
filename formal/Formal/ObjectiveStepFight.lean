@@ -146,4 +146,33 @@ task fires (the stand-down has released). -/
 example : objectiveStepIsFightPure true 50 3 true "items" "t1" 5 5 = true :=
   completed_task_fires 50 3 5 5 "items" "t1" (by decide)
 
+/-! ### Bootstrap horizon — grounding the `gap ≤ 4` hypothesis in production. -/
+
+/-- Production's character-level bootstrap look-ahead
+(`src/artifactsmmo_cli/ai/tiers/prerequisite_graph.py::_CHAR_LEVEL_BOOTSTRAP_HORIZON`).
+The bootstrap root is `ReachCharLevel (state.level + bootstrapCharHorizon)`, so a
+bootstrap step's level gap is exactly `bootstrapCharHorizon`. The differential gate
+asserts this equals the live constant. -/
+def bootstrapCharHorizon : Nat := 2
+
+/-- (LIVENESS, grounded) A BOOTSTRAP `ReachCharLevel` step — target
+`level + bootstrapCharHorizon` — is ALWAYS Fight-led when a combat monster exists,
+UNCONDITIONALLY in the items-task state. Because the horizon is `2 ≤ 4` the gap
+never reaches the long-haul stand-down threshold, so the planner keeps fighting
+while underleveled. This discharges the `gap ≤ 4` hypothesis of
+`bootstrap_always_fires` against the real production constant — the
+`CombatPersistent` ingredient the level-50 capstone needs. -/
+theorem bootstrap_step_always_fires (level taskTotal taskProgress : Nat)
+    (taskType taskCode : String) :
+    objectiveStepIsFightPure true (level + bootstrapCharHorizon) level true
+        taskType taskCode taskTotal taskProgress = true := by
+  apply bootstrap_always_fires
+  unfold bootstrapCharHorizon
+  omega
+
+/-- Non-vacuity witness: at level 3 the bootstrap target is 5 (gap 2), and the step
+fires even with a fully-active items task. -/
+example : objectiveStepIsFightPure true (3 + bootstrapCharHorizon) 3 true "items" "t1" 5 2 = true :=
+  bootstrap_step_always_fires 3 5 2 "items" "t1"
+
 end Formal.ObjectiveStepFight

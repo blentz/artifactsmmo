@@ -79,6 +79,17 @@ structural (grind_character_xp.py relevant_actions ⊆ {Fight(target), recovery,
 - [x] 7 mutation (6 mutants in mutate.py, all killed; task_total>0 deliberately NOT mutated — implied by progress<total, would survive)
 - [x] 8 adversarial review (tests live fn; domain unrigged; witnesses concrete; not a surrogate)
 
+## Bootstrap-horizon grounding (DONE 2026-06-29)
+
+`bootstrap_step_always_fires` (ObjectiveStepFight.lean) discharges the `gap ≤ 4`
+hypothesis of `bootstrap_always_fires` against the live constant: production sets the
+bootstrap target to `level + _CHAR_LEVEL_BOOTSTRAP_HORIZON` and the horizon is `2 ≤ 4`,
+so a bootstrap `ReachCharLevel` step is UNCONDITIONALLY Fight-led when a combat monster
+exists — regardless of any active items task. The horizon constant is differentially
+bound (oracle `bootstrap_char_horizon` == `_CHAR_LEVEL_BOOTSTRAP_HORIZON`) and
+mutation-guarded (drift 2→5 killed). This is a concrete `CombatPersistent` ingredient:
+while underleveled, the bootstrap mechanism keeps the planner fighting.
+
 ## Honest residual (follow-on, separate component)
 The binding proves PRODUCTION's Fight-routing predicate == the proved Lean def
 (`objectiveStepIsFightPure`). It does NOT yet prove the liveness State field

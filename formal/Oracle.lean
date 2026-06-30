@@ -1154,6 +1154,12 @@ def runObjectiveStepIsFight (args : Array Json) : Json :=
               hasCombatMonster taskType taskCode taskTotal taskProgress
   Json.mkObj [("fires", Json.bool b)]
 
+/-- Emit the proved `bootstrapCharHorizon` constant so the differential gate can
+assert it equals the live `_CHAR_LEVEL_BOOTSTRAP_HORIZON`. Drift above 4 would break
+`bootstrap_step_always_fires`. -/
+def runBootstrapCharHorizon (_args : Array Json) : Json :=
+  Json.mkObj [("horizon", Json.num (Int.ofNat Formal.ObjectiveStepFight.bootstrapCharHorizon))]
+
 /-- Compute one strategy_blend result using the SAME proved cores.
 
 args layout (Ints; rationals as num/den pairs):
@@ -2623,6 +2629,8 @@ def runOne (item : Json) : Json :=
     runLowYieldCancel args
   else if kind == "objective_step_is_fight" then
     runObjectiveStepIsFight args
+  else if kind == "bootstrap_char_horizon" then
+    runBootstrapCharHorizon args
   else if kind == "strategy_blend" then
     runStrategyBlend args
   else if kind == "decide_key" then

@@ -311,6 +311,7 @@ open Formal.PriorityBand
 #check @Formal.ObjectiveStepFight.no_combat_monster_never_fires    -- safety: no combat monster ⇒ never Fight-led
 #check @Formal.ObjectiveStepFight.bootstrap_always_fires           -- liveness: ReachCharLevel ∧ monster ∧ gap ≤ 4 ⇒ Fight-led (breaks no-combat livelock)
 #check @Formal.ObjectiveStepFight.completed_task_fires            -- release: items-task done ⇒ stand-down lifts ⇒ Fight-led
+#check @Formal.ObjectiveStepFight.bootstrap_step_always_fires      -- grounded: bootstrap target (level + horizon 2) ⇒ unconditionally Fight-led
 -- StrategyBlend required roles:
 #check @Formal.StrategyBlend.balancingScaled_ge_min                -- band-lower: result ≥ balanceMinScaled (= 4 * 0.5 = 2)
 #check @Formal.StrategyBlend.balancingScaled_le_max                -- band-upper: result ≤ balanceMaxScaled (= 4 * 2.0 = 8)

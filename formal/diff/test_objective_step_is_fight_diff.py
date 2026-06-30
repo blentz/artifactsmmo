@@ -15,7 +15,8 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
-from formal.diff.oracle_client import run_oracle_structured
+from artifactsmmo_cli.ai.tiers.prerequisite_graph import _CHAR_LEVEL_BOOTSTRAP_HORIZON
+from formal.diff.oracle_client import run_oracle, run_oracle_structured
 
 # Include "items" (the stand-down type), other real types, None and "" (falsy).
 _TASK_TYPES = st.sampled_from([None, "", "items", "monsters", "resources", "crafting"])
@@ -90,3 +91,32 @@ def test_boundary_gap_five_with_active_items_task_defers() -> None:
     args = (True, 8, 3, True, "items", "t1", 5, 2)
     assert _py(*args) is False
     assert _lean(*args) is False
+
+
+def test_bootstrap_horizon_matches_production() -> None:
+    # The proved Lean constant bootstrapCharHorizon must equal the live
+    # _CHAR_LEVEL_BOOTSTRAP_HORIZON; drift above 4 would break the unconditional
+    # bootstrap-fires guarantee (bootstrap_step_always_fires).
+    lean_horizon = run_oracle("bootstrap_char_horizon", [[0]])[0]["horizon"]
+    assert lean_horizon == _CHAR_LEVEL_BOOTSTRAP_HORIZON
+
+
+@given(
+    level=st.integers(min_value=1, max_value=49),
+    task_type=_TASK_TYPES,
+    task_code=_TASK_CODES,
+    task_total=st.integers(min_value=0, max_value=20),
+    task_progress=st.integers(min_value=0, max_value=20),
+)
+@settings(max_examples=150, deadline=None)
+def test_bootstrap_step_always_fires_live(
+    level: int, task_type: str | None, task_code: str | None,
+    task_total: int, task_progress: int,
+) -> None:
+    # A bootstrap ReachCharLevel step (target = level + horizon) with a combat
+    # monster is ALWAYS Fight-led in the live core, regardless of the items task —
+    # mirrors the proved bootstrap_step_always_fires. The oracle confirms agreement.
+    target = level + _CHAR_LEVEL_BOOTSTRAP_HORIZON
+    args = (True, target, level, True, task_type, task_code, task_total, task_progress)
+    assert _py(*args) is True
+    assert _lean(*args) is True

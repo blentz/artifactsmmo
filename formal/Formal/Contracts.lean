@@ -1638,6 +1638,13 @@ example : ∀ (target level taskTotal taskProgress : Nat) (taskType taskCode : S
     Formal.ObjectiveStepFight.objectiveStepIsFightPure true target level true
         taskType taskCode taskTotal taskProgress = true :=
   @Formal.ObjectiveStepFight.completed_task_fires
+-- grounded liveness: a bootstrap step (target = level + horizon) is unconditionally
+-- Fight-led when a combat monster exists — the horizon (2) keeps the gap ≤ 4.
+example : ∀ (level taskTotal taskProgress : Nat) (taskType taskCode : String),
+    Formal.ObjectiveStepFight.objectiveStepIsFightPure true
+        (level + Formal.ObjectiveStepFight.bootstrapCharHorizon) level true
+        taskType taskCode taskTotal taskProgress = true :=
+  @Formal.ObjectiveStepFight.bootstrap_step_always_fires
 
 /-! ### StrategyBlend role contracts. -/
 
