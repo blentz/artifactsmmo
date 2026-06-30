@@ -697,6 +697,14 @@ class TestEquipAction:
         assert result.inventory.get("small_health_potion", 0) == 3
         assert result.equipment["utility1_slot"] == "small_health_potion"
 
+    def test_repr_with_quantity(self):
+        action = EquipAction(code="small_health_potion", slot="utility1_slot", quantity=10)
+        assert repr(action) == "Equip(small_health_potionx10->utility1_slot)"
+
+    def test_repr_default_quantity(self):
+        action = EquipAction(code="copper_dagger", slot="weapon_slot")
+        assert repr(action) == "Equip(copper_dagger->weapon_slot)"
+
 
 def _consumable_stats(code: str = "cooked_chicken", hp_restore: int = 80) -> dict[str, ItemStats]:
     return {code: ItemStats(code=code, level=1, type_="consumable", hp_restore=hp_restore)}
