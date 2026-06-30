@@ -38,28 +38,37 @@ reached incrementally, never a single big grind.
 4. **Effect scope:** this spec covers `effect = hp_restore` (health potions). The goal is
    parameterized by effect for future extension (damage/boost utilities) — out of scope here.
 
-## Weight formula (user-specified)
+## Level→baseline curve (smooth ramp — replaces the earlier watermark formula)
+
+The maintained baseline grows smoothly with level: a few potions early, a full stack only
+near end-game.
 
 ```
-weight = max_stack - lower(current_equipped_stack_size, (1 / (2 * current_level)) * 100)
-       = 100 - min(equipped_qty, 50 / level)          # lower() = min; max_stack = 100
+baseline(level) = low_qty                                   if level <= low_level
+                = high_qty                                  if level >= high_level
+                = low_qty + floor((high_qty - low_qty) * (level - low_level)
+                                  / (high_level - low_level))   otherwise
 ```
+with `low_level=5, low_qty=5, high_level=45, high_qty=100` (= `UTILITY_SLOT_MAX_STACK`):
+linear from `(level 5 → 5 potions)` to `(level 45 → 100 potions)`, i.e.
+`5 + floor(95*(level-5)/40)` on the ramp. Examples: L1-5 → 5, L10 → 16, L20 → 40,
+L30 → 64, L40 → 88, L45+ → 100. Monotone non-decreasing in level; integer (float-free).
 
-- `current_equipped_stack_size` = the quantity of the target potion currently in the
-  utility slot (NEW state; see below). `current_level` = character level.
-- The watermark `50/level` shrinks as level rises, so for a given stock the weight
-  RISES with level — the player maintains an increasing baseline as they level up.
-- Range ≈ `[50, 100]`: empty stock → 100 (just below survival `RestoreHP=110`,
-  above everything else); near the watermark → `100 - 50/level` (50 at L1 → 99 at L50).
-- Exact rational (float-free): `min` of `Fraction(equipped_qty)` and `Fraction(50, level)`;
-  `weight = 100 - that`. Lifted to `Fraction` like `GrindCharacterXPGoal`, returned as
-  `float` from `Goal.value`.
+- Anchors (user-specified): the first 5 levels need no more than ~5 potions on-hand;
+  full stacks (100) only near end-game (level ≥ 45); smooth ramp between.
+- `current_equipped_stack_size` (the quantity of the target potion in the utility slot,
+  NEW state — see below) is compared against `baseline(level)`.
 
-**Behavior note (accepted):** when the stack is low, `CraftPotions` outranks the grind
-and most objectives (not survival). It is gated by craftability — when alchemy can't yet
-make the potion, the goal is satisfied (no batch producible) and the bot grinds. So it is
-naturally dormant until alchemy comes online, then stocks aggressively, interleaved with
-grinding via the batch-and-replan loop.
+**Fire (preempt) decision:** `CraftPotions` fires — interrupts the grind to stock —
+**while `equipped_qty < baseline(level)`** (and a batch is producible). When
+`equipped_qty >= baseline(level)` it yields and the grind proceeds. The target grows with
+level, so the maintained stack ramps up smoothly as the player levels.
+
+**Behavior note (accepted):** while below the level baseline, `CraftPotions` (guard-tier,
+preemptive) outranks the grind to stock potions; it is gated by craftability — when alchemy
+can't yet make the potion it does not fire and the bot grinds. So it is dormant until
+alchemy comes online, then stocks to the level baseline, interleaved with grinding via the
+batch-and-replan loop.
 
 ## New state — equipped utility-slot quantity
 
@@ -77,11 +86,10 @@ The server `CharacterSchema` exposes `utility1_slot_quantity` / `utility2_slot_q
 
 ## Proven pure cores (Lean + differential + mutation)
 
-1. `potion_supply_weight_pure(equipped_qty, level, max_stack, watermark_num,
-   watermark_den) -> (num, den)` — the rational weight `max_stack - min(equipped_qty,
-   watermark)` with `watermark = watermark_num/(watermark_den*level)` (i.e. 100/(2*level)).
-   Returns an exact rational. Proven: bounded in `[max_stack - watermark_cap, max_stack]`,
-   monotone non-increasing in `equipped_qty`, monotone non-decreasing in `level`.
+1. `potion_baseline_pure(level, low_level, low_qty, high_level, high_qty) -> int` — the
+   level→baseline curve above (clamped + floor-linear ramp). Proven: equals `low_qty` at/below
+   `low_level`, `high_qty` at/above `high_level`, monotone non-decreasing in `level`, and
+   bounded in `[low_qty, high_qty]`. The fire decision is `equipped_qty < potion_baseline_pure(level, ...)`.
 2. `max_batch_from_held_pure(recipe: list[(ingredient_need, held_count)], yield_per_craft)
    -> int` — the max number of potions craftable from held ingredients =
    `min_i(held_i // need_i) * yield_per_craft`. Proven: bounded by every ingredient's
@@ -101,10 +109,13 @@ The server `CharacterSchema` exposes `utility1_slot_quantity` / `utility2_slot_q
   `crafting_skill == "alchemy"`, `crafting_level <= state.skills["alchemy"]`. Prefer the
   highest `hp_restore` such craftable potion (deterministic tie-break by code). `None` →
   goal satisfied (nothing to craft).
-- **`value`:** `potion_supply_weight_pure(equipped_qty_of_target, level, 100, 100, 2)` →
-  float; `0.0` when `is_satisfied`.
-- **`is_satisfied`:** `equipped_qty >= max_stack` OR no producible batch this cycle (the
-  craft/buy/gather ladder below yields nothing actionable).
+- **`value`:** `float(baseline - equipped_qty)` while firing (potions short of the level
+  baseline), `0.0` when satisfied. (Guard ordering is fixed; this value is for urgency/logging.)
+- **`is_satisfied`:** equipped quantity in some utility slot `>= baseline(level)` (state-only,
+  via `potion_baseline_pure(state.level, ...)`) OR no producible batch this cycle. Because
+  `Goal.is_satisfied(state)` has no `game_data`, the producibility/target half lives in the
+  guard `_fires` predicate (which has `game_data`); `is_satisfied` covers the state-only
+  baseline check.
 - **Plan ladder (priority 1 > 2 > 3, the user's order):**
   1. **Craft from held:** if `max_batch_from_held_pure(recipe, inventory+bank, yield) >= 1`,
      emit `CraftAction(potion, quantity=that batch)` (+ any `WithdrawItemAction` to pull
@@ -120,12 +131,25 @@ The server `CharacterSchema` exposes `utility1_slot_quantity` / `utility2_slot_q
   planner builds the right step; `desired_state`/`is_satisfied` terminate on the equipped
   quantity reaching the producible target.
 
-## Arbiter placement
+## Arbiter placement (decided)
 
-`CraftPotionsGoal` is a weighted goal (not a fixed discretionary means), value `[50,100]`.
-It sits below survival (`RestoreHP=110`) and above the grind/provision when the stack is
-low — so a low stack preempts grinding to stock potions, exactly as the formula intends,
-bounded by craftability and the batch-and-replan loop.
+The arbiter is strictly tiered — guards → collect → objective-step (grind) → discretionary,
+first non-empty tier wins — so a discretionary goal can NEVER outrank a plannable step-grind
+(this is exactly why `MaintainConsumables` never accumulated). `CraftPotionsGoal` is therefore
+a **preemptive guard-tier goal** (`preemptive = True`, like `RestoreHPGoal`): it enters the
+guard tier and interrupts the grind to stock potions, but only **while it FIRES**.
+
+- **Fire condition:** `equipped_qty < baseline(level)` AND a batch is producible now
+  (craft-from-held OR buyable OR gatherable).
+- **Value while firing:** `baseline(level) - equipped_qty` (potions short), below survival
+  `RestoreHP = 110`. Guard precedence is the fixed `GUARD_ORDER` position (lowest guard,
+  still above the objective-step grind), so a firing `CraftPotions` preempts the grind.
+- **When not firing** (stocked to `baseline(level)`, or no producible batch) the grind proceeds.
+
+**Resulting curve (the smooth ramp):** maintains ~5 potions through level 5, ramps linearly to
+a full 100 by level 45, full stack thereafter — see the curve section. Still gated by
+craftability (dormant when alchemy can't yet make the potion) and bounded by the
+craft/buy/gather-5 loop.
 
 ## Testing
 
