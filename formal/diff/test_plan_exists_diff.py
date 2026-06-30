@@ -139,8 +139,8 @@ def _base_game_data() -> GameData:
     gd._monster_resistance = {"chicken": {}}
     gd._monster_critical_strike = {"chicken": 0}
     gd._monster_initiative = {"chicken": 0}
-    # A level-1 weapon so FightAction's `best_eq >= monster_level - 1` filter
-    # passes for chicken (level 1).
+    # A level-1 weapon; note the old `best_eq >= monster_level - 1` gear gate
+    # was removed (commit 0cd5407b); FightAction now uses xp_per_kill > 0 only.
     gd._item_stats = {
         "wooden_stick": ItemStats(
             code="wooden_stick", level=1, type_="weapon",

@@ -3193,6 +3193,27 @@ APPLY_FIGHT_MUTATIONS = [
 ]
 
 
+FIGHT_APPLICABILITY_MUTATIONS = [
+    (
+        # Re-introduces the old `best_eq >= monster_level - 1` gear-level gate that
+        # was removed in commit 0cd5407b (2026-06-29).  That gate starved combat when
+        # no owned gear matched the window (P0 deadlock: L3 char, copper_dagger L1,
+        # winnable green_slime L4 rejected because 1 < 4-1=3).
+        # Killed by:
+        #   test_fight_applicable_when_winnable_despite_low_gear_level  (L3/L4 case)
+        #   test_every_picker_target_is_applicable  (char_level loop, no equipment)
+        "fight-is_applicable: re-introduce best_eq >= monster_level - 1 gear gate",
+        "        return game_data.xp_per_kill(self.monster_code, state.level) > 0",
+        "        best_eq = max(\n"
+        "            (game_data.all_item_stats[c].level\n"
+        "             for c in state.equipment.values() if c and c in game_data.all_item_stats),\n"
+        "            default=0,\n"
+        "        )\n"
+        "        return game_data.xp_per_kill(self.monster_code, state.level) > 0 and best_eq >= monster_level - 1",
+    ),
+]
+
+
 APPLY_BANK_EXPANSION_MUTATIONS = [
     (
         "apply-baseline-bank-expansion: revert BuyBankExpansionAction.apply to explicit WorldState(...) dropping baseline",
@@ -4146,6 +4167,11 @@ def _run_all_groups() -> int:
               "tests/ai/test_gear_taxonomy_core.py", survivors)
     run_group(GEAR_TAXONOMY_CORE_SRC, GEAR_TAXONOMY_SETDIFF_MUTATIONS,
               "formal/diff/test_gear_taxonomy_diff.py", survivors)
+    # Fight-applicability gear-gate regression (commit 0cd5407b 2026-06-29):
+    # re-introducing best_eq >= monster_level - 1 must be killed by the
+    # picker-consistency test and the Task-1 regression test.
+    run_group(APPLY_FIGHT_SRC, FIGHT_APPLICABILITY_MUTATIONS,
+              "tests/test_ai/test_no_combat_deadlock.py", survivors)
     _execute(_UNITS, survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")

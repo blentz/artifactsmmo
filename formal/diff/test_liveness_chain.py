@@ -172,10 +172,13 @@ def test_chain_matches_lean_predicate(
     """The Lean theorem's positive direction: when ALL of
       * xp gate holds (xp_per_kill > 0 — the P0-revision lower bound)
       * suicide guard holds (monster_level ≤ lvl+2)
-      * best_eq ≥ monster_level - 1 (wooden_stick L1 means monster_level ≤ 2)
       * hp_pct > 50%
       * winnable-at-max-hp
     the Python chain MUST return True.
+
+    Note: the old `best_eq >= monster_level - 1` gear-level gate was removed
+    in commit 0cd5407b (2026-06-29). The four conditions above are the only
+    structural gates in fightApplicable post-P0-revision.
     """
     max_hp = 100
     hp = (max_hp * hp_pct) // 100
@@ -186,10 +189,9 @@ def test_chain_matches_lean_predicate(
     state = _state(player_level, hp, max_hp)
 
     # Pre-compute Lean predicate truth (post-P0 gates: xp>0 lower bound,
-    # level+2 suicide guard — no hard lower window).
+    # level+2 suicide guard — no hard lower window, no gear-level gate).
     level_ok = (gd.xp_per_kill(monster, player_level) > 0
                 and monster_level <= player_level + 2)
-    gear_ok = 1 >= monster_level - 1   # wooden_stick.level=1
     hp_ok = hp * 100 > 50 * max_hp
 
     # Winnability check (also part of the Lean precondition).
@@ -198,7 +200,7 @@ def test_chain_matches_lean_predicate(
 
     chain_result = _chain(state, gd, monster, level=player_level + 2)
 
-    if level_ok and gear_ok and hp_ok and winnable:
+    if level_ok and hp_ok and winnable:
         assert chain_result, (
             f"Liveness regression: Lean preconditions all hold "
             f"(player_level={player_level}, monster_level={monster_level}, "
