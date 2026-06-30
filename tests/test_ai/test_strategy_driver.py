@@ -35,6 +35,8 @@ from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
+from artifactsmmo_cli.ai.goals.provision_marginal_fight import ProvisionMarginalFightGoal
+from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner, PlanStats
 from artifactsmmo_cli.ai.strategy_driver import (
@@ -2390,3 +2392,53 @@ def test_deep_gear_routes_to_incremental_gather_not_empty_upgrade():
     goal = objective_step_goal(step, state, gd, _ctx(), root=root, committed_root=root)
     assert goal is not None
     assert type(goal).__name__ == "GatherMaterialsGoal"
+
+
+# ---------------------------------------------------------------------------
+# _marginal_provision_goal routing tests (Task 8)
+# ---------------------------------------------------------------------------
+
+def _record_mixed(history: LearningStore, action_repr: str, wins: int, losses: int) -> None:
+    """Seed the history DB with win+loss cycles for action_repr."""
+    session_id = history.start_session()
+    for i in range(wins):
+        history.record_cycle(Cycle(
+            ts=f"2026-01-01T00:{i:02d}:00+00:00",
+            session_id=session_id, cycle_index=i,
+            character="r", action_repr=action_repr, outcome="ok",
+        ))
+    for j in range(losses):
+        history.record_cycle(Cycle(
+            ts=f"2026-01-01T01:{j:02d}:00+00:00",
+            session_id=session_id, cycle_index=wins + j,
+            character="r", action_repr=action_repr, outcome="fail",
+        ))
+
+
+def _gd_with_consumable(code: str, hp_restore: int) -> GameData:
+    gd = GameData()
+    gd._item_stats = {code: ItemStats(code=code, level=1, type_="consumable",
+                                      hp_restore=hp_restore)}
+    return gd
+
+
+def test_marginal_target_routes_to_provision_goal(tmp_path):
+    state = make_state(level=3, inventory={"small_health_potion": 100})
+    gd = _gd_with_consumable("small_health_potion", hp_restore=60)
+    history = LearningStore(db_path=str(tmp_path / "l.db"), character="r")
+    _record_mixed(history, "Fight(green_slime)", wins=8, losses=2)  # 80% < 0.95
+    ctx = _ctx(combat_monster="green_slime")
+    goal = objective_step_goal(ReachCharLevel(level=5), state, gd, ctx, history=history)
+    assert isinstance(goal, ProvisionMarginalFightGoal)
+    history.close()
+
+
+def test_reliable_target_still_grinds(tmp_path):
+    state = make_state(level=3, inventory={"small_health_potion": 100})
+    gd = _gd_with_consumable("small_health_potion", hp_restore=60)
+    history = LearningStore(db_path=str(tmp_path / "l.db"), character="r")
+    _record_mixed(history, "Fight(green_slime)", wins=20, losses=0)  # 100% >= 0.95
+    ctx = _ctx(combat_monster="green_slime")
+    goal = objective_step_goal(ReachCharLevel(level=5), state, gd, ctx, history=history)
+    assert isinstance(goal, GrindCharacterXPGoal)
+    history.close()
