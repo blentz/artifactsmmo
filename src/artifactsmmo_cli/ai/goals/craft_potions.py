@@ -26,6 +26,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.max_batch_from_held import max_batch_from_held_pure
 from artifactsmmo_cli.ai.optimal_buy_mix import optimal_buy_mix_pure
 from artifactsmmo_cli.ai.potion_baseline import potion_baseline_pure
+from artifactsmmo_cli.ai.potion_supply import target_potion_pure
 from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
 from artifactsmmo_cli.ai.thresholds import (
     POTION_GATHER_BATCH,
@@ -48,28 +49,11 @@ class CraftPotionsGoal(Goal):
         self._effect = effect
 
     def _target_potion(self, state: WorldState, game_data: GameData) -> str | None:
-        """Highest-`effect`, alchemy-craftable-now, utility-slot-equippable potion
-        (deterministic smallest-code tie-break); None when none qualifies.
+        """Highest-`effect`, alchemy-craftable-now, utility-slot-equippable potion.
 
-        Mirrors `consumable_supply.best_craftable_heal`, but REQUIRES the item be
-        a utility-slot type (so the EquipAction is applicable) crafted by the
-        `alchemy` skill at a level the bot has reached. Materials are NOT required
-        on hand — the relevant-actions ladder gathers/buys/withdraws them."""
-        best_code: str | None = None
-        best_restore = 0
-        for code in sorted(game_data.crafting_recipes):
-            stats = game_data.item_stats(code)
-            if stats is None or stats.type_ != "utility":
-                continue
-            restore = getattr(stats, self._effect)
-            if restore <= 0 or restore <= best_restore:
-                continue
-            if stats.crafting_skill != "alchemy":
-                continue
-            if state.skills.get("alchemy", 1) < stats.crafting_level:
-                continue
-            best_code, best_restore = code, restore
-        return best_code
+        Delegates to ``target_potion_pure`` (potion_supply.py) so guard and goal
+        always agree on the target — guard/goal divergence is a spin."""
+        return target_potion_pure(state, game_data, self._effect)
 
     def _equipped(self, state: WorldState, game_data: GameData) -> int:
         code = self._target_potion(state, game_data)

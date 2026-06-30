@@ -158,9 +158,14 @@ def test_fires_returns_false_for_unknown_guard_kind():
 
 
 def test_gear_review_in_guard_order_below_survival_above_none():
-    # GEAR_REVIEW is the LAST guard (lowest-priority guard, still above all means).
-    assert GUARD_ORDER[-1] is GuardKind.GEAR_REVIEW
+    # GEAR_REVIEW is below all survival guards and above CRAFT_POTIONS.
     assert GuardKind.HP_CRITICAL in GUARD_ORDER[:GUARD_ORDER.index(GuardKind.GEAR_REVIEW)]
+    assert GUARD_ORDER.index(GuardKind.GEAR_REVIEW) < GUARD_ORDER.index(GuardKind.CRAFT_POTIONS)
+
+
+def test_craft_potions_is_last_guard():
+    # CRAFT_POTIONS is the LAST (lowest-priority) guard — still preempts all means.
+    assert GUARD_ORDER[-1] is GuardKind.CRAFT_POTIONS
 
 
 def test_gear_review_fires_only_when_ctx_active(make_planner_gd):
@@ -616,3 +621,68 @@ def test_bank_full_cascade_order():
         assert fired.index(GuardKind.DEPOSIT_FULL) < fired.index(GuardKind.DISCARD_HIGH), (
             f"DEPOSIT_FULL (buffer) must precede DISCARD_HIGH, got {fired}")
     assert GuardKind.DISCARD_CRITICAL not in fired, "DISCARD_CRITICAL must not fire with room"
+
+
+# ---------------------------------------------------------------------------
+# CRAFT_POTIONS guard
+# ---------------------------------------------------------------------------
+
+def _potion_gd() -> GameData:
+    """GameData with one alchemy-craftable utility potion (ingredient gatherable)."""
+    gd = GameData()
+    gd._item_stats = {
+        "health_potion": ItemStats(code="health_potion", level=1, type_="utility",
+                                   hp_restore=50, crafting_skill="alchemy", crafting_level=1),
+        "red_slimeball": ItemStats(code="red_slimeball", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"health_potion": {"red_slimeball": 2}}
+    gd._resource_drops = {"red_slime": "red_slimeball"}  # ingredient is gatherable
+    return gd
+
+
+def _understocked_producible(level: int = 3, equipped: int = 0):
+    """Level 3: baseline = POTION_LOW_QTY = 5; equipped=0 < 5; potion gatherable."""
+    state = make_state(level=level, skills={"alchemy": 1},
+                       utility1_slot_quantity=equipped)
+    return state, _potion_gd(), _ctx()
+
+
+def _understocked_but_no_alchemy(level: int = 3, equipped: int = 0):
+    """Level 3, understocked, but no alchemy-craftable utility potion exists."""
+    gd = GameData()  # empty catalog — no potions
+    state = make_state(level=level, skills={"alchemy": 1},
+                       utility1_slot_quantity=equipped)
+    return state, gd, _ctx()
+
+
+def _stocked_to_baseline(level: int = 3, equipped: int = 5):
+    """Level 3: baseline=5; equipped=5 == baseline → guard quiet."""
+    eq = {
+        "weapon_slot": None, "shield_slot": None, "helmet_slot": None,
+        "body_armor_slot": None, "leg_armor_slot": None, "boots_slot": None,
+        "ring1_slot": None, "ring2_slot": None, "amulet_slot": None,
+        "artifact1_slot": None, "artifact2_slot": None, "artifact3_slot": None,
+        "utility1_slot": "health_potion", "utility2_slot": None,
+        "bag_slot": None, "rune_slot": None,
+    }
+    state = make_state(level=level, skills={"alchemy": 1},
+                       equipment=eq, utility1_slot_quantity=equipped)
+    return state, _potion_gd(), _ctx()
+
+
+def test_craft_potions_guard_fires_when_understocked_and_producible():
+    """Understocked (equipped=0 < baseline=5) and potion gatherable → fires."""
+    state, gd, ctx = _understocked_producible(level=3, equipped=0)
+    assert _fires(GuardKind.CRAFT_POTIONS, state, gd, None, ctx, None) is True
+
+
+def test_craft_potions_guard_quiet_when_not_producible():
+    """Understocked but no alchemy-craftable utility potion in catalog → quiet."""
+    state, gd, ctx = _understocked_but_no_alchemy(level=3, equipped=0)
+    assert _fires(GuardKind.CRAFT_POTIONS, state, gd, None, ctx, None) is False
+
+
+def test_craft_potions_guard_quiet_when_stocked_to_level_baseline():
+    """equipped == baseline(3) = 5 → guard quiet even though potion exists."""
+    state, gd, ctx = _stocked_to_baseline(level=3, equipped=5)
+    assert _fires(GuardKind.CRAFT_POTIONS, state, gd, None, ctx, None) is False
