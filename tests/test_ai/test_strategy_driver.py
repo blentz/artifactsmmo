@@ -2442,3 +2442,36 @@ def test_reliable_target_still_grinds(tmp_path):
     goal = objective_step_goal(ReachCharLevel(level=5), state, gd, ctx, history=history)
     assert isinstance(goal, GrindCharacterXPGoal)
     history.close()
+
+
+def test_utility_slot_already_filled_routes_to_grind(tmp_path) -> None:
+    """_marginal_provision_goal early-exits when a utility slot is already occupied."""
+    equipment = {
+        "weapon_slot": None, "shield_slot": None, "helmet_slot": None,
+        "body_armor_slot": None, "leg_armor_slot": None, "boots_slot": None,
+        "ring1_slot": None, "ring2_slot": None, "amulet_slot": None,
+        "artifact1_slot": None, "artifact2_slot": None, "artifact3_slot": None,
+        "utility1_slot": "small_health_potion", "utility2_slot": None,
+        "bag_slot": None, "rune_slot": None,
+    }
+    state = make_state(level=3, inventory={"small_health_potion": 100},
+                       equipment=equipment)
+    gd = _gd_with_consumable("small_health_potion", hp_restore=60)
+    history = LearningStore(db_path=str(tmp_path / "l.db"), character="r")
+    _record_mixed(history, "Fight(green_slime)", wins=8, losses=2)  # 80% < 0.95
+    ctx = _ctx(combat_monster="green_slime")
+    goal = objective_step_goal(ReachCharLevel(level=5), state, gd, ctx, history=history)
+    assert isinstance(goal, GrindCharacterXPGoal)
+    history.close()
+
+
+def test_no_heal_held_routes_to_grind(tmp_path) -> None:
+    """_marginal_provision_goal early-exits when inventory holds no heal."""
+    state = make_state(level=3, inventory={})  # no heal on hand
+    gd = _gd_with_consumable("small_health_potion", hp_restore=60)
+    history = LearningStore(db_path=str(tmp_path / "l.db"), character="r")
+    _record_mixed(history, "Fight(green_slime)", wins=8, losses=2)  # 80% < 0.95
+    ctx = _ctx(combat_monster="green_slime")
+    goal = objective_step_goal(ReachCharLevel(level=5), state, gd, ctx, history=history)
+    assert isinstance(goal, GrindCharacterXPGoal)
+    history.close()

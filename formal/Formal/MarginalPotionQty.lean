@@ -1,4 +1,4 @@
--- @concept: combat-survivability @property: bounded, held-clamped, zero-above-threshold
+-- @concept: combat-survivability @property: validity, safety
 /-
 Formal model of the pure win-rate-scaled potion-quantity core extracted from
 `src/artifactsmmo_cli/ai/marginal_potion_qty.py` (`marginal_potion_qty_pure`).

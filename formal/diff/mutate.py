@@ -2137,10 +2137,13 @@ DOOMED_MEMO_MUTATIONS = [
 
 # Killed by tests/test_ai/test_combat.py — the learned-veto threshold that stops the
 # bot grinding marginal monsters (blue_slime 13%-loss trace 2026-06-15).
+# Task 1 lowered threshold 0.9 -> 0.4 so marginal grinds survive; mutation tightens
+# it back to 0.9 which re-blocks the 80%-win case tested by
+# test_is_winnable_at_80pct_not_vetoed.
 COMBAT_VETO_MUTATIONS = [
-    ("combat: weaken learned-veto threshold 0.9 -> 0.5 (re-admits marginal monsters)",
-     "WIN_RATE_THRESHOLD = 0.9",
-     "WIN_RATE_THRESHOLD = 0.5"),
+    ("combat: weaken learned-veto threshold 0.4 -> 0.9 (blocks marginal-but-winnable targets)",
+     "WIN_RATE_THRESHOLD = 0.4",
+     "WIN_RATE_THRESHOLD = 0.9"),
 ]
 
 
@@ -3072,8 +3075,8 @@ TELEPORT_COST_MUTATIONS = [
 CONSUMABLE_SUPPLY_MUTATIONS = [
     (
         "consumable_supply: stock floor >= becomes > (stock == floor wrongly re-fires)",
-        "    if heal_stock(state, game_data) >= HEAL_STOCK_FLOOR:\n        return False",
-        "    if heal_stock(state, game_data) > HEAL_STOCK_FLOOR:\n        return False",
+        "    if heal_stock(state, game_data) >= heal_stock_target(desired_stock):\n        return False",
+        "    if heal_stock(state, game_data) > heal_stock_target(desired_stock):\n        return False",
     ),
     (
         "consumable_supply: weaker-heal filter < becomes <= (drops an equal-strength restock)",

@@ -70,3 +70,22 @@ def test_goal_plans_the_equip_end_to_end() -> None:
     plan = plan_for_goal(goal, state, gd)   # use the repo's planner entrypoint
     assert any(isinstance(a, EquipAction) and a.slot == "utility1_slot"
                and a.quantity == 40 for a in plan)
+
+
+def test_desired_state_returns_empty_dict() -> None:
+    state = make_state()
+    gd = GameData()
+    assert _goal().desired_state(state, gd) == {}
+
+
+def test_serialize_returns_expected_dict() -> None:
+    assert _goal().serialize() == {
+        "type": "ProvisionMarginalFightGoal",
+        "target_monster": "green_slime",
+        "heal_code": "small_health_potion",
+        "quantity": 40,
+    }
+
+
+def test_repr_format() -> None:
+    assert repr(_goal()) == "ProvisionMarginalFight(green_slime,small_health_potionx40)"
