@@ -11,3 +11,9 @@ def test_equipped_potion_qty_sums_matching_slots():
     state = dataclasses.replace(state, utility1_slot_quantity=40, utility2_slot_quantity=10)
     assert equipped_potion_qty(state, "small_health_potion") == 50
     assert equipped_potion_qty(state, "other") == 0
+
+
+def test_equipped_potion_qty_single_slot_match():
+    state = make_state(equipment={"utility1_slot": "small_health_potion", "utility2_slot": "other"})
+    state = dataclasses.replace(state, utility1_slot_quantity=40, utility2_slot_quantity=10)
+    assert equipped_potion_qty(state, "small_health_potion") == 40

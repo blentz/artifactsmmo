@@ -127,10 +127,6 @@ class WorldState:
     initiative: int = 0
     """Turn-order stat (higher acts first). From `initiative`."""
     task_lifecycle_phase: TaskLifecyclePhase = TaskLifecyclePhase.NONE
-    utility1_slot_quantity: int = 0
-    """Quantity of the consumable in utility slot 1 (from CharacterSchema)."""
-    utility2_slot_quantity: int = 0
-    """Quantity of the consumable in utility slot 2 (from CharacterSchema)."""
     """Phase of the taskmaster task pipeline (Phase 23c-1).
 
     DERIVED from (task_code, task_progress, task_total) via
@@ -142,6 +138,10 @@ class WorldState:
     also pass an appropriate ``task_lifecycle_phase`` to
     ``dataclasses.replace`` (or it will keep the stale phase and trip the
     invariant on next replace through ``__post_init__``)."""
+    utility1_slot_quantity: int = 0
+    """Quantity of the consumable in utility slot 1 (from CharacterSchema)."""
+    utility2_slot_quantity: int = 0
+    """Quantity of the consumable in utility slot 2 (from CharacterSchema)."""
 
     def __post_init__(self) -> None:
         """Derive ``task_lifecycle_phase`` from raw task fields.
