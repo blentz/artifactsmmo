@@ -127,6 +127,10 @@ class WorldState:
     initiative: int = 0
     """Turn-order stat (higher acts first). From `initiative`."""
     task_lifecycle_phase: TaskLifecyclePhase = TaskLifecyclePhase.NONE
+    utility1_slot_quantity: int = 0
+    """Quantity of the consumable in utility slot 1 (from CharacterSchema)."""
+    utility2_slot_quantity: int = 0
+    """Quantity of the consumable in utility slot 2 (from CharacterSchema)."""
     """Phase of the taskmaster task pipeline (Phase 23c-1).
 
     DERIVED from (task_code, task_progress, task_total) via
@@ -263,4 +267,6 @@ class WorldState:
             task_lifecycle_phase=derive_task_lifecycle_phase(
                 task_code_norm, char.task_progress, char.task_total
             ),
+            utility1_slot_quantity=int(_require(char, "utility1_slot_quantity") or 0),
+            utility2_slot_quantity=int(_require(char, "utility2_slot_quantity") or 0),
         )

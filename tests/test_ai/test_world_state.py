@@ -140,3 +140,36 @@ def test_combat_stats_default_empty_when_not_supplied():
     assert state.resistance == {}
     assert state.critical_strike == 0
     assert state.initiative == 0
+
+
+def test_world_state_carries_utility_slot_quantities():
+    char = MagicMock()
+    char.name = "hero"
+    char.level = 1
+    char.xp = 0
+    char.max_xp = 100
+    char.hp = 100
+    char.max_hp = 100
+    char.gold = 0
+    char.x = 0
+    char.y = 0
+    char.cooldown_expiration = None
+    char.task = ""
+    char.task_type = ""
+    char.task_progress = 0
+    char.task_total = 0
+    char.inventory = []
+    char.inventory_max_items = 100
+    for slot in EQUIPMENT_SLOTS:
+        setattr(char, slot, "")
+    char.utility1_slot = "small_health_potion"
+    char.utility1_slot_quantity = 40
+    char.utility2_slot = ""
+    char.utility2_slot_quantity = 0
+    for s in SKILL_NAMES:
+        setattr(char, f"{s}_level", 1)
+        setattr(char, f"{s}_xp", 0)
+
+    state = WorldState.from_character_schema(char, bank_items=None, bank_gold=0)
+    assert state.utility1_slot_quantity == 40
+    assert state.utility2_slot_quantity == 0
