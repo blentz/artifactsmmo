@@ -3048,24 +3048,30 @@ APPLY_MOVE_MUTATIONS = [
 APPLY_EQUIP_MUTATIONS = [
     (
         "apply-baseline-equip: revert EquipAction.apply to explicit WorldState(...) dropping baseline",
-        "        return dataclasses.replace(\n"
-        "            state,\n"
-        "            inventory=new_inventory,\n"
-        "            equipment=new_equipment,\n"
-        "            cooldown_expires=None,\n"
-        "        )",
-        "        return WorldState(\n"
-        "            character=state.character,\n"
-        "            level=state.level, xp=state.xp, max_xp=state.max_xp,\n"
-        "            hp=state.hp, max_hp=state.max_hp, gold=state.gold,\n"
-        "            skills=state.skills, x=state.x, y=state.y,\n"
-        "            inventory=new_inventory, inventory_max=state.inventory_max,\n"
-        "            equipment=new_equipment, cooldown_expires=None,\n"
-        "            task_code=state.task_code, task_type=state.task_type,\n"
-        "            task_progress=state.task_progress, task_total=state.task_total,\n"
-        "            bank_items=state.bank_items, bank_gold=state.bank_gold,\n"
-        "            pending_items=state.pending_items, active_events=state.active_events,\n"
-        "        )",
+        # Target: the non-utility return path (lines 91-96 of equip.py, inside the
+        # `if self.slot not in ("utility1_slot", "utility2_slot"):` branch).
+        # This is the path exercised by test_equip_preserves_baseline_{probe,property}
+        # which uses slot="weapon_slot".  Task-2's per-slot restructure added 4 spaces
+        # of extra indent vs. the pre-restructure single-return block — the old 8-space
+        # anchor no longer matched, producing an inert / uncaught mutant.
+        "            return dataclasses.replace(\n"
+        "                state,\n"
+        "                inventory=new_inventory,\n"
+        "                equipment=new_equipment,\n"
+        "                cooldown_expires=None,\n"
+        "            )",
+        "            return WorldState(\n"
+        "                character=state.character,\n"
+        "                level=state.level, xp=state.xp, max_xp=state.max_xp,\n"
+        "                hp=state.hp, max_hp=state.max_hp, gold=state.gold,\n"
+        "                skills=state.skills, x=state.x, y=state.y,\n"
+        "                inventory=new_inventory, inventory_max=state.inventory_max,\n"
+        "                equipment=new_equipment, cooldown_expires=None,\n"
+        "                task_code=state.task_code, task_type=state.task_type,\n"
+        "                task_progress=state.task_progress, task_total=state.task_total,\n"
+        "                bank_items=state.bank_items, bank_gold=state.bank_gold,\n"
+        "                pending_items=state.pending_items, active_events=state.active_events,\n"
+        "            )",
     ),
 ]
 
