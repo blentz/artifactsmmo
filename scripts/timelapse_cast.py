@@ -31,7 +31,12 @@ event), so re-timing a single event is local -- no global re-basing.
 Usage:
     asciinema rec raw.cast -c 'uv run artifactsmmo play <char> --tui'
     uv run python scripts/timelapse_cast.py raw.cast demo.cast
+    uv run python scripts/timelapse_cast.py raw.cast demo.cast --max-seconds 90
     asciinema play demo.cast
+
+`--max-seconds N` truncates the output to N seconds of playtime (a safe suffix
+cut). For the first N seconds of the RAW recording with no time compression,
+also pass `--keep 1e9` (everything real-time, then cut at N).
 """
 
 import argparse
@@ -121,6 +126,19 @@ def timelapse(events: list[Event], keep_seconds: float, blur_seconds: float, bou
             t_in_cycle += interval
 
 
+def truncate(events: Iterator[Event], max_seconds: float) -> Iterator[Event]:
+    """Stop once cumulative playtime exceeds `max_seconds`. Cutting a SUFFIX is
+    safe -- the terminal is coherent at every prefix point; only deleting MIDDLE
+    frames corrupts state. Applied after timelapse, so the limit is measured on
+    the already-compressed stream (90s of the final cast, not the raw)."""
+    t = 0.0
+    for event in events:
+        t += cast(float, event[0])
+        if t > max_seconds:
+            return
+        yield event
+
+
 def write_cast(path: str, header: dict[str, object], events: Iterator[Event]) -> None:
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(json.dumps(header))
@@ -154,6 +172,8 @@ def main() -> None:
                         help=f"interval for fast-forwarded loop frames (default {BLUR_SECONDS})")
     parser.add_argument("--boundary-bytes", type=int, default=BOUNDARY_BYTES,
                         help=f"repaint size threshold (default {BOUNDARY_BYTES})")
+    parser.add_argument("--max-seconds", type=float, default=None,
+                        help="truncate output to this many seconds of playtime (safe suffix cut)")
     parser.add_argument("--stats", action="store_true",
                         help="print output-size histogram and exit (helps pick --boundary-bytes)")
     args = parser.parse_args()
@@ -165,6 +185,8 @@ def main() -> None:
     if not args.output:
         parser.error("output path required (or pass --stats)")
     rewritten = timelapse(events, args.keep, args.blur, args.boundary_bytes)
+    if args.max_seconds is not None:
+        rewritten = truncate(rewritten, args.max_seconds)
     write_cast(args.output, header, rewritten)
     print(f"wrote {args.output}")
 
