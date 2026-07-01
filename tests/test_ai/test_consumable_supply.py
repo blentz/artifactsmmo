@@ -12,11 +12,14 @@ def _gd() -> GameData:
                                           crafting_skill="alchemy", crafting_level=5),
         "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
                                    crafting_skill="weaponcrafting", crafting_level=1),
+        "apple_pie": ItemStats(code="apple_pie", level=1, type_="consumable",
+                               crafting_skill="cooking", crafting_level=1),
     }
     gd._crafting_recipes = {
         "cooked_chicken": {"raw_chicken": 1},
         "small_health_potion": {"sunflower": 3},
         "copper_dagger": {"copper_bar": 6},
+        "apple_pie": {"apple": 4, "egg": 2},
     }
     return gd
 
@@ -45,9 +48,11 @@ class TestConsumableCraftQuantity:
 
     def test_multi_ingredient_bounded_by_scarcest(self):
         gd = _gd()
-        # potion needs sunflower:3; hold 12 -> 4 runs (scarcest ingredient bounds)
-        state = make_state(inventory={"sunflower": 11})  # 11//3 = 3 runs
-        assert consumable_craft_quantity("small_health_potion", 1, state, gd) == 3
+        # apple_pie needs apple:4, egg:2. Hold apple=20 (20//4=5 runs) but
+        # egg=6 (6//2=3 runs) -> min over ingredients = 3. A wrong impl using
+        # only the first ingredient would return 5, so this proves the min().
+        state = make_state(inventory={"apple": 20, "egg": 6})
+        assert consumable_craft_quantity("apple_pie", 1, state, gd) == 3
 
     def test_never_shrinks_below_planned(self):
         gd = _gd()
