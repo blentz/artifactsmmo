@@ -8,6 +8,7 @@ from artifactsmmo_cli.tui.app import WatchApp
 from artifactsmmo_cli.tui.screens.character_screen import CharacterScreen
 from artifactsmmo_cli.tui.screens.log_screen import LogScreen
 from artifactsmmo_cli.tui.screens.plan_screen import PlanScreen
+from artifactsmmo_cli.tui.sprites import NPC_SPRITES
 from artifactsmmo_cli.tui.widgets.inventory_pane import InventoryPane
 from artifactsmmo_cli.tui.widgets.log_pane import LogPane
 from artifactsmmo_cli.tui.widgets.map_pane import TILE_H, TILE_W, MapPane
@@ -68,6 +69,14 @@ class TestWatchAppStaticProperties:
         gd = GameData()
         app = WatchApp(character="hero", game_data=gd)
         assert app._game_data is gd
+
+    def test_watchapp_init_audits_uncurated(self, capsys):
+        gd = GameData()
+        gd._monster_locations = {"made_up_beast": [(0, 0)]}
+        gd.world.npc_tiles = {next(iter(NPC_SPRITES)): (0, 0)}
+        WatchApp("robby", gd)
+        out = capsys.readouterr().out
+        assert "made_up_beast" in out and "uncurated monsters" in out
 
 
 class TestWatchAppCompose:

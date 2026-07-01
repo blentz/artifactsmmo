@@ -12,6 +12,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.tui.screens.character_screen import CharacterScreen
 from artifactsmmo_cli.tui.screens.log_screen import LogScreen
 from artifactsmmo_cli.tui.screens.plan_screen import PlanScreen
+from artifactsmmo_cli.tui.sprite_coverage_audit import SpriteCoverageAudit
 from artifactsmmo_cli.tui.widgets.inventory_pane import InventoryPane
 from artifactsmmo_cli.tui.widgets.log_pane import LogPane
 from artifactsmmo_cli.tui.widgets.map_pane import MapPane
@@ -77,6 +78,7 @@ class WatchApp(App[None]):
         self.title = f"artifactsmmo watch: {character}"
         self._last_snapshot: CycleSnapshot | None = None
         self._recent_snapshots: deque[CycleSnapshot] = deque(maxlen=self.LOG_BUFFER)
+        SpriteCoverageAudit().run(game_data)
 
     def compose(self) -> ComposeResult:
         yield Header()
