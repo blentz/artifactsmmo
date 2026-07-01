@@ -71,6 +71,10 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachCharLevel,
     ReachSkillLevel,
 )
+from artifactsmmo_cli.ai.tiers.next_tier_cap import (
+    next_tier_cap_pure,
+    next_tier_dampened_pure,
+)
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.objective_needs import objective_needs
 from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
@@ -82,6 +86,7 @@ from artifactsmmo_cli.ai.tiers.skill_step_dispatch import (
     dispatch_candidate_flags,
     skill_step_dispatch_pure,
 )
+from artifactsmmo_cli.ai.tiers.skill_target_curve import SkillItem
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -745,8 +750,27 @@ def objective_step_goal(
         candidates = _skill_dispatch_candidates(
             step.skill, state, game_data, reserved_full, reserved_relaxed,
             current, ctx.target_gear | ctx.target_tools, wanted_targets)
+        # Next-tier throwaway dampener (project next-tier skill-grind dampener):
+        # when this gear-crafting skill can ALREADY craft every gear item in the
+        # 10-level band one tier above the character's level, a speculative
+        # throwaway grind only over-skills a tier the committed root already
+        # covers. Hoist the SkillItem view (mirrors skill_target_curve) and let
+        # the proved cores decide; the dispatch core suppresses only a NOT-wanted
+        # grind under this flag (need-exemption preserved).
+        skill_items = [
+            SkillItem(
+                stats.crafting_skill, stats.crafting_level, stats.level,
+                (stats.type_ in ITEM_TYPE_TO_SLOTS or stats.subtype == "tool"),
+            )
+            for stats in game_data.all_item_stats.values()
+            if stats.crafting_skill
+        ]
+        next_cap = next_tier_cap_pure(step.skill, state.level, skill_items,
+                                      game_data.max_skill_level)
+        dampened = next_tier_dampened_pure(current, next_cap)
         decision = skill_step_dispatch_pure(step.skill, current,
-                                            committed_skill, committed_level, candidates)
+                                            committed_skill, committed_level,
+                                            candidates, dampened=dampened)
         if decision.kind == "grind":
             bank = state.bank_items or {}
             held = state.inventory.get(decision.code, 0) + bank.get(decision.code, 0)

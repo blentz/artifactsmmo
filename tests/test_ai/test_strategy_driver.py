@@ -910,6 +910,71 @@ def test_grind_reserves_objective_gear_when_committed_root_is_skill_root():
                 and g._target_item in {"copper_helmet", "copper_ring", "copper_dagger"})
 
 
+def _gd_next_tier() -> GameData:
+    """A gearcrafting skill with a THROWAWAY in-level craft (copper_helmet,
+    gearcrafting-1, item_level 1) and a NEXT-TIER gear item (iron_helmet,
+    gearcrafting-10, item_level 12). At char_level 5 the next-tier band is
+    [10,19], so iron_helmet fixes next_tier_cap = 10. Both mats (copper_bar,
+    iron_bar) are gatherable, so both crafts are obtainable."""
+    gd = GameData()
+    gd._item_stats = {
+        "copper_helmet": ItemStats(code="copper_helmet", level=1, type_="helmet",
+                                   crafting_skill="gearcrafting", crafting_level=1),
+        "iron_helmet": ItemStats(code="iron_helmet", level=12, type_="helmet",
+                                 crafting_skill="gearcrafting", crafting_level=10),
+        "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource"),
+        "iron_bar": ItemStats(code="iron_bar", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"copper_helmet": {"copper_bar": 6},
+                            "iron_helmet": {"iron_bar": 6}}
+    gd._resource_drops = {"copper_rocks": "copper_bar", "iron_rocks": "iron_bar"}
+    return gd
+
+
+def test_objective_step_suppresses_speculative_grind_when_tier_ahead():
+    """Next-tier dampener: when gearcrafting already covers ALL next-tier gear
+    (current skill 10 >= next_tier_cap 10 at char_level 5) and only a THROWAWAY
+    (not-wanted) craft would be picked, the objective step suppresses the grind
+    and returns None. The dampener converts a would-be throwaway grind into a
+    SUPPRESS (project next-tier skill-grind dampener)."""
+    gd = _gd_next_tier()
+    state = make_state(level=5, skills={"gearcrafting": 10},
+                       inventory={"copper_bar": 6})
+    step = ReachSkillLevel("gearcrafting", 50)
+    assert objective_step_goal(step, state, gd, _ctx()) is None
+
+
+def test_objective_step_grinds_when_not_tier_ahead():
+    """Same fixture, but current gearcrafting 3 < next_tier_cap 10 -> NOT
+    dampened. The in-level throwaway grind (copper_helmet) still fires: the
+    dampener leaves behavior unchanged when the skill has not yet covered the
+    next tier. Proves the suppression above is caused by the dampener, not by a
+    missing candidate."""
+    gd = _gd_next_tier()
+    state = make_state(level=5, skills={"gearcrafting": 3},
+                       inventory={"copper_bar": 6})
+    step = ReachSkillLevel("gearcrafting", 50)
+    g = objective_step_goal(step, state, gd, _ctx())
+    assert isinstance(g, GatherMaterialsGoal)
+    assert g._target_item == "copper_helmet"
+
+
+def test_objective_step_grinds_wanted_next_tier_item_despite_gate():
+    """Need-exemption: even when dampened (current gearcrafting 10 >=
+    next_tier_cap 10), a WANTED/committed next-tier item (iron_helmet, carried in
+    ctx.near_term_targets and not yet held) is still crafted. Dampening suppresses
+    only a NOT-wanted throwaway grind; crafting a wanted item is objective
+    progress and is never blocked."""
+    gd = _gd_next_tier()
+    state = make_state(level=5, skills={"gearcrafting": 10},
+                       inventory={"copper_bar": 6})
+    step = ReachSkillLevel("gearcrafting", 50)
+    ctx = _ctx(near_term_targets=frozenset({"iron_helmet"}))
+    g = objective_step_goal(step, state, gd, ctx)
+    assert isinstance(g, GatherMaterialsGoal)
+    assert g._target_item == "iron_helmet"
+
+
 def _gd_copper_gated_legs() -> GameData:
     """copper_legs_armor is gearcrafting-5 (SKILL-GATED above current) and shares
     copper_bar with the in-level grind craftable copper_helmet (gearcrafting-1).
