@@ -159,6 +159,31 @@ def test_grind_never_picks_unobtainable():
     assert d.kind == "no_grind"
 
 
+# --- dampened next-tier throwaway suppression --------------------------------
+
+def test_dampened_suppresses_throwaway_grind():
+    """Under dampening, a grind on a NOT-wanted (throwaway) pick is suppressed
+    (let the committed root craft its own gear instead of over-grinding)."""
+    cands = [_c("copper_dagger", level=1, missing=0, wanted=False)]
+    d = skill_step_dispatch_pure("gearcrafting", 1, "", 0, cands, dampened=True)
+    assert d.kind == "suppress"
+
+
+def test_dampened_does_not_suppress_wanted_craft():
+    """Dampening is guarded by NOT-wanted: a WANTED objective craft still grinds
+    (committed/wanted progress is never blocked)."""
+    cands = [_c("iron_helmet", level=1, missing=0, wanted=True)]
+    d = skill_step_dispatch_pure("gearcrafting", 1, "", 0, cands, dampened=True)
+    assert d.kind == "grind" and d.code == "iron_helmet"
+
+
+def test_not_dampened_grinds_as_before():
+    """With dampening off (the default), the throwaway grind is unchanged."""
+    cands = [_c("copper_dagger", level=1, missing=0, wanted=False)]
+    d = skill_step_dispatch_pure("gearcrafting", 1, "", 0, cands, dampened=False)
+    assert d.kind == "grind" and d.code == "copper_dagger"
+
+
 # --- combine_dispatch_pure (the extracted/proved core) -----------------------
 
 def test_combine_suppress():

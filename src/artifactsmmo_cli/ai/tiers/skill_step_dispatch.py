@@ -124,13 +124,22 @@ def skill_step_dispatch_pure(
     skill: str, current_level: int,
     committed_skill: str, committed_level: int,
     candidates: list[DispatchCandidate],
+    dampened: bool = False,
 ) -> DispatchDecision:
     """Decide the grind action for a `ReachSkillLevel(skill, ...)` step by
     composing the proved selection (`skill_grind_selection_pure`, run over the
     full- then relaxed-reservation candidate lists) with the proved combine core
     (`combine_dispatch_pure`). The composition's safety/liveness are the
-    `forward_progress` / `grind_respects_full_reservation` theorems in
-    formal/Formal/SkillStepDispatch.lean."""
+    `forward_progress` / `reservation_safety` theorems in
+    formal/Formal/SkillStepDispatch.lean.
+
+    When `dampened` (the caller's next-tier throwaway signal) and the combine
+    core would GRIND a pick that is NOT a wanted objective target, suppress the
+    grind instead: the throwaway would only over-skill a tier the committed root
+    already covers. The branch is guarded by `not wanted`, so a committed/wanted
+    craft is never blocked — dampening only converts a throwaway grind into a
+    SUPPRESS (see `dispatchD_*` theorems in formal/Formal/SkillStepDispatch.lean).
+    Behavior is unchanged when `dampened` is False (the default)."""
     full = [_to_grind(c) for c in candidates if not c.uses_reserved_full]
     full_pick = skill_grind_selection_pure(skill, current_level, full)
     if full_pick != "":
@@ -140,4 +149,8 @@ def skill_step_dispatch_pure(
         relaxed_pick = skill_grind_selection_pure(skill, current_level, relaxed)
     kind, code = combine_dispatch_pure(skill, current_level, committed_skill,
                                        committed_level, full_pick, relaxed_pick)
+    if kind == "grind" and dampened:
+        picked = next((c for c in candidates if c.code == code), None)
+        if picked is not None and not picked.wanted:
+            return DispatchDecision(kind="suppress", code="")
     return DispatchDecision(kind=kind, code=code)

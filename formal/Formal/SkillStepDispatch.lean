@@ -270,4 +270,108 @@ theorem grind_valid (skill : String) (cl : Int) (cs : String) (clv : Int)
       rw [← hgcode, ← hcg, toGrind_code]
     · show feasible skill cl (toGrind c); rw [hcg]; exact hgfeas
 
+/-! ## Dampened next-tier throwaway suppression (the wrapper's `dampened` branch).
+
+The impure caller passes a `dampened : Bool` next-tier signal. When set, the
+wrapper converts a GRIND on a throwaway (a pick that is NOT a wanted objective
+target) into SUPPRESS — the throwaway would only over-skill a tier the committed
+root already covers. The branch is guarded by `not wanted`, so committed/wanted
+progress is never blocked. `dampSuppress` mirrors the Python `next(...)` lookup;
+`dispatchD` is `dispatch` post-composed with that guarded conversion.
+
+Load-bearing theorems:
+* `dispatchD_not_dampened`        — `dampened = false` reproduces `dispatch`
+                                     exactly, so every `dispatch` role theorem
+                                     above transfers to the default call path.
+* `dispatchD_suppress_of_throwaway` — a dampened grind on a not-wanted pick
+                                     suppresses (the intended new behavior).
+* `dispatchD_preserves_wanted_grind`— a grind whose pick IS wanted is NEVER
+                                     suppressed by dampening (wanted-progress).
+* `dispatchD_changed_only_throwaway_grind` — dampening only ever converts a
+                                     not-wanted GRIND into SUPPRESS; suppress /
+                                     no_grind / wanted-grind decisions are
+                                     untouched (committed-progress safety).
+-/
+
+/-- The dampened suppress predicate: mirrors the Python `next((c for c in
+candidates if c.code == code), None)` lookup — `true` iff the first candidate
+whose code equals the grind pick exists and is NOT a wanted objective target. -/
+def dampSuppress (cands : List DC) (code : String) : Bool :=
+  match cands.find? (fun c => c.code == code) with
+  | some c => !c.wanted
+  | none => false
+
+/-- The full model of `skill_step_dispatch_pure` WITH the `dampened` parameter:
+the un-dampened `dispatch` decision, except a GRIND on a throwaway (not-wanted)
+pick is converted to `("suppress", "")` when `dampened`. -/
+def dispatchD (skill : String) (cl : Int) (cs : String) (clv : Int)
+    (cands : List DC) (dampened : Bool) : String × String :=
+  if dampened && (dispatch skill cl cs clv cands).1 == "grind"
+      && dampSuppress cands (dispatch skill cl cs clv cands).2
+  then ("suppress", "")
+  else dispatch skill cl cs clv cands
+
+/-- `dispatchD` with `dampened = false` is exactly `dispatch`: the default call
+path is unchanged, so the `suppress_correct` / `full_preference` /
+`reservation_safety` / `forward_progress` / `grind_valid` role theorems above
+characterize it verbatim. -/
+theorem dispatchD_not_dampened (skill : String) (cl : Int) (cs : String) (clv : Int)
+    (cands : List DC) :
+    dispatchD skill cl cs clv cands false = dispatch skill cl cs clv cands := by
+  unfold dispatchD; simp
+
+/-- If the picked candidate (found by code) is WANTED, the dampened suppress
+predicate is false — a wanted objective craft is never a throwaway. -/
+theorem dampSuppress_eq_false_of_found_wanted (cands : List DC) (code : String) (c : DC)
+    (hfound : cands.find? (fun d => d.code == code) = some c) (hw : c.wanted = true) :
+    dampSuppress cands code = false := by
+  unfold dampSuppress; rw [hfound]; simp [hw]
+
+/-- `dispatchD_suppress_of_throwaway`: a dampened GRIND on a throwaway (not-wanted)
+pick is suppressed. -/
+theorem dispatchD_suppress_of_throwaway (skill : String) (cl : Int) (cs : String) (clv : Int)
+    (cands : List DC) (code : String)
+    (hd : dispatch skill cl cs clv cands = ("grind", code))
+    (hds : dampSuppress cands code = true) :
+    dispatchD skill cl cs clv cands true = ("suppress", "") := by
+  unfold dispatchD; rw [hd]; simp [hds]
+
+/-- `dispatchD_grind_of_wanted`: when the pick is NOT a throwaway (dampSuppress
+false), the grind survives dampening at any `dampened` flag. -/
+theorem dispatchD_grind_of_wanted (skill : String) (cl : Int) (cs : String) (clv : Int)
+    (cands : List DC) (code : String) (dampened : Bool)
+    (hd : dispatch skill cl cs clv cands = ("grind", code))
+    (hds : dampSuppress cands code = false) :
+    dispatchD skill cl cs clv cands dampened = ("grind", code) := by
+  unfold dispatchD; rw [hd]; simp [hds]
+
+/-- `dispatchD_preserves_wanted_grind` (wanted-progress): a grind whose pick is a
+WANTED objective target is never suppressed by dampening. -/
+theorem dispatchD_preserves_wanted_grind (skill : String) (cl : Int) (cs : String) (clv : Int)
+    (cands : List DC) (code : String) (dampened : Bool) (c : DC)
+    (hd : dispatch skill cl cs clv cands = ("grind", code))
+    (hfound : cands.find? (fun d => d.code == code) = some c) (hw : c.wanted = true) :
+    dispatchD skill cl cs clv cands dampened = ("grind", code) :=
+  dispatchD_grind_of_wanted skill cl cs clv cands code dampened hd
+    (dampSuppress_eq_false_of_found_wanted cands code c hfound hw)
+
+/-- `dispatchD_changed_only_throwaway_grind` (committed-progress safety): if
+dampening changes the decision at all, the un-dampened decision was a GRIND on a
+throwaway (not-wanted) pick and the new decision is SUPPRESS. Hence suppress,
+no_grind, and wanted-grind decisions are all preserved. -/
+theorem dispatchD_changed_only_throwaway_grind (skill : String) (cl : Int) (cs : String)
+    (clv : Int) (cands : List DC) (dampened : Bool)
+    (hchg : dispatchD skill cl cs clv cands dampened ≠ dispatch skill cl cs clv cands) :
+    dampened = true ∧ (dispatch skill cl cs clv cands).1 = "grind"
+      ∧ dampSuppress cands (dispatch skill cl cs clv cands).2 = true
+      ∧ dispatchD skill cl cs clv cands dampened = ("suppress", "") := by
+  unfold dispatchD at hchg ⊢
+  by_cases hcond : (dampened && (dispatch skill cl cs clv cands).1 == "grind"
+      && dampSuppress cands (dispatch skill cl cs clv cands).2) = true
+  · rw [if_pos hcond]
+    rw [Bool.and_eq_true, Bool.and_eq_true] at hcond
+    obtain ⟨⟨hdam, hgrind⟩, hsupp⟩ := hcond
+    exact ⟨hdam, eq_of_beq hgrind, hsupp, rfl⟩
+  · rw [if_neg hcond] at hchg; exact absurd rfl hchg
+
 end Formal.SkillStepDispatch
