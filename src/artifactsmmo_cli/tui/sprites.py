@@ -748,7 +748,7 @@ MONSTER_SPRITES: dict[str, Sprite] = {
     # Serpents
     "duskworm": recolor(SAND_SNAKE_SPRITE, {"o": INK, "a": BREW, "e": SLATE}),
     # Insects
-    "dusk_beetle": recolor(SPIDER_SPRITE, {"o": INK, "b": INK, "e": SLATE}),
+    "dusk_beetle": recolor(SPIDER_SPRITE, {"o": INK, "b": SLATE, "e": SLATE}),
     "solar_desert_scorpion": recolor(DESERT_SCORPION_SPRITE, {"o": INK, "a": GOLD, "e": INK, "t": EMBER}),
     # Plants
     "dryad": recolor(CURSED_TREE_SPRITE, {"o": INK, "d": LEAF, "e": SKIN, "t": BARK}),
@@ -876,6 +876,8 @@ ALL_CURATED_SPRITES: dict[str, Sprite] = {
     "king_slime": KING_SLIME_SPRITE,
 }
 
-for _name, _sprite in ALL_CURATED_SPRITES.items():
-    validate_sprite(_name, _sprite)
+for _category_sprites in CURATED_BY_CATEGORY.values():
+    for _code, _sprite in _category_sprites.items():
+        validate_sprite(_code, _sprite)
+validate_sprite("player", PLAYER_SPRITE)
 validate_sprite("blank", BLANK_SPRITE)
