@@ -167,6 +167,7 @@ import Formal.Liveness.LearningStoreBridge
 import Formal.Liveness.MetaGoalDispatch
 import Formal.Liveness.StateFieldGapSemantics
 import Formal.SkillTargetCurve
+import Formal.NextTierCap
 import Formal.SkillGrindSelection
 import Formal.Extracted.SkillStepDispatch
 import Formal.SkillStepDispatch
