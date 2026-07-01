@@ -70,3 +70,10 @@ Multi-character coordination is not in scope yet.
 GNU Affero General Public License v3 (AGPL-3.0) — see [LICENSE](LICENSE). The
 AGPL ensures any modifications to this AI, including those used to provide
 network services, remain open-source and available to the community.
+
+This choice is deliberate. Because this AI was itself built with AI — a model
+trained on a dataset derived from the internet commons through methods that
+are, at best, morally ambiguous — it is only right that works derived from
+that commons stay in the commons, for everyone to benefit from. We can't put
+the genie back in the bottle, but we can try to use the tool as responsibly
+as we can.
