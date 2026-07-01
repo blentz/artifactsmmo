@@ -5,6 +5,11 @@ the standard CLI commands (move, gather, fight, bank, etc.) and an
 autonomous GOAP-based AI player that plays a character end-to-end while
 learning from observation.
 
+![Live TUI: the autonomous player grinding combat XP, with status, inventory, sprite map, and decision log](docs/demo.gif)
+
+*The live TUI watcher. Recording time-lapsed with `scripts/timelapse_cast.py`
+(one animation sweep per action, cooldown downtime collapsed).*
+
 ## Install
 
 ```sh
