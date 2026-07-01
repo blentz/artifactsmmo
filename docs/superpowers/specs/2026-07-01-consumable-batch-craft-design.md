@@ -62,14 +62,16 @@ Implementation:
 - `recipe = game_data.crafting_recipe(code)`; if `None` → return `planned_qty`.
 - `needs = [qty for _c, qty in recipe.items()]`,
   `held = [state.inventory.get(c, 0) for c, _qty in recipe.items()]`.
-- `y = game_data.craft_yield(code)`.
-- `produced = max_batch_from_held_pure(needs, held, y)` (proven helper,
-  `MaxBatchFromHeld.lean`); `runs = produced // y` (produced == runs*y, so this
-  recovers runs; when `y==0` or no ingredients, `produced==0` → runs 0).
+- `runs = max_batch_from_held_pure(needs, held, 1)`. The `CraftAction.quantity`
+  field is the run count, and runs = `min(held[i]//needs[i])` is independent of
+  per-run yield — so calling the proven helper with `yield=1` returns runs
+  directly. No `craft_yield` call, no division, no `y==0` guard (which would be
+  untestable defensive code).
 - return `max(planned_qty, runs)`.
 
 `max_batch_from_held_pure(needs, held, yield_per_craft)` already exists
-(`ai/max_batch_from_held.py`, returns `min(held[i]//needs[i]) * yield`).
+(`ai/max_batch_from_held.py`, proven by `MaxBatchFromHeld.lean`, returns
+`min(held[i]//needs[i]) * yield`).
 
 ### Wiring in `_execute`
 
