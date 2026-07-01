@@ -566,7 +566,7 @@ class StrategyEngine:
             # deadlock (see POTION_SUPPLY_URGENCY); the CraftPotions guard
             # maintains the baseline once alchemy unlocks crafting.
             elif (stats.type_ == "utility"
-                    and getattr(stats, "hp_restore", 0) > 0
+                    and stats.hp_restore > 0
                     and equipped_potion_qty(state, root.code) < potion_baseline_pure(
                         state.level, POTION_LOW_LEVEL, POTION_LOW_QTY,
                         POTION_HIGH_LEVEL, POTION_HIGH_QTY)):
