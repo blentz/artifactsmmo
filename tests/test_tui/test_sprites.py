@@ -5,6 +5,7 @@ import pytest
 from artifactsmmo_cli.tui.sprites import (
     ALL_CURATED_SPRITES,
     BLANK_SPRITE,
+    MONSTER_SPRITES,
     PLAYER_SPRITE,
     SPRITE_SIZE,
     TRANSPARENT,
@@ -68,3 +69,8 @@ def test_recolor_keeps_shape_swaps_palette():
     assert out.rows == base.rows
     assert out.palette == {"#": "blue"}
     validate_sprite("recolored", out)  # must stay a valid 8x8 with defined keys
+
+
+@pytest.mark.parametrize("code", sorted(MONSTER_SPRITES))
+def test_every_curated_monster_sprite_is_valid(code):
+    validate_sprite(code, MONSTER_SPRITES[code])

@@ -13,39 +13,39 @@ Format: `code  | family | base (curated shape to recolor, or NEW) | palette inte
 
 ### Recolors of a curated monster shape (26)
 
-- [ ] `corrupted_ogre`        | giant    | base=`ogre`            | sickly green→violet corruption tint
-- [ ] `corrupted_owlbear`     | beast    | base=`owlbear`         | corruption violet over the owlbear browns
-- [ ] `full_moon_vampire`     | undead   | base=`vampire`         | moon-pale skin, silver accents
-- [ ] `lich`                  | undead   | base=`skeleton`        | robed: bone + dark-violet robe overpaint
-- [ ] `demon`                 | humanoid | base=`imp`             | deeper blood-red, larger horns via mark cells
-- [ ] `goblin_guard`          | humanoid | base=`goblin`          | steel-armored (STEEL over tunic)
-- [ ] `goblin_priestess`      | humanoid | base=`goblin`          | robe (BREW/violet), pale accent
-- [ ] `cultist_emperor`       | humanoid | base=`cultist_acolyte` | imperial gold + crimson robe
-- [ ] `cultist_alchemist`     | humanoid | base=`cultist_acolyte` | green potion palette
-- [ ] `sea_marauder`          | humanoid | base=`highwayman`      | teal/steel pirate palette
-- [ ] `sandwhisper_empress`   | humanoid | base=`sandwarden`      | regal sand-gold + violet
-- [ ] `efreet_sultan`         | giant    | base=`cyclops`         | fire palette (EMBER/AMBER/GOLD)
-- [ ] `sonnengott`            | giant    | base=`cyclops`         | radiant gold ("sun god")
-- [ ] `rat`                   | beast    | base=`wolf`            | grey, small (mark trim)
-- [ ] `fennec`               | beast    | base=`wolf`            | sandy KHAKI (desert fox)
-- [ ] `grimlet`               | beast    | base=`wolf`            | dark SLATE, ember eyes
-- [ ] `bandit_lizard`         | beast    | base=`wolf`            | LEAF green reptile
-- [ ] `duskworm`              | serpent  | base=`sand_snake`      | dusk violet/SLATE
-- [ ] `dusk_beetle`           | insect   | base=`spider`          | dark carapace (INK/SLATE)
-- [ ] `solar_desert_scorpion` | insect   | base=`desert_scorpion` | solar gold/ember
-- [ ] `dryad`                 | plant    | base=`cursed_tree`     | living LEAF green + SKIN face
-- [ ] `rosenblood`            | plant    | base=`cursed_tree`     | rose BLOOD red + LEAF
-- [ ] `flameche`              | elemental| base=`green_slime`     | fire palette (EMBER/AMBER) — flame blob
-- [ ] `pixie`                 | flyer    | base=NEW `bat`         | PINK body, pale wings (small winged)
-- [ ] `echoless_bat`          | flyer    | base=NEW `bat`         | near-black SLATE, silent variant
-- [ ] `red_dragon`            | dragon   | base=NEW `dragon`      | BLOOD red, full size
-- [ ] `baby_red_dragon`       | dragon   | base=NEW `dragon`      | red, lighter/juvenile accent
+- [x] `corrupted_ogre`        | giant    | base=`ogre`            | sickly green→violet corruption tint
+- [x] `corrupted_owlbear`     | beast    | base=`owlbear`         | corruption violet over the owlbear browns
+- [x] `full_moon_vampire`     | undead   | base=`vampire`         | moon-pale skin, silver accents
+- [x] `lich`                  | undead   | base=`skeleton`        | robed: bone + dark-violet robe overpaint
+- [x] `demon`                 | humanoid | base=`imp`             | deeper blood-red, larger horns via mark cells
+- [x] `goblin_guard`          | humanoid | base=`goblin`          | steel-armored (STEEL over tunic)
+- [x] `goblin_priestess`      | humanoid | base=`goblin`          | robe (BREW/violet), pale accent
+- [x] `cultist_emperor`       | humanoid | base=`cultist_acolyte` | imperial gold + crimson robe
+- [x] `cultist_alchemist`     | humanoid | base=`cultist_acolyte` | green potion palette
+- [x] `sea_marauder`          | humanoid | base=`highwayman`      | teal/steel pirate palette
+- [x] `sandwhisper_empress`   | humanoid | base=`sandwarden`      | regal sand-gold + violet
+- [x] `efreet_sultan`         | giant    | base=`cyclops`         | fire palette (EMBER/AMBER/GOLD)
+- [x] `sonnengott`            | giant    | base=`cyclops`         | radiant gold ("sun god")
+- [x] `rat`                   | beast    | base=`wolf`            | grey, small (mark trim)
+- [x] `fennec`               | beast    | base=`wolf`            | sandy KHAKI (desert fox)
+- [x] `grimlet`               | beast    | base=`wolf`            | dark SLATE, ember eyes
+- [x] `bandit_lizard`         | beast    | base=`wolf`            | LEAF green reptile
+- [x] `duskworm`              | serpent  | base=`sand_snake`      | dusk violet/SLATE
+- [x] `dusk_beetle`           | insect   | base=`spider`          | dark carapace (INK/SLATE)
+- [x] `solar_desert_scorpion` | insect   | base=`desert_scorpion` | solar gold/ember
+- [x] `dryad`                 | plant    | base=`cursed_tree`     | living LEAF green + SKIN face
+- [x] `rosenblood`            | plant    | base=`cursed_tree`     | rose BLOOD red + LEAF
+- [x] `flameche`              | elemental| base=`green_slime`     | fire palette (EMBER/AMBER) — flame blob
+- [x] `pixie`                 | flyer    | base=NEW `bat`         | PINK body, pale wings (small winged)
+- [x] `echoless_bat`          | flyer    | base=NEW `bat`         | near-black SLATE, silent variant
+- [x] `red_dragon`            | dragon   | base=NEW `dragon`      | BLOOD red, full size
+- [x] `baby_red_dragon`       | dragon   | base=NEW `dragon`      | red, lighter/juvenile accent
 
 ### New bespoke base shapes (author once, reused above) (2)
 
-- [ ] NEW base `_BAT_BASE`    | flyer  | bespoke 8x8 (wings spread, small body) — used by `bat`, `echoless_bat`, `pixie`
-- [ ] NEW base `_DRAGON_BASE` | dragon | bespoke 8x8 (winged serpent/quadruped) — used by `red_dragon`, `baby_red_dragon`
-- [ ] `bat`                   | flyer  | base=NEW `bat` | dark BARK/SLATE (the plain bat)
+- [x] NEW base `_BAT_BASE`    | flyer  | bespoke 8x8 (wings spread, small body) — used by `bat`, `echoless_bat`, `pixie`
+- [x] NEW base `_DRAGON_BASE` | dragon | bespoke 8x8 (winged serpent/quadruped) — used by `red_dragon`, `baby_red_dragon`
+- [x] `bat`                   | flyer  | base=NEW `bat` | dark BARK/SLATE (the plain bat)
 
 ## Missing NPCs (7) — all merchant/trader humanoids
 

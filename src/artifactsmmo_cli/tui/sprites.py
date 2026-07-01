@@ -634,6 +634,64 @@ KING_SLIME_SPRITE = Sprite(
     palette={"o": INK, "G": GOLD, "g": BREW, "e": INK},
 )
 
+# --- New base shapes (used by bat/dragon family recolors below) ---
+_BAT_BASE = Sprite(
+    rows=(
+        "........",
+        ".b....b.",
+        "wwbbbbww",
+        "wwbeebww",
+        ".wbbbbw.",
+        "..wbbw..",
+        "...bb...",
+        "........",
+    ),
+    palette={"b": BARK, "w": SLATE, "e": EMBER},
+)
+_DRAGON_BASE = Sprite(
+    rows=(
+        "...hh...",
+        "..heeh..",
+        "w.bbbb.w",
+        "wwbbbbww",
+        ".wbbbbw.",
+        "..bbbb..",
+        ".b.bb.b.",
+        "b......b",
+    ),
+    palette={"h": BLOOD, "e": GOLD, "b": BLOOD, "w": BLOOD},
+)
+
+# --- Bespoke overpaint variants (rows differ from base) ---
+LICH_SPRITE = Sprite(
+    # skeleton base with lower-body 'w' replaced by 'r' (robe color=BREW).
+    rows=(
+        "..oooo..",
+        ".owwwwo.",
+        ".oweewo.",
+        ".owwwwo.",
+        "..oooo..",
+        ".orrrro.",
+        ".or..ro.",
+        ".oo..oo.",
+    ),
+    palette={"o": INK, "w": BONE, "e": INK, "r": BREW},
+)
+DEMON_SPRITE = Sprite(
+    # imp base with row 0 horns extended into adjacent transparent cells.
+    rows=(
+        "oi...io.",
+        ".oiiiio.",
+        ".oieeio.",
+        ".oiiiio.",
+        "..oooo..",
+        ".oiiiio.",
+        ".oi..io.",
+        ".oo..oo.",
+    ),
+    palette={"o": INK, "i": BLOOD, "e": GOLD},
+)
+
 MONSTER_SPRITES: dict[str, Sprite] = {
     "green_slime": GREEN_SLIME_SPRITE,
     "blue_slime": BLUE_SLIME_SPRITE,
@@ -665,6 +723,45 @@ MONSTER_SPRITES: dict[str, Sprite] = {
     "desert_scorpion": DESERT_SCORPION_SPRITE,
     "sandwarden": SANDWARDEN_SPRITE,
     "king_slime": KING_SLIME_SPRITE,
+    # --- 28 missing monsters from roster-gap.md ---
+    # Giants
+    "corrupted_ogre": recolor(OGRE_SPRITE, {"o": INK, "g": BREW, "e": BLOOD}),
+    "efreet_sultan": recolor(CYCLOPS_SPRITE, {"o": INK, "c": AMBER, "e": EMBER}),
+    "sonnengott": recolor(CYCLOPS_SPRITE, {"o": INK, "c": GOLD, "e": AMBER}),
+    # Beasts
+    "corrupted_owlbear": recolor(OWLBEAR_SPRITE, {"o": INK, "b": BREW, "a": AMBER}),
+    "rat": recolor(WOLF_SPRITE, {"o": INK, "w": SLATE, "e": INK}),
+    "fennec": recolor(WOLF_SPRITE, {"o": INK, "w": KHAKI, "e": AMBER}),
+    "grimlet": recolor(WOLF_SPRITE, {"o": INK, "w": SLATE, "e": EMBER}),
+    "bandit_lizard": recolor(WOLF_SPRITE, {"o": INK, "w": LEAF, "e": BLOOD}),
+    # Undead
+    "full_moon_vampire": recolor(VAMPIRE_SPRITE, {"o": INK, "h": STONE, "w": BONE, "r": STONE}),
+    "lich": LICH_SPRITE,
+    # Humanoids
+    "demon": DEMON_SPRITE,
+    "goblin_guard": recolor(GOBLIN_SPRITE, {"o": INK, "g": GOBLIN_SKIN, "e": BLOOD, "b": STEEL}),
+    "goblin_priestess": recolor(GOBLIN_SPRITE, {"o": INK, "g": GOBLIN_SKIN, "e": BLOOD, "b": BREW}),
+    "cultist_emperor": recolor(CULTIST_ACOLYTE_SPRITE, {"o": INK, "b": BLOOD, "e": GOLD}),
+    "cultist_alchemist": recolor(CULTIST_ACOLYTE_SPRITE, {"o": INK, "b": LEAF, "e": AMBER}),
+    "sea_marauder": recolor(HIGHWAYMAN_SPRITE, {"o": INK, "c": WATER, "s": SKIN, "e": INK}),
+    "sandwhisper_empress": recolor(SANDWARDEN_SPRITE, {"o": INK, "k": GOLD, "e": BREW}),
+    # Serpents
+    "duskworm": recolor(SAND_SNAKE_SPRITE, {"o": INK, "a": BREW, "e": SLATE}),
+    # Insects
+    "dusk_beetle": recolor(SPIDER_SPRITE, {"o": INK, "b": INK, "e": SLATE}),
+    "solar_desert_scorpion": recolor(DESERT_SCORPION_SPRITE, {"o": INK, "a": GOLD, "e": INK, "t": EMBER}),
+    # Plants
+    "dryad": recolor(CURSED_TREE_SPRITE, {"o": INK, "d": LEAF, "e": SKIN, "t": BARK}),
+    "rosenblood": recolor(CURSED_TREE_SPRITE, {"o": INK, "d": BLOOD, "e": LEAF, "t": BARK}),
+    # Elementals
+    "flameche": recolor(GREEN_SLIME_SPRITE, {"o": INK, "g": AMBER, "e": EMBER}),
+    # Flyers (bat family)
+    "bat": recolor(_BAT_BASE, {"b": BARK, "w": SLATE, "e": EMBER}),
+    "echoless_bat": recolor(_BAT_BASE, {"b": SLATE, "w": INK, "e": INK}),
+    "pixie": recolor(_BAT_BASE, {"b": PINK, "w": BONE, "e": INK}),
+    # Dragons
+    "red_dragon": recolor(_DRAGON_BASE, {"h": BLOOD, "e": GOLD, "b": BLOOD, "w": BLOOD}),
+    "baby_red_dragon": recolor(_DRAGON_BASE, {"h": BLOOD, "e": GOLD, "b": AMBER, "w": BLOOD}),
 }
 NPC_SPRITES: dict[str, Sprite] = {
     "archaeologist": ARCHAEOLOGIST_SPRITE,
