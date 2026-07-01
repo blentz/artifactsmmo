@@ -66,10 +66,19 @@ Event = list[object]  # asciicast v3 event: [interval, code, data]
 #                 misread as new actions -> waits not compressed. No bytes are
 #                 ever dropped, so a wrong value only mis-paces, never corrupts.
 #                 Tune by inspecting event sizes (see --stats).
+#   IDLE_SECONDS  any gap LONGER than this is pure downtime (the only motion is
+#                 the 1s cooldown-timer tick) and is collapsed to BLUR_SECONDS.
+#                 Swing frames are 0.15s apart, countdown ticks 1.0s apart, so
+#                 0.5 cleanly separates animation from dead time. This is what
+#                 kills the "waiting for cooldown" downtime -- including static
+#                 rest/deposit actions whose start is too small to register as a
+#                 BOUNDARY. Bytes are preserved (gap capped, not dropped), so the
+#                 countdown just blinks past instead of playing out in real time.
 # ---------------------------------------------------------------------------
 KEEP_SECONDS = 0.9
 BLUR_SECONDS = 0.008
 BOUNDARY_BYTES = 2000
+IDLE_SECONDS = 0.5
 
 
 def is_cycle_boundary(data: str, boundary_bytes: int) -> bool:
@@ -103,26 +112,33 @@ def load_cast(path: str) -> tuple[dict[str, object], list[Event]]:
     return header, events
 
 
-def timelapse(events: list[Event], keep_seconds: float, blur_seconds: float, boundary_bytes: int) -> Iterator[Event]:
+def timelapse(events: list[Event], keep_seconds: float, blur_seconds: float,
+              boundary_bytes: int, idle_seconds: float) -> Iterator[Event]:
     """Rewrite intervals so the first `keep_seconds` of each action plays at real
     speed and every frame after it (until the next action) rushes past at
-    `blur_seconds`. EVERY event is emitted -- no bytes are dropped, so the
-    terminal stays coherent. Non-output events (resize/marker/exit) pass through
-    unchanged at real time so a resize never gets swallowed by a blur."""
+    `blur_seconds`. Any gap longer than `idle_seconds` is pure cooldown downtime
+    (sparse 1s timer ticks vs 0.15s animation) and is collapsed to `blur_seconds`
+    even inside the keep-window. EVERY event is emitted -- no bytes are dropped,
+    so the terminal stays coherent. Non-output events (resize/marker/exit) pass
+    through, still with idle gaps before them collapsed."""
     t_in_cycle = keep_seconds  # so a pre-first-action preamble plays, not blurs
     for event in events:
         interval, code, data = cast(float, event[0]), event[1], cast(str, event[2])
+        # A long gap = the only motion was the cooldown timer ticking -> dead
+        # time; collapse it wherever it occurs. `eff` is the interval we emit;
+        # `interval` (real elapsed) still drives the keep-window bookkeeping.
+        eff = blur_seconds if interval > idle_seconds else interval
         if code != "o":
-            yield event
+            yield [eff, code, data]
             continue
         if is_cycle_boundary(data, boundary_bytes):
-            yield [interval, code, data]  # new action -> real speed, reset window
+            yield [eff, code, data]  # new action -> real speed, reset window
             t_in_cycle = 0.0
         elif t_in_cycle < keep_seconds:
-            yield [interval, code, data]  # live sweep -- keep at real speed
+            yield [eff, code, data]  # live sweep -- keep at real speed
             t_in_cycle += interval
         else:
-            yield [min(interval, blur_seconds), code, data]  # redundant loop -> rush past, keep bytes
+            yield [min(eff, blur_seconds), code, data]  # redundant loop -> rush past, keep bytes
             t_in_cycle += interval
 
 
@@ -172,6 +188,8 @@ def main() -> None:
                         help=f"interval for fast-forwarded loop frames (default {BLUR_SECONDS})")
     parser.add_argument("--boundary-bytes", type=int, default=BOUNDARY_BYTES,
                         help=f"repaint size threshold (default {BOUNDARY_BYTES})")
+    parser.add_argument("--idle", type=float, default=IDLE_SECONDS,
+                        help=f"gaps longer than this are cooldown downtime, collapsed (default {IDLE_SECONDS})")
     parser.add_argument("--max-seconds", type=float, default=None,
                         help="truncate output to this many seconds of playtime (safe suffix cut)")
     parser.add_argument("--stats", action="store_true",
@@ -184,7 +202,7 @@ def main() -> None:
         return
     if not args.output:
         parser.error("output path required (or pass --stats)")
-    rewritten = timelapse(events, args.keep, args.blur, args.boundary_bytes)
+    rewritten = timelapse(events, args.keep, args.blur, args.boundary_bytes, args.idle)
     if args.max_seconds is not None:
         rewritten = truncate(rewritten, args.max_seconds)
     write_cast(args.output, header, rewritten)
