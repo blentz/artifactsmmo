@@ -915,6 +915,14 @@ class GamePlayer:
             page += 1
         return out
 
+    def _log_active_raids(self, raids: list[RaidInfo]) -> None:
+        """Print one line per currently-active raid (visibility only)."""
+        for raid in raids:
+            if raid.is_active():
+                print(f"[{self._now()}] raid active: {raid.monster} "
+                      f"{raid.remaining_hp}/{raid.total_hp} hp, "
+                      f"ends {raid.window_ends_at}")
+
     def _fetch_world_state(self, client: AuthenticatedClient) -> WorldState:
         """Query character state from the API. Retries on transient errors."""
         last_result = None
@@ -967,6 +975,7 @@ class GamePlayer:
         pending_items = self.state.pending_items if self.state else None
         active_events = self._fetch_active_events(client)
         raids = self._fetch_raids(client)
+        self._log_active_raids(raids)
         state = WorldState.from_character_schema(
             last_result.data,
             bank_items=bank_items,
