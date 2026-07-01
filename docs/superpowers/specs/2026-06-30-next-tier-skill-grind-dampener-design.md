@@ -68,11 +68,24 @@ gear). Self-lifting as the character advances; no persisted state.
 ## Gate predicate
 
 ```
-next_tier_dampened(current_skill, char_level, next_tier_cap, next_tier_floor) :=
+next_tier_dampened(current_skill, next_tier_cap) :=
       next_tier_cap  > 0
   and current_skill >= next_tier_cap      # crafts ALL next-tier gear
-  and char_level    <  next_tier_floor    # next tier not yet level-appropriate
 ```
+
+`next_tier_cap` is computed over the tier band **above** the character's current
+tier (`next_tier_floor = ((char_level // 10) + 1) * 10`; band
+`[next_tier_floor, next_tier_floor + 9]`). Because that band is *by construction*
+one tier above the character, a separate "not yet level-appropriate" check on
+`char_level` would be **vacuously true** (`char_level < next_tier_floor` always
+holds) — it is intentionally omitted. The "until the tier is level-appropriate"
+semantics instead falls out of `next_tier` **rolling up** as `char_level` climbs:
+at the decade boundary the band redefines to the next-higher gear, `next_tier_cap`
+recomputes over higher-level recipes, and the same `current_skill` typically no
+longer covers it — so the gate releases. This roll-up is a data-dependent
+behavior verified by regression test, **not** claimed as a structural theorem (the
+band shifts rather than widens, so `cap` is not structurally monotone in
+`char_level`).
 
 `gear_relevant` mirrors the curve: `stats.type_ in ITEM_TYPE_TO_SLOTS or
 stats.subtype == "tool"`.
@@ -87,46 +100,57 @@ so they may share a module like `skill_target_curve.py` does).
 
 - `next_tier_cap_pure(skill: str, char_level: int, items: list[SkillItem],
   max_skill_level: int) -> int`
-  Max `craft_level` over `gear_relevant` items of `skill` whose `item_level` lies in
+  Computes `next_tier_floor = ((char_level // 10) + 1) * 10` internally, then the
+  max `craft_level` over `gear_relevant` items of `skill` whose `item_level` lies in
   `[next_tier_floor, next_tier_floor + 9]`, clamped to `[1, max_skill_level]`;
-  `0` when no qualifying gear item exists. Reuses the existing `SkillItem` view.
-- `next_tier_dampened_pure(current_skill: int, char_level: int, next_tier_cap: int,
-  next_tier_floor: int) -> bool`
-  The boolean predicate above.
+  `0` when no qualifying gear item exists. Reuses the existing `SkillItem` view
+  (imported from `skill_target_curve`).
+- `next_tier_dampened_pure(current_skill: int, next_tier_cap: int) -> bool`
+  Returns `next_tier_cap > 0 and current_skill >= next_tier_cap`.
 
 ### Impure hoist
 
-Extend the `objective_step_goal` path (impure caller of `skill_step_dispatch_pure`)
-to compute, for the step's skill, `next_tier_cap` (over `game_data.all_item_stats`)
-and `next_tier_floor` from `state.level`, and pass them into the dispatch. Mirrors
-`skill_target_curve` hoisting `SkillItem` tuples from `GameData`.
+Extend the `objective_step_goal` path (impure caller of `skill_step_dispatch_pure`,
+`strategy_driver.py:688-759`) so that, in the `ReachSkillLevel` branch, it hoists
+`SkillItem` tuples from `game_data.all_item_stats` (mirroring
+`skill_target_curve`), computes
+`cap = next_tier_cap_pure(step.skill, state.level, items, game_data.max_skill_level)`
+and `dampened = next_tier_dampened_pure(current, cap)` (where `current =
+state.skills.get(step.skill, 0)`, already read at line 705), and passes the single
+`dampened: bool` into the dispatch.
 
 ### Dispatch integration
 
-In `skill_step_dispatch_pure` (`skill_step_dispatch.py`): after the reservation
-passes produce `pick`, if
+In `skill_step_dispatch_pure` (`skill_step_dispatch.py`): add one parameter
+`dampened: bool = False` (keyword-defaulted so existing callers/tests are
+unaffected). After the reservation passes produce `pick` and `combine_dispatch_pure`
+yields `("grind", pick)`, if
 
-- `pick != ""`, and
-- the picked candidate is **not** `wanted` (throwaway), and
-- `next_tier_dampened_pure(current_skill, char_level, cap, floor)` holds
+- `dampened` is `True`, and
+- the picked candidate (looked up by `code == pick` in `candidates`) is **not**
+  `wanted` (throwaway),
 
-then return `DispatchDecision(kind="suppress", code="")` instead of `("grind", pick)`.
-The existing committed-item suppress (`combine_dispatch_pure`) is unchanged; the
-dampener is an additional, `not wanted`-guarded suppress reason. New inputs
-(`next_tier_cap`, `next_tier_floor`) thread through the pure signature.
+then return `DispatchDecision(kind="suppress", code="")` instead. The existing
+committed-item suppress (`combine_dispatch_pure`) is unchanged; the dampener is an
+additional, `not wanted`-guarded suppress reason applied in the wrapper. Passing a
+single precomputed `bool` (not the raw ints) keeps the proven `combine_dispatch_pure`
+core untouched and confines the new branch to the wrapper.
 
 ## Data flow
 
 ```
-objective_step_goal (impure)
-  ├─ hoist candidates (existing) ─ each carries .wanted / is_target
-  ├─ hoist next_tier_cap  = next_tier_cap_pure(skill, state.level, items, max_skill)
-  ├─ next_tier_floor      = ((state.level // 10) + 1) * 10
-  └─ skill_step_dispatch_pure(skill, current, committed…, candidates,
-                              next_tier_cap, next_tier_floor)
-        ├─ full/relaxed pick (existing proved selection)
-        ├─ if pick and not wanted and next_tier_dampened(...) → SUPPRESS   # NEW
-        └─ else combine_dispatch_pure(...) (existing)
+objective_step_goal (impure)  [strategy_driver.py:688-759, ReachSkillLevel branch]
+  ├─ current = state.skills.get(step.skill, 0)          (existing, line 705)
+  ├─ candidates (existing) ─ each carries .wanted / is_target
+  ├─ items = [SkillItem(...) for stats in game_data.all_item_stats]   # NEW hoist
+  ├─ cap      = next_tier_cap_pure(step.skill, state.level, items, max_skill)  # NEW
+  ├─ dampened = next_tier_dampened_pure(current, cap)                          # NEW
+  └─ skill_step_dispatch_pure(step.skill, current, committed_skill,
+                              committed_level, candidates, dampened)   # +1 arg
+        ├─ (kind, code) = combine_dispatch_pure(...)  (existing proved core)
+        ├─ if kind == "grind" and dampened and not picked(code).wanted:
+        │        return DispatchDecision("suppress", "")               # NEW branch
+        └─ else return DispatchDecision(kind, code)   (existing)
   → SUPPRESS ⇒ caller returns None ⇒ arbiter advances (existing semantics)
 ```
 
@@ -135,30 +159,47 @@ objective_step_goal (impure)
 - Register + extract `next_tier_cap_pure` and `next_tier_dampened_pure`
   (extraction bridge alongside `Bridges` for the curve; oracle arm + differential
   test + mutation anchors — zero survivors).
-- Honest theorems (non-vacuous):
-  - **Safety:** `next_tier_dampened ⇒ current_skill ≥ next_tier_cap` — the grind is
-    suppressed only when the skill genuinely covers the whole next tier.
-  - **Self-lift / liveness:** `char_level ≥ next_tier_floor ⇒ ¬next_tier_dampened`
-    — once the next tier is level-appropriate the gate opens; grinding resumes. Rolls
-    forward as `char_level` climbs (the band shifts up, `cap`/`floor` recompute).
-  - **Cap bound:** `1 ≤ next_tier_cap ≤ max_skill_level` when `> 0` (mirrors the
-    curve's clamp proof).
+- Honest theorems (all non-vacuous — no false-premise / always-true hypotheses):
+  - **Cap bound:** `next_tier_cap ≤ max_skill_level` and `0 ≤ next_tier_cap` (given
+    `0 ≤ max_skill_level`) — mirrors the curve's `curve_le_max` / `curve_nonneg`
+    clamp proofs.
+  - **Empty-band ⇒ no gate:** `next_tier_cap = 0 ⇒ ¬next_tier_dampened` — a skill
+    with no gear in the next tier band is never dampened (this is what scopes the
+    feature to gear-crafting skills; non-gear skills have `cap = 0`).
+  - **Safety decode:** `next_tier_dampened current_skill cap = true ⇒
+    (cap > 0 ∧ current_skill ≥ cap)` — the grind is suppressed only when the skill
+    genuinely covers the whole next tier (a real precondition, satisfiable and
+    falsifiable).
+- **NOT claimed as a theorem:** the "self-lift" (gate releases as `char_level`
+  climbs into the tier). The band *shifts* rather than widens, so `next_tier_cap` is
+  not structurally monotone in `char_level` — releasing depends on higher tiers
+  requiring higher craft levels, a data property. It is verified by regression test
+  (below), not proved. Recording this here to avoid shipping a dishonest
+  monotonicity theorem.
 - Extend `formal/Formal/SkillStepDispatch.lean`: the new suppress branch is guarded by
   `not wanted`, so `forward_progress` / committed-progress properties still hold — a
-  `wanted`/committed craft is never suppressed by the dampener.
+  `wanted`/committed craft is never suppressed by the dampener. Because the dampener
+  enters the wrapper as a precomputed `bool`, the proved `combine_dispatch_pure` core
+  is unchanged; only the wrapper's post-combine branch and its theorem need updating.
 
 ## Testing (project suite; 0 errors/warnings/skips, 100% coverage)
 
-- Gear-crafting skill a full tier ahead + throwaway pick → SUPPRESS.
-- Same skill, `char_level` risen to `next_tier_floor` → GRIND resumes (self-lift).
-- `wanted`/committed in-skill item craftable now under the gate → GRIND proceeds
-  (need-exemption).
+- Gear-crafting skill that can craft all next-tier gear (`current_skill >= cap`) +
+  throwaway pick → SUPPRESS.
+- **Self-lift roll-up:** at `char_level` in one decade the skill is dampened; raise
+  `char_level` across the decade boundary (band rolls to a higher tier whose `cap`
+  exceeds `current_skill`) → `dampened` flips false → GRIND resumes. This is the
+  data-dependent behavioral test that stands in for the (deliberately unproven)
+  monotonicity.
+- `wanted`/committed in-skill item picked under the gate → GRIND proceeds
+  (need-exemption; suppress is `not wanted`-guarded).
 - Task-gate path (`LevelSkillGoal` via `PURSUE_TASK`) unaffected by the dampener.
-- Consumable skill (e.g. cooking) → `cap = 0` → never dampened.
-- Boundary: skill exactly at `cap` (>=) vs one below; `char_level` exactly at
-  `next_tier_floor` (open) vs one below (gated).
+- Consumable skill (e.g. cooking) → `cap = 0` → `dampened` false → never suppressed.
+- Boundary on the one real condition: `current_skill == cap` (gated, `>=`) vs
+  `current_skill == cap - 1` (not gated).
 - Pure-core unit tests for `next_tier_cap_pure` (empty band, gear-vs-nongear items,
-  clamp to `max_skill_level`).
+  clamp to `max_skill_level`, band arithmetic across a decade boundary) and
+  `next_tier_dampened_pure` (`cap = 0`, `current_skill` above/below/equal `cap`).
 
 ## Out of scope
 
