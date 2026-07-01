@@ -1,24 +1,32 @@
-"""Time-lapse an asciicast v3 recording of the TUI: keep one animation sweep per
-action, then skip the cooldown wait.
+"""Time-lapse an asciicast v3 recording of the TUI: play one animation sweep per
+action at real speed, then fast-forward the cooldown wait.
 
 Why this is needed: the map pane loops a ~0.8s tool-swing over the WHOLE API
 cooldown (map_pane.py SWING_SWEEP_SECONDS, clamped to cooldown_remaining at
 _is_animating line 211). A raw cast therefore replays every action's full,
 repetitive wait -- a 25s cooldown is ~31 identical sweeps. Idle-compression
 (`asciinema rec --idle-time-limit`) can't help: the swing emits output every
-0.15s, so there is no idle to compress. The fix is to DROP the redundant loop
-frames, keeping only the first sweep of each action, then hard-cut to the next.
+0.15s, so there is no idle to compress.
 
-How it works (robust to the ticking cooldown countdown, which makes loops NOT
-byte-identical): segment the stream at wholesale viewport repaints. A new action
-clears the line cache (map_pane.py:147) and repaints ~every row = a BIG output
-event; a within-cycle swing frame repaints only a 3-tile-row band = a SMALL
-event; the status-pane countdown tick is tiny. So classify by output SIZE, keep
-the first KEEP_SECONDS of each cycle at real speed, drop the rest until the next
-big repaint, and give each cut a fixed SKIP_GAP beat.
+Why we compress time instead of dropping frames: asciicast "o" events are an
+INCREMENTAL byte stream to a terminal emulator -- cursor moves, partial-line
+writes and scroll ops, all stateful. Textual paints diffs, not full-screen
+redraws, so deleting middle frames leaves the cursor/scroll state diverged and
+every later frame misaligns. We therefore keep EVERY byte (terminal state stays
+coherent) and only rewrite the RELATIVE intervals: the first KEEP_SECONDS of
+each action plays at real speed (one clean sweep); every frame after that, until
+the next action, is emitted at BLUR_SECONDS so the redundant loops rush past in
+a fraction of a second without vanishing.
+
+How actions are detected (robust to the ticking cooldown countdown, which makes
+loops NOT byte-identical): a new action clears the line cache (map_pane.py:147)
+and repaints ~every row = a BIG output event; a within-cycle swing frame
+repaints only a 3-tile-row band = a SMALL event; the countdown tick is tiny. So
+classify by output SIZE. A missed/spurious boundary only nudges pacing -- since
+no bytes are dropped, the screen is always coherent.
 
 asciicast v3 note: event timestamps are RELATIVE intervals (time since the prev
-event), so dropping a frame or re-timing a cut is local -- no global re-basing.
+event), so re-timing a single event is local -- no global re-basing.
 
 Usage:
     asciinema rec raw.cast -c 'uv run artifactsmmo play <char> --tui'
@@ -37,22 +45,25 @@ Event = list[object]  # asciicast v3 event: [interval, code, data]
 # Tuning knobs -- these three values are the whole "look". Defaults are a
 # reasonable starting point; adjust to taste after eyeballing `asciinema play`.
 #
-#   KEEP_SECONDS  real-time window kept at each action's start. ~= one swing
+#   KEEP_SECONDS  real-time window played at each action's start. ~= one swing
 #                 sweep (SWING_SWEEP_SECONDS is 0.8). Bigger -> more of the
 #                 animation shown per action; smaller -> snappier but may clip a
 #                 sweep mid-swing.
-#   SKIP_GAP      fixed pause placed where a wait was collapsed -- the beat
-#                 between actions. Bigger -> more relaxed; smaller -> faster.
-#   BOUNDARY_BYTES  an "o" event larger than this is treated as a wholesale
-#                 repaint (a new action). This is terminal-size dependent: a
-#                 full 80x41 viewport repaint is many KB, a band repaint far
-#                 less. Too HIGH -> boundaries missed -> everything after the
-#                 first cycle's window is dropped (output truncates). Too LOW ->
-#                 band frames misread as boundaries -> waits not collapsed.
+#   BLUR_SECONDS  interval given to every frame AFTER the window until the next
+#                 action -- how fast the redundant loops rush past. Smaller ->
+#                 the wait blurs by quicker. A 25s wait (~165 frames) at 0.008
+#                 rushes past in ~1.3s. Not zero, so the terminal still keeps up.
+#   BOUNDARY_BYTES  an "o" event larger than this starts a new action (a
+#                 wholesale repaint), resetting the real-time window. Terminal-
+#                 size dependent: a full 80x41 viewport repaint is many KB, a
+#                 band repaint far less. Too HIGH -> new actions missed -> whole
+#                 cast blurs after the first window. Too LOW -> band frames
+#                 misread as new actions -> waits not compressed. No bytes are
+#                 ever dropped, so a wrong value only mis-paces, never corrupts.
 #                 Tune by inspecting event sizes (see --stats).
 # ---------------------------------------------------------------------------
 KEEP_SECONDS = 0.9
-SKIP_GAP = 0.4
+BLUR_SECONDS = 0.008
 BOUNDARY_BYTES = 2000
 
 
@@ -87,23 +98,27 @@ def load_cast(path: str) -> tuple[dict[str, object], list[Event]]:
     return header, events
 
 
-def timelapse(events: list[Event], keep_seconds: float, skip_gap: float, boundary_bytes: int) -> Iterator[Event]:
-    """Rewrite events: keep the first `keep_seconds` of each action cycle at real
-    speed, drop the redundant loop frames after it, and give each cut a fixed
-    `skip_gap` beat. Non-output events (resize/marker/exit) pass through."""
-    t_in_cycle = keep_seconds  # so the pre-first-boundary preamble is kept, not dropped
+def timelapse(events: list[Event], keep_seconds: float, blur_seconds: float, boundary_bytes: int) -> Iterator[Event]:
+    """Rewrite intervals so the first `keep_seconds` of each action plays at real
+    speed and every frame after it (until the next action) rushes past at
+    `blur_seconds`. EVERY event is emitted -- no bytes are dropped, so the
+    terminal stays coherent. Non-output events (resize/marker/exit) pass through
+    unchanged at real time so a resize never gets swallowed by a blur."""
+    t_in_cycle = keep_seconds  # so a pre-first-action preamble plays, not blurs
     for event in events:
         interval, code, data = cast(float, event[0]), event[1], cast(str, event[2])
         if code != "o":
             yield event
             continue
         if is_cycle_boundary(data, boundary_bytes):
-            yield [skip_gap, code, data]  # collapse the wait that preceded this action
+            yield [interval, code, data]  # new action -> real speed, reset window
             t_in_cycle = 0.0
         elif t_in_cycle < keep_seconds:
             yield [interval, code, data]  # live sweep -- keep at real speed
             t_in_cycle += interval
-        # else: past the window and not a new action -> a redundant loop frame; drop.
+        else:
+            yield [min(interval, blur_seconds), code, data]  # redundant loop -> rush past, keep bytes
+            t_in_cycle += interval
 
 
 def write_cast(path: str, header: dict[str, object], events: Iterator[Event]) -> None:
@@ -134,9 +149,9 @@ def main() -> None:
     parser.add_argument("input", help="raw asciicast v3 file")
     parser.add_argument("output", nargs="?", help="time-lapsed output file (omit with --stats)")
     parser.add_argument("--keep", type=float, default=KEEP_SECONDS,
-                        help=f"seconds kept per action (default {KEEP_SECONDS})")
-    parser.add_argument("--gap", type=float, default=SKIP_GAP,
-                        help=f"beat between actions (default {SKIP_GAP})")
+                        help=f"real-time seconds played per action (default {KEEP_SECONDS})")
+    parser.add_argument("--blur", type=float, default=BLUR_SECONDS,
+                        help=f"interval for fast-forwarded loop frames (default {BLUR_SECONDS})")
     parser.add_argument("--boundary-bytes", type=int, default=BOUNDARY_BYTES,
                         help=f"repaint size threshold (default {BOUNDARY_BYTES})")
     parser.add_argument("--stats", action="store_true",
@@ -149,7 +164,7 @@ def main() -> None:
         return
     if not args.output:
         parser.error("output path required (or pass --stats)")
-    rewritten = timelapse(events, args.keep, args.gap, args.boundary_bytes)
+    rewritten = timelapse(events, args.keep, args.blur, args.boundary_bytes)
     write_cast(args.output, header, rewritten)
     print(f"wrote {args.output}")
 
