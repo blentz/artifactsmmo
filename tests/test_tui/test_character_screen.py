@@ -1,7 +1,11 @@
+import pytest
 from rich.console import Console
+from textual.widgets import Static
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
-from artifactsmmo_cli.tui.screens.character_screen import build_character_detail
+from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.tui.app import WatchApp
+from artifactsmmo_cli.tui.screens.character_screen import CharacterScreen, build_character_detail
 
 
 def _snap(**overrides) -> CycleSnapshot:
@@ -49,3 +53,53 @@ def test_detail_lists_equipment_slots():
 def test_detail_no_task():
     out = _text(build_character_detail(_snap(task_code=None)))
     assert "none" in out.lower()
+
+
+class TestThreeColumnModal:
+    @pytest.mark.asyncio
+    async def test_modal_has_three_columns(self):
+        app = WatchApp("hero", GameData())
+        async with app.run_test(size=(120, 50)) as pilot:
+            app.update_snapshot(
+                _snap(inventory={"iron_ore": 5}, inventory_max=20, bank_items={"gold_ore": 3})
+            )
+            await pilot.press("c")
+            screen = app.screen
+            assert isinstance(screen, CharacterScreen)
+            det = screen.query_one("#char-detail", Static)
+            inv = screen.query_one("#char-inv", Static)
+            bank = screen.query_one("#char-bank", Static)
+            assert det is not None and inv is not None and bank is not None
+
+    @pytest.mark.asyncio
+    async def test_columns_show_expected_content(self):
+        app = WatchApp("hero", GameData())
+        async with app.run_test(size=(150, 50)) as pilot:
+            app.update_snapshot(
+                _snap(inventory={"iron_ore": 5}, inventory_max=20, bank_items={"gold_ore": 3})
+            )
+            await pilot.press("c")
+            out = _text(app.screen.query_one("#char-inv", Static).content)
+            assert "iron_ore" in out
+            out_bank = _text(app.screen.query_one("#char-bank", Static).content)
+            assert "gold_ore" in out_bank
+
+    @pytest.mark.asyncio
+    async def test_bank_waiting_when_none(self):
+        app = WatchApp("hero", GameData())
+        async with app.run_test(size=(150, 50)) as pilot:
+            app.update_snapshot(_snap(bank_items=None))
+            await pilot.press("c")
+            out = _text(app.screen.query_one("#char-bank", Static).content)
+            assert "waiting" in out.lower()
+
+    @pytest.mark.asyncio
+    async def test_update_snapshot_refreshes_all_columns(self):
+        app = WatchApp("hero", GameData())
+        async with app.run_test(size=(150, 50)) as pilot:
+            app.update_snapshot(_snap(bank_items={"gold_ore": 1}))
+            await pilot.press("c")
+            app.update_snapshot(_snap(inventory={"copper_ore": 9}, inventory_max=20, bank_items={"topaz": 4}))
+            inv = _text(app.screen.query_one("#char-inv", Static).content)
+            bank = _text(app.screen.query_one("#char-bank", Static).content)
+            assert "copper_ore" in inv and "topaz" in bank
