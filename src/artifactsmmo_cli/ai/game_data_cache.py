@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-CACHE_VERSION = 1
+CACHE_VERSION = 2
 """Bump when the raw-page schema changes; an old version reads as a miss."""
 
 RawPages = dict[str, Any]
