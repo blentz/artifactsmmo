@@ -83,7 +83,7 @@ class EquipAction(Action):
         if old_item:
             new_inventory[old_item] = new_inventory.get(old_item, 0) + 1
 
-        # ASSUMPTION (needs live verification): utility equip is additive for same-code.
+        # Utility equip is additive for same-code (confirmed by maintainer 2026-06-30).
         # Equipping q of a code into a utility slot that already holds the SAME code
         # ADDS to the stack (M + q); into an empty/different slot it SETS the quantity
         # to q (returning any displaced code to inventory, handled above).
