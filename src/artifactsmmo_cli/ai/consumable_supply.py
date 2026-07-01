@@ -12,6 +12,7 @@ EATS heals (UseConsumable); this keeps the cupboard stocked.
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.max_batch_from_held import max_batch_from_held_pure
 from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -100,6 +101,31 @@ def best_craftable_heal(state: WorldState, game_data: GameData) -> str | None:
         if stats.hp_restore > best_restore:
             best_code, best_restore = code, stats.hp_restore
     return best_code
+
+
+def consumable_craft_quantity(code: str, planned_qty: int,
+                              state: WorldState, game_data: GameData) -> int:
+    """Craft runs for a consumable/utility item, batched to the held pile.
+
+    For a consumable or utility item (`stats.type_ in ("consumable", "utility")`)
+    with a recipe, return max(planned_qty, runs producible from the ingredients
+    already in inventory) so one batched API craft cooks the whole held pile.
+    For any other type, an unknown code, a recipe-less item, or when no
+    ingredients are held, return planned_qty unchanged. Held only — never gathers.
+
+    Reuses the kernel-proved max_batch_from_held_pure (MaxBatchFromHeld.lean) with
+    yield=1, which returns the run count directly (runs = min held//need; the
+    CraftAction.quantity field is runs, independent of per-run yield)."""
+    stats = game_data.item_stats(code)
+    if stats is None or stats.type_ not in ("consumable", "utility"):
+        return planned_qty
+    recipe = game_data.crafting_recipe(code)
+    if not recipe:
+        return planned_qty
+    needs = [qty for _c, qty in recipe.items()]
+    held = [state.inventory.get(c, 0) for c, _qty in recipe.items()]
+    runs = max_batch_from_held_pure(needs, held, 1)
+    return max(planned_qty, runs)
 
 
 def maintain_consumables_fires(state: WorldState, game_data: GameData,
