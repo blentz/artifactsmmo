@@ -39,8 +39,8 @@ NO sorry / admit / extra axioms (gate-enforced). Lean core only — no mathlib.
 
 namespace Extracted.Bridges
 
-open Formal.ArbiterSelect (indexOf? precedes findCommitted guardPrecedes walk
-  stickyOutcome selectPure)
+open Formal.ArbiterSelect (indexOf? precedes findCommitted guardPrecedes
+  lowerBandPrecedes walk stickyOutcome selectPure)
 
 /-! ## Encodings -/
 
@@ -49,7 +49,7 @@ open Formal.ArbiterSelect (indexOf? precedes findCommitted guardPrecedes walk
 repr string the image of the id under the embedding `f`. -/
 def encC (f : Nat → String) (c : Formal.ArbiterSelect.Candidate) :
     Extracted.ArbiterSelect.Candidate Nat :=
-  ⟨c.id, c.isMeans, f c.id⟩
+  ⟨c.id, c.isMeans, f c.id, c.band⟩
 
 @[simp] theorem encC_goal (f : Nat → String) (c : Formal.ArbiterSelect.Candidate) :
     (encC f c).goal = c.id := rfl
@@ -59,6 +59,9 @@ def encC (f : Nat → String) (c : Formal.ArbiterSelect.Candidate) :
 
 @[simp] theorem encC_repr (f : Nat → String) (c : Formal.ArbiterSelect.Candidate) :
     (encC f c).repr_ = f c.id := rfl
+
+@[simp] theorem encC_band (f : Nat → String) (c : Formal.ArbiterSelect.Candidate) :
+    (encC f c).band = c.band := rfl
 
 /-- Plan oracle encoding: `Action := Unit`; a goal plans to the one-step plan
 `[()]` exactly when the hand `plannable` oracle fires (Python truthiness of
@@ -191,6 +194,41 @@ private theorem guard_any_bridge (f : Nat → String) (hf : ∀ a b, f a = f b �
   unfold Formal.ArbiterSelect.guardPrecedes
   exact guard_any_aux f hf cs cid cs
 
+/-- The generated lower-band scan (`any` of `band < committedBand ∧ _precedes`
+over the encoded list) IS the hand `lowerBandPrecedes` any-body — the `.band`
+survives `encC` (via `encC_band`) and `_precedes` reduces via `precedes_bridge`. -/
+private theorem lower_band_any_aux (f : Nat → String) (hf : ∀ a b, f a = f b → a = b)
+    (cs : List Formal.ArbiterSelect.Candidate) (b : Int) (cid : Nat) :
+    ∀ gs : List Formal.ArbiterSelect.Candidate,
+      List.any (gs.map (encC f))
+          (fun x => decide (x.band < b)
+            && Extracted.ArbiterSelect._precedes (cs.map (encC f)) x.repr_ (f cid))
+        = gs.any (fun x => decide (x.band < b) && precedes cs x.id cid) := by
+  intro gs
+  induction gs with
+  | nil => rfl
+  | cons g rest ih =>
+    rw [List.map_cons, List.any_cons, List.any_cons, ih]
+    -- After aligning `_precedes`→`precedes`, the residual `decide` instance still
+    -- mentions `(encC f g).band`; it is defeq to `g.band` (encC is a literal), so
+    -- `rfl` (default transparency) closes what `simp` (reducible) cannot.
+    simp only [encC_repr, precedes_bridge f hf cs g.id cid]
+    rfl
+
+/-- The generated `lower_band_precedes` let-value over the encoded list IS the
+hand `lowerBandPrecedes cs cid c.band`. -/
+private theorem lower_band_bridge (f : Nat → String) (hf : ∀ a b, f a = f b → a = b)
+    (cs : List Formal.ArbiterSelect.Candidate) (c : Formal.ArbiterSelect.Candidate)
+    (cid : Nat) :
+    (decide ((encC f c).band < 4)
+        && List.any (cs.map (encC f))
+            (fun x => decide (x.band < (encC f c).band)
+              && Extracted.ArbiterSelect._precedes (cs.map (encC f)) x.repr_ (f cid)))
+      = lowerBandPrecedes cs cid c.band := by
+  unfold Formal.ArbiterSelect.lowerBandPrecedes
+  simp only [encC_band]
+  exact congrArg (fun z => decide (c.band < 4) && z) (lower_band_any_aux f hf cs c.band cid cs)
+
 /-! ## The walk -/
 
 /-- The generated `_findSome` walk equals the hand `walk`, mapped through the
@@ -317,6 +355,7 @@ theorem arbiter_select_bridge (f : Nat → String) (hf : ∀ a b, f a = f b → 
         Formal.ArbiterSelect.findCommitted_some_props cs cid c hfc
       simp only [Option.map_some, encC_goal]
       rw [guard_any_bridge f hf cs cid]
+      rw [lower_band_bridge f hf cs c cid]
       rw [findSome_walk_bridge f plannable satisfied suppressed (some cid)
         (some (f cid)) (hT_some f hf cid) cs]
       rw [findSome_walk_bridge f plannable satisfied suppressed none none
@@ -368,30 +407,49 @@ theorem arbiter_select_bridge (f : Nat → String) (hf : ∀ a b, f a = f b → 
                   Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hgp, hw,
                   hm', encOut]
           | false =>
-            cases hp : plannable c.id with
+            cases hlbp : lowerBandPrecedes cs cid c.band with
             | true =>
-              have hp' : plannable cid = true := hcid ▸ hp
-              have hs' : satisfied cid = false := hcid ▸ hs
-              have hsu' : suppressed cid = false := hcid ▸ hsu
-              simp [Formal.ArbiterSelect.selectPure,
-                Formal.ArbiterSelect.stickyOutcome, hfc, hgp,
-                hp', hs', hsu', encOut, encPlan, hcid]
-            | false =>
-              cases hw : walk plannable satisfied suppressed (some cid) cs with
+              -- extracted `(!gp) && (!lbp)` = true && false = false ⇒ walk (tried none);
+              -- hand stickyOutcome hits the lowerBandPrecedes branch ⇒ (none, none) ⇒ walk none.
+              cases hw : walk plannable satisfied suppressed none cs with
               | none =>
                 simp [Formal.ArbiterSelect.selectPure,
-                  Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hgp, hp, hw,
-                  encOut, encPlan]
+                  Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hgp, hlbp, hw, encOut]
               | some c' =>
                 cases hm' : c'.isMeans with
                 | true =>
                   simp [Formal.ArbiterSelect.selectPure,
-                    Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hgp, hp,
-                    hw, hm', encOut, encPlan]
+                    Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hgp, hlbp, hw,
+                    hm', encOut]
                 | false =>
                   simp [Formal.ArbiterSelect.selectPure,
-                    Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hgp, hp,
-                    hw, hm', encOut, encPlan]
+                    Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hgp, hlbp, hw,
+                    hm', encOut]
+            | false =>
+              cases hp : plannable c.id with
+              | true =>
+                have hp' : plannable cid = true := hcid ▸ hp
+                have hs' : satisfied cid = false := hcid ▸ hs
+                have hsu' : suppressed cid = false := hcid ▸ hsu
+                simp [Formal.ArbiterSelect.selectPure,
+                  Formal.ArbiterSelect.stickyOutcome, hfc, hgp, hlbp,
+                  hp', hs', hsu', encOut, encPlan, hcid]
+              | false =>
+                cases hw : walk plannable satisfied suppressed (some cid) cs with
+                | none =>
+                  simp [Formal.ArbiterSelect.selectPure,
+                    Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hgp, hlbp, hp, hw,
+                    encOut, encPlan]
+                | some c' =>
+                  cases hm' : c'.isMeans with
+                  | true =>
+                    simp [Formal.ArbiterSelect.selectPure,
+                      Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hgp, hlbp, hp,
+                      hw, hm', encOut, encPlan]
+                  | false =>
+                    simp [Formal.ArbiterSelect.selectPure,
+                      Formal.ArbiterSelect.stickyOutcome, hfc, hs, hsu, hgp, hlbp, hp,
+                      hw, hm', encOut, encPlan]
 
 /-! ## Transferred safety theorem -/
 

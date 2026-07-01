@@ -1600,7 +1600,7 @@ def test_objective_step_goal_none_for_no_step():
 def test_precedes_false_when_target_absent():
     """_precedes returns False when either repr is not present in the candidates list."""
     goal_a = AcceptTaskGoal()
-    candidates = [Candidate(goal=goal_a, is_means=True, repr_=repr(goal_a))]
+    candidates = [Candidate(goal=goal_a, is_means=True, repr_=repr(goal_a), band=2)]
     # "NotPresent" is not in the list → b_idx is None → return False
     assert _precedes(candidates, repr(goal_a), "NotPresent") is False
     # a_repr also absent → a_idx is None → return False
@@ -1612,8 +1612,8 @@ def test_select_pure_skips_satisfied_candidate():
     plannable one. Pure unit test over injected closures — no planner/state."""
     sat_goal = AcceptTaskGoal()
     next_goal = AcceptTaskGoal()
-    sat = Candidate(goal=sat_goal, is_means=True, repr_="Satisfied")
-    nxt = Candidate(goal=next_goal, is_means=True, repr_="Next")
+    sat = Candidate(goal=sat_goal, is_means=True, repr_="Satisfied", band=2)
+    nxt = Candidate(goal=next_goal, is_means=True, repr_="Next", band=2)
 
     def try_plan(g):
         return [object()]  # non-empty stand-in plan
@@ -1636,8 +1636,8 @@ def test_select_pure_skips_suppressed_candidate():
     checks, so a later candidate wins."""
     supp_goal = AcceptTaskGoal()
     next_goal = AcceptTaskGoal()
-    supp = Candidate(goal=supp_goal, is_means=True, repr_="Suppressed")
-    nxt = Candidate(goal=next_goal, is_means=True, repr_="Next")
+    supp = Candidate(goal=supp_goal, is_means=True, repr_="Suppressed", band=2)
+    nxt = Candidate(goal=next_goal, is_means=True, repr_="Next", band=2)
 
     goal, _plan, committed = select_pure(
         [supp, nxt], None,
@@ -1651,7 +1651,7 @@ def test_select_pure_skips_suppressed_candidate():
 
 def test_select_pure_returns_none_when_nothing_plans():
     """When no candidate plans, select_pure returns the empty result."""
-    g = Candidate(goal=AcceptTaskGoal(), is_means=True, repr_="Only")
+    g = Candidate(goal=AcceptTaskGoal(), is_means=True, repr_="Only", band=2)
     result = select_pure(
         [g], None,
         try_plan=lambda goal: [],

@@ -55,10 +55,13 @@ Lean core only — no mathlib.
 
 namespace Formal.ArbiterSelect
 
-/-- A candidate is `(id, isMeans)` where `isMeans = false` ⇒ guard. -/
+/-- A candidate is `(id, isMeans, band)` where `isMeans = false` ⇒ guard.
+`band` is the priority band (guards 0, collect 1, step ~2/3, discretionary 4);
+lower band = higher priority. -/
 structure Candidate where
   id : Nat
   isMeans : Bool
+  band : Int
 deriving Repr, DecidableEq
 
 /-! ### Helpers (mirror Python `_precedes`). -/
@@ -83,6 +86,15 @@ def findCommitted (cs : List Candidate) (committed : Nat) : Option Candidate :=
 /-- Some guard strictly precedes the committed id. -/
 def guardPrecedes (cs : List Candidate) (committed : Nat) : Bool :=
   (cs.filter (fun c => !c.isMeans)).any (fun g => precedes cs g.id committed)
+
+/-- A strictly-lower-band candidate strictly precedes the committed id — and the
+committed band is not discretionary (band < 4). Mirrors the Python band-aware
+sticky preemption: a higher-priority (lower-band) means that comes first must not
+be preempted by a sticky lower-priority commitment. Discretionary commits
+(band 4) are exempt. -/
+def lowerBandPrecedes (cs : List Candidate) (committed : Nat) (committedBand : Int) : Bool :=
+  decide (committedBand < 4) &&
+    cs.any (fun d => decide (d.band < committedBand) && precedes cs d.id committed)
 
 /-! ### Walk + selector. -/
 
@@ -113,6 +125,7 @@ def stickyOutcome
     | some c =>
       if satisfied c.id || suppressed c.id then (none, none)
       else if guardPrecedes cs cid then (none, none)
+      else if lowerBandPrecedes cs cid c.band then (none, none)
       else if plannable c.id then (some c, some cid)
       else (none, some cid)
 
@@ -556,9 +569,16 @@ theorem select_pure_any_plannable_guard_wins
                 cases hp : plannable c.id with
                 | false => rfl
                 | true => exact absurd hp hplc
-              refine ⟨some cid, ?_, ?_⟩
-              · simp [hfc, hsk, hgp', hplc']
-              · intro h; injection h with h; exact hne_cid h.symm
+              by_cases hlbp : lowerBandPrecedes cs cid c.band = true
+              · refine ⟨none, ?_, by intro h; cases h⟩
+                simp [hfc, hsk, hgp', hlbp]
+              · have hlbp' : lowerBandPrecedes cs cid c.band = false := by
+                  cases hl : lowerBandPrecedes cs cid c.band with
+                  | false => rfl
+                  | true => exact absurd hl hlbp
+                refine ⟨some cid, ?_, ?_⟩
+                · simp [hfc, hsk, hgp', hlbp', hplc']
+                · intro h; injection h with h; exact hne_cid h.symm
   obtain ⟨tried, hso, htried⟩ := hkey
   obtain ⟨r, hwalk, hrm⟩ :=
     walk_returns_guard_when_plannable_guard_exists cs plannable satisfied suppressed tried
@@ -577,6 +597,7 @@ theorem select_pure_sticky_idempotent
     (plannable satisfied suppressed : Nat → Bool)
     (hnoguard : ∀ x ∈ cs, x.isMeans = true)
     (hfind : findCommitted cs cid = some c)
+    (hlbp : lowerBandPrecedes cs cid c.band = false)
     (hplan : plannable c.id = true)
     (hnsat : satisfied c.id = false)
     (hnsup : suppressed c.id = false) :
@@ -595,9 +616,48 @@ theorem select_pure_sticky_idempotent
   have hsticky_eq :
       stickyOutcome cs (some cid) plannable satisfied suppressed = (some c, some cid) := by
     unfold stickyOutcome
-    simp [hfind, hsk_false, hgp_false, hplan]
+    simp [hfind, hsk_false, hgp_false, hlbp, hplan]
   unfold selectPure
   rw [hsticky_eq]
+
+/-! ### Theorem (d'): band-aware anti-freeze (NO sticky preempt of a lower band).
+
+The copper_ring freeze: a band-3 step means was committed while a plannable
+band-2 collect means preceded it in the list. Sticky short-circuit would keep
+firing the band-3 commit forever. The band-aware rule blocks the sticky path
+whenever a strictly-lower-band candidate precedes the committed one (and the
+commit is not discretionary), letting the walk pick the higher-priority means. -/
+
+/-- When a strictly-lower-band candidate `d` precedes the committed means `c`
+(and `c` is not discretionary, `c.band < 4`), the sticky path does NOT return
+the committed candidate — its first component is `none`, so `selectPure` runs
+the walk instead. -/
+theorem select_pure_no_sticky_preempt_lower_band
+    (cs : List Candidate) (cid : Nat) (c d : Candidate)
+    (plannable satisfied suppressed : Nat → Bool)
+    (hfind : findCommitted cs cid = some c)
+    (hlow : d ∈ cs)
+    (hband : d.band < c.band)
+    (hcbandlt : c.band < 4)
+    (hprec : precedes cs d.id cid = true) :
+    (stickyOutcome cs (some cid) plannable satisfied suppressed).1 = none := by
+  have hlbp : lowerBandPrecedes cs cid c.band = true := by
+    unfold lowerBandPrecedes
+    have h1 : decide (c.band < 4) = true := by rw [decide_eq_true_eq]; exact hcbandlt
+    have h2 : cs.any (fun x => decide (x.band < c.band) && precedes cs x.id cid) = true := by
+      rw [List.any_eq_true]
+      refine ⟨d, hlow, ?_⟩
+      rw [Bool.and_eq_true]
+      refine ⟨?_, hprec⟩
+      rw [decide_eq_true_eq]; exact hband
+    rw [h1, h2]; rfl
+  unfold stickyOutcome
+  simp only [hfind]
+  by_cases h1 : satisfied c.id || suppressed c.id
+  · simp [h1]
+  · by_cases h2 : guardPrecedes cs cid
+    · simp [h1, h2]
+    · simp [h1, h2, hlbp]
 
 /-! ### Theorem (b): no commitment ⇒ walk in order. -/
 
@@ -619,7 +679,7 @@ theorem select_pure_no_commitment_is_walk
 /-! ### Non-vacuity witnesses (real provable instances). -/
 
 private theorem demo_disjoint_2 :
-    idsDisjoint [⟨0, false⟩, ⟨1, true⟩] := by
+    idsDisjoint [⟨0, false, 0⟩, ⟨1, true, 2⟩] := by
   intro a b ha hb hga hbm
   rcases List.mem_cons.mp ha with rfl | ha
   · rcases List.mem_cons.mp hb with rfl | hb
@@ -634,16 +694,17 @@ private theorem demo_disjoint_2 :
 /-- Witness for safety: a list with a head guard, committed pointing at a
 later means. The guard wins. -/
 example :
-    (selectPure [⟨0, false⟩, ⟨1, true⟩] (some 1)
-      (fun _ => true) (fun _ => false) (fun _ => false)).1 = some ⟨0, false⟩ :=
-  select_pure_guard_wins ⟨0, false⟩ [⟨1, true⟩] (some 1) _ _ _
+    (selectPure [⟨0, false, 0⟩, ⟨1, true, 2⟩] (some 1)
+      (fun _ => true) (fun _ => false) (fun _ => false)).1 = some ⟨0, false, 0⟩ :=
+  select_pure_guard_wins ⟨0, false, 0⟩ [⟨1, true, 2⟩] (some 1) _ _ _
     rfl rfl rfl rfl demo_disjoint_2
 
-/-- Witness for sticky-idempotence: no guards, committed plans → returned. -/
+/-- Witness for sticky-idempotence: no guards, committed plans → returned.
+Both means share band 2, so `lowerBandPrecedes` is false (no strictly-lower band). -/
 example :
-    (selectPure [⟨1, true⟩, ⟨2, true⟩] (some 2)
-      (fun _ => true) (fun _ => false) (fun _ => false)).1 = some ⟨2, true⟩ := by
-  apply select_pure_sticky_idempotent [⟨1, true⟩, ⟨2, true⟩] 2 ⟨2, true⟩
+    (selectPure [⟨1, true, 2⟩, ⟨2, true, 2⟩] (some 2)
+      (fun _ => true) (fun _ => false) (fun _ => false)).1 = some ⟨2, true, 2⟩ := by
+  apply select_pure_sticky_idempotent [⟨1, true, 2⟩, ⟨2, true, 2⟩] 2 ⟨2, true, 2⟩
   · intro x hx
     rcases List.mem_cons.mp hx with rfl | hx
     · rfl
@@ -651,6 +712,7 @@ example :
       · rfl
       · simp at hx
   · unfold findCommitted; rfl
+  · decide
   · rfl
   · rfl
   · rfl
@@ -658,8 +720,8 @@ example :
 /-- Witness for no-commitment band order. With `committed = none` and an
 all-plannable list, walk returns the head. -/
 example :
-    (selectPure [⟨1, true⟩, ⟨2, true⟩] none
-      (fun _ => true) (fun _ => false) (fun _ => false)).1 = some ⟨1, true⟩ := by
+    (selectPure [⟨1, true, 2⟩, ⟨2, true, 2⟩] none
+      (fun _ => true) (fun _ => false) (fun _ => false)).1 = some ⟨1, true, 2⟩ := by
   rw [select_pure_no_commitment_is_walk]
   unfold walk
   simp
@@ -669,13 +731,13 @@ a multi-guard input where the SECOND guard is the firing one (head guard is
 non-plannable). With `committed = some 2` (a means later in the list) the
 selector returns a guard (specifically the second guard, which is plannable). -/
 example :
-    let cs : List Candidate := [⟨0, false⟩, ⟨1, false⟩, ⟨2, true⟩]
+    let cs : List Candidate := [⟨0, false, 0⟩, ⟨1, false, 0⟩, ⟨2, true, 2⟩]
     let pl : Nat → Bool := fun n => decide (n = 1) || decide (n = 2)  -- guard 1 + means 2 plannable
     let sat : Nat → Bool := fun _ => false
     let sup : Nat → Bool := fun _ => false
     ∃ r, (selectPure cs (some 2) pl sat sup).1 = some r ∧ r.isMeans = false := by
   apply select_pure_any_plannable_guard_wins
-    [⟨0, false⟩, ⟨1, false⟩, ⟨2, true⟩] (some 2) _ _ _ ⟨1, false⟩
+    [⟨0, false, 0⟩, ⟨1, false, 0⟩, ⟨2, true, 2⟩] (some 2) _ _ _ ⟨1, false, 0⟩
   · simp
   · rfl
   · rfl
@@ -710,5 +772,25 @@ example :
       · rcases List.mem_cons.mp ha with rfl | ha
         · simp at hga
         · simp at ha
+
+/-- Non-vacuity witness for the band-aware anti-freeze theorem (the copper_ring
+freeze): the committed band-3 means `⟨1, true, 3⟩` is preceded by a plannable
+band-2 means `⟨0, true, 2⟩`. The theorem's hypotheses all hold, so the sticky
+path yields `none`. -/
+example :
+    (stickyOutcome [⟨0, true, 2⟩, ⟨1, true, 3⟩] (some 1)
+      (fun _ => true) (fun _ => false) (fun _ => false)).1 = none :=
+  select_pure_no_sticky_preempt_lower_band
+    [⟨0, true, 2⟩, ⟨1, true, 3⟩] 1 ⟨1, true, 3⟩ ⟨0, true, 2⟩
+    (fun _ => true) (fun _ => false) (fun _ => false)
+    (by decide) (by decide) (by decide) (by decide) (by decide)
+
+/-- End-to-end consequence: with the sticky path blocked, `selectPure` walks and
+returns the higher-priority band-2 means `⟨0, true, 2⟩` — not the committed
+band-3 means. -/
+example :
+    (selectPure [⟨0, true, 2⟩, ⟨1, true, 3⟩] (some 1)
+      (fun _ => true) (fun _ => false) (fun _ => false)).1 = some ⟨0, true, 2⟩ := by
+  decide
 
 end Formal.ArbiterSelect

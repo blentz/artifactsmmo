@@ -76,6 +76,7 @@ import Formal.ServableFilter
 import Formal.StrategicValue
 import Formal.GearTaxonomy
 import Formal.GearValue
+import Formal.ArbiterSelect
 import Formal.Extracted.Bridges9
 open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin Formal.LoadoutProjection Formal.EquipmentScoring Formal.SkillXpCurve Formal.RecipeClosure
 /-! STATEMENT CONTRACTS. Each `example` pins a role theorem's EXACT statement by
@@ -3440,3 +3441,20 @@ example : ∀ (skillEffect : Formal.EquipmentScoring.Item → Int) (playerLevel 
         (Formal.GearValue.Purpose.gather skillEffect) playerLevel current items
       = Formal.PurposeRouting.pickGatherSlot skillEffect playerLevel current items :=
   @Formal.GearValue.pickSlotForPurpose_gather_eq
+
+/-! ### ArbiterSelect band-anti-freeze role contract.
+
+Pins the EXACT statement of the band-aware sticky-preemption block: when a
+strictly-lower-band candidate `d` precedes the committed means `c` (and `c` is
+not discretionary, `c.band < 4`), the sticky path yields `none` — the walk runs
+instead of re-firing the stale commitment (the copper_ring freeze fix). -/
+example : ∀ (cs : List Formal.ArbiterSelect.Candidate) (cid : Nat)
+    (c d : Formal.ArbiterSelect.Candidate)
+    (plannable satisfied suppressed : Nat → Bool),
+    Formal.ArbiterSelect.findCommitted cs cid = some c →
+    d ∈ cs →
+    d.band < c.band →
+    c.band < 4 →
+    Formal.ArbiterSelect.precedes cs d.id cid = true →
+    (Formal.ArbiterSelect.stickyOutcome cs (some cid) plannable satisfied suppressed).1 = none :=
+  @Formal.ArbiterSelect.select_pure_no_sticky_preempt_lower_band

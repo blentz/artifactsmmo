@@ -6,7 +6,15 @@ Lives above goals/ and tiers/ (imports both) to avoid the goals→tiers cycle.""
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.actions.wait import WaitAction
-from artifactsmmo_cli.ai.arbiter_select import Candidate, select_pure
+from artifactsmmo_cli.ai.arbiter_select import (
+    BAND_COLLECT,
+    BAND_DISCRETIONARY,
+    BAND_FALLBACK_STEP,
+    BAND_GUARD,
+    BAND_STEP,
+    Candidate,
+    select_pure,
+)
 from artifactsmmo_cli.ai.combat import MIN_WIN_SAMPLES
 from artifactsmmo_cli.ai.consumable_supply import best_held_heal
 from artifactsmmo_cli.ai.craft_plan_gen import generate_next_craft_action
@@ -1149,10 +1157,10 @@ class StrategyArbiter:
         candidates: list[Candidate] = []
         for gk in guard_kinds:
             g = map_guard(gk, game_data, ctx, state, step_profile)
-            candidates.append(Candidate(goal=g, is_means=False, repr_=repr(g)))
+            candidates.append(Candidate(goal=g, is_means=False, repr_=repr(g), band=BAND_GUARD))
         for mk in collect_kinds:
             g = map_means(mk, game_data, ctx, state, self._history)
-            candidates.append(Candidate(goal=g, is_means=True, repr_=repr(g)))
+            candidates.append(Candidate(goal=g, is_means=True, repr_=repr(g), band=BAND_COLLECT))
         # Append step_goal + every fallback-step goal in ranking order so
         # select_pure walks them all before reaching discretionary. Trace
         # 2026-06-06 16:34 (cycles 0-1): top step's GrindCharacterXP
@@ -1164,7 +1172,7 @@ class StrategyArbiter:
         added_reprs: set[str] = set()
         if step_goal is not None:
             r = repr(step_goal)
-            candidates.append(Candidate(goal=step_goal, is_means=True, repr_=r))
+            candidates.append(Candidate(goal=step_goal, is_means=True, repr_=r, band=BAND_STEP))
             added_reprs.add(r)
         for idx, alt in enumerate(fallback_steps):
             alt_root = fallback_roots[idx] if idx < len(fallback_roots) else None
@@ -1184,10 +1192,10 @@ class StrategyArbiter:
             if r in added_reprs:
                 continue
             added_reprs.add(r)
-            candidates.append(Candidate(goal=alt_goal, is_means=True, repr_=r))
+            candidates.append(Candidate(goal=alt_goal, is_means=True, repr_=r, band=BAND_FALLBACK_STEP))
         for mk in discretionary_kinds:
             g = map_means(mk, game_data, ctx, state, self._history)
-            candidates.append(Candidate(goal=g, is_means=True, repr_=repr(g)))
+            candidates.append(Candidate(goal=g, is_means=True, repr_=repr(g), band=BAND_DISCRETIONARY))
         return candidates
 
     def _worth_gate_suppressed(

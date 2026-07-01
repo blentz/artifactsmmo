@@ -29,13 +29,32 @@ from dataclasses import dataclass
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.goals.base import Goal
 
+# Candidate priority bands (set by StrategyArbiter._build_candidates). Lower =
+# higher priority. Sticky commitment may defend the committed goal within-or-below
+# its band but never preempts a strictly-lower band. Discretionary is the lowest
+# tier and is EXEMPT from band preemption: committed income tasks stay governed
+# by the semantic worth gate, not this structural rule (see the worth-gate epic).
+BAND_GUARD = 0
+BAND_COLLECT = 1
+BAND_STEP = 2
+BAND_FALLBACK_STEP = 3
+BAND_DISCRETIONARY = 4
+
 
 @dataclass(frozen=True)
 class Candidate:
-    """A (goal, is_means, repr) triple — the unit the pure selector walks."""
+    """A (goal, is_means, repr, band) tuple — the unit the pure selector walks.
+
+    `band` is the priority tier the candidate was built in (0 guards, 1 collect,
+    2 top objective step, 3 fallback steps, 4 discretionary). Sticky commitment
+    may defend the committed goal within-or-below its own band but must never
+    preempt a STRICTLY LOWER band (higher-priority) candidate — see
+    `lower_band_precedes` in `select_pure`.
+    """
     goal: Goal
     is_means: bool
     repr_: str
+    band: int
 
 
 def _precedes(candidates: list[Candidate], a_repr: str, b_repr: str) -> bool:
@@ -78,7 +97,23 @@ def select_pure(
             guard_precedes = any(
                 _precedes(candidates, gr, committed_repr) for gr in guard_reprs
             )
-            if not guard_precedes:
+            # A strictly-lower band (higher-priority) candidate that precedes the
+            # committed one blocks the sticky short-circuit: the ordered walk must
+            # get to try the higher-priority candidate first. Without this a stale
+            # commitment to a fallback grind (band 3) preempts the plannable
+            # objective step (band 2) forever — the copper_ring char-XP freeze,
+            # trace 2026-07-01. Discretionary commits (band 4) are EXEMPT: committed
+            # income tasks stay governed by the semantic worth gate, not this
+            # structural rule, so their deliberate task-vs-step arbitration is
+            # preserved.
+            # `4` is BAND_DISCRETIONARY inlined: the extractor's v1 subset can't
+            # resolve a module constant inside the pure core, and the band tiers
+            # are a fixed 5-value enum. Keep in sync with BAND_DISCRETIONARY.
+            lower_band_precedes = committed_cand.band < 4 and any(
+                c.band < committed_cand.band and _precedes(candidates, c.repr_, committed_repr)
+                for c in candidates
+            )
+            if not guard_precedes and not lower_band_precedes:
                 plan = try_plan(committed_cand.goal)
                 tried_repr = committed_repr
                 if len(plan) > 0:

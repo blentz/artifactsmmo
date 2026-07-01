@@ -176,7 +176,7 @@ def test_objective_combat_goal_exempt_from_memo_skip():
     state = make_state(task_code=None, task_total=0)
     a._memo.mark(repr(combat), state, 0)        # a prior transient no-plan poisoned the memo
     a.set_cycle(1)
-    cands = [Candidate(goal=combat, is_means=True, repr_=repr(combat))]
+    cands = [Candidate(goal=combat, is_means=True, repr_=repr(combat), band=2)]
     goal, plan, _ = a._arbitrate(cands, set(), set(), state, _make_planner_gd(), [])
     assert repr(goal) == repr(combat), "memo-exempt combat goal must be selected despite the doom mark"
     assert len(plan) == 1
@@ -191,7 +191,7 @@ def test_objective_combat_goal_no_plan_does_not_poison_memo():
     planner = _ScriptedPlanner(cheap_ok=set(), full_only=set())   # nothing plans
     a = _arbiter_with(planner)
     state = make_state(task_code=None, task_total=0)
-    cands = [Candidate(goal=combat, is_means=True, repr_=repr(combat))]
+    cands = [Candidate(goal=combat, is_means=True, repr_=repr(combat), band=2)]
     a._arbitrate(cands, set(), set(), state, _make_planner_gd(), [])
     assert not a._memo.is_doomed(repr(combat), state, 1), \
         "the objective combat goal must never be memoized (its no-plan is HP/inventory-transient)"

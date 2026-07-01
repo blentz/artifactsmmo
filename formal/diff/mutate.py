@@ -1521,7 +1521,7 @@ ARBITER_SELECT_MUTATIONS = [
     # drop the guard_precedes check: sticky-committed means survives a firing
     # plannable guard. This is the bug-likely safety-violation the proof pins.
     ("arbiter_select: drop guard_precedes check (sticky wins over guard)",
-     "            if not guard_precedes:\n"
+     "            if not guard_precedes and not lower_band_precedes:\n"
      "                plan = try_plan(committed_cand.goal)\n"
      "                tried_repr = committed_repr\n"
      "                if len(plan) > 0:\n"
@@ -1535,13 +1535,31 @@ ARBITER_SELECT_MUTATIONS = [
     # when committed is not plannable, the function returns None instead of
     # falling through.
     ("arbiter_select: sticky always wins (return committed unconditionally)",
-     "            if not guard_precedes:\n"
+     "            if not guard_precedes and not lower_band_precedes:\n"
      "                plan = try_plan(committed_cand.goal)\n"
      "                tried_repr = committed_repr\n"
      "                if len(plan) > 0:\n"
      "                    return committed_cand.goal, plan, committed_repr",
      "            plan = try_plan(committed_cand.goal)\n"
      "            return committed_cand.goal, plan, committed_repr"),
+    # drop the lower_band_precedes check: a stale commit to a LOWER-priority
+    # (higher band) grind preempts the plannable objective step forever — the
+    # copper_ring char-XP freeze (trace 2026-07-01). Killed by the freeze
+    # regression differential.
+    ("arbiter_select: drop lower_band_precedes check (stale commit preempts step)",
+     "            if not guard_precedes and not lower_band_precedes:\n",
+     "            if not guard_precedes:\n"),
+    # flip the band comparison: c.band < committed.band -> c.band > committed.band,
+    # so a lower band no longer counts as "preceding higher priority" and the
+    # freeze is not prevented.
+    ("arbiter_select: lower_band comparison flip (< -> >)",
+     "                c.band < committed_cand.band and _precedes(candidates, c.repr_, committed_repr)",
+     "                c.band > committed_cand.band and _precedes(candidates, c.repr_, committed_repr)"),
+    # widen the discretionary exemption so band-4 commits are ALSO preemptable —
+    # breaks the worth-gate-governed task arbitration the exemption preserves.
+    ("arbiter_select: widen discretionary exemption (band < 4 -> band < 999)",
+     "            lower_band_precedes = committed_cand.band < 4 and any(",
+     "            lower_band_precedes = committed_cand.band < 999 and any("),
     # reverse the precedes comparison: a_idx < b_idx -> a_idx > b_idx, so a
     # guard at index 0 no longer "precedes" a means at index ≥ 1. guard_precedes
     # becomes false when it should be true, and sticky can override a guard.
