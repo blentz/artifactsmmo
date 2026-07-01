@@ -2,6 +2,8 @@
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
+import httpx
+
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.raid_info import RaidInfo
 
@@ -60,3 +62,41 @@ def test_log_active_raids_prints_only_active(capsys):
 def test_log_active_raids_silent_when_none(capsys):
     GamePlayer(character="hero")._log_active_raids([_ri("upcoming")])
     assert capsys.readouterr().out == ""
+
+
+def test_fetch_raids_retries_on_http_error(monkeypatch):
+    """Cover lines 887-892: except httpx.HTTPError retry branch in _fetch_raids."""
+    call_count = 0
+    empty_page = MagicMock()
+    empty_page.data = []
+
+    def mock_get_all_raids(**kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise httpx.ConnectError("boom")
+        return empty_page
+
+    monkeypatch.setattr("artifactsmmo_cli.ai.player.get_all_raids", mock_get_all_raids)
+    monkeypatch.setattr("artifactsmmo_cli.ai.player.time.sleep", lambda _: None)
+
+    raids = GamePlayer(character="hero")._fetch_raids(MagicMock())
+    assert raids == []
+    assert call_count == 2
+
+
+def test_fetch_raids_multi_page(monkeypatch):
+    """Cover line 915: page += 1 when first page is full (100 items)."""
+    pages_requested = []
+
+    def mock_get_all_raids(**kwargs):
+        pages_requested.append(kwargs["page"])
+        page = MagicMock()
+        page.data = [_raid_schema("upcoming", None) for _ in range(100)] if kwargs["page"] == 1 else []
+        return page
+
+    monkeypatch.setattr("artifactsmmo_cli.ai.player.get_all_raids", mock_get_all_raids)
+
+    raids = GamePlayer(character="hero")._fetch_raids(MagicMock())
+    assert len(raids) == 100
+    assert 2 in pages_requested
