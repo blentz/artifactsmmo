@@ -73,6 +73,8 @@ import Formal.Extracted.Bridges6
 import Formal.Extracted.Bridges7
 import Formal.Extracted.Bridges8
 import Formal.Extracted.Bridges9
+import Formal.Extracted.Bridges10
+import Formal.Extracted.NextTierCap
 import Formal.Extracted.StrategicValue
 import Formal.Extracted.SkillTargetCurve
 import Formal.Extracted.SkillGrindSelection

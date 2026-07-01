@@ -420,6 +420,13 @@ MODULES: tuple[ModuleSpec, ...] = (
         structures=("SkillItem",),
     ),
     ModuleSpec(
+        source="src/artifactsmmo_cli/ai/tiers/next_tier_cap.py",
+        output=f"{GENERATED_DIR}/NextTierCap.lean",
+        core_name="NextTierCap",
+        functions=("next_tier_cap_pure", "next_tier_dampened_pure"),
+        structures=("SkillItem",),  # SkillItem imported from skill_target_curve; emit a namespaced copy
+    ),
+    ModuleSpec(
         source="src/artifactsmmo_cli/ai/tiers/skill_grind_selection.py",
         output=f"{GENERATED_DIR}/SkillGrindSelection.lean",
         core_name="SkillGrindSelection",
@@ -2144,6 +2151,27 @@ def _extract_constants(spec: ModuleSpec, tree: ast.Module) -> tuple[list[str], d
     return blocks, consts
 
 
+def _resolve_imported_class(tree: ast.Module, name: str) -> ast.ClassDef | None:
+    """Locate a `@dataclass` `name` that this module IMPORTS from a sibling
+    module (`from artifactsmmo_cli...sub import name`) so a registered structure
+    reused across modules (e.g. `SkillItem`, defined in `skill_target_curve` and
+    imported by `next_tier_cap`) can be emitted as a namespaced copy. Follows the
+    import to the sibling source file under `src/` and returns its ClassDef."""
+    for node in tree.body:
+        if not isinstance(node, ast.ImportFrom) or node.module is None:
+            continue
+        if not any(alias.name == name and alias.asname is None for alias in node.names):
+            continue
+        mod_path = ROOT / "src" / (node.module.replace(".", "/") + ".py")
+        if not mod_path.exists():
+            continue
+        sub = ast.parse(mod_path.read_text(), filename=str(mod_path))
+        for sn in sub.body:
+            if isinstance(sn, ast.ClassDef) and sn.name == name:
+                return sn
+    return None
+
+
 def extract_module(spec: ModuleSpec,
                    global_sigs: dict[str, tuple[str, tuple[LType, ...], LType, bool]],
                    global_consts: set[str] | None = None) -> str:
@@ -2153,6 +2181,11 @@ def extract_module(spec: ModuleSpec,
     tree = ast.parse(text, filename=spec.source)
     env = TypeEnv(opaque=spec.opaque_types)
     classes = {n.name: n for n in tree.body if isinstance(n, ast.ClassDef)}
+    for s in spec.structures:
+        if s not in classes:
+            imported = _resolve_imported_class(tree, s)
+            if imported is not None:
+                classes[s] = imported
     missing_structs = [s for s in spec.structures if s not in classes]
     if missing_structs:
         raise ExtractionError(
