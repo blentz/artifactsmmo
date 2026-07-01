@@ -3,11 +3,12 @@
 from rich.console import RenderableType
 from rich.table import Table
 from textual.app import ComposeResult
-from textual.containers import VerticalScroll
+from textual.containers import Horizontal, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Static
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
+from artifactsmmo_cli.tui.item_tables import build_bank_items, build_inventory_items
 
 
 def build_character_detail(snap: CycleSnapshot) -> RenderableType:
@@ -36,12 +37,15 @@ def build_character_detail(snap: CycleSnapshot) -> RenderableType:
 
 
 class CharacterScreen(Screen[None]):
-    """Modal full-screen character detail. Dismiss with 'c' or Escape."""
+    """Modal character detail in three columns: sheet | inventory | bank.
+    Dismiss with 'c' or Escape."""
 
-    # Fill the screen. (The screen's own layout is reset from the app's grid in
-    # WatchApp.CSS, where app-level rules can outrank this DEFAULT_CSS.)
     DEFAULT_CSS = """
-    #character-modal #char-scroll {
+    #character-modal #char-cols {
+        width: 1fr;
+        height: 1fr;
+    }
+    #character-modal #char-cols > VerticalScroll {
         width: 1fr;
         height: 1fr;
         padding: 1 2;
@@ -55,10 +59,16 @@ class CharacterScreen(Screen[None]):
         self._snapshot = snapshot
 
     def compose(self) -> ComposeResult:
-        # Scroll container so a tall character sheet scrolls instead of clipping.
-        with VerticalScroll(id="char-scroll"):
-            yield Static(build_character_detail(self._snapshot), id="char-detail")
+        with Horizontal(id="char-cols"):
+            with VerticalScroll(id="char-sheet-col"):
+                yield Static(build_character_detail(self._snapshot), id="char-detail")
+            with VerticalScroll(id="char-inv-col"):
+                yield Static(build_inventory_items(self._snapshot), id="char-inv")
+            with VerticalScroll(id="char-bank-col"):
+                yield Static(build_bank_items(self._snapshot), id="char-bank")
 
     def update_snapshot(self, snap: CycleSnapshot) -> None:
         self._snapshot = snap
         self.query_one("#char-detail", Static).update(build_character_detail(snap))
+        self.query_one("#char-inv", Static).update(build_inventory_items(snap))
+        self.query_one("#char-bank", Static).update(build_bank_items(snap))

@@ -203,14 +203,17 @@ class TestWatchAppModals:
 
     @pytest.mark.asyncio
     async def test_character_screen_fills_terminal(self):
-        """The character detail scroll container fills the whole modal screen."""
+        """The three-column container fills the modal; columns split the width."""
         app = _make_app()
         async with app.run_test(size=(120, 50)) as pilot:
             app.update_snapshot(_snap())
             await pilot.press("c")
-            scroll = app.screen.query_one("#char-scroll")
-            assert scroll.size.width == 120
-            assert scroll.size.height == 50
+            cols = app.screen.query_one("#char-cols")
+            assert cols.size.width == 120
+            assert cols.size.height == 50
+            sheet = app.screen.query_one("#char-sheet-col")
+            # equal thirds — each column roughly a third of 120
+            assert 35 <= sheet.size.width <= 45
 
     @pytest.mark.asyncio
     async def test_character_screen_update_snapshot_while_open(self):
