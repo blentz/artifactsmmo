@@ -134,6 +134,7 @@ class GameData:
     _recipe_cost_memo: RecipeCostMemo | None = field(default=None, init=False, repr=False)
     _consumable_effect_codes: dict[str, list[str]] = field(default_factory=dict, init=False, repr=False)
     _effect_registry: dict[str, str] = field(default_factory=dict, init=False, repr=False)
+    _seen_effect_codes: set[str] = field(default_factory=set, init=False, repr=False)
 
     # === Legacy private-state accessors ===
     # Tests and fixtures seed GameData through these historical private
@@ -1150,6 +1151,7 @@ class GameData:
         data._build_tasks(objs["tasks"])
         data._build_events(objs["events"])
         data._build_effects(objs["effects"])
+        data._audit_effect_coverage()
         data._build_bank(objs["bank"])
         data._load_ge_orders(client)
         return data
@@ -1277,6 +1279,7 @@ class GameData:
                 effect_codes = self._consumable_effect_codes.setdefault(item.code, [])
                 for effect in item.effects:
                     effect_codes.append(effect.code)
+                    self._seen_effect_codes.add(effect.code)
                     if effect.code in ("heal", "restore", "splash_restore"):
                         # The HP-restoration family: `heal` (cooked food), `restore`
                         # (potions, e.g. enchanted_health_potion=300), `splash_restore`
@@ -1560,6 +1563,24 @@ class GameData:
         for eff in effects:
             self._effect_registry[eff.code] = eff.name
 
+    def _audit_effect_coverage(self) -> None:
+        """Warn (never raise) about effect-registry coverage: codes defined but on
+        no current entity (model them before something carries one), codes in use
+        the registry does not define, and carveouts that no longer exist. The lazy
+        GameDataCoverageError stays the hard gate when a new code is actually
+        carried by a monster/item."""
+        registry = set(self._effect_registry)
+        latent = sorted(registry - self._seen_effect_codes)
+        if latent:
+            print(f"[game_data] effect codes defined but on no current entity: {latent}")
+        anomaly = sorted(self._seen_effect_codes - registry)
+        if anomaly:
+            print(f"[game_data] effect codes in use but not in /effects registry: {anomaly}")
+        carveouts = _MONSTER_EFFECT_CARVEOUTS | _ITEM_EFFECT_CARVEOUTS | _RUNE_ABILITY_CARVEOUTS
+        stale = sorted(carveouts - registry)
+        if stale:
+            print(f"[game_data] stale effect carveouts (not in /effects registry): {stale}")
+
     def _fetch_events(self, client: AuthenticatedClient) -> list[EventSchema]:
         """Page all events; return the list of schema objects."""
         out: list[EventSchema] = []
@@ -1655,6 +1676,8 @@ class GameData:
             if mon_effects and not isinstance(mon_effects, Unset):
                 for effect in mon_effects:
                     code = getattr(effect, "code", None)
+                    if code is not None:
+                        self._seen_effect_codes.add(code)
                     if code == "lifesteal":
                         self._monster_lifesteal[mon.code] = effect.value
                     elif code == "poison":
