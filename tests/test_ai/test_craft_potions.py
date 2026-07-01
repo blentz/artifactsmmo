@@ -20,6 +20,7 @@ from tests.test_ai.fixtures import make_state
 
 _POTION = "small_health_potion"
 _INGREDIENT = "sunflower"
+_INGREDIENT2 = "herb"
 _RESOURCE = "sunflower_field"
 
 
@@ -197,6 +198,63 @@ def test_gather_path_filters_closure_and_keeps_moves():
     assert [g.resource_code for g in out if isinstance(a := g, GatherAction)] == [_RESOURCE]
     assert [w.code for w in out if isinstance(w, WithdrawItemAction)] == [_INGREDIENT]
     assert any(isinstance(a, MoveAction) for a in out)
+
+
+def test_buy_quantity_batched_to_run_count():
+    """The ingredient buy is sized to the whole batch (recipe_qty x runs - held),
+    matching the co-emitted craft's run count, not left at 1."""
+    gd = _gd_potion()
+    gd._npc_stock = {"alchemist": {_INGREDIENT: 100}}
+    gd._npc_locations = {"alchemist": (5, 0)}
+    state = make_state(level=1, inventory={}, gold=100000)  # baseline 5, nothing held
+    actions = [_craft_action(),
+               NpcBuyAction(npc_code="alchemist", item_code=_INGREDIENT, quantity=1,
+                            npc_location=(5, 0)),
+               MoveAction(x=0, y=0)]
+    out = CraftPotionsGoal().relevant_actions(actions, state, gd)
+    craft = next(a for a in out if isinstance(a, CraftAction) and a.code == _POTION)
+    buy = next(a for a in out if isinstance(a, NpcBuyAction))
+    # recipe is {sunflower: 1}, nothing held -> buy == 1 * runs == craft.quantity
+    assert craft.quantity > 1            # ladder chose a multi-run batch
+    assert buy.quantity == craft.quantity
+    assert buy.quantity > 1              # batched, not the old quantity=1
+
+
+def test_buy_quantity_subtracts_held():
+    """Held ingredient reduces the buy to the remaining shortfall.
+
+    Requires a 2-ingredient recipe so the buy tier actually fires: with only
+    sunflower held (herb=0), from_held = min(2//1, 0//1) = 0, which skips the
+    held tier and enters the buy tier.  runs=5 (baseline at level=1, nothing
+    equipped) so sunflower buy = max(1, 5-2) = 3 — a positive shortfall that is
+    neither 1 (the old pass-through) nor 5 (the full batch).
+    """
+    gd = _gd_potion()
+    gd._item_stats[_INGREDIENT2] = ItemStats(code=_INGREDIENT2, level=1, type_="resource")
+    gd._crafting_recipes = {_POTION: {_INGREDIENT: 1, _INGREDIENT2: 1}}
+    gd._npc_stock = {"alchemist": {_INGREDIENT: 100, _INGREDIENT2: 100}}
+    gd._npc_locations = {"alchemist": (5, 0)}
+    state = make_state(level=1, inventory={_INGREDIENT: 2}, gold=100000)
+    actions = [
+        _craft_action(),
+        NpcBuyAction(npc_code="alchemist", item_code=_INGREDIENT, quantity=1,
+                     npc_location=(5, 0)),
+        NpcBuyAction(npc_code="alchemist", item_code=_INGREDIENT2, quantity=1,
+                     npc_location=(5, 0)),
+        MoveAction(x=0, y=0),
+    ]
+    out = CraftPotionsGoal().relevant_actions(actions, state, gd)
+    craft = next(a for a in out if isinstance(a, CraftAction) and a.code == _POTION)
+    buy_sun = next(a for a in out if isinstance(a, NpcBuyAction) and a.item_code == _INGREDIENT)
+    buy_herb = next(a for a in out if isinstance(a, NpcBuyAction) and a.item_code == _INGREDIENT2)
+    runs = craft.quantity
+    # from_held=0 forces buy tier; runs must be large enough for a positive shortfall
+    assert runs >= 4, f"expected runs>=4 for positive shortfall; got {runs}"
+    # sunflower: 2 held -> buy = max(1, runs-2), which is runs-2 (>1 when runs>=4)
+    assert buy_sun.quantity == max(1, runs - 2)
+    assert buy_sun.quantity == runs - 2      # positive shortfall, not the floor
+    # herb: 0 held -> buy == full batch
+    assert buy_herb.quantity == runs
 
 
 # ── misc surface ─────────────────────────────────────────────────────────────

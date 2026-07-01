@@ -148,6 +148,9 @@ class CraftPotionsGoal(Goal):
         closure_demand(code, 1, game_data, chain, frozenset())
         withdrawable |= set(chain)
 
+        buy_chain: dict[str, int] = {}
+        closure_demand(code, runs, game_data, buy_chain, frozenset())
+
         result: list[Action] = []
         have_craft = False
         for a in actions:
@@ -161,7 +164,10 @@ class CraftPotionsGoal(Goal):
             elif isinstance(a, GatherAction) and a.resource_code in needed_resources:
                 result.append(a)
             elif isinstance(a, NpcBuyAction) and a.item_code in chain:
-                result.append(a)
+                buy_qty = max(1, buy_chain.get(a.item_code, 0)
+                              - self._held(a.item_code, state))
+                result.append(a if a.quantity == buy_qty
+                              else dataclasses.replace(a, quantity=buy_qty))
             elif isinstance(a, WithdrawItemAction) and a.code in withdrawable:
                 result.append(a)
             elif isinstance(a, MoveAction):
