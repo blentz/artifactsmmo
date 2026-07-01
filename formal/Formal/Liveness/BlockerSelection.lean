@@ -100,11 +100,11 @@ theorem productionLadder_eq_claimPending (s : State)
     (h5b : fires .recycleRelief s = false)
     (h5c : fires .sellRelief s = false)
     (h6 : fires .depositFull s = false) (h7 : fires .discardHigh s = false)
-    (h8 : fires .gearReview s = false)
+    (h8 : fires .gearReview s = false) (h8b : fires .craftPotions s = false)
     (hfire : fires .claimPending s = true) :
     productionLadder s = some .claimPending := by
   simp [productionLadder, allInLadderOrder,
-    h0, h1, h2, h3, h4, h5, h5b, h5c, h6, h7, h8, hfire]
+    h0, h1, h2, h3, h4, h5, h5b, h5c, h6, h7, h8, h8b, hfire]
 
 /-- `sellPressured` (slot 13) — higher: slots 0-12 (incl. completeTask). -/
 theorem productionLadder_eq_sellPressured (s : State)
@@ -114,12 +114,13 @@ theorem productionLadder_eq_sellPressured (s : State)
     (h5b : fires .recycleRelief s = false)
     (h5c : fires .sellRelief s = false)
     (h6 : fires .depositFull s = false) (h7 : fires .discardHigh s = false)
-    (h8 : fires .gearReview s = false) (h9 : fires .claimPending s = false)
+    (h8 : fires .gearReview s = false) (h8b : fires .craftPotions s = false)
+    (h9 : fires .claimPending s = false)
     (h10 : fires .completeTask s = false)
     (hfire : fires .sellPressured s = true) :
     productionLadder s = some .sellPressured := by
   simp [productionLadder, allInLadderOrder,
-    h0, h1, h2, h3, h4, h5, h5b, h5c, h6, h7, h8, h9, h10, hfire]
+    h0, h1, h2, h3, h4, h5, h5b, h5c, h6, h7, h8, h8b, h9, h10, hfire]
 
 /-- `bankUnlock` (slot 2, a FIGHT means) is selected when it fires and the two
     higher slots (hpCritical, restForCombat) are quiet. Used by the B-0 bootstrap

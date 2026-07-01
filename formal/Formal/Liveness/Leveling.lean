@@ -13,7 +13,7 @@ task + a committed combat objective. A parked task is either `.none` or
 (it touches neither `phase` nor `taskFeasibleProjected`, and `phase ≠ inProgress`
 keeps `lowYieldCancel` quiet despite the `actionsAttempted` bump).
 
-So `Leveling` ⇒ all 14 blockers quiet ⇒ `objectiveStep` selected ⇒ `.fight` ⇒
+So `Leveling` ⇒ all 17 blockers quiet ⇒ `objectiveStep` selected ⇒ `.fight` ⇒
 `Leveling` preserved. A single `Leveling` state discharges
 `CombatObjectiveFairlyScheduled` and (with config-positivity) level-50 reachability —
 the SAME payoff as `Settled`, but on a state the warm-up can actually reach.
@@ -89,6 +89,7 @@ theorem Leveling_blockers_quiet (s : State) (h : Leveling s) :
   · simp [fires, depositFullFires, hm.deposits]
   · simp [fires, discardHighFires, hm.overstock]
   · simp [fires, ProductionLadder.gearReviewFires, hm.gear]
+  · simp [fires, ProductionLadder.craftPotionsFires, hm.potions]
   · simp [fires, claimPendingFires, hm.pending]
   · exact htc
   · simp [fires, sellPressuredFires, hm.sellable]

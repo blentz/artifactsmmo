@@ -31,7 +31,7 @@ noncomputable def settledWitness : State :=
 
 /-- `Settled` is satisfiable. -/
 theorem settledWitness_isSettled : Settled settledWitness := by
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
     first | rfl | decide
 
 /-- **A concrete, hypothesis-free level-50 reachability** (modulo only LIV-001). The

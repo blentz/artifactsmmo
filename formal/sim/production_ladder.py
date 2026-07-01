@@ -50,6 +50,7 @@ class LadderMeans(Enum):
     DEPOSIT_FULL = "deposit_full"
     DISCARD_HIGH = "discard_high"
     GEAR_REVIEW = "gear_review"
+    CRAFT_POTIONS = "craft_potions"
     CLAIM_PENDING = "claim_pending"
     COMPLETE_TASK = "complete_task"
     SELL_PRESSURED = "sell_pressured"
@@ -79,6 +80,7 @@ ALL_IN_LADDER_ORDER: tuple[LadderMeans, ...] = (
     LadderMeans.DEPOSIT_FULL,
     LadderMeans.DISCARD_HIGH,
     LadderMeans.GEAR_REVIEW,
+    LadderMeans.CRAFT_POTIONS,
     LadderMeans.CLAIM_PENDING,
     LadderMeans.COMPLETE_TASK,
     LadderMeans.SELL_PRESSURED,
@@ -109,6 +111,7 @@ _GUARD_MAP: dict[LadderMeans, GuardKind] = {
     LadderMeans.DEPOSIT_FULL: GuardKind.DEPOSIT_FULL,
     LadderMeans.DISCARD_HIGH: GuardKind.DISCARD_HIGH,
     LadderMeans.GEAR_REVIEW: GuardKind.GEAR_REVIEW,
+    LadderMeans.CRAFT_POTIONS: GuardKind.CRAFT_POTIONS,
 }
 
 _MEANS_MAP: dict[LadderMeans, MeansKind] = {
@@ -142,6 +145,7 @@ assert tuple(g for g in GUARD_ORDER) == (
     GuardKind.DEPOSIT_FULL,
     GuardKind.DISCARD_HIGH,
     GuardKind.GEAR_REVIEW,
+    GuardKind.CRAFT_POTIONS,
 ), "GUARD_ORDER drift — Lean MeansKind.allInLadderOrder is stale"
 
 assert COLLECT_REWARD_ORDER == (

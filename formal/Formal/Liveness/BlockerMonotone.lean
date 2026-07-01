@@ -139,6 +139,39 @@ theorem gearReview_quiet_forever (s : State) (h : s.gearReviewFires = false) (n 
     fires .gearReview (cycleStepN n s) = false := by
   simp [fires, ProductionLadder.gearReviewFires, gearReviewFires_false_cycleStepN n s h]
 
+/-! ## craftPotionsFires (craftPotions) -/
+
+theorem craftPotionsFires_false_apply (a : ActionKind) (s : State)
+    (h : s.craftPotionsFires = false) :
+    (applyActionKind a s).craftPotionsFires = false := by
+  cases a
+  case move => simp only [applyActionKind]; rcases s.moveTarget with _ | ⟨tx, ty⟩ <;> exact h
+  case mapTransition => simp only [applyActionKind]; rcases s.moveTarget with _ | ⟨tx, ty⟩ <;> exact h
+  all_goals first | exact h | (simp [applyActionKind])
+
+theorem craftPotionsFires_false_cycleStep (s : State) (h : s.craftPotionsFires = false) :
+    (cycleStep s).craftPotionsFires = false := by
+  unfold cycleStep
+  split
+  · exact h
+  · split
+    · exact h
+    · exact craftPotionsFires_false_apply _ s h
+
+theorem craftPotionsFires_false_cycleStepN :
+    ∀ (n : Nat) (s : State), s.craftPotionsFires = false →
+      (cycleStepN n s).craftPotionsFires = false
+  | 0, _, h => h
+  | n + 1, s, h => by
+      rw [cycleStepN_succ]
+      exact craftPotionsFires_false_cycleStepN n (cycleStep s)
+        (craftPotionsFires_false_cycleStep s h)
+
+/-- Once the craft-potions latch is clear, `craftPotions` never fires again. -/
+theorem craftPotions_quiet_forever (s : State) (h : s.craftPotionsFires = false) (n : Nat) :
+    fires .craftPotions (cycleStepN n s) = false := by
+  simp [fires, ProductionLadder.craftPotionsFires, craftPotionsFires_false_cycleStepN n s h]
+
 /-! ## pendingItemsNonempty (claimPending) -/
 
 theorem pendingItems_false_apply (a : ActionKind) (s : State)

@@ -1232,7 +1232,8 @@ def runDecideKey (args : Array Json) : Json :=
       | 7 => .restForCombat
       | 8 => .gearReview
       | 9 => .recycleRelief
-      | _ => .sellRelief  -- index 10
+      | 10 => .sellRelief
+      | _ => .craftPotions  -- index 11
     Json.mkObj [("repr", Json.str (Formal.DecideKey.goalReprOfGuard k))]
   else
     let idx := (intArg args 1).toNat
@@ -2290,9 +2291,10 @@ ARG LAYOUT (flat ints; index → field):
 * `[29]` maintainConsumablesFires     (Bool 0/1)
 * `[30]` bankItemsKnown               (Bool 0/1)
 * `[31]` bankJunkNonempty             (Bool 0/1)
+* `[32]` craftPotionsFires            (Bool 0/1)
 
 Emits a JSON object: one Bool field per MeansKind keyed by `meansKindName`
-(26 fields), plus `"selected"`: the name of `productionLadder s` or `null`. -/
+(27 fields), plus `"selected"`: the name of `productionLadder s` or `null`. -/
 def runLadder (args : Array Json) : Json :=
   let n := fun i => (intArg args i).toNat
   let b := fun i => intArg args i != 0
@@ -2317,7 +2319,7 @@ def runLadder (args : Array Json) : Json :=
     restForCombatReady := b 25, gearReviewFires := b 26,
     craftReliefFires := b 27, objectiveStepFires := b 28,
     maintainConsumablesFires := b 29, bankItemsKnown := b 30,
-    bankJunkNonempty := b 31 }
+    bankJunkNonempty := b 31, craftPotionsFires := b 32 }
   let firesFields : List (String × Json) :=
     allInLadderOrder.map (fun k => (meansKindName k, Json.bool (fires k s)))
   let selected : Json := match productionLadder s with

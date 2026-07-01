@@ -215,3 +215,6 @@ import Formal.Liveness.CurrencyFunding
 import Formal.GearTaxonomy
 import Formal.LoadoutProfiles
 import Formal.MarginalPotionQty
+import Formal.PotionBaseline
+import Formal.MaxBatchFromHeld
+import Formal.OptimalBuyMix

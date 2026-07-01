@@ -74,6 +74,7 @@ structure FightReadyCore (s : State) : Prop where
   overstock      : s.hasOverstockItems = false
   deposits       : s.selectBankDepositsNonempty = false
   gear           : s.gearReviewFires = false
+  potions        : s.craftPotionsFires = false
   pending        : s.pendingItemsNonempty = false
   sellable       : s.sellableInventoryNonempty = false
   craft          : s.craftReliefFires = false
@@ -100,6 +101,7 @@ theorem fightReadyCore_reachable_of_seeds (s : State)
     (hover : ∃ k, (cycleStepN k s).hasOverstockItems = false)
     (hdep : ∃ k, (cycleStepN k s).selectBankDepositsNonempty = false)
     (hgear : ∃ k, (cycleStepN k s).gearReviewFires = false)
+    (hpotions : ∃ k, (cycleStepN k s).craftPotionsFires = false)
     (hpend : ∃ k, (cycleStepN k s).pendingItemsNonempty = false)
     (hsell : ∃ k, (cycleStepN k s).sellableInventoryNonempty = false)
     (hcraft : ∃ k, (cycleStepN k s).craftReliefFires = false)
@@ -135,9 +137,14 @@ theorem fightReadyCore_reachable_of_seeds (s : State)
     (persist_and (persist_and (persist_and (persist_and (persist_and (persist_and
       (persist_and pHp pOver) pDep) pGear) pPend) pSell) pCraft) pRecycle)
     hparkP c7 hpark
-  obtain ⟨K, ⟨⟨⟨⟨⟨⟨⟨⟨hp, hov⟩, hde⟩, hge⟩, hpe⟩, hse⟩, hcr⟩, hre⟩, hpa⟩⟩ := c8
+  have pPotions := craftPotionsFires_false_cycleStepN
+  have c9 := reach_and s
+    (persist_and (persist_and (persist_and (persist_and (persist_and (persist_and
+      (persist_and (persist_and pHp pOver) pDep) pGear) pPend) pSell) pCraft) pRecycle) hparkP)
+    pPotions c8 hpotions
+  obtain ⟨K, ⟨⟨⟨⟨⟨⟨⟨⟨⟨hp, hov⟩, hde⟩, hge⟩, hpe⟩, hse⟩, hcr⟩, hre⟩, hpa⟩, hpo⟩⟩ := c9
   exact ⟨K, { hpFull := hp, overstock := hov, deposits := hde, gear := hge,
-              pending := hpe, sellable := hse, craft := hcr,
+              potions := hpo, pending := hpe, sellable := hse, craft := hcr,
               recycleNonempty := hre, parked := hpa }⟩
 
 /-- **The Phase-A assembly.** A reached `FightReadyCore` (the model-provable
@@ -154,6 +161,7 @@ theorem fightReady_reachable_of_seeds (s : State)
   obtain ⟨K, hcore⟩ := hwarm
   exact ⟨K, { hpFull := hcore.hpFull, overstock := hcore.overstock,
               deposits := hcore.deposits, gear := hcore.gear,
+              potions := hcore.potions,
               pending := hcore.pending, sellable := hcore.sellable,
               craft := hcore.craft, recycleNonempty := hcore.recycleNonempty,
               parked := hcore.parked,

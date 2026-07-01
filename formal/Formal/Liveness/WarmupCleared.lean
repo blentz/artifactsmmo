@@ -36,6 +36,7 @@ structure MechCleared (s : State) : Prop where
   overstock      : s.hasOverstockItems = false
   deposits       : s.selectBankDepositsNonempty = false
   gear           : s.gearReviewFires = false
+  potions        : s.craftPotionsFires = false
   pending        : s.pendingItemsNonempty = false
   sellable       : s.sellableInventoryNonempty = false
   craft          : s.craftReliefFires = false
@@ -51,6 +52,7 @@ theorem MechCleared_cycleStep (s : State) (h : MechCleared s) :
   overstock       := hasOverstockItems_false_cycleStep s h.overstock
   deposits        := selectBankDeposits_false_cycleStep s h.deposits
   gear            := gearReviewFires_false_cycleStep s h.gear
+  potions         := craftPotionsFires_false_cycleStep s h.potions
   pending         := pendingItems_false_cycleStep s h.pending
   sellable        := sellable_false_cycleStep s h.sellable
   craft           := craftReliefFires_false_cycleStep s h.craft
@@ -79,6 +81,7 @@ theorem settled_of_mechCleared (s : State) (hm : MechCleared s)
   overstock       := hm.overstock
   deposits        := hm.deposits
   gear            := hm.gear
+  potions         := hm.potions
   pending         := hm.pending
   sellable        := hm.sellable
   craft           := hm.craft

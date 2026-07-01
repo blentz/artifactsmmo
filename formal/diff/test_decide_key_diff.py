@@ -148,6 +148,7 @@ _GUARD_INDEX = {
     GuardKind.GEAR_REVIEW: 8,
     GuardKind.RECYCLE_RELIEF: 9,
     GuardKind.SELL_RELIEF: 10,
+    GuardKind.CRAFT_POTIONS: 11,
 }
 
 _MEANS_INDEX = {

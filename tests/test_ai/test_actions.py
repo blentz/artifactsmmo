@@ -727,6 +727,26 @@ class TestEquipAction:
         out = EquipAction("small_health_potion", "utility1_slot", quantity=30).apply(state, gd)
         assert out.utility1_slot_quantity == 50  # 20 + 30
 
+    def test_equip_utility2_sets_quantity_on_empty_slot(self):
+        """Equipping into an empty utility2_slot SETS the slot quantity to the
+        equipped amount (covers the utility2 apply branch, equip.py:108)."""
+        state = make_state(inventory={"small_health_potion": 50}, level=1,
+                           equipment={"utility2_slot": None})
+        gd = _gd_with_utility_heal("small_health_potion", hp_restore=60)
+        out = EquipAction("small_health_potion", "utility2_slot", quantity=30).apply(state, gd)
+        assert out.equipment["utility2_slot"] == "small_health_potion"
+        assert out.utility2_slot_quantity == 30
+
+    def test_equip_utility2_adds_to_existing_same_code_stack(self):
+        """Equipping the SAME code into utility2_slot ADDS to the existing stack
+        (additive same-code branch through equip.py:108)."""
+        state = make_state(inventory={"small_health_potion": 50}, level=1,
+                           equipment={"utility2_slot": "small_health_potion"})
+        state = dataclasses.replace(state, utility2_slot_quantity=20)
+        gd = _gd_with_utility_heal("small_health_potion", hp_restore=60)
+        out = EquipAction("small_health_potion", "utility2_slot", quantity=30).apply(state, gd)
+        assert out.utility2_slot_quantity == 50  # 20 + 30
+
 
 def _consumable_stats(code: str = "cooked_chicken", hp_restore: int = 80) -> dict[str, ItemStats]:
     return {code: ItemStats(code=code, level=1, type_="consumable", hp_restore=hp_restore)}

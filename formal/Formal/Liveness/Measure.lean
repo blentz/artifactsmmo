@@ -198,6 +198,14 @@ structure State where
       prioritization latch). State-carried Bool — a diff harness asserts
       agreement with `ctx.gear_review_active`. -/
   gearReviewFires : Bool
+  /-- OPAQUE: production's CRAFT_POTIONS guard firing predicate. Mirrors
+      `tiers/guards.py::_fires(GuardKind.CRAFT_POTIONS, …)` =
+      `craft_potions_fires(state, game_data)`: fires when a utility-slot
+      potion baseline is under-stocked and an alchemy-craftable (or buyable)
+      potion can restock it. State-carried Bool (default false); a diff
+      harness asserts agreement with the real predicate. Cleared by the
+      `.craft` apply (the CraftPotions goal crafts the baseline potion). -/
+  craftPotionsFires : Bool := false
   /-- OPAQUE: production's MAINTAIN_CONSUMABLES means firing predicate (PLAN #6a).
       Mirrors `tiers/means.py::_fires(MAINTAIN_CONSUMABLES, …)`: fires iff combat
       is the active means AND heal-stock < floor AND a better heal is craftable.

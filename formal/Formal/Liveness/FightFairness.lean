@@ -41,15 +41,16 @@ open Formal.Liveness.ProductionLadder
 open Formal.Liveness.CycleStep
 open Formal.Liveness.CumulativeProgress
 
-/-- The means strictly ahead of `objectiveStep` (idx 0–14) in `allInLadderOrder`.
-    `productionLadder` returns the FIRST firing means, so `objectiveStep` (idx 15)
+/-- The means strictly ahead of `objectiveStep` (idx 0–16) in `allInLadderOrder`.
+    `productionLadder` returns the FIRST firing means, so `objectiveStep` (idx 17)
     is selected exactly when all of these are quiet and it fires. -/
 def objectiveStepBlockers : List MeansKind :=
   [.hpCritical, .restForCombat, .bankUnlock, .reachUnlockLevel,
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull, .discardHigh, .gearReview,
+   .craftPotions,
    .claimPending, .completeTask, .sellPressured, .lowYieldCancel, .taskCancel]
 
-/-- The means at/after `objectiveStep` (idx 15–24). -/
+/-- The means at/after `objectiveStep` (idx 17–26). -/
 def objectiveStepSuffix : List MeansKind :=
   [.pursueTask, .acceptTask, .taskExchange, .maintainConsumables, .sellIdle, .recycleSurplus,
    .bankExpand, .drainBankJunk, .wait]
@@ -116,7 +117,7 @@ independently:
   pure `cycleStep` mechanics and so is an honest hypothesis.
 
 - **`BlockersQuietInfinitelyOften`** — a pure SCHEDULING property: infinitely
-  often, none of the 14 higher-priority means fires. This is the transience core:
+  often, none of the 17 higher-priority means fires. This is the transience core:
   each blocker's `planFor` action CLEARS its own firing condition (e.g.
   `deleteItem` clears overstock, `depositAll` clears the deposit set, `npcSell`
   clears the sellable set, `completeTask` clears the task, the bootstrap fights

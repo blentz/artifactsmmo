@@ -123,6 +123,7 @@ noncomputable def planFor : MeansKind → State → Plan
   | .depositFull      , _ => [.depositAll]
   | .discardHigh      , _ => [.deleteItem]
   | .gearReview       , _ => [.optimizeLoadout]
+  | .craftPotions     , _ => [.craft]
   | .claimPending     , _ => [.claimPendingItem]
   | .completeTask     , _ => [.completeTask]
   | .sellPressured    , _ => [.npcSell]
@@ -408,6 +409,18 @@ theorem cycleStep_progress_or_waits
     have hpost : (applyActionKind .optimizeLoadout s).gearReviewFires = false := by
       simp [applyActionKind]
     have hpre' : s.gearReviewFires = false := by
+      rw [heq] at hpost; exact hpost
+    rw [hfires] at hpre'; cases hpre'
+  | craftPotions =>
+    left
+    have hcs : cycleStep s = applyActionKind .craft s := by
+      unfold cycleStep; rw [hk]; rfl
+    rw [hcs]
+    simp only [fires, ProductionLadder.craftPotionsFires] at hfires
+    intro heq
+    have hpost : (applyActionKind .craft s).craftPotionsFires = false := by
+      simp [applyActionKind]
+    have hpre' : s.craftPotionsFires = false := by
       rw [heq] at hpost; exact hpost
     rw [hfires] at hpre'; cases hpre'
   | claimPending =>

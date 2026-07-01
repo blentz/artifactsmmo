@@ -398,9 +398,16 @@ noncomputable def applyActionKind : ActionKind → State → State
       -- immediately after the craft" by clearing the flag. This is what
       -- lets `extMeasureLt` strictly decrease on the craftReliefFlag
       -- slot, sealing CRAFT_RELIEF termination (CumulativeProgress.lean).
+      -- CRAFT_POTIONS post-condition: the CraftPotions goal crafts the
+      -- baseline utility-slot potion; once crafted the production
+      -- `craft_potions_fires(...)` predicate becomes false (the slot is
+      -- stocked). Cleared here alongside `craftReliefFires`, mirroring the
+      -- same "predicate evaluates false immediately after the craft" pattern
+      -- (planFor .craftPotions = [.craft]).
       { s with craftableSlots := s.craftableSlots + 1,
                skillXpDelta := newSkillXp,
-               craftReliefFires := false }
+               craftReliefFires := false,
+               craftPotionsFires := false }
   -- Item 4b: .equip cons-prepends (slot, code) per equipTarget; no-op
   -- when equipTarget is none. Mirrors EquipAction.apply (equip.py:50+).
   | .equip, s =>

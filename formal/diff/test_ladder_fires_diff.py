@@ -165,6 +165,7 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.inventory_caps import overstocked_items
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.guards import _has_sellable
@@ -204,6 +205,7 @@ _ORACLE_KEY: dict[LadderMeans, str] = {
     LadderMeans.DEPOSIT_FULL: "depositFull",
     LadderMeans.DISCARD_HIGH: "discardHigh",
     LadderMeans.GEAR_REVIEW: "gearReview",
+    LadderMeans.CRAFT_POTIONS: "craftPotions",
     LadderMeans.CLAIM_PENDING: "claimPending",
     LadderMeans.COMPLETE_TASK: "completeTask",
     LadderMeans.SELL_PRESSURED: "sellPressured",
@@ -427,6 +429,10 @@ def _oracle_args(scn: Scenario, w: WorldState) -> list[int]:
         0,                                       # 29 maintainConsumablesFires (deferred)
         1 if scn.bank_known else 0,              # 30 bankItemsKnown
         1 if _bank_junk_nonempty(scn) else 0,    # 31 bankJunkNonempty
+        # 32 craftPotionsFires: the opaque CRAFT_POTIONS guard verdict, computed
+        # by production's REAL `craft_potions_fires` on the same (w, gd) the
+        # ladder reads (empty synthetic catalog ⇒ no target potion ⇒ False).
+        1 if craft_potions_fires(w, _make_game_data(scn)) else 0,  # 32 craftPotionsFires
     ]
 
 
@@ -801,6 +807,9 @@ def _rich_oracle_args(
         # 31: derive from production's REAL bank_drain_excess helper (like 19/20/22),
         # NOT the slot verdict — the helper IS the opaque nonempty signal.
         1 if bank_drain_excess(w, gd, frozenset(ctx.target_gear | ctx.target_tools)) else 0,  # 31 bankJunkNonempty
+        # 32 craftPotionsFires: opaque CRAFT_POTIONS latch — derive from the SAME
+        # production verdict (like gearReview/craftRelief/maintainConsumables).
+        1 if prod[LadderMeans.CRAFT_POTIONS] else 0,  # 32 craftPotionsFires
     ]
 
 

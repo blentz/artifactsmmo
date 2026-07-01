@@ -118,6 +118,7 @@ def meansKindName : MeansKind → String
   | .depositFull         => "depositFull"
   | .discardHigh         => "discardHigh"
   | .gearReview          => "gearReview"
+  | .craftPotions        => "craftPotions"
   | .claimPending        => "claimPending"
   | .completeTask        => "completeTask"
   | .sellPressured       => "sellPressured"

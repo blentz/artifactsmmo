@@ -157,6 +157,11 @@ theorem cycleStep_xp_level_preserved_when_no_fight_no_complete (s : State)
       show (applyActionKind .optimizeLoadout s).level = s.level
             ∧ (applyActionKind .optimizeLoadout s).xp = s.xp
       exact ⟨rfl, rfl⟩
+    | craftPotions =>
+      -- planFor .craftPotions = [.craft], same as craftRelief.
+      show (applyActionKind .craft s).level = s.level
+            ∧ (applyActionKind .craft s).xp = s.xp
+      exact ⟨rfl, rfl⟩
     | claimPending =>
       show (applyActionKind .claimPendingItem s).level = s.level
             ∧ (applyActionKind .claimPendingItem s).xp = s.xp

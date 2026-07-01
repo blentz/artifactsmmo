@@ -686,3 +686,35 @@ def test_craft_potions_guard_quiet_when_stocked_to_level_baseline():
     """equipped == baseline(3) = 5 → guard quiet even though potion exists."""
     state, gd, ctx = _stocked_to_baseline(level=3, equipped=5)
     assert _fires(GuardKind.CRAFT_POTIONS, state, gd, None, ctx, None) is False
+
+
+def test_craft_potions_guard_fires_when_ingredients_held():
+    """Understocked with all ingredients already in inventory → craft-from-held
+    producibility fires (potion_supply.py:74)."""
+    state = make_state(level=3, skills={"alchemy": 1}, utility1_slot_quantity=0,
+                       inventory={"red_slimeball": 2})
+    assert _fires(GuardKind.CRAFT_POTIONS, state, _potion_gd(), None, _ctx(), None) is True
+
+
+def test_craft_potions_guard_fires_when_ingredients_buyable_for_gold():
+    """Understocked, none held, but every ingredient is NPC-buyable for gold →
+    buy-mix producibility fires (potion_supply.py:80)."""
+    gd = _potion_gd()
+    gd._resource_drops = {}  # not gatherable — force the buyable path
+    gd._npc_stock = {"alchemist": {"red_slimeball": 3}}  # gold currency by default
+    state = make_state(level=3, skills={"alchemy": 1}, utility1_slot_quantity=0,
+                       inventory={})
+    assert _fires(GuardKind.CRAFT_POTIONS, state, gd, None, _ctx(), None) is True
+
+
+def test_craft_potions_guard_quiet_when_recipe_is_empty():
+    """A target utility potion whose crafting recipe is empty has no ingredient
+    path → guard stays quiet (potion_supply.py:69)."""
+    gd = GameData()
+    gd._item_stats = {
+        "health_potion": ItemStats(code="health_potion", level=1, type_="utility",
+                                   hp_restore=50, crafting_skill="alchemy", crafting_level=1),
+    }
+    gd._crafting_recipes = {"health_potion": {}}  # selected as target, but no ingredients
+    state = make_state(level=3, skills={"alchemy": 1}, utility1_slot_quantity=0)
+    assert _fires(GuardKind.CRAFT_POTIONS, state, gd, None, _ctx(), None) is False
