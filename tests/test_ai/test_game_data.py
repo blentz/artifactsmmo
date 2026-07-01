@@ -1275,9 +1275,10 @@ class TestGameDataLoad:
                         with patch("artifactsmmo_cli.ai.game_data.get_all_npc_items", return_value=empty_page):
                             with patch("artifactsmmo_cli.ai.game_data.get_all_tasks", return_value=empty_page):
                                 with patch("artifactsmmo_cli.ai.game_data.get_all_events", return_value=empty_page):
-                                    with patch("artifactsmmo_cli.ai.game_data.get_ge_orders", return_value=empty_page):
-                                        with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None):
-                                            gd = GameData.load(client, cache=cache)
+                                    with patch("artifactsmmo_cli.ai.game_data.get_all_effects", return_value=empty_page):
+                                        with patch("artifactsmmo_cli.ai.game_data.get_ge_orders", return_value=empty_page):
+                                            with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None):
+                                                gd = GameData.load(client, cache=cache)
         assert isinstance(gd, GameData)
 
 
@@ -1815,7 +1816,7 @@ class TestGameDataFetchBuildSplit:
         assert gd._resource_locations == {"copper": [(2, 3)]}
 
 
-_STATIC = ("maps", "items", "resources", "monsters", "npcs", "tasks", "events")
+_STATIC = ("maps", "items", "resources", "monsters", "npcs", "tasks", "events", "effects")
 
 
 class _RecordingCache(GameDataCache):
@@ -1859,7 +1860,7 @@ def test_cold_load_fetches_and_writes(monkeypatch, tmp_path):
 
 def test_warm_load_skips_fetch_uses_cache(monkeypatch, tmp_path):
     ge = _stub_fetch_build(monkeypatch)
-    seeded = {k: [] for k in _STATIC} | {"bank": None}
+    seeded = {k: [] for k in _STATIC} | {"bank": None}  # _STATIC now includes "effects"
     cache = _RecordingCache(tmp_path, seeded=seeded)  # hit
     monkeypatch.setattr(
         GameData,
@@ -1943,6 +1944,7 @@ def test_warm_and_cold_events_build_equal(monkeypatch, tmp_path):
     (built from from_dict(to_dict(...))) must index identically."""
     ev = _make_event_npc(code="gold_merchant", npc_code="merchant", x=5, y=6)  # real EventSchema
     monkeypatch.setattr(GameData, "_fetch_events", lambda self, client: [ev])
+    monkeypatch.setattr(GameData, "_fetch_effects", lambda self, client: [])
     for name in ("maps", "items", "resources", "monsters", "npcs", "tasks"):
         monkeypatch.setattr(GameData, f"_fetch_{name}", lambda self, client: [])
     monkeypatch.setattr(GameData, "_fetch_bank", lambda self, client: None)

@@ -14,6 +14,7 @@ from functools import cached_property
 from typing import Any
 
 from artifactsmmo_api_client import AuthenticatedClient
+from artifactsmmo_api_client.api.effects.get_all_effects_effects_get import sync as get_all_effects
 from artifactsmmo_api_client.api.events.get_all_events_events_get import sync as get_all_events
 from artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get import sync as get_ge_orders
 from artifactsmmo_api_client.api.items.get_all_items_items_get import sync as get_all_items
@@ -26,6 +27,7 @@ from artifactsmmo_api_client.api.tasks.get_all_tasks_tasks_list_get import sync 
 from artifactsmmo_api_client.models.task_full_schema import TaskFullSchema
 from artifactsmmo_api_client.models.bank_schema import BankSchema
 from artifactsmmo_api_client.models.craft_skill import CraftSkill
+from artifactsmmo_api_client.models.effect_schema import EffectSchema
 from artifactsmmo_api_client.models.event_schema import EventSchema
 from artifactsmmo_api_client.models.gathering_skill import GatheringSkill
 from artifactsmmo_api_client.models.ge_order_type import GEOrderType
@@ -131,6 +133,7 @@ class GameData:
     _task_coin_rewards: dict[str, int] = field(default_factory=dict)
     _recipe_cost_memo: RecipeCostMemo | None = field(default=None, init=False, repr=False)
     _consumable_effect_codes: dict[str, list[str]] = field(default_factory=dict, init=False, repr=False)
+    _effect_registry: dict[str, str] = field(default_factory=dict, init=False, repr=False)
 
     # === Legacy private-state accessors ===
     # Tests and fixtures seed GameData through these historical private
@@ -1109,6 +1112,7 @@ class GameData:
                 "npcs": data._fetch_npcs(client),
                 "tasks": data._fetch_tasks(client),
                 "events": data._fetch_events(client),
+                "effects": data._fetch_effects(client),
                 "bank": data._fetch_bank(client),
             }
             raw = {
@@ -1135,6 +1139,7 @@ class GameData:
                 "npcs": [NPCItemSchema.from_dict(d) for d in raw["npcs"]],
                 "tasks": [TaskFullSchema.from_dict(d) for d in raw["tasks"]],
                 "events": [EventSchema.from_dict(d) for d in raw["events"]],
+                "effects": [EffectSchema.from_dict(d) for d in raw["effects"]],
                 "bank": BankSchema.from_dict(raw["bank"]) if raw["bank"] is not None else None,
             }
         data._build_maps(objs["maps"])
@@ -1144,6 +1149,7 @@ class GameData:
         data._build_npcs(objs["npcs"])
         data._build_tasks(objs["tasks"])
         data._build_events(objs["events"])
+        data._build_effects(objs["effects"])
         data._build_bank(objs["bank"])
         data._load_ge_orders(client)
         return data
@@ -1534,6 +1540,25 @@ class GameData:
             if len(result.data) < 100:
                 break
             page += 1
+
+    def _fetch_effects(self, client: AuthenticatedClient) -> list[EffectSchema]:
+        """Page all effect definitions; return the schema list."""
+        out: list[EffectSchema] = []
+        page = 1
+        while True:
+            result = get_all_effects(client=client, page=page, size=100)
+            if result is None or not result.data:
+                break
+            out.extend(result.data)
+            if len(result.data) < 100:
+                break
+            page += 1
+        return out
+
+    def _build_effects(self, effects: list[EffectSchema]) -> None:
+        """Index the authoritative effect registry (code -> name)."""
+        for eff in effects:
+            self._effect_registry[eff.code] = eff.name
 
     def _fetch_events(self, client: AuthenticatedClient) -> list[EventSchema]:
         """Page all events; return the list of schema objects."""

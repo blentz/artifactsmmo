@@ -127,16 +127,17 @@ def test_advance_with_history_persists_cursor(tmp_path):
                             with patch("artifactsmmo_cli.ai.game_data.get_all_npc_items", return_value=MagicMock(data=[])):
                                 with patch("artifactsmmo_cli.ai.game_data.get_all_tasks", return_value=MagicMock(data=[])):
                                     with patch("artifactsmmo_cli.ai.game_data.get_all_events", return_value=MagicMock(data=[])):
-                                        with patch("artifactsmmo_cli.ai.game_data.get_ge_orders", return_value=MagicMock(data=[])):
-                                            with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None):
-                                                with patch("artifactsmmo_cli.ai.game_data.GameDataCache", _NoopCache):
-                                                    with patch.object(player, "_fetch_world_state", return_value=initial_state):
-                                                        with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
-                                                            with patch.object(player, "_maybe_periodic_refresh"):
-                                                                with patch.object(player, "_build_actions", return_value=[rest]):
-                                                                    import pytest
-                                                                    with pytest.raises(KeyboardInterrupt):
-                                                                        player.run()
+                                        with patch("artifactsmmo_cli.ai.game_data.get_all_effects", return_value=MagicMock(data=[])):
+                                            with patch("artifactsmmo_cli.ai.game_data.get_ge_orders", return_value=MagicMock(data=[])):
+                                                with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None):
+                                                    with patch("artifactsmmo_cli.ai.game_data.GameDataCache", _NoopCache):
+                                                        with patch.object(player, "_fetch_world_state", return_value=initial_state):
+                                                            with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
+                                                                with patch.object(player, "_maybe_periodic_refresh"):
+                                                                    with patch.object(player, "_build_actions", return_value=[rest]):
+                                                                        import pytest
+                                                                        with pytest.raises(KeyboardInterrupt):
+                                                                            player.run()
 
     # After one dry_run ok cycle, the cursor in the DB must have advanced.
     loaded = store.load_plan_commitment()
