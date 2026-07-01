@@ -150,7 +150,10 @@ def skill_step_dispatch_pure(
     kind, code = combine_dispatch_pure(skill, current_level, committed_skill,
                                        committed_level, full_pick, relaxed_pick)
     if kind == "grind" and dampened:
-        picked = next((c for c in candidates if c.code == code), None)
-        if picked is not None and not picked.wanted:
+        # `code` is always a candidate's code when combine returns "grind"
+        # (skill_grind_selection_pure picks from `candidates`), so this lookup
+        # cannot miss — fail loud rather than defend an impossible None.
+        picked = next(c for c in candidates if c.code == code)
+        if not picked.wanted:
             return DispatchDecision(kind="suppress", code="")
     return DispatchDecision(kind=kind, code=code)

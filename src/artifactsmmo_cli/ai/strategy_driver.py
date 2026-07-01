@@ -757,13 +757,16 @@ def objective_step_goal(
         # covers. Hoist the SkillItem view (mirrors skill_target_curve) and let
         # the proved cores decide; the dispatch core suppresses only a NOT-wanted
         # grind under this flag (need-exemption preserved).
+        # Only the step's own skill is needed (next_tier_cap_pure filters
+        # craft_skill == skill), so restrict the hoist to it instead of building
+        # a SkillItem for every crafting item of every skill each cycle.
         skill_items = [
             SkillItem(
                 stats.crafting_skill, stats.crafting_level, stats.level,
                 (stats.type_ in ITEM_TYPE_TO_SLOTS or stats.subtype == "tool"),
             )
             for stats in game_data.all_item_stats.values()
-            if stats.crafting_skill
+            if stats.crafting_skill == step.skill
         ]
         next_cap = next_tier_cap_pure(step.skill, state.level, skill_items,
                                       game_data.max_skill_level)

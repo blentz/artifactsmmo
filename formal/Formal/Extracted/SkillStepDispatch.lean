@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/tiers/skill_step_dispatch.py (sha256: a0e5221552947feceae53a314917fc86b963148c5dcada9d6887f432eb98b256) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/tiers/skill_step_dispatch.py (sha256: f4aec9451fd9fde0de9d46a9ea58202b5383d4d6b31f7117af1a35c4d4484f15) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.SkillStepDispatch

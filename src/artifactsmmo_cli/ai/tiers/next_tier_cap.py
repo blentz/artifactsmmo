@@ -2,8 +2,9 @@
 
 `next_tier_cap_pure` is a PURE CORE (extraction subset): for ONE gear-crafting
 skill, the max craft_level over gear-relevant items whose item_level falls in the
-10-level band ONE tier above `char_level`, clamped to [1, max_skill_level]; 0 means
-"no next-tier gear for this skill" (never dampened). `next_tier_dampened_pure` is
+10-level band ONE tier above `char_level`, capped at max_skill_level (a real
+craft_level is >= 1, so any nonzero result is >= 1); 0 means "no next-tier gear
+for this skill" (never dampened). `next_tier_dampened_pure` is
 the boolean gate: the skill can already craft all next-tier gear. Both mirror
 `skill_curve_target_pure` (see skill_target_curve.py) and are extracted + proven.
 The band rolls up with char_level, which is how the gate self-releases as the
@@ -21,8 +22,8 @@ def next_tier_cap_pure(
 ) -> int:
     """PURE CORE. Max craft_level over gear-relevant `items` of `skill` whose
     item_level is in the next tier band [floor, floor+9], floor =
-    ((char_level // 10) + 1) * 10, clamped to [1, max_skill_level]. 0 when the band
-    holds no qualifying gear item."""
+    ((char_level // 10) + 1) * 10, capped at max_skill_level. Returns 0 when the
+    band holds no qualifying gear item; any nonzero result is >= 1 (craft_level >= 1)."""
     # Annotated so the mechanical Lean extraction pins `best : Int` at the seed
     # (mirrors skill_curve_target_pure).
     floor: int = ((char_level // 10) + 1) * 10
