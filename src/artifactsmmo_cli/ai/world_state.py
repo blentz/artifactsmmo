@@ -13,6 +13,7 @@ from artifactsmmo_api_client.types import Unset
 
 from artifactsmmo_cli.ai.elements import ELEMENTS
 from artifactsmmo_cli.ai.missing_api_data import MissingApiData
+from artifactsmmo_cli.ai.raid_info import RaidInfo
 from artifactsmmo_cli.ai.task_lifecycle import (
     TaskLifecyclePhase,
     derive_task_lifecycle_phase,
@@ -107,6 +108,10 @@ class WorldState:
     """event code -> expiration (tz-aware). Per-cycle snapshot from
     GET /events/active. Defaults empty so constructions that don't supply it
     (and planner sims through actions that preserve it) keep working."""
+    raids: list[RaidInfo] = field(default_factory=list)
+    """Live raid snapshot. Per-cycle, from GET /raids. Defaults empty so
+    constructions that don't supply it keep working (visibility only —
+    no planner consumer in this task)."""
     crafting_target: str | None = None
     """Item the bot is currently working to craft/upgrade toward (the committed
     UpgradeEquipment target). Set per cycle by the player. Lets
@@ -185,6 +190,11 @@ class WorldState:
             return 1.0
         return self.hp / self.max_hp
 
+    @property
+    def active_raids(self) -> list[RaidInfo]:
+        """Raids currently running (visibility only — no planner consumer)."""
+        return [r for r in self.raids if r.is_active()]
+
     @classmethod
     def from_character_schema(
         cls,
@@ -194,6 +204,7 @@ class WorldState:
         bank_capacity: int | None = None,
         pending_items: "tuple[tuple[str, str], ...] | None" = None,
         active_events: dict[str, datetime] | None = None,
+        raids: list[RaidInfo] | None = None,
     ) -> "WorldState":
         """Build WorldState from a CharacterSchema API response."""
         inventory: dict[str, int] = {}
@@ -258,6 +269,7 @@ class WorldState:
             bank_capacity=bank_capacity,
             pending_items=pending_items,
             active_events=active_events or {},
+            raids=raids or [],
             attack=attack,
             dmg=_require(char, "dmg"),
             dmg_elements=dmg_elements,
