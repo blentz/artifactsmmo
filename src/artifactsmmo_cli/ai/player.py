@@ -34,6 +34,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
 from artifactsmmo_cli.ai.combat import is_winnable, predict_win
 from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
+from artifactsmmo_cli.ai.consumable_supply import consumable_craft_quantity
 from artifactsmmo_cli.ai.constants import (
     BANK_REFRESH_FORCE_SENTINEL,
     BANK_REFRESH_INTERVAL,
@@ -755,6 +756,11 @@ class GamePlayer:
         assert self.state is not None
         if isinstance(action, CraftAction):
             action.history = self.history
+            if self.game_data is not None:
+                batched = consumable_craft_quantity(
+                    action.code, action.quantity, self.state, self.game_data)
+                if batched != action.quantity:
+                    action = replace(action, quantity=batched)
         try:
             new_state = action.execute(self.state, client)
             # Re-sync bank state after visiting bank
