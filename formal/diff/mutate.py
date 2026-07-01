@@ -798,6 +798,42 @@ SKILL_TARGET_CURVE_MUTATIONS = [
 ]
 
 
+# next_tier_cap mutations -- pure-core anchors for next_tier_cap_pure and
+# next_tier_dampened_pure. Each substring is copied verbatim from
+# next_tier_cap.py (indentation included) so the mutation applies
+# unambiguously; killed by the differential test
+# formal/diff/test_next_tier_cap_diff.py.
+NEXT_TIER_CAP_SRC = ROOT / "src/artifactsmmo_cli/ai/tiers/next_tier_cap.py"
+
+NEXT_TIER_CAP_MUTATIONS = [
+    # drop the band lower bound -- items below floor slip through, raising the
+    # cap erroneously; the diff test catches the inflated target.
+    ("next_tier_cap: band lower bound dropped",
+     "                and floor <= it.item_level and it.item_level <= floor + 9\n",
+     "                and it.item_level <= floor + 9\n"),
+    # use current tier instead of next -- floor stays at char_level boundary,
+    # so the wrong band is scanned; diff catches the wrong cap.
+    ("next_tier_cap: wrong tier (current instead of next)",
+     "    floor: int = ((char_level // 10) + 1) * 10\n",
+     "    floor: int = (char_level // 10) * 10\n"),
+    # flip running max to min -- lowest craft_level wins instead of highest,
+    # under-targeting; diff catches the reduced cap.
+    ("next_tier_cap: running max becomes running min",
+     "                and it.craft_level > best):\n",
+     "                and it.craft_level < best):\n"),
+    # drop max_skill clamp -- craft_level above max leaks through unclamped;
+    # diff catches the overshooting value.
+    ("next_tier_cap: drop max_skill clamp",
+     "    if best > max_skill_level:\n        return max_skill_level\n",
+     "    if False:\n        return max_skill_level\n"),
+    # flip >= to > in dampened gate -- skill exactly at cap is not dampened,
+    # allowing unnecessary grind; diff catches the missed suppression.
+    ("next_tier_dampened: >= becomes >",
+     "    return next_tier_cap > 0 and current_skill >= next_tier_cap\n",
+     "    return next_tier_cap > 0 and current_skill > next_tier_cap\n"),
+]
+
+
 # skill_grind_selection mutations -- pure-core anchors for
 # skill_grind_selection_pure (the recipe-aware skill-grind target selector).
 # Each substring is copied verbatim from skill_grind_selection.py (indentation
@@ -4370,6 +4406,8 @@ def _run_all_groups() -> int:
     # picker-consistency test and the Task-1 regression test.
     run_group(APPLY_FIGHT_SRC, FIGHT_APPLICABILITY_MUTATIONS,
               "tests/test_ai/test_no_combat_deadlock.py", survivors)
+    run_group(NEXT_TIER_CAP_SRC, NEXT_TIER_CAP_MUTATIONS,
+              "formal/diff/test_next_tier_cap_diff.py", survivors)
     _execute(_UNITS, survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
