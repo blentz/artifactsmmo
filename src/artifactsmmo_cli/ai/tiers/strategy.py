@@ -40,7 +40,15 @@ from artifactsmmo_cli.ai.tiers.strategy_blend import (
 from artifactsmmo_cli.ai.tiers.strategy_blend import (
     learned_blend as _learned_blend_pure,
 )
-from artifactsmmo_cli.ai.thresholds import CRITICAL_HP_FRACTION
+from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
+from artifactsmmo_cli.ai.potion_baseline import potion_baseline_pure
+from artifactsmmo_cli.ai.thresholds import (
+    CRITICAL_HP_FRACTION,
+    POTION_HIGH_LEVEL,
+    POTION_HIGH_QTY,
+    POTION_LOW_LEVEL,
+    POTION_LOW_QTY,
+)
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, WorldState
 
 # P4a: all score constants are exact Fractions — the ranking pipeline
@@ -138,6 +146,16 @@ none existed. Sized to beat the char-level bootstrap THROUGH the sticky
 commitment: bootstrap scores 1.48 and sticky holds unless the challenger
 exceeds STICKY_DOMINANCE_RATIO (3/2) x 1.48 = 2.22; 5/2 = 2.5 > 2.22.
 Switches off the moment the slot is filled (root satisfied → removed)."""
+POTION_SUPPLY_URGENCY = EMPTY_SLOT_URGENCY * PRIOR_COMBAT_GEAR / PRIOR_UTILITY_GEAR
+"""Urgency multiplier on an under-stocked health-potion utility root's marginal.
+Derived so PRIOR_UTILITY_GEAR * POTION_SUPPLY_URGENCY == PRIOR_COMBAT_GEAR *
+EMPTY_SLOT_URGENCY = 2.5 — an under-baseline heal potion ties an empty combat
+slot at the top of the bootstrap band. Expressed as the ratio (not a literal
+25/4) so it stays pinned to combat-gear-equivalent urgency if the priors are
+retuned. Fires only while equipped heal-potion qty < potion_baseline (level-
+scaled); breaks the alchemy-1→5 deadlock so the CraftPotions guard can then
+maintain the stack. See docs/superpowers/specs/2026-07-01-bootstrap-potion-
+supply-weighting-design.md."""
 """Tier-2 sticky-commitment threshold. The previous cycle's chosen_root is
 kept unless a new top candidate's score strictly exceeds
 `STICKY_DOMINANCE_RATIO * sticky_score`. Matches Tier-3 means-tier
@@ -538,6 +556,21 @@ class StrategyEngine:
                     and current_code is None
                     and stats.level <= state.level and gain > 0):
                 marginal = max(marginal, Fraction(1)) * EMPTY_SLOT_URGENCY
+            # Potion-supply urgency: an under-stocked health potion is as urgent
+            # as an empty combat slot during bootstrap. Unlike the empty-slot
+            # branch this is NOT gated on gain > 0 — a heal potion must stock
+            # even when the strategic-value model scores its equip-gain at 0
+            # (max(marginal, 1) forces the multiplier). `stats.type_ ==
+            # "utility"` mirrors target_potion_pure's slot-family predicate;
+            # equipped_potion_qty sums both utility slots. Breaks the alchemy
+            # deadlock (see POTION_SUPPLY_URGENCY); the CraftPotions guard
+            # maintains the baseline once alchemy unlocks crafting.
+            elif (stats.type_ == "utility"
+                    and getattr(stats, "hp_restore", 0) > 0
+                    and equipped_potion_qty(state, root.code) < potion_baseline_pure(
+                        state.level, POTION_LOW_LEVEL, POTION_LOW_QTY,
+                        POTION_HIGH_LEVEL, POTION_HIGH_QTY)):
+                marginal = max(marginal, Fraction(1)) * POTION_SUPPLY_URGENCY
             return marginal
         return Fraction(0)
 

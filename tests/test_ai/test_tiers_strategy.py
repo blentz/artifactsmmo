@@ -22,6 +22,7 @@ from artifactsmmo_cli.ai.tiers.strategy import (
     GEAR_EQUIP_SCALE,
     LEARN_SAMPLE_FULL,
     LEARN_W_MAX,
+    POTION_SUPPLY_URGENCY,
     PRIOR_CHAR_LEVEL,
     PRIOR_COMBAT_CRAFT_SKILL,
     PRIOR_COMBAT_GEAR,
@@ -195,6 +196,73 @@ def test_rootscore_instrumental_always_false():
     obj = CharacterObjective.from_game_data(gd)
     d = StrategyEngine(obj, BalancedPersonality()).decide(make_state(level=5), gd)
     assert all(rs.instrumental is False for rs in d.ranking)
+
+
+def _gd_potions() -> GameData:
+    """GameData with a heal potion (alchemy L5) and a non-heal utility item."""
+    gd = GameData()
+    gd._item_stats = {
+        "small_health_potion": ItemStats(
+            code="small_health_potion", level=1, type_="utility",
+            hp_restore=60, crafting_skill="alchemy", crafting_level=5),
+        "sunflower": ItemStats(code="sunflower", level=1, type_="resource"),
+        "fire_boost_potion": ItemStats(
+            code="fire_boost_potion", level=1, type_="utility",
+            hp_restore=0,
+            crafting_skill="alchemy", crafting_level=10),
+    }
+    gd._crafting_recipes = {"small_health_potion": {"sunflower": 3}}
+    gd._resource_drops = {"sunflower_field": "sunflower"}
+    gd._resource_skill = {"sunflower_field": ("alchemy", 1)}
+    gd._monster_level = {"chicken": 1}  # mirror _gd() so from_game_data has a combat monster
+    fill_monster_stat_defaults(gd)
+    return gd
+
+
+class TestPotionSupplyUrgency:
+    def test_constant_ties_empty_combat_slot(self):
+        # POTION_SUPPLY_URGENCY applied to the utility prior lands exactly on the
+        # empty-combat-slot score (2.5).
+        assert PRIOR_UTILITY_GEAR * POTION_SUPPLY_URGENCY == PRIOR_COMBAT_GEAR * EMPTY_SLOT_URGENCY
+        assert PRIOR_UTILITY_GEAR * POTION_SUPPLY_URGENCY == Fraction(5, 2)
+
+    def test_under_baseline_heal_potion_scores_bootstrap_band(self):
+        gd = _gd_potions()
+        eng = StrategyEngine(CharacterObjective.from_game_data(gd), BalancedPersonality())
+        state = make_state(level=5)  # alchemy 1, utility slots empty, qty 0 < baseline 5
+        root = ObtainItem("small_health_potion", slot="utility1_slot")
+        assert eng._value(root, state, gd) == Fraction(5, 2)
+
+    def test_at_baseline_no_boost(self):
+        gd = _gd_potions()
+        eng = StrategyEngine(CharacterObjective.from_game_data(gd), BalancedPersonality())
+        state = make_state(
+            level=5,
+            equipment={**make_state().equipment, "utility1_slot": "small_health_potion"},
+            utility1_slot_quantity=5,  # == baseline at L5
+        )
+        root = ObtainItem("small_health_potion", slot="utility1_slot")
+        assert eng._value(root, state, gd) < Fraction(5, 2)
+
+    def test_non_heal_utility_not_boosted(self):
+        gd = _gd_potions()
+        eng = StrategyEngine(CharacterObjective.from_game_data(gd), BalancedPersonality())
+        state = make_state(level=5)  # fire_boost_potion slot empty, but hp_restore == 0
+        root = ObtainItem("fire_boost_potion", slot="utility1_slot")
+        assert eng._value(root, state, gd) < Fraction(5, 2)
+
+    def test_baseline_is_level_scaled(self):
+        gd = _gd_potions()
+        eng = StrategyEngine(CharacterObjective.from_game_data(gd), BalancedPersonality())
+        root = ObtainItem("small_health_potion", slot="utility1_slot")
+        # 10 equipped: below the L45 baseline (100) → boosted; at/above the L5
+        # baseline (5) → not boosted. Same equipped qty, opposite result ⇒ the
+        # threshold follows potion_baseline_pure, not a constant.
+        equip = {**make_state().equipment, "utility1_slot": "small_health_potion"}
+        hi = make_state(level=45, equipment=equip, utility1_slot_quantity=10)
+        lo = make_state(level=5, equipment=equip, utility1_slot_quantity=10)
+        assert eng._value(root, hi, gd) == Fraction(5, 2)
+        assert eng._value(root, lo, gd) < Fraction(5, 2)
 
 
 def test_decide_empty_when_nothing_reachable():
