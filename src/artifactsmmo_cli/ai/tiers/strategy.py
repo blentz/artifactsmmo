@@ -121,6 +121,13 @@ BALANCE_THRESHOLD = 2
 BALANCE_MIN = Fraction(1, 2)
 BALANCE_MAX = Fraction(2)
 STICKY_DOMINANCE_RATIO = Fraction(3, 2)
+"""Tier-2 sticky-commitment threshold. The previous cycle's chosen_root is
+kept unless a new top candidate's score strictly exceeds
+`STICKY_DOMINANCE_RATIO * sticky_score`. Matches Tier-3 means-tier
+commitment: only switch when the new winner dominates by 50%+. Prevents
+single-cycle objective flap from transient predicate flips (e.g.
+combat_capable=False momentarily because pick_loadout's inventory
+projection changes when inventory composition shifts)."""
 PRIOR_RELEVANT_TOOL = Fraction(11, 10)
 """Active-task tool boost: a target_tools item whose skill_effects match
 the bot's currently-active gathering skill (state.task_code resolved via
@@ -156,13 +163,6 @@ retuned. Fires only while equipped heal-potion qty < potion_baseline (level-
 scaled); breaks the alchemy-1→5 deadlock so the CraftPotions guard can then
 maintain the stack. See docs/superpowers/specs/2026-07-01-bootstrap-potion-
 supply-weighting-design.md."""
-"""Tier-2 sticky-commitment threshold. The previous cycle's chosen_root is
-kept unless a new top candidate's score strictly exceeds
-`STICKY_DOMINANCE_RATIO * sticky_score`. Matches Tier-3 means-tier
-commitment: only switch when the new winner dominates by 50%+. Prevents
-single-cycle objective flap from transient predicate flips (e.g.
-combat_capable=False momentarily because pick_loadout's inventory
-projection changes when inventory composition shifts)."""
 LEARN_W_MAX = Fraction(1, 2)
 LEARN_SAMPLE_FULL = 20
 XP_RATE_REFERENCE = Fraction(10)
