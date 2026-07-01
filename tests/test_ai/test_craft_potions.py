@@ -199,6 +199,43 @@ def test_gather_path_filters_closure_and_keeps_moves():
     assert any(isinstance(a, MoveAction) for a in out)
 
 
+def test_buy_quantity_batched_to_run_count():
+    """The ingredient buy is sized to the whole batch (recipe_qty x runs - held),
+    matching the co-emitted craft's run count, not left at 1."""
+    gd = _gd_potion()
+    gd._npc_stock = {"alchemist": {_INGREDIENT: 100}}
+    gd._npc_locations = {"alchemist": (5, 0)}
+    state = make_state(level=1, inventory={}, gold=100000)  # baseline 5, nothing held
+    actions = [_craft_action(),
+               NpcBuyAction(npc_code="alchemist", item_code=_INGREDIENT, quantity=1,
+                            npc_location=(5, 0)),
+               MoveAction(x=0, y=0)]
+    out = CraftPotionsGoal().relevant_actions(actions, state, gd)
+    craft = next(a for a in out if isinstance(a, CraftAction) and a.code == _POTION)
+    buy = next(a for a in out if isinstance(a, NpcBuyAction))
+    # recipe is {sunflower: 1}, nothing held -> buy == 1 * runs == craft.quantity
+    assert craft.quantity > 1            # ladder chose a multi-run batch
+    assert buy.quantity == craft.quantity
+    assert buy.quantity > 1              # batched, not the old quantity=1
+
+
+def test_buy_quantity_subtracts_held():
+    """Held ingredient reduces the buy to the remaining shortfall."""
+    gd = _gd_potion()
+    gd._npc_stock = {"alchemist": {_INGREDIENT: 100}}
+    gd._npc_locations = {"alchemist": (5, 0)}
+    state = make_state(level=1, inventory={_INGREDIENT: 2}, gold=100000)
+    actions = [_craft_action(),
+               NpcBuyAction(npc_code="alchemist", item_code=_INGREDIENT, quantity=1,
+                            npc_location=(5, 0)),
+               MoveAction(x=0, y=0)]
+    out = CraftPotionsGoal().relevant_actions(actions, state, gd)
+    craft = next(a for a in out if isinstance(a, CraftAction) and a.code == _POTION)
+    buy = next(a for a in out if isinstance(a, NpcBuyAction))
+    # recipe {sunflower:1}; demand = 1*runs; held 2 -> buy == max(1, runs - 2)
+    assert buy.quantity == max(1, craft.quantity - 2)
+
+
 # ── misc surface ─────────────────────────────────────────────────────────────
 
 def test_preemptive_flag():
