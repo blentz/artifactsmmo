@@ -199,7 +199,17 @@ def test_rootscore_instrumental_always_false():
 
 
 def _gd_potions() -> GameData:
-    """GameData with a heal potion (alchemy L5) and a non-heal utility item."""
+    """GameData with a heal potion (alchemy L5) and a non-heal utility item.
+
+    fire_boost_potion has a positive equip-gain (resistance={"fire":20} →
+    combat_raw > 0 → strategic_value > 0) but hp_restore == 0.  Without
+    _consumable_effect_codes populated, stats_is_combat_bearing would return
+    True for fire_boost_potion (resistance is non-empty), and consumable_types
+    would be empty, causing combat_gear_types to (mis-)include "utility".  We
+    seed _consumable_effect_codes with a boost_res_ prefix code so that
+    consumable_types correctly contains "utility", matching production where the
+    API populates effect codes for every consumable item.
+    """
     gd = GameData()
     gd._item_stats = {
         "small_health_potion": ItemStats(
@@ -208,9 +218,16 @@ def _gd_potions() -> GameData:
         "sunflower": ItemStats(code="sunflower", level=1, type_="resource"),
         "fire_boost_potion": ItemStats(
             code="fire_boost_potion", level=1, type_="utility",
-            hp_restore=0,
+            hp_restore=0, resistance={"fire": 20},
             crafting_skill="alchemy", crafting_level=10),
     }
+    # Seed consumable effect codes so consumable_types includes "utility".
+    # "boost_res_fire" matches the _CONSUMABLE_PREFIX ("boost_res_") in
+    # gear_taxonomy_core, making is_consumable() return True for
+    # fire_boost_potion.  This mirrors production: the API supplies effect
+    # codes for every consumable, keeping utility out of combat_gear_types
+    # even when a utility item carries resistance stats.
+    gd._consumable_effect_codes = {"fire_boost_potion": ["boost_res_fire"]}
     gd._crafting_recipes = {"small_health_potion": {"sunflower": 3}}
     gd._resource_drops = {"sunflower_field": "sunflower"}
     gd._resource_skill = {"sunflower_field": ("alchemy", 1)}
@@ -245,11 +262,20 @@ class TestPotionSupplyUrgency:
         assert eng._value(root, state, gd) < Fraction(5, 2)
 
     def test_non_heal_utility_not_boosted(self):
+        # fire_boost_potion has resistance={"fire":20} → positive equip-gain
+        # (combat_raw > 0 → strategic_value > 0 → gain > 0 → marginal > 0).
+        # Despite the positive equip-gain the potion-supply gate must NOT fire
+        # because hp_restore == 0.  The two-part assertion below proves the
+        # gate discriminates on hp_restore specifically, not on "item has no
+        # stats": score > 0 confirms positive gain exists; score < Fraction(5,2)
+        # confirms the potion-supply urgency multiplier was not applied.
         gd = _gd_potions()
         eng = StrategyEngine(CharacterObjective.from_game_data(gd), BalancedPersonality())
-        state = make_state(level=5)  # fire_boost_potion slot empty, but hp_restore == 0
+        state = make_state(level=5)  # fire_boost_potion slot empty, hp_restore == 0
         root = ObtainItem("fire_boost_potion", slot="utility1_slot")
-        assert eng._value(root, state, gd) < Fraction(5, 2)
+        score = eng._value(root, state, gd)
+        assert score > 0             # positive equip-gain (resistance → combat_raw > 0)
+        assert score < Fraction(5, 2)  # hp_restore == 0 → NOT boosted by potion gate
 
     def test_baseline_is_level_scaled(self):
         gd = _gd_potions()
