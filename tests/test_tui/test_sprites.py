@@ -6,6 +6,7 @@ from artifactsmmo_cli.tui.sprites import (
     ALL_CURATED_SPRITES,
     BLANK_SPRITE,
     MONSTER_SPRITES,
+    NPC_SPRITES,
     PLAYER_SPRITE,
     SPRITE_SIZE,
     TRANSPARENT,
@@ -74,3 +75,8 @@ def test_recolor_keeps_shape_swaps_palette():
 @pytest.mark.parametrize("code", sorted(MONSTER_SPRITES))
 def test_every_curated_monster_sprite_is_valid(code):
     validate_sprite(code, MONSTER_SPRITES[code])
+
+
+@pytest.mark.parametrize("code", sorted(NPC_SPRITES))
+def test_every_curated_npc_sprite_is_valid(code):
+    validate_sprite(code, NPC_SPRITES[code])

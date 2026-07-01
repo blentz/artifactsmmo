@@ -51,13 +51,13 @@ Format: `code  | family | base (curated shape to recolor, or NEW) | palette inte
 
 Reuse a curated NPC/humanoid shape via `recolor`; vary palette by trade.
 
-- [ ] `beastmaster`        | trader   | base=`archaeologist` (or `tailor`) | earthy BARK/LEAF
-- [ ] `sorceress`          | trader   | base=`cultist_wizard`              | violet/BREW robe, feminine accent
-- [ ] `fish_merchant`      | merchant | base=`tailor`                      | WATER blue
-- [ ] `gemstone_merchant`  | merchant | base=`tailor`                      | GOLD + gem accent
-- [ ] `herbal_merchant`    | merchant | base=`tailor`                      | LEAF green
-- [ ] `nomadic_merchant`   | merchant | base=`tailor`                      | KHAKI/AMBER desert robe
-- [ ] `timber_merchant`    | merchant | base=`tailor`                      | BARK brown
+- [x] `beastmaster`        | trader   | base=`archaeologist` (or `tailor`) | earthy BARK/LEAF
+- [x] `sorceress`          | trader   | base=`cultist_wizard`              | violet/BREW robe, feminine accent
+- [x] `fish_merchant`      | merchant | base=`tailor`                      | WATER blue
+- [x] `gemstone_merchant`  | merchant | base=`tailor`                      | GOLD + gem accent
+- [x] `herbal_merchant`    | merchant | base=`tailor`                      | LEAF green
+- [x] `nomadic_merchant`   | merchant | base=`tailor`                      | KHAKI/AMBER desert robe
+- [x] `timber_merchant`    | merchant | base=`tailor`                      | BARK brown
 
 ## Notes for the implementer (Tasks 5-6)
 

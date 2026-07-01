@@ -770,6 +770,17 @@ NPC_SPRITES: dict[str, Sprite] = {
     "rune_vendor": RUNE_VENDOR_SPRITE,
     "sandwhisper_trader": SANDWHISPER_TRADER_SPRITE,
     "tasks_trader": TASKS_TRADER_SPRITE,
+    # --- 7 missing NPCs from roster-gap.md ---
+    # Trader: earthy BARK hat, LEAF body (archaeologist base)
+    "beastmaster": recolor(ARCHAEOLOGIST_SPRITE, {"o": INK, "b": BARK, "s": SKIN, "e": INK, "k": LEAF}),
+    # Trader: violet BREW hood, PINK accent (cultist_wizard base)
+    "sorceress": recolor(CULTIST_WIZARD_SPRITE, {"o": INK, "h": BREW, "s": SKIN, "e": INK, "b": PINK}),
+    # Merchants (tailor base, vary clothes color by trade)
+    "fish_merchant": recolor(TAILOR_SPRITE, {"o": INK, "s": SKIN, "e": INK, "m": WATER}),
+    "gemstone_merchant": recolor(TAILOR_SPRITE, {"o": INK, "s": SKIN, "e": INK, "m": GOLD}),
+    "herbal_merchant": recolor(TAILOR_SPRITE, {"o": INK, "s": SKIN, "e": INK, "m": LEAF}),
+    "nomadic_merchant": recolor(TAILOR_SPRITE, {"o": INK, "s": SKIN, "e": INK, "m": KHAKI}),
+    "timber_merchant": recolor(TAILOR_SPRITE, {"o": INK, "s": SKIN, "e": INK, "m": BARK}),
 }
 STRUCTURE_SPRITES: dict[str, Sprite] = {
     "bank": BANK_SPRITE,
