@@ -1,7 +1,34 @@
 """Shared test fixtures for AI module tests."""
 
+import attrs
+from artifactsmmo_api_client.models.character_schema import CharacterSchema
+from artifactsmmo_api_client.models.map_layer import MapLayer
+
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.world_state import WorldState
+
+
+def make_character_schema(**overrides) -> CharacterSchema:
+    """Build a fully-populated real CharacterSchema for testing.
+
+    All attrs-required fields (no default) are auto-filled: str→"", int→0,
+    ``layer`` enum→MapLayer.OVERWORLD. Callers may override any field via
+    keyword arguments (e.g. ``utility1_slot="small_health_potion"``,
+    ``utility1_slot_quantity=40``).
+    """
+    kwargs: dict[str, object] = {}
+    for f in attrs.fields(CharacterSchema):
+        if f.default is not attrs.NOTHING:
+            continue
+        if f.name == "layer":
+            kwargs[f.name] = MapLayer.OVERWORLD
+        elif f.type is str:
+            kwargs[f.name] = ""
+        else:
+            kwargs[f.name] = 0
+    kwargs["name"] = "hero"
+    kwargs.update(overrides)
+    return CharacterSchema(**kwargs)
 
 
 def make_state(**overrides) -> WorldState:

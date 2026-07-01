@@ -5,6 +5,9 @@ import Formal.CraftPlanDriver
 import Formal.DominancePareto
 import Formal.GearTaxonomy
 import Formal.MarginalPotionQty
+import Formal.PotionBaseline
+import Formal.MaxBatchFromHeld
+import Formal.OptimalBuyMix
 import Lean.Data.Json
 
 open Lean Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin
@@ -1229,7 +1232,8 @@ def runDecideKey (args : Array Json) : Json :=
       | 7 => .restForCombat
       | 8 => .gearReview
       | 9 => .recycleRelief
-      | _ => .sellRelief  -- index 10
+      | 10 => .sellRelief
+      | _ => .craftPotions  -- index 11
     Json.mkObj [("repr", Json.str (Formal.DecideKey.goalReprOfGuard k))]
   else
     let idx := (intArg args 1).toNat
@@ -1564,6 +1568,24 @@ def runConsumableSelection (args : Array Json) : Json :=
     | none => -1
   Json.mkObj [("selected", Json.num selected)]
 
+/-- Compute one max_batch_from_held result using the SAME proved
+`Formal.MaxBatchFromHeld.maxBatchFromHeld`.
+
+args layout: `[yield, n, need_0, held_0, need_1, held_1, ...]` — the per-craft
+yield, then `n` ingredients each the 2 ints `[need, held]` (a length-prefixed
+list, mirroring `runConsumableSelection`). Builds the `List (Nat × Nat)` of
+`(need, held)` pairs, runs the min-floor fold, and emits `{"batch": <int>}`
+matching the Python `max_batch_from_held_pure` return in the differential test. -/
+def runMaxBatchFromHeld (args : Array Json) : Json :=
+  let yield_ := (intArg args 0).toNat
+  let n := (intArg args 1).toNat
+  let pairs : List (Nat × Nat) :=
+    (List.range n).map (fun k =>
+      let base := 2 + 2 * k
+      ((intArg args base).toNat, (intArg args (base + 1)).toNat))
+  let batch := Formal.MaxBatchFromHeld.maxBatchFromHeld pairs yield_
+  Json.mkObj [("batch", Json.num (Int.ofNat batch))]
+
 /-- Compute one marginal_potion_qty result using the SAME proved
 `Formal.MarginalPotionQty.marginalPotionQty`.
 
@@ -1578,6 +1600,37 @@ def runMarginalPotionQty (args : Array Json) : Json :=
     (intArg args 3).toNat (intArg args 4).toNat (intArg args 5).toNat
     ((intArg args 6) != 0) (intArg args 7).toNat
   Json.mkObj [("qty", Json.num (Int.ofNat q))]
+
+/-- Compute one optimal_buy_mix result using the SAME proved
+`Formal.OptimalBuyMix.optimalBuyMix`.
+
+args layout (length-prefixed): `[gold, max_batch, n, need_0, held_0, price_0,
+need_1, held_1, price_1, ...]` — the budget and cap, then `n` ingredients each the
+3 ints `[need, held, price]`. Builds the parallel `needs`/`held`/`prices` Nat
+lists, runs the downward feasibility scan, and emits `{"batch": <int>}` matching
+the Python `optimal_buy_mix_pure` return in the differential test. -/
+def runOptimalBuyMix (args : Array Json) : Json :=
+  let gold := (intArg args 0).toNat
+  let maxBatch := (intArg args 1).toNat
+  let n := (intArg args 2).toNat
+  let idx := List.range n
+  let needs := idx.map (fun k => (intArg args (3 + 3 * k)).toNat)
+  let held := idx.map (fun k => (intArg args (3 + 3 * k + 1)).toNat)
+  let prices := idx.map (fun k => (intArg args (3 + 3 * k + 2)).toNat)
+  let b := Formal.OptimalBuyMix.optimalBuyMix needs held prices gold maxBatch
+  Json.mkObj [("batch", Json.num (Int.ofNat b))]
+
+/-- Compute one potion_baseline result using the SAME proved
+`Formal.PotionBaseline.potionBaseline`.
+
+args layout (5 Ints): `[level, low_level, low_qty, high_level, high_qty]`, all read
+via `.toNat`; emits `{"baseline": <int>}` matching the Python `potion_baseline_pure`
+return in the differential test. -/
+def runPotionBaseline (args : Array Json) : Json :=
+  let b := Formal.PotionBaseline.potionBaseline
+    (intArg args 0).toNat (intArg args 1).toNat (intArg args 2).toNat
+    (intArg args 3).toNat (intArg args 4).toNat
+  Json.mkObj [("baseline", Json.num (Int.ofNat b))]
 
 /-- Compute one bank_expansion_timing result using the SAME proved
 `Formal.BankExpansionTiming.shouldExpandBank`.
@@ -2238,9 +2291,10 @@ ARG LAYOUT (flat ints; index → field):
 * `[29]` maintainConsumablesFires     (Bool 0/1)
 * `[30]` bankItemsKnown               (Bool 0/1)
 * `[31]` bankJunkNonempty             (Bool 0/1)
+* `[32]` craftPotionsFires            (Bool 0/1)
 
 Emits a JSON object: one Bool field per MeansKind keyed by `meansKindName`
-(26 fields), plus `"selected"`: the name of `productionLadder s` or `null`. -/
+(27 fields), plus `"selected"`: the name of `productionLadder s` or `null`. -/
 def runLadder (args : Array Json) : Json :=
   let n := fun i => (intArg args i).toNat
   let b := fun i => intArg args i != 0
@@ -2265,7 +2319,7 @@ def runLadder (args : Array Json) : Json :=
     restForCombatReady := b 25, gearReviewFires := b 26,
     craftReliefFires := b 27, objectiveStepFires := b 28,
     maintainConsumablesFires := b 29, bankItemsKnown := b 30,
-    bankJunkNonempty := b 31 }
+    bankJunkNonempty := b 31, craftPotionsFires := b 32 }
   let firesFields : List (String × Json) :=
     allInLadderOrder.map (fun k => (meansKindName k, Json.bool (fires k s)))
   let selected : Json := match productionLadder s with
@@ -2643,6 +2697,8 @@ def runOne (item : Json) : Json :=
     runWeightedRemaining args
   else if kind == "low_yield_cancel" then
     runLowYieldCancel args
+  else if kind == "max_batch_from_held" then
+    runMaxBatchFromHeld args
   else if kind == "objective_step_is_fight" then
     runObjectiveStepIsFight args
   else if kind == "bootstrap_char_horizon" then
@@ -2677,6 +2733,10 @@ def runOne (item : Json) : Json :=
     runConsumableSelection args
   else if kind == "marginal_potion_qty" then
     runMarginalPotionQty args
+  else if kind == "optimal_buy_mix" then
+    runOptimalBuyMix args
+  else if kind == "potion_baseline" then
+    runPotionBaseline args
   else if kind == "bank_expansion_timing" then
     runBankExpansionTiming args
   else if kind == "event_window" then

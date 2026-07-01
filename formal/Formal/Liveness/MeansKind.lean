@@ -2,7 +2,7 @@
   Formal.Liveness.MeansKind
 
   Production-granularity `MeansKind` enum mirroring the StrategyArbiter's
-  ladder. There are 23 means in total, ordered:
+  ladder. There are 27 means in total, ordered:
 
     GUARD_ORDER (10, from `tiers/guards.py:68`)  -- REST_FOR_COMBAT after
                                                    HP_CRITICAL; CRAFT_RELIEF
@@ -38,7 +38,7 @@ namespace Formal.Liveness.MeansKind
     Order matches production's preordered candidate list:
       GUARD_ORDER ++ COLLECT_REWARD_ORDER ++ [OBJECTIVE_STEP] ++ DISCRETIONARY_ORDER.
 
-    Total 23 constructors. -/
+    Total 27 constructors. -/
 inductive MeansKind where
   -- Guards (GUARD_ORDER, guards.py:68)
   | hpCritical          -- HP_CRITICAL,        guards.py:69
@@ -68,6 +68,10 @@ inductive MeansKind where
   | gearReview          -- GEAR_REVIEW,        guards.py:77 (lowest-priority
                         --                     guard, still above all means;
                         --                     fires on ctx.gear_review_active)
+  | craftPotions        -- CRAFT_POTIONS,      guards.py (LAST guard in
+                        --                     GUARD_ORDER; stocks the utility-slot
+                        --                     potion baseline before grind;
+                        --                     fires on craft_potions_fires)
   -- Collect-reward (COLLECT_REWARD_ORDER, means.py:35)
   | claimPending        -- CLAIM_PENDING,      means.py:69
   | completeTask        -- COMPLETE_TASK,      means.py:72
@@ -98,13 +102,14 @@ inductive MeansKind where
 def allInLadderOrder : List MeansKind :=
   [.hpCritical, .restForCombat, .bankUnlock, .reachUnlockLevel,
    .discardCritical, .craftRelief, .recycleRelief, .sellRelief, .depositFull, .discardHigh, .gearReview,
+   .craftPotions,
    .claimPending, .completeTask, .sellPressured, .lowYieldCancel, .taskCancel,
    .objectiveStep,
    .pursueTask, .acceptTask, .taskExchange, .maintainConsumables,
    .sellIdle, .recycleSurplus, .bankExpand, .drainBankJunk,
    .wait]
 
-/-- Sanity: 26 constructors. -/
-example : allInLadderOrder.length = 26 := by decide
+/-- Sanity: 27 constructors. -/
+example : allInLadderOrder.length = 27 := by decide
 
 end Formal.Liveness.MeansKind

@@ -11,7 +11,7 @@ SELECTED (preempting the phase-advancing pursueTask/acceptTask), which itself ne
 all blockers quiet — a circular coupling.
 
 Break it with a SELF-PRESERVING `Settled` state that bundles every blocker's
-clearing condition at once. At a `Settled` state ALL 14 blockers are quiet, so
+clearing condition at once. At a `Settled` state ALL 17 blockers are quiet, so
 `objectiveStep` is selected, so the cycle is a `.fight` — which preserves every
 `Settled` field (fight touches only level/xp/bankAccessible/actionsAttempted, none
 of which a blocker's clearing condition depends on adversely). Hence `Settled` is
@@ -41,6 +41,7 @@ structure Settled (s : State) : Prop where
   overstock      : s.hasOverstockItems = false
   deposits       : s.selectBankDepositsNonempty = false
   gear           : s.gearReviewFires = false
+  potions        : s.craftPotionsFires = false
   pending        : s.pendingItemsNonempty = false
   sellable       : s.sellableInventoryNonempty = false
   craft          : s.craftReliefFires = false
@@ -75,6 +76,7 @@ theorem Settled_blockers_quiet (s : State) (h : Settled s) :
   · simp [fires, depositFullFires, h.deposits]
   · simp [fires, discardHighFires, h.overstock]
   · simp [fires, ProductionLadder.gearReviewFires, h.gear]
+  · simp [fires, ProductionLadder.craftPotionsFires, h.potions]
   · simp [fires, claimPendingFires, h.pending]
   · simp [fires, completeTaskFires, h.phaseNone]
   · simp [fires, sellPressuredFires, h.sellable]
@@ -96,10 +98,11 @@ theorem Settled_cycleStep (s : State) (h : Settled s) : Settled (cycleStep s) :=
   have hcs : cycleStep s = applyActionKind .fight s :=
     cycleStep_eq_fight_when_objectiveStepFight s hpl h.objFight
   rw [hcs]
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · exact h.overstock
   · exact h.deposits
   · exact h.gear
+  · exact h.potions
   · exact h.pending
   · exact h.sellable
   · exact h.craft

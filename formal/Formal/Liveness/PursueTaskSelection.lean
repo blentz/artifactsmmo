@@ -55,6 +55,7 @@ def pursueSelectionConditions (s : State) : Prop :=
   ∧ depositFullFires s = false
   ∧ discardHighFires s = false
   ∧ gearReviewFires s = false
+  ∧ craftPotionsFires s = false
   ∧ claimPendingFires s = false
   ∧ completeTaskFires s = false
   ∧ sellPressuredFires s = false
@@ -78,9 +79,9 @@ theorem productionLadder_eq_pursueTask
   show MeansKind.allInLadderOrder.findSome?
         (fun k => if fires k s then some k else none)
       = some .pursueTask
-  obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16, h17⟩ := hConds
+  obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, hcp, h12, h13, h14, h15, h16, h17⟩ := hConds
   simp only [MeansKind.allInLadderOrder, List.findSome?,
-             fires, h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13,
+             fires, h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, hcp, h12, h13,
              h14, h15, h16, h17, hPursue, if_true]
   rfl
 

@@ -195,6 +195,12 @@ def discardHighFires (s : State) : Bool :=
     latch; a diff harness asserts agreement. -/
 def gearReviewFires (s : State) : Bool := s.gearReviewFires
 
+/-- CRAFT_POTIONS guard. Mirrors `guards.py::_fires(GuardKind.CRAFT_POTIONS, …)`:
+      return craft_potions_fires(state, game_data)
+    Opaque Bool — the Lean state carries production's answer; a diff harness
+    asserts agreement. Cleared by the `.craft` apply (CraftPotions goal). -/
+def craftPotionsFires (s : State) : Bool := s.craftPotionsFires
+
 /-- CLAIM_PENDING. Mirrors `means.py:67-68`. -/
 def claimPendingFires (s : State) : Bool := s.pendingItemsNonempty
 
@@ -348,6 +354,7 @@ def fires (k : MeansKind) (s : State) : Bool :=
   | .depositFull      => depositFullFires s
   | .discardHigh      => discardHighFires s
   | .gearReview       => gearReviewFires s
+  | .craftPotions     => craftPotionsFires s
   | .claimPending     => claimPendingFires s
   | .completeTask     => completeTaskFires s
   | .sellPressured    => sellPressuredFires s

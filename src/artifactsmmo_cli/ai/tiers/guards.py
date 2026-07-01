@@ -19,6 +19,7 @@ from artifactsmmo_cli.ai.inventory_caps import overstocked_items
 from artifactsmmo_cli.ai.inventory_profile import inventory_profile
 from artifactsmmo_cli.ai.learning.skill_xp_curve import SkillXpCurve
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.thresholds import (
     CRITICAL_HP_FRACTION,
@@ -112,6 +113,7 @@ class GuardKind(Enum):
     DEPOSIT_FULL = "deposit_full"
     DISCARD_HIGH = "discard_high"
     GEAR_REVIEW = "gear_review"  # post-level-up / post-loss gear prioritization
+    CRAFT_POTIONS = "craft_potions"  # preemptively stock the utility-slot potion baseline
 
 
 GUARD_ORDER: tuple[GuardKind, ...] = (
@@ -125,7 +127,8 @@ GUARD_ORDER: tuple[GuardKind, ...] = (
     GuardKind.SELL_RELIEF,  # bank-full: sell surplus to NPC before deposit/discard
     GuardKind.DEPOSIT_FULL,
     GuardKind.DISCARD_HIGH,
-    GuardKind.GEAR_REVIEW,  # lowest-priority guard, still above all means
+    GuardKind.GEAR_REVIEW,  # post-level-up / post-loss gear prioritization
+    GuardKind.CRAFT_POTIONS,  # lowest-priority guard: stock potions before grind
 )
 
 
@@ -286,6 +289,8 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
                 and _used_fraction(state) >= DISCARD_HIGH_FRACTION)
     if kind is GuardKind.GEAR_REVIEW:
         return ctx.gear_review_active
+    if kind is GuardKind.CRAFT_POTIONS:
+        return craft_potions_fires(state, game_data)
     return False
 
 

@@ -89,6 +89,7 @@ _GUARD_REPR: dict[GuardKind, str] = {
     # GEAR_REVIEW maps to UpgradeEquipment or GatherMaterials depending on
     # material availability — the static prefix covers exhaustiveness.
     GuardKind.GEAR_REVIEW: "UpgradeEquipment",
+    GuardKind.CRAFT_POTIONS: "CraftPotions",
 }
 
 _MEANS_REPR: dict[MeansKind, str] = {

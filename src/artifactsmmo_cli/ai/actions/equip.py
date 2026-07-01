@@ -83,11 +83,34 @@ class EquipAction(Action):
         if old_item:
             new_inventory[old_item] = new_inventory.get(old_item, 0) + 1
 
+        # Utility equip is additive for same-code (confirmed by maintainer 2026-06-30).
+        # Equipping q of a code into a utility slot that already holds the SAME code
+        # ADDS to the stack (M + q); into an empty/different slot it SETS the quantity
+        # to q (returning any displaced code to inventory, handled above).
+        if self.slot not in ("utility1_slot", "utility2_slot"):
+            return dataclasses.replace(
+                state,
+                inventory=new_inventory,
+                equipment=new_equipment,
+                cooldown_expires=None,
+            )
+        prior_qty = (state.utility1_slot_quantity if self.slot == "utility1_slot"
+                     else state.utility2_slot_quantity) if old_item == self.code else 0
+        qty = prior_qty + self.quantity
+        if self.slot == "utility1_slot":
+            return dataclasses.replace(
+                state,
+                inventory=new_inventory,
+                equipment=new_equipment,
+                cooldown_expires=None,
+                utility1_slot_quantity=qty,
+            )
         return dataclasses.replace(
             state,
             inventory=new_inventory,
             equipment=new_equipment,
             cooldown_expires=None,
+            utility2_slot_quantity=qty,
         )
 
     def cost(self, state: WorldState, game_data: GameData,

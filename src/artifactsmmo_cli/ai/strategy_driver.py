@@ -18,6 +18,7 @@ from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
 from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
+from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.goals.craft_relief import CraftReliefGoal
 from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
 from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
@@ -349,6 +350,8 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
                                          committed_target=(item, slot))
         return _gather_goal_for_unreachable_equippable(
             item, state, game_data, committed.max_depth)
+    if kind is GuardKind.CRAFT_POTIONS:
+        return CraftPotionsGoal()
     raise ValueError(f"Unknown GuardKind: {kind!r}")
 
 

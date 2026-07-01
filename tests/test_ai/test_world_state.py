@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, SKILL_NAMES, WorldState
-from tests.test_ai.fixtures import make_state
+from tests.test_ai.fixtures import make_character_schema, make_state
 
 
 class TestWorldStateProperties:
@@ -140,3 +140,16 @@ def test_combat_stats_default_empty_when_not_supplied():
     assert state.resistance == {}
     assert state.critical_strike == 0
     assert state.initiative == 0
+
+
+def test_world_state_carries_utility_slot_quantities():
+    char = make_character_schema(
+        utility1_slot="small_health_potion",
+        utility1_slot_quantity=40,
+        utility2_slot="",
+        utility2_slot_quantity=0,
+    )
+
+    state = WorldState.from_character_schema(char, bank_items=None, bank_gold=0)
+    assert state.utility1_slot_quantity == 40
+    assert state.utility2_slot_quantity == 0

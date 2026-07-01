@@ -18,6 +18,7 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.claim_pending import ClaimPendingGoal
 from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
+from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
 from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
@@ -140,6 +141,10 @@ def test_map_guard_sell_relief():
 def test_map_guard_unknown_raises():
     with pytest.raises(ValueError):
         map_guard("bogus", GameData(), _ctx())  # type: ignore[arg-type]
+
+
+def test_map_guard_returns_craft_potions_goal():
+    assert isinstance(map_guard(GuardKind.CRAFT_POTIONS, _gd(), _ctx()), CraftPotionsGoal)
 
 
 def test_map_guard_gear_review_gathers_when_materials_missing():

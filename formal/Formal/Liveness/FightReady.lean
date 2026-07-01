@@ -48,6 +48,7 @@ structure FightReady (s : State) : Prop where
   overstock      : s.hasOverstockItems = false
   deposits       : s.selectBankDepositsNonempty = false
   gear           : s.gearReviewFires = false
+  potions        : s.craftPotionsFires = false
   pending        : s.pendingItemsNonempty = false
   sellable       : s.sellableInventoryNonempty = false
   craft          : s.craftReliefFires = false
@@ -80,6 +81,8 @@ theorem productionLadder_fight_of_fightReady (s : State) (h : FightReady s) :
   have q6 : fires .depositFull s = false := by simp [fires, depositFullFires, h.deposits]
   have q7 : fires .discardHigh s = false := by simp [fires, discardHighFires, h.overstock]
   have q8 : fires .gearReview s = false := by simp [fires, ProductionLadder.gearReviewFires, h.gear]
+  have q8b : fires .craftPotions s = false := by
+    simp [fires, ProductionLadder.craftPotionsFires, h.potions]
   have q9 : fires .claimPending s = false := by simp [fires, claimPendingFires, h.pending]
   have q11 : fires .sellPressured s = false := by simp [fires, sellPressuredFires, h.sellable]
   have hobj : fires .objectiveStep s = true := by
@@ -88,7 +91,7 @@ theorem productionLadder_fight_of_fightReady (s : State) (h : FightReady s) :
   -- collapse, leaving bankUnlock?.or reachUnlockLevel?.or (some objectiveStep).
   unfold productionLadder
   simp only [allInLadderOrder, List.findSome?_cons,
-             q0, q1, q4, q5, q5b, q5c, q6, q7, q8, q9, htc, q11, hlyc, htcan, hobj]
+             q0, q1, q4, q5, q5b, q5c, q6, q7, q8, q8b, q9, htc, q11, hlyc, htcan, hobj]
   -- Goal now: (if bankUnlockFires then some bankUnlock else none).or
   --           ((if reachUnlockLevelFires then some reachUnlockLevel else none).or
   --             (some objectiveStep)) ∈ the 3-way.
@@ -122,11 +125,12 @@ theorem cycleStep_eq_fight_of_fightReady (s : State) (h : FightReady s) :
 theorem FightReady_cycleStep (s : State) (h : FightReady s) : FightReady (cycleStep s) := by
   have hcs := cycleStep_eq_fight_of_fightReady s h
   rw [hcs]
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · exact h.hpFull        -- hpFull (fight touches neither hp nor maxHp)
   · exact h.overstock
   · exact h.deposits
   · exact h.gear
+  · exact h.potions
   · exact h.pending
   · exact h.sellable
   · exact h.craft

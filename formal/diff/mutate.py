@@ -70,6 +70,9 @@ BUY_SOURCE_VENUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "buy_source_ve
 NEAREST_TILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "nearest_tile.py"
 CONSUMABLE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_selection.py"
 MARGINAL_POTION_QTY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "marginal_potion_qty.py"
+POTION_BASELINE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_baseline.py"
+MAX_BATCH_FROM_HELD_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "max_batch_from_held.py"
+OPTIMAL_BUY_MIX_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "optimal_buy_mix.py"
 BANK_EXPANSION_TIMING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_expansion_timing.py"
 EVENT_WINDOW_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "event_availability.py"
 COST_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "cost_core.py"
@@ -2235,6 +2238,8 @@ _ALL_SRCS = [
     NEAREST_TILE_SRC,
     CONSUMABLE_SELECTION_SRC,
     MARGINAL_POTION_QTY_SRC,
+    MAX_BATCH_FROM_HELD_SRC,
+    OPTIMAL_BUY_MIX_SRC,
     BANK_EXPANSION_TIMING_SRC,
     EVENT_WINDOW_SRC,
     COST_CORE_SRC,
@@ -2794,6 +2799,96 @@ MARGINAL_POTION_QTY_MUTATIONS = [
      "        numerator = (threshold_permille - win_permille) * max_stack - (denominator - 1)"),
 ]
 
+# potion_baseline mutations -- old strings matched to current potion_baseline.py
+# text. Each perturbs a clamp boundary or the floored linear ramp so the Python
+# baseline diverges from the Lean `potionBaseline` oracle. Killed by
+# formal/diff/test_potion_baseline_diff.py (the (5,5,45,100) curve over level 1..60).
+#
+# RETIRED (provably EQUIVALENT mutants -- the linear ramp is EXACT at both
+# endpoints, so the two boundary clamps are redundant at the boundary value and
+# flipping their comparator changes nothing observable for any in-domain input):
+#   * "low-clamp compare flip (<= -> <)": differs only at level == low_level, where
+#     the fall-through ramp computes low_qty + (high_qty-low_qty)*(level-low_level)//.. ==
+#     low_qty + 0 == low_qty -- identical to the clamp's return. Verified 0 divergences
+#     over level 1..60 on the (5,5,45,100) curve.
+#   * "high-clamp compare flip (>= -> >)": differs only at level == high_level, where
+#     the fall-through ramp computes low_qty + (high_qty-low_qty)*(high_level-low_level)//
+#     (high_level-low_level) == low_qty + (high_qty-low_qty) == high_qty exactly (the
+#     division is exact, span/span == 1) -- identical to the clamp's return. Verified
+#     0 divergences over level 1..60 on the (5,5,45,100) curve.
+# The two kept mutants below both perturb the ramp ARITHMETIC, which the differential
+# pins exactly across the whole interior of the curve.
+POTION_BASELINE_MUTATIONS = [
+    ("potion_baseline: drop the low_qty offset",
+     "    return low_qty + (high_qty - low_qty) * (level - low_level) // (high_level - low_level)",
+     "    return (high_qty - low_qty) * (level - low_level) // (high_level - low_level)"),
+    ("potion_baseline: span sign flip (level-low_level -> low_level-level)",
+     "    return low_qty + (high_qty - low_qty) * (level - low_level) // (high_level - low_level)",
+     "    return low_qty + (high_qty - low_qty) * (low_level - level) // (high_level - low_level)"),
+]
+
+# max_batch_from_held mutations -- old strings matched to current
+# max_batch_from_held.py text. Each perturbs the min-floor / floor-div / yield
+# multiply so the Python batch diverges from the Lean `maxBatchFromHeld` oracle.
+# Killed by formal/diff/test_max_batch_from_held_diff.py (random multi-ingredient
+# recipes + the exact-divisor / short-ingredient / yield anchors).
+MAX_BATCH_FROM_HELD_MUTATIONS = [
+    # floor-div -> ceil-div (add need-1 to the numerator): any non-exact held//need
+    # rounds UP, over-reporting craftable runs. The single-ingredient 10//3 anchor
+    # (floor 3 vs ceil 4) and interior random cases diverge.
+    ("max_batch_from_held: floor-div -> ceil-div (+need-1 on numerator)",
+     "    runs = min(held[i] // needs[i] for i in range(len(needs)))",
+     "    runs = min((held[i] + needs[i] - 1) // needs[i] for i in range(len(needs)))"),
+    # min -> max: take the LARGEST per-ingredient run-count instead of the scarcest,
+    # so a short ingredient no longer caps the batch. The short-ingredient (held 0)
+    # anchor diverges (0 vs the other ingredient's runs).
+    ("max_batch_from_held: min -> max (scarcest -> most-abundant)",
+     "    runs = min(held[i] // needs[i] for i in range(len(needs)))",
+     "    runs = max(held[i] // needs[i] for i in range(len(needs)))"),
+    # drop the yield multiply: report run COUNT instead of potions. Any yield != 1
+    # diverges (the yield-multiplies anchor with yield 5).
+    ("max_batch_from_held: drop yield multiply",
+     "    return runs * yield_per_craft",
+     "    return runs"),
+]
+
+# optimal_buy_mix mutations -- old strings matched to current optimal_buy_mix.py
+# text. Each KEPT mutant perturbs the feasibility test or the per-ingredient
+# deficit so the Python batch diverges from the Lean `optimalBuyMix` oracle.
+# Killed by formal/diff/test_optimal_buy_mix_diff.py (random recipes + the
+# exact-budget-tie and real-deficit anchors).
+#
+# RETIRED (provably EQUIVALENT mutants -- documented, not fake-killed):
+#   * "drop the break": removing `else: break` makes the scan keep going past the
+#     first unaffordable batch, returning the LARGEST affordable batch in
+#     [1, max_batch] instead of the largest affordable PREFIX. These coincide for
+#     every input because cost(B) is MONOTONE non-decreasing in B (proven in Lean
+#     as `Formal.OptimalBuyMix.cost_mono`): the affordable batches form a
+#     down-closed prefix, so largest-affordable == largest-prefix-affordable. The
+#     break is a pure performance optimisation with no observable effect; no input
+#     can distinguish it, so the differential can never (honestly) kill it.
+#   * "deficit > 0  ->  deficit >= 0": the guarded body adds `prices[i] * deficit`.
+#     The two guards differ ONLY at deficit == 0, where the contribution is
+#     `prices[i] * 0 == 0` either way (and at deficit < 0 both guards are false), so
+#     the total is identical for all inputs -- a behaviour-preserving comparator
+#     change. The genuine sign-flip mutant below (`b*need - held` ->
+#     `held - b*need`) is the one that actually perturbs the deficit and IS killed.
+OPTIMAL_BUY_MIX_MUTATIONS = [
+    # Feasibility `<=` -> `<`: at an exact-budget tie (cost(B) == gold) the batch is
+    # affordable but the mutant rejects it and breaks one batch early. The
+    # need1/held0/price2, gold==4 anchor (cost(2)==4) diverges (2 vs 1).
+    ("optimal_buy_mix: feasibility <= -> < (off-by-one at exact budget)",
+     "        if _cost(needs, held, prices, batch) <= gold:",
+     "        if _cost(needs, held, prices, batch) < gold:"),
+    # Deficit sign flip `b*need - held` -> `held - b*need`: negates every real
+    # shortfall, so the `> 0` guard skips it and the batch looks free. Any recipe
+    # with a genuine deficit (held < batch*need) diverges; the need4/held0 anchor
+    # (cost(1)=8 > gold 3 -> answer 0) fires (0 vs the full max_batch).
+    ("optimal_buy_mix: deficit sign flip (batch*need-held -> held-batch*need)",
+     "        deficit = batch * needs[i] - held[i]",
+     "        deficit = held[i] - batch * needs[i]"),
+]
+
 # bank_expansion_timing mutations -- old strings matched to current
 # bank_expansion_timing.py text. Each perturbs the fill-threshold cross-multiply
 # or the reserve-safety gate so the Python verdict diverges from the Lean
@@ -2953,24 +3048,30 @@ APPLY_MOVE_MUTATIONS = [
 APPLY_EQUIP_MUTATIONS = [
     (
         "apply-baseline-equip: revert EquipAction.apply to explicit WorldState(...) dropping baseline",
-        "        return dataclasses.replace(\n"
-        "            state,\n"
-        "            inventory=new_inventory,\n"
-        "            equipment=new_equipment,\n"
-        "            cooldown_expires=None,\n"
-        "        )",
-        "        return WorldState(\n"
-        "            character=state.character,\n"
-        "            level=state.level, xp=state.xp, max_xp=state.max_xp,\n"
-        "            hp=state.hp, max_hp=state.max_hp, gold=state.gold,\n"
-        "            skills=state.skills, x=state.x, y=state.y,\n"
-        "            inventory=new_inventory, inventory_max=state.inventory_max,\n"
-        "            equipment=new_equipment, cooldown_expires=None,\n"
-        "            task_code=state.task_code, task_type=state.task_type,\n"
-        "            task_progress=state.task_progress, task_total=state.task_total,\n"
-        "            bank_items=state.bank_items, bank_gold=state.bank_gold,\n"
-        "            pending_items=state.pending_items, active_events=state.active_events,\n"
-        "        )",
+        # Target: the non-utility return path (lines 91-96 of equip.py, inside the
+        # `if self.slot not in ("utility1_slot", "utility2_slot"):` branch).
+        # This is the path exercised by test_equip_preserves_baseline_{probe,property}
+        # which uses slot="weapon_slot".  Task-2's per-slot restructure added 4 spaces
+        # of extra indent vs. the pre-restructure single-return block — the old 8-space
+        # anchor no longer matched, producing an inert / uncaught mutant.
+        "            return dataclasses.replace(\n"
+        "                state,\n"
+        "                inventory=new_inventory,\n"
+        "                equipment=new_equipment,\n"
+        "                cooldown_expires=None,\n"
+        "            )",
+        "            return WorldState(\n"
+        "                character=state.character,\n"
+        "                level=state.level, xp=state.xp, max_xp=state.max_xp,\n"
+        "                hp=state.hp, max_hp=state.max_hp, gold=state.gold,\n"
+        "                skills=state.skills, x=state.x, y=state.y,\n"
+        "                inventory=new_inventory, inventory_max=state.inventory_max,\n"
+        "                equipment=new_equipment, cooldown_expires=None,\n"
+        "                task_code=state.task_code, task_type=state.task_type,\n"
+        "                task_progress=state.task_progress, task_total=state.task_total,\n"
+        "                bank_items=state.bank_items, bank_gold=state.bank_gold,\n"
+        "                pending_items=state.pending_items, active_events=state.active_events,\n"
+        "            )",
     ),
 ]
 
@@ -4099,6 +4200,12 @@ def _run_all_groups() -> int:
               "formal/diff/test_consumable_selection_diff.py", survivors)
     run_group(MARGINAL_POTION_QTY_SRC, MARGINAL_POTION_QTY_MUTATIONS,
               "formal/diff/test_marginal_potion_qty_diff.py", survivors)
+    run_group(MAX_BATCH_FROM_HELD_SRC, MAX_BATCH_FROM_HELD_MUTATIONS,
+              "formal/diff/test_max_batch_from_held_diff.py", survivors)
+    run_group(OPTIMAL_BUY_MIX_SRC, OPTIMAL_BUY_MIX_MUTATIONS,
+              "formal/diff/test_optimal_buy_mix_diff.py", survivors)
+    run_group(POTION_BASELINE_SRC, POTION_BASELINE_MUTATIONS,
+              "formal/diff/test_potion_baseline_diff.py", survivors)
     run_group(BANK_EXPANSION_TIMING_SRC, BANK_EXPANSION_TIMING_MUTATIONS,
               "formal/diff/test_bank_expansion_timing_diff.py", survivors)
     run_group(EVENT_WINDOW_SRC, EVENT_WINDOW_MUTATIONS,

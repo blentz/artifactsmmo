@@ -8,7 +8,7 @@ The transience mechanism underneath `BlockersQuietInfinitelyOften`: each
 blocker cannot fire two cycles in a row. Proven here per blocker
 (`<blocker>_quiet_after_firing`): `productionLadder s = some b ⇒ fires b (cycleStep s) = false`.
 
-Coverage: 13 of the 14 blockers. `reachUnlockLevel` is excluded — its `.fight`
+Coverage: 16 of the 17 blockers. `reachUnlockLevel` is excluded — its `.fight`
 does NOT one-step-quiet it (it fires repeatedly until `level` reaches
 `bankRequiredLevel`); its boundedness is the gap argument (`≤ MAX_ACHIEVABLE_GAP_LV2`),
 not one-step quieting.

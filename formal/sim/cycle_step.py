@@ -93,6 +93,7 @@ MIRROR_PLAN_FOR: dict[LadderMeans, str] = {
     LadderMeans.DEPOSIT_FULL:       "depositAll",
     LadderMeans.DISCARD_HIGH:       "deleteItem",
     LadderMeans.GEAR_REVIEW:        "optimizeLoadout",
+    LadderMeans.CRAFT_POTIONS:      "craft",  # CraftPotions goal crafts the baseline potion
     LadderMeans.CLAIM_PENDING:      "claimPendingItem",
     LadderMeans.COMPLETE_TASK:      "completeTask",
     LadderMeans.SELL_PRESSURED:     "npcSell",

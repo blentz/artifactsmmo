@@ -47,3 +47,11 @@ PRESSURE_CRITICAL_FRACTION = PRESSURE_CRITICAL_NUM / PRESSURE_CRITICAL_DEN
 MARGINAL_WINRATE_THRESHOLD = 0.95  # below this observed win-rate, bring potions
 FULL_STACK_WINRATE = 0.50          # at/below this win-rate, bring a full stack
 UTILITY_SLOT_MAX_STACK = 100       # openapi.json EquipSchema.quantity.maximum
+
+# Level-scaled potion stocking (spec 2026-06-30-potion-supply). Baseline ramps
+# linearly from (level 5 -> 5 potions) to (level 45 -> 100 potions).
+POTION_LOW_LEVEL = 5
+POTION_LOW_QTY = 5
+POTION_HIGH_LEVEL = 45
+POTION_HIGH_QTY = 100             # == UTILITY_SLOT_MAX_STACK
+POTION_GATHER_BATCH = 5           # gather/craft this many when gathering is required

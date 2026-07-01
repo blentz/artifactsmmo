@@ -637,6 +637,9 @@ theorem cycleStep_level_ge (s : State) : (cycleStep s).level ≥ s.level := by
     | gearReview =>
       show (applyActionKind .optimizeLoadout s).level ≥ s.level
       simp [applyActionKind]
+    | craftPotions =>
+      show (applyActionKind .craft s).level ≥ s.level
+      simp [applyActionKind]
     | claimPending =>
       show (applyActionKind .claimPendingItem s).level ≥ s.level
       simp [applyActionKind]
@@ -1112,6 +1115,7 @@ theorem progressMeans_decreases_extMeasure_or_advances_level
   -- carried by `CycleStep.cycleStep_progress_or_waits`.
   | restForCombat   => exfalso; revert hmem; unfold progressMeans; decide
   | gearReview      => exfalso; revert hmem; unfold progressMeans; decide
+  | craftPotions    => exfalso; revert hmem; unfold progressMeans; decide
 
 /-! ## Headline — strong form (restricted trajectory) — RETIRED (2026-06-29)
 
