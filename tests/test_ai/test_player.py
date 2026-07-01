@@ -1,7 +1,7 @@
 """Tests for GamePlayer."""
 
 import time
-from dataclasses import fields, replace
+from dataclasses import dataclass, field, fields, replace
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
@@ -14,6 +14,7 @@ from artifactsmmo_api_client.types import UNSET
 from sqlmodel import Session, select
 
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
+from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, RootScoreView
@@ -1916,3 +1917,64 @@ def test_snapshot_carries_chosen_root_and_ranking_and_bank(tmp_path):
     assert snap.strategy_ranking[0].score == 2.5
     assert snap.strategy_ranking[0].step_repr == "FightAction(chicken)"
     assert snap.bank_items == {"copper_ore": 5}
+
+
+@dataclass
+class _CapturingCraft(CraftAction):
+    """CraftAction whose execute records the quantity it would send, so the test
+    can assert the batch rewrite without a live API."""
+    captured: list = field(default_factory=list, compare=False, repr=False)
+
+    def execute(self, state, client):  # type: ignore[override]
+        self.captured.append(self.quantity)
+        return state
+
+
+def _batch_gd() -> GameData:
+    gd = GameData()
+    gd._item_stats = {
+        "cooked_chicken": ItemStats(code="cooked_chicken", level=1, type_="consumable",
+                                    crafting_skill="cooking", crafting_level=1),
+        "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
+                                   crafting_skill="weaponcrafting", crafting_level=1),
+    }
+    gd._crafting_recipes = {"cooked_chicken": {"raw_chicken": 1},
+                            "copper_dagger": {"copper_bar": 6}}
+    return gd
+
+
+class TestConsumableBatchDispatch:
+    def _player(self, gd: GameData, state) -> GamePlayer:
+        player = GamePlayer(character="hero")
+        player.game_data = gd
+        player.state = state
+        return player
+
+    def test_cooking_batches_the_held_pile(self):
+        gd = _batch_gd()
+        player = self._player(gd, make_state(inventory={"raw_chicken": 9}))
+        cap: list = []
+        action = _CapturingCraft(code="cooked_chicken", quantity=1,
+                                 workshop_location=(0, 0), captured=cap)
+        _new_state, outcome = player._execute(action, client=None)
+        assert outcome == "ok"
+        assert cap == [9]   # rewritten from 1 to the held-pile batch
+
+    def test_non_consumable_not_batched(self):
+        gd = _batch_gd()
+        player = self._player(gd, make_state(inventory={"copper_bar": 60}))
+        cap: list = []
+        action = _CapturingCraft(code="copper_dagger", quantity=1,
+                                 workshop_location=(0, 0), captured=cap)
+        player._execute(action, client=None)
+        assert cap == [1]   # weapon craft untouched
+
+    def test_no_game_data_leaves_quantity_unchanged(self):
+        player = GamePlayer(character="hero")
+        player.game_data = None
+        player.state = make_state(inventory={"raw_chicken": 9})
+        cap: list = []
+        action = _CapturingCraft(code="cooked_chicken", quantity=1,
+                                 workshop_location=(0, 0), captured=cap)
+        player._execute(action, client=None)
+        assert cap == [1]   # no game_data → no rewrite
