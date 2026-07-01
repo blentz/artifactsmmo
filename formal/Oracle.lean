@@ -8,6 +8,7 @@ import Formal.MarginalPotionQty
 import Formal.PotionBaseline
 import Formal.MaxBatchFromHeld
 import Formal.OptimalBuyMix
+import Formal.NextTierCap
 import Lean.Data.Json
 
 open Lean Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWin
@@ -359,6 +360,41 @@ def runSkillTargetCurve (args : Array Json) : Json :=
         gearRelevant := intArg args (7 + k*4) != 0 })
   Json.mkObj [("target",
     Json.num (Formal.SkillTargetCurve.skillCurveTarget skill charLevel lookahead maxSkill items))]
+
+/-- Compute one next_tier_cap result using the proved `nextTierCap`.
+
+args layout (Ints):
+* `[0]`   charLevel
+* `[1]`   maxSkill
+* `[2]`   skill (interned to a small Int by the diff side)
+* then 4-int item blocks: `[craftSkill, craftLevel, itemLevel, gearRelevant(0/1)]`
+
+Emits `{"cap": Int}` — the next-tier craft-level cap for `skill`. -/
+def runNextTierCap (args : Array Json) : Json :=
+  let charLevel := intArg args 0
+  let maxSkill := intArg args 1
+  let skill := intArg args 2
+  let nItems := (args.size - 3) / 4
+  let items : List Formal.NextTierCap.Item :=
+    (List.range nItems).map (fun k =>
+      { craftSkill := intArg args (3 + k*4), craftLevel := intArg args (4 + k*4),
+        itemLevel := intArg args (5 + k*4),
+        gearRelevant := intArg args (6 + k*4) != 0 })
+  Json.mkObj [("cap",
+    Json.num (Formal.NextTierCap.nextTierCap skill charLevel maxSkill items))]
+
+/-- Compute one next_tier_dampened result using the proved `nextTierDampened`.
+
+args layout (Ints):
+* `[0]`   currentSkill
+* `[1]`   cap
+
+Emits `{"dampened": Bool}` — whether the skill already covers all next-tier gear. -/
+def runNextTierDampened (args : Array Json) : Json :=
+  let currentSkill := intArg args 0
+  let cap := intArg args 1
+  Json.mkObj [("dampened",
+    Json.bool (Formal.NextTierCap.nextTierDampened currentSkill cap))]
 
 /-- Compute one skill_xp_curve result using the SAME proved defs.
 
@@ -2805,6 +2841,10 @@ def runOne (item : Json) : Json :=
     runGearDemand args
   else if kind == "bank_space_cost" then
     runBankSpaceCost args
+  else if kind == "next_tier_cap" then
+    runNextTierCap args
+  else if kind == "next_tier_dampened" then
+    runNextTierDampened args
   else
     Json.mkObj [("error", Json.str s!"unknown kind: {kind}")]
 
