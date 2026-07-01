@@ -84,6 +84,12 @@ def overlay_sprites(base: Sprite, top: Sprite) -> Sprite:
     return Sprite(rows=rows, palette={**base.palette, **top.palette})
 
 
+def recolor(base: Sprite, palette: dict[str, str]) -> Sprite:
+    """A family variant: same silhouette as `base`, new palette. Authoring-time
+    helper for binning many codes onto one shared shape (e.g. slime colors)."""
+    return Sprite(rows=base.rows, palette=palette)
+
+
 BLANK_SPRITE = Sprite(rows=(TRANSPARENT * SPRITE_SIZE,) * SPRITE_SIZE, palette={})
 
 PLAYER_SPRITE = Sprite(

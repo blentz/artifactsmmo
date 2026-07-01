@@ -10,6 +10,7 @@ from artifactsmmo_cli.tui.sprites import (
     TRANSPARENT,
     Sprite,
     SpriteCategory,
+    recolor,
     validate_sprite,
 )
 
@@ -59,3 +60,11 @@ def test_category_members():
     assert {c.value for c in SpriteCategory} == {
         "player", "monster", "npc", "structure", "resource",
     }
+
+
+def test_recolor_keeps_shape_swaps_palette():
+    base = Sprite(rows=("#" * 8,) * 8, palette={"#": "red"})
+    out = recolor(base, {"#": "blue"})
+    assert out.rows == base.rows
+    assert out.palette == {"#": "blue"}
+    validate_sprite("recolored", out)  # must stay a valid 8x8 with defined keys
