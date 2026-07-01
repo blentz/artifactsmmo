@@ -1,9 +1,9 @@
 # ArtifactsMMO CLI + Autonomous AI Player
 
-A Python CLI for [ArtifactsMMO](https://artifactsmmo.com) with two modes:
-the standard CLI commands (move, gather, fight, bank, etc.) and an
-autonomous GOAP-based AI player that plays a character end-to-end while
-learning from observation.
+A Python CLI for [ArtifactsMMO](https://artifactsmmo.com) with two modes: the
+standard CLI commands (move, gather, fight, bank, …) and an autonomous
+GOAP-based AI player that plays a character end-to-end while learning from
+observation.
 
 ![Live TUI: the autonomous player grinding combat XP, with status, inventory, sprite map, and decision log](docs/demo.gif)
 
@@ -14,197 +14,59 @@ uv sync
 echo "<your API token>" > TOKEN
 ```
 
-Python 3.13. Dependencies via `uv` (lockfile committed).
+Python 3.13, dependencies via [`uv`](https://docs.astral.sh/uv/) (lockfile
+committed).
 
-## Usage
-
-### Standard CLI
+## Quickstart
 
 ```sh
-uv run artifactsmmo character status <name>
-uv run artifactsmmo character create <name> <skin>
-uv run artifactsmmo move <name> <x> <y>
+# Run a single CLI command
 uv run artifactsmmo fight <name>
-uv run artifactsmmo gather <name>
-# ...etc — see `uv run artifactsmmo --help`
-```
 
-### Autonomous player
-
-```sh
-# Plain headless run
-uv run artifactsmmo play <name>
-
-# With learning store (persisted to ~/.cache/artifactsmmo/learning.db)
-uv run artifactsmmo play <name> --learn
-
-# Live TUI watcher (four-pane: status / map / inventory / log)
+# Turn the AI player loose, and watch it live
 uv run artifactsmmo play <name> --learn --tui
-
-# Trace decisions to JSONL for offline analysis
-uv run artifactsmmo play <name> --learn --trace
-
-# Plan-only (no API mutations)
-uv run artifactsmmo play <name> --dry-run --verbose
 ```
 
-### Session stats
-
-The `stats` subcommand reads from the same SQLite store `play --learn`
-writes to (`~/.cache/artifactsmmo/learning.db`) and renders every
-metric that matters for debugging a session — no inline scripts.
-
-```sh
-# List recent sessions
-uv run artifactsmmo stats sessions
-
-# Summarise the most recent session for a character
-uv run artifactsmmo stats summary --character Robby
-
-# Whole DB, with a time window
-uv run artifactsmmo stats summary --session all --since 2026-06-05T00:00
-
-# Focused views
-uv run artifactsmmo stats summary --planner-only --top 20
-uv run artifactsmmo stats summary --goals-only --top 30
-```
-
-Sections rendered: overview (cycles, duration, goal-change rate),
-outcomes + per-action errors, top selected goals, top actions, planner
-load per goal (max/avg nodes + plan_len + timeouts), fight attempts +
-losses with HP context, inventory events (crafts/equips/deletes/
-deposits/withdraws) + per-item breakdowns, task completions with
-duration + s/unit, stuck windows (8+ cycles with no progress).
+Full command reference and session-stats tooling: [docs/usage.md](docs/usage.md).
 
 ## What the AI player does
 
-The player runs a sense → plan → act loop using **GOAP** (Goal-Oriented
-Action Planning) with forward A* search.
+It runs a sense → plan → act loop with a single goal: reach max character
+level (50) by the cheapest path. Everything else is a means to that end.
 
-**Single root objective:** find the cheapest path to maximum character
-level (50). Every decision is scored against expected character-XP per
-cycle. Tasks/gold/skill-XP are means to that end, not first-class goals.
+| Feature | What it does |
+| --- | --- |
+| **Plays end-to-end** | Gathers, crafts, fights, runs tasks, and banks on its own to level a character to 50. |
+| **Plans the fastest route** | Estimates how far each path to max level is and follows the shortest one. |
+| **Fights smart** | Picks the best weapon and armor for each monster's elemental weakness before engaging. |
+| **Stays alive** | Heals before it can die, and when it gets stuck it escalates recovery until it breaks free. |
+| **Manages its bag** | Sells or discards surplus while protecting materials, tools, and task items — and crafts overflow into progress instead of dumping it. |
+| **Levels skills just in time** | Trains crafting skills only when needed to unlock the next upgrade. |
+| **Reuses the bank** | Withdraws stored materials instead of re-gathering them. |
+| **Remembers what blocks it** | Learns progression gates across runs so it doesn't retry the impossible. |
+| **Learns as it plays** | Records observed costs and outcomes to a store that sharpens later decisions. |
+| **Shows its work** | A four-pane live terminal UI renders status, map, inventory, and every decision. |
+| **Provably correct core** | Its decision logic is proven in Lean 4 and gated so the code can't drift from the proofs. |
 
-### Strategic decisions the player makes
+How each decision is made: [docs/ai-player.md](docs/ai-player.md). The live
+watcher: [docs/tui.md](docs/tui.md).
 
-- **Path projection** (`cheapest_path_to_level`): walks the monster
-  ladder using documented per-kill XP and observed cycle costs to
-  estimate cycles-remaining to L50. Trace shows
-  `projected_cycles_to_max` and `path_next_action` every cycle.
-- **Low-yield task cancel**: if a held task pays zero char-XP/cycle
-  (e.g. items-tasks that only payout on CompleteTask), and any
-  alternative pays positive, fire `TaskCancel` immediately.
-- **Blocker registry**: persistent learning of progression gates
-  (e.g. bank achievement requires defeating sea_marauder L45). Loaded
-  on every session start; survives restarts.
-- **Equipment optimizer**: per-fight loadout selection by element
-  matching. Robby holding `fishing_net` will swap to `copper_dagger`
-  vs `yellow_slime` (water-vs-earth resistance flip) automatically.
-- **Overstock cap**: items held beyond their max recipe demand (plus
-  task / equip / action-consumable / consumable-keep / task-chain
-  floors) get sold or deleted in single batched actions. Healing
-  consumables (`hp_restore>0`) and `tasks_coin` are protected at high
-  caps so they aren't deleted under inventory pressure; the cap also
-  walks the task-recipe chain so mid-chain inputs (e.g. `ash_wood`
-  needed to craft the active `ash_plank` task) aren't discarded
-  prematurely.
-- **CraftRelief circuit breaker**: when inventory pressure crosses 70%
-  AND the active items-task deliverable or an in-flight step's
-  intermediate material is craftable from current inventory, a
-  `CRAFT_RELIEF` guard preempts the deposit/discard ladder and crafts
-  that intermediate instead — converting raw materials into goal
-  progress rather than banking or deleting them. It never assembles
-  end-stage gear/tools; final equipment assembly is left to the gear
-  goals (so relief can't burn an objective's materials on an
-  off-objective equippable).
-- **Equippable goal semantics**: meta-objective `ObtainItem` for items
-  with an equipment slot requires the item to actually be EQUIPPED, not
-  just owned. Crafting a `wooden_shield` without equipping it no
-  longer satisfies the root; the arbiter plans the `EquipAction` to
-  close the loop.
-- **Bank-stock reuse**: PursueTask / GatherMaterials / LevelSkill /
-  CraftRelief all consider `WithdrawItemAction` for their recipe-chain
-  inputs, so banked materials get withdrawn instead of re-gathered
-  when a goal needs them.
-- **Craft-skill bootstrap**: a small `ReachSkillLevel(skill, 2)` root
-  is added for `weaponcrafting` / `gearcrafting` / `jewelrycrafting`
-  whenever the character is at the level-1 floor, so the planner has
-  a low-effort competitor for skill XP and the gear-craft loop can
-  start.
-- **HP critical floor**: `RestoreHP` priority jumps to 110 below 25%
-  HP to preempt any combat goal.
-- **Skill-up driver**: `LevelSkillGoal` interrupts gathering to craft
-  for skill XP when a near-future upgrade is gated. Action scope is
-  bounded to the skill's recipe closure (gathers + withdraws for items
-  the skill's recipes consume) so the planner doesn't blow up exploring
-  unrelated gather chains.
-- **Survival recovery**: stuck-state detector with escalating recovery
-  (state refresh → goal suppression → wildcard mode).
+## Documentation
 
-### TUI watcher
-
-A four-pane Textual interface (3×3 grid) shows live state without
-changing the bot's behavior — status and inventory stacked on the left,
-a large map spanning the right, and a full-width log strip along the
-bottom:
-
-```
-┌────────┬────────────────────────┐
-│ Status │                        │
-│ L3 HP  │   Map — 8×8 sprite      │
-│ XP     │   tiles, player-        │
-├────────┤   centered             │
-│ Inv    │                        │
-├────────┴────────────────────────┤
-│ Log  21:08 c2 Fight          ok │
-└──────────────────────────────────┘
-```
-
-The map renders each tile as an **8×8 sprite** drawn with Unicode
-half-block characters (`▀` — two color pixels per cell), centered on the
-player. Sprites are outline-only pixel art composited over the terrain
-color, defined as pure data in `tui/palette.py` (shared hex palette) and
-`tui/sprites.py` (the tileset):
-
-- player, 30 monsters, 6 NPCs, structures (bank, grand exchange,
-  workshop, taskmaster), resources (tree / ore / fish / herb), and doors.
-- Any code the API exposes without a curated sprite falls back to a
-  deterministic, category-tinted silhouette — so the map never breaks as
-  the game adds content; new sprites just ship as more data.
-
-Preview the whole tileset in the terminal without launching the game:
-
-```sh
-uv run python scripts/preview_sprites.py
-```
-
-Quit the watcher with `q` or `Ctrl+C`.
-
-## Design docs
-
-Architecture, design rationale, and implementation plans live under
-`docs/superpowers/`:
-
-- `specs/2026-05-12-goap-ai-player-design.md` — initial GOAP design
-- `specs/2026-05-15-goap-robustness-layer-design.md` — survival layer
-- `specs/2026-05-17-autoregressive-planning-design.md` — learning store
-- `specs/2026-05-18-strategic-reasoning-design.md` — Phase G (per-cycle scoring)
-- `specs/2026-05-18-max-level-objective-design.md` — root objective
-- `specs/2026-06-13-tui-map-sprites-design.md` — half-block sprite map + 3×3 layout
-- `specs/2026-06-13-improved-sprites-design.md` — outline-only sprite tileset
-- `plans/...` — task-by-task implementation plans for each spec
+- [docs/usage.md](docs/usage.md) — CLI reference + session stats
+- [docs/ai-player.md](docs/ai-player.md) — how the player decides
+- [docs/tui.md](docs/tui.md) — live TUI watcher and sprite map
+- [docs/development.md](docs/development.md) — dev setup, testing, formal verification, design specs
 
 ## Project status
 
 Active development. Single-character autonomous play works end-to-end:
 gather → craft → fight → task → bank, with per-monster equipment
-optimization, overstock control, blocker memory, and live TUI
-observation. Multi-character coordination not in scope yet.
+optimization, overstock control, blocker memory, and live TUI observation.
+Multi-character coordination is not in scope yet.
 
 ## License
 
-GNU Affero General Public License v3 (AGPL-3.0) — see [LICENSE](LICENSE).
-
-The AGPL ensures any modifications to this AI, including those used to
-provide network services, remain open-source and available to the
-community.
+GNU Affero General Public License v3 (AGPL-3.0) — see [LICENSE](LICENSE). The
+AGPL ensures any modifications to this AI, including those used to provide
+network services, remain open-source and available to the community.
