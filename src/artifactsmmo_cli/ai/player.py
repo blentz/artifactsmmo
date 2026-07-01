@@ -13,6 +13,7 @@ from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.achievements.get_achievement_achievements_code_get import sync as get_achievement
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character
 from artifactsmmo_api_client.api.events.get_all_active_events_events_active_get import sync as get_all_active_events
+from artifactsmmo_api_client.api.raids.get_all_raids_raids_get import sync as get_all_raids
 from artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get import sync as get_bank_details
 from artifactsmmo_api_client.api.my_account.get_bank_items_my_bank_items_get import sync as get_bank_items
 from artifactsmmo_api_client.api.my_account.get_pending_items_my_pending_items_get import sync as get_pending_items
@@ -94,6 +95,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal
 from artifactsmmo_cli.ai.tiers.root_progress import root_progress_value
 from artifactsmmo_cli.ai.tiers.sticky_select_core import next_last
 from artifactsmmo_cli.ai.tracer import Tracer
+from artifactsmmo_cli.ai.raid_info import RaidInfo
 from artifactsmmo_cli.ai.winnable_cascade import CascadeInputs, winnable_farm_target_pure
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from artifactsmmo_cli.client_manager import ClientManager
@@ -869,6 +871,50 @@ class GamePlayer:
             page += 1
         return active
 
+    def _fetch_raids(self, client: AuthenticatedClient) -> list[RaidInfo]:
+        """All raids with live status, mapped to RaidInfo. Retries on transient
+        transport errors like _fetch_active_events; a request that keeps failing
+        yields the raids collected so far (raids are non-critical visibility)."""
+        out: list[RaidInfo] = []
+        page = 1
+        while True:
+            result = None
+            backoff = 5.0
+            for attempt in range(1, 4):
+                try:
+                    result = get_all_raids(client=client, page=page, size=100)
+                    break
+                except httpx.HTTPError as e:
+                    if attempt < 3:
+                        print(f"[{self._now()}] get_all_raids network error: {e!r}; "
+                              f"retry {attempt}/3 in {backoff:.0f}s")
+                        time.sleep(backoff)
+                        backoff *= 2
+            if result is None or not result.data:
+                break
+            for raid in result.data:
+                inst = raid.active_instance
+                # active_instance is RaidInstanceSchema | None | Unset — "present"
+                # means a real instance (not None, not the Unset sentinel).
+                if inst is not None and not isinstance(inst, Unset):
+                    remaining_hp: int | None = inst.remaining_hp
+                    total_hp: int | None = inst.total_hp
+                    window_ends_at: datetime | None = inst.ends_at
+                else:
+                    remaining_hp = None
+                    total_hp = None
+                    window_ends_at = None
+                out.append(RaidInfo(
+                    code=raid.code, name=raid.name, monster=raid.monster,
+                    status=raid.status.value, next_start_at=raid.next_start_at,
+                    remaining_hp=remaining_hp,
+                    total_hp=total_hp,
+                    window_ends_at=window_ends_at))
+            if len(result.data) < 100:
+                break
+            page += 1
+        return out
+
     def _fetch_world_state(self, client: AuthenticatedClient) -> WorldState:
         """Query character state from the API. Retries on transient errors."""
         last_result = None
@@ -920,6 +966,7 @@ class GamePlayer:
         bank_capacity = self.state.bank_capacity if self.state else None
         pending_items = self.state.pending_items if self.state else None
         active_events = self._fetch_active_events(client)
+        raids = self._fetch_raids(client)
         state = WorldState.from_character_schema(
             last_result.data,
             bank_items=bank_items,
@@ -927,6 +974,7 @@ class GamePlayer:
             bank_capacity=bank_capacity,
             pending_items=pending_items,
             active_events=active_events,
+            raids=raids,
         )
         self._record_skill_observations(
             state,

@@ -147,9 +147,13 @@ class TestFetchWorldStateActiveEvents:
         events_page = MagicMock()
         events_page.data = [ev]
 
+        empty_raids = MagicMock()
+        empty_raids.data = []
+
         with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
             with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=events_page):
-                state = player._fetch_world_state(client)
+                with patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty_raids):
+                    state = player._fetch_world_state(client)
 
         assert isinstance(state, WorldState)
         assert state.active_events == {"gemstone_merchant": expiry}
@@ -164,8 +168,12 @@ class TestFetchWorldStateActiveEvents:
         empty_page = MagicMock()
         empty_page.data = []
 
+        empty_raids = MagicMock()
+        empty_raids.data = []
+
         with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
             with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_page):
-                state = player._fetch_world_state(client)
+                with patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty_raids):
+                    state = player._fetch_world_state(client)
 
         assert state.active_events == {}

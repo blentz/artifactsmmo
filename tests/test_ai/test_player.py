@@ -491,7 +491,8 @@ class TestFetchWorldState:
         empty_events.data = []
         with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
             with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
-                state = player._fetch_world_state(client)
+                with patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty_events):
+                    state = player._fetch_world_state(client)
         assert isinstance(state, WorldState)
 
     def test_preserves_bank_state_from_current_state(self):
@@ -503,7 +504,8 @@ class TestFetchWorldState:
         empty_events.data = []
         with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
             with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
-                state = player._fetch_world_state(client)
+                with patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty_events):
+                    state = player._fetch_world_state(client)
         assert state.bank_items == {"gold": 100}
 
     def test_raises_on_none_response(self):
@@ -705,7 +707,8 @@ class TestExecute:
         with patch("artifactsmmo_cli.ai.actions.movement.action_move", side_effect=RuntimeError("fail")):
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
-                    new_state, outcome = player._execute(action, client)
+                    with patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty_events):
+                        new_state, outcome = player._execute(action, client)
 
         assert isinstance(new_state, WorldState)
         assert outcome == "error:other"
@@ -738,11 +741,13 @@ class TestExecute:
                            return_value=make_get_character_result(char)):
                     with patch("artifactsmmo_cli.ai.player.get_all_active_events",
                                return_value=empty_events):
-                        with patch("artifactsmmo_cli.ai.player.get_bank_items",
-                                   return_value=real_bank):
-                            with patch("artifactsmmo_cli.ai.player.get_bank_details",
-                                       return_value=bank_details):
-                                new_state, outcome = player._execute(action, client)
+                        with patch("artifactsmmo_cli.ai.player.get_all_raids",
+                                   return_value=empty_events):
+                            with patch("artifactsmmo_cli.ai.player.get_bank_items",
+                                       return_value=real_bank):
+                                with patch("artifactsmmo_cli.ai.player.get_bank_details",
+                                           return_value=bank_details):
+                                    new_state, outcome = player._execute(action, client)
 
         assert outcome == "error:HTTP_478"
         assert new_state.bank_items == {}   # re-synced: the stale ash_plank claim is gone
@@ -767,9 +772,11 @@ class TestExecute:
                            return_value=make_get_character_result(char)):
                     with patch("artifactsmmo_cli.ai.player.get_all_active_events",
                                return_value=empty_events):
-                        with patch("artifactsmmo_cli.ai.player.get_bank_items",
-                                   side_effect=httpx.HTTPError("net down")):
-                            new_state, outcome = player._execute(action, client)
+                        with patch("artifactsmmo_cli.ai.player.get_all_raids",
+                                   return_value=empty_events):
+                            with patch("artifactsmmo_cli.ai.player.get_bank_items",
+                                       side_effect=httpx.HTTPError("net down")):
+                                new_state, outcome = player._execute(action, client)
 
         assert outcome == "error:HTTP_478"
         assert isinstance(new_state, WorldState)
@@ -794,7 +801,8 @@ class TestExecute:
                        side_effect=ApiActionError(499, "Character in cooldown")):
                 with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
                     with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
-                        new_state, outcome = player._execute(action, client)
+                        with patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty_events):
+                            new_state, outcome = player._execute(action, client)
 
         assert isinstance(new_state, WorldState)
         assert outcome == "error:cooldown"
@@ -820,7 +828,8 @@ class TestExecute:
                    side_effect=ApiActionError(485, "This item is already equipped")):
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
-                    new_state, outcome = player._execute(action, client)
+                    with patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty_events):
+                        new_state, outcome = player._execute(action, client)
 
         assert isinstance(new_state, WorldState)
         assert outcome == "error:already_equipped"
@@ -845,7 +854,8 @@ class TestExecute:
         with patch("artifactsmmo_cli.ai.actions.movement.action_move", side_effect=net_err):
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
-                    new_state, outcome = player._execute(action, client)
+                    with patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty_events):
+                        new_state, outcome = player._execute(action, client)
 
         assert isinstance(new_state, WorldState)
         assert outcome == "error:network"
@@ -892,7 +902,8 @@ class TestExecute:
         with patch.object(action, "execute", side_effect=RuntimeError("fight_lost: yellow_slime (turns=3)")):
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
-                    new_state, outcome = player._execute(action, client)
+                    with patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty_events):
+                        new_state, outcome = player._execute(action, client)
 
         assert outcome == "error:fight_lost"
         assert isinstance(new_state, WorldState)
@@ -1230,7 +1241,8 @@ class TestExecuteHttp496BankLock:
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_achievement", return_value=None):
                     with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
-                        player._execute(action, client)
+                        with patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty_events):
+                            player._execute(action, client)
 
         assert player._bank_accessible is False
         assert player._bank_blocked_since is not None
@@ -1252,7 +1264,8 @@ class TestExecuteHttp496BankLock:
                    side_effect=ApiActionError(496, "bank access denied")):
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
-                    player._execute(action, client)
+                    with patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty_events):
+                        player._execute(action, client)
 
         assert player._bank_accessible is False
         assert player._bank_unlock_monster is None
@@ -1274,7 +1287,8 @@ class TestExecuteHttp496BankLock:
                    side_effect=ApiActionError(496, "some unrelated error")):
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
-                    player._execute(action, client)
+                    with patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty_events):
+                        player._execute(action, client)
 
         assert player._bank_accessible is True  # unchanged
 
@@ -1303,7 +1317,8 @@ class TestExecuteHttp496BankLock:
                    side_effect=ApiActionError(496, "(myach achievement_unlocked)")):
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
-                    player._execute(action, client)
+                    with patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty_events):
+                        player._execute(action, client)
 
         assert resolve_calls == ["myach"]
         assert player._bank_unlock_monster == "skeleton"
@@ -1334,7 +1349,8 @@ class TestExecuteHttp496BankLock:
                    side_effect=RuntimeError("HTTP 496 (newach achievement_unlocked)")):
             with patch("artifactsmmo_cli.ai.player.get_character", return_value=make_get_character_result(char)):
                 with patch("artifactsmmo_cli.ai.player.get_all_active_events", return_value=empty_events):
-                    player._execute(action, client)
+                    with patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty_events):
+                        player._execute(action, client)
 
         # resolve should NOT be called since monster is already set
         assert resolve_calls == []
