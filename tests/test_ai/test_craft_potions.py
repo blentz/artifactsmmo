@@ -8,6 +8,8 @@ baseline.
 
 import dataclasses
 
+from sqlmodel import Session as SqlSession
+
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
@@ -16,6 +18,9 @@ from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
+from artifactsmmo_cli.ai.learning.models import Cycle
+from artifactsmmo_cli.ai.learning.models import Session as SessionModel
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from tests.test_ai.fixtures import make_state
 
 _POTION = "small_health_potion"
@@ -342,3 +347,53 @@ def test_desired_state_empty():
 
 def test_repr():
     assert repr(CraftPotionsGoal()) == "CraftPotionsGoal"
+
+
+# ── _baseline monster-demand scaling ─────────────────────────────────────────
+
+def _mk_store_with_fights(tmp_path, monster: str, consumables_json: str,
+                          n: int = 5) -> LearningStore:
+    """LearningStore with `n` won Fight(monster) cycles each expending consumables_json."""
+    store = LearningStore(db_path=str(tmp_path / "test.db"), character="testchar")
+    store.start_session()
+    with SqlSession(store._engine) as s:
+        if not s.get(SessionModel, store._session_id):
+            s.add(SessionModel(session_id=store._session_id,
+                               started_at="2026-05-18T00:00:00Z", character="testchar"))
+        for i in range(n):
+            s.add(Cycle(
+                ts=f"2026-05-18T00:{i:02d}:00Z",
+                session_id=store._session_id,
+                cycle_index=i,
+                character="testchar",
+                action_repr=f"Fight({monster})",
+                outcome="ok",
+                consumables_expended_json=consumables_json,
+            ))
+        s.commit()
+    return store
+
+
+def test_baseline_rises_for_hard_target_monster(tmp_path):
+    """When learned monster demand exceeds level_baseline, _baseline is raised.
+
+    level=1 → level_baseline=5. 5 fight rows each use 10 potions × 30 HP = 300 healed.
+    hp_healed_per_fight returns 300.0. monster_demand = ceil(300/30) = 10 > 5.
+    _baseline returns min(max(5, 10), 100) = 10.
+    """
+    _MONSTER = "hard_boss"
+    gd = _gd_potion(hp_restore=30)
+    state = make_state(level=1)
+    store = _mk_store_with_fights(tmp_path, _MONSTER, '{"small_health_potion": 10}')
+    goal = CraftPotionsGoal(combat_monster=_MONSTER, game_data=gd, history=store)
+    result = goal._baseline(state.level, state, gd, store)
+    store.close()
+    assert result == 10
+
+
+def test_baseline_unchanged_when_no_target_monster():
+    """No combat_monster → _baseline falls back to level_baseline (no regression)."""
+    gd = _gd_potion()
+    state = make_state(level=1)  # level_baseline=5
+    goal = CraftPotionsGoal()  # no combat_monster
+    assert goal._baseline(state.level, state, gd) == 5

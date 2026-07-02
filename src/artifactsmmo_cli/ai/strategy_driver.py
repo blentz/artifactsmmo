@@ -300,7 +300,8 @@ def _skill_dispatch_candidates(
 
 def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
               state: WorldState | None = None,
-              step_profile: dict[str, int] | None = None) -> Goal:
+              step_profile: dict[str, int] | None = None,
+              history: LearningStore | None = None) -> Goal:
     """Map a GuardKind to a parameterized Goal instance.
 
     `state` is required for CRAFT_RELIEF (which inspects current inventory
@@ -380,7 +381,8 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
         return _gather_goal_for_unreachable_equippable(
             item, state, game_data, committed.max_depth)
     if kind is GuardKind.CRAFT_POTIONS:
-        return CraftPotionsGoal()
+        return CraftPotionsGoal(combat_monster=ctx.combat_monster, game_data=game_data,
+                                history=history)
     raise ValueError(f"Unknown GuardKind: {kind!r}")
 
 
@@ -1187,7 +1189,7 @@ class StrategyArbiter:
         """Candidate ordering: guards, collect, step + fallback-step chain, discretionary."""
         candidates: list[Candidate] = []
         for gk in guard_kinds:
-            g = map_guard(gk, game_data, ctx, state, step_profile)
+            g = map_guard(gk, game_data, ctx, state, step_profile, self._history)
             candidates.append(Candidate(goal=g, is_means=False, repr_=repr(g), band=BAND_GUARD))
         for mk in collect_kinds:
             g = map_means(mk, game_data, ctx, state, self._history)
