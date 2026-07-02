@@ -155,10 +155,15 @@ def objective_roots(
         # level; the objective-step gather-to-level path (strategy_driver) serves it.
         gd = objective._game_data
         for skill in CONSUMABLE_CRAFT_SKILLS:
-            if best_gather_resource_drop(skill, state.level, gd) is None:
+            # Gate on the SKILL level (not char level) so the emitted root is one
+            # the objective-step gather-server can actually serve: strategy_driver
+            # calls best_gather_resource_drop with the skill level, so keying Part A
+            # on char level could emit a root whose gather step is unservable.
+            skill_level = state.skills.get(skill, 1)
+            if best_gather_resource_drop(skill, skill_level, gd) is None:
                 continue  # not gatherable now (e.g. cooking) -> reactive path only
             target = first_craftable_level(skill, gd)
-            if target is not None and state.skills.get(skill, 1) < target:
+            if target is not None and skill_level < target:
                 roots.append(ReachSkillLevel(skill, target))
         # Recipe-aware near-term skill curve: hold each crafting skill high
         # enough to craft gear up to char_level + LOOKAHEAD, so the next tier is
