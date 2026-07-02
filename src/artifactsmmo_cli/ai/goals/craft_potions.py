@@ -22,6 +22,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.max_batch_from_held import max_batch_from_held_pure
 from artifactsmmo_cli.ai.optimal_buy_mix import optimal_buy_mix_pure
@@ -160,7 +161,7 @@ class CraftPotionsGoal(Goal):
                     result.append(a if a.quantity == runs
                                   else dataclasses.replace(a, quantity=runs))
             elif isinstance(a, CraftAction) and a.code in craftable_mats:
-                result.append(a)
+                result.append(size_intermediate_craft(a, buy_chain, state, game_data))
             elif isinstance(a, GatherAction) and a.resource_code in needed_resources:
                 result.append(a)
             elif isinstance(a, NpcBuyAction) and a.item_code in chain:

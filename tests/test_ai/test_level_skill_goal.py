@@ -253,6 +253,38 @@ class TestRelevantActions:
         codes = {a.code for a in relevant if isinstance(a, WithdrawItemAction)}
         assert codes == {"copper_ore", "copper_bar", "copper_dagger"}
 
+    def test_relevant_actions_sizes_intermediate_craft_to_batch(self):
+        """Intermediate crafts (not the in-skill item itself) are sized by
+        size_intermediate_craft to inventory-bounded closure demand, not left at
+        quantity=1. Regression guard for Task-6 (intermediate-craft batching in
+        LevelSkillGoal).
+
+        Setup: copper_dagger (weaponcrafting) <- copper_bar (intermediate) <- copper_ore.
+        copper_dagger recipe: {"copper_bar": 6}; copper_bar recipe: {"copper_ore": 1}.
+        Expected copper_bar quantity:
+          closure_demand("copper_dagger", 1) -> chain: copper_bar: 6
+          demand = 6 - 0 held = 6
+          mats_per_unit = 1 (1 copper_ore per copper_bar, raw)
+          fit = (inventory_free=20 + held_recipe=0 - 3) // 1 = 17
+          result = max(1, min(6, 17, 10)) = 6
+        """
+        goal = LevelSkillGoal("weaponcrafting", 3)
+        gd = _gd_with_weapon_recipes()
+        state = make_state(
+            skills={"weaponcrafting": 1},
+            inventory={},
+            inventory_max=20,
+        )
+        actions = [
+            CraftAction(code="copper_dagger", quantity=1),
+            CraftAction(code="copper_bar", quantity=1),
+        ]
+        relevant = goal.relevant_actions(actions, state, gd)
+        intermediate = next(
+            a for a in relevant if isinstance(a, CraftAction) and a.code == "copper_bar"
+        )
+        assert intermediate.quantity == 6
+
 
 class TestRepr:
     def test_repr_includes_skill_and_target(self):

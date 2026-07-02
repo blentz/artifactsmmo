@@ -14,6 +14,19 @@ We abstract `mats_per_unit` (≥ 1) and `held_recipe` as integer inputs — they
 recipe-closure math proven elsewhere. Python's `//` is floor division, modelled
 by `Int.fdiv`.
 
+This clamp is now the shared core of BOTH `task_batch_size_pure` and the
+code-agnostic `craft_batch_size_pure` (Python): `batchSize`'s `remaining`
+argument abstracts the demand generically, so the task path is exactly the
+`demand = remaining` specialization. All five theorems below hold for ANY
+demand, so no new hand proofs are needed for the generalization; the extracted
+`craft_batch_size_pure`/`task_batch_size_pure` are bridged to `batchSize` in
+`Formal/Extracted/Bridges3.lean` (`craft_batch_bridge`, `task_batch_bridge`,
+`task_batch_bridge_none`), which transfer these theorems to the extracted defs.
+The Python `craft_batch_size_pure` additionally guards `mats_per_unit = 0` (a
+degenerate zero-quantity recipe) by returning `max 1 (min demand batchCap)` — a
+div-by-zero shield outside this model's `mats ≥ 1` assumption, handled as a
+separate branch in the bridge.
+
 Lean core only — no mathlib. Integer arithmetic is handled by `omega`.
 -/
 

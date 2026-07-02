@@ -12,9 +12,10 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
 from artifactsmmo_cli.ai.learning.skill_xp_curve import SkillXpCurve
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.recipe_closure import recipe_closure
+from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
 from artifactsmmo_cli.ai.world_state import WorldState
 
 MAX_SKILL_GAP = 5
@@ -129,6 +130,11 @@ class LevelSkillGoal(Goal):
             drop = game_data.resource_drop_item(res)
             if drop is not None:
                 withdrawable.add(drop)
+        # Build closure demand for each in-skill craftable (qty=1 each) so
+        # intermediate crafts can be inventory-batched via size_intermediate_craft.
+        batch_chain: dict[str, int] = {}
+        for target_code in skill_craftables:
+            closure_demand(target_code, 1, game_data, batch_chain, frozenset())
 
         result: list[Action] = []
         for action in actions:
@@ -145,6 +151,10 @@ class LevelSkillGoal(Goal):
             # be made and would only widen the search.
             elif isinstance(action, CraftAction) and action.code in skill_craftables:
                 result.append(action)
+            # Intermediates (craftable_mats not in skill_craftables, e.g. copper_bar
+            # for weaponcrafting) are sized to their inventory-bounded closure demand.
+            elif isinstance(action, CraftAction) and action.code in craftable_mats:
+                result.append(size_intermediate_craft(action, batch_chain, state, game_data))
         return result
 
     @property

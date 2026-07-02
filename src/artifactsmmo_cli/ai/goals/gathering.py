@@ -12,6 +12,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.buy_source_venue import BuyVenue, choose_buy_venue
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.craft_vs_buy import Method, acquisition_method
+from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
 from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
 from artifactsmmo_cli.ai.goals.gather_plannable_core import gather_plannable_pure
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor
@@ -174,11 +175,12 @@ class GatherMaterialsGoal(Goal):
             ):
                 # Drop item fully bank/inventory-covered — withdraw, don't gather.
                 continue
-            if (
+            if isinstance(action, CraftAction) and action.code in craftable_mats:
+                result.append(size_intermediate_craft(action, chain, state, game_data))
+            elif (
                 "recovery" in action.tags
                 or "deposit" in action.tags
                 or (isinstance(action, GatherAction) and action.resource_code in needed_resources)
-                or (isinstance(action, CraftAction) and action.code in craftable_mats)
                 or (isinstance(action, WithdrawItemAction) and action.code in withdrawable)
             ):
                 result.append(action)

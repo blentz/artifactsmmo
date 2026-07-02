@@ -185,6 +185,31 @@ def test_relevant_actions_includes_craftable_intermediate():
     assert any(isinstance(a, CraftAction) and a.code == "potion_base" for a in out)
 
 
+def test_intermediate_craft_is_batched():
+    """Intermediate crafts are sized to the batch demand, not left at quantity=1.
+
+    Scenario: potion_base is a craftable intermediate (1 per potion, 1 sunflower
+    per potion_base).  At level=1 the baseline is 5; nothing equipped → runs=5.
+    buy_chain["potion_base"]=5.  size_intermediate_craft computes:
+      demand=5, inventory_free=10, held_recipe(sunflower)=10, mats_per_unit=1
+      qty = max(1, min(5, (10+10-3)//1, 10)) = 5.
+    Before the fix the branch passes `a` unchanged → quantity=1.
+    """
+    gd = _gd_potion()
+    gd._crafting_recipes = {_POTION: {"potion_base": 1}, "potion_base": {_INGREDIENT: 1}}
+    gd._item_stats["potion_base"] = ItemStats(code="potion_base", level=1, type_="resource",
+                                             crafting_skill="alchemy", crafting_level=1)
+    # 10 sunflowers held; inventory_max=20 → inventory_free=10
+    state = make_state(level=1, inventory={_INGREDIENT: 10})
+    actions = [
+        _craft_action(),
+        CraftAction(code="potion_base", quantity=1, workshop_location=(3, 0)),
+    ]
+    out = CraftPotionsGoal().relevant_actions(actions, state, gd)
+    intermediate = next(a for a in out if isinstance(a, CraftAction) and a.code == "potion_base")
+    assert intermediate.quantity == 5
+
+
 def test_gather_path_filters_closure_and_keeps_moves():
     gd = _gd_potion()
     state = make_state(level=3, inventory={})

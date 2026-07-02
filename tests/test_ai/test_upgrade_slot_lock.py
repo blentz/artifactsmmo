@@ -65,6 +65,33 @@ def test_relevant_actions_locks_to_target_slot():
     assert not any("Unequip" in r for r in kept)
 
 
+def test_relevant_actions_sizes_intermediate_craft_to_batch():
+    """Intermediate crafts are sized by size_intermediate_craft to the
+    inventory-bounded closure demand. Regression guard for Task-6
+    (intermediate-craft batching in UpgradeEquipmentGoal).
+
+    Setup: wooden_shield <- ash_plank (intermediate) <- ash_wood; empty inventory.
+    Expected ash_plank quantity:
+      closure_demand("wooden_shield", 1) -> chain: ash_plank: 6
+      demand = 6 - 0 held = 6
+      mats_per_unit = 1 (1 ash_wood per ash_plank, raw)
+      fit = (inventory_free=20 + held_recipe=0 - 3) // 1 = 17
+      result = max(1, min(6, 17, 10)) = 6
+    """
+    gd = _gd()
+    goal = _goal()  # committed to wooden_shield
+    state = make_state(inventory={}, inventory_max=20)
+    actions = [
+        CraftAction(code="wooden_shield", quantity=1),
+        CraftAction(code="ash_plank", quantity=1),
+    ]
+    kept = goal.relevant_actions(actions, state, gd)
+    intermediate = next(
+        a for a in kept if isinstance(a, CraftAction) and a.code == "ash_plank"
+    )
+    assert intermediate.quantity == 6
+
+
 def test_relevant_actions_unfiltered_when_no_target():
     """No upgrade target (nothing to craft/equip) — don't over-filter; the
     planner gets the full action set."""

@@ -332,7 +332,7 @@ MODULES: tuple[ModuleSpec, ...] = (
         source="src/artifactsmmo_cli/ai/task_batch.py",
         output=f"{GENERATED_DIR}/TaskBatch.lean",
         core_name="TaskBatch",
-        functions=("task_batch_size_pure",),
+        functions=("craft_batch_size_pure", "task_batch_size_pure"),
         constants=("BATCH_CAP", "_MIN_FREE_SLOTS"),
         imports=("_raw_units", "_closure_visited"),
     ),

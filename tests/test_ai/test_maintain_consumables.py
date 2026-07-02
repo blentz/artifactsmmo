@@ -212,6 +212,32 @@ def test_goal_relevant_actions_includes_craftable_intermediate():
     assert any(isinstance(a, CraftAction) and a.code == "fish_fillet" for a in out)
 
 
+def test_intermediate_craft_is_batched():
+    """Intermediate crafts are sized to the deficit-sized batch demand, not left at 1.
+
+    Scenario: cooked_fish requires fish_fillet (1:1), fish_fillet requires raw_fish (1:1).
+    deficit=5=HEAL_STOCK_FLOOR; batch_chain["fish_fillet"]=5.
+    size_intermediate_craft computes:
+      demand=5, inventory_free=10, held_recipe(raw_fish)=10, mats_per_unit=1
+      qty = max(1, min(5, (10+10-3)//1, 10)) = 5.
+    Before the fix the branch passes `a` unchanged → quantity=1.
+    """
+    gd = _gd()
+    gd._crafting_recipes = {"cooked_fish": {"fish_fillet": 1}, "fish_fillet": {"raw_fish": 1}}
+    gd._item_stats["fish_fillet"] = ItemStats(code="fish_fillet", level=1, type_="resource",
+                                              crafting_skill="cooking", crafting_level=1)
+    goal = MaintainConsumablesGoal(game_data=gd)
+    # 10 raw_fish held; inventory_max=20 → inventory_free=10
+    state = _state(inventory={"raw_fish": 10})
+    actions = [
+        CraftAction(code="cooked_fish", quantity=1, workshop_location=(3, 0)),
+        CraftAction(code="fish_fillet", quantity=1, workshop_location=(3, 0)),
+    ]
+    out = goal.relevant_actions(actions, state, gd)
+    intermediate = next(a for a in out if isinstance(a, CraftAction) and a.code == "fish_fillet")
+    assert intermediate.quantity == 5
+
+
 def test_goal_repr():
     assert repr(MaintainConsumablesGoal(game_data=_gd())) == "MaintainConsumables"
 

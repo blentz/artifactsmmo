@@ -30,7 +30,9 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.craft_plan_driver_core import craft_plan_full
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
 from artifactsmmo_cli.ai.next_craft_core import NextAction
+from artifactsmmo_cli.ai.recipe_closure import closure_demand
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -146,11 +148,15 @@ def generate_next_craft_action(
         plan = craft_plan_full(recipes, owned, bank, item, qty)
         if not plan:
             continue  # this item already satisfied; try the next needed item
+        chain: dict[str, int] = {}
+        closure_demand(item, qty, game_data, chain, frozenset())
         mapped: list[Action] = []
         for na in plan:
             action = _map_next_action(na, relevant, game_data)
             if action is None:
                 return None  # a step has no concrete action → fall back to A*
+            if isinstance(action, CraftAction):
+                action = size_intermediate_craft(action, chain, state, game_data)
             mapped.append(action)
         return mapped
     return None  # all needed items already satisfied — let normal path handle it

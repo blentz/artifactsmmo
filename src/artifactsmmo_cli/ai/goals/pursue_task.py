@@ -15,9 +15,10 @@ from artifactsmmo_cli.ai.actions.task_trade import TaskTradeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.priority_band import clamp_into_band
-from artifactsmmo_cli.ai.recipe_closure import recipe_closure
+from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
 from artifactsmmo_cli.ai.scalar_priority import yield_bonus_for_goal
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -94,17 +95,24 @@ class PursueTaskGoal(Goal):
             if drop is not None:
                 withdrawable.add(drop)
         withdrawable.add(self._task_code)  # the task item itself, banked previously
+        # Build closure demand so intermediate crafts can be inventory-batched.
+        chain: dict[str, int] = {}
+        closure_demand(self._task_code, self._batch, game_data, chain, frozenset())
         result: list[Action] = []
         for action in actions:
             if (
                 "recovery" in action.tags
                 or "deposit" in action.tags
                 or (isinstance(action, GatherAction) and action.resource_code in needed_resources)
-                or (isinstance(action, CraftAction) and action.code in craftable_mats)
                 or (isinstance(action, TaskTradeAction) and action.code == self._task_code)
                 or (isinstance(action, WithdrawItemAction) and action.code in withdrawable)
             ):
                 result.append(action)
+            elif isinstance(action, CraftAction) and action.code in craftable_mats:
+                if action.code == self._task_code:
+                    result.append(action)
+                else:
+                    result.append(size_intermediate_craft(action, chain, state, game_data))
         return result
 
     @property
