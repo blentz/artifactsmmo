@@ -28,6 +28,19 @@ class CraftAction(Action):
     workshop_location: tuple[int, int] | None = field(default=None, repr=False)
     history: LearningStore | None = field(default=None, repr=False)
 
+    def effective_quantity(self, state: WorldState, game_data: GameData) -> int:
+        """Largest feasible batch to craft NOW: `min(requested, floor(inv / per))`
+        over every recipe input. Partial batches count — full satisfaction is the
+        ideal, but any unit the on-hand inputs cover contributes. 0 when not even
+        one unit is affordable."""
+        recipe = game_data.crafting_recipe(self.code)
+        if not recipe:
+            return 0
+        eff = self.quantity
+        for mat_code, mat_qty in recipe.items():
+            eff = min(eff, state.inventory.get(mat_code, 0) // mat_qty)
+        return max(0, eff)
+
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         if self.workshop_location is None:
             return False
@@ -40,25 +53,27 @@ class CraftAction(Action):
         if recipe is None:
             return False
 
-        for mat_code, mat_qty in recipe.items():
-            if state.inventory.get(mat_code, 0) < mat_qty * self.quantity:
-                return False
-
         skill_level = state.skills.get(stats.crafting_skill, 1)
-        return skill_level >= stats.crafting_level
+        if skill_level < stats.crafting_level:
+            return False
+
+        # Partial applicability: applicable when the inputs cover >= 1 unit.
+        return self.effective_quantity(state, game_data) >= 1
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         recipe = game_data.crafting_recipe(self.code) or {}
         new_inventory = dict(state.inventory)
 
+        # Craft the largest feasible batch the on-hand inputs cover (<= requested).
+        eff = self.effective_quantity(state, game_data)
         for mat_code, mat_qty in recipe.items():
-            consumed = mat_qty * self.quantity
+            consumed = mat_qty * eff
             new_inventory[mat_code] = new_inventory.get(mat_code, 0) - consumed
             if new_inventory[mat_code] <= 0:
                 del new_inventory[mat_code]
 
         y = game_data.craft_yield(self.code)
-        produced = self.quantity * y
+        produced = eff * y
         new_inventory[self.code] = new_inventory.get(self.code, 0) + produced
 
         new_progress = (
@@ -96,6 +111,10 @@ class CraftAction(Action):
              history: LearningStore | None = None) -> float:
         dest = self.workshop_location or (state.x, state.y)
         dist = abs(dest[0] - state.x) + abs(dest[1] - state.y)
+        # Cost stays keyed to the REQUESTED quantity (not the effective batch) to
+        # match the proved planner-admissibility cost model
+        # (formal/Formal/PlannerAdmissibility.lean, qtyCost). A partial craft is
+        # merely over-costed, which keeps edge costs >= 0 and the search sound.
         return 5.0 * self.quantity + dist
 
     def execute(self, state: WorldState, client: AuthenticatedClient) -> WorldState:

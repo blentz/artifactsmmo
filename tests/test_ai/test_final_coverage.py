@@ -315,9 +315,11 @@ class TestPlayerRunVerboseAndExecute:
 
 class TestActionCostMethods:
     def test_craft_action_cost(self):
+        # Inputs cover the full requested batch (6 iron / 2 per = 3) so cost
+        # scales with the 3 feasible units: 5.0 * 3.
         action = CraftAction(code="sword", quantity=3)
-        state = make_state()
-        gd = make_gd()
+        state = make_state(inventory={"iron": 6})
+        gd = make_gd(recipes={"sword": {"iron": 2}})
         assert action.cost(state, gd) == pytest.approx(15.0)
 
     def test_equip_action_cost(self):

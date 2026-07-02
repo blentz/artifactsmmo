@@ -30,6 +30,7 @@ from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision, StrategyEngine
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
+from tests.test_ai.test_actions import make_game_data
 from tests.test_ai.test_actions_execute import make_api_result, make_char_schema, make_get_character_result
 
 
@@ -692,6 +693,32 @@ class TestExecute:
 
         assert new_state.x == 3
         assert outcome == "ok"
+
+    def test_execute_clamps_craft_quantity_to_affordable(self):
+        """_execute must send the API only the batch the on-hand inputs cover —
+        an oversized requested quantity is clamped so the server never 400s."""
+        stats = ItemStats(
+            code="copper_dagger", level=1, type_="weapon",
+            crafting_skill="weaponcrafting", crafting_level=1,
+        )
+        player = GamePlayer(character="hero")
+        player.state = make_state(
+            x=0, y=0, skills={"weaponcrafting": 5}, inventory={"copper_ore": 12})
+        player.game_data = make_game_data(
+            workshop_locs={"weaponcrafting": (0, 0)},
+            item_stats={"copper_dagger": stats},
+            recipes={"copper_dagger": {"copper_ore": 6}},
+        )
+        action = CraftAction(code="copper_dagger", quantity=3, workshop_location=(0, 0))
+        client = MagicMock()
+        char = make_char_schema()
+
+        with patch("artifactsmmo_cli.ai.actions.crafting.action_crafting",
+                   return_value=make_api_result(char)) as mock_craft:
+            player._execute(action, client)
+
+        sent = mock_craft.call_args.kwargs["body"]
+        assert sent.quantity == 2  # 12 ore / 6 per dagger, clamped from requested 3
 
     def test_execute_api_error_refreshes_state(self):
         player = GamePlayer(character="hero")

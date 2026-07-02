@@ -505,6 +505,80 @@ class TestCraftAction:
         )
         assert action.is_applicable(state, gd) is False
 
+    def test_applicable_when_partial_batch_affordable(self):
+        """A batch craft whose inputs cover only SOME of the requested quantity
+        is applicable — partial (>=1) counts, full satisfaction is not required."""
+        action = CraftAction(code="copper_dagger", quantity=3, workshop_location=(3, 0))
+        stats = ItemStats(
+            code="copper_dagger", level=1, type_="weapon",
+            crafting_skill="weaponcrafting", crafting_level=1,
+        )
+        # 12 ore covers 2 daggers (needs 18 for the full 3)
+        state = make_state(x=0, y=0, skills={"weaponcrafting": 5}, inventory={"copper_ore": 12})
+        gd = make_game_data(
+            workshop_locs={"weaponcrafting": (3, 0)},
+            item_stats={"copper_dagger": stats},
+            recipes={"copper_dagger": {"copper_ore": 6}},
+        )
+        assert action.is_applicable(state, gd) is True
+
+    def test_not_applicable_when_not_even_one_unit_affordable(self):
+        """Inputs below one unit's recipe => cannot contribute => not applicable."""
+        action = CraftAction(code="copper_dagger", quantity=3, workshop_location=(3, 0))
+        stats = ItemStats(
+            code="copper_dagger", level=1, type_="weapon",
+            crafting_skill="weaponcrafting", crafting_level=1,
+        )
+        state = make_state(x=0, y=0, skills={"weaponcrafting": 5}, inventory={"copper_ore": 5})
+        gd = make_game_data(
+            workshop_locs={"weaponcrafting": (3, 0)},
+            item_stats={"copper_dagger": stats},
+            recipes={"copper_dagger": {"copper_ore": 6}},
+        )
+        assert action.is_applicable(state, gd) is False
+
+    def test_apply_crafts_largest_feasible_batch_when_partial(self):
+        """apply produces the largest feasible batch (<= requested), not zero and
+        not the full requested amount when inputs fall short."""
+        action = CraftAction(code="copper_dagger", quantity=3, workshop_location=(3, 0))
+        stats = ItemStats(
+            code="copper_dagger", level=1, type_="weapon",
+            crafting_skill="weaponcrafting", crafting_level=1,
+        )
+        state = make_state(x=0, y=0, skills={"weaponcrafting": 5}, inventory={"copper_ore": 12})
+        gd = make_game_data(
+            workshop_locs={"weaponcrafting": (3, 0)},
+            item_stats={"copper_dagger": stats},
+            recipes={"copper_dagger": {"copper_ore": 6}},
+        )
+        new_state = action.apply(state, gd)
+        assert new_state.inventory["copper_dagger"] == 2
+        assert new_state.inventory.get("copper_ore", 0) == 0
+        assert new_state.projected_skill_xp_delta["weaponcrafting"] == 2
+
+    def test_not_applicable_when_skill_below_recipe_gate(self):
+        """Skill below the recipe's crafting_level blocks the craft even with
+        materials on hand (partial applicability must NOT bypass the skill gate)."""
+        action = CraftAction(code="steel_sword", quantity=1, workshop_location=(3, 0))
+        stats = ItemStats(
+            code="steel_sword", level=1, type_="weapon",
+            crafting_skill="weaponcrafting", crafting_level=10,
+        )
+        state = make_state(x=0, y=0, skills={"weaponcrafting": 5}, inventory={"steel": 6})
+        gd = make_game_data(
+            workshop_locs={"weaponcrafting": (3, 0)},
+            item_stats={"steel_sword": stats},
+            recipes={"steel_sword": {"steel": 6}},
+        )
+        assert action.is_applicable(state, gd) is False
+
+    def test_effective_quantity_zero_when_no_recipe(self):
+        """No recipe for the item => nothing craftable => effective 0."""
+        action = CraftAction(code="mystery_item", quantity=3, workshop_location=(0, 0))
+        state = make_state(x=0, y=0, skills={"weaponcrafting": 5})
+        gd = make_game_data(workshop_locs={"weaponcrafting": (0, 0)}, recipes={})
+        assert action.effective_quantity(state, gd) == 0
+
     def test_apply_moves_to_workshop_and_produces_item(self):
         action = CraftAction(code="copper_dagger", quantity=1, workshop_location=(3, 0))
         stats = ItemStats(

@@ -768,6 +768,12 @@ class GamePlayer:
                     action.code, action.quantity, self.state, self.game_data)
                 if batched != action.quantity:
                     action = replace(action, quantity=batched)
+                # Clamp to the batch the on-hand inputs actually cover so the
+                # server never 400s on an unaffordable quantity (partial crafts
+                # are valid — craft what we can, >= 1). See CraftAction.
+                feasible = action.effective_quantity(self.state, self.game_data)
+                if feasible >= 1 and feasible != action.quantity:
+                    action = replace(action, quantity=feasible)
         try:
             new_state = action.execute(self.state, client)
             # Re-sync bank state after visiting bank

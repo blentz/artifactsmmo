@@ -57,7 +57,6 @@ concept tag, or a concept with no module, is a traceability gap.
 | LivenessChain | combat, monsters | reachability, no-deadlock |
 | LoadoutProfiles | gear | validity, monotonicity, totality, safety |
 | LowYieldCancel | tasks | safety, monotonicity |
-| MarginalPotionQty | combat-survivability | validity, safety |
 | MonsterDropApply | combat, planner | liveness, safety |
 | MonsterDropSelection | monsters | dominance, monotonicity, totality, reachability |
 | MultiCycleLiveness | characters, combat | reachability, monotonicity |
@@ -76,6 +75,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | PlanModel | planner, plan, action | monotonicity, safety |
 | PlannerAdmissibility | planner, core | dominance |
 | PlannerDepthBound | planner, core | safety, reachability |
+| PotionProvisionQty | combat-survivability | validity, safety |
 | PrerequisiteGraph | crafting, items | safety, totality |
 | PriorityBand | core, planner | safety |
 | ProgressionReserve | core, economy | deduction-accounting, monotonicity |
