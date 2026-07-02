@@ -275,10 +275,13 @@ recipe-plumbing inputs. -/
 def eFuel (recipes : List (String × List (String × Int))) : Nat :=
   Int.toNat ((Int.ofNat (List.length recipes)) + 1)
 
-/-- `mats_per_unit` exactly as the extracted core computes it. The yield map is
-`[]` (the Python `task_batch` passes `{}` — all-`Y=1`). -/
-def eMats (recipes : List (String × List (String × Int))) (code : String) : Int :=
-  Extracted.RecipeClosure._raw_units (eFuel recipes) code recipes [] []
+/-- `mats_per_unit` exactly as the extracted core computes it. `yields` is the
+yield map threaded from `craft_batch_size_pure` (default 1 per code when absent),
+so the per-unit raw footprint is yield-aware (ceil-batch) — matching the
+yield-aware closure demand fed in as `demand`. -/
+def eMats (recipes : List (String × List (String × Int)))
+    (yields : List (String × Int)) (code : String) : Int :=
+  Extracted.RecipeClosure._raw_units (eFuel recipes) code recipes yields []
 
 /-- The task item's closure exactly as the extracted core computes it. -/
 def eClosure (recipes : List (String × List (String × Int))) (code : String) :
@@ -320,25 +323,26 @@ live `mats ≥ 1` branch the extracted clamp is exactly `batchSize true`. -/
 theorem craft_batch_bridge (c : String) (demand inventory_free : Int)
     (inventory : List (String × Int))
     (recipes : List (String × List (String × Int)))
-    (drops : List (String × String)) :
+    (drops : List (String × String))
+    (yields : List (String × Int)) :
     Extracted.TaskBatch.craft_batch_size_pure (some c) demand inventory inventory_free
-        recipes drops
+        recipes drops yields
       = (if (decide (demand ≤ 0)) then (1 : Int)
-         else if (decide (eMats recipes c = 0))
+         else if (decide (eMats recipes yields c = 0))
               then max 1 (min demand Extracted.TaskBatch.BATCH_CAP)
-              else Formal.TaskBatch.batchSize true demand (eMats recipes c) inventory_free
+              else Formal.TaskBatch.batchSize true demand (eMats recipes yields c) inventory_free
                      (eHeld recipes drops inventory c)) := by
   show (if (decide (demand ≤ 0)) then (1 : Int)
-        else if (decide (eMats recipes c = 0))
+        else if (decide (eMats recipes yields c = 0))
              then (max 1 (min demand Extracted.TaskBatch.BATCH_CAP))
              else (max 1 (min demand (min (Int.fdiv
                     ((inventory_free + eHeld recipes drops inventory c)
-                      - Extracted.TaskBatch._MIN_FREE_SLOTS) (eMats recipes c))
+                      - Extracted.TaskBatch._MIN_FREE_SLOTS) (eMats recipes yields c))
                     Extracted.TaskBatch.BATCH_CAP)))) = _
   by_cases hd : (decide (demand ≤ 0)) = true
   · rw [if_pos hd, if_pos hd]
   · rw [if_neg hd, if_neg hd]
-    by_cases hm : (decide (eMats recipes c = 0)) = true
+    by_cases hm : (decide (eMats recipes yields c = 0)) = true
     · rw [if_pos hm, if_pos hm]
     · rw [if_neg hm, if_neg hm]
       rfl
@@ -351,9 +355,10 @@ theorem task_batch_bridge_none (task_type : Option String)
     (task_total task_progress inventory_free : Int)
     (inventory : List (String × Int))
     (recipes : List (String × List (String × Int)))
-    (drops : List (String × String)) :
+    (drops : List (String × String))
+    (yields : List (String × Int)) :
     Extracted.TaskBatch.task_batch_size_pure task_type none task_total task_progress
-        inventory inventory_free recipes drops
+        inventory inventory_free recipes drops yields
       = Formal.TaskBatch.batchSize false (task_total - task_progress) 1
           inventory_free 0 := by
   rw [Formal.TaskBatch.non_task_one]
@@ -378,14 +383,15 @@ theorem task_batch_bridge (task_type : Option String) (c : String)
     (task_total task_progress inventory_free : Int)
     (inventory : List (String × Int))
     (recipes : List (String × List (String × Int)))
-    (drops : List (String × String)) :
+    (drops : List (String × String))
+    (yields : List (String × Int)) :
     Extracted.TaskBatch.task_batch_size_pure task_type (some c) task_total task_progress
-        inventory inventory_free recipes drops
+        inventory inventory_free recipes drops yields
       = (if eTaskGate task_type (some c) task_total task_progress
-         then (if (decide (eMats recipes c = 0))
+         then (if (decide (eMats recipes yields c = 0))
                then max 1 (min (task_total - task_progress) Extracted.TaskBatch.BATCH_CAP)
                else Formal.TaskBatch.batchSize true (task_total - task_progress)
-                      (eMats recipes c) inventory_free (eHeld recipes drops inventory c))
+                      (eMats recipes yields c) inventory_free (eHeld recipes drops inventory c))
          else 1) := by
   have hceq : decide ((some c : Option String) = some "") = decide (c = "") := by
     simp only [Option.some.injEq]
@@ -422,9 +428,10 @@ theorem task_batch_ge_one_extracted (task_type task_code : Option String)
     (task_total task_progress inventory_free : Int)
     (inventory : List (String × Int))
     (recipes : List (String × List (String × Int)))
-    (drops : List (String × String)) :
+    (drops : List (String × String))
+    (yields : List (String × Int)) :
     1 ≤ Extracted.TaskBatch.task_batch_size_pure task_type task_code task_total
-          task_progress inventory inventory_free recipes drops := by
+          task_progress inventory inventory_free recipes drops yields := by
   cases task_code with
   | none =>
     rw [task_batch_bridge_none]

@@ -39,6 +39,26 @@ def test_intermediate_absent_from_chain_unchanged():
     assert out.quantity == 1   # no demand -> floors at 1, action returned as-is
 
 
+def test_size_intermediate_threads_craft_yields():
+    # copper_bar <- copper_ore x10; drops copper_rocks->copper_ore (held_recipe=0).
+    # inventory_max=18, empty -> usable = 18 - _MIN_FREE_SLOTS(3) = 15; chain demand = 10.
+    #   yield 1 (default):        mats_per_unit = ceil(10/1) = 10 -> fit = 15//10 = 1 -> batch = 1
+    #   yield 2 ({copper_bar:2}): mats_per_unit = ceil(10/2) = 5  -> fit = 15//5  = 3 -> batch = min(10,3,10) = 3
+    # The yield-2 result (3) differs from the yield-agnostic result (1), proving
+    # size_intermediate_craft threads game_data.craft_yields into the fit.
+    a = CraftAction(code="copper_bar", quantity=1, workshop_location=(0, 0))
+    state = make_state(inventory={}, inventory_max=18)
+
+    gd_y1 = _gd()  # craft_yields empty -> all Y=1
+    out_y1 = size_intermediate_craft(a, {"copper_bar": 10}, state, gd_y1)
+    assert out_y1.quantity == 1
+
+    gd_y2 = _gd()
+    gd_y2._craft_yields = {"copper_bar": 2}
+    out_y2 = size_intermediate_craft(a, {"copper_bar": 10}, state, gd_y2)
+    assert out_y2.quantity == 3
+
+
 def _gd_gem_chain() -> GameData:
     gd = GameData()
     gd._crafting_recipes = {
