@@ -1038,3 +1038,28 @@ class TestCraftYield:
         store = LearningStore(db_path=tmp_db_path, character="hero")
         _break_engine(store)
         assert store.observed_craft_yield("potion") is None
+
+
+def test_cycle_consumables_expended_json_roundtrips(tmp_path):
+    store = LearningStore(db_path=str(tmp_path / "c.db"), character="hero")
+    store.start_session()
+    store.record_cycle(Cycle(
+        ts="2026-07-02T00:00:00+00:00", session_id="s", cycle_index=0,
+        character="hero", outcome="ok", action_repr="Fight(red_slime)",
+        action_class="FightAction", consumables_expended_json='{"small_health_potion": 2}'))
+    with SqlSession(store._engine) as s:
+        row = list(s.exec(select(Cycle).where(Cycle.action_repr == "Fight(red_slime)")))[0]
+    assert row.consumables_expended_json == '{"small_health_potion": 2}'
+    store.close()
+
+
+def test_cycle_consumables_expended_json_defaults_empty(tmp_path):
+    store = LearningStore(db_path=str(tmp_path / "c.db"), character="hero")
+    store.start_session()
+    store.record_cycle(Cycle(ts="2026-07-02T00:00:01+00:00", session_id="s",
+        cycle_index=1, character="hero", outcome="ok", action_repr="Rest",
+        action_class="RestAction"))
+    with SqlSession(store._engine) as s:
+        row = list(s.exec(select(Cycle).where(Cycle.action_repr == "Rest")))[0]
+    assert row.consumables_expended_json == "{}"
+    store.close()
