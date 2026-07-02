@@ -1063,3 +1063,36 @@ def test_cycle_consumables_expended_json_defaults_empty(tmp_path):
         row = list(s.exec(select(Cycle).where(Cycle.action_repr == "Rest")))[0]
     assert row.consumables_expended_json == "{}"
     store.close()
+
+
+def _restore_of(code: str) -> int:
+    return {"small_health_potion": 30}.get(code, 0)
+
+
+def test_hp_healed_per_fight_none_below_warmup(tmp_path):
+    store = LearningStore(db_path=str(tmp_path / "h.db"), character="hero")
+    store.start_session()
+    for i in range(4):  # < WARMUP_MIN_SAMPLES
+        store.record_cycle(Cycle(ts=f"2026-07-02T00:00:0{i}+00:00", session_id="s",
+            cycle_index=i, character="hero", outcome="ok", action_repr="Fight(red_slime)",
+            action_class="FightAction", consumables_expended_json='{"small_health_potion": 2}'))
+    assert store.hp_healed_per_fight("red_slime", _restore_of) is None
+    store.close()
+
+
+def test_hp_healed_per_fight_means_over_wins(tmp_path):
+    store = LearningStore(db_path=str(tmp_path / "h.db"), character="hero")
+    store.start_session()
+    # 5 wins: three consumed 2 potions (60 HP), two consumed 0 (0 HP) -> mean 36.0
+    exps = ['{"small_health_potion": 2}'] * 3 + ["{}"] * 2
+    for i, e in enumerate(exps):
+        store.record_cycle(Cycle(ts=f"2026-07-02T00:00:1{i}+00:00", session_id="s",
+            cycle_index=i, character="hero", outcome="ok", action_repr="Fight(red_slime)",
+            action_class="FightAction", consumables_expended_json=e))
+    # a loss must be ignored
+    store.record_cycle(Cycle(ts="2026-07-02T00:00:20+00:00", session_id="s",
+        cycle_index=9, character="hero", outcome="error:fight_lost",
+        action_repr="Fight(red_slime)", action_class="FightAction",
+        consumables_expended_json='{"small_health_potion": 5}'))
+    assert store.hp_healed_per_fight("red_slime", _restore_of) == 36.0
+    store.close()
