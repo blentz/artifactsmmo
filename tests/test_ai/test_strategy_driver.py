@@ -816,6 +816,66 @@ def test_objective_step_reach_skill_no_inskill_recipe_returns_none():
     assert objective_step_goal(step, state, _gd(), _ctx()) is None
 
 
+def _gd_alchemy_gather() -> GameData:
+    """Alchemy has a gatherable resource (sunflower_field → sunflower, skill=alchemy L1)
+    but no alchemy crafting recipe — exercises the NO_GRIND+gatherable branch."""
+    gd = GameData()
+    gd._item_stats = {
+        "sunflower": ItemStats(code="sunflower", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {}
+    gd._resource_drops = {"sunflower_field": "sunflower"}
+    gd._resource_skill = {"sunflower_field": ("alchemy", 1)}
+    return gd
+
+
+def test_no_grind_gatherable_skill_returns_gather_goal():
+    """ReachSkillLevel(alchemy, 5) at alchemy level 2 with no alchemy craftable but a
+    gatherable sunflower_field (alchemy L1) should return GatherMaterialsGoal for
+    sunflower — NOT None. This is the NO_GRIND+gatherable branch added in Task 2B."""
+    step = ReachSkillLevel("alchemy", 5)
+    state = make_state(skills={"alchemy": 2}, skill_xp={"alchemy": 0})
+    gd = _gd_alchemy_gather()
+    g = objective_step_goal(step, state, gd, _ctx())
+    assert isinstance(g, GatherMaterialsGoal)
+    assert g._target_item == "sunflower"
+    assert g._needed == {"sunflower": 1}  # held=0, needed=0+1
+
+
+def test_no_grind_gatherable_with_bank_items_counts_held():
+    """held = inventory + bank; needed = held + 1 (grind-one-replan semantics)."""
+    step = ReachSkillLevel("alchemy", 5)
+    state = make_state(skills={"alchemy": 2}, skill_xp={"alchemy": 0},
+                       inventory={"sunflower": 3}, bank_items={"sunflower": 2})
+    gd = _gd_alchemy_gather()
+    g = objective_step_goal(step, state, gd, _ctx())
+    assert isinstance(g, GatherMaterialsGoal)
+    assert g._target_item == "sunflower"
+    assert g._needed == {"sunflower": 6}  # held=3+2=5, needed=5+1
+
+
+def test_no_grind_non_gatherable_skill_still_returns_none():
+    """NO_GRIND with no gatherable resource for the skill still returns None
+    (arbiter advances). _gd() has no alchemy gathering resource."""
+    step = ReachSkillLevel("alchemy", 5)
+    state = make_state(skills={"alchemy": 2}, skill_xp={"alchemy": 0})
+    assert objective_step_goal(step, state, _gd(), _ctx()) is None
+
+
+def test_grind_branch_still_used_when_craftable():
+    """Regression: when a skill has a craftable-now item, the grind branch fires
+    (returns GatherMaterialsGoal for the craft item), NOT the gather branch.
+    Uses _gd_copper_gear(): gearcrafting L1 can craft copper_helmet (6 copper_bar)."""
+    gd = _gd_copper_gear()
+    step = ReachSkillLevel("gearcrafting", 5)
+    state = make_state(level=5, skills={"gearcrafting": 1},
+                       inventory={"copper_bar": 6})
+    g = objective_step_goal(step, state, gd, _ctx())
+    assert isinstance(g, GatherMaterialsGoal)
+    # Must be a craftable item (the grind branch), not a raw resource drop
+    assert g._target_item in {"copper_helmet", "copper_dagger", "copper_ring"}
+
+
 def _gd_copper_gear() -> GameData:
     """copper_boots + copper_helmet (both gearcrafting, 8/6 copper_bar) +
     copper_dagger (weaponcrafting, 6 copper_bar). 6 bar on hand makes the
