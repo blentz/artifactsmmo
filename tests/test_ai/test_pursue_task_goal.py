@@ -29,6 +29,12 @@ class TestPursueTaskGoal:
     def test_repr(self):
         assert repr(PursueTaskGoal("copper_bar", 0)) == "PursueTask(copper_bar)"
 
+    def test_serialize(self):
+        g = PursueTaskGoal("copper_bar", initial_progress=3, batch=5)
+        d = g.serialize()
+        assert d == {"type": "PursueTaskGoal", "task_code": "copper_bar",
+                     "initial_progress": 3, "batch": 5}
+
     def test_value_fires_when_unsatisfied(self):
         g = PursueTaskGoal("copper_bar", 0)
         assert g.value(_items_task(progress=0), GameData()) == PRIORITY_WHEN_FIRING
@@ -132,6 +138,49 @@ class TestPursueTaskGoal:
         assert gathered == {"copper_rocks"}
         assert crafted == {"copper_bar"}
         assert traded == {"copper_bar"}
+
+    def _two_level_gd(self):
+        """ashwood_staff <- ash_plank (intermediate) <- ash_wood (drop of ash_tree)."""
+        gd = GameData()
+        gd._crafting_recipes = {
+            "ashwood_staff": {"ash_plank": 1},
+            "ash_plank": {"ash_wood": 2},
+        }
+        gd._resource_drops = {"ash_tree": "ash_wood"}
+        return gd
+
+    def test_relevant_actions_sizes_intermediate_craft_to_batch(self):
+        """Intermediate crafts (not the task item itself) are sized by
+        size_intermediate_craft to inventory-bounded closure demand, not
+        left at quantity=1.  Regression guard for Task-4 (intermediate-craft
+        batching).
+
+        Setup: ashwood_staff <- ash_plank <- ash_wood; batch=3; empty inventory.
+        Expected ash_plank quantity:
+          demand = 3  (closure_demand("ashwood_staff", 3) → ash_plank: 3)
+          mats_per_unit = 2  (2 ash_wood per ash_plank)
+          fit = (inventory_free=20 + held_recipe=0 − 3) // 2 = 8
+          result = max(1, min(3, 8, 10)) = 3
+        """
+        gd = self._two_level_gd()
+        batch = 3
+        state = make_state(
+            task_code="ashwood_staff", task_type="items",
+            task_progress=0, task_total=20,
+            inventory={}, inventory_max=20,
+        )
+        g = PursueTaskGoal("ashwood_staff", 0, batch=batch)
+        actions = [
+            GatherAction(resource_code="ash_tree", locations=frozenset({(0, 0)})),
+            CraftAction(code="ash_plank", quantity=1, workshop_location=(0, 0)),
+            CraftAction(code="ashwood_staff", quantity=batch, workshop_location=(0, 0)),
+            TaskTradeAction(code="ashwood_staff", quantity=batch, taskmaster_location=(1, 2)),
+        ]
+        kept = g.relevant_actions(actions, state, gd)
+        intermediate = next(
+            a for a in kept if isinstance(a, CraftAction) and a.code == "ash_plank"
+        )
+        assert intermediate.quantity == 3
 
     def test_relevant_actions_includes_withdraw_for_recipe_chain(self):
         """If recipe materials are already in the bank, the planner must be
