@@ -21,6 +21,7 @@ from artifactsmmo_cli.ai.consumable_supply import (
 )
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -71,6 +72,8 @@ class MaintainConsumablesGoal(Goal):
         withdrawable |= set(chain)
 
         deficit = max(1, HEAL_STOCK_FLOOR - heal_stock(state, game_data))
+        batch_chain: dict[str, int] = {}
+        closure_demand(code, deficit, game_data, batch_chain, frozenset())
         result: list[Action] = []
         have_craft = False
         for a in actions:
@@ -80,7 +83,7 @@ class MaintainConsumablesGoal(Goal):
                     result.append(a if a.quantity == deficit
                                   else dataclasses.replace(a, quantity=deficit))
             elif isinstance(a, CraftAction) and a.code in craftable_mats:
-                result.append(a)
+                result.append(size_intermediate_craft(a, batch_chain, state, game_data))
             elif isinstance(a, GatherAction) and a.resource_code in needed_resources:
                 result.append(a)
             elif isinstance(a, WithdrawItemAction) and a.code in withdrawable:
