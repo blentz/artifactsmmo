@@ -1,5 +1,6 @@
 """Integration: GamePlayer + LearningStore."""
 
+import dataclasses
 import json
 import os
 import tempfile
@@ -309,3 +310,18 @@ def test_no_combat_outcome_on_cooldown_or_nonfight(tmp_path):
 
     assert store.combat_loadout_outcomes() == []
     store.close()
+
+
+def test_compute_consumables_expended_counts_utility_drop():
+    player = GamePlayer(character="hero")
+    prev = make_state(equipment={"utility1_slot": "small_health_potion"})
+    prev = dataclasses.replace(prev, utility1_slot_quantity=5, utility2_slot_quantity=0)
+    new = dataclasses.replace(prev, utility1_slot_quantity=2)
+    assert player._compute_consumables_expended(prev, new) == {"small_health_potion": 3}
+
+
+def test_compute_consumables_expended_empty_when_no_drop():
+    player = GamePlayer(character="hero")
+    prev = make_state(equipment={"utility1_slot": "small_health_potion"})
+    prev = dataclasses.replace(prev, utility1_slot_quantity=5)
+    assert player._compute_consumables_expended(prev, prev) == {}
