@@ -980,6 +980,11 @@ class TestDegradationOnDbError:
         store.set_learned_int("task_exchange_min_coins", 9)
         assert "set_learned_int" in capsys.readouterr().out
 
+    def test_hp_healed_per_fight_returns_none_on_db_error(self, tmp_db_path):
+        store = LearningStore(db_path=tmp_db_path, character="hero")
+        _break_engine(store)
+        assert store.hp_healed_per_fight("red_slime", lambda c: 0) is None
+
 
 class TestLearnedInt:
     def test_round_trip_and_update(self, tmp_db_path):

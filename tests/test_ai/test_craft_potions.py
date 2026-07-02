@@ -397,3 +397,40 @@ def test_baseline_unchanged_when_no_target_monster():
     state = make_state(level=1)  # level_baseline=5
     goal = CraftPotionsGoal()  # no combat_monster
     assert goal._baseline(state.level, state, gd) == 5
+
+
+def test_baseline_returns_level_baseline_when_no_target_potion():
+    """combat_monster set but game_data has no alchemy utility heal → _target_potion
+    returns None → _baseline falls back to level_baseline (line 90 branch)."""
+    gd = _gd_no_alchemy_heal()
+    state = make_state(level=1)  # level_baseline=5
+    goal = CraftPotionsGoal(combat_monster="some_boss")
+    assert goal._baseline(state.level, state, gd) == 5
+
+
+def test_baseline_returns_level_baseline_when_potion_restore_zero():
+    """A utility item selected by effect='wisdom' has hp_restore=0; hp_restore_of
+    returns 0 → _baseline falls back to level_baseline (line 93 branch)."""
+    gd = GameData()
+    gd._item_stats = {
+        "wisdom_token": ItemStats(code="wisdom_token", level=1, type_="utility",
+                                  wisdom=5, hp_restore=0,
+                                  crafting_skill="alchemy", crafting_level=1),
+    }
+    gd._crafting_recipes = {"wisdom_token": {_INGREDIENT: 1}}
+    gd._resource_drops = {}
+    gd._resource_locations = {}
+    gd._workshop_locations = {"alchemy": (3, 0)}
+    state = make_state(level=1)  # level_baseline=5; alchemy=1 passes skill gate
+    goal = CraftPotionsGoal(combat_monster="some_boss", effect="wisdom")
+    assert goal._baseline(state.level, state, gd) == 5
+
+
+def test_baseline_returns_level_baseline_when_hp_need_zero():
+    """Monster code not in game_data.monster_levels → expected_damage_per_fight
+    returns 0 → hp_need == 0 → _baseline falls back to level_baseline (line 99 branch)."""
+    gd = _gd_potion()  # small_health_potion with hp_restore=30; no monsters in gd
+    state = make_state(level=1)  # level_baseline=5
+    # "unknown_monster" absent from monster_levels → expected_damage_per_fight → 0
+    goal = CraftPotionsGoal(combat_monster="unknown_monster")
+    assert goal._baseline(state.level, state, gd) == 5
