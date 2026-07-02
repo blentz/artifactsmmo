@@ -3,9 +3,12 @@
 A skill is "gating" iff it is the craft.skill of some wanted, not-yet-owned item
 (gear / tool / active items-task item / combat weapon) — or an item in that item's
 craftable recipe closure — at a craft.level above the character's current skill
-level. Gather/resource skill gates are EXCLUDED: gather skills self-level through
-the gathering the bot already does and cannot deadlock for lack of activity; only
-craft skills can stall because nothing in the routine forces a craft.
+level. Gather/resource skill gates are EXCLUDED: gather skills generally self-level
+through the gathering the bot already does; only craft skills can stall because
+nothing in the routine forces a craft. Exception: a gatherable consumable-craft
+skill (alchemy) whose FIRST craftable sits above level 1 cannot self-level via
+craft-grind — objective_roots emits a gather-bootstrap root for it so the
+objective-step gather-to-level path (strategy_driver) levels it proactively.
 
 See docs/superpowers/specs/2026-06-08-levelskill-gating-prioritization-design.md
 (LIV-SKILL-1/2/3).

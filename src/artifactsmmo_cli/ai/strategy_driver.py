@@ -21,6 +21,7 @@ from artifactsmmo_cli.ai.craft_plan_gen import generate_next_craft_action
 from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
 from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gather_skill_resource import best_gather_resource_drop
 from artifactsmmo_cli.ai.gather_step_target import gather_step_target
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -787,10 +788,19 @@ def objective_step_goal(
             held = state.inventory.get(decision.code, 0) + bank.get(decision.code, 0)
             return GatherMaterialsGoal(target_item=decision.code,
                                        needed={decision.code: held + 1})
-        # SUPPRESS (committed root crafts its own gear) or NO_GRIND (no
-        # level-appropriate item to grind; the arbiter advances — gathering
-        # skills level via the ambient gathering the bot already does,
-        # skill_gates.py): no objective-step goal here.
+        # SUPPRESS: committed root crafts its own gear — no objective-step goal.
+        # NO_GRIND: no craftable to grind. If the skill is gatherable at the
+        # current level, LEVEL IT BY GATHERING its resource (grind-one-replan) —
+        # a gatherable-but-no-low-craftable skill (alchemy: lowest recipe L5,
+        # sunflower_field gives XP at L1) climbs to its first craftable level this
+        # way. Skills with no gather resource fall through to None (arbiter
+        # advances). Mirrors the "grind" branch's grind-one-replan.
+        if decision.kind == "no_grind":
+            drop = best_gather_resource_drop(step.skill, current, game_data)
+            if drop is not None:
+                bank = state.bank_items or {}
+                held = state.inventory.get(drop, 0) + bank.get(drop, 0)
+                return GatherMaterialsGoal(target_item=drop, needed={drop: held + 1})
         return None
     if isinstance(step, ReachCharLevel):
         if ctx.combat_monster is None:

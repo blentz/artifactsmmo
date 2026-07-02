@@ -6,6 +6,10 @@ chains terminate; cycles (if any) are left for P3's visited-set traversal."""
 
 from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gather_skill_resource import (
+    best_gather_resource_drop,
+    first_craftable_level,
+)
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
@@ -15,7 +19,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
-from artifactsmmo_cli.ai.tiers.skill_classes import COMBAT_CRAFT_SKILLS
+from artifactsmmo_cli.ai.tiers.skill_classes import COMBAT_CRAFT_SKILLS, CONSUMABLE_CRAFT_SKILLS
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -143,6 +147,24 @@ def objective_roots(
         for skill in _CRAFTING_BOOTSTRAP_SKILLS:
             if state.skills.get(skill, 1) < _CRAFT_BOOTSTRAP_TARGET:
                 roots.append(ReachSkillLevel(skill, _CRAFT_BOOTSTRAP_TARGET))
+        # Gatherable consumable-craft bootstrap: a skill like alchemy is a
+        # gathering skill whose FIRST craftable sits above level 1 (potions need
+        # alchemy 5). It can't craft-grind up (nothing craftable below 5) and its
+        # resources are consumed only by its own products, so it never self-levels
+        # ambiently — a hard deadlock. Emit a bootstrap root to its first-craftable
+        # level; the objective-step gather-to-level path (strategy_driver) serves it.
+        gd = objective._game_data
+        for skill in CONSUMABLE_CRAFT_SKILLS:
+            # Gate on the SKILL level (not char level) so the emitted root is one
+            # the objective-step gather-server can actually serve: strategy_driver
+            # calls best_gather_resource_drop with the skill level, so keying Part A
+            # on char level could emit a root whose gather step is unservable.
+            skill_level = state.skills.get(skill, 1)
+            if best_gather_resource_drop(skill, skill_level, gd) is None:
+                continue  # not gatherable now (e.g. cooking) -> reactive path only
+            target = first_craftable_level(skill, gd)
+            if target is not None and skill_level < target:
+                roots.append(ReachSkillLevel(skill, target))
         # Recipe-aware near-term skill curve: hold each crafting skill high
         # enough to craft gear up to char_level + LOOKAHEAD, so the next tier is
         # ready just-in-time instead of a catch-up freeze (run-7 finding; spec
