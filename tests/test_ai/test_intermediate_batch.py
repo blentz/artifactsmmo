@@ -91,3 +91,44 @@ def test_deep_chain_three_level_interleave_safety() -> None:
     assert out_setting.quantity == 2
     # interleave-safety: 2 * 12 = 24 <= 47
     assert out_setting.quantity * 12 <= usable
+
+
+def test_deep_chain_tight_inventory_exercises_fit_clamp() -> None:
+    """Tight inventory forces fit < demand on every intermediate (non-vacuous).
+
+    Same gem chain: gem_ring <- gem_setting x2 <- gem_bar x3 <- gem_ore x4.
+    closure_demand gives: gem_setting=2, gem_bar=6.
+
+    With inventory_max=15, empty inventory:
+      inventory_free = 15, usable = 15 - _MIN_FREE_SLOTS(3) = 12
+
+    gem_bar:     mats_per_unit=4,  demand=6,  fit=12//4=3  < demand → batch=3  (FIT-CLAMPED)
+    gem_setting: mats_per_unit=12, demand=2,  fit=12//12=1 < demand → batch=1  (FIT-CLAMPED)
+
+    Interleave-safety: 3*4=12<=12 and 1*12=12<=12 (tight — equality holds).
+
+    Discriminates raw-leaf recursion: a buggy direct footprint for gem_setting
+    of 3 (gem_bar qty only) would give fit=12//3=4 → batch=min(2,4)=2 ≠ 1,
+    so the == 1 assertion proves _raw_units descended to gem_ore.
+    """
+    gd = _gd_gem_chain()
+    chain: dict[str, int] = {}
+    closure_demand("gem_ring", 1, gd, chain, frozenset())
+
+    # Tight inventory: 15 slots, no items held, no resource drops
+    state = make_state(inventory={}, inventory_max=15)
+    usable = state.inventory_free - 3  # _MIN_FREE_SLOTS = 3
+    assert usable == 12
+
+    # gem_bar: demand=6, fit=12//4=3 < 6 → FIT-CLAMPED to 3
+    a_bar = CraftAction(code="gem_bar", quantity=1, workshop_location=(0, 0))
+    out_bar = size_intermediate_craft(a_bar, chain, state, gd)
+    assert out_bar.quantity == 3
+    assert out_bar.quantity * 4 <= usable  # interleave-safety: 3*4=12<=12
+
+    # gem_setting: demand=2, fit=12//12=1 < 2 → FIT-CLAMPED to 1
+    # Also proves raw-leaf recursion: direct footprint 3 would give fit=4 → batch=2 ≠ 1
+    a_setting = CraftAction(code="gem_setting", quantity=1, workshop_location=(0, 0))
+    out_setting = size_intermediate_craft(a_setting, chain, state, gd)
+    assert out_setting.quantity == 1
+    assert out_setting.quantity * 12 <= usable  # interleave-safety: 1*12=12<=12
