@@ -8,6 +8,7 @@ from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
 from artifactsmmo_cli.ai.goals.upgrade_selection import (
     UpgradeCandidate,
     best_by_key,
@@ -232,8 +233,12 @@ class UpgradeEquipmentGoal(Goal):
                 result.append(action)
             elif isinstance(action, CraftAction):
                 # Keep only closure crafts (the chain intermediates + target).
-                if action.code in in_closure_crafts:
+                # The target passes through unchanged; intermediates are sized to
+                # their inventory-bounded closure demand via size_intermediate_craft.
+                if action.code == target_item:
                     result.append(action)
+                elif action.code in in_closure_crafts:
+                    result.append(size_intermediate_craft(action, chain, state, game_data))
             elif isinstance(action, WithdrawItemAction):
                 # Keep only withdraws of closure items (chain materials/target).
                 if action.code in withdrawable:
