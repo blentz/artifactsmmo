@@ -75,12 +75,39 @@ def test_target_potion_none_when_skill_gate_unmet():
     assert CraftPotionsGoal()._target_potion(state, gd) is None
 
 
-def test_target_potion_skips_non_alchemy_utility_heal():
+def test_target_potion_picks_higher_restore_regardless_of_craft_skill():
+    """Any utility-slot heal counts, not just alchemy-crafted ones — the skill
+    that makes it is not a game fact the selector may assume. A cooking-crafted
+    utility heal with higher hp_restore (99) must win over the alchemy potion
+    (30) when its own skill gate is met."""
     gd = _gd_potion()
-    # A utility-slot heal crafted by a DIFFERENT skill is not alchemy-craftable.
     gd._item_stats["cook_potion"] = ItemStats(code="cook_potion", level=1, type_="utility",
                                               hp_restore=99, crafting_skill="cooking", crafting_level=1)
     gd._crafting_recipes["cook_potion"] = {_INGREDIENT: 1}
+    assert CraftPotionsGoal()._target_potion(make_state(), gd) == "cook_potion"
+
+
+def test_target_potion_skips_utility_heal_when_its_own_skill_gate_unmet():
+    """The skill gate reads the item's OWN crafting skill/level (API data), not a
+    hardcoded 'alchemy'. A higher-restore utility heal crafted by a skill the
+    character hasn't leveled is correctly skipped in favour of the craftable one."""
+    gd = _gd_potion()
+    gd._item_stats["cook_potion"] = ItemStats(code="cook_potion", level=1, type_="utility",
+                                              hp_restore=99, crafting_skill="cooking", crafting_level=10)
+    gd._crafting_recipes["cook_potion"] = {_INGREDIENT: 1}
+    state = make_state(skills={"cooking": 1, "alchemy": 1})
+    assert CraftPotionsGoal()._target_potion(state, gd) == _POTION
+
+
+def test_target_potion_skips_utility_heal_without_a_crafting_skill():
+    """A utility heal whose stats carry no crafting_skill (None) can't be skill-
+    gated, so it is skipped in favour of a properly-skilled potion — never
+    crashing on a None skill lookup."""
+    gd = _gd_potion()
+    gd._item_stats["skilless_potion"] = ItemStats(code="skilless_potion", level=1,
+                                                  type_="utility", hp_restore=99,
+                                                  crafting_skill=None, crafting_level=1)
+    gd._crafting_recipes["skilless_potion"] = {_INGREDIENT: 1}
     assert CraftPotionsGoal()._target_potion(make_state(), gd) == _POTION
 
 
@@ -142,6 +169,26 @@ def test_craft_from_held_emits_craft_and_equip():
     out = CraftPotionsGoal().relevant_actions(actions, state, gd)
     assert any(isinstance(a, CraftAction) for a in out)
     assert any(isinstance(a, EquipAction) and a.slot == "utility1_slot" for a in out)
+
+
+def test_equips_held_potions_without_requiring_craft():
+    """When potions are already HELD in inventory but no utility slot holds them,
+    relevant_actions must emit an EquipAction that is applicable from held stock
+    (no fresh craft required) so the potions actually reach the utility slot —
+    the whole point of crafting them. Regression for the live 476 deadlock
+    (2026-07-02): Robby crafted 10 small_health_potion that sat unused in
+    inventory while RestoreHP spun on UseConsumable; once the spin is fixed the
+    held potions must be equippable."""
+    gd = _gd_potion()
+    state = make_state(level=1, inventory={_POTION: 10})  # baseline(1)=5, slot empty
+    out = CraftPotionsGoal().relevant_actions(
+        [_craft_action(), MoveAction(x=0, y=0)], state, gd)
+    equips = [a for a in out
+              if isinstance(a, EquipAction) and a.slot == "utility1_slot" and a.code == _POTION]
+    assert equips, f"expected an EquipAction for the held potions, got {out!r}"
+    assert equips[0].is_applicable(state, gd), (
+        "equip must be applicable from held inventory (potions already crafted)"
+    )
 
 
 def test_buy_tier_emits_npcbuy():

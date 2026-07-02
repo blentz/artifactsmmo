@@ -43,6 +43,21 @@ class UseConsumableAction(Action):
 
     _item_stats: Mapping[str, ItemStats] = field(default_factory=dict, repr=False)
 
+    def __post_init__(self) -> None:
+        # Only type="consumable" items (food) are use-able via the action/use
+        # endpoint. A type="utility" heal (small_health_potion, subtype=potion)
+        # carries hp_restore>0 but restores HP by being EQUIPPED into a utility
+        # slot and consumed in combat — calling /use on it returns HTTP 476
+        # "Invalid consumable item" (live deadlock 2026-07-02: Robby held 10
+        # small_health_potion with empty utility slots and spun UseConsumable
+        # forever). Filter them out here so select_consumable never picks one and
+        # RestoreHP falls back to Rest / equipping. select_consumable (the proven
+        # ConsumableSelection core) stays untouched — it just sees the food subset.
+        self._item_stats = {
+            code: stats for code, stats in self._item_stats.items()
+            if stats.type_ == "consumable"
+        }
+
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         if state.hp >= state.max_hp:
             return False

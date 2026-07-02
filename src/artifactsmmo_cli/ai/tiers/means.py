@@ -90,7 +90,7 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         return _used_fraction(state) >= SELL_PRESSURE_FRACTION and _has_sellable(state, game_data)
 
     if kind is MeansKind.LOW_YIELD_CANCEL:
-        return low_yield_cancel_fires(state, history)
+        return low_yield_cancel_fires(state, game_data, history)
 
     if kind is MeansKind.TASK_CANCEL:
         if not state.task_code or history is None:

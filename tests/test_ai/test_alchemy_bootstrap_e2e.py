@@ -118,6 +118,13 @@ class TestAlchemyBootstrapServability:
             "needed must be held(3) + 1 = 4 (grind-one-replan); "
             f"got {goal.needed!r}"
         )
+        # This is a perpetual skill-XP grind whose sunflower drop is a byproduct;
+        # it MUST be tagged so the deposit/discard profile caps its bag reserve
+        # (surplus banks) instead of locking the whole growing pile in the bag.
+        assert goal.skill_grind is True, (
+            "the alchemy NO_GRIND gather must be tagged skill_grind so its "
+            "byproduct is not hoarded in the bag"
+        )
 
     def test_non_gatherable_skill_still_returns_none(self):
         """A skill with NO gather resource returns None after the fix.

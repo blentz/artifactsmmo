@@ -774,6 +774,20 @@ class TestUseConsumableAction:
         state = make_state(hp=50, max_hp=150, inventory={"copper_ore": 10})
         assert action.is_applicable(state, make_game_data()) is False
 
+    def test_not_applicable_for_utility_potion(self):
+        """A type='utility' heal (small_health_potion, subtype potion) has
+        hp_restore>0 but is NOT use-able via the action/use endpoint — it heals
+        by being EQUIPPED into a utility slot and consumed in combat. Selecting
+        it made execute() spin on HTTP 476 'Invalid consumable item' (live
+        deadlock 2026-07-02: Robby held 10 small_health_potion with empty utility
+        slots and looped UseConsumable forever). Only type='consumable' food is
+        use-able, so a bag full of potions must NOT make UseConsumable applicable."""
+        stats = {"small_health_potion": ItemStats(code="small_health_potion",
+                                                  level=5, type_="utility", hp_restore=30)}
+        action = UseConsumableAction(_item_stats=stats)
+        state = make_state(hp=73, max_hp=235, inventory={"small_health_potion": 10})
+        assert action.is_applicable(state, make_game_data()) is False
+
     def test_apply_sets_hp_to_max(self):
         action = UseConsumableAction(_item_stats=_consumable_stats())
         state = make_state(hp=50, max_hp=150, inventory={"cooked_chicken": 2})

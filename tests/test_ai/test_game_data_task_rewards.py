@@ -40,8 +40,9 @@ class _FakeItem:
 
 
 class _FakeRewards:
-    def __init__(self, items: list[_FakeItem]) -> None:
+    def __init__(self, items: list[_FakeItem], gold: int = 0) -> None:
         self.items = items
+        self.gold = gold
 
 
 class _FakeTask:
@@ -94,18 +95,50 @@ class _FakeCoinItem:
 
 
 class _FakeCoinRewards:
-    def __init__(self, items: list[_FakeCoinItem]) -> None:
+    def __init__(self, items: list[_FakeCoinItem], gold: int = 0) -> None:
         self.items = items
+        self.gold = gold
 
 
 class _FakeCoinTask:
-    def __init__(self, code: str, coin_qty: int) -> None:
+    def __init__(self, code: str, coin_qty: int, gold: int = 0) -> None:
         self.code = code
-        self.rewards = _FakeCoinRewards([_FakeCoinItem(TASKS_COIN_CODE, coin_qty)])
+        self.rewards = _FakeCoinRewards([_FakeCoinItem(TASKS_COIN_CODE, coin_qty)], gold=gold)
 
 
 def _fake_coin_tasks() -> list[_FakeCoinTask]:
     return [_FakeCoinTask("chicken", 3), _FakeCoinTask("copper_ore", 2)]
+
+
+# ── task GOLD rewards (API-sourced, no hardcoded payout) ─────────────────────
+
+def _seed_gold(rewards: dict[str, int]) -> GameData:
+    gd = GameData()
+    gd._task_gold_rewards = dict(rewards)
+    return gd
+
+
+def test_task_gold_reward_known_code():
+    gd = _seed_gold({"chicken": 150, "copper_ore": 90})
+    assert gd.task_gold_reward("chicken") == 150
+
+
+def test_task_gold_reward_unknown_code_returns_min_floor():
+    gd = _seed_gold({"chicken": 150, "copper_ore": 90})
+    assert gd.task_gold_reward("__pending__") == 90  # conservative min
+
+
+def test_min_task_gold_reward_no_data_raises():
+    with pytest.raises(ValueError):
+        GameData().min_task_gold_reward()
+
+
+def test_build_tasks_collects_gold_rewards():
+    gd = GameData()
+    gd._build_tasks([_FakeCoinTask("chicken", 3, gold=150),
+                     _FakeCoinTask("copper_ore", 2, gold=90)])
+    assert gd.task_gold_reward("chicken") == 150
+    assert gd.task_gold_reward("copper_ore") == 90
 
 
 def test_build_tasks_rejects_zero_coin_reward():

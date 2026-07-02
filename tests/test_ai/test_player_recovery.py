@@ -273,6 +273,43 @@ def test_handle_stuck_repeated_action_level3_raises_stuck_exit():
     assert not isinstance(exc_info.value, SystemExit)
 
 
+def test_handle_stuck_repeated_action_blocks_failing_action():
+    """REPEATED_ACTION_FAILURE recovery must also BLOCK the repeatedly-failing
+    ACTION (by repr), not only suppress the driving goal. A GUARD/interrupt-driven
+    action (e.g. RestoreHP -> UseConsumable) bypasses goal suppression, so without
+    an action-level block the recovery could not break a guard spin — the live 476
+    deadlock (2026-07-02: RestoreHP guard looped UseConsumable on utility potions)."""
+    player = GamePlayer(character="testchar")
+    _wedge(player, goal="GatherMaterials", fails=10)
+    player._handle_stuck(StuckSignal.REPEATED_ACTION_FAILURE, client=None)
+    assert player._failed_action_backoff.get("Withdraw(ash_plank)", 0) > 0
+
+
+def test_build_actions_excludes_backoff_blocked_action():
+    """A repr in _failed_action_backoff is filtered out of the planning action
+    list, so the planner (and any guard) routes around the doomed action."""
+    player = GamePlayer(character="testchar")
+    gd = GameData()
+    gd._bank_location = (4, 0)
+    gd._taskmaster_location = (1, 2)
+    player.game_data = gd
+    player.state = make_state()
+    unblocked = [repr(a) for a in player._build_actions()]
+    assert "Rest" in unblocked  # baseline: Rest is always built
+    player._failed_action_backoff = {"Rest": 5}
+    blocked = [repr(a) for a in player._build_actions()]
+    assert "Rest" not in blocked
+
+
+def test_action_backoff_decrements_per_cycle():
+    """The per-action block decays each cycle (like goal suppression) so the
+    block is temporary — a transient failure is not blocked forever."""
+    player = GamePlayer(character="testchar")
+    player._failed_action_backoff = {"Withdraw(ash_plank)": 3, "UseConsumable": 1}
+    player._decrement_suppressions()
+    assert player._failed_action_backoff == {"Withdraw(ash_plank)": 2}  # 1 pruned at zero
+
+
 class TestEscalationDecay:
     """_recovery_level[signal] decays: a full detection window (8 for
     GOAL_OSCILLATION) of CONSECUTIVE counter-evidence since the signal last

@@ -47,9 +47,17 @@ ramp (which capped at 40.0) plus an above-baseline scalar bonus head-room."""
 class GatherMaterialsGoal(Goal):
     """Gather resources needed to craft a specific upgrade item."""
 
-    def __init__(self, target_item: str, needed: dict[str, int]) -> None:
+    def __init__(self, target_item: str, needed: dict[str, int],
+                 skill_grind: bool = False) -> None:
         self._target_item = target_item
         self._needed = needed  # {material_code: quantity_needed}
+        # skill_grind: this is a perpetual skill-XP grind gather (needed target is
+        # `held + 1`, never satisfied) whose DROP is a byproduct, not a demand.
+        # The deposit/discard protection profile caps its bag reserve so surplus
+        # banks (re-withdrawable) instead of choking the bag — see
+        # `strategy_driver._step_protection_profile`. Not part of goal identity
+        # (repr/serialize) — the `needed` map already distinguishes instances.
+        self.skill_grind = skill_grind
 
     @property
     def needed(self) -> dict[str, int]:

@@ -136,6 +136,13 @@ class GamePlayer:
         self._blockers = BlockerRegistry()
         self._detector = StuckDetector(history_size=STUCK_DETECTOR_WINDOW)
         self._suppressed_goals: dict[str, int] = {}
+        # Per-ACTION block (action_repr -> cycles remaining) set by the
+        # REPEATED_ACTION_FAILURE recovery. Unlike goal suppression, this filters
+        # the action out of the planning list, so a GUARD/interrupt-driven action
+        # (which bypasses goal suppression) is routed around instead of spun on
+        # (live 476 deadlock: the RestoreHP guard looped UseConsumable). Decays
+        # per cycle alongside _suppressed_goals.
+        self._failed_action_backoff: dict[str, int] = {}
         self._actions_since_full_refresh: int = 0
         # Consecutive no-cooldown action failures, driving the exponential
         # backoff that keeps a persistent error (e.g. a stuck Withdraw→478) from
@@ -1123,6 +1130,9 @@ class GamePlayer:
         self._suppressed_goals = {
             name: n - 1 for name, n in self._suppressed_goals.items() if n > 1
         }
+        self._failed_action_backoff = {
+            name: n - 1 for name, n in self._failed_action_backoff.items() if n > 1
+        }
 
     def _make_cycle_record(self, goal_name: str, action_name: str,
                            planned_depth: int, planner_timed_out: bool, succeeded: bool) -> CycleRecord:
@@ -1309,19 +1319,27 @@ class GamePlayer:
                 if r.action_name in repeated_actions
                 and not r.succeeded and r.goal_name != "<none>"
             }
+            # Block the failing ACTION(S) directly (not just the driving goal):
+            # a guard/interrupt-driven action bypasses goal suppression, so the
+            # action-level block is what actually breaks a guard spin.
+            block_cycles = 10 if level == 1 else 30
+            if repeated_actions and level < 3:
+                for a in repeated_actions:
+                    self._failed_action_backoff[a] = block_cycles
             if not distinct:
                 print(f"[{self._now()}] [recovery] REPEATED_ACTION_FAILURE: "
-                      "no failing goal to suppress; clearing signal")
+                      f"blocking {repeated_actions} for {block_cycles} cycles "
+                      "(no goal to suppress)")
             elif level == 1:
                 for name in distinct:
                     self._suppressed_goals[name] = 10
                 print(f"[{self._now()}] [recovery] REPEATED_ACTION_FAILURE L1: "
-                      f"suppressing {distinct} for 10 cycles")
+                      f"suppressing {distinct} + blocking {repeated_actions} for 10 cycles")
             elif level == 2:
                 for name in distinct:
                     self._suppressed_goals[name] = 30
                 print(f"[{self._now()}] [recovery] REPEATED_ACTION_FAILURE L2: "
-                      f"suppressing {distinct} for 30 cycles")
+                      f"suppressing {distinct} + blocking {repeated_actions} for 30 cycles")
             else:
                 print(f"[{self._now()}] [recovery] REPEATED_ACTION_FAILURE L3: "
                       "recovery exhausted — stopping run (manual intervention)")
@@ -1343,7 +1361,7 @@ class GamePlayer:
             protected_gear = frozenset(active_profile_gear(
                 self.state, self.game_data, self.history,
                 self._winnable_farm_target(), frozenset()))
-        return build_actions(
+        built = build_actions(
             game_data=self.game_data,
             state=self.state,
             objective=self._objective,
@@ -1351,6 +1369,12 @@ class GamePlayer:
             task_exchange_min_coins=self._task_exchange_min_coins,
             protected_gear=protected_gear,
         )
+        # Route around actions the REPEATED_ACTION_FAILURE recovery has blocked,
+        # so a repeatedly-failing action (even guard-driven) is dropped from the
+        # plan while its short backoff lasts.
+        if self._failed_action_backoff:
+            return [a for a in built if repr(a) not in self._failed_action_backoff]
+        return built
 
     def _notify_observer(
         self,

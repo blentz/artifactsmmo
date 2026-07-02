@@ -168,6 +168,17 @@ def _reservation_consumption(step_goal: Goal, state: WorldState,
     return None
 
 
+GRIND_BAG_RESERVE = 3
+"""Bag reserve for a skill-XP grind gather's byproduct drop. A grind gather's
+`needed` is `held + 1` (inventory + BANK), a perpetual never-satisfied target
+whose DROP is a byproduct, not a demand — using it as the bag protection floor
+locked the whole growing pile in the bag (live Robby: 137 sunflower, 114/114
+full, during the alchemy L1->L5 grind). We instead protect only this small
+reserve so surplus banks (re-withdrawable, and bank stock still counts toward
+`held` so the grind keeps gathering for XP). Matches `inventory_caps.SAFETY_FLOOR`
+intent: keep just enough not to re-gather what was banked."""
+
+
 def _step_protection_profile(step_goal: Goal | None, state: WorldState,
                              game_data: GameData) -> dict[str, int] | None:
     """The resolved step goal's item->qty protection map for deposit/discard,
@@ -195,6 +206,13 @@ def _step_protection_profile(step_goal: Goal | None, state: WorldState,
         for mat, mat_qty in chain.items():
             if mat_qty > profile.get(mat, 0):
                 profile[mat] = mat_qty
+    if step_goal.skill_grind:
+        # The grind's `needed` target is `held + 1` (a perpetual XP-grind hack,
+        # not a real demand); its drop is a byproduct. Cap the bag reserve so
+        # surplus banks instead of locking the whole growing pile in the bag —
+        # bank stock still counts toward `held`, so the grind keeps gathering.
+        for code in step_goal.needed:
+            profile[code] = min(profile[code], GRIND_BAG_RESERVE)
     return profile
 
 
@@ -787,7 +805,8 @@ def objective_step_goal(
             bank = state.bank_items or {}
             held = state.inventory.get(decision.code, 0) + bank.get(decision.code, 0)
             return GatherMaterialsGoal(target_item=decision.code,
-                                       needed={decision.code: held + 1})
+                                       needed={decision.code: held + 1},
+                                       skill_grind=True)
         # SUPPRESS: committed root crafts its own gear — no objective-step goal.
         # NO_GRIND: no craftable to grind. If the skill is gatherable at the
         # current level, LEVEL IT BY GATHERING its resource (grind-one-replan) —
@@ -800,7 +819,8 @@ def objective_step_goal(
             if drop is not None:
                 bank = state.bank_items or {}
                 held = state.inventory.get(drop, 0) + bank.get(drop, 0)
-                return GatherMaterialsGoal(target_item=drop, needed={drop: held + 1})
+                return GatherMaterialsGoal(target_item=drop, needed={drop: held + 1},
+                                           skill_grind=True)
         return None
     if isinstance(step, ReachCharLevel):
         if ctx.combat_monster is None:

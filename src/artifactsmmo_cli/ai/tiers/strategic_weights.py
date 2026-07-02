@@ -43,12 +43,12 @@ SECONDS_FP = 100
 # openapi: wisdom/prospecting = "1% extra per 10 points" = 0.001 fraction per point.
 _XP_DROP_RATE_PER_POINT = 0.001
 
-# Cold-start cooldown fallbacks (documented, used only when < 5 observations of a
-# class exist — and the action-mix fraction is ~0 cold anyway, so these rarely
-# bite). fight = projections' post-fight cooldown model; move = 5 s/tile
-# (movement.py); deposit = 3 s (openapi 3 s × distinct items, ~1 item).
-_MOVE_CD_DEFAULT = 5.0
-_DEPOSIT_CD_DEFAULT = 3.0
+# No invented cooldowns: the API exposes no static per-action cooldown formula,
+# so an unlearned move/deposit cooldown contributes a rate of 0 (default 0.0)
+# rather than a fabricated figure — the same discipline `haste` follows below.
+# The action-mix fraction is ~0 cold anyway, and once deposits/moves actually
+# occur their cooldowns are sampled, so this path is essentially unreachable.
+_UNLEARNED_CD = 0.0
 
 _FIGHT_CLASS = "FightAction"
 _MOVE_CLASS = "MovementAction"
@@ -78,8 +78,8 @@ def strategic_weights(
 
     fight_cd = history.action_class_cost(_FIGHT_CLASS, default=DEFAULT_FIGHT_CYCLES)
     f_fight = history.action_class_fraction(_FIGHT_CLASS)
-    move_cd = history.action_class_cost(_MOVE_CLASS, default=_MOVE_CD_DEFAULT)
-    deposit_cd = history.action_class_cost(_DEPOSIT_CLASS, default=_DEPOSIT_CD_DEFAULT)
+    move_cd = history.action_class_cost(_MOVE_CLASS, default=_UNLEARNED_CD)
+    deposit_cd = history.action_class_cost(_DEPOSIT_CLASS, default=_UNLEARNED_CD)
     f_trip = history.action_class_fraction(_DEPOSIT_CLASS)
 
     xp_drop_rate = _XP_DROP_RATE_PER_POINT * fight_cd * f_fight

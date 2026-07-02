@@ -131,6 +131,7 @@ class GameData:
     world: LocationCatalog = field(default_factory=LocationCatalog)
     _task_reward_item_codes: frozenset[str] = field(default_factory=frozenset)
     _task_coin_rewards: dict[str, int] = field(default_factory=dict)
+    _task_gold_rewards: dict[str, int] = field(default_factory=dict)
     _recipe_cost_memo: RecipeCostMemo | None = field(default=None, init=False, repr=False)
     _consumable_effect_codes: dict[str, list[str]] = field(default_factory=dict, init=False, repr=False)
     _effect_registry: dict[str, str] = field(default_factory=dict, init=False, repr=False)
@@ -874,6 +875,21 @@ class GameData:
         known = self._task_coin_rewards.get(task_code)
         return known if known is not None else self.min_task_coin_reward()
 
+    def min_task_gold_reward(self) -> int:
+        """Conservative floor: the smallest gold award across all loaded tasks.
+        Used to project an unknown task's payout without over-crediting. Raises
+        if no task data is loaded (no defaulting)."""
+        if not self._task_gold_rewards:
+            raise ValueError("no task gold-reward data loaded")
+        return min(self._task_gold_rewards.values())
+
+    def task_gold_reward(self, task_code: str) -> int:
+        """Gold awarded by completing `task_code` (API `rewards.gold`). For a
+        known task the exact API amount; for an unknown / `__pending__` / empty
+        code the conservative `min_task_gold_reward()` floor (never over-credits)."""
+        known = self._task_gold_rewards.get(task_code)
+        return known if known is not None else self.min_task_gold_reward()
+
     def ge_best_buy_order(self, item_code: str) -> tuple[str, int, int] | None:
         """The highest-price OPEN BUY order for item_code as (order_id, price,
         quantity), or None if no such standing order exists. This is the order the
@@ -1474,11 +1490,13 @@ class GameData:
         return out
 
     def _build_tasks(self, tasks: list[TaskFullSchema]) -> None:
-        """Collect (a) the set of item codes any task awards [C1], and
-        (b) per-task `tasks_coin` reward amounts [C2]."""
+        """Collect (a) the set of item codes any task awards [C1],
+        (b) per-task `tasks_coin` reward amounts [C2], and (c) per-task gold
+        payouts (API `rewards.gold`, so projections never hardcode a figure)."""
         self._task_reward_item_codes = frozenset(
             item.code for task in tasks for item in task.rewards.items
         )
+        self._task_gold_rewards = {task.code: task.rewards.gold for task in tasks}
         self._task_coin_rewards = {
             task.code: item.quantity
             for task in tasks

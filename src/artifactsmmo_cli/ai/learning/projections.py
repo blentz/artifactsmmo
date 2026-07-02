@@ -279,16 +279,18 @@ def cheapest_path_to_level(
 
 
 def project_task_completion(
-    state: WorldState, store: LearningStore, completion_bonus_gold: float = 150.0,
+    state: WorldState, game_data: GameData, store: LearningStore,
 ) -> TaskProjection | None:
     """Project remaining cycles and reward for the in-flight task.
 
     Requires `state.task_total > state.task_progress`. Returns None when there's
     no active task. Reward projections use FarmItems aggregates (the standard
-    goal that drives task progression). `completion_bonus_gold` defaults to the
-    typical observed CompleteTask payout (≈150 gold + 1 tasks_coin batch).
+    goal that drives task progression). The completion payout is the task's
+    exact API reward (`task_gold_reward` / `task_coin_reward`), never a
+    hardcoded figure.
     """
-    if state.task_total == 0 or state.task_progress >= state.task_total:
+    if (not state.task_code or state.task_total == 0
+            or state.task_progress >= state.task_total):
         return None
 
     remaining_progress = state.task_total - state.task_progress
@@ -303,13 +305,16 @@ def project_task_completion(
     confidence_cap = WARMUP_MIN_SAMPLES * 3
     confidence = min(1.0, farm_yield.sample_count / confidence_cap)
 
+    # CompleteTask's one-off payout (gold + tasks_coin batch) is the API reward
+    # for this task, outside the per-cycle FarmItems yield, so add it separately.
+    completion_gold = game_data.task_gold_reward(state.task_code)
+    completion_coins = game_data.task_coin_reward(state.task_code)
+
     return TaskProjection(
         cycles_remaining=cycles_remaining,
         expected_char_xp=farm_yield.char_xp * cycles_remaining,
-        expected_gold=farm_yield.gold * cycles_remaining + completion_bonus_gold,
-        # CompleteTask drops one tasks_coin batch (~3) on completion; that's
-        # outside the per-cycle FarmItems yield so add it separately.
-        expected_tasks_coins=farm_yield.tasks_coins * cycles_remaining + 3.0,
+        expected_gold=farm_yield.gold * cycles_remaining + completion_gold,
+        expected_tasks_coins=farm_yield.tasks_coins * cycles_remaining + completion_coins,
         confidence=confidence,
     )
 
@@ -356,7 +361,9 @@ def _best_alternative_repr(history: LearningStore) -> str | None:
     return max(counts, key=lambda k: counts[k])
 
 
-def low_yield_cancel_fires(state: WorldState, history: LearningStore | None) -> bool:
+def low_yield_cancel_fires(
+    state: WorldState, game_data: GameData, history: LearningStore | None
+) -> bool:
     """True when the held task should be cancelled for a clearly-better monster
     alternative. Single source of truth for both LowYieldCancelGoal and the
     strategy means predicate.
@@ -387,7 +394,7 @@ def low_yield_cancel_fires(state: WorldState, history: LearningStore | None) -> 
         return False
     alternative_char_xp_per_cycle = alt_yield.char_xp
 
-    projection = project_task_completion(state, history)
+    projection = project_task_completion(state, game_data, history)
     # Projection.None contributes confidence 0.0, which the pure boundary
     # rejects via the min_confidence gate UNLESS the zero-fast-path fires.
     confidence = projection.confidence if projection is not None else 0.0
