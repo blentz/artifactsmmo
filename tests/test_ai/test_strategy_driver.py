@@ -2732,3 +2732,33 @@ def test_marginal_provision_seeds_from_expected_damage_when_cold(tmp_path) -> No
     # expected_damage = round(10) * ceil(30/10) = 10 * 3 = 30 → qty = ceil(30/30) = 1
     assert goal._quantity == 1
     store.close()
+
+
+def test_marginal_provision_sizes_by_equipped_potion_not_held_food(tmp_path) -> None:
+    """qty = ceil(hp_need / potion_restore), NOT ceil(hp_need / food_restore).
+
+    When the inventory also holds a food item (type=consumable) with a HIGHER
+    hp_restore than the equipped utility potion, best_held_heal_restore would
+    overstate the restore and produce qty=2 (ceil(90/60)).  The fix sizes by
+    game_data.hp_restore_of(heal_code) — the equipped potion's own restore —
+    giving qty=3 (ceil(90/30))."""
+    heal_code = "small_health_potion"
+    food_code = "cooked_chicken"
+    store = LearningStore(db_path=str(tmp_path / "l.db"), character="r")
+    # 5 wins, each consuming 3 potions at 30 HP restore = 90 HP healed avg
+    _record_fight_wins_with_consumables(
+        store, "red_slime", 5, json.dumps({heal_code: 3})
+    )
+    gd = GameData()
+    gd._item_stats = {
+        heal_code: ItemStats(code=heal_code, level=1, type_="utility", hp_restore=30),
+        food_code: ItemStats(code=food_code, level=1, type_="consumable", hp_restore=60),
+    }
+    # Both held in inventory — food's hp_restore (60) is higher than potion's (30)
+    state = make_state(level=5, inventory={heal_code: 10, food_code: 5})
+    ctx = _ctx(combat_monster="red_slime")
+    goal = sd._marginal_provision_goal(ctx, state, gd, store)
+    assert isinstance(goal, ProvisionMarginalFightGoal)
+    # Must be 3 = ceil(90/30), sized by the POTION's restore — NOT 2 = ceil(90/60)
+    assert goal._quantity == 3
+    store.close()

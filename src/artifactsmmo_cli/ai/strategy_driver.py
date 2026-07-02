@@ -15,8 +15,7 @@ from artifactsmmo_cli.ai.arbiter_select import (
     Candidate,
     select_pure,
 )
-from artifactsmmo_cli.ai.combat import MIN_WIN_SAMPLES
-from artifactsmmo_cli.ai.consumable_supply import best_held_heal, best_held_heal_restore
+from artifactsmmo_cli.ai.consumable_supply import best_held_heal
 from artifactsmmo_cli.ai.craft_plan_gen import generate_next_craft_action
 from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
 from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
@@ -581,7 +580,7 @@ def _marginal_provision_goal(ctx: SelectionContext, state: WorldState,
     if heal_code is None:
         return None  # no utility-slot heal held -> fight unprovisioned
     held = state.inventory.get(heal_code, 0)
-    restore = best_held_heal_restore(state, game_data)
+    restore = game_data.hp_restore_of(heal_code)
     learned = history.hp_healed_per_fight(monster, game_data.hp_restore_of) \
         if hasattr(history, "hp_healed_per_fight") else None
     hp_need = int(learned) if learned is not None \
