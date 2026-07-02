@@ -20,8 +20,10 @@ from artifactsmmo_cli.ai.world_state import WorldState
 def target_potion_pure(
     state: WorldState, game_data: GameData, effect: str = "hp_restore"
 ) -> str | None:
-    """Highest-``effect``, alchemy-craftable-now, utility-slot-equippable potion
-    (deterministic smallest-code tie-break); None when none qualifies.
+    """Highest-``effect``, craftable-now (at the item's own skill/level),
+    utility-slot-equippable heal (deterministic smallest-code tie-break); None
+    when none qualifies. The crafting skill is read from item metadata, never
+    assumed to be alchemy.
 
     Single source of truth shared by ``CraftPotionsGoal._target_potion`` and
     ``craft_potions_fires`` so guard and goal always select the same target.
@@ -36,9 +38,12 @@ def target_potion_pure(
         restore = getattr(stats, effect, 0)
         if restore <= 0 or restore <= best_restore:
             continue
-        if stats.crafting_skill != "alchemy":
+        # The crafting SKILL is item metadata (API), not an assumption: any
+        # utility-slot heal qualifies, gated by ITS OWN skill/level — never a
+        # hardcoded 'alchemy'. An item in crafting_recipes always names a skill.
+        if stats.crafting_skill is None:
             continue
-        if state.skills.get("alchemy", 1) < stats.crafting_level:
+        if state.skills[stats.crafting_skill] < stats.crafting_level:
             continue
         best_code, best_restore = code, restore
     return best_code
@@ -48,7 +53,7 @@ def craft_potions_fires(state: WorldState, game_data: GameData) -> bool:
     """True when the CRAFT_POTIONS guard should preempt the grind.
 
     Fires when:
-    - An alchemy-craftable utility potion exists at current alchemy skill, AND
+    - A craftable utility heal exists at the character's current skill, AND
     - The equipped quantity of that potion is below the level-scaled baseline, AND
     - A batch is producible: ingredients craft-from-held OR all buyable OR any gatherable.
 

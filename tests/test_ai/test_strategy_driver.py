@@ -182,6 +182,37 @@ def test_map_guard_discard_merges_step_profile():
     assert all("wooden_shield" not in repr(a) for a in acts), acts
 
 
+def test_skill_grind_gather_caps_bag_reserve():
+    """A perpetual skill-XP grind gather (needed = held+1, byproduct drop) must
+    NOT reserve its entire growing pile in the bag — only GRIND_BAG_RESERVE, so
+    surplus banks (re-withdrawable; bank stock still counts toward held so the
+    grind keeps gathering for XP). Regression: live Robby held 137 sunflower and
+    the held+1 profile locked all of them in the bag (114/114) during the alchemy
+    L1->L5 grind."""
+    gd = GameData()
+    gd._crafting_recipes = {}  # sunflower is a raw resource (no sub-recipe)
+    state = make_state(inventory={"sunflower": 40}, bank_items={"sunflower": 97})
+    # held = 40 + 97 = 137 -> grind target = held + 1 = 138
+    grind = GatherMaterialsGoal(target_item="sunflower",
+                                needed={"sunflower": 138}, skill_grind=True)
+    profile = sd._step_protection_profile(grind, state, gd)
+    assert profile is not None
+    assert profile["sunflower"] == sd.GRIND_BAG_RESERVE  # capped, NOT 138
+
+
+def test_non_grind_gather_keeps_full_needed_protection():
+    """A normal (non-grind) GatherMaterials protects its full needed target —
+    the byproduct-reserve cap applies ONLY to skill-grind gathers, so a real
+    craft-input accumulation is never under-protected."""
+    gd = GameData()
+    gd._crafting_recipes = {}
+    state = make_state(inventory={"steel_bar": 2}, bank_items={})
+    normal = GatherMaterialsGoal(target_item="steel_bar", needed={"steel_bar": 6})
+    profile = sd._step_protection_profile(normal, state, gd)
+    assert profile is not None
+    assert profile["steel_bar"] == 6  # full needed still protected
+
+
 def test_select_fallback_equip_not_shadowed_by_dead_upgrade_goal():
     """Run-18 trace 2026-06-12 17:31-18:33 (cycles 27-98): copper_legs_armor
     was crafted and sat in inventory for 73 cycles while Robby fought

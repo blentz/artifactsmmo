@@ -1,6 +1,6 @@
 {
   "api_base_url": "https://api.artifactsmmo.com",
-  "captured_at": "2026-06-20T15:30:32.722769+00:00",
+  "captured_at": "2026-07-02T15:55:54.447690+00:00",
   "crafting_recipes": {
     "adamantite_axe": {
       "adamantite_bar": 10,
@@ -17,8 +17,8 @@
       "adamantite_bar": 12,
       "diamond": 1,
       "dusk_beetle_shell": 4,
-      "enchanted_fabric": 2,
       "golden_dust": 3,
+      "prime_fabric": 2,
       "wolfrider_hair": 4
     },
     "adamantite_fishing_rod": {
@@ -26,9 +26,9 @@
       "astralyte_crystal": 2,
       "cursed_flask": 3,
       "cursed_plank": 3,
-      "desert_scorpion_carapace": 4,
       "lava_bucket": 4,
-      "palm_plank": 5
+      "palm_plank": 5,
+      "solar_desert_scorpion_tail": 4
     },
     "adamantite_gloves": {
       "adamantite_bar": 10,
@@ -43,8 +43,8 @@
       "alexandrite": 1,
       "cursed_book": 5,
       "duskworm_skin": 3,
-      "hellhound_collar": 3,
-      "jasper_crystal": 2
+      "jasper_crystal": 2,
+      "solar_desert_scorpion_tail": 3
     },
     "adamantite_pickaxe": {
       "adamantite_bar": 10,
@@ -58,16 +58,16 @@
       "adamantite_bar": 12,
       "adventurer_skull": 3,
       "desert_scorpion_carapace": 3,
-      "enchanted_fabric": 2,
       "golden_dust": 4,
-      "malefic_cloth": 3
+      "malefic_cloth": 3,
+      "prime_fabric": 2
     },
     "adamantite_platelegs": {
       "adamantite_bar": 12,
       "duskworm_skin": 3,
-      "enchanted_fabric": 2,
       "golden_dust": 3,
       "marauder_hand": 3,
+      "prime_fabric": 2,
       "sand_snakeskin": 3
     },
     "adamantite_ring": {
@@ -184,8 +184,8 @@
     },
     "batwing_helmet": {
       "bat_wing": 5,
-      "cursed_flask": 5,
-      "enchanted_fabric": 2,
+      "echoless_bat_wing": 5,
+      "prime_fabric": 2,
       "rosenblood_elixir": 1,
       "strangold_bar": 6,
       "topaz": 1
@@ -193,21 +193,23 @@
     "blade_of_hell": {
       "book_from_hell": 1,
       "broken_sword": 2,
-      "lava_bucket": 4,
+      "fire_crystal": 1,
+      "lava_bucket": 3,
       "orc_bone": 6,
       "strangold_bar": 11
     },
     "bloodblade": {
       "astralyte_crystal": 2,
+      "bat_heart": 4,
       "broken_sword": 1,
       "goblin_tooth": 5,
-      "mithril_bar": 8,
-      "wolfrider_hair": 4
+      "mithril_bar": 8
     },
     "bow_from_hell": {
       "book_from_hell": 1,
-      "demon_horn": 4,
+      "demon_horn": 3,
       "efreet_cloth": 3,
+      "fire_crystal": 1,
       "imp_tail": 5,
       "magical_plank": 10
     },
@@ -225,12 +227,12 @@
     "conjurer_cloak": {
       "cyclops_eye": 5,
       "demon_horn": 4,
-      "enchanted_fabric": 1,
       "obsidian_bar": 6,
-      "owlbear_hair": 4
+      "owlbear_hair": 4,
+      "prime_fabric": 1
     },
     "conjurer_skirt": {
-      "lizard_eye": 4,
+      "full_moon_vampire_cape": 4,
       "obsidian_bar": 6,
       "owlbear_claw": 3,
       "vampire_tooth": 4,
@@ -254,6 +256,9 @@
     "cooked_hellhound_meat": {
       "raw_hellhound_meat": 1
     },
+    "cooked_porkchop": {
+      "raw_porkchop": 1
+    },
     "cooked_rat_meat": {
       "raw_rat_meat": 1
     },
@@ -271,6 +276,10 @@
     },
     "cooked_wolf_meat": {
       "raw_wolf_meat": 1
+    },
+    "cookie": {
+      "egg": 1,
+      "milk_bucket": 1
     },
     "copper_armor": {
       "copper_bar": 5,
@@ -316,7 +325,7 @@
       "orc_bone": 5
     },
     "cultist_cloak": {
-      "astralyte_crystal": 2,
+      "enchanted_fabric": 2,
       "hellhound_collar": 4,
       "malefic_cloth": 2,
       "maple_plank": 8,
@@ -324,10 +333,10 @@
     },
     "cultist_hat": {
       "astralyte_crystal": 2,
-      "hellhound_hair": 5,
+      "bat_heart": 4,
       "malefic_cloth": 1,
       "maple_plank": 8,
-      "orc_skin": 4
+      "orc_skin": 5
     },
     "cultist_pants": {
       "cursed_plank": 8,
@@ -340,9 +349,9 @@
       "cursed_book": 4,
       "cursed_plank": 8,
       "diamond": 1,
-      "enchanted_fabric": 1,
       "malefic_cloth": 2,
-      "owlbear_hair": 4
+      "owlbear_hair": 4,
+      "prime_fabric": 1
     },
     "cursed_plank": {
       "cursed_wood": 10
@@ -356,40 +365,41 @@
       "malefic_cloth": 3
     },
     "dark_horned_helmet": {
-      "duskworm_skin": 4,
-      "hellhound_collar": 4,
+      "duskworm_skin": 2,
       "jasper_crystal": 3,
       "palm_plank": 10,
       "sand_snake_poison": 3,
+      "sand_snakeskin": 2,
+      "solar_desert_scorpion_tail": 4,
       "topaz": 2
     },
     "darkforged_boots": {
       "astralyte_crystal": 3,
+      "bat_heart": 2,
       "dark_essence": 5,
       "lava_bucket": 4,
-      "maple_plank": 10,
-      "sand_snakeskin": 2
+      "maple_plank": 10
     },
     "darkforged_helmet": {
       "dark_essence": 5,
-      "enchanted_fabric": 3,
       "grimlet_bone": 4,
       "marauder_hand": 2,
-      "mithril_bar": 10
+      "mithril_bar": 10,
+      "prime_fabric": 3
     },
     "darkforged_plate": {
       "cursed_plank": 10,
-      "efreet_cloth": 5,
+      "echoless_bat_wing": 5,
       "grimlet_bone": 4,
       "rosenblood_elixir": 1,
       "sand_snake_poison": 4
     },
     "darkforged_shield": {
-      "bat_wing": 4,
+      "bat_wing": 5,
       "cursed_plank": 10,
-      "dark_essence": 5,
       "diamond": 1,
-      "marauder_hand": 4
+      "enchanted_fabric": 3,
+      "marauder_hand": 5
     },
     "dead_wood_plank": {
       "dead_wood": 10
@@ -409,12 +419,12 @@
       "grimlet_bone": 3
     },
     "desert_whip": {
-      "cursed_flask": 2,
       "desert_scorpion_carapace": 3,
       "duskworm_skin": 3,
       "efreet_cloth": 3,
       "palm_plank": 12,
-      "sand_snake_poison": 3
+      "sand_snake_poison": 3,
+      "solar_desert_scorpion_tail": 2
     },
     "diamond": {
       "diamond_stone": 24
@@ -425,6 +435,20 @@
       "magical_cure": 2,
       "magical_plank": 8,
       "obsidian_bar": 5
+    },
+    "diamond_armor": {
+      "diamond": 8,
+      "echoless_bat_wing": 4,
+      "enchanted_fabric": 5,
+      "prime_fabric": 2,
+      "rosenblood_elixir": 1
+    },
+    "diamond_skirt": {
+      "bat_heart": 3,
+      "diamond": 8,
+      "dryad_hair": 4,
+      "enchanted_fabric": 4,
+      "full_moon_vampire_cape": 3
     },
     "diamond_sword": {
       "corrupted_stone": 3,
@@ -449,11 +473,11 @@
       "ogre_eye": 4
     },
     "dreadful_armor": {
-      "enchanted_fabric": 1,
       "goblin_guard_foot": 4,
       "obsidian_bar": 8,
       "ogre_eye": 5,
-      "priestess_orb": 2
+      "priestess_orb": 2,
+      "prime_fabric": 1
     },
     "dreadful_battleaxe": {
       "goblin_eye": 3,
@@ -484,34 +508,36 @@
     "duskarmor": {
       "adamantite_bar": 10,
       "dusk_beetle_shell": 3,
-      "duskworm_skin": 4,
-      "enchanted_fabric": 3,
+      "duskworm_skin": 3,
+      "enchanted_fabric": 1,
       "orc_skin": 4,
+      "prime_fabric": 3,
       "sapphire": 2
     },
     "duskpants": {
       "dusk_beetle_shell": 3,
       "duskworm_skin": 4,
-      "enchanted_fabric": 3,
       "goblin_guard_foot": 4,
       "palm_plank": 10,
-      "priestess_orb": 2
+      "priestess_orb": 2,
+      "prime_fabric": 3
     },
     "dust_amulet": {
       "adamantite_bar": 10,
       "alexandrite": 1,
       "dark_essence": 4,
       "demoniac_dust": 3,
-      "duskworm_skin": 4,
+      "duskworm_skin": 2,
+      "fennec_ear": 2,
       "golden_dust": 4
     },
     "dust_helmet": {
       "adventurer_skull": 3,
       "astralyte_crystal": 2,
-      "corrupted_stone": 3,
       "desert_scorpion_carapace": 4,
+      "fire_crystal": 1,
       "golden_dust": 4,
-      "palm_plank": 10
+      "palm_plank": 12
     },
     "dust_sword": {
       "adamantite_bar": 10,
@@ -557,7 +583,7 @@
       "emerald": 1,
       "hardwood_plank": 8,
       "jasper_crystal": 2,
-      "wolf_hair": 5
+      "snake_hide": 5
     },
     "emerald_ring": {
       "emerald": 1,
@@ -566,54 +592,56 @@
       "obsidian_bar": 4,
       "vampire_blood": 5
     },
-    "enchanted_antidote": {
-      "magic_sap": 1,
-      "strangold_bar": 2,
-      "torch_cactus_flower": 1
-    },
-    "enchanted_boost_potion": {
-      "bat_wing": 1,
-      "glowstem_leaf": 2,
-      "magic_sap": 1
-    },
-    "enchanted_bow": {
-      "demon_horn": 2,
-      "gold_bar": 8,
-      "ogre_eye": 4,
-      "red_cloth": 3,
-      "spider_leg": 3
-    },
-    "enchanted_health_potion": {
-      "glowstem_leaf": 2,
-      "magic_sap": 1,
-      "sunflower": 1
-    },
-    "enchanted_health_splash_potion": {
-      "coconut": 1,
-      "magic_sap": 1,
-      "torch_cactus_flower": 2
+    "enchanted_potion": {
+      "enchanted_mushroom": 1,
+      "salmon": 1
     },
     "enchanter_boots": {
-      "enchanted_fabric": 1,
       "lizard_eye": 4,
       "magical_plank": 8,
       "priestess_orb": 2,
+      "prime_fabric": 1,
       "vermin_leather": 5
     },
     "enchanter_pants": {
       "cursed_book": 3,
       "demon_horn": 2,
-      "enchanted_fabric": 1,
+      "full_moon_vampire_cape": 2,
       "magical_plank": 8,
       "owlbear_claw": 4,
-      "spider_leg": 2
+      "prime_fabric": 1
+    },
+    "enhanced_antidote": {
+      "magic_sap": 1,
+      "sand_snake_poison": 1,
+      "strangold_bar": 2,
+      "torch_cactus_flower": 1
+    },
+    "enhanced_boost_potion": {
+      "bat_wing": 1,
+      "enchanted_mushroom": 1,
+      "glowstem_leaf": 2,
+      "magic_sap": 1
+    },
+    "enhanced_health_potion": {
+      "egg": 1,
+      "enchanted_mushroom": 1,
+      "glowstem_leaf": 2,
+      "magic_sap": 1
+    },
+    "enhanced_health_splash_potion": {
+      "coconut": 1,
+      "lava_fish": 1,
+      "magic_sap": 1,
+      "torch_cactus_flower": 1
     },
     "eternal_red_ring": {
       "adamantite_bar": 12,
       "alexandrite": 1,
       "desert_scorpion_carapace": 2,
-      "duskworm_skin": 4,
-      "golden_dust": 4,
+      "duskworm_skin": 3,
+      "fennec_ear": 4,
+      "fennec_tail": 1,
       "sand_snake_poison": 4
     },
     "eternity_ring": {
@@ -678,6 +706,10 @@
       "magical_cure": 1,
       "owlbear_hair": 3
     },
+    "forest_bank_potion": {
+      "nettle_leaf": 1,
+      "trout": 1
+    },
     "forest_whip": {
       "hardwood_plank": 4,
       "king_slimeball": 2,
@@ -735,8 +767,8 @@
     "gold_platebody": {
       "demon_horn": 2,
       "demoniac_dust": 4,
+      "full_moon_vampire_cape": 3,
       "gold_bar": 8,
-      "owlbear_hair": 3,
       "red_cloth": 3
     },
     "gold_platelegs": {
@@ -790,7 +822,7 @@
     },
     "greater_emerald_amulet": {
       "astralyte_crystal": 2,
-      "cursed_flask": 6,
+      "echoless_bat_wing": 6,
       "emerald": 2,
       "emerald_amulet": 1,
       "maple_plank": 8
@@ -854,14 +886,14 @@
       "birch_wood": 6
     },
     "health_boost_potion": {
+      "milk_bucket": 1,
       "nettle_leaf": 2,
-      "sap": 1,
-      "shrimp": 1
+      "sap": 1
     },
     "health_potion": {
+      "egg": 1,
       "nettle_leaf": 2,
-      "sap": 1,
-      "sunflower": 1
+      "sap": 1
     },
     "health_splash_potion": {
       "algae": 1,
@@ -877,17 +909,19 @@
       "palm_plank": 12
     },
     "hell_armor": {
+      "book_from_hell": 1,
       "cursed_plank": 10,
       "demon_horn": 5,
-      "efreet_cloth": 5,
+      "efreet_cloth": 3,
+      "fire_crystal": 1,
       "grimlet_bone": 3,
       "rosenblood_elixir": 1
     },
     "hell_helmet": {
-      "enchanted_fabric": 3,
       "lava_bucket": 5,
       "maple_plank": 10,
       "orc_skin": 4,
+      "prime_fabric": 3,
       "wolfrider_ponytail": 3
     },
     "hell_legs_armor": {
@@ -905,24 +939,25 @@
       "mithril_bar": 11
     },
     "hell_ring": {
+      "bat_heart": 5,
+      "book_from_hell": 1,
       "diamond": 2,
-      "efreet_cloth": 3,
-      "goblin_eye": 5,
+      "efreet_cloth": 2,
       "grimlet_bone": 4,
       "strangold_bar": 10
     },
     "hell_staff": {
       "book_from_hell": 1,
       "cursed_plank": 10,
-      "efreet_cloth": 3,
+      "efreet_cloth": 2,
       "imp_tail": 5,
       "obsidian_bar": 5
     },
     "hork_helmet": {
       "bat_wing": 3,
-      "dark_essence": 3,
+      "dryad_hair": 3,
+      "echoless_bat_wing": 3,
       "orc_skin": 4,
-      "owlbear_claw": 3,
       "strangold_bar": 7
     },
     "hunting_bow": {
@@ -979,15 +1014,19 @@
     "jester_hat": {
       "cursed_book": 3,
       "cursed_plank": 8,
-      "enchanted_fabric": 1,
       "goblin_guard_foot": 3,
       "owlbear_hair": 3,
+      "prime_fabric": 1,
       "vampire_tooth": 2
     },
     "king_slime_sword": {
       "iron_bar": 8,
       "jasper_crystal": 1,
       "king_slimeball": 6
+    },
+    "lava_underground_potion": {
+      "enchanted_mushroom": 1,
+      "lava_fish": 1
     },
     "leather_armor": {
       "cowhide": 4,
@@ -1020,8 +1059,8 @@
       "mushroom": 5
     },
     "lightning_sword": {
+      "bat_heart": 5,
       "broken_sword": 1,
-      "goblin_eye": 5,
       "hellhound_hair": 4,
       "magical_cure": 3,
       "maple_plank": 7
@@ -1070,15 +1109,17 @@
     },
     "magic_shield": {
       "alexandrite": 1,
-      "desert_scorpion_carapace": 5,
+      "desert_scorpion_carapace": 3,
+      "fennec_ear": 2,
       "grimlet_bone": 4,
       "marauder_hand": 4,
       "palm_plank": 10
     },
     "magic_wizard_hat": {
-      "blue_slimeball": 10,
+      "blue_slimeball": 6,
       "hardwood_plank": 2,
       "ogre_skin": 2,
+      "snakeskin": 4,
       "wolf_hair": 4
     },
     "magical_plank": {
@@ -1116,8 +1157,25 @@
       "priestess_orb": 2,
       "strangold_bar": 6
     },
+    "medic_armor": {
+      "dryad_hair": 4,
+      "fennec_tail": 3,
+      "fire_crystal": 2,
+      "palm_plank": 12,
+      "red_dragon_scale": 3,
+      "solar_desert_scorpion_tail": 3
+    },
+    "medic_skirt": {
+      "baby_red_dragon_scale": 3,
+      "dryad_hair": 4,
+      "fennec_ear": 3,
+      "fire_crystal": 2,
+      "palm_plank": 12,
+      "solar_desert_scorpion_tail": 3
+    },
     "mesh_armor": {
-      "efreet_cloth": 5,
+      "efreet_cloth": 3,
+      "enchanted_fabric": 2,
       "grimlet_bone": 3,
       "hellhound_hair": 5,
       "mithril_bar": 10,
@@ -1125,10 +1183,10 @@
     },
     "mesh_legs_armor": {
       "dark_essence": 4,
-      "efreet_cloth": 5,
+      "efreet_cloth": 3,
+      "enchanted_fabric": 3,
       "mithril_bar": 10,
-      "orc_skin": 4,
-      "rosenblood_elixir": 1
+      "orc_skin": 4
     },
     "minor_health_potion": {
       "algae": 1,
@@ -1145,16 +1203,16 @@
       "mithril_ore": 10
     },
     "mithril_boots": {
-      "diamond": 1,
-      "enchanted_fabric": 2,
-      "goblin_eye": 5,
-      "hellhound_hair": 5,
-      "mithril_bar": 7
+      "echoless_bat_wing": 3,
+      "goblin_eye": 4,
+      "hellhound_hair": 4,
+      "mithril_bar": 7,
+      "prime_fabric": 2
     },
     "mithril_fishing_rod": {
+      "bat_heart": 3,
       "cursed_flask": 3,
       "cursed_plank": 3,
-      "goblin_guard_foot": 3,
       "hellhound_hair": 3,
       "mithril_bar": 8
     },
@@ -1167,7 +1225,7 @@
     },
     "mithril_helm": {
       "diamond": 1,
-      "goblin_tooth": 3,
+      "echoless_bat_wing": 3,
       "jasper_crystal": 5,
       "mithril_bar": 8,
       "wolfrider_ponytail": 3
@@ -1180,11 +1238,11 @@
       "vampire_blood": 5
     },
     "mithril_platebody": {
-      "bat_wing": 3,
-      "enchanted_fabric": 2,
+      "echoless_bat_wing": 3,
       "goblin_guard_foot": 3,
       "goblin_tooth": 4,
-      "mithril_bar": 8
+      "mithril_bar": 8,
+      "prime_fabric": 2
     },
     "mithril_platelegs": {
       "demoniac_dust": 3,
@@ -1194,8 +1252,8 @@
       "vampire_tooth": 3
     },
     "mithril_ring": {
+      "bat_heart": 4,
       "dark_essence": 3,
-      "hellhound_hair": 4,
       "lizard_eye": 2,
       "mithril_bar": 8,
       "wolfrider_hair": 3
@@ -1249,8 +1307,8 @@
       "spruce_plank": 5
     },
     "obsidian_armor": {
-      "demon_horn": 4,
       "demoniac_dust": 4,
+      "full_moon_vampire_cape": 4,
       "obsidian_bar": 6,
       "ruby": 1,
       "spider_leg": 5
@@ -1282,17 +1340,24 @@
     "palm_plank": {
       "palm_wood": 10
     },
+    "perfect_bow": {
+      "demon_horn": 2,
+      "gold_bar": 8,
+      "ogre_eye": 4,
+      "red_cloth": 3,
+      "spider_leg": 3
+    },
     "piggy_armor": {
       "dead_wood_plank": 5,
+      "full_moon_vampire_cape": 4,
       "jasper_crystal": 2,
-      "ogre_skin": 4,
       "pig_skin": 5
     },
     "piggy_helmet": {
       "cyclops_eye": 2,
+      "full_moon_vampire_cape": 2,
       "pig_skin": 6,
-      "steel_bar": 6,
-      "vampire_blood": 2
+      "steel_bar": 6
     },
     "piggy_pants": {
       "hardwood_plank": 5,
@@ -1306,6 +1371,41 @@
       "ogre_skin": 6,
       "owlbear_hair": 4,
       "spider_leg": 3
+    },
+    "recall_potion": {
+      "gudgeon": 1,
+      "sunflower": 1
+    },
+    "red_dragon_armor": {
+      "baby_red_dragon_scale": 4,
+      "desert_scorpion_carapace": 3,
+      "dragon_bone": 12,
+      "fennec_ear": 3,
+      "fire_crystal": 2,
+      "red_dragon_scale": 3
+    },
+    "red_dragon_boots": {
+      "alexandrite": 1,
+      "baby_red_dragon_scale": 4,
+      "dragon_bone": 12,
+      "fire_crystal": 2,
+      "red_dragon_scale": 4,
+      "solar_desert_scorpion_tail": 3
+    },
+    "red_dragon_legs_armor": {
+      "alexandrite": 1,
+      "baby_red_dragon_scale": 3,
+      "dragon_bone": 12,
+      "fennec_tail": 3,
+      "marauder_hand": 3,
+      "red_dragon_scale": 3
+    },
+    "red_dragon_shield": {
+      "baby_red_dragon_scale": 5,
+      "dragon_bone": 10,
+      "fire_crystal": 2,
+      "red_dragon_scale": 4,
+      "solar_desert_scorpion_tail": 4
     },
     "ring_of_chance": {
       "jasper_crystal": 1,
@@ -1345,7 +1445,7 @@
       "hardwood_plank": 8,
       "jasper_crystal": 2,
       "ruby": 1,
-      "wolf_hair": 5
+      "snake_hide": 5
     },
     "ruby_ring": {
       "gold_bar": 8,
@@ -1389,6 +1489,10 @@
       "marauder_hand": 2,
       "sand_snakeskin": 5,
       "wolfrider_hair": 4
+    },
+    "sandwhisper_potion": {
+      "swordfish": 1,
+      "torch_cactus_flower": 1
     },
     "sap": {
       "ash_wood": 5,
@@ -1468,8 +1572,8 @@
     "skullforged_armor": {
       "adventurer_skull": 4,
       "astralyte_crystal": 2,
-      "corrupted_stone": 3,
       "desert_scorpion_carapace": 4,
+      "fennec_tail": 3,
       "lava_bucket": 3,
       "palm_plank": 10
     },
@@ -1477,8 +1581,9 @@
       "adventurer_skull": 3,
       "astralyte_crystal": 2,
       "demon_horn": 4,
-      "desert_scorpion_carapace": 4,
+      "desert_scorpion_carapace": 2,
       "dusk_beetle_shell": 3,
+      "fennec_tail": 2,
       "palm_plank": 10
     },
     "skullforged_ring": {
@@ -1503,10 +1608,10 @@
       "sunflower": 3
     },
     "snakeskin_armor": {
+      "full_moon_vampire_cape": 4,
       "jasper_crystal": 1,
       "skeleton_bone": 5,
-      "snakeskin": 2,
-      "vampire_blood": 4
+      "snakeskin": 2
     },
     "snakeskin_boots": {
       "green_cloth": 2,
@@ -1667,17 +1772,18 @@
       "steel_bar": 7
     },
     "vampire_bow": {
+      "full_moon_vampire_cape": 4,
       "magical_cure": 1,
-      "spider_leg": 4,
       "steel_bar": 4,
       "vampire_blood": 4,
       "vermin_leather": 2
     },
     "vital_armor": {
       "duskworm_skin": 4,
-      "enchanted_fabric": 3,
-      "lava_bucket": 4,
+      "fennec_tail": 2,
+      "lava_bucket": 2,
       "palm_plank": 10,
+      "prime_fabric": 3,
       "ruby": 2,
       "sand_snake_poison": 4
     },
@@ -1685,8 +1791,8 @@
       "desert_scorpion_carapace": 3,
       "duskworm_skin": 3,
       "efreet_cloth": 3,
-      "enchanted_fabric": 2,
       "palm_plank": 12,
+      "prime_fabric": 2,
       "sand_snake_poison": 3
     },
     "water_boost_potion": {
@@ -1710,16 +1816,16 @@
     },
     "water_shield": {
       "blue_slimeball": 20,
-      "hellhound_collar": 3,
+      "dryad_hair": 3,
       "rosenblood_elixir": 1,
       "sapphire": 1,
       "strangold_bar": 6
     },
     "white_knight_armor": {
       "corrupted_stone": 3,
-      "enchanted_fabric": 2,
       "hellhound_hair": 3,
       "mithril_bar": 8,
+      "prime_fabric": 2,
       "wolfrider_ponytail": 4
     },
     "white_knight_helmet": {
@@ -1737,9 +1843,9 @@
       "wolfrider_hair": 3
     },
     "white_knight_shield": {
+      "echoless_bat_wing": 3,
       "goblin_eye": 4,
       "hellhound_hair": 3,
-      "lizard_eye": 3,
       "maple_plank": 7,
       "wolfrider_hair": 3
     },
@@ -1757,10 +1863,10 @@
       "wooden_stick": 1
     },
     "wratharmor": {
-      "enchanted_fabric": 2,
       "goblin_eye": 4,
       "hellhound_collar": 5,
       "mithril_bar": 8,
+      "prime_fabric": 2,
       "rosenblood_elixir": 1
     },
     "wrathelmet": {
@@ -2420,6 +2526,22 @@
       "subtype": "task",
       "type": "resource"
     },
+    "baby_red_dragon_scale": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 50,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "mob",
+      "type": "resource"
+    },
     "backpack": {
       "antipoison": 0,
       "attack": {},
@@ -2435,6 +2557,22 @@
       "resistance": {},
       "subtype": "",
       "type": "bag"
+    },
+    "bag_of_gems": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 1,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "bag",
+      "type": "consumable"
     },
     "bag_of_gold": {
       "antipoison": 0,
@@ -2488,6 +2626,22 @@
       "lifesteal": 0,
       "resistance": {},
       "subtype": "fishing",
+      "type": "resource"
+    },
+    "bat_heart": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 38,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "mob",
       "type": "resource"
     },
     "bat_wing": {
@@ -2907,6 +3061,22 @@
       "subtype": "food",
       "type": "consumable"
     },
+    "cooked_porkchop": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 20,
+      "crafting_skill": "cooking",
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 20,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "food",
+      "type": "consumable"
+    },
     "cooked_rat_meat": {
       "antipoison": 0,
       "attack": {},
@@ -3006,14 +3176,14 @@
     "cookie": {
       "antipoison": 0,
       "attack": {},
-      "crafting_level": 0,
-      "crafting_skill": null,
+      "crafting_level": 10,
+      "crafting_skill": "cooking",
       "critical_strike": 0,
       "dmg": 0,
       "dmg_elements": {},
       "hp_bonus": 0,
       "initiative": 0,
-      "level": 25,
+      "level": 10,
       "lifesteal": 0,
       "resistance": {},
       "subtype": "food",
@@ -3607,7 +3777,7 @@
       "critical_strike": 0,
       "dmg": 0,
       "dmg_elements": {},
-      "hp_bonus": 0,
+      "hp_bonus": 50,
       "initiative": 0,
       "level": 45,
       "lifesteal": 0,
@@ -3869,6 +4039,38 @@
       "subtype": "",
       "type": "amulet"
     },
+    "diamond_armor": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 40,
+      "crafting_skill": "gearcrafting",
+      "critical_strike": 0,
+      "dmg": 20,
+      "dmg_elements": {},
+      "hp_bonus": 150,
+      "initiative": 0,
+      "level": 40,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "",
+      "type": "body_armor"
+    },
+    "diamond_skirt": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 40,
+      "crafting_skill": "gearcrafting",
+      "critical_strike": 0,
+      "dmg": 10,
+      "dmg_elements": {},
+      "hp_bonus": 200,
+      "initiative": 0,
+      "level": 40,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "",
+      "type": "leg_armor"
+    },
     "diamond_stone": {
       "antipoison": 0,
       "attack": {},
@@ -3921,6 +4123,22 @@
       "resistance": {},
       "subtype": "",
       "type": "ring"
+    },
+    "dragon_bone": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 50,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "mob",
+      "type": "resource"
     },
     "dreadful_amulet": {
       "antipoison": 0,
@@ -4038,6 +4256,22 @@
       "resistance": {},
       "subtype": "",
       "type": "weapon"
+    },
+    "dryad_hair": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 40,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "mob",
+      "type": "resource"
     },
     "dusk_beetle_shell": {
       "antipoison": 0,
@@ -4242,6 +4476,22 @@
       "subtype": "",
       "type": "shield"
     },
+    "echoless_bat_wing": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 38,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "mob",
+      "type": "resource"
+    },
     "efreet_cloth": {
       "antipoison": 0,
       "attack": {},
@@ -4395,61 +4645,21 @@
       "subtype": "mining",
       "type": "resource"
     },
-    "enchanted_antidote": {
-      "antipoison": 200,
+    "enchanted_coin": {
+      "antipoison": 0,
       "attack": {},
-      "crafting_level": 45,
-      "crafting_skill": "alchemy",
+      "crafting_level": 0,
+      "crafting_skill": null,
       "critical_strike": 0,
       "dmg": 0,
       "dmg_elements": {},
-      "hp_bonus": 0,
-      "initiative": 0,
-      "level": 45,
-      "lifesteal": 0,
-      "resistance": {},
-      "subtype": "potion",
-      "type": "utility"
-    },
-    "enchanted_boost_potion": {
-      "antipoison": 0,
-      "attack": {},
-      "crafting_level": 40,
-      "crafting_skill": "alchemy",
-      "critical_strike": 0,
-      "dmg": 0,
-      "dmg_elements": {
-        "air": 20,
-        "earth": 20,
-        "fire": 20,
-        "water": 20
-      },
       "hp_bonus": 0,
       "initiative": 0,
       "level": 40,
       "lifesteal": 0,
       "resistance": {},
-      "subtype": "potion",
-      "type": "utility"
-    },
-    "enchanted_bow": {
-      "antipoison": 0,
-      "attack": {
-        "fire": 53,
-        "water": 15
-      },
-      "crafting_level": 30,
-      "crafting_skill": "weaponcrafting",
-      "critical_strike": 35,
-      "dmg": 0,
-      "dmg_elements": {},
-      "hp_bonus": 0,
-      "initiative": 0,
-      "level": 30,
-      "lifesteal": 0,
-      "resistance": {},
       "subtype": "",
-      "type": "weapon"
+      "type": "currency"
     },
     "enchanted_fabric": {
       "antipoison": 0,
@@ -4461,43 +4671,59 @@
       "dmg_elements": {},
       "hp_bonus": 0,
       "initiative": 0,
-      "level": 10,
+      "level": 40,
       "lifesteal": 0,
       "resistance": {},
-      "subtype": "task",
+      "subtype": "npc",
       "type": "resource"
     },
-    "enchanted_health_potion": {
+    "enchanted_mushroom": {
       "antipoison": 0,
       "attack": {},
-      "crafting_level": 45,
-      "crafting_skill": "alchemy",
+      "crafting_level": 0,
+      "crafting_skill": null,
       "critical_strike": 0,
       "dmg": 0,
       "dmg_elements": {},
       "hp_bonus": 0,
       "initiative": 0,
-      "level": 45,
+      "level": 40,
       "lifesteal": 0,
       "resistance": {},
-      "subtype": "potion",
-      "type": "utility"
+      "subtype": "mob",
+      "type": "resource"
     },
-    "enchanted_health_splash_potion": {
+    "enchanted_potion": {
       "antipoison": 0,
       "attack": {},
-      "crafting_level": 50,
+      "crafting_level": 40,
       "crafting_skill": "alchemy",
       "critical_strike": 0,
       "dmg": 0,
       "dmg_elements": {},
       "hp_bonus": 0,
       "initiative": 0,
-      "level": 50,
+      "level": 40,
       "lifesteal": 0,
       "resistance": {},
       "subtype": "potion",
-      "type": "utility"
+      "type": "consumable"
+    },
+    "enchanted_rune": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 40,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "",
+      "type": "rune"
     },
     "enchanter_boots": {
       "antipoison": 0,
@@ -4532,6 +4758,75 @@
       },
       "subtype": "",
       "type": "leg_armor"
+    },
+    "enhanced_antidote": {
+      "antipoison": 200,
+      "attack": {},
+      "crafting_level": 45,
+      "crafting_skill": "alchemy",
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 45,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "potion",
+      "type": "utility"
+    },
+    "enhanced_boost_potion": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 40,
+      "crafting_skill": "alchemy",
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {
+        "air": 20,
+        "earth": 20,
+        "fire": 20,
+        "water": 20
+      },
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 40,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "potion",
+      "type": "utility"
+    },
+    "enhanced_health_potion": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 45,
+      "crafting_skill": "alchemy",
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 45,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "potion",
+      "type": "utility"
+    },
+    "enhanced_health_splash_potion": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 50,
+      "crafting_skill": "alchemy",
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 50,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "potion",
+      "type": "utility"
     },
     "eternal_red_ring": {
       "antipoison": 0,
@@ -4621,6 +4916,38 @@
       "subtype": "",
       "type": "body_armor"
     },
+    "fennec_ear": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 50,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "mob",
+      "type": "resource"
+    },
+    "fennec_tail": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 50,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "mob",
+      "type": "resource"
+    },
     "fire_and_earth_amulet": {
       "antipoison": 0,
       "attack": {},
@@ -4675,6 +5002,38 @@
       "resistance": {},
       "subtype": "",
       "type": "weapon"
+    },
+    "fire_crystal": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 50,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "mob",
+      "type": "resource"
+    },
+    "fire_dust": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 50,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "mob",
+      "type": "resource"
     },
     "fire_res_potion": {
       "antipoison": 0,
@@ -4818,14 +5177,14 @@
     "forest_bank_potion": {
       "antipoison": 0,
       "attack": {},
-      "crafting_level": 0,
-      "crafting_skill": null,
+      "crafting_level": 20,
+      "crafting_skill": "alchemy",
       "critical_strike": 0,
       "dmg": 0,
       "dmg_elements": {},
       "hp_bonus": 0,
       "initiative": 0,
-      "level": 10,
+      "level": 20,
       "lifesteal": 0,
       "resistance": {},
       "subtype": "potion",
@@ -4846,6 +5205,25 @@
       "resistance": {},
       "subtype": "",
       "type": "ring"
+    },
+    "forest_staff": {
+      "antipoison": 0,
+      "attack": {
+        "earth": 12,
+        "fire": 12
+      },
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "critical_strike": 5,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 10,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "",
+      "type": "weapon"
     },
     "forest_whip": {
       "antipoison": 0,
@@ -4880,6 +5258,22 @@
       "resistance": {},
       "subtype": "food",
       "type": "consumable"
+    },
+    "full_moon_vampire_cape": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 24,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "mob",
+      "type": "resource"
     },
     "glowstem_leaf": {
       "antipoison": 0,
@@ -5377,7 +5771,7 @@
       "hp_bonus": 0,
       "initiative": 0,
       "level": 40,
-      "lifesteal": 20,
+      "lifesteal": 25,
       "resistance": {},
       "subtype": "",
       "type": "rune"
@@ -6290,6 +6684,38 @@
       "subtype": "mob",
       "type": "resource"
     },
+    "lava_fish": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 50,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "food",
+      "type": "consumable"
+    },
+    "lava_underground_potion": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 50,
+      "crafting_skill": "alchemy",
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 50,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "potion",
+      "type": "consumable"
+    },
     "leather_armor": {
       "antipoison": 0,
       "attack": {},
@@ -6500,7 +6926,7 @@
       "hp_bonus": 0,
       "initiative": 0,
       "level": 20,
-      "lifesteal": 10,
+      "lifesteal": 15,
       "resistance": {},
       "subtype": "",
       "type": "rune"
@@ -6976,6 +7402,44 @@
       "resistance": {},
       "subtype": "",
       "type": "amulet"
+    },
+    "medic_armor": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 50,
+      "crafting_skill": "gearcrafting",
+      "critical_strike": 0,
+      "dmg": 20,
+      "dmg_elements": {},
+      "hp_bonus": 400,
+      "initiative": 200,
+      "level": 50,
+      "lifesteal": 0,
+      "resistance": {
+        "earth": 7,
+        "fire": 7
+      },
+      "subtype": "",
+      "type": "body_armor"
+    },
+    "medic_skirt": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 50,
+      "crafting_skill": "gearcrafting",
+      "critical_strike": 0,
+      "dmg": 14,
+      "dmg_elements": {},
+      "hp_bonus": 500,
+      "initiative": 250,
+      "level": 50,
+      "lifesteal": 0,
+      "resistance": {
+        "air": 6,
+        "earth": 6
+      },
+      "subtype": "",
+      "type": "leg_armor"
     },
     "mesh_armor": {
       "antipoison": 0,
@@ -7703,6 +8167,25 @@
       "subtype": "woodcutting",
       "type": "resource"
     },
+    "perfect_bow": {
+      "antipoison": 0,
+      "attack": {
+        "fire": 53,
+        "water": 15
+      },
+      "crafting_level": 30,
+      "crafting_skill": "weaponcrafting",
+      "critical_strike": 35,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 30,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "",
+      "type": "weapon"
+    },
     "perfect_pearl": {
       "antipoison": 0,
       "attack": {},
@@ -7811,6 +8294,22 @@
       "subtype": "",
       "type": "leg_armor"
     },
+    "powerful_rune": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 50,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "",
+      "type": "rune"
+    },
     "priestess_hideout_key": {
       "antipoison": 0,
       "attack": {},
@@ -7841,6 +8340,22 @@
       "lifesteal": 0,
       "resistance": {},
       "subtype": "mob",
+      "type": "resource"
+    },
+    "prime_fabric": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 10,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "task",
       "type": "resource"
     },
     "prospecting_amulet": {
@@ -7939,6 +8454,22 @@
       "subtype": "mob",
       "type": "resource"
     },
+    "raw_porkchop": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 19,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "mob",
+      "type": "resource"
+    },
     "raw_rat_meat": {
       "antipoison": 0,
       "attack": {},
@@ -7974,14 +8505,14 @@
     "recall_potion": {
       "antipoison": 0,
       "attack": {},
-      "crafting_level": 0,
-      "crafting_skill": null,
+      "crafting_level": 5,
+      "crafting_skill": "alchemy",
       "critical_strike": 0,
       "dmg": 0,
       "dmg_elements": {},
       "hp_bonus": 0,
       "initiative": 0,
-      "level": 10,
+      "level": 5,
       "lifesteal": 0,
       "resistance": {},
       "subtype": "potion",
@@ -8002,6 +8533,100 @@
       "resistance": {},
       "subtype": "mob",
       "type": "resource"
+    },
+    "red_dragon_armor": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 50,
+      "crafting_skill": "gearcrafting",
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {
+        "fire": 30
+      },
+      "hp_bonus": 300,
+      "initiative": 100,
+      "level": 50,
+      "lifesteal": 0,
+      "resistance": {
+        "water": 5
+      },
+      "subtype": "",
+      "type": "body_armor"
+    },
+    "red_dragon_boots": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 50,
+      "crafting_skill": "gearcrafting",
+      "critical_strike": 0,
+      "dmg": 10,
+      "dmg_elements": {
+        "fire": 5
+      },
+      "hp_bonus": 200,
+      "initiative": 0,
+      "level": 50,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "",
+      "type": "boots"
+    },
+    "red_dragon_legs_armor": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 50,
+      "crafting_skill": "gearcrafting",
+      "critical_strike": 3,
+      "dmg": 0,
+      "dmg_elements": {
+        "fire": 33
+      },
+      "hp_bonus": 300,
+      "initiative": 150,
+      "level": 50,
+      "lifesteal": 0,
+      "resistance": {
+        "fire": 8,
+        "water": 3
+      },
+      "subtype": "",
+      "type": "leg_armor"
+    },
+    "red_dragon_scale": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 50,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "mob",
+      "type": "resource"
+    },
+    "red_dragon_shield": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 50,
+      "crafting_skill": "gearcrafting",
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 100,
+      "initiative": 0,
+      "level": 50,
+      "lifesteal": 0,
+      "resistance": {
+        "fire": 18,
+        "water": 18
+      },
+      "subtype": "",
+      "type": "shield"
     },
     "red_slimeball": {
       "antipoison": 0,
@@ -8460,6 +9085,22 @@
       "subtype": "key",
       "type": "resource"
     },
+    "sandwhisper_potion": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 50,
+      "crafting_skill": "alchemy",
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 50,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "potion",
+      "type": "consumable"
+    },
     "sanguine_edge_of_rosen": {
       "antipoison": 0,
       "attack": {
@@ -8913,6 +9554,22 @@
       "subtype": "potion",
       "type": "utility"
     },
+    "small_bag_of_gems": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 1,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "bag",
+      "type": "consumable"
+    },
     "small_bag_of_gold": {
       "antipoison": 0,
       "attack": {},
@@ -9053,6 +9710,70 @@
       },
       "subtype": "",
       "type": "leg_armor"
+    },
+    "solar_desert_scorpion_tail": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 50,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "mob",
+      "type": "resource"
+    },
+    "sonnengott_cloak": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "critical_strike": 8,
+      "dmg": 40,
+      "dmg_elements": {},
+      "hp_bonus": 350,
+      "initiative": 200,
+      "level": 50,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "",
+      "type": "body_armor"
+    },
+    "sonnengott_coin": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 55,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "",
+      "type": "currency"
+    },
+    "sonnengott_key": {
+      "antipoison": 0,
+      "attack": {},
+      "crafting_level": 0,
+      "crafting_skill": null,
+      "critical_strike": 0,
+      "dmg": 0,
+      "dmg_elements": {},
+      "hp_bonus": 0,
+      "initiative": 0,
+      "level": 50,
+      "lifesteal": 0,
+      "resistance": {},
+      "subtype": "key",
+      "type": "resource"
     },
     "spider_leg": {
       "antipoison": 0,
@@ -10351,6 +11072,12 @@
     }
   },
   "monster_attack": {
+    "baby_red_dragon": {
+      "air": 0,
+      "earth": 0,
+      "fire": 250,
+      "water": 0
+    },
     "bandit_lizard": {
       "air": 0,
       "earth": 0,
@@ -10385,7 +11112,7 @@
       "air": 0,
       "earth": 0,
       "fire": 0,
-      "water": 100
+      "water": 115
     },
     "cow": {
       "air": 21,
@@ -10418,8 +11145,8 @@
       "water": 130
     },
     "cyclops": {
-      "air": 20,
-      "earth": 90,
+      "air": 25,
+      "earth": 105,
       "fire": 0,
       "water": 0
     },
@@ -10432,12 +11159,18 @@
     "demon": {
       "air": 0,
       "earth": 0,
-      "fire": 90,
+      "fire": 110,
       "water": 0
     },
     "desert_scorpion": {
       "air": 0,
       "earth": 350,
+      "fire": 0,
+      "water": 0
+    },
+    "dryad": {
+      "air": 140,
+      "earth": 0,
       "fire": 0,
       "water": 0
     },
@@ -10453,10 +11186,28 @@
       "fire": 0,
       "water": 550
     },
+    "echoless_bat": {
+      "air": 0,
+      "earth": 0,
+      "fire": 80,
+      "water": 80
+    },
     "efreet_sultan": {
       "air": 100,
       "earth": 0,
       "fire": 100,
+      "water": 0
+    },
+    "fennec": {
+      "air": 0,
+      "earth": 350,
+      "fire": 0,
+      "water": 100
+    },
+    "flameche": {
+      "air": 0,
+      "earth": 0,
+      "fire": 1250,
       "water": 0
     },
     "flying_snake": {
@@ -10464,6 +11215,12 @@
       "earth": 0,
       "fire": 0,
       "water": 0
+    },
+    "full_moon_vampire": {
+      "air": 0,
+      "earth": 0,
+      "fire": 24,
+      "water": 40
     },
     "goblin": {
       "air": 170,
@@ -10473,7 +11230,7 @@
     },
     "goblin_guard": {
       "air": 0,
-      "earth": 120,
+      "earth": 140,
       "fire": 0,
       "water": 0
     },
@@ -10544,16 +11301,16 @@
       "water": 0
     },
     "orc": {
-      "air": 100,
+      "air": 115,
       "earth": 0,
-      "fire": 100,
+      "fire": 115,
       "water": 0
     },
     "owlbear": {
       "air": 0,
       "earth": 0,
       "fire": 0,
-      "water": 80
+      "water": 105
     },
     "pig": {
       "air": 0,
@@ -10561,10 +11318,22 @@
       "fire": 0,
       "water": 30
     },
+    "pixie": {
+      "air": 675,
+      "earth": 0,
+      "fire": 0,
+      "water": 0
+    },
     "rat": {
       "air": 0,
       "earth": 0,
       "fire": 50,
+      "water": 0
+    },
+    "red_dragon": {
+      "air": 0,
+      "earth": 0,
+      "fire": 300,
       "water": 0
     },
     "red_slime": {
@@ -10615,6 +11384,18 @@
       "fire": 26,
       "water": 0
     },
+    "solar_desert_scorpion": {
+      "air": 0,
+      "earth": 0,
+      "fire": 400,
+      "water": 0
+    },
+    "sonnengott": {
+      "air": 0,
+      "earth": 0,
+      "fire": 1100,
+      "water": 0
+    },
     "spider": {
       "air": 0,
       "earth": 0,
@@ -10641,6 +11422,7 @@
     }
   },
   "monster_critical_strike": {
+    "baby_red_dragon": 5,
     "bandit_lizard": 5,
     "bat": 5,
     "blue_slime": 0,
@@ -10656,10 +11438,15 @@
     "death_knight": 5,
     "demon": 5,
     "desert_scorpion": 50,
+    "dryad": 15,
     "dusk_beetle": 5,
     "duskworm": 20,
+    "echoless_bat": 5,
     "efreet_sultan": 5,
+    "fennec": 5,
+    "flameche": 5,
     "flying_snake": 5,
+    "full_moon_vampire": 35,
     "goblin": 5,
     "goblin_guard": 5,
     "goblin_priestess": 20,
@@ -10676,7 +11463,9 @@
     "orc": 10,
     "owlbear": 5,
     "pig": 30,
+    "pixie": 5,
     "rat": 50,
+    "red_dragon": 5,
     "red_slime": 0,
     "rosenblood": 30,
     "sand_snake": 5,
@@ -10685,33 +11474,41 @@
     "sea_marauder": 5,
     "sheep": 0,
     "skeleton": 5,
+    "solar_desert_scorpion": 75,
+    "sonnengott": 20,
     "spider": 5,
     "vampire": 35,
     "wolf": 50,
     "yellow_slime": 0
   },
   "monster_hp": {
+    "baby_red_dragon": 4500,
     "bandit_lizard": 780,
     "bat": 2000,
     "blue_slime": 120,
     "chicken": 60,
     "corrupted_ogre": 850,
-    "corrupted_owlbear": 1100,
+    "corrupted_owlbear": 1500,
     "cow": 280,
     "cultist_acolyte": 1500,
     "cultist_alchemist": 3000,
     "cultist_emperor": 1750,
     "cursed_tree": 1550,
-    "cyclops": 630,
+    "cyclops": 850,
     "death_knight": 820,
-    "demon": 900,
+    "demon": 1250,
     "desert_scorpion": 4250,
+    "dryad": 3000,
     "dusk_beetle": 3500,
     "duskworm": 25000,
+    "echoless_bat": 2250,
     "efreet_sultan": 3600,
+    "fennec": 5000,
+    "flameche": 2000,
     "flying_snake": 360,
+    "full_moon_vampire": 760,
     "goblin": 1550,
-    "goblin_guard": 2000,
+    "goblin_guard": 2300,
     "goblin_priestess": 6750,
     "goblin_wolfrider": 2650,
     "green_slime": 80,
@@ -10723,10 +11520,12 @@
     "lich": 6600,
     "mushmush": 350,
     "ogre": 650,
-    "orc": 1600,
-    "owlbear": 1100,
+    "orc": 2100,
+    "owlbear": 1450,
     "pig": 480,
+    "pixie": 600000,
     "rat": 800,
+    "red_dragon": 5000,
     "red_slime": 120,
     "rosenblood": 8000,
     "sand_snake": 3200,
@@ -10735,12 +11534,15 @@
     "sea_marauder": 2900,
     "sheep": 120,
     "skeleton": 480,
+    "solar_desert_scorpion": 4250,
+    "sonnengott": 1500000,
     "spider": 550,
     "vampire": 680,
     "wolf": 400,
     "yellow_slime": 70
   },
   "monster_initiative": {
+    "baby_red_dragon": 600,
     "bandit_lizard": 200,
     "bat": 200,
     "blue_slime": 100,
@@ -10756,10 +11558,15 @@
     "death_knight": 150,
     "demon": 250,
     "desert_scorpion": 600,
+    "dryad": 300,
     "dusk_beetle": 250,
     "duskworm": 600,
+    "echoless_bat": 200,
     "efreet_sultan": 400,
+    "fennec": 600,
+    "flameche": 2000,
     "flying_snake": 125,
+    "full_moon_vampire": 150,
     "goblin": 200,
     "goblin_guard": 250,
     "goblin_priestess": 400,
@@ -10776,7 +11583,9 @@
     "orc": 250,
     "owlbear": 250,
     "pig": 100,
+    "pixie": 800,
     "rat": 175,
+    "red_dragon": 600,
     "red_slime": 100,
     "rosenblood": 400,
     "sand_snake": 250,
@@ -10785,12 +11594,15 @@
     "sea_marauder": 500,
     "sheep": 50,
     "skeleton": 150,
+    "solar_desert_scorpion": 600,
+    "sonnengott": 700,
     "spider": 100,
     "vampire": 150,
     "wolf": 125,
     "yellow_slime": 50
   },
   "monster_level": {
+    "baby_red_dragon": 50,
     "bandit_lizard": 25,
     "bat": 38,
     "blue_slime": 6,
@@ -10806,10 +11618,15 @@
     "death_knight": 28,
     "demon": 30,
     "desert_scorpion": 50,
+    "dryad": 40,
     "dusk_beetle": 47,
     "duskworm": 48,
+    "echoless_bat": 38,
     "efreet_sultan": 42,
+    "fennec": 52,
+    "flameche": 52,
     "flying_snake": 12,
+    "full_moon_vampire": 24,
     "goblin": 33,
     "goblin_guard": 35,
     "goblin_priestess": 35,
@@ -10826,7 +11643,9 @@
     "orc": 38,
     "owlbear": 30,
     "pig": 19,
+    "pixie": 40,
     "rat": 25,
+    "red_dragon": 51,
     "red_slime": 7,
     "rosenblood": 40,
     "sand_snake": 44,
@@ -10835,12 +11654,20 @@
     "sea_marauder": 45,
     "sheep": 5,
     "skeleton": 18,
+    "solar_desert_scorpion": 50,
+    "sonnengott": 55,
     "spider": 20,
     "vampire": 24,
     "wolf": 15,
     "yellow_slime": 2
   },
   "monster_resistance": {
+    "baby_red_dragon": {
+      "air": 0,
+      "earth": 0,
+      "fire": 50,
+      "water": 0
+    },
     "bandit_lizard": {
       "air": 25,
       "earth": 25,
@@ -10931,6 +11758,12 @@
       "fire": -10,
       "water": -10
     },
+    "dryad": {
+      "air": -10,
+      "earth": 10,
+      "fire": 10,
+      "water": 10
+    },
     "dusk_beetle": {
       "air": -10,
       "earth": -10,
@@ -10943,17 +11776,41 @@
       "fire": -80,
       "water": -80
     },
+    "echoless_bat": {
+      "air": 5,
+      "earth": 5,
+      "fire": -20,
+      "water": 5
+    },
     "efreet_sultan": {
       "air": 0,
       "earth": 0,
       "fire": 50,
       "water": 50
     },
+    "fennec": {
+      "air": 0,
+      "earth": 0,
+      "fire": -20,
+      "water": 0
+    },
+    "flameche": {
+      "air": -50,
+      "earth": 0,
+      "fire": 0,
+      "water": -50
+    },
     "flying_snake": {
       "air": 40,
       "earth": 0,
       "fire": -20,
       "water": -20
+    },
+    "full_moon_vampire": {
+      "air": 30,
+      "earth": -15,
+      "fire": 0,
+      "water": -15
     },
     "goblin": {
       "air": -20,
@@ -11051,11 +11908,23 @@
       "fire": 0,
       "water": 40
     },
+    "pixie": {
+      "air": 5,
+      "earth": 5,
+      "fire": 10,
+      "water": 10
+    },
     "rat": {
       "air": 5,
       "earth": -10,
       "fire": 40,
       "water": 5
+    },
+    "red_dragon": {
+      "air": 0,
+      "earth": 0,
+      "fire": 80,
+      "water": 0
     },
     "red_slime": {
       "air": 0,
@@ -11105,6 +11974,18 @@
       "fire": 30,
       "water": -10
     },
+    "solar_desert_scorpion": {
+      "air": -10,
+      "earth": -10,
+      "fire": 0,
+      "water": 0
+    },
+    "sonnengott": {
+      "air": 5,
+      "earth": 10,
+      "fire": -20,
+      "water": -20
+    },
     "spider": {
       "air": 5,
       "earth": 5,
@@ -11138,10 +12019,12 @@
     "coal_rocks": "coal",
     "copper_rocks": "copper_ore",
     "dead_tree": "dead_wood",
+    "enchanted_mushroom": "enchanted_mushroom",
     "glowstem": "glowstem_leaf",
     "gold_rocks": "gold_ore",
     "gudgeon_spot": "gudgeon",
     "iron_rocks": "iron_ore",
+    "lava_fish_spot": "lava_fish",
     "magic_tree": "magic_wood",
     "maple_tree": "maple_wood",
     "mithril_rocks": "mithril_ore",
@@ -11185,6 +12068,10 @@
       "woodcutting",
       30
     ],
+    "enchanted_mushroom": [
+      "alchemy",
+      40
+    ],
     "glowstem": [
       "alchemy",
       40
@@ -11200,6 +12087,10 @@
     "iron_rocks": [
       "mining",
       10
+    ],
+    "lava_fish_spot": [
+      "fishing",
+      50
     ],
     "magic_tree": [
       "woodcutting",

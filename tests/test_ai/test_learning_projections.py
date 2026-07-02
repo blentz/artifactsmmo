@@ -213,32 +213,46 @@ class TestCyclesForProgress:
 
 
 class TestProjectTaskCompletion:
+    @staticmethod
+    def _gd_rewards(task_code: str, *, gold: int, coin: int) -> GameData:
+        """GameData whose completion payout for `task_code` is the given API
+        gold/tasks_coin amounts (so the projection reads them, never a literal)."""
+        gd = GameData()
+        gd._task_gold_rewards = {task_code: gold}
+        gd._task_coin_rewards = {task_code: coin}
+        return gd
+
     def test_no_task_returns_none(self, tmp_path):
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         state = make_state(task_code=None, task_total=0, task_progress=0)
-        assert project_task_completion(state, store) is None
+        assert project_task_completion(state, GameData(), store) is None
         store.close()
 
     def test_satisfied_task_returns_none(self, tmp_path):
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         state = make_state(task_code="x", task_total=10, task_progress=10)
-        assert project_task_completion(state, store) is None
+        assert project_task_completion(state, GameData(), store) is None
         store.close()
 
-    def test_empty_store_uses_defaults(self, tmp_path):
-        """With no history, falls back to 15 cycles/progress and 150 gold bonus."""
+    def test_reward_projection_uses_api_task_rewards(self, tmp_path):
+        """With no yield history the payout is exactly the API completion reward —
+        gold from `task_gold_reward`, coins from `task_coin_reward` — not a
+        hardcoded 150/3."""
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         state = make_state(task_code="gudgeon", task_type="items",
                            task_total=20, task_progress=5)
-        proj = project_task_completion(state, store)
+        gd = self._gd_rewards("gudgeon", gold=140, coin=5)
+        proj = project_task_completion(state, gd, store)
         store.close()
         assert proj is not None
         # 15 remaining * 15 cycles/progress = 225 cycles
         assert proj.cycles_remaining == 225.0
         # No yield data → expected_char_xp = 0
         assert proj.expected_char_xp == 0.0
-        # No yield data → expected_gold = 0 + 150 bonus
-        assert proj.expected_gold == 150.0
+        # No yield data → expected_gold = 0 + API gold(140)
+        assert proj.expected_gold == 140.0
+        # No yield data → expected_tasks_coins = 0 + API coin(5)
+        assert proj.expected_tasks_coins == 5.0
         # No history → confidence = 0
         assert proj.confidence == 0.0
 
@@ -251,7 +265,8 @@ class TestProjectTaskCompletion:
         ])
         state = make_state(task_code="x", task_type="items",
                            task_total=20, task_progress=5)
-        proj = project_task_completion(state, store)
+        gd = self._gd_rewards("x", gold=150, coin=3)
+        proj = project_task_completion(state, gd, store)
         store.close()
         assert proj is not None
         assert 0.4 < proj.confidence < 0.6
@@ -464,6 +479,15 @@ class TestIsWinnableFilter:
 class TestLowYieldCancelFires:
     """Unit tests for the shared low_yield_cancel_fires predicate."""
 
+    @staticmethod
+    def _gd() -> GameData:
+        """GameData carrying API completion rewards for the task codes these
+        tests use, so the projection reads real payouts (never a literal)."""
+        gd = GameData()
+        gd._task_gold_rewards = {"x": 150, "gudgeon": 150}
+        gd._task_coin_rewards = {"x": 3, "gudgeon": 3}
+        return gd
+
     def _seed(self, store: LearningStore, cycles: list[dict]) -> None:
         store.start_session()
         with Session(store._engine) as s:
@@ -499,19 +523,19 @@ class TestLowYieldCancelFires:
 
     def test_returns_false_when_no_history(self):
         state = make_state(task_code="x", task_total=10, task_progress=5)
-        assert low_yield_cancel_fires(state, None) is False
+        assert low_yield_cancel_fires(state, self._gd(), None) is False
 
     def test_returns_false_when_no_task(self, tmp_path):
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         state = make_state(task_code=None, task_total=0)
-        assert low_yield_cancel_fires(state, store) is False
+        assert low_yield_cancel_fires(state, self._gd(), store) is False
         store.close()
 
     def test_returns_false_when_task_total_zero(self, tmp_path):
         """task_total == 0 is treated as no active task (fixes means.py bug)."""
         store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
         state = make_state(task_code="gudgeon", task_total=0, task_progress=0)
-        assert low_yield_cancel_fires(state, store) is False
+        assert low_yield_cancel_fires(state, self._gd(), store) is False
         store.close()
 
     def test_zero_char_xp_fires_immediately(self, tmp_path):
@@ -521,7 +545,7 @@ class TestLowYieldCancelFires:
         cycles += [self._cycle(5 + i, "FarmMonster(slime)", delta_xp=15) for i in range(3)]
         self._seed(store, cycles)
         state = make_state(task_code="gudgeon", task_total=347, task_progress=5)
-        assert low_yield_cancel_fires(state, store) is True
+        assert low_yield_cancel_fires(state, self._gd(), store) is True
         store.close()
 
     def test_no_fire_when_no_farmitems_history(self, tmp_path):
@@ -530,7 +554,7 @@ class TestLowYieldCancelFires:
         cycles = [self._cycle(i, "FarmMonster(slime)", delta_xp=15) for i in range(5)]
         self._seed(store, cycles)
         state = make_state(task_code="gudgeon", task_total=50, task_progress=5)
-        assert low_yield_cancel_fires(state, store) is False
+        assert low_yield_cancel_fires(state, self._gd(), store) is False
         store.close()
 
     def test_no_fire_when_no_alternative_history(self, tmp_path):
@@ -539,7 +563,7 @@ class TestLowYieldCancelFires:
         cycles = [self._cycle(i, "FarmItems", delta_xp=1, task_progress=i) for i in range(35)]
         self._seed(store, cycles)
         state = make_state(task_code="x", task_total=50, task_progress=10)
-        assert low_yield_cancel_fires(state, store) is False
+        assert low_yield_cancel_fires(state, self._gd(), store) is False
         store.close()
 
     def test_positive_path_fires_above_margin_and_confidence(self, tmp_path):
@@ -551,7 +575,7 @@ class TestLowYieldCancelFires:
         )
         self._seed(store, cycles)
         state = make_state(task_code="x", task_total=50, task_progress=10)
-        assert low_yield_cancel_fires(state, store) is True
+        assert low_yield_cancel_fires(state, self._gd(), store) is True
         store.close()
 
     def test_no_fire_below_confidence_threshold(self, tmp_path):
@@ -563,7 +587,7 @@ class TestLowYieldCancelFires:
         )
         self._seed(store, cycles)
         state = make_state(task_code="x", task_total=50, task_progress=3)
-        assert low_yield_cancel_fires(state, store) is False
+        assert low_yield_cancel_fires(state, self._gd(), store) is False
         store.close()
 
     def test_no_fire_below_margin(self, tmp_path):
@@ -576,7 +600,7 @@ class TestLowYieldCancelFires:
         )
         self._seed(store, cycles)
         state = make_state(task_code="x", task_total=50, task_progress=10)
-        assert low_yield_cancel_fires(state, store) is False
+        assert low_yield_cancel_fires(state, self._gd(), store) is False
         store.close()
 
     def test_no_fire_when_alt_yield_has_zero_samples(self, monkeypatch, tmp_path):
@@ -589,7 +613,7 @@ class TestLowYieldCancelFires:
         monkeypatch.setattr(proj, "_best_alternative_repr",
                             lambda h: "FarmMonster(ghost_that_does_not_exist)")
         state = make_state(task_code="x", task_total=50, task_progress=5)
-        assert low_yield_cancel_fires(state, store) is False
+        assert low_yield_cancel_fires(state, self._gd(), store) is False
         store.close()
 
 

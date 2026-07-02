@@ -1579,10 +1579,16 @@ def test_task_cancel_near_miss_no_history() -> None:
 
 def _feasible_items_gd() -> GameData:
     """Empty catalog: the items-task code has no crafting_skill stats and no
-    recipe, so `task_requirement` returns None (no skill gap) -> PURSUE."""
+    recipe, so `task_requirement` returns None (no skill gap) -> PURSUE.
+
+    Task completion rewards are seeded for the `widget` task code so the
+    low-yield projection (`project_task_completion` -> task_gold/coin_reward)
+    reads real API amounts instead of raising on missing task-reward data."""
     gd = GameData()
     gd._item_stats = {}
     gd._crafting_recipes = {}
+    gd._task_gold_rewards = {"widget": 150}
+    gd._task_coin_rewards = {"widget": 1}
     return gd
 
 

@@ -171,6 +171,15 @@ def test_low_yield_cancel_absent_when_no_history():
     assert MeansKind.LOW_YIELD_CANCEL not in collect
 
 
+def _gd_task_rewards() -> GameData:
+    """GameData carrying API completion rewards for the low-yield task codes so
+    the projection reads real payouts (never a hardcoded 150/3)."""
+    gd = GameData()
+    gd._task_gold_rewards = {"x": 150, "gudgeon": 150}
+    gd._task_coin_rewards = {"x": 3, "gudgeon": 3}
+    return gd
+
+
 def test_low_yield_cancel_fires_with_seeded_history(tmp_path):
     """Zero-char-XP FarmItems + positive FarmMonster → fires immediately (no confidence gate)."""
     store = LearningStore(db_path=str(tmp_path / "p.db"), character="hero")
@@ -178,7 +187,7 @@ def test_low_yield_cancel_fires_with_seeded_history(tmp_path):
     cycles += [_cycle(5 + i, "FarmMonster(slime)", delta_xp=15) for i in range(3)]
     _seed_cycles(store, cycles)
     state = make_state(task_code="gudgeon", task_type="items", task_total=347, task_progress=5)
-    collect, _ = active_means(state, GameData(), store, _ctx())
+    collect, _ = active_means(state, _gd_task_rewards(), store, _ctx())
     assert MeansKind.LOW_YIELD_CANCEL in collect
     store.close()
 
@@ -316,7 +325,7 @@ def test_low_yield_cancel_positive_path_fires_above_margin(tmp_path):
     )
     _seed_cycles(store, cycles)
     state = make_state(task_code="x", task_type="items", task_total=50, task_progress=10)
-    collect, _ = active_means(state, GameData(), store, _ctx())
+    collect, _ = active_means(state, _gd_task_rewards(), store, _ctx())
     assert MeansKind.LOW_YIELD_CANCEL in collect
     store.close()
 
@@ -331,7 +340,7 @@ def test_low_yield_cancel_absent_below_confidence_threshold(tmp_path):
     )
     _seed_cycles(store, cycles)
     state = make_state(task_code="x", task_type="items", task_total=50, task_progress=3)
-    collect, _ = active_means(state, GameData(), store, _ctx())
+    collect, _ = active_means(state, _gd_task_rewards(), store, _ctx())
     assert MeansKind.LOW_YIELD_CANCEL not in collect
     store.close()
 
@@ -346,7 +355,7 @@ def test_low_yield_cancel_positive_path_no_fire_below_margin(tmp_path):
     )
     _seed_cycles(store, cycles)
     state = make_state(task_code="x", task_type="items", task_total=50, task_progress=10)
-    collect, _ = active_means(state, GameData(), store, _ctx())
+    collect, _ = active_means(state, _gd_task_rewards(), store, _ctx())
     assert MeansKind.LOW_YIELD_CANCEL not in collect
     store.close()
 

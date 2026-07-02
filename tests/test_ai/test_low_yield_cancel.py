@@ -23,6 +23,9 @@ def _gd_with_woodcutting_task() -> GameData:
     gd._crafting_recipes = {"ash_plank": {"ash_wood": 1}}
     gd._resource_drops = {"ash_tree": "ash_wood"}
     gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
+    # API completion rewards for the task codes these tests project over.
+    gd._task_gold_rewards = {"x": 150, "gudgeon": 150}
+    gd._task_coin_rewards = {"x": 3, "gudgeon": 3}
     return gd
 
 

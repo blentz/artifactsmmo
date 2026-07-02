@@ -43,7 +43,7 @@ class LowYieldCancelGoal(Goal):
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
-        if low_yield_cancel_fires(state, history):
+        if low_yield_cancel_fires(state, game_data, history):
             return LOW_YIELD_CANCEL
         return 0.0
 

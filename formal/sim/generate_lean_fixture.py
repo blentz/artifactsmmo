@@ -305,6 +305,7 @@ def generate_lean(snapshot: dict) -> str:
         "  targetSkillXp := 0",
         "  gold := 0",
         "  bankAccessible := true",
+        "  bankJunkNonempty := false",
         "  bankUnlockMonsterPresent := false",
         "  initialXp := 0",
         "  unlockMonsterLevel := 0",
