@@ -305,6 +305,12 @@ MUTATIONS = [
 # task_batch mutations -- old strings matched to the actual current task_batch.py text.
 # Phase-1 re-anchor: the inventory-bounded clamp moved into the code-agnostic
 # `craft_batch_size_pure`, so the floor/cap anchors are now `min(demand, ...)`.
+#
+# RETIRED (provably EQUIVALENT mutants -- documented, not fake-killed):
+#   * "mats==0 guard drop max(1, ...) floor": the earlier `if demand <= 0: return 1`
+#     guard guarantees demand >= 1 at the mats_per_unit == 0 branch, so
+#     min(demand, BATCH_CAP) >= 1 always and max(1, min(demand, BATCH_CAP)) ==
+#     min(demand, BATCH_CAP) for every reachable input -- max(1, ...) is a no-op.
 TASK_BATCH_MUTATIONS = [
     # invert the max(1, ...) floor: drop the floor so a 0-fit case yields 0, not 1.
     ("task_batch: drop max(1, ...) floor",
@@ -314,10 +320,6 @@ TASK_BATCH_MUTATIONS = [
     ("task_batch: drop BATCH_CAP clamp",
      "    return max(1, min(demand, fit, BATCH_CAP))",
      "    return max(1, min(demand, fit))"),
-    # mats_per_unit == 0 guard: drop the floor so a demand<=0 case could yield 0.
-    ("task_batch: mats==0 guard drop max(1, ...) floor",
-     "        return max(1, min(demand, BATCH_CAP))",
-     "        return min(demand, BATCH_CAP)"),
     # mats_per_unit == 0 guard: drop the BATCH_CAP clamp (allows results > 10).
     ("task_batch: mats==0 guard drop BATCH_CAP clamp",
      "        return max(1, min(demand, BATCH_CAP))",

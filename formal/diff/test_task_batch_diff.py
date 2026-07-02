@@ -101,8 +101,11 @@ def test_craft_batch_zero_mats_per_unit():
     # hand model's mats >= 1 assumption (Lean fdiv-by-0 -> 0), so the code guard
     # short-circuits to max(1, min(demand, cap)) with no division. Asserted
     # directly (the oracle's batchSize does not model this branch).
+    # The demand >= 1 cases (demand=4, demand=999) genuinely hit the mats==0
+    # branch. demand=0 returns via the earlier `demand <= 0: return 1` guard
+    # (NOT the mats==0 branch); it is harmless coverage of the demand-floor path.
     zero_recipe = {"Z": {"M": 0}}
     drops = {"R": "M"}
-    assert craft_batch_size_pure("Z", 4, {}, 100, zero_recipe, drops) == 4
-    assert craft_batch_size_pure("Z", 999, {}, 100, zero_recipe, drops) == BATCH_CAP
-    assert craft_batch_size_pure("Z", 0, {}, 100, zero_recipe, drops) == 1
+    assert craft_batch_size_pure("Z", 4, {}, 100, zero_recipe, drops) == 4    # mats==0 branch: max(1, min(4, 10)) = 4
+    assert craft_batch_size_pure("Z", 999, {}, 100, zero_recipe, drops) == BATCH_CAP  # mats==0 branch: capped at 10
+    assert craft_batch_size_pure("Z", 0, {}, 100, zero_recipe, drops) == 1    # demand<=0 guard fires first, not mats==0
