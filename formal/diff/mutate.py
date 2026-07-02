@@ -69,7 +69,6 @@ LIQUIDATION_VENUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "liquidation_
 BUY_SOURCE_VENUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "buy_source_venue.py"
 NEAREST_TILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "nearest_tile.py"
 CONSUMABLE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_selection.py"
-MARGINAL_POTION_QTY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "marginal_potion_qty.py"
 POTION_PROVISION_QTY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_provision_qty.py"
 POTION_BASELINE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_baseline.py"
 MAX_BATCH_FROM_HELD_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "max_batch_from_held.py"
@@ -2845,35 +2844,6 @@ CONSUMABLE_SELECTION_MUTATIONS = [
      "        if qty < 0:\n            continue"),
 ]
 
-# marginal_potion_qty mutations -- old strings matched to current
-# marginal_potion_qty.py text. Each perturbs the held clamp or the integer-ceil so
-# the Python quantity diverges from the Lean `marginalPotionQty` oracle. Killed by
-# formal/diff/test_marginal_potion_qty_diff.py.
-#
-# RETIRED (provably EQUIVALENT mutants under the corrected unconditional bound --
-# the else branch is now a plain ceilDiv with no `max(1, ...)` floor and no clamp).
-# All three comparator-boundary mutants depended on the deleted floor: it turned the
-# boundary's natural ceil of 0 into 1, and that 0-vs-1 gap was their ONLY kill-vector.
-# With the floor gone the boundary value is 0 in both the kept and mutated branch:
-#   * "threshold compare flip (>= -> >)": differs only at win == threshold, where the
-#     fall-through computes ceilDiv((tp-win)*mx, tp-fp) == ceilDiv(0, ..) == 0 == the
-#     not-marginal return. Verified 0 divergences over max_stack 0..120 x held 0..100.
-#   * "full-stack compare flip (<= -> <)": at win == full both branches yield max_stack
-#     (else computes ceilDiv((tp-fp)*mx, tp-fp) == mx exactly), so the flip is a no-op.
-#   * "drop the floor-at-1": the floor was deleted, so there is no line to mutate; it
-#     only ever fired at max_stack==0 (the bug the unconditional bound fixes).
-# Also NOT added: first guard "held_heal_qty <= 0 -> < 0" -- at held==0 the fall-through
-# yields min(desired, 0) == 0 (absorbed by the final held-clamp) and held<0 is outside
-# the Nat/test domain, so it is equivalent for all in-domain inputs.
-MARGINAL_POTION_QTY_MUTATIONS = [
-    ("marginal_potion_qty: drop held clamp",
-     "    return min(desired, held_heal_qty)",
-     "    return desired"),
-    ("marginal_potion_qty: ceil -> floor (drop the +den-1)",
-     "        numerator = (threshold_permille - win_permille) * max_stack",
-     "        numerator = (threshold_permille - win_permille) * max_stack - (denominator - 1)"),
-]
-
 # potion_provision_qty mutations -- old strings matched to current
 # potion_provision_qty.py text. Each perturbs the integer-ceil, one of the two
 # clamps, or the slot-filled/held/restore guard so the Python quantity diverges
@@ -4297,8 +4267,6 @@ def _run_all_groups() -> int:
               "formal/diff/test_nearest_tile_diff.py", survivors)
     run_group(CONSUMABLE_SELECTION_SRC, CONSUMABLE_SELECTION_MUTATIONS,
               "formal/diff/test_consumable_selection_diff.py", survivors)
-    run_group(MARGINAL_POTION_QTY_SRC, MARGINAL_POTION_QTY_MUTATIONS,
-              "formal/diff/test_marginal_potion_qty_diff.py", survivors)
     run_group(POTION_PROVISION_QTY_SRC, POTION_PROVISION_QTY_MUTATIONS,
               "formal/diff/test_potion_provision_qty_diff.py", survivors)
     run_group(MAX_BATCH_FROM_HELD_SRC, MAX_BATCH_FROM_HELD_MUTATIONS,

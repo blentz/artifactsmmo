@@ -1,6 +1,6 @@
-"""ProvisionMarginalFightGoal: equip a win-rate-scaled stack of health potions into
+"""ProvisionMarginalFightGoal: equip an HP-need-scaled stack of health potions into
 a utility slot before a marginal fight. The heal code and quantity are chosen by the
-caller (strategy_driver glue) from the proven `marginal_potion_qty_pure` core and the
+caller (strategy_driver glue) from the proven `potion_provision_qty_pure` core and the
 strongest held heal. Satisfied once a utility slot holds a heal; re-fires after the
 server consumes the stack to empty (observed via per-cycle state refresh)."""
 
