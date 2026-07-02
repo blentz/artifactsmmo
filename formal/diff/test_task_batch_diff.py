@@ -87,11 +87,41 @@ def test_craft_batch_matches_lean(demand, mats, free, held):
     recipes = {"T": {"M": mats}}
     drops = {"R": "M"}
     inventory = {"M": held} if held > 0 else {}
-    py = craft_batch_size_pure("T", demand, inventory, free, recipes, drops)
+    py = craft_batch_size_pure("T", demand, inventory, free, recipes, drops, {})
 
     lean = run_oracle(
         "task_batch",
         [[1, demand, mats, free, held]],
+    )[0]
+    assert py == lean["k"]
+
+
+@settings(max_examples=300)
+@given(
+    demand=st.integers(min_value=1, max_value=50),
+    mats=st.integers(min_value=1, max_value=8),
+    y=st.integers(min_value=1, max_value=4),
+    free=st.integers(min_value=0, max_value=40),
+    held=st.integers(min_value=0, max_value=40),
+)
+def test_craft_batch_yield_aware_matches_lean(demand, mats, y, free, held):
+    # YIELD>1 realization: "T" needs `mats` raw "M" per craft RUN, and each run
+    # yields `y` units, so `_raw_units` computes the per-UNIT raw footprint
+    # `mats_per_unit = ceil(mats / y)`. Threading `yields={"T": y}` must make the
+    # code-agnostic core agree with the proved `batchSize true demand
+    # (ceil mats/y) free held` — the SAME clamp at the yield-aware mats input.
+    # This is the case that DIVERGES if the yields threading is dropped (mats
+    # stays `mats`, not `ceil(mats/y)`), so it kills the yields-drop mutant.
+    recipes = {"T": {"M": mats}}
+    drops = {"R": "M"}
+    yields = {"T": y}
+    inventory = {"M": held} if held > 0 else {}
+    py = craft_batch_size_pure("T", demand, inventory, free, recipes, drops, yields)
+
+    mats_per_unit = -(-mats // y)  # ceil(mats / y), the _raw_units yield formula
+    lean = run_oracle(
+        "task_batch",
+        [[1, demand, mats_per_unit, free, held]],
     )[0]
     assert py == lean["k"]
 
@@ -106,6 +136,6 @@ def test_craft_batch_zero_mats_per_unit():
     # (NOT the mats==0 branch); it is harmless coverage of the demand-floor path.
     zero_recipe = {"Z": {"M": 0}}
     drops = {"R": "M"}
-    assert craft_batch_size_pure("Z", 4, {}, 100, zero_recipe, drops) == 4    # mats==0 branch: max(1, min(4, 10)) = 4
-    assert craft_batch_size_pure("Z", 999, {}, 100, zero_recipe, drops) == BATCH_CAP  # mats==0 branch: capped at 10
-    assert craft_batch_size_pure("Z", 0, {}, 100, zero_recipe, drops) == 1    # demand<=0 guard fires first, not mats==0
+    assert craft_batch_size_pure("Z", 4, {}, 100, zero_recipe, drops, {}) == 4    # mats==0 branch: max(1, min(4, 10)) = 4
+    assert craft_batch_size_pure("Z", 999, {}, 100, zero_recipe, drops, {}) == BATCH_CAP  # mats==0 branch: capped at 10
+    assert craft_batch_size_pure("Z", 0, {}, 100, zero_recipe, drops, {}) == 1    # demand<=0 guard fires first, not mats==0

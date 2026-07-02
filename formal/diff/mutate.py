@@ -329,6 +329,13 @@ TASK_BATCH_MUTATIONS = [
     ("task_batch: off-by-one remaining (+1)",
      "    remaining = task_total - task_progress",
      "    remaining = task_total - task_progress + 1"),
+    # drop the yields threading (pass {} to _raw_units instead of yields): the
+    # per-unit raw footprint reverts to yield-AGNOSTIC (ceil(raw/1)=raw), so a
+    # yield>1 recipe under-batches. Killed by test_craft_batch_yield_aware_matches_lean
+    # (which realizes a yield>1 recipe and compares against the ceil(mats/y) clamp).
+    ("task_batch: drop yields threading into _raw_units",
+     "    mats_per_unit = _raw_units(len(recipes) + 1, code, recipes, yields, no_visited)",
+     "    mats_per_unit = _raw_units(len(recipes) + 1, code, recipes, {}, no_visited)"),
 ]
 
 

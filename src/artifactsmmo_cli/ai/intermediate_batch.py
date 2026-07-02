@@ -18,5 +18,5 @@ def size_intermediate_craft(action: CraftAction, chain: Mapping[str, int],
     demand = max(0, chain.get(action.code, 0) - held)
     qty = craft_batch_size_pure(action.code, demand, state.inventory,
                                 state.inventory_free, game_data.crafting_recipes,
-                                game_data.resource_drops)
+                                game_data.resource_drops, game_data.craft_yields)
     return action if action.quantity == qty else dataclasses.replace(action, quantity=qty)

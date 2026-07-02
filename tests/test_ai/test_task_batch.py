@@ -15,54 +15,70 @@ _DROPS = {"R": "M"}
 
 def test_craft_batch_demand_bounded():
     # plenty of space, small demand -> demand wins
-    assert craft_batch_size_pure("T", 3, {}, 100, _RECIPES, _DROPS) == 3
+    assert craft_batch_size_pure("T", 3, {}, 100, _RECIPES, _DROPS, {}) == 3
 
 
 def test_craft_batch_inventory_bounded():
     # free=9, held=0, mats_per_unit=2 -> usable=(9-3)=6, fit=3 < demand 10
-    assert craft_batch_size_pure("T", 10, {}, 9, _RECIPES, _DROPS) == 3
+    assert craft_batch_size_pure("T", 10, {}, 9, _RECIPES, _DROPS, {}) == 3
 
 
 def test_craft_batch_cap_bounded():
     # huge demand + space -> capped at BATCH_CAP
-    assert craft_batch_size_pure("T", 999, {}, 10_000, _RECIPES, _DROPS) == BATCH_CAP
+    assert craft_batch_size_pure("T", 999, {}, 10_000, _RECIPES, _DROPS, {}) == BATCH_CAP
 
 
 def test_craft_batch_counts_held_drops_as_free():
     # held M reduces the space pressure: held=6 adds to usable
     # free=3, held=6 -> usable=(3+6-3)=6, fit=3
-    assert craft_batch_size_pure("T", 10, {"M": 6}, 3, _RECIPES, _DROPS) == 3
+    assert craft_batch_size_pure("T", 10, {"M": 6}, 3, _RECIPES, _DROPS, {}) == 3
 
 
 def test_craft_batch_floors_at_one():
     # no space -> still 1 (never 0)
-    assert craft_batch_size_pure("T", 5, {}, 0, _RECIPES, _DROPS) == 1
+    assert craft_batch_size_pure("T", 5, {}, 0, _RECIPES, _DROPS, {}) == 1
 
 
 def test_craft_batch_base_item_no_raws():
     # code with no recipe -> mats_per_unit 0 -> demand/cap bounded, no div-by-zero
-    assert craft_batch_size_pure("M", 4, {}, 100, _RECIPES, _DROPS) == 4
+    assert craft_batch_size_pure("M", 4, {}, 100, _RECIPES, _DROPS, {}) == 4
 
 
 def test_craft_batch_no_code_or_no_demand_floors_at_one():
     # code None or non-positive demand -> 1 (never reaches the recipe walk)
-    assert craft_batch_size_pure(None, 4, {}, 100, _RECIPES, _DROPS) == 1
-    assert craft_batch_size_pure("T", 0, {}, 100, _RECIPES, _DROPS) == 1
+    assert craft_batch_size_pure(None, 4, {}, 100, _RECIPES, _DROPS, {}) == 1
+    assert craft_batch_size_pure("T", 0, {}, 100, _RECIPES, _DROPS, {}) == 1
 
 
 def test_craft_batch_zero_mats_per_unit_skips_fit():
     # a degenerate zero-quantity recipe -> mats_per_unit 0 -> demand/cap only,
     # never divides by zero.
     zero_recipe = {"Z": {"M": 0}}
-    assert craft_batch_size_pure("Z", 4, {}, 100, zero_recipe, _DROPS) == 4
-    assert craft_batch_size_pure("Z", 999, {}, 100, zero_recipe, _DROPS) == BATCH_CAP
+    assert craft_batch_size_pure("Z", 4, {}, 100, zero_recipe, _DROPS, {}) == 4
+    assert craft_batch_size_pure("Z", 999, {}, 100, zero_recipe, _DROPS, {}) == BATCH_CAP
+
+
+def test_craft_batch_yield_aware_mats_per_unit():
+    # T <- M x4.  _raw_units gives per-UNIT raw cost = ceil(raw_per_run / Y):
+    #   yield 1 (yields={}):     mats_per_unit = ceil(4 / 1) = 4
+    #   yield 2 (yields={"T":2}): mats_per_unit = ceil(4 / 2) = 2
+    # free=11, empty inventory, no held drops -> usable = 11 - _MIN_FREE_SLOTS(3) = 8.
+    #   agnostic: fit = 8 // 4 = 2 -> min(100, 2, BATCH_CAP) = 2
+    #   aware:    fit = 8 // 2 = 4 -> min(100, 4, BATCH_CAP) = 4
+    # The DIFFERENCE proves the yields map reaches _raw_units.
+    recipes = {"T": {"M": 4}}
+    drops = {"R": "M"}
+    agnostic = craft_batch_size_pure("T", 100, {}, 11, recipes, drops, {})
+    aware = craft_batch_size_pure("T", 100, {}, 11, recipes, drops, {"T": 2})
+    assert agnostic == 2
+    assert aware == 4
 
 
 def test_task_batch_wrapper_matches_prior_outputs():
     # task path delegates: items task, total 8, progress 0, ample space -> min(8, cap)
-    assert task_batch_size_pure("items", "T", 8, 0, {}, 100, _RECIPES, _DROPS) == 8
+    assert task_batch_size_pure("items", "T", 8, 0, {}, 100, _RECIPES, _DROPS, {}) == 8
     # non-items task -> 1
-    assert task_batch_size_pure("monsters", "T", 8, 0, {}, 100, _RECIPES, _DROPS) == 1
+    assert task_batch_size_pure("monsters", "T", 8, 0, {}, 100, _RECIPES, _DROPS, {}) == 1
 
 
 def _gd():
