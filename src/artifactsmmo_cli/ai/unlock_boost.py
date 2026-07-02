@@ -29,11 +29,11 @@ def unlock_boost_target(state: WorldState, game_data: GameData) -> tuple[str, st
     """(boost_code, monster_code) of the craftable non-heal boost that flips the
     highest-XP in-band monster from unwinnable to winnable; None if some in-band
     monster is already bare-winnable, or no craftable boost unlocks anything.
-    Deterministic tie-break: fewest recipe items, then smallest boost code, then
-    smallest monster code."""
+    Selection: highest xp_per_kill first; deterministic tie-break by fewest recipe
+    items, then smallest boost code, then smallest monster code."""
     equip_sig = tuple(sorted(c for c in state.equipment.values() if c is not None))
     owned = tuple(sorted(c for c in state.inventory if _is_craftable_boost(c, state, game_data)))
-    key = (state.level, equip_sig, owned)
+    key = (id(game_data), state.level, equip_sig, owned)
     if _cache.get("key") == key:
         return _cache["val"]  # type: ignore[return-value]
 
