@@ -117,6 +117,40 @@ Per-code restore is needed for the HP normalization, so we record the consumed
   keep the extraction a thin reader, not a second combat model.
 - Snapshot/liveness fixtures unaffected (no game-data shape change).
 
+## L50 capstone threading
+
+This economy sits on the capstone's causal chain: **survivability → fight
+success → XP gain → level-up → L50** (`FightReady` → `Leveling` →
+`LevelFiftyReachableP`). More on-hand potions widen the set of fights the bot
+actually wins, which is the XP source the measure-descent liveness argument
+rests on.
+
+**Soundness (Phase 1 does not touch proofs):** the capstone winnability core
+(`WinnableGrounded` / `WinnableAcrossBand`) is currently **potion-blind** — it
+witnesses winnability from best-obtainable loadout + projected HP only, with no
+heal-reserve term. Phase 1 provisioning/crafting therefore strengthens *actual*
+runtime survivability **beyond** the conservative proven floor: every fight the
+proof calls winnable stays winnable (potions only add HP headroom), and some
+fights winnable *only* with potions become reachable at runtime without any
+claim in the proof. So Phase 1 is conservative-safe — it cannot weaken the L50
+argument. The one hard constraint: the runtime must actually EQUIP what any
+winnability assumption relies on — since the proof assumes zero potions, there is
+nothing extra to guarantee in Phase 1 (the economy is pure upside).
+
+**Capstone-tightening opportunity (the integration point):** the natural next
+formal step this economy unlocks is a **potion-extended effective-HP** term in
+`WinnableAcrossBand` — model `effectiveHp = projectedHp + guaranteedHealReserve`,
+where `guaranteedHealReserve` is bounded by what the economy *guarantees* on hand
+(`potion_provision_qty_pure` output × restore). That would WIDEN the proven
+winnable band (fights past the current bare-HP frontier become provably winnable
+*given* the economy stocks the stack), tightening `FightReadyReach` /
+`WinnableAcrossBand` and thus the L50 liveness. This is a deep proof change
+(`WinnableAcrossBand` currently holds 49/49 only under best-loadout + full HP).
+**Decision: deferred to Phase 1.5** (tracked capstone-tightening spec). Phase 1
+ships the runtime economy with the L50 proof UNCHANGED (conservative-safe); the
+`effectiveHp` extension is isolated as its own follow-up so the delicate proof
+change does not gate shipping survivability value.
+
 ## Testing (TDD, 0/0/0/100%)
 
 - `consumables_expended_json` round-trips; player records `{code: qty}` on a
@@ -132,9 +166,14 @@ Per-code restore is needed for the HP normalization, so we record the consumed
   `ceil(hp_need/restore)`.
 - Craft baseline: rises for a harder target monster, unchanged when cold.
 
-## Out of scope (Phase 2)
+## Out of scope
 
-Non-heal utility effects: per-effect magnitude accessors over the same
+**Phase 1.5 (capstone-tightening, tracked):** potion-extended `effectiveHp` term
+in `WinnableAcrossBand` — model `guaranteedHealReserve` from the economy's
+provision guarantee, widen the proven winnable band, tighten `FightReadyReach` /
+L50 liveness. Deep proof change, isolated from Phase 1 (see L50 threading §).
+
+**Phase 2 —** Non-heal utility effects: per-effect magnitude accessors over the same
 `consumables_expended_json` substrate; attribute win-rate/expenditure deltas to
 equipped utilities; craft best-ROI non-heal potions per monster. Also learnable
 and named by the user but deferred: damage-dealt attribution (fight-log parse),
