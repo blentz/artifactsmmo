@@ -151,11 +151,33 @@ Unit tests only; no formal re-gate. Helper purity makes them cheaply testable.
   `keep_servable`). Assert the potion root survives servability at ≥3 sunflowers.
 - Full suite + mypy; 0 errors/warnings/skips, 100% coverage.
 
+## Cooking: reactive by design (NOT proactive-bootstrapped)
+
+Cooking is deliberately excluded from Part A's proactive bootstrap, and this is
+correct — cooking is a fundamentally different case from alchemy:
+- Cooking's lowest craftable (`cooked_chicken`) is **crafting_level 1**, so it has
+  NO NO_GRIND deadlock — it craft-grinds normally from level 1. Part B never
+  triggers for it (the "grind" branch handles it), and it has no dedicated gather
+  resource anyway (`best_gather_resource_drop("cooking", …)` → None).
+- Cooking ingredients (`raw_chicken`, etc.) come from **fighting + gathering** as a
+  side-effect, not a dedicated cooking gather node — so proactively *gathering to
+  level cooking* is wrong. Cooking should fire **reactively**: when a pile of
+  cookable ingredients has accumulated (e.g. a stack of `raw_chicken` after
+  fighting chickens), batch-cook it into `cooked_chicken` (food heals + cooking XP).
+- That reactive behavior already exists and is intentionally left as-is:
+  `MaintainConsumablesGoal` fires when combat is active and heals are understocked,
+  and the merged [[project_consumable_batch_cook]] execution-layer batch cooks the
+  whole held raw pile in one craft. This spec does not change it.
+
+The Part A gate ("gatherable AND consumable-craft") yields exactly alchemy today —
+the one skill that is dedicated-ingredient, deadlocked (first craftable L5), and
+levels only by gathering. Cooking correctly falls through to its reactive path.
+
 ## Out of scope
 
 - No change to the proven skill-dispatch/selection cores (no formal re-gate).
 - No change to combat prediction, the win-rate veto, or red_slime selection — the
   fix makes potions available; combat readiness follows from having heals.
-- Cooking / non-gatherable skills (handled correctly by exclusion, not special-cased).
+- No change to cooking / the reactive consumable-batch path (see above).
 - The [[project_repeated_action_failure_signal]] oscillation detector (separate,
   unmerged) — not needed once the deadlock is broken.
