@@ -1126,7 +1126,7 @@ class TestGatherMaterialsGoal:
         result = goal.relevant_actions(actions, state, gd)
         repr_set = {repr(a) for a in result}
         assert "Gather(copper_rocks)" in repr_set
-        assert "Craft(copper×1)" in repr_set
+        assert "Craft(copper×2)" in repr_set  # batched to inventory-bounded demand (demand=4, fit=2)
         assert "Rest" in repr_set
         assert "DepositAll" in repr_set
         assert "Gather(ash_tree)" not in repr_set
@@ -1164,7 +1164,7 @@ class TestGatherMaterialsGoal:
         result = goal.relevant_actions(actions, state, gd)
         repr_set = {repr(a) for a in result}
         assert "Gather(wood_grove)" in repr_set      # 3 levels deep: staff->plank->raw_wood
-        assert "Craft(plank×1)" in repr_set           # intermediate craft
+        assert "Craft(plank×4)" in repr_set           # batched to inventory-bounded demand (demand=6, fit=4)
         assert "Craft(staff×1)" in repr_set           # top-level craft
         assert "Rest" in repr_set
         assert "DepositAll" in repr_set
