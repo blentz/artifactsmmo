@@ -362,3 +362,69 @@ def test_gear_roots_are_slot_tagged_and_distinct_per_ring_slot():
                   if isinstance(r, ObtainItem) and r.code == "copper_ring"]
     assert ObtainItem("copper_ring", slot="ring1_slot") in ring_roots
     assert ObtainItem("copper_ring", slot="ring2_slot") in ring_roots
+
+
+def _gd_alchemy_gatherable() -> GameData:
+    """GameData where alchemy has a gatherable resource (sunflower_field, L1)
+    and a first craftable at level 5 (small_health_potion). Cooking has no
+    gather resource in this fixture, so it takes the reactive-only path."""
+    gd = GameData()
+    gd._item_stats = {
+        "sunflower": ItemStats(code="sunflower", level=1, type_="resource"),
+        "small_health_potion": ItemStats(
+            code="small_health_potion", level=5, type_="consumable",
+            crafting_skill="alchemy", crafting_level=5),
+    }
+    gd._crafting_recipes = {"small_health_potion": {"sunflower": 6}}
+    gd._resource_skill = {"sunflower_field": ("alchemy", 1)}
+    gd._resource_drops = {"sunflower_field": "sunflower"}
+    return gd
+
+
+def test_objective_roots_emits_alchemy_gather_bootstrap_when_below_first_craftable():
+    """Alchemy is gatherable via sunflower_field (L1) and first craftable is L5.
+    At alchemy < 5, objective_roots emits ReachSkillLevel("alchemy", 5) so the
+    objective proactively levels alchemy via gathering rather than waiting for a
+    potion to be explicitly wanted. Pre-fix: no alchemy bootstrap root emitted."""
+    gd = _gd_alchemy_gatherable()
+    obj = CharacterObjective.from_game_data(gd)
+    state = make_state(skills={"alchemy": 1})
+    roots = objective_roots(obj, state)
+    assert ReachSkillLevel("alchemy", 5) in roots, (
+        f"missing alchemy gather-bootstrap root; got {roots}"
+    )
+
+
+def test_objective_roots_omits_alchemy_gather_bootstrap_when_at_first_craftable():
+    """Once alchemy >= first_craftable_level (5), the gather-bootstrap root
+    drops out — the character can already craft, so no deadlock to break."""
+    gd = _gd_alchemy_gatherable()
+    obj = CharacterObjective.from_game_data(gd)
+    state = make_state(skills={"alchemy": 5})
+    roots = objective_roots(obj, state)
+    assert ReachSkillLevel("alchemy", 5) not in roots, (
+        f"alchemy gather-bootstrap root emitted unexpectedly at skill>=5; got {roots}"
+    )
+
+
+def test_objective_roots_does_not_emit_cooking_gather_bootstrap():
+    """Cooking has no gatherable resource (no resource with skill='cooking' in
+    game_data). The gatherability gate naturally excludes it, so even with a
+    first_craftable_level > current_skill, no bootstrap root is emitted for
+    cooking — it takes the reactive-only path."""
+    gd = _gd_alchemy_gatherable()
+    # Add a cooking craftable so first_craftable_level("cooking", gd) = 3 (not None).
+    # If the gatherability gate failed, we'd see ReachSkillLevel("cooking", 3).
+    gd._item_stats["cooked_shrimp"] = ItemStats(
+        code="cooked_shrimp", level=3, type_="consumable",
+        crafting_skill="cooking", crafting_level=3)
+    gd._crafting_recipes["cooked_shrimp"] = {"shrimp": 2}
+    obj = CharacterObjective.from_game_data(gd)
+    # cooking at 1 < 3: IF cooking were gatherable, bootstrap would fire.
+    state = make_state(skills={"alchemy": 1, "cooking": 1})
+    roots = objective_roots(obj, state)
+    # The gather-bootstrap should NOT add a cooking root (no gather resource).
+    # target_skill_levels emits ReachSkillLevel("cooking", 50), not 3 — so 3 is unambiguous.
+    assert ReachSkillLevel("cooking", 3) not in roots, (
+        f"unexpected cooking gather-bootstrap root (cooking not gatherable); got {roots}"
+    )
