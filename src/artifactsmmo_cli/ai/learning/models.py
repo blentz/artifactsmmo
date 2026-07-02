@@ -60,6 +60,11 @@ class CycleBase(SQLModel):
     # Read by Phase G-B projections to attribute skill-XP yield per cycle.
     delta_skill_xp_json: str = Field(default="{}")
 
+    # Items consumed this cycle as JSON {item_code: qty}. Sparse — non-empty
+    # only on fights that consumed equipped utility consumables. Generalizes
+    # to any utility effect (Phase 2 resolves each code's effect).
+    consumables_expended_json: str = Field(default="{}")
+
     # Goal completion tracking
     cycles_to_satisfy: int | None = None
 

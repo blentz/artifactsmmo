@@ -20,6 +20,7 @@ from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
+from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
@@ -27,6 +28,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.max_batch_from_held import max_batch_from_held_pure
 from artifactsmmo_cli.ai.optimal_buy_mix import optimal_buy_mix_pure
 from artifactsmmo_cli.ai.potion_baseline import potion_baseline_pure
+from artifactsmmo_cli.ai.potion_provision_qty import potion_provision_qty_pure
 from artifactsmmo_cli.ai.potion_supply import target_potion_pure
 from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
 from artifactsmmo_cli.ai.thresholds import (
@@ -35,6 +37,7 @@ from artifactsmmo_cli.ai.thresholds import (
     POTION_HIGH_QTY,
     POTION_LOW_LEVEL,
     POTION_LOW_QTY,
+    UTILITY_SLOT_MAX_STACK,
 )
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -46,8 +49,14 @@ class CraftPotionsGoal(Goal):
 
     preemptive = True
 
-    def __init__(self, effect: str = "hp_restore") -> None:
+    def __init__(self, effect: str = "hp_restore",
+                 combat_monster: str | None = None,
+                 game_data: GameData | None = None,
+                 history: LearningStore | None = None) -> None:
         self._effect = effect
+        self._combat_monster = combat_monster
+        self._game_data = game_data
+        self._history = history
 
     def _target_potion(self, state: WorldState, game_data: GameData) -> str | None:
         """Highest-`effect`, alchemy-craftable-now, utility-slot-equippable potion.
@@ -60,22 +69,53 @@ class CraftPotionsGoal(Goal):
         code = self._target_potion(state, game_data)
         return equipped_potion_qty(state, code) if code else 0
 
-    def _baseline(self, level: int) -> int:
-        return potion_baseline_pure(level, POTION_LOW_LEVEL, POTION_LOW_QTY,
-                                    POTION_HIGH_LEVEL, POTION_HIGH_QTY)
+    def _baseline(self, level: int, state: WorldState | None = None,
+                  game_data: GameData | None = None,
+                  history: LearningStore | None = None) -> int:
+        """Level-scaled potion baseline, optionally raised to the active target-monster demand.
+
+        When ``combat_monster`` and ``game_data`` are provided, the baseline becomes
+        ``min(max(level_baseline, monster_demand), UTILITY_SLOT_MAX_STACK)`` where
+        ``monster_demand = ceil(hp_need / potion_restore)``. ``hp_need`` is taken from
+        learned fight history when enough samples are available, otherwise from
+        ``expected_damage_per_fight``. Falls back to the plain level baseline when
+        any required context is absent.
+        """
+        level_baseline = potion_baseline_pure(level, POTION_LOW_LEVEL, POTION_LOW_QTY,
+                                              POTION_HIGH_LEVEL, POTION_HIGH_QTY)
+        if self._combat_monster is None or game_data is None or state is None:
+            return level_baseline
+        target_potion = self._target_potion(state, game_data)
+        if target_potion is None:
+            return level_baseline
+        potion_restore = game_data.hp_restore_of(target_potion)
+        if potion_restore <= 0:
+            return level_baseline
+        learned = history.hp_healed_per_fight(self._combat_monster, game_data.hp_restore_of) \
+            if history is not None else None
+        hp_need = int(learned) if learned is not None \
+            else expected_damage_per_fight(state, game_data, self._combat_monster)
+        if hp_need <= 0:
+            return level_baseline
+        # Use a large sentinel for held_heal_qty: this is a CRAFT target baseline,
+        # not limited by current holdings. potion_provision_qty_pure computes ceil(hp_need/restore).
+        monster_demand = potion_provision_qty_pure(
+            hp_need, potion_restore, UTILITY_SLOT_MAX_STACK, False, UTILITY_SLOT_MAX_STACK
+        )
+        return min(max(level_baseline, monster_demand), UTILITY_SLOT_MAX_STACK)
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
         if self.is_satisfied(state):
             return 0.0
-        deficit = self._baseline(state.level) - self._equipped(state, game_data)
+        deficit = self._baseline(state.level, state, game_data, history) - self._equipped(state, game_data)
         return float(max(0, deficit))
 
     def is_satisfied(self, state: WorldState) -> bool:
-        # State-only signal (no GameData here): a utility slot at this level's
-        # baseline. Producibility lives in the Task-7 guard `_fires` (see module
-        # docstring).
-        baseline = self._baseline(state.level)
+        # Uses stored game_data/history (set at construction) so the raised
+        # monster-demand baseline applies even though Goal.is_satisfied has no
+        # game_data parameter. Falls back to level_baseline when not set.
+        baseline = self._baseline(state.level, state, self._game_data, self._history)
         return (state.utility1_slot_quantity >= baseline
                 or state.utility2_slot_quantity >= baseline)
 
@@ -134,7 +174,7 @@ class CraftPotionsGoal(Goal):
         recipe = dict(game_data.crafting_recipes[code])
 
         craft_yield = game_data.craft_yield(code)
-        deficit = max(1, self._baseline(state.level) - self._equipped(state, game_data))
+        deficit = max(1, self._baseline(state.level, state, game_data, self._history) - self._equipped(state, game_data))
         runs_needed = -(-deficit // craft_yield)  # ⌈deficit / yield⌉
         runs = max(1, self._ladder_runs(state, game_data, recipe, runs_needed, craft_yield))
         equip_qty = min(deficit, runs * craft_yield)

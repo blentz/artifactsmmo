@@ -1878,6 +1878,7 @@ class GamePlayer:
             prev_xp = prev_state.skill_xp.get(skill_name, 0)
             if new_xp != prev_xp:
                 skill_deltas[skill_name] = new_xp - prev_xp
+        consumables = self._compute_consumables_expended(prev_state, new_state)
         cycle = Cycle(
             ts=datetime.now(tz=timezone.utc).isoformat(),
             session_id="placeholder",
@@ -1905,6 +1906,7 @@ class GamePlayer:
             delta_inv_used=new_state.inventory_used - prev_state.inventory_used,
             drops_json=json.dumps(drops, ensure_ascii=False) if drops else None,
             delta_skill_xp_json=json.dumps(skill_deltas, ensure_ascii=False, sort_keys=True),
+            consumables_expended_json=json.dumps(consumables, ensure_ascii=False, sort_keys=True),
             cycles_to_satisfy=cycles_to_satisfy,
         )
         self.history.record_cycle(cycle)
@@ -1918,6 +1920,22 @@ class GamePlayer:
             if qty > prev_qty:
                 drops[code] = qty - prev_qty
         return drops
+
+    @staticmethod
+    def _compute_consumables_expended(prev: WorldState, new: WorldState) -> dict[str, int]:
+        """Utility consumables auto-consumed this cycle: per utility slot, the
+        drop in that slot's equipped quantity (only positive drops; an equip
+        raises the quantity and is not an expenditure)."""
+        expended: dict[str, int] = {}
+        for slot, prev_qty, new_qty in (
+            ("utility1_slot", prev.utility1_slot_quantity, new.utility1_slot_quantity),
+            ("utility2_slot", prev.utility2_slot_quantity, new.utility2_slot_quantity),
+        ):
+            code = prev.equipment.get(slot)
+            drop = prev_qty - new_qty
+            if code is not None and drop > 0:
+                expended[code] = expended.get(code, 0) + drop
+        return expended
 
     @staticmethod
     def _now() -> str:

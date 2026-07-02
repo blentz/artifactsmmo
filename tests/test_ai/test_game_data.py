@@ -148,6 +148,15 @@ class TestGameDataLookups:
     def test_best_consumable_empty_inventory(self):
         assert self.gd.best_consumable({}) is None
 
+    def test_hp_restore_of_known_item(self):
+        self.gd._item_stats["small_health_potion"] = ItemStats(
+            code="small_health_potion", level=1, type_="utility", hp_restore=40
+        )
+        assert self.gd.hp_restore_of("small_health_potion") == 40
+
+    def test_hp_restore_of_unknown_item(self):
+        assert self.gd.hp_restore_of("nonexistent_code") == 0
+
 
 class TestGameDataLoadMaps:
     def test_loads_monster_location(self):

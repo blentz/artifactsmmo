@@ -8,6 +8,8 @@ baseline.
 
 import dataclasses
 
+from sqlmodel import Session as SqlSession
+
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
@@ -16,6 +18,9 @@ from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
+from artifactsmmo_cli.ai.learning.models import Cycle
+from artifactsmmo_cli.ai.learning.models import Session as SessionModel
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from tests.test_ai.fixtures import make_state
 
 _POTION = "small_health_potion"
@@ -342,3 +347,90 @@ def test_desired_state_empty():
 
 def test_repr():
     assert repr(CraftPotionsGoal()) == "CraftPotionsGoal"
+
+
+# ── _baseline monster-demand scaling ─────────────────────────────────────────
+
+def _mk_store_with_fights(tmp_path, monster: str, consumables_json: str,
+                          n: int = 5) -> LearningStore:
+    """LearningStore with `n` won Fight(monster) cycles each expending consumables_json."""
+    store = LearningStore(db_path=str(tmp_path / "test.db"), character="testchar")
+    store.start_session()
+    with SqlSession(store._engine) as s:
+        if not s.get(SessionModel, store._session_id):
+            s.add(SessionModel(session_id=store._session_id,
+                               started_at="2026-05-18T00:00:00Z", character="testchar"))
+        for i in range(n):
+            s.add(Cycle(
+                ts=f"2026-05-18T00:{i:02d}:00Z",
+                session_id=store._session_id,
+                cycle_index=i,
+                character="testchar",
+                action_repr=f"Fight({monster})",
+                outcome="ok",
+                consumables_expended_json=consumables_json,
+            ))
+        s.commit()
+    return store
+
+
+def test_baseline_rises_for_hard_target_monster(tmp_path):
+    """When learned monster demand exceeds level_baseline, _baseline is raised.
+
+    level=1 → level_baseline=5. 5 fight rows each use 10 potions × 30 HP = 300 healed.
+    hp_healed_per_fight returns 300.0. monster_demand = ceil(300/30) = 10 > 5.
+    _baseline returns min(max(5, 10), 100) = 10.
+    """
+    _MONSTER = "hard_boss"
+    gd = _gd_potion(hp_restore=30)
+    state = make_state(level=1)
+    store = _mk_store_with_fights(tmp_path, _MONSTER, '{"small_health_potion": 10}')
+    goal = CraftPotionsGoal(combat_monster=_MONSTER, game_data=gd, history=store)
+    result = goal._baseline(state.level, state, gd, store)
+    store.close()
+    assert result == 10
+
+
+def test_baseline_unchanged_when_no_target_monster():
+    """No combat_monster → _baseline falls back to level_baseline (no regression)."""
+    gd = _gd_potion()
+    state = make_state(level=1)  # level_baseline=5
+    goal = CraftPotionsGoal()  # no combat_monster
+    assert goal._baseline(state.level, state, gd) == 5
+
+
+def test_baseline_returns_level_baseline_when_no_target_potion():
+    """combat_monster set but game_data has no alchemy utility heal → _target_potion
+    returns None → _baseline falls back to level_baseline (line 90 branch)."""
+    gd = _gd_no_alchemy_heal()
+    state = make_state(level=1)  # level_baseline=5
+    goal = CraftPotionsGoal(combat_monster="some_boss")
+    assert goal._baseline(state.level, state, gd) == 5
+
+
+def test_baseline_returns_level_baseline_when_potion_restore_zero():
+    """A utility item selected by effect='wisdom' has hp_restore=0; hp_restore_of
+    returns 0 → _baseline falls back to level_baseline (line 93 branch)."""
+    gd = GameData()
+    gd._item_stats = {
+        "wisdom_token": ItemStats(code="wisdom_token", level=1, type_="utility",
+                                  wisdom=5, hp_restore=0,
+                                  crafting_skill="alchemy", crafting_level=1),
+    }
+    gd._crafting_recipes = {"wisdom_token": {_INGREDIENT: 1}}
+    gd._resource_drops = {}
+    gd._resource_locations = {}
+    gd._workshop_locations = {"alchemy": (3, 0)}
+    state = make_state(level=1)  # level_baseline=5; alchemy=1 passes skill gate
+    goal = CraftPotionsGoal(combat_monster="some_boss", effect="wisdom")
+    assert goal._baseline(state.level, state, gd) == 5
+
+
+def test_baseline_returns_level_baseline_when_hp_need_zero():
+    """Monster code not in game_data.monster_levels → expected_damage_per_fight
+    returns 0 → hp_need == 0 → _baseline falls back to level_baseline (line 99 branch)."""
+    gd = _gd_potion()  # small_health_potion with hp_restore=30; no monsters in gd
+    state = make_state(level=1)  # level_baseline=5
+    # "unknown_monster" absent from monster_levels → expected_damage_per_fight → 0
+    goal = CraftPotionsGoal(combat_monster="unknown_monster")
+    assert goal._baseline(state.level, state, gd) == 5

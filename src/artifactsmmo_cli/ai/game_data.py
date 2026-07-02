@@ -595,6 +595,13 @@ class GameData:
         """Stats for an item."""
         return self.items.item_stats(code)
 
+    def hp_restore_of(self, code: str) -> int:
+        """HP restored by item ``code`` (0 when unknown or non-healing)."""
+        stats = self.item_stats(code)
+        if stats is None:
+            return 0
+        return stats.hp_restore
+
     def max_recipe_demand(self, item_code: str) -> int:
         """Largest TRANSITIVE quantity of `item_code` consumed to produce any
         single end-item, recursively across the crafting chain. Used by the

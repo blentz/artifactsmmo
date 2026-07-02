@@ -44,8 +44,6 @@ DEPOSIT_FULL_FRACTION = DEPOSIT_FULL_NUM / DEPOSIT_FULL_DEN
 PRESSURE_CRITICAL_FRACTION = PRESSURE_CRITICAL_NUM / PRESSURE_CRITICAL_DEN
 
 # Marginal-fight potion provisioning (spec 2026-06-30).
-MARGINAL_WINRATE_THRESHOLD = 0.95  # below this observed win-rate, bring potions
-FULL_STACK_WINRATE = 0.50          # at/below this win-rate, bring a full stack
 UTILITY_SLOT_MAX_STACK = 100       # openapi.json EquipSchema.quantity.maximum
 
 # Level-scaled potion stocking (spec 2026-06-30-potion-supply). Baseline ramps

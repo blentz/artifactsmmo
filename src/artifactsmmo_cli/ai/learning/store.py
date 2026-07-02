@@ -30,6 +30,7 @@ from artifactsmmo_cli.ai.learning.models import (
     TaskRewardObservation,
 )
 from artifactsmmo_cli.ai.learning.store_warmup_core import (
+    WARMUP_MIN_SAMPLES,
     warmup_gated_median,
     warmup_gated_success_rate,
 )
@@ -314,6 +315,36 @@ class LearningStore:
             return warmup_gated_success_rate(outcomes)
         except SQLAlchemyError:
             return 1.0
+
+    def hp_healed_per_fight(self, monster_code: str,
+                            restore_of: Callable[[str], int],
+                            window: int = WINDOW_ACTION) -> float | None:
+        """Mean HP-healed per WON Fight(monster) over the last `window`; None below
+        WARMUP_MIN_SAMPLES. hp_healed per row = sum(qty * restore_of(code)) over the
+        cycle's consumables_expended_json (empty -> 0). `restore_of` supplies the
+        per-code restore so the store stays GameData-free."""
+        try:
+            with SqlSession(self._engine) as s:
+                stmt = (
+                    select(Cycle.consumables_expended_json)
+                    .where(
+                        Cycle.character == self._character,
+                        Cycle.action_repr == f"Fight({monster_code})",
+                        Cycle.outcome == "ok",
+                    )
+                    .order_by(col(Cycle.ts).desc())
+                    .limit(window)
+                )
+                rows = list(s.exec(stmt))
+        except SQLAlchemyError:
+            return None
+        if len(rows) < WARMUP_MIN_SAMPLES:
+            return None
+        healed: list[float] = []
+        for raw in rows:
+            consumed = json.loads(raw) if raw else {}
+            healed.append(float(sum(qty * restore_of(code) for code, qty in consumed.items())))
+        return sum(healed) / len(healed)
 
     _ALLOWED_EFFECT_FIELDS = ("delta_gold", "delta_xp", "delta_hp", "delta_inv_used")
 
