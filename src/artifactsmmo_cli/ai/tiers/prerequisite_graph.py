@@ -6,6 +6,10 @@ chains terminate; cycles (if any) are left for P3's visited-set traversal."""
 
 from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gather_skill_resource import (
+    best_gather_resource_drop,
+    first_craftable_level,
+)
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
@@ -15,7 +19,6 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
-from artifactsmmo_cli.ai.gather_skill_resource import best_gather_resource_drop, first_craftable_level
 from artifactsmmo_cli.ai.tiers.skill_classes import COMBAT_CRAFT_SKILLS, CONSUMABLE_CRAFT_SKILLS
 from artifactsmmo_cli.ai.world_state import WorldState
 
