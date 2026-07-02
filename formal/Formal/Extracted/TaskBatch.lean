@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/task_batch.py (sha256: a196cf0ed908c1da333d5d1f84d3dd7a1a73cca392fac1a27262dac944856cd4) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/task_batch.py (sha256: 88127e208df46f170ff774b4cdee8f2b725e5529b154a5ed49a55ba2a5f82a5f) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 import Formal.Extracted.RecipeClosure
 
@@ -11,32 +11,31 @@ def _dictGetD {α : Type} (m : List (String × α)) (k : String) (d : α) : α :
   | [] => d
   | (k', v) :: rest => if k' == k then v else _dictGetD rest k d
 
-/-- Extracted module constant `BATCH_CAP` (line 21). -/
+/-- Extracted module constant `BATCH_CAP` (line 24). -/
 def BATCH_CAP : Int := 10
 
-/-- Extracted module constant `_MIN_FREE_SLOTS` (line 24). -/
+/-- Extracted module constant `_MIN_FREE_SLOTS` (line 27). -/
 def _MIN_FREE_SLOTS : Int := 3
 
-/-- Extracted from `task_batch_size_pure` (line 28). -/
-def task_batch_size_pure (task_type : Option String) (task_code : Option String) (task_total : Int) (task_progress : Int) (inventory : List (String × Int)) (inventory_free : Int) (recipes : List (String × List (String × Int))) (drops : List (String × String)) :
+/-- Extracted from `craft_batch_size_pure` (line 31). -/
+def craft_batch_size_pure (code : Option String) (demand : Int) (inventory : List (String × Int)) (inventory_free : Int) (recipes : List (String × List (String × Int))) (drops : List (String × String)) :
     Int :=
-  (match task_code with
+  (match code with
   | none =>
     1
-  | some task_code_1 =>
-    (if ((!(decide (task_type = some "items"))) || (decide (task_code_1 = "")) || (decide (task_total ≤ 0)))
+  | some code_1 =>
+    (if (decide (demand ≤ 0))
      then
       1
      else
-      let remaining := (task_total - task_progress)
-      (if (decide (remaining ≤ 0))
+      let no_visited : List (String × Int) := []
+      let mats_per_unit := (Extracted.RecipeClosure._raw_units (Int.toNat ((Int.ofNat (List.length recipes)) + 1)) code_1 recipes [] no_visited)
+      (if (decide (mats_per_unit = 0))
        then
-        1
+        (max 1 (min demand BATCH_CAP))
        else
-        let no_visited : List (String × Int) := []
-        let mats_per_unit := (Extracted.RecipeClosure._raw_units (Int.toNat ((Int.ofNat (List.length recipes)) + 1)) task_code_1 recipes [] no_visited)
         let closure : List (String × Int) := []
-        let closure := (Extracted.RecipeClosure._closure_visited (Int.toNat ((Int.ofNat (List.length recipes)) + 1)) task_code_1 recipes closure)
+        let closure := (Extracted.RecipeClosure._closure_visited (Int.toNat ((Int.ofNat (List.length recipes)) + 1)) code_1 recipes closure)
         let held_recipe := 0
         let held_recipe := List.foldl
           (fun held_recipe _x =>
@@ -47,6 +46,20 @@ def task_batch_size_pure (task_type : Option String) (task_code : Option String)
           held_recipe drops
         let usable := ((inventory_free + held_recipe) - _MIN_FREE_SLOTS)
         let fit := (Int.fdiv usable mats_per_unit)
-        (max 1 (min remaining (min fit BATCH_CAP))))))
+        (max 1 (min demand (min fit BATCH_CAP))))))
+
+/-- Extracted from `task_batch_size_pure` (line 64). -/
+def task_batch_size_pure (task_type : Option String) (task_code : Option String) (task_total : Int) (task_progress : Int) (inventory : List (String × Int)) (inventory_free : Int) (recipes : List (String × List (String × Int))) (drops : List (String × String)) :
+    Int :=
+  (if ((!(decide (task_type = some "items"))) || (decide (task_code = some "")) || (decide (task_total ≤ 0)))
+   then
+    1
+   else
+    let remaining := (task_total - task_progress)
+    (if (decide (remaining ≤ 0))
+     then
+      1
+     else
+      (craft_batch_size_pure task_code remaining inventory inventory_free recipes drops)))
 
 end Extracted.TaskBatch

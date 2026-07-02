@@ -303,15 +303,25 @@ MUTATIONS = [
 
 
 # task_batch mutations -- old strings matched to the actual current task_batch.py text.
+# Phase-1 re-anchor: the inventory-bounded clamp moved into the code-agnostic
+# `craft_batch_size_pure`, so the floor/cap anchors are now `min(demand, ...)`.
 TASK_BATCH_MUTATIONS = [
     # invert the max(1, ...) floor: drop the floor so a 0-fit case yields 0, not 1.
     ("task_batch: drop max(1, ...) floor",
-     "    return max(1, min(remaining, fit, BATCH_CAP))",
-     "    return min(remaining, fit, BATCH_CAP)"),
+     "    return max(1, min(demand, fit, BATCH_CAP))",
+     "    return min(demand, fit, BATCH_CAP)"),
     # drop the BATCH_CAP clamp entirely (allows results > 10).
     ("task_batch: drop BATCH_CAP clamp",
-     "    return max(1, min(remaining, fit, BATCH_CAP))",
-     "    return max(1, min(remaining, fit))"),
+     "    return max(1, min(demand, fit, BATCH_CAP))",
+     "    return max(1, min(demand, fit))"),
+    # mats_per_unit == 0 guard: drop the floor so a demand<=0 case could yield 0.
+    ("task_batch: mats==0 guard drop max(1, ...) floor",
+     "        return max(1, min(demand, BATCH_CAP))",
+     "        return min(demand, BATCH_CAP)"),
+    # mats_per_unit == 0 guard: drop the BATCH_CAP clamp (allows results > 10).
+    ("task_batch: mats==0 guard drop BATCH_CAP clamp",
+     "        return max(1, min(demand, BATCH_CAP))",
+     "        return max(1, demand)"),
     # off-by-one on remaining (use task_total instead of task_total - progress).
     # P3a re-anchor: the read moved into the pure core (plain scalars).
     ("task_batch: off-by-one remaining (+1)",

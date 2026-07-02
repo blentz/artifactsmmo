@@ -310,7 +310,43 @@ def eTaskGate (task_type : Option String) (task_code : Option String)
         || (decide (task_total ≤ 0)))
       && !(decide (task_total - task_progress ≤ 0))
 
-/-- BRIDGE (no task code): both sides return 1. -/
+/-- BRIDGE: the extracted code-agnostic `craft_batch_size_pure` IS the hand
+`Formal.TaskBatch.batchSize` clamp at the extracted recipe-plumbing terms
+(`eMats`/`eHeld`), for EVERY input. The `demand ≤ 0` and `mats_per_unit = 0`
+guards short-circuit to `1` and to the demand/cap clamp respectively; the hand
+`batchSize` assumes `mats ≥ 1` (its floor-div by 0 would return 0), so the
+`mats = 0` degenerate-recipe branch is a code-only div-by-zero shield. On the
+live `mats ≥ 1` branch the extracted clamp is exactly `batchSize true`. -/
+theorem craft_batch_bridge (c : String) (demand inventory_free : Int)
+    (inventory : List (String × Int))
+    (recipes : List (String × List (String × Int)))
+    (drops : List (String × String)) :
+    Extracted.TaskBatch.craft_batch_size_pure (some c) demand inventory inventory_free
+        recipes drops
+      = (if (decide (demand ≤ 0)) then (1 : Int)
+         else if (decide (eMats recipes c = 0))
+              then max 1 (min demand Extracted.TaskBatch.BATCH_CAP)
+              else Formal.TaskBatch.batchSize true demand (eMats recipes c) inventory_free
+                     (eHeld recipes drops inventory c)) := by
+  show (if (decide (demand ≤ 0)) then (1 : Int)
+        else if (decide (eMats recipes c = 0))
+             then (max 1 (min demand Extracted.TaskBatch.BATCH_CAP))
+             else (max 1 (min demand (min (Int.fdiv
+                    ((inventory_free + eHeld recipes drops inventory c)
+                      - Extracted.TaskBatch._MIN_FREE_SLOTS) (eMats recipes c))
+                    Extracted.TaskBatch.BATCH_CAP)))) = _
+  by_cases hd : (decide (demand ≤ 0)) = true
+  · rw [if_pos hd, if_pos hd]
+  · rw [if_neg hd, if_neg hd]
+    by_cases hm : (decide (eMats recipes c = 0)) = true
+    · rw [if_pos hm, if_pos hm]
+    · rw [if_neg hm, if_neg hm]
+      rfl
+
+/-- BRIDGE (no task code): the extracted decision is always `1` — the gate's
+early exit, the `remaining ≤ 0` exit, or the delegated `craft_batch_size_pure
+none = 1`. That is the hand `batchSize false` value (which ignores its
+`mats`/`held` args). -/
 theorem task_batch_bridge_none (task_type : Option String)
     (task_total task_progress inventory_free : Int)
     (inventory : List (String × Int))
@@ -320,12 +356,23 @@ theorem task_batch_bridge_none (task_type : Option String)
         inventory inventory_free recipes drops
       = Formal.TaskBatch.batchSize false (task_total - task_progress) 1
           inventory_free 0 := by
-  rfl
+  rw [Formal.TaskBatch.non_task_one]
+  unfold Extracted.TaskBatch.task_batch_size_pure
+  by_cases hG : ((!(decide (task_type = some "items"))) || (decide ((none : Option String) = some ""))
+      || (decide (task_total ≤ 0))) = true
+  · rw [if_pos hG]
+  · rw [if_neg hG]
+    by_cases hr : (decide (task_total - task_progress ≤ 0)) = true
+    · simp only [hr, if_true]
+    · simp only [hr]
+      rfl
 
-/-- BRIDGE: the extracted `task_batch_size_pure` IS the hand
-`Formal.TaskBatch.batchSize` evaluated at the Python gate (`eTaskGate`) and
-the extracted recipe-plumbing inputs (`eMats`/`eHeld`) — for EVERY input.
-Every `Formal.TaskBatch` clamp theorem (floor at 1, ≤ remaining, ≤ cap,
+/-- BRIDGE: the extracted `task_batch_size_pure` at a present code delegates to
+`craft_batch_size_pure` (bridged above). It equals `1` off the items branch and
+on the `mats = 0` degenerate recipe folds to the demand/cap clamp; on the live
+`mats ≥ 1` branch it IS the hand `Formal.TaskBatch.batchSize` at the Python gate
+(`eTaskGate`) and the extracted recipe-plumbing terms (`eMats`/`eHeld`), so
+every `Formal.TaskBatch` clamp theorem (floor at 1, ≤ remaining, ≤ cap,
 fits-in-usable) transfers. -/
 theorem task_batch_bridge (task_type : Option String) (c : String)
     (task_total task_progress inventory_free : Int)
@@ -334,67 +381,40 @@ theorem task_batch_bridge (task_type : Option String) (c : String)
     (drops : List (String × String)) :
     Extracted.TaskBatch.task_batch_size_pure task_type (some c) task_total task_progress
         inventory inventory_free recipes drops
-      = Formal.TaskBatch.batchSize
-          (eTaskGate task_type (some c) task_total task_progress)
-          (task_total - task_progress)
-          (eMats recipes c) inventory_free
-          (eHeld recipes drops inventory c) := by
-  show (if ((!(decide (task_type = some "items"))) || (decide (c = ""))
-            || (decide (task_total ≤ 0)))
-        then (1 : Int)
-        else
-          let remaining := (task_total - task_progress)
-          (if (decide (remaining ≤ 0))
-           then (1 : Int)
-           else
-            let no_visited : List (String × Int) := []
-            let mats_per_unit := (Extracted.RecipeClosure._raw_units
-              (Int.toNat ((Int.ofNat (List.length recipes)) + 1)) c recipes [] no_visited)
-            let closure : List (String × Int) := []
-            let closure := (Extracted.RecipeClosure._closure_visited
-              (Int.toNat ((Int.ofNat (List.length recipes)) + 1)) c recipes closure)
-            let held_recipe : Int := 0
-            let held_recipe := List.foldl
-              (fun held_recipe _x =>
-                let _res := (_x.1)
-                let drop_item := (_x.2)
-                let held_recipe := (if (decide ((Extracted.TaskBatch._dictGetD closure drop_item 0) = 1)) then (held_recipe + (Extracted.TaskBatch._dictGetD inventory drop_item 0)) else held_recipe)
-                held_recipe)
-              held_recipe drops
-            let usable := ((inventory_free + held_recipe) - Extracted.TaskBatch._MIN_FREE_SLOTS)
-            let fit := (Int.fdiv usable mats_per_unit)
-            (max 1 (min remaining (min fit Extracted.TaskBatch.BATCH_CAP)))))
-      = _
-  by_cases h1 : ((!(decide (task_type = some "items"))) || (decide (c = ""))
-      || (decide (task_total ≤ 0))) = true
-  · rw [if_pos h1]
+      = (if eTaskGate task_type (some c) task_total task_progress
+         then (if (decide (eMats recipes c = 0))
+               then max 1 (min (task_total - task_progress) Extracted.TaskBatch.BATCH_CAP)
+               else Formal.TaskBatch.batchSize true (task_total - task_progress)
+                      (eMats recipes c) inventory_free (eHeld recipes drops inventory c))
+         else 1) := by
+  have hceq : decide ((some c : Option String) = some "") = decide (c = "") := by
+    simp only [Option.some.injEq]
+  have hE : eTaskGate task_type (some c) task_total task_progress
+      = (!(!(decide (task_type = some "items"))
+            || decide ((some c : Option String) = some "")
+            || decide (task_total ≤ 0))
+          && !(decide (task_total - task_progress ≤ 0))) := by
+    show (!(!(decide (task_type = some "items")) || decide (c = "") || decide (task_total ≤ 0))
+          && !(decide (task_total - task_progress ≤ 0))) = _
+    rw [hceq]
+  unfold Extracted.TaskBatch.task_batch_size_pure
+  by_cases hA : ((!(decide (task_type = some "items")))
+      || decide ((some c : Option String) = some "") || (decide (task_total ≤ 0))) = true
+  · rw [if_pos hA]
     have hg : eTaskGate task_type (some c) task_total task_progress = false := by
-      simp only [eTaskGate, h1]
-      rfl
-    rw [hg]
-    rfl
-  · rw [if_neg h1]
-    by_cases h2 : (decide (task_total - task_progress ≤ 0)) = true
-    · simp only [h2, if_true]
+      rw [hE, hA]; rfl
+    rw [hg]; rfl
+  · rw [if_neg hA]
+    by_cases hB : (decide (task_total - task_progress ≤ 0)) = true
+    · simp only [hB, if_true]
       have hg : eTaskGate task_type (some c) task_total task_progress = false := by
-        simp only [eTaskGate, h2]
-        rw [Bool.not_eq_true] at h1
-        rw [h1]
-        rfl
-      rw [hg]
-      rfl
-    · simp only [h2]
+        rw [hE, hB]; simp
+      rw [hg]; rfl
+    · simp only [hB]
+      rw [craft_batch_bridge, if_neg hB]
       have hg : eTaskGate task_type (some c) task_total task_progress = true := by
-        simp only [eTaskGate]
-        rw [Bool.not_eq_true] at h1 h2
-        rw [h1, h2]
-        rfl
-      rw [hg]
-      show _ = (let usable := (inventory_free + eHeld recipes drops inventory c)
-                  - Formal.TaskBatch.minFree
-                let fit := Int.fdiv usable (eMats recipes c)
-                max 1 (min (task_total - task_progress) (min fit Formal.TaskBatch.batchCap)))
-      rfl
+        rw [hE]; rw [Bool.not_eq_true] at hA hB; rw [hA, hB]; rfl
+      rw [hg]; rfl
 
 /-- THE transferred safety theorem on the EXTRACTED definition: the batch
 size is always at least 1 (the planner never plans a zero-unit batch). -/
@@ -411,7 +431,11 @@ theorem task_batch_ge_one_extracted (task_type task_code : Option String)
     exact Formal.TaskBatch.batch_ge_one false _ _ _ _
   | some c =>
     rw [task_batch_bridge]
-    exact Formal.TaskBatch.batch_ge_one _ _ _ _ _
+    split
+    · split
+      · exact Int.le_max_left 1 _
+      · exact Formal.TaskBatch.batch_ge_one true _ _ _ _
+    · exact Int.le_refl 1
 
 /-! ## Recipe-graph encoding (shared by the RecipeClosure and TaskReservation
 bridges): a finite entry list `es : List (Nat × List (Nat × Nat))` denotes the
