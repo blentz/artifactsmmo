@@ -5,6 +5,7 @@ import Formal.CraftPlanDriver
 import Formal.DominancePareto
 import Formal.GearTaxonomy
 import Formal.MarginalPotionQty
+import Formal.PotionProvisionQty
 import Formal.PotionBaseline
 import Formal.MaxBatchFromHeld
 import Formal.OptimalBuyMix
@@ -1637,6 +1638,19 @@ def runMarginalPotionQty (args : Array Json) : Json :=
     ((intArg args 6) != 0) (intArg args 7).toNat
   Json.mkObj [("qty", Json.num (Int.ofNat q))]
 
+/-- Compute one potion_provision_qty result using the SAME proved
+`Formal.PotionProvisionQty.potionProvisionQty`.
+
+args layout (5 args): `[hp_need, potion_restore, held_heal_qty, slot_filled(0/1),
+max_stack]`. The three Int quantities are read directly, `slot_filled` as `!= 0`;
+emits `{"qty": <int>}` matching the Python `potion_provision_qty_pure` return in
+the differential test. -/
+def runPotionProvisionQty (args : Array Json) : Json :=
+  let q := Formal.PotionProvisionQty.potionProvisionQty
+    (intArg args 0) (intArg args 1) (intArg args 2)
+    ((intArg args 3) != 0) (intArg args 4)
+  Json.mkObj [("qty", Json.num q)]
+
 /-- Compute one optimal_buy_mix result using the SAME proved
 `Formal.OptimalBuyMix.optimalBuyMix`.
 
@@ -2769,6 +2783,8 @@ def runOne (item : Json) : Json :=
     runConsumableSelection args
   else if kind == "marginal_potion_qty" then
     runMarginalPotionQty args
+  else if kind == "potion_provision_qty" then
+    runPotionProvisionQty args
   else if kind == "optimal_buy_mix" then
     runOptimalBuyMix args
   else if kind == "potion_baseline" then

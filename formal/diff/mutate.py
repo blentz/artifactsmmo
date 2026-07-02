@@ -70,6 +70,7 @@ BUY_SOURCE_VENUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "buy_source_ve
 NEAREST_TILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "nearest_tile.py"
 CONSUMABLE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_selection.py"
 MARGINAL_POTION_QTY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "marginal_potion_qty.py"
+POTION_PROVISION_QTY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_provision_qty.py"
 POTION_BASELINE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_baseline.py"
 MAX_BATCH_FROM_HELD_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "max_batch_from_held.py"
 OPTIMAL_BUY_MIX_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "optimal_buy_mix.py"
@@ -2311,6 +2312,7 @@ _ALL_SRCS = [
     NEAREST_TILE_SRC,
     CONSUMABLE_SELECTION_SRC,
     MARGINAL_POTION_QTY_SRC,
+    POTION_PROVISION_QTY_SRC,
     MAX_BATCH_FROM_HELD_SRC,
     OPTIMAL_BUY_MIX_SRC,
     BANK_EXPANSION_TIMING_SRC,
@@ -2870,6 +2872,30 @@ MARGINAL_POTION_QTY_MUTATIONS = [
     ("marginal_potion_qty: ceil -> floor (drop the +den-1)",
      "        numerator = (threshold_permille - win_permille) * max_stack",
      "        numerator = (threshold_permille - win_permille) * max_stack - (denominator - 1)"),
+]
+
+# potion_provision_qty mutations -- old strings matched to current
+# potion_provision_qty.py text. Each perturbs the integer-ceil, one of the two
+# clamps, or the slot-filled/held/restore guard so the Python quantity diverges
+# from the Lean `potionProvisionQty` oracle. Killed by
+# formal/diff/test_potion_provision_qty_diff.py.
+POTION_PROVISION_QTY_MUTATIONS = [
+    # ceil -> overshoot: delete the `- 1`, so a divisible hp_need rounds one too high.
+    ("potion_provision_qty: ceil -> floor (delete the - 1)",
+     "    desired = (hp_need + potion_hp_restore - 1) // potion_hp_restore  # ceil",
+     "    desired = (hp_need + potion_hp_restore) // potion_hp_restore  # ceil"),
+    # drop the held clamp: over-provision past what the bot actually holds.
+    ("potion_provision_qty: drop held clamp",
+     "    return min(desired, held_heal_qty, max_stack)",
+     "    return min(desired, max_stack)"),
+    # drop the max_stack clamp: over-provision past a full stack.
+    ("potion_provision_qty: drop max_stack clamp",
+     "    return min(desired, held_heal_qty, max_stack)",
+     "    return min(desired, held_heal_qty)"),
+    # flip the slot-filled guard: provision INTO an already-filled slot (return != 0).
+    ("potion_provision_qty: flip slot-filled guard",
+     "    if utility_slot_filled or held_heal_qty <= 0 or potion_hp_restore <= 0:",
+     "    if not utility_slot_filled or held_heal_qty <= 0 or potion_hp_restore <= 0:"),
 ]
 
 # potion_baseline mutations -- old strings matched to current potion_baseline.py
@@ -4273,6 +4299,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_consumable_selection_diff.py", survivors)
     run_group(MARGINAL_POTION_QTY_SRC, MARGINAL_POTION_QTY_MUTATIONS,
               "formal/diff/test_marginal_potion_qty_diff.py", survivors)
+    run_group(POTION_PROVISION_QTY_SRC, POTION_PROVISION_QTY_MUTATIONS,
+              "formal/diff/test_potion_provision_qty_diff.py", survivors)
     run_group(MAX_BATCH_FROM_HELD_SRC, MAX_BATCH_FROM_HELD_MUTATIONS,
               "formal/diff/test_max_batch_from_held_diff.py", survivors)
     run_group(OPTIMAL_BUY_MIX_SRC, OPTIMAL_BUY_MIX_MUTATIONS,
