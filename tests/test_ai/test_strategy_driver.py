@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass
 
 import pytest
@@ -2576,6 +2577,21 @@ def _record_mixed(history: LearningStore, action_repr: str, wins: int, losses: i
         ))
 
 
+def _record_fight_wins_with_consumables(
+    history: LearningStore, monster_code: str, n: int,
+    consumables_json: str,
+) -> None:
+    """Seed n winning Fight(monster_code) cycles each with consumables_expended_json."""
+    session_id = history.start_session()
+    for i in range(n):
+        history.record_cycle(Cycle(
+            ts=f"2026-01-02T00:{i:02d}:00+00:00",
+            session_id=session_id, cycle_index=i,
+            character="r", action_repr=f"Fight({monster_code})", outcome="ok",
+            consumables_expended_json=consumables_json,
+        ))
+
+
 def _gd_with_utility_heal(code: str, hp_restore: int) -> GameData:
     """Utility-slot-equippable heal (type=utility): the only kind best_held_heal
     can provision into a utility slot."""
@@ -2599,7 +2615,11 @@ def test_marginal_target_routes_to_provision_goal(tmp_path):
     state = make_state(level=3, inventory={"small_health_potion": 100})
     gd = _gd_with_utility_heal("small_health_potion", hp_restore=60)
     history = LearningStore(db_path=str(tmp_path / "l.db"), character="r")
-    _record_mixed(history, "Fight(green_slime)", wins=8, losses=2)  # 80% < 0.95
+    # Seed 8 wins each consuming 2 potions at 60 HP restore = 120 HP healed → qty = ceil(120/60) = 2
+    _record_fight_wins_with_consumables(
+        history, "green_slime", 8,
+        json.dumps({"small_health_potion": 2}),
+    )
     ctx = _ctx(combat_monster="green_slime")
     goal = objective_step_goal(ReachCharLevel(level=5), state, gd, ctx, history=history)
     assert isinstance(goal, ProvisionMarginalFightGoal)
@@ -2610,7 +2630,7 @@ def test_reliable_target_still_grinds(tmp_path):
     state = make_state(level=3, inventory={"small_health_potion": 100})
     gd = _gd_with_utility_heal("small_health_potion", hp_restore=60)
     history = LearningStore(db_path=str(tmp_path / "l.db"), character="r")
-    _record_mixed(history, "Fight(green_slime)", wins=20, losses=0)  # 100% >= 0.95
+    _record_mixed(history, "Fight(green_slime)", wins=20, losses=0)  # no consumables_expended_json → learned HP-need=0; no monster entry → expected_damage=0 → qty=0 → grind
     ctx = _ctx(combat_monster="green_slime")
     goal = objective_step_goal(ReachCharLevel(level=5), state, gd, ctx, history=history)
     assert isinstance(goal, GrindCharacterXPGoal)
@@ -2658,8 +2678,57 @@ def test_no_heal_held_routes_to_grind(tmp_path) -> None:
     state = make_state(level=3, inventory={})  # no heal on hand
     gd = _gd_with_utility_heal("small_health_potion", hp_restore=60)
     history = LearningStore(db_path=str(tmp_path / "l.db"), character="r")
-    _record_mixed(history, "Fight(green_slime)", wins=8, losses=2)  # 80% < 0.95
+    _record_mixed(history, "Fight(green_slime)", wins=8, losses=2)
     ctx = _ctx(combat_monster="green_slime")
     goal = objective_step_goal(ReachCharLevel(level=5), state, gd, ctx, history=history)
     assert isinstance(goal, GrindCharacterXPGoal)
     history.close()
+
+
+def test_marginal_provision_uses_learned_hp_need(tmp_path) -> None:
+    """_marginal_provision_goal sizes qty from learned HP-need (ceil(healed/restore))."""
+    heal_code = "small_health_potion"
+    store = LearningStore(db_path=str(tmp_path / "l.db"), character="r")
+    # 5 wins, each consuming 3 potions at 30 HP restore = 90 HP healed avg
+    _record_fight_wins_with_consumables(
+        store, "red_slime", 5, json.dumps({heal_code: 3})
+    )
+    gd = GameData()
+    gd._item_stats = {heal_code: ItemStats(code=heal_code, level=1, type_="utility",
+                                           hp_restore=30)}
+    state = make_state(level=5, inventory={heal_code: 10})
+    ctx = _ctx(combat_monster="red_slime")
+    goal = sd._marginal_provision_goal(ctx, state, gd, store)
+    assert isinstance(goal, ProvisionMarginalFightGoal)
+    assert goal._quantity == 3  # ceil(90 / 30) = 3
+    store.close()
+
+
+def test_marginal_provision_seeds_from_expected_damage_when_cold(tmp_path) -> None:
+    """When no history exists for the monster, qty = ceil(expected_damage / restore)."""
+    heal_code = "small_health_potion"
+    store = LearningStore(db_path=str(tmp_path / "l.db"), character="r")
+    store.start_session()
+    # No Fight(red_slime) cycles — cold store for this monster
+
+    gd = GameData()
+    gd._item_stats = {heal_code: ItemStats(code=heal_code, level=1, type_="utility",
+                                           hp_restore=30)}
+    # Monster: fire attack=10, HP=30, no resistance, crit=0 → expected_damage=30
+    # (monster_per_turn = _element_damage(10,0,0) = 10; player hits same → 3 rounds)
+    gd._monster_level = {"red_slime": 3}
+    gd._monster_hp = {"red_slime": 30}
+    gd._monster_attack = {"red_slime": {"fire": 10}}
+    gd._monster_resistance = {"red_slime": {}}
+    gd._monster_critical_strike = {"red_slime": 0}
+    gd._monster_initiative = {"red_slime": 0}
+    gd._monster_type = {"red_slime": "normal"}
+
+    # Player has matching fire attack so player_kill_step > 0
+    state = make_state(level=5, inventory={heal_code: 10}, attack={"fire": 10})
+    ctx = _ctx(combat_monster="red_slime")
+    goal = sd._marginal_provision_goal(ctx, state, gd, store)
+    assert isinstance(goal, ProvisionMarginalFightGoal)
+    # expected_damage = round(10) * ceil(30/10) = 10 * 3 = 30 → qty = ceil(30/30) = 1
+    assert goal._quantity == 1
+    store.close()

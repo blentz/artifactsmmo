@@ -16,7 +16,7 @@ from artifactsmmo_cli.ai.arbiter_select import (
     select_pure,
 )
 from artifactsmmo_cli.ai.combat import MIN_WIN_SAMPLES
-from artifactsmmo_cli.ai.consumable_supply import best_held_heal
+from artifactsmmo_cli.ai.consumable_supply import best_held_heal, best_held_heal_restore
 from artifactsmmo_cli.ai.craft_plan_gen import generate_next_craft_action
 from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
 from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
@@ -51,19 +51,16 @@ from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal, tasks_coin_total
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
+from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.marginal_potion_qty import marginal_potion_qty_pure
 from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
+from artifactsmmo_cli.ai.potion_provision_qty import potion_provision_qty_pure
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.recipe_closure import closure_demand
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
 from artifactsmmo_cli.ai.task_reservation import consumes_reserved
-from artifactsmmo_cli.ai.thresholds import (
-    FULL_STACK_WINRATE,
-    MARGINAL_WINRATE_THRESHOLD,
-    UTILITY_SLOT_MAX_STACK,
-)
+from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
 from artifactsmmo_cli.ai.tiers.guards import (
     GuardKind,
     SelectionContext,
@@ -568,8 +565,11 @@ def monster_drop_inputs(
 def _marginal_provision_goal(ctx: SelectionContext, state: WorldState,
                              game_data: GameData,
                              history: LearningStore | None) -> Goal | None:
-    """Return ProvisionMarginalFightGoal when the combat target is observed-marginal and
-    no utility slot holds a heal; else None (caller grinds)."""
+    """Return ProvisionMarginalFightGoal sized to the learned or seeded HP-need.
+
+    Quantity = ceil(hp_need / restore), clamped to held and UTILITY_SLOT_MAX_STACK.
+    hp_need comes from the learning store when >=5 winning Fight cycles exist,
+    falling back to expected_damage_per_fight for cold-start seeding."""
     monster = ctx.combat_monster
     if monster is None or history is None:
         return None
@@ -577,15 +577,16 @@ def _marginal_provision_goal(ctx: SelectionContext, state: WorldState,
         return None  # already provisioned -> grind
     heal_code = best_held_heal(state, game_data)
     if heal_code is None:
-        return None  # no heal held -> fight unprovisioned (never block the grind)
+        return None  # no utility-slot heal held -> fight unprovisioned
     held = state.inventory.get(heal_code, 0)
-    repr_ = f"Fight({monster})"
-    samples = history.sample_count(repr_)
-    win_permille = round(history.success_rate(repr_) * 1000)
-    qty = marginal_potion_qty_pure(
-        samples, win_permille, MIN_WIN_SAMPLES,
-        int(MARGINAL_WINRATE_THRESHOLD * 1000), int(FULL_STACK_WINRATE * 1000),
-        UTILITY_SLOT_MAX_STACK, utility_slot_filled=False, held_heal_qty=held)
+    restore = best_held_heal_restore(state, game_data)
+    learned = history.hp_healed_per_fight(monster, game_data.hp_restore_of) \
+        if hasattr(history, "hp_healed_per_fight") else None
+    hp_need = int(learned) if learned is not None \
+        else expected_damage_per_fight(state, game_data, monster)
+    qty = potion_provision_qty_pure(hp_need, restore, held,
+                                    utility_slot_filled=False,
+                                    max_stack=UTILITY_SLOT_MAX_STACK)
     if qty <= 0:
         return None
     return ProvisionMarginalFightGoal(target_monster=monster,
