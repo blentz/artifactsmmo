@@ -85,6 +85,54 @@ def _expected_hit(
     return raw * (1 + (crit / 100) * 0.5)
 
 
+def _kill_step_net(
+    raw_player: int, p_crit: int, m_crit: int, m_lifesteal: int,
+    m_atk_sum: int, monster_hp: int, monster_healing: int,
+    player_max_hp: int, monster_void_drain: int,
+    monster_bubble: int, monster_sun_shield: int,
+) -> int:
+    """Net per-turn kill rate (player vs monster, ×10000 scale).
+
+    Mirrors Lean `killStepNet` (PredictWin.lean:122). All inputs are ints;
+    output is an int. A non-positive result means the monster is unkillable.
+    See predict_win for the modelling rationale behind each term."""
+    return (50 * raw_player * (200 + p_crit)
+            - m_crit * m_lifesteal * m_atk_sum
+            - monster_healing * monster_hp * 100
+            - monster_void_drain * player_max_hp * 100
+            - (monster_bubble
+               + monster_sun_shield) * raw_player * (200 + p_crit) // 2)
+
+
+def _die_step(
+    raw_monster: int, m_crit: int, p_crit: int, p_lifesteal: int,
+    p_atk_sum: int, monster_poison: int, monster_burn: int,
+    player_max_hp: int, monster_void_drain: int,
+    monster_berserk: int, monster_frenzy: int,
+    player_antipoison: int, raw_player: int,
+    monster_greed: int, monster_enchanted_mirror: int,
+) -> int:
+    """Net per-turn die rate (player receiving damage, ×10000 scale).
+
+    Mirrors Lean `dieStep` (PredictWin.lean:134). All inputs are ints;
+    output is an int. A non-positive result means the player out-sustains the
+    monster. See predict_win for the modelling rationale behind each term."""
+    return (50 * raw_monster * (200 + m_crit)
+            - p_crit * p_lifesteal * p_atk_sum
+            + max(0, monster_poison - player_antipoison) * 10000
+            + monster_burn * p_atk_sum * 100
+            + monster_void_drain * player_max_hp * 100
+            + monster_berserk * raw_monster * (200 + m_crit) // 2
+            + monster_frenzy * raw_monster * (200 + m_crit) // 2
+            + GREED_MAX_STACKS * monster_greed * raw_monster * (200 + m_crit) // 2
+            + monster_enchanted_mirror * raw_player * (200 + p_crit) // 2)
+
+
+def _effective_player_hp(hp: int, max_hp: int) -> int:
+    """Player HP at fight start: current HP capped at max_hp, or 0 if already dead."""
+    return min(hp, max_hp) if hp > 0 else 0
+
+
 def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bool:
     """True if the documented formula says the player beats the monster using the
     best on-hand loadout (inventory + equipped) for it.
@@ -133,12 +181,16 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
     # floor-divide — two separate `// 2` floors would double-round and break the proved
     # monotonicity of kill_step in raw_player (real monsters carry at most one of them,
     # so this is identical for live data). // 2 matches the Lean `/ 2` on non-negatives.
-    kill_step = (50 * raw_player * (200 + p.critical_strike)
-                 - m_crit * game_data.monster_lifesteal(monster_code) * m_atk_sum
-                 - game_data.monster_healing(monster_code) * game_data.monster_hp(monster_code) * 100
-                 - game_data.monster_void_drain(monster_code) * p.max_hp * 100
-                 - (game_data.monster_protective_bubble(monster_code)
-                    + game_data.monster_sun_shield(monster_code)) * raw_player * (200 + p.critical_strike) // 2)
+    kill_step = _kill_step_net(
+        raw_player, p.critical_strike, m_crit,
+        game_data.monster_lifesteal(monster_code), m_atk_sum,
+        game_data.monster_hp(monster_code),
+        game_data.monster_healing(monster_code),
+        p.max_hp,
+        game_data.monster_void_drain(monster_code),
+        game_data.monster_protective_bubble(monster_code),
+        game_data.monster_sun_shield(monster_code),
+    )
     if kill_step <= 0:
         return False  # the monster out-damages/out-heals/out-resists us — unkillable
     # Barrier is an absorbing shield: model it conservatively as extra effective HP
@@ -187,18 +239,22 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
     # output) back at the player, once per 3 turns; modeled conservatively as every turn
     # (3× upper bound, mirroring healing) ⇒ add value% of the player-damage term. This is
     # the only die_step term scaled by the player's raw output (raw_player, p.crit).
-    die_step = (50 * raw_monster * (200 + m_crit)
-                - p.critical_strike * player_lifesteal * p_atk_sum
-                + max(0, game_data.monster_poison(monster_code) - player_antipoison) * 10000
-                + game_data.monster_burn(monster_code) * p_atk_sum * 100
-                + game_data.monster_void_drain(monster_code) * p.max_hp * 100
-                + game_data.monster_berserker_rage(monster_code) * raw_monster * (200 + m_crit) // 2
-                + game_data.monster_frenzy(monster_code) * raw_monster * (200 + m_crit) // 2
-                + GREED_MAX_STACKS * game_data.monster_greed(monster_code) * raw_monster * (200 + m_crit) // 2
-                + game_data.monster_enchanted_mirror(monster_code) * raw_player * (200 + p.critical_strike) // 2)
+    die_step = _die_step(
+        raw_monster, m_crit, p.critical_strike, player_lifesteal,
+        p_atk_sum,
+        game_data.monster_poison(monster_code),
+        game_data.monster_burn(monster_code),
+        p.max_hp,
+        game_data.monster_void_drain(monster_code),
+        game_data.monster_berserker_rage(monster_code),
+        game_data.monster_frenzy(monster_code),
+        player_antipoison, raw_player,
+        game_data.monster_greed(monster_code),
+        game_data.monster_enchanted_mirror(monster_code),
+    )
     if die_step <= 0:
         return True  # we out-sustain the monster's damage (poison-inclusive)
-    effective_hp = min(state.hp, p.max_hp) if state.hp > 0 else 0
+    effective_hp = _effective_player_hp(state.hp, p.max_hp)
     if effective_hp <= 0:
         return False
     rounds_to_die = -(-(effective_hp * 10000) // die_step)  # ceil

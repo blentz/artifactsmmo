@@ -547,3 +547,47 @@ def test_predict_win_false_when_zero_hp():
     state = make_state(max_hp=100, hp=0, attack={"fire": 10}, initiative=50)
     gd = _gd(hp=30, attack={"fire": 1}, initiative=0)
     assert predict_win(state, gd, "mob") is False
+
+
+def test_predict_win_boolean_unchanged_by_helper_extraction():
+    """Characterization: exact booleans across all key paths through predict_win.
+    These values are captured pre-refactor; the extraction of _kill_step_net /
+    _die_step / _effective_player_hp must not alter any of them.
+
+    Covers: raw_player<=0 (False), kill_step<=0 (False), die_step<=0 (True,
+    sustain), die_step>0 with poison-induced loss (False), normal win via
+    initiative tiebreak (True), effective_hp==0 guard (False)."""
+    # Case A: raw_player <= 0 — player cannot damage → False
+    state_a = make_state(max_hp=100, attack={}, initiative=50)
+    gd_a = _gd(hp=30, attack={"fire": 5})
+    assert predict_win(state_a, gd_a, "mob") is False
+
+    # Case B: kill_step <= 0 — monster lifesteal out-heals player → False
+    state_b = make_state(max_hp=200, attack={"fire": 5}, resistance={"fire": 100},
+                         initiative=50)
+    gd_b = _gd(hp=30, attack={"fire": 200}, crit=50, lifesteal=10)
+    assert predict_win(state_b, gd_b, "mob") is False
+
+    # Case C: die_step <= 0 — player lifesteal out-sustains monster → True
+    gd_c = _gd(hp=100, attack={"fire": 5}, crit=0)
+    gd_c._item_stats = {
+        "vamp": ItemStats(code="vamp", level=1, type_="weapon", lifesteal=100),
+    }
+    state_c = make_state(hp=10, max_hp=10, attack={"fire": 10}, critical_strike=50,
+                         initiative=50, equipment={"weapon_slot": "vamp"})
+    assert predict_win(state_c, gd_c, "mob") is True
+
+    # Case D: die_step > 0, poison-only loss — poison raises die_step → False
+    state_d = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    gd_d = _gd(hp=100, attack={"fire": 50}, initiative=10, poison=100)
+    assert predict_win(state_d, gd_d, "mob") is False
+
+    # Case E: normal win — player initiative tie favours player (rtk == rtd == 2) → True
+    state_e = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    gd_e = _gd(hp=100, attack={"fire": 50}, initiative=10)
+    assert predict_win(state_e, gd_e, "mob") is True
+
+    # Case F: effective_hp == 0 — state.hp = 0, fight lost before it starts → False
+    state_f = make_state(max_hp=100, hp=0, attack={"fire": 10}, initiative=50)
+    gd_f = _gd(hp=30, attack={"fire": 1}, initiative=0)
+    assert predict_win(state_f, gd_f, "mob") is False
