@@ -154,6 +154,13 @@ none existed. Sized to beat the char-level bootstrap THROUGH the sticky
 commitment: bootstrap scores 1.48 and sticky holds unless the challenger
 exceeds STICKY_DOMINANCE_RATIO (3/2) x 1.48 = 2.22; 5/2 = 2.5 > 2.22.
 Switches off the moment the slot is filled (root satisfied → removed)."""
+OCCUPIED_SLOT_UPGRADE_URGENCY = Fraction(5, 2)
+"""Urgency for replacing an OCCUPIED combat armor slot when the candidate beats
+the equipped item by at least GEAR_EQUIP_SCALE (a ~2x strategic-value jump).
+Ties EMPTY_SLOT_URGENCY so a large upgrade interrupts grinding/leveling and the
+bot re-gears (copper->iron). Self-limits: per-tier gains shrink below the gate as
+gear improves, so char-leveling resumes once well-geared. Gate at
+gain >= GEAR_EQUIP_SCALE keeps minor upgrades from winning."""
 BAG_SLOT_URGENCY = Fraction(1)
 """Empty-bag-slot marginal floor (2026-07-03). Strictly below
 COMBAT_READINESS_URGENCY (2) and EMPTY_SLOT_URGENCY (5/2) so a weapon / empty
@@ -565,6 +572,16 @@ class StrategyEngine:
                     and current_code is None
                     and stats.level <= state.level and gain > 0):
                 marginal = max(marginal, Fraction(1)) * EMPTY_SLOT_URGENCY
+            # Occupied-slot upgrade urgency: replacing a FILLED combat armor slot
+            # with a large upgrade (gain >= GEAR_EQUIP_SCALE, roughly a 2x
+            # strategic-value jump) interrupts grinding so the bot re-gears
+            # (copper_boots → iron_boots). Self-limits: once the tier gap closes
+            # the gain falls below the gate and char-leveling resumes.
+            elif (slot in self._combat_gear_slots(game_data) and slot != "weapon_slot"
+                    and current_code is not None
+                    and stats.level <= state.level
+                    and gain >= GEAR_EQUIP_SCALE):
+                marginal = max(marginal, Fraction(1)) * OCCUPIED_SLOT_UPGRADE_URGENCY
             # Potion-supply urgency: an under-stocked health potion is as urgent
             # as an empty combat slot during bootstrap. Unlike the empty-slot
             # branch this is NOT gated on gain > 0 — a heal potion must stock

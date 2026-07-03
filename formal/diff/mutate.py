@@ -1304,6 +1304,24 @@ STRATEGY_MARGINAL_MUTATIONS = [
 ]
 
 
+# Occupied-slot upgrade urgency mutations on strategy.py `_marginal` — the
+# branch that fires OCCUPIED_SLOT_UPGRADE_URGENCY when a large upgrade
+# (gain >= GEAR_EQUIP_SCALE) is available for a filled combat armor slot.
+# Killed by unit tests: drop-urgency is killed by test_occupied_slot_big_upgrade
+# (asserts score == 5/2; without multiplier score is 1); >= -> > is killed by
+# the same test at the boundary gain == GEAR_EQUIP_SCALE (score drops from 5/2
+# to 1 when the gate fires for >= but not for >).
+OCCUPIED_UPGRADE_MUTATIONS = [
+    ("strategy: drop occupied-slot upgrade urgency",
+     "                    and gain >= GEAR_EQUIP_SCALE):\n"
+     "                marginal = max(marginal, Fraction(1)) * OCCUPIED_SLOT_UPGRADE_URGENCY\n",
+     "                    and gain >= GEAR_EQUIP_SCALE):\n"
+     "                marginal = marginal\n"),
+    ("strategy: occupied-upgrade gate >= -> >",
+     "and gain >= GEAR_EQUIP_SCALE):", "and gain > GEAR_EQUIP_SCALE):"),
+]
+
+
 # Potion-supply gate mutations on strategy.py `_value` — the effect-based
 # bootstrap_potion_target guard added by the potion-effect-priority feature.
 # This is a runtime-only VALUE gate (not a traversal decision), so the traversal
@@ -4377,6 +4395,8 @@ def _run_all_groups() -> int:
               "tests/test_ai/test_tiers_strategy.py::TestPotionSupplyUrgency::test_aspirational_tier_not_boosted",
               survivors)
     run_group(STRATEGY_SRC, STRATEGY_MARGINAL_MUTATIONS,
+              "tests/test_ai/test_tiers_strategy.py", survivors)
+    run_group(STRATEGY_SRC, OCCUPIED_UPGRADE_MUTATIONS,
               "tests/test_ai/test_tiers_strategy.py", survivors)
     run_group(STRATEGY_SRC, REACHABILITY_MUTATIONS,
               "formal/diff/test_reachability_diff.py", survivors)

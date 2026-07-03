@@ -1313,3 +1313,68 @@ def test_bag_floor_gated_on_craft_skill():
     # gearcrafting 1 < satchel.crafting_level 5 → not craftable yet → no floor.
     root = ObtainItem("satchel", slot="bag_slot")
     assert eng._value(root, _bag_state(gearcrafting=1), gd) == 0
+
+
+def _gd_boots() -> GameData:
+    """GameData: iron_boots craftable (resistance={"fire": 25} → sv=25k),
+    copper_boots equipped (resistance={"fire": 5} → sv=5k).
+    gain = 20k == GEAR_EQUIP_SCALE exactly → boundary case that kills both
+    mutants (drop-urgency and >= -> > gate flip)."""
+    gd = GameData()
+    gd._item_stats = {
+        "iron_boots": ItemStats(code="iron_boots", level=1, type_="boots",
+                                resistance={"fire": 25},
+                                crafting_skill="gearcrafting", crafting_level=1),
+        "copper_boots": ItemStats(code="copper_boots", level=1, type_="boots",
+                                  resistance={"fire": 5}),
+        "iron_bar": ItemStats(code="iron_bar", level=1, type_="resource"),
+        "iron_ore": ItemStats(code="iron_ore", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"iron_boots": {"iron_bar": 4}, "iron_bar": {"iron_ore": 3}}
+    gd._resource_drops = {"iron_rocks": "iron_ore"}
+    gd._resource_skill = {"iron_rocks": ("mining", 1)}
+    gd._monster_level = {"chicken": 1}
+    fill_monster_stat_defaults(gd)
+    return gd
+
+
+def _gd_boots_small() -> GameData:
+    """GameData: iron_boots craftable (resistance={"fire": 6} → sv=6k),
+    copper_boots equipped (resistance={"fire": 5} → sv=5k).
+    gain = 1k < GEAR_EQUIP_SCALE (20k) → no occupied-upgrade urgency."""
+    gd = GameData()
+    gd._item_stats = {
+        "iron_boots": ItemStats(code="iron_boots", level=1, type_="boots",
+                                resistance={"fire": 6},
+                                crafting_skill="gearcrafting", crafting_level=1),
+        "copper_boots": ItemStats(code="copper_boots", level=1, type_="boots",
+                                  resistance={"fire": 5}),
+        "iron_bar": ItemStats(code="iron_bar", level=1, type_="resource"),
+        "iron_ore": ItemStats(code="iron_ore", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"iron_boots": {"iron_bar": 4}, "iron_bar": {"iron_ore": 3}}
+    gd._resource_drops = {"iron_rocks": "iron_ore"}
+    gd._resource_skill = {"iron_rocks": ("mining", 1)}
+    gd._monster_level = {"chicken": 1}
+    fill_monster_stat_defaults(gd)
+    return gd
+
+
+def test_occupied_slot_big_upgrade_gets_urgency():
+    """An occupied boots slot whose upgrade clears GEAR_EQUIP_SCALE scores
+    PRIOR_COMBAT_GEAR × OCCUPIED_SLOT_UPGRADE_URGENCY = 5/2."""
+    gd = _gd_boots()
+    eng = StrategyEngine(CharacterObjective.from_game_data(gd), BalancedPersonality())
+    state = make_state(level=10, equipment={**make_state().equipment, "boots_slot": "copper_boots"})
+    root = ObtainItem("iron_boots", slot="boots_slot")
+    assert eng._value(root, state, gd, "red_slime", None) == Fraction(5, 2)
+
+
+def test_occupied_slot_small_upgrade_no_urgency():
+    """An occupied boots slot whose upgrade is below GEAR_EQUIP_SCALE does NOT
+    receive the urgency multiplier (score stays < 5/2)."""
+    gd = _gd_boots_small()
+    eng = StrategyEngine(CharacterObjective.from_game_data(gd), BalancedPersonality())
+    state = make_state(level=10, equipment={**make_state().equipment, "boots_slot": "copper_boots"})
+    root = ObtainItem("iron_boots", slot="boots_slot")
+    assert eng._value(root, state, gd, "red_slime", None) < Fraction(5, 2)
