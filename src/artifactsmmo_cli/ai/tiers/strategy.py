@@ -456,20 +456,23 @@ class StrategyEngine:
         return tier * weight
 
     def _has_empty_armor_slot(self, state: WorldState, game_data: GameData) -> bool:
-        """True when a combat ARMOR slot the objective targets is empty and its
-        target item is usable at the current level. Excludes weapon_slot — an
-        empty/unusable weapon is covered by the combat-capability gate
-        (combat_monster is None). Gates the char-level boost: while such a slot
-        remains, leveling stays at the lower rate so empty-slot armor wins;
-        once equipped, char leveling rises above general skill grinding."""
+        """True when a combat ARMOR slot targeted by near_term_gear is empty.
+        Excludes weapon_slot — an empty/unusable weapon is covered by the
+        combat-capability gate (combat_monster is None). Gates the char-level
+        boost: while such a slot remains, leveling stays at the lower rate so
+        empty-slot armor wins; once equipped, char leveling rises above general
+        skill grinding.
+
+        Iterates near_term_gear (usable-now targets) instead of target_gear
+        (endgame BiS). The old target_gear iteration silently skipped empty
+        slots when the BiS item was too high level, falsely reporting geared.
+        near_term_gear already filters to stats.level <= state.level, so the
+        inner level check is not needed here."""
         combat_slots = self._combat_gear_slots(game_data)
-        for slot, code in self.objective.target_gear.items():
+        for slot, _code in self.objective.near_term_gear(state).items():
             if slot == "weapon_slot" or slot not in combat_slots:
                 continue
-            if state.equipment.get(slot) is not None:
-                continue
-            stats = game_data.item_stats(code)
-            if stats is not None and stats.level <= state.level:
+            if state.equipment.get(slot) is None:
                 return True
         return False
 

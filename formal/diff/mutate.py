@@ -1366,6 +1366,18 @@ CAPSTONE_GRADIENT_MUTATIONS = [
 ]
 
 
+# Geared-gate premise mutation on strategy.py `_has_empty_armor_slot` — the
+# `is None` check that detects an empty combat armor slot in near_term_gear.
+# Killed by test_geared_gate_uses_near_term_not_bis (empty case asserts True;
+# the inverted check returns True for FILLED slots, flipping the verdict to
+# False for empty and True for filled — both assertions fail).
+GEARED_GATE_MUTATIONS = [
+    ("strategy: geared-gate empty check inverted (is None -> is not None)",
+     "            if state.equipment.get(slot) is None:\n                return True",
+     "            if state.equipment.get(slot) is not None:\n                return True"),
+]
+
+
 # reachability-invariant mutations: both is_reachable AND actionable_step now use
 # per-DFS-path frozenset cycle-tracking (Phase 13 refactor — Python byte-equivalent
 # to the proved Lean `actStep`). Each mutation breaks
@@ -4422,6 +4434,8 @@ def _run_all_groups() -> int:
     run_group(STRATEGY_SRC, SKILL_DECAY_MUTATIONS,
               "tests/test_ai/test_tiers_strategy.py", survivors)
     run_group(STRATEGY_SRC, CAPSTONE_GRADIENT_MUTATIONS,
+              "tests/test_ai/test_tiers_strategy.py", survivors)
+    run_group(STRATEGY_SRC, GEARED_GATE_MUTATIONS,
               "tests/test_ai/test_tiers_strategy.py", survivors)
     run_group(STRATEGY_SRC, OCCUPIED_UPGRADE_MUTATIONS,
               "tests/test_ai/test_tiers_strategy.py", survivors)

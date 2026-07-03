@@ -478,6 +478,50 @@ def test_empty_slot_tie_breaks_by_computed_protection_not_alphabet():
     assert "air_and_water_amulet" not in repr(d.chosen_root)
 
 
+def _gd_near_term_armor() -> GameData:
+    """Game data with a near-term usable boot (copper_boots, level 1) and a
+    high-level BiS boot (dragon_boots, level 50).
+
+    Reproduces the old bug: _has_empty_armor_slot iterated target_gear
+    (dragon_boots, level 50) and the level check (50 > 10) caused it to skip
+    the slot, reporting geared even with an empty boots_slot that has a
+    near-term copper_boots available. The new code iterates near_term_gear
+    (copper_boots, level 1 ≤ 10) and correctly detects the empty slot."""
+    gd = GameData()
+    gd._item_stats = {
+        "copper_boots": ItemStats(code="copper_boots", level=1, type_="boots",
+                                  hp_bonus=5, crafting_skill="gearcrafting",
+                                  crafting_level=1),
+        "dragon_boots": ItemStats(code="dragon_boots", level=50, type_="boots",
+                                  hp_bonus=200, crafting_skill="gearcrafting",
+                                  crafting_level=50),
+        "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"copper_boots": {"copper_ore": 2}}
+    gd._resource_drops = {"copper_rocks": "copper_ore"}
+    gd._resource_skill = {"copper_rocks": ("mining", 1)}
+    gd._monster_level = {"chicken": 1}
+    fill_monster_stat_defaults(gd)
+    return gd
+
+
+def test_geared_gate_uses_near_term_not_bis():
+    """Old code iterated target_gear (dragon_boots, level 50); the level check
+    50 > 10 silently skipped boots_slot and returned False (geared) even with
+    the slot empty. New code iterates near_term_gear (copper_boots, level 1 ≤
+    10): empty slot → True (ungeared); slot filled with near-term item → False
+    (geared)."""
+    gd = _gd_near_term_armor()
+    eng = _eng(gd, target_gear={"boots_slot": "dragon_boots"})
+    empty = make_state(level=10,
+                       equipment={**make_state().equipment, "boots_slot": None})
+    assert eng._has_empty_armor_slot(empty, gd) is True
+    filled = make_state(level=10,
+                        equipment={**make_state().equipment,
+                                   "boots_slot": "copper_boots"})
+    assert eng._has_empty_armor_slot(filled, gd) is False
+
+
 class TestBalancing:
     def test_leader_suppressed(self):
         eng = _eng(GameData())
