@@ -18,7 +18,11 @@ _UTILITY_FILL_TYPES: frozenset[str] = frozenset({"artifact"})
 """Item types whose value is purpose-independent flat utility (wisdom/prospecting/
 hp). They carry no skill_effects, so the Gather scorer values them at 0 and the
 empty-slot gate discards them — this set routes them through the flat-utility
-term instead. NOT `utility` (consumable/potion slots handled elsewhere)."""
+term instead. NOT `utility` (consumable/potion slots handled elsewhere).
+
+The differential mirrors this set at ``formal/diff/test_loadout_picker_diff.py``
+(``_UTILITY_FILL_TYPES``) to classify oracle candidates independently; keep the
+two in sync — a divergence trips the bit-exact Gather-artifact binding test."""
 
 _NO_MONSTER: dict[str, int] = {}
 """Empty monster attack: armor_score's defense term Σ mon_atk·res collapses to 0,

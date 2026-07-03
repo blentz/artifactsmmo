@@ -233,8 +233,10 @@ def runLoadoutProjection (args : Array Json) : Json :=
   let slots := toSlots rest
   Json.mkObj [("projected", Json.num (projectedField current slots))]
 
-/-- Build a model `Item` from a flat 12-int block:
-`[code, level, fits(0/1), atk0..atk3, res0..res3, crit]`. Element keys are 0..3. -/
+/-- Build a model `Item` from a flat 13-int block:
+`[code, level, fits(0/1), atk0..atk3, res0..res3, crit, flatUtil]`. Element keys
+are 0..3. `isUtilityFill` is left at its `false` default (set by callers that
+carry it out-of-block, e.g. `runLoadoutPicker`). -/
 def itemFromBlock (b : Nat → Int) : Item :=
   { code := b 0, level := b 1, fits := b 2 != 0,
     attack := [(0, b 3), (1, b 4), (2, b 5), (3, b 6)],
