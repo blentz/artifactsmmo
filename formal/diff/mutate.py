@@ -823,6 +823,22 @@ GEAR_VALUE_DISPATCH_MUTATIONS = [
 ]
 
 
+# gear_value Rank-dispatch mutation -- the monster-independent `rank_value` ruler
+# feeding `pick_loadout(Rank)` (the `EquipOwnedGoal` live caller). Dropping the
+# `haste` summand makes `gear_value(_, Rank)` diverge from the oracle's
+# `Formal.GearValue.rankValue` (which still credits haste), so the Rank picker's
+# chosen benefit no longer matches the proved-optimal rank benefit. Killed by the
+# RANK differential test_loadout_picker_diff.py::test_rank_pick_matches_lean
+# (closes the formerly-deferred Rank picker binding with mutation teeth).
+GEAR_VALUE_RANK_MUTATIONS = [
+    ("gear_value: drop haste from the Rank ruler (haste -> 0)",
+     "        return rank_value(combat_raw_of(stats), stats.wisdom, stats.prospecting,\n"
+     "                          stats.inventory_space, stats.haste, stats.subtype)",
+     "        return rank_value(combat_raw_of(stats), stats.wisdom, stats.prospecting,\n"
+     "                          stats.inventory_space, 0, stats.subtype)"),
+]
+
+
 # skill_xp_curve mutations -- old strings matched to current skill_xp_curve.py text.
 SKILL_XP_CURVE_MUTATIONS = [
     # confidence off-by-one: inflate the observed-gap count by 1.
@@ -4302,6 +4318,8 @@ def _run_all_groups() -> int:
               "tests/ai/test_loadout_picker_purpose.py", survivors)
     run_group(GEAR_VALUE_SRC, GEAR_VALUE_DISPATCH_MUTATIONS,
               "formal/diff/test_realizable_loadout_diff.py", survivors)
+    run_group(GEAR_VALUE_SRC, GEAR_VALUE_RANK_MUTATIONS,
+              "formal/diff/test_loadout_picker_diff.py", survivors)
     run_group(LOADOUT_PICKER_SRC, REALIZABLE_LOADOUT_MUTATIONS,
               "formal/diff/test_realizable_loadout_diff.py", survivors)
     run_group(SKILL_XP_CURVE_SRC, SKILL_XP_CURVE_MUTATIONS,

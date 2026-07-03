@@ -23,19 +23,22 @@ loop for the two LIVE-WIRED purposes:
   (the established ``equipment_scoring`` convention): the chosen item's
   ``weapon_score_raw`` equals the oracle's max-feasible / no-downgrade benefit.
 
-RANK COVERAGE — EXPLICIT DEFERRAL (Task 3 review carry-forward). The Lean
-``Purpose.rank`` carries an ABSTRACT ``rankOf : Item → Int`` because no
-``Item → RawStats`` projection exists (the oracle ``Item`` block aggregates the
-utility stats into one ``flatUtil`` int, losing the breakdown ``rankValue``
-needs). A faithful binding would require inventing that projection. Crucially,
-**no live caller picks a loadout with the Rank purpose** — every
-``pick_loadout`` call site uses ``Combat`` (combat.py, actions/combat.py,
-grind_character_xp.py, optimize_loadout.py) or ``Gather`` (gathering.py,
-optimize_loadout.py); ``Rank`` is only a ``gear_value`` ranker key, not a picker
-purpose. So Rank-purpose picking has NO live behavior to differentially bind, and
-its per-slot optimality stands on the abstract-benefit PARAMETRIC proof
-``Formal.GearValue.pickSlot_purpose_rank_optimal`` (pinned in Contracts/Audit).
-The Rank differential binding is therefore explicitly DEFERRED, not skipped.
+RANK COVERAGE — BINDING NOW CLOSED (was DEFERRED; closed for the ``EquipOwnedGoal``
+live caller). The Lean ``Purpose.rank`` carries an ABSTRACT ``rankOf : Item → Int``
+because the 13-int oracle ``Item`` block aggregates the utility stats into one
+``flatUtil`` int, losing the breakdown ``rankValue`` needs. Rather than invent an
+``Item → RawStats`` projection, the oracle ``runLoadoutPicker`` now carries the 6
+``rankValue`` inputs ``[combat_raw, wisdom, prospecting, inventory_space, haste,
+is_tool]`` per item OUT-OF-BLOCK (block+15..block+20, stride 21 for
+``purposeKind == 2``), reassembled into the abstract ``rankOf`` via the SAME
+``Formal.GearValue.rankValue`` def the value-level ``rank_value`` differential
+(``test_gear_value_diff.py::test_rank_value_matches_oracle``) already pins. The
+first LIVE caller ``EquipOwnedGoal`` picks a loadout with the Rank purpose (every
+prior ``pick_loadout`` call site used ``Combat`` or ``Gather``), so the Rank
+picker DECISION now has live behavior; ``test_rank_pick_matches_lean`` binds the
+live ``pick_loadout(Rank)`` per-slot pick to the proved
+``Formal.GearValue.pickSlot_purpose_rank_optimal`` benefit, BIT-EXACT — no
+unproven Rank decision logic ships.
 
 TIE-BREAK / SURROGATE NOTES carry over from ``test_equipment_scoring_diff.py``:
 Python ``max(..., key=...)`` over an unordered set breaks ties arbitrarily while
@@ -49,7 +52,8 @@ from artifactsmmo_cli.ai.equipment.elements import ELEMENTS
 from artifactsmmo_cli.ai.equipment.loadout_picker import _benefit, pick_loadout
 from artifactsmmo_cli.ai.equipment.scoring import armor_score, gather_score, weapon_score_raw
 from artifactsmmo_cli.ai.game_data import ItemStats
-from artifactsmmo_cli.ai.gear_value_core import Combat, Gather
+from artifactsmmo_cli.ai.gear_value import combat_raw_of, gear_value
+from artifactsmmo_cli.ai.gear_value_core import Combat, Gather, Rank
 from artifactsmmo_cli.ai.world_state import WorldState
 from formal.diff.oracle_client import run_oracle
 
@@ -400,3 +404,124 @@ def test_gather_no_downgrade_on_tie_keeps_current():
     state = _make_state(5, {"axe_spare": 1}, {_WEAPON_SLOT: "axe_worn"})
     # Tie (both benefit 10) → keep the worn axe (strict `>` only).
     assert pick_loadout(Gather("woodcutting"), state, gd)[_WEAPON_SLOT] == "axe_worn"
+
+
+# ---------------------------------------------------------------------------
+# RANK: the monster-independent ruler picker (purposeKind == 2). Closes the
+# previously-deferred Rank differential for the ``EquipOwnedGoal`` live caller.
+# The oracle carries the 6 ``rankValue`` inputs per item OUT-OF-BLOCK (stride 21)
+# and reassembles the abstract ``rankOf`` via ``Formal.GearValue.rankValue``.
+# ---------------------------------------------------------------------------
+
+# Single-slot types so each item code fits exactly one slot → no cross-slot
+# one-slot-per-code contention; each slot is bound independently.
+_RANK_TYPES = ["weapon", "helmet", "body_armor", "boots"]
+_RANK_TYPE_SLOT = {"weapon": "weapon_slot", "helmet": "helmet_slot",
+                   "body_armor": "body_armor_slot", "boots": "boots_slot"}
+_RANK_CODES = ["r_a", "r_b", "r_c", "r_d", "r_e", "r_f", "r_g", "r_h"]
+
+
+def _rank_item_block(code_id: int, stats: ItemStats | None, slot: str) -> list[int]:
+    """21-int Rank block: the 15-int extended block + the 6 ``rankValue`` inputs
+    ``[combat_raw, wisdom, prospecting, inventory_space, haste, is_tool]`` — the
+    SAME inputs ``runRankValue`` (Oracle.lean) consumes, computed exactly as the
+    live ``gear_value(_, Rank)`` reads them (``combat_raw_of`` + ItemStats fields
+    + ``subtype == 'tool'``)."""
+    block = _item_block(code_id, stats, slot, None)
+    if stats is None:
+        return [*block, 0, 0, 0, 0, 0, 0]
+    is_tool = 1 if stats.subtype == "tool" else 0
+    return [*block, combat_raw_of(stats), stats.wisdom, stats.prospecting,
+            stats.inventory_space, stats.haste, is_tool]
+
+
+def _oracle_rank_pick(level: int, cur_code: str | None,
+                      table: dict[str, ItemStats], owned: list[str],
+                      cid, slot: str, is_weapon: int) -> dict:
+    """One ``purposeKind == 2`` oracle request for ``slot`` (monster-independent:
+    the monster element block is all zeros)."""
+    cur_stats = table.get(cur_code) if cur_code else None
+    cur_present = 1 if cur_stats is not None else 0
+    args = [2, level, is_weapon, *[0 for _ in ELEMENTS], cur_present]
+    args += _rank_item_block(cid(cur_code), cur_stats, slot)
+    for code in sorted(owned):
+        args += _rank_item_block(cid(code), table.get(code), slot)
+    return run_oracle("loadout_picker", [args])[0]
+
+
+@settings(max_examples=300, deadline=None)
+@given(
+    item_types=st.lists(st.sampled_from(_RANK_TYPES),
+                        min_size=len(_RANK_CODES), max_size=len(_RANK_CODES)),
+    item_levels=st.lists(st.integers(min_value=1, max_value=10),
+                         min_size=len(_RANK_CODES), max_size=len(_RANK_CODES)),
+    item_atk=st.lists(_VAL, min_size=len(_RANK_CODES), max_size=len(_RANK_CODES)),
+    item_res=st.lists(_VAL, min_size=len(_RANK_CODES), max_size=len(_RANK_CODES)),
+    item_crit=st.lists(st.integers(min_value=0, max_value=100),
+                       min_size=len(_RANK_CODES), max_size=len(_RANK_CODES)),
+    item_hp=st.lists(_UTIL, min_size=len(_RANK_CODES), max_size=len(_RANK_CODES)),
+    item_wis=st.lists(_UTIL, min_size=len(_RANK_CODES), max_size=len(_RANK_CODES)),
+    item_pros=st.lists(_UTIL, min_size=len(_RANK_CODES), max_size=len(_RANK_CODES)),
+    item_inv=st.lists(_UTIL, min_size=len(_RANK_CODES), max_size=len(_RANK_CODES)),
+    item_haste=st.lists(_UTIL, min_size=len(_RANK_CODES), max_size=len(_RANK_CODES)),
+    item_tool=st.lists(st.booleans(), min_size=len(_RANK_CODES), max_size=len(_RANK_CODES)),
+    inv_pick=st.lists(st.booleans(), min_size=len(_RANK_CODES), max_size=len(_RANK_CODES)),
+    level=st.integers(min_value=1, max_value=10),
+)
+def test_rank_pick_matches_lean(item_types, item_levels, item_atk, item_res,
+                                item_crit, item_hp, item_wis, item_pros, item_inv,
+                                item_haste, item_tool, inv_pick, level):
+    """Live ``pick_loadout(Rank)`` per-slot pick ≡ oracle
+    ``pickSlotForPurpose(.rank rankOf)``, BIT-EXACT. The chosen item's live
+    ``gear_value(chosen, Rank)`` equals the oracle's proved-optimal rank benefit —
+    binding the monster-independent Rank picker DECISION to
+    ``Formal.GearValue.pickSlot_purpose_rank_optimal``. A random multi-slot-type
+    owned pool mixes combat-contributing stats (attack/resistance/crit, folded
+    into ``combat_raw``) and utility stats (wisdom/prospecting/hp/inventory_space/
+    haste) plus tool/non-tool subtype, so every ``rankValue`` summand is
+    exercised."""
+    table = {
+        code: ItemStats(
+            code=code, level=lvl, type_=typ,
+            subtype="tool" if tool else "",
+            attack={"earth": atk}, resistance={"fire": res},
+            critical_strike=crit, hp_bonus=hp, wisdom=wis, prospecting=pros,
+            inventory_space=inv, haste=haste,
+        )
+        for code, typ, lvl, atk, res, crit, hp, wis, pros, inv, haste, tool in zip(
+            _RANK_CODES, item_types, item_levels, item_atk, item_res, item_crit,
+            item_hp, item_wis, item_pros, item_inv, item_haste, item_tool,
+            strict=True)
+    }
+    inventory = {c: 1 for c, keep in zip(_RANK_CODES, inv_pick, strict=True) if keep}
+    equipment: dict[str, str | None] = {s: None for s in _RANK_TYPE_SLOT.values()}
+    gd = _FakeGameData(table)
+    state = _make_state(level, inventory, equipment)
+    result = pick_loadout(Rank(), state, gd)
+
+    owned = sorted(_owned_codes(state))
+    for typ, slot in _RANK_TYPE_SLOT.items():
+        code_ids: dict[str, int] = {}
+
+        def cid(code: str | None, _ids=code_ids) -> int:
+            if code is None:
+                return -1
+            return _ids.setdefault(code, len(_ids) + 1)
+
+        is_weapon = 1 if typ == "weapon" else 0
+        res = _oracle_rank_pick(level, None, table, owned, cid, slot, is_weapon)
+
+        chosen = result.get(slot)
+        chosen_stats = table.get(chosen) if chosen else None
+        feasible_exists = any(
+            st_.level <= level and slot in ITEM_TYPE_TO_SLOTS.get(st_.type_, [])
+            for st_ in (table.get(c) for c in owned) if st_ is not None
+        )
+        if chosen_stats is not None:
+            py_benefit = gear_value(chosen_stats, Rank())
+            assert py_benefit == _benefit(chosen_stats, Rank()), (py_benefit, chosen)
+            if feasible_exists:
+                assert py_benefit == max(res["max_benefit"], res["cur_benefit"]), (py_benefit, res)
+            assert py_benefit >= res["cur_benefit"], (py_benefit, res)
+        else:
+            assert res["cur_benefit"] == 0, res

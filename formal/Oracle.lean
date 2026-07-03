@@ -325,17 +325,22 @@ def runEquipmentScoring (args : Array Json) : Json :=
 
 The unified picker maximizes ONE per-slot benefit dispatched on the purpose:
 Combat → `combatValue` (= raw `WScore`/`AScore`), Gather → `-gatherValue`
-(`-skillEffect`, so the most-negative gather effect is the biggest benefit).
+(`-skillEffect`, so the most-negative gather effect is the biggest benefit),
+Rank → the monster-independent `rankValue` ruler per item.
 
 args layout:
-* 0:        purposeKind (0 = combat, 1 = gather)
+* 0:        purposeKind (0 = combat, 1 = gather, 2 = rank)
 * 1:        playerLevel
-* 2:        isWeapon (0/1)  — combat weapon-vs-armor dispatch; ignored for gather
+* 2:        isWeapon (0/1)  — combat weapon-vs-armor dispatch; ignored otherwise
 * 3..6:     monster element stats (resistance for weapon, attack for armor)
 * 7:        currentPresent (0/1)
-* 8..22:    current EXTENDED block: 13-int item block + skillEffect + isUtilityFill
-* 23..:     candidate EXTENDED blocks, 15 ints each (13-int item + skillEffect
-            + isUtilityFill)
+* 8..:      current EXTENDED block, then candidate EXTENDED blocks
+
+Each EXTENDED block is `stride` ints: the 13-int item block + skillEffect
+(block+13) + isUtilityFill (block+14). For the Rank purpose (purposeKind == 2)
+the block additionally carries the 6 `rankValue` inputs at block+15..block+20 —
+`[combat_raw, wisdom, prospecting, inventory_space, haste, is_tool]` — so
+`stride` is 21; for Combat/Gather it stays 15 (byte-unchanged layout).
 
 The skill effect is carried per item (the 14th int) and reassembled into the
 abstract `skillEffect : Item → Int` keyed by item code — binding the abstract
@@ -343,6 +348,10 @@ Gather benefit to the per-item integer the live Python `gather_score` returns.
 The 15th int (`isUtilityFill`, 0/1) flags the artifact-type utility-fill items
 whose Gather benefit is the flat utility (`Item.flatUtil`) rather than
 `-gatherValue` — the `_UTILITY_FILL_TYPES` fast-path in the live `_benefit`.
+The 6 Rank inputs feed the SAME `Formal.GearValue.rankValue` def `runRankValue`
+consumes (combat_raw in `attack`, other combat fields 0, so `combatRaw s =
+combat_raw`), reassembled into the abstract `rankOf : Item → Int` keyed by code —
+binding the abstract `Purpose.rank` benefit to the live `gear_value(_, Rank)`.
 
 Emits the picked item's CODE (or -1 = none / leave-as-is), its BENEFIT, the MAX
 feasible benefit, and the current item's benefit (for the no-downgrade assertion). -/
@@ -352,26 +361,49 @@ def runLoadoutPicker (args : Array Json) : Json :=
   let isWeapon := intArg args 2 != 0
   let monStats := elemFromArgs args 3
   let curPresent := intArg args 7 != 0
-  -- Build an Item from a 15-int block at `base`: the 13-int item block, then the
+  -- Rank (purposeKind == 2) extends each block with the 6 `rankValue` inputs at
+  -- block+15..block+20, so the stride is 21; Combat/Gather keep the 15-int layout.
+  let stride := if purposeKind == 2 then 21 else 15
+  -- Build an Item from a block at `base`: the 13-int item block, then the
   -- skillEffect (base+13, read separately into the pair), then isUtilityFill
   -- (base+14). `itemFromBlock` sets the default `isUtilityFill := false`; the
   -- record update binds it from the block so `runEquipmentScoring` stays default.
   let mkItem := fun (base : Nat) =>
     { itemFromBlock (fun i => intArg args (base + i)) with
         isUtilityFill := intArg args (base + 14) != 0 }
+  -- Per-item Rank ruler value from the 6 rank inputs at base+15..base+20, reusing
+  -- the SAME `Formal.GearValue.rankValue` def `runRankValue` consumes: combat_raw
+  -- is carried in `attack` (other combat fields 0) so `combatRaw s = combat_raw`.
+  let rankAt := fun (base : Nat) =>
+    let s : Formal.EquipValueAugmented.RawStats :=
+      ⟨intArg args (base + 15), 0, 0, 0, 0, 0,
+       intArg args (base + 16), intArg args (base + 17), intArg args (base + 18),
+       intArg args (base + 19), 0, 0⟩
+    Formal.GearValue.rankValue s (intArg args (base + 20) != 0)
+  let curBase := 8
   let curPair : Option (Item × Int) :=
-    if curPresent then some (mkItem 8, intArg args 21)
+    if curPresent then some (mkItem curBase, intArg args (curBase + 13))
     else none
-  let nCand := (args.size - 23) / 15
+  let candStart := curBase + stride
+  let nCand := (args.size - candStart) / stride
   let candPairs : List (Item × Int) :=
     (List.range nCand).map (fun k =>
-      (mkItem (23 + k * 15), intArg args (23 + k * 15 + 13)))
+      (mkItem (candStart + k * stride), intArg args (candStart + k * stride + 13)))
   let allPairs : List (Item × Int) :=
     (match curPair with | some p => [p] | none => []) ++ candPairs
   let skillEffect : Item → Int := fun it =>
     ((allPairs.find? (fun p => p.1.code == it.code)).map (fun p => p.2)).getD 0
   let p : Formal.GearValue.Purpose :=
-    if purposeKind == 1 then Formal.GearValue.Purpose.gather skillEffect
+    if purposeKind == 2 then
+      -- Per-code Rank ruler map, built only on the Rank path (stride 21).
+      let rankPairs : List (Item × Int) :=
+        (match curPair with | some pr => [(pr.1, rankAt curBase)] | none => []) ++
+        (List.range nCand).map (fun k =>
+          (mkItem (candStart + k * stride), rankAt (candStart + k * stride)))
+      let rankOf : Item → Int := fun it =>
+        ((rankPairs.find? (fun pr => pr.1.code == it.code)).map (fun pr => pr.2)).getD 0
+      Formal.GearValue.Purpose.rank rankOf
+    else if purposeKind == 1 then Formal.GearValue.Purpose.gather skillEffect
     else Formal.GearValue.Purpose.combat monStats monStats isWeapon
   let benefit := Formal.GearValue.purposeBenefit p
   let current : Option Item := curPair.map (fun p => p.1)
