@@ -10,6 +10,7 @@ from artifactsmmo_cli.tui.sprites import SpriteCategory
 from artifactsmmo_cli.tui.widgets.map_pane import (
     FALLBACK_H,
     FALLBACK_W,
+    MIN_TILES,
     TILE_H,
     TILE_W,
     MapPane,
@@ -357,3 +358,81 @@ class TestRenderLine:
         assert pane._line_cache                       # populated
         pane.update_snapshot(_snap(0, 0))             # new cycle clears it
         assert pane._line_cache == {}
+
+
+class TestWholeTileSizing:
+    """The pane auto-sizes to an exact whole-tile grid so the border hugs the
+    tiles with no sub-tile filler (bug: tiles didn't reach the pane edge)."""
+
+    def test_tiles_across_floors_to_whole_tiles(self):
+        assert MapPane.tiles_across(132) == 132 // TILE_W        # 16 whole tiles
+        assert MapPane.tiles_across(135) == 135 // TILE_W        # remainder dropped
+
+    def test_tiles_down_reserves_hud_row(self):
+        # 33 rows -> 1 HUD + (32 // TILE_H) tile rows.
+        assert MapPane.tiles_down(33) == (33 - 1) // TILE_H
+
+    def test_min_grid_floor(self):
+        assert MapPane.tiles_across(1) == MIN_TILES              # never below 3 wide
+        assert MapPane.tiles_down(1) == MIN_TILES                # never below 3 tall
+
+    def test_content_size_is_whole_tiles(self):
+        pane = MapPane(_gd_typed())
+        cw = pane.get_content_width(Size(132, 40), Size(170, 44))
+        ch = pane.get_content_height(Size(132, 40), Size(170, 44), cw)
+        assert cw % TILE_W == 0                                  # exact tile columns
+        assert (ch - 1) % TILE_H == 0                            # HUD + exact tile rows
+        assert cw == 16 * TILE_W and ch == 1 + 9 * TILE_H
+
+    async def test_pane_border_hugs_tiles_no_gap(self):
+        """Mounted with the auto-size CSS at 170x44: every tile row fills the
+        pane's content region edge-to-edge — zero blank cols against either
+        border (no sub-tile filler)."""
+        gd = _gd_typed()
+
+        class _Host(App):
+            CSS = "#map { border: solid white; width: auto; height: auto; }"
+
+            def compose(self) -> ComposeResult:
+                yield MapPane(gd, id="map")
+
+        app = _Host()
+        async with app.run_test(size=(170, 44)) as pilot:
+            pane = app.query_one("#map", MapPane)
+            pane.update_snapshot(_snap(0, 0))
+            await pilot.pause()
+            cr = pane.content_region
+            assert cr.width % TILE_W == 0                        # whole tiles, no remainder
+            strips = app.screen._compositor.render_strips()
+            row = strips[cr.y + 1].text[cr.x:cr.x + cr.width]    # first tile row, inside border
+            assert row.strip() != ""                            # a real tile row
+            assert len(row) - len(row.lstrip()) == 0            # no left gap
+            assert len(row) - len(row.rstrip()) == 0            # no right gap
+
+
+class TestOpaqueHudLine:
+    """The HUD line is rendered with an opaque background so re-emitting it clears
+    any characters a just-closed overlay (modal/palette) left on that row — the
+    transparent padding of a plain text line would not overwrite them."""
+
+    def test_hud_strip_padding_is_opaque(self):
+        pane = MapPane(_gd_typed())
+        pane.update_snapshot(_snap(0, 0))
+        strip = pane.render_line(0)                     # HUD line
+        # every cell (coords AND trailing padding) carries a background color
+        assert all(seg.style is not None and seg.style.bgcolor is not None
+                   for seg in strip if seg.text)
+        assert strip.cell_length == (pane.size.width or FALLBACK_W)   # full width
+
+    def test_tile_lines_not_forced_opaque_by_hud_style(self):
+        # A tile row keeps its own terrain colors; the HUD style only touches y=0.
+        pane = MapPane(_gd_typed())
+        pane.update_snapshot(_snap(0, 0))
+        assert pane.render_line(5).cell_length == (pane.size.width or FALLBACK_W)
+
+    def test_waiting_line_is_opaque(self):
+        pane = MapPane(_gd_typed())                     # no snapshot yet
+        strip = pane.render_line(0)
+        assert "Waiting" in strip.text
+        assert all(seg.style is not None and seg.style.bgcolor is not None
+                   for seg in strip if seg.text)

@@ -1,8 +1,7 @@
 from rich.console import Console
 
-from artifactsmmo_cli.ai.cycle_snapshot import RootScoreView
-from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.tui.plan_summary import build_plan_summary
+from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
+from artifactsmmo_cli.tui.plan_summary import build_plan_header
 
 
 def _text(renderable) -> str:
@@ -12,162 +11,34 @@ def _text(renderable) -> str:
     return cap.get()
 
 
-def _gd() -> GameData:
-    gd = GameData()
-    gd._crafting_recipes = {
-        "copper_boots": {"copper_bar": 6},
-        "copper_bar": {"copper_ore": 10},
-    }
-    gd._item_stats = {
-        "copper_boots": ItemStats(code="copper_boots", level=1, type_="boots",
-                                  crafting_skill="gearcrafting", crafting_level=1),
-        "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource",
-                                crafting_skill="mining", crafting_level=1),
-        "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource"),
-    }
-    return gd
+def _snap(**ov) -> CycleSnapshot:
+    base = dict(cycle_index=1, timestamp="t", character="hero", x=0, y=0, level=1,
+                xp=0, max_xp=100, hp=10, max_hp=10, gold=0, selected_goal="g",
+                action="a", outcome="ok", max_level=40)
+    base.update(ov)
+    return CycleSnapshot(**base)
 
 
-def test_obtain_chain_collapses_with_have_need():
-    out = _text(build_plan_summary(
-        chosen_root="ObtainItem(code='copper_boots', quantity=1)",
-        ranking=[], inventory={"copper_ore": 42}, bank=None, game_data=_gd(),
-        projected_cycles_to_max=None,
-    ))
-    # one line per item, raw-first, with [have/total]
-    assert "copper_ore" in out and "42/60" in out      # need 6*10=60, have 42
-    assert "copper_bar" in out and "0/6" in out
-    assert "copper_boots" in out and "0/1" in out
-    assert "Collect" in out and "Craft" in out
-    # boots is equippable (type 'boots' in ITEM_TYPE_TO_SLOTS) -> Equip line
-    assert "Equip" in out and "copper_boots" in out
+def test_header_shows_objective_and_eta():
+    out = _text(build_plan_header(_snap(
+        chosen_root="ObtainItem(code='life_amulet', quantity=1)",
+        projected_cycles_to_max=18.0)))
+    assert "OBJECTIVE" in out and "40" in out
+    assert "ETA" in out and "18" in out
 
 
-def test_active_leaf_marked_now():
-    out = _text(build_plan_summary(
-        chosen_root="ObtainItem(code='copper_boots', quantity=1)",
-        ranking=[], inventory={"copper_ore": 42}, bank=None, game_data=_gd(),
-        projected_cycles_to_max=None,
-    ))
-    # the SHALLOWEST pending item (copper_ore, being gathered now) gets the
-    # marker — NOT the final copper_boots craft that can't start yet.
-    line = next(ln for ln in out.splitlines() if "now" in ln)
-    assert "copper_ore" in line
-    assert "copper_boots" not in line
-
-
-def test_bank_credited_in_have():
-    out = _text(build_plan_summary(
-        chosen_root="ObtainItem(code='copper_boots', quantity=1)",
-        ranking=[], inventory={"copper_ore": 20}, bank={"copper_ore": 40},
-        game_data=_gd(), projected_cycles_to_max=None,
-    ))
-    assert "60/60" in out   # 20 inv + 40 bank covers the 60 needed
-
-
-def test_none_root_empty_state():
-    out = _text(build_plan_summary(None, [], {}, None, _gd(), None))
+def test_header_none_objective_message():
+    out = _text(build_plan_header(_snap(chosen_root=None)))
     assert "No committed objective" in out
 
 
-def test_reach_char_level_line():
-    out = _text(build_plan_summary(
-        "ReachCharLevel(level=3)", [], {}, None, _gd(), None,
-        ))
-    assert "char XP" in out and "L3" in out
-
-
-def test_reach_skill_level_line():
-    out = _text(build_plan_summary("ReachSkillLevel(skill='gearcrafting', level=5)",
-                                   [], {}, None, _gd(), None))
-    assert "gearcrafting" in out and "L5" in out
-
-
-def test_flowchart_chosen_branch_and_stubs():
-    ranking = [
-        RootScoreView(root_repr="ObtainItem(code='copper_boots', quantity=1)",
-                      category="gear", score=2.5, step_repr="UpgradeEquipment(copper_boots)"),
-        RootScoreView(root_repr="ReachCharLevel(level=3)", category="char_level", score=1.48,
-                      step_repr="FightAction(chicken)"),
-    ]
-    out = _text(build_plan_summary(
-        "ObtainItem(code='copper_boots', quantity=1)", ranking,
-        {"copper_ore": 42}, None, _gd(), 18.0))
-    assert "OBJECTIVE" in out
-    assert "CHOSEN" in out and "copper_boots" in out and "2.5" in out
-    assert "ETA" in out and "18" in out
-    # the non-chosen root appears as a stub with its score
-    assert "ReachCharLevel" in out and "1.48" in out
-    assert "would" in out                       # stub action line
-
-
-def test_pursue_task_line():
-    out = _text(build_plan_summary(
-        "PursueTask(task_code='cook_beef')", [], {}, None, _gd(), None,
-        task_code="cook_beef", task_progress=3, task_total=10))
-    assert "Task cook_beef" in out and "3/10" in out
-
-
-def test_unrecognized_root_falls_back_to_plain_plan_line():
-    out = _text(build_plan_summary("MysteryRoot(x=1)", [], {}, None, _gd(), None))
-    assert "Plan:" in out and "MysteryRoot" in out
-
-
-def test_suppressed_footer_listed():
-    out = _text(build_plan_summary(
-        "ReachCharLevel(level=3)", [], {}, None, _gd(), None,
-        suppressed_goals=["PursueTask", "GatherMaterials"]))
+def test_header_lists_suppressed():
+    out = _text(build_plan_header(_snap(
+        chosen_root="ReachCharLevel(level=3)",
+        suppressed_goals=["PursueTask", "GatherMaterials"])))
     assert "suppressed" in out and "PursueTask" in out and "GatherMaterials" in out
 
 
-def test_chosen_branch_shows_plan_len_and_next():
-    out = _text(build_plan_summary(
-        "ReachCharLevel(level=3)", [], {}, None, _gd(), None,
-        plan_len=3, path_next_action="chicken"))
-    assert "plan" in out and "3" in out and "chicken" in out
-
-
-def test_stub_would_line_for_obtain_root():
-    ranking = [
-        RootScoreView(root_repr="ReachCharLevel(level=3)", category="char_level", score=2.0,
-                      step_repr="FightAction(chicken)"),
-        RootScoreView(root_repr="ObtainItem(code='copper_boots', quantity=1)",
-                      category="gear", score=1.0, step_repr="UpgradeEquipment(copper_boots)"),
-    ]
-    out = _text(build_plan_summary("ReachCharLevel(level=3)", ranking, {}, None, _gd(), None))
-    stub = next(ln for ln in out.splitlines() if "copper_boots" in ln and "would" in ln)
-    assert "Craft" in stub
-
-
-def _stub_ranking(n: int) -> list[RootScoreView]:
-    out = [RootScoreView(root_repr="ReachCharLevel(level=3)", category="char_level",
-                         score=9.0, step_repr="FightAction(chicken)")]  # chosen
-    for i in range(n):
-        out.append(RootScoreView(root_repr=f"ObtainItem(code='item{i}', quantity=1)",
-                                 category="gear", score=1.0 - i * 0.01,
-                                 step_repr=f"UpgradeEquipment(item{i})"))
-    return out
-
-
-def test_pagination_footer_and_first_page_slice():
-    ranking = _stub_ranking(14)
-    out = _text(build_plan_summary("ReachCharLevel(level=3)", ranking, {}, None, _gd(), None,
-                                   alt_page=0, alt_page_size=6))
-    assert "item0" in out and "item5" in out
-    assert "item6" not in out
-    assert "alternatives 1" in out and "of 14" in out
-
-
-def test_pagination_last_page_slice():
-    ranking = _stub_ranking(14)
-    out = _text(build_plan_summary("ReachCharLevel(level=3)", ranking, {}, None, _gd(), None,
-                                   alt_page=2, alt_page_size=6))
-    assert "item12" in out and "item13" in out
-    assert "item0" not in out
-    assert "13" in out and "14" in out
-
-
-def test_no_footer_when_single_page():
-    ranking = _stub_ranking(3)
-    out = _text(build_plan_summary("ReachCharLevel(level=3)", ranking, {}, None, _gd(), None))
-    assert "alternatives" not in out
+def test_header_omits_eta_when_absent():
+    out = _text(build_plan_header(_snap(chosen_root="ReachCharLevel(level=3)")))
+    assert "ETA" not in out

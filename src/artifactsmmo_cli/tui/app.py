@@ -4,6 +4,7 @@ from collections import deque
 from collections.abc import Callable
 
 from textual.app import App, ComposeResult
+from textual.containers import Container
 from textual.screen import Screen
 from textual.widgets import Footer, Header
 
@@ -42,14 +43,23 @@ class WatchApp(App[None]):
         border: solid white;
         padding: 0 1;
     }
-    #map {
+    /* The map cell fills the grid slot and OWNS the sub-tile leftover space, so a
+       closed modal's text there is repainted away like any other pane (unowned
+       screen space is NOT re-emitted on screen resume, which stranded remnants). */
+    #map-cell {
         column-span: 2;
         row-span: 2;
+        /* Opaque background so the leftover strip (right/below the tile-exact map)
+           is repainted on modal close instead of stranding the old pane's text. */
+        background: $background;
+    }
+    #map {
         border: solid white;
-        padding: 0 1;
-        /* Fill the cell so the renderer sizes its grid from self.size. */
-        width: 1fr;
-        height: 1fr;
+        /* Auto-size to an exact whole-tile grid (MapPane.get_content_width/height):
+           no padding, no sub-tile filler, border hugs the tiles. The leftover
+           (< 1 tile) is owned by #map-cell, not stranded as unowned screen space. */
+        width: auto;
+        height: auto;
     }
     #inv {
         border: solid white;
@@ -83,7 +93,8 @@ class WatchApp(App[None]):
     def compose(self) -> ComposeResult:
         yield Header()
         yield StatusPane(id="status")
-        yield MapPane(self._game_data, id="map")
+        with Container(id="map-cell"):        # owns the sub-tile leftover space
+            yield MapPane(self._game_data, id="map")
         yield InventoryPane(id="inv")
         yield LogPane(id="log")
         yield Footer()

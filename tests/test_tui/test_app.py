@@ -393,3 +393,21 @@ class TestThreeByThreeLayout:
             assert log_pane.region.y > map_pane.region.y
             assert log_pane.region.height <= 7
             await pilot.pause()
+
+    async def test_map_cell_owns_tile_leftover(self):
+        """The tile-exact map is wrapped in #map-cell, which fills the grid slot
+        and OWNS the sub-tile leftover (right/bottom of the map box). Unowned
+        screen space is not repainted on modal close, which stranded remnants
+        there; an owning widget is repainted like any other pane."""
+        app = WatchApp("hero", GameData())
+        async with app.run_test(size=(170, 44)) as pilot:
+            app.update_snapshot(_snap())
+            await pilot.pause()
+            cell = app.query_one("#map-cell")
+            m = app.query_one("#map", MapPane)
+            # map is tile-exact and sits inside the cell
+            assert m.content_region.width % TILE_W == 0
+            assert app.query_one("#map", MapPane).parent is cell
+            # the cell fully contains the map and extends past it (owns the gap)
+            assert cell.region.x <= m.region.x and cell.region.right >= m.region.right
+            assert cell.region.right > m.region.right or cell.region.bottom > m.region.bottom

@@ -1252,3 +1252,64 @@ def test_not_producible_for_currency_buy_with_unattainable_currency():
     gd._npc_locations = {"mystery_shop": (3, 3)}
     gd._item_stats = {"rare_gem": ItemStats(code="rare_gem", level=1, type_="resource")}
     assert _producible("rare_gem", make_state(), gd) is False
+
+
+def _gd_bag() -> GameData:
+    """GameData with the craftable bag (satchel, gearcrafting L5) plus an empty
+    combat helmet, for the bag-slot urgency tests. satchel's only stat is
+    inventory_space, so its COLD strategic_value is 0 (efficiency weights are 0
+    until learned) — the exact zero-collapse the BAG_SLOT_URGENCY floor
+    addresses. (equip_value(satchel) is 41, not 0 — Rank weights inventory_space
+    at parity — but equip_value is never on the bag root's ranking path.) iron_helmet
+    carries hp_bonus (combat-bearing) so helmet_slot is an empty COMBAT slot,
+    giving a concrete 'below combat' comparison target."""
+    gd = GameData()
+    gd._item_stats = {
+        "satchel": ItemStats(
+            code="satchel", level=5, type_="bag", inventory_space=20,
+            crafting_skill="gearcrafting", crafting_level=5),
+        "iron_helmet": ItemStats(
+            code="iron_helmet", level=5, type_="helmet", hp_bonus=20,
+            crafting_skill="gearcrafting", crafting_level=5),
+        "cowhide": ItemStats(code="cowhide", level=8, type_="resource"),
+    }
+    gd._crafting_recipes = {"satchel": {"cowhide": 5}, "iron_helmet": {"cowhide": 5}}
+    gd._monster_level = {"chicken": 1}  # gives from_game_data a combat monster
+    fill_monster_stat_defaults(gd)
+    return gd
+
+
+def _bag_state(gearcrafting: int = 5):
+    """State at level 11 with empty bag + helmet slots and the given
+    gearcrafting skill. Copies make_state's default skills so only gearcrafting
+    is overridden (bag branch gates on gearcrafting >= satchel.crafting_level)."""
+    base = make_state(level=11)
+    return make_state(
+        level=11,
+        skills={**base.skills, "gearcrafting": gearcrafting},
+        equipment={**base.equipment, "bag_slot": None, "helmet_slot": None},
+    )
+
+
+def test_empty_bag_slot_scores_nonzero():
+    gd = _gd_bag()
+    eng = StrategyEngine(CharacterObjective.from_game_data(gd), BalancedPersonality())
+    root = ObtainItem("satchel", slot="bag_slot")
+    assert eng._value(root, _bag_state(), gd) > 0
+
+
+def test_empty_bag_slot_below_empty_combat_slot():
+    gd = _gd_bag()
+    eng = StrategyEngine(CharacterObjective.from_game_data(gd), BalancedPersonality())
+    state = _bag_state()
+    bag = eng._value(ObtainItem("satchel", slot="bag_slot"), state, gd)
+    helmet = eng._value(ObtainItem("iron_helmet", slot="helmet_slot"), state, gd)
+    assert 0 < bag < helmet
+
+
+def test_bag_floor_gated_on_craft_skill():
+    gd = _gd_bag()
+    eng = StrategyEngine(CharacterObjective.from_game_data(gd), BalancedPersonality())
+    # gearcrafting 1 < satchel.crafting_level 5 → not craftable yet → no floor.
+    root = ObtainItem("satchel", slot="bag_slot")
+    assert eng._value(root, _bag_state(gearcrafting=1), gd) == 0

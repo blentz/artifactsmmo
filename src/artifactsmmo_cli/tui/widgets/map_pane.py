@@ -4,9 +4,10 @@ import time
 from typing import Any
 
 from rich.console import Console
+from rich.style import Style
 from rich.text import Text
 from textual.events import Resize
-from textual.geometry import Region
+from textual.geometry import Region, Size
 from textual.reactive import reactive
 from textual.strip import Strip
 from textual.timer import Timer
@@ -49,6 +50,12 @@ from artifactsmmo_cli.tui.swing_frames import (
 
 TILE_W = 8   # chars per tile column (8 pixels wide)
 TILE_H = 4   # char-rows per tile (8 pixels tall, 2 px per char-row)
+MIN_TILES = 3  # never shrink the viewport below a 3x3 tile grid
+# Opaque background for the HUD line. Its coords text is short, so the rest of the
+# line is padding; without an opaque bg those cells are transparent and re-emitting
+# the line does NOT overwrite characters an overlay (a just-closed modal) left on
+# that row. An opaque HUD line clears them on every repaint.
+_HUD_STYLE = Style(bgcolor=UNMAPPED_COLOR)
 FALLBACK_W = 80
 FALLBACK_H = 41
 MAX_ANIM_STEPS = 12       # cap glide frames so big jumps still finish fast
@@ -228,6 +235,26 @@ class MapPane(Static):
         self._anim_now = time.monotonic()
         self.refresh()
 
+    @staticmethod
+    def tiles_across(available_width: int) -> int:
+        """Whole tile columns that fit in `available_width`, floored to a min grid."""
+        return max(MIN_TILES, available_width // TILE_W)
+
+    @staticmethod
+    def tiles_down(available_height: int) -> int:
+        """Whole tile rows that fit below the 1-row HUD, floored to a min grid."""
+        return max(MIN_TILES, (available_height - 1) // TILE_H)
+
+    def get_content_width(self, container: Size, viewport: Size) -> int:
+        """Size the pane to an exact whole-tile width (no sub-tile remainder, so
+        the border hugs the grid with no filler). Textual calls this because #map
+        is `width: auto`."""
+        return self.tiles_across(container.width) * TILE_W
+
+    def get_content_height(self, container: Size, viewport: Size, width: int) -> int:
+        """Exact whole-tile height: 1 HUD row + a whole number of tile rows."""
+        return 1 + self.tiles_down(container.height) * TILE_H
+
     def render(self) -> Text:
         snap = self.snapshot
         if snap is None:
@@ -380,7 +407,8 @@ class MapPane(Static):
         snap = self.snapshot
         if snap is None:
             text = Text("Waiting for first cycle...") if y == 0 else Text("")
-            return self._text_strip(text, width)
+            strip = self._text_strip(text, width)
+            return strip.apply_style(_HUD_STYLE) if y == 0 else strip
         if y >= self._line_count(height):
             return Strip.blank(width)
         center = self._glide_center(self._anim_now) or (snap.x, snap.y)
@@ -391,6 +419,9 @@ class MapPane(Static):
         if cached is not None and cached[0] == sig:
             return cached[1]
         strip = self._text_strip(self._line_text(y, width, height, center, sprite, overlay), width)
+        if y == 0:
+            # Opaque HUD line: overwrite any characters a closed overlay left here.
+            strip = strip.apply_style(_HUD_STYLE)
         self._line_cache[y] = (sig, strip)
         return strip
 

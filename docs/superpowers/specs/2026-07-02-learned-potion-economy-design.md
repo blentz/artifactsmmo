@@ -168,10 +168,18 @@ change does not gate shipping survivability value.
 
 ## Out of scope
 
-**Phase 1.5 (capstone-tightening, tracked):** potion-extended `effectiveHp` term
-in `WinnableAcrossBand` — model `guaranteedHealReserve` from the economy's
-provision guarantee, widen the proven winnable band, tighten `FightReadyReach` /
-L50 liveness. Deep proof change, isolated from Phase 1 (see L50 threading §).
+**Phase 1.5 (capstone-tightening): SHELVED 2026-07-02 — premise false, no liveness
+gain.** The idea was a potion-extended `effectiveHp` term in `WinnableAcrossBand`
+to widen the proven band. Exploration showed: (1) `WinnableAcrossBand`
+(`GearTierLeveling.lean:54`) already holds 49/49 with the BARE loadout at full
+projected HP — the band has NO gap for potions to unlock, so zero L50-liveness
+tightening; (2) production `predict_win` does not credit potions as HP
+(`effective_hp = min(hp, max_hp)`), so this would be a proven-core BEHAVIOR change
+(bot fights harder monsters relying on potions → over-confidence risk), not a
+proof-to-match-runtime tightening; (3) it's unsound without a fragile
+runtime "N potions guaranteed on hand at fight time" invariant the Lean State
+does not model — dishonest-proof risk for zero gain. Phase 1 stays
+conservative-safe as designed. See memory `project_phase15_shelved`.
 
 **Phase 2 —** Non-heal utility effects: per-effect magnitude accessors over the same
 `consumables_expended_json` substrate; attribute win-rate/expenditure deltas to
