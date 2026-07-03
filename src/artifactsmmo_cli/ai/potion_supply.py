@@ -20,7 +20,7 @@ from artifactsmmo_cli.ai.unlock_boost import unlock_boost_target
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
-def _primary_combat_target(state: WorldState, game_data: GameData) -> str | None:
+def primary_combat_target(state: WorldState, game_data: GameData) -> str | None:
     """First winnable in-band monster from combat_target_monsters, or None when empty."""
     targets = combat_target_monsters(state, game_data)
     return targets[0] if targets else None
@@ -138,18 +138,16 @@ def craft_potions_fires(state: WorldState, game_data: GameData) -> bool:
         state.level, POTION_LOW_LEVEL, POTION_LOW_QTY, POTION_HIGH_LEVEL, POTION_HIGH_QTY,
     )
     if equipped >= baseline:
-        monster = _primary_combat_target(state, game_data)
+        monster = primary_combat_target(state, game_data)
         if monster is not None:
             boost = best_boost_potion(state, game_data, monster)
             boost_baseline = potion_baseline_pure(
                 state.level, POTION_LOW_LEVEL, POTION_LOW_QTY, POTION_HIGH_LEVEL, POTION_HIGH_QTY,
             )
-            if (boost is not None
-                    and equipped_potion_qty(state, boost) < boost_baseline
-                    and _recipe_producible(
-                        dict(game_data.crafting_recipes.get(boost, {})), state, game_data
-                    )):
-                return True
+            if boost is not None and equipped_potion_qty(state, boost) < boost_baseline:
+                boost_recipe = dict(game_data.crafting_recipes.get(boost, {}))
+                if boost_recipe and _recipe_producible(boost_recipe, state, game_data):
+                    return True
         return False
     recipe = dict(game_data.crafting_recipes.get(target, {}))
     if not recipe:

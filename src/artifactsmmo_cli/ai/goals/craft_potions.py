@@ -22,7 +22,7 @@ from artifactsmmo_cli.ai.max_batch_from_held import max_batch_from_held_pure
 from artifactsmmo_cli.ai.optimal_buy_mix import optimal_buy_mix_pure
 from artifactsmmo_cli.ai.potion_baseline import potion_baseline_pure
 from artifactsmmo_cli.ai.potion_provision_qty import potion_provision_qty_pure
-from artifactsmmo_cli.ai.potion_supply import target_potion_pure
+from artifactsmmo_cli.ai.potion_supply import primary_combat_target, target_potion_pure
 from artifactsmmo_cli.ai.thresholds import (
     POTION_GATHER_BATCH,
     POTION_HIGH_LEVEL,
@@ -116,8 +116,9 @@ class CraftPotionsGoal(Goal):
         craft_yield = game_data.craft_yield(code)
         deficit = self._baseline(state.level, state, game_data, self._history) - self._equipped(state, game_data)
         if deficit <= 0:
-            if self._combat_monster is not None:
-                best_boost = best_boost_potion(state, game_data, self._combat_monster)
+            boost_monster = primary_combat_target(state, game_data)
+            if boost_monster is not None:
+                best_boost = best_boost_potion(state, game_data, boost_monster)
                 if best_boost is not None:
                     boost_equipped = equipped_potion_qty(state, best_boost)
                     boost_baseline = potion_baseline_pure(

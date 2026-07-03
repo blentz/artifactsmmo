@@ -25,6 +25,7 @@ from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
 from artifactsmmo_cli.ai.strategy_driver import map_guard
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext, active_guards
+from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
@@ -194,7 +195,7 @@ def _gd_boost_trivial_monster() -> GameData:
     return gd
 
 
-def _state_heals_stocked() -> GameData:
+def _state_heals_stocked() -> WorldState:
     """Level=5, alchemy=10, heal equipped at baseline qty=5 (stocked),
     boost not equipped, inventory has 3 sunflowers (producible for 1 boost batch)."""
     return make_state(
@@ -233,3 +234,42 @@ def test_guard_no_boost_when_none_beneficial():
     gd = _gd_boost_trivial_monster()
     state = _state_heals_stocked()
     assert craft_potions_fires(state, gd) is False
+
+
+def test_c1_guard_and_goal_agree_on_boost_target():
+    """C1 spin regression: guard picks boost-target via primary_combat_target;
+    goal must use the SAME selector — NOT self._combat_monster.
+
+    Pre-fix: CraftPotionsGoal._active_craft guarded the boost branch on
+    ``self._combat_monster is not None``.  When the goal was constructed with
+    ``combat_monster=None`` (or any monster that differs from primary_combat_target),
+    _active_craft returned None even though craft_potions_fires returned True
+    → guard re-fired every cycle → infinite spin.
+
+    Post-fix: the goal's boost branch calls primary_combat_target(state, gd),
+    identical to the guard, so guard and goal always agree on the target.
+
+    Non-vacuous: fire_boost IS craftable-now (alchemy=10 >= gate=1), IS
+    beneficial against slime (fire attack → gain > 0), and IS producible
+    (3 sunflowers held satisfy recipe {sunflower:3}).  The only variable is
+    which monster the goal uses — post-fix it matches the guard's pick.
+    """
+    gd = _gd_boost_winnable()
+    state = _state_heals_stocked()
+
+    # Guard fires: primary_combat_target = slime → fire_boost beneficial + producible.
+    assert craft_potions_fires(state, gd) is True
+
+    # Goal constructed with combat_monster=None: simulates the mismatch where
+    # the strategy driver passes a task-aligned monster different from the guard's pick.
+    goal = CraftPotionsGoal(combat_monster=None)
+
+    # Post-fix: _active_craft uses primary_combat_target → slime → fire_boost plan.
+    # Pre-fix: the combat_monster=None branch was skipped entirely → returned None.
+    result = goal._active_craft(state, gd)
+    assert result is not None, (
+        "guard fired for slime's fire_boost but _active_craft returned None "
+        "(C1 spin: goal boost-path was gated on self._combat_monster, "
+        "not primary_combat_target)"
+    )
+    assert result[0] == _BOOST
