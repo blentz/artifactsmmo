@@ -3,10 +3,13 @@
 import pytest
 
 from artifactsmmo_cli.ai.combat import (
+    LOSE_MARGIN,
     MIN_WIN_SAMPLES,
+    WIN_MARGIN,
     _element_damage,
     _expected_hit,
     _round_half_up,
+    combat_margin,
     is_winnable,
     predict_win,
 )
@@ -591,3 +594,96 @@ def test_predict_win_boolean_unchanged_by_helper_extraction():
     state_f = make_state(max_hp=100, hp=0, attack={"fire": 10}, initiative=50)
     gd_f = _gd(hp=30, attack={"fire": 1}, initiative=0)
     assert predict_win(state_f, gd_f, "mob") is False
+
+
+def _predict_win_case_matrix() -> list[tuple]:
+    """Return (label, state, gd, expected_win_bool) for the key predict_win branches.
+
+    Excludes Case C (die_step<=0) because it requires special _item_stats wiring not
+    supported by the plain _gd() helper; that branch is covered by the differential
+    test (test_sustain_win_returns_win_margin) instead.
+    """
+    return [
+        # Case A: raw_player=0 (no attack) → LOSE
+        ("raw_player_zero",
+         make_state(max_hp=100, attack={}, initiative=50),
+         _gd(hp=30, attack={"fire": 5}),
+         False),
+        # Case B: kill_step <= 0 (monster lifesteal out-heals) → LOSE
+        ("kill_step_zero",
+         make_state(max_hp=200, attack={"fire": 5}, resistance={"fire": 100}, initiative=50),
+         _gd(hp=30, attack={"fire": 200}, crit=50, lifesteal=10),
+         False),
+        # Case D: die_step > 0, poison raises cost → LOSE
+        ("poison_loss",
+         make_state(max_hp=100, attack={"fire": 50}, initiative=10),
+         _gd(hp=100, attack={"fire": 50}, initiative=10, poison=100),
+         False),
+        # Case E: normal win, player-first tie (rtk == rtd == 2) → WIN
+        ("normal_win_player_first",
+         make_state(max_hp=100, attack={"fire": 50}, initiative=10),
+         _gd(hp=100, attack={"fire": 50}, initiative=10),
+         True),
+        # Case F: state.hp=0 → effective_hp==0 guard → LOSE
+        ("zero_hp_loss",
+         make_state(max_hp=100, hp=0, attack={"fire": 10}, initiative=50),
+         _gd(hp=30, attack={"fire": 1}, initiative=0),
+         False),
+    ]
+
+
+def test_combat_margin_sign_matches_predict_win():
+    """Invariant: (combat_margin(...) > 0) == predict_win(...) for all case-matrix rows.
+
+    Also verifies that the sentinel values LOSE_MARGIN and WIN_MARGIN are used at
+    their respective exits: raw_player=0 and die_step=0 exits use sentinels, not
+    arbitrary values that happen to have the right sign.
+    """
+    for label, state, gd, expected_win in _predict_win_case_matrix():
+        margin = combat_margin(state, gd, "mob")
+        pw = predict_win(state, gd, "mob")
+        assert pw is expected_win, f"predict_win mismatch for {label}: {pw!r}"
+        assert (margin > 0) is expected_win, (
+            f"sign invariant broken for {label}: margin={margin} expected_win={expected_win}"
+        )
+    # Sentinel check: raw_player=0 case returns exactly LOSE_MARGIN
+    _, state_a, gd_a, _ = _predict_win_case_matrix()[0]
+    assert combat_margin(state_a, gd_a, "mob") == LOSE_MARGIN
+    # Sentinel check: monster with no attack → die_step=0 → WIN_MARGIN
+    state_sustain = make_state(max_hp=100, attack={"fire": 50}, initiative=10)
+    gd_sustain = _gd(hp=100, attack={})  # no monster attack → die_step=0
+    assert combat_margin(state_sustain, gd_sustain, "mob") == WIN_MARGIN
+
+
+def test_combat_margin_magnitude_orders_by_cushion():
+    """A player with more HP (bigger round cushion) has a strictly larger margin.
+
+    Construction: keep rtk fixed (same attack vs same monster HP), vary player HP
+    so rtd grows. Margin = rtd - rtk + 1 (player_first, tie in initiative).
+
+    Larger rtd → larger margin, and the stronger player's margin > weaker player's.
+    Also verifies the boundary: the exact-tie player (rtk == rtd, player_first) has
+    margin==1 (win), while a player one round short has margin==0 (loss).
+
+    Note: state.hp must equal max_hp so _effective_player_hp returns max_hp unchanged;
+    make_state(max_hp=X) alone defaults state.hp=100 which would clamp eff_hp to 100.
+    """
+    gd_sym = _gd(hp=100, attack={"fire": 50}, initiative=10)
+
+    # Tie: rtk==rtd==2, player_first → margin = 2-2+1 = 1.
+    state_tie = make_state(max_hp=100, hp=100, attack={"fire": 50}, initiative=10)
+    margin_tie = combat_margin(state_tie, gd_sym, "mob")
+    assert margin_tie == 1, f"expected margin 1 for tie-win, got {margin_tie}"
+    assert predict_win(state_tie, gd_sym, "mob") is True
+
+    # Weaker player: rtd=1 → margin = 1-2+1 = 0 (loss).
+    state_weak = make_state(max_hp=50, hp=50, attack={"fire": 50}, initiative=10)
+    margin_weak = combat_margin(state_weak, gd_sym, "mob")
+    assert margin_weak == 0, f"expected margin 0 for weak player, got {margin_weak}"
+    assert margin_weak < margin_tie
+
+    # Stronger player: rtd=4 → margin = 4-2+1 = 3 (cushion).
+    state_strong = make_state(max_hp=200, hp=200, attack={"fire": 50}, initiative=10)
+    margin_strong = combat_margin(state_strong, gd_sym, "mob")
+    assert margin_strong == 3, f"expected margin 3 for strong player, got {margin_strong}"
+    assert margin_strong > margin_tie

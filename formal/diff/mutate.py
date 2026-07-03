@@ -603,6 +603,27 @@ PREDICT_WIN_LIFESTEAL_MUTATIONS = [
      "    if 0 < reconstitution <= 0:"),
 ]
 
+# combat_margin mutations -- old strings matched to current combat.py text.
+# These are killed by formal/diff/test_combat_margin_diff.py (exact int agreement).
+COMBAT_MARGIN_MUTATIONS = [
+    # tiebreak: drop the +1 player-first adjustment → margin=0 at tie (was win, now not>0).
+    ("combat_margin: tiebreak +1 -> +0 (player-first)",
+     "    return rounds_to_die - rounds_to_kill + (1 if player_first else 0)",
+     "    return rounds_to_die - rounds_to_kill + 0"),
+    # sentinel flip: die_step<=0 branch returns LOSE_MARGIN instead of WIN_MARGIN.
+    ("combat_margin: WIN_MARGIN sentinel -> LOSE_MARGIN (die_step<=0 branch)",
+     "        return WIN_MARGIN",
+     "        return LOSE_MARGIN"),
+    # arithmetic flip: negate the cushion sign (win looks like loss and vice versa).
+    ("combat_margin: flip round-cushion arithmetic (die-kill -> kill-die)",
+     "    return rounds_to_die - rounds_to_kill + (1 if player_first else 0)",
+     "    return rounds_to_kill - rounds_to_die + (1 if player_first else 0)"),
+    # effective-hp guard: sentinel flipped to WIN_MARGIN (dead player is a win).
+    ("combat_margin: effective_hp<=0 guard LOSE_MARGIN -> WIN_MARGIN",
+     "    if effective_hp <= 0:\n        return LOSE_MARGIN\n    rounds_to_die",
+     "    if effective_hp <= 0:\n        return WIN_MARGIN\n    rounds_to_die"),
+]
+
 
 # loadout_projection mutations -- old strings matched to current projection.py text.
 PROJECTION_MUTATIONS = [
@@ -4220,6 +4241,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_predict_win_diff.py", survivors)
     run_group(COMBAT_SRC, PREDICT_WIN_LIFESTEAL_MUTATIONS,
               "tests/test_ai/test_combat.py", survivors)
+    run_group(COMBAT_SRC, COMBAT_MARGIN_MUTATIONS,
+              "formal/diff/test_combat_margin_diff.py", survivors)
     run_group(PROJECTION_SRC, PROJECTION_MUTATIONS,
               "formal/diff/test_loadout_projection_diff.py", survivors)
     run_group(SCORING_SRC, SCORING_MUTATIONS,

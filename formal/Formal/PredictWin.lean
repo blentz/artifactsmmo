@@ -169,6 +169,45 @@ def predictWin (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
           if playerFirst then roundsToKill ≤ roundsToDie
           else roundsToKill < roundsToDie
 
+/-- Sentinel for the `dieStep ≤ 0` (out-sustain) win branch of `combatMargin`.
+Always positive: `0 < winMargin`. -/
+def winMargin : Int := maxTurns + 1
+
+/-- Sentinel for all losing / unkillable branches of `combatMargin`.
+Always negative: `loseMargin < 0`. -/
+def loseMargin : Int := -(maxTurns + 1)
+
+/-- Signed margin whose sign equals the `predictWin` verdict.
+
+Invariant: `predictWin ... playerFirst = (combatMargin ... playerFirst > 0)`.
+
+Mirrors `predictWin`'s exact branch structure, returning `loseMargin` / `winMargin`
+at the boolean exits and `roundsToDie - roundsToKill + (if playerFirst then 1 else 0)`
+in the numeric regime (so win ⟺ value > 0, matching `roundsToKill ≤ roundsToDie`
+when `playerFirst` and strict `<` otherwise). -/
+def combatMargin (rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
+    pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn
+    monsterHealing monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy monsterBubble playerAntipoison
+    monsterSunShield monsterGreed monsterEnchantedMirror : Int)
+    (playerFirst : Bool) : Int :=
+  if rawPlayer ≤ 0 then loseMargin
+  else
+    let ks := killStepNet rawPlayer pCrit mCrit mLifesteal mAtkSum monsterHp monsterHealing
+        playerMaxHp monsterVoidDrain monsterBubble monsterSunShield
+    if ks ≤ 0 then loseMargin
+    else
+      let roundsToKill := ceilDiv ((monsterHp + monsterBarrier) * 10000) ks
+      if roundsToKill > maxTurns then loseMargin
+      else if 0 < monsterReconstitution ∧ monsterReconstitution ≤ roundsToKill then loseMargin
+      else
+        let ds := dieStep rawMonster mCrit pCrit pLifesteal pAtkSum monsterPoison monsterBurn
+            playerMaxHp monsterVoidDrain monsterBerserk monsterFrenzy playerAntipoison
+            rawPlayer monsterGreed monsterEnchantedMirror
+        if ds ≤ 0 then winMargin
+        else
+          let roundsToDie := ceilDiv (playerMaxHp * 10000) ds
+          roundsToDie - roundsToKill + (if playerFirst then 1 else 0)
+
 /-! ### Operational fight simulation (refinement target).
 
 A turn-by-turn fight: starting HP totals, alternating attacks by initiative,

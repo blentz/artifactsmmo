@@ -133,6 +133,43 @@ def runPredictWin (g : Nat → Int) : Json :=
   Json.mkObj [("win", Json.bool verdict), ("raw_player", Json.num rawPlayer),
     ("raw_monster", Json.num rawMonster)]
 
+/-- Compute one combat_margin result using the SAME proved `combatMargin`/`rawHit`.
+
+Same args layout as `runPredictWin` (46 ints, 0..45). Returns the signed integer
+margin whose sign equals the `predictWin` verdict. -/
+def runCombatMargin (g : Nat → Int) : Json :=
+  let rawPlayer := rawHit (g 0) (g 1) (g 2) (g 3) (g 4) (g 5)
+    (g 6) (g 7) (g 8) (g 9) (g 10) (g 11)
+  let pCrit := g 12
+  let monsterHp := g 13
+  let rawMonster := rawHit (g 14) (g 15) (g 16) (g 17) (g 18) (g 19)
+    (g 20) (g 21) (g 22) (g 23) (g 24) (g 25)
+  let mCrit := g 26
+  let playerMaxHp := g 27
+  let playerFirst := g 28 != 0
+  let pLifesteal := g 29
+  let pAtkSum := g 30
+  let mLifesteal := g 31
+  let mAtkSum := g 32
+  let monsterPoison := g 33
+  let monsterBarrier := g 34
+  let monsterBurn := g 35
+  let monsterHealing := g 36
+  let monsterReconstitution := g 37
+  let monsterVoidDrain := g 38
+  let monsterBerserk := g 39
+  let monsterFrenzy := g 40
+  let monsterBubble := g 41
+  let playerAntipoison := g 42
+  let monsterSunShield := g 43
+  let monsterGreed := g 44
+  let monsterEnchantedMirror := g 45
+  let margin := combatMargin rawPlayer pCrit monsterHp rawMonster mCrit playerMaxHp
+    pLifesteal pAtkSum mLifesteal mAtkSum monsterPoison monsterBarrier monsterBurn monsterHealing
+    monsterReconstitution monsterVoidDrain monsterBerserk monsterFrenzy monsterBubble playerAntipoison
+    monsterSunShield monsterGreed monsterEnchantedMirror playerFirst
+  Json.mkObj [("margin", Json.num margin)]
+
 /-- Read an Int field (defaulting to 0) from a JSON array of Ints. -/
 def intArg (xs : Array Json) (i : Nat) : Int := (xs[i]!.getInt?).toOption.getD 0
 
@@ -2686,6 +2723,8 @@ def runOne (item : Json) : Json :=
     runEquipCapFromPeers args
   else if kind == "predict_win" then
     runPredictWin (fun i => intArg args i)
+  else if kind == "combat_margin" then
+    runCombatMargin (fun i => intArg args i)
   else if kind == "loadout_projection" then
     runLoadoutProjection args
   else if kind == "equipment_scoring" then

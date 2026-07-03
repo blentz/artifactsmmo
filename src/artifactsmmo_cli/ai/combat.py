@@ -18,6 +18,12 @@ from artifactsmmo_cli.ai.world_state import WorldState
 MAX_TURNS = 100
 """A fight unresolved by turn 100 is a loss (documented combat cap)."""
 
+WIN_MARGIN = MAX_TURNS + 1
+"""Sentinel margin for the die_step<=0 (out-sustain) win branch of `combat_margin`."""
+
+LOSE_MARGIN = -(MAX_TURNS + 1)
+"""Sentinel margin for all losing / unkillable branches of `combat_margin`."""
+
 GREED_MAX_STACKS = 9
 """Max `greed` stacks the closed-form model assumes (conservative upper bound).
 
@@ -260,6 +266,94 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
     rounds_to_die = -(-(effective_hp * 10000) // die_step)  # ceil
     player_first = p.initiative >= game_data.monster_initiative(monster_code)
     return rounds_to_kill <= rounds_to_die if player_first else rounds_to_kill < rounds_to_die
+
+
+def combat_margin(state: WorldState, game_data: GameData, monster_code: str) -> int:
+    """Signed margin whose sign equals the `predict_win` verdict.
+
+    Invariant: ``predict_win(...) == (combat_margin(...) > 0)`` for all inputs.
+
+    Mirrors `predict_win`'s exact control flow, returning int sentinels or the
+    round-cushion at each exit:
+    * ``raw_player <= 0``                        → ``LOSE_MARGIN``
+    * ``kill_step <= 0``                         → ``LOSE_MARGIN``
+    * ``rounds_to_kill > MAX_TURNS``             → ``LOSE_MARGIN``
+    * reconstitution kills before we do          → ``LOSE_MARGIN``
+    * ``die_step <= 0`` (out-sustain)            → ``WIN_MARGIN``
+    * ``effective_hp <= 0``                      → ``LOSE_MARGIN``
+    * numeric regime: ``rounds_to_die - rounds_to_kill + (1 if player_first else 0)``
+
+    Mirrors Lean ``Formal.PredictWin.combatMargin`` (PredictWin.lean).
+    """
+    loadout = pick_loadout(
+        Combat(game_data.monster_attack(monster_code), game_data.monster_resistance(monster_code)),
+        state, game_data,
+    )
+    p = project_loadout_stats(state, loadout, game_data)
+    m_resist = game_data.monster_resistance(monster_code)
+    m_crit = game_data.monster_critical_strike(monster_code)
+    raw_player = sum(
+        _element_damage(p.attack.get(e, 0), p.dmg + p.dmg_elements.get(e, 0), m_resist.get(e, 0))
+        for e in ELEMENTS
+    )
+    if raw_player <= 0:
+        return LOSE_MARGIN
+    m_attack = game_data.monster_attack(monster_code)
+    m_atk_sum = sum(m_attack.values())
+    kill_step = _kill_step_net(
+        raw_player, p.critical_strike, m_crit,
+        game_data.monster_lifesteal(monster_code), m_atk_sum,
+        game_data.monster_hp(monster_code),
+        game_data.monster_healing(monster_code),
+        p.max_hp,
+        game_data.monster_void_drain(monster_code),
+        game_data.monster_protective_bubble(monster_code),
+        game_data.monster_sun_shield(monster_code),
+    )
+    if kill_step <= 0:
+        return LOSE_MARGIN
+    effective_monster_hp = game_data.monster_hp(monster_code) + game_data.monster_barrier(monster_code)
+    rounds_to_kill = -(-(effective_monster_hp * 10000) // kill_step)  # ceil
+    if rounds_to_kill > MAX_TURNS:
+        return LOSE_MARGIN
+    reconstitution = game_data.monster_reconstitution(monster_code)
+    if 0 < reconstitution <= rounds_to_kill:
+        return LOSE_MARGIN
+    raw_monster = sum(
+        _element_damage(m_attack.get(e, 0), 0, p.resistance.get(e, 0)) for e in ELEMENTS
+    )
+    final_equip = dict(state.equipment)
+    final_equip.update(loadout)
+    player_lifesteal = sum(
+        st.lifesteal for code in final_equip.values()
+        if code and (st := game_data.item_stats(code)) is not None
+    )
+    player_antipoison = sum(
+        st.antipoison for code in final_equip.values()
+        if code and (st := game_data.item_stats(code)) is not None
+    )
+    p_atk_sum = sum(p.attack.values())
+    die_step = _die_step(
+        raw_monster, m_crit, p.critical_strike, player_lifesteal,
+        p_atk_sum,
+        game_data.monster_poison(monster_code),
+        game_data.monster_burn(monster_code),
+        p.max_hp,
+        game_data.monster_void_drain(monster_code),
+        game_data.monster_berserker_rage(monster_code),
+        game_data.monster_frenzy(monster_code),
+        player_antipoison, raw_player,
+        game_data.monster_greed(monster_code),
+        game_data.monster_enchanted_mirror(monster_code),
+    )
+    if die_step <= 0:
+        return WIN_MARGIN
+    effective_hp = _effective_player_hp(state.hp, p.max_hp)
+    if effective_hp <= 0:
+        return LOSE_MARGIN
+    rounds_to_die = -(-(effective_hp * 10000) // die_step)  # ceil
+    player_first = p.initiative >= game_data.monster_initiative(monster_code)
+    return rounds_to_die - rounds_to_kill + (1 if player_first else 0)
 
 
 def is_winnable(
