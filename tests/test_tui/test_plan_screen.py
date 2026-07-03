@@ -1,20 +1,12 @@
 """PlanScreen tests — header renders and the tree receives snapshot nodes."""
 
 import pytest
-from rich.console import Console
-from textual.app import App, ComposeResult
+from textual.app import App
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, PlanTreeNode
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.tui.screens.plan_screen import PlanScreen
 from artifactsmmo_cli.tui.widgets.plan_tree import PlanTree
-
-
-def _text(renderable) -> str:
-    console = Console(no_color=True, width=120)
-    with console.capture() as cap:
-        console.print(renderable)
-    return cap.get()
 
 
 def _snap(**ov) -> CycleSnapshot:
