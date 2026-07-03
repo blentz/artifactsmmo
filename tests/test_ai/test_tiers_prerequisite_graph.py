@@ -428,3 +428,30 @@ def test_objective_roots_does_not_emit_cooking_gather_bootstrap():
     assert ReachSkillLevel("cooking", 3) not in roots, (
         f"unexpected cooking gather-bootstrap root (cooking not gatherable); got {roots}"
     )
+
+
+def _gd_with_potions() -> GameData:
+    gd = GameData()
+    gd._item_stats = {
+        "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon", attack={"fire": 4}),
+        "small_health_potion": ItemStats(code="small_health_potion", level=5,
+            type_="utility", hp_restore=50, crafting_skill="alchemy", crafting_level=5),
+        "enhanced_health_potion": ItemStats(code="enhanced_health_potion", level=45,
+            type_="utility", hp_restore=300, crafting_skill="alchemy", crafting_level=45),
+    }
+    gd._crafting_recipes = {
+        "copper_dagger": {"bar": 1},
+        "small_health_potion": {"sunflower": 3},
+        "enhanced_health_potion": {"sunflower": 3},
+    }
+    gd._resource_drops = {"rocks": "bar", "sunflower_field": "sunflower"}
+    gd._resource_skill = {"rocks": ("mining", 1), "sunflower_field": ("alchemy", 1)}
+    return gd
+
+
+def test_objective_roots_emit_effect_based_potion_root():
+    obj = CharacterObjective.from_game_data(_gd_with_potions())
+    state = make_state(level=10, skills={**make_state().skills, "alchemy": 16})
+    roots = objective_roots(obj, state)
+    assert ObtainItem("small_health_potion", slot="utility1_slot") in roots
+    assert ObtainItem("enhanced_health_potion", slot="utility1_slot") not in roots

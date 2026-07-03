@@ -179,6 +179,14 @@ def objective_roots(
         # CharacterObjective.near_term_gear.
         roots.extend(ObtainItem(code, slot=slot)
                      for slot, code in objective.near_term_gear(state).items())
+        # Utility potions are judged by EFFECT, not level (see
+        # utility_potion_targets / bootstrap_potion_target). Emit the single
+        # effect-based heal root at every level — including bootstrap, where the
+        # level-gated near_term_gear emits nothing — so POTION_SUPPLY_URGENCY has
+        # a craftable-now-or-cheapest target to attach to instead of an
+        # aspirational high-tier potion from target_gear.
+        roots.extend(ObtainItem(code, slot=slot)
+                     for slot, code in objective.utility_potion_targets(state).items())
     roots.extend(ReachSkillLevel(skill, level)
                  for skill, level in objective.target_skill_levels.items())
     roots.extend(ObtainItem(code, slot=slot) for slot, code in objective.target_gear.items())
