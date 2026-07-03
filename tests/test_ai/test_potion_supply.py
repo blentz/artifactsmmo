@@ -33,6 +33,18 @@ def test_cheapest_heal_potion_none_when_no_heal():
     assert _cheapest_heal_potion(gd) is None
 
 
+def test_cheapest_heal_potion_skips_zero_effect_utility():
+    # A craftable utility item that carries NO heal effect (hp_restore == 0) is
+    # skipped by the effect guard, so it is never chosen as the cheapest heal.
+    gd = GameData()
+    gd._item_stats = {
+        "fire_boost_potion": ItemStats(code="fire_boost_potion", level=1,
+            type_="utility", hp_restore=0, crafting_skill="alchemy", crafting_level=10),
+    }
+    gd._crafting_recipes = {"fire_boost_potion": {"sunflower": 1}}
+    assert _cheapest_heal_potion(gd) is None
+
+
 def test_bootstrap_target_prefers_craftable_now():
     # alchemy 16: small craftable now, enhanced not -> small.
     gd = _gd()

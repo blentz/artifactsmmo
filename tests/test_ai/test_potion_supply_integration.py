@@ -25,6 +25,10 @@ from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.strategy_driver import map_guard
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext, active_guards
 from tests.test_ai.fixtures import make_state
+from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
+from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 
 _POTION = "small_health_potion"
 _INGREDIENT = "sunflower"
@@ -98,3 +102,42 @@ def test_no_alchemy_potion_leaves_guard_quiet_so_grind_proceeds():
     # And the goal itself has no target, so it would contribute no actions.
     assert CraftPotionsGoal().relevant_actions(
         [MoveAction(x=0, y=0)], state, gd) == []
+
+
+def test_robby_scenario_stocked_small_does_not_force_enhanced_grind() -> None:
+    """Stocked small_health_potion (qty 100 >> L10 baseline 16) must NOT cause
+    the engine to choose enhanced_health_potion (alchemy L45) as chosen_root.
+
+    Regression guard for the Robby play-trace where a well-stocked lower-tier
+    potion triggered aspirational enhanced-potion grind (alchemy 16→45).
+    """
+    gd = GameData()
+    gd._item_stats = {
+        "small_health_potion": ItemStats(
+            code="small_health_potion", level=1, type_="utility",
+            hp_restore=60, crafting_skill="alchemy", crafting_level=5),
+        "enhanced_health_potion": ItemStats(
+            code="enhanced_health_potion", level=45, type_="utility",
+            hp_restore=300, crafting_skill="alchemy", crafting_level=45),
+        "sunflower": ItemStats(code="sunflower", level=1, type_="resource"),
+    }
+    gd._consumable_effect_codes = {}
+    gd._crafting_recipes = {
+        "small_health_potion": {"sunflower": 3},
+        "enhanced_health_potion": {"sunflower": 3},
+    }
+    gd._resource_drops = {"sunflower_field": "sunflower"}
+    gd._resource_skill = {"sunflower_field": ("alchemy", 1)}
+    gd._monster_level = {"chicken": 1}
+    fill_monster_stat_defaults(gd)
+
+    state = make_state(
+        level=10,
+        skills={**make_state().skills, "alchemy": 16},
+        equipment={**make_state().equipment, "utility1_slot": "small_health_potion"},
+        utility1_slot_quantity=100,
+    )
+
+    eng = StrategyEngine(CharacterObjective.from_game_data(gd), BalancedPersonality())
+    chosen_root = eng.decide(state, gd).chosen_root
+    assert "enhanced_health_potion" not in repr(chosen_root)

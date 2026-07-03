@@ -1224,6 +1224,27 @@ STRATEGY_MUTATIONS = [
 ]
 
 
+# Potion-supply gate mutations on strategy.py `_value` — the effect-based
+# bootstrap_potion_target guard added by the potion-effect-priority feature.
+# This is a runtime-only VALUE gate (not a traversal decision), so the traversal
+# differential (test_strategy_traversal_diff.py) CANNOT observe it. It therefore
+# gets its OWN group bound to the unit test that pins the behavior — never folded
+# into the traversal-diff STRATEGY_MUTATIONS group (the bag-slot lesson: unit-
+# killed mutations need their own group bound to the unit test). Killed by
+# tests/test_ai/test_tiers_strategy.py::TestPotionSupplyUrgency::
+# test_aspirational_tier_not_boosted, which pins that only the effect-best
+# craftable-now target (small) is boosted and an aspirational high-tier potion
+# (enhanced, alchemy 45) is NOT — the 16->45 alchemy-grind regression.
+POTION_GATE_MUTATIONS = [
+    # Flip the bootstrap-target equality: without it an aspirational high-tier
+    # potion would ride the POTION_SUPPLY_URGENCY boost and the effect-best
+    # craftable-now target would lose it (both assertions in the kill-test fail).
+    ("strategy: potion-gate bootstrap-target equality flip (== -> !=)",
+     "                    and root.code == bootstrap_potion_target(state, game_data)",
+     "                    and root.code != bootstrap_potion_target(state, game_data)"),
+]
+
+
 # reachability-invariant mutations: both is_reachable AND actionable_step now use
 # per-DFS-path frozenset cycle-tracking (Phase 13 refactor — Python byte-equivalent
 # to the proved Lean `actStep`). Each mutation breaks
@@ -4200,6 +4221,9 @@ def _run_all_groups() -> int:
               "formal/diff/test_objective_diff.py", survivors)
     run_group(STRATEGY_SRC, STRATEGY_MUTATIONS,
               "formal/diff/test_strategy_traversal_diff.py", survivors)
+    run_group(STRATEGY_SRC, POTION_GATE_MUTATIONS,
+              "tests/test_ai/test_tiers_strategy.py::TestPotionSupplyUrgency::test_aspirational_tier_not_boosted",
+              survivors)
     run_group(STRATEGY_SRC, REACHABILITY_MUTATIONS,
               "formal/diff/test_reachability_diff.py", survivors)
     run_group(BANK_SELECTION_SRC, BANK_SELECTION_MUTATIONS,
