@@ -50,6 +50,40 @@ def target_potion_pure(
     return best_code
 
 
+def _cheapest_heal_potion(game_data: GameData, effect: str = "hp_restore") -> str | None:
+    """The craftable utility heal with the smallest crafting_level (the next tier
+    to ever unlock); deterministic smallest-code tie-break. None when none exists.
+
+    Level-exempt bootstrap target: unlike target_potion_pure it does NOT require
+    the skill to already meet the recipe gate, so the arbiter can drive the FIRST
+    unlock. The crafting skill is item metadata, never assumed to be alchemy."""
+    best_code: str | None = None
+    best_level = 0
+    for code in sorted(game_data.crafting_recipes):
+        stats = game_data.item_stats(code)
+        if stats is None or stats.type_ != "utility":
+            continue
+        if getattr(stats, effect, 0) <= 0 or stats.crafting_skill is None:
+            continue
+        if best_code is None or stats.crafting_level < best_level:
+            best_code, best_level = code, stats.crafting_level
+    return best_code
+
+
+def bootstrap_potion_target(
+    state: WorldState, game_data: GameData, effect: str = "hp_restore"
+) -> str | None:
+    """The utility heal to pursue: the effect-best potion craftable NOW, or — when
+    none is craftable yet — the cheapest-to-unlock heal so the arbiter can drive
+    the first skill unlock. Level-exempt (a potion's item level never gates it;
+    utility is judged by effect, not level). Single source of truth for the
+    utility-slot root and the POTION_SUPPLY_URGENCY gate."""
+    craftable = target_potion_pure(state, game_data, effect)
+    if craftable is not None:
+        return craftable
+    return _cheapest_heal_potion(game_data, effect)
+
+
 def _recipe_producible(recipe: dict[str, int], state: WorldState, game_data: GameData) -> bool:
     """True when a craft batch is producible via any of three tiers:
     - craft-from-held: all ingredients available in inventory + bank, OR
