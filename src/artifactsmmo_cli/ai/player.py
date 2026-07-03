@@ -90,6 +90,7 @@ from artifactsmmo_cli.ai.tiers import (
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
 from artifactsmmo_cli.ai.plan_cache import PlanCache
 from artifactsmmo_cli.ai.plan_report import PlanReport
+from artifactsmmo_cli.ai.plan_tree import build_plan_tree
 from artifactsmmo_cli.ai.should_replan import should_replan
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal
@@ -1468,6 +1469,14 @@ class GamePlayer:
             ],
             bank_items=(dict(self.state.bank_items)
                         if self.state.bank_items is not None else None),
+            plan_tree=(
+                build_plan_tree(
+                    self._last_decision, self.state, self.game_data,
+                    f"{selected_goal_name}: {action_name}"
+                    if selected_goal_name and action_name else (selected_goal_name or action_name),
+                )
+                if self._last_decision is not None and self.game_data is not None else ()
+            ),
         )
         self._cycle_observer(snap)
 
