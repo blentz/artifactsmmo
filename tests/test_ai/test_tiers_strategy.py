@@ -290,6 +290,23 @@ class TestPotionSupplyUrgency:
         assert eng._value(root, hi, gd) == Fraction(5, 2)
         assert eng._value(root, lo, gd) < Fraction(5, 2)
 
+    def test_aspirational_tier_not_boosted(self):
+        # An under-baseline heal potion the char CANNOT craft yet (enhanced,
+        # alchemy 45 vs current 16) must NOT receive the potion-supply urgency —
+        # only the effect-best craftable-now target (small) does. Prevents the
+        # 16->45 alchemy grind (trace play-trace-Robby.jsonl).
+        gd = _gd_potions()
+        gd._item_stats["enhanced_health_potion"] = ItemStats(
+            code="enhanced_health_potion", level=45, type_="utility",
+            hp_restore=300, crafting_skill="alchemy", crafting_level=45)
+        gd._crafting_recipes["enhanced_health_potion"] = {"sunflower": 3}
+        eng = StrategyEngine(CharacterObjective.from_game_data(gd), BalancedPersonality())
+        state = make_state(level=10, skills={**make_state().skills, "alchemy": 16})
+        small = ObtainItem("small_health_potion", slot="utility1_slot")
+        enhanced = ObtainItem("enhanced_health_potion", slot="utility1_slot")
+        assert eng._value(small, state, gd) == Fraction(5, 2)     # target -> boosted
+        assert eng._value(enhanced, state, gd) < Fraction(5, 2)   # aspirational -> not
+
 
 def test_decide_empty_when_nothing_reachable():
     gd = GameData()

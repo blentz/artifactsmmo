@@ -42,6 +42,7 @@ from artifactsmmo_cli.ai.tiers.strategy_blend import (
 )
 from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
 from artifactsmmo_cli.ai.potion_baseline import potion_baseline_pure
+from artifactsmmo_cli.ai.potion_supply import bootstrap_potion_target
 from artifactsmmo_cli.ai.thresholds import (
     CRITICAL_HP_FRACTION,
     POTION_HIGH_LEVEL,
@@ -565,8 +566,10 @@ class StrategyEngine:
             # equipped_potion_qty sums both utility slots. Breaks the alchemy
             # deadlock (see POTION_SUPPLY_URGENCY); the CraftPotions guard
             # maintains the baseline once alchemy unlocks crafting.
+            # Fires only for the effect-based bootstrap_potion_target — never an aspirational high-tier potion (would drive a multi-level skill grind).
             elif (stats.type_ == "utility"
                     and stats.hp_restore > 0
+                    and root.code == bootstrap_potion_target(state, game_data)
                     and equipped_potion_qty(state, root.code) < potion_baseline_pure(
                         state.level, POTION_LOW_LEVEL, POTION_LOW_QTY,
                         POTION_HIGH_LEVEL, POTION_HIGH_QTY)):
