@@ -687,3 +687,44 @@ def test_combat_margin_magnitude_orders_by_cushion():
     margin_strong = combat_margin(state_strong, gd_sym, "mob")
     assert margin_strong == 3, f"expected margin 3 for strong player, got {margin_strong}"
     assert margin_strong > margin_tie
+
+
+def test_combat_margin_lose_when_rounds_to_kill_exceeds_turn_cap():
+    """combat_margin returns LOSE_MARGIN when rounds_to_kill > MAX_TURNS (100).
+
+    Non-vacuous: kill_step > 0 (player CAN deal damage) but the monster has so
+    much HP that ceil(effective_hp / kill_step) > 100 → impossible to kill in
+    the turn cap.  Covers combat.py line 318.
+
+    Construction: player fire attack=1 vs monster hp=10000, monster attack=0
+    (so die_step=0 path is avoided).  kill_step ≈ 50*1*200 = 10000 (base, no
+    crit/lifesteal modifiers); rounds_to_kill = ceil(100000000 / 10000) = 10000
+    >> MAX_TURNS=100 → LOSE_MARGIN.
+    """
+    state = make_state(max_hp=10000, hp=10000, attack={"fire": 1}, initiative=100)
+    gd = _gd(hp=10000, attack={"fire": 1})
+    assert predict_win(state, gd, "mob") is False
+    assert combat_margin(state, gd, "mob") == LOSE_MARGIN
+
+
+def test_combat_margin_lose_when_reconstitution_triggers_before_kill():
+    """combat_margin returns LOSE_MARGIN when 0 < reconstitution <= rounds_to_kill.
+
+    Non-vacuous: without reconstitution the player wins (positive margin);
+    adding reconstitution=2 means the monster fully heals before we kill it →
+    LOSE_MARGIN.  Covers combat.py line 321.
+
+    Mirrors predict_win's reconstitution branch (test_predict_win_false_when_
+    reconstitution_outlasts_our_kill) but calls combat_margin directly.
+
+    Note: combat_margin returns WIN_MARGIN only when die_step<=0 (out-sustain).
+    Here the monster attacks (fire:5), so die_step > 0 and the baseline returns
+    a finite positive cushion — NOT WIN_MARGIN.  Only the reconstitution branch
+    returns LOSE_MARGIN.
+    """
+    state = make_state(max_hp=1000, hp=1000, attack={"fire": 50}, initiative=50)
+    gd_no = _gd(hp=100, attack={"fire": 5}, initiative=10)
+    assert predict_win(state, gd_no, "mob") is True
+    assert combat_margin(state, gd_no, "mob") > 0
+    gd_rec = _gd(hp=100, attack={"fire": 5}, initiative=10, reconstitution=2)
+    assert combat_margin(state, gd_rec, "mob") == LOSE_MARGIN

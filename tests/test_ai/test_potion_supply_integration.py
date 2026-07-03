@@ -20,6 +20,8 @@ from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
+from artifactsmmo_cli.ai.boost_selection import best_boost_potion, project_equip
+from artifactsmmo_cli.ai.combat import combat_margin
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
@@ -273,3 +275,85 @@ def test_c1_guard_and_goal_agree_on_boost_target():
         "not primary_combat_target)"
     )
     assert result[0] == _BOOST
+
+
+# ── anti-grind regression (Task 5) ──────────────────────────────────────────
+
+def _gd_boost_skill_gated() -> GameData:
+    """Same as _gd_boost_winnable but fire_boost requires crafting_level=20.
+
+    The boost EXISTS and WOULD improve combat_margin against slime (fire attack
+    → resistance boost gives positive gain).  Only the skill requirement is out
+    of reach for a character whose alchemy=5 (below gate=20).
+    """
+    gd = _gd_boost_winnable()
+    gd._item_stats[_BOOST] = ItemStats(
+        code=_BOOST, level=1, type_="utility",
+        dmg_elements={"fire": 10},
+        crafting_skill="alchemy", crafting_level=20,
+    )
+    return gd
+
+
+def _state_heals_stocked_low_alchemy() -> WorldState:
+    """Same as _state_heals_stocked but alchemy=5 (below boost gate=20).
+
+    Heals are stocked (utility1_slot=small_health_potion, qty=5==baseline(5)=5)
+    so the guard looks at the boost path rather than the heal path."""
+    return make_state(
+        level=5,
+        hp=100, max_hp=100,
+        attack={"fire": 50},
+        skills={**make_state().skills, "alchemy": 5},
+        equipment={**make_state().equipment, "utility1_slot": _POTION},
+        utility1_slot_quantity=5,
+        inventory={_INGREDIENT: 3},
+    )
+
+
+def test_anti_grind_boost_skill_gated_guard_does_not_fire():
+    """Phase-1 anti-grind discipline: a beneficial boost that requires a crafting
+    skill above the character's current level is silently skipped — the guard does
+    NOT fire, and no planning step pursues it.
+
+    Non-vacuous:
+    - fire_boost EXISTS and is in crafting_recipes.
+    - fire_boost WOULD improve combat_margin against slime (verified by
+      project_equip + combat_margin direct call: gain > 0).
+    - Only the skill gate (alchemy=5 < crafting_level=20) blocks it.
+
+    The anti-grind discipline is enforced exclusively by best_boost_potion:
+    it gates by craftable-now, never schedules a ReachSkillLevel to reach
+    the boost's skill requirement.  Guard silence means no CraftPotionsGoal
+    is ever queued for the boost, so no planner step can emit ReachSkillLevel
+    for the boost crafting skill.
+    """
+    gd = _gd_boost_skill_gated()
+    state = _state_heals_stocked_low_alchemy()
+
+    # Non-vacuousness: the boost WOULD help if alchemy were sufficient.
+    projected = project_equip(state, _BOOST, gd)
+    gain = combat_margin(projected, gd, _MONSTER) - combat_margin(state, gd, _MONSTER)
+    assert gain > 0, (
+        f"fixture broken: fire_boost should improve combat_margin (gain={gain}); "
+        "ensure slime has fire attack and boost adds fire dmg_elements"
+    )
+
+    # Skill gate blocks selection: alchemy=5 < crafting_level=20 → None.
+    assert best_boost_potion(state, gd, _MONSTER) is None, (
+        "best_boost_potion should return None when alchemy < crafting_level; "
+        "anti-grind discipline requires craftable-now check, not aspirational"
+    )
+
+    # Guard does not fire — the economy does not pursue the boost.
+    assert craft_potions_fires(state, gd) is False, (
+        "craft_potions_fires must be False when the only boost is skill-gated; "
+        "firing would send the economy into an unreachable grind"
+    )
+
+    # Goal corroboration: _active_craft also returns None (no boost plan emitted).
+    goal = CraftPotionsGoal(combat_monster=None)
+    assert goal._active_craft(state, gd) is None, (
+        "_active_craft must return None when guard is silent; "
+        "any non-None result would plan a craft step for an unattainable boost"
+    )

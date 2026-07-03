@@ -279,3 +279,51 @@ def test_deterministic_tiebreak_smallest_code():
     state = _fire_mob_state()
     result = best_boost_potion(state, gd, "fire_mob")
     assert result == "aaa_boost"
+
+
+def test_skips_non_utility_recipe_item():
+    """boost_selection.py:123 continue — a recipe whose item is NOT type=="utility"
+    (here type_=="weapon") is skipped.  The only craftable item is a weapon, so
+    best_boost_potion returns None.
+
+    Non-vacuous: the weapon recipe exists and is craftable at alchemy level 1;
+    only the type_ field differs from a qualifying boost potion.
+    """
+    gd = _gd_fire_mob()
+    # Replace both utility items with a weapon (non-utility).
+    gd._item_stats["res_fire_potion"] = ItemStats(
+        code="res_fire_potion", level=1, type_="weapon",
+        crafting_skill="alchemy", crafting_level=1,
+        resistance={"fire": 20},
+    )
+    gd._item_stats["dmg_earth_potion"] = ItemStats(
+        code="dmg_earth_potion", level=1, type_="weapon",
+        crafting_skill="alchemy", crafting_level=1,
+        dmg_elements={"earth": 30},
+    )
+    state = _fire_mob_state()
+    result = best_boost_potion(state, gd, "fire_mob")
+    assert result is None
+
+
+def test_skips_utility_item_without_crafting_skill():
+    """boost_selection.py:127 continue — a utility item with crafting_skill=None
+    (not craftable via any workshop) is skipped.  Non-vacuous: the item exists,
+    has a boost effect (resistance), and would yield positive gain, but
+    crafting_skill=None means it has no recipe gate to pass the craftable-now check.
+    """
+    gd = _gd_fire_mob()
+    # Override res_fire_potion to have crafting_skill=None.
+    gd._item_stats["res_fire_potion"] = ItemStats(
+        code="res_fire_potion", level=1, type_="utility",
+        crafting_skill=None, crafting_level=1,
+        resistance={"fire": 20},
+    )
+    gd._item_stats["dmg_earth_potion"] = ItemStats(
+        code="dmg_earth_potion", level=1, type_="utility",
+        crafting_skill=None, crafting_level=1,
+        dmg_elements={"earth": 30},
+    )
+    state = _fire_mob_state()
+    result = best_boost_potion(state, gd, "fire_mob")
+    assert result is None
