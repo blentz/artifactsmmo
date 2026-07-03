@@ -134,6 +134,7 @@ PROGRESSION_RESERVE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "progr
 NEXT_CRAFT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "next_craft_core.py"
 CRAFT_PLAN_DRIVER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_plan_driver_core.py"
 GEAR_TAXONOMY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_taxonomy_core.py"
+BOOST_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "boost_selection.py"
 
 # craft_plan_full / _apply_state mutations (B2 full-plan driver). The CONSUMING
 # model is the soundness-critical part; killed by
@@ -2363,6 +2364,42 @@ GEAR_VALUE_CORE_MUTATIONS = [
 ]
 
 
+# boost_selection mutations -- own group bound to the unit test (bag-slot lesson:
+# no Lean mirror, no traversal-diff group).  Each mutation perturbs one of the
+# four load-bearing decisions:
+#
+#   1. positive-gain threshold: `best_gain = 0` → `best_gain = -1` makes gain >= 0
+#      qualify (zero-gain boost selected instead of None).
+#      Killed by test_none_when_no_boost_helps (gain=0 → should be None).
+#
+#   2. craftable-now gate off-by-one: `< stats.crafting_level` → `<= stats.crafting_level`
+#      excludes items where skill == crafting_level (boundary).
+#      Killed by tests 1, 2, 5 (char alchemy=1, crafting_level=1: 1<=1 → skip → None).
+#
+#   3. argmax → zero-select: `gain > best_gain` → `gain < best_gain` makes
+#      gain < 0 the only trigger; no positive gain ever qualifies → None.
+#      Killed by tests 1, 2, 5 (expect non-None).
+#
+#   4. tiebreak: `gain > best_gain` → `gain >= best_gain` replaces on equal gain,
+#      so the LAST (alphabetically largest) code wins instead of the first.
+#      Killed by test_deterministic_tiebreak_smallest_code ("bbb_boost" returned
+#      instead of "aaa_boost").
+BOOST_SELECTION_MUTATIONS = [
+    ("boost_selection: > 0 threshold → >= 0 (zero-gain boost selected)",
+     "    best_gain = 0\n",
+     "    best_gain = -1\n"),
+    ("boost_selection: craftable-now gate off-by-one (< → <=)",
+     "        if state.skills.get(stats.crafting_skill, 0) < stats.crafting_level:",
+     "        if state.skills.get(stats.crafting_skill, 0) <= stats.crafting_level:"),
+    ("boost_selection: argmax → zero-select (> best_gain → < best_gain)",
+     "        if gain > best_gain:",
+     "        if gain < best_gain:"),
+    ("boost_selection: tiebreak flip (strict > → >=, last code wins)",
+     "        if gain > best_gain:\n            best_code = code\n            best_gain = gain",
+     "        if gain >= best_gain:\n            best_code = code\n            best_gain = gain"),
+]
+
+
 def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
               survivors: list[str]) -> None:
     """Collect this group's mutation units into _UNITS (filtered by _ONLY).
@@ -4534,6 +4571,8 @@ def _run_all_groups() -> int:
               "tests/test_ai/test_no_combat_deadlock.py", survivors)
     run_group(NEXT_TIER_CAP_SRC, NEXT_TIER_CAP_MUTATIONS,
               "formal/diff/test_next_tier_cap_diff.py", survivors)
+    run_group(BOOST_SELECTION_SRC, BOOST_SELECTION_MUTATIONS,
+              "tests/test_ai/test_boost_selection.py", survivors)
     _execute(_UNITS, survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
