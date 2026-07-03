@@ -1,0 +1,129 @@
+from fractions import Fraction
+
+from artifactsmmo_cli.ai.cycle_snapshot import PlanTreeNode
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.plan_tree import build_plan_tree
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
+from artifactsmmo_cli.ai.tiers.strategy import RootScore, StrategyDecision
+from tests.test_ai.fixtures import make_state
+
+
+def _gd() -> GameData:
+    gd = GameData()
+    gd._item_stats = {
+        "life_amulet": ItemStats(code="life_amulet", level=5, type_="amulet",
+                                 crafting_skill="jewelrycrafting", crafting_level=5),
+        "golden_ring": ItemStats(code="golden_ring", level=3, type_="ring",
+                                 crafting_skill="jewelrycrafting", crafting_level=3),
+        "topaz": ItemStats(code="topaz", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {
+        "life_amulet": {"golden_ring": 1, "topaz": 2},
+        "golden_ring": {"topaz": 4},
+    }
+    gd._resource_drops = {}
+    gd._resource_skill = {}
+    return gd
+
+
+def _decision(chosen, step, ranking):
+    return StrategyDecision(interrupt=None, chosen_root=chosen, chosen_step=step,
+                            desired_state={}, ranking=ranking)
+
+
+def _rs(node, score, category="gear"):
+    return RootScore(root_repr=repr(node), category=category,
+                     contribution=Fraction(0), cost=0, score=Fraction(score), step_repr="")
+
+
+def test_chosen_expands_skill_gate_and_materials():
+    gd = _gd()
+    state = make_state(skills={"jewelrycrafting": 1}, equipment={"amulet_slot": None})
+    chosen = ObtainItem("life_amulet")
+    step = ReachSkillLevel("jewelrycrafting", 5)
+    tree = build_plan_tree(_decision(chosen, step, [_rs(chosen, 2)]), state, gd, None)
+
+    assert len(tree) == 1                      # only the chosen root (no other ranked roots)
+    root = tree[0]
+    assert root.kind == "obtain" and root.label == "life_amulet" and root.status == "unmet"
+    kinds = {c.label: c for c in root.children}
+    assert "jewelrycrafting → 5" in kinds
+    assert kinds["jewelrycrafting → 5"].status == "current"     # == chosen_step
+    assert kinds["golden_ring"].status == "unmet"
+    assert kinds["topaz ×2"].status == "unmet"
+
+
+def test_current_step_gets_synthetic_serve_child():
+    gd = _gd()
+    state = make_state(skills={"jewelrycrafting": 1})
+    chosen = ObtainItem("life_amulet")
+    step = ReachSkillLevel("jewelrycrafting", 5)
+    tree = build_plan_tree(_decision(chosen, step, [_rs(chosen, 2)]), state, gd,
+                           "LevelSkill: craft copper_ring")
+    skill = next(c for c in tree[0].children if c.label == "jewelrycrafting → 5")
+    steps = [c for c in skill.children if c.kind == "step"]
+    assert len(steps) == 1
+    assert steps[0].label == "LevelSkill: craft copper_ring"
+    assert steps[0].status == "current"
+
+
+def test_no_serve_child_when_serve_step_none():
+    gd = _gd()
+    state = make_state(skills={"jewelrycrafting": 1})
+    chosen = ObtainItem("life_amulet")
+    step = ReachSkillLevel("jewelrycrafting", 5)
+    tree = build_plan_tree(_decision(chosen, step, [_rs(chosen, 2)]), state, gd, None)
+    skill = next(c for c in tree[0].children if c.label == "jewelrycrafting → 5")
+    assert [c for c in skill.children if c.kind == "step"] == []
+
+
+def test_recurses_material_subtree_to_raw_leaf():
+    gd = _gd()
+    state = make_state(skills={"jewelrycrafting": 1})
+    chosen = ObtainItem("life_amulet")
+    tree = build_plan_tree(_decision(chosen, None, [_rs(chosen, 2)]), state, gd, None)
+    ring = next(c for c in tree[0].children if c.label == "golden_ring")
+    assert any(c.label == "jewelrycrafting → 3" for c in ring.children)   # ring's own skill gate
+    topaz = next(c for c in ring.children if c.label == "topaz ×4")
+    assert topaz.children == ()                                           # raw resource → leaf
+
+
+def test_met_material_marked_met():
+    gd = _gd()
+    # topaz owned enough at the amulet level: 2 needed, hold 2 -> met leaf
+    state = make_state(skills={"jewelrycrafting": 1}, inventory={"topaz": 2})
+    chosen = ObtainItem("life_amulet")
+    tree = build_plan_tree(_decision(chosen, None, [_rs(chosen, 2)]), state, gd, None)
+    topaz = next(c for c in tree[0].children if c.label == "topaz ×2")
+    assert topaz.status == "met"
+
+
+def test_non_chosen_roots_are_leaf_stubs():
+    gd = _gd()
+    state = make_state(skills={"jewelrycrafting": 1})
+    chosen = ObtainItem("life_amulet")
+    other = ObtainItem("golden_ring")
+    ranking = [_rs(chosen, 2, "gear"), _rs(other, 1, "gear")]
+    tree = build_plan_tree(_decision(chosen, None, ranking), state, gd, None)
+    assert len(tree) == 2
+    stub = tree[1]
+    assert stub.kind == "root_stub" and stub.children == ()
+    assert stub.label == "golden_ring" and "1.00" in stub.detail
+
+
+def test_chosen_root_none_returns_empty():
+    gd = _gd()
+    tree = build_plan_tree(_decision(None, None, []), make_state(), gd, None)
+    assert tree == ()
+
+
+def test_cycle_and_depth_bounded():
+    # A self-referential recipe would recurse forever without the visited-set.
+    gd = _gd()
+    gd._crafting_recipes = {"loop_item": {"loop_item": 1}}
+    gd._item_stats = {"loop_item": ItemStats(code="loop_item", level=1, type_="resource")}
+    state = make_state()
+    chosen = ObtainItem("loop_item")
+    tree = build_plan_tree(_decision(chosen, None, [_rs(chosen, 1)]), state, gd, None)
+    # terminates; the repeated node becomes a leaf via the visited-set
+    assert tree[0].label == "loop_item"

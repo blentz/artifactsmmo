@@ -1,6 +1,6 @@
 """CycleSnapshot: frozen per-cycle state + decision context for TUI consumers."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class RootScoreView(BaseModel):
@@ -28,6 +28,23 @@ class GoalAttempt(BaseModel):
     depth: int = 0
     timed_out: bool = False
     plan_len: int = 0
+
+
+class PlanTreeNode(BaseModel):
+    """One node in the chosen objective's prerequisite tree (TUI plan screen).
+
+    Frozen recursive value object. `kind` drives the glyph; `status` drives the
+    style. `root_stub` nodes are the non-chosen ranked roots (no children).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    key: str                    # stable id for expansion memory (usually repr(node))
+    label: str
+    kind: str                   # obtain | skill | charlevel | step | root_stub
+    status: str                 # met | unmet | current
+    detail: str = ""
+    children: tuple["PlanTreeNode", ...] = ()
 
 
 class CycleSnapshot(BaseModel):
