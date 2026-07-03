@@ -1354,6 +1354,18 @@ SKILL_DECAY_MUTATIONS = [
 ]
 
 
+# Capstone-gradient mutations on strategy.py `_marginal` — the progress-scaled
+# bonus (level/root.level × CHAR_CAPSTONE_SCALE) that pulls the bot toward the
+# L50 capstone when gap >= CHAR_REACHABLE_HORIZON. Killed by
+# test_capstone_has_progress_gradient (v10 == Fraction(27, 25) fails when
+# the gradient is flattened back to CHAR_MARGINAL).
+CAPSTONE_GRADIENT_MUTATIONS = [
+    ("strategy: drop capstone gradient (flatten to CHAR_MARGINAL)",
+     "                return CHAR_MARGINAL + Fraction(state.level, root.level) * CHAR_CAPSTONE_SCALE",
+     "                return CHAR_MARGINAL"),
+]
+
+
 # reachability-invariant mutations: both is_reachable AND actionable_step now use
 # per-DFS-path frozenset cycle-tracking (Phase 13 refactor — Python byte-equivalent
 # to the proved Lean `actStep`). Each mutation breaks
@@ -4408,6 +4420,8 @@ def _run_all_groups() -> int:
     run_group(STRATEGY_SRC, STRATEGY_MARGINAL_MUTATIONS,
               "tests/test_ai/test_tiers_strategy.py", survivors)
     run_group(STRATEGY_SRC, SKILL_DECAY_MUTATIONS,
+              "tests/test_ai/test_tiers_strategy.py", survivors)
+    run_group(STRATEGY_SRC, CAPSTONE_GRADIENT_MUTATIONS,
               "tests/test_ai/test_tiers_strategy.py", survivors)
     run_group(STRATEGY_SRC, OCCUPIED_UPGRADE_MUTATIONS,
               "tests/test_ai/test_tiers_strategy.py", survivors)

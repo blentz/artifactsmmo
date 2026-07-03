@@ -112,6 +112,14 @@ is geared. While an armor slot is still empty the lower CHAR_GAP_PER_LEVEL
 applies, preserving the empty-slot-armor-dominates invariant without touching
 EMPTY_SLOT_URGENCY (2026-06-14, surgical: bump only after slots are filled)."""
 
+CHAR_CAPSTONE_SCALE = Fraction(2, 5)
+"""Weak long-range attractor for the L50 capstone (ReachCharLevel(target)) when
+its gap exceeds CHAR_REACHABLE_HORIZON. Scales with progress (level/target) from
+~1.08 (L10) to ~1.32 (L40), staying strictly below the +2 bootstrap (1.48) so it
+never triggers the e27779e items-task stand-down and below EMPTY_SLOT_URGENCY so
+gear-first holds — but non-flat, so the capstone can win flat windows and the bot
+is pulled toward 50 instead of only local +2 hops."""
+
 GEAR_EQUIP_SCALE = Fraction(20) * STRATEGIC_SCALE
 """Normalizes gear strategic-value gain to ~[0,1]; tune so a first-tier upgrade
 ~0.7-0.9. Scaled by STRATEGIC_SCALE (1000) because `_equip_gain` now measures the
@@ -526,6 +534,8 @@ class StrategyEngine:
             # takes the step slot ahead of PursueTask in the arbiter
             # walk.
             gap = max(0, root.level - state.level)
+            if gap >= CHAR_REACHABLE_HORIZON:
+                return CHAR_MARGINAL + Fraction(state.level, root.level) * CHAR_CAPSTONE_SCALE
             reach = max(0, CHAR_REACHABLE_HORIZON - gap)
             # Gear-first: the char-leveling boost (out-ranking skill grind)
             # applies only once the bot is combat-ready AND every fillable

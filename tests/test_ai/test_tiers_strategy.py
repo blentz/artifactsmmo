@@ -15,6 +15,7 @@ from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
 from artifactsmmo_cli.ai.tiers.strategy import (
     BALANCE_MAX,
     BALANCE_MIN,
+    CHAR_CAPSTONE_SCALE,
     CHAR_GAP_PER_LEVEL,
     CHAR_GAP_PER_LEVEL_GEARED,
     CHAR_MARGINAL,
@@ -555,7 +556,9 @@ class TestMarginal:
     def test_char_and_skill_marginal_constants(self):
         eng = _eng(GameData())
         st = make_state()
-        assert eng._marginal(ReachCharLevel(50), st, GameData()) == CHAR_MARGINAL
+        # ReachCharLevel(50) with default level=5: gap=45 > CHAR_REACHABLE_HORIZON → capstone path.
+        # Expected: CHAR_MARGINAL + Fraction(5, 50) * CHAR_CAPSTONE_SCALE = 1 + 1/25 = 26/25.
+        assert eng._marginal(ReachCharLevel(50), st, GameData()) == CHAR_MARGINAL + Fraction(5, 50) * CHAR_CAPSTONE_SCALE
         assert eng._marginal(ReachSkillLevel("mining", 50), st, GameData()) == SKILL_MARGINAL
 
     def test_gear_marginal_unknown_item_returns_zero(self):
@@ -891,6 +894,26 @@ def test_reach_char_level_marginal_scales_with_inverse_gap():
         f"so tools don't preempt the combat grind when the bot is "
         f"under-leveled"
     )
+
+
+def test_capstone_has_progress_gradient():
+    """L50 capstone (gap > CHAR_REACHABLE_HORIZON) scores a non-flat gradient
+    that rises with the character's progress toward 50. Formula:
+    CHAR_MARGINAL + (level / root.level) × CHAR_CAPSTONE_SCALE.
+    Exact fractions: v10 = 27/25 (1.08), v40 = 33/25 (1.32).
+    Both are above the old flat 1.0 and below the +2 bootstrap (1.48).
+    The bootstrap (+2 hop) path is unchanged — confirmed by the
+    test_reach_char_level_marginal_scales_with_inverse_gap test."""
+    gd = _gd()
+    eng = StrategyEngine(CharacterObjective.from_game_data(gd), BalancedPersonality())
+    root = ReachCharLevel(50)
+    v10 = eng._value(root, make_state(level=10), gd, "red_slime", None)
+    v40 = eng._value(root, make_state(level=40), gd, "red_slime", None)
+    assert v10 == Fraction(27, 25)       # 1 + (10/50)*(2/5) = 1 + 2/25
+    assert v40 == Fraction(33, 25)       # 1 + (40/50)*(2/5) = 1 + 8/25
+    assert v40 > v10                     # rises with progress toward 50
+    assert v10 > Fraction(1)             # above the old flat 1.0
+    assert v40 < Fraction(37, 25)        # stays below the +2 bootstrap (1.48)
 
 
 def test_reach_char_level_marginal_zero_bonus_when_already_at_target():
