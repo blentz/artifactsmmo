@@ -18,9 +18,12 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
 EQUIP_GEAR_VALUE = 60.0
-"""Priority between the grind/step ceiling (45) and the survival guard floor (70).
-Placed in the COLLECT band by the arbiter, so it outranks the step/grind goal and
-free gear equips before more grinding, without preempting survival/combat guards."""
+"""Not a selection driver: select_pure orders candidates by BAND + list position,
+not by value(). The arbiter places EquipOwnedGoal in the COLLECT band, above the
+STEP/grind goal and below the GUARD/survival band, so that band placement — not
+this number — is what makes free gear equip before more grinding while still
+yielding to survival/combat guards. value() returns 0.0 when satisfied and this
+constant otherwise, purely for API conformance with Goal.value and diagnostics."""
 
 
 @dataclass

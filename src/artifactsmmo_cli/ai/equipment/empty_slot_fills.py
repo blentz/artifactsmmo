@@ -18,7 +18,7 @@ def empty_slot_rank_fills(state: WorldState, game_data: GameData,
     empty-slot gate inside ``pick_loadout`` already discards zero/negative-Rank
     fills, so every code here carries strictly-positive Rank value.
     """
-    picked = pick_loadout(Rank, state, game_data)
+    picked = pick_loadout(Rank(), state, game_data)
     return {
         slot: code
         for slot, code in picked.items()

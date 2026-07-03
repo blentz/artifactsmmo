@@ -1372,7 +1372,7 @@ def test_chosen_step_alive_true_when_top_step_yields_goal():
     assert arbiter.chosen_step_alive is True
 
 
-def test_select_promotes_upgrade_equipment_from_fallback_first_pass():
+def test_select_prefers_equip_owned_gear_over_fallback_upgrade():
     """When the top chosen_step yields no goal, an owned wooden_shield into its
     empty slot is served by the first-class `EquipOwnedGoal` in the COLLECT
     band, which outranks (and thus preempts) the UpgradeEquipment fallback —
