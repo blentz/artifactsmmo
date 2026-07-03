@@ -113,27 +113,40 @@ change.
 
 ## Formal-gate impact
 
-The proved cores must stay sound:
+**Reconciliation (post-investigation 2026-07-03):** the fix is NOT a new proved
+Lean core. Root-ranking urgency lives in `StrategyEngine._marginal`
+(`ai/tiers/strategy.py`) as impure `Fraction` policy — the existing siblings
+`EMPTY_SLOT_URGENCY = Fraction(5,2)`, `COMBAT_READINESS_URGENCY = Fraction(2)`,
+`POTION_SUPPLY_URGENCY` are plain constants + `elif` branches, none Lean-proved.
+The bag floor is the same shape: a new `BAG_SLOT_URGENCY` constant + one `elif`
+branch. `strategy.py` IS in the mutation set (`mutate.py` `STRATEGY_SRC`,
+`STRATEGY_MUTATIONS`), so the branch is guarded by Python unit tests that kill a
+new mutation entry — the same discipline the potion urgency followed.
 
-- `strategic_value_pure` (Formal/StrategicValue.lean): a pure nonneg-monotone
-  weighted sum. The floor is applied in the **impure wrapper** (`_equip_gain` /
-  the gap policy), NOT inside `strategic_value_pure`, so the core and its
-  differential binding are untouched.
-- `decide_key` (Formal/DecideKey.lean) computes `protection = max(0,
-  strategic_value(item) − strategic_value(current))`. The floor must be placed so
-  it does **not** silently alter `decide_key`'s protection term in a way that
-  breaks the proved ladder/tiebreak. **Open placement question for the plan:**
-  floor the *gap/priority* used for root ranking without changing the
-  `strategic_value` inputs that `decide_key` consumes — i.e., the floor is a
-  ranking-policy adjustment, not a redefinition of item value.
-- `ObjectiveGap` / `GearPolicy` (`armor_strictly_dominates_empty_slot`): the
-  floor ≤ `EFFICIENCY_BUDGET` keeps combat strictly dominant, so the dominance
-  theorems are preserved. Re-verify the nonneg bound still holds with the floor.
+Cores that stay untouched and sound:
 
-Expected gate work: a new small pure decision helper (e.g. `bag_floor_pure` /
-empty-craftable-bag predicate → floored gain) with its own Formal model +
-differential tuples + mutation coverage, per the repo rule that new decision
-cores ship extracted+proven. No weakening of existing theorems.
+- `strategic_value_pure` / `decide_key` / `GearPolicy`
+  (`armor_strictly_dominates_empty_slot`): the floor is applied to the
+  `_marginal` urgency (ranking policy), NOT to `strategic_value` or the
+  `protection` term `decide_key` consumes, so those proofs and their differential
+  bindings are unchanged.
+- `BAG_SLOT_URGENCY` is chosen strictly below `COMBAT_READINESS_URGENCY` (2) and
+  `EMPTY_SLOT_URGENCY` (5/2), so an empty combat slot / weapon still outranks the
+  bag — "below combat" preserved by construction.
+
+Gate work: Python unit tests (mirroring `TestPotionSupplyUrgency`) + one
+`STRATEGY_MUTATIONS` entry (drop the bag branch) that those tests kill + full
+gate green. No Lean/differential changes.
+
+## Root-ranking detail (why priority collapses to 0)
+
+The bag reaches ranking as a `target_gear` root (`target_gear["bag_slot"] =
+satchel`, admitted by `is_attainable`), but `_marginal`'s `ObtainItem` branch
+gives it `marginal = 0`: the empty-slot boost is gated on `slot in
+_combat_gear_slots` (bag is not combat-bearing → excluded), and the base
+`min(1, gain/GEAR_EQUIP_SCALE)` is 0 because a bag's `strategic_value` is 0 when
+the learned `inventory_weight` is cold. The new `elif slot == "bag_slot"` branch
+supplies the non-zero floor.
 
 ## Verification plan
 
