@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from fractions import Fraction
 
-from artifactsmmo_cli.ai.cycle_snapshot import PlanTreeNode
+from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, PlanTreeNode
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.plan_tree import build_plan_tree
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
@@ -157,3 +157,13 @@ def test_unknown_metagoal_falls_back_to_short_root_label():
     tree = build_plan_tree(_decision(dummy, None, [_rs(dummy, 1)]), make_state(), gd, None)
     assert tree[0].kind == "obtain"        # fallback branch
     assert tree[0].children == ()          # prerequisites(unknown) -> []
+
+
+def test_snapshot_carries_plan_tree():
+    node = PlanTreeNode(key="k", label="life_amulet", kind="obtain", status="unmet")
+    snap = CycleSnapshot(cycle_index=1, timestamp="t", character="hero",
+                         x=0, y=0, level=1, xp=0, max_xp=1, hp=1, max_hp=1, gold=0,
+                         selected_goal="g", action="a", outcome="ok",
+                         plan_tree=(node,))
+    assert snap.plan_tree[0].label == "life_amulet"
+    assert snap.plan_tree[0].children == ()

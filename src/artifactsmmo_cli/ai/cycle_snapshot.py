@@ -102,3 +102,4 @@ class CycleSnapshot(BaseModel):
     chosen_root: str | None = None
     strategy_ranking: list[RootScoreView] = Field(default_factory=list)
     bank_items: dict[str, int] | None = None
+    plan_tree: tuple[PlanTreeNode, ...] = ()
