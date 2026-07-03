@@ -1924,6 +1924,24 @@ class TestNotifyObserverCooldown:
         assert snap.cooldown_remaining > 0
         assert snap.cooldown_remaining <= 12.0
 
+    def test_notify_observer_populates_plan_tree(self):
+        """_notify_observer wires build_plan_tree(self._last_decision, ...) into
+        the emitted CycleSnapshot.plan_tree when a decision is committed (the
+        True branch of the plan_tree=... conditional in player.py)."""
+        captured = []
+        player = GamePlayer(character="hero", cycle_observer=captured.append)
+        player.game_data = make_game_data_mock()
+        player.state = make_state(level=4)
+        player._last_decision = StrategyDecision(
+            interrupt=None, chosen_root=ObtainItem("nonexistent_item"),
+            chosen_step=None, desired_state={}, ranking=[],
+        )
+        player._notify_observer("ReachCharLevel(5)", "FightAction(cow)", "ok", [])
+        assert len(captured) == 1
+        snap = captured[0]
+        assert snap.plan_tree != ()
+        assert snap.plan_tree[0].label == "nonexistent_item"
+
 
 def test_snapshot_carries_chosen_root_and_ranking_and_bank(tmp_path):
     """The cycle snapshot exposes the committed strategy root + ranking + bank
