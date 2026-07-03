@@ -29,6 +29,7 @@ GATHERING_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "ga
 LEVEL_SKILL_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "level_skill.py"
 SCORING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "scoring.py"
 LOADOUT_PICKER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "loadout_picker.py"
+EMPTY_SLOT_FILLS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "empty_slot_fills.py"
 GEAR_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_value.py"
 SKILL_XP_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "skill_xp_curve.py"
 SKILL_TARGET_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "skill_target_curve.py"
@@ -2335,6 +2336,34 @@ STRATEGY_DRIVER_MUTATIONS = [
 ]
 
 
+# EquipOwnedGoal (COLLECT band) wiring — Task 3 (spec 2026-07-03 equip-owned-gear).
+# The empty-slot Rank fill computation: each conjunct of the keep-filter is a
+# mutant killed by an OWNED unit-test group (tests/ai/test_empty_slot_fills.py).
+EMPTY_SLOT_FILLS_MUTATIONS = [
+    # (a) drop the empty-only guard: a filled slot's better owned item would be
+    # DISPLACED (a swap into a non-empty slot) — killed by
+    # `test_filled_slot_with_better_owned_item_is_not_displaced`.
+    ("empty_slot_fills: drop empty-only filter (displaces incumbents)",
+     "        if state.equipment.get(slot) is None and code is not None and code not in reserved",
+     "        if code is not None and code not in reserved"),
+    # (b) drop the reserved exclusion: an item owed to the active task pipeline
+    # would be equipped away — killed by `test_reserved_item_is_excluded`.
+    ("empty_slot_fills: drop reserved exclusion",
+     "        if state.equipment.get(slot) is None and code is not None and code not in reserved",
+     "        if state.equipment.get(slot) is None and code is not None"),
+]
+
+# (c) band placement: the EquipOwnedGoal candidate must sit in the COLLECT band
+# (above the step/grind tier). Flipping it to DISCRETIONARY sinks it below the
+# step — killed by the arbiter-ordering test's `equip.band == BAND_COLLECT`
+# assertion (tests/ai/test_equip_owned_arbiter.py).
+EQUIP_OWNED_BAND_MUTATIONS = [
+    ("strategy_driver: EquipOwnedGoal band COLLECT->DISCRETIONARY (sinks below step)",
+     "                                        repr_=repr(eq_goal), band=BAND_COLLECT))",
+     "                                        repr_=repr(eq_goal), band=BAND_DISCRETIONARY))"),
+]
+
+
 # Utility-stat valuation (2026-06-15 novice_guide discard fix). hp_bonus/wisdom/
 # prospecting must count so artifacts are scored, equipped, and not discarded.
 ARMOR_UTILITY_MUTATIONS = [
@@ -2433,7 +2462,7 @@ _ALL_SRCS = [
     GEAR_VALUE_CORE_SRC,
     GAME_DATA_PARSE_SRC, LOCATION_CATALOG_SRC,
     SRC, TASK_BATCH_SRC, INVENTORY_CAPS_SRC, COMBAT_SRC, PROJECTION_SRC, SCORING_SRC,
-    LOADOUT_PICKER_SRC, GEAR_VALUE_SRC,
+    LOADOUT_PICKER_SRC, EMPTY_SLOT_FILLS_SRC, GEAR_VALUE_SRC,
     SKILL_XP_CURVE_SRC, RECIPE_CLOSURE_SRC, TASK_FEASIBILITY_SRC, PREREQUISITE_GRAPH_SRC,
     OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, STUCK_DETECTOR_SRC,
     PRIORITY_BAND_SRC, OWNED_COUNT_SRC, ROOT_PROGRESS_SRC, UPGRADE_SELECTION_SRC, SCALAR_CORE_SRC,
@@ -4560,6 +4589,10 @@ def _run_all_groups() -> int:
               "formal/diff/test_doomed_memo_diff.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, STRATEGY_DRIVER_MUTATIONS,
               "tests/test_ai/test_strategy_driver_tiered.py", survivors)
+    run_group(EMPTY_SLOT_FILLS_SRC, EMPTY_SLOT_FILLS_MUTATIONS,
+              "tests/ai/test_empty_slot_fills.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, EQUIP_OWNED_BAND_MUTATIONS,
+              "tests/ai/test_equip_owned_arbiter.py", survivors)
     run_group(COMBAT_SRC, COMBAT_VETO_MUTATIONS,
               "tests/test_ai/test_combat.py", survivors)
     run_group(SCORING_SRC, ARMOR_UTILITY_MUTATIONS,

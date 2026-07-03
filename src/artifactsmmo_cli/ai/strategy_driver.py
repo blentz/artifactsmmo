@@ -19,6 +19,7 @@ from artifactsmmo_cli.ai.consumable_supply import best_held_heal
 from artifactsmmo_cli.ai.craft_plan_gen import generate_next_craft_action
 from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
 from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
+from artifactsmmo_cli.ai.equipment.empty_slot_fills import empty_slot_rank_fills
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_skill_resource import best_gather_resource_drop
 from artifactsmmo_cli.ai.gather_step_target import gather_step_target
@@ -30,6 +31,7 @@ from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.goals.craft_relief import CraftReliefGoal
 from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
 from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
+from artifactsmmo_cli.ai.goals.equip_owned_gear import EquipOwnedGoal
 from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
 from artifactsmmo_cli.ai.goals.drain_bank_junk import DrainBankJunkGoal
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
@@ -58,7 +60,7 @@ from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.recipe_closure import closure_demand
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
-from artifactsmmo_cli.ai.task_reservation import consumes_reserved
+from artifactsmmo_cli.ai.task_reservation import consumes_reserved, task_reserved_demand
 from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
 from artifactsmmo_cli.ai.tiers.guards import (
     GuardKind,
@@ -1193,6 +1195,23 @@ class StrategyArbiter:
         for mk in collect_kinds:
             g = map_means(mk, game_data, ctx, state, self._history)
             candidates.append(Candidate(goal=g, is_means=True, repr_=repr(g), band=BAND_COLLECT))
+        # Equip-owned-gear (COLLECT band): a first-class objective that equips
+        # already-OWNED positive-Rank gear into currently-EMPTY slots, so free
+        # gear is worn before the bot grinds for more (COLLECT outranks the
+        # step/grind tier). Materialized directly here — like the objective
+        # step_goal below and unlike the `active_means` MeansKinds — so it stays
+        # OUT of `COLLECT_REWARD_ORDER` and the liveness ladder it mirrors: this
+        # candidate is a bounded, one-action, self-satisfying equip (fires only
+        # while `fills` is non-empty, then `is_satisfied`), never a blocker. The
+        # reserved set is the active items-task's material reservation
+        # (`task_reserved_demand`) — the same pipeline `_suppress_step_for_task`
+        # protects — so an owned item still owed to a task is not equipped away.
+        equip_fills = empty_slot_rank_fills(
+            state, game_data, frozenset(task_reserved_demand(state, game_data)))
+        if equip_fills:
+            eq_goal = EquipOwnedGoal(fills=equip_fills)
+            candidates.append(Candidate(goal=eq_goal, is_means=True,
+                                        repr_=repr(eq_goal), band=BAND_COLLECT))
         # Append step_goal + every fallback-step goal in ranking order so
         # select_pure walks them all before reaching discretionary. Trace
         # 2026-06-06 16:34 (cycles 0-1): top step's GrindCharacterXP

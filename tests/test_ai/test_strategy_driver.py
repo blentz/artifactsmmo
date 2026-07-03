@@ -22,6 +22,7 @@ from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
 from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
+from artifactsmmo_cli.ai.goals.equip_owned_gear import EquipOwnedGoal
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
@@ -222,7 +223,12 @@ def test_select_fallback_equip_not_shadowed_by_dead_upgrade_goal():
     relevant_actions drop Fight actions) — and the rank-#1 fallback root's
     one-action equip goal was DEDUPED AWAY because UpgradeEquipmentGoal's
     repr was the bare "UpgradeEquipment" for every target. Distinct targets
-    must produce distinct candidates; the live equip must win."""
+    must produce distinct candidates; the live equip must win.
+
+    Post-EquipOwnedGoal (COLLECT band): the owned copper_legs_armor into its
+    empty slot is now served by the first-class `EquipOwnedGoal`, which
+    outranks the (dead) UpgradeEquipment step — the equip still wins, via the
+    dedicated equip-owned path."""
     planner = GOAPPlanner()
     gd = GameData()
     gd._item_stats = {
@@ -263,7 +269,7 @@ def test_select_fallback_equip_not_shadowed_by_dead_upgrade_goal():
     arbiter = StrategyArbiter(planner, history=None)
     arbiter.set_cycle(0)
     goal, plan, goals_tried = arbiter.select(decision, state, gd, actions, _ctx())
-    assert isinstance(goal, UpgradeEquipmentGoal), (goal, goals_tried)
+    assert isinstance(goal, EquipOwnedGoal), (goal, goals_tried)
     assert plan and any(isinstance(a, EquipAction)
                         and a.code == "copper_legs_armor" for a in plan), plan
 
@@ -1367,9 +1373,10 @@ def test_chosen_step_alive_true_when_top_step_yields_goal():
 
 
 def test_select_promotes_upgrade_equipment_from_fallback_first_pass():
-    """When the top chosen_step yields no goal, the fallback FIRST pass prefers
-    a fallback step that maps to UpgradeEquipmentGoal (the one-step equip),
-    promoting it over later fallbacks (lines 393-400)."""
+    """When the top chosen_step yields no goal, an owned wooden_shield into its
+    empty slot is served by the first-class `EquipOwnedGoal` in the COLLECT
+    band, which outranks (and thus preempts) the UpgradeEquipment fallback —
+    the owned shield still gets equipped, via the dedicated equip-owned path."""
     planner = GOAPPlanner()
     gd = _gd()  # has wooden_shield (equippable) + ash_plank recipe
     # wooden_shield owned in inventory -> UpgradeEquipmentGoal is a one-action
@@ -1386,7 +1393,7 @@ def test_select_promotes_upgrade_equipment_from_fallback_first_pass():
     )
     _goal, _plan, goals_tried = arbiter_select_with(planner, decision, state, gd)
     tried_reprs = {str(e["goal"]) for e in goals_tried}
-    assert any("UpgradeEquipment" in r for r in tried_reprs), tried_reprs
+    assert any("EquipOwnedGear" in r for r in tried_reprs), tried_reprs
 
 
 def arbiter_select_with(planner, decision, state, gd):
