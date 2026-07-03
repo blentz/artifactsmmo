@@ -1,9 +1,10 @@
+from dataclasses import dataclass
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.cycle_snapshot import PlanTreeNode
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.plan_tree import build_plan_tree
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.strategy import RootScore, StrategyDecision
 from tests.test_ai.fixtures import make_state
 
@@ -127,3 +128,32 @@ def test_cycle_and_depth_bounded():
     tree = build_plan_tree(_decision(chosen, None, [_rs(chosen, 1)]), state, gd, None)
     # terminates; the repeated node becomes a leaf via the visited-set
     assert tree[0].label == "loop_item"
+
+
+def test_reach_char_level_root_labelled_and_leaf():
+    # Empty monster table -> combat_capable's any() short-circuits False without
+    # calling predict_win; no attainable weapon -> prerequisites() returns [] (leaf).
+    gd = GameData()
+    gd._item_stats = {}
+    gd._crafting_recipes = {}
+    gd._monster_level = {}
+    gd._resource_drops = {}
+    gd._resource_skill = {}
+    chosen = ReachCharLevel(5)
+    tree = build_plan_tree(_decision(chosen, None, [_rs(chosen, 1)]), make_state(), gd, None)
+    assert tree[0].label == "character → 5" and tree[0].kind == "charlevel"
+    assert tree[0].children == ()
+
+
+@dataclass(frozen=True)
+class _UnknownGoal:
+    def is_satisfied(self, state, game_data) -> bool:
+        return False
+
+
+def test_unknown_metagoal_falls_back_to_short_root_label():
+    gd = _gd()
+    dummy = _UnknownGoal()
+    tree = build_plan_tree(_decision(dummy, None, [_rs(dummy, 1)]), make_state(), gd, None)
+    assert tree[0].kind == "obtain"        # fallback branch
+    assert tree[0].children == ()          # prerequisites(unknown) -> []
