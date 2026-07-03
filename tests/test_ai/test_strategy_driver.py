@@ -1761,6 +1761,7 @@ def test_select_skips_satisfied_step_goal_continues_to_next():
     # Give GameData the monster/bank locations AcceptTask needs
     gd._monster_locations = {"chicken": [(1, 0)]}
     gd._monster_level = {"chicken": 1}
+    fill_monster_stat_defaults(gd)  # craft_potions_fires → unlock_boost_target → predict_win needs full stats
     gd._resource_locations = {}
     gd._workshop_locations = {}
     gd._bank_location = (4, 0)

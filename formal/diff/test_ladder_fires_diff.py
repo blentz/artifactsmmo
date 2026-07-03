@@ -167,6 +167,7 @@ from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.guards import _has_sellable
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
@@ -306,6 +307,7 @@ def _make_game_data(scn: Scenario) -> GameData:
     gd._npc_locations = {SELLER_NPC: (1, 2)} if scn.item_sellable else {}
     gd._bank_capacity = scn.bank_capacity
     gd._next_expansion_cost = scn.next_expansion_cost
+    fill_monster_stat_defaults(gd)  # craft_potions_fires→unlock_boost_target→predict_win needs full stats
     return gd
 
 
@@ -1471,6 +1473,7 @@ def _too_hard_monsters_gd() -> GameData:
     gd._monster_level = {"hard_mob": 40}
     gd._item_stats = {}
     gd._crafting_recipes = {}
+    fill_monster_stat_defaults(gd)  # craft_potions_fires→unlock_boost_target→predict_win needs full stats
     return gd
 
 
@@ -1536,6 +1539,7 @@ def test_task_cancel_near_miss_feasible_task() -> None:
     gd._monster_level = {"easy_mob": 5}
     gd._item_stats = {}
     gd._crafting_recipes = {}
+    fill_monster_stat_defaults(gd)  # craft_potions_fires→unlock_boost_target→predict_win needs full stats
     prod, _, lean, _ = drive_and_contest(
         w, gd, _plain_ctx(),
         driven=frozenset({LadderMeans.TASK_CANCEL}),

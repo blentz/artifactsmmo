@@ -14,6 +14,7 @@ from artifactsmmo_cli.ai.thresholds import (
     POTION_LOW_LEVEL,
     POTION_LOW_QTY,
 )
+from artifactsmmo_cli.ai.unlock_boost import unlock_boost_target
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -49,17 +50,44 @@ def target_potion_pure(
     return best_code
 
 
+def _recipe_producible(recipe: dict[str, int], state: WorldState, game_data: GameData) -> bool:
+    """True when a craft batch is producible via any of three tiers:
+    - craft-from-held: all ingredients available in inventory + bank, OR
+    - buyable: every ingredient purchaseable from an NPC for gold, OR
+    - gatherable: at least one ingredient drops from a resource node."""
+    bank = state.bank_items or {}
+    if all(state.inventory.get(mat, 0) + bank.get(mat, 0) >= qty
+           for mat, qty in recipe.items()):
+        return True
+    if all(
+        any(currency == "gold" for _npc, _price, currency in game_data.npc_purchases(mat))
+        for mat in recipe
+    ):
+        return True
+    drop_items = set(game_data.resource_drops.values())
+    return any(mat in drop_items for mat in recipe)
+
+
 def craft_potions_fires(state: WorldState, game_data: GameData) -> bool:
     """True when the CRAFT_POTIONS guard should preempt the grind.
 
     Fires when:
+    - A craftable unlock boost exists that would flip a bare-unwinnable in-band
+      monster to winnable (stall-breaker path) AND the boost recipe is producible
+      (craft-from-held OR all ingredients buyable OR any ingredient gatherable), OR
     - A craftable utility heal exists at the character's current skill, AND
-    - The equipped quantity of that potion is below the level-scaled baseline, AND
-    - A batch is producible: ingredients craft-from-held OR all buyable OR any gatherable.
+      the equipped quantity of that potion is below the level-scaled baseline, AND
+      a batch is producible: ingredients craft-from-held OR all buyable OR any gatherable.
 
     This predicate is the exclusive gating truth for CraftPotionsGoal — the
     guard never fires when the goal would have no plannable path (no target →
     ``relevant_actions`` returns ``[]``)."""
+    pair = unlock_boost_target(state, game_data)
+    if pair is not None:
+        boost_code = pair[0]
+        boost_recipe = dict(game_data.crafting_recipes.get(boost_code, {}))
+        if boost_recipe and _recipe_producible(boost_recipe, state, game_data):
+            return True
     target = target_potion_pure(state, game_data)
     if target is None:
         return False
@@ -72,17 +100,4 @@ def craft_potions_fires(state: WorldState, game_data: GameData) -> bool:
     recipe = dict(game_data.crafting_recipes.get(target, {}))
     if not recipe:
         return False
-    bank = state.bank_items or {}
-    # craft-from-held: all ingredients already available in inventory + bank
-    if all(state.inventory.get(mat, 0) + bank.get(mat, 0) >= qty
-           for mat, qty in recipe.items()):
-        return True
-    # buyable: every ingredient purchaseable from an NPC for gold
-    if all(
-        any(currency == "gold" for _npc, _price, currency in game_data.npc_purchases(mat))
-        for mat in recipe
-    ):
-        return True
-    # gatherable: at least one ingredient drops from a resource node
-    drop_items = set(game_data.resource_drops.values())
-    return any(mat in drop_items for mat in recipe)
+    return _recipe_producible(recipe, state, game_data)

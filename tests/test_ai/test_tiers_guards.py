@@ -11,6 +11,7 @@ from artifactsmmo_cli.ai.tiers.guards import (
     active_guards,
 )
 from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_strategy_driver import _ctx as driver_ctx
 
@@ -132,6 +133,7 @@ def test_bank_unlock_fires_when_level_meets_threshold():
     # BANK_UNLOCK: target_level returned as 5, player level=4 (>= 5-1=4) → fires.
     gd = GameData()
     gd._monster_level["goblin"] = 5
+    fill_monster_stat_defaults(gd)  # craft_potions_fires → unlock_boost_target → predict_win needs full stats
     state = make_state(hp=100, max_hp=100, xp=0, level=4)
     guards = active_guards(
         state, gd, None,
