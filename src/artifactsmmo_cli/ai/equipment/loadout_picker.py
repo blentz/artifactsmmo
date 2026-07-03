@@ -8,10 +8,21 @@ LAYERING DIRECTION: ``loadout_picker`` imports ``equipment.scoring`` (via
 
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.equipment.realizable_loadout import ownership
+from artifactsmmo_cli.ai.equipment.scoring import armor_score
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gear_value import gear_value
 from artifactsmmo_cli.ai.gear_value_core import Gather
 from artifactsmmo_cli.ai.world_state import WorldState
+
+_UTILITY_FILL_TYPES: frozenset[str] = frozenset({"artifact"})
+"""Item types whose value is purpose-independent flat utility (wisdom/prospecting/
+hp). They carry no skill_effects, so the Gather scorer values them at 0 and the
+empty-slot gate discards them — this set routes them through the flat-utility
+term instead. NOT `utility` (consumable/potion slots handled elsewhere)."""
+
+_NO_MONSTER: dict[str, int] = {}
+"""Empty monster attack: armor_score's defense term Σ mon_atk·res collapses to 0,
+leaving exactly the flat utility sum (bit-identical to the Lean model flatUtil)."""
 
 
 def _candidates_for_slot(
@@ -69,10 +80,23 @@ def _benefit(stats: ItemStats, purpose: object) -> int:
     highest benefit. Armor candidates have gather_score=0, so their benefit
     is also 0 — the empty-slot gate (best_score <= 0 → skip) and the
     strict-improvement rule (> current_score) together guarantee that armor
-    slots keep their current item unchanged for Gather purposes.
+    slots keep their current item unchanged for Gather purposes. Exception:
+    types in `_UTILITY_FILL_TYPES` (artifacts) route through the flat-utility
+    term `armor_score(stats, {})` instead, since they carry no skill_effects
+    but do grant purpose-independent utility that pick_loadout should equip.
     """
-    value = gear_value(stats, purpose)
-    return -value if isinstance(purpose, Gather) else value
+    if isinstance(purpose, Gather):
+        if stats.type_ in _UTILITY_FILL_TYPES:
+            # Artifacts grant purpose-independent utility (wisdom/prospecting/hp)
+            # and carry no skill_effects, so gear_value(Gather) = 0 and the
+            # empty-slot gate discards them. Score by the flat-utility term:
+            # armor_score against an empty monster attack zeroes the defense term,
+            # leaving hp_bonus+wisdom+prospecting+inventory_space+haste+lifesteal+
+            # combat_buff — bit-identical to the Lean model's per-item flatUtil,
+            # and consistent with the Combat path (armor_score includes it too).
+            return armor_score(stats, _NO_MONSTER)
+        return -gear_value(stats, purpose)
+    return gear_value(stats, purpose)
 
 
 def pick_loadout(

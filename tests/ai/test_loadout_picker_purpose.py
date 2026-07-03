@@ -226,3 +226,71 @@ def test_gather_purpose_empty_armor_slots_stay_empty() -> None:
     result = pick_loadout(Gather("woodcutting"), state, gd)
     assert result["weapon_slot"] == "strong_axe"
     assert result["body_armor_slot"] is None
+
+
+# ---------------------------------------------------------------------------
+# Gather purpose: artifact utility-fill branch
+# ---------------------------------------------------------------------------
+
+
+def _gd_gather_artifact() -> GameData:
+    """Gather fixture with a tool, armor, and two utility artifacts."""
+    gd = GameData()
+    gd._item_stats = {
+        "strong_axe": ItemStats(code="strong_axe", level=1, type_="weapon", subtype="tool",
+                                attack={"earth": 3}, skill_effects={"woodcutting": -10}),
+        "leather_armor": ItemStats(code="leather_armor", level=1, type_="body_armor",
+                                   resistance={"earth": 10}),
+        "novice_guide": ItemStats(code="novice_guide", level=1, type_="artifact",
+                                  hp_bonus=25, wisdom=25, prospecting=25),
+        "lucky_charm": ItemStats(code="lucky_charm", level=1, type_="artifact",
+                                 wisdom=10, prospecting=10),
+    }
+    return gd
+
+
+def test_gather_fills_empty_artifact_slot() -> None:
+    """MUTATION KILLER: a gather re-arm fills an empty artifact slot with an owned
+    utility artifact. novice_guide flat utility = hp_bonus 25 + wisdom 25 +
+    prospecting 25 = 75 > 0, so the empty-slot gate passes. The mutant that
+    reverts the artifact branch to -gather_score (0) leaves the slot empty."""
+    gd = _gd_gather_artifact()
+    assert armor_score(gd._item_stats["novice_guide"], {}) == 75
+    state = _make_state(level=1, inventory={"novice_guide": 1},
+                        equipment={"artifact1_slot": None})
+    result = pick_loadout(Gather("woodcutting"), state, gd)
+    assert result["artifact1_slot"] == "novice_guide"
+
+
+def test_gather_picks_best_utility_artifact() -> None:
+    """Under Gather, artifacts argmax on flat utility (not an arbitrary 0-0 tie):
+    novice_guide (75) takes the first artifact slot, lucky_charm (20) the next."""
+    gd = _gd_gather_artifact()
+    state = _make_state(level=1, inventory={"novice_guide": 1, "lucky_charm": 1},
+                        equipment={"artifact1_slot": None, "artifact2_slot": None})
+    result = pick_loadout(Gather("woodcutting"), state, gd)
+    assert result["artifact1_slot"] == "novice_guide"
+    assert result["artifact2_slot"] == "lucky_charm"
+
+
+def test_gather_artifact_branch_leaves_armor_empty() -> None:
+    """The utility-fill branch is artifact-ONLY. Empty armor with owned hp-bonus
+    armor (flat utility 30 > 0) still stays empty under Gather — armor is not a
+    fill type, so it keeps the proven -gather_score (0) benefit."""
+    gd = _gd_gather_artifact()
+    gd._item_stats["padded_vest"] = ItemStats(code="padded_vest", level=1,
+                                              type_="body_armor", hp_bonus=30)
+    state = _make_state(level=1, inventory={"padded_vest": 1},
+                        equipment={"body_armor_slot": None})
+    result = pick_loadout(Gather("woodcutting"), state, gd)
+    assert result["body_armor_slot"] is None
+
+
+def test_combat_fills_empty_artifact_slot_unchanged() -> None:
+    """Regression: Combat already fills artifacts (armor_score includes flat
+    utility). The Gather-branch edit must not change the Combat path."""
+    gd = _gd_gather_artifact()
+    state = _make_state(level=1, inventory={"novice_guide": 1},
+                        equipment={"artifact1_slot": None})
+    result = pick_loadout(Combat({"earth": 0}, {"earth": 0}), state, gd)
+    assert result["artifact1_slot"] == "novice_guide"
