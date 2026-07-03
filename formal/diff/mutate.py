@@ -751,9 +751,25 @@ LOADOUT_PICKER_GATHER_MUTATIONS = [
     # the WORST tool (least-negative effect) — the opposite of the proved
     # `argmax(-gatherScore) = argmin(gatherScore)` duality. The gather pick
     # diverges from the oracle and the swap-in-tool anchor flips → killed.
+    # (Re-anchored 2026-07-03: Task 1 restructured `_benefit` into explicit
+    # artifact/non-artifact arms, so the negation now lives on the tool arm.)
     ("loadout_picker: drop the Gather benefit negation (-value -> value)",
-     "    return -value if isinstance(purpose, Gather) else value",
-     "    return value if isinstance(purpose, Gather) else value"),
+     "        return -gear_value(stats, purpose)",
+     "        return gear_value(stats, purpose)"),
+]
+
+
+# loadout_picker (artifact utility-fill) mutation -- the `_UTILITY_FILL_TYPES`
+# fast-path that scores an ARTIFACT by its flat utility (`armor_score` against an
+# empty monster attack) instead of `-gather_score` (= 0). Reverting it drops the
+# fast-path, so under Gather an artifact scores 0 and the empty-slot gate leaves
+# the slot empty. Killed by the OWNED unit test bound to the branch (not merely
+# the traversal diff): tests/ai/test_loadout_picker_purpose.py::
+# test_gather_fills_empty_artifact_slot (novice_guide flat utility 75 > 0).
+LOADOUT_PICKER_ARTIFACT_MUTATIONS = [
+    ("loadout_picker: revert artifact utility-fill arm (armor_score -> -gear_value)",
+     "            return armor_score(stats, _NO_MONSTER)",
+     "            return -gear_value(stats, purpose)"),
 ]
 
 
@@ -4209,6 +4225,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_equipment_scoring_diff.py", survivors)
     run_group(LOADOUT_PICKER_SRC, LOADOUT_PICKER_GATHER_MUTATIONS,
               "formal/diff/test_loadout_picker_diff.py", survivors)
+    run_group(LOADOUT_PICKER_SRC, LOADOUT_PICKER_ARTIFACT_MUTATIONS,
+              "tests/ai/test_loadout_picker_purpose.py", survivors)
     run_group(GEAR_VALUE_SRC, GEAR_VALUE_DISPATCH_MUTATIONS,
               "formal/diff/test_realizable_loadout_diff.py", survivors)
     run_group(LOADOUT_PICKER_SRC, REALIZABLE_LOADOUT_MUTATIONS,

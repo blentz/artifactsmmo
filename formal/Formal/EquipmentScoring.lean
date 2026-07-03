@@ -55,6 +55,7 @@ structure Item where
   crit : Int
   fits : Bool
   flatUtil : Int := 0   -- monster-independent utility = hp_bonus + wisdom + prospecting
+  isUtilityFill : Bool := false  -- artifact-type utility-fill: Gather scores it by flatUtil
 deriving Repr, DecidableEq
 
 /-- The 4 game elements as integer keys (fire, earth, water, air). -/
@@ -191,6 +192,29 @@ theorem argmaxBy_is_max (score : Item → Int) (best : Item) (xs : List Item) :
     (argmaxBy score best xs ∈ best :: xs) ∧
     (∀ y ∈ best :: xs, score y ≤ score (argmaxBy score best xs)) :=
   ⟨argmaxBy_mem score best xs, argmaxBy_ge score best xs⟩
+
+/-- `argmaxBy` depends on the score only through its values on `best :: xs`: two
+scores agreeing on every element there select the SAME argmax. -/
+theorem argmaxBy_congr (s1 s2 : Item → Int) :
+    ∀ (best : Item) (xs : List Item),
+      (∀ i ∈ best :: xs, s1 i = s2 i) →
+      argmaxBy s1 best xs = argmaxBy s2 best xs := by
+  intro best xs
+  induction xs generalizing best with
+  | nil => intro _; rfl
+  | cons x xs ih =>
+    intro h
+    unfold argmaxBy
+    have hx : s1 x = s2 x := h x (by simp)
+    have hb : s1 best = s2 best := h best (by simp)
+    by_cases hc : s2 x > s2 best
+    · rw [hx, hb, if_pos hc, if_pos hc]
+      exact ih x (fun i hi => h i (List.mem_cons_of_mem best hi))
+    · rw [hx, hb, if_neg hc, if_neg hc]
+      refine ih best (fun i hi => ?_)
+      rcases List.mem_cons.mp hi with he | hm
+      · exact he ▸ h best (by simp)
+      · exact h i (List.mem_cons_of_mem best (List.mem_cons_of_mem x hm))
 
 /-! ### Pick theorems (the strong contracts). -/
 

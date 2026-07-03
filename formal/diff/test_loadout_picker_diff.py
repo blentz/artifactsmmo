@@ -47,13 +47,15 @@ from hypothesis import given, settings, strategies as st
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.equipment.elements import ELEMENTS
 from artifactsmmo_cli.ai.equipment.loadout_picker import _benefit, pick_loadout
-from artifactsmmo_cli.ai.equipment.scoring import gather_score, weapon_score_raw
+from artifactsmmo_cli.ai.equipment.scoring import armor_score, gather_score, weapon_score_raw
 from artifactsmmo_cli.ai.game_data import ItemStats
 from artifactsmmo_cli.ai.gear_value_core import Combat, Gather
 from artifactsmmo_cli.ai.world_state import WorldState
 from formal.diff.oracle_client import run_oracle
 
 _WEAPON_SLOT = "weapon_slot"
+_ARTIFACT_SLOT = "artifact1_slot"
+_UTILITY_FILL_TYPES = frozenset({"artifact"})
 _ELEM_IDX = {e: i for i, e in enumerate(ELEMENTS)}
 
 
@@ -87,19 +89,24 @@ def _elem_block(stats: ItemStats | None, which: str) -> list[int]:
 
 def _item_block(code_id: int, stats: ItemStats | None, slot: str,
                 skill: str | None) -> list[int]:
-    """14-int extended Lean block: 13-int item block + skillEffect int.
+    """15-int extended Lean block: 13-int item block + skillEffect + isUtilityFill.
 
     flatUtil aggregates the monster-independent utility stats (== the Python
     armor/utility flat term); skillEffect is the signed per-skill gather effect
-    (``gather_score``) the abstract Gather benefit reads, 0 when no skill."""
+    (``gather_score``) the abstract Gather benefit reads, 0 when no skill;
+    isUtilityFill flags the artifact-type utility-fill items whose Gather benefit
+    is the flat utility (``armor_score(stats, {})``) rather than ``-gather_score``.
+    """
     if stats is None:
-        return [code_id, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        return [code_id, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     fits = 1 if slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []) else 0
     flat = (stats.hp_bonus + stats.wisdom + stats.prospecting + stats.inventory_space
             + stats.haste + stats.lifesteal + stats.combat_buff)
     eff = gather_score(stats, skill) if skill is not None else 0
+    is_utility_fill = 1 if stats and stats.type_ in _UTILITY_FILL_TYPES else 0
     return [code_id, stats.level, fits, *_elem_block(stats, "attack"),
-            *_elem_block(stats, "resistance"), stats.critical_strike, flat, eff]
+            *_elem_block(stats, "resistance"), stats.critical_strike, flat, eff,
+            is_utility_fill]
 
 
 def _owned_codes(state: WorldState) -> set[str]:
@@ -111,14 +118,15 @@ def _owned_codes(state: WorldState) -> set[str]:
 def _oracle_pick(purpose_kind: int, level: int, mon: dict[str, int],
                  cur_code: str | None, table: dict[str, ItemStats],
                  owned: list[str], skill: str | None,
-                 cid) -> dict:
-    """One oracle request for the weapon slot under `purpose_kind`."""
+                 cid, slot: str = _WEAPON_SLOT, is_weapon: int = 1) -> dict:
+    """One oracle request for `slot` under `purpose_kind`."""
     cur_stats = table.get(cur_code) if cur_code else None
     cur_present = 1 if cur_stats is not None else 0
-    args = [purpose_kind, level, 1, *[mon.get(e, 0) for e in ELEMENTS], cur_present]
-    args += _item_block(cid(cur_code), cur_stats, _WEAPON_SLOT, skill)
+    args = [purpose_kind, level, is_weapon,
+            *[mon.get(e, 0) for e in ELEMENTS], cur_present]
+    args += _item_block(cid(cur_code), cur_stats, slot, skill)
     for code in sorted(owned):
-        args += _item_block(cid(code), table.get(code), _WEAPON_SLOT, skill)
+        args += _item_block(cid(code), table.get(code), slot, skill)
     return run_oracle("loadout_picker", [args])[0]
 
 
@@ -184,6 +192,80 @@ def test_gather_pick_matches_lean(item_levels, item_effs, has_eff, level,
     )
     if chosen_stats is not None:
         py_benefit = _benefit(chosen_stats, purpose)
+        if feasible_exists:
+            assert py_benefit == max(res["max_benefit"], res["cur_benefit"]), (py_benefit, res)
+        assert py_benefit >= res["cur_benefit"], (py_benefit, res)
+    else:
+        assert res["cur_benefit"] == 0, res
+
+
+# ---------------------------------------------------------------------------
+# GATHER + ARTIFACT: the utility-fill branch. Artifacts carry NO skill_effects,
+# so ``-gather_score`` is 0; the live ``_benefit`` routes them through the flat
+# utility ``armor_score(stats, {})`` instead, and the oracle mirrors it via the
+# per-item ``isUtilityFill`` flag → ``purposeBenefit(.gather) = flatUtil``. This
+# binds the live flat-utility score to the oracle benefit BIT-EXACT and kills the
+# mutant that reverts the artifact arm to ``-gather_score`` (0 → slot stays empty).
+# ---------------------------------------------------------------------------
+
+_UTIL = st.integers(min_value=0, max_value=30)
+_ARTIFACT_CODES = ["a_a", "a_b", "a_c", "a_d"]
+
+
+@settings(max_examples=300, deadline=None)
+@given(
+    item_levels=st.lists(st.integers(min_value=1, max_value=10),
+                         min_size=len(_ARTIFACT_CODES), max_size=len(_ARTIFACT_CODES)),
+    item_hp=st.lists(_UTIL, min_size=len(_ARTIFACT_CODES), max_size=len(_ARTIFACT_CODES)),
+    item_wis=st.lists(_UTIL, min_size=len(_ARTIFACT_CODES), max_size=len(_ARTIFACT_CODES)),
+    item_pros=st.lists(_UTIL, min_size=len(_ARTIFACT_CODES), max_size=len(_ARTIFACT_CODES)),
+    level=st.integers(min_value=1, max_value=10),
+    inv_pick=st.lists(st.booleans(), min_size=len(_ARTIFACT_CODES), max_size=len(_ARTIFACT_CODES)),
+    equip_a=st.sampled_from([*_ARTIFACT_CODES, None]),
+)
+def test_gather_artifact_pick_matches_lean(item_levels, item_hp, item_wis, item_pros,
+                                           level, inv_pick, equip_a):
+    """Live ``pick_loadout(Gather)`` artifact-slot benefit ≡ oracle
+    ``pickSlotForPurpose(.gather)`` under the utility-fill flag, BIT-EXACT. The
+    chosen artifact's live ``armor_score(stats, {})`` equals the oracle's returned
+    flatUtil benefit — reverting the artifact arm to ``-gather_score`` diverges."""
+    table = {
+        code: ItemStats(
+            code=code, level=lvl, type_="artifact",
+            hp_bonus=hp, wisdom=wis, prospecting=pros,
+        )
+        for code, lvl, hp, wis, pros in zip(_ARTIFACT_CODES, item_levels, item_hp,
+                                            item_wis, item_pros, strict=True)
+    }
+    inventory = {c: 1 for c, keep in zip(_ARTIFACT_CODES, inv_pick, strict=True) if keep}
+    equipment = {_ARTIFACT_SLOT: equip_a}
+    gd = _FakeGameData(table)
+    state = _make_state(level, inventory, equipment)
+    purpose = Gather(_SKILL)
+    result = pick_loadout(purpose, state, gd)
+
+    code_ids: dict[str, int] = {}
+
+    def cid(code: str | None) -> int:
+        if code is None:
+            return -1
+        return code_ids.setdefault(code, len(code_ids) + 1)
+
+    owned = sorted(_owned_codes(state))
+    cid(equip_a)
+    res = _oracle_pick(1, level, {}, equip_a, table, owned, _SKILL, cid,
+                       slot=_ARTIFACT_SLOT, is_weapon=0)
+
+    chosen = result.get(_ARTIFACT_SLOT)
+    chosen_stats = table.get(chosen) if chosen else None
+    feasible_exists = any(
+        st_.level <= level and _ARTIFACT_SLOT in ITEM_TYPE_TO_SLOTS.get(st_.type_, [])
+        for st_ in (table.get(c) for c in owned) if st_ is not None
+    )
+    if chosen_stats is not None:
+        py_benefit = _benefit(chosen_stats, purpose)
+        # The utility-fill benefit is exactly the flat utility term.
+        assert py_benefit == armor_score(chosen_stats, {}), (py_benefit, chosen)
         if feasible_exists:
             assert py_benefit == max(res["max_benefit"], res["cur_benefit"]), (py_benefit, res)
         assert py_benefit >= res["cur_benefit"], (py_benefit, res)

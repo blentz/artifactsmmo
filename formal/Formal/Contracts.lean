@@ -3423,20 +3423,25 @@ example : ∀ (score : Formal.EquipmentScoring.Item → Int) (best : Formal.Equi
     Formal.EquipmentScoring.argmaxBy (fun i => - score i) best xs
       = Formal.PurposeRouting.argminBy score best xs :=
   @Formal.GearValue.argmaxBy_neg_eq_argminBy
--- pickSlot_purpose_gather_optimal: Gather fold — argmax(-gather) MINIMIZES gatherValue over candidates.
+-- pickSlot_purpose_gather_optimal: Gather fold — on the non-utility-fill candidate
+-- sub-world, argmax(-gather) MINIMIZES gatherValue over candidates.
 example : ∀ (skillEffect : Formal.EquipmentScoring.Item → Int) (playerLevel : Int)
     (items : List Formal.EquipmentScoring.Item) (c : Formal.EquipmentScoring.Item)
     (cs : List Formal.EquipmentScoring.Item),
     Formal.EquipmentScoring.candidates playerLevel items = c :: cs →
+    (∀ i ∈ Formal.EquipmentScoring.candidates playerLevel items, i.isUtilityFill = false) →
     ∀ y ∈ Formal.EquipmentScoring.candidates playerLevel items,
       Formal.GearValue.gatherValue skillEffect
           (Formal.EquipmentScoring.argmaxBy
             (Formal.GearValue.purposeBenefit (Formal.GearValue.Purpose.gather skillEffect)) c cs)
         ≤ Formal.GearValue.gatherValue skillEffect y :=
   @Formal.GearValue.pickSlot_purpose_gather_optimal
--- pickSlotForPurpose_gather_eq: Gather fold — unified picker output = dedicated pickGatherSlot output.
+-- pickSlotForPurpose_gather_eq: Gather fold — on the non-utility-fill sub-world
+-- (candidates and current), unified picker output = dedicated pickGatherSlot output.
 example : ∀ (skillEffect : Formal.EquipmentScoring.Item → Int) (playerLevel : Int)
     (current : Option Formal.EquipmentScoring.Item) (items : List Formal.EquipmentScoring.Item),
+    (∀ i ∈ Formal.EquipmentScoring.candidates playerLevel items, i.isUtilityFill = false) →
+    (∀ cur, current = some cur → cur.isUtilityFill = false) →
     Formal.GearValue.pickSlotForPurpose
         (Formal.GearValue.Purpose.gather skillEffect) playerLevel current items
       = Formal.PurposeRouting.pickGatherSlot skillEffect playerLevel current items :=

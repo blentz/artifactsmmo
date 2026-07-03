@@ -294,12 +294,16 @@ args layout:
 * 2:        isWeapon (0/1)  — combat weapon-vs-armor dispatch; ignored for gather
 * 3..6:     monster element stats (resistance for weapon, attack for armor)
 * 7:        currentPresent (0/1)
-* 8..21:    current EXTENDED block: 13-int item block + 1 skillEffect int
-* 22..:     candidate EXTENDED blocks, 14 ints each (13-int item + skillEffect)
+* 8..22:    current EXTENDED block: 13-int item block + skillEffect + isUtilityFill
+* 23..:     candidate EXTENDED blocks, 15 ints each (13-int item + skillEffect
+            + isUtilityFill)
 
 The skill effect is carried per item (the 14th int) and reassembled into the
 abstract `skillEffect : Item → Int` keyed by item code — binding the abstract
 Gather benefit to the per-item integer the live Python `gather_score` returns.
+The 15th int (`isUtilityFill`, 0/1) flags the artifact-type utility-fill items
+whose Gather benefit is the flat utility (`Item.flatUtil`) rather than
+`-gatherValue` — the `_UTILITY_FILL_TYPES` fast-path in the live `_benefit`.
 
 Emits the picked item's CODE (or -1 = none / leave-as-is), its BENEFIT, the MAX
 feasible benefit, and the current item's benefit (for the no-downgrade assertion). -/
@@ -309,13 +313,20 @@ def runLoadoutPicker (args : Array Json) : Json :=
   let isWeapon := intArg args 2 != 0
   let monStats := elemFromArgs args 3
   let curPresent := intArg args 7 != 0
+  -- Build an Item from a 15-int block at `base`: the 13-int item block, then the
+  -- skillEffect (base+13, read separately into the pair), then isUtilityFill
+  -- (base+14). `itemFromBlock` sets the default `isUtilityFill := false`; the
+  -- record update binds it from the block so `runEquipmentScoring` stays default.
+  let mkItem := fun (base : Nat) =>
+    { itemFromBlock (fun i => intArg args (base + i)) with
+        isUtilityFill := intArg args (base + 14) != 0 }
   let curPair : Option (Item × Int) :=
-    if curPresent then some (itemFromBlock (fun i => intArg args (8 + i)), intArg args 21)
+    if curPresent then some (mkItem 8, intArg args 21)
     else none
-  let nCand := (args.size - 22) / 14
+  let nCand := (args.size - 23) / 15
   let candPairs : List (Item × Int) :=
     (List.range nCand).map (fun k =>
-      (itemFromBlock (fun i => intArg args (22 + k * 14 + i)), intArg args (22 + k * 14 + 13)))
+      (mkItem (23 + k * 15), intArg args (23 + k * 15 + 13)))
   let allPairs : List (Item × Int) :=
     (match curPair with | some p => [p] | none => []) ++ candPairs
   let skillEffect : Item → Int := fun it =>

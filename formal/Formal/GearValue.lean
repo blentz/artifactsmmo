@@ -174,7 +174,16 @@ def purposeBenefit : Purpose → Item → Int
   | .combat monsterAtk monsterRes isWeapon =>
       fun i => combatValue isWeapon i monsterAtk monsterRes
   | .rank rankOf => rankOf
-  | .gather skillEffect => fun i => - gatherValue skillEffect i
+  | .gather skillEffect =>
+      fun i => if i.isUtilityFill then i.flatUtil else - gatherValue skillEffect i
+
+/-- On a NON-utility-fill item the Gather benefit is exactly `-gatherValue` (the
+`else` arm) — the atom that lets the gather folds reduce to the dedicated
+`gatherScore` argmin/optimality without touching the utility-fill artifacts. -/
+theorem purposeBenefit_gather_nonfill (skillEffect : Item → Int) (i : Item)
+    (h : i.isUtilityFill = false) :
+    purposeBenefit (.gather skillEffect) i = - gatherValue skillEffect i := by
+  simp only [purposeBenefit, h, Bool.false_eq_true, if_false]
 
 /-- The unified purpose picker: the existing parametric `pickSlot` driven by the
 purpose benefit. Combat callers, the Rank ranker, and the (folded-in) gather path
@@ -232,43 +241,89 @@ theorem argmaxBy_neg_eq_argminBy (score : Item → Int) (best : Item) (xs : List
     · rw [if_neg h, if_neg (show ¬ (- score x > - score best) by omega)]
       exact ih best
 
-/-- **Gather fold via duality** — optimality: the unified picker under the Gather
-benefit (`-gatherValue`) MINIMIZES `gatherValue` over the feasible candidates,
-recovering the `PurposeRouting.pickGatherSlot_score_optimal` content with no
-optimality lost. -/
+/-- **Gather fold via duality** — optimality: on the pure gather-tool sub-world
+(NO candidate is a `isUtilityFill` artifact, so every candidate's Gather benefit
+is `-gatherValue`), the unified picker under the Gather benefit MINIMIZES
+`gatherValue` over the feasible candidates, recovering the
+`PurposeRouting.pickGatherSlot_score_optimal` content with no optimality lost.
+
+The `hNoFill` hypothesis is NON-VACUOUS: every non-artifact item defaults
+`isUtilityFill = false` (weapons/tools — exactly the gather-tool scenario this
+theorem governs). The utility-fill artifact case is instead covered directly by
+the generic `pickSlot_score_optimal_purpose` (its benefit IS the flat utility). -/
 theorem pickSlot_purpose_gather_optimal (skillEffect : Item → Int) (playerLevel : Int)
     (items : List Item) (c : Item) (cs : List Item)
-    (hcand : candidates playerLevel items = c :: cs) :
+    (hcand : candidates playerLevel items = c :: cs)
+    (hNoFill : ∀ i ∈ candidates playerLevel items, i.isUtilityFill = false) :
     ∀ y ∈ candidates playerLevel items,
       gatherValue skillEffect (argmaxBy (purposeBenefit (.gather skillEffect)) c cs)
         ≤ gatherValue skillEffect y := by
   intro y hy
   have h := pickSlot_score_optimal_purpose (.gather skillEffect) playerLevel items c cs hcand y hy
-  have h' : - gatherValue skillEffect y
-      ≤ - gatherValue skillEffect (argmaxBy (purposeBenefit (.gather skillEffect)) c cs) := h
+  have hbest_mem : argmaxBy (purposeBenefit (.gather skillEffect)) c cs
+      ∈ candidates playerLevel items := by
+    rw [hcand]; exact argmaxBy_mem _ c cs
+  have hyf : y.isUtilityFill = false := hNoFill y hy
+  have hbf : (argmaxBy (purposeBenefit (.gather skillEffect)) c cs).isUtilityFill = false :=
+    hNoFill _ hbest_mem
+  have ey := purposeBenefit_gather_nonfill skillEffect y hyf
+  have eb := purposeBenefit_gather_nonfill skillEffect
+    (argmaxBy (purposeBenefit (.gather skillEffect)) c cs) hbf
+  rw [ey, eb] at h
   omega
 
-/-- **Gather fold via duality** — picker identity: routing the Gather purpose
-through the unified `pickSlotForPurpose` produces EXACTLY the dedicated
-`PurposeRouting.pickGatherSlot` output, for any candidate list and current item.
-The complete fold — the dead argmin picker is subsumed. -/
+/-- **Gather fold via duality** — picker identity: on the pure gather-tool
+sub-world (no candidate AND no current item is a `isUtilityFill` artifact),
+routing the Gather purpose through the unified `pickSlotForPurpose` produces
+EXACTLY the dedicated `PurposeRouting.pickGatherSlot` output. The complete fold —
+the dead argmin picker is subsumed. The hypotheses are NON-VACUOUS: every
+non-artifact item (weapons/tools) defaults `isUtilityFill = false`, which is
+precisely the gather-tool picking this identity governs. When a utility-fill
+artifact IS present the two pickers legitimately DIVERGE (the unified picker
+equips the flat-utility artifact; the dedicated argmin does not), so the identity
+holds only where the utility-fill semantics are inert. -/
 theorem pickSlotForPurpose_gather_eq (skillEffect : Item → Int) (playerLevel : Int)
-    (current : Option Item) (items : List Item) :
+    (current : Option Item) (items : List Item)
+    (hNoFill : ∀ i ∈ candidates playerLevel items, i.isUtilityFill = false)
+    (hCurNoFill : ∀ cur, current = some cur → cur.isUtilityFill = false) :
     pickSlotForPurpose (.gather skillEffect) playerLevel current items
       = Formal.PurposeRouting.pickGatherSlot skillEffect playerLevel current items := by
   unfold pickSlotForPurpose pickSlot Formal.PurposeRouting.pickGatherSlot
   cases hC : candidates playerLevel items with
   | nil => rfl
   | cons c cs =>
+    -- On the non-fill candidate list, the Gather benefit is exactly `-gatherScore`,
+    -- so the unified argmax equals the argmax of the negated score, which the
+    -- proven duality folds to the dedicated `argminBy gatherScore`.
+    have hcongr : argmaxBy (purposeBenefit (.gather skillEffect)) c cs
+        = argmaxBy (fun i => - Formal.PurposeRouting.gatherScore skillEffect i) c cs := by
+      apply argmaxBy_congr
+      intro i hi
+      have hif : i.isUtilityFill = false := hNoFill i (by rw [hC]; exact hi)
+      rw [purposeBenefit_gather_nonfill skillEffect i hif, gatherValue]
     have hbest : argmaxBy (purposeBenefit (.gather skillEffect)) c cs
         = Formal.PurposeRouting.argminBy
-            (Formal.PurposeRouting.gatherScore skillEffect) c cs :=
-      argmaxBy_neg_eq_argminBy (Formal.PurposeRouting.gatherScore skillEffect) c cs
+            (Formal.PurposeRouting.gatherScore skillEffect) c cs := by
+      rw [hcongr]
+      exact argmaxBy_neg_eq_argminBy (Formal.PurposeRouting.gatherScore skillEffect) c cs
     simp only [hbest]
     cases current with
     | none => rfl
     | some cur =>
-      simp only [purposeBenefit, gatherValue]
+      have hcf : cur.isUtilityFill = false := hCurNoFill cur rfl
+      -- `argminBy gatherScore` over the non-fill list is itself non-fill, so BOTH
+      -- benefit reads reduce to `-gatherScore` and the comparison matches exactly.
+      have hbf : (Formal.PurposeRouting.argminBy
+          (Formal.PurposeRouting.gatherScore skillEffect) c cs).isUtilityFill = false :=
+        hNoFill _ (by
+          rw [hC]; exact Formal.PurposeRouting.argminBy_mem
+            (Formal.PurposeRouting.gatherScore skillEffect) c cs)
+      have ecur := purposeBenefit_gather_nonfill skillEffect cur hcf
+      have ebest := purposeBenefit_gather_nonfill skillEffect
+        (Formal.PurposeRouting.argminBy (Formal.PurposeRouting.gatherScore skillEffect) c cs) hbf
+      rw [gatherValue] at ecur ebest
+      dsimp only
+      rw [ecur, ebest]
       by_cases h : Formal.PurposeRouting.gatherScore skillEffect
           (Formal.PurposeRouting.argminBy (Formal.PurposeRouting.gatherScore skillEffect) c cs)
           < Formal.PurposeRouting.gatherScore skillEffect cur
