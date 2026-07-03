@@ -22,6 +22,7 @@ from artifactsmmo_cli.ai.optimal_buy_mix import optimal_buy_mix_pure
 from artifactsmmo_cli.ai.potion_baseline import potion_baseline_pure
 from artifactsmmo_cli.ai.potion_provision_qty import potion_provision_qty_pure
 from artifactsmmo_cli.ai.potion_supply import target_potion_pure
+from artifactsmmo_cli.ai.unlock_boost import unlock_boost_target
 from artifactsmmo_cli.ai.thresholds import (
     POTION_GATHER_BATCH,
     POTION_HIGH_LEVEL,
@@ -93,23 +94,62 @@ class CraftPotionsGoal(Goal):
         )
         return min(max(level_baseline, monster_demand), UTILITY_SLOT_MAX_STACK)
 
+    def _active_craft(self, state: WorldState, game_data: GameData) -> tuple[str, int, int] | None:
+        """Return (target_code, runs, equip_qty) for the craft this cycle, or None
+        when no craft is needed (goal satisfied).
+
+        Unlock boost takes precedence when leveling is stalled: if
+        ``unlock_boost_target`` returns a (boost, monster) pair, craft one batch
+        of the boost (runs=1, equip_qty=craft_yield).  Otherwise fall through to
+        the heal-potion baseline plan.  Returns None when the heal deficit is
+        already met or no target exists."""
+        pair = unlock_boost_target(state, game_data)
+        if pair is not None:
+            boost = pair[0]
+            cy = game_data.craft_yield(boost)
+            return (boost, 1, cy)
+        code = self._target_potion(state, game_data)
+        if code is None:
+            return None
+        recipe = dict(game_data.crafting_recipes[code])
+        craft_yield = game_data.craft_yield(code)
+        deficit = self._baseline(state.level, state, game_data, self._history) - self._equipped(state, game_data)
+        if deficit <= 0:
+            return None
+        runs_needed = -(-deficit // craft_yield)  # ⌈deficit / yield⌉
+        runs = max(1, self._ladder_runs(state, game_data, recipe, runs_needed, craft_yield))
+        equip_qty = min(deficit, runs * craft_yield)
+        return (code, runs, equip_qty)
+
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
-        if self.is_satisfied(state):
+        plan = self._active_craft(state, game_data)
+        if plan is None:
             return 0.0
+        # Unlock-boost path: fixed positive urgency (stall-breaker is at least
+        # as urgent as a heal deficit; defer to 1.0 since there is no deficit).
+        if unlock_boost_target(state, game_data) is not None:
+            return 1.0
+        # Heal path: return deficit magnitude (preserves existing behaviour).
         deficit = self._baseline(state.level, state, game_data, history) - self._equipped(state, game_data)
         return float(max(0, deficit))
 
     def is_satisfied(self, state: WorldState) -> bool:
-        # Uses stored game_data/history (set at construction) so the raised
-        # monster-demand baseline applies even though Goal.is_satisfied has no
-        # game_data parameter. Falls back to level_baseline when not set.
+        # When game_data is set (constructed with game_data=...), delegate to
+        # _active_craft so the unlock-boost path is reflected: owning the boost
+        # makes unlock_boost_target return None and the heal check applies.
+        # Falls back to the state-only slot-quantity check when game_data is absent.
+        if self._game_data is not None:
+            return self._active_craft(state, self._game_data) is None
         baseline = self._baseline(state.level, state, self._game_data, self._history)
         return (state.utility1_slot_quantity >= baseline
                 or state.utility2_slot_quantity >= baseline)
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
-        # The planner goal-tests via is_satisfied once the equip tops the slot up.
+        pair = unlock_boost_target(state, game_data)
+        if pair is not None:
+            return {"have": {pair[0]: 1}}
+        # Heal path: planner goal-tests via is_satisfied once the slot is topped up.
         return {}
 
     def _ladder_runs(self, state: WorldState, game_data: GameData, recipe: dict[str, int],
@@ -144,21 +184,9 @@ class CraftPotionsGoal(Goal):
 
     def relevant_actions(self, actions: list[Action], state: WorldState,
                          game_data: GameData) -> list[Action]:
-        """Recipe-closure actions for the target potion sized by the supply
-        ladder, plus the EquipAction that tops up utility1_slot. Mirrors
-        `MaintainConsumablesGoal`: the target Craft is rebatched to the chosen
-        run count; its intermediates, gathers, buys, withdraws, and moves pass
-        through; the equip quantity is the batch's potion output (capped at the
-        deficit) so it is applicable after the craft."""
-        code = self._target_potion(state, game_data)
-        if code is None:
-            return []
-        # `_target_potion` only returns codes drawn from `crafting_recipes`, so
-        # the recipe is always present (no None guard needed).
-        recipe = dict(game_data.crafting_recipes[code])
-        craft_yield = game_data.craft_yield(code)
-        deficit = max(1, self._baseline(state.level, state, game_data, self._history) - self._equipped(state, game_data))
-        runs_needed = -(-deficit // craft_yield)  # ⌈deficit / yield⌉
-        runs = max(1, self._ladder_runs(state, game_data, recipe, runs_needed, craft_yield))
-        equip_qty = min(deficit, runs * craft_yield)
-        return craft_utility_ladder(code, runs, equip_qty, actions, state, game_data)
+        """Recipe-closure actions for the active craft target (unlock boost or
+        heal potion), sized by the supply ladder, plus the EquipAction that tops
+        up utility1_slot.  Returns ``[]`` when _active_craft determines the goal
+        is already satisfied."""
+        plan = self._active_craft(state, game_data)
+        return [] if plan is None else craft_utility_ladder(*plan, actions, state, game_data)

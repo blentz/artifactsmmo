@@ -14,6 +14,7 @@ from artifactsmmo_cli.ai.thresholds import (
     POTION_LOW_LEVEL,
     POTION_LOW_QTY,
 )
+from artifactsmmo_cli.ai.unlock_boost import unlock_boost_target
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -53,13 +54,17 @@ def craft_potions_fires(state: WorldState, game_data: GameData) -> bool:
     """True when the CRAFT_POTIONS guard should preempt the grind.
 
     Fires when:
+    - A craftable unlock boost exists that would flip a bare-unwinnable in-band
+      monster to winnable (stall-breaker path), OR
     - A craftable utility heal exists at the character's current skill, AND
-    - The equipped quantity of that potion is below the level-scaled baseline, AND
-    - A batch is producible: ingredients craft-from-held OR all buyable OR any gatherable.
+      the equipped quantity of that potion is below the level-scaled baseline, AND
+      a batch is producible: ingredients craft-from-held OR all buyable OR any gatherable.
 
     This predicate is the exclusive gating truth for CraftPotionsGoal — the
     guard never fires when the goal would have no plannable path (no target →
     ``relevant_actions`` returns ``[]``)."""
+    if unlock_boost_target(state, game_data) is not None:
+        return True
     target = target_potion_pure(state, game_data)
     if target is None:
         return False
