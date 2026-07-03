@@ -1223,6 +1223,20 @@ STRATEGY_MUTATIONS = [
      "        stack.extend(prerequisites(node, state, game_data))"),
 ]
 
+# Impure ranking-policy mutations killed by UNIT tests (not the differential
+# traversal suite). The bag-slot urgency floor is policy like EMPTY_SLOT_URGENCY;
+# dropping the branch reverts an empty craftable bag slot to marginal 0 (never
+# pursued) — killed by test_empty_bag_slot_scores_nonzero.
+STRATEGY_MARGINAL_MUTATIONS = [
+    ("strategy: drop bag-slot urgency floor",
+     "            elif (slot == \"bag_slot\" and current_code is None\n"
+     "                    and stats.level <= state.level\n"
+     "                    and stats.crafting_skill is not None\n"
+     "                    and state.skills.get(stats.crafting_skill, 0) >= stats.crafting_level):\n"
+     "                marginal = max(marginal, BAG_SLOT_URGENCY)\n",
+     ""),
+]
+
 
 # reachability-invariant mutations: both is_reachable AND actionable_step now use
 # per-DFS-path frozenset cycle-tracking (Phase 13 refactor — Python byte-equivalent
@@ -4200,6 +4214,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_objective_diff.py", survivors)
     run_group(STRATEGY_SRC, STRATEGY_MUTATIONS,
               "formal/diff/test_strategy_traversal_diff.py", survivors)
+    run_group(STRATEGY_SRC, STRATEGY_MARGINAL_MUTATIONS,
+              "tests/test_ai/test_tiers_strategy.py", survivors)
     run_group(STRATEGY_SRC, REACHABILITY_MUTATIONS,
               "formal/diff/test_reachability_diff.py", survivors)
     run_group(BANK_SELECTION_SRC, BANK_SELECTION_MUTATIONS,
