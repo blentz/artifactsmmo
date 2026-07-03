@@ -1240,8 +1240,10 @@ def test_not_producible_for_currency_buy_with_unattainable_currency():
 def _gd_bag() -> GameData:
     """GameData with the craftable bag (satchel, gearcrafting L5) plus an empty
     combat helmet, for the bag-slot urgency tests. satchel's only stat is
-    inventory_space, so its equip_value and cold strategic_value are both 0 —
-    the exact zero-collapse the BAG_SLOT_URGENCY floor addresses. iron_helmet
+    inventory_space, so its COLD strategic_value is 0 (efficiency weights are 0
+    until learned) — the exact zero-collapse the BAG_SLOT_URGENCY floor
+    addresses. (equip_value(satchel) is 41, not 0 — Rank weights inventory_space
+    at parity — but equip_value is never on the bag root's ranking path.) iron_helmet
     carries hp_bonus (combat-bearing) so helmet_slot is an empty COMBAT slot,
     giving a concrete 'below combat' comparison target."""
     gd = GameData()

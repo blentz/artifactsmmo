@@ -131,8 +131,12 @@ Cores that stay untouched and sound:
   `protection` term `decide_key` consumes, so those proofs and their differential
   bindings are unchanged.
 - `BAG_SLOT_URGENCY` is chosen strictly below `COMBAT_READINESS_URGENCY` (2) and
-  `EMPTY_SLOT_URGENCY` (5/2), so an empty combat slot / weapon still outranks the
-  bag — "below combat" preserved by construction.
+  `EMPTY_SLOT_URGENCY` (5/2), so the two urgency-multiplied combat pursuits — an
+  empty combat slot and weapon-readiness — always outrank the bag. "Below combat"
+  holds for those; a *small upgrade to an already-filled combat slot* (marginal
+  `min(1, gain/GEAR_EQUIP_SCALE)`, no urgency multiplier) is NOT urgency-boosted,
+  so the bag may interleave with it — intended fill-in, matching "want the satchel
+  sooner", and confirmed deferred-not-dominating by the live `plan Robby` check.
 
 Gate work: Python unit tests (mirroring `TestPotionSupplyUrgency`) + one
 `STRATEGY_MUTATIONS` entry (drop the bag branch) that those tests kill + full
