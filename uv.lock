@@ -35,7 +35,7 @@ wheels = [
 
 [[package]]
 name = "artifactsmmo-api-client"
-version = "7.0.4"
+version = "8.0.0"
 source = { editable = "artifactsmmo-api-client" }
 dependencies = [
     { name = "attrs" },
