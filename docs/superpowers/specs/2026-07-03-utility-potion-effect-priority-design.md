@@ -167,6 +167,14 @@ craftable) only when (a) or (b) holds; otherwise that root sits at its base gear
 score. Deferred: needs combat-model work (`predict_win` with a potion stack) and
 a worth threshold, and its own differential + mutation coverage.
 
+**Scope note (Phase 1 consequence):** removing `utility` from `target_gear` /
+`near_term_gear` also stops the objective from pursuing non-heal *boost* utility
+potions (e.g. `health_boost_potion`), since `bootstrap_potion_target` covers only
+`effect="hp_restore"`. This is intentional and NOT a regression — boost-utility
+pursuit is dark until Phase 2 (or a separate effect-based boost target) lands.
+Heal-potion supply is unaffected: the CRAFT_POTIONS guard plus equip slot-overflow
+still fill both utility slots with the effect-based heal.
+
 ## Testing / gate
 
 - Success criteria per repo: 0 errors, 0 warnings, 0 skipped, 100% coverage.
