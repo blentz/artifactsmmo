@@ -162,36 +162,55 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 ### Task 2: Mutation guard for the bag-slot branch
 
+**IMPORTANT (corrected 2026-07-03):** The existing `STRATEGY_MUTATIONS` group is bound to `formal/diff/test_strategy_traversal_diff.py` (differential traversal tests) — it does NOT run the bag unit test, so the bag mutation would SURVIVE there. The bag branch is impure ranking policy killed by a UNIT test, so it needs its OWN group bound to `tests/test_ai/test_tiers_strategy.py`. Use the branch text EXACTLY as committed in Task 1, which includes the `and stats.crafting_skill is not None` guard the implementer added for mypy.
+
 **Files:**
-- Modify: `formal/diff/mutate.py` (`STRATEGY_MUTATIONS` list, ~line 2160-2190)
+- Modify: `formal/diff/mutate.py` (new `STRATEGY_MARGINAL_MUTATIONS` list near `STRATEGY_MUTATIONS` ~line 2160; new `run_group(...)` call beside the existing `STRATEGY_SRC` calls ~line 4201)
 
 **Interfaces:**
-- Consumes: the exact branch text added in Task 1 Step 4; the killing test `test_empty_bag_slot_scores_nonzero` from Task 1.
-- Produces: one new tuple in `STRATEGY_MUTATIONS`.
+- Consumes: the exact `_marginal` bag branch as committed in Task 1 (`strategy.py`); the killing test `test_empty_bag_slot_scores_nonzero`.
+- Produces: `STRATEGY_MARGINAL_MUTATIONS` list + one `run_group` call binding it to the unit-test file.
 
-- [ ] **Step 1: Add the mutation entry**
+- [ ] **Step 1: Add the mutation list**
 
-In `formal/diff/mutate.py`, append this tuple to the `STRATEGY_MUTATIONS` list (before its closing `]`):
+In `formal/diff/mutate.py`, immediately after the `STRATEGY_MUTATIONS = [ ... ]` list definition, add:
 
 ```python
-    # bag-slot floor: dropping the branch reverts an empty craftable bag slot to
-    # marginal 0 (never pursued) — killed by test_empty_bag_slot_scores_nonzero.
+# Impure ranking-policy mutations killed by UNIT tests (not the differential
+# traversal suite). The bag-slot urgency floor is policy like EMPTY_SLOT_URGENCY;
+# dropping the branch reverts an empty craftable bag slot to marginal 0 (never
+# pursued) — killed by test_empty_bag_slot_scores_nonzero.
+STRATEGY_MARGINAL_MUTATIONS = [
     ("strategy: drop bag-slot urgency floor",
      "            elif (slot == \"bag_slot\" and current_code is None\n"
      "                    and stats.level <= state.level\n"
+     "                    and stats.crafting_skill is not None\n"
      "                    and state.skills.get(stats.crafting_skill, 0) >= stats.crafting_level):\n"
      "                marginal = max(marginal, BAG_SLOT_URGENCY)\n",
      ""),
+]
 ```
 
-- [ ] **Step 2: Confirm the bot is stopped, then run the strategy mutation group**
+- [ ] **Step 2: Verify the mutation `old` string matches the source verbatim**
 
-The gate runs all of `mutate.py`; to check just this group quickly, run the whole mutation pass (it is the only supported entrypoint) with the bot stopped:
+Run: `uv run python -c "import pathlib; s=pathlib.Path('src/artifactsmmo_cli/ai/tiers/strategy.py').read_text(); old='            elif (slot == \"bag_slot\" and current_code is None\n                    and stats.level <= state.level\n                    and stats.crafting_skill is not None\n                    and state.skills.get(stats.crafting_skill, 0) >= stats.crafting_level):\n                marginal = max(marginal, BAG_SLOT_URGENCY)\n'; print('MATCH' if old in s else 'NO MATCH')"`
+Expected: `MATCH`. If `NO MATCH`, read `strategy.py` lines 588-592 and copy the branch text exactly into the tuple (indentation included).
 
-Run: `uv run python formal/diff/mutate.py`
-Expected: `0 survivors` overall; the summary line for `STRATEGY_SRC` includes the new `strategy: drop bag-slot urgency floor` mutation as KILLED. If it SURVIVES, the killing test is not exercising the branch — revisit Task 1 tests.
+- [ ] **Step 3: Add the `run_group` binding**
 
-- [ ] **Step 3: Commit**
+In `formal/diff/mutate.py`, next to the existing `run_group(STRATEGY_SRC, STRATEGY_MUTATIONS, "formal/diff/test_strategy_traversal_diff.py", survivors)` call (~line 4201), add:
+
+```python
+    run_group(STRATEGY_SRC, STRATEGY_MARGINAL_MUTATIONS,
+              "tests/test_ai/test_tiers_strategy.py", survivors)
+```
+
+- [ ] **Step 4: Run the scoped mutation to confirm KILLED (bot stopped — serialize gate runs)**
+
+Run: `uv run python formal/diff/mutate.py --only test_tiers_strategy`
+Expected: `0 survivors`; the `strategy: drop bag-slot urgency floor` unit KILLED. `--only test_tiers_strategy` matches this group's `test_path` and runs ONLY it (the traversal group's path `test_strategy_traversal_diff.py` does not contain that token). If it SURVIVES, the `old` string didn't match (Step 2) or the killing test isn't exercising the branch.
+
+- [ ] **Step 5: Commit**
 
 ```bash
 git add formal/diff/mutate.py
