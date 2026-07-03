@@ -618,7 +618,15 @@ COMBAT_MARGIN_MUTATIONS = [
     ("combat_margin: flip round-cushion arithmetic (die-kill -> kill-die)",
      "    return rounds_to_die - rounds_to_kill + (1 if player_first else 0)",
      "    return rounds_to_kill - rounds_to_die + (1 if player_first else 0)"),
-    # effective-hp guard: sentinel flipped to WIN_MARGIN (dead player is a win).
+]
+
+# effective-hp guard mutation -- the effective_hp<=0 branch in combat_margin.
+# The differential test never exercises hp=0 (state.hp = randint(1, 2000) >= 1),
+# so this mutation is vacuous against test_combat_margin_diff.py. It IS killed by
+# test_combat_margin_sign_matches_predict_win (Case F: hp=0 → predict_win=False →
+# combat_margin must be LOSE_MARGIN<=0; mutation returns WIN_MARGIN=101>0 → sign
+# mismatch → killed). Bound to that unit test, not the differential.
+COMBAT_MARGIN_HP_MUTATIONS = [
     ("combat_margin: effective_hp<=0 guard LOSE_MARGIN -> WIN_MARGIN",
      "    if effective_hp <= 0:\n        return LOSE_MARGIN\n    rounds_to_die",
      "    if effective_hp <= 0:\n        return WIN_MARGIN\n    rounds_to_die"),
@@ -4243,6 +4251,8 @@ def _run_all_groups() -> int:
               "tests/test_ai/test_combat.py", survivors)
     run_group(COMBAT_SRC, COMBAT_MARGIN_MUTATIONS,
               "formal/diff/test_combat_margin_diff.py", survivors)
+    run_group(COMBAT_SRC, COMBAT_MARGIN_HP_MUTATIONS,
+              "tests/test_ai/test_combat.py", survivors)
     run_group(PROJECTION_SRC, PROJECTION_MUTATIONS,
               "formal/diff/test_loadout_projection_diff.py", survivors)
     run_group(SCORING_SRC, SCORING_MUTATIONS,
