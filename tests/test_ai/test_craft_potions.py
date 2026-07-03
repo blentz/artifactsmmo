@@ -21,6 +21,7 @@ from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
 _POTION = "small_health_potion"
@@ -434,3 +435,95 @@ def test_baseline_returns_level_baseline_when_hp_need_zero():
     # "unknown_monster" absent from monster_levels → expected_damage_per_fight → 0
     goal = CraftPotionsGoal(combat_monster="unknown_monster")
     assert goal._baseline(state.level, state, gd) == 5
+
+
+# ── heal-then-boost in _active_craft (Task 4) ────────────────────────────────
+
+_BOOST_CODE = "fire_boost"
+_MONSTER_CODE = "slime"
+
+
+def _gd_heal_and_boost() -> GameData:
+    """GameData with a heal (small_health_potion) and a beneficial boost (fire_boost).
+
+    Monster slime (level=5, hp=1000, attack={"fire": 5}): winnable by a character
+    with attack={"fire": 50} (predict_win True, margin=1). With fire_boost equipped
+    (dmg_elements={"fire": 10}) raw_player=55, rounds_to_kill drops 20→19, margin
+    rises to 2 → gain=1 > 0 → best_boost_potion returns fire_boost.
+    """
+    gd = GameData()
+    gd._item_stats = {
+        _POTION: ItemStats(code=_POTION, level=1, type_="utility", hp_restore=30,
+                           crafting_skill="alchemy", crafting_level=1),
+        _BOOST_CODE: ItemStats(code=_BOOST_CODE, level=1, type_="utility",
+                               dmg_elements={"fire": 10},
+                               crafting_skill="alchemy", crafting_level=1),
+        _INGREDIENT: ItemStats(code=_INGREDIENT, level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {_POTION: {_INGREDIENT: 1}, _BOOST_CODE: {_INGREDIENT: 3}}
+    gd._resource_drops = {}
+    gd._resource_locations = {}
+    gd._workshop_locations = {"alchemy": (3, 0)}
+    gd._npc_stock = {}
+    gd._npc_sell_prices = {}
+    gd._npc_locations = {}
+    gd._monster_level = {_MONSTER_CODE: 5}
+    gd._monster_hp = {_MONSTER_CODE: 1000}
+    gd._monster_attack = {_MONSTER_CODE: {"fire": 5}}
+    gd._monster_resistance = {_MONSTER_CODE: {}}
+    fill_monster_stat_defaults(gd)
+    return gd
+
+
+def test_goal_crafts_boost_after_heal_satisfied():
+    """_active_craft returns the boost code when heals are stocked and a beneficial
+    boost is understocked.
+
+    level=5 → baseline=5; utility1_slot has small_health_potion at qty=5 (stocked,
+    deficit=0). combat_monster="slime" → best_boost_potion returns fire_boost
+    (gain=1 > 0). boost_equipped=0 < boost_baseline=5 → boost path fires.
+    Non-vacuous: both the heal and the boost exist and are craftable; only the
+    heal deficit distinguishes this from the heal path test.
+    """
+    gd = _gd_heal_and_boost()
+    state = make_state(
+        level=5,
+        hp=100, max_hp=100,
+        attack={"fire": 50},
+        skills={**make_state().skills, "alchemy": 10},
+        equipment={**make_state().equipment, "utility1_slot": _POTION},
+        utility1_slot_quantity=5,
+        inventory={_INGREDIENT: 3},
+    )
+    goal = CraftPotionsGoal(combat_monster=_MONSTER_CODE, game_data=gd)
+    result = goal._active_craft(state, gd)
+    assert result is not None, "_active_craft must return a boost plan when heals are stocked"
+    code, _runs, _qty = result
+    assert code == _BOOST_CODE
+
+
+def test_goal_prioritizes_heal_over_boost():
+    """_active_craft returns the heal code when heals are under-baseline, even when
+    a beneficial boost also exists.
+
+    level=5 → baseline=5; utility1_slot is empty (qty=0, deficit=5 > 0). Both the
+    heal and boost are in game_data and the boost is beneficial, but the heal deficit
+    takes precedence → _active_craft targets small_health_potion.
+    Non-vacuous: the boost exists and is craftable (alchemy gate met); only the
+    heal-equipped count differs from test_goal_crafts_boost_after_heal_satisfied.
+    """
+    gd = _gd_heal_and_boost()
+    state = make_state(
+        level=5,
+        hp=100, max_hp=100,
+        attack={"fire": 50},
+        skills={**make_state().skills, "alchemy": 10},
+        equipment={**make_state().equipment, "utility1_slot": None},
+        utility1_slot_quantity=0,
+        inventory={_INGREDIENT: 10},
+    )
+    goal = CraftPotionsGoal(combat_monster=_MONSTER_CODE, game_data=gd)
+    result = goal._active_craft(state, gd)
+    assert result is not None, "_active_craft must return a heal plan when heals are understocked"
+    code, _runs, _qty = result
+    assert code == _POTION

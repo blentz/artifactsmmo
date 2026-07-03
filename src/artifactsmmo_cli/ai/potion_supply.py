@@ -5,6 +5,8 @@ for the CRAFT_POTIONS guard tier (guards.py) and CraftPotionsGoal.
 — both the guard and the goal call it so they always agree on the target.
 ``craft_potions_fires`` is the guard predicate imported by guards.py."""
 
+from artifactsmmo_cli.ai.boost_selection import best_boost_potion
+from artifactsmmo_cli.ai.combat_targets import combat_target_monsters
 from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.potion_baseline import potion_baseline_pure
@@ -16,6 +18,12 @@ from artifactsmmo_cli.ai.thresholds import (
 )
 from artifactsmmo_cli.ai.unlock_boost import unlock_boost_target
 from artifactsmmo_cli.ai.world_state import WorldState
+
+
+def _primary_combat_target(state: WorldState, game_data: GameData) -> str | None:
+    """First winnable in-band monster from combat_target_monsters, or None when empty."""
+    targets = combat_target_monsters(state, game_data)
+    return targets[0] if targets else None
 
 
 def target_potion_pure(
@@ -130,6 +138,18 @@ def craft_potions_fires(state: WorldState, game_data: GameData) -> bool:
         state.level, POTION_LOW_LEVEL, POTION_LOW_QTY, POTION_HIGH_LEVEL, POTION_HIGH_QTY,
     )
     if equipped >= baseline:
+        monster = _primary_combat_target(state, game_data)
+        if monster is not None:
+            boost = best_boost_potion(state, game_data, monster)
+            boost_baseline = potion_baseline_pure(
+                state.level, POTION_LOW_LEVEL, POTION_LOW_QTY, POTION_HIGH_LEVEL, POTION_HIGH_QTY,
+            )
+            if (boost is not None
+                    and equipped_potion_qty(state, boost) < boost_baseline
+                    and _recipe_producible(
+                        dict(game_data.crafting_recipes.get(boost, {})), state, game_data
+                    )):
+                return True
         return False
     recipe = dict(game_data.crafting_recipes.get(target, {}))
     if not recipe:

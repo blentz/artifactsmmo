@@ -22,6 +22,7 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
+from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
 from artifactsmmo_cli.ai.strategy_driver import map_guard
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext, active_guards
 from tests.test_ai.fixtures import make_state
@@ -141,3 +142,94 @@ def test_robby_scenario_stocked_small_does_not_force_enhanced_grind() -> None:
     eng = StrategyEngine(CharacterObjective.from_game_data(gd), BalancedPersonality())
     chosen_root = eng.decide(state, gd).chosen_root
     assert "enhanced_health_potion" not in repr(chosen_root)
+
+
+# ── boost-supply guard (Task 4) ──────────────────────────────────────────────
+
+_BOOST = "fire_boost"
+_MONSTER = "slime"
+
+
+def _gd_boost_winnable() -> GameData:
+    """GameData with:
+    - A heal: small_health_potion (utility, hp_restore=30, alchemy/1).
+    - A boost: fire_boost (utility, dmg_elements={"fire": 10}, alchemy/1).
+      Not a heal (hp_restore=0) → qualifies as boost in best_boost_potion.
+    - A monster: slime (level=5, hp=1000, attack={"fire": 5}).
+      Character (attack={"fire": 50}) kills slime in 20 rounds; slime kills
+      character in 20 rounds → predict_win True (margin=1, player_first).
+      With boost (raw_player=55): rounds_to_kill=19, margin=2 → gain=1 > 0
+      → best_boost_potion returns fire_boost.
+    """
+    gd = GameData()
+    gd._item_stats = {
+        _POTION: ItemStats(code=_POTION, level=1, type_="utility", hp_restore=30,
+                           crafting_skill="alchemy", crafting_level=1),
+        _BOOST: ItemStats(code=_BOOST, level=1, type_="utility",
+                          dmg_elements={"fire": 10},
+                          crafting_skill="alchemy", crafting_level=1),
+        _INGREDIENT: ItemStats(code=_INGREDIENT, level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {_POTION: {_INGREDIENT: 1}, _BOOST: {_INGREDIENT: 3}}
+    gd._resource_drops = {}
+    gd._resource_locations = {}
+    gd._workshop_locations = {"alchemy": (3, 0)}
+    gd._npc_stock = {}
+    gd._npc_sell_prices = {}
+    gd._npc_locations = {}
+    gd._monster_level = {_MONSTER: 5}
+    gd._monster_hp = {_MONSTER: 1000}
+    gd._monster_attack = {_MONSTER: {"fire": 5}}
+    gd._monster_resistance = {_MONSTER: {}}
+    fill_monster_stat_defaults(gd)
+    return gd
+
+
+def _gd_boost_trivial_monster() -> GameData:
+    """Same as _gd_boost_winnable but monster attack={} (no attack).
+    die_step=0 → combat_margin=WIN_MARGIN both with and without boost
+    → gain=0 → best_boost_potion returns None."""
+    gd = _gd_boost_winnable()
+    gd._monster_attack = {_MONSTER: {}}
+    return gd
+
+
+def _state_heals_stocked() -> GameData:
+    """Level=5, alchemy=10, heal equipped at baseline qty=5 (stocked),
+    boost not equipped, inventory has 3 sunflowers (producible for 1 boost batch)."""
+    return make_state(
+        level=5,
+        hp=100, max_hp=100,
+        attack={"fire": 50},
+        skills={**make_state().skills, "alchemy": 10},
+        equipment={**make_state().equipment, "utility1_slot": _POTION},
+        utility1_slot_quantity=5,
+        inventory={_INGREDIENT: 3},
+    )
+
+
+def test_guard_fires_for_beneficial_boost_when_heal_stocked():
+    """craft_potions_fires returns True for a beneficial, understocked, producible
+    boost when heals are already at baseline.
+
+    Heals stocked (qty=5 == baseline(5)=5); fire_boost has gain=1 against slime;
+    boost not equipped (qty=0 < 5); 3 sunflowers held satisfy recipe {sunflower:3}.
+    """
+    gd = _gd_boost_winnable()
+    state = _state_heals_stocked()
+    assert craft_potions_fires(state, gd) is True
+
+
+def test_guard_no_boost_when_none_beneficial():
+    """craft_potions_fires returns False when heals are stocked and no beneficial
+    boost exists.
+
+    fire_boost exists and is craftable (alchemy gate met), but the monster has
+    zero attack so combat_margin is WIN_MARGIN with or without boost → gain=0
+    → best_boost_potion returns None → boost path skipped → guard False.
+    Non-vacuous: the boost item exists and the skill gate is met; only the
+    combat-margin gain condition differs.
+    """
+    gd = _gd_boost_trivial_monster()
+    state = _state_heals_stocked()
+    assert craft_potions_fires(state, gd) is False

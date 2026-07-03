@@ -11,6 +11,7 @@ GameData. The guard not firing == the goal effectively satisfied for the cycle.
 """
 
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.boost_selection import best_boost_potion
 from artifactsmmo_cli.ai.craft_ladder import _held, craft_utility_ladder
 from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
@@ -115,6 +116,25 @@ class CraftPotionsGoal(Goal):
         craft_yield = game_data.craft_yield(code)
         deficit = self._baseline(state.level, state, game_data, self._history) - self._equipped(state, game_data)
         if deficit <= 0:
+            if self._combat_monster is not None:
+                best_boost = best_boost_potion(state, game_data, self._combat_monster)
+                if best_boost is not None:
+                    boost_equipped = equipped_potion_qty(state, best_boost)
+                    boost_baseline = potion_baseline_pure(
+                        state.level, POTION_LOW_LEVEL, POTION_LOW_QTY,
+                        POTION_HIGH_LEVEL, POTION_HIGH_QTY,
+                    )
+                    if boost_equipped < boost_baseline:
+                        boost_yield = game_data.craft_yield(best_boost)
+                        boost_deficit = boost_baseline - boost_equipped
+                        boost_recipe = dict(game_data.crafting_recipes.get(best_boost, {}))
+                        if boost_recipe:
+                            boost_runs_needed = -(-boost_deficit // boost_yield)
+                            boost_runs = max(1, self._ladder_runs(
+                                state, game_data, boost_recipe, boost_runs_needed, boost_yield,
+                            ))
+                            boost_equip_qty = min(boost_deficit, boost_runs * boost_yield)
+                            return (best_boost, boost_runs, boost_equip_qty)
             return None
         runs_needed = -(-deficit // craft_yield)  # ⌈deficit / yield⌉
         runs = max(1, self._ladder_runs(state, game_data, recipe, runs_needed, craft_yield))
