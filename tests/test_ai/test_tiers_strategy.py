@@ -1088,15 +1088,17 @@ class TestGapProportionalSkillMarginal:
         endgame = ReachSkillLevel("weaponcrafting", gd.max_skill_level)
         assert eng._marginal(endgame, state, gd) == SKILL_MARGINAL
 
-    def test_far_behind_skill_root_outranks_char_bootstrap(self):
+    def test_far_behind_skill_root_loses_to_char_bootstrap_after_decay(self):
         # The run-7 scenario: char 7, weaponcrafting 2, curve target 5 (gap 3).
-        # The skill root's value must beat the level+2 char bootstrap (so the
-        # skill rises BEFORE the gear commit forces a freeze).
+        # With progress-decay: current=2, progress=2/5, boost=(3/5)*(3/2)=9/10,
+        # marginal=1/5+9/10=11/10. balancing: leader=8(woodcutting), current=2,
+        # raw=1+(1/4)*(8-2-2)=2, balancing=2. v_skill=(3/5)*(11/10)*2=33/25=1.32.
+        # v_char=37/25=1.48. The skill grind (33/25) now LOSES to char bootstrap (37/25).
         eng, gd = _engine_with_recipes()
         state = make_state(level=7, skills={"weaponcrafting": 2, "woodcutting": 8})
         skill_root = ReachSkillLevel("weaponcrafting", 5)
         char_boot = ReachCharLevel(state.level + 2)
-        assert eng._value(skill_root, state, gd) > eng._value(char_boot, state, gd)
+        assert eng._value(skill_root, state, gd) < eng._value(char_boot, state, gd)
 
     def test_near_curve_skill_root_loses_to_char_bootstrap(self):
         # gap 1 must NOT hijack leveling.
@@ -1107,13 +1109,13 @@ class TestGapProportionalSkillMarginal:
         assert eng._value(skill_root, state, gd) < eng._value(char_boot, state, gd)
 
     def test_skill_marginal_capped_at_gap_cap(self):
-        """A large gap is clamped to SKILL_GAP_CAP (1.5): marginal tops out at
-        SKILL_MARGINAL + 1.5 = 1.7 no matter how far behind the curve target."""
+        """A large gap is clamped to SKILL_GAP_CAP (1.5) but the progress factor
+        (1 - progress) reduces it: current=1, gap=8, progress=1/9,
+        boost=(8/9)*(3/2)=4/3, marginal=1/5+4/3=23/15 (slightly below old flat 1.7)."""
         eng, gd = _engine_with_recipes()
         state = make_state(level=10, skills={"weaponcrafting": 1})
-        root = ReachSkillLevel("weaponcrafting", 9)  # gap 8, clamped to 1.5
-        assert eng._marginal(root, state, gd) == (
-            SKILL_MARGINAL + SKILL_GAP_CAP * SKILL_GAP_PER_LEVEL)
+        root = ReachSkillLevel("weaponcrafting", 9)  # gap 8, clamped to 1.5, progress=1/9
+        assert eng._marginal(root, state, gd) == Fraction(23, 15)
 
     def test_moderate_gap_balanced_skill_loses_to_gear_and_char(self):
         """Trace 2026-06-13: char 3, crafting skills all ~3 (no runaway leader),
@@ -1132,6 +1134,23 @@ class TestGapProportionalSkillMarginal:
         assert skill_v < eng._value(char_boot, state, gd)
         gear_root = ObtainItem(code="water_bow", quantity=1)
         assert skill_v < eng._value(gear_root, state, gd)
+
+
+def test_skill_grind_decays_with_progress():
+    """Progress-decay: value falls as skill approaches its near-term curve target.
+    v_far (gearcrafting=1 of target 10) must beat v_near (gearcrafting=8 of target 10)
+    and both must sit below the ungeared char-level bootstrap (37/25)."""
+    gd = _gd()
+    eng = StrategyEngine(CharacterObjective.from_game_data(gd), BalancedPersonality())
+    far = make_state(level=10, skills={**make_state().skills, "gearcrafting": 1})
+    near = make_state(level=10, skills={**make_state().skills, "gearcrafting": 8})
+    root = ReachSkillLevel("gearcrafting", 10)
+    v_far = eng._value(root, far, gd, "red_slime", None)
+    v_near = eng._value(root, near, gd, "red_slime", None)
+    assert v_far > v_near
+    assert v_far == Fraction(93, 100)
+    assert v_near == Fraction(3, 20)
+    assert v_far < Fraction(37, 25)
 
 
 class TestGearedCharBoost:

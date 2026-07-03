@@ -1343,6 +1343,17 @@ POTION_GATE_MUTATIONS = [
 ]
 
 
+# Skill-grind progress-decay mutations on strategy.py `_marginal` — the
+# (1 - progress) factor that reduces the catch-up boost as the skill
+# approaches its curve target. Killed by test_skill_grind_decays_with_progress
+# (v_far == v_near without decay, breaking v_far > v_near and v_far == 93/100).
+SKILL_DECAY_MUTATIONS = [
+    ("strategy: drop skill-grind progress decay",
+     "boost = (1 - progress) * min(Fraction(gap), SKILL_GAP_CAP) * SKILL_GAP_PER_LEVEL",
+     "boost = min(Fraction(gap), SKILL_GAP_CAP) * SKILL_GAP_PER_LEVEL"),
+]
+
+
 # reachability-invariant mutations: both is_reachable AND actionable_step now use
 # per-DFS-path frozenset cycle-tracking (Phase 13 refactor — Python byte-equivalent
 # to the proved Lean `actStep`). Each mutation breaks
@@ -4395,6 +4406,8 @@ def _run_all_groups() -> int:
               "tests/test_ai/test_tiers_strategy.py::TestPotionSupplyUrgency::test_aspirational_tier_not_boosted",
               survivors)
     run_group(STRATEGY_SRC, STRATEGY_MARGINAL_MUTATIONS,
+              "tests/test_ai/test_tiers_strategy.py", survivors)
+    run_group(STRATEGY_SRC, SKILL_DECAY_MUTATIONS,
               "tests/test_ai/test_tiers_strategy.py", survivors)
     run_group(STRATEGY_SRC, OCCUPIED_UPGRADE_MUTATIONS,
               "tests/test_ai/test_tiers_strategy.py", survivors)

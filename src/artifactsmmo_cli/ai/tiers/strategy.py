@@ -547,7 +547,8 @@ class StrategyEngine:
                 return SKILL_MARGINAL
             current = state.skills.get(root.skill, 1)
             gap = max(0, root.level - current)
-            boost = min(Fraction(gap), SKILL_GAP_CAP) * SKILL_GAP_PER_LEVEL
+            progress = Fraction(current, max(1, root.level))
+            boost = (1 - progress) * min(Fraction(gap), SKILL_GAP_CAP) * SKILL_GAP_PER_LEVEL
             return SKILL_MARGINAL + boost
         if isinstance(root, ObtainItem):
             stats = game_data.item_stats(root.code)
