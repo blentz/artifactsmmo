@@ -153,6 +153,14 @@ none existed. Sized to beat the char-level bootstrap THROUGH the sticky
 commitment: bootstrap scores 1.48 and sticky holds unless the challenger
 exceeds STICKY_DOMINANCE_RATIO (3/2) x 1.48 = 2.22; 5/2 = 2.5 > 2.22.
 Switches off the moment the slot is filled (root satisfied → removed)."""
+BAG_SLOT_URGENCY = Fraction(1)
+"""Empty-bag-slot marginal floor (2026-07-03). Strictly below
+COMBAT_READINESS_URGENCY (2) and EMPTY_SLOT_URGENCY (5/2) so a weapon / empty
+combat armor slot always outranks the bag, but non-zero so the bag is pursued
+when no combat/gear upgrade is servable. A bag's strategic_value is 0 when the
+learned inventory_weight is cold, so this floors the marginal directly. The
+funding route (ReachCurrencyGoal) + sticky commitment then acquire the satchel.
+See docs/superpowers/specs/2026-07-03-satchel-bag-acquisition-priority-design.md."""
 POTION_SUPPLY_URGENCY = EMPTY_SLOT_URGENCY * PRIOR_COMBAT_GEAR / PRIOR_UTILITY_GEAR
 """Urgency multiplier on an under-stocked health-potion utility root's marginal.
 Derived so PRIOR_UTILITY_GEAR * POTION_SUPPLY_URGENCY == PRIOR_COMBAT_GEAR *
@@ -571,6 +579,17 @@ class StrategyEngine:
                         state.level, POTION_LOW_LEVEL, POTION_LOW_QTY,
                         POTION_HIGH_LEVEL, POTION_HIGH_QTY)):
                 marginal = max(marginal, Fraction(1)) * POTION_SUPPLY_URGENCY
+            # Bag-slot floor (2026-07-03): an empty bag slot whose bag is
+            # craftable NOW (gearcrafting >= its crafting_level) is worth a
+            # non-zero, BELOW-combat pursuit so the arbiter fills it in windows
+            # with no combat/gear upgrade. BAG_SLOT_URGENCY < COMBAT_READINESS
+            # (2) and < EMPTY_SLOT (5/2), so a weapon / empty combat slot always
+            # wins. Floors marginal directly (bag strategic_value is 0 cold).
+            elif (slot == "bag_slot" and current_code is None
+                    and stats.level <= state.level
+                    and stats.crafting_skill is not None
+                    and state.skills.get(stats.crafting_skill, 0) >= stats.crafting_level):
+                marginal = max(marginal, BAG_SLOT_URGENCY)
             return marginal
         return Fraction(0)
 
