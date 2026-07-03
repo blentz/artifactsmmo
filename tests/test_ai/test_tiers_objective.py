@@ -583,3 +583,40 @@ def test_is_attainable_satchel_via_task_currency_chain():
     — the full chain must resolve as attainable."""
     gd = _gd_task_currency()
     assert is_attainable("satchel", gd) is True
+
+
+def _gd_with_potions() -> GameData:
+    gd = GameData()
+    gd._item_stats = {
+        "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon", attack={"fire": 4}),
+        "small_health_potion": ItemStats(code="small_health_potion", level=5,
+            type_="utility", hp_restore=50, crafting_skill="alchemy", crafting_level=5),
+        "enhanced_health_potion": ItemStats(code="enhanced_health_potion", level=45,
+            type_="utility", hp_restore=300, crafting_skill="alchemy", crafting_level=45),
+    }
+    gd._crafting_recipes = {
+        "copper_dagger": {"bar": 1},
+        "small_health_potion": {"sunflower": 3},
+        "enhanced_health_potion": {"sunflower": 3},
+    }
+    gd._resource_drops = {"rocks": "bar", "sunflower_field": "sunflower"}
+    gd._resource_skill = {"rocks": ("mining", 1), "sunflower_field": ("alchemy", 1)}
+    return gd
+
+
+def test_target_gear_excludes_utility():
+    obj = CharacterObjective.from_game_data(_gd_with_potions())
+    assert all("utility" not in slot for slot in obj.target_gear)
+    assert "enhanced_health_potion" not in obj.target_gear.values()
+
+
+def test_near_term_gear_excludes_utility():
+    obj = CharacterObjective.from_game_data(_gd_with_potions())
+    targets = obj.near_term_gear(make_state(level=10, skills={**make_state().skills, "alchemy": 16}))
+    assert all("utility" not in slot for slot in targets)
+
+
+def test_utility_potion_targets_picks_craftable_now():
+    obj = CharacterObjective.from_game_data(_gd_with_potions())
+    targets = obj.utility_potion_targets(make_state(level=10, skills={**make_state().skills, "alchemy": 16}))
+    assert targets == {"utility1_slot": "small_health_potion"}

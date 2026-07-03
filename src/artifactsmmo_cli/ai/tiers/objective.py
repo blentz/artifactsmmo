@@ -11,6 +11,7 @@ from fractions import Fraction
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import _GATHERING_SKILLS, GameData
+from artifactsmmo_cli.ai.potion_supply import bootstrap_potion_target
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value, tool_value
 from artifactsmmo_cli.ai.tiers.leaf_attainable_core import leaf_attainable_pure
 from artifactsmmo_cli.ai.tiers.objective_completion import is_complete_pure
@@ -225,7 +226,7 @@ class CharacterObjective:
         target_skill_levels = {s: game_data.max_skill_level for s in SKILL_NAMES}
         by_type: dict[str, list[tuple[int, str]]] = {}
         for code, stats in game_data.all_item_stats.items():
-            if stats.type_ not in ITEM_TYPE_TO_SLOTS:
+            if stats.type_ not in ITEM_TYPE_TO_SLOTS or stats.type_ == "utility":
                 continue
             by_type.setdefault(stats.type_, []).append((equip_value(stats), code))
         target_gear: dict[str, str] = {}
@@ -271,7 +272,9 @@ class CharacterObjective:
         live roots that premise needs."""
         by_type: dict[str, list[tuple[int, str]]] = {}
         for code, stats in self._game_data.all_item_stats.items():
-            if stats.type_ not in ITEM_TYPE_TO_SLOTS or stats.level > state.level:
+            if (stats.type_ not in ITEM_TYPE_TO_SLOTS
+                    or stats.type_ == "utility"
+                    or stats.level > state.level):
                 continue
             value = equip_value(stats)
             if value > 0:
@@ -286,6 +289,15 @@ class CharacterObjective:
                 if value > self._item_value(state.equipment.get(slot)):
                     targets[slot] = code
         return targets
+
+    def utility_potion_targets(self, state: WorldState) -> dict[str, str]:
+        """The utility-slot heal to pursue, judged by EFFECT not level (potions
+        are level-exempt). Delegates to bootstrap_potion_target — the effect-best
+        potion craftable now, or the cheapest-to-unlock when none is craftable
+        yet. Replaces the level-based best-in-slot utility roots that armor
+        enumeration (target_gear / near_term_gear) used to emit."""
+        code = bootstrap_potion_target(state, self._game_data)
+        return {"utility1_slot": code} if code is not None else {}
 
     def near_term_skill_targets(self, state: WorldState) -> dict[str, int]:
         """Recipe-aware skill curve: {craft_skill: target_level} the bot should
