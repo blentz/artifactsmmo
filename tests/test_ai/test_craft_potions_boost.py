@@ -154,3 +154,32 @@ def test_craft_potions_fires_false_when_no_unlock_and_no_heal():
     gd = _gd_stalled()
     state = _state_stalled(inventory={_BOOST: 1})
     assert craft_potions_fires(state, gd) is False
+
+
+def test_craft_potions_fires_false_when_boost_ingredients_unobtainable():
+    """craft_potions_fires must NOT fire via the unlock path when the boost
+    recipe's ingredients are unobtainable — not held, not buyable, not gatherable.
+
+    _gd_stalled has no resource_drops and no npc_stock.  When the player holds
+    no sunflowers (inventory={}) the boost recipe {sunflower: 3} is producible
+    by none of the three tiers, so the guard must fall through to the heal path
+    (also False — no heal potions in _gd_stalled) and return False overall.
+
+    Before the fix, craft_potions_fires returned True here (unlock path fired
+    without a producibility check), violating the docstring invariant that the
+    guard never fires when CraftPotionsGoal would have no plannable path."""
+    gd = _gd_stalled()
+    # No ingredients held, no bank, no NPC stock, no resource drops → unobtainable.
+    state = _state_stalled(inventory={})
+    assert craft_potions_fires(state, gd) is False
+
+
+def test_craft_potions_fires_true_when_boost_ingredient_gatherable():
+    """craft_potions_fires fires via the unlock path when the boost ingredient
+    IS gatherable (resource_drops maps a node to the ingredient), even when none
+    is currently held — confirms the gatherable branch is checked for the boost."""
+    gd = _gd_stalled()
+    # Wire sunflower as a gatherable resource drop so the recipe is producible.
+    gd._resource_drops = {"sunflower_field": _INGREDIENT}
+    state = _state_stalled(inventory={})  # nothing held, but gatherable
+    assert craft_potions_fires(state, gd) is True

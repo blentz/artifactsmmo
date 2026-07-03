@@ -22,7 +22,6 @@ from artifactsmmo_cli.ai.optimal_buy_mix import optimal_buy_mix_pure
 from artifactsmmo_cli.ai.potion_baseline import potion_baseline_pure
 from artifactsmmo_cli.ai.potion_provision_qty import potion_provision_qty_pure
 from artifactsmmo_cli.ai.potion_supply import target_potion_pure
-from artifactsmmo_cli.ai.unlock_boost import unlock_boost_target
 from artifactsmmo_cli.ai.thresholds import (
     POTION_GATHER_BATCH,
     POTION_HIGH_LEVEL,
@@ -31,6 +30,7 @@ from artifactsmmo_cli.ai.thresholds import (
     POTION_LOW_QTY,
     UTILITY_SLOT_MAX_STACK,
 )
+from artifactsmmo_cli.ai.unlock_boost import unlock_boost_target
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
