@@ -15,11 +15,11 @@ Brick D2 of `docs/PLAN_residual_closure.md`. Three refinements over
    production observation (opaque-Bool discipline); the gate's other two
    conjuncts (`pursueTaskFires`, `taskProgress < taskTotal`) make it
    self-certifying: they are exactly the facts the pursueTask descent needs.
-2. **Adversarial chore re-arm** (`choreRearm` / `rearmIfFight`): EVERY cycle
-   that dispatches a `.fight` re-arms ALL 8 chore latches — the worst case of
-   production's loot-driven re-arming (residual 4, fight direction). Reach-50
-   still holds because a fight descends slots 1/2, which lex-dominate every
-   flag.
+2. **Mint-driven chore re-arm** (`choreRearm` / `rearmOnMint`, Phase A1): EVERY
+   cycle that dispatches a `.fight` re-arms ALL 8 chore latches (worst case of
+   loot), and the two MINTING chores re-arm the latches lex-below their own
+   descent slot (claim → the 7 non-pending flags; completeTask → everything).
+   Reach-50 still holds — each row's strict slot lex-dominates its re-arms.
 3. **Dispatch-keyed loot** (`pressureDeltaD`): the inventory fill applies iff
    the cycle actually dispatches a `.fight` — the synthetic
    `.objectiveStep` placeholder (a stale-armed Bool inside the defer window)
@@ -77,9 +77,26 @@ def choreRearm (st : State) : State :=
             gearReviewFires := true,
             pendingItemsNonempty := true }
 
-/-- Re-arm after fight dispatches only. -/
-def rearmIfFight (k : MeansKind) (r st : State) : State :=
-  if dispatchesFight k r then choreRearm st else st
+/-- Phase-A1 mint re-arm map. Fight dispatches re-arm EVERYTHING (worst case of
+    loot). The two MINTING chores re-arm the flags lex-BELOW their own descent
+    slot: `claimPending` (descends `pendingFlag`, slot 5) re-arms the 7 other
+    chore latches — the formerly disclosed claim→overstock cross-arm, now
+    modelled; `completeTask` (descends slot 1/3) re-arms everything incl.
+    `pendingFlag` (task rewards mint pending items). -/
+def rearmOnMint (k : MeansKind) (r st : State) : State :=
+  if dispatchesFight k r then choreRearm st
+  else
+    match k with
+    | .claimPending =>
+        { st with hasOverstockItems := true,
+                  selectBankDepositsNonempty := true,
+                  sellableInventoryNonempty := true,
+                  recyclableSurplusNonempty := true,
+                  craftReliefFires := true,
+                  craftPotionsFires := true,
+                  gearReviewFires := true }
+    | .completeTask => choreRearm st
+    | _ => st
 
 /-- Dispatch-keyed inventory pressure: fight loot on actual fight dispatch;
     claim mint and reducer drains as in `pressureDelta`; the synthetic
@@ -99,7 +116,7 @@ def pressureDeltaD (k : MeansKind) (r st : State) : State :=
 noncomputable def cycleStepD (s : State) : State :=
   match productionLadder (perceptionRefreshD s) with
   | some k =>
-      rearmIfFight k (perceptionRefreshD s)
+      rearmOnMint k (perceptionRefreshD s)
         (pressureDeltaD k (perceptionRefreshD s) (cycleStep (perceptionRefreshD s)))
   | none => cycleStep (perceptionRefreshD s)
 
@@ -122,7 +139,7 @@ theorem cycleStepDN_succ_outer (n : Nat) (s : State) :
       rw [cycleStepDN_succ, ih, cycleStepDN_succ]
 
 /-! ## Field bridges — `perceptionRefreshD` mutates only the two objective
-Bools; `rearmIfFight`/`choreRearm` mutate only the 8 chore latches;
+Bools; `rearmOnMint`/`choreRearm` mutate only the 8 chore latches;
 `pressureDeltaD` mutates only `inventoryUsed`. -/
 
 theorem perceptionRefreshD_level (s : State) :
@@ -133,13 +150,17 @@ theorem perceptionRefreshD_xp (s : State) :
     (perceptionRefreshD s).xp = s.xp := by
   unfold perceptionRefreshD; split <;> rfl
 
-theorem rearmIfFight_level (k : MeansKind) (r st : State) :
-    (rearmIfFight k r st).level = st.level := by
-  unfold rearmIfFight choreRearm; split <;> rfl
+theorem rearmOnMint_level (k : MeansKind) (r st : State) :
+    (rearmOnMint k r st).level = st.level := by
+  unfold rearmOnMint choreRearm; split
+  · rfl
+  · cases k <;> rfl
 
-theorem rearmIfFight_xp (k : MeansKind) (r st : State) :
-    (rearmIfFight k r st).xp = st.xp := by
-  unfold rearmIfFight choreRearm; split <;> rfl
+theorem rearmOnMint_xp (k : MeansKind) (r st : State) :
+    (rearmOnMint k r st).xp = st.xp := by
+  unfold rearmOnMint choreRearm; split
+  · rfl
+  · cases k <;> rfl
 
 theorem pressureDeltaD_level (k : MeansKind) (r st : State) :
     (pressureDeltaD k r st).level = st.level := by
@@ -160,7 +181,7 @@ theorem cycleStepD_level (s : State) :
   unfold cycleStepD
   cases productionLadder (perceptionRefreshD s) with
   | none => rfl
-  | some k => rw [rearmIfFight_level, pressureDeltaD_level]
+  | some k => rw [rearmOnMint_level, pressureDeltaD_level]
 
 /-- Xp bridge. -/
 theorem cycleStepD_xp (s : State) :
@@ -168,6 +189,6 @@ theorem cycleStepD_xp (s : State) :
   unfold cycleStepD
   cases productionLadder (perceptionRefreshD s) with
   | none => rfl
-  | some k => rw [rearmIfFight_xp, pressureDeltaD_xp]
+  | some k => rw [rearmOnMint_xp, pressureDeltaD_xp]
 
 end Formal.Liveness.CycleStepD

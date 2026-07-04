@@ -48,7 +48,7 @@ private theorem fires_of_ladder {s : State} {k : MeansKind}
 private theorem cycleStepD_some (s : State) {k : MeansKind}
     (hk : productionLadder (perceptionRefreshD s) = some k) :
     cycleStepD s =
-      rearmIfFight k (perceptionRefreshD s)
+      rearmOnMint k (perceptionRefreshD s)
         (pressureDeltaD k (perceptionRefreshD s) (cycleStep (perceptionRefreshD s))) := by
   unfold cycleStepD
   rw [hk]
@@ -122,7 +122,7 @@ theorem descendsD_hpCritical (s : State)
     unfold cycleStep; rw [hk]; rfl
   rw [hcs]
   apply dLt_of_hpDeficit_dec <;>
-    simp only [dMeasure, rearmIfFight, dispatchesFight, pressureDeltaD,
+    simp only [dMeasure, rearmOnMint, dispatchesFight, pressureDeltaD,
       applyActionKind, if_false, Bool.false_eq_true, reduceIte,
       refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
@@ -147,7 +147,7 @@ theorem descendsD_restForCombat (s : State)
     unfold cycleStep; rw [hk]; rfl
   rw [hcs]
   apply dLt_of_hpDeficit_dec <;>
-    simp only [dMeasure, rearmIfFight, dispatchesFight, pressureDeltaD,
+    simp only [dMeasure, rearmOnMint, dispatchesFight, pressureDeltaD,
       applyActionKind, if_false, Bool.false_eq_true, reduceIte,
       refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
@@ -171,7 +171,7 @@ theorem descendsD_discardCritical (s : State)
     unfold cycleStep; rw [hk]; rfl
   rw [hcs]
   apply dLt_of_overstock_dec <;>
-    simp [dMeasure, rearmIfFight, dispatchesFight, pressureDeltaD,
+    simp [dMeasure, rearmOnMint, dispatchesFight, pressureDeltaD,
       applyActionKind, hfire.1.1,
       refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
@@ -193,7 +193,7 @@ theorem descendsD_discardHigh (s : State)
     unfold cycleStep; rw [hk]; rfl
   rw [hcs]
   apply dLt_of_overstock_dec <;>
-    simp [dMeasure, rearmIfFight, dispatchesFight, pressureDeltaD,
+    simp [dMeasure, rearmOnMint, dispatchesFight, pressureDeltaD,
       applyActionKind, hfire.1.1,
       refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
@@ -215,7 +215,7 @@ theorem descendsD_depositFull (s : State)
     unfold cycleStep; rw [hk]; rfl
   rw [hcs]
   apply dLt_of_selectBankDeposits_dec <;>
-    simp [dMeasure, rearmIfFight, dispatchesFight, pressureDeltaD,
+    simp [dMeasure, rearmOnMint, dispatchesFight, pressureDeltaD,
       applyActionKind, hfire.2,
       refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
@@ -237,7 +237,7 @@ theorem descendsD_sellPressured (s : State)
     unfold cycleStep; rw [hk]; rfl
   rw [hcs]
   apply dLt_of_sellable_dec <;>
-    simp [dMeasure, rearmIfFight, dispatchesFight, pressureDeltaD,
+    simp [dMeasure, rearmOnMint, dispatchesFight, pressureDeltaD,
       applyActionKind, hfire.2,
       refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
@@ -259,7 +259,7 @@ theorem descendsD_sellRelief (s : State)
     unfold cycleStep; rw [hk]; rfl
   rw [hcs]
   apply dLt_of_sellable_dec <;>
-    simp [dMeasure, rearmIfFight, dispatchesFight, pressureDeltaD,
+    simp [dMeasure, rearmOnMint, dispatchesFight, pressureDeltaD,
       applyActionKind, hfire.2,
       refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
@@ -281,7 +281,7 @@ theorem descendsD_recycleRelief (s : State)
     unfold cycleStep; rw [hk]; rfl
   rw [hcs]
   apply dLt_of_recyclable_dec <;>
-    simp [dMeasure, rearmIfFight, dispatchesFight, pressureDeltaD,
+    simp [dMeasure, rearmOnMint, dispatchesFight, pressureDeltaD,
       applyActionKind, hfire.2,
       refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
@@ -303,7 +303,7 @@ theorem descendsD_craftRelief (s : State)
     unfold cycleStep; rw [hk]; rfl
   rw [hcs]
   apply dLt_of_craftRelief_dec <;>
-    simp [dMeasure, rearmIfFight, dispatchesFight, pressureDeltaD,
+    simp [dMeasure, rearmOnMint, dispatchesFight, pressureDeltaD,
       applyActionKind, hfire,
       refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
@@ -325,7 +325,7 @@ theorem descendsD_gearReview (s : State)
     unfold cycleStep; rw [hk]; rfl
   rw [hcs]
   apply dLt_of_gearReview_dec <;>
-    simp [dMeasure, rearmIfFight, dispatchesFight, pressureDeltaD,
+    simp [dMeasure, rearmOnMint, dispatchesFight, pressureDeltaD,
       applyActionKind, hfire,
       refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
@@ -347,7 +347,7 @@ theorem descendsD_claimPending (s : State)
     unfold cycleStep; rw [hk]; rfl
   rw [hcs]
   apply dLt_of_pending_dec <;>
-    simp [dMeasure, rearmIfFight, dispatchesFight, pressureDeltaD,
+    simp [dMeasure, rearmOnMint, dispatchesFight, pressureDeltaD,
       applyActionKind, hfire,
       refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
@@ -371,7 +371,7 @@ theorem descendsD_craftPotions (s : State)
   rw [hcs]
   by_cases hrelief : s.craftReliefFires = true
   · apply dLt_of_craftRelief_dec <;>
-      simp [dMeasure, rearmIfFight, dispatchesFight, pressureDeltaD,
+      simp [dMeasure, rearmOnMint, dispatchesFight, pressureDeltaD,
         applyActionKind, hrelief,
         refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
@@ -381,7 +381,7 @@ theorem descendsD_craftPotions (s : State)
       perceptionRefreshD_level, perceptionRefreshD_xp]
   · rw [Bool.not_eq_true] at hrelief
     apply dLt_of_craftPotions_dec <;>
-      simp [dMeasure, rearmIfFight, dispatchesFight, pressureDeltaD,
+      simp [dMeasure, rearmOnMint, dispatchesFight, pressureDeltaD,
         applyActionKind, hrelief, hfire,
         refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
@@ -408,7 +408,7 @@ theorem descendsD_taskCancel (s : State)
     unfold cycleStep; rw [hk]; rfl
   rw [hcs]
   apply dLt_of_phasePresent_dec <;>
-    simp [dMeasure, rearmIfFight, dispatchesFight, pressureDeltaD,
+    simp [dMeasure, rearmOnMint, dispatchesFight, pressureDeltaD,
       applyActionKind, hphase,
       refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
@@ -432,7 +432,7 @@ theorem descendsD_lowYieldCancel (s : State)
     unfold cycleStep; rw [hk]; rfl
   rw [hcs]
   apply dLt_of_phasePresent_dec <;>
-    simp [dMeasure, rearmIfFight, dispatchesFight, pressureDeltaD,
+    simp [dMeasure, rearmOnMint, dispatchesFight, pressureDeltaD,
       applyActionKind, hphase,
       refreshD_phase, refreshD_progress, refreshD_total, refreshD_overstock,
       refreshD_selectBankDeposits, refreshD_sellable, refreshD_recyclable,
@@ -464,7 +464,7 @@ theorem descendsD_completeTask (s : State)
         = (perceptionRefreshD s).level + 1 := by
       simp only [applyActionKind]; rw [if_pos hwill]
     apply dLt_of_levelDeficit_dec
-    simp only [dMeasure, rearmIfFight, dispatchesFight, pressureDeltaD,
+    simp only [dMeasure, rearmOnMint, dispatchesFight, choreRearm, pressureDeltaD,
       if_false, Bool.false_eq_true, reduceIte, hfl, perceptionRefreshD_level]
     omega
   · have hphase : s.taskLifecyclePhase ≠ .none := by
@@ -480,11 +480,11 @@ theorem descendsD_completeTask (s : State)
         = .none := by
       simp only [applyActionKind]
     apply dLt_of_phasePresent_dec
-    · simp [dMeasure, rearmIfFight, dispatchesFight, pressureDeltaD, hfl,
+    · simp [dMeasure, rearmOnMint, dispatchesFight, choreRearm, pressureDeltaD, hfl,
         perceptionRefreshD_level]
-    · simp [dMeasure, rearmIfFight, dispatchesFight, pressureDeltaD, hfl, hfx,
+    · simp [dMeasure, rearmOnMint, dispatchesFight, choreRearm, pressureDeltaD, hfl, hfx,
         perceptionRefreshD_level, perceptionRefreshD_xp]
-    · simp [dMeasure, rearmIfFight, dispatchesFight, pressureDeltaD, hph, hphase]
+    · simp [dMeasure, rearmOnMint, dispatchesFight, choreRearm, pressureDeltaD, hph, hphase]
 
 
 /-! ## Fight row — slots 1/2 dominate the worst-case re-arm, the loot fill,
@@ -564,7 +564,7 @@ theorem descendsD_placeholder (s : State)
     simp [planFor, his0]
   rw [hcs]
   apply dLt_of_objectiveStepFlag_dec <;>
-    simp [dMeasure, rearmIfFight, dispatchesFight, pressureDeltaD,
+    simp [dMeasure, rearmOnMint, dispatchesFight, pressureDeltaD,
       applyActionKind, his0, hfire]
 
 /-- `pursueTask` is selectable only inside the defer window (outside it the
@@ -641,10 +641,10 @@ theorem descendsD_pursueTask (s : State) (hlvl : s.level < 50)
     rw [if_neg htot]
     split <;> (intro hc; cases hc)
   apply dLt_of_taskCycles_dec
-  · simp [dMeasure, rearmIfFight, dispatchesFight, pressureDeltaD, applyActionKind]
-  · simp [dMeasure, rearmIfFight, dispatchesFight, pressureDeltaD, applyActionKind]
-  · simp [dMeasure, rearmIfFight, dispatchesFight, pressureDeltaD, hpost, hphase]
-  · simp only [dMeasure, rearmIfFight, dispatchesFight, pressureDeltaD,
+  · simp [dMeasure, rearmOnMint, dispatchesFight, pressureDeltaD, applyActionKind]
+  · simp [dMeasure, rearmOnMint, dispatchesFight, pressureDeltaD, applyActionKind]
+  · simp [dMeasure, rearmOnMint, dispatchesFight, pressureDeltaD, hpost, hphase]
+  · simp only [dMeasure, rearmOnMint, dispatchesFight, pressureDeltaD,
       if_false, Bool.false_eq_true, reduceIte, applyActionKind]
     omega
 
