@@ -65,6 +65,10 @@ We prove:
     dup-allowed ⇒ ring2 fills (server HTTP 200, probed 2026-06-14).
   * `pickLoadout_single_ring_no_dup_fill`: 1 owned ⇒ ring2 stays EMPTY (the
     realizability boundary; we never over-fill past physical ownership).
+  * `pickLoadout_triple_artifact_fills_when_three_owned` /
+    `pickLoadout_single_artifact_no_dup_fill`: the artifact analogues after
+    artifacts joined rings as dup-allowed (2026-07-03) — 3 owned ⇒ all three
+    artifact slots fill; 1 owned ⇒ siblings stay empty (same ownership cap).
 
 Lean core only — no mathlib. `Nat` arithmetic via `omega`/`simp`; lists via
 fold/induction.
@@ -871,6 +875,45 @@ theorem pickLoadout_single_ring_no_dup_fill :
        { slot := { current := none, candidates := ["copper_ring"] },
          scoreFn := fun _ => 5 }]
       = [some "copper_ring", none] := by
+  decide
+
+/-- **THE ARTIFACT TRIPLE-FILL CASE (2026-07-03, dup carve-out extended)**:
+perfect_pearl worn in artifact1_slot, TWO more copies in inventory
+(ownership = 3), artifact2 and artifact3 empty, perfect_pearl marked
+dup-allowed (artifact-type). Artifacts join rings as duplicate-allowed
+(`equip.py:DUPLICATE_SLOT_TYPES`), so `capOf perfect_pearl = ownership = 3` and
+all three artifact slots FILL with the same code. This is realizable (3 owned,
+3 worn) — the exact artifact analogue of `pickLoadout_dual_ring_fills_when_two_owned`. -/
+theorem pickLoadout_triple_artifact_fills_when_three_owned :
+    pickLoadout (fun c => c = "perfect_pearl")
+      (fun c => if c = "perfect_pearl" then 2 else 0)
+      [some "perfect_pearl", none, none]
+      [{ slot := { current := some "perfect_pearl", candidates := ["perfect_pearl"] },
+         scoreFn := fun _ => 5 },
+       { slot := { current := none, candidates := ["perfect_pearl"] },
+         scoreFn := fun _ => 5 },
+       { slot := { current := none, candidates := ["perfect_pearl"] },
+         scoreFn := fun _ => 5 }]
+      = [some "perfect_pearl", some "perfect_pearl", some "perfect_pearl"] := by
+  decide
+
+/-- **THE ARTIFACT REALIZABILITY BOUNDARY (anti-over-fill)**: perfect_pearl worn
+in artifact1_slot, NONE in inventory (ownership = 1), artifact2/artifact3 empty,
+perfect_pearl dup-allowed. Even though artifact duplicates are now allowed in
+principle, `capOf perfect_pearl = ownership = 1` so the single worn copy fills
+the cap and BOTH sibling artifact slots stay EMPTY. We never over-fill past
+physical ownership — the artifact analogue of `pickLoadout_single_ring_no_dup_fill`. -/
+theorem pickLoadout_single_artifact_no_dup_fill :
+    pickLoadout (fun c => c = "perfect_pearl")
+      (fun _ => 0)
+      [some "perfect_pearl", none, none]
+      [{ slot := { current := some "perfect_pearl", candidates := ["perfect_pearl"] },
+         scoreFn := fun _ => 5 },
+       { slot := { current := none, candidates := ["perfect_pearl"] },
+         scoreFn := fun _ => 5 },
+       { slot := { current := none, candidates := ["perfect_pearl"] },
+         scoreFn := fun _ => 5 }]
+      = [some "perfect_pearl", none, none] := by
   decide
 
 /-- **Zero-score empty-fill regression**: an empty slot whose only candidate

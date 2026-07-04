@@ -19,11 +19,17 @@ from artifactsmmo_cli.ai.world_state import WorldState
 # Item types whose code may legally occupy MORE THAN ONE slot, up to physical
 # ownership. Live-server probe 2026-06-14 (character Robby): a 2nd identical
 # copper_ring equipped into ring2_slot returned HTTP 200 — the server allows
-# duplicate rings. Every other type keeps the strict one-slot-per-code rule
-# (HTTP 485 "already equipped"; documented utility small_health_potion case).
-# Shared with `equipment/scoring.py` (pick_loadout cap) and matches the
-# objective layer's `_DUPLICATE_FILL_TYPES`.
-DUPLICATE_SLOT_TYPES: frozenset[str] = frozenset({"ring"})
+# duplicate rings. Artifacts (3 slots) JOIN rings here: the game exposes three
+# artifact slots and the dual-ring probe establishes the server's per-slot (not
+# per-code) equip model, so a 2nd identical artifact is asserted-allowed. This
+# is NOT yet live-probed (no character can hold ≥2 of a duplicable artifact yet
+# — see the spec's probe trigger: on the first ≥2-owned artifact, confirm the
+# 2nd-copy equip returns HTTP 200, else revert "artifact"). All remaining types
+# keep the strict one-slot-per-code rule (HTTP 485 "already equipped";
+# documented utility small_health_potion case). Shared with
+# `equipment/scoring.py` (pick_loadout cap) and the objective layer's
+# `_DUPLICATE_FILL_TYPES` (both read this set generically).
+DUPLICATE_SLOT_TYPES: frozenset[str] = frozenset({"ring", "artifact"})
 
 
 @dataclass

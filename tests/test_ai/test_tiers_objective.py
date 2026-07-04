@@ -527,9 +527,10 @@ def test_ring_slots_duplicate_fill_when_one_attainable():
     assert obj.target_gear["ring2_slot"] == "copper_ring"
 
 
-def test_artifact_slots_not_duplicate_filled():
-    """Artifacts are unique (game rejects duplicates): one attainable artifact
-    fills only artifact1_slot — duplicate-fill is rings-only."""
+def test_artifact_slots_duplicate_filled():
+    """Artifacts are duplicate-allowed (join rings in DUPLICATE_SLOT_TYPES): one
+    attainable artifact fills ALL THREE artifact slots, mirroring the dual-ring
+    carve-out. Acquisition is bounded by ownership downstream (min slots, owned)."""
     gd = GameData()
     gd._item_stats = {"ancient_relic": ItemStats(code="ancient_relic", level=1,
                                                   type_="artifact", attack={"fire": 3})}
@@ -538,8 +539,8 @@ def test_artifact_slots_not_duplicate_filled():
     gd._resource_skill = {"rocks": ("mining", 1)}
     obj = CharacterObjective.from_game_data(gd)
     assert obj.target_gear["artifact1_slot"] == "ancient_relic"
-    assert "artifact2_slot" not in obj.target_gear
-    assert "artifact3_slot" not in obj.target_gear
+    assert obj.target_gear["artifact2_slot"] == "ancient_relic"
+    assert obj.target_gear["artifact3_slot"] == "ancient_relic"
 
 
 def test_near_term_gear_duplicate_fills_empty_second_ring():

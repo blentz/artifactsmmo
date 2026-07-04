@@ -4042,6 +4042,21 @@ EQUIP_MUTATIONS = [
      "        if any(\n"
      "            equipped == self.code\n"),
 ]
+# Duplicate-artifact carve-out: OWN group bound to the unit test (bag-slot
+# lesson — a unit-killed mutation needs its own group tied to the unit test, NOT
+# a traversal-diff group). Dropping "artifact" from DUPLICATE_SLOT_TYPES reverts
+# artifacts to the strict one-slot-per-code rule: a 2nd-copy sibling equip
+# 485-blocks (is_applicable False) and pick_loadout's per-code cap falls to 1
+# (only one artifact slot fills). Killed by
+# test_equip_second_copy_into_sibling_slot_applicable,
+# test_pick_loadout_fills_three_artifact_slots_when_three_owned, and
+# test_artifact_is_duplicate_allowed in tests/ai/test_duplicate_artifacts.py.
+# Anchor is the full frozenset literal — unique in equip.py.
+DUPLICATE_ARTIFACT_MUTATIONS = [
+    ("equip: drop artifact from DUPLICATE_SLOT_TYPES (reverts to ring-only)",
+     'DUPLICATE_SLOT_TYPES: frozenset[str] = frozenset({"ring", "artifact"})',
+     'DUPLICATE_SLOT_TYPES: frozenset[str] = frozenset({"ring"})'),
+]
 # Target F: store_warmup_core warmup gates.
 STORE_WARMUP_MUTATIONS = [
     ("store_warmup: drop median warmup gate (< 5 ⇒ should return None)",
@@ -4579,6 +4594,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_phase7_invariants_diff.py", survivors)
     run_group(EQUIP_SRC, EQUIP_MUTATIONS,
               "formal/diff/test_phase7_invariants_diff.py", survivors)
+    run_group(EQUIP_SRC, DUPLICATE_ARTIFACT_MUTATIONS,
+              "tests/ai/test_duplicate_artifacts.py", survivors)
     run_group(STORE_WARMUP_SRC, STORE_WARMUP_MUTATIONS,
               "formal/diff/test_store_warmup_diff.py", survivors)
     run_group(BANK_EXPANSION_SRC, BANK_EXPANSION_MUTATIONS,

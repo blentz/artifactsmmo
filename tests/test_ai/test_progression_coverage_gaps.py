@@ -229,41 +229,41 @@ class TestSiblingSlotTargeting:
         assert goal._find_craftable_upgrade_target(state, gd) is None
 
     def test_worn_NON_dup_type_still_blocks_sibling_slot_craft(self):
-        """The dual-ring carve is RING-SPECIFIC: a NON-duplicate multi-slot type
-        (artifact) worn in artifact1 still can't fill artifact2 (server HTTP 485
-        one-slot-per-code), so it is not a craft target — `_worn_in_other_slot`
-        returns True for non-dup types and the per-slot candidate is dropped."""
+        """The dup carve-out is TYPE-SPECIFIC (rings + artifacts): a NON-duplicate
+        multi-slot type (utility) worn in utility1 still can't fill utility2
+        (server HTTP 485 one-slot-per-code), so it is not a craft target —
+        `_worn_in_other_slot` returns True for non-dup types and the per-slot
+        candidate is dropped. Artifact is now dup-allowed, so utility is the
+        remaining non-dup multi-slot witness."""
         gd = GameData()
         gd._item_stats = {
-            "novice_guide": ItemStats(code="novice_guide", level=1, type_="artifact",
-                                      crafting_skill="jewelrycrafting", crafting_level=1,
-                                      hp_bonus=25),
+            "mini_potion": ItemStats(code="mini_potion", level=1, type_="utility",
+                                     crafting_skill="alchemy", crafting_level=1,
+                                     hp_bonus=25),
         }
-        gd._crafting_recipes = {"novice_guide": {"copper_bar": 6}}
+        gd._crafting_recipes = {"mini_potion": {"copper_bar": 6}}
         goal = UpgradeEquipmentGoal()
         state = make_state(
-            level=5, skills={"jewelrycrafting": 1},
+            level=5, skills={"alchemy": 1},
             inventory={},
-            equipment={"artifact1_slot": "novice_guide", "artifact2_slot": None,
-                       "artifact3_slot": None},
+            equipment={"utility1_slot": "mini_potion", "utility2_slot": None},
         )
         assert goal._find_craftable_upgrade_target(state, gd) is None
 
     def test_worn_NON_dup_type_still_blocks_sibling_slot_inventory(self):
-        """Same for the inventory path: a spare artifact in inventory while one is
-        worn can NOT go into a sibling artifact slot (non-dup one-slot-per-code)."""
+        """Same for the inventory path: a spare NON-dup item (utility) in inventory
+        while one is worn can NOT go into its sibling slot (one-slot-per-code)."""
         gd = GameData()
         gd._item_stats = {
-            "novice_guide": ItemStats(code="novice_guide", level=1, type_="artifact",
-                                      hp_bonus=25),
+            "mini_potion": ItemStats(code="mini_potion", level=1, type_="utility",
+                                     hp_bonus=25),
         }
         gd._crafting_recipes = {}
         goal = UpgradeEquipmentGoal()
         state = make_state(
             level=5,
-            inventory={"novice_guide": 1},
-            equipment={"artifact1_slot": "novice_guide", "artifact2_slot": None,
-                       "artifact3_slot": None},
+            inventory={"mini_potion": 1},
+            equipment={"utility1_slot": "mini_potion", "utility2_slot": None},
         )
         assert goal._find_inventory_upgrade(state, gd) is None
 

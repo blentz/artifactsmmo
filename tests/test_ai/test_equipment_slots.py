@@ -83,4 +83,4 @@ def test_combat_gear_slots_includes_rune_and_artifact():
 
 def test_dup_fill_is_single_source():
     assert _DUPLICATE_FILL_TYPES is DUPLICATE_SLOT_TYPES
-    assert DUPLICATE_SLOT_TYPES == frozenset({"ring"})
+    assert DUPLICATE_SLOT_TYPES == frozenset({"ring", "artifact"})
