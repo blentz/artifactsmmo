@@ -105,6 +105,29 @@ Closure bricks:
   grounded witness table (`xpPosConcrete` ← production picks ← xp_per_kill>0),
   so their honesty note gains the citation, not a new hypothesis.
 
+## The level-38 wall (C2 pre-design finding, 2026-07-04)
+
+Probes over the acquirable pool (snapshot-pinned):
+
+* Bands 34-37's acquirable witness farms death_knight (L28). At char 38 the
+  10-band level_penalty ZEROES it (38 ≥ 28+10 — C0a's gate, exactly), and no
+  monster in the xp-positive window (L29-40) is winnable with acquirable gear
+  — not even with EVERY acquirable utility potion stocked (Phase-1.5 revival
+  probed: potions do NOT close it). The next acquirable-winnable target
+  (owlbear L30, band-39 row) needs L39 base stats. Combat is the only char-xp
+  source (taskCompleteXpEstimate = 0, server-verified). Hence:
+
+  **Acquirable-only progression hard-caps at level 38.** Crossing 38→39
+  requires event/boss/NPC-class gear (the C1b frontier items). This is the
+  game's actual progression design surfaced as a theorem-shaped fact.
+
+* C2c therefore splits: `ai_reaches_thirtyeight_geared` (unconditional over
+  acquirable gear) + `ai_reaches_fifty_geared` modulo ONE named, satisfiable
+  hypothesis — a winnable xp-positive band-38 loadout is obtained (witnessed
+  by the optimistic row 38; production path: event content per roadmap-4).
+  The E-tower's gearGap descent uses `acquirableWitness` below 38 and above
+  39, and the frontier hypothesis exactly at the wall.
+
 ## Phase C — the C2 composition (gaps 1+2)
 
 The old Option-C scoping (`PLAN_winnable_across_band_discharge.md`) collapsed
@@ -162,11 +185,15 @@ band, and gate the model's xp credit on it.
   `witness_acquirable_all_bands`. RISK: some band may genuinely need an event/
   boss drop — then the theorem records the TRUE frontier (band table with named
   exceptions), not a forced green.
-* **C2a: adequacy predicate.** `loadoutAdequate : State → Bool` — the equipped
-  scalar totals (from `State.equipment`, via the proven equipment-scoring
-  cores) meet the witness scalars for the current band. Differential-pinned
-  against production's `pick_loadout`/projection (existing gear diff harness
-  extends).
+* **C2a: adequacy predicate.** Discipline decision: `loadoutAdequate` enters
+  the cycle State as an OPAQUE observed Bool (like every chore flag), pinned
+  by a differential that recomputes it as production `is_winnable(current
+  gear, band target)` — the full in-kernel derivation from `State.equipment`
+  via the mirrored projection is a LATER strengthening (the pieces exist:
+  LoadoutProjection + PredictWin), not a C2b blocker. A `gearGap : Nat`
+  opaque counter (recipe-closure steps remaining toward the band's
+  acquirable-witness loadout) rides with it, decremented by gear means —
+  the A2 debt pattern at gear scale.
 * **C2b: the E-tower (geared cycle).** `cycleStepE`:
   - fight row credits xp ONLY when `loadoutAdequate` (gap 1's sharpest edge:
     no more unconditional +10);

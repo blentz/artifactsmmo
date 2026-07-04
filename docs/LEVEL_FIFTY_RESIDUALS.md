@@ -110,6 +110,18 @@ combat picker's `xp_per_kill > 0` gate keeps the bot off level_penalty = 0
 targets in practice. This is the server-axiom-signoff evidence for the C0a
 `xpPositiveGate` core (`docs/PLAN_c2_composed_liveness.md` §C0).
 
+## The level-38 wall (C1/C2 finding, 2026-07-04)
+
+With provably-acquirable gear only (kernel cert, `WitnessAcquirable.lean`),
+progression hard-caps at level 38: bands 34-37 farm death_knight (L28), the
+10-band level_penalty zeroes it at char 38 (`xpPositiveGate`, exactly), no
+L29-40 monster is winnable with acquirable gear (potions probed — no), and the
+next acquirable target (owlbear L30) needs L39 base stats. Combat is the only
+char-xp source. Crossing 38→39 REQUIRES the C1b frontier items (event/boss/
+NPC-class). The forthcoming E-tower capstone therefore splits: unconditional
+reach-38, and reach-50 modulo the named, satisfiable band-38 event-gear
+hypothesis.
+
 ## What this does NOT prove
 
 * Nothing about wall-clock time or xp RATE — only eventual reachability under
