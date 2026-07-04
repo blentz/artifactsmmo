@@ -116,10 +116,12 @@ def craft_potions_fires(state: WorldState, game_data: GameData) -> bool:
     Fires when:
     - A craftable unlock boost exists that would flip a bare-unwinnable in-band
       monster to winnable (stall-breaker path) AND the boost recipe is producible
-      (craft-from-held OR all ingredients buyable OR any ingredient gatherable), OR
+      (each ingredient individually obtainable: in inventory+bank, NPC-buyable for gold,
+      or gatherable), OR
     - A craftable utility heal exists at the character's current skill, AND
       the equipped quantity of that potion is below the level-scaled baseline, AND
-      a batch is producible: ingredients craft-from-held OR all buyable OR any gatherable.
+      a batch is producible: each ingredient individually obtainable: in inventory+bank,
+      NPC-buyable for gold, or gatherable.
 
     This predicate is the exclusive gating truth for CraftPotionsGoal — the
     guard never fires when the goal would have no plannable path (no target →

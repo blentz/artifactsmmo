@@ -67,16 +67,8 @@ def test_bootstrap_target_climbs_with_skill():
     assert bootstrap_potion_target(state, gd) == "enhanced_health_potion"
 
 
-def _gd_mixed_recipe() -> GameData:
-    """sunflower is gatherable, rare_crystal is unobtainable — not in drops, not NPC-bought, not held."""
-    gd = GameData()
-    gd._resource_drops = {"sunflower_field": "sunflower"}
-    gd._npc_stock = {}
-    return gd
-
-
-def _gd_all_gatherable() -> GameData:
-    """sunflower is gatherable — all ingredients obtainable."""
+def _gd_sunflower_only() -> GameData:
+    """sunflower is gatherable; nothing else is obtainable (not in drops, not NPC-bought)."""
     gd = GameData()
     gd._resource_drops = {"sunflower_field": "sunflower"}
     gd._npc_stock = {}
@@ -85,12 +77,12 @@ def _gd_all_gatherable() -> GameData:
 
 def test_recipe_not_producible_when_one_ingredient_unobtainable():
     # recipe {gatherable_mat:1, unobtainable_mat:1}: old any() said True, new all() says False
-    gd = _gd_mixed_recipe()
+    gd = _gd_sunflower_only()
     state = make_state(level=10)
     assert _recipe_producible({"sunflower": 1, "rare_crystal": 1}, state, gd) is False
 
 
 def test_recipe_producible_when_all_ingredients_obtainable():
-    gd = _gd_all_gatherable()
+    gd = _gd_sunflower_only()
     state = make_state(level=10)
     assert _recipe_producible({"sunflower": 3}, state, gd) is True
