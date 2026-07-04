@@ -107,7 +107,26 @@ per-level witness table over production-projected scalars. C2 finishes the job
 for ACQUISITION: prove the bot can OBTAIN a witness-adequate loadout at every
 band, and gate the model's xp credit on it.
 
-* **C1: acquirability data obligation (kernel, WinnableGrounded-style).** Over
+* **C1: acquirability data obligation (kernel, WinnableGrounded-style).**
+  SURVEY FACTS (2026-07-04, session end): `WitnessRow` carries PROJECTED
+  SCALARS only — no item codes in Lean; per-item `level ≤ L` is ALREADY
+  asserted by `test_winnable_witness_diff.py` (module docstring line 31). So
+  C1's real kernel obligation is the CRAFT-CLOSURE side, and it needs a new
+  fixture export:
+  - C1a: extend the witness generator (the script feeding
+    `test_winnable_witness_diff.py` / `winnableWitness`) to ALSO emit the
+    per-band loadout ITEM CODES into a Lean fixture
+    (`WitnessLoadouts.lean`, generated — snapshot-regen discipline,
+    `reference_snapshot_regen`).
+  - C1b: kernel `decide` per band over `GameDataFixture`: every witness item
+    either drops from a monster/resource gated ≤ L, or has a recipe whose
+    RecipeClosure bottoms out in such leaves with craft-skill requirements
+    reachable by the gather loop (reuse `RecipeChainClosure` +
+    `SkillGapClosure` machinery). Honest frontier: bands needing event/boss
+    drops get NAMED exceptions, not forced green.
+  - C1c: differential re-pins the generated fixture against production
+    (`pick_loadout` + recipe data) so the Lean table cannot drift.
+  ORIGINAL SCOPE: Over
   the live `GameDataFixture`: for every band L ∈ [1,50), the witness loadout
   for L is OBTAINABLE at L — every piece has a craft recipe whose closure
   bottoms out in resources/drops gated ≤ L (or an NPC purchase with income
