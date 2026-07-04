@@ -81,14 +81,9 @@ def test_acquirability_tables_match_independent_recompute():
     assert m
     emitted_frontier = [int(x) for x in re.findall(r"-?\d+", m.group(1))]
     assert emitted_frontier == frontier
-    # Row identity: level + monster are pinned exactly (pure fold, deterministic).
-    # Loadout CODES are pinned as an acquirability property (every code in the
-    # kernel-verified cert), NOT as an exact sequence: C1b surfaced a real
-    # production nondeterminism — pick_loadout breaks equal-score ties on
-    # set-iteration order (hash seed), e.g. copper_armor vs feather_coat at
-    # level 5 across processes. Exact-sequence pinning is deferred to the
-    # picker-tiebreak fix (docs/PLAN_c2_composed_liveness.md, filed finding);
-    # the kernel theorems are unaffected (they verify the EMITTED rows).
+    # Row identity: level + monster + the EXACT loadout sequence. The picker
+    # tie is now a canonical total order (benefit, level, smallest code —
+    # the C1b nondeterminism fix), so cross-process exact pinning is sound.
     emitted = re.findall(
         r"\{ level := (\d+), monsterCode := \"([^\"]+)\".*?loadoutCodes := \[([^\]]*)\]",
         src[src.index("def acquirableWitness") :],
@@ -99,6 +94,6 @@ def test_acquirability_tables_match_independent_recompute():
     for (lvl, mon, codes), row in zip(emitted, rows):
         assert int(lvl) == row.level
         assert mon == row.monster_code
-        emitted_codes = set(re.findall(r'"([^"]+)"', codes))
-        assert emitted_codes <= cert_set, (lvl, sorted(emitted_codes - cert_set))
-        assert set(row.loadout_codes) <= cert_set, (lvl, row.loadout_codes)
+        emitted_codes = re.findall(r'"([^"]+)"', codes)
+        assert emitted_codes == list(row.loadout_codes), (lvl, emitted_codes, row.loadout_codes)
+        assert set(emitted_codes) <= cert_set, (lvl, sorted(set(emitted_codes) - cert_set))

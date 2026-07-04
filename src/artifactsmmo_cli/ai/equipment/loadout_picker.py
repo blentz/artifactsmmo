@@ -42,7 +42,11 @@ def _candidates_for_slot(
             pool.add(equipped_code)
 
     result: list[ItemStats] = []
-    for code in pool:
+    # Sorted iteration: `pool` is a set, and hash-seed iteration order leaked
+    # into the argmax tie below (cross-process nondeterministic picks, e.g.
+    # copper_armor vs feather_coat at L5 — C1b finding). Candidate order is
+    # now canonical so the pick is reproducible everywhere.
+    for code in sorted(pool):
         stats = game_data.item_stats(code)
         if stats is None or state.level < stats.level:
             continue
@@ -187,7 +191,13 @@ def pick_loadout(
             # rule prevents any other slot from having taken its code.
             continue
 
-        best = max(feasible, key=lambda s: _benefit(s, purpose))
+        # Tie chain (feedback: semantic keys, never bare-alphabetical
+        # decisions): benefit for the purpose, then item level (equal-benefit
+        # candidates prefer the newer gear generation), then code — a pure
+        # disambiguator between semantically identical candidates (smallest
+        # code wins), which makes the pick a canonical total order instead of
+        # hash-seed roulette.
+        best = min(feasible, key=lambda s: (-_benefit(s, purpose), -s.level, s.code))
         best_score = _benefit(best, purpose)
 
         if current_code == best.code:

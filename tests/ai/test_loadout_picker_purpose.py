@@ -294,3 +294,27 @@ def test_combat_fills_empty_artifact_slot_unchanged() -> None:
                         equipment={"artifact1_slot": None})
     result = pick_loadout(Combat({"earth": 0}, {"earth": 0}), state, gd)
     assert result["artifact1_slot"] == "novice_guide"
+
+
+def test_equal_benefit_tie_is_canonical_across_candidate_orders() -> None:
+    """C1b regression: the per-slot argmax tie is a canonical total order
+    (benefit, level, code) — NOT candidate-iteration order. Two body-armor
+    twins with identical scores must yield the same pick for BOTH inventory
+    insertion orders (the old set-iteration tie flipped with the process
+    hash seed: copper_armor vs feather_coat, acquirable-witness level 5)."""
+    gd = GameData()
+    gd._item_stats = {
+        "twin_a": ItemStats(code="twin_a", level=1, type_="body_armor",
+                            resistance={"earth": 10}),
+        "twin_b": ItemStats(code="twin_b", level=1, type_="body_armor",
+                            resistance={"earth": 10}),
+    }
+    gd._monster_attack = {"yellow_slime": {"earth": 8, "fire": 0, "water": 0, "air": 0}}
+    gd._monster_resistance = {"yellow_slime": {"earth": 0, "fire": 0, "water": 0, "air": 0}}
+    combat = Combat(gd._monster_attack["yellow_slime"],
+                    gd._monster_resistance["yellow_slime"])
+    picks = []
+    for order in (("twin_a", "twin_b"), ("twin_b", "twin_a")):
+        state = _make_state(inventory={code: 1 for code in order})
+        picks.append(pick_loadout(combat, state, gd).get("body_armor_slot"))
+    assert picks[0] == picks[1] == "twin_a", picks
