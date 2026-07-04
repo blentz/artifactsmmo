@@ -268,6 +268,52 @@ class TestSiblingSlotTargeting:
         assert goal._find_inventory_upgrade(state, gd) is None
 
 
+class TestDuplicateArtifactAcquisition:
+    def test_worn_dup_artifact_does_not_veto_sibling_target(self):
+        """DUPLICATE ARTIFACT (mirrors the dual-ring carve-out, 9db1c78b): a
+        CRAFTABLE artifact worn in artifact1 DOES make artifact2 a craft target
+        for a SECOND copy of the same artifact — `DUPLICATE_SLOT_TYPES` now
+        includes "artifact", so `_worn_in_other_slot` returns False for it and
+        the sibling-slot candidate survives instead of being dropped by the
+        one-slot-per-code rule."""
+        gd = GameData()
+        gd._item_stats = {
+            "lucky_charm": ItemStats(code="lucky_charm", level=1, type_="artifact",
+                                     crafting_skill="jewelrycrafting", crafting_level=1,
+                                     hp_bonus=25),
+        }
+        gd._crafting_recipes = {"lucky_charm": {"copper_bar": 6}}
+        goal = UpgradeEquipmentGoal()
+        state = make_state(
+            level=5, skills={"jewelrycrafting": 1},
+            inventory={},
+            equipment={"artifact1_slot": "lucky_charm", "artifact2_slot": None,
+                       "artifact3_slot": None},
+        )
+        assert goal._find_craftable_upgrade_target(state, gd) == ("lucky_charm", "artifact2_slot")
+
+    def test_unacquirable_worn_artifact_not_targeted_no_stall(self):
+        """novice_guide (no crafting recipe, 0 spare copies in inventory/bank)
+        worn in artifact1 is never selected as a craftable- or inventory-upgrade
+        target for the empty artifact2/artifact3 slots — an unacquirable dup
+        artifact must not stall the goal chasing a copy it can never obtain."""
+        gd = GameData()
+        gd._item_stats = {
+            "novice_guide": ItemStats(code="novice_guide", level=1, type_="artifact",
+                                     hp_bonus=25),
+        }
+        gd._crafting_recipes = {}
+        goal = UpgradeEquipmentGoal()
+        state = make_state(
+            level=5,
+            inventory={},
+            equipment={"artifact1_slot": "novice_guide", "artifact2_slot": None,
+                       "artifact3_slot": None},
+        )
+        assert goal._find_craftable_upgrade_target(state, gd) is None
+        assert goal._find_inventory_upgrade(state, gd) is None
+
+
 class TestCraftableUpgradeSkipsNonUpgrade:
     def test_skips_candidate_that_is_not_an_upgrade(self):
         """A craftable item worse than the currently-equipped gear is not an
