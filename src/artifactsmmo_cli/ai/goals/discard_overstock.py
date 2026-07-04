@@ -1,9 +1,9 @@
-"""DiscardOverstockGoal: sell or delete items held beyond their useful cap."""
+"""DiscardOverstockGoal: sell, recycle, bank, or delete items held beyond their useful cap."""
 
 from artifactsmmo_cli.ai.actions.base import Action
-from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
 from artifactsmmo_cli.ai.actions.ge_fill import GeFillBuyOrderAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
+from artifactsmmo_cli.ai.disposal_route import overstock_disposal
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.inventory_caps import overstocked_items
@@ -39,16 +39,20 @@ shared pressure-ladder CRITICAL rung (single source: ai/thresholds.py)."""
 
 
 class DiscardOverstockGoal(Goal):
-    """Sell (if NPC buys) or delete items held beyond their useful cap."""
+    """Sell (if NPC buys), else recycle/bank/delete items held beyond their useful cap."""
 
     def __init__(self, game_data: GameData,
-                 profile: dict[str, int] | None = None) -> None:
+                 profile: dict[str, int] | None = None,
+                 bank_accessible: bool = False) -> None:
         # game_data stashed so is_satisfied (which only receives state per
         # the Goal protocol) can still compute overstock during planning.
         self._gd = game_data
         # The active goal's soft inventory profile — never discard a profile
         # item below its target (spec 2026-06-07).
         self._profile = profile or {}
+        # Threaded from SelectionContext at the strategy_driver build site
+        # (not a WorldState field): gates the disposal-route DEPOSIT arm.
+        self._bank_accessible = bank_accessible
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
@@ -82,12 +86,13 @@ class DiscardOverstockGoal(Goal):
     def relevant_actions(
         self, actions: list[Action], state: WorldState, game_data: GameData,
     ) -> list[Action]:
-        """Construct one BATCH Sell or Delete per overstocked item.
+        """Construct one BATCH Sell / Recycle / Deposit / Delete per overstocked item.
 
         Bypasses the pre-built quantity=1 actions in `actions` and emits a
         single-cycle batch action per item so one cycle clears one item's
-        overstock entirely. Sell wins over Delete when any NPC buys —
-        gold > zero. Sell picks the highest-paying NPC.
+        overstock entirely. Sell wins when any NPC buys — gold > zero; Sell
+        picks the highest-paying NPC. With no executable sale the item is
+        routed by the proved `disposal_route`: recycle > deposit > delete.
         """
         excess = overstocked_items(state, game_data, profile=self._profile)
         if not excess:
@@ -126,21 +131,24 @@ class DiscardOverstockGoal(Goal):
                     npc_location=npc_loc,
                 )
                 result.append(sell_action)
-            # Delete fallback: emit a Delete whenever there is no fillable GE order
-            # AND no EXECUTABLE sell — i.e. no sell action at all, OR the sell
-            # action is not currently applicable. The latter is the dormant
-            # event-merchant case (trace 2026-06-24): sap's only buyer is the
-            # `timber_merchant` event NPC — it HAS a location (so the old
-            # `npc_loc is None` guard left Delete unoffered) but its spawn window
-            # is closed, so NpcSellAction.is_applicable is False. With neither sell
-            # nor delete executable the overstock never clears → the bag-full
-            # Withdraw↔Deposit livelock. Delete frees the slot for a worthless-NOW
-            # item; when the event later spawns, the sell (gold) is preferred.
+            # Disposal fallback: whenever there is no fillable GE order AND no
+            # EXECUTABLE sell — i.e. no sell action at all, OR the sell action
+            # is not currently applicable (the dormant event-merchant case,
+            # trace 2026-06-24: sap's only buyer is the `timber_merchant` event
+            # NPC whose spawn window is closed) — route the item through the
+            # proved disposal_route instead of a bare Delete (trace 2026-07-04:
+            # copper_helmet x33 recyclable gear destroyed): an applicable
+            # Recycle recovers materials; else a bankable item with future
+            # value (recipe demand or equippable) deposits; else Delete frees
+            # the slot for a worthless-NOW item. Every route is executable this
+            # cycle, so overstock still always clears (no Withdraw↔Deposit
+            # bag-full livelock regression).
             if not ge_action_available and (
                 sell_action is None
                 or not sell_action.is_applicable(state, game_data)
             ):
-                result.append(DeleteItemAction(code=code, quantity=excess_qty))
+                result.append(overstock_disposal(
+                    code, excess_qty, state, game_data, self._bank_accessible))
         return result
 
     def __repr__(self) -> str:

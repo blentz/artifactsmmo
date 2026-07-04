@@ -39,6 +39,7 @@ import Formal.ShoppingList
 import Formal.MonsterDropSelection
 import Formal.CraftVsBuy
 import Formal.LiquidationVenue
+import Formal.DisposalRoute
 import Formal.BuySourceVenue
 import Formal.NearestTile
 import Formal.ConsumableSelection

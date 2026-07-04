@@ -26,6 +26,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | CycleInvariants | characters, combat | safety, monotonicity |
 | CyclesForProgress | characters | reachability, monotonicity |
 | DecideKey | core, planner | dominance, totality |
+| DisposalRoute | inventory | dominance, safety, totality |
 | DominancePareto | equipment, selling | safety |
 | DoomedMemo | core, planner | monotonicity, safety, reachability |
 | EquipValueAugmented | items, characters | dominance, monotonicity |

@@ -1625,6 +1625,21 @@ def runLiquidationVenue (args : Array Json) : Json :=
   let realized := Formal.LiquidationVenue.realizedProceeds npcPay geProceeds venue
   Json.mkObj [("venue", Json.num code), ("realized", Json.num realized)]
 
+/-- Compute one disposal_route result using the SAME proved
+`Formal.DisposalRoute.disposalRoute`.
+
+args layout (3 Ints, each 0/1): `[recyclable, bankOk, futureValue]`. Emits the
+chosen route (`0` = RECYCLE, `1` = DEPOSIT, `2` = DELETE, matching the Python
+`Route` encoding in the differential test). -/
+def runDisposalRoute (args : Array Json) : Json :=
+  let route := Formal.DisposalRoute.disposalRoute
+    (intArg args 0 != 0) (intArg args 1 != 0) (intArg args 2 != 0)
+  let code : Int := match route with
+    | Formal.DisposalRoute.Route.recycle => 0
+    | Formal.DisposalRoute.Route.deposit => 1
+    | Formal.DisposalRoute.Route.delete => 2
+  Json.mkObj [("route", Json.num code)]
+
 /-- Compute one buy_source_venue result using the SAME proved
 `Formal.BuySourceVenue.chooseBuyVenue` / `realizedCost` (the DUAL of
 liquidation_venue).
@@ -2919,6 +2934,8 @@ def runOne (item : Json) : Json :=
     runCraftVsBuy args
   else if kind == "liquidation_venue" then
     runLiquidationVenue args
+  else if kind == "disposal_route" then
+    runDisposalRoute args
   else if kind == "buy_source_venue" then
     runBuySourceVenue args
   else if kind == "nearest_tile" then

@@ -27,6 +27,7 @@ from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
+from artifactsmmo_cli.ai.actions.deposit_item import DepositItemAction
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
@@ -778,7 +779,7 @@ class GamePlayer:
         try:
             new_state = action.execute(self.state, client)
             # Re-sync bank state after visiting bank
-            if isinstance(action, (DepositAllAction, WithdrawItemAction)):
+            if isinstance(action, (DepositAllAction, DepositItemAction, WithdrawItemAction)):
                 new_state = self._sync_bank(client, new_state)
             # Re-sync pending items after claiming one
             if isinstance(action, ClaimPendingItemAction):
@@ -788,7 +789,7 @@ class GamePlayer:
             if e.code == ERROR_CODE_COOLDOWN:
                 print(f"[{self._now()}] Server cooldown (HTTP 499) — refreshing state")
                 outcome = "error:cooldown"
-            elif e.code == 496 and isinstance(action, (DepositAllAction, WithdrawItemAction)):
+            elif e.code == 496 and isinstance(action, (DepositAllAction, DepositItemAction, WithdrawItemAction)):
                 # Discover unlock monster + compute required level, then push
                 # everything into the blocker registry (which also persists
                 # via the learning store when present).
@@ -827,7 +828,7 @@ class GamePlayer:
                 outcome = f"error:HTTP_{e.code}"
             refreshed = self._fetch_world_state(client)
             if outcome.startswith("error:HTTP_") and isinstance(
-                action, (WithdrawItemAction, DepositAllAction)
+                action, (WithdrawItemAction, DepositAllAction, DepositItemAction)
             ):
                 # A bank action failed on a structured HTTP error (e.g. 478
                 # "missing items" on a Withdraw): our bank view drove an
