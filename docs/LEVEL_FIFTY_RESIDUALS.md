@@ -99,6 +99,17 @@ small and named: (rest, fight)×35 — production rested ABOVE the 75% gate
 fought slightly below the gate (sticky-commitment/timing tail; real but
 bounded, revisit with B3 flags). Level-rollover agreement 383/387.
 
+## XP formula corroboration (Phase C0c, 2026-07-04 — `formal/diff/xp_formula_replay.py`)
+
+The documented server xp formula (stats_and_fights#xp-formula: level_penalty
+1.0 / 0.7@diff≥5 / 0@diff≥10, type multiplier, wisdom bonus) replayed against
+399 observed ok-fights with fixture monster level/hp: **262/399 exact at
+wisdom = 0, and all 137 remaining deltas are exactly +1 xp** — the wisdom-bonus
+signature (uniform, tips the round). **0 zero-band fights observed**: the
+combat picker's `xp_per_kill > 0` gate keeps the bot off level_penalty = 0
+targets in practice. This is the server-axiom-signoff evidence for the C0a
+`xpPositiveGate` core (`docs/PLAN_c2_composed_liveness.md` §C0).
+
 ## What this does NOT prove
 
 * Nothing about wall-clock time or xp RATE — only eventual reachability under

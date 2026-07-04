@@ -1,0 +1,8 @@
+trace=../play-trace-Robby.jsonl snapshot=sim/game_data_snapshot.json (2026-07-02T15:55:54.447690+00:00)
+ok-fights checked=399 rollovers-skipped=6 unknown-monster=0
+EXACT formula matches (wisdom=0, multiplier=1.0): 262/399
+zero-band fights observed (level_penalty = 0): 0
+mismatch classes (expected, real) -> count, top 15: [((20, 21), 78), ((22, 23), 59)]
+
+Uniform positive excess = wisdom bonus; ~1.4x/2x = elite/boss multiplier;
+anything else contradicts the documented formula and needs escalation.

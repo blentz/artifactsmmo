@@ -81,10 +81,9 @@ Closure bricks:
   just positivity — an exact ℚ (or scaled-int) mirror of the full formula with
   round-half-even, differential bit-agreement vs the float implementation.
   Separate brick; only needed when a decision consumes the magnitude.
-* **C0c: trace corroboration.** Extend the server-axiom replay: recompute
-  expected xp per observed fight (monster level/hp/type from the fixture,
-  wisdom from gear) vs the trace's real xp delta — validates the DOC against
-  the live server on 405 fights, the same discipline as LIV-001's signoff.
+* **C0c: trace corroboration. DONE** (`diff/xp_formula_replay.py`): 262/399
+  exact at wisdom=0; all 137 residuals exactly +1 (wisdom signature); 0
+  zero-band fights observed — the picker gate holds in practice.
 * **C0d: liveness closure.** The E-tower fight row (C2b below) credits xp ONLY
   under `loadoutAdequate && xpPositiveGate` — the level_penalty=0 case becomes
   UNREACHABLE in the credited path instead of silently over-credited. The
