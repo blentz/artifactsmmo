@@ -104,3 +104,4 @@ concept tag, or a concept with no module, is a traceability gap.
 | UpgradeSelection | items, characters | dominance |
 | WeightedRemaining | tasks, characters | monotonicity, safety |
 | WithdrawSetExpansion | crafting, items | totality, safety |
+| XpPositive | combat, planner | safety |

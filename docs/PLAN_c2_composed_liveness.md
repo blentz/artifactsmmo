@@ -67,7 +67,10 @@ credits xp unconditionally — no level_penalty image.
 
 Closure bricks:
 
-* **C0a: integer decision core.** KEY FACT (makes the gate float-free): within
+* **C0a: integer decision core. DONE** (`Formal/XpPositive.lean` +
+  oracle `xp_positive` + `test_xp_positive_diff.py` w/ deterministic band-edge
+  sweep + XP_POSITIVE mutation group, 4/4 killed — random sampling alone let a
+  `>= 11` mutant survive; edges must be enumerated). KEY FACT (makes the gate float-free): within
   the band (diff <= 9, monster_level >= 1) the formula's minimum value is
   ~1.4 (worst case plvl=10/mlvl=1/penalty=0.7), which rounds to >= 1; outside
   the band penalty = 0. Hence `xp_per_kill > 0 ⟺ char_level <

@@ -920,6 +920,35 @@ NEXT_TIER_CAP_MUTATIONS = [
 ]
 
 
+# xp_positive mutations -- anchors the level_penalty thresholds in
+# monster_catalog.xp_per_kill (doc-cited formula) whose > 0 verdict is the
+# proven Formal.XpPositive.xpPositiveGate. Each substring is copied verbatim
+# from monster_catalog.py; killed by formal/diff/test_xp_positive_diff.py.
+MONSTER_CATALOG_SRC = ROOT / "src/artifactsmmo_cli/ai/monster_catalog.py"
+
+XP_POSITIVE_MUTATIONS = [
+    # widen the zero band boundary -- diff = 10 would still pay xp; the gate
+    # says false, production says positive: diff test kills at the edge.
+    ("xp_positive: zero band >= 10 becomes >= 11",
+     "        if diff >= 10:\n            penalty = 0.0\n",
+     "        if diff >= 11:\n            penalty = 0.0\n"),
+    # exclusive edge -- same failure at exactly diff = 10.
+    ("xp_positive: zero band >= 10 becomes > 10",
+     "        if diff >= 10:\n            penalty = 0.0\n",
+     "        if diff > 10:\n            penalty = 0.0\n"),
+    # zero band pays anyway -- out-of-band fights yield xp; gate false vs
+    # production positive everywhere in the band: killed.
+    ("xp_positive: zero-band penalty 0.0 becomes 0.7",
+     "        if diff >= 10:\n            penalty = 0.0\n",
+     "        if diff >= 10:\n            penalty = 0.7\n"),
+    # drop the unknown-monster guard -- level-0 monsters with hp pay xp via
+    # the hp term; gate requires monster_level >= 1: killed when hp >= 13.
+    ("xp_positive: drop unknown-monster guard",
+     "        if monster_level <= 0 or char_level <= 0:\n            return 0\n",
+     "        if False:\n            return 0\n"),
+]
+
+
 # skill_grind_selection mutations -- pure-core anchors for
 # skill_grind_selection_pure (the recipe-aware skill-grind target selector).
 # Each substring is copied verbatim from skill_grind_selection.py (indentation
@@ -4707,6 +4736,8 @@ def _run_all_groups() -> int:
               "tests/test_ai/test_no_combat_deadlock.py", survivors)
     run_group(NEXT_TIER_CAP_SRC, NEXT_TIER_CAP_MUTATIONS,
               "formal/diff/test_next_tier_cap_diff.py", survivors)
+    run_group(MONSTER_CATALOG_SRC, XP_POSITIVE_MUTATIONS,
+              "formal/diff/test_xp_positive_diff.py", survivors)
     run_group(BOOST_SELECTION_SRC, BOOST_SELECTION_MUTATIONS,
               "tests/test_ai/test_boost_selection.py", survivors)
     run_group(POTION_SUPPLY_SRC, RECIPE_PRODUCIBLE_MUTATIONS,

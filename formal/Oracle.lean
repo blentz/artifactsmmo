@@ -2770,6 +2770,13 @@ def runBankSpaceCost (args : Array Json) : Json :=
   Json.mkObj [("cost",
     Json.num (Int.ofNat (Formal.LoadoutProfiles.bankSpaceCost loadouts equipped)))]
 
+/-- `xp_positive` — C0a gate: args `[charLevel, monsterLevel]`; emits the
+proven `Formal.XpPositive.xpPositiveGate` verdict. The differential pins the
+production float path's `xp_per_kill > 0` to this integer gate. -/
+def runXpPositive (args : Array Json) : Json :=
+  let n := fun i => (intArg args i).toNat
+  Json.mkObj [("positive", Json.bool (Formal.XpPositive.xpPositiveGate (n 0) (n 1)))]
+
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
   let args := ((item.getObjValD "args" |>.getArr?).toOption.getD #[])
@@ -2972,6 +2979,8 @@ def runOne (item : Json) : Json :=
     runLadder args
   else if kind == "cycle_step_d" then
     runCycleStepD args
+  else if kind == "xp_positive" then
+    runXpPositive args
   else if kind == "next_craft" then
     runNextCraft args
   else if kind == "craft_plan" then
