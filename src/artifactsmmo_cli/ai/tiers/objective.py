@@ -19,14 +19,15 @@ from artifactsmmo_cli.ai.tiers.skill_target_curve import skill_target_curve
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, SKILL_NAMES, WorldState
 
 
-# Single source: the server-probed set of types that accept a duplicate item
-# CODE across their slots (rings only). Shared with actions/equip.py — no copy.
+# Single source: the duplicate-allowed slot types, read from actions/equip.py's
+# DUPLICATE_SLOT_TYPES — no copy, so this can't drift from that set.
 _DUPLICATE_FILL_TYPES = DUPLICATE_SLOT_TYPES
 """Multi-slot equip types whose empty slots are filled by repeating the best
-attainable item. Rings only: the game lets you wear two identical rings, so when
-fewer distinct rings are attainable than ring slots, double up the best.
-Artifacts are unique (the game rejects duplicates) and utility consumables stay
-distinct, so their remaining slots are left untargeted."""
+attainable item. See actions/equip.py's DUPLICATE_SLOT_TYPES comment for which
+types are in the set and why (rings: confirmed by a live HTTP-200 probe
+2026-06-14; artifacts: asserted from the same per-slot equip model, not yet
+probed — see that comment's probe trigger). Types outside the set (e.g. utility
+consumables) stay distinct, so their remaining slots are left untargeted."""
 
 
 def _slot_assignments(type_: str, slots: list[str],

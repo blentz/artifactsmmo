@@ -120,7 +120,7 @@ def pick_loadout(
     RESULT, enforcing a per-code OCCUPANCY CAP: an item code C is infeasible for
     slot S once the projected result already holds C at its cap in OTHER slots —
     kept there or newly assigned by an earlier iteration. The cap is 1 for every
-    type EXCEPT duplicate-allowed types (rings), whose cap is physical
+    type EXCEPT duplicate-allowed types (rings, artifacts), whose cap is physical
     `ownership(C)`. So a non-ring code keeps the strict server ONE-SLOT-PER-CODE
     rule (HTTP 485 "This item is already equipped"), while a spare copper_ring
     MAY fill ring2_slot while ring1_slot wears copper_ring — but only when a 2nd

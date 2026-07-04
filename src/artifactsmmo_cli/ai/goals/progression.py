@@ -337,7 +337,8 @@ class UpgradeEquipmentGoal(Goal):
     def _worn_in_other_slot(item_code: str, slot: str, state: WorldState,
                             game_data: GameData) -> bool:
         """One slot per code (server HTTP 485): a code worn in ANY other slot can
-        never be equipped into `slot` — EXCEPT duplicate-allowed types (rings).
+        never be equipped into `slot` — EXCEPT duplicate-allowed types (rings,
+        artifacts).
 
         For rings the server permits the SAME code in multiple slots up to
         physical ownership (HTTP 200, live probe 2026-06-14; see
@@ -413,7 +414,7 @@ class UpgradeEquipmentGoal(Goal):
             # slot is handled per-slot below by `_worn_in_other_slot`: for a
             # NON-duplicate type the server's one-slot-per-code rule (HTTP 485)
             # means it can never fill a sibling slot, so those targets are
-            # dropped; but for DUPLICATE_SLOT_TYPES (rings) the server allows the
+            # dropped; but for DUPLICATE_SLOT_TYPES (rings, artifacts) the server allows the
             # SAME code in multiple slots up to ownership (HTTP 200), so a 2nd
             # copper_ring IS a valid craft target for the empty ring2 — the
             # dual-ring case. `_is_upgrade_over` still rejects a code for its own
