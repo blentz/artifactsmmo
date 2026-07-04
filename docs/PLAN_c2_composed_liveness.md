@@ -133,7 +133,26 @@ band, and gate the model's xp credit on it.
     drops get NAMED exceptions, not forced green.
   - C1c: differential re-pins the generated fixture against production
     (`pick_loadout` + recipe data) so the Lean table cannot drift.
-  ORIGINAL SCOPE: Over
+  **C1 EXPERIMENT RESULT (2026-07-04, pivotal):** `obtainable_inventory_for_level`
+  is DOCUMENTED-OPTIMISTIC (level ≤ L is its only filter; acquirability is the
+  Task-3/corner-3 residual). Rebuilding the witness table with an
+  acquirability-FILTERED pool (closure over gather ∪ live monster drops ∪
+  task-exchange; 290/522 equippables close) shows: **47/49 bands stay winnable
+  with provably-acquirable gear; bands 38-39 FAIL** — no winnable xp-positive
+  target without ~10 closure-unreachable items (ancestral_talisman,
+  ancient_jean, cursed_sceptre, dreadful_shield, gold_boots, life_crystal,
+  lifesteal_rune, novice_guide, obsidian_helmet, ring_of_the_adept), whose
+  sources are event/boss/NPC-class (npc stock empty outside events —
+  event-merchant memory). This CONFIRMS roadmap-4 ("events gate lvl20-50
+  gear") with a kernel-adjacent experiment, and TENSIONS the
+  boss-not-level50-blocker memory (its criterion was gear-exists, not
+  band-winnability). C1b's theorem therefore states the TRUE frontier: closure
+  acquirability for 47 bands + the named 38-39 event-dependency. C1b kernel
+  work: emit gatherableItems + monsterDropItems (+ task-exchange set) into the
+  fixture (snapshot script gains monster_drops), certificate-style decide
+  (python computes the acquirable set, kernel VERIFIES closure membership),
+  rowAcquirable over loadoutCodes with the two exception bands named in the
+  theorem statement. ORIGINAL SCOPE: Over
   the live `GameDataFixture`: for every band L ∈ [1,50), the witness loadout
   for L is OBTAINABLE at L — every piece has a craft recipe whose closure
   bottoms out in resources/drops gated ≤ L (or an NPC purchase with income
