@@ -378,6 +378,20 @@ structure State where
       `perceptionRefresh` tower ignores it. Defaulted so existing State
       literals, fixtures, and the oracle decoder are unaffected. -/
   itemsTaskDeferActive : Bool := false
+  /-- OPAQUE (Phase A2, `docs/PLAN_c2_composed_liveness.md`): outstanding
+      overstock-discard batches beyond the first — production may need several
+      `.deleteItem` applies before `overstocked_items(...)` is empty. Consumed
+      only by `CycleStepD.partialClear`; defaulted so existing State literals,
+      fixtures, and the oracle decoder are unaffected. -/
+  overstockDebt : Nat := 0
+  /-- OPAQUE (Phase A2): outstanding deposit batches beyond the first
+      (`select_bank_deposits(...)` may stay nonempty after one `.depositAll`).
+      Consumed only by `CycleStepD.partialClear`; defaulted. -/
+  depositDebt : Nat := 0
+  /-- OPAQUE (Phase A2): outstanding NPC-sell batches beyond the first
+      (`_has_sellable(...)` may stay true after one `.npcSell`). Consumed only
+      by `CycleStepD.partialClear`; defaulted. -/
+  sellDebt : Nat := 0
   deriving Repr
 
 namespace State

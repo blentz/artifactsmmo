@@ -1,6 +1,6 @@
 # PLAN — C2 composed liveness: geared combat, honest chores, trace lockstep
 
-**Status: DESIGNED 2026-07-04 — Phase A in progress. Multi-session epic.**
+**Status: Phase A COMPLETE (A1 663f3673, A2 this commit). Next: Phase B. Multi-session epic.**
 
 Successor to `docs/PLAN_residual_closure.md` (commit 96c339f6). User mandate:
 fix unmodeled gaps 1 (combat outcomes), 2 (gear/skill economy), 4 (chore
@@ -30,7 +30,7 @@ Rework the D-tower's flag dynamics so the two disclosed corners disappear:
   number of deposit/sell batches outstanding): chore apply decrements by ≥1,
   mint re-arms add a bounded amount. Same lex argument; kills the one-apply-
   clears-all conservatism. Needs State fields (defaulted) + fires predicates
-  gated on debt > 0. Deferred to its own brick — mechanical but wide.
+  gated on debt > 0. DONE — `partialClear` layer in `cycleStepD`, 18-slot DMeasure (debt slot directly above its latch), all rows re-proved.
 
 ## Phase B — trace-lockstep differential (gap 5)
 

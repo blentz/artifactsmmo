@@ -65,8 +65,15 @@ def dispatchesFight (k : MeansKind) (r : State) : Bool :=
   | .objectiveStep => r.objectiveStepIsFight
   | _ => false
 
-/-- Worst-case chore re-arm: arm ALL 8 chore latches. Over-approximates any
-    loot-driven production re-arming (loot cannot arm more than everything). -/
+/-- Phase-A2 worst-case debt restored by a mint: the number of extra chore
+    batches a single loot/mint event can create. Provisional constant (like
+    `DROP_BOUND`); every lemma is agnostic to its value — a raise at a debt
+    slot is always lex-dominated by the minting row's own descent. -/
+def DEBT_CAP : Nat := 8
+
+/-- Worst-case chore re-arm: arm ALL 8 chore latches AND restore the three
+    multi-batch debts to `DEBT_CAP`. Over-approximates any loot-driven
+    production re-arming. -/
 def choreRearm (st : State) : State :=
   { st with hasOverstockItems := true,
             selectBankDepositsNonempty := true,
@@ -75,7 +82,10 @@ def choreRearm (st : State) : State :=
             craftReliefFires := true,
             craftPotionsFires := true,
             gearReviewFires := true,
-            pendingItemsNonempty := true }
+            pendingItemsNonempty := true,
+            overstockDebt := DEBT_CAP,
+            depositDebt := DEBT_CAP,
+            sellDebt := DEBT_CAP }
 
 /-- Phase-A1 mint re-arm map. Fight dispatches re-arm EVERYTHING (worst case of
     loot). The two MINTING chores re-arm the flags lex-BELOW their own descent
@@ -94,7 +104,10 @@ def rearmOnMint (k : MeansKind) (r st : State) : State :=
                   recyclableSurplusNonempty := true,
                   craftReliefFires := true,
                   craftPotionsFires := true,
-                  gearReviewFires := true }
+                  gearReviewFires := true,
+                  overstockDebt := DEBT_CAP,
+                  depositDebt := DEBT_CAP,
+                  sellDebt := DEBT_CAP }
     | .completeTask => choreRearm st
     | _ => st
 
@@ -111,13 +124,31 @@ def pressureDeltaD (k : MeansKind) (r st : State) : State :=
         { st with inventoryUsed := 0 }
     | _ => st
 
-/-- One defer-faithful cycle: gated refresh, ladder select, apply, dispatch-keyed
-    pressure, worst-case re-arm on fights. -/
+/-- Phase-A2 partial clear: the three multi-batch chores clear their latch
+    only when the debt is exhausted; otherwise the apply's clear is UNDONE
+    (latch re-armed) and the debt strictly decrements — production needing
+    `debt + 1` batches, modelled step for step. -/
+def partialClear (k : MeansKind) (st : State) : State :=
+  match k with
+  | .discardCritical | .discardHigh =>
+      if st.overstockDebt = 0 then st
+      else { st with hasOverstockItems := true, overstockDebt := st.overstockDebt - 1 }
+  | .depositFull =>
+      if st.depositDebt = 0 then st
+      else { st with selectBankDepositsNonempty := true, depositDebt := st.depositDebt - 1 }
+  | .sellPressured | .sellRelief =>
+      if st.sellDebt = 0 then st
+      else { st with sellableInventoryNonempty := true, sellDebt := st.sellDebt - 1 }
+  | _ => st
+
+/-- One defer-faithful cycle: gated refresh, ladder select, apply,
+    dispatch-keyed pressure, partial clear, mint re-arm. -/
 noncomputable def cycleStepD (s : State) : State :=
   match productionLadder (perceptionRefreshD s) with
   | some k =>
       rearmOnMint k (perceptionRefreshD s)
-        (pressureDeltaD k (perceptionRefreshD s) (cycleStep (perceptionRefreshD s)))
+        (partialClear k
+          (pressureDeltaD k (perceptionRefreshD s) (cycleStep (perceptionRefreshD s))))
   | none => cycleStep (perceptionRefreshD s)
 
 /-- `n`-fold defer-faithful cycle. -/
@@ -162,6 +193,14 @@ theorem rearmOnMint_xp (k : MeansKind) (r st : State) :
   · rfl
   · cases k <;> rfl
 
+theorem partialClear_level (k : MeansKind) (st : State) :
+    (partialClear k st).level = st.level := by
+  cases k <;> simp [partialClear, apply_ite]
+
+theorem partialClear_xp (k : MeansKind) (st : State) :
+    (partialClear k st).xp = st.xp := by
+  cases k <;> simp [partialClear, apply_ite]
+
 theorem pressureDeltaD_level (k : MeansKind) (r st : State) :
     (pressureDeltaD k r st).level = st.level := by
   unfold pressureDeltaD; split
@@ -181,7 +220,7 @@ theorem cycleStepD_level (s : State) :
   unfold cycleStepD
   cases productionLadder (perceptionRefreshD s) with
   | none => rfl
-  | some k => rw [rearmOnMint_level, pressureDeltaD_level]
+  | some k => rw [rearmOnMint_level, partialClear_level, pressureDeltaD_level]
 
 /-- Xp bridge. -/
 theorem cycleStepD_xp (s : State) :
@@ -189,6 +228,6 @@ theorem cycleStepD_xp (s : State) :
   unfold cycleStepD
   cases productionLadder (perceptionRefreshD s) with
   | none => rfl
-  | some k => rw [rearmOnMint_xp, pressureDeltaD_xp]
+  | some k => rw [rearmOnMint_xp, partialClear_xp, pressureDeltaD_xp]
 
 end Formal.Liveness.CycleStepD
