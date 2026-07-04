@@ -89,6 +89,7 @@ import Formal.Liveness.GatedArming
 import Formal.Liveness.UnconditionalDescent
 import Formal.Liveness.DeferFaithful
 import Formal.Liveness.CycleStepDC
+import Formal.Liveness.WitnessAcquirable
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
@@ -789,3 +790,19 @@ open Formal.Liveness.CycleStepDC
 #print axioms planForC_eq
 #print axioms cycleStepC_eq
 #print axioms cycleStepDC_eq
+
+-- C1b (2026-07-04, docs/PLAN_c2_composed_liveness.md): the witness gear is
+-- provably OBTAINABLE — the Task-3/corner-3 acquirability residual of
+-- WinnableGrounded discharged against the live fixture. Certificate pattern:
+-- python computes acquirableCert, the KERNEL verifies its closure property
+-- (certClosed) — a wrong cert cannot prove. acquirableWitness = the SAME
+-- production sweep restricted to the cert pool: rows still WIN
+-- (acquirable_rows_winnable), loadouts ⊆ cert, and coverage holds at every
+-- band level except the kernel-NAMED event frontier: acquirableFrontier = [38]
+-- (roadmap-4's events-gate-gear, now a theorem-visible boundary).
+open Formal.Liveness.WitnessAcquirable
+#print axioms certClosed
+#print axioms acquirable_loadouts_in_cert
+#print axioms acquirable_rows_winnable
+#print axioms acquirable_covers_band
+#print axioms acquirableFrontier_is_38

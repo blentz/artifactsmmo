@@ -20,7 +20,10 @@ from collections import defaultdict, deque
 from pathlib import Path
 
 from formal.sim.winnable_witness import (
+    BAND_HI,
+    BAND_LO,
     WitnessRow,
+    build_witness_row,
     build_witness_table,
     game_data_from_snapshot,
     item_stats_from_snapshot,
@@ -147,6 +150,42 @@ def _emit_item_catalog(lines: list[str], snapshot: dict) -> None:
         lines.append("")
     lines.append("def itemCatalog : List CatalogItem :=")
     lines.append("  [" + ", ".join(f"item_{_safe(code)}" for code, _ in equippable) + "]")
+    lines.append("")
+
+
+def _acquirability_closure(snapshot: dict) -> tuple[list[str], list[str], list[str]]:
+    """(gatherableItems, monsterDropItems, acquirableCert) from the snapshot.
+
+    The cert is the CLOSURE-ACQUIRABLE code set: a code is in the cert iff it
+    is a source leaf (resource drop or monster drop) or has a recipe whose
+    ingredients are all in the cert. Computed here in Python; the KERNEL
+    verifies the closure property of the emitted cert (certificate pattern —
+    `Formal/Liveness/WitnessAcquirable.lean`), so a wrong cert cannot prove.
+    Rates/quantities are deliberately out of scope (EVENTUAL acquirability;
+    skill gates are dischargeable by the proven skill-grind liveness)."""
+    recipes = snapshot["crafting_recipes"]
+    gather = sorted(set(snapshot["resource_drops"].values()))
+    drop_items = sorted({i for lst in snapshot["monster_drops"].values() for i in lst})
+    sources = set(gather) | set(drop_items)
+    universe = set(recipes) | sources | set(snapshot["item_stats"])
+    for ings in recipes.values():
+        universe |= set(ings)
+    cert: set[str] = set(sources)
+    changed = True
+    while changed:
+        changed = False
+        for out, ings in recipes.items():
+            if out not in cert and all(i in cert for i in ings):
+                cert.add(out)
+                changed = True
+    return gather, drop_items, sorted(cert & universe)
+
+
+def _emit_str_list(lines: list[str], name: str, doc: str, values: list[str]) -> None:
+    lines.append(f"/-- {doc} -/")
+    lines.append(f"def {name} : List String :=")
+    body = ", ".join(f'"{escape_lean_string(v)}"' for v in values)
+    lines.append(f"  [{body}]")
     lines.append("")
 
 
@@ -403,6 +442,58 @@ def generate_lean(snapshot: dict) -> str:
         base_doc.get("base_stats", {}), stats_by_code, game_data,
     )
     _emit_witness_table(lines, witness_rows)
+
+    # C1b acquirability tables (docs/PLAN_c2_composed_liveness.md): source
+    # leaves + python-computed closure cert (kernel-verified) + the witness
+    # table REBUILT from the acquirability-filtered pool, with the uncoverable
+    # band levels named as the frontier.
+    gather, drop_items, cert = _acquirability_closure(snapshot)
+    _emit_str_list(lines, "gatherableItems",
+                   "Items dropped by gatherable resources (snapshot resource_drops).",
+                   gather)
+    _emit_str_list(lines, "monsterDropItems",
+                   "Distinct items dropped by catalog monsters (snapshot monster_drops).",
+                   drop_items)
+    _emit_str_list(lines, "acquirableCert",
+                   "Python-computed closure-acquirable code set; the kernel "
+                   "VERIFIES its closure property (WitnessAcquirable.lean), so "
+                   "a wrong cert cannot prove.",
+                   cert)
+    cert_set = set(cert)
+    acq_stats = {c: st for c, st in stats_by_code.items() if c in cert_set}
+    acq_rows: list[WitnessRow] = []
+    frontier: list[int] = []
+    for level in range(BAND_LO, BAND_HI):
+        base_row = base_doc.get("base_stats", {}).get(str(level))
+        if base_row is None:
+            continue
+        row = build_witness_row(level, base_row, acq_stats, game_data)
+        if row is None:
+            frontier.append(level)
+        else:
+            acq_rows.append(row)
+    lines.append("/-! ## Acquirable witness table (C1b)")
+    lines.append("")
+    lines.append("  The same production sweep as `winnableWitness`, but over the")
+    lines.append("  pool RESTRICTED to `acquirableCert` — every loadout below is")
+    lines.append("  provably obtainable by the gather/fight/craft loop. Band")
+    lines.append("  levels with no winnable target under this restriction form")
+    lines.append("  `acquirableFrontier` (event/boss/NPC-gated gear — the honest")
+    lines.append("  remainder of the gear-progression residual). -/")
+    lines.append("")
+    lines.append("def acquirableFrontier : List Int :=")
+    lines.append("  [" + ", ".join(str(x) for x in frontier) + "]")
+    lines.append("")
+    old_marker = "def winnableWitness : List WitnessRow :="
+    # reuse the row emitter for the acquirable table
+    sub: list[str] = []
+    _emit_witness_table(sub, acq_rows)
+    sub_text = "\n".join(sub).replace(
+        old_marker, "def acquirableWitness : List WitnessRow :=")
+    # drop the duplicated docstring block of the reused emitter
+    sub_lines = sub_text.split("\n")
+    start = next(i for i, l in enumerate(sub_lines) if l.startswith("def acquirableWitness"))
+    lines.extend(sub_lines[start:])
 
     lines.append("end Formal.Liveness.GameDataFixture")
 

@@ -46,6 +46,13 @@ def main() -> None:
         "crafting_recipes": {k: dict(v) for k, v in gd._crafting_recipes.items()},
         "resource_skill": {k: list(v) for k, v in gd._resource_skill.items()},
         "resource_drops": dict(gd._resource_drops),
+        # C1b (docs/PLAN_c2_composed_liveness.md): distinct drop item codes per
+        # monster — the acquirability closure's drop-sourced leaves. Rates and
+        # quantities are omitted deliberately (EVENTUAL acquirability only).
+        "monster_drops": {
+            code: sorted({item for (item, *_rest) in lst})
+            for code, lst in gd.monsters.drops.items()
+        },
         # Combat stat fields (attack/hp_bonus/resistance/...) added for the
         # WinnableAcrossBand sweep (docs/PLAN_faithfulness_modeling.md Workstream
         # B): the offline best-weapon-at-L proxy + per-level winnability check need

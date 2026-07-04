@@ -1,6 +1,6 @@
 {
   "api_base_url": "https://api.artifactsmmo.com",
-  "captured_at": "2026-07-02T15:55:54.447690+00:00",
+  "captured_at": "2026-07-04T22:06:10.738986+00:00",
   "crafting_recipes": {
     "adamantite_axe": {
       "adamantite_bar": 10,
@@ -11480,6 +11480,255 @@
     "vampire": 35,
     "wolf": 50,
     "yellow_slime": 0
+  },
+  "monster_drops": {
+    "baby_red_dragon": [
+      "baby_red_dragon_scale",
+      "dragon_bone",
+      "sonnengott_key"
+    ],
+    "bandit_lizard": [
+      "bandit_armor",
+      "lizard_eye",
+      "lizard_skin"
+    ],
+    "bat": [
+      "bat_heart",
+      "bat_wing"
+    ],
+    "blue_slime": [
+      "apple",
+      "blue_slimeball"
+    ],
+    "chicken": [
+      "egg",
+      "feather",
+      "golden_egg",
+      "raw_chicken"
+    ],
+    "corrupted_ogre": [
+      "corrupted_gem",
+      "ogre_eye",
+      "ogre_skin"
+    ],
+    "corrupted_owlbear": [
+      "corrupted_gem",
+      "owlbear_claw",
+      "owlbear_hair"
+    ],
+    "cow": [
+      "cowhide",
+      "milk_bucket",
+      "raw_beef"
+    ],
+    "cultist_acolyte": [
+      "corrupted_stone",
+      "cursed_book"
+    ],
+    "cultist_alchemist": [
+      "cursed_flask",
+      "dark_essence"
+    ],
+    "cultist_emperor": [
+      "malefic_cloth",
+      "malefic_shard"
+    ],
+    "cursed_tree": [
+      "cursed_wood"
+    ],
+    "cyclops": [
+      "cyclops_eye"
+    ],
+    "death_knight": [
+      "death_knight_sword",
+      "lich_tomb_key",
+      "red_cloth"
+    ],
+    "demon": [
+      "demon_horn",
+      "piece_of_obsidian"
+    ],
+    "desert_scorpion": [
+      "desert_scorpion_carapace",
+      "desert_scorpion_meat"
+    ],
+    "dryad": [
+      "dryad_hair",
+      "enchanted_potion"
+    ],
+    "dusk_beetle": [
+      "dusk_beetle_shell"
+    ],
+    "duskworm": [
+      "adventurer_skull",
+      "duskworm_skin"
+    ],
+    "echoless_bat": [
+      "bat_heart",
+      "echoless_bat_wing"
+    ],
+    "efreet_sultan": [
+      "efreet_cloth",
+      "lava_bucket",
+      "page_from_hell"
+    ],
+    "fennec": [
+      "fennec_ear",
+      "fennec_tail"
+    ],
+    "flameche": [
+      "fire_dust",
+      "sonnengott_key"
+    ],
+    "flying_snake": [
+      "flying_wing",
+      "forest_staff",
+      "snake_hide"
+    ],
+    "full_moon_vampire": [
+      "full_moon_vampire_cape",
+      "lich_tomb_key",
+      "vampire_tooth"
+    ],
+    "goblin": [
+      "goblin_eye",
+      "goblin_tooth",
+      "priestess_hideout_key"
+    ],
+    "goblin_guard": [
+      "goblin_guard_foot",
+      "goblin_guard_shield",
+      "priestess_hideout_key"
+    ],
+    "goblin_priestess": [
+      "priestess_orb"
+    ],
+    "goblin_wolfrider": [
+      "broken_sword",
+      "priestess_hideout_key",
+      "wolfrider_hair",
+      "wolfrider_ponytail"
+    ],
+    "green_slime": [
+      "apple",
+      "green_slimeball"
+    ],
+    "grimlet": [
+      "corrupted_gem",
+      "grimlet_bone",
+      "page_from_hell"
+    ],
+    "hellhound": [
+      "hellhound_collar",
+      "hellhound_hair",
+      "raw_hellhound_meat"
+    ],
+    "highwayman": [
+      "green_cloth",
+      "highwayman_dagger"
+    ],
+    "imp": [
+      "demoniac_dust",
+      "imp_tail",
+      "piece_of_obsidian"
+    ],
+    "king_slime": [
+      "king_slimeball"
+    ],
+    "lich": [
+      "lich_crown",
+      "life_crystal_shard"
+    ],
+    "mushmush": [
+      "forest_ring",
+      "mushroom"
+    ],
+    "ogre": [
+      "ogre_eye",
+      "ogre_skin",
+      "wooden_club"
+    ],
+    "orc": [
+      "orc_bone",
+      "orc_skin"
+    ],
+    "owlbear": [
+      "owlbear_claw",
+      "owlbear_hair"
+    ],
+    "pig": [
+      "pig_skin",
+      "raw_porkchop"
+    ],
+    "pixie": [],
+    "rat": [
+      "rat_hide",
+      "raw_rat_meat"
+    ],
+    "red_dragon": [
+      "dragon_bone",
+      "red_dragon_scale",
+      "sonnengott_key"
+    ],
+    "red_slime": [
+      "apple",
+      "red_slimeball"
+    ],
+    "rosenblood": [
+      "elemental_page",
+      "rosenblood_elixir",
+      "sanguine_edge_of_rosen"
+    ],
+    "sand_snake": [
+      "sand_snake_hide",
+      "sand_snake_poison"
+    ],
+    "sandwarden": [
+      "desert_wrap",
+      "golden_dust",
+      "sandwhisper_coin",
+      "sandwhisper_key"
+    ],
+    "sandwhisper_empress": [
+      "codex_page",
+      "sandwhisper_coin"
+    ],
+    "sea_marauder": [
+      "marauder_hand",
+      "sandwhisper_coin"
+    ],
+    "sheep": [
+      "wool"
+    ],
+    "skeleton": [
+      "lich_tomb_key",
+      "skeleton_bone",
+      "skeleton_skull"
+    ],
+    "solar_desert_scorpion": [
+      "desert_scorpion_meat",
+      "solar_desert_scorpion_tail"
+    ],
+    "sonnengott": [],
+    "spider": [
+      "old_boots",
+      "spider_leg"
+    ],
+    "vampire": [
+      "lich_tomb_key",
+      "vampire_blood",
+      "vampire_tooth"
+    ],
+    "wolf": [
+      "raw_wolf_meat",
+      "wolf_bone",
+      "wolf_ears",
+      "wolf_hair"
+    ],
+    "yellow_slime": [
+      "apple",
+      "yellow_slimeball"
+    ]
   },
   "monster_hp": {
     "baby_red_dragon": 4500,
