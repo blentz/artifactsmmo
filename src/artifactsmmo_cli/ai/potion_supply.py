@@ -93,21 +93,21 @@ def bootstrap_potion_target(
 
 
 def _recipe_producible(recipe: dict[str, int], state: WorldState, game_data: GameData) -> bool:
-    """True when a craft batch is producible via any of three tiers:
-    - craft-from-held: all ingredients available in inventory + bank, OR
-    - buyable: every ingredient purchaseable from an NPC for gold, OR
-    - gatherable: at least one ingredient drops from a resource node."""
+    """True when EVERY ingredient is obtainable by some tier: available in
+    inventory+bank, OR fully buyable from an NPC for gold, OR gatherable from a
+    resource node. Matches what the GOAP craft search actually requires — the
+    guard's exclusive-gating invariant (never fire when the goal has no plannable
+    path). Previously used a per-tier any() on gatherable, which admitted recipes
+    the planner could not complete (149-node no-plan spin)."""
     bank = state.bank_items or {}
-    if all(state.inventory.get(mat, 0) + bank.get(mat, 0) >= qty
-           for mat, qty in recipe.items()):
-        return True
-    if all(
-        any(currency == "gold" for _npc, _price, currency in game_data.npc_purchases(mat))
-        for mat in recipe
-    ):
-        return True
     drop_items = set(game_data.resource_drops.values())
-    return any(mat in drop_items for mat in recipe)
+    def obtainable(mat: str, qty: int) -> bool:
+        if state.inventory.get(mat, 0) + bank.get(mat, 0) >= qty:
+            return True
+        if any(currency == "gold" for _npc, _price, currency in game_data.npc_purchases(mat)):
+            return True
+        return mat in drop_items
+    return all(obtainable(mat, qty) for mat, qty in recipe.items())
 
 
 def craft_potions_fires(state: WorldState, game_data: GameData) -> bool:

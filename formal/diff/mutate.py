@@ -136,6 +136,7 @@ NEXT_CRAFT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "next_craft_cor
 CRAFT_PLAN_DRIVER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_plan_driver_core.py"
 GEAR_TAXONOMY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_taxonomy_core.py"
 BOOST_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "boost_selection.py"
+POTION_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_supply.py"
 
 # craft_plan_full / _apply_state mutations (B2 full-plan driver). The CONSUMING
 # model is the soundness-critical part; killed by
@@ -2497,6 +2498,12 @@ BOOST_SELECTION_MUTATIONS = [
      "        if gain >= best_gain:\n            best_code = code\n            best_gain = gain"),
 ]
 
+RECIPE_PRODUCIBLE_MUTATIONS = [
+    ("potion_supply: recipe producible all -> any",
+     "    return all(obtainable(mat, qty) for mat, qty in recipe.items())",
+     "    return any(obtainable(mat, qty) for mat, qty in recipe.items())"),
+]
+
 
 def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
               survivors: list[str]) -> None:
@@ -4685,6 +4692,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_next_tier_cap_diff.py", survivors)
     run_group(BOOST_SELECTION_SRC, BOOST_SELECTION_MUTATIONS,
               "tests/test_ai/test_boost_selection.py", survivors)
+    run_group(POTION_SUPPLY_SRC, RECIPE_PRODUCIBLE_MUTATIONS,
+              "tests/test_ai/test_potion_supply.py", survivors)
     _execute(_UNITS, survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
