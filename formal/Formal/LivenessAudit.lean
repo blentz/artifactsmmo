@@ -86,6 +86,7 @@ import Formal.Liveness.TaskPoolTrajectory
 import Formal.Liveness.StickySelect
 import Formal.Liveness.ZombieFreedom
 import Formal.Liveness.GatedArming
+import Formal.Liveness.UnconditionalDescent
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
@@ -721,3 +722,30 @@ open Formal.Liveness.GatedArming
 #print axioms gatedArming_eq_top_of_released
 #print axioms arming_false_of_held_nonfight
 #print axioms no_infinite_zombie_suppression
+
+-- Unconditional descent (2026-07-04): the hquiet (blockers-quiet) residual of
+-- ai_reaches_fifty_grounded is DISCHARGED. FMeasure (13-slot cycleStepF-tailored
+-- lex tuple; perceptionRefresh-invariant by construction) descends strictly on
+-- EVERY below-50 faithful cycle — per-means over the 18-element ladder prefix
+-- (BlockerDescent), closed by the prefix/none case analysis (the armed
+-- objectiveStep makes the discretionary tail unreachable below the cap). The
+-- capstone ai_reaches_fifty_unconditional is HYPOTHESIS-FREE: no hquiet, no
+-- hspawn, no fairness residual — axioms are the standard set + LIV-001 only.
+-- Honesty perimeter: FMeasure module docstring +
+-- docs/PLAN_l50_unconditional_descent.md (opaque-Bool fidelity, items-task
+-- defer-case, single-action chore semantics).
+open Formal.Liveness.FMeasure
+#print axioms fMeasureLt_wellFounded
+#print axioms exists_level_ge_of_fdescent
+#print axioms cycleStepF_reaches_fifty_of_fdescent
+#print axioms fdescent_hyp_satisfiable_with_goal
+open Formal.Liveness.BlockerDescent
+#print axioms fMeasure_perceptionRefresh
+#print axioms descends_fight
+#print axioms descends_completeTask
+#print axioms descends_claimPending
+open Formal.Liveness.UnconditionalDescent
+#print axioms ladder_mem_blockerPrefix
+#print axioms ladder_some_below_fifty
+#print axioms cycleStepF_descends_below_fifty
+#print axioms ai_reaches_fifty_unconditional

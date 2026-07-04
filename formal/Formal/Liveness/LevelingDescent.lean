@@ -185,7 +185,14 @@ offline grounding for model FAITHFULNESS — Task 4's kernel target-existence
 (`arming_justified_below_fifty.1`) + the production differential — is NOT logically consumed
 inside this proof term; it establishes that the model's unconditional arming faithfully
 images production outside the items-task defer-case.  This capstone does NOT claim
-blockers-quiet is discharged, and does NOT claim the defer-case is handled. -/
+blockers-quiet is discharged, and does NOT claim the defer-case is handled.
+
+SUPERSEDED (2026-07-04, kept for the derivation record): `hquiet` and `hspawn` are
+now both DISCHARGED by `UnconditionalDescent.ai_reaches_fifty_unconditional`
+(per-means `FMeasure` descent over the below-50-selectable ladder prefix — every
+chore cycle itself strictly progresses, so no blockers-quiet selection assumption
+is needed). The defer-case faithfulness note above is unchanged and lives on in
+the FMeasure/UnconditionalDescent honesty perimeter. -/
 theorem ai_reaches_fifty_grounded (s : State)
     (hquiet : ∀ k, (cycleStepFN k s).level < 50 →
         productionLadder (perceptionRefresh (cycleStepFN k s)) = some .bankUnlock
