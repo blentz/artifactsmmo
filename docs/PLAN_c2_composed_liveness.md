@@ -207,6 +207,38 @@ band, and gate the model's xp credit on it.
     race) + death→respawn as hp := maxHp, position reset (position not in
     measure) — rest/hpCritical row already absorbs recovery. Removes the
     "fights are free" abstraction.
+* **C2b construction recipe (mechanical deltas from the D-tower — next
+  session executes this cold):**
+  1. State fields (defaulted, opaque-observed discipline): `loadoutAdequate :
+     Bool := false`, `gearGap : Nat := 0` (recipe-closure steps to the band's
+     acquirable-witness loadout), `eventGearAvailable : Bool := false` (the
+     band-38 frontier switch).
+  2. `EMeasure` = DMeasure with `gearGap` inserted at slot 2 (between
+     levelDeficit and xpDeficit) — 19 slots; regenerate with the DMeasure
+     python generator (slot list edit only).
+  3. `CycleStepE`: `perceptionRefreshE` arms objectiveStep iff (below 50 ∧
+     ¬deferGate ∧ loadoutAdequate); when ¬adequate it arms gearReviewFires
+     instead (production image: the gear latch / UpgradeEquipment band).
+     `gearProgress` layer (partialClear pattern): a `.gearReview`-selected
+     cycle with gearGap > 0 decrements it and sets `loadoutAdequate := (gap-1
+     = 0)`; gated at band 38 on `eventGearAvailable` (the ONE frontier gate).
+     Fight rollover layer re-arms the gear fields (`gearGap := GEAR_CAP`,
+     `loadoutAdequate := false`) — new band, new target; dominated by slot 1.
+     `fightLoss` layer: fight cycles drop hp by `FIGHT_LOSS_BOUND := 270`
+     (B1-measured) with death→respawn `hp := maxHp` — raises only hpDeficit
+     (bottom slots), dominated.
+  4. `BlockerDescentE`: D rows re-proved (gearGap equality rides slot 2 —
+     chore applies never touch it); NEW rows: gearReview-with-gap descends
+     slot 2; adequate-fight descends 1/3.
+  5. Case analysis: ¬adequate ⟹ gearReview fires (armed) ⟹ selection in
+     prefix; adequate ⟹ as D-tower.
+  6. Capstones: `ai_reaches_thirtyeight_geared` unconditional;
+     `ai_reaches_fifty_geared (hfrontier : ∀ k, level = 38 → eventGearAvailable)`
+     — satisfiable (constant-true trajectory), event-content-cited.
+  7. Differentials: loadoutAdequate pinned to production
+     `is_winnable(acquirable loadout, band target)` (the witness diff already
+     drives this predicate per band); gearGap latency measured by the B-phase
+     lockstep as a divergence class, not asserted.
 * **C2c: capstone.** `ai_reaches_fifty_geared : ∀ s, ∃ k, level ≥ 50` from
   per-cycle E-descent, hypothesis-free modulo LIV-001 + the C1 data theorem.
   What STAYS abstract (disclose, do not hide): "adequate loadout ⟹ fight
