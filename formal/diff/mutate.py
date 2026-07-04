@@ -948,6 +948,31 @@ XP_POSITIVE_MUTATIONS = [
      "        if False:\n            return 0\n"),
 ]
 
+# xp_value mutations -- anchors the EXACT xp formula in monster_catalog.
+# xp_per_kill (post-C0b integer refactor) whose full value is mirrored by the
+# proven Formal.XpValue.xpPerKill. Killed by formal/diff/test_xp_value_diff.py
+# (which enumerates penalty band edges and a verified half-integer tie).
+XP_VALUE_MUTATIONS = [
+    # soften the 0.7 band -- diff in [5,9] pays full xp; the value diff
+    # catches every band-edge case.
+    ("xp_value: penalty10 7 becomes 10 in the 5..9 band",
+     "        penalty10 = 7 if diff >= 5 else 10\n",
+     "        penalty10 = 10 if diff >= 5 else 10\n"),
+    # break the wisdom bonus scale -- 1000+w becomes 1000, killing the bonus;
+    # any wisdom > 0 case diverges.
+    ("xp_value: wisdom bonus dropped",
+     "               * penalty10 * mult10 * (1000 + wisdom))\n",
+     "               * penalty10 * mult10 * 1000)\n"),
+    # flip the tie rule to half-odd -- the engineered .5 tie (192) rounds up.
+    ("xp_value: round-half-even becomes half-odd",
+     "        if 2 * r > den or (2 * r == den and q % 2 == 1):\n",
+     "        if 2 * r > den or (2 * r == den and q % 2 == 0):\n"),
+    # drop the hp term's char_level factor -- mis-scales the formula.
+    ("xp_value: hp term loses the char_level factor",
+     "        num = ((2000 * monster_level + 4 * monster_hp * char_level)\n",
+     "        num = ((2000 * monster_level + 4 * monster_hp)\n"),
+]
+
 
 # skill_grind_selection mutations -- pure-core anchors for
 # skill_grind_selection_pure (the recipe-aware skill-grind target selector).
@@ -4738,6 +4763,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_next_tier_cap_diff.py", survivors)
     run_group(MONSTER_CATALOG_SRC, XP_POSITIVE_MUTATIONS,
               "formal/diff/test_xp_positive_diff.py", survivors)
+    run_group(MONSTER_CATALOG_SRC, XP_VALUE_MUTATIONS,
+              "formal/diff/test_xp_value_diff.py", survivors)
     run_group(BOOST_SELECTION_SRC, BOOST_SELECTION_MUTATIONS,
               "tests/test_ai/test_boost_selection.py", survivors)
     run_group(POTION_SUPPLY_SRC, RECIPE_PRODUCIBLE_MUTATIONS,

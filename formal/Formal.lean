@@ -171,6 +171,7 @@ import Formal.Liveness.StateFieldGapSemantics
 import Formal.SkillTargetCurve
 import Formal.NextTierCap
 import Formal.XpPositive
+import Formal.XpValue
 import Formal.SkillGrindSelection
 import Formal.Extracted.SkillStepDispatch
 import Formal.SkillStepDispatch

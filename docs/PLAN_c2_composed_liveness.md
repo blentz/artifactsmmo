@@ -84,10 +84,17 @@ Closure bricks:
   core with the full pipeline (differential vs production `xp_per_kill(...) >
   0` over the live catalog x level grid; mutation group bound; Contracts pin).
   Server-doc citation on the constants per the axiom-split signoff discipline.
-* **C0b: xp VALUE core (follow-up).** `unlock_boost.py` ranks by xp VALUE, not
-  just positivity — an exact ℚ (or scaled-int) mirror of the full formula with
-  round-half-even, differential bit-agreement vs the float implementation.
-  Separate brick; only needed when a decision consumes the magnitude.
+* **C0b: xp VALUE core. DONE.** `monster_catalog.xp_per_kill` REFACTORED to
+  exact integer arithmetic (one rational num/den, round-half-even; old float
+  differed at 12/17400 grid points, all ±1 at half-integer ties — exact is now
+  canonical). Proven mirror `Formal.XpValue.xpPerKill` bit-identical
+  (differential incl. enumerated band edges + a verified .5 tie; XP_VALUE
+  mutation group 4/4 killed). Role theorems: roundHalfEven floor/ceil bounds,
+  `xpPerKill_pos_iff_gate` (value positive ⟺ C0a gate, given 1 ≤ charLevel —
+  ties the value core to the positivity core in-kernel),
+  `xpPerKill_wisdom_mono`. LESSON: omega treats `d*(n/d)` with VARIABLE d as
+  opaque nonlinear atoms — align both `Nat.div_add_mod` instances onto ONE
+  atom (rw the quotient equality first) before omega.
 * **C0c: trace corroboration. DONE** (`diff/xp_formula_replay.py`): 262/399
   exact at wisdom=0; all 137 residuals exactly +1 (wisdom signature); 0
   zero-band fights observed — the picker gate holds in practice.

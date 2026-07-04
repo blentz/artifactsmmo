@@ -52,7 +52,7 @@ class MonsterCatalog:
     # monster_multiplier: normal=1.0, elite=1.4, boss=2.0
     # wisdom_bonus: 1 + wisdom * 0.001
 
-    _MONSTER_TYPE_MULTIPLIER = {"normal": 1.0, "elite": 1.4, "boss": 2.0}
+    _MONSTER_TYPE_MULT10 = {"normal": 10, "elite": 14, "boss": 20}  # multiplier x10, exact
 
     def monster_locations(self, code: str) -> list[tuple[int, int]]:
         """Tiles where a monster spawns."""
@@ -62,6 +62,17 @@ class MonsterCatalog:
         """Compute documented XP gained from killing `monster_code`.
 
         Returns 0 if monster is unknown (no level on file).
+
+        EXACT integer arithmetic (mechanical-extraction discipline — this value
+        is in the decision path: unlock_boost ranks by it, combat_picker gates
+        on it being positive). The documented formula is evaluated as a single
+        rational num/den with round-half-even (Python's `round` semantics), so
+        the Lean mirror (`Formal.XpValue.xpPerKill`) is bit-identical and no
+        float rounding can flip a ranking. penalty and multiplier are carried
+        x10 (0.7 -> 7, 1.4 -> 14), wisdom_bonus as (1000 + wisdom)/1000:
+
+            num = (2000*ml + 4*hp*cl) * penalty10 * mult10 * (1000 + wisdom)
+            den = cl * 10_000_000
         """
         monster_level = self.levels.get(monster_code, 0)
         if monster_level <= 0 or char_level <= 0:
@@ -69,16 +80,17 @@ class MonsterCatalog:
         monster_hp = self.hp.get(monster_code, 0)
         diff = char_level - monster_level
         if diff >= 10:
-            penalty = 0.0
-        elif diff >= 5:
-            penalty = 0.7
-        else:
-            penalty = 1.0
+            return 0
+        penalty10 = 7 if diff >= 5 else 10
         mtype = self.types.get(monster_code, "normal")
-        multiplier = self._MONSTER_TYPE_MULTIPLIER.get(mtype, 1.0)
-        wisdom_bonus = 1.0 + wisdom * 0.001
-        raw = (monster_level / char_level * 20 + monster_hp * 0.04)
-        return round(raw * penalty * multiplier * wisdom_bonus)
+        mult10 = self._MONSTER_TYPE_MULT10.get(mtype, 10)
+        num = ((2000 * monster_level + 4 * monster_hp * char_level)
+               * penalty10 * mult10 * (1000 + wisdom))
+        den = char_level * 10_000_000
+        q, r = divmod(num, den)
+        if 2 * r > den or (2 * r == den and q % 2 == 1):
+            return q + 1
+        return q
 
     def monster_attack(self, code: str) -> dict[str, int]:
         """{element: attack_value} for the monster. Raises `KeyError` when the
