@@ -84,6 +84,28 @@ single character, early band L4+ — rerun as traces accumulate):
 | chores fast-transient (the 2026-06-18 story) | max same-chore run = 1; chore bursts between fights short | CONFIRMED for chores proper — `DEBT_CAP = 8` generous |
 | non-fight activity bounded | bursts between fights up to **689 cycles** (skill-grind/gather phases) | Not chores — the gap-2 gather/craft economy the E-tower models as gear means; measured, expected |
 
+## Trace lockstep (Phase B2, 2026-07-04 — `formal/diff/trace_lockstep.py`)
+
+The oracle's `cycle_step_d` entry evaluates `CycleStepDC.cycleStepDC` — a
+computable clone of `cycleStepD`, kernel-equal at the axiom's value
+(`cycleStepDC_eq`, rfl-shaped: clone drift breaks the build) — with `xpNext` =
+each cycle's recorded server `max_xp` (LIV-001 replaced by observed data per
+replayed step). First replay (5815 pairs):
+
+* Decision layer, scalars-only visibility: 52 agreements on the fight axis;
+  5054 pairs skipped as `flag-unobserved` (the trace does not record the opaque
+  chore Bools — Phase B3 = trace flag enrichment).
+* **(fight, rest) × 354 — OPEN QUESTION**: production dispatched Fight at hp
+  below the model's `CRITICAL_HP = 75%` gate (e.g. hp 21/165). `hpCriticalFires`
+  is scalar-only and O5.4-differential-pinned, so this is either a REAL
+  arbitration-order divergence on live trajectories (sticky commitment
+  outranking the guard?) or a snapshot-timing artifact — needs investigation
+  before the E-tower trusts the rest row's production image.
+* (rest, fight) × 355: feed artifact — `restForCombatReady` unobserved (fed 0);
+  production's rests are mostly rest-before-combat.
+* Fight dynamics: model +10 vs real per-pair quantified ((10,0)×19, (10,6)×19,
+  (10,3)×12, …); level-rollover agreement 52/52 where comparable.
+
 ## What this does NOT prove
 
 * Nothing about wall-clock time or xp RATE — only eventual reachability under

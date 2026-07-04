@@ -1,0 +1,15 @@
+trace=../play-trace-Robby.jsonl pairs-replayed=5815 (oracle: cycle_step_d → cycleStepDC, kernel-equal to cycleStepD)
+
+== DECISION layer (scalars-only visibility) ==
+comparable=761 agree=52 flag-unobserved(skipped)=5054
+mismatches (trace-action, model-selected, count): [('rest', 'fight', 355), ('fight', 'rest', 354)]
+
+== FIGHT dynamics: model xp projection vs real (top 12) ==
+[((10, 0), 19), ((10, 6), 19), ((10, 3), 12), ((10, 25), 1), ((10, 22), 1)]
+level-rollover agreement: agree=52 diverge=0
+
+== REST dynamics: model hp:=max_hp vs real next hp ==
+agree=0 diverge=0
+
+Divergence classes feed docs/LEVEL_FIFTY_RESIDUALS.md; decision lockstep
+beyond the rest/fight axis awaits trace flag enrichment (Phase B3).

@@ -88,6 +88,7 @@ import Formal.Liveness.ZombieFreedom
 import Formal.Liveness.GatedArming
 import Formal.Liveness.UnconditionalDescent
 import Formal.Liveness.DeferFaithful
+import Formal.Liveness.CycleStepDC
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
@@ -774,3 +775,17 @@ open Formal.Liveness.DeferFaithful
 #print axioms ladderD_some_below_fifty
 #print axioms cycleStepD_descends_below_fifty
 #print axioms ai_reaches_fifty_defer_faithful
+
+-- Phase B2 (2026-07-04, docs/PLAN_c2_composed_liveness.md): the COMPUTABLE
+-- mirror of the defer-faithful cycle. cycleStepDC (xpNext : Nat) is a
+-- byte-for-byte clone of the noncomputable cycle with LIV-001's value passed
+-- as data; the equality theorems are rfl-shaped, so ANY drift between clone
+-- and source breaks the build — the anti-drift guarantee is the kernel. The
+-- oracle's cycle_step_d entry evaluates the mirror for the trace-lockstep
+-- harness (diff/trace_lockstep.py), which feeds the server's REAL max_xp per
+-- cycle — the axiom replaced by observed data at every replayed step.
+open Formal.Liveness.CycleStepDC
+#print axioms applyActionKindC_eq
+#print axioms planForC_eq
+#print axioms cycleStepC_eq
+#print axioms cycleStepDC_eq
