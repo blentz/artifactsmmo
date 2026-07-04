@@ -104,7 +104,7 @@ def _recipe_producible(recipe: dict[str, int], state: WorldState, game_data: Gam
     Previously used a per-tier any() on gatherable, which admitted recipes the
     planner could not complete (149-node no-plan spin)."""
     bank = state.bank_items or {}
-    drop_items = set(game_data.resource_drops.values())
+    drop_items = set(game_data.gatherable_drop_items())
     def obtainable(mat: str, qty: int) -> bool:
         if state.inventory.get(mat, 0) + bank.get(mat, 0) >= qty:
             return True

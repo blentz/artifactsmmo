@@ -1974,3 +1974,29 @@ def test_craft_yield_reads_quantity_default_one():
     assert gd.craft_yield("potion") == 2
     assert gd.craft_yield("bar") == 1      # present recipe, no yield -> 1
     assert gd.craft_yield("ore") == 1      # raw, no recipe -> 1
+
+
+def test_gatherable_drop_items_includes_rare_multi_drops():
+    """P1 (engagement expansion): the sourcing set must include SECONDARY
+    drops — gem stones drop 1/200 from ordinary rocks and were invisible
+    to sourcing via the primary-drop map (the level-38-wall gap)."""
+    gd = GameData()
+    gd._resource_drops = {"copper_rocks": "copper_ore"}
+    gd._resource_drops_full = {
+        "copper_rocks": [("copper_ore", 1, 1, 1), ("emerald_stone", 200, 1, 1)],
+    }
+    items = gd.gatherable_drop_items()
+    assert "copper_ore" in items
+    assert "emerald_stone" in items
+
+
+def test_resource_for_drop_prefers_most_frequent_source():
+    gd = GameData()
+    gd._resource_drops = {"copper_rocks": "copper_ore"}
+    gd._resource_drops_full = {
+        "copper_rocks": [("topaz_stone", 200, 1, 1)],
+        "gold_rocks": [("topaz_stone", 100, 1, 1)],
+    }
+    assert gd.resource_for_drop("topaz_stone") == ("gold_rocks", 100)
+    assert gd.resource_for_drop("copper_ore") == ("copper_rocks", 1)
+    assert gd.resource_for_drop("nonexistent") is None

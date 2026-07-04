@@ -539,7 +539,7 @@ def _recipe_has_combat_drop_input(
     recipe = game_data.crafting_recipe(code)
     if recipe is None:
         return (bool(game_data.monsters_dropping(code))
-                and code not in game_data.resource_drops.values())
+                and code not in game_data.gatherable_drop_items())
     nxt = visited | {code}
     return any(_recipe_has_combat_drop_input(mat, game_data, nxt) for mat in recipe)
 
@@ -554,7 +554,7 @@ def monster_drop_inputs(
     recipe = game_data.crafting_recipe(code)
     if recipe is None:
         if (game_data.monsters_dropping(code)
-                and code not in game_data.resource_drops.values()):
+                and code not in game_data.gatherable_drop_items()):
             return [code]
         return []
     nxt = visited | {code}

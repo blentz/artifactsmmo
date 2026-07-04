@@ -71,6 +71,18 @@ def build_actions(
 
     for resource_code, locs in game_data.all_resource_locations.items():
         actions.append(GatherAction(resource_code=resource_code, locations=frozenset(locs)))
+        # P1: one targeted gather per NON-primary drop (rare multi-drops —
+        # gems from rocks, pearls from fishing). The planner simulates the
+        # secondary yield directly (see GatherAction.drop_item_override), so
+        # gem-ingredient recipe chains are plannable at last.
+        primary = game_data.resource_drop_item(resource_code)
+        seen: set[str] = set()
+        for drop_item, _rate, _mn, _mx in game_data.resource_drop_table(resource_code):
+            if drop_item != primary and drop_item not in seen:
+                seen.add(drop_item)
+                actions.append(GatherAction(
+                    resource_code=resource_code, locations=frozenset(locs),
+                    drop_item_override=drop_item))
 
     # One gather-loadout optimizer per gathering skill — lets the planner re-arm
     # with the best tool before a gather session (mirrors the per-monster combat

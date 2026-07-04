@@ -103,7 +103,7 @@ def generate_next_craft_action(
     closure = _closure_items(recipes, needed)
 
     # Gatherable raw item codes: items that are produced by some resource node.
-    gatherable_items: set[str] = set(game_data.resource_drops.values())
+    gatherable_items: set[str] = set(game_data.gatherable_drop_items())
 
     bank: dict[str, int] = state.bank_items or {}
 

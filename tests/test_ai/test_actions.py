@@ -1352,3 +1352,40 @@ class TestDepositAllSelective:
         action = DepositAllAction(bank_location=(4, 1), accessible=False, game_data=gd)
         state = make_state(inventory={"sap": 1})
         assert action.is_applicable(state, gd) is False
+
+
+class TestGatherRareDropTargeting:
+    """P1 (engagement expansion): rare multi-drop targeting."""
+
+    def test_override_apply_credits_secondary_drop(self):
+        from artifactsmmo_cli.ai.actions.gathering import GatherAction
+        gd = GameData()
+        gd._resource_drops = {"copper_rocks": "copper_ore"}
+        gd._resource_drops_full = {
+            "copper_rocks": [("copper_ore", 1, 1, 1), ("emerald_stone", 200, 1, 1)],
+        }
+        gd._resource_skill = {"copper_rocks": ("mining", 1)}
+        action = GatherAction(resource_code="copper_rocks",
+                              locations=frozenset({(0, 0)}),
+                              drop_item_override="emerald_stone")
+        state = make_state(x=0, y=0, inventory={}, inventory_max=20)
+        post = action.apply(state, gd)
+        assert post.inventory.get("emerald_stone") == 1
+        assert repr(action) == "Gather(copper_rocks->emerald_stone)"
+
+    def test_factory_emits_targeted_gathers_for_secondary_drops(self):
+        from artifactsmmo_cli.ai.actions.factory import build_actions
+        gd = GameData()
+        gd._resource_drops = {"copper_rocks": "copper_ore"}
+        gd._resource_drops_full = {
+            "copper_rocks": [("copper_ore", 1, 1, 1), ("emerald_stone", 200, 1, 1)],
+        }
+        gd._resource_skill = {"copper_rocks": ("mining", 1)}
+        gd._resource_locations = {"copper_rocks": [(0, 0)]}
+        gd.world.bank_tile = (1, 1)
+        gd.world.taskmaster_tile = (2, 2)
+        actions = build_actions(gd, None, None, bank_accessible=False,
+                                task_exchange_min_coins=0)
+        names = {repr(a) for a in actions}
+        assert "Gather(copper_rocks)" in names
+        assert "Gather(copper_rocks->emerald_stone)" in names

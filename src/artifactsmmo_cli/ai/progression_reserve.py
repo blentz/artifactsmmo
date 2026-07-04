@@ -69,7 +69,7 @@ def _best_per_slot(state: WorldState, game_data: GameData,
 
 def _is_gatherable(material: str, game_data: GameData) -> bool:
     """True when some resource node drops `material` (gathering, not gold)."""
-    return any(drop == material for drop in game_data.resource_drops.values())
+    return material in game_data.gatherable_drop_items()
 
 
 def crafting_unlock_targets(state: WorldState, game_data: GameData) -> dict[str, int]:

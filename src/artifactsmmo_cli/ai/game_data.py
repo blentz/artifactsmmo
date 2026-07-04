@@ -241,6 +241,34 @@ class GameData:
     def _resource_drops(self, value: dict[str, str]) -> None:
         self.recipes_catalog.resource_drops = value
 
+    def gatherable_drop_items(self) -> frozenset[str]:
+        """Every item ANY resource can drop — the FULL multi-drop sourcing set.
+
+        The primary-drop map (`resource_drops`) understates gatherability:
+        gem stones drop at 1/100-1/200 from ordinary rocks (topaz/emerald/
+        ruby/sapphire from L1 copper_rocks) and were invisible to sourcing —
+        the level-38-wall gap P1 (docs/PLAN_engagement_expansion.md).
+        """
+        out: set[str] = set(self.recipes_catalog.resource_drops.values())
+        for table in self.recipes_catalog.resource_drops_full.values():
+            for item, _rate, _mn, _mx in table:
+                out.add(item)
+        return frozenset(out)
+
+    def resource_for_drop(self, item_code: str) -> tuple[str, int] | None:
+        """Best (most frequent, lowest rate number) resource dropping `item_code`,
+        as (resource_code, rate); falls back to the primary map at rate 1."""
+        best: tuple[str, int] | None = None
+        for res, table in self.recipes_catalog.resource_drops_full.items():
+            for item, rate, _mn, _mx in table:
+                if item == item_code and (best is None or rate < best[1]):
+                    best = (res, rate)
+        if best is None:
+            for res, item in self.recipes_catalog.resource_drops.items():
+                if item == item_code:
+                    return (res, 1)
+        return best
+
     @property
     def _resource_drops_full(self) -> dict[str, list[tuple[str, int, int, int]]]:
         return self.recipes_catalog.resource_drops_full

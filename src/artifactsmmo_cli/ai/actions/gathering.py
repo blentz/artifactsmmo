@@ -44,6 +44,13 @@ class GatherAction(Action):
 
     resource_code: str
     locations: frozenset[tuple[int, int]] = field(default_factory=frozenset, repr=False)
+    # P1 (docs/PLAN_engagement_expansion.md): rare multi-drop targeting. When
+    # set, the planner SIMULATES this gather as yielding the named secondary
+    # drop (e.g. emerald_stone from copper_rocks @1/200) instead of the
+    # primary. Deliberate abstraction — one sim-gather credits one unit, like
+    # the fight xp projection; execution gathers the same tile and the
+    # replan loop runs until the REAL count satisfies the goal.
+    drop_item_override: str | None = None
 
     _MIN_FREE_SLOTS = 3  # gathering can produce ore + random bonus drops simultaneously
 
@@ -73,7 +80,9 @@ class GatherAction(Action):
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         dest = nearest_or_error(state.x, state.y, self.locations, "gather")
-        drop_item = game_data.resource_drop_item(self.resource_code) or self.resource_code
+        drop_item = (self.drop_item_override
+                     or game_data.resource_drop_item(self.resource_code)
+                     or self.resource_code)
         inv = GatherInv(used=state.inventory_used, cap=state.inventory_max,
                         item_count=state.inventory)
         post = gather_apply_pure(inv, drop_item)
@@ -114,7 +123,9 @@ class GatherAction(Action):
         # _BANKED_REGATHER_PENALTY). The penalty applies per banked unit's
         # worth: once the bank is exhausted the deficit gathers carry no
         # penalty, preserving optimal handling of the unavoidable shortfall.
-        drop_item = game_data.resource_drop_item(self.resource_code) or self.resource_code
+        drop_item = (self.drop_item_override
+                     or game_data.resource_drop_item(self.resource_code)
+                     or self.resource_code)
         banked = (state.bank_items or {}).get(drop_item, 0)
         if banked > 0:
             static += self._BANKED_REGATHER_PENALTY
@@ -151,4 +162,6 @@ class GatherAction(Action):
         )
 
     def __repr__(self) -> str:
+        if self.drop_item_override is not None:
+            return f"Gather({self.resource_code}->{self.drop_item_override})"
         return f"Gather({self.resource_code})"

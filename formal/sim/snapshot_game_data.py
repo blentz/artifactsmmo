@@ -46,6 +46,13 @@ def main() -> None:
         "crafting_recipes": {k: dict(v) for k, v in gd._crafting_recipes.items()},
         "resource_skill": {k: list(v) for k, v in gd._resource_skill.items()},
         "resource_drops": dict(gd._resource_drops),
+        # P1 (docs/PLAN_engagement_expansion.md): FULL multi-drop tables —
+        # (item, rate, min_q, max_q) per resource; the primary map above
+        # understates gatherability (gems @1/100-1/200 from ordinary rocks).
+        "resource_drops_full": {
+            code: [list(row) for row in table]
+            for code, table in gd._resource_drops_full.items()
+        },
         # C1b (docs/PLAN_c2_composed_liveness.md): distinct drop item codes per
         # monster — the acquirability closure's drop-sourced leaves. Rates and
         # quantities are omitted deliberately (EVENTUAL acquirability only).

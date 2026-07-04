@@ -302,7 +302,7 @@ def _producible(code: str, state: WorldState, game_data: GameData) -> bool:
         and game_data.monster_locations(monster_code)
         for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(code))
     return leaf_attainable_pure(
-        code in game_data.resource_drops.values(),
+        code in game_data.gatherable_drop_items(),
         winnable_drop,
         game_data.is_task_earnable(code),
         buyable)
