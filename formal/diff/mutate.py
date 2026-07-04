@@ -67,6 +67,7 @@ GATHER_STEP_TARGET_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gather_step
 MONSTER_DROP_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "monster_drop_selection.py"
 CRAFT_VS_BUY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_vs_buy.py"
 LIQUIDATION_VENUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "liquidation_venue.py"
+DISPOSAL_ROUTE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "disposal_route.py"
 BUY_SOURCE_VENUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "buy_source_venue.py"
 NEAREST_TILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "nearest_tile.py"
 CONSUMABLE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "consumable_selection.py"
@@ -2999,6 +3000,73 @@ LIQUIDATION_VENUE_MUTATIONS = [
      "    if venue is Venue.GE and ge_proceeds is not None:\n        return npc_pay\n    return npc_pay"),
 ]
 
+# disposal_route PURE-CORE mutations -- old strings matched to current
+# disposal_route.py text. Each perturbs the recycle > deposit > delete decision so
+# the Python route diverges from the Lean `disposalRoute` oracle on at least one
+# of the exhaustively-enumerated 8 Bool³ inputs. Killed by
+# formal/diff/test_disposal_route_diff.py.
+DISPOSAL_ROUTE_MUTATIONS = [
+    # Suppress recycle when the bank is open: recyclable gear gets deposited
+    # instead of recovered — breaks the recycle-first priority at (1,1,1).
+    ("disposal_route: recycle suppressed at open bank (deposit outranks recycle)",
+     "    if recyclable:\n        return Route.RECYCLE",
+     "    if recyclable and not bank_ok:\n        return Route.RECYCLE"),
+    # Weaken the deposit guard `and` -> `or`: junk with an open bank (or value
+    # with a closed bank) now deposits — the anti-hoard guard dies at (0,1,0).
+    ("disposal_route: deposit guard and -> or (bank hoards junk)",
+     "    if bank_ok and future_value:",
+     "    if bank_ok or future_value:"),
+    # Drop the bank_ok conjunct: deposit fires with no bank room at (0,0,1).
+    ("disposal_route: deposit without bank room",
+     "    if bank_ok and future_value:",
+     "    if future_value:"),
+    # Flip the delete fallback to deposit: true junk never clears by deletion
+    # at (0,0,0) — and (0,1,0) hoards.
+    ("disposal_route: delete fallback -> deposit",
+     "    return Route.DELETE",
+     "    return Route.DEPOSIT"),
+]
+
+# disposal_route ADAPTER mutations -- perturb the impure input assembly
+# (`_applicable_recycle` / `_future_value` / `overstock_disposal`), which the
+# Bool-level differential cannot see. Each is killed by a DEDICATED unit test in
+# tests/test_ai/test_disposal_route.py (unit-killed mutations get their own
+# group bound to that test, not a differential group).
+DISPOSAL_ROUTE_ADAPTER_MUTATIONS = [
+    # Drop the server recycling-skill gate: alchemy/cooking craftables (potions,
+    # food) enter the recycle probe and would 4xx at the workshop. Killed by
+    # test_alchemy_craftable_is_not_recycled.
+    ("disposal_route adapter: recycling-skill gate dropped (potions recycle)",
+     "    if stats is None or stats.crafting_skill not in RECYCLING_SKILLS:",
+     "    if stats is None or stats.crafting_skill is None:"),
+    # Ascend instead of descend in the quantity probe: the smallest applicable
+    # recycle is returned, leaving most of the overstock unrecycled. Killed by
+    # test_recyclable_gear_routes_to_recycle (expects the full excess).
+    ("disposal_route adapter: recycle probe ascends (recycles 1 instead of max)",
+     "    for qty in range(excess_qty, 0, -1):",
+     "    for qty in range(1, excess_qty + 1):"),
+    # Blind future_value to recipe demand: gems consumed by far-future recipes
+    # read as junk and delete. Killed by test_recipe_demanded_material_deposits.
+    ("disposal_route adapter: future_value blind to recipe demand",
+     "    if game_data.max_recipe_demand(code) > 0:",
+     "    if game_data.max_recipe_demand(code) > 10**9:"),
+    # Blind future_value to equippability: non-craftable gear (novice_guide,
+    # utility potions) reads as junk. Killed by test_alchemy_craftable_is_not_recycled
+    # and test_recycle_impossible_falls_to_deposit.
+    ("disposal_route adapter: future_value blind to equippability",
+     "    return stats is not None and bool(ITEM_TYPE_TO_SLOTS.get(stats.type_))",
+     "    return False"),
+]
+
+# discard_overstock goal-wiring mutation: the goal stops threading the
+# SelectionContext bank flag, silently reverting every deposit to the legacy
+# delete. Killed by TestDiscardOverstockRouting.test_fallback_deposits_recipe_demanded_material.
+DISCARD_OVERSTOCK_ROUTING_MUTATIONS = [
+    ("discard_overstock: bank_accessible not threaded (deposit arm dead)",
+     "                result.append(overstock_disposal(\n                    code, excess_qty, state, game_data, self._bank_accessible))",
+     "                result.append(overstock_disposal(\n                    code, excess_qty, state, game_data, False))"),
+]
+
 # buy_source_venue mutations (DUAL of liquidation_venue) -- old strings matched to
 # current buy_source_venue.py text. Each perturbs the immediate-fill BUY source
 # decision so the Python venue/realized verdict diverges from the Lean
@@ -4550,6 +4618,12 @@ def _run_all_groups() -> int:
               "formal/diff/test_craft_vs_buy_diff.py", survivors)
     run_group(LIQUIDATION_VENUE_SRC, LIQUIDATION_VENUE_MUTATIONS,
               "formal/diff/test_liquidation_venue_diff.py", survivors)
+    run_group(DISPOSAL_ROUTE_SRC, DISPOSAL_ROUTE_MUTATIONS,
+              "formal/diff/test_disposal_route_diff.py", survivors)
+    run_group(DISPOSAL_ROUTE_SRC, DISPOSAL_ROUTE_ADAPTER_MUTATIONS,
+              "tests/test_ai/test_disposal_route.py", survivors)
+    run_group(DISCARD_OVERSTOCK_GOAL_SRC, DISCARD_OVERSTOCK_ROUTING_MUTATIONS,
+              "tests/test_ai/test_disposal_route.py", survivors)
     run_group(BUY_SOURCE_VENUE_SRC, BUY_SOURCE_VENUE_MUTATIONS,
               "formal/diff/test_buy_source_venue_diff.py", survivors)
     run_group(NEAREST_TILE_SRC, NEAREST_TILE_MUTATIONS,

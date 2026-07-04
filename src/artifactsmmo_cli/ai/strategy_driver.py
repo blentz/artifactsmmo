@@ -321,7 +321,8 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
     if kind is GuardKind.DISCARD_CRITICAL or kind is GuardKind.DISCARD_HIGH:
         profile = (active_profile(state, game_data, ctx, step_profile)
                    if state is not None else None)
-        return DiscardOverstockGoal(game_data=game_data, profile=profile)
+        return DiscardOverstockGoal(game_data=game_data, profile=profile,
+                                    bank_accessible=ctx.bank_accessible)
     if kind is GuardKind.BANK_UNLOCK:
         return UnlockBankGoal(
             bank_locked=not ctx.bank_accessible,

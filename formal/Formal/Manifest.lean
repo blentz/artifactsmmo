@@ -398,6 +398,12 @@ open Formal.PriorityBand
 #check @Formal.LiquidationVenue.chosen_venue_maximizes   -- safety/no-value-loss: realized ≥ npcPay and ≥ any order
 #check @Formal.LiquidationVenue.ge_stable_under_higher_ge -- monotonicity: ↑order keeps GE
 #check @Formal.LiquidationVenue.ge_stable_under_lower_npc -- monotonicity: ↓npc floor keeps GE
+-- DisposalRoute required roles (overstock disposal route over Bool³):
+#check @Formal.DisposalRoute.recycle_first            -- priority: executable recycle always wins
+#check @Formal.DisposalRoute.deposit_when_bankable    -- priority: bankable + future value ⇒ deposit
+#check @Formal.DisposalRoute.delete_only_when_worthless -- safety: delete ⇒ no recycle ∧ (no bank ∨ no value)
+#check @Formal.DisposalRoute.delete_iff_worthless     -- dominance: exact delete firing condition
+#check @Formal.DisposalRoute.route_total              -- totality: always recycle, deposit, or delete
 -- BuySourceVenue required roles (immediate-fill BUY source venue, DUAL of LiquidationVenue):
 #check @Formal.BuySourceVenue.venue_total                -- totality: always NPC or GE
 #check @Formal.BuySourceVenue.ge_iff_fillable_and_cheaper -- dominance: GE ⇔ fillable order strictly cheaper

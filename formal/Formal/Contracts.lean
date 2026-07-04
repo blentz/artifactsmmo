@@ -53,6 +53,7 @@ import Formal.ShoppingList
 import Formal.MonsterDropSelection
 import Formal.CraftVsBuy
 import Formal.LiquidationVenue
+import Formal.DisposalRoute
 import Formal.BuySourceVenue
 import Formal.NearestTile
 import Formal.ConsumableSelection
@@ -2751,6 +2752,39 @@ example : ∀ (npcPay npcPay' : Int) (geProceeds : Option Int),
     npcPay' ≤ npcPay →
     Formal.LiquidationVenue.chooseVenue npcPay' geProceeds = Formal.LiquidationVenue.Venue.ge :=
   @Formal.LiquidationVenue.ge_stable_under_lower_npc
+
+/-! ### DisposalRoute role contracts (overstock disposal route, Bool³). -/
+
+-- recycle_first: PRIORITY — executable recycle always wins.
+example : ∀ (bankOk futureValue : Bool),
+    Formal.DisposalRoute.disposalRoute true bankOk futureValue =
+      Formal.DisposalRoute.Route.recycle :=
+  @Formal.DisposalRoute.recycle_first
+-- deposit_when_bankable: PRIORITY — no recycle + bank open + future value ⇒ deposit.
+example : Formal.DisposalRoute.disposalRoute false true true =
+      Formal.DisposalRoute.Route.deposit :=
+  Formal.DisposalRoute.deposit_when_bankable
+-- delete_only_when_worthless: SAFETY — delete ⇒ no recycle ∧ (no bank ∨ no value).
+example : ∀ (recyclable bankOk futureValue : Bool),
+    Formal.DisposalRoute.disposalRoute recyclable bankOk futureValue =
+      Formal.DisposalRoute.Route.delete →
+    recyclable = false ∧ (bankOk = false ∨ futureValue = false) :=
+  @Formal.DisposalRoute.delete_only_when_worthless
+-- delete_iff_worthless: DOMINANCE — exact delete firing condition.
+example : ∀ (recyclable bankOk futureValue : Bool),
+    Formal.DisposalRoute.disposalRoute recyclable bankOk futureValue =
+      Formal.DisposalRoute.Route.delete ↔
+    recyclable = false ∧ (bankOk = false ∨ futureValue = false) :=
+  @Formal.DisposalRoute.delete_iff_worthless
+-- route_total: TOTALITY — always recycle, deposit, or delete.
+example : ∀ (recyclable bankOk futureValue : Bool),
+    Formal.DisposalRoute.disposalRoute recyclable bankOk futureValue =
+      Formal.DisposalRoute.Route.recycle
+    ∨ Formal.DisposalRoute.disposalRoute recyclable bankOk futureValue =
+      Formal.DisposalRoute.Route.deposit
+    ∨ Formal.DisposalRoute.disposalRoute recyclable bankOk futureValue =
+      Formal.DisposalRoute.Route.delete :=
+  @Formal.DisposalRoute.route_total
 
 /-! ### BuySourceVenue role contracts (immediate-fill BUY source venue, DUAL of
 LiquidationVenue, Int + Option Int). -/
