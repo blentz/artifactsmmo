@@ -95,10 +95,14 @@ def bootstrap_potion_target(
 def _recipe_producible(recipe: dict[str, int], state: WorldState, game_data: GameData) -> bool:
     """True when EVERY ingredient is obtainable by some tier: available in
     inventory+bank, OR fully buyable from an NPC for gold, OR gatherable from a
-    resource node. Matches what the GOAP craft search actually requires — the
-    guard's exclusive-gating invariant (never fire when the goal has no plannable
-    path). Previously used a per-tier any() on gatherable, which admitted recipes
-    the planner could not complete (149-node no-plan spin)."""
+    resource node. This is a ONE-LEVEL check — it does NOT recurse into an
+    ingredient that is itself craftable from obtainables, so a recipe containing a
+    crafted intermediate reads non-producible. That is a SAFE false-negative (the
+    guard under-fires rather than spinning) and is exact for the real potion
+    recipes, whose ingredients are all direct gathers. Serves the guard's
+    exclusive-gating invariant (avoid firing when the goal has no plannable path).
+    Previously used a per-tier any() on gatherable, which admitted recipes the
+    planner could not complete (149-node no-plan spin)."""
     bank = state.bank_items or {}
     drop_items = set(game_data.resource_drops.values())
     def obtainable(mat: str, qty: int) -> bool:

@@ -67,15 +67,28 @@ overriding `_marginal`) confirmed the combined ①②④ landscape:
 Skill grinds recede to 1.1–1.9 (below char/gear); gear-first preserved. Sticky
 check: gear (2.5) breaks a committed gearcrafting lock at L10; a deeply-lagging
 skill (weaponcrafting 2→25, decays little → ~1.9, threshold 2.85) can still lock
-IF it arms sticky — but under the tuned scores a lagging skill never wins
-outright, so it rarely arms. This is the deferred ③ residual.
+IF it arms sticky. Correction: a lagging near-term skill at `current=1` with a
+runaway leader (balancing=2) reaches ~1.86, which DOES exceed the *ungeared*
+char bootstrap (1.48) — so it can win outright and arm sticky in a
+`combat_monster=None` / empty-armor window (not "never"). But ②'s progress-decay
+makes the lock SELF-RELEASING: as the committed skill levels toward its target,
+its value decays toward ~0.24, dropping below char-level so the sticky hold
+breaks. Combined with ①'s self-limiters this cannot become a permanent livelock
+(corroborated by the green liveness axiom check). This is the deferred ③
+residual — revisit `StickySelect` only if live traces show a real lock.
 
 ## Changes
 
 ### ① Occupied-slot upgrade urgency (strategy.py `_marginal`, ObtainItem branch)
 
 New constant `OCCUPIED_SLOT_UPGRADE_URGENCY = Fraction(5, 2)`. Add a branch AFTER
-the `EMPTY_SLOT_URGENCY` branch (so empty slots keep priority):
+the `EMPTY_SLOT_URGENCY` branch. Note: empty and occupied-upgrade both score
+`5/2`, so this is not a strict-score priority — the two apply to *different*
+roots (different slots) and tie at 2.5, separated by the equip-value-gain
+tiebreak. An empty slot's gain is the item's full strategic value while an
+occupied upgrade's is a delta, so empty usually wins the tiebreak (not
+guaranteed). This does not affect the proven `armor_strictly_dominates_empty_slot`
+theorem (beating the do-nothing baseline, not empty-vs-occupied):
 
 ```python
 elif (slot in self._combat_gear_slots(game_data) and slot != "weapon_slot"
@@ -112,7 +125,7 @@ reachable horizon (the capstone case), return a progress-scaled attractor:
 
 ```python
 gap = max(0, root.level - state.level)
-if gap > CHAR_REACHABLE_HORIZON:
+if gap >= CHAR_REACHABLE_HORIZON:   # >= (gap==10 is degenerate reach=0; keeps v40==33/25)
     return CHAR_MARGINAL + Fraction(state.level, root.level) * CHAR_CAPSTONE_SCALE
 ```
 
