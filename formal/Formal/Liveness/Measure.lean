@@ -370,6 +370,14 @@ structure State where
       dict[EventCode, Position]`. Used by `.event_*` gated actions.
       For now: list of (event_code, posX, posY). -/
   eventSpawns : List (String × Nat × Nat)
+  /-- OPAQUE (residual-closure, `docs/PLAN_residual_closure.md`): production's
+      items-task LONG-HAUL DEFER decision — `bootstrap_gap > 4 ∧ items-task
+      active` (the one branch where `objective_step_goal(ReachCharLevel)`
+      yields NO fight; see `test_objectivestep_arming_diff.py`). Consumed only
+      by `CycleStepD.deferGate` / `perceptionRefreshD`; the base
+      `perceptionRefresh` tower ignores it. Defaulted so existing State
+      literals, fixtures, and the oracle decoder are unaffected. -/
+  itemsTaskDeferActive : Bool := false
   deriving Repr
 
 namespace State

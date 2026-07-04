@@ -87,6 +87,7 @@ import Formal.Liveness.StickySelect
 import Formal.Liveness.ZombieFreedom
 import Formal.Liveness.GatedArming
 import Formal.Liveness.UnconditionalDescent
+import Formal.Liveness.DeferFaithful
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
@@ -749,3 +750,27 @@ open Formal.Liveness.UnconditionalDescent
 #print axioms ladder_some_below_fifty
 #print axioms cycleStepF_descends_below_fifty
 #print axioms ai_reaches_fifty_unconditional
+
+-- Residual closure (2026-07-04, docs/PLAN_residual_closure.md): the
+-- defer-faithful, adversarially-re-arming capstone. cycleStepD models the
+-- items-task LONG-HAUL DEFER window (residual 3: arming gated on
+-- itemsTaskDeferActive; inside the window the cycle pursues the items task,
+-- descending taskCycles) and worst-cases chore re-arming (residual 4, fight
+-- direction: EVERY fight re-arms ALL 8 chore latches; reach-50 still holds —
+-- flags are lex-dominated by the fight's level/xp descent). The synthetic
+-- placeholder row (stale-armed objective Bool inside the window) descends the
+-- new objectiveStepFlag slot with dispatch-keyed loot (pressureDeltaD).
+-- HYPOTHESIS-FREE; axioms = standard + LIV-001.
+open Formal.Liveness.DMeasure
+#print axioms dMeasureLt_wellFounded
+#print axioms exists_level_ge_of_ddescent
+open Formal.Liveness.BlockerDescentD
+#print axioms descendsD_fight
+#print axioms descendsD_placeholder
+#print axioms descendsD_pursueTask
+#print axioms descendsD_completeTask
+open Formal.Liveness.DeferFaithful
+#print axioms ladder_mem_pursuePrefix
+#print axioms ladderD_some_below_fifty
+#print axioms cycleStepD_descends_below_fifty
+#print axioms ai_reaches_fifty_defer_faithful

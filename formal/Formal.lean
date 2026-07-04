@@ -198,6 +198,10 @@ import Formal.Liveness.LevelingDescent
 import Formal.Liveness.FMeasure
 import Formal.Liveness.BlockerDescent
 import Formal.Liveness.UnconditionalDescent
+import Formal.Liveness.DMeasure
+import Formal.Liveness.CycleStepD
+import Formal.Liveness.BlockerDescentD
+import Formal.Liveness.DeferFaithful
 import Formal.Liveness.StickySelect
 import Formal.Liveness.ZombieFreedom
 import Formal.Liveness.ObtainProgress

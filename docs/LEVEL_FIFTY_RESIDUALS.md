@@ -1,9 +1,20 @@
 # Level-50 reachability — the honest residual perimeter
 
-**Status (2026-07-04): the reach-50 capstone is HYPOTHESIS-FREE.**
+**Status (2026-07-04, second pass): TWO hypothesis-free capstones.**
 
 > `Formal.Liveness.UnconditionalDescent.ai_reaches_fifty_unconditional :`
 > `∀ s, ∃ k, (cycleStepFN k s).level ≥ 50`
+>
+> `Formal.Liveness.DeferFaithful.ai_reaches_fifty_defer_faithful :`
+> `∀ s, ∃ k, (cycleStepDN k s).level ≥ 50`
+
+The second (`cycleStepD`, `docs/PLAN_residual_closure.md`) strengthens the
+first on two of the perimeter rows below: the items-task defer-case is now
+MODELLED (arming gated on the production-observed `itemsTaskDeferActive`;
+inside the window the cycle pursues the items task and descends a `taskCycles`
+slot) instead of over-approximated, and chore re-arming is WORST-CASED (every
+fight re-arms ALL 8 chore latches — reach-50 still holds, because flags are
+lex-dominated by the fight's level/xp descent).
 
 Kernel axioms: `{propext, Classical.choice, Quot.sound, xpToNextLevel}` — the
 standard set plus LIV-001 only (`xpToNextLevel_pos` is no longer even consumed).
@@ -46,12 +57,12 @@ Their fates:
 These are NOT Lean hypotheses — the theorem has none. They are the points where
 the model's fidelity to production is established offline rather than in-kernel:
 
-| # | Gap | Where established |
-|---|-----|-------------------|
-| 1 | LIV-001 server xp curve | accepted axiom, openapi-cited (`Measure.lean`) |
-| 2 | Opaque chore Bools (`hasOverstockItems`, `selectBankDepositsNonempty`, `sellableInventoryNonempty`, `gearReviewFires`, `craftReliefFires`, `craftPotionsFires`, `recyclableSurplusNonempty`, `pendingItemsNonempty`) carry production's observed answers with conservative one-shot clearing | per-flag diff harnesses (ProductionLadder docstring roster); O5.4 SELECT differential pins the ladder walk itself |
-| 3 | Items-task defer-case: `perceptionRefresh` arms unconditionally below 50; production returns no fight in the long-haul items-task defer branch | `formal/diff/test_perceive_arm_diff.py` / `test_objectivestep_arming_diff.py` CHARACTERIZE the over-approximation |
-| 4 | Single-action chore semantics: the model clears a chore latch in one apply; production may need several (e.g. multiple deposits). Multi-step real chores still descend — via `bankPressure` (inventory drains) with flags equal — so the descent shape survives; the model just books the progress on a different slot | disclosure only (no offline differential can replay multi-step chore composition) |
+| # | Gap | Where established | 2nd-pass status |
+|---|-----|-------------------|-----------------|
+| 1 | LIV-001 server xp curve | accepted axiom, openapi-cited (`Measure.lean`) | IRREDUCIBLE by design — the server owns the number; no offline data reproduces the curve. |
+| 2 | Opaque chore Bools (`hasOverstockItems`, `selectBankDepositsNonempty`, `sellableInventoryNonempty`, `gearReviewFires`, `craftReliefFires`, `craftPotionsFires`, `recyclableSurplusNonempty`, `pendingItemsNonempty`, and now `itemsTaskDeferActive`) carry production's observed answers | AUDITED 2026-07-04: the O5.4 SELECT differential (`test_ladder_fires_diff.py`) DRIVES the production predicates behind the computable flags (overstock, deposit selection, sellable, pending, gear-review latch) against the oracle ladder, and pins the walk itself 23-slots-wide, mutation-enforced. The flags whose production computation reads live game data (`craftReliefFires`, `craftPotionsFires`, `itemsTaskDeferActive`) are observed inputs BY DESIGN — that is the model's interface, not a gap to close offline. |
+| 3 | Items-task defer-case | `test_perceive_arm_diff.py` / `test_objectivestep_arming_diff.py` characterize | CLOSED IN-MODEL by `cycleStepD`: arming is gated on the defer window; inside it the cycle pursues the items task (`pursueTask` descends `taskCycles`; `acceptTask` remains unreachable — the gate implies an active phase, contradicting `acceptTaskFires`). |
+| 4 | One-shot chore semantics | disclosure | SHARPENED: fight-direction re-arming is now WORST-CASED in-model (`choreRearm`: every fight re-arms everything; capstone survives). Remaining disclosed: chore-cycle cross-arm (claim→overstock) and partial clears (multi-step deposits) — real multi-step chores still descend via `bankPressure` with flags equal; no offline differential can replay the composition. |
 
 If any of these is wrong (e.g. a production chore that neither clears its latch
 nor drains inventory, or an unbounded chore burst between fights), the model and
