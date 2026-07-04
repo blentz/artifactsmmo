@@ -49,6 +49,49 @@ Multi-cycle model↔bot binding, offline, from recorded live traces:
   delta) rather than asserting them. Divergence classes become named rows in
   `docs/LEVEL_FIFTY_RESIDUALS.md` — measured, not assumed.
 
+## Phase C0 — xp-formula / level_penalty core (NEW, user-flagged 2026-07-04)
+
+Server xp formula is DOCUMENTED with a closed form
+(https://docs.artifactsmmo.com/concepts/stats_and_fights/#xp-formula):
+
+    XP = round((monster_level/player_level * 20 + monster_hp * 0.04)
+               * level_penalty * monster_multiplier * wisdom_bonus)
+    level_penalty: 1.0 (diff <= 4), 0.7 (5 <= diff <= 9), 0.0 (diff >= 10)
+    where diff = char_level - monster_level
+
+Production already implements it verbatim (`monster_catalog.xp_per_kill`,
+doc-cited comment) and gates combat targeting on `xp_per_kill(code, lvl) > 0`
+(player.py:1574 → combat_picker) plus FightAction's xpPositive applicability
+(ActionApplicability.lean). The MODEL gap: the liveness towers' `.fight` apply
+credits xp unconditionally — no level_penalty image.
+
+Closure bricks:
+
+* **C0a: integer decision core.** KEY FACT (makes the gate float-free): within
+  the band (diff <= 9, monster_level >= 1) the formula's minimum value is
+  ~1.4 (worst case plvl=10/mlvl=1/penalty=0.7), which rounds to >= 1; outside
+  the band penalty = 0. Hence `xp_per_kill > 0 ⟺ char_level <
+  monster_level + 10` EXACTLY — immune even to Python's banker's rounding.
+  Ship `xpPositiveGate (charLevel monsterLevel : Nat) : Bool := decide
+  (1 <= monsterLevel) && decide (charLevel < monsterLevel + 10)` as a proven
+  core with the full pipeline (differential vs production `xp_per_kill(...) >
+  0` over the live catalog x level grid; mutation group bound; Contracts pin).
+  Server-doc citation on the constants per the axiom-split signoff discipline.
+* **C0b: xp VALUE core (follow-up).** `unlock_boost.py` ranks by xp VALUE, not
+  just positivity — an exact ℚ (or scaled-int) mirror of the full formula with
+  round-half-even, differential bit-agreement vs the float implementation.
+  Separate brick; only needed when a decision consumes the magnitude.
+* **C0c: trace corroboration.** Extend the server-axiom replay: recompute
+  expected xp per observed fight (monster level/hp/type from the fixture,
+  wisdom from gear) vs the trace's real xp delta — validates the DOC against
+  the live server on 405 fights, the same discipline as LIV-001's signoff.
+* **C0d: liveness closure.** The E-tower fight row (C2b below) credits xp ONLY
+  under `loadoutAdequate && xpPositiveGate` — the level_penalty=0 case becomes
+  UNREACHABLE in the credited path instead of silently over-credited. The
+  existing towers' arming already images xp-positive targets via the
+  grounded witness table (`xpPosConcrete` ← production picks ← xp_per_kill>0),
+  so their honesty note gains the citation, not a new hypothesis.
+
 ## Phase C — the C2 composition (gaps 1+2)
 
 The old Option-C scoping (`PLAN_winnable_across_band_discharge.md`) collapsed
