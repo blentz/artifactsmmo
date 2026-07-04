@@ -798,11 +798,11 @@ open Formal.Liveness.CycleStepDC
 -- (certClosed) — a wrong cert cannot prove. acquirableWitness = the SAME
 -- production sweep restricted to the cert pool: rows still WIN
 -- (acquirable_rows_winnable), loadouts ⊆ cert, and coverage holds at every
--- band level except the kernel-NAMED event frontier: acquirableFrontier = [38]
--- (roadmap-4's events-gate-gear, now a theorem-visible boundary).
+-- band level with an EMPTY frontier (post-P1 multi-drop closure — the level-38
+-- wall dissolved; acquirableFrontier_empty pins it).
 open Formal.Liveness.WitnessAcquirable
 #print axioms certClosed
 #print axioms acquirable_loadouts_in_cert
 #print axioms acquirable_rows_winnable
 #print axioms acquirable_covers_band
-#print axioms acquirableFrontier_is_38
+#print axioms acquirableFrontier_empty

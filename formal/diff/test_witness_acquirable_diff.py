@@ -36,7 +36,12 @@ def test_acquirability_tables_match_independent_recompute():
     snap = json.loads(Path(SNAPSHOT_PATH).read_text())
     src = FIXTURE.read_text()
 
-    gather = sorted(set(snap["resource_drops"].values()))
+    gather_full = {
+        item
+        for table in snap.get("resource_drops_full", {}).values()
+        for (item, _rate, _mn, _mx) in table
+    }
+    gather = sorted(set(snap["resource_drops"].values()) | gather_full)
     drops = sorted({i for lst in snap["monster_drops"].values() for i in lst})
     assert _lean_str_list(src, "gatherableItems") == gather
     assert _lean_str_list(src, "monsterDropItems") == drops

@@ -164,7 +164,15 @@ def _acquirability_closure(snapshot: dict) -> tuple[list[str], list[str], list[s
     Rates/quantities are deliberately out of scope (EVENTUAL acquirability;
     skill gates are dischargeable by the proven skill-grind liveness)."""
     recipes = snapshot["crafting_recipes"]
-    gather = sorted(set(snapshot["resource_drops"].values()))
+    # P1 (engagement expansion): FULL multi-drop gather set — secondary drops
+    # (gems from ordinary rocks) are gatherable; the primary map understated
+    # this and walled acquirable progression at level 38.
+    gather_full = {
+        item
+        for table in snapshot.get("resource_drops_full", {}).values()
+        for (item, _rate, _mn, _mx) in table
+    }
+    gather = sorted(set(snapshot["resource_drops"].values()) | gather_full)
     drop_items = sorted({i for lst in snapshot["monster_drops"].values() for i in lst})
     sources = set(gather) | set(drop_items)
     universe = set(recipes) | sources | set(snapshot["item_stats"])

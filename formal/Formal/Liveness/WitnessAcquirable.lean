@@ -16,11 +16,13 @@ residual). This module discharges that residual against the live fixture:
   `winnableWitness`, restricted to the cert pool: every row's loadout is
   closure-obtainable by the gather/fight/craft loop, and the row's kernel
   `predictWin` verdict still holds (`acquirable_rows_winnable`).
-* `acquirableFrontier = [38]` — the ONE band level with no winnable,
-  xp-positive, not-overleveled target under the restriction. The optimistic
-  witness at 38 leans on event/boss/NPC-class gear (lifesteal_rune,
-  obsidian_helmet, gold_boots, life_crystal, ancient_jean, …) — the honest
-  event-content frontier (roadmap-4), NAMED, not forced green.
+* `acquirableFrontier = []` — EMPTY since the P1 multi-drop closure
+  (docs/PLAN_engagement_expansion.md): gem stones are gatherable secondary
+  drops of ordinary rocks, which closes the jewelry/obsidian/gold recipe
+  families and with them every band. The historical frontier ([38] before
+  P1) is preserved in git history; `acquirableFrontier_empty` pins the
+  closure so any regeneration that REOPENS a frontier is a visible,
+  theorem-breaking change.
 
 Skill gates (gather/craft levels) are deliberately outside the closure: the
 proven skill-grind liveness (`GrindLadder`, `SkillGapClosure`) makes any skill
@@ -79,8 +81,9 @@ theorem acquirable_covers_band :
       || acquirableFrontier.contains ((i : Int) + 1)) = true := by
   decide
 
-/-- The frontier is exactly band 38 — stated explicitly so a regeneration that
-    grows it is a VISIBLE change, not a silent one. -/
-theorem acquirableFrontier_is_38 : acquirableFrontier = [38] := by decide
+/-- The frontier is EMPTY — every band level has a provably-acquirable winning
+    loadout. Stated explicitly so a regeneration that reopens a frontier is a
+    VISIBLE, theorem-breaking change, not a silent one. -/
+theorem acquirableFrontier_empty : acquirableFrontier = [] := by decide
 
 end Formal.Liveness.WitnessAcquirable

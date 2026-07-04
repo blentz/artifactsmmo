@@ -110,17 +110,20 @@ combat picker's `xp_per_kill > 0` gate keeps the bot off level_penalty = 0
 targets in practice. This is the server-axiom-signoff evidence for the C0a
 `xpPositiveGate` core (`docs/PLAN_c2_composed_liveness.md` §C0).
 
-## The level-38 wall (C1/C2 finding, 2026-07-04)
+## The level-38 wall — RAISED, then DISSOLVED (2026-07-04)
 
-With provably-acquirable gear only (kernel cert, `WitnessAcquirable.lean`),
-progression hard-caps at level 38: bands 34-37 farm death_knight (L28), the
-10-band level_penalty zeroes it at char 38 (`xpPositiveGate`, exactly), no
-L29-40 monster is winnable with acquirable gear (potions probed — no), and the
-next acquirable target (owlbear L30) needs L39 base stats. Combat is the only
-char-xp source. Crossing 38→39 REQUIRES the C1b frontier items (event/boss/
-NPC-class). The forthcoming E-tower capstone therefore splits: unconditional
-reach-38, and reach-50 modulo the named, satisfiable band-38 event-gear
-hypothesis.
+History: with the PRIMARY-drop closure, acquirable progression hard-capped at
+level 38 (bands 34-37 farm death_knight L28; the 10-band level_penalty zeroes
+it at 38 — `xpPositiveGate` exactly; no L29-40 monster winnable, potions
+included; owlbear L30 needs L39 stats; combat is the only char-xp source).
+Root cause (engagement-expansion P1): every sourcing decision consumed the
+primary-drop map while resources MULTI-drop — gem stones at 1/100-1/200 from
+ordinary rocks — walling the jewelry/obsidian/gold recipe families. With the
+full-drop closure the acquirable-witness FRONTIER IS EMPTY: 49/49 bands carry
+a provably-obtainable winning loadout (`acquirableFrontier_empty`, kernel).
+The E-tower capstone no longer needs a band-38 event-gear hypothesis; event/
+raid/currency content (P3-P6) widens gear breadth (309→496 equippables) and
+remains valuable, but is NOT progression-critical.
 
 ## What this does NOT prove
 

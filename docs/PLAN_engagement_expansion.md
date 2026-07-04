@@ -1,6 +1,6 @@
 # PLAN — Engagement expansion: events, elites, bosses, raids (cross the L38 wall)
 
-**Status: DESIGNED 2026-07-04 from live-API classification. Multi-session epic.**
+**Status: P1 DONE 836e4045 (wall FALLS — frontier ∅ from multi-drops alone); F1-v2 regen this commit; P2 was a NON-GAP (recipes were always loaded — the closure failed on gem/currency ingredients); next P3-P6 (breadth 309→496 + engagement behaviours).**
 User mandate: by level 38 the player must engage events, elites, bosses, raids,
 raid bosses — expand production capability AND the formal model.
 
