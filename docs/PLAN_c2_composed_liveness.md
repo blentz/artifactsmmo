@@ -1,6 +1,6 @@
 # PLAN — C2 composed liveness: geared combat, honest chores, trace lockstep
 
-**Status: Phase A COMPLETE (A1 663f3673, A2 this commit). Next: Phase B. Multi-session epic.**
+**Status: Phase A COMPLETE (663f3673, 319f1b73); Phase B1 (trace characterization) COMPLETE this commit — findings in LEVEL_FIFTY_RESIDUALS.md (357/406 zero-xp fights confirms Phase-C gating as load-bearing; rest partial-heal gap found). Next: B2 (computable cycleStepD mirror + oracle lockstep — cycleStepD is noncomputable via LIV-001, so B2 needs `applyActionKindC (xpNext : Nat)` clone bound by a kernel equality theorem) then C1. Multi-session epic.**
 
 Successor to `docs/PLAN_residual_closure.md` (commit 96c339f6). User mandate:
 fix unmodeled gaps 1 (combat outcomes), 2 (gear/skill economy), 4 (chore

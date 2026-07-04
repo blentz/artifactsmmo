@@ -70,6 +70,20 @@ the real trajectory diverge at that point and the reach-50 guarantee does not
 transfer — that divergence, observable as a live stall the model calls
 impossible, is exactly the falsifiable surface this proof exposes.
 
+## Measured divergence classes (Phase B1, 2026-07-04 — `formal/diff/trace_characterize.py`)
+
+First live measurement of the model↔bot dynamics gap (5850 consecutive cycles,
+single character, early band L4+ — rerun as traces accumulate):
+
+| Model abstraction | Measured reality | Consequence |
+|---|---|---|
+| fight: `xp += 10` every fight | **357/406 fights yielded 0 xp** (over-leveled targets); nonzero deltas were 3/6/22/23/25; zero rollovers observed | The F/D capstones' per-fight `xpDeficit` descent is FALSE of most real fights in this trace — the Phase-C gating (credit xp only on adequate+xp-positive targets) is confirmed as the load-bearing fix, and target xp-positivity needs to join the gate |
+| fight: hp untouched | hp deltas noisy (post-cooldown snapshots); max single-fight LOSS 210 | E-tower bounded hp-loss constant: ≥ 210 (full-bar loss = death case present) |
+| fight loot ≤ `DROP_BOUND = 8` | max observed fight inventory delta = 3 | DROP_BOUND generous — safe |
+| rest: `hp := max_hp` | **131/355 rests ended below max_hp** | Rest apply over-approximates; model's hpDeficit descent per rest is not strict in reality — needs a partial-heal analog of Phase A2's debt (tracked) |
+| chores fast-transient (the 2026-06-18 story) | max same-chore run = 1; chore bursts between fights short | CONFIRMED for chores proper — `DEBT_CAP = 8` generous |
+| non-fight activity bounded | bursts between fights up to **689 cycles** (skill-grind/gather phases) | Not chores — the gap-2 gather/craft economy the E-tower models as gear means; measured, expected |
+
 ## What this does NOT prove
 
 * Nothing about wall-clock time or xp RATE — only eventual reachability under

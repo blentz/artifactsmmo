@@ -1,0 +1,24 @@
+trace: ../play-trace-Robby.jsonl  records=5880  consecutive-pairs=5850
+
+== FIGHT dynamics (model: xp+=10 flat, hp untouched, loot <= DROP_BOUND=8) ==
+fights=406  rollovers=0
+xp-delta distribution (top 10): [(0, 357), (6, 31), (3, 15), (25, 1), (22, 1), (23, 1)]
+  model-exact (+10): 0/406
+hp-delta distribution (top 10): [(50, 52), (210, 41), (114, 38), (132, 37), (195, 31), (-28, 25), (102, 23), (-24, 15), (120, 15), (0, 14)]
+  max hp LOSS in one fight: 210  (E-tower bounded-loss constant candidate)
+inventory-delta distribution (top 10): [(0, 305), (-1, 65), (1, 30), (3, 3), (2, 2), (-6, 1)]
+  fights exceeding DROP_BOUND=8: 0
+
+== REST semantics (model: hp := max_hp) ==
+rests=355  post-hp != max_hp violations=131
+
+== LEVEL monotonicity (model: level never decreases) ==
+regressions=0
+
+== CHORE transience (2026-06-18 honesty boundary — now measured) ==
+same-chore run lengths (class, len) -> count: [(('claim', 1), 1), (('deposit', 1), 11)]
+  max same-chore run: 1  (DEBT_CAP=8 grounding; model needs max_run-1 debt)
+non-fight burst lengths between fights (top 15): [(1, 100), (2, 86), (9, 64), (3, 26), (6, 25), (12, 18), (5, 13), (10, 12), (15, 10), (4, 8), (7, 5), (13, 3), (41, 1), (590, 1), (165, 1)]
+  max burst: 689
+
+Divergence classes above feed docs/LEVEL_FIFTY_RESIDUALS.md — measured, not assumed.
