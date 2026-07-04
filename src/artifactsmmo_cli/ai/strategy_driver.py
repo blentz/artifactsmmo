@@ -895,6 +895,11 @@ class StrategyArbiter:
         # plateau, trace 2026-06-19). Defaults True; set every select().
         self.chosen_step_alive: bool = True
         self.goals_tried: list[dict[str, object]] = []
+        # Phase B3 (docs/PLAN_c2_composed_liveness.md): the fired guard/means
+        # kinds exactly as the most recent select() saw them. Emitted into the
+        # per-cycle trace so the offline ladder lockstep replays selection
+        # against observed fires instead of re-deriving opaque predicates.
+        self.last_fires: dict[str, object] = {}
         self._memo = DoomedMemo()
         self._cycle = 0
         # Whether the most recent `_plans` call ended in a budget TIMEOUT (vs an
@@ -1037,6 +1042,14 @@ class StrategyArbiter:
         # the guard's profile only knew crafting_target/gear/tools/task.
         step_profile = _step_protection_profile(step_goal, state, game_data)
         guard_kinds = active_guards(state, game_data, self._history, ctx, step_profile)
+        # Phase B3: snapshot the fired kinds for the trace (selection-time
+        # truth; recomputing at emit time would drift on ctx-dependent flags).
+        self.last_fires = {
+            "guards": [k.value for k in guard_kinds],
+            "collect": [k.value for k in collect_kinds],
+            "discretionary": [k.value for k in discretionary_kinds],
+            "step_present": step_goal is not None,
+        }
 
         # Trace 2026-05-19 (cycles 318-342): with task_code=None, the bot
         # locked into a Gather→Discard loop — meta-objective step

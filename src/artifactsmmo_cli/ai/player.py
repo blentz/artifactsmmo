@@ -1187,6 +1187,9 @@ class GamePlayer:
             "recovery": recovery,
             "suppressed_goals": list(self._suppressed_goals.keys()),
             "servability": self._last_servability_diag,
+            # Phase B3: fired guard/means kinds as selection saw them (see
+            # StrategyArbiter.last_fires) — consumed by the trace lockstep.
+            "fires": dict(self._arbiter.last_fires),
         }
         if self._strategy is not None and self.game_data is not None:
             decision = self._last_decision or self._strategy.decide(

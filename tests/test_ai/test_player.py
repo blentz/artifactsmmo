@@ -1496,10 +1496,19 @@ class TestEmitTrace:
         player.state = make_state(cooldown_expires=future)
         tracer = MagicMock()
         player.tracer = tracer
+        player._arbiter.last_fires = {
+            "guards": ["hp_critical"], "collect": [], "discretionary": [],
+            "step_present": True,
+        }
         player._emit_trace("Rest", "RestoreHP", "ok", {"nodes": 0, "depth": 0, "timed_out": False, "plan_len": 1})
         tracer.write_cycle.assert_called_once()
         record = tracer.write_cycle.call_args[0][0]
         assert record["cooldown_remaining_at_cycle_start"] > 0.0
+        # Phase B3: the fired-kinds snapshot rides every cycle record.
+        assert record["fires"] == {
+            "guards": ["hp_critical"], "collect": [], "discretionary": [],
+            "step_present": True,
+        }
 
 
 class TestHandleStuckExtended:
