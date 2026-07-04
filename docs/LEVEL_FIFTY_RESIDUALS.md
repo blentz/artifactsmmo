@@ -70,41 +70,34 @@ the real trajectory diverge at that point and the reach-50 guarantee does not
 transfer — that divergence, observable as a live stall the model calls
 impossible, is exactly the falsifiable surface this proof exposes.
 
-## Measured divergence classes (Phase B1, 2026-07-04 — `formal/diff/trace_characterize.py`)
+## Measured divergence classes (Phases B1+B2, corrected 2026-07-04)
 
-First live measurement of the model↔bot dynamics gap (5850 consecutive cycles,
-single character, early band L4+ — rerun as traces accumulate):
+**Correction:** the first replay mis-read the trace — `_emit_trace`
+(player.py:740) runs AFTER `action.execute`, so record k's `state` is that
+action's POST-state. The initial "357/406 zero-xp fights", "131/355 rest
+violations", and the lockstep's "(fight,rest)×354 open question" were all
+one-action misattributions from feeding post-states as selection states. Both
+tools now align `prev.state → cur.action → cur.state`; corrected findings
+(5822 pairs, single character, early band):
 
-| Model abstraction | Measured reality | Consequence |
+| Model abstraction | Measured reality (corrected) | Consequence |
 |---|---|---|
-| fight: `xp += 10` every fight | **357/406 fights yielded 0 xp** (over-leveled targets); nonzero deltas were 3/6/22/23/25; zero rollovers observed | The F/D capstones' per-fight `xpDeficit` descent is FALSE of most real fights in this trace — the Phase-C gating (credit xp only on adequate+xp-positive targets) is confirmed as the load-bearing fix, and target xp-positivity needs to join the gate |
-| fight: hp untouched | hp deltas noisy (post-cooldown snapshots); max single-fight LOSS 210 | E-tower bounded hp-loss constant: ≥ 210 (full-bar loss = death case present) |
-| fight loot ≤ `DROP_BOUND = 8` | max observed fight inventory delta = 3 | DROP_BOUND generous — safe |
-| rest: `hp := max_hp` | **131/355 rests ended below max_hp** | Rest apply over-approximates; model's hpDeficit descent per rest is not strict in reality — needs a partial-heal analog of Phase A2's debt (tracked) |
-| chores fast-transient (the 2026-06-18 story) | max same-chore run = 1; chore bursts between fights short | CONFIRMED for chores proper — `DEBT_CAP = 8` generous |
-| non-fight activity bounded | bursts between fights up to **689 cycles** (skill-grind/gather phases) | Not chores — the gap-2 gather/craft economy the E-tower models as gear means; measured, expected |
+| fight: `xp += 10` flat | real per-fight xp 3-29 (mode 19-23), 6 rollovers; +10 within range, never exact | projection direction sound in-band; Phase-C gate (adequate + xp-positive target) still the principled fix for OUT-of-band fights the trace does not exercise |
+| fight: hp untouched | every fight LOSES hp (-24…-270); max loss 270 | E-tower bounded hp-loss constant ≥ 270 |
+| fight loot ≤ `DROP_BOUND = 8` | max fight inventory delta 3 | safe |
+| rest: `hp := max_hp` | **EXACT — 0/357 violations; lockstep post-hp 322/322** | Rest apply is faithful; no partial-heal debt needed |
+| chores fast-transient | max same-chore run 1; chore bursts short | CONFIRMED; `DEBT_CAP = 8` generous |
+| non-fight bursts | up to 689 cycles (gather/grind phases) | the gap-2 economy the E-tower models as gear means |
 
-## Trace lockstep (Phase B2, 2026-07-04 — `formal/diff/trace_lockstep.py`)
-
-The oracle's `cycle_step_d` entry evaluates `CycleStepDC.cycleStepDC` — a
-computable clone of `cycleStepD`, kernel-equal at the axiom's value
-(`cycleStepDC_eq`, rfl-shaped: clone drift breaks the build) — with `xpNext` =
-each cycle's recorded server `max_xp` (LIV-001 replaced by observed data per
-replayed step). First replay (5815 pairs):
-
-* Decision layer, scalars-only visibility: 52 agreements on the fight axis;
-  5054 pairs skipped as `flag-unobserved` (the trace does not record the opaque
-  chore Bools — Phase B3 = trace flag enrichment).
-* **(fight, rest) × 354 — OPEN QUESTION**: production dispatched Fight at hp
-  below the model's `CRITICAL_HP = 75%` gate (e.g. hp 21/165). `hpCriticalFires`
-  is scalar-only and O5.4-differential-pinned, so this is either a REAL
-  arbitration-order divergence on live trajectories (sticky commitment
-  outranking the guard?) or a snapshot-timing artifact — needs investigation
-  before the E-tower trusts the rest row's production image.
-* (rest, fight) × 355: feed artifact — `restForCombatReady` unobserved (fed 0);
-  production's rests are mostly rest-before-combat.
-* Fight dynamics: model +10 vs real per-pair quantified ((10,0)×19, (10,6)×19,
-  (10,3)×12, …); level-rollover agreement 52/52 where comparable.
+**Lockstep decision layer** (`trace_lockstep.py`, oracle `cycle_step_d` →
+`cycleStepDC`, kernel-equal to `cycleStepD` at the axiom's value, `xpNext` =
+each cycle's recorded server `max_xp`): **709/762 agreement (93%)** on the
+scalars-visible rest/fight axis; 5060 pairs `flag-unobserved` (opaque Bools not
+in the trace — Phase B3 enrichment queued). Residual mismatch tails, both
+small and named: (rest, fight)×35 — production rested ABOVE the 75% gate
+(`restForCombatReady`, unobserved opaque); (fight, rest)×18 — production
+fought slightly below the gate (sticky-commitment/timing tail; real but
+bounded, revisit with B3 flags). Level-rollover agreement 383/387.
 
 ## What this does NOT prove
 

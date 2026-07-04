@@ -83,10 +83,15 @@ def main() -> int:
             except json.JSONDecodeError:
                 continue  # tail record may be mid-write while the bot is live
 
+    # TRACE SEMANTICS (player.py:740): _emit_trace runs AFTER action.execute,
+    # so record k's `state` is the POST-state of record k's action; the PRE-state
+    # is record k-1's state. Pairs are therefore (prev, cur): cur's action maps
+    # prev.state -> cur.state. (The first replay of this tool mis-attributed
+    # deltas by one action — resolved 2026-07-04.)
     pairs = []
-    for a, b in zip(records, records[1:]):
-        if b.get("cycle") == a.get("cycle", -2) + 1 and a.get("state") and b.get("state"):
-            pairs.append((a, b))
+    for prev, cur in zip(records, records[1:]):
+        if cur.get("cycle") == prev.get("cycle", -2) + 1 and prev.get("state") and cur.get("state"):
+            pairs.append((prev, cur))
 
     fight_xp = Counter()
     fight_hp = Counter()
@@ -103,10 +108,10 @@ def main() -> int:
     cur_run_len = 0
     cur_burst = 0
 
-    for a, b in pairs:
-        sa, sb = a["state"], b["state"]
-        cls = action_class(a.get("action") or "")
-        ok = a.get("outcome") == "ok"
+    for prev, cur in pairs:
+        sa, sb = prev["state"], cur["state"]
+        cls = action_class(cur.get("action") or "")
+        ok = cur.get("outcome") == "ok"
 
         if sb["level"] < sa["level"]:
             lvl_regressions += 1

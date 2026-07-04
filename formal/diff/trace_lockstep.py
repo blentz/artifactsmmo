@@ -101,15 +101,20 @@ def main() -> int:
             except json.JSONDecodeError:
                 continue
 
+    # TRACE SEMANTICS (player.py:740): _emit_trace runs AFTER action.execute —
+    # record k's `state` is that action's POST-state. The selection state for
+    # record k's action is record k-1's state. (First replay fed post-states as
+    # pre-states, producing a phantom (fight,rest)x354 "divergence": hp 21/165
+    # was post-fight damage, not the selection state — resolved 2026-07-04.)
     pairs = [
-        (a, b) for a, b in zip(records, records[1:])
-        if b.get("cycle") == a.get("cycle", -2) + 1
-        and a.get("state") and b.get("state") and a.get("outcome") == "ok"
+        (prev, cur) for prev, cur in zip(records, records[1:])
+        if cur.get("cycle") == prev.get("cycle", -2) + 1
+        and prev.get("state") and cur.get("state") and cur.get("outcome") == "ok"
     ]
 
     replies = []
     for i in range(0, len(pairs), CHUNK):
-        batch = [{"kind": "cycle_step_d", "args": vector(a["state"])} for a, _ in pairs[i:i + CHUNK]]
+        batch = [{"kind": "cycle_step_d", "args": vector(prev["state"])} for prev, _ in pairs[i:i + CHUNK]]
         out = subprocess.run(
             [str(oracle)], input=json.dumps(batch), capture_output=True, text=True, check=True,
         )
@@ -122,9 +127,9 @@ def main() -> int:
     rest_hp_agree = 0
     rest_hp_diverge = 0
 
-    for (a, b), r in zip(pairs, replies):
-        sa, sb = a["state"], b["state"]
-        tcls = action_class(a.get("action") or "")
+    for (prev, cur), r in zip(pairs, replies):
+        sa, sb = prev["state"], cur["state"]
+        tcls = action_class(cur.get("action") or "")
         sel = r.get("selected")
         if sel in FLAG_DEPENDENT or tcls.startswith("other:"):
             decision[("flag-unobserved", tcls, sel)] += 1
