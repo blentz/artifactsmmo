@@ -1192,6 +1192,14 @@ class GamePlayer:
             # StrategyArbiter.last_fires) — consumed by the trace lockstep.
             "fires": dict(self._arbiter.last_fires),
         }
+        # E-tower observable: production's loadoutAdequate — a winnable,
+        # xp-positive band target exists for the CURRENT means (the exact
+        # verdict CycleStepE's adequacy-gated arming abstracts). Consumed by
+        # the cycle_step_e trace lockstep. Emitted only when game data is
+        # loaded (absent = unobserved, never guessed); gearGap has no cheap
+        # per-cycle analog and stays a measured divergence class.
+        if self.game_data is not None:
+            record["gear"] = {"adequate": self._pick_winnable_monster() is not None}
         if self._strategy is not None and self.game_data is not None:
             decision = self._last_decision or self._strategy.decide(
                 self.state, self.game_data, history=self.history,

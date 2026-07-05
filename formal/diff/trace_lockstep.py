@@ -46,8 +46,10 @@ def derive_phase(st: dict) -> int:
     return 1
 
 
-def vector(st: dict) -> list:
-    return [
+def vector(st: dict, gear: dict | None = None) -> list:
+    """38-slot cycle_step_d vector; +[adequate, gearGap] when the record
+    carries the E-tower gear observable (enriched traces, 2026-07-05+)."""
+    v = [
         st["hp"], st["max_hp"], st["level"], st["xp"],
         0,   # initialXp
         0,   # bankRequiredLevel
@@ -66,6 +68,9 @@ def vector(st: dict) -> list:
         0,  # itemsTaskDeferActive
         0, 0, 0,  # debts
     ]
+    if gear is not None:
+        v += [1 if gear.get("adequate") else 0, 0]  # [38] adequate, [39] gearGap (unmeasured)
+    return v
 
 
 def action_class(action: str) -> str:
@@ -114,7 +119,12 @@ def main() -> int:
 
     replies = []
     for i in range(0, len(pairs), CHUNK):
-        batch = [{"kind": "cycle_step_d", "args": vector(prev["state"])} for prev, _ in pairs[i:i + CHUNK]]
+        batch = [
+            {"kind": "cycle_step_e", "args": vector(prev["state"], prev["gear"])}
+            if prev.get("gear") is not None
+            else {"kind": "cycle_step_d", "args": vector(prev["state"])}
+            for prev, _ in pairs[i:i + CHUNK]
+        ]
         out = subprocess.run(
             [str(oracle)], input=json.dumps(batch), capture_output=True, text=True, check=True,
         )
@@ -152,7 +162,9 @@ def main() -> int:
                 rest_hp_diverge += 1
 
     out = []
-    out.append(f"trace={trace} pairs-replayed={len(pairs)} (oracle: cycle_step_d → cycleStepDC, kernel-equal to cycleStepD)")
+    enriched = sum(1 for prev, _ in pairs if prev.get("gear") is not None)
+    out.append(f"trace={trace} pairs-replayed={len(pairs)} enriched(gear)={enriched} "
+               "(oracle: cycle_step_e/cycle_step_d → kernel-equal mirrors)")
     out.append("")
     out.append("== DECISION layer (scalars-only visibility) ==")
     agree = sum(c for (k, t, m), c in decision.items() if k == "cmp" and t == m)

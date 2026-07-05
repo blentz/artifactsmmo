@@ -6,6 +6,7 @@ import tempfile
 
 from artifactsmmo_cli.ai.file_tracer import FileTracer
 from artifactsmmo_cli.ai.game_data import GameData
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from artifactsmmo_cli.ai.null_tracer import NullTracer
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.tracer import Tracer
@@ -79,6 +80,7 @@ class TestPlayerTracer:
         player = GamePlayer(character="testchar", tracer=CapturingTracer())
         player.game_data = GameData()
         player.game_data._monster_level = {"chicken": 1}
+        fill_monster_stat_defaults(player.game_data)
         player.state = make_state()
 
         player._emit_trace(
@@ -119,6 +121,7 @@ class TestPlayerTracer:
         player = GamePlayer(character="testchar", tracer=CapturingTracer())
         player.game_data = GameData()
         player.game_data._monster_level = {"chicken": 1}
+        fill_monster_stat_defaults(player.game_data)
         player.state = make_state(xp=42, max_xp=100,
                                   skills={"mining": 3, "woodcutting": 2,
                                           "fishing": 1, "weaponcrafting": 1,
