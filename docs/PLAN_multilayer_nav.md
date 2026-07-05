@@ -47,6 +47,37 @@ Design:
    mechanically, with mypy strict as the net. No Lean ripple (coords are
    not modeled in the liveness State).
 
+## PROBE RESULTS (2026-07-05 02:00-02:10, active window)
+
+* Raid tile (-4,10) map 769: `access.type='restricted'`; move → HTTP 596
+  "map is blocked", from afar AND from the adjacent tile.
+* Docs (concepts/maps_and_movement): restricted maps form REGIONS —
+  "only accessible from other restricted maps"; entry via transitions.
+* Full map sweep: the Enchanted Forest is a 5-tile restricted region
+  (dryad ×2, enchanted_mushroom ×2, the raid tile), with EXACTLY ONE entry:
+  a transition at (-4,9) overworld → map 667 (-4,8) with condition
+  `{code: gold, operator: cost, value: 5000}` — a 5000-gold entry fee.
+  Then walk within the region to the raid tile.
+* Docs (concepts/raids): participation = normal fight action at the raid
+  tile; up to 3 own characters; rewards AUTO-distributed to PENDING ITEMS
+  per damage_per_reward (ClaimPendingItemAction already handles those).
+* Probe HALTED honestly: Robby holds 1099 + 1000 bank = 2099 gold < 5000.
+  Fight-at-tile semantics remain UNOBSERVED (asserted from docs).
+
+DESIGN CONSEQUENCES:
+* **P5b is not just layers — it is ACCESS REGIONS.** The movement graph
+  partitions by (layer, access-region); transitions are the only edges
+  between partitions and carry CONDITIONS INCLUDING COSTS (gold 5000 here;
+  achievement/item conditions elsewhere). `MapTransitionAction` needs
+  cost-aware applicability (gold ≥ fee) and apply (gold -= fee, position :=
+  destination).
+* **ParticipateRaid worth gate gains the entry fee**: expected coin value
+  must beat 5000 gold + opportunity cost, amortized over the window; the
+  region persists (one fee per visit? UNKNOWN — probe when funded).
+* Dryads + enchanted_mushroom are restricted-region content — currently
+  invisible sources for the same reason; the access-region work unlocks
+  them with the raid.
+
 ## P6: ParticipateRaid goal (enchanted_fairy first)
 
 Facts: raid = static map content (`raid_location_tiles`), boss engaged by
