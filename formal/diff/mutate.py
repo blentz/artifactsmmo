@@ -931,17 +931,17 @@ XP_POSITIVE_MUTATIONS = [
     # widen the zero band boundary -- diff = 10 would still pay xp; the gate
     # says false, production says positive: diff test kills at the edge.
     ("xp_positive: zero band >= 10 becomes >= 11",
-     "        if diff >= 10:\n            penalty = 0.0\n",
-     "        if diff >= 11:\n            penalty = 0.0\n"),
+     "        if diff >= 10:\n            return 0\n",
+     "        if diff >= 11:\n            return 0\n"),
     # exclusive edge -- same failure at exactly diff = 10.
     ("xp_positive: zero band >= 10 becomes > 10",
-     "        if diff >= 10:\n            penalty = 0.0\n",
-     "        if diff > 10:\n            penalty = 0.0\n"),
-    # zero band pays anyway -- out-of-band fights yield xp; gate false vs
-    # production positive everywhere in the band: killed.
-    ("xp_positive: zero-band penalty 0.0 becomes 0.7",
-     "        if diff >= 10:\n            penalty = 0.0\n",
-     "        if diff >= 10:\n            penalty = 0.7\n"),
+     "        if diff >= 10:\n            return 0\n",
+     "        if diff > 10:\n            return 0\n"),
+    # zero band pays anyway -- out-of-band fights yield xp at the 0.7 rate;
+    # gate false vs production positive everywhere in the band: killed.
+    ("xp_positive: zero-band return 0 becomes 0.7-band fallthrough",
+     "        if diff >= 10:\n            return 0\n        penalty10 = 7 if diff >= 5 else 10\n",
+     "        penalty10 = 7 if diff >= 5 else 10\n"),
     # drop the unknown-monster guard -- level-0 monsters with hp pay xp via
     # the hp term; gate requires monster_level >= 1: killed when hp >= 13.
     ("xp_positive: drop unknown-monster guard",
