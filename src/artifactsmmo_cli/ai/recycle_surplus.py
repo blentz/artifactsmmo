@@ -25,6 +25,7 @@ Pure: reads state/game_data only, no I/O.
 """
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.bank_selection import _best_gathering_tools
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_caps import useful_quantity_cap
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -61,6 +62,11 @@ def recyclable_surplus(
     in-flight spare) rather than the blanket 1, so equippable gear in no active
     profile and not in-flight has cap 0 and its full held count is reclaimable.
     `None` keeps the legacy blanket-1 cap."""
+    # Working kit: the best owned tool per gathering skill is equipment the
+    # gather re-arm is ABOUT to wear (WithdrawTools ferries it a cycle before
+    # OptimizeLoadout equips it) — recycling must never race the equip and eat
+    # it (live probe 2026-07-05: copper_pickaxe surfaced as surplus 1).
+    kit = _best_gathering_tools(state, game_data)
     out: dict[str, int] = {}
     for code, qty in state.inventory.items():
         # No blanket equipped-code skip: `qty` counts only BAG copies (the worn
@@ -68,7 +74,7 @@ def recyclable_surplus(
         # already keeps >=1 for an equipped code — the old skip shielded every
         # spare of a worn code from recycling (copper_helmet x25 hoard,
         # trace 2026-07-05).
-        if qty <= 0 or code in protected_codes:
+        if qty <= 0 or code in protected_codes or code in kit:
             continue
         stats = game_data.item_stats(code)
         if stats is None or not stats.crafting_skill:

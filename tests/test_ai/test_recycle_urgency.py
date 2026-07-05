@@ -172,3 +172,26 @@ def test_small_surplus_keeps_discretionary_recycle() -> None:
     recycles = [c for c in cands if isinstance(c.goal, RecycleSurplusGoal)]
     assert len(recycles) == 1
     assert recycles[0].band != BAND_COLLECT
+
+
+def test_goal_with_snapshot_satisfied_by_partial_progress() -> None:
+    """All-or-nothing satisfaction dead-ends the planner when the hoard cannot
+    fit one bag-limited recycle (live 2026-07-05: 39 surplus, space-capped
+    Recycle x14, plan_len=0). With the initial-total snapshot, ANY reduction
+    satisfies — one batch per cycle, converging across cycles."""
+    gd = _gd()
+    goal = RecycleSurplusGoal(game_data=gd, protected_codes=frozenset(),
+                              initial_total=39)
+    assert not goal.is_satisfied(_state(40))       # 39 surplus: no progress yet
+    assert goal.is_satisfied(_state(26))           # 25 surplus < 39: progress
+    assert goal.is_satisfied(_state(1))            # cleared entirely
+
+
+def test_hoisted_goal_carries_snapshot_and_is_plannable_one_batch() -> None:
+    from artifactsmmo_cli.ai.actions.recycle import RecycleAction
+    cands = _build(_state(40, inventory_max=50), _gd())
+    rs = next(c.goal for c in cands if isinstance(c.goal, RecycleSurplusGoal))
+    actions = rs.relevant_actions([], _state(40, inventory_max=50), _gd())
+    assert actions and isinstance(actions[0], RecycleAction)
+    post = actions[0].apply(_state(40, inventory_max=50), _gd())
+    assert rs.is_satisfied(post)  # one space-capped batch already satisfies

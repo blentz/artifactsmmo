@@ -8,6 +8,7 @@ from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
+from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.buy_source_venue import BuyVenue, choose_buy_venue
 from artifactsmmo_cli.ai.combat import is_winnable
@@ -175,6 +176,18 @@ class GatherMaterialsGoal(Goal):
         for item, qty in self._needed.items():
             covered |= fully_covered_materials(item, qty, game_data.crafting_recipes, owned)
 
+        # Gather re-arm: admit the per-skill loadout optimizer for every skill
+        # this goal will gather with, so the planner can equip a better owned
+        # tool and shed GATHER_LOADOUT_PENALTY from each subsequent gather.
+        # Without it the penalty had no action that could remove it and the
+        # re-arm was inert — trace 2026-07-05 16:22: copper_pickaxe ferried to
+        # the bag, then every cycle still mined with copper_dagger.
+        needed_skills: set[str] = set()
+        for res in needed_resources:
+            skill_req = game_data.resource_skill_level(res)
+            if skill_req is not None:
+                needed_skills.add(skill_req[0])
+
         result: list[Action] = []
         for action in actions:
             if (
@@ -190,6 +203,8 @@ class GatherMaterialsGoal(Goal):
                 or "deposit" in action.tags
                 or (isinstance(action, GatherAction) and action.resource_code in needed_resources)
                 or (isinstance(action, WithdrawItemAction) and action.code in withdrawable)
+                or (isinstance(action, OptimizeLoadoutAction)
+                    and action.target_skill in needed_skills)
             ):
                 result.append(action)
 

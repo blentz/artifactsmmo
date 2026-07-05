@@ -91,6 +91,19 @@ def protected_gear_codes(ctx: SelectionContext) -> frozenset[str]:
     return frozenset(ctx.gear_keep)
 
 
+def recycle_protected_codes(ctx: SelectionContext) -> frozenset[str]:
+    """Recycle-eligibility protection: with profile info the per-code CAP
+    (ctx.gear_keep, enforced inside `recyclable_surplus` via
+    `useful_quantity_cap`) already keeps the demanded copies, so a blanket
+    code exclusion on top turns "keep 1" into "keep all" — gear_keep
+    ['copper_helmet']=1 hid a 41-helmet grind hoard from every recycle path
+    (trace 2026-07-05). Blanket protection survives only for the profile-less
+    legacy fallback, where no caps exist to do the job."""
+    if ctx.gear_keep:
+        return frozenset()
+    return ctx.target_gear | ctx.target_tools
+
+
 def _gear_protected(ctx: SelectionContext) -> frozenset[str]:
     """The GEAR codes the keep economy protects (recycle/sell/drain exclusion):
     the active-profile gear set ∪ in-flight upgrade (spec
@@ -259,7 +272,7 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
         # Gear protection (spec 2026-06-28-gear-loadout-profiles): the protected
         # set + the per-code cap come from the active-profile gear set when
         # available, else the legacy target_gear/target_tools fallback.
-        recycle_protected = _gear_protected(ctx)
+        recycle_protected = recycle_protected_codes(ctx)
         return (not bank_has_room(ctx.bank_accessible, state.bank_items,
                                   game_data.bank_capacity)
                 and bool(recyclable_surplus(

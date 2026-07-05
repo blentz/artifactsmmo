@@ -18,7 +18,7 @@ from artifactsmmo_cli.ai.tiers.guards import (
     SelectionContext,
     _gear_protected,
     _has_sellable,
-    protected_gear_codes,
+    recycle_protected_codes,
 )
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
@@ -151,7 +151,7 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
         # gear set + cap when available, else the legacy target_gear fallback.
         return (_used_fraction(state) < SELL_PRESSURE_FRACTION
                 and bool(recyclable_surplus(
-                    state, game_data, _gear_protected(ctx),
+                    state, game_data, recycle_protected_codes(ctx),
                     gear_keep=ctx.gear_keep or None)))
 
     if kind is MeansKind.DRAIN_BANK_JUNK:

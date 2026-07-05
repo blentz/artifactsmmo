@@ -31,9 +31,17 @@ class RecycleSurplusGoal(Goal):
     """
 
     def __init__(self, game_data: GameData, protected_codes: frozenset[str],
-                 gear_keep: dict[str, int] | None = None) -> None:
+                 gear_keep: dict[str, int] | None = None,
+                 initial_total: int | None = None) -> None:
         self._gd = game_data
         self._protected = protected_codes
+        # Construction-time surplus snapshot: ANY reduction below it satisfies,
+        # so a bag-space-capped Recycle batch is a complete 1-action plan and a
+        # big hoard melts one batch per cycle. All-or-nothing satisfaction
+        # dead-ended the planner (live 2026-07-05: 39 surplus, Recycle x14 was
+        # the space cap, plan_len=0 — the hoist selected a goal it could never
+        # plan). None keeps the strict all-clear semantics.
+        self._initial_total = initial_total
         # Active-profile gear-demand keep map (spec
         # 2026-06-28-gear-loadout-profiles): rerouted the equippable cap so
         # un-profiled, not-in-flight gear is reclaimable. None = legacy cap.
@@ -48,8 +56,12 @@ class RecycleSurplusGoal(Goal):
         return RECYCLE_SURPLUS_VALUE * recycle_urgency(surplus)
 
     def is_satisfied(self, state: WorldState) -> bool:
-        return not recyclable_surplus(state, self._gd, self._protected,
-                                      gear_keep=self._gear_keep)
+        surplus = recyclable_surplus(state, self._gd, self._protected,
+                                     gear_keep=self._gear_keep)
+        if not surplus:
+            return True
+        return (self._initial_total is not None
+                and sum(surplus.values()) < self._initial_total)
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"surplus_gear_recycled": True}

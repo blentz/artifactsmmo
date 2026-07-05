@@ -24,13 +24,16 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.world_state import WorldState
 
-GATHER_LOADOUT_PENALTY = 5.0
+GATHER_LOADOUT_PENALTY = 6.0
 """Added to GatherAction cost when the equipped loadout is suboptimal for the
 resource's skill, so the planner sequences OptimizeLoadout(Gather) before the
 gather action. Mirrors LOADOUT_PENALTY in actions/combat.py:
-  - Must stay < SWAP_COST_PER_SLOT * 2 (10.0) so the penalty favors swap-before-
-    gather over multiple gathers without swapping, without making a one-shot swap
-    never worthwhile.
+  - Must stay STRICTLY ABOVE one swap's cost (SWAP_COST_PER_SLOT * 1 = 5.0):
+    a gather re-arm swaps exactly the weapon slot, and at 5.0 a single-gather
+    plan TIED with the un-swapped plan and never equipped the ferried tool
+    (live 2026-07-05: 3-action helmet plan, copper_pickaxe stayed in the bag).
+  - Must stay < SWAP_COST_PER_SLOT * 2 (10.0) so a hypothetical 2-slot swap is
+    not forced on a single gather.
   - Must stay << _BANKED_REGATHER_PENALTY (100.0) so a banked-material withdraw
     still wins over re-gathering regardless of tool mismatch.
 The penalty fires ONLY on GatherAction — never mid-combat."""

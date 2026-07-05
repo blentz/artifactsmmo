@@ -33,6 +33,9 @@ EMPTY_SLOT_FILLS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / 
 BANK_TOOL_FILLS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "bank_tool_fills.py"
 RECYCLE_SURPLUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recycle_surplus.py"
 RECYCLE_SURPLUS_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "recycle_surplus.py"
+GUARDS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "guards.py"
+GATHERING_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "gathering.py"
+CRAFT_PLAN_GEN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_plan_gen.py"
 GEAR_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_value.py"
 SKILL_XP_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "skill_xp_curve.py"
 SKILL_TARGET_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "skill_target_curve.py"
@@ -100,6 +103,7 @@ UNEQUIP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "unequip.py
 TASK_EXCHANGE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "task_exchange.py"
 TASK_CANCEL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "task_cancel.py"
 GATHERING_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "gathering.py"
+CRAFT_PLAN_GEN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_plan_gen.py"
 PURSUE_TASK_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "pursue_task.py"
 SCALAR_PRIORITY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "scalar_priority.py"
 EQUIP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "equip.py"
@@ -2514,9 +2518,10 @@ WITHDRAW_TOOLS_BAND_MUTATIONS = [
 # tests/test_ai/test_recycle_surplus.py.
 RECYCLE_SURPLUS_ELIGIBILITY_MUTATIONS = [
     ("recyclable_surplus: re-introduce blanket equipped-code skip (spares hoard)",
-     "        if qty <= 0 or code in protected_codes:",
-     "        if qty <= 0 or code in protected_codes or code in {"
+     "        if qty <= 0 or code in protected_codes or code in kit:",
+     "        if qty <= 0 or code in protected_codes or code in kit or code in {"
      "c for c in state.equipment.values() if c}:"),
+
     ("recyclable_surplus: at-cap counts as surplus (qty > cap -> >=, zero-qty entries)",
      "        if qty > cap:",
      "        if qty >= cap:"),
@@ -2541,7 +2546,19 @@ RECYCLE_URGENCY_VALUE_MUTATIONS = [
      "        return RECYCLE_SURPLUS_VALUE"),
 ]
 
+RECYCLE_SNAPSHOT_MUTATIONS = [
+    ("recycle_surplus goal: snapshot progress < -> <= (no-progress counts satisfied)",
+     "        return (self._initial_total is not None\n"
+     "                and sum(surplus.values()) < self._initial_total)",
+     "        return (self._initial_total is not None\n"
+     "                and sum(surplus.values()) <= self._initial_total)"),
+]
+
 RECYCLE_HOIST_MUTATIONS = [
+    ("strategy_driver: hoisted recycle drops the snapshot (all-or-nothing again)",
+     "                initial_total=sum(recycle_surplus_map.values()))",
+     "                initial_total=None)"),
+
     ("strategy_driver: hoist threshold >= -> > (urgency-2 hoard stays starved)",
      "        hoist_recycle = (recycle_urgency(recycle_surplus_map) >= RECYCLE_HOIST_URGENCY",
      "        hoist_recycle = (recycle_urgency(recycle_surplus_map) > RECYCLE_HOIST_URGENCY"),
@@ -2555,6 +2572,39 @@ RECYCLE_HOIST_MUTATIONS = [
     ("strategy_driver: drop the discretionary dedup of a hoisted recycle",
      "            if hoist_recycle and mk is MeansKind.RECYCLE_SURPLUS:",
      "            if False and mk is MeansKind.RECYCLE_SURPLUS:"),
+]
+
+# Recycle protection semantics (2026-07-05 post-restart): caps beat blankets —
+# with gear_keep present the blanket exclusion turned "keep 1" into "keep 41".
+# Killed by tests/test_ai/test_recycle_protection.py.
+RECYCLE_KIT_MUTATIONS = [
+    ("recyclable_surplus: drop the working-kit skip (recycles the ferried tool)",
+     "        if qty <= 0 or code in protected_codes or code in kit:",
+     "        if qty <= 0 or code in protected_codes:"),
+]
+
+RECYCLE_PROTECTED_MUTATIONS = [
+    ("recycle_protected_codes: blanket protection even with profile caps",
+     "    if ctx.gear_keep:\n        return frozenset()",
+     "    if ctx.gear_keep:\n        return protected_gear_codes(ctx)"),
+]
+
+# Gather re-arm activation (2026-07-05): the goal must admit the per-skill
+# OptimizeLoadout or GATHER_LOADOUT_PENALTY has no action that removes it.
+# Killed by tests/test_ai/test_gather_rearm.py.
+GATHER_REARM_MUTATIONS = [
+    ("craft_plan_gen: never front the re-arm (generated plans stay bare-handed)",
+     "    return [rearm, *mapped]",
+     "    return mapped"),
+    ("craft_plan_gen: front the re-arm unconditionally (equips on every generated plan)",
+     "    if not rearm.is_applicable(state, game_data):\n"
+     "        return mapped  # loadout already optimal for this skill\n",
+     ""),
+
+    ("gathering goal: drop the OptimizeLoadout admission (re-arm inert again)",
+     "                or (isinstance(action, OptimizeLoadoutAction)\n"
+     "                    and action.target_skill in needed_skills)\n",
+     ""),
 ]
 
 BANK_KEEP_TOOLS_MUTATIONS = [
@@ -2677,7 +2727,7 @@ _ALL_SRCS = [
     GAME_DATA_PARSE_SRC, LOCATION_CATALOG_SRC,
     SRC, TASK_BATCH_SRC, INVENTORY_CAPS_SRC, COMBAT_SRC, PROJECTION_SRC, SCORING_SRC,
     LOADOUT_PICKER_SRC, EMPTY_SLOT_FILLS_SRC, BANK_TOOL_FILLS_SRC, RECYCLE_SURPLUS_SRC,
-    RECYCLE_SURPLUS_GOAL_SRC,
+    RECYCLE_SURPLUS_GOAL_SRC, GUARDS_SRC, GATHERING_GOAL_SRC, CRAFT_PLAN_GEN_SRC,
     GEAR_VALUE_SRC,
     SKILL_XP_CURVE_SRC, RECIPE_CLOSURE_SRC, TASK_FEASIBILITY_SRC, PREREQUISITE_GRAPH_SRC,
     OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, STUCK_DETECTOR_SRC,
@@ -4920,6 +4970,16 @@ def _run_all_groups() -> int:
     run_group(RECYCLE_SURPLUS_GOAL_SRC, RECYCLE_URGENCY_VALUE_MUTATIONS,
               "tests/test_ai/test_recycle_urgency.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, RECYCLE_HOIST_MUTATIONS,
+              "tests/test_ai/test_recycle_urgency.py", survivors)
+    run_group(GUARDS_SRC, RECYCLE_PROTECTED_MUTATIONS,
+              "tests/test_ai/test_recycle_protection.py", survivors)
+    run_group(RECYCLE_SURPLUS_SRC, RECYCLE_KIT_MUTATIONS,
+              "tests/test_ai/test_recycle_protection.py", survivors)
+    run_group(GATHERING_GOAL_SRC, GATHER_REARM_MUTATIONS[2:],
+              "tests/test_ai/test_gather_rearm.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, GATHER_REARM_MUTATIONS[:2],
+              "tests/test_ai/test_gather_rearm.py", survivors)
+    run_group(RECYCLE_SURPLUS_GOAL_SRC, RECYCLE_SNAPSHOT_MUTATIONS,
               "tests/test_ai/test_recycle_urgency.py", survivors)
     run_group(COMBAT_SRC, COMBAT_VETO_MUTATIONS,
               "tests/test_ai/test_combat.py", survivors)

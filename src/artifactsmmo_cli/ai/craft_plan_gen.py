@@ -26,6 +26,7 @@ import dataclasses
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.craft_plan_driver_core import craft_plan_full
 from artifactsmmo_cli.ai.game_data import GameData
@@ -158,8 +159,28 @@ def generate_next_craft_action(
             if isinstance(action, CraftAction):
                 action = size_intermediate_craft(action, chain, state, game_data)
             mapped.append(action)
-        return mapped
+        return _with_rearm(mapped, state, game_data)
     return None  # all needed items already satisfied — let normal path handle it
+
+
+def _with_rearm(mapped: list[Action], state: WorldState,
+                game_data: GameData) -> list[Action]:
+    """Front the per-skill loadout optimizer when the plan opens with a Gather
+    whose loadout is suboptimal. This generated path bypasses A* entirely
+    (nodes=0), so GATHER_LOADOUT_PENALTY never gets a vote here — live trace
+    2026-07-05: every generated helmet plan opened bare-handed while the
+    ferried copper_pickaxe rode in the bag. Plans opening with a Craft are
+    left alone; a later Gather-first regeneration re-arms then."""
+    first = mapped[0] if mapped else None
+    if not isinstance(first, GatherAction):
+        return mapped
+    skill_req = game_data.resource_skill_level(first.resource_code)
+    if skill_req is None:
+        return mapped
+    rearm = OptimizeLoadoutAction(target_skill=skill_req[0], game_data=game_data)
+    if not rearm.is_applicable(state, game_data):
+        return mapped  # loadout already optimal for this skill
+    return [rearm, *mapped]
 
 
 def _map_next_action(
