@@ -81,3 +81,11 @@ Design (deliberate departures, each documented):
   window with a throwaway-strong char state — confirm the fight response
   (raid damage vs normal combat), death semantics, and coin crediting.
   Server semantics are ASSERTED from map data, not yet observed.
+  2026-07-05 02:00 attempt ABORTED: the live bot (play Robby --trace,
+  started 18:06 — predates the day's builds) owns the character; probing
+  would fight over cooldowns. Run the probe at the next bot pause —
+  which is ALSO the moment to restart it (picks up: targeted rare-drop
+  gathers, currency-chain producibility, adequacy trace observable,
+  CACHE_VERSION 3) and to run the full gate.sh (mutation battery has not
+  covered today's Python changes; serialize-gate-runs forbids running it
+  beside the live bot).
