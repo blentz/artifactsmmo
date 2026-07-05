@@ -205,6 +205,10 @@ import Formal.Liveness.DMeasure
 import Formal.Liveness.CycleStepD
 import Formal.Liveness.BlockerDescentD
 import Formal.Liveness.DeferFaithful
+import Formal.Liveness.EMeasure
+import Formal.Liveness.CycleStepE
+import Formal.Liveness.BlockerDescentE
+import Formal.Liveness.GearedDescent
 import Formal.Liveness.CycleStepDC
 import Formal.Liveness.StickySelect
 import Formal.Liveness.ZombieFreedom

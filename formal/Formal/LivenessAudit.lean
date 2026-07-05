@@ -90,6 +90,7 @@ import Formal.Liveness.UnconditionalDescent
 import Formal.Liveness.DeferFaithful
 import Formal.Liveness.CycleStepDC
 import Formal.Liveness.WitnessAcquirable
+import Formal.Liveness.GearedDescent
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
@@ -806,3 +807,15 @@ open Formal.Liveness.WitnessAcquirable
 #print axioms acquirable_rows_winnable
 #print axioms acquirable_covers_band
 #print axioms acquirableFrontier_empty
+
+-- C2b/C2c (2026-07-04, docs/PLAN_c2_composed_liveness.md): the E-tower — the
+-- geared cycle. perceptionRefreshE credits fight xp ONLY behind adequate gear
+-- (the gap-1 combat-outcome fix the trace phases measured); inadequate states
+-- take gear-progress cycles (finite discharge grounded offline by the EMPTY
+-- acquirable frontier, WitnessAcquirable); fights cost FIGHT_LOSS_BOUND hp
+-- (B1-measured 270) with death→respawn; rollovers adversarially reset gear +
+-- every chore latch/debt. ai_reaches_fifty_geared is HYPOTHESIS-FREE: axioms
+-- must be std + xpToNextLevel (LIV-001) ONLY.
+open Formal.Liveness.GearedDescent
+#print axioms cycleStepE_descends_below_fifty
+#print axioms ai_reaches_fifty_geared

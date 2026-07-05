@@ -125,6 +125,15 @@ The E-tower capstone no longer needs a band-38 event-gear hypothesis; event/
 raid/currency content (P3-P6) widens gear breadth (309→496 equippables) and
 remains valuable, but is NOT progression-critical.
 
+**E-tower LANDED:** `ai_reaches_fifty_geared` (GearedDescent.lean) — fight xp
+credited only behind adequate gear, gear progress grounded by the empty
+acquirable frontier, fight hp-loss (270, B1-measured) with death→respawn,
+rollovers adversarially re-arming gear + every chore latch/debt. Axioms:
+std + xpToNextLevel (LIV-001). The combat-outcome gap family (gap 1) is now
+CLOSED in-model; the residual is the opaque-Bool faithfulness of
+`loadoutAdequate`/`gearGap` (pinned per-band by the acquirable-witness
+differential; per-cycle latency measured, not asserted).
+
 ## What this does NOT prove
 
 * Nothing about wall-clock time or xp RATE — only eventual reachability under

@@ -392,6 +392,15 @@ structure State where
       (`_has_sellable(...)` may stay true after one `.npcSell`). Consumed only
       by `CycleStepD.partialClear`; defaulted. -/
   sellDebt : Nat := 0
+  /-- OPAQUE (E-tower, `docs/PLAN_c2_composed_liveness.md` C2a): production's
+      observed verdict that the CURRENT equipment beats the band's acquirable
+      witness target (`is_winnable(current gear, band target)`). Consumed only
+      by `CycleStepE`; defaulted. -/
+  loadoutAdequate : Bool := false
+  /-- OPAQUE (E-tower): recipe-closure steps remaining toward the band's
+      acquirable-witness loadout (the A2 debt pattern at gear scale). Consumed
+      only by `CycleStepE`; defaulted. -/
+  gearGap : Nat := 0
   deriving Repr
 
 namespace State
