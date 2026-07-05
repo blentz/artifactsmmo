@@ -14,8 +14,17 @@ LEGACY indexes deliberately overworld-only until the movement brick, so no
 plan can route to an unreachable tile. Live-verified: all 4 layer-locked
 bosses + god_of_the_sun tiles in layered data, fairy tile restricted=True,
 entry edge = (-4,8,overworld,(('gold','cost',5000),)). CACHE_VERSION 4.
-REMAINING: movement semantics (state layer field, region-aware distance,
-cost-aware MapTransitionAction, consumer migration to layered locations).
+**MOVEMENT BRICK LANDED (2026-07-05):** WorldState.layer;
+GameData.region_of/state_region (restricted flood-fill components); base
+Action.travel_region contract with ONE central planner gate;
+MapTransitionAction = real region-crossing edge (folds portal walk, models
+gold-cost conditions only — others inapplicable, never default-pass;
+deterministic teleport apply); factory emits 30 edges + 38 off-region
+Fight/Gather actions. GOAP chains Transition->Fight cross-region with zero
+goal-layer changes (pinned by test). REMAINING (deliberate): goal layers
+still target legacy overworld indexes — off-region content becomes
+GOAL-DRIVEN when consumers migrate to layered_locations (next); dryad/
+enchanted_mushroom + 4 bosses reachable the moment a goal asks for them.
 
 Facts (live-verified 2026-07-05):
 * Map layers: overworld / underground / interior. Loader fetches OVERWORLD
