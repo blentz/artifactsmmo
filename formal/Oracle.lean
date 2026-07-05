@@ -2519,6 +2519,69 @@ def runCycleStepD (args : Array Json) : Json :=
     ("task_progress", Json.num (Int.ofNat post.taskProgress)),
     ("task_total", Json.num (Int.ofNat post.taskTotal))]
 
+/-- `cycle_step_e` — E-tower trace-lockstep entry. Args = `cycle_step_d`'s
+38-slot vector PLUS:
+
+* `[38]` loadoutAdequate (Bool 0/1 — production `is_winnable(current gear,
+         band target)` observation)
+* `[39]` gearGap (Nat — recipe-closure steps toward the band's acquirable
+         witness loadout)
+
+Evaluates the COMPUTABLE mirror `CycleStepEC.cycleStepEC`, kernel-equal to
+the capstone's `cycleStepE` at the axiom's value (`cycleStepEC_eq`), and
+emits the selected means + post-state projection incl. the gear fields. -/
+def runCycleStepE (args : Array Json) : Json :=
+  let n := fun i => (intArg args i).toNat
+  let b := fun i => intArg args i != 0
+  let phase : Formal.Liveness.TaskLifecyclePhase.TaskLifecyclePhase :=
+    match intArg args 16 with
+    | 1 => .accepted
+    | 2 => .inProgress
+    | 3 => .complete
+    | _ => .none
+  let s : Formal.Liveness.Measure.State := { inertLadderState with
+    hp := n 0, maxHp := n 1, level := n 2, xp := n 3, initialXp := n 4,
+    bankRequiredLevel := n 5, unlockMonsterLevel := n 6,
+    inventoryUsed := n 7, inventoryMax := n 8,
+    taskCoinsTotal := n 9, taskExchangeMinCoins := n 10,
+    actionsAttempted := n 11, gold := n 12,
+    bankItemsCount := n 13, bankCapacity := n 14, nextExpansionCost := n 15,
+    taskLifecyclePhase := phase,
+    bankAccessible := b 17, bankUnlockMonsterPresent := b 18,
+    hasOverstockItems := b 19, selectBankDepositsNonempty := b 20,
+    pendingItemsNonempty := b 21, sellableInventoryNonempty := b 22,
+    recyclableSurplusNonempty := b 23, taskFeasibleProjected := b 24,
+    restForCombatReady := b 25, gearReviewFires := b 26,
+    craftReliefFires := b 27, objectiveStepFires := b 28,
+    maintainConsumablesFires := b 29, bankItemsKnown := b 30,
+    bankJunkNonempty := b 31, craftPotionsFires := b 32,
+    itemsTaskDeferActive := b 34,
+    overstockDebt := n 35, depositDebt := n 36, sellDebt := n 37,
+    loadoutAdequate := b 38, gearGap := n 39 }
+  let post := Formal.Liveness.CycleStepEC.cycleStepEC (n 33) s
+  let selected : Json :=
+    match Formal.Liveness.ProductionLadder.productionLadder
+        (Formal.Liveness.CycleStepE.perceptionRefreshE s) with
+    | some k => Json.str (meansKindName k)
+    | none => Json.null
+  let phaseNum : Int :=
+    match post.taskLifecyclePhase with
+    | .none => 0
+    | .accepted => 1
+    | .inProgress => 2
+    | .complete => 3
+  Json.mkObj [
+    ("selected", selected),
+    ("level", Json.num (Int.ofNat post.level)),
+    ("xp", Json.num (Int.ofNat post.xp)),
+    ("hp", Json.num (Int.ofNat post.hp)),
+    ("inventory_used", Json.num (Int.ofNat post.inventoryUsed)),
+    ("phase", Json.num phaseNum),
+    ("task_progress", Json.num (Int.ofNat post.taskProgress)),
+    ("task_total", Json.num (Int.ofNat post.taskTotal)),
+    ("loadout_adequate", Json.bool post.loadoutAdequate),
+    ("gear_gap", Json.num (Int.ofNat post.gearGap))]
+
 /-- Tier-2 sticky override. args: [n, ratioNum, ratioDen, lastChosen("" = none),
     then per candidate: repr, scoreNum, scoreDen]. Returns the chosen repr or null. -/
 def runStickyChoose (args : Array Json) : Json :=
@@ -3002,6 +3065,8 @@ def runOne (item : Json) : Json :=
     runCurrencyAfford args
   else if kind == "ladder_fires" then
     runLadder args
+  else if kind == "cycle_step_e" then
+    runCycleStepE args
   else if kind == "cycle_step_d" then
     runCycleStepD args
   else if kind == "xp_positive" then

@@ -819,3 +819,7 @@ open Formal.Liveness.WitnessAcquirable
 open Formal.Liveness.GearedDescent
 #print axioms cycleStepE_descends_below_fifty
 #print axioms ai_reaches_fifty_geared
+
+-- E-mirror binding (oracle `cycle_step_e` stands on this; rfl-chain on the
+-- Phase-B2 clone, so mirror and model cannot drift silently).
+#print axioms Formal.Liveness.CycleStepEC.cycleStepEC_eq
