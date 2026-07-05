@@ -106,6 +106,15 @@ class LearningStore:
                 conn.exec_driver_sql(
                     "ALTER TABLE cycles ADD COLUMN delta_skill_xp_json TEXT NOT NULL DEFAULT '{}'"
                 )
+            # Consumable batch-cook migration (2026-07-05): the column shipped
+            # in the model without a matching one-shot ALTER, so pre-existing
+            # DBs failed EVERY record_cycle INSERT ("table cycles has no
+            # column named consumables_expended_json") — learning silently
+            # dead since the batch-cook merge on old caches.
+            if cols and "consumables_expended_json" not in cols:
+                conn.exec_driver_sql(
+                    "ALTER TABLE cycles ADD COLUMN consumables_expended_json TEXT NOT NULL DEFAULT '{}'"
+                )
             conn.commit()
 
         self._character = character

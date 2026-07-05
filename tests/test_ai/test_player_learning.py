@@ -325,3 +325,28 @@ def test_compute_consumables_expended_empty_when_no_drop():
     prev = make_state(equipment={"utility1_slot": "small_health_potion"})
     prev = dataclasses.replace(prev, utility1_slot_quantity=5)
     assert player._compute_consumables_expended(prev, prev) == {}
+
+
+def test_store_migrates_consumables_expended_column(tmp_path):
+    """A pre-batch-cook DB (cycles table without consumables_expended_json)
+    must be ALTERed on open — the missing one-shot migration made every
+    record_cycle INSERT fail on old caches (live regression 2026-07-05)."""
+    import sqlite3
+
+    from artifactsmmo_cli.ai.learning.store import LearningStore
+
+    db = tmp_path / "old.db"
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "CREATE TABLE cycles (id INTEGER PRIMARY KEY, ts TEXT, session_id TEXT,"
+        " cycle_index INTEGER, character TEXT, x INTEGER, y INTEGER)"
+    )
+    conn.commit()
+    conn.close()
+    store = LearningStore(str(db), "testchar")
+    store._engine.dispose()
+    conn = sqlite3.connect(db)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(cycles)")}
+    conn.close()
+    assert "consumables_expended_json" in cols
+    assert "delta_skill_xp_json" in cols
