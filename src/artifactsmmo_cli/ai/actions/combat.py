@@ -42,6 +42,9 @@ class FightAction(Action):
 
     monster_code: str
     locations: frozenset[tuple[int, int]] = field(default_factory=frozenset, repr=False)
+    # P5b: access region the folded movement stays inside; the planner only
+    # offers this action when the character is in the same region.
+    travel_region: str = "overworld"
 
     _MIN_FREE_SLOTS = 1  # combat can drop loot; need at least 1 free capacity
 

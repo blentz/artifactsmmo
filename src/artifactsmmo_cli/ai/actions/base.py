@@ -34,6 +34,15 @@ class Action(ABC):
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         """Return True if this action can be taken from the given state."""
 
+    travel_region: str = "overworld"
+    """Access region this action's folded movement stays inside (P5b).
+    Every action folds move-to-target into cost/execute, which is only valid
+    WITHIN one access region (same layer, no restricted boundary). The
+    planner rejects actions whose region differs from the character's
+    current region; TransitionAction is the sole region-crossing edge.
+    Class-level default keeps every legacy action overworld-bound; layered
+    Fight/Gather instances and transitions override per instance."""
+
     tags: ClassVar[frozenset[str]] = frozenset()
     """Semantic labels for goal-level action filtering. Subclasses override.
 

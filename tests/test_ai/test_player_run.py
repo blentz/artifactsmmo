@@ -318,6 +318,10 @@ def test_player_builds_phase_b_actions():
     player.game_data._bank_location = (4, 0)
     player.game_data._taskmaster_location = (1, 2)
     player.game_data._transition_tiles = {(5, 5)}
+    # P5b: transitions are emitted per EDGE from the layered facts.
+    player.game_data.world.transition_edges = {
+        (5, 5, "overworld"): (5, 6, "underground", ()),
+    }
     player.game_data._bank_capacity = 30
     player.game_data._next_expansion_cost = 1000
     player._bank_accessible = True

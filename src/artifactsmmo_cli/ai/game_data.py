@@ -52,6 +52,7 @@ from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS, ItemCatalog, Ite
 from artifactsmmo_cli.ai.location_catalog import LocationCatalog
 from artifactsmmo_cli.ai.monster_catalog import MonsterCatalog
 from artifactsmmo_cli.ai.recipe_catalog import RecipeCatalog
+from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.ai.recipe_cost_memo import RecipeCostMemo
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 
@@ -596,6 +597,14 @@ class GameData:
     def transition_edge(self, x: int, y: int, layer: str) -> tuple[int, int, str, tuple[tuple[str, str, int], ...]] | None:
         """Transition leaving the tile: (dest_x, dest_y, dest_layer, conditions)."""
         return self.world.transition_edge(x, y, layer)
+
+    def region_of(self, x: int, y: int, layer: str) -> str:
+        """Access-region identity of a tile (see LocationCatalog.region_of)."""
+        return self.world.region_of(x, y, layer)
+
+    def state_region(self, state: WorldState) -> str:
+        """The region the character currently stands in."""
+        return self.world.region_of(state.x, state.y, state.layer)
 
     def workshop_location(self, skill: str) -> tuple[int, int] | None:
         """Location of the workshop for a crafting skill."""

@@ -146,6 +146,11 @@ class WorldState:
     utility1_slot_quantity: int = 0
     """Quantity of the consumable in utility slot 1 (from CharacterSchema)."""
     utility2_slot_quantity: int = 0
+    layer: str = "overworld"
+    """Map layer the character stands on (overworld/underground/interior) —
+    P5b movement (docs/PLAN_multilayer_nav.md). Defaults overworld so older
+    constructions keep working; access-REGION identity is derived at use time
+    via GameData.region_of (restricted tiles partition further than layers)."""
     """Quantity of the consumable in utility slot 2 (from CharacterSchema)."""
 
     def __post_init__(self) -> None:
@@ -243,8 +248,11 @@ class WorldState:
             cooldown_expires = char.cooldown_expiration
 
         task_code_norm = char.task if char.task else None
+        layer_raw = getattr(char, "layer", None)
+        layer = getattr(layer_raw, "value", layer_raw) or "overworld"
         return cls(
             character=char.name,
+            layer=str(layer),
             level=char.level,
             xp=char.xp,
             max_xp=char.max_xp,

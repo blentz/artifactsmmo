@@ -87,6 +87,27 @@ class LocationCatalog:
         has no transition."""
         return self.transition_edges.get((x, y, layer))
 
+    def region_of(self, x: int, y: int, layer: str) -> str:
+        """Access-region identity of a tile (P5b movement). Non-restricted
+        tiles share their layer's open region; restricted tiles belong to a
+        connected component labelled by its lexicographic anchor — movement
+        between regions happens ONLY through transition edges."""
+        if (x, y, layer) not in self.restricted_tiles:
+            return layer
+        # Flood the component (restricted regions are tiny — the Enchanted
+        # Forest is 5 tiles; recomputing per call is cheap and cache-free).
+        seen = {(x, y, layer)}
+        frontier = [(x, y, layer)]
+        while frontier:
+            cx, cy, cl = frontier.pop()
+            for nx, ny in ((cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)):
+                nt = (nx, ny, cl)
+                if nt in self.restricted_tiles and nt not in seen:
+                    seen.add(nt)
+                    frontier.append(nt)
+        ax, ay, al = min(seen)
+        return f"restricted:{al}:{ax},{ay}"
+
     def raid_location_tiles(self, raid_code: str) -> list[tuple[int, int]]:
         """Map tiles carrying this raid's content (empty if unknown). The tile
         exists statically; the boss is fightable there only while the raid's

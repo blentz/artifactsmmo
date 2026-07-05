@@ -51,6 +51,8 @@ class GatherAction(Action):
     # the fight xp projection; execution gathers the same tile and the
     # replan loop runs until the REAL count satisfies the goal.
     drop_item_override: str | None = None
+    # P5b: access region of the resource tiles (see FightAction.travel_region).
+    travel_region: str = "overworld"
 
     _MIN_FREE_SLOTS = 3  # gathering can produce ore + random bonus drops simultaneously
 

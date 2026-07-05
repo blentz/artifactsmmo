@@ -126,6 +126,9 @@ class GOAPPlanner:
                     continue
 
                 for action in relevant:
+                    if getattr(action, "travel_region", "overworld") != \
+                            game_data.state_region(node.state):
+                        continue
                     if not action.is_applicable(node.state, game_data):
                         continue
 

@@ -261,9 +261,38 @@ def build_actions(
                 npc_location=npc_loc,
             ))
 
+    # P5b: region-crossing transition edges + off-region content. Fights and
+    # gathers for tiles OUTSIDE the overworld open region become plannable —
+    # the planner chains Transition edges to reach them (movement folds only
+    # within a region). Monster/resource codes already indexed by the legacy
+    # (overworld) maps are NOT re-emitted for their overworld tiles.
+    for (px, py, playr), (dx, dy, dlayer, conds) in sorted(
+            game_data.world.transition_edges.items()):
+        actions.append(MapTransitionAction(
+            portal_x=px, portal_y=py, dest_x=dx, dest_y=dy, dest_layer=dlayer,
+            conditions=conds,
+            travel_region=game_data.region_of(px, py, playr)))
+    layered_extra: dict[tuple[str, str], list[tuple[int, int]]] = {}
+    for code, layered_tiles in game_data.world.layered_content.items():
+        for (tx, ty, tlayer) in layered_tiles:
+            region = game_data.region_of(tx, ty, tlayer)
+            if region == "overworld":
+                continue
+            layered_extra.setdefault((code, region), []).append((tx, ty))
+    for (code, region), region_tiles in sorted(layered_extra.items()):
+        if code in game_data.monsters.levels:
+            actions.append(FightAction(
+                monster_code=code, locations=frozenset(region_tiles),
+                travel_region=region))
+            actions.append(OptimizeLoadoutAction(
+                target_monster_code=code, game_data=game_data))
+        elif game_data.resource_skill_level(code) is not None:
+            actions.append(GatherAction(
+                resource_code=code, locations=frozenset(region_tiles),
+                travel_region=region))
+
     # Phase B: bank expansion, transitions, gold management
     actions.append(BuyBankExpansionAction(bank_location=bank, accessible=bank_accessible))
-    actions.append(MapTransitionAction())
     # Teleport consumables (PLAN #6b): one TeleportAction per teleport item whose
     # destination map resolves to a known tile. The planner's cost search prefers a
     # warp over a long walk when cheaper; is_applicable gates on actually holding it.
