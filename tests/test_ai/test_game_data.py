@@ -1332,6 +1332,8 @@ class TestGameDataLoad:
             patch("artifactsmmo_cli.ai.game_data.get_all_effects", return_value=empty_page),
             patch("artifactsmmo_cli.ai.game_data.get_ge_orders", return_value=empty_page),
             patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None),
+            patch("artifactsmmo_cli.ai.game_data.get_account_details", return_value=None),
+            patch("artifactsmmo_cli.ai.game_data.get_account_achievements", return_value=empty_page),
         ):
             gd = GameData.load(client, cache=cache)
         assert isinstance(gd, GameData)
@@ -1874,7 +1876,8 @@ class TestGameDataFetchBuildSplit:
         assert gd._resource_locations == {"copper": [(2, 3)]}
 
 
-_STATIC = ("maps", "items", "resources", "monsters", "npcs", "tasks", "events", "effects")
+_STATIC = ("maps", "items", "resources", "monsters", "npcs", "tasks", "events",
+           "effects", "achievements")
 
 
 class _RecordingCache(GameDataCache):
@@ -2003,7 +2006,7 @@ def test_warm_and_cold_events_build_equal(monkeypatch, tmp_path):
     ev = _make_event_npc(code="gold_merchant", npc_code="merchant", x=5, y=6)  # real EventSchema
     monkeypatch.setattr(GameData, "_fetch_events", lambda self, client: [ev])
     monkeypatch.setattr(GameData, "_fetch_effects", lambda self, client: [])
-    for name in ("maps", "items", "resources", "monsters", "npcs", "tasks"):
+    for name in ("maps", "items", "resources", "monsters", "npcs", "tasks", "achievements"):
         monkeypatch.setattr(GameData, f"_fetch_{name}", lambda self, client: [])
     monkeypatch.setattr(GameData, "_fetch_bank", lambda self, client: None)
     monkeypatch.setattr(GameData, "_load_ge_orders", lambda self, client: None)
@@ -2060,16 +2063,39 @@ def test_raid_map_content_ingested():
     assert gd.raid_location_tiles("nope") == []
 
 
+def test_raid_build_indexes_walkable_tiles_only():
+    """A raid tile on open ground is legacy-indexed; the (real) restricted
+    enchanted_fairy tile is not — it belongs to the layered/region model
+    like every other restricted content."""
+    from artifactsmmo_api_client.models.map_content_schema import MapContentSchema
+    from artifactsmmo_api_client.models.map_content_type import MapContentType
+    gd = GameData()
+    gd._build_maps([
+        _map_tile(1, 3, 3, "overworld",
+                  content=MapContentSchema(type_=MapContentType.RAID, code="open_raid")),
+        _map_tile(2, -4, 10, "overworld", access_type="restricted",
+                  content=MapContentSchema(type_=MapContentType.RAID,
+                                           code="enchanted_fairy")),
+    ])
+    assert gd.raid_location_tiles("open_raid") == [(3, 3)]
+    assert gd.raid_location_tiles("enchanted_fairy") == []
+    assert gd.layered_locations("enchanted_fairy") == [(-4, 10, "overworld")]
+
+
 def _map_tile(map_id, x, y, layer, access_type="standard", content=None,
-              transition=None):
+              transition=None, access_conditions=None):
     from artifactsmmo_api_client.models.access_schema import AccessSchema
     from artifactsmmo_api_client.models.interaction_schema import InteractionSchema
     from artifactsmmo_api_client.models.map_access_type import MapAccessType
     from artifactsmmo_api_client.models.map_layer import MapLayer
     from artifactsmmo_api_client.models.map_schema import MapSchema
+    access = (AccessSchema(type_=MapAccessType(access_type),
+                           conditions=access_conditions)
+              if access_conditions is not None
+              else AccessSchema(type_=MapAccessType(access_type)))
     return MapSchema(
         map_id=map_id, name="t", skin="s", x=x, y=y, layer=MapLayer(layer),
-        access=AccessSchema(type_=MapAccessType(access_type)),
+        access=access,
         interactions=InteractionSchema(content=content, transition=transition),
     )
 
@@ -2115,15 +2141,41 @@ def test_build_maps_restricted_and_transition_edge():
     assert gd.transition_edge(0, 0, "overworld") is None
 
 
-def test_monster_spawn_known_includes_layered_tiles():
-    """P5b consumer migration: spawn-known gates count all-layer tiles (the
-    movement brick routes to them); same-region distance callers keep using
-    monster_locations."""
+def test_monster_spawn_known_requires_reachable_region():
+    """Spawn-known counts an all-layer tile ONLY when its region is
+    reachable through modeled transition conditions (cost / has_item). The
+    Lich Tomb shape (key-cost entry into a walled standard-access pocket)
+    counts; an achievement-gated pocket does not — counting it was the
+    premature-spawn-known bug."""
+    from artifactsmmo_api_client.models.condition_schema import ConditionSchema
+    from artifactsmmo_api_client.models.map_content_schema import MapContentSchema
+    from artifactsmmo_api_client.models.map_content_type import MapContentType
+    from artifactsmmo_api_client.models.transition_schema import TransitionSchema
     gd = GameData()
-    gd._monster_locations = {"chicken": [(0, 1)]}
-    gd.world.layered_content = {"lich": [(9, 8, "underground")]}
-    assert gd.monster_spawn_known("chicken") is True
-    assert gd.monster_spawn_known("lich") is True
+    gd._build_maps([
+        _map_tile(1, 0, 0, "overworld"),
+        _map_tile(2, 0, 1, "overworld",
+                  content=MapContentSchema(type_=MapContentType.MONSTER, code="chicken")),
+        _map_tile(3, 1, 0, "overworld",
+                  transition=TransitionSchema(
+                      map_id=4, x=1, y=0, layer="underground",
+                      conditions=[ConditionSchema(
+                          code="lich_tomb_key", operator="cost", value=1)])),
+        _map_tile(4, 1, 0, "underground"),
+        _map_tile(5, 1, 1, "underground",
+                  content=MapContentSchema(type_=MapContentType.MONSTER, code="lich")),
+        _map_tile(6, 2, 0, "overworld",
+                  transition=TransitionSchema(
+                      map_id=7, x=3, y=0, layer="underground",
+                      conditions=[ConditionSchema(
+                          code="deep_delver", operator="achievement_unlocked", value=1)])),
+        _map_tile(7, 3, 0, "underground",
+                  content=MapContentSchema(type_=MapContentType.MONSTER,
+                                           code="goblin_priestess")),
+    ])
+    assert gd.monster_spawn_known("chicken") is True            # legacy overworld
+    assert gd.monster_spawn_known("lich") is True               # keyed pocket: modeled
+    assert gd.monster_spawn_known("goblin_priestess") is False  # achievement edge: unmodeled
     assert gd.monster_spawn_known("ghost") is False
     assert gd.monster_locations("lich") == []
 

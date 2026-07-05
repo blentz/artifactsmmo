@@ -67,6 +67,7 @@ def _patch_game_data_load():
                      "get_all_events", "get_all_effects", "get_ge_orders"):
             stack.enter_context(patch(f"artifactsmmo_cli.ai.game_data.{name}", return_value=empty))
         stack.enter_context(patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None))
+        stack.enter_context(patch("artifactsmmo_cli.ai.game_data.get_account_details", return_value=None))
         stack.enter_context(patch("artifactsmmo_cli.ai.game_data.GameDataCache", _NoopCache))
         yield
 

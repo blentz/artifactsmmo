@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-CACHE_VERSION = 4  # v4: all-layer map fetch + access/transition facts (P5b data)
+CACHE_VERSION = 5  # v5: account achievements page + walkable-tile region facts
 """Bump when the raw-page schema changes; an old version reads as a miss."""
 
 RawPages = dict[str, Any]

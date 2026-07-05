@@ -131,6 +131,7 @@ def test_advance_with_history_persists_cursor(tmp_path):
         patch("artifactsmmo_cli.ai.game_data.get_all_effects", return_value=MagicMock(data=[])),
         patch("artifactsmmo_cli.ai.game_data.get_ge_orders", return_value=MagicMock(data=[])),
         patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None),
+        patch("artifactsmmo_cli.ai.game_data.get_account_details", return_value=None),
         patch("artifactsmmo_cli.ai.game_data.GameDataCache", _NoopCache),
         patch.object(player, "_fetch_world_state", return_value=initial_state),
         patch.object(player, "_wait_for_cooldown", side_effect=fake_wait),

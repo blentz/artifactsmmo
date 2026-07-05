@@ -25,6 +25,35 @@ goal-layer changes (pinned by test). REMAINING (deliberate): goal layers
 still target legacy overworld indexes — off-region content becomes
 GOAL-DRIVEN when consumers migrate to layered_locations (next); dryad/
 enchanted_mushroom + 4 bosses reachable the moment a goal asks for them.
+**REGION-SOUNDNESS BRICK LANDED (2026-07-05):** docs pin the semantics
+("movement uses A* pathfinding ... bypassing blocked maps") — blocked
+tiles PARTITION a layer, so region identity is now the 4-adjacency
+component of walkable tiles (spawn component keeps the label
+"overworld"; others anchor-labelled `layer:x,y`). This exposed and fixed
+three bugs: (1) the five standard-access key pockets (Lich Tomb,
+priestess hideout, Sonnengott region, Rosenblood/Empress houses) were
+labelled plain layer regions — the planner believed it could walk to
+lich once underground, no key; (2) `conditional` access was never
+ingested — the tasks_trader tile (achievement `tasks_farmer`) sat in the
+legacy NPC index unconditionally (account achievements now fetched at
+load, page "achievements", CACHE_VERSION 5; unmet-conditional and
+restricted tiles are excluded from ALL legacy indexes — this also fixed
+(3) dryad/mushroom/fairy-raid restricted overworld tiles living in
+legacy indexes with travel_region "overworld", a guaranteed HTTP 596).
+MapTransitionAction now models item-`cost` (consumed from inventory)
+and `has_item` (inventory or equipped, not consumed) alongside gold —
+all five pockets are genuinely routable once the key is held; anything
+else (achievement_unlocked, stat comparisons) stays inapplicable.
+`monster_spawn_known` counts a layered tile ONLY when its region is in
+`reachable_regions()` (BFS over cost/has_item edges) — all 4 bosses
+stay spawn-known, now honestly. Live-verified: 415 walkable tiles, 15
+reachable regions, all 5 pockets distinct regions + reachable,
+tasks_farmer NOT completed on the account → tasks_trader correctly
+unrouted (NpcBuy/NpcSell already tolerate location=None). Known
+approximation: reachable_regions does not check key OBTAINABILITY
+(a key dropping only inside its own pocket would over-claim; live data
+has none). Full gate.sh not run in-session (bot live — serialize rule);
+run before merge.
 
 Facts (live-verified 2026-07-05):
 * Map layers: overworld / underground / interior. Loader fetches OVERWORLD

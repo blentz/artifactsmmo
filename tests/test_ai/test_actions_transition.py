@@ -32,12 +32,15 @@ class TestMapTransitionAction:
         assert _edge().is_applicable(make_state(gold=4999), gd) is False
         assert _edge(conditions=()).is_applicable(make_state(gold=0), gd) is True
 
-    def test_unmodeled_condition_codes_never_pass(self):
-        """An achievement/item-gated edge is inapplicable until explicitly
-        modeled — never silently passable."""
+    def test_unmodeled_condition_operators_never_pass(self):
+        """An edge with an operator outside {cost, has_item} is inapplicable
+        until explicitly modeled — never silently passable."""
         gd = GameData()
         gated = _edge(conditions=(("sonnengott_key", "has", 1),))
         assert gated.is_applicable(make_state(gold=10**9), gd) is False
+        achievement = _edge(
+            conditions=(("deep_delver", "achievement_unlocked", 1),))
+        assert achievement.is_applicable(make_state(gold=10**9), gd) is False
 
     def test_apply_teleports_and_charges(self):
         gd = GameData()
@@ -60,6 +63,79 @@ class TestMapTransitionAction:
                    return_value=make_api_result(char)) as mock_t:
             a.execute(state, client)
         mock_t.assert_called_once_with(client=client, name="testchar")
+
+    def test_execute_walks_to_portal_first(self):
+        a = _edge(conditions=())
+        char = make_char_schema()
+        state = make_state(x=0, y=0)  # off-portal: MoveAction folds the walk
+        client = MagicMock()
+        moved = make_state(x=-4, y=9)
+        with patch("artifactsmmo_cli.ai.actions.transition.MoveAction") as move_cls, \
+             patch("artifactsmmo_cli.ai.actions.transition.action_transition",
+                   return_value=make_api_result(char)) as mock_t:
+            move_cls.return_value.execute.return_value = moved
+            a.execute(state, client)
+        move_cls.assert_called_once_with(x=-4, y=9)
+        move_cls.return_value.execute.assert_called_once_with(state, client)
+        mock_t.assert_called_once_with(client=client, name="testchar")
+
+
+class TestKeyedTransitions:
+    """`cost` (key item, CONSUMED from the inventory) and `has_item`
+    (possessed in inventory or equipped, NOT consumed) — the two operators
+    that open the five walled boss pockets (Lich Tomb, priestess hideout,
+    Sonnengott region, Rosenblood/Empress houses)."""
+
+    def test_item_cost_needs_key_in_inventory(self):
+        gd = GameData()
+        edge = _edge(conditions=(("lich_tomb_key", "cost", 1),))
+        assert edge.is_applicable(
+            make_state(inventory={"lich_tomb_key": 1}), gd) is True
+        assert edge.is_applicable(make_state(inventory={}), gd) is False
+        # an equipped copy cannot pay a CONSUMING cost
+        equipped_only = make_state(
+            inventory={}, equipment={"weapon_slot": "lich_tomb_key"})
+        assert edge.is_applicable(equipped_only, gd) is False
+
+    def test_item_cost_consumed_on_apply(self):
+        gd = GameData()
+        edge = _edge(conditions=(("lich_tomb_key", "cost", 1),),
+                     dest_layer="underground")
+        spare = edge.apply(
+            make_state(inventory={"lich_tomb_key": 2, "bread": 1}, gold=50), gd)
+        assert spare.inventory == {"lich_tomb_key": 1, "bread": 1}
+        assert spare.gold == 50  # no gold charged
+        assert (spare.x, spare.y, spare.layer) == (-4, 8, "underground")
+        last = edge.apply(make_state(inventory={"lich_tomb_key": 1}), gd)
+        assert last.inventory == {}  # spent to zero: entry dropped
+
+    def test_has_item_inventory_or_equipped_not_consumed(self):
+        gd = GameData()
+        edge = _edge(conditions=(("cultist_cloak", "has_item", 1),))
+        held = make_state(inventory={"cultist_cloak": 1})
+        assert edge.is_applicable(held, gd) is True
+        assert edge.apply(held, gd).inventory == {"cultist_cloak": 1}
+        worn = make_state(equipment={"body_armor_slot": "cultist_cloak"})
+        assert edge.is_applicable(worn, gd) is True
+        assert edge.is_applicable(make_state(), gd) is False
+
+    def test_mixed_gold_and_key_conditions(self):
+        gd = GameData()
+        edge = _edge(conditions=(("gold", "cost", 100),
+                                 ("lich_tomb_key", "cost", 1)))
+        funded = make_state(gold=100, inventory={"lich_tomb_key": 1})
+        assert edge.is_applicable(funded, gd) is True
+        assert edge.is_applicable(
+            make_state(gold=99, inventory={"lich_tomb_key": 1}), gd) is False
+        assert edge.is_applicable(make_state(gold=100, inventory={}), gd) is False
+        post = edge.apply(funded, gd)
+        assert post.gold == 0 and post.inventory == {}
+
+    def test_repr_shows_key_conditions(self):
+        assert repr(_edge(conditions=(("lich_tomb_key", "cost", 1),))) == \
+            "Transition((-4,9)->(-4,8,overworld), lich_tomb_keyx1)"
+        assert repr(_edge(conditions=(("cultist_cloak", "has_item", 1),))) == \
+            "Transition((-4,9)->(-4,8,overworld), holds cultist_cloak)"
 
 
 class TestRegionAwarePlanning:
