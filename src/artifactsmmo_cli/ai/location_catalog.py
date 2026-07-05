@@ -16,7 +16,17 @@ class LocationCatalog:
     # teaches the planner layers/regions — consumers migrate then.
     layered_content: dict[str, list[tuple[int, int, str]]] = field(default_factory=dict)  # content code -> [(x, y, layer)]
     restricted_tiles: set[tuple[int, int, str]] = field(default_factory=set)  # access.type == 'restricted'
+    walkable_tiles: set[tuple[int, int, str]] = field(default_factory=set)
+    """Every tile the move action can path onto: access 'standard' plus
+    'conditional' tiles whose conditions the account satisfies. The server
+    moves by A* THROUGH these (docs: "uses A* pathfinding ... bypassing
+    blocked maps"), so walkable adjacency — not the bare layer — defines
+    which tiles can reach each other without a transition."""
     transition_edges: dict[tuple[int, int, str], tuple[int, int, str, tuple[tuple[str, str, int], ...]]] = field(default_factory=dict)  # (x,y,layer) -> (dx,dy,dlayer, ((cond_code, operator, value), ...))
+    _region_cache: dict[tuple[int, int, str], str] = field(default_factory=dict, repr=False, compare=False)
+    """Memoized region_of labels, filled one whole component per flood. The
+    catalog is load-once/never-mutate in production; tests that reseed tile
+    sets construct a fresh catalog."""
     bank_tile: tuple[int, int] | None = None
     bank_tile_open: bool = False  # True once bank_tile points at an unconditional bank
     taskmaster_tile: tuple[int, int] | None = None
@@ -88,25 +98,72 @@ class LocationCatalog:
         return self.transition_edges.get((x, y, layer))
 
     def region_of(self, x: int, y: int, layer: str) -> str:
-        """Access-region identity of a tile (P5b movement). Non-restricted
-        tiles share their layer's open region; restricted tiles belong to a
-        connected component labelled by its lexicographic anchor — movement
-        between regions happens ONLY through transition edges."""
-        if (x, y, layer) not in self.restricted_tiles:
+        """Access-region identity of a tile (P5b movement). A region is a
+        connected component of same-kind tiles under 4-adjacency: the server
+        moves by A* through walkable tiles, so blocked tiles PARTITION a
+        layer (the standard-access Lich Tomb is walled off inside the
+        underground layer — live data ships a keyed transition as its only
+        entry). Restricted tiles flood among themselves ("restricted maps
+        cannot communicate with normal maps"). Movement between regions
+        happens ONLY through transition edges.
+
+        Labels: the component holding the (0, 0) overworld spawn is
+        "overworld" (matching Action.travel_region's default); every other
+        component is anchored by its lexicographic minimum. Tiles absent
+        from the walkability facts (sparse test fixtures) fall back to the
+        bare layer."""
+        tloc = (x, y, layer)
+        cached = self._region_cache.get(tloc)
+        if cached is not None:
+            return cached
+        if tloc in self.restricted_tiles:
+            pool: set[tuple[int, int, str]] = self.restricted_tiles
+        elif tloc in self.walkable_tiles:
+            pool = self.walkable_tiles
+        else:
             return layer
-        # Flood the component (restricted regions are tiny — the Enchanted
-        # Forest is 5 tiles; recomputing per call is cheap and cache-free).
-        seen = {(x, y, layer)}
-        frontier = [(x, y, layer)]
+        seen = {tloc}
+        frontier = [tloc]
         while frontier:
             cx, cy, cl = frontier.pop()
             for nx, ny in ((cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1)):
                 nt = (nx, ny, cl)
-                if nt in self.restricted_tiles and nt not in seen:
+                if nt in pool and nt not in seen:
                     seen.add(nt)
                     frontier.append(nt)
         ax, ay, al = min(seen)
-        return f"restricted:{al}:{ax},{ay}"
+        if pool is self.restricted_tiles:
+            label = f"restricted:{al}:{ax},{ay}"
+        elif (0, 0, "overworld") in seen:
+            label = "overworld"
+        else:
+            label = f"{al}:{ax},{ay}"
+        for member in seen:
+            self._region_cache[member] = label
+        return label
+
+    def reachable_regions(self) -> frozenset[str]:
+        """Fixed point of the regions reachable from the overworld spawn
+        region through transition edges whose conditions the movement model
+        can actually satisfy through play: `cost` (gold or a consumed key
+        item) and `has_item` (a possessed item) — exactly the operators
+        MapTransitionAction models. An edge carrying any other condition
+        (achievement_unlocked, stat comparisons) does NOT extend reach; the
+        content behind it stays honestly unroutable until modeled."""
+        reach = {"overworld"}
+        changed = True
+        while changed:
+            changed = False
+            for (px, py, pl), (dx, dy, dl, conds) in self.transition_edges.items():
+                if not all(op in ("cost", "has_item") for _code, op, _v in conds):
+                    continue
+                if self.region_of(px, py, pl) not in reach:
+                    continue
+                dest = self.region_of(dx, dy, dl)
+                if dest not in reach:
+                    reach.add(dest)
+                    changed = True
+        return frozenset(reach)
 
     def raid_location_tiles(self, raid_code: str) -> list[tuple[int, int]]:
         """Map tiles carrying this raid's content (empty if unknown). The tile

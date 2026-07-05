@@ -14,17 +14,22 @@ from functools import cached_property
 from typing import Any
 
 from artifactsmmo_api_client import AuthenticatedClient
+from artifactsmmo_api_client.api.accounts.get_account_achievements_accounts_account_achievements_get import (
+    sync as get_account_achievements,
+)
 from artifactsmmo_api_client.api.effects.get_all_effects_effects_get import sync as get_all_effects
 from artifactsmmo_api_client.api.events.get_all_events_events_get import sync as get_all_events
 from artifactsmmo_api_client.api.grand_exchange.get_ge_orders_grandexchange_orders_get import sync as get_ge_orders
 from artifactsmmo_api_client.api.items.get_all_items_items_get import sync as get_all_items
 from artifactsmmo_api_client.api.maps.get_all_maps_maps_get import sync as get_all_maps
 from artifactsmmo_api_client.api.monsters.get_all_monsters_monsters_get import sync as get_all_monsters
+from artifactsmmo_api_client.api.my_account.get_account_details_my_details_get import sync as get_account_details
 from artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get import sync as get_bank_details
 from artifactsmmo_api_client.api.np_cs.get_all_npcs_items_npcs_items_get import sync as get_all_npc_items
 from artifactsmmo_api_client.api.resources.get_all_resources_resources_get import sync as get_all_resources
 from artifactsmmo_api_client.api.tasks.get_all_tasks_tasks_list_get import sync as get_all_tasks
 from artifactsmmo_api_client.models.task_full_schema import TaskFullSchema
+from artifactsmmo_api_client.models.account_achievement_schema import AccountAchievementSchema
 from artifactsmmo_api_client.models.bank_schema import BankSchema
 from artifactsmmo_api_client.models.craft_skill import CraftSkill
 from artifactsmmo_api_client.models.effect_schema import EffectSchema
@@ -130,6 +135,11 @@ class GameData:
     monsters: MonsterCatalog = field(default_factory=MonsterCatalog)
     recipes_catalog: RecipeCatalog = field(default_factory=RecipeCatalog)
     world: LocationCatalog = field(default_factory=LocationCatalog)
+    _completed_achievements: set[str] = field(default_factory=set)
+    """Achievement codes the ACCOUNT has completed (from
+    /accounts/{account}/achievements). Evaluates `achievement_unlocked`
+    access conditions at map build; account-wide, so one set serves every
+    character. Refreshes with the static-page cache TTL."""
     _task_reward_item_codes: frozenset[str] = field(default_factory=frozenset)
     _task_coin_rewards: dict[str, int] = field(default_factory=dict)
     _task_gold_rewards: dict[str, int] = field(default_factory=dict)
@@ -588,12 +598,20 @@ class GameData:
 
     def monster_spawn_known(self, code: str) -> bool:
         """True when the monster spawns SOMEWHERE the planner can route to:
-        the legacy overworld/event index, or any all-layer tile (P5b — the
-        movement brick reaches those through transition edges). Use for
-        spawn-known GATES; keep `monster_locations` for same-region distance
-        work."""
-        return bool(self.monster_locations(code)) or bool(
-            self.world.layered_locations(code))
+        the legacy overworld/event index, or an all-layer tile whose region
+        is REACHABLE through transition edges the movement model can satisfy
+        (cost / has_item conditions). A tile behind an achievement-gated or
+        otherwise unmodeled edge does NOT count — claiming it routable would
+        re-open the premature-spawn-known bug. Use for spawn-known GATES;
+        keep `monster_locations` for same-region distance work."""
+        if self.monster_locations(code):
+            return True
+        tiles = self.world.layered_locations(code)
+        if not tiles:
+            return False
+        reach = self.world.reachable_regions()
+        return any(self.world.region_of(x, y, layer) in reach
+                   for (x, y, layer) in tiles)
 
     def layered_locations(self, code: str) -> list[tuple[int, int, str]]:
         """ALL-layer (x, y, layer) tiles for a content code (P5b data)."""
@@ -614,6 +632,10 @@ class GameData:
     def state_region(self, state: WorldState) -> str:
         """The region the character currently stands in."""
         return self.world.region_of(state.x, state.y, state.layer)
+
+    def reachable_regions(self) -> frozenset[str]:
+        """Regions reachable via modeled transitions (see LocationCatalog)."""
+        return self.world.reachable_regions()
 
     def workshop_location(self, skill: str) -> tuple[int, int] | None:
         """Location of the workshop for a crafting skill."""
@@ -1200,6 +1222,7 @@ class GameData:
                 "events": data._fetch_events(client),
                 "effects": data._fetch_effects(client),
                 "bank": data._fetch_bank(client),
+                "achievements": data._fetch_achievements(client),
             }
             raw = {
                 k: (
@@ -1227,7 +1250,9 @@ class GameData:
                 "events": [EventSchema.from_dict(d) for d in raw["events"]],
                 "effects": [EffectSchema.from_dict(d) for d in raw["effects"]],
                 "bank": BankSchema.from_dict(raw["bank"]) if raw["bank"] is not None else None,
+                "achievements": [AccountAchievementSchema.from_dict(d) for d in raw["achievements"]],
             }
+        data._build_achievements(objs["achievements"])  # before maps: access-condition evaluation
         data._build_maps(objs["maps"])
         data._build_items(objs["items"])
         data._build_resources(objs["resources"])
@@ -1259,6 +1284,42 @@ class GameData:
         """Fetch bank capacity and next expansion cost."""
         self._build_bank(self._fetch_bank(client))
 
+    def _fetch_achievements(self, client: AuthenticatedClient) -> list[AccountAchievementSchema]:
+        """Page the account's achievements (account name via /my/details).
+        Feeds `achievement_unlocked` access-condition evaluation in
+        `_build_maps`. Follows the shared pager posture: an absent page
+        reads as empty."""
+        details = get_account_details(client=client)
+        if details is None or getattr(details, "data", None) is None:
+            return []
+        out: list[AccountAchievementSchema] = []
+        page = 1
+        while True:
+            result = get_account_achievements(
+                account=details.data.username, client=client, page=page, size=100)
+            # The generated client types this endpoint as a union with
+            # ErrorResponseSchema; an error page carries no data.
+            page_data = getattr(result, "data", None)
+            if not page_data:
+                break
+            out.extend(page_data)
+            if len(page_data) < 100:
+                break
+            page += 1
+        return out
+
+    def _build_achievements(self, items: list[AccountAchievementSchema]) -> None:
+        """Record the COMPLETED achievement codes (completed_at set)."""
+        self._completed_achievements = {
+            a.code for a in items
+            if getattr(a, "completed_at", None) is not None
+            and not isinstance(getattr(a, "completed_at", None), Unset)
+        }
+
+    def achievement_completed(self, code: str) -> bool:
+        """True when the account has completed this achievement."""
+        return code in self._completed_achievements
+
     def _fetch_maps(self, client: AuthenticatedClient) -> list[MapSchema]:
         """Page ALL map tiles across every layer (P5b: underground/interior
         carry 4 bosses + god_of_the_sun's raid tiles; the overworld-only
@@ -1281,20 +1342,43 @@ class GameData:
         """Build content location indexes from map tile schema objects.
 
         P5b split: the LEGACY indexes (every accessor the planner consumes
-        today) ingest OVERWORLD tiles only — exactly the pre-P5b view, so no
-        plan can route to a tile the movement model cannot reach. ALL tiles
-        additionally feed the layered structures (layered_content /
-        restricted_tiles / transition_edges) that the movement brick will
-        consume."""
+        today) ingest OVERWORLD tiles only, and only tiles the character can
+        actually WALK to — restricted tiles and unmet-conditional tiles are
+        excluded (their content is owned by the layered structures + region
+        model, reached through transition edges; routing to them as if open
+        draws HTTP 596). ALL tiles additionally feed the layered structures
+        (layered_content / restricted_tiles / walkable_tiles /
+        transition_edges) that the movement model consumes."""
         for tile in tiles:
             layer = getattr(tile.layer, "value", tile.layer)
             tloc = (tile.x, tile.y, layer)
 
             access = getattr(tile, "access", None)
-            if (access is not None and not isinstance(access, Unset)
-                    and getattr(access, "type_", None) is not None
-                    and getattr(access.type_, "value", access.type_) == "restricted"):
+            access_type: str | None = None
+            if access is not None and not isinstance(access, Unset):
+                raw_type = getattr(access, "type_", None)
+                if raw_type is not None:
+                    access_type = str(getattr(raw_type, "value", raw_type))
+            if access_type == "restricted":
                 self.world.restricted_tiles.add(tloc)
+
+            conditional_unmet = False
+            if access_type == "conditional":
+                # Access conditions gate STEPPING ONTO the tile. Only
+                # achievement_unlocked is evaluable from static account
+                # data; any other operator reads as unmet — never
+                # default-pass.
+                access_conds = getattr(access, "conditions", None) or []
+                conditional_unmet = not all(
+                    str(getattr(getattr(c, "operator", ""), "value",
+                                getattr(c, "operator", ""))) == "achievement_unlocked"
+                    and str(getattr(c, "code", "")) in self._completed_achievements
+                    for c in access_conds
+                )
+
+            walkable = access_type not in ("blocked", "restricted") and not conditional_unmet
+            if walkable:
+                self.world.walkable_tiles.add(tloc)
 
             transition = tile.interactions.transition
             if not isinstance(transition, Unset) and transition is not None:
@@ -1334,6 +1418,17 @@ class GameData:
 
             ct = content.type_
             code = content.code
+
+            # Content on a tile the character cannot walk onto (restricted
+            # region, unmet conditional access) must NOT enter the legacy
+            # indexes: actions built from them default travel_region
+            # "overworld" and the server rejects the move (HTTP 596). The
+            # layered structures above still carry the tile; the region
+            # model routes to it through transition edges. Banks are exempt
+            # — their dedicated open-vs-gated latch below already handles
+            # conditional access.
+            if not walkable and ct != MapContentType.BANK:
+                continue
 
             if ct == MapContentType.MONSTER:
                 self._monster_locations.setdefault(code, []).append(loc)

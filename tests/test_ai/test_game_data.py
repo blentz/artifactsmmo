@@ -1302,7 +1302,9 @@ class TestGameDataLoad:
                                 with patch("artifactsmmo_cli.ai.game_data.get_all_events", return_value=empty_page):
                                     with patch("artifactsmmo_cli.ai.game_data.get_all_effects", return_value=empty_page):
                                         with patch("artifactsmmo_cli.ai.game_data.get_ge_orders", return_value=empty_page):
-                                            with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None):
+                                            with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None), \
+                                                 patch("artifactsmmo_cli.ai.game_data.get_account_details",
+                                                       return_value=None):
                                                 gd = GameData.load(client, cache=cache)
         assert isinstance(gd, GameData)
 
@@ -1844,7 +1846,8 @@ class TestGameDataFetchBuildSplit:
         assert gd._resource_locations == {"copper": [(2, 3)]}
 
 
-_STATIC = ("maps", "items", "resources", "monsters", "npcs", "tasks", "events", "effects")
+_STATIC = ("maps", "items", "resources", "monsters", "npcs", "tasks", "events",
+           "effects", "achievements")
 
 
 class _RecordingCache(GameDataCache):
@@ -1973,7 +1976,7 @@ def test_warm_and_cold_events_build_equal(monkeypatch, tmp_path):
     ev = _make_event_npc(code="gold_merchant", npc_code="merchant", x=5, y=6)  # real EventSchema
     monkeypatch.setattr(GameData, "_fetch_events", lambda self, client: [ev])
     monkeypatch.setattr(GameData, "_fetch_effects", lambda self, client: [])
-    for name in ("maps", "items", "resources", "monsters", "npcs", "tasks"):
+    for name in ("maps", "items", "resources", "monsters", "npcs", "tasks", "achievements"):
         monkeypatch.setattr(GameData, f"_fetch_{name}", lambda self, client: [])
     monkeypatch.setattr(GameData, "_fetch_bank", lambda self, client: None)
     monkeypatch.setattr(GameData, "_load_ge_orders", lambda self, client: None)
@@ -2030,16 +2033,39 @@ def test_raid_map_content_ingested():
     assert gd.raid_location_tiles("nope") == []
 
 
+def test_raid_build_indexes_walkable_tiles_only():
+    """A raid tile on open ground is legacy-indexed; the (real) restricted
+    enchanted_fairy tile is not — it belongs to the layered/region model
+    like every other restricted content."""
+    from artifactsmmo_api_client.models.map_content_schema import MapContentSchema
+    from artifactsmmo_api_client.models.map_content_type import MapContentType
+    gd = GameData()
+    gd._build_maps([
+        _map_tile(1, 3, 3, "overworld",
+                  content=MapContentSchema(type_=MapContentType.RAID, code="open_raid")),
+        _map_tile(2, -4, 10, "overworld", access_type="restricted",
+                  content=MapContentSchema(type_=MapContentType.RAID,
+                                           code="enchanted_fairy")),
+    ])
+    assert gd.raid_location_tiles("open_raid") == [(3, 3)]
+    assert gd.raid_location_tiles("enchanted_fairy") == []
+    assert gd.layered_locations("enchanted_fairy") == [(-4, 10, "overworld")]
+
+
 def _map_tile(map_id, x, y, layer, access_type="standard", content=None,
-              transition=None):
+              transition=None, access_conditions=None):
     from artifactsmmo_api_client.models.access_schema import AccessSchema
     from artifactsmmo_api_client.models.interaction_schema import InteractionSchema
     from artifactsmmo_api_client.models.map_access_type import MapAccessType
     from artifactsmmo_api_client.models.map_layer import MapLayer
     from artifactsmmo_api_client.models.map_schema import MapSchema
+    access = (AccessSchema(type_=MapAccessType(access_type),
+                           conditions=access_conditions)
+              if access_conditions is not None
+              else AccessSchema(type_=MapAccessType(access_type)))
     return MapSchema(
         map_id=map_id, name="t", skin="s", x=x, y=y, layer=MapLayer(layer),
-        access=AccessSchema(type_=MapAccessType(access_type)),
+        access=access,
         interactions=InteractionSchema(content=content, transition=transition),
     )
 
@@ -2085,14 +2111,200 @@ def test_build_maps_restricted_and_transition_edge():
     assert gd.transition_edge(0, 0, "overworld") is None
 
 
-def test_monster_spawn_known_includes_layered_tiles():
-    """P5b consumer migration: spawn-known gates count all-layer tiles (the
-    movement brick routes to them); same-region distance callers keep using
-    monster_locations."""
+def test_monster_spawn_known_requires_reachable_region():
+    """Spawn-known counts an all-layer tile ONLY when its region is
+    reachable through modeled transition conditions (cost / has_item). The
+    Lich Tomb shape (key-cost entry into a walled standard-access pocket)
+    counts; an achievement-gated pocket does not — counting it was the
+    premature-spawn-known bug."""
+    from artifactsmmo_api_client.models.condition_schema import ConditionSchema
+    from artifactsmmo_api_client.models.map_content_schema import MapContentSchema
+    from artifactsmmo_api_client.models.map_content_type import MapContentType
+    from artifactsmmo_api_client.models.transition_schema import TransitionSchema
     gd = GameData()
-    gd._monster_locations = {"chicken": [(0, 1)]}
-    gd.world.layered_content = {"lich": [(9, 8, "underground")]}
-    assert gd.monster_spawn_known("chicken") is True
-    assert gd.monster_spawn_known("lich") is True
+    gd._build_maps([
+        _map_tile(1, 0, 0, "overworld"),
+        _map_tile(2, 0, 1, "overworld",
+                  content=MapContentSchema(type_=MapContentType.MONSTER, code="chicken")),
+        _map_tile(3, 1, 0, "overworld",
+                  transition=TransitionSchema(
+                      map_id=4, x=1, y=0, layer="underground",
+                      conditions=[ConditionSchema(
+                          code="lich_tomb_key", operator="cost", value=1)])),
+        _map_tile(4, 1, 0, "underground"),
+        _map_tile(5, 1, 1, "underground",
+                  content=MapContentSchema(type_=MapContentType.MONSTER, code="lich")),
+        _map_tile(6, 2, 0, "overworld",
+                  transition=TransitionSchema(
+                      map_id=7, x=3, y=0, layer="underground",
+                      conditions=[ConditionSchema(
+                          code="deep_delver", operator="achievement_unlocked", value=1)])),
+        _map_tile(7, 3, 0, "underground",
+                  content=MapContentSchema(type_=MapContentType.MONSTER,
+                                           code="goblin_priestess")),
+    ])
+    assert gd.monster_spawn_known("chicken") is True            # legacy overworld
+    assert gd.monster_spawn_known("lich") is True               # keyed pocket: modeled
+    assert gd.monster_spawn_known("goblin_priestess") is False  # achievement edge: unmodeled
     assert gd.monster_spawn_known("ghost") is False
-    assert gd.monster_locations("lich") == []
+    assert gd.monster_locations("lich") == []  # same-region distance source unchanged
+    assert gd.reachable_regions() == frozenset({"overworld", "underground:1,0"})
+
+
+def test_region_of_walkable_components_and_labels():
+    """Regions are 4-adjacency components of walkable tiles (the server
+    A*-paths through walkable maps, so blocked gaps partition a layer).
+    The spawn component keeps the label 'overworld'; every other component
+    is anchored by its lexicographic minimum; restricted components keep
+    their P5b labels; tiles with no walkability facts fall back to the
+    bare layer."""
+    from artifactsmmo_cli.ai.location_catalog import LocationCatalog
+    cat = LocationCatalog()
+    cat.walkable_tiles = {
+        (0, 0, "overworld"), (1, 0, "overworld"),   # spawn component
+        (5, 5, "overworld"),                        # detached overworld island
+        (9, 7, "underground"), (9, 8, "underground"),  # Lich Tomb pocket
+    }
+    cat.restricted_tiles = {(-4, 9, "overworld"), (-4, 10, "overworld")}
+    assert cat.region_of(0, 0, "overworld") == "overworld"
+    assert cat.region_of(1, 0, "overworld") == "overworld"
+    assert cat.region_of(5, 5, "overworld") == "overworld:5,5"
+    assert cat.region_of(9, 8, "underground") == "underground:9,7"
+    assert cat.region_of(9, 7, "underground") == cat.region_of(9, 8, "underground")
+    assert cat.region_of(-4, 10, "overworld") == "restricted:overworld:-4,9"
+    assert cat.region_of(7, 7, "interior") == "interior"
+    # memoized: second lookup hits the component cache
+    assert cat.region_of(9, 8, "underground") == "underground:9,7"
+
+
+def test_reachable_regions_modeled_edges_only():
+    """Reach BFS crosses free / cost / has_item edges (what
+    MapTransitionAction models) — including chained hops — and refuses
+    achievement-gated edges."""
+    from artifactsmmo_cli.ai.location_catalog import LocationCatalog
+    cat = LocationCatalog()
+    cat.walkable_tiles = {
+        (0, 0, "overworld"), (1, 0, "overworld"), (2, 0, "overworld"), (3, 0, "overworld"),
+        (1, 0, "underground"),   # free-edge destination
+        (5, 5, "underground"),   # key-cost pocket, entered FROM the free area (chained)
+        (7, 7, "interior"),      # has_item pocket
+        (9, 9, "interior"),      # achievement-gated pocket
+    }
+    cat.transition_edges = {
+        (1, 0, "overworld"): (1, 0, "underground", ()),
+        (1, 0, "underground"): (5, 5, "underground", (("lich_tomb_key", "cost", 1),)),
+        (2, 0, "overworld"): (7, 7, "interior", (("cultist_cloak", "has_item", 1),)),
+        (3, 0, "overworld"): (9, 9, "interior", (("deep_delver", "achievement_unlocked", 1),)),
+        # an exit FROM the unreachable pocket must not seed reach from there
+        (9, 9, "interior"): (3, 0, "overworld", ()),
+    }
+    reach = cat.reachable_regions()
+    assert reach == frozenset({
+        "overworld", "underground:1,0", "underground:5,5", "interior:7,7"})
+
+
+def test_build_maps_restricted_content_not_legacy_routable():
+    """Dryad case: content on a restricted overworld tile must NOT feed the
+    legacy indexes (actions built from them default travel_region
+    'overworld' and the move draws HTTP 596). The layered structures still
+    carry the tile, and it never becomes walkable."""
+    from artifactsmmo_api_client.models.map_content_schema import MapContentSchema
+    from artifactsmmo_api_client.models.map_content_type import MapContentType
+    gd = GameData()
+    gd._build_maps([
+        _map_tile(1, 0, 0, "overworld"),
+        _map_tile(2, -5, 8, "overworld", access_type="restricted",
+                  content=MapContentSchema(type_=MapContentType.MONSTER, code="dryad")),
+    ])
+    assert gd.monster_locations("dryad") == []
+    assert gd.layered_locations("dryad") == [(-5, 8, "overworld")]
+    assert (-5, 8, "overworld") not in gd.world.walkable_tiles
+    assert gd.is_restricted_tile(-5, 8, "overworld") is True
+
+
+def test_build_maps_walkable_excludes_blocked():
+    gd = GameData()
+    gd._build_maps([
+        _map_tile(1, 0, 0, "overworld"),
+        _map_tile(2, 1, 0, "overworld", access_type="blocked"),
+    ])
+    assert (0, 0, "overworld") in gd.world.walkable_tiles
+    assert (1, 0, "overworld") not in gd.world.walkable_tiles
+
+
+def test_build_maps_conditional_access_gated_on_achievement():
+    """tasks_trader case: a conditional-access tile joins the legacy index
+    and the walkable set ONLY when the account holds the achievement; a
+    condition with any non-achievement operator reads as unmet (never
+    default-pass)."""
+    from artifactsmmo_api_client.models.condition_schema import ConditionSchema
+    from artifactsmmo_api_client.models.map_content_schema import MapContentSchema
+    from artifactsmmo_api_client.models.map_content_type import MapContentType
+
+    def trader_tile(conditions):
+        return _map_tile(1, 5, 11, "overworld", access_type="conditional",
+                         access_conditions=conditions,
+                         content=MapContentSchema(type_=MapContentType.NPC,
+                                                  code="tasks_trader"))
+
+    achievement = [ConditionSchema(code="tasks_farmer",
+                                   operator="achievement_unlocked", value=1)]
+
+    locked = GameData()
+    locked._build_maps([trader_tile(achievement)])
+    assert "tasks_trader" not in locked._npc_locations
+    assert (5, 11, "overworld") not in locked.world.walkable_tiles
+
+    unlocked = GameData(_completed_achievements={"tasks_farmer"})
+    unlocked._build_maps([trader_tile(achievement)])
+    assert unlocked._npc_locations["tasks_trader"] == (5, 11)
+    assert (5, 11, "overworld") in unlocked.world.walkable_tiles
+
+    stat_gated = GameData(_completed_achievements={"tasks_farmer"})
+    stat_gated._build_maps([trader_tile(
+        [ConditionSchema(code="level", operator="gt", value=40)])])
+    assert "tasks_trader" not in stat_gated._npc_locations
+    assert (5, 11, "overworld") not in stat_gated.world.walkable_tiles
+
+
+def test_build_achievements_records_completed_only():
+    import datetime as _dt
+    gd = GameData()
+    gd._build_achievements([
+        SimpleNamespace(code="tasks_farmer", completed_at=_dt.datetime(2026, 1, 1)),
+        SimpleNamespace(code="lumberjack_10", completed_at=None),
+        SimpleNamespace(code="miner_10", completed_at=UNSET),
+    ])
+    assert gd.achievement_completed("tasks_farmer") is True
+    assert gd.achievement_completed("lumberjack_10") is False
+    assert gd.achievement_completed("miner_10") is False
+
+
+def test_fetch_achievements_pages_and_tolerates_missing_details(monkeypatch):
+    gd = GameData()
+    monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_account_details",
+                        lambda client: None)
+    assert gd._fetch_achievements(client=None) == []
+
+    monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_account_details",
+                        lambda client: SimpleNamespace(data=None))
+    assert gd._fetch_achievements(client=None) == []
+
+    monkeypatch.setattr(
+        "artifactsmmo_cli.ai.game_data.get_account_details",
+        lambda client: SimpleNamespace(data=SimpleNamespace(username="brett")))
+    pages = {1: [SimpleNamespace(code=f"a{i}") for i in range(100)],
+             2: [SimpleNamespace(code="last")]}
+
+    def fake_achievements(account, client, page=1, size=100):
+        assert account == "brett"
+        return SimpleNamespace(data=pages.get(page, []))
+
+    monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_account_achievements",
+                        fake_achievements)
+    out = gd._fetch_achievements(client=None)
+    assert len(out) == 101 and out[-1].code == "last"
+
+    monkeypatch.setattr("artifactsmmo_cli.ai.game_data.get_account_achievements",
+                        lambda account, client, page=1, size=100: None)
+    assert gd._fetch_achievements(client=None) == []
