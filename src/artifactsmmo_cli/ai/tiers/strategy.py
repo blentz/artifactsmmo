@@ -291,10 +291,24 @@ def _producible(code: str, state: WorldState, game_data: GameData) -> bool:
     the core call to avoid instantiating the four flags when unneeded."""
     if game_data.crafting_recipe(code) is not None:
         return True
-    # Flat currency-buy: gold or directly task-earnable currency (tasks_coin).
-    # Non-recursive — sufficient for the task-coin use-case; is_reachable recurses.
+    # Currency-buy, one level deep: gold, task-earnable (tasks_coin), or a
+    # currency the character can PRODUCE now — gatherable (hides come from
+    # fights but wool/dusts also gather-adjacent items count via the full
+    # drop tables) or dropped by a currently-winnable spawned monster
+    # (P3, docs/PLAN_engagement_expansion.md: tailor leathers @ hides,
+    # archaeologist @ shards, cultist @ corrupted_gem). Currencies are base
+    # items, so one level suffices; is_reachable recurses for the rest.
+    def _currency_producible(currency: str) -> bool:
+        if currency == GOLD or game_data.is_task_earnable(currency):
+            return True
+        if currency in game_data.gatherable_drop_items():
+            return True
+        return any(
+            is_winnable(state, game_data, monster_code)
+            and game_data.monster_locations(monster_code)
+            for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(currency))
     buyable = any(
-        currency == GOLD or game_data.is_task_earnable(currency)
+        _currency_producible(currency)
         for _price, currency in _permanent_vendor_purchases(code, game_data))
     # Winnable drop: state-aware (preserves the winnability gate).
     winnable_drop = any(

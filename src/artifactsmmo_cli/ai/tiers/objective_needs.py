@@ -53,7 +53,18 @@ def _producible_by_self(code: str, game_data: GameData) -> bool:
            for table in game_data.resource_drops_full.values()
            for item, *_rest in table):
         return True
-    return bool(game_data.monsters_dropping(code))
+    if game_data.monsters_dropping(code):
+        return True
+    # NPC purchase with a self-producible currency (P3): tailor leathers for
+    # hides, archaeologist items for shard/page drops, tasks_trader for coins.
+    # One level deep — currencies are base items (gold handled by callers'
+    # worth gates; task-earnable and drop/gather currencies count here).
+    return any(
+        game_data.is_task_earnable(currency)
+        or currency in game_data.gatherable_drop_items()
+        or bool(game_data.monsters_dropping(currency))
+        for _npc, _price, currency in game_data.npc_purchases(code)
+        if not game_data.is_event_npc(_npc) and game_data.npc_location(_npc) is not None)
 
 
 def objective_needs(root: MetaGoal, state: WorldState, game_data: GameData) -> NeedSet:

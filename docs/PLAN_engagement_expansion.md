@@ -1,6 +1,17 @@
 # PLAN — Engagement expansion: events, elites, bosses, raids (cross the L38 wall)
 
-**Status: P1 DONE 836e4045 (wall FALLS — frontier ∅ from multi-drops alone); F1-v2 regen this commit; P2 was a NON-GAP (recipes were always loaded — the closure failed on gem/currency ingredients); next P3-P6 (breadth 309→496 + engagement behaviours).**
+**Status: P1 DONE 836e4045 (wall FALLS); F1-v2 DONE 7b61681f (frontier ∅ kernel);
+P2 NON-GAP; E-tower capstone DONE 31c78262 (ai_reaches_fifty_geared).
+P4 DISCOVERED ALREADY IMPLEMENTED — active-event fetch per cycle (player.py),
+active_event_codes overlay before action-building, factory merges event
+monster/resource tiles, event-merchant EventWindow gating (roadmap-4 memory
+was stale). P3 partial DONE (this commit): state-aware leaf `_producible`
+and `_producible_by_self` now count NPC purchases paid in a currency the
+character can produce (gatherable / winnable-drop / task-earnable), one
+level deep — tailor leathers @ hides, archaeologist @ shards, cultist @
+corrupted_gem; unlocated vendors honestly excluded (sorceress). Remaining:
+P5 elite/boss drop-hunting goals, P6 raids, currency ACCUMULATION goals
+(BuyItem funding when currency insufficient — CurrencyFunding extension).**
 User mandate: by level 38 the player must engage events, elites, bosses, raids,
 raid bosses — expand production capability AND the formal model.
 

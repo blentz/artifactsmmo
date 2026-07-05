@@ -2,7 +2,7 @@
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
-from artifactsmmo_cli.ai.tiers.objective_needs import objective_needs
+from artifactsmmo_cli.ai.tiers.objective_needs import _producible_by_self, objective_needs
 from tests.test_ai.fixtures import make_state
 
 
@@ -124,3 +124,16 @@ def test_secondary_drop_ingredient_is_material_not_buy_only():
     needs = objective_needs(ObtainItem("iron_sword"), state, gd)
     assert "rare_gem" in needs.materials
     assert "rare_gem" not in needs.buy_only
+
+
+def test_producible_by_self_via_currency_purchase():
+    """P3 (engagement expansion): an item sold by a permanent located vendor
+    for a monster-drop currency counts as self-producible."""
+    gd = GameData()
+    gd.world.npc_stock = {"tailor": {"cloth": 3}}
+    gd.world.npc_buy_currency = {"tailor": {"cloth": "wool"}}
+    gd._npc_locations = {"tailor": (5, 5)}
+    gd._monster_drops = {"sheep": [("wool", 1, 1, 1)]}
+    assert _producible_by_self("cloth", gd) is True
+    gd._npc_locations = {}
+    assert _producible_by_self("cloth", gd) is False

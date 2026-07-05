@@ -315,3 +315,38 @@ def test_relevant_actions_drops_unwinnable_dropper_keeps_winnable() -> None:
     relevant = goal.relevant_actions(actions, state, gd)
     fights = [a for a in relevant if isinstance(a, FightAction)]
     assert [f.monster_code for f in fights] == ["chicken"]
+
+
+# --- P3 (engagement expansion): currency-buy producibility -------------------
+
+
+def _gd_tailor() -> GameData:
+    """Permanent located vendor selling 'cloth' for 'wool' (a monster drop)."""
+    gd = _gd_two_droppers()
+    gd.world.npc_stock = {"tailor": {"cloth": 3}}
+    gd.world.npc_buy_currency = {"tailor": {"cloth": "wool"}}
+    gd._npc_locations = {"tailor": (5, 5)}
+    gd._item_stats["cloth"] = ItemStats(code="cloth", level=1, type_="resource")
+    gd._item_stats["wool"] = ItemStats(code="wool", level=1, type_="resource")
+    gd._monster_level = {**gd._monster_level, "sheep": 1}
+    gd._monster_drops = {**gd._monster_drops, "sheep": [("wool", 1, 1, 1)]}
+    gd._monster_locations = {**gd._monster_locations, "sheep": [(1, 1)]}
+    fill_monster_stat_defaults(gd)
+    gd._monster_hp = {**gd._monster_hp, "sheep": 10}
+    return gd
+
+
+def test_producible_via_drop_currency_purchase() -> None:
+    """cloth (tailor @ wool) is producible when the currency's dropper is
+    winnable and spawned — the P3 currency-chain widening."""
+    gd = _gd_tailor()
+    state = _winnable_state()
+    assert _producible("cloth", state, gd) is True
+
+
+def test_not_producible_when_vendor_unlocated() -> None:
+    """An unlocated vendor is not a source (sorceress case, live-verified)."""
+    gd = _gd_tailor()
+    gd._npc_locations = {}
+    state = _winnable_state()
+    assert _producible("cloth", state, gd) is False
