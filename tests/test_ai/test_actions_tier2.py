@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from artifactsmmo_api_client.models.map_content_type import MapContentType
+from artifactsmmo_api_client.models.map_layer import MapLayer
 from artifactsmmo_api_client.types import UNSET
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOT
@@ -378,6 +379,7 @@ class TestGameDataNpcSupport:
         tile = MagicMock()
         tile.x = 2
         tile.y = 1
+        tile.layer = MapLayer.OVERWORLD
         tile.interactions.content.type_ = MapContentType.NPC
         tile.interactions.content.code = "cook"
 

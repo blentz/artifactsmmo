@@ -585,6 +585,18 @@ class GameData:
         """Tiles carrying a raid's map content (see LocationCatalog)."""
         return self.world.raid_location_tiles(raid_code)
 
+    def layered_locations(self, code: str) -> list[tuple[int, int, str]]:
+        """ALL-layer (x, y, layer) tiles for a content code (P5b data)."""
+        return self.world.layered_locations(code)
+
+    def is_restricted_tile(self, x: int, y: int, layer: str) -> bool:
+        """True when the tile is region-gated (access type 'restricted')."""
+        return self.world.is_restricted(x, y, layer)
+
+    def transition_edge(self, x: int, y: int, layer: str) -> tuple[int, int, str, tuple[tuple[str, str, int], ...]] | None:
+        """Transition leaving the tile: (dest_x, dest_y, dest_layer, conditions)."""
+        return self.world.transition_edge(x, y, layer)
+
     def workshop_location(self, skill: str) -> tuple[int, int] | None:
         """Location of the workshop for a crafting skill."""
         return self.world.workshop_location(skill)
@@ -1230,27 +1242,71 @@ class GameData:
         self._build_bank(self._fetch_bank(client))
 
     def _fetch_maps(self, client: AuthenticatedClient) -> list[MapSchema]:
-        """Page all overworld map tiles; return the list of schema objects."""
+        """Page ALL map tiles across every layer (P5b: underground/interior
+        carry 4 bosses + god_of_the_sun's raid tiles; the overworld-only
+        fetch walled them off). `_build_maps` keeps the legacy indexes
+        overworld-only until the movement brick lands."""
         out: list[MapSchema] = []
-        page = 1
-        while True:
-            result = get_all_maps(client=client, layer=MapLayer.OVERWORLD, page=page, size=100)
-            if result is None or not result.data:
-                break
-            out.extend(result.data)
-            if len(result.data) < 100:
-                break
-            page += 1
+        for layer in MapLayer:
+            page = 1
+            while True:
+                result = get_all_maps(client=client, layer=layer, page=page, size=100)
+                if result is None or not result.data:
+                    break
+                out.extend(result.data)
+                if len(result.data) < 100:
+                    break
+                page += 1
         return out
 
     def _build_maps(self, tiles: list[MapSchema]) -> None:
-        """Build content location indexes from map tile schema objects."""
+        """Build content location indexes from map tile schema objects.
+
+        P5b split: the LEGACY indexes (every accessor the planner consumes
+        today) ingest OVERWORLD tiles only — exactly the pre-P5b view, so no
+        plan can route to a tile the movement model cannot reach. ALL tiles
+        additionally feed the layered structures (layered_content /
+        restricted_tiles / transition_edges) that the movement brick will
+        consume."""
         for tile in tiles:
+            layer = getattr(tile.layer, "value", tile.layer)
+            tloc = (tile.x, tile.y, layer)
+
+            access = getattr(tile, "access", None)
+            if (access is not None and not isinstance(access, Unset)
+                    and getattr(access, "type_", None) is not None
+                    and getattr(access.type_, "value", access.type_) == "restricted"):
+                self.world.restricted_tiles.add(tloc)
+
+            transition = tile.interactions.transition
+            if not isinstance(transition, Unset) and transition is not None:
+                conds: list[tuple[str, str, int]] = []
+                raw_conds = getattr(transition, "conditions", None)
+                if raw_conds is not None and not isinstance(raw_conds, Unset):
+                    for c in raw_conds:
+                        conds.append((
+                            str(getattr(c, "code", "")),
+                            str(getattr(getattr(c, "operator", ""), "value", getattr(c, "operator", ""))),
+                            int(getattr(c, "value", 0) or 0),
+                        ))
+                self.world.transition_edges[tloc] = (
+                    transition.x, transition.y,
+                    str(getattr(transition.layer, "value", transition.layer)),
+                    tuple(conds),
+                )
+
+            content_any = tile.interactions.content
+            if not (isinstance(content_any, Unset) or content_any is None):
+                self.world.layered_content.setdefault(
+                    content_any.code, []).append(tloc)
+
+            if layer != "overworld":
+                continue
+
             loc = (tile.x, tile.y)
             self._known_tiles.add(loc)
             self.world.map_id_to_loc[tile.map_id] = loc  # teleport destinations resolve map_id -> coords
 
-            transition = tile.interactions.transition
             if not isinstance(transition, Unset) and transition is not None:
                 self._transition_tiles.add(loc)
 

@@ -7,6 +7,16 @@ and god_of_the_sun's raid tiles; ParticipateRaid works for enchanted_fairy
 
 ## P5b: multi-layer navigation
 
+**DATA LAYER LANDED (2026-07-05):** all-layer map fetch; layered structures
+(`layered_content` (x,y,layer) per code, `restricted_tiles`,
+`transition_edges` with parsed (code, operator, value) conditions);
+LEGACY indexes deliberately overworld-only until the movement brick, so no
+plan can route to an unreachable tile. Live-verified: all 4 layer-locked
+bosses + god_of_the_sun tiles in layered data, fairy tile restricted=True,
+entry edge = (-4,8,overworld,(('gold','cost',5000),)). CACHE_VERSION 4.
+REMAINING: movement semantics (state layer field, region-aware distance,
+cost-aware MapTransitionAction, consumer migration to layered locations).
+
 Facts (live-verified 2026-07-05):
 * Map layers: overworld / underground / interior. Loader fetches OVERWORLD
   only (`game_data.py` `_fetch_maps`, `layer=MapLayer.OVERWORLD`).

@@ -11,6 +11,12 @@ class LocationCatalog:
 
     workshop_locations: dict[str, tuple[int, int]] = field(default_factory=dict)  # skill -> (x, y)
     raid_locations: dict[str, list[tuple[int, int]]] = field(default_factory=dict)  # raid_code -> tiles (P6)
+    # P5b data layer (docs/PLAN_multilayer_nav.md): ALL-layer, access-aware map
+    # facts. Legacy indexes above stay OVERWORLD-only until the movement brick
+    # teaches the planner layers/regions — consumers migrate then.
+    layered_content: dict[str, list[tuple[int, int, str]]] = field(default_factory=dict)  # content code -> [(x, y, layer)]
+    restricted_tiles: set[tuple[int, int, str]] = field(default_factory=set)  # access.type == 'restricted'
+    transition_edges: dict[tuple[int, int, str], tuple[int, int, str, tuple[tuple[str, str, int], ...]]] = field(default_factory=dict)  # (x,y,layer) -> (dx,dy,dlayer, ((cond_code, operator, value), ...))
     bank_tile: tuple[int, int] | None = None
     bank_tile_open: bool = False  # True once bank_tile points at an unconditional bank
     taskmaster_tile: tuple[int, int] | None = None
@@ -66,6 +72,20 @@ class LocationCatalog:
     def workshop_location(self, skill: str) -> tuple[int, int] | None:
         """Location of the workshop for a crafting skill."""
         return self.workshop_locations.get(skill)
+
+    def layered_locations(self, code: str) -> list[tuple[int, int, str]]:
+        """Every (x, y, layer) carrying this content code, ALL layers (P5b)."""
+        return self.layered_content.get(code, [])
+
+    def is_restricted(self, x: int, y: int, layer: str) -> bool:
+        """True when the tile's access type is 'restricted' (region-gated)."""
+        return (x, y, layer) in self.restricted_tiles
+
+    def transition_edge(self, x: int, y: int, layer: str) -> tuple[int, int, str, tuple[tuple[str, str, int], ...]] | None:
+        """The transition leaving this tile as (dest_x, dest_y, dest_layer,
+        conditions) — conditions like ('gold', 'cost', 5000); None if the tile
+        has no transition."""
+        return self.transition_edges.get((x, y, layer))
 
     def raid_location_tiles(self, raid_code: str) -> list[tuple[int, int]]:
         """Map tiles carrying this raid's content (empty if unknown). The tile

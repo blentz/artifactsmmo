@@ -9,6 +9,7 @@ from artifactsmmo_api_client.models.event_content_schema import EventContentSche
 from artifactsmmo_api_client.models.event_map_schema import EventMapSchema
 from artifactsmmo_api_client.models.event_schema import EventSchema
 from artifactsmmo_api_client.models.map_content_type import MapContentType
+from artifactsmmo_api_client.models.map_layer import MapLayer
 from artifactsmmo_api_client.models.static_data_page_event_schema import StaticDataPageEventSchema
 from artifactsmmo_api_client.types import UNSET
 
@@ -22,6 +23,7 @@ def make_map_tile(x, y, content_type=None, content_code=None, access_conditions=
     tile = MagicMock()
     tile.x = x
     tile.y = y
+    tile.layer = MapLayer.OVERWORLD  # P5b: the build partitions on layer
     # Default: open tile (no access conditions). Pass a non-empty list to gate it.
     tile.access = MagicMock()
     tile.access.conditions = access_conditions if access_conditions is not None else []
@@ -39,6 +41,16 @@ def make_page(items):
     result = MagicMock()
     result.data = items
     return result
+
+
+def overworld_maps(tiles):
+    """get_all_maps side_effect: serve `tiles` on the OVERWORLD first page,
+    empty pages for every other layer (P5b fetches all three layers)."""
+    def _fake(client=None, layer=None, page=1, size=100, **_kw):
+        if layer == MapLayer.OVERWORLD and page == 1:
+            return make_page(list(tiles))
+        return make_page([])
+    return _fake
 
 
 class TestGameDataLookups:
@@ -162,21 +174,21 @@ class TestGameDataLoadMaps:
     def test_loads_monster_location(self):
         gd = GameData()
         tile = make_map_tile(1, 0, "monster", "chicken")
-        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=make_page([tile])):
+        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", side_effect=overworld_maps([tile])):
             gd._load_maps(MagicMock())
         assert gd._monster_locations == {"chicken": [(1, 0)]}
 
     def test_loads_resource_location(self):
         gd = GameData()
         tile = make_map_tile(2, 3, "resource", "copper")
-        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=make_page([tile])):
+        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", side_effect=overworld_maps([tile])):
             gd._load_maps(MagicMock())
         assert gd._resource_locations == {"copper": [(2, 3)]}
 
     def test_loads_bank_location(self):
         gd = GameData()
         tile = make_map_tile(0, 1, "bank", "bank")
-        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=make_page([tile])):
+        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", side_effect=overworld_maps([tile])):
             gd._load_maps(MagicMock())
         assert gd._bank_location == (0, 1)
 
@@ -190,7 +202,7 @@ class TestGameDataLoadMaps:
              make_map_tile(-2, 19, "bank", "bank", access_conditions=[{"code": "secure_the_island"}])],
         ):
             gd = GameData()
-            with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=make_page(tiles)):
+            with patch("artifactsmmo_cli.ai.game_data.get_all_maps", side_effect=overworld_maps(tiles)):
                 gd._load_maps(MagicMock())
             assert gd._bank_location == (4, 1)
             assert gd.has_open_bank() is True
@@ -206,7 +218,7 @@ class TestGameDataLoadMaps:
     def test_bank_falls_back_to_gated_when_no_open(self):
         gd = GameData()
         tile = make_map_tile(-2, 19, "bank", "bank", access_conditions=[{"code": "secure_the_island"}])
-        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=make_page([tile])):
+        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", side_effect=overworld_maps([tile])):
             gd._load_maps(MagicMock())
         assert gd._bank_location == (-2, 19)
         assert gd.has_open_bank() is False
@@ -214,21 +226,21 @@ class TestGameDataLoadMaps:
     def test_loads_taskmaster_location(self):
         gd = GameData()
         tile = make_map_tile(1, 2, "tasks_master", "taskmaster")
-        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=make_page([tile])):
+        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", side_effect=overworld_maps([tile])):
             gd._load_maps(MagicMock())
         assert gd._taskmaster_location == (1, 2)
 
     def test_loads_workshop_by_skill_substring(self):
         gd = GameData()
         tile = make_map_tile(5, 0, "workshop", "weaponcrafting_workshop")
-        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=make_page([tile])):
+        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", side_effect=overworld_maps([tile])):
             gd._load_maps(MagicMock())
         assert gd._workshop_locations.get("weaponcrafting") == (5, 0)
 
     def test_skips_null_content(self):
         gd = GameData()
         tile = make_map_tile(1, 0)  # no content
-        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=make_page([tile])):
+        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", side_effect=overworld_maps([tile])):
             gd._load_maps(MagicMock())
         assert gd._monster_locations == {}
 
@@ -250,7 +262,11 @@ class TestGameDataLoadMaps:
         page1.data = [tile] * 100
         page2 = MagicMock()
         page2.data = [make_map_tile(2, 0, "monster", "cow")]
-        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", side_effect=[page1, page2]):
+        def paged(client=None, layer=None, page=1, size=100, **_kw):
+            if layer != MapLayer.OVERWORLD:
+                return make_page([])
+            return page1 if page == 1 else page2
+        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", side_effect=paged):
             gd._load_maps(MagicMock())
         assert "chicken" in gd._monster_locations
         assert "cow" in gd._monster_locations
@@ -258,7 +274,7 @@ class TestGameDataLoadMaps:
     def test_loads_grand_exchange_location(self):
         gd = GameData()
         tile = make_map_tile(3, 4, "grand_exchange", "grand_exchange")
-        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=make_page([tile])):
+        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", side_effect=overworld_maps([tile])):
             gd._load_maps(MagicMock())
         assert gd._grand_exchange_location == (3, 4)
 
@@ -1325,6 +1341,7 @@ def test_load_maps_captures_transition_tiles(monkeypatch):
         def __init__(self, x, y, transition=None):
             self.x = x
             self.y = y
+            self.layer = MapLayer.OVERWORLD
             self.map_id = x * 1000 + y  # MapSchema.map_id is a required field
             self.interactions = FakeInteractions(content=None, transition=transition)
 
@@ -1336,8 +1353,10 @@ def test_load_maps_captures_transition_tiles(monkeypatch):
         if page == 1:
             return FakeResult([
                 FakeTile(0, 0, transition=None),
-                FakeTile(5, 5, transition="dungeon_a"),
-                FakeTile(7, 7, transition="zone_b"),
+                FakeTile(5, 5, transition=SimpleNamespace(
+                    x=5, y=6, layer="underground", conditions=[])),
+                FakeTile(7, 7, transition=SimpleNamespace(
+                    x=7, y=8, layer="overworld", conditions=[])),
             ])
         return FakeResult([])
 
@@ -1812,7 +1831,7 @@ class TestGameDataFetchBuildSplit:
     def test_fetch_maps_returns_element_objects(self):
         gd = GameData()
         tile = make_map_tile(1, 0, "monster", "chicken")
-        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=make_page([tile])):
+        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", side_effect=overworld_maps([tile])):
             out = gd._fetch_maps(MagicMock())
         assert out == [tile]   # _fetch_* returns the schema objects, un-built
 
@@ -1820,7 +1839,7 @@ class TestGameDataFetchBuildSplit:
         # the existing wrapper still indexes correctly (build over fetched objects)
         gd = GameData()
         tile = make_map_tile(2, 3, "resource", "copper")
-        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=make_page([tile])):
+        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", side_effect=overworld_maps([tile])):
             gd._load_maps(MagicMock())
         assert gd._resource_locations == {"copper": [(2, 3)]}
 
@@ -2009,3 +2028,58 @@ def test_raid_map_content_ingested():
     gd.world.raid_locations = {"enchanted_fairy": [(-4, 10)]}
     assert gd.raid_location_tiles("enchanted_fairy") == [(-4, 10)]
     assert gd.raid_location_tiles("nope") == []
+
+
+def _map_tile(map_id, x, y, layer, access_type="standard", content=None,
+              transition=None):
+    from artifactsmmo_api_client.models.access_schema import AccessSchema
+    from artifactsmmo_api_client.models.interaction_schema import InteractionSchema
+    from artifactsmmo_api_client.models.map_access_type import MapAccessType
+    from artifactsmmo_api_client.models.map_layer import MapLayer
+    from artifactsmmo_api_client.models.map_schema import MapSchema
+    return MapSchema(
+        map_id=map_id, name="t", skin="s", x=x, y=y, layer=MapLayer(layer),
+        access=AccessSchema(type_=MapAccessType(access_type)),
+        interactions=InteractionSchema(content=content, transition=transition),
+    )
+
+
+def test_build_maps_layers_partition_legacy_vs_layered():
+    """P5b data layer: non-overworld content feeds ONLY the layered
+    structures; legacy indexes stay overworld-only (no plan can route to a
+    tile the movement model cannot reach yet)."""
+    from artifactsmmo_api_client.models.map_content_schema import MapContentSchema
+    from artifactsmmo_api_client.models.map_content_type import MapContentType
+    gd = GameData()
+    tiles = [
+        _map_tile(1, 0, 0, "overworld",
+                  content=MapContentSchema(type_=MapContentType.MONSTER, code="chicken")),
+        _map_tile(2, 9, 8, "underground",
+                  content=MapContentSchema(type_=MapContentType.MONSTER, code="lich")),
+    ]
+    gd._build_maps(tiles)
+    assert gd.monster_locations("chicken") == [(0, 0)]
+    assert gd.monster_locations("lich") == []
+    assert gd.layered_locations("lich") == [(9, 8, "underground")]
+    assert gd.layered_locations("chicken") == [(0, 0, "overworld")]
+
+
+def test_build_maps_restricted_and_transition_edge():
+    """Restricted flags and transition edges (with cost conditions) are
+    captured exactly — the Enchanted Forest entry shape."""
+    from artifactsmmo_api_client.models.condition_schema import ConditionSchema
+    from artifactsmmo_api_client.models.transition_schema import TransitionSchema
+    gd = GameData()
+    tiles = [
+        _map_tile(769, -4, 10, "overworld", access_type="restricted"),
+        _map_tile(715, -4, 9, "overworld",
+                  transition=TransitionSchema(
+                      map_id=667, x=-4, y=8, layer="overworld",
+                      conditions=[ConditionSchema(code="gold", operator="cost", value=5000)])),
+    ]
+    gd._build_maps(tiles)
+    assert gd.is_restricted_tile(-4, 10, "overworld") is True
+    assert gd.is_restricted_tile(-4, 9, "overworld") is False
+    assert gd.transition_edge(-4, 9, "overworld") == (
+        -4, 8, "overworld", (("gold", "cost", 5000),))
+    assert gd.transition_edge(0, 0, "overworld") is None
