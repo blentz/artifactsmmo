@@ -91,6 +91,7 @@ import Formal.Liveness.DeferFaithful
 import Formal.Liveness.CycleStepDC
 import Formal.Liveness.WitnessAcquirable
 import Formal.Liveness.GearedDescent
+import Formal.Liveness.CycleStepEC
 
 open Formal.Liveness.Placeholder
 open Formal.Liveness.Measure
