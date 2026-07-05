@@ -19,7 +19,9 @@ from artifactsmmo_cli.ai.consumable_supply import best_held_heal
 from artifactsmmo_cli.ai.craft_plan_gen import generate_next_craft_action
 from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
 from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
+from artifactsmmo_cli.ai.equipment.bank_tool_fills import bank_tool_fills
 from artifactsmmo_cli.ai.equipment.empty_slot_fills import empty_slot_rank_fills
+from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_skill_resource import best_gather_resource_drop
 from artifactsmmo_cli.ai.gather_step_target import gather_step_target
@@ -31,9 +33,9 @@ from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.goals.craft_relief import CraftReliefGoal
 from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
 from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
-from artifactsmmo_cli.ai.goals.equip_owned_gear import EquipOwnedGoal
 from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
 from artifactsmmo_cli.ai.goals.drain_bank_junk import DrainBankJunkGoal
+from artifactsmmo_cli.ai.goals.equip_owned_gear import EquipOwnedGoal
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
@@ -52,11 +54,11 @@ from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal, tasks_coin_total
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
-from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
+from artifactsmmo_cli.ai.goals.withdraw_tools import WithdrawToolsGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
-from artifactsmmo_cli.ai.potion_provision_qty import potion_provision_qty_pure
 from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.potion_provision_qty import potion_provision_qty_pure
 from artifactsmmo_cli.ai.recipe_closure import closure_demand
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
@@ -68,7 +70,6 @@ from artifactsmmo_cli.ai.tiers.guards import (
     _gear_protected,
     active_guards,
     active_profile,
-    protected_gear_codes,
 )
 from artifactsmmo_cli.ai.tiers.means import MeansKind, active_means
 from artifactsmmo_cli.ai.tiers.means_worth import means_serves
@@ -280,7 +281,7 @@ def _skill_dispatch_candidates(
     cannibalize = cannibalize_pure(current_level, flag_inputs)
     rf, rr = frozenset(reserved_full), frozenset(reserved_relaxed)
     out: list[DispatchCandidate] = []
-    for gc, fi in zip(raw, flag_inputs):
+    for gc, fi in zip(raw, flag_inputs, strict=False):
         uses_full, uses_relaxed = dispatch_candidate_flags(fi, current_level, rf, rr, cannibalize)
         out.append(DispatchCandidate(
             code=gc.code, craft_skill=gc.craft_skill, craft_level=gc.craft_level,
@@ -1226,6 +1227,23 @@ class StrategyArbiter:
             eq_goal = EquipOwnedGoal(fills=equip_fills)
             candidates.append(Candidate(goal=eq_goal, is_means=True,
                                         repr_=repr(eq_goal), band=BAND_COLLECT))
+        # Withdraw-tools (COLLECT band): same materialized-here contract as
+        # EquipOwnedGoal — bounded, self-satisfying, never a blocker. Ferries a
+        # strictly-better BANKED gathering tool into the bag; the proven gather
+        # re-arm (GATHER_LOADOUT_PENALTY + OptimizeLoadout(Gather)) equips it,
+        # and `_best_gathering_tools` in the deposit keep-set stops the
+        # ping-pong back to the bank. pick_loadout scans only owned items, so
+        # without this ferry a banked tool is invisible forever (trace
+        # 2026-07-05: copper_pickaxe banked, 261/300 cycles bare-handed mining).
+        bank_tile = game_data.bank_location_or_none
+        if ctx.bank_accessible and bank_tile is not None:
+            tool_fills = bank_tool_fills(
+                state, game_data, frozenset(task_reserved_demand(state, game_data)))
+            if tool_fills:
+                wt_goal = WithdrawToolsGoal(fills=tool_fills, bank_location=bank_tile,
+                                            accessible=ctx.bank_accessible)
+                candidates.append(Candidate(goal=wt_goal, is_means=True,
+                                            repr_=repr(wt_goal), band=BAND_COLLECT))
         # Append step_goal + every fallback-step goal in ranking order so
         # select_pure walks them all before reaching discretionary. Trace
         # 2026-06-06 16:34 (cycles 0-1): top step's GrindCharacterXP

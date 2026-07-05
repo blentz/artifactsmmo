@@ -30,6 +30,8 @@ LEVEL_SKILL_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "lev
 SCORING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "scoring.py"
 LOADOUT_PICKER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "loadout_picker.py"
 EMPTY_SLOT_FILLS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "empty_slot_fills.py"
+BANK_TOOL_FILLS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "bank_tool_fills.py"
+RECYCLE_SURPLUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recycle_surplus.py"
 GEAR_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_value.py"
 SKILL_XP_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "skill_xp_curve.py"
 SKILL_TARGET_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "skill_target_curve.py"
@@ -2473,6 +2475,67 @@ EQUIP_OWNED_BAND_MUTATIONS = [
 ]
 
 
+# Withdraw-tools ferry (2026-07-05 bare-handed-mining fix). The banked-tool fill
+# must be strictly better than every OWNED candidate, respect the level/reserved
+# gates, and land in the COLLECT band; each conjunct is killed by a dedicated
+# unit test (tests/ai/test_bank_tool_fills.py / test_withdraw_tools_arbiter.py).
+BANK_TOOL_FILLS_MUTATIONS = [
+    ("bank_tool_fills: strict-better -> better-or-equal (withdraw ping-pong)",
+     "            if value > best_owned and (best is None or value > best[0]):",
+     "            if value >= best_owned and (best is None or value > best[0]):"),
+    ("bank_tool_fills: owned pool ignores equipped tool",
+     "    owned.update(code for code in state.equipment.values() if code)",
+     "    owned.update(())"),
+    ("bank_tool_fills: drop level gate (withdraws unusable tool)",
+     "            if stats is None or state.level < stats.level:",
+     "            if stats is None:"),
+    ("bank_tool_fills: drop reserved exclusion",
+     "            if state.bank_items[code] <= 0 or code in reserved:",
+     "            if state.bank_items[code] <= 0:"),
+]
+
+WITHDRAW_TOOLS_BAND_MUTATIONS = [
+    ("strategy_driver: WithdrawToolsGoal band COLLECT->DISCRETIONARY (sinks below step)",
+     "                                            repr_=repr(wt_goal), band=BAND_COLLECT))",
+     "                                            repr_=repr(wt_goal), band=BAND_DISCRETIONARY))"),
+    ("strategy_driver: drop bank-accessible gate on WithdrawTools",
+     "        if ctx.bank_accessible and bank_tile is not None:",
+     "        if bank_tile is not None:"),
+]
+
+# Gathering-tool keep-set (2026-07-05): the best owned tool per gathering skill
+# is working kit — depositing it re-creates the bare-handed grind. Killed by
+# tests/test_ai/test_bank_selection.py.
+# Recyclable-surplus eligibility (2026-07-05 copper_helmet x25 hoard). The worn
+# copy lives in equipment (not inventory) and useful_quantity_cap keeps >=1 for
+# an equipped code, so a blanket equipped-code skip (the old bug) or an
+# off-by-one cap comparison silently shields spares from recycling. Killed by
+# tests/test_ai/test_recycle_surplus.py.
+RECYCLE_SURPLUS_ELIGIBILITY_MUTATIONS = [
+    ("recyclable_surplus: re-introduce blanket equipped-code skip (spares hoard)",
+     "        if qty <= 0 or code in protected_codes:",
+     "        if qty <= 0 or code in protected_codes or code in {"
+     "c for c in state.equipment.values() if c}:"),
+    ("recyclable_surplus: at-cap counts as surplus (qty > cap -> >=, zero-qty entries)",
+     "        if qty > cap:",
+     "        if qty >= cap:"),
+]
+
+BANK_KEEP_TOOLS_MUTATIONS = [
+    ("bank_selection: drop gathering-tool protection (tool banked again)",
+     "    keep |= _best_gathering_tools(state, game_data)",
+     "    keep |= set()"),
+    ("bank_selection: tool keep accepts zero-value items (keeps non-tools)",
+     "            if value > 0 and (best is None or value > best[0]",
+     "            if value >= 0 and (best is None or value > best[0]"),
+    ("bank_selection: best-tool argmax flip (keeps the WORSE tool)",
+     "            if value > 0 and (best is None or value > best[0]\n"
+     "                              or (value == best[0] and code < best[1])):",
+     "            if value > 0 and (best is None or value < best[0]\n"
+     "                              or (value == best[0] and code < best[1])):"),
+]
+
+
 # Utility-stat valuation (2026-06-15 novice_guide discard fix). hp_bonus/wisdom/
 # prospecting must count so artifacts are scored, equipped, and not discarded.
 ARMOR_UTILITY_MUTATIONS = [
@@ -2577,7 +2640,8 @@ _ALL_SRCS = [
     GEAR_VALUE_CORE_SRC,
     GAME_DATA_PARSE_SRC, LOCATION_CATALOG_SRC,
     SRC, TASK_BATCH_SRC, INVENTORY_CAPS_SRC, COMBAT_SRC, PROJECTION_SRC, SCORING_SRC,
-    LOADOUT_PICKER_SRC, EMPTY_SLOT_FILLS_SRC, GEAR_VALUE_SRC,
+    LOADOUT_PICKER_SRC, EMPTY_SLOT_FILLS_SRC, BANK_TOOL_FILLS_SRC, RECYCLE_SURPLUS_SRC,
+    GEAR_VALUE_SRC,
     SKILL_XP_CURVE_SRC, RECIPE_CLOSURE_SRC, TASK_FEASIBILITY_SRC, PREREQUISITE_GRAPH_SRC,
     OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, STUCK_DETECTOR_SRC,
     PRIORITY_BAND_SRC, OWNED_COUNT_SRC, ROOT_PROGRESS_SRC, UPGRADE_SELECTION_SRC, SCALAR_CORE_SRC,
@@ -4806,6 +4870,14 @@ def _run_all_groups() -> int:
               "tests/ai/test_empty_slot_fills.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, EQUIP_OWNED_BAND_MUTATIONS,
               "tests/ai/test_equip_owned_arbiter.py", survivors)
+    run_group(BANK_TOOL_FILLS_SRC, BANK_TOOL_FILLS_MUTATIONS,
+              "tests/ai/test_bank_tool_fills.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, WITHDRAW_TOOLS_BAND_MUTATIONS,
+              "tests/ai/test_withdraw_tools_arbiter.py", survivors)
+    run_group(BANK_SELECTION_SRC, BANK_KEEP_TOOLS_MUTATIONS,
+              "tests/test_ai/test_bank_selection.py", survivors)
+    run_group(RECYCLE_SURPLUS_SRC, RECYCLE_SURPLUS_ELIGIBILITY_MUTATIONS,
+              "tests/test_ai/test_recycle_surplus.py", survivors)
     run_group(COMBAT_SRC, COMBAT_VETO_MUTATIONS,
               "tests/test_ai/test_combat.py", survivors)
     run_group(SCORING_SRC, ARMOR_UTILITY_MUTATIONS,

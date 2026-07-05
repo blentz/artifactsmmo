@@ -20,6 +20,8 @@ def _gd(**overrides) -> GameData:
         "wooden_stick": ItemStats(code="wooden_stick", level=1, type_="weapon", attack={"air": 4}),
         "copper_pickaxe": ItemStats(code="copper_pickaxe", level=1, type_="weapon",
                                     attack={"earth": 5}, skill_effects={"mining": -10}),
+        "rusty_pickaxe": ItemStats(code="rusty_pickaxe", level=1, type_="weapon",
+                                   attack={"earth": 2}, skill_effects={"mining": -5}),
         "iron_bar": ItemStats(code="iron_bar", level=1, type_="resource"),
         "spruce_plank": ItemStats(code="spruce_plank", level=1, type_="resource"),
     }
@@ -87,11 +89,41 @@ def test_best_weapon_considers_equipped_slot():
 
 
 def test_tool_is_not_treated_as_fighting_weapon():
+    """A tool never counts as the protected FIGHTING weapon: with a pickaxe and
+    a stick in the bag, the stick is the kept weapon (the pickaxe is kept too,
+    but by the gathering-tool rule, not the weapon rule — a WORSE tool of the
+    same skill proves the distinction by getting banked)."""
     gd = _gd()
-    state = make_state(inventory={"copper_pickaxe": 1, "wooden_stick": 1})
+    state = make_state(inventory={"copper_pickaxe": 1, "rusty_pickaxe": 1,
+                                  "wooden_stick": 1, "sap": 1})
     codes = [c for c, _ in select_bank_deposits(state, gd)]
-    assert "copper_pickaxe" in codes
-    assert "wooden_stick" not in codes
+    assert "rusty_pickaxe" in codes  # outclassed tool -> bankable
+    assert "wooden_stick" not in codes  # best fighting weapon -> kept
+
+
+def test_keeps_best_gathering_tool_per_skill():
+    """Regression (trace 2026-07-05): copper_pickaxe was deposited and Robby
+    mined 261/300 cycles bare-handed. The best owned tool per gathering skill
+    is working kit — deposit must never bank it."""
+    gd = _gd()
+    state = make_state(inventory={"copper_pickaxe": 1, "sap": 1})
+    assert select_bank_deposits(state, gd) == [("sap", 1)]
+
+
+def test_keeps_only_the_best_tool_for_a_skill():
+    gd = _gd()
+    state = make_state(inventory={"copper_pickaxe": 1, "rusty_pickaxe": 1, "sap": 1})
+    codes = [c for c, _ in select_bank_deposits(state, gd)]
+    assert "copper_pickaxe" not in codes
+    assert "rusty_pickaxe" in codes
+
+
+def test_best_tool_considers_equipped_slot():
+    gd = _gd()
+    state = make_state(inventory={"rusty_pickaxe": 1, "sap": 1},
+                       equipment={"weapon_slot": "copper_pickaxe"})
+    codes = [c for c, _ in select_bank_deposits(state, gd)]
+    assert "rusty_pickaxe" in codes
 
 
 def test_keeps_crafting_target_materials():

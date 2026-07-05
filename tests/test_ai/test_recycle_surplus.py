@@ -46,18 +46,41 @@ def test_surplus_excludes_committed_objective_gear():
     assert recyclable_surplus(state, gd, protected_codes=frozenset({"copper_boots"})) == {}
 
 
-def test_surplus_excludes_skill_gated_and_raw_and_equipped():
-    """Skill-gated (iron_helmet lvl 10), raw materials (copper_ore), and equipped
-    items are not recyclable-surplus."""
+def test_surplus_excludes_skill_gated_and_raw():
+    """Skill-gated (iron_helmet lvl 10), raw materials (copper_ore), and
+    recipe-less gear are not recyclable-surplus."""
     gd = _gd()
     state = make_state(level=5, skills={"gearcrafting": 1},
-                       inventory={"iron_helmet": 5, "copper_ore": 50, "copper_helmet": 2, "no_recipe_ring": 3},
-                       equipment={"helmet_slot": "copper_helmet"})
+                       inventory={"iron_helmet": 5, "copper_ore": 50, "no_recipe_ring": 3})
     out = recyclable_surplus(state, gd, protected_codes=frozenset())
     assert "iron_helmet" not in out      # skill gate (gearcrafting 1 < 10)
     assert "copper_ore" not in out       # raw / not equipment
-    assert "copper_helmet" not in out    # equipped
     assert "no_recipe_ring" not in out   # equippable + skill but no recipe
+
+
+def test_equipped_code_spares_above_cap_are_surplus():
+    """Wearing one copy must NOT shield the BAG spares from recycling.
+
+    Regression (trace 2026-07-05): Robby wore copper_helmet and hoarded 25
+    spares — the old blanket `code in equipped` skip hid them from
+    RecycleSurplus forever. The useful cap (which already keeps >=1 for an
+    equipped code) is the right guard: 25 held, cap 1 → surplus 24. The WORN
+    copy is not in the inventory count, so it is never recycled."""
+    gd = _gd()
+    state = make_state(level=5, skills={"gearcrafting": 1},
+                       inventory={"copper_helmet": 25},
+                       equipment={"helmet_slot": "copper_helmet"})
+    assert recyclable_surplus(state, gd, protected_codes=frozenset()) == {"copper_helmet": 24}
+
+
+def test_equipped_code_at_cap_is_not_surplus():
+    """One spare in the bag for an equipped code sits AT the useful cap —
+    nothing to recycle."""
+    gd = _gd()
+    state = make_state(level=5, skills={"gearcrafting": 1},
+                       inventory={"copper_helmet": 1},
+                       equipment={"helmet_slot": "copper_helmet"})
+    assert recyclable_surplus(state, gd, protected_codes=frozenset()) == {}
 
 
 def test_goal_relevant_actions_recycles_surplus_not_deletes():

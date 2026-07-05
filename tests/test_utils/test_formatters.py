@@ -3,6 +3,7 @@
 import json
 from unittest.mock import Mock
 
+from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
@@ -182,21 +183,20 @@ class TestFormatBankTable:
         assert result.title == "Bank Items"
 
     def test_format_bank_items(self):
-        """Test formatting bank items."""
-        items = [{"code": "iron_ore", "quantity": 50}, {"code": "copper_ore", "quantity": 25}]
+        """The API hands SimpleItemSchema objects (attribute access, NOT dicts).
+
+        Regression 2026-07-05: `item.get("code")` crashed `bank list` with
+        AttributeError: 'SimpleItemSchema' object has no attribute 'get'."""
+        items = [SimpleItemSchema(code="iron_ore", quantity=50),
+                 SimpleItemSchema(code="copper_ore", quantity=25)]
 
         result = format_bank_table(items)
 
         assert isinstance(result, Table)
         assert result.title == "Bank Items"
-
-    def test_format_bank_items_with_missing_fields(self):
-        """Test formatting bank items with missing fields."""
-        items = [{"code": "incomplete_item"}]
-
-        result = format_bank_table(items)
-
-        assert isinstance(result, Table)
+        assert result.row_count == 2
+        assert list(result.columns[0].cells) == ["iron_ore", "copper_ore"]
+        assert list(result.columns[1].cells) == ["50", "25"]
 
 
 class TestFormatMessages:

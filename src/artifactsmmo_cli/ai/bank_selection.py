@@ -1,6 +1,7 @@
 """Selective bank-deposit policy: what to bank, ordered by sell value."""
 
-from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.equipment.scoring import gather_score
+from artifactsmmo_cli.ai.game_data import _GATHERING_SKILLS, GameData
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 
@@ -21,6 +22,32 @@ def _best_fighting_weapon(state: WorldState, game_data: GameData) -> str | None:
         if best is None or attack > best[0] or (attack == best[0] and code < best[1]):
             best = (attack, code)
     return best[1] if best else None
+
+
+def _best_gathering_tools(state: WorldState, game_data: GameData) -> set[str]:
+    """Best owned tool per gathering skill (by ``tool_value``) — the working
+    kit. Depositing it undoes the WithdrawTools ferry and re-creates the
+    bare-handed grind (trace 2026-07-05: copper_pickaxe banked, 261/300 cycles
+    mining with copper_dagger). Outclassed spares stay bankable.
+
+    Tool magnitude is ``abs(gather_score)`` (== tiers.equip_value.tool_value,
+    which cannot be imported here: tiers.__init__ -> strategy -> guards ->
+    bank_selection cycles)."""
+    candidates: set[str] = {c for c, q in state.inventory.items() if q > 0}
+    candidates.update(c for c in state.equipment.values() if c)
+    tools: set[str] = set()
+    for skill in _GATHERING_SKILLS:
+        best: tuple[int, str] | None = None
+        for code in candidates:
+            stats = game_data.item_stats(code)
+            value = abs(gather_score(stats, skill)) if stats is not None else 0
+            # Bigger reduction wins; tie broken by code ascending (deterministic).
+            if value > 0 and (best is None or value > best[0]
+                              or (value == best[0] and code < best[1])):
+                best = (value, code)
+        if best is not None:
+            tools.add(best[1])
+    return tools
 
 
 def _recipe_materials(roots: list[str], game_data: GameData) -> set[str]:
@@ -54,6 +81,7 @@ def _keep_codes(state: WorldState, game_data: GameData,
     weapon = _best_fighting_weapon(state, game_data)
     if weapon is not None:
         keep.add(weapon)
+    keep |= _best_gathering_tools(state, game_data)
     # Protect recipe materials for both the equipment crafting target and the
     # active items-task item — banking the task's own inputs starves PursueTask
     # (gather -> craft -> TaskTrade) and freezes task progress.

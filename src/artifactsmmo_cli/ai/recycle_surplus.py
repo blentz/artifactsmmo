@@ -41,10 +41,14 @@ def recyclable_surplus(
     in-flight spare) rather than the blanket 1, so equippable gear in no active
     profile and not in-flight has cap 0 and its full held count is reclaimable.
     `None` keeps the legacy blanket-1 cap."""
-    equipped = {code for code in state.equipment.values() if code is not None}
     out: dict[str, int] = {}
     for code, qty in state.inventory.items():
-        if qty <= 0 or code in protected_codes or code in equipped:
+        # No blanket equipped-code skip: `qty` counts only BAG copies (the worn
+        # copy lives in equipment, not inventory) and `useful_quantity_cap`
+        # already keeps >=1 for an equipped code — the old skip shielded every
+        # spare of a worn code from recycling (copper_helmet x25 hoard,
+        # trace 2026-07-05).
+        if qty <= 0 or code in protected_codes:
             continue
         stats = game_data.item_stats(code)
         if stats is None or not stats.crafting_skill:

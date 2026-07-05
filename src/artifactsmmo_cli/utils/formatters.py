@@ -77,8 +77,8 @@ def format_item_table(items: list[dict[str, Any]]) -> Table:
     return table
 
 
-def format_bank_table(bank_items: list[dict[str, Any]]) -> Table:
-    """Format bank items as a table."""
+def format_bank_table(bank_items: list[Any]) -> Table:
+    """Format bank items (API SimpleItemSchema objects) as a table."""
     table = Table(title="Bank Items", box=box.ROUNDED)
     table.add_column("Code", style="cyan", no_wrap=True)
     table.add_column("Quantity", justify="right", style="yellow")
@@ -88,7 +88,8 @@ def format_bank_table(bank_items: list[dict[str, Any]]) -> Table:
         return table
 
     for item in bank_items:
-        table.add_row(item.get("code", ""), str(item.get("quantity", 0)))
+        table.add_row(_get_attr_or_key(item, "code"),
+                      str(_get_attr_or_key(item, "quantity", 0)))
 
     return table
 
