@@ -32,6 +32,7 @@ LOADOUT_PICKER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "l
 EMPTY_SLOT_FILLS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "empty_slot_fills.py"
 BANK_TOOL_FILLS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "bank_tool_fills.py"
 RECYCLE_SURPLUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recycle_surplus.py"
+RECYCLE_SURPLUS_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "recycle_surplus.py"
 GEAR_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_value.py"
 SKILL_XP_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "skill_xp_curve.py"
 SKILL_TARGET_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "skill_target_curve.py"
@@ -2521,6 +2522,41 @@ RECYCLE_SURPLUS_ELIGIBILITY_MUTATIONS = [
      "        if qty >= cap:"),
 ]
 
+# Hoard-scaled recycle urgency (2026-07-05): every 5 surplus copies of the
+# largest pile add 1x urgency; >= RECYCLE_HOIST_URGENCY materializes the goal
+# in the COLLECT band (the discretionary tier is starved under constant grind).
+# Killed by tests/test_ai/test_recycle_urgency.py.
+RECYCLE_URGENCY_MUTATIONS = [
+    ("recycle_urgency: step 5 -> 50 (hoard never escalates)",
+     "URGENCY_STEP = 5",
+     "URGENCY_STEP = 50"),
+    ("recycle_urgency: drop the 1x floor (empty surplus scores 0)",
+     "    return max(1, -(-max_surplus // URGENCY_STEP))",
+     "    return -(-max_surplus // URGENCY_STEP)"),
+]
+
+RECYCLE_URGENCY_VALUE_MUTATIONS = [
+    ("recycle_surplus goal: value ignores urgency (flat 20 for any hoard)",
+     "        return RECYCLE_SURPLUS_VALUE * recycle_urgency(surplus)",
+     "        return RECYCLE_SURPLUS_VALUE"),
+]
+
+RECYCLE_HOIST_MUTATIONS = [
+    ("strategy_driver: hoist threshold >= -> > (urgency-2 hoard stays starved)",
+     "        hoist_recycle = (recycle_urgency(recycle_surplus_map) >= RECYCLE_HOIST_URGENCY",
+     "        hoist_recycle = (recycle_urgency(recycle_surplus_map) > RECYCLE_HOIST_URGENCY"),
+    ("strategy_driver: drop the pressure gate on the recycle hoist",
+     "        hoist_recycle = (recycle_urgency(recycle_surplus_map) >= RECYCLE_HOIST_URGENCY\n"
+     "                         and _used_fraction(state) < SELL_PRESSURE_FRACTION)",
+     "        hoist_recycle = (recycle_urgency(recycle_surplus_map) >= RECYCLE_HOIST_URGENCY)"),
+    ("strategy_driver: hoisted recycle band COLLECT->DISCRETIONARY",
+     "                                        repr_=repr(rs_goal), band=BAND_COLLECT))",
+     "                                        repr_=repr(rs_goal), band=BAND_DISCRETIONARY))"),
+    ("strategy_driver: drop the discretionary dedup of a hoisted recycle",
+     "            if hoist_recycle and mk is MeansKind.RECYCLE_SURPLUS:",
+     "            if False and mk is MeansKind.RECYCLE_SURPLUS:"),
+]
+
 BANK_KEEP_TOOLS_MUTATIONS = [
     ("bank_selection: drop gathering-tool protection (tool banked again)",
      "    keep |= _best_gathering_tools(state, game_data)",
@@ -2641,6 +2677,7 @@ _ALL_SRCS = [
     GAME_DATA_PARSE_SRC, LOCATION_CATALOG_SRC,
     SRC, TASK_BATCH_SRC, INVENTORY_CAPS_SRC, COMBAT_SRC, PROJECTION_SRC, SCORING_SRC,
     LOADOUT_PICKER_SRC, EMPTY_SLOT_FILLS_SRC, BANK_TOOL_FILLS_SRC, RECYCLE_SURPLUS_SRC,
+    RECYCLE_SURPLUS_GOAL_SRC,
     GEAR_VALUE_SRC,
     SKILL_XP_CURVE_SRC, RECIPE_CLOSURE_SRC, TASK_FEASIBILITY_SRC, PREREQUISITE_GRAPH_SRC,
     OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, STUCK_DETECTOR_SRC,
@@ -4878,6 +4915,12 @@ def _run_all_groups() -> int:
               "tests/test_ai/test_bank_selection.py", survivors)
     run_group(RECYCLE_SURPLUS_SRC, RECYCLE_SURPLUS_ELIGIBILITY_MUTATIONS,
               "tests/test_ai/test_recycle_surplus.py", survivors)
+    run_group(RECYCLE_SURPLUS_SRC, RECYCLE_URGENCY_MUTATIONS,
+              "tests/test_ai/test_recycle_urgency.py", survivors)
+    run_group(RECYCLE_SURPLUS_GOAL_SRC, RECYCLE_URGENCY_VALUE_MUTATIONS,
+              "tests/test_ai/test_recycle_urgency.py", survivors)
+    run_group(STRATEGY_DRIVER_SRC, RECYCLE_HOIST_MUTATIONS,
+              "tests/test_ai/test_recycle_urgency.py", survivors)
     run_group(COMBAT_SRC, COMBAT_VETO_MUTATIONS,
               "tests/test_ai/test_combat.py", survivors)
     run_group(SCORING_SRC, ARMOR_UTILITY_MUTATIONS,

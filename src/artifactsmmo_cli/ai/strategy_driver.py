@@ -60,6 +60,7 @@ from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_figh
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.potion_provision_qty import potion_provision_qty_pure
 from artifactsmmo_cli.ai.recipe_closure import closure_demand
+from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus, recycle_urgency
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
 from artifactsmmo_cli.ai.task_reservation import consumes_reserved, task_reserved_demand
@@ -71,7 +72,12 @@ from artifactsmmo_cli.ai.tiers.guards import (
     active_guards,
     active_profile,
 )
-from artifactsmmo_cli.ai.tiers.means import MeansKind, active_means
+from artifactsmmo_cli.ai.tiers.means import (
+    SELL_PRESSURE_FRACTION,
+    MeansKind,
+    _used_fraction,
+    active_means,
+)
 from artifactsmmo_cli.ai.tiers.means_worth import means_serves
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
@@ -97,6 +103,12 @@ from artifactsmmo_cli.ai.tiers.skill_step_dispatch import (
 from artifactsmmo_cli.ai.tiers.skill_target_curve import SkillItem
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
+
+RECYCLE_HOIST_URGENCY = 2
+"""Urgency multiple (see `recycle_urgency`: every 5 surplus copies of the
+largest pile = +1x) at which RecycleSurplus is materialized in the COLLECT band
+instead of waiting in the starved discretionary tier — i.e. >5 spares of the
+grind output. Below it, the pile is normal working slack."""
 
 CHEAP_BUDGET_SECONDS = 10.0
 """Per-candidate budget for the arbiter's cheap first pass. Sized ABOVE the
@@ -1244,6 +1256,26 @@ class StrategyArbiter:
                                             accessible=ctx.bank_accessible)
                 candidates.append(Candidate(goal=wt_goal, is_means=True,
                                             repr_=repr(wt_goal), band=BAND_COLLECT))
+        # Urgent-hoard recycle (COLLECT band): the discretionary RECYCLE_SURPLUS
+        # means is starved while a step goal stays plannable, so a skill grind
+        # feeds its output pile unboundedly (copper_helmet x30, trace
+        # 2026-07-05). Past RECYCLE_HOIST_URGENCY (every 5 surplus copies of the
+        # largest pile = +1x urgency, see recycle_urgency) the goal is
+        # materialized here — same bounded, self-satisfying, never-a-blocker
+        # contract as EquipOwnedGoal — so the hoard melts back to its keep-cap
+        # before more grinding. Pressure-gated like the discretionary means:
+        # recycling MINTS materials into the bag, so under space pressure the
+        # deposit/discard guards own the bag instead.
+        recycle_surplus_map = recyclable_surplus(
+            state, game_data, _gear_protected(ctx), gear_keep=ctx.gear_keep or None)
+        hoist_recycle = (recycle_urgency(recycle_surplus_map) >= RECYCLE_HOIST_URGENCY
+                         and _used_fraction(state) < SELL_PRESSURE_FRACTION)
+        if hoist_recycle:
+            rs_goal = RecycleSurplusGoal(game_data=game_data,
+                                         protected_codes=_gear_protected(ctx),
+                                         gear_keep=ctx.gear_keep or None)
+            candidates.append(Candidate(goal=rs_goal, is_means=True,
+                                        repr_=repr(rs_goal), band=BAND_COLLECT))
         # Append step_goal + every fallback-step goal in ranking order so
         # select_pure walks them all before reaching discretionary. Trace
         # 2026-06-06 16:34 (cycles 0-1): top step's GrindCharacterXP
@@ -1277,6 +1309,11 @@ class StrategyArbiter:
             added_reprs.add(r)
             candidates.append(Candidate(goal=alt_goal, is_means=True, repr_=r, band=BAND_FALLBACK_STEP))
         for mk in discretionary_kinds:
+            if hoist_recycle and mk is MeansKind.RECYCLE_SURPLUS:
+                # Already materialized in the COLLECT band this cycle; a second
+                # "RecycleSurplus" candidate would duplicate the repr the
+                # sticky-commitment machinery keys on.
+                continue
             g = map_means(mk, game_data, ctx, state, self._history)
             candidates.append(Candidate(goal=g, is_means=True, repr_=repr(g), band=BAND_DISCRETIONARY))
         return candidates

@@ -154,7 +154,8 @@ def test_goal_value_positive_with_surplus_and_metadata():
     state = make_state(level=5, skills={"gearcrafting": 1},
                        inventory={"copper_helmet": 9}, inventory_max=200)
     goal = RecycleSurplusGoal(game_data=gd, protected_codes=frozenset())
-    assert goal.value(state, gd) == 20.0
+    # 9 held -> surplus 8 -> urgency 2 (hoard-scaled, see recycle_urgency).
+    assert goal.value(state, gd) == 2 * 20.0
     assert goal.is_satisfied(state) is False
     assert goal.desired_state(state, gd) == {"surplus_gear_recycled": True}
     assert goal.max_depth == 15

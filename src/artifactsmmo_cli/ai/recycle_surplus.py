@@ -11,9 +11,10 @@ and recycling it is actually possible and worthwhile:
   * a workshop for that skill is known (recycling happens at the workshop);
   * it is NOT a committed objective code (`protected_codes` = the objective's
     target_gear/target_tools — never recycle the gear you are building);
-  * it is NOT currently equipped;
   * it is held above `useful_quantity_cap` (the swap-pool floor of 1 for
-    equippable craftables — keep one spare for the optimizer).
+    equippable craftables — keep one spare for the optimizer; the cap already
+    keeps >=1 for an equipped code, and the WORN copy is not in the inventory
+    count at all).
 
 Recycling recovers ~half the crafting materials, which then flow to the bank or
 the gear chain — far better than the `DiscardOverstock` DELETE that destroys them.
@@ -27,6 +28,25 @@ from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_caps import useful_quantity_cap
 from artifactsmmo_cli.ai.world_state import WorldState
+
+URGENCY_STEP = 5
+"""Surplus copies per +1x urgency: every 5 spares of the piling grind item add
+one urgency multiple (a ~40-copy hoard is 8x more urgent than <5)."""
+
+
+def recycle_urgency_pure(max_surplus: int) -> int:
+    """Urgency multiplier for the largest surplus pile: ``max(1, ceil(q/5))``.
+
+    <=5 surplus is baseline (1x); each further 5 copies add 1x, so the pile the
+    skill grind keeps feeding becomes progressively harder to ignore instead of
+    growing unbounded in the starved discretionary tier."""
+    return max(1, -(-max_surplus // URGENCY_STEP))
+
+
+def recycle_urgency(surplus: dict[str, int]) -> int:
+    """Urgency of a `recyclable_surplus` map: driven by its LARGEST pile (the
+    current grind item is by construction the code that piles up)."""
+    return recycle_urgency_pure(max(surplus.values(), default=0))
 
 
 def recyclable_surplus(
