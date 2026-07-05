@@ -581,6 +581,10 @@ class GameData:
             return base
         return list(dict.fromkeys(base + extra))
 
+    def raid_location_tiles(self, raid_code: str) -> list[tuple[int, int]]:
+        """Tiles carrying a raid's map content (see LocationCatalog)."""
+        return self.world.raid_location_tiles(raid_code)
+
     def workshop_location(self, skill: str) -> tuple[int, int] | None:
         """Location of the workshop for a crafting skill."""
         return self.world.workshop_location(skill)
@@ -1278,6 +1282,11 @@ class GameData:
                 self._grand_exchange_location = loc
             elif ct == MapContentType.NPC:
                 self._npc_locations[code] = loc
+            elif ct == MapContentType.RAID:
+                # P6 (docs/PLAN_engagement_expansion.md): raid tiles are STATIC
+                # map content (the enchanted_fairy tile sits on the overworld);
+                # the boss is engageable there only during the raid window.
+                self.world.raid_locations.setdefault(code, []).append(loc)
             elif ct == MapContentType.WORKSHOP:
                 # code is a workshop identifier — match to its skill by substring
                 # over the API-derived skill vocabulary (_WORKSHOP_SKILLS).

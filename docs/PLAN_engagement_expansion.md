@@ -9,9 +9,29 @@ was stale). P3 partial DONE (this commit): state-aware leaf `_producible`
 and `_producible_by_self` now count NPC purchases paid in a currency the
 character can produce (gatherable / winnable-drop / task-earnable), one
 level deep — tailor leathers @ hides, archaeologist @ shards, cultist @
-corrupted_gem; unlocated vendors honestly excluded (sorceress). Remaining:
-P5 elite/boss drop-hunting goals, P6 raids, currency ACCUMULATION goals
-(BuyItem funding when currency insufficient — CurrencyFunding extension).**
+corrupted_gem; unlocated vendors honestly excluded (sorceress). VERIFIED
+(2026-07-05): currency FUNDING already works end-to-end — GOAP natively
+chains Fight×N (drop currency) → NpcBuy (probe: sheep→wool×3→cloth), and
+GatherMaterialsGoal already emits NpcBuy for closure leaves (C4 Task 1);
+P5 drop-hunting already wired (select_monster_for_drop narrowing + event
+overlay). REMAINING GAPS, precisely:
+* **P5b multi-layer navigation**: lich/goblin_priestess (underground),
+  rosenblood/sandwhisper_empress (interior) have tiles on layers the map
+  loader never fetches (OVERWORLD only); MapTransitionAction exists but is
+  planner-blind (apply=identity, no layer in WorldState). Design-first
+  brick: layer in state, all-layer map ingest, transition destinations
+  (tile.transition carries map_id/x/y/layer + conditions).
+* **P6 raid participation**: raid tiles are STATIC map content
+  (type='raid': enchanted_fairy OVERWORLD (-4,10) — playable without P5b;
+  god_of_the_sun underground, needs P5b). DATA LAYER LANDED: loader
+  ingests RAID content, `raid_location_tiles(code)` accessor,
+  CACHE_VERSION 3. Live-verified DURING an active window: the raid boss
+  never appears as a monster tile — participation = fighting at the raid
+  tile while `WorldState.active_raids` has the window open. NEXT: a
+  ParticipateRaid goal — bypasses the is_winnable veto DELIBERATELY
+  (600k shared HP pool: contribution-throughput, not solo-kill;
+  damage-threshold coin rewards fund beastmaster buys), survivability-
+  guarded (hp floor + rest cycles), window-scheduled.**
 User mandate: by level 38 the player must engage events, elites, bosses, raids,
 raid bosses — expand production capability AND the formal model.
 

@@ -10,6 +10,7 @@ class LocationCatalog:
     spawns, GE order books, bank metadata, and raw tile sets."""
 
     workshop_locations: dict[str, tuple[int, int]] = field(default_factory=dict)  # skill -> (x, y)
+    raid_locations: dict[str, list[tuple[int, int]]] = field(default_factory=dict)  # raid_code -> tiles (P6)
     bank_tile: tuple[int, int] | None = None
     bank_tile_open: bool = False  # True once bank_tile points at an unconditional bank
     taskmaster_tile: tuple[int, int] | None = None
@@ -65,6 +66,12 @@ class LocationCatalog:
     def workshop_location(self, skill: str) -> tuple[int, int] | None:
         """Location of the workshop for a crafting skill."""
         return self.workshop_locations.get(skill)
+
+    def raid_location_tiles(self, raid_code: str) -> list[tuple[int, int]]:
+        """Map tiles carrying this raid's content (empty if unknown). The tile
+        exists statically; the boss is fightable there only while the raid's
+        window is active (WorldState.active_raids gates participation)."""
+        return self.raid_locations.get(raid_code, [])
 
     def bank_location(self) -> tuple[int, int]:
         """Location of the bank."""

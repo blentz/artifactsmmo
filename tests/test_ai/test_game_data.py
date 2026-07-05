@@ -2000,3 +2000,12 @@ def test_resource_for_drop_prefers_most_frequent_source():
     assert gd.resource_for_drop("topaz_stone") == ("gold_rocks", 100)
     assert gd.resource_for_drop("copper_ore") == ("copper_rocks", 1)
     assert gd.resource_for_drop("nonexistent") is None
+
+
+def test_raid_map_content_ingested():
+    """P6 (engagement expansion): MapContentType.RAID tiles land in
+    raid_locations; the accessor returns them (empty for unknown codes)."""
+    gd = GameData()
+    gd.world.raid_locations = {"enchanted_fairy": [(-4, 10)]}
+    assert gd.raid_location_tiles("enchanted_fairy") == [(-4, 10)]
+    assert gd.raid_location_tiles("nope") == []
