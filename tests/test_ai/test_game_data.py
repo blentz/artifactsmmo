@@ -2083,3 +2083,16 @@ def test_build_maps_restricted_and_transition_edge():
     assert gd.transition_edge(-4, 9, "overworld") == (
         -4, 8, "overworld", (("gold", "cost", 5000),))
     assert gd.transition_edge(0, 0, "overworld") is None
+
+
+def test_monster_spawn_known_includes_layered_tiles():
+    """P5b consumer migration: spawn-known gates count all-layer tiles (the
+    movement brick routes to them); same-region distance callers keep using
+    monster_locations."""
+    gd = GameData()
+    gd._monster_locations = {"chicken": [(0, 1)]}
+    gd.world.layered_content = {"lich": [(9, 8, "underground")]}
+    assert gd.monster_spawn_known("chicken") is True
+    assert gd.monster_spawn_known("lich") is True
+    assert gd.monster_spawn_known("ghost") is False
+    assert gd.monster_locations("lich") == []

@@ -42,7 +42,7 @@ def is_obtainable(code: str, state: WorldState, game_data: GameData,
         if code in game_data.resource_drops.values():
             return True
         return any(is_winnable(state, game_data, monster_code)
-                   and game_data.monster_locations(monster_code)
+                   and game_data.monster_spawn_known(monster_code)
                    for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(code))
     nxt = visited | {code}
     return all(is_obtainable(mat, state, game_data, nxt) for mat in recipe)

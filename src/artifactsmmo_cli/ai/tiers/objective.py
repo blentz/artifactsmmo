@@ -84,7 +84,7 @@ def _drops_from_spawning_monster(code: str, game_data: GameData) -> bool:
     included) drops `code`. State-INDEPENDENT: the perfect sheet assumes full
     progression, at which any spawning monster is farmable, so its drops count
     as producible regardless of current combat strength."""
-    return any(game_data.monster_locations(monster_code)
+    return any(game_data.monster_spawn_known(monster_code)
                for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(code))
 
 
@@ -159,7 +159,7 @@ def is_attainable_now(code: str, state: WorldState, game_data: GameData) -> bool
         if _gatherable(leaf, game_data):
             return True
         if any(is_winnable(rested, game_data, monster_code)
-               and game_data.monster_locations(monster_code)
+               and game_data.monster_spawn_known(monster_code)
                for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(leaf)):
             return True
         if leaf in path:

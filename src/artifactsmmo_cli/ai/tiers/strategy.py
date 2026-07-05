@@ -305,7 +305,7 @@ def _producible(code: str, state: WorldState, game_data: GameData) -> bool:
             return True
         return any(
             is_winnable(state, game_data, monster_code)
-            and game_data.monster_locations(monster_code)
+            and game_data.monster_spawn_known(monster_code)
             for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(currency))
     buyable = any(
         _currency_producible(currency)
@@ -313,7 +313,7 @@ def _producible(code: str, state: WorldState, game_data: GameData) -> bool:
     # Winnable drop: state-aware (preserves the winnability gate).
     winnable_drop = any(
         is_winnable(state, game_data, monster_code)
-        and game_data.monster_locations(monster_code)
+        and game_data.monster_spawn_known(monster_code)
         for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(code))
     return leaf_attainable_pure(
         code in game_data.gatherable_drop_items(),

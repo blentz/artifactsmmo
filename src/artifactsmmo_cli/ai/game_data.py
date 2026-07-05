@@ -586,6 +586,15 @@ class GameData:
         """Tiles carrying a raid's map content (see LocationCatalog)."""
         return self.world.raid_location_tiles(raid_code)
 
+    def monster_spawn_known(self, code: str) -> bool:
+        """True when the monster spawns SOMEWHERE the planner can route to:
+        the legacy overworld/event index, or any all-layer tile (P5b — the
+        movement brick reaches those through transition edges). Use for
+        spawn-known GATES; keep `monster_locations` for same-region distance
+        work."""
+        return bool(self.monster_locations(code)) or bool(
+            self.world.layered_locations(code))
+
     def layered_locations(self, code: str) -> list[tuple[int, int, str]]:
         """ALL-layer (x, y, layer) tiles for a content code (P5b data)."""
         return self.world.layered_locations(code)

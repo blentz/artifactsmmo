@@ -513,7 +513,7 @@ class GamePlayer:
                 winnable = sorted(
                     m for m in droppers
                     if is_winnable(state, game_data, m, self.history)
-                    and game_data.monster_locations(m))
+                    and game_data.monster_spawn_known(m))
                 drop_inputs.append({"item": leaf, "droppers": sorted(droppers),
                                     "winnable": winnable})
         return PlanReport(decision=decision, selected_goal=selected_goal,
