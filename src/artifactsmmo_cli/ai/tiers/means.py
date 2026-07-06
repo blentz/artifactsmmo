@@ -8,7 +8,11 @@ No Goal-class imports — the driver (StrategyArbiter) maps MeansKind to goals.
 from enum import Enum
 
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
-from artifactsmmo_cli.ai.bank_expansion_timing import TRIGGER_FILL_DEN, TRIGGER_FILL_NUM
+from artifactsmmo_cli.ai.bank_expansion_timing import (
+    TRIGGER_FILL_DEN,
+    TRIGGER_FILL_NUM,
+    should_expand_bank,
+)
 from artifactsmmo_cli.ai.consumable_supply import maintain_consumables_fires
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.projections import low_yield_cancel_fires
@@ -25,13 +29,13 @@ from artifactsmmo_cli.ai.tiers.guards import (
 )
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
-# Semantic names for this module's gates, bound to the SHARED single-source
-# constants (thresholds.py pressure ladder / bank_expansion_timing trigger).
-# These used to be re-typed literals (0.85 / 0.95) — the drift the thresholds
-# consolidation was built to kill; the local names are kept because the
-# ladder's proven mutation anchors bind to the usage lines.
+# Semantic name for this module's sell-pressure gate, bound to the SHARED
+# single-source constant (thresholds.py pressure ladder). It used to be a
+# re-typed literal (0.85) — the drift the thresholds consolidation was built
+# to kill; the local name is kept because the ladder's proven mutation
+# anchors bind to the usage lines. (BANK_EXPAND's fill gate now lives inside
+# the shared should_expand_bank core — no local constant.)
 SELL_PRESSURE_FRACTION = PRESSURE_HIGH_FRACTION
-BANK_EXPAND_FILL = TRIGGER_FILL_NUM / TRIGGER_FILL_DEN
 
 
 class MeansKind(Enum):
@@ -183,10 +187,22 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
             return False
         if game_data.bank_capacity == 0:
             return False
-        fill = len(state.bank_items) / game_data.bank_capacity
-        if fill < BANK_EXPAND_FILL:
-            return False
-        return state.gold >= game_data.next_expansion_cost
+        # SAME proven decision the goal uses (should_expand_bank: exact
+        # integer fill cross-multiply + the gold-reserve safety gate). The
+        # old guard re-typed a float fill compare and the pre-fix bare
+        # `gold >= cost` — the exact SAFETY-HOLE the core closed — so the
+        # arbiter admitted candidates ExpandBankGoal.value then scored 0
+        # (drift flagged 2026-07-06). A bank expansion is never a reserved
+        # gear code, so the player threads reserve_floor(state, gd, None)
+        # as ctx.gold_reserve (means.py cannot import progression_reserve —
+        # tiers package cycle), mirroring the goal. (The goal also raises `used` by the
+        # active-profile floor — history-dependent; the means guard has no
+        # history and keeps the plain count, as before.)
+        return should_expand_bank(
+            len(state.bank_items), game_data.bank_capacity, state.gold,
+            game_data.next_expansion_cost, ctx.gold_reserve,
+            TRIGGER_FILL_NUM, TRIGGER_FILL_DEN,
+        )
 
     # MeansKind.WAIT: always-firing last-resort. Position-last in
     # DISCRETIONARY_ORDER ensures every other means gets a chance before

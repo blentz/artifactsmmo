@@ -2423,6 +2423,10 @@ ARG LAYOUT (flat ints; index → field):
 * `[30]` bankItemsKnown               (Bool 0/1)
 * `[31]` bankJunkNonempty             (Bool 0/1)
 * `[32]` craftPotionsFires            (Bool 0/1)
+* `[33]` goldReserve                  (Nat — reserve_floor(state, gd, None);
+                                        the BANK_EXPAND reserve gate. NOTE:
+                                        cycle_step_d/e reuse only the 0..32
+                                        prefix; their own [33] is xpNext.)
 
 Emits a JSON object: one Bool field per MeansKind keyed by `meansKindName`
 (27 fields), plus `"selected"`: the name of `productionLadder s` or `null`. -/
@@ -2450,7 +2454,8 @@ def runLadder (args : Array Json) : Json :=
     restForCombatReady := b 25, gearReviewFires := b 26,
     craftReliefFires := b 27, objectiveStepFires := b 28,
     maintainConsumablesFires := b 29, bankItemsKnown := b 30,
-    bankJunkNonempty := b 31, craftPotionsFires := b 32 }
+    bankJunkNonempty := b 31, craftPotionsFires := b 32,
+    goldReserve := n 33 }
   let firesFields : List (String × Json) :=
     allInLadderOrder.map (fun k => (meansKindName k, Json.bool (fires k s)))
   let selected : Json := match productionLadder s with

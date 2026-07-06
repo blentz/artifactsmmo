@@ -306,19 +306,22 @@ def maintainConsumablesFires (s : State) : Bool := s.maintainConsumablesFires
     other means is tried first. -/
 def waitFires (_s : State) : Bool := true
 
-/-- BANK_EXPAND. Mirrors `means.py:101-111`:
+/-- BANK_EXPAND. Mirrors `means.py::_fires(BANK_EXPAND, …)`, which since
+    2026-07-06 delegates to the proven `should_expand_bank` core:
       bank_accessible
       ∧ bank_items is not None
       ∧ game_data._bank_capacity ≠ 0
-      ∧ len(bank_items) / capacity ≥ 0.95
-      ∧ gold ≥ next_expansion_cost -/
+      ∧ used * FILL_DEN ≥ capacity * FILL_NUM   (exact 95/100 cross-multiply)
+      ∧ gold ≥ next_expansion_cost + goldReserve  (the reserve SAFETY gate:
+        the purchase never drains gold below the progression reserve;
+        `goldReserve` mirrors `reserve_floor(state, game_data, None)`). -/
 def bankExpandFires (s : State) : Bool :=
   s.bankAccessible
   && s.bankItemsKnown
   && decide (s.bankCapacity > 0)
   && decide (BANK_EXPAND_FILL_DEN * s.bankItemsCount
               ≥ BANK_EXPAND_FILL_NUM * s.bankCapacity)
-  && decide (s.gold ≥ s.nextExpansionCost)
+  && decide (s.gold ≥ s.nextExpansionCost + s.goldReserve)
 
 /-- CRAFT_RELIEF. Mirrors `tiers/guards.py::_fires(CRAFT_RELIEF, …)`:
     fires when inv pressure crosses `CRAFT_RELIEF_FRACTION` (0.70) AND a

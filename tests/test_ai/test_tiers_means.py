@@ -250,8 +250,8 @@ def test_bank_expand_fires_when_conditions_met():
     gd = GameData()
     gd._bank_capacity = 20
     gd._next_expansion_cost = 10
-    # 19/20 = 0.95 fill, gold >= cost, bank accessible
-    state = make_state(bank_items={f"item{i}": 1 for i in range(19)}, gold=100)
+    # 19/20 = 0.95 fill, gold - cost >= ctx reserve (default 0), accessible
+    state = make_state(bank_items={f"item{i}": 1 for i in range(19)}, gold=200)
     _, discretionary = active_means(state, gd, None, _ctx(bank_accessible=True))
     assert MeansKind.BANK_EXPAND in discretionary
 
@@ -463,3 +463,46 @@ def test_low_yield_cancel_absent_when_alt_repr_found_but_no_yield(tmp_path):
             collect, _ = active_means(state, GameData(), store, _ctx())
             assert MeansKind.LOW_YIELD_CANCEL not in collect
     store.close()
+
+
+def test_bank_expand_absent_when_purchase_would_break_gold_reserve():
+    """The means guard must apply the SAME reserve gate as the proven
+    should_expand_bank core the goal uses (gold - cost >= reserve_floor).
+    The old guard fired on bare gold >= cost — the exact SAFETY-HOLE the
+    core closed — admitting a candidate the goal then values 0 (drift
+    flagged 2026-07-06). The player threads reserve_floor(state, gd, None)
+    as ctx.gold_reserve: gold 100, cost 10, reserve 100 → 90 < 100 → no
+    fire."""
+    gd = GameData()
+    gd._bank_capacity = 20
+    gd._next_expansion_cost = 10
+    state = make_state(bank_items={f"item{i}": 1 for i in range(19)}, gold=100)
+    _, discretionary = active_means(
+        state, gd, None, _ctx(bank_accessible=True, gold_reserve=100))
+    assert MeansKind.BANK_EXPAND not in discretionary
+
+
+def test_bank_expand_fires_when_reserve_survives_purchase():
+    """gold - cost >= reserve (200 - 10 = 190 >= 100) → fires."""
+    gd = GameData()
+    gd._bank_capacity = 20
+    gd._next_expansion_cost = 10
+    state = make_state(bank_items={f"item{i}": 1 for i in range(19)}, gold=200)
+    _, discretionary = active_means(
+        state, gd, None, _ctx(bank_accessible=True, gold_reserve=100))
+    assert MeansKind.BANK_EXPAND in discretionary
+
+
+def test_bank_expand_fill_gate_is_exact_cross_multiply():
+    """37/39 = 0.9487 < 95/100 must NOT fire even though a float rounding of
+    the ratio might; 38/39 crosses. Pins the means guard to the same exact
+    integer compare as should_expand_bank (no float in the decision path)."""
+    gd = GameData()
+    gd._bank_capacity = 39
+    gd._next_expansion_cost = 10
+    below = make_state(bank_items={f"item{i}": 1 for i in range(37)}, gold=500)
+    _, disc_below = active_means(below, gd, None, _ctx(bank_accessible=True))
+    assert MeansKind.BANK_EXPAND not in disc_below
+    at = make_state(bank_items={f"item{i}": 1 for i in range(38)}, gold=500)
+    _, disc_at = active_means(at, gd, None, _ctx(bank_accessible=True))
+    assert MeansKind.BANK_EXPAND in disc_at

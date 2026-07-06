@@ -157,7 +157,8 @@ from __future__ import annotations
 
 import dataclasses
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
@@ -167,17 +168,18 @@ from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
 from artifactsmmo_cli.ai.task_lifecycle import TaskLifecyclePhase
-from tests.test_ai._monster_fixture import fill_monster_stat_defaults
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
-from artifactsmmo_cli.ai.tiers.guards import _has_sellable
+from artifactsmmo_cli.ai.tiers.guards import SelectionContext, _has_sellable
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from formal.diff.oracle_client import run_oracle
 from formal.sim.production_ladder import (
     ALL_IN_LADDER_ORDER,
     LadderMeans,
-    fires as production_fires,
     production_ladder,
 )
+from formal.sim.production_ladder import (
+    fires as production_fires,
+)
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 
 # Slots whose TRUE-firing path is deferred to Brick 4 (see module docstring).
 # They are still compared at their reachable (False) value in every scenario;
@@ -259,6 +261,7 @@ class Scenario:
     bank_items_count: int
     bank_capacity: int
     next_expansion_cost: int
+    gold_reserve: int
     gold: int
     item_sellable: bool      # NPC buys JUNK -> sellable
     gear_review: bool        # opaque, passed identically to both sides
@@ -361,6 +364,7 @@ def _make_ctx(scn: Scenario) -> SelectionContext:
         initial_xp=scn.initial_xp,
         task_exchange_min_coins=scn.task_exchange_min_coins,
         combat_monster=None,
+        gold_reserve=scn.gold_reserve,
         target_gear=frozenset(),
         target_tools=frozenset(),
         gear_review_active=scn.gear_review,
@@ -419,7 +423,10 @@ def _oracle_args(scn: Scenario, w: WorldState) -> list[int]:
         1 if scn.bank_accessible else 0,         # 17
         1 if scn.has_bank_unlock_monster else 0, # 18
         1 if _has_overstock(scn) else 0,         # 19 hasOverstockItems
-        1 if _deposit_nonempty(scn) else 0,      # 20 selectBankDepositsNonempty
+        # 20: production's REAL select_bank_deposits (like the rich path) —
+        # the scn shortcut predated the last-resort branch (full-bag-of-keep
+        # banks ONE keep item, 4548d9e) and diverged on free==0 keep-only bags.
+        1 if select_bank_deposits(w, _make_game_data(scn)) else 0,
         1 if scn.has_pending else 0,             # 21 pendingItemsNonempty
         1 if scn.item_sellable and scn.junk_qty > 0 else 0,  # 22 sellableInventoryNonempty
         0,                                       # 23 recyclableSurplusNonempty (deferred)
@@ -435,6 +442,10 @@ def _oracle_args(scn: Scenario, w: WorldState) -> list[int]:
         # by production's REAL `craft_potions_fires` on the same (w, gd) the
         # ladder reads (empty synthetic catalog ⇒ no target potion ⇒ False).
         1 if craft_potions_fires(w, _make_game_data(scn)) else 0,  # 32 craftPotionsFires
+        # 33 goldReserve: the SAME drawn reserve the production guard reads
+        # via ctx.gold_reserve (should_expand_bank's safety gate, 2026-07-06)
+        # — one value, two sides, exact lockstep.
+        scn.gold_reserve,
     ]
 
 
@@ -513,6 +524,7 @@ def _scenario(draw) -> Scenario:
         bank_items_count=draw(st.integers(min_value=0, max_value=40)),
         bank_capacity=bank_capacity,
         next_expansion_cost=draw(st.integers(min_value=0, max_value=2000)),
+        gold_reserve=draw(st.integers(min_value=0, max_value=300)),
         gold=draw(st.integers(min_value=0, max_value=5000)),
         item_sellable=draw(st.booleans()),
         gear_review=draw(st.booleans()),
@@ -568,7 +580,7 @@ def _base_scn(**overrides) -> Scenario:
         inventory_max=20, junk_qty=0, coin_qty=0, bank_coin_qty=0,
         task_exchange_min_coins=5, has_pending=False, task_phase="none",
         bank_known=False, bank_items_count=0, bank_capacity=0,
-        next_expansion_cost=0, gold=0, item_sellable=False,
+        next_expansion_cost=0, gold=0, gold_reserve=0, item_sellable=False,
         gear_review=False, objective_step=False,
     )
     defaults.update(overrides)
@@ -812,6 +824,7 @@ def _rich_oracle_args(
         # 32 craftPotionsFires: opaque CRAFT_POTIONS latch — derive from the SAME
         # production verdict (like gearReview/craftRelief/maintainConsumables).
         1 if prod[LadderMeans.CRAFT_POTIONS] else 0,  # 32 craftPotionsFires
+        ctx.gold_reserve,                             # 33 goldReserve (ctx-threaded)
     ]
 
 

@@ -53,6 +53,13 @@ class SelectionContext:
     initial_xp: int
     task_exchange_min_coins: int
     combat_monster: str | None
+    # Gold-reserve safety floor (`progression_reserve.reserve_floor(state,
+    # game_data, None)`), computed by the player per cycle. Threaded here so
+    # the BANK_EXPAND means guard applies the SAME reserve gate as the proven
+    # should_expand_bank core WITHOUT means.py importing progression_reserve
+    # (which imports back into the tiers package — circular). Default 0 =
+    # reserve-free (legacy fixtures keep their old semantics).
+    gold_reserve: int = 0
     # Learned SkillXpCurve per skill, sourced from history. Used by
     # LevelSkillGoal to convert `projected_skill_xp_delta` into a real
     # "would cross the level threshold" satisfaction check; with an empty

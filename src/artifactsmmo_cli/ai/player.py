@@ -13,14 +13,15 @@ from artifactsmmo_api_client import AuthenticatedClient
 from artifactsmmo_api_client.api.achievements.get_achievement_achievements_code_get import sync as get_achievement
 from artifactsmmo_api_client.api.characters.get_character_characters_name_get import sync as get_character
 from artifactsmmo_api_client.api.events.get_all_active_events_events_active_get import sync as get_all_active_events
-from artifactsmmo_api_client.api.raids.get_all_raids_raids_get import sync as get_all_raids
 from artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get import sync as get_bank_details
 from artifactsmmo_api_client.api.my_account.get_bank_items_my_bank_items_get import sync as get_bank_items
 from artifactsmmo_api_client.api.my_account.get_pending_items_my_pending_items_get import sync as get_pending_items
+from artifactsmmo_api_client.api.raids.get_all_raids_raids_get import sync as get_all_raids
 from artifactsmmo_api_client.models.achievement_type import AchievementType
 from artifactsmmo_api_client.models.error_response_schema import ErrorResponseSchema
 from artifactsmmo_api_client.types import Unset
 
+from artifactsmmo_cli.ai.action_kind import action_kind_of
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.claim import ClaimPendingItemAction
@@ -35,7 +36,6 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
 from artifactsmmo_cli.ai.combat import is_winnable, predict_win
 from artifactsmmo_cli.ai.combat_picker import pick_winnable_monster_pure
-from artifactsmmo_cli.ai.consumable_supply import consumable_craft_quantity
 from artifactsmmo_cli.ai.constants import (
     BANK_REFRESH_FORCE_SENTINEL,
     BANK_REFRESH_INTERVAL,
@@ -45,27 +45,33 @@ from artifactsmmo_cli.ai.constants import (
     ERROR_CODE_COOLDOWN,
     STUCK_DETECTOR_WINDOW,
 )
-from artifactsmmo_cli.ai.action_kind import action_kind_of
+from artifactsmmo_cli.ai.consumable_supply import consumable_craft_quantity
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, GoalAttempt, GoalRankEntry, RootScoreView
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_latch import GearLatch
 from artifactsmmo_cli.ai.gear_value_core import Combat, Gather
-from artifactsmmo_cli.ai.loadout_profiles import (
-    active_profile_gear,
-    combat_key,
-    gather_key,
-)
+from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.projections import PathPlan, cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.scalarizer import _max_sell_back_price
 from artifactsmmo_cli.ai.learning.skill_xp_curve import SkillXpCurve
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.loadout_profiles import (
+    active_profile_gear,
+    combat_key,
+    gather_key,
+)
 from artifactsmmo_cli.ai.null_tracer import NullTracer
+from artifactsmmo_cli.ai.plan_cache import PlanCache
+from artifactsmmo_cli.ai.plan_report import PlanReport
+from artifactsmmo_cli.ai.plan_tree import build_plan_tree
 from artifactsmmo_cli.ai.planner import GOAPPlanner, _state_key
 from artifactsmmo_cli.ai.player_helpers import delete_cost as _delete_cost  # noqa: F401  (test import target)
 from artifactsmmo_cli.ai.player_helpers import format_plan as _format_plan
+from artifactsmmo_cli.ai.progression_reserve import reserve_floor
+from artifactsmmo_cli.ai.raid_info import RaidInfo
 from artifactsmmo_cli.ai.recovery import (
     REPEATED_ACTION_FAILURE_THRESHOLD,
     REPEATED_ACTION_WINDOW,
@@ -75,6 +81,7 @@ from artifactsmmo_cli.ai.recovery import (
     StuckExit,
     StuckSignal,
 )
+from artifactsmmo_cli.ai.should_replan import should_replan
 from artifactsmmo_cli.ai.strategy_driver import (
     StrategyArbiter,
     monster_drop_inputs,
@@ -88,17 +95,11 @@ from artifactsmmo_cli.ai.tiers import (
     StrategyDecision,
     StrategyEngine,
 )
-from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
-from artifactsmmo_cli.ai.plan_cache import PlanCache
-from artifactsmmo_cli.ai.plan_report import PlanReport
-from artifactsmmo_cli.ai.plan_tree import build_plan_tree
-from artifactsmmo_cli.ai.should_replan import should_replan
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal
 from artifactsmmo_cli.ai.tiers.root_progress import root_progress_value
 from artifactsmmo_cli.ai.tiers.sticky_select_core import next_last
 from artifactsmmo_cli.ai.tracer import Tracer
-from artifactsmmo_cli.ai.raid_info import RaidInfo
 from artifactsmmo_cli.ai.winnable_cascade import CascadeInputs, winnable_farm_target_pure
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from artifactsmmo_cli.client_manager import ClientManager
@@ -1656,6 +1657,7 @@ class GamePlayer:
 
     def _selection_context(self, combat_monster: str | None = None) -> SelectionContext:
         assert self.state is not None
+        assert self.game_data is not None
         if combat_monster is None:
             combat_monster = self._winnable_farm_target()
         # Build per-skill SkillXpCurve from observed learning history; empty
@@ -1688,6 +1690,10 @@ class GamePlayer:
             initial_xp=self.state.xp,
             task_exchange_min_coins=self._task_exchange_min_coins,
             combat_monster=combat_monster,
+            # A bank expansion is never a reserved gear code → buying=None
+            # applies the full progression-reserve floor (same call the goal
+            # makes inside should_expand_bank's inputs).
+            gold_reserve=reserve_floor(self.state, self.game_data, None),
             skill_xp_curves=skill_xp_curves,
             target_gear=target_gear,
             target_tools=target_tools,

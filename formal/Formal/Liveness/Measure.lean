@@ -220,6 +220,13 @@ structure State where
   bankCapacity : Nat
   /-- `game_data._next_expansion_cost` (means.py:111). -/
   nextExpansionCost : Nat
+  /-- `progression_reserve.reserve_floor(state, game_data, None)` — the
+      gold-reserve safety floor the BANK_EXPAND guard applies (2026-07-06:
+      the means guard delegates to the proven `should_expand_bank` core,
+      whose reserve gate is `gold - cost >= reserve`). Defaulted to 0 so
+      every pre-existing witness/fixture keeps its old (reserve-free)
+      semantics unchanged. -/
+  goldReserve : Nat := 0
   /-- Phase 23c-3b: lifecycle phase mirror of
       `WorldState.task_lifecycle_phase` (production:
       `src/artifactsmmo_cli/ai/task_lifecycle.py`). The phase is

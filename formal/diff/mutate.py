@@ -3910,19 +3910,23 @@ LADDER_MEANS_FIRES_MUTATIONS = [
         "        return _used_fraction(state) <= SELL_PRESSURE_FRACTION and _has_sellable(state, game_data)",
     ),
     (
-        "ladder/means: BANK_EXPAND fill comparator < -> <= (boundary 0.95 leaks)",
-        "        if fill < BANK_EXPAND_FILL:",
-        "        if fill <= BANK_EXPAND_FILL:",
+        # The guard delegates to the proven should_expand_bank core
+        # (2026-07-06); the means-layer mutants now attack the CALL.
+        # Dropping the reserve reverts the pre-fix bare gold>=cost
+        # SAFETY-HOLE — the lean bankExpandFires keeps its goldReserve
+        # conjunct, so the differential diverges whenever
+        # cost <= gold < cost + reserve.
+        "ladder/means: BANK_EXPAND reserve gate dropped (bare gold >= cost)",
+        "            game_data.next_expansion_cost, reserve_floor(state, game_data, None),",
+        "            game_data.next_expansion_cost, 0,",
     ),
     (
-        "ladder/means: BANK_EXPAND_FILL 0.95 -> 0.85 (fires too early)",
-        "BANK_EXPAND_FILL = TRIGGER_FILL_NUM / TRIGGER_FILL_DEN",
-        "BANK_EXPAND_FILL = 0.85",
-    ),
-    (
-        "ladder/means: BANK_EXPAND gold-gate >= -> > (boundary gold==cost leaks)",
-        "        return state.gold >= game_data.next_expansion_cost",
-        "        return state.gold > game_data.next_expansion_cost",
+        # Swapping the trigger pair flips the fill gate to used*95 >= cap*100
+        # (a >=105% threshold): the 95% boundary scenarios stop firing on the
+        # python side while lean still fires.
+        "ladder/means: BANK_EXPAND trigger pair swapped (fill gate inverted)",
+        "            TRIGGER_FILL_NUM, TRIGGER_FILL_DEN,",
+        "            TRIGGER_FILL_DEN, TRIGGER_FILL_NUM,",
     ),
     (
         "ladder/means: DRAIN_BANK_JUNK fill comparator < -> <= (boundary 0.85 leaks)",
