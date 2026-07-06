@@ -150,7 +150,7 @@ def _canned_report() -> PlanReport:
         plan=["Fight(chicken)", "Gather(ash_tree)"],
         goals_tried=[
             {"goal": "GatherMaterials(feather_coat)", "nodes": 57000, "depth": 23,
-             "plan_len": 0, "timed_out": True},
+             "plan_len": 0, "timed_out": True, "node_capped": True},
             {"goal": "GatherMaterials(feather)", "nodes": 5, "depth": 2,
              "plan_len": 2, "timed_out": False},
         ],
@@ -178,6 +178,8 @@ def test_plan_command_prints_report(capsys):
     assert "chosen_root" in out and "feather_coat" in out
     assert "Fight(chicken)" in out
     assert "NO PLAN" in out and "TIMED_OUT" in out
+    # node-cap truncation must be visible distinctly from a wall-clock timeout
+    assert "NODE_CAP" in out
     # drop-input winnability section: a winnable feather + an unwinnable scale.
     assert "WINNABLE via ['chicken']" in out
     assert "NOT WINNABLE" in out

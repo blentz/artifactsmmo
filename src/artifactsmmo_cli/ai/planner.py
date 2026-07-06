@@ -20,16 +20,21 @@ but reachable goal is found when it is the only option; the tiered arbiter's che
 pass (CHEAP_BUDGET_SECONDS) plans fast goals first, so this full budget is rarely
 hit, and the doomed-goal memo skips known-unreachable goals on later cycles."""
 
-_MAX_SEARCH_NODES = 250_000
+_MAX_SEARCH_NODES = 1_000_000
 """A* node-CREATION cap — the memory bound, independent of the wall clock.
 Search memory is proportional to nodes pushed (open heap + visited set +
 per-node WorldState copies), not to elapsed seconds: the wall-clock budget
 only bounded memory by accident, via slow node evaluation. When the loadout
 memo made expansions ~50x cheaper (2026-07-06), an unsatisfiable goal filled
-15GB RSS inside 6 minutes while honoring its time budget. 250K created nodes
-is ~1GB transient worst-case and far above any legitimately deep plan (the
-worst observed pathological search was 237K nodes; real plans complete in
-tens of thousands)."""
+15GB RSS inside 6 minutes while honoring its time budget.
+
+Calibration is in CREATED nodes (pushes), NOT explored (pops): at full
+branching (~1800 actions) created runs ~100x explored, so historical
+explored-node figures (237K pathological, 52K deep-chain) do NOT transfer.
+The first calibration (250K created) truncated a real escalation pass that
+succeeded uncapped at ~900K created (RestoreHP live probe 2026-07-06).
+1M created ≈ 4GB transient worst case; goals with sane relevant_actions
+never approach it."""
 
 
 def _state_key(state: WorldState) -> tuple[object, ...]:
@@ -60,6 +65,7 @@ class _Node:
 class PlanStats:
     """Diagnostics from the last planner run."""
     nodes_explored: int = 0
+    nodes_created: int = 0
     max_depth_reached: int = 0
     timed_out: bool = False
     node_capped: bool = False
@@ -96,8 +102,7 @@ class GOAPPlanner:
         budget = _SEARCH_BUDGET_SECONDS if budget_seconds is None else budget_seconds
         node_cap = _MAX_SEARCH_NODES if max_nodes is None else max_nodes
         deadline = time.monotonic() + budget
-        stats = PlanStats()
-        nodes_created = 1  # the root node below
+        stats = PlanStats(nodes_created=1)  # the root node below
 
         visited: set[tuple[object, ...]] = set()
         relevant = goal.relevant_actions(actions, state, game_data)
@@ -120,7 +125,7 @@ class GOAPPlanner:
                 if time.monotonic() >= deadline:
                     stats.timed_out = True
                     break
-                if nodes_created >= node_cap:
+                if stats.nodes_created >= node_cap:
                     # Memory bound hit (checked per pop; overshoot is at most
                     # one expansion's fan-out). Inconclusive like a timeout.
                     stats.node_capped = True
@@ -173,7 +178,7 @@ class GOAPPlanner:
                             g_score=g,
                         ),
                     )
-                    nodes_created += 1
+                    stats.nodes_created += 1
 
         self.last_stats = stats
         return []

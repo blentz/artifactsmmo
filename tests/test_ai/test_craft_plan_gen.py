@@ -445,6 +445,7 @@ class TestStrategyArbiterIntegration:
                 nodes_explored = 0
                 max_depth_reached = 0
                 timed_out = False
+                node_capped = False
             def plan(self, *args, **kwargs):
                 self.__class__.calls += 1
                 return []
@@ -474,6 +475,7 @@ class TestStrategyArbiterIntegration:
                 nodes_explored = 5
                 max_depth_reached = 2
                 timed_out = False
+                node_capped = False
             def plan(self, *args, **kwargs):
                 self.__class__.calls += 1
                 return []

@@ -50,6 +50,29 @@ class TestRestoreHPGoal:
         state = make_state(hp=150, max_hp=150)
         assert goal.value(state, make_game_data()) == 0.0
 
+    def test_relevant_actions_restricts_to_recovery_craft_movement(self):
+        """HP restoration never needs fight/gather/bank branches. Live probe
+        2026-07-06: with the full 1822-action set, Dijkstra needed 79s to pop
+        the cost-10 [Rest] (every cheaper fight/gather state floods first) —
+        the 10s cheap pass timed out EVERY cycle. Recovery+craft+movement
+        keeps cook-then-eat and travel-to-workshop reachable and plans in
+        milliseconds."""
+        goal = RestoreHPGoal()
+        state = make_state(hp=75, max_hp=150)
+        gd = make_game_data()
+        rest = RestAction()
+        cook = CraftAction(code="cooked_chicken", quantity=1, workshop_location=(1, 1))
+        move = MoveAction(x=1, y=0)
+        fight = FightAction(monster_code="chicken", locations=frozenset([(1, 0)]))
+        gather = GatherAction(resource_code="ash_tree", locations=frozenset([(6, 1)]))
+        deposit = DepositAllAction()
+        relevant = goal.relevant_actions(
+            [rest, cook, move, fight, gather, deposit], state, gd)
+        assert rest in relevant and cook in relevant and move in relevant
+        assert fight not in relevant
+        assert gather not in relevant
+        assert deposit not in relevant
+
     def test_value_half_hp_is_critical(self):
         """At 50% HP (below the 0.75 rest threshold) RestoreHP returns its ceiling."""
         goal = RestoreHPGoal()

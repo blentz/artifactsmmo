@@ -1004,6 +1004,7 @@ class StrategyArbiter:
             "nodes": stats.nodes_explored,
             "depth": stats.max_depth_reached,
             "timed_out": stats.timed_out,
+            "node_capped": stats.node_capped,
             "plan_len": len(plan),
         })
         return plan

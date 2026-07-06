@@ -1,5 +1,6 @@
 """RestoreHPGoal: restore HP to full, with urgency that spikes when HP is low."""
 
+from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -35,6 +36,16 @@ class RestoreHPGoal(Goal):
 
     def is_satisfied(self, state: WorldState) -> bool:
         return state.hp >= state.max_hp
+
+    def relevant_actions(self, actions: list[Action], state: WorldState,
+                         game_data: GameData) -> list[Action]:
+        """Recovery, craft (cook-then-eat) and movement (reach the workshop)
+        only. HP restoration can never require fighting, gathering or banking,
+        but with the FULL action set the h=0 planner must exhaust every state
+        cheaper than Rest's cost-10 before popping [Rest] — live probe
+        2026-07-06: 1822 actions, 79s to find the 1-step plan, so the 10s
+        cheap pass timed out every cycle and the HP guard never planned."""
+        return [a for a in actions if a.tags & {"recovery", "craft", "movement"}]
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"hp": state.max_hp}

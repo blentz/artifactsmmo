@@ -96,13 +96,22 @@ def test_node_cap_bounds_search_memory(make_planner_gd: GameData) -> None:
     # they must ride the same "don't memo as doomed" semantics.
     assert planner.last_stats.timed_out is True
     assert planner.last_stats.nodes_explored <= 100
+    # The cap bounds CREATED nodes (memory), which at branching-1 tracks
+    # explored closely; the stat must be recorded for live diagnosis.
+    assert planner.last_stats.nodes_created >= 100
+    assert planner.last_stats.nodes_created <= 100 + 1  # ≤ one fan-out overshoot
     assert elapsed < 5.0, f"cap=100 must stop far under the 30s budget, took {elapsed:.1f}s"
 
 
 def test_node_cap_default_uses_module_constant() -> None:
+    """250K was the first calibration and it TRUNCATED real escalation passes:
+    node counts in past incident reports are EXPLORED (pops), but memory —
+    and this cap — follow CREATED (pushes), ~100x explored at full branching
+    (live probe 2026-07-06: RestoreHP found [Rest] at ~900K created; the 250K
+    cap killed that search at 21s). 1M created ≈ 4GB transient worst case."""
     sig = inspect.signature(GOAPPlanner.plan)
     assert sig.parameters["max_nodes"].default is None
-    assert _MAX_SEARCH_NODES == 250_000
+    assert _MAX_SEARCH_NODES == 1_000_000
 
 
 def test_node_cap_does_not_block_reachable_plans(make_planner_gd: GameData) -> None:
