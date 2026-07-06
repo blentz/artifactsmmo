@@ -3917,7 +3917,7 @@ LADDER_MEANS_FIRES_MUTATIONS = [
         # conjunct, so the differential diverges whenever
         # cost <= gold < cost + reserve.
         "ladder/means: BANK_EXPAND reserve gate dropped (bare gold >= cost)",
-        "            game_data.next_expansion_cost, reserve_floor(state, game_data, None),",
+        "            game_data.next_expansion_cost, ctx.gold_reserve,",
         "            game_data.next_expansion_cost, 0,",
     ),
     (
