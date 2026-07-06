@@ -4,6 +4,7 @@ Each test asserts the goal's observable contract (value / is_satisfied /
 desired_state / relevant_actions), never just line execution.
 """
 
+from artifactsmmo_cli.ai.actions.bank_expansion import BuyBankExpansionAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -55,6 +56,22 @@ class TestExpandBankGaps:
         gd._bank_capacity = capacity
         gd._next_expansion_cost = cost
         return gd
+
+    def test_relevant_actions_is_expansion_only(self):
+        """The buy action folds bank travel into its own cost/apply, so the
+        expansion plan is single-step — no other action can contribute. With
+        default all-actions relevance the h=0 planner had to exhaust every
+        state cheaper than the gold-scaled buy cost (5 + dist + cost/100 —
+        50+ once expansions cost thousands): live probe 2026-07-06 timed out
+        the whole 10s cheap pass (1096 explored, 127K created, NO plan), so
+        the bank could never expand once prices grew."""
+        goal = ExpandBankGoal(bank_accessible=True, game_data=self._gd())
+        state = make_state(gold=2000,
+                           bank_items={f"i{i}": 1 for i in range(29)})
+        buy = BuyBankExpansionAction(bank_location=(4, 1), accessible=True)
+        others = [DepositAllAction(), OptimizeLoadoutAction(target_skill="mining")]
+        relevant = goal.relevant_actions([*others, buy], state, self._gd())
+        assert relevant == [buy]
 
     def test_value_zero_when_capacity_unknown(self):
         """value() reaches the capacity==0 guard: not satisfied (bank known

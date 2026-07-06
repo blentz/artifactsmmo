@@ -1,5 +1,6 @@
 """ExpandBankGoal: buy more bank slots when bank fills up."""
 
+from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.bank_expansion_timing import should_expand_bank
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -76,6 +77,18 @@ class ExpandBankGoal(Goal):
         ):
             return 0.0
         return 40.0
+
+    def relevant_actions(self, actions: list[Action], state: WorldState,
+                         game_data: GameData) -> list[Action]:
+        """Only the expansion buy: BuyBankExpansionAction folds the bank
+        travel into its own cost/apply, so the plan is always single-step and
+        no other action can contribute. With the default all-actions
+        relevance, the h=0 planner had to exhaust every state cheaper than
+        the gold-scaled buy cost (5 + dist + expansion_cost/100 — 50+ once
+        expansions cost thousands): live probe 2026-07-06 burned the whole
+        10s cheap pass (1096 explored / 127K created, NO plan), so the bank
+        could never expand once prices grew."""
+        return [a for a in actions if "expansion" in a.tags]
 
     def is_satisfied(self, state: WorldState) -> bool:
         # Unknown bank state → treat as satisfied (no urgency to expand)
