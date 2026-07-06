@@ -21,7 +21,7 @@ from artifactsmmo_cli.ai.goals.discard_overstock import (
     _DISCARD_OVERSTOCK_HIGH_PRESSURE,
     _DISCARD_OVERSTOCK_CRITICAL,
 )
-from artifactsmmo_cli.ai.goals.pursue_task import PursueTaskGoal, PRIORITY_WHEN_FIRING
+from artifactsmmo_cli.ai.goals.pursue_task import PRIORITY_FLOOR, PursueTaskGoal
 from artifactsmmo_cli.ai.goals.reach_unlock_level import (
     ReachUnlockLevelGoal,
     PRIORITY_WHEN_BLOCKER_ACTIVE,
@@ -186,11 +186,11 @@ def test_pursue_task_batch_done_zero():
 def test_pursue_task_fires():
     g = PursueTaskGoal(task_code="x", initial_progress=5, batch=3)
     state = _mk(task_code="x", task_total=20, task_progress=5)
-    assert g.value(state, GameData()) == PRIORITY_WHEN_FIRING
+    assert g.value(state, GameData()) == PRIORITY_FLOOR
 
 
 def test_pursue_task_priority_constant():
-    assert PRIORITY_WHEN_FIRING == 35.0
+    assert PRIORITY_FLOOR == 35.0
 
 
 # ─── TaskExchangeGoal ────────────────────────────────────────────────────────

@@ -152,7 +152,9 @@ def test_constant_actions_nonneg(x, y, dx, dy):
     assert RestAction().cost(s, None, None) == 10.0
     assert EquipAction(code="c", slot="weapon").cost(s, None, None) == 1.0
     assert UnequipAction(slot="weapon").cost(s, None, None) == 1.0
-    assert MapTransitionAction().cost(s, None, None) == 3.0
+    # P5b: transition cost folds the walk to the portal (walk + 3.0) — no
+    # longer a pinned constant, but still strictly positive for every state.
+    assert MapTransitionAction().cost(s, None, None) == float(abs(x) + abs(y)) + 3.0
     assert ClaimPendingItemAction().cost(s, None, None) == 1.0
     assert MoveTo(name="bank", destinations=frozenset({(x + dx, y + dy)})).cost(
         s, None, None

@@ -141,6 +141,33 @@ def bestWeaponCode (s : State) : Option Nat :=
   | none => none
   | some (_, code) => some code
 
+/-! ### Best gathering tool (banked-tool ferry keep, 2026-07-05).
+
+Python `_best_gathering_tools` keeps, per gathering skill, the argmax of
+`abs(gather_score)` over inventory ∪ equipped, ties broken by code ascending —
+depositing the working kit undid the WithdrawTools ferry and re-created the
+bare-handed grind. In THIS model's input abstraction toolness is a single
+boolean (the differential fixture maps every tool to one skill at unit
+magnitude), so the per-skill argmax reduces exactly to the LOWEST tool code. -/
+
+/-- Fold step for the best gathering tool: first/lowest tool code wins. -/
+def betterTool (s : State) (best : Option Nat) (code : Nat) : Option Nat :=
+  if s.isTool code then
+    match best with
+    | none => some code
+    | some bcode => if code < bcode then some code else some bcode
+  else best
+
+/-- Tool candidates: inventory codes with qty > 0 ∪ equipped. Python's
+`_best_gathering_tools` filters `q > 0` — a zero-qty stack is not an owned
+tool (unlike `weaponCandidates`, whose Python twin iterates codes only). -/
+def toolCandidates (s : State) : List Nat :=
+  ((s.inventory.filter (fun cq => cq.2 > 0)).map Prod.fst ++ s.equipped).eraseDups
+
+/-- The kept gathering-tool code (lowest owned tool), if any tool is owned. -/
+def bestToolCode (s : State) : Option Nat :=
+  (toolCandidates s).foldl (betterTool s) none
+
 /-! ### Recipe-material walk — REUSED from `RecipeClosure`.
 
 `_recipe_materials(roots)` adds a material when it is reached as a recipe CHILD of
@@ -188,12 +215,14 @@ finitely-checkable part:
 * `code = tasksCoin`, or
 * `some code = taskCode`, or
 * HP-restore item in inventory, or
-* `code = bestWeaponCode`. -/
+* `code = bestWeaponCode`, or
+* `code = bestToolCode` (banked-tool ferry protection). -/
 def inKeepBase (s : State) (code : Nat) : Bool :=
   decide (code = s.tasksCoin)
   || decide (s.taskCode = some code)
   || isKeptHp s code
   || decide (bestWeaponCode s = some code)
+  || decide (bestToolCode s = some code)
 
 /-- The FULL keep predicate: the base part OR a recipe material. -/
 def InKeep (s : State) (code : Nat) : Prop :=
@@ -404,6 +433,13 @@ theorem hp_item_kept_base (s : State) (c : Nat)
 
 /-- The best fighting weapon is kept (base), when one exists. -/
 theorem best_weapon_kept_base (s : State) (c : Nat) (h : bestWeaponCode s = some c) :
+    inKeepBase s c = true := by
+  unfold inKeepBase
+  simp [h]
+
+/-- The kept gathering tool is kept (base), when one exists — the banked-tool
+ferry protection: the working kit never deposits. -/
+theorem best_tool_kept_base (s : State) (c : Nat) (h : bestToolCode s = some c) :
     inKeepBase s c = true := by
   unfold inKeepBase
   simp [h]

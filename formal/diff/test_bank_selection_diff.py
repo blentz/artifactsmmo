@@ -304,8 +304,9 @@ def test_full_bag_with_bankable_uses_normal_path_matches_lean():
 
 def test_best_weapon_protected_over_tool():
     """The best fighting weapon (max-attack non-tool weapon over inv+equipped) is
-    kept; a higher-'attack' TOOL (has skill_effects) is NOT the fighting weapon and
-    is depositable. Pins tool exclusion + the argmax tie rule against Lean."""
+    kept; a TOOL is not a fighting-weapon candidate (argmax tie rule pinned
+    against Lean) but IS kept by the banked-tool ferry protection (2026-07-05):
+    the working kit never deposits."""
     recipes: dict[int, dict[int, int]] = {}
     attrs = {
         1: {"type_": "weapon", "attack": 30, "is_tool": False, "hp_restore": 0, "sell": 5},
@@ -318,7 +319,8 @@ def test_best_weapon_protected_over_tool():
     )
     assert py_keep == lean_keep
     assert py_deposits == lean_deposits
-    # best fighting weapon = item 1 (attack 30, non-tool). Item 2 is a tool (excluded).
-    assert 1 in py_keep
+    # best fighting weapon = item 1 (attack 30, non-tool). Item 2 is a tool —
+    # excluded from the weapon argmax but KEPT as the working gathering kit.
+    assert 1 in py_keep and 2 in py_keep
     dep_codes = {c for c, _ in py_deposits}
-    assert dep_codes == {2, 3}, f"tool/weaker weapon should deposit, got {dep_codes}"
+    assert dep_codes == {3}, f"only the weaker weapon should deposit, got {dep_codes}"

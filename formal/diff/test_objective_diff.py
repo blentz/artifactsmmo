@@ -80,6 +80,12 @@ class _FakeGameData:
     def monster_locations(self, code: str) -> list[tuple[int, int]]:
         return [(0, 0)] if self._monster_spawns.get(code) else []
 
+    def monster_spawn_known(self, code: str) -> bool:
+        # P5b spawn-known gate: production also consults the all-layer tile
+        # index; this fake has no layers, so located == spawn-known is the
+        # model-faithful reduction (matches the Lean oracle's drop predicate).
+        return bool(self.monster_locations(code))
+
     def npc_purchases(self, item_code: str) -> list[tuple[str, int, str]]:
         # one synthetic vendor per edge; the npc name encodes its kind so
         # is_event_npc / npc_location can reproduce the permanence gate.

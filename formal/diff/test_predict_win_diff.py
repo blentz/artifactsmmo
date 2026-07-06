@@ -135,7 +135,7 @@ def _run(p_attack, p_dmg, p_dmg_elem, p_resist, p_crit, p_max_hp, p_init,
         equipment: dict[str, str] = {}
 
     with MonkeyPatch.context() as mp:
-        mp.setattr(combat_mod, "pick_loadout", lambda code, state, gd: loadout)
+        mp.setattr(combat_mod, "pick_loadout_cached", lambda code, state, gd: loadout)
         mp.setattr(combat_mod, "project_loadout_stats", lambda state, loadout, gd: stats)
         py = combat_mod.predict_win(_FakeState(), _FakeGameData(), MONSTER)
 
