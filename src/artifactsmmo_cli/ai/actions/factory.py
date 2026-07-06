@@ -110,6 +110,30 @@ def build_actions(
                 if mat_qty > materials_to_withdraw.get(mat_code, 0):
                     materials_to_withdraw[mat_code] = mat_qty
 
+    # OWNED recipe-less equippables (NPC-bought bags/runes/artifacts, task
+    # rewards): the loop above enumerates equips only for CRAFTABLE items, so
+    # a held sandwhisper_bag had NO EquipAction and UpgradeEquipment's
+    # closure-locked search died at 0 plans even at full capability (probe
+    # 2026-07-06 @L50). Bounded to owned items so the action set stays small;
+    # the acquisition legs (Fight xN -> NpcBuy) are GatherMaterials' job, and
+    # ownership is exactly when the equip leg becomes real.
+    if state is not None:
+        owned_codes = set(state.inventory) | set(state.bank_items or {})
+        for item_code in sorted(owned_codes):
+            if item_code in game_data.crafting_recipes:
+                continue  # already enumerated above
+            stats = game_data.item_stats(item_code)
+            if stats is None:
+                continue
+            slots = ITEM_TYPE_TO_SLOTS.get(stats.type_, [])
+            for slot in slots:
+                actions.append(EquipAction(code=item_code, slot=slot))
+            if slots and item_code not in unit_withdraw_codes:
+                actions.append(WithdrawItemAction(
+                    code=item_code, quantity=1, bank_location=bank,
+                    accessible=bank_accessible))
+                unit_withdraw_codes.add(item_code)
+
     # Walk recipe closure transitively. The first pass above only adds
     # withdraws for DIRECT recipe inputs of equippables (e.g. copper_bar
     # for copper_dagger). Trace 2026-06-06 15:21: bot looped gather →

@@ -90,7 +90,7 @@ from artifactsmmo_cli.ai.tiers.next_tier_cap import (
     next_tier_cap_pure,
     next_tier_dampened_pure,
 )
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, _permanent_vendor_purchases
 from artifactsmmo_cli.ai.tiers.objective_needs import objective_needs
 from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
 from artifactsmmo_cli.ai.tiers.skill_grind_target import build_grind_candidates
@@ -532,6 +532,41 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
     in hand UpgradeEquipment becomes plannable and fires the craft+equip. (Mirrors
     the GEAR_REVIEW guard's gather/upgrade split for the objective-step path.)"""
     upgrade = UpgradeEquipmentGoal(initial_equipment=state.equipment, committed_target=(code, slot))
+    owned = (state.inventory.get(code, 0) > 0
+             or (state.bank_items or {}).get(code, 0) > 0)
+    if (game_data.crafting_recipe(code) is None and not owned
+            and game_data.npc_purchases(code)):
+        # UNOWNED, recipe-less, NPC-buy-only equippable (sandwhisper_bag):
+        # UpgradeEquipment's closure lock restricts planning to the recipe
+        # closure's crafts/gathers/withdraws + the equip — for a recipe-less
+        # vendor item that set is EMPTY, so its search died at 2 nodes even
+        # at full capability (probe 2026-07-06 @L50: plan_len=0 — a dead
+        # gear root), while is_plannable over-admitted it ("recipe-less
+        # needs at most one gather" assumes a gather exists). Route the
+        # ACQUISITION through GatherMaterials, whose currency injection
+        # (task #13) emits Fight xN (drop-farm capable) -> NpcBuy; once the
+        # item is in hand this branch is skipped and UpgradeEquipment fires
+        # the equip — one stepwise leg per cycle, as with every other root.
+        #
+        # UNAFFORDABLE item-currency: accumulate the currency INCREMENTALLY
+        # (needed = held+1, the grind-one-replan idiom) — a one-shot plan
+        # for a 230-coin price is ~120 fights deep and dies on max_depth
+        # (sandwhisper_bag probe @L50: 28K nodes, plan_len=0). Cheapest
+        # PERMANENT located vendor decides the price (semantic key; event/
+        # unlocated vendors mirror currency_demand's exclusion). Gold-priced
+        # items skip the accumulation (gold is earned by normal play, not a
+        # gatherable item) and fall through to the buy attempt.
+        bank = state.bank_items or {}
+        purchases = [(price, currency)
+                     for price, currency in _permanent_vendor_purchases(code, game_data)
+                     if currency != "gold"]
+        if purchases:
+            price, currency = min(purchases)
+            held = state.inventory.get(currency, 0) + bank.get(currency, 0)
+            if held < price:
+                return GatherMaterialsGoal(target_item=currency,
+                                           needed={currency: held + 1})
+        return GatherMaterialsGoal(target_item=code, needed={code: 1})
     if upgrade.is_plannable(state, game_data):
         return upgrade
     recipe = game_data.crafting_recipe(code) or {}

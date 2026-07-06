@@ -287,6 +287,13 @@ def _producible(code: str, state: WorldState, game_data: GameData) -> bool:
     the core call to avoid instantiating the four flags when unneeded."""
     if game_data.crafting_recipe(code) is not None:
         return True
+    # Already IN HAND (inventory or bank): nothing left to produce — the
+    # obtain step is served by withdraw/equip. Without this arm a HELD
+    # recipe-less vendor item (sandwhisper_bag bought a cycle ago) still
+    # read not-producible and actionable_step went dead (2026-07-06).
+    bank = state.bank_items or {}
+    if state.inventory.get(code, 0) > 0 or bank.get(code, 0) > 0:
+        return True
     # Currency-buy, one level deep: gold, task-earnable (tasks_coin), or a
     # currency the character can PRODUCE now — gatherable (hides come from
     # fights but wool/dusts also gather-adjacent items count via the full
@@ -303,9 +310,14 @@ def _producible(code: str, state: WorldState, game_data: GameData) -> bool:
             is_winnable(state, game_data, monster_code)
             and game_data.monster_spawn_known(monster_code)
             for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(currency))
+    # A purchase is producible when the currency can be PRODUCED — or is
+    # ALREADY EARNED: currency on hand (inventory + bank) covering the price
+    # counts even when its droppers are currently unwinnable (the incremental
+    # accumulation route banks coins across cycles; 2026-07-06).
     buyable = any(
-        _currency_producible(currency)
-        for _price, currency in _permanent_vendor_purchases(code, game_data))
+        state.inventory.get(currency, 0) + bank.get(currency, 0) >= price
+        or _currency_producible(currency)
+        for price, currency in _permanent_vendor_purchases(code, game_data))
     # Winnable drop: state-aware (preserves the winnability gate).
     winnable_drop = any(
         is_winnable(state, game_data, monster_code)

@@ -2770,3 +2770,60 @@ def test_marginal_provision_sizes_by_equipped_potion_not_held_food(tmp_path) -> 
     # Must be 3 = ceil(90/30), sized by the POTION's restore — NOT 2 = ceil(90/60)
     assert goal._quantity == 3
     store.close()
+
+
+def _vendor_bag_gd() -> GameData:
+    """A recipe-less, NPC-only equippable (bag) sold for a monster-drop
+    currency by a permanent vendor — the sandwhisper_bag shape."""
+    gd = GameData()
+    gd._item_stats = {
+        "dune_bag": ItemStats(code="dune_bag", level=1, type_="bag",
+                              inventory_space=10),
+    }
+    gd._npc_stock = {"dune_trader": {"dune_bag": 3}}
+    gd._npc_buy_currency = {"dune_trader": {"dune_bag": "dune_coin"}}
+    gd._npc_locations = {"dune_trader": (4, 1)}
+    gd._monster_level = {"dune_rat": 1}
+    gd._monster_hp = {"dune_rat": 10}
+    gd._monster_locations = {"dune_rat": (2, 2)}
+    fill_monster_stat_defaults(gd)
+    gd._monster_drops = {"dune_rat": [("dune_coin", 50, 1, 1)]}
+    return gd
+
+
+def test_equippable_goal_routes_unowned_vendor_only_item_to_currency_grind():
+    """An UNOWNED, recipe-less, NPC-buy-only equippable with the currency
+    NOT yet affordable must map to an INCREMENTAL currency accumulation
+    (needed = held+1, the grind-one-replan idiom): a one-shot plan for a
+    230-coin price is ~120 fights deep and dies on max_depth
+    (sandwhisper_bag probe 2026-07-06 @L50: 28K nodes, plan_len=0), while
+    UpgradeEquipment's closure lock could never emit the buy at all."""
+    gd = _vendor_bag_gd()
+    state = make_state(level=5, attack={"air": 50}, inventory={}, bank_items={})
+    goal = objective_step_goal(ObtainItem("dune_bag", 1, slot="bag_slot"),
+                               state, gd, _ctx(), root=ObtainItem("dune_bag", 1, slot="bag_slot"))
+    assert isinstance(goal, GatherMaterialsGoal), repr(goal)
+    assert goal.needed == {"dune_coin": 1}, repr(goal)
+
+
+def test_equippable_goal_routes_affordable_vendor_only_item_to_buy():
+    """Currency in hand (>= price): the goal targets the item itself — its
+    Task-13 currency injection emits the single NpcBuy leg."""
+    gd = _vendor_bag_gd()
+    state = make_state(level=5, attack={"air": 50},
+                       inventory={"dune_coin": 3}, bank_items={})
+    goal = objective_step_goal(ObtainItem("dune_bag", 1, slot="bag_slot"),
+                               state, gd, _ctx(), root=ObtainItem("dune_bag", 1, slot="bag_slot"))
+    assert isinstance(goal, GatherMaterialsGoal), repr(goal)
+    assert goal.needed == {"dune_bag": 1}, repr(goal)
+
+
+def test_equippable_goal_keeps_upgrade_path_when_vendor_item_owned():
+    """Once the vendor item is IN HAND the normal UpgradeEquipment equip
+    path applies (withdraw/equip are in its closure lock)."""
+    gd = _vendor_bag_gd()
+    state = make_state(level=5, attack={"air": 50},
+                       inventory={"dune_bag": 1}, bank_items={})
+    goal = objective_step_goal(ObtainItem("dune_bag", 1, slot="bag_slot"),
+                               state, gd, _ctx(), root=ObtainItem("dune_bag", 1, slot="bag_slot"))
+    assert isinstance(goal, UpgradeEquipmentGoal), repr(goal)

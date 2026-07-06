@@ -1389,3 +1389,31 @@ class TestGatherRareDropTargeting:
         names = {repr(a) for a in actions}
         assert "Gather(copper_rocks)" in names
         assert "Gather(copper_rocks->emerald_stone)" in names
+
+
+def test_factory_emits_equip_for_owned_recipeless_equippable():
+    """A recipe-less, NPC-bought equippable (sandwhisper_bag) got NO
+    EquipAction — the factory only enumerated equips for items with crafting
+    recipes, so even with the bag IN HAND UpgradeEquipment's closure-locked
+    search died at 0 plans (probe 2026-07-06 @L50). Owned (inventory or
+    bank) equippables must get their EquipAction (+ Withdraw for banked)."""
+    from artifactsmmo_cli.ai.actions.factory import build_actions
+    from tests.test_ai.fixtures import make_state
+    gd = GameData()
+    gd._item_stats = {
+        "dune_bag": ItemStats(code="dune_bag", level=1, type_="bag",
+                              inventory_space=10),
+    }
+    gd.world.bank_tile = (1, 1)
+    gd.world.taskmaster_tile = (2, 2)
+    held = make_state(inventory={"dune_bag": 1})
+    names = {repr(a) for a in build_actions(gd, held, None, bank_accessible=True,
+                                            task_exchange_min_coins=0)}
+    assert "Equip(dune_bag->bag_slot)" in names, sorted(
+        n for n in names if "dune" in n)
+    banked = make_state(bank_items={"dune_bag": 1})
+    names_b = {repr(a) for a in build_actions(gd, banked, None, bank_accessible=True,
+                                              task_exchange_min_coins=0)}
+    assert "Equip(dune_bag->bag_slot)" in names_b
+    assert any(n.startswith("Withdraw(dune_bag") for n in names_b), sorted(
+        n for n in names_b if "dune" in n)
