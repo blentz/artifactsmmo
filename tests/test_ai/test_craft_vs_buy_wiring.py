@@ -538,3 +538,48 @@ def test_relevant_actions_skips_event_vendor_for_closure_leaf() -> None:
     assert not any(isinstance(a, NpcBuyAction) and a.item_code == "flux" for a in relevant), (
         "event-vendor closure leaf must not get an NpcBuy emission"
     )
+
+
+def test_directly_requested_currency_item_is_funded() -> None:
+    """Stepwise decomposition hands the mapper the currency item ITSELF once
+    every other input is in hand (satchel -> ... -> ObtainItem(jasper_crystal)).
+    The old 'leaf in needed' exclusion silenced funding exactly at that final
+    step: GatherMaterials(jasper_crystal) was built with 0 tasks_coin, NpcBuy
+    inapplicable, goal unplannable — the live satchel stall (2026-07-06)."""
+    from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
+
+    gd = GameData()
+    gd._crafting_recipes = {}
+    gd._item_stats = {
+        "gem": ItemStats(code="gem", level=1, type_="resource", subtype="task"),
+    }
+    gd._npc_stock = {"trader": {"gem": 8}}
+    gd._npc_buy_currency = {"trader": {"gem": "tasks_coin"}}
+    gd._npc_locations = {"trader": (0, 0)}
+    gd._task_coin_rewards = {"chickens": 2}
+
+    state = make_state(inventory={}, bank_items={})
+    result = analyze_currency_leaves({"gem": 1}, state, gd)
+    assert result.blocked is True, "unaffordable direct currency request must block"
+    assert result.funding_target == ("tasks_coin", 8)
+
+
+def test_directly_requested_currency_item_affordable_not_blocked() -> None:
+    """With coins in hand the direct request is NOT blocked (GatherMaterials
+    plans the NpcBuy) and needs no funding."""
+    from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
+
+    gd = GameData()
+    gd._crafting_recipes = {}
+    gd._item_stats = {
+        "gem": ItemStats(code="gem", level=1, type_="resource", subtype="task"),
+    }
+    gd._npc_stock = {"trader": {"gem": 8}}
+    gd._npc_buy_currency = {"trader": {"gem": "tasks_coin"}}
+    gd._npc_locations = {"trader": (0, 0)}
+    gd._task_coin_rewards = {"chickens": 2}
+
+    state = make_state(inventory={"tasks_coin": 8}, bank_items={})
+    result = analyze_currency_leaves({"gem": 1}, state, gd)
+    assert result.blocked is False
+    assert result.funding_target is None

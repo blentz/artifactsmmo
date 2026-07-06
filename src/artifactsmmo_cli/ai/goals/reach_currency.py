@@ -10,7 +10,6 @@ from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.complete_task import CompleteTaskAction
-from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.funding_core import funding_cycles_pure
@@ -57,9 +56,16 @@ class ReachCurrencyGoal(Goal):
 
     def relevant_actions(self, actions: list[Action], state: WorldState,
                          game_data: GameData) -> list[Action]:
+        """Accept/Complete/Fight only. The in-model pending task is
+        monsters-typed (AcceptTaskAction.apply), so a CraftAction can never
+        progress it — keeping the ~320 crafts only flooded the h=0 search
+        (live 2026-07-06: 24K nodes / 10s cheap-pass timeout with crafts;
+        milliseconds without). Execution replans against the server's REAL
+        task each cycle, so an items task is worked by the task machinery,
+        not by this in-model projection."""
         return [a for a in actions
                 if isinstance(a, (AcceptTaskAction, CompleteTaskAction,
-                                  FightAction, CraftAction))]
+                                  FightAction))]
 
     @property
     def max_depth(self) -> int:

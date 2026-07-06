@@ -32,12 +32,21 @@ class AcceptTaskAction(Action):
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         dest = self.taskmaster_location
+        # task_type="monsters" makes the pending in-model task PROGRESSABLE:
+        # FightAction.apply advances a monsters-task, and it special-cases the
+        # _PENDING_TASK marker (any monster counts). Without a type the pending
+        # task could never progress in ANY projection, CompleteTask was never
+        # applicable, and every accept→progress→complete plan (ReachCurrency
+        # funding, C4) was unfindable — live satchel/jasper stall 2026-07-06.
+        # Execution replaces all of this with the server's real task; the
+        # per-cycle replan then works the actual requirement.
         return dataclasses.replace(
             state,
             x=dest[0],
             y=dest[1],
             cooldown_expires=None,
             task_code=_PENDING_TASK,
+            task_type="monsters",
             task_progress=0,
             task_total=1,
             task_lifecycle_phase=TaskLifecyclePhase.ACCEPTED,

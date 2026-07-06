@@ -1,9 +1,8 @@
 """Shared analysis of currency-buy leaves in a recipe closure.
 
-A "currency-buy leaf" is a recipe input that can ONLY be acquired by buying it
-from an NPC against a currency (e.g. jasper_crystal @ tasks_trader for 8
-tasks_coin). Such a leaf is:
-  - not itself a requested item (`needed`),
+A "currency-buy leaf" is a closure member (a recipe input OR the requested
+item itself) that can ONLY be acquired by buying it from an NPC against a
+currency (e.g. jasper_crystal @ tasks_trader for 8 tasks_coin). Such a leaf:
   - has no crafting recipe,
   - is not a resource drop,
   - is dropped by no monster,
@@ -68,8 +67,12 @@ def analyze_currency_leaves(
     funding_target: tuple[str, int] | None = None
 
     for leaf, qty in chain.items():
-        if leaf in needed:
-            continue
+        # The requested item ITSELF is analyzed too: stepwise decomposition
+        # hands the mapper the currency item directly once every other input
+        # is in hand (satchel -> ... -> ObtainItem(jasper_crystal)), and the
+        # old `leaf in needed` exclusion silenced funding exactly at that
+        # final step (live satchel stall 2026-07-06). Craftable / gatherable /
+        # monster-dropped requests still skip via the guards below.
         if game_data.crafting_recipe(leaf) is not None:
             continue
         if leaf in game_data.resource_drops.values():

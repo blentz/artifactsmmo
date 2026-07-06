@@ -9,6 +9,7 @@ from artifactsmmo_api_client.api.my_characters.action_fight_my_name_action_fight
 from artifactsmmo_api_client.models.fight_request_schema import FightRequestSchema
 from artifactsmmo_api_client.models.fight_result import FightResult
 
+from artifactsmmo_cli.ai.actions.accept_task import _PENDING_TASK
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.cost_core import learned_cost_pure
 from artifactsmmo_cli.ai.actions.gather_apply_core import (
@@ -73,9 +74,15 @@ class FightAction(Action):
         dest = nearest_or_error(state.x, state.y, self.locations, "combat")
         estimated_hp_cost = max(1, state.max_hp // 5)
         new_hp = max(1, state.hp - estimated_hp_cost)
+        # The _PENDING_TASK marker is the planning-only "some monsters task"
+        # AcceptTaskAction.apply mints: ANY fight progresses it, so the planner
+        # can assemble accept→fight→complete without knowing which monster the
+        # server will assign. A REAL task (an actual monster code) still
+        # requires the exact monster.
         new_progress = (
             state.task_progress + 1
-            if state.task_type == "monsters" and state.task_code == self.monster_code
+            if state.task_type == "monsters"
+            and state.task_code in (self.monster_code, _PENDING_TASK)
             else state.task_progress
         )
         # Model the loot: a kill yields the monster's drops, so the planner can
