@@ -1278,8 +1278,11 @@ OBJECTIVE_MUTATIONS = [
     # drop the known-spawn gate: accept ANY monster drop even from a monster the
     # bot can never reach. Killed by test_attainable_spawnless_monster_drop_rejected
     # and the random graph (spawn-less droppers must not ground their item).
+    # (anchor refreshed 2026-07-06: P5b renamed the gate to monster_spawn_known
+    # — the stale monster_locations anchor no longer applied and surfaced as a
+    # "(stale)" survivor on the first post-P5b gate run.)
     ("objective: drop known-spawn gate in monster-drop leaf",
-     "    return any(game_data.monster_locations(monster_code)\n"
+     "    return any(game_data.monster_spawn_known(monster_code)\n"
      "               for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(code))",
      "    return any(True\n"
      "               for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(code))"),
