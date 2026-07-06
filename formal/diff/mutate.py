@@ -1324,6 +1324,18 @@ OBJECTIVE_MUTATIONS = [
 ]
 
 
+# is_attainable_now task-earnable arm (2026-07-06): a tasks_coin-priced leaf is
+# producible-NOW via the always-available C4 funding loop. Dropping the arm
+# silently removes every task-currency-gated item (satchel) from near_term_gear.
+# Unit-killed group (bag-slot-urgency lesson: unit-bound mutants get their OWN
+# group), bound to tests/test_ai/test_tiers_objective.py.
+OBJECTIVE_NOW_MUTATIONS = [
+    ("objective: drop task-earnable arm in is_attainable_now leaf",
+     "        if game_data.is_task_earnable(leaf):",
+     "        if False and game_data.is_task_earnable(leaf):"),
+]
+
+
 # strategy_traversal mutations -- old strings matched to current strategy.py text.
 STRATEGY_MUTATIONS = [
     # cycle-guard flip in is_reachable: a node on the current path becomes wrongly
@@ -4745,6 +4757,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_prerequisite_graph_diff.py", survivors)
     run_group(OBJECTIVE_SRC, OBJECTIVE_MUTATIONS,
               "formal/diff/test_objective_diff.py", survivors)
+    run_group(OBJECTIVE_SRC, OBJECTIVE_NOW_MUTATIONS,
+              "tests/test_ai/test_tiers_objective.py", survivors)
     run_group(STRATEGY_SRC, STRATEGY_MUTATIONS,
               "formal/diff/test_strategy_traversal_diff.py", survivors)
     run_group(STRATEGY_SRC, POTION_GATE_MUTATIONS,

@@ -162,6 +162,15 @@ def is_attainable_now(code: str, state: WorldState, game_data: GameData) -> bool
                and game_data.monster_spawn_known(monster_code)
                for monster_code, _rate, _mn, _mx in game_data.monsters_dropping(leaf)):
             return True
+        if game_data.is_task_earnable(leaf):
+            # Task-earned currency (tasks_coin) is producible-NOW: the C4
+            # funding loop (accept → fight → complete, activated 2026-07-06)
+            # is always available and ReachCurrencyGoal plans it from any
+            # state. Without this arm a tasks_coin-priced leaf (jasper_crystal
+            # @ tasks_trader) failed the now-walk and satchel silently never
+            # became a near-term bag target. Mirrors the full-progression
+            # leaf's is_task_earnable arm.
+            return True
         if leaf in path:
             return False
         sub = path | {leaf}

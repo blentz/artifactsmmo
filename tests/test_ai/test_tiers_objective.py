@@ -621,3 +621,45 @@ def test_utility_potion_targets_picks_craftable_now():
     obj = CharacterObjective.from_game_data(_gd_with_potions())
     targets = obj.utility_potion_targets(make_state(level=10, skills={**make_state().skills, "alchemy": 16}))
     assert targets == {"utility1_slot": "small_health_potion"}
+
+
+def test_is_attainable_now_credits_task_earnable_currency():
+    """A leaf priced in a TASK-EARNABLE currency (jasper_crystal @ 8
+    tasks_coin) is attainable-now even with 0 coins on hand: the C4 funding
+    loop (accept -> fight -> complete, 2ba14d9c) is always available, so the
+    currency is producible the same way a winnable monster drop is. The old
+    now-leaf only consulted gather/winnable-drop/vendor-affordable and
+    silently dropped satchel from near_term_gear forever (live 2026-07-06:
+    bag_slot's only root was an unequippable L50 BiS bag)."""
+    gd = _gd_drop_recipes()
+    gd._item_stats["satchel"] = ItemStats(code="satchel", level=5, type_="bag",
+                                          inventory_space=15,
+                                          crafting_skill="gearcrafting",
+                                          crafting_level=5)
+    # satchel needs feather (winnable chicken) + jasper (tasks_coin buy).
+    gd._crafting_recipes["satchel"] = {"feather": 2, "jasper_crystal": 1}
+    gd._npc_stock = {"tasks_trader": {"jasper_crystal": 8}}
+    gd._npc_buy_currency = {"tasks_trader": {"jasper_crystal": "tasks_coin"}}
+    gd._npc_locations = {"tasks_trader": (5, 11)}
+    gd._task_reward_item_codes = {"tasks_coin"}
+    state = make_state(level=5, attack={"air": 5})
+    assert state.inventory.get("tasks_coin") is None
+    assert is_attainable_now("jasper_crystal", state, gd) is True
+    assert is_attainable_now("satchel", state, gd) is True
+    targets = CharacterObjective.from_game_data(gd).near_term_gear(state)
+    assert targets.get("bag_slot") == "satchel"
+
+
+def test_is_attainable_now_still_rejects_unaffordable_gold_leaf():
+    """The task-earnable arm must not weaken the gold gate: a gold-priced
+    leaf with insufficient gold stays not-attainable-now."""
+    gd = _gd_drop_recipes()
+    gd._crafting_recipes["gold_helm"] = {"rare_gem": 1}
+    gd._item_stats["gold_helm"] = ItemStats(code="gold_helm", level=5, type_="helmet",
+                                            resistance={"fire": 2})
+    gd._npc_stock = {"jeweler": {"rare_gem": 5000}}
+    gd._npc_buy_currency = {"jeweler": {"rare_gem": "gold"}}
+    gd._npc_locations = {"jeweler": (1, 1)}
+    gd._task_reward_item_codes = {"tasks_coin"}
+    state = make_state(level=5, attack={"air": 5}, gold=10)
+    assert is_attainable_now("gold_helm", state, gd) is False
