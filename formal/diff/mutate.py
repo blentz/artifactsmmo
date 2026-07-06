@@ -3968,13 +3968,23 @@ FIGHT_APPLICABILITY_MUTATIONS = [
         #   test_fight_applicable_when_winnable_despite_low_gear_level  (L3/L4 case)
         #   test_every_picker_target_is_applicable  (char_level loop, no equipment)
         "fight-is_applicable: re-introduce best_eq >= monster_level - 1 gear gate",
-        "        return game_data.xp_per_kill(self.monster_code, state.level) > 0",
+        "        return self.drop_farm or game_data.xp_per_kill(self.monster_code, state.level) > 0",
         "        best_eq = max(\n"
         "            (game_data.all_item_stats[c].level\n"
         "             for c in state.equipment.values() if c and c in game_data.all_item_stats),\n"
         "            default=0,\n"
         "        )\n"
-        "        return game_data.xp_per_kill(self.monster_code, state.level) > 0 and best_eq >= monster_level - 1",
+        "        return self.drop_farm or (game_data.xp_per_kill(self.monster_code, state.level) > 0 and best_eq >= monster_level - 1)",
+    ),
+    (
+        # Widen the drop-farm bypass to swallow the whole gate: every fight
+        # (not just recipe-serving drop farms) becomes applicable, flooding
+        # xp-grind plans with grey mobs. Killed by
+        # tests/ai/test_grey_farm.py::TestDropFarmMechanism (default False
+        # must keep the xp gate) via the grey-farm unit group.
+        "fight-is_applicable: drop_farm bypass swallows the xp gate (always True)",
+        "        return self.drop_farm or game_data.xp_per_kill(self.monster_code, state.level) > 0",
+        "        return True or game_data.xp_per_kill(self.monster_code, state.level) > 0",
     ),
 ]
 

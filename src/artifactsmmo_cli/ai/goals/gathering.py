@@ -1,5 +1,6 @@
 """Gathering goal: accumulate materials needed to craft an upgrade."""
 
+import dataclasses
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.actions.base import Action
@@ -13,13 +14,13 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.buy_source_venue import BuyVenue, choose_buy_venue
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.craft_vs_buy import Method, acquisition_method
-from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
-from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
-from artifactsmmo_cli.ai.goals.gather_plannable_core import gather_plannable_pure
-from artifactsmmo_cli.ai.progression_reserve import reserve_floor
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_selection import GatherCandidate, select_gather_source
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
+from artifactsmmo_cli.ai.goals.gather_plannable_core import gather_plannable_pure
+from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed
+from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.monster_drop_selection import (
     MonsterDropCandidate,
@@ -27,6 +28,7 @@ from artifactsmmo_cli.ai.monster_drop_selection import (
 )
 from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.priority_band import clamp_into_band
+from artifactsmmo_cli.ai.progression_reserve import reserve_floor
 from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
 from artifactsmmo_cli.ai.scalar_priority import yield_bonus_for_goal
 from artifactsmmo_cli.ai.shopping_list import fully_covered_materials
@@ -294,7 +296,19 @@ class GatherMaterialsGoal(Goal):
                 continue
             chosen = select_monster_for_drop(item, drop_candidates)
             if chosen is not None and chosen in winner_fights:
-                result.append(winner_fights[chosen])
+                fight = winner_fights[chosen]
+                if game_data.xp_per_kill(chosen, state.level) > 0:
+                    result.append(fight)
+                elif grey_farm_allowed(item, state, game_data):
+                    # GREY dropper (zero xp at this level): the plain fight is
+                    # inapplicable (xpPositive gate), so a recipe demand could
+                    # never hunt its drops — live Robby L12 could not gather
+                    # feathers from L1 chickens. Emit the drop-farm variant,
+                    # but only under the policy: the drop serves a recipe AND
+                    # the next-tier recipe is too far a grind away; when a
+                    # same-family recipe is within reach, grinding the skill
+                    # beats farming greys, and no fight is emitted.
+                    result.append(dataclasses.replace(fight, drop_farm=True))
 
         # C4 Task 1: emit NpcBuy for deep recipe-closure leaves that are
         # currency-bought. A top-level needed item is handled below; a TRANSITIVE

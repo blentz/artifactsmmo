@@ -163,6 +163,10 @@ class TestNoCombatDeadlock:
         assert player._is_winnable("chicken") is True
         assert gd.xp_per_kill("chicken", 11) == 0
         assert player._pick_winnable_monster() is None
+        # Action-level: a DEFAULT fight (no drop_farm) keeps the xp gate — the
+        # drop-farm bypass must never leak into plain xp-grind fights.
+        fight = FightAction(monster_code="chicken", locations=frozenset({(0, 1)}))
+        assert fight.is_applicable(state, gd) is False
 
     def test_true_deadlock_still_returns_none(self) -> None:
         """When nothing winnable grants XP the picker honestly returns None

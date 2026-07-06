@@ -76,17 +76,24 @@ structure FightInputs where
   monsterLevel  : Int
   minFreeSlots  : Int
   xpPerKill     : Int       -- game_data.xp_per_kill(monster, playerLevel)
+  dropFarm      : Bool := false
+  -- Drop-farm variant (2026-07-06): GatherMaterialsGoal may emit a fight
+  -- whose sole purpose is the monster's DROPS (grey mob, zero xp). The flag
+  -- bypasses ONLY the xpPositive lower gate; every structural gate
+  -- (locations, inventory room, hp floor, level+2 suicide guard) still
+  -- applies. Mirrors Python FightAction.drop_farm.
 
 /-- The composite predicate. Matches Python `FightAction.is_applicable`
-term-by-term: locations, inventory room, hp floor, xp>0 lower gate,
-level+2 suicide guard. The gear pre-filter (`best_eq >= monster_level - 1`)
-was REMOVED 2026-06-29 in lockstep with Python `is_applicable` (commits
-0cd5407b, 5de3ce42): it starved combat when no owned gear met the window. -/
+term-by-term: locations, inventory room, hp floor, (drop-farm OR xp>0)
+lower gate, level+2 suicide guard. The gear pre-filter
+(`best_eq >= monster_level - 1`) was REMOVED 2026-06-29 in lockstep with
+Python `is_applicable` (commits 0cd5407b, 5de3ce42): it starved combat when
+no owned gear met the window. -/
 def fightApplicable (i : FightInputs) : Bool :=
   i.hasLocations
     && hasInventoryRoom i.inventoryFree i.minFreeSlots
     && hpAboveFightFloor i.hp i.maxHp
-    && xpPositive i.xpPerKill
+    && (i.dropFarm || xpPositive i.xpPerKill)
     && monsterNotOverleveled i.playerLevel i.monsterLevel
 
 /-! ## Independence of the conditions. -/
@@ -114,15 +121,16 @@ theorem fightApplicable_false_of_low_hp (i : FightInputs)
   have : ¬ (i.hp * 100 > 50 * i.maxHp) := by omega
   simp [this]
 
-/-- If the kill grants zero (or negative) XP, the predicate is false.
-This is the NEW lower gate — replaces
-`fightApplicable_false_of_underleveled_monster` (the old hard window). -/
+/-- If the kill grants zero (or negative) XP and the fight is NOT a
+drop-farm variant, the predicate is false. This is the NEW lower gate —
+replaces `fightApplicable_false_of_underleveled_monster` (the old hard
+window). A drop-farm fight (dropFarm = true) bypasses exactly this gate. -/
 theorem fightApplicable_false_of_zero_xp (i : FightInputs)
-    (h : i.xpPerKill ≤ 0) :
+    (h : i.xpPerKill ≤ 0) (hFarm : i.dropFarm = false) :
     fightApplicable i = false := by
   unfold fightApplicable xpPositive
   have : ¬ (i.xpPerKill > 0) := by omega
-  simp [this]
+  simp [this, hFarm]
 
 /-- If monster level exceeds `state.level + 2`, the predicate is false.
 The suicide guard survives the P0 revision unchanged. -/
@@ -181,17 +189,18 @@ winnable candidates by `xp_per_kill > 0`, exactly what
 `CombatTargetExistence.pickWinnableWindowed` does. -/
 theorem winnable_does_not_imply_applicable
     (i : FightInputs) (winnable : Bool)
-    (hZero : i.xpPerKill ≤ 0) :
+    (hZero : i.xpPerKill ≤ 0) (hFarm : i.dropFarm = false) :
     fightApplicable i = false ∧ winnable = winnable := by
   refine ⟨?_, rfl⟩
-  exact fightApplicable_false_of_zero_xp i hZero
+  exact fightApplicable_false_of_zero_xp i hZero hFarm
 
 /-- Exact characterization of the predicate as a conjunction of the five
-atomic conditions. Used to show the below-window case is now LIVE. -/
+atomic conditions (the lower gate is now the drop-farm/xp disjunction).
+Used to show the below-window case is now LIVE. -/
 theorem fightApplicable_iff (i : FightInputs) :
     fightApplicable i = true ↔
       i.hasLocations = true ∧ i.inventoryFree ≥ i.minFreeSlots ∧
-      i.hp * 100 > 50 * i.maxHp ∧ i.xpPerKill > 0 ∧
+      i.hp * 100 > 50 * i.maxHp ∧ (i.dropFarm = true ∨ i.xpPerKill > 0) ∧
       i.monsterLevel ≤ i.playerLevel + 2 := by
   unfold fightApplicable hasInventoryRoom hpAboveFightFloor xpPositive
     monsterNotOverleveled
@@ -210,7 +219,7 @@ theorem below_old_window_xp_positive_is_applicable
     (hUp   : i.monsterLevel ≤ i.playerLevel + 2)
     (_hBelow : i.monsterLevel < max 1 (i.playerLevel - 1)) :
     fightApplicable i = true := by
-  exact (fightApplicable_iff i).mpr ⟨hLoc, hInv, hHp, hXp, hUp⟩
+  exact (fightApplicable_iff i).mpr ⟨hLoc, hInv, hHp, Or.inr hXp, hUp⟩
 
 /-! ## Capability ⇒ structural applicability (the L50 fight-liveness seam). -/
 
@@ -233,7 +242,8 @@ theorem winnable_inWindow_imp_fightApplicable
     fightApplicable i = true := by
   unfold fightApplicable
   simp only [Bool.and_eq_true]
-  exact ⟨⟨⟨⟨hLoc, hInv⟩, hHp⟩, hXp⟩, decide_eq_true hWin⟩
+  refine ⟨⟨⟨⟨hLoc, hInv⟩, hHp⟩, ?_⟩, decide_eq_true hWin⟩
+  simp [hXp]
 
 /-- **Non-vacuity witness** for `winnable_inWindow_imp_fightApplicable`:
 a concrete `FightInputs` that simultaneously satisfies all five hypotheses
@@ -252,6 +262,42 @@ theorem winnable_inWindow_imp_fightApplicable_nonvacuous :
       ∧ xpPositive i.xpPerKill = true
       ∧ fightApplicable i = true := by
   refine ⟨rfl, by decide, by decide, by decide, by decide, ?_⟩
+  decide
+
+/-! ## Drop-farm bypass scope (2026-07-06).
+
+The drop-farm variant exists so a RECIPE demand can hunt a grey mob's drops
+(server drops loot regardless of xp). The bypass must be EXACTLY the xp gate:
+every structural veto survives. -/
+
+/-- With `dropFarm` set and zero xp, applicability reduces exactly to the
+four structural gates — the bypass swallows nothing else. -/
+theorem dropFarm_zero_xp_applicable_iff_structural (i : FightInputs)
+    (hFarm : i.dropFarm = true) (_hZero : i.xpPerKill ≤ 0) :
+    fightApplicable i = true ↔
+      i.hasLocations = true ∧ i.inventoryFree ≥ i.minFreeSlots ∧
+      i.hp * 100 > 50 * i.maxHp ∧ i.monsterLevel ≤ i.playerLevel + 2 := by
+  rw [fightApplicable_iff]
+  simp [hFarm]
+
+/-- Structural veto survives the bypass: a drop-farm fight at or below the
+hp floor is still inapplicable. (Same holds for locations / inventory /
+suicide-guard via the unchanged `fightApplicable_false_of_*` lemmas, which
+carry no xp hypothesis.) -/
+theorem dropFarm_does_not_bypass_hp_floor (i : FightInputs)
+    (h : i.hp * 100 ≤ 50 * i.maxHp) :
+    fightApplicable i = false :=
+  fightApplicable_false_of_low_hp i h
+
+/-- Non-vacuity witness: a grey-mob drop-farm fight (zero xp, dropFarm set,
+all structural gates satisfied) IS applicable — the live case this arm
+exists for (L12 character hunting feathers from an L1 chicken). -/
+theorem dropFarm_grey_mob_applicable_nonvacuous :
+    let i : FightInputs :=
+      { hasLocations := true, inventoryFree := 1, hp := 100, maxHp := 100,
+        playerLevel := 12, monsterLevel := 1, minFreeSlots := 1,
+        xpPerKill := 0, dropFarm := true }
+    fightApplicable i = true := by
   decide
 
 /-! ## RestAction applicability — the simplest action and a useful baseline. -/

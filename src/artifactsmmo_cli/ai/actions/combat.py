@@ -46,6 +46,13 @@ class FightAction(Action):
     # P5b: access region the folded movement stays inside; the planner only
     # offers this action when the character is in the same region.
     travel_region: str = "overworld"
+    # Drop-farm variant: bypasses ONLY the xpPositive lower gate so a recipe
+    # demand can hunt a grey mob's drops (server drops loot regardless of xp).
+    # Set exclusively by GatherMaterialsGoal.relevant_actions under the
+    # grey_farm_allowed policy — never by xp-grind paths. Excluded from
+    # compare/repr so learned-cost history keys and action identity don't
+    # fork. Mirrored in Formal/ActionApplicability.lean (dropFarm arm).
+    drop_farm: bool = field(default=False, compare=False, repr=False)
 
     _MIN_FREE_SLOTS = 1  # combat can drop loot; need at least 1 free capacity
 
@@ -67,8 +74,11 @@ class FightAction(Action):
         # 2026-06-29: L3 char, level-1 gear, winnable green_slime L4 rejected). Both
         # removed; UPPER bound (level+2 suicide guard) stays. Capability is decided
         # upstream by is_winnable (predict_win); this gate stays structural.
-        # Lean lockstep: formal/Formal/ActionApplicability.lean (xpPositive gate).
-        return game_data.xp_per_kill(self.monster_code, state.level) > 0
+        # Lean lockstep: formal/Formal/ActionApplicability.lean (xpPositive gate,
+        # dropFarm bypass arm). drop_farm bypasses ONLY this lower gate — the
+        # structural gates above (locations, inventory room, hp floor, level+2
+        # suicide guard) always apply.
+        return self.drop_farm or game_data.xp_per_kill(self.monster_code, state.level) > 0
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         dest = nearest_or_error(state.x, state.y, self.locations, "combat")
