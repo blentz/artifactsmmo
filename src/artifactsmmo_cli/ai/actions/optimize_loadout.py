@@ -13,7 +13,7 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, EquipAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.constants import ERROR_CODE_ALREADY_EQUIPPED
-from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
+from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Combat, Gather
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -69,7 +69,10 @@ class OptimizeLoadoutAction(Action):
             purpose = Gather(self.target_skill)
         else:
             return {}
-        optimal = pick_loadout(purpose, state, game_data)
+        # Memoized: the planner calls _swap_plan from is_applicable, cost AND
+        # apply on every node expansion — a fresh solve each time pegged the
+        # planner thread at 100% CPU (py-spy 2026-07-06: 78% of samples here).
+        optimal = pick_loadout_cached(purpose, state, game_data)
         return {
             slot: new_code
             for slot, new_code in optimal.items()

@@ -20,6 +20,17 @@ but reachable goal is found when it is the only option; the tiered arbiter's che
 pass (CHEAP_BUDGET_SECONDS) plans fast goals first, so this full budget is rarely
 hit, and the doomed-goal memo skips known-unreachable goals on later cycles."""
 
+_MAX_SEARCH_NODES = 250_000
+"""A* node-CREATION cap — the memory bound, independent of the wall clock.
+Search memory is proportional to nodes pushed (open heap + visited set +
+per-node WorldState copies), not to elapsed seconds: the wall-clock budget
+only bounded memory by accident, via slow node evaluation. When the loadout
+memo made expansions ~50x cheaper (2026-07-06), an unsatisfiable goal filled
+15GB RSS inside 6 minutes while honoring its time budget. 250K created nodes
+is ~1GB transient worst-case and far above any legitimately deep plan (the
+worst observed pathological search was 237K nodes; real plans complete in
+tens of thousands)."""
+
 
 def _state_key(state: WorldState) -> tuple[object, ...]:
     """Hashable key over the full WorldState for the visited set."""
@@ -51,6 +62,10 @@ class PlanStats:
     nodes_explored: int = 0
     max_depth_reached: int = 0
     timed_out: bool = False
+    node_capped: bool = False
+    """True when the search stopped at _MAX_SEARCH_NODES (memory bound).
+    Always sets timed_out too: a capped search is inconclusive, not proof of
+    unreachability, so it must ride the same doomed-memo-exempt semantics."""
 
 
 class GOAPPlanner:
@@ -68,17 +83,21 @@ class GOAPPlanner:
         history: LearningStore | None = None,
         *,
         budget_seconds: float | None = None,
+        max_nodes: int | None = None,
     ) -> list[Action]:
         """Return the lowest-cost action plan to satisfy `goal` from `state`, or [] if none found.
 
         ``budget_seconds`` overrides the module-level ``_SEARCH_BUDGET_SECONDS`` for this
         call only.  Pass ``None`` (the default) to use the full 300s escalation budget;
         the arbiter's cheap first pass passes 10s (strategy_driver.CHEAP_BUDGET_SECONDS).
+        ``max_nodes`` likewise overrides ``_MAX_SEARCH_NODES`` (the memory bound).
         """
         max_depth = goal.max_depth
         budget = _SEARCH_BUDGET_SECONDS if budget_seconds is None else budget_seconds
+        node_cap = _MAX_SEARCH_NODES if max_nodes is None else max_nodes
         deadline = time.monotonic() + budget
         stats = PlanStats()
+        nodes_created = 1  # the root node below
 
         visited: set[tuple[object, ...]] = set()
         relevant = goal.relevant_actions(actions, state, game_data)
@@ -99,6 +118,12 @@ class GOAPPlanner:
             heap: list[_Node] = [_Node(f_score=h0, depth=0, state=state, plan=[], g_score=0.0)]
             while heap:
                 if time.monotonic() >= deadline:
+                    stats.timed_out = True
+                    break
+                if nodes_created >= node_cap:
+                    # Memory bound hit (checked per pop; overshoot is at most
+                    # one expansion's fan-out). Inconclusive like a timeout.
+                    stats.node_capped = True
                     stats.timed_out = True
                     break
 
@@ -148,6 +173,7 @@ class GOAPPlanner:
                             g_score=g,
                         ),
                     )
+                    nodes_created += 1
 
         self.last_stats = stats
         return []

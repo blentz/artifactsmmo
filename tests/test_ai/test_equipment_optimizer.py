@@ -376,7 +376,7 @@ class TestOptimizeLoadoutAction:
             equipment={"weapon_slot": None},
         )
 
-        with patch("artifactsmmo_cli.ai.actions.optimize_loadout.pick_loadout",
+        with patch("artifactsmmo_cli.ai.actions.optimize_loadout.pick_loadout_cached",
                    return_value={"weapon_slot": None}):
             with patch("artifactsmmo_cli.ai.actions.optimize_loadout.UnequipAction") as MockUn:
                 MockUn.return_value.execute.return_value = unequipped

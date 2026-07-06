@@ -17,7 +17,7 @@ from artifactsmmo_cli.ai.actions.gather_apply_core import (
     gather_is_applicable_pure,
 )
 from artifactsmmo_cli.ai.actions.movement import MoveAction
-from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
+from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Gather
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -143,7 +143,7 @@ class GatherAction(Action):
         skill_req = game_data.resource_skill_level(self.resource_code)
         if skill_req is not None:
             skill, _ = skill_req
-            optimal = pick_loadout(Gather(skill), state, game_data)
+            optimal = pick_loadout_cached(Gather(skill), state, game_data)
             if any(state.equipment.get(slot) != code for slot, code in optimal.items()):
                 static += GATHER_LOADOUT_PENALTY
         if history is None:
