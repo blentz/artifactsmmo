@@ -1,7 +1,8 @@
 """Selective bank-deposit policy: what to bank, ordered by sell value."""
 
 from artifactsmmo_cli.ai.equipment.scoring import gather_score
-from artifactsmmo_cli.ai.game_data import _GATHERING_SKILLS, GameData
+from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 

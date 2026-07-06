@@ -8,7 +8,7 @@ a stable verdict, not a sampled fight."""
 import math
 
 from artifactsmmo_cli.ai.elements import ELEMENTS
-from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
+from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.equipment.projection import project_loadout_stats
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Combat
@@ -149,7 +149,7 @@ def predict_win(state: WorldState, game_data: GameData, monster_code: str) -> bo
     predicted to win a chicken fight, fought, lost. The fight starts at
     state.hp, not max_hp; project_loadout_stats may raise max_hp via
     equipment but doesn't refill current hp."""
-    loadout = pick_loadout(
+    loadout = pick_loadout_cached(
         Combat(game_data.monster_attack(monster_code), game_data.monster_resistance(monster_code)),
         state, game_data,
     )
@@ -285,7 +285,7 @@ def combat_margin(state: WorldState, game_data: GameData, monster_code: str) -> 
 
     Mirrors Lean ``Formal.PredictWin.combatMargin`` (PredictWin.lean).
     """
-    loadout = pick_loadout(
+    loadout = pick_loadout_cached(
         Combat(game_data.monster_attack(monster_code), game_data.monster_resistance(monster_code)),
         state, game_data,
     )

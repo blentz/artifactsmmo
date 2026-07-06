@@ -293,7 +293,7 @@ def test_player_builds_sell_actions_for_sellable_inventory():
     player.game_data._npc_sell_prices = {"cook": {"chicken": 5}}
     player.game_data._bank_location = (4, 0)
     player.game_data._taskmaster_location = (1, 2)
-    player._bank_accessible = False
+    player._blockers.mark_blocked("bank", char_level=0)
     player.state = make_state(inventory={"chicken": 5})
 
     actions = player._build_actions()
@@ -324,7 +324,7 @@ def test_player_builds_phase_b_actions():
     }
     player.game_data._bank_capacity = 30
     player.game_data._next_expansion_cost = 1000
-    player._bank_accessible = True
+    player._blockers.clear("bank")
     player.state = make_state(task_code="iron_ore", task_type="items")
 
     actions = player._build_actions()
@@ -763,7 +763,7 @@ def test_items_task_builds_batched_craft_and_trade():
                                 crafting_skill="weaponcrafting", crafting_level=1),
     }
     player.game_data._workshop_locations = {"weaponcrafting": (2, 0)}
-    player._bank_accessible = True
+    player._blockers.clear("bank")
     player.state = make_state(task_code="copper_bar", task_type="items",
                               task_total=20, task_progress=0, inventory={}, inventory_max=100)
 

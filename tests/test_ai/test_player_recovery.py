@@ -46,7 +46,7 @@ def test_arbiter_skips_suppressed_goals():
     gd._crafting_recipes = {}
     gd._resource_skill = {}
     player.game_data = gd
-    player._bank_accessible = True
+    player._blockers.clear("bank")
     # Idle (no task) → AcceptTask is the discretionary candidate; suppress it.
     player.state = make_state(task_code=None, task_type=None)
     player._objective = CharacterObjective.from_game_data(gd)

@@ -8,22 +8,30 @@ No Goal-class imports — the driver (StrategyArbiter) maps MeansKind to goals.
 from enum import Enum
 
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
+from artifactsmmo_cli.ai.bank_expansion_timing import TRIGGER_FILL_DEN, TRIGGER_FILL_NUM
 from artifactsmmo_cli.ai.consumable_supply import maintain_consumables_fires
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.projections import low_yield_cancel_fires
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.task_decision import PIVOT, PURSUE, task_decision
+from artifactsmmo_cli.ai.thresholds import PRESSURE_HIGH_FRACTION
 from artifactsmmo_cli.ai.tiers.guards import (
     SelectionContext,
     _gear_protected,
     _has_sellable,
+    _used_fraction,
     recycle_protected_codes,
 )
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
-SELL_PRESSURE_FRACTION = 0.85
-BANK_EXPAND_FILL = 0.95
+# Semantic names for this module's gates, bound to the SHARED single-source
+# constants (thresholds.py pressure ladder / bank_expansion_timing trigger).
+# These used to be re-typed literals (0.85 / 0.95) — the drift the thresholds
+# consolidation was built to kill; the local names are kept because the
+# ladder's proven mutation anchors bind to the usage lines.
+SELL_PRESSURE_FRACTION = PRESSURE_HIGH_FRACTION
+BANK_EXPAND_FILL = TRIGGER_FILL_NUM / TRIGGER_FILL_DEN
 
 
 class MeansKind(Enum):
@@ -66,11 +74,6 @@ DISCRETIONARY_ORDER: tuple[MeansKind, ...] = (
     MeansKind.DRAIN_BANK_JUNK,
     MeansKind.WAIT,
 )
-
-
-def _used_fraction(state: WorldState) -> float:
-    return state.inventory_used / state.inventory_max if state.inventory_max > 0 else 0.0
-
 
 
 def _tasks_coin_total(state: WorldState) -> int:

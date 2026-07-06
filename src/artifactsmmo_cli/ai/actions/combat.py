@@ -16,7 +16,7 @@ from artifactsmmo_cli.ai.actions.gather_apply_core import (
     apply_monster_drops_pure,
 )
 from artifactsmmo_cli.ai.actions.movement import MoveAction
-from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
+from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -119,7 +119,7 @@ class FightAction(Action):
         # placeholders), state.equipment only carries filled slots. Direct
         # dict-equality always disagrees on shape. Match the per-slot pattern
         # used in OptimizeLoadoutAction._swap_plan.
-        optimal = pick_loadout(
+        optimal = pick_loadout_cached(
             Combat(game_data.monster_attack(self.monster_code),
                    game_data.monster_resistance(self.monster_code)),
             state, game_data,

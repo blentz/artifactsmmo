@@ -16,6 +16,7 @@ import gc
 
 import pytest
 
+from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.equipment.loadout_cache import (
@@ -218,6 +219,18 @@ class TestHotCallersUseCache:
         _poison(gd)
         assert action.cost(state, gd) == first_cost
         assert action.is_applicable(state, gd)
+
+    def test_fight_cost_is_memoized(self) -> None:
+        """FightAction.cost's loadout-penalty check is the third per-node
+        pick_loadout caller (missed in the 38b29754 migration): same poison
+        proof as the gather twin."""
+        gd = _gd()
+        state = _make_state(inventory={"iron_axe": 1})
+        action = FightAction(monster_code="yellow_slime",
+                             locations=frozenset({(0, 0)}))
+        first = action.cost(state, gd)
+        _poison(gd)
+        assert action.cost(state, gd) == first
 
     def test_gather_cost_is_memoized(self) -> None:
         gd = _gd()

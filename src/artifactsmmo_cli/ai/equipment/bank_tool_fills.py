@@ -9,7 +9,8 @@ can ferry them into the bag, where the proven re-arm takes over.
 """
 
 from artifactsmmo_cli.ai.equipment.scoring import gather_score
-from artifactsmmo_cli.ai.game_data import _GATHERING_SKILLS, GameData
+from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS
 from artifactsmmo_cli.ai.world_state import WorldState
 
 

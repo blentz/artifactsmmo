@@ -13,6 +13,12 @@ The pure `should_expand_bank` is the differential target proved in
 formal/Formal/BankExpansionTiming.lean over `Int`.
 """
 
+TRIGGER_FILL_NUM = 95
+TRIGGER_FILL_DEN = 100
+"""The bank-near-full trigger (95%), owned by the decision module so every
+gate on "should the bank expand" — ExpandBankGoal.value and the arbiter's
+BANK_EXPAND means guard — reads the SAME ratio and cannot drift."""
+
 
 def should_expand_bank(
     used: int,

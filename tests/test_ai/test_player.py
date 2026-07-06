@@ -274,7 +274,7 @@ class TestArbiterSelection:
         player = self._with_strategy(gd, level=3,
                                      inventory={"copper_ore": 20}, inventory_max=20,
                                      bank_items={})  # bank visited, 0 items < capacity 50
-        player._bank_accessible = True
+        player._blockers.clear("bank")
         decision = player._strategy.decide(player.state, player.game_data)
         actions = player._build_actions()
         goal, _plan, _tried = player._arbiter.select(
@@ -1272,8 +1272,8 @@ class TestExecuteHttp496BankLock:
                         with patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty_events):
                             player._execute(action, client)
 
-        assert player._bank_accessible is False
-        assert player._bank_blocked_since is not None
+        assert player._blockers.is_blocked("bank")
+        assert player._blockers.get("bank").blocked_since_monotonic is not None
 
     def test_http496_without_achievement_code_leaves_unlock_monster_none(self):
         player = GamePlayer(character="hero")
@@ -1295,8 +1295,8 @@ class TestExecuteHttp496BankLock:
                     with patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty_events):
                         player._execute(action, client)
 
-        assert player._bank_accessible is False
-        assert player._bank_unlock_monster is None
+        assert player._blockers.is_blocked("bank")
+        assert player._blockers.get("bank").unlock_monster is None
 
     def test_http496_does_not_mark_inaccessible_for_non_bank_action(self):
         player = GamePlayer(character="hero")
@@ -1318,7 +1318,7 @@ class TestExecuteHttp496BankLock:
                     with patch("artifactsmmo_cli.ai.player.get_all_raids", return_value=empty_events):
                         player._execute(action, client)
 
-        assert player._bank_accessible is True  # unchanged
+        assert not player._blockers.is_blocked("bank")  # unchanged
 
     def test_http496_with_achievement_code_calls_resolve(self):
         """When achievement code is in the 496 error, _resolve_bank_unlock_monster is called."""
@@ -1349,14 +1349,15 @@ class TestExecuteHttp496BankLock:
                         player._execute(action, client)
 
         assert resolve_calls == ["myach"]
-        assert player._bank_unlock_monster == "skeleton"
+        assert player._blockers.get("bank").unlock_monster == "skeleton"
 
     def test_http496_skips_resolve_when_monster_already_set(self):
         """Once bank_unlock_monster is set, _resolve_bank_unlock_monster is not called again."""
         player = GamePlayer(character="hero")
         player.state = make_state(x=4, y=0, inventory={"copper_ore": 1})
         player.game_data = make_game_data_mock()
-        player._bank_unlock_monster = "chicken"  # already resolved
+        player._blockers.mark_blocked("bank", char_level=0,
+                                      unlock_monster="chicken")  # already resolved
         client = MagicMock()
 
         from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
@@ -1382,7 +1383,7 @@ class TestExecuteHttp496BankLock:
 
         # resolve should NOT be called since monster is already set
         assert resolve_calls == []
-        assert player._bank_unlock_monster == "chicken"
+        assert player._blockers.get("bank").unlock_monster == "chicken"
 
 
 class TestExecuteClaimPendingSync:
@@ -1594,22 +1595,24 @@ class TestBuildGoalsExtended:
         player.state = make_state(level=5)
         # Block was recorded at level 3 — current level (5) has surpassed it.
         player._blockers.mark_blocked("bank", char_level=3)
-        player._bank_blocked_since = time.monotonic() - 61.0  # > 60s threshold
+        player._blockers.get("bank").blocked_since_monotonic = \
+            time.monotonic() - 61.0  # > 60s threshold
 
         player._maybe_retry_bank()
 
-        assert player._bank_accessible is True
-        assert player._bank_blocked_since is None
+        assert not player._blockers.is_blocked("bank")
+        assert player._blockers.get("bank") is None
 
     def test_bank_retry_timer_does_not_reset_before_timeout(self):
         player = self._make_minimal_player()
         player.state = make_state(level=5)
-        player._bank_accessible = False
-        player._bank_blocked_since = time.monotonic() - 10.0  # only 10s ago
+        player._blockers.mark_blocked("bank", char_level=0)
+        player._blockers.get("bank").blocked_since_monotonic = \
+            time.monotonic() - 10.0  # only 10s ago
 
         player._maybe_retry_bank()
 
-        assert player._bank_accessible is False  # still locked
+        assert player._blockers.is_blocked("bank")  # still locked
 
     def test_bank_retry_does_not_fire_when_level_unchanged(self):
         """Timer elapsed but no level gained since block — retry must NOT fire."""
@@ -1617,13 +1620,14 @@ class TestBuildGoalsExtended:
         player.state = make_state(level=5)
         # Block recorded at the same level the character is at now.
         player._blockers.mark_blocked("bank", char_level=5)
-        player._bank_blocked_since = time.monotonic() - 61.0  # > 60s threshold
+        player._blockers.get("bank").blocked_since_monotonic = \
+            time.monotonic() - 61.0  # > 60s threshold
 
         player._maybe_retry_bank()
 
         # Level guard must suppress the retry: bank blocker must remain set.
-        assert player._bank_accessible is False
-        assert player._bank_blocked_since is not None
+        assert player._blockers.is_blocked("bank")
+        assert player._blockers.get("bank").blocked_since_monotonic is not None
 
 
 def test_game_player_accepts_history_kwarg():
@@ -1653,7 +1657,7 @@ class TestBuildActionsExtended:
         gd._resource_skill = {}
         gd._monster_level = {}
         player.game_data = gd
-        player._bank_accessible = False
+        player._blockers.mark_blocked("bank", char_level=0)
 
         equipment = {slot: None for slot in [
             "weapon_slot", "shield_slot", "helmet_slot", "body_armor_slot",
@@ -1839,33 +1843,6 @@ def test_fetch_world_state_retries_on_httperror(monkeypatch):
         player._fetch_world_state(client=None)
     assert len(attempts) == 3
     assert "NetChar" in str(exc.value)
-
-
-class TestBankBlockerSetters:
-    def test_bank_blocked_since_setter_noop_when_no_blocker(self):
-        """Setting _bank_blocked_since with no bank blocker is a no-op (line 197)."""
-        player = GamePlayer(character="hero")
-        # No bank blocker exists.
-        assert player._blockers.get("bank") is None
-        player._bank_blocked_since = 123.0
-        # Still no blocker created; getter reports None.
-        assert player._blockers.get("bank") is None
-        assert player._bank_blocked_since is None
-
-    def test_bank_unlock_monster_setter_updates_existing(self):
-        """Setting _bank_unlock_monster on an existing blocker updates it (line 218)."""
-        player = GamePlayer(character="hero")
-        player._blockers.mark_blocked("bank", char_level=3)
-        player._bank_unlock_monster = "skeleton"
-        assert player._bank_unlock_monster == "skeleton"
-        assert player._blockers.get("bank").unlock_monster == "skeleton"
-
-    def test_bank_unlock_monster_setter_creates_when_absent(self):
-        """Setting _bank_unlock_monster with no blocker creates an empty one."""
-        player = GamePlayer(character="hero")
-        assert player._blockers.get("bank") is None
-        player._bank_unlock_monster = "wolf"
-        assert player._bank_unlock_monster == "wolf"
 
 
 class TestComputeCyclesToSatisfy:

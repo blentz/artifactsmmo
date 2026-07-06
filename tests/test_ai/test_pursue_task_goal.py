@@ -12,7 +12,6 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.pursue_task import (
     PRIORITY_FLOOR,
-    PRIORITY_WHEN_FIRING,
     PursueTaskGoal,
 )
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -37,7 +36,7 @@ class TestPursueTaskGoal:
 
     def test_value_fires_when_unsatisfied(self):
         g = PursueTaskGoal("copper_bar", 0)
-        assert g.value(_items_task(progress=0), GameData()) == PRIORITY_WHEN_FIRING
+        assert g.value(_items_task(progress=0), GameData()) == PRIORITY_FLOOR
 
     def test_value_zero_when_satisfied(self):
         g = PursueTaskGoal("copper_bar", 0)

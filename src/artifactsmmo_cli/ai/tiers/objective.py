@@ -10,14 +10,14 @@ from fractions import Fraction
 
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.combat import is_winnable
-from artifactsmmo_cli.ai.game_data import _GATHERING_SKILLS, GameData
+from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS
 from artifactsmmo_cli.ai.potion_supply import bootstrap_potion_target
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value, tool_value
 from artifactsmmo_cli.ai.tiers.leaf_attainable_core import leaf_attainable_pure
 from artifactsmmo_cli.ai.tiers.objective_completion import is_complete_pure
 from artifactsmmo_cli.ai.tiers.skill_target_curve import skill_target_curve
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, SKILL_NAMES, WorldState
-
 
 # Single source: the duplicate-allowed slot types, read from actions/equip.py's
 # DUPLICATE_SLOT_TYPES — no copy, so this can't drift from that set.

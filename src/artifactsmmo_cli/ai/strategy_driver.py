@@ -69,6 +69,7 @@ from artifactsmmo_cli.ai.tiers.guards import (
     GuardKind,
     SelectionContext,
     _gear_protected,
+    _used_fraction,
     active_guards,
     active_profile,
     recycle_protected_codes,
@@ -76,7 +77,6 @@ from artifactsmmo_cli.ai.tiers.guards import (
 from artifactsmmo_cli.ai.tiers.means import (
     SELL_PRESSURE_FRACTION,
     MeansKind,
-    _used_fraction,
     active_means,
 )
 from artifactsmmo_cli.ai.tiers.means_worth import means_serves

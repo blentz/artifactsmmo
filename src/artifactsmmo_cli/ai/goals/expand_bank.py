@@ -1,7 +1,11 @@
 """ExpandBankGoal: buy more bank slots when bank fills up."""
 
 from artifactsmmo_cli.ai.actions.base import Action
-from artifactsmmo_cli.ai.bank_expansion_timing import should_expand_bank
+from artifactsmmo_cli.ai.bank_expansion_timing import (
+    TRIGGER_FILL_DEN,
+    TRIGGER_FILL_NUM,
+    should_expand_bank,
+)
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -9,10 +13,8 @@ from artifactsmmo_cli.ai.loadout_profiles import active_bank_space_cost
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor
 from artifactsmmo_cli.ai.world_state import WorldState
 
-# value() activates at or above a 95/100 fill ratio (exact integer threshold,
-# evaluated by should_expand_bank's cross-multiply — no float).
-_TRIGGER_FILL_NUM = 95
-_TRIGGER_FILL_DEN = 100
+# value() activates at or above the shared TRIGGER_FILL_NUM/DEN ratio (95/100,
+# owned by bank_expansion_timing; exact integer cross-multiply — no float).
 _SATISFIED_FILL = 0.90  # is_satisfied is True when below this fill ratio
 
 
@@ -73,7 +75,7 @@ class ExpandBankGoal(Goal):
         if not should_expand_bank(
             used, game_data.bank_capacity, state.gold,
             game_data.next_expansion_cost, reserve_floor(state, game_data, None),
-            _TRIGGER_FILL_NUM, _TRIGGER_FILL_DEN,
+            TRIGGER_FILL_NUM, TRIGGER_FILL_DEN,
         ):
             return 0.0
         return 40.0

@@ -36,11 +36,6 @@ PRIORITY_CEILING = 50.0
 survival floor (70), preserving Phase-1's ban on unbounded additive priority
 bonuses: a discretionary goal can never be reordered above a survival goal."""
 
-# Backwards-compat alias for the original constant name (still re-exported so
-# existing callers/tests that import PRIORITY_WHEN_FIRING continue to read the
-# cold-start floor value).
-PRIORITY_WHEN_FIRING = PRIORITY_FLOOR
-
 
 class PursueTaskGoal(Goal):
     """Drive gather/craft -> TaskTrade to advance an items-type task one unit."""

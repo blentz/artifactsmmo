@@ -11,11 +11,7 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
-from artifactsmmo_cli.ai.learning.projections import (
-    LOW_YIELD_ALTERNATIVE_MARGIN,
-    LOW_YIELD_CONFIDENCE_THRESHOLD,
-    low_yield_cancel_fires,
-)
+from artifactsmmo_cli.ai.learning.projections import low_yield_cancel_fires
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -23,17 +19,6 @@ from artifactsmmo_cli.ai.world_state import WorldState
 LOW_YIELD_CANCEL = 70.0
 """Beats tactical pursuits (FarmItems=35, GatherMaterials=50, LevelSkill=55)
 so a data-confirmed poor task is cancelled before continuing work."""
-
-# Re-export under legacy names so existing importers (tests etc.) still work.
-CONFIDENCE_THRESHOLD = LOW_YIELD_CONFIDENCE_THRESHOLD
-"""Don't cancel until projection confidence >= this. Delegates to
-LOW_YIELD_CONFIDENCE_THRESHOLD in learning/projections.py."""
-
-ALTERNATIVE_MARGIN = LOW_YIELD_ALTERNATIVE_MARGIN
-"""Cancel only when the alternative's scalar rate is at least this multiple
-of the current task's rate. Delegates to LOW_YIELD_ALTERNATIVE_MARGIN in
-learning/projections.py."""
-
 
 class LowYieldCancelGoal(Goal):
     """Cancel an in-flight task when projection says alternatives pay more."""

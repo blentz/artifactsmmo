@@ -7,13 +7,17 @@ from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_cancel import TaskCancelAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.low_yield_cancel import (
-    ALTERNATIVE_MARGIN,
-    CONFIDENCE_THRESHOLD,
     LOW_YIELD_CANCEL,
     LowYieldCancelGoal,
 )
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
+from artifactsmmo_cli.ai.learning.projections import (
+    LOW_YIELD_ALTERNATIVE_MARGIN as ALTERNATIVE_MARGIN,
+)
+from artifactsmmo_cli.ai.learning.projections import (
+    LOW_YIELD_CONFIDENCE_THRESHOLD as CONFIDENCE_THRESHOLD,
+)
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from tests.test_ai.fixtures import make_state
 

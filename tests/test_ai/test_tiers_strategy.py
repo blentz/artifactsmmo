@@ -13,8 +13,6 @@ from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, Reac
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
 from artifactsmmo_cli.ai.tiers.strategy import (
-    BALANCE_MAX,
-    BALANCE_MIN,
     CHAR_CAPSTONE_SCALE,
     CHAR_GAP_PER_LEVEL,
     CHAR_GAP_PER_LEVEL_GEARED,
@@ -44,6 +42,7 @@ from artifactsmmo_cli.ai.tiers.strategy import (
     root_cost,
     unmet_closure_size,
 )
+from artifactsmmo_cli.ai.tiers.strategy_blend import BALANCE_MAX, BALANCE_MIN
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_skill_target_curve import _gd_with_recipes

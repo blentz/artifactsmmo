@@ -47,7 +47,7 @@ from artifactsmmo_cli.ai.constants import (
 )
 from artifactsmmo_cli.ai.action_kind import action_kind_of
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, GoalAttempt, GoalRankEntry, RootScoreView
-from artifactsmmo_cli.ai.equipment.loadout_picker import pick_loadout
+from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_latch import GearLatch
 from artifactsmmo_cli.ai.gear_value_core import Combat, Gather
@@ -312,61 +312,6 @@ class GamePlayer:
         self.state = replace(state, crafting_target=cache.crafting_target)
         self._notify_planning(False)
         return cache.selected_goal, cache.plan[cache.cursor:], [], False
-
-    # === Backward-compatibility shims that delegate to the blocker registry ===
-    # These let the rest of player.py keep using the old field names while the
-    # registry owns the actual state. Remove the shims (and update callers) in
-    # a follow-up pass.
-
-    @property
-    def _bank_accessible(self) -> bool:
-        return not self._blockers.is_blocked("bank")
-
-    @_bank_accessible.setter
-    def _bank_accessible(self, value: bool) -> None:
-        """Setter for backward-compat: True clears the blocker; False sets
-        one with whatever metadata was previously known (or empty)."""
-        if value:
-            self._blockers.clear("bank")
-        elif not self._blockers.is_blocked("bank"):
-            self._blockers.mark_blocked("bank", char_level=0)
-
-    @property
-    def _bank_blocked_since(self) -> float | None:
-        b = self._blockers.get("bank")
-        return b.blocked_since_monotonic if b else None
-
-    @_bank_blocked_since.setter
-    def _bank_blocked_since(self, value: float | None) -> None:
-        b = self._blockers.get("bank")
-        if b is None:
-            return
-        b.blocked_since_monotonic = value
-
-    @property
-    def _bank_blocked_at_level(self) -> int:
-        b = self._blockers.get("bank")
-        return b.blocked_at_char_level if b else 0
-
-    @property
-    def _bank_unlock_monster(self) -> str | None:
-        b = self._blockers.get("bank")
-        return b.unlock_monster if b else None
-
-    @_bank_unlock_monster.setter
-    def _bank_unlock_monster(self, value: str | None) -> None:
-        b = self._blockers.get("bank")
-        if b is None:
-            # Tests sometimes set the monster before any 496 — create an
-            # empty blocker so the attribute sticks.
-            self._blockers.mark_blocked("bank", char_level=0, unlock_monster=value)
-            return
-        b.unlock_monster = value
-
-    @property
-    def _bank_required_level(self) -> int:
-        b = self._blockers.get("bank")
-        return b.required_level if b else 0
 
     def _resume_plan_cache(self, state: WorldState, game_data: GameData | None) -> None:
         """Restore a persisted commitment iff the goal rehydrates and every remaining
@@ -793,7 +738,8 @@ class GamePlayer:
                 # Discover unlock monster + compute required level, then push
                 # everything into the blocker registry (which also persists
                 # via the learning store when present).
-                unlock_monster = self._bank_unlock_monster
+                bank_blocker = self._blockers.get("bank")
+                unlock_monster = bank_blocker.unlock_monster if bank_blocker else None
                 if unlock_monster is None:
                     match = _ACHIEVEMENT_CODE_RE.search(str(e))
                     if match:
@@ -1176,7 +1122,7 @@ class GamePlayer:
                 "skill_xp": dict(self.state.skill_xp),
                 "inventory_used": self.state.inventory_used,
                 "inventory_max": self.state.inventory_max,
-                "bank_accessible": self._bank_accessible,
+                "bank_accessible": not self._blockers.is_blocked("bank"),
                 "task_code": self.state.task_code, "task_type": self.state.task_type,
                 "task_progress": self.state.task_progress, "task_total": self.state.task_total,
             },
@@ -1384,7 +1330,7 @@ class GamePlayer:
             game_data=self.game_data,
             state=self.state,
             objective=self._objective,
-            bank_accessible=self._bank_accessible,
+            bank_accessible=not self._blockers.is_blocked("bank"),
             task_exchange_min_coins=self._task_exchange_min_coins,
             protected_gear=protected_gear,
         )
@@ -1678,9 +1624,12 @@ class GamePlayer:
         since the last attempt — otherwise the flap creates a wasteful
         Deposit→496→UnlockBank→Deposit loop."""
         assert self.state is not None
-        if (not self._bank_accessible and self._bank_blocked_since is not None
-                and time.monotonic() - self._bank_blocked_since >= _BANK_RETRY_SECONDS
-                and self.state.level > self._bank_blocked_at_level):
+        bank_blocker = self._blockers.get("bank")
+        if (bank_blocker is not None
+                and bank_blocker.blocked_since_monotonic is not None
+                and time.monotonic() - bank_blocker.blocked_since_monotonic
+                >= _BANK_RETRY_SECONDS
+                and self.state.level > bank_blocker.blocked_at_char_level):
             self._blockers.clear("bank")
 
     def _active_gear_keep(self, combat_monster: str | None,
@@ -1731,10 +1680,11 @@ class GamePlayer:
             near_term_targets = frozenset(
                 self._objective.near_term_gear(self.state).values()) | target_tools
         gear_keep = self._active_gear_keep(combat_monster, near_term_targets)
+        bank_blocker = self._blockers.get("bank")
         return SelectionContext(
-            bank_accessible=self._bank_accessible,
-            bank_required_level=self._bank_required_level,
-            bank_unlock_monster=self._bank_unlock_monster,
+            bank_accessible=bank_blocker is None,
+            bank_required_level=bank_blocker.required_level if bank_blocker else 0,
+            bank_unlock_monster=bank_blocker.unlock_monster if bank_blocker else None,
             initial_xp=self.state.xp,
             task_exchange_min_coins=self._task_exchange_min_coins,
             combat_monster=combat_monster,
@@ -1846,7 +1796,7 @@ class GamePlayer:
             return
         loadout = {
             slot: code
-            for slot, code in pick_loadout(purpose, state, self.game_data).items()
+            for slot, code in pick_loadout_cached(purpose, state, self.game_data).items()
             if code is not None
         }
         self.history.record_loadout_profile(task_key, loadout)
@@ -1916,7 +1866,7 @@ class GamePlayer:
             gold=new_state.gold, level=new_state.level, xp=new_state.xp,
             inventory_used=new_state.inventory_used,
             inventory_max=new_state.inventory_max,
-            bank_accessible=self._bank_accessible,
+            bank_accessible=not self._blockers.is_blocked("bank"),
             task_code=new_state.task_code, task_type=new_state.task_type,
             task_progress=new_state.task_progress, task_total=new_state.task_total,
             selected_goal=selected_goal,

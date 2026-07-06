@@ -125,10 +125,6 @@ GEAR_EQUIP_SCALE = Fraction(20) * STRATEGIC_SCALE
 ~0.7-0.9. Scaled by STRATEGIC_SCALE (1000) because `_equip_gain` now measures the
 gain in strategic_value's fixed-point units (combat stats × SCALE) rather than raw
 equip_value, so combat-gear marginals keep the same ~[0,1] gradation as before."""
-BALANCE_K = Fraction(1, 4)
-BALANCE_THRESHOLD = 2
-BALANCE_MIN = Fraction(1, 2)
-BALANCE_MAX = Fraction(2)
 STICKY_DOMINANCE_RATIO = Fraction(3, 2)
 """Tier-2 sticky-commitment threshold. The previous cycle's chosen_root is
 kept unless a new top candidate's score strictly exceeds

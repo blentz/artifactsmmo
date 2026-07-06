@@ -3881,7 +3881,7 @@ LADDER_MEANS_FIRES_MUTATIONS = [
     ),
     (
         "ladder/means: SELL_PRESSURE_FRACTION 0.85 -> 0.95 (pressure boundary shifts)",
-        "SELL_PRESSURE_FRACTION = 0.85",
+        "SELL_PRESSURE_FRACTION = PRESSURE_HIGH_FRACTION",
         "SELL_PRESSURE_FRACTION = 0.95",
     ),
     (
@@ -3901,7 +3901,7 @@ LADDER_MEANS_FIRES_MUTATIONS = [
     ),
     (
         "ladder/means: BANK_EXPAND_FILL 0.95 -> 0.85 (fires too early)",
-        "BANK_EXPAND_FILL = 0.95",
+        "BANK_EXPAND_FILL = TRIGGER_FILL_NUM / TRIGGER_FILL_DEN",
         "BANK_EXPAND_FILL = 0.85",
     ),
     (
