@@ -36,6 +36,7 @@ RECYCLE_SURPLUS_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / 
 GUARDS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "guards.py"
 GATHERING_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "gathering.py"
 CRAFT_PLAN_GEN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_plan_gen.py"
+OPTIMIZE_LOADOUT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "optimize_loadout.py"
 GEAR_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_value.py"
 SKILL_XP_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "skill_xp_curve.py"
 SKILL_TARGET_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "skill_target_curve.py"
@@ -2607,6 +2608,17 @@ GATHER_REARM_MUTATIONS = [
      ""),
 ]
 
+# Composite-swap cooldown wait (2026-07-05 23:34 livelock): without blocking
+# out each call's cooldown the equip leg 499s, the slot sits empty half-swapped,
+# and EquipOwnedGear + the re-arm ping-pong forever. Killed by
+# tests/test_ai/test_optimize_loadout_cooldown.py.
+OPTIMIZE_COOLDOWN_MUTATIONS = [
+    ("optimize_loadout: drop the unequip-pass cooldown wait (equip leg 499s)",
+     "                state = UnequipAction(slot=slot).execute(state, client)\n"
+     "                _wait_out_cooldown(state)",
+     "                state = UnequipAction(slot=slot).execute(state, client)"),
+]
+
 BANK_KEEP_TOOLS_MUTATIONS = [
     ("bank_selection: drop gathering-tool protection (tool banked again)",
      "    keep |= _best_gathering_tools(state, game_data)",
@@ -2728,6 +2740,7 @@ _ALL_SRCS = [
     SRC, TASK_BATCH_SRC, INVENTORY_CAPS_SRC, COMBAT_SRC, PROJECTION_SRC, SCORING_SRC,
     LOADOUT_PICKER_SRC, EMPTY_SLOT_FILLS_SRC, BANK_TOOL_FILLS_SRC, RECYCLE_SURPLUS_SRC,
     RECYCLE_SURPLUS_GOAL_SRC, GUARDS_SRC, GATHERING_GOAL_SRC, CRAFT_PLAN_GEN_SRC,
+    OPTIMIZE_LOADOUT_SRC,
     GEAR_VALUE_SRC,
     SKILL_XP_CURVE_SRC, RECIPE_CLOSURE_SRC, TASK_FEASIBILITY_SRC, PREREQUISITE_GRAPH_SRC,
     OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, STUCK_DETECTOR_SRC,
@@ -4981,6 +4994,8 @@ def _run_all_groups() -> int:
               "tests/test_ai/test_gather_rearm.py", survivors)
     run_group(RECYCLE_SURPLUS_GOAL_SRC, RECYCLE_SNAPSHOT_MUTATIONS,
               "tests/test_ai/test_recycle_urgency.py", survivors)
+    run_group(OPTIMIZE_LOADOUT_SRC, OPTIMIZE_COOLDOWN_MUTATIONS,
+              "tests/test_ai/test_optimize_loadout_cooldown.py", survivors)
     run_group(COMBAT_SRC, COMBAT_VETO_MUTATIONS,
               "tests/test_ai/test_combat.py", survivors)
     run_group(SCORING_SRC, ARMOR_UTILITY_MUTATIONS,

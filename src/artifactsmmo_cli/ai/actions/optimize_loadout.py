@@ -1,7 +1,9 @@
 """OptimizeLoadoutAction: swap equipment to optimal loadout for a target monster."""
 
 import dataclasses
+import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
@@ -19,6 +21,19 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 SWAP_COST_PER_SLOT = 5.0
 """Approximate cycle cost per equip/unequip API call."""
+
+
+def _wait_out_cooldown(state: WorldState) -> None:
+    """Block until the cooldown the server just set has expired (the MoveAction
+    composite-action idiom). Every unequip/equip in the swap starts its own
+    cooldown; issuing the next call immediately gets HTTP 499 and strands the
+    swap HALF-DONE — live livelock 2026-07-05: the equip leg 499'd, the weapon
+    slot sat empty, EquipOwnedGear refilled the dagger by Rank, and the re-arm
+    retried forever (~6 wasted calls/min)."""
+    if state.cooldown_expires is not None:
+        remaining = (state.cooldown_expires - datetime.now(tz=timezone.utc)).total_seconds()
+        if remaining > 0:
+            time.sleep(remaining + 0.1)
 
 
 @dataclass
@@ -137,6 +152,7 @@ class OptimizeLoadoutAction(Action):
         for slot in swaps:
             if state.equipment.get(slot) is not None:
                 state = UnequipAction(slot=slot).execute(state, client)
+                _wait_out_cooldown(state)
         refused: list[str] = []
         for slot, new_code in swaps.items():
             if new_code is None:
@@ -152,6 +168,7 @@ class OptimizeLoadoutAction(Action):
                 refused.append(f"{new_code}->{slot}")
                 continue
             state = equip.execute(state, client)
+            _wait_out_cooldown(state)
         if refused:
             # Report through the standard failure channel (the player maps
             # ApiActionError(485) to the recorded outcome
