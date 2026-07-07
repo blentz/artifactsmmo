@@ -401,16 +401,40 @@ class GamePlayer:
         # value at/above the periodic threshold triggers the refresh on cycle 0.
         self._actions_since_full_refresh = BANK_REFRESH_FORCE_SENTINEL
 
+    def seed_offline(self, state: WorldState, game_data: GameData) -> None:
+        """Offline seeding for scenario planning (spec 2026-07-06 progression
+        tree, Phase 1): everything `_initialize` does EXCEPT the API — no
+        game-data fetch, no character fetch, no persistent-blocker load (an
+        offline scenario has no learning DB history to honor). Documented
+        blockers ARE seeded from game_data so scenario plans see the same
+        near-future gates the live bot does."""
+        self.game_data = game_data
+        self._objective = CharacterObjective.from_game_data(game_data)
+        self._strategy = StrategyEngine(self._objective, BalancedPersonality())
+        self.state = state
+        seed_documented_blockers(self._blockers, game_data, state)
+        self._actions_since_full_refresh = BANK_REFRESH_FORCE_SENTINEL
+
     def plan_once(self, doomed: list[str] | None = None,
                   committed: str | None = None) -> PlanReport:
-        """Sense the world and compute ONE planning cycle WITHOUT executing — the
-        `plan` CLI command. Mirrors run()'s per-cycle decide+select (same refresh,
-        gear-latch, combat target, servable filter, crafting-target keep-set) so the
-        printed plan is exactly what the bot would do this cycle. No cooldown wait, no
-        action execution, no state mutation on the server."""
+        """Sense the world via the API, then compute one planning cycle —
+        the `plan <char>` CLI command. Acquisition only; the planning logic
+        lives in `plan_from_state` (shared with the offline scenario
+        harness)."""
         client = ClientManager().client
         self._initialize(client)
         self._maybe_periodic_refresh(client)
+        return self.plan_from_state(doomed=doomed, committed=committed)
+
+    def plan_from_state(self, doomed: list[str] | None = None,
+                         committed: str | None = None) -> PlanReport:
+        """Compute ONE planning cycle WITHOUT executing — the `plan` CLI command.
+        Mirrors run()'s per-cycle decide+select (same refresh, gear-latch, combat
+        target, servable filter, crafting-target keep-set) so the printed plan is
+        exactly what the bot would do this cycle. No cooldown wait, no action
+        execution, no state mutation on the server. Pure over
+        `self.state`/`self.game_data`/`self.history` — the seam shared by the
+        live `plan_once` and the offline scenario harness (`seed_offline`)."""
         assert self.state is not None and self.game_data is not None
         assert self._strategy is not None
         state = self.state
