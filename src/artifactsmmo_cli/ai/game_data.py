@@ -1217,29 +1217,52 @@ class GameData:
                 print(f"[game_data] cache write failed: {e}")
             objs = fetched
         else:
-            objs = {
-                "maps": [MapSchema.from_dict(d) for d in raw["maps"]],
-                "items": [ItemSchema.from_dict(d) for d in raw["items"]],
-                "resources": [ResourceSchema.from_dict(d) for d in raw["resources"]],
-                "monsters": [MonsterSchema.from_dict(d) for d in raw["monsters"]],
-                "npcs": [NPCItemSchema.from_dict(d) for d in raw["npcs"]],
-                "tasks": [TaskFullSchema.from_dict(d) for d in raw["tasks"]],
-                "events": [EventSchema.from_dict(d) for d in raw["events"]],
-                "effects": [EffectSchema.from_dict(d) for d in raw["effects"]],
-                "bank": BankSchema.from_dict(raw["bank"]) if raw["bank"] is not None else None,
-            }
-        data._build_maps(objs["maps"])
-        data._build_items(objs["items"])
-        data._build_resources(objs["resources"])
-        data._build_monsters(objs["monsters"])
-        data._build_npcs(objs["npcs"])
-        data._build_tasks(objs["tasks"])
-        data._build_events(objs["events"])
-        data._build_effects(objs["effects"])
-        data._audit_effect_coverage()
-        data._build_bank(objs["bank"])
+            objs = cls._hydrate_bundle(raw)
+        data._build_from_objs(objs)
         data._load_ge_orders(client)
         return data
+
+    @classmethod
+    def from_cache_bundle(cls, raw: dict[str, Any]) -> "GameData":
+        """Build a full GameData OFFLINE from the disk-cache bundle shape
+        (`GameDataCache` JSON: maps/items/resources/monsters/npcs/tasks/
+        events/effects/bank). The Grand-Exchange order book is left EMPTY —
+        orders are live-only by design; scenario planning treats GE as quiet.
+        This is the scenario harness's loader (spec 2026-07-06 progression
+        tree, Phase 1): a real catalog with zero API dependency."""
+        data = cls()
+        data._build_from_objs(cls._hydrate_bundle(raw))
+        return data
+
+    @staticmethod
+    def _hydrate_bundle(raw: dict[str, Any]) -> dict[str, Any]:
+        """raw JSON bundle -> schema objects (the warm-cache branch of load)."""
+        return {
+            "maps": [MapSchema.from_dict(d) for d in raw["maps"]],
+            "items": [ItemSchema.from_dict(d) for d in raw["items"]],
+            "resources": [ResourceSchema.from_dict(d) for d in raw["resources"]],
+            "monsters": [MonsterSchema.from_dict(d) for d in raw["monsters"]],
+            "npcs": [NPCItemSchema.from_dict(d) for d in raw["npcs"]],
+            "tasks": [TaskFullSchema.from_dict(d) for d in raw["tasks"]],
+            "events": [EventSchema.from_dict(d) for d in raw["events"]],
+            "effects": [EffectSchema.from_dict(d) for d in raw["effects"]],
+            "bank": BankSchema.from_dict(raw["bank"]) if raw["bank"] is not None else None,
+        }
+
+    def _build_from_objs(self, objs: dict[str, Any]) -> None:
+        """The shared build pipeline (moved verbatim from `load`'s tail —
+        every `_build_*` call in the same order). GE orders NOT fetched here;
+        `load` fetches them afterward with its live client."""
+        self._build_maps(objs["maps"])
+        self._build_items(objs["items"])
+        self._build_resources(objs["resources"])
+        self._build_monsters(objs["monsters"])
+        self._build_npcs(objs["npcs"])
+        self._build_tasks(objs["tasks"])
+        self._build_events(objs["events"])
+        self._build_effects(objs["effects"])
+        self._audit_effect_coverage()
+        self._build_bank(objs["bank"])
 
     def _fetch_bank(self, client: AuthenticatedClient) -> BankSchema | None:
         """Fetch the single bank-details schema object, or None when absent."""
