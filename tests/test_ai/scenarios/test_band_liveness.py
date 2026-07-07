@@ -24,16 +24,25 @@ from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree
+from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree, has_structural_upgrade
 from artifactsmmo_cli.ai.tiers.progression_tree_core import milestone_pure
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
 from artifactsmmo_cli.ai.world_state import WorldState
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
+L48_BAND_ADEQUATE = "l48_band_adequate"
+"""The capstone/XP-branch counterpart to l48_capstone_approach: every gear
+slot already holds the catalog-best is_attainable_now item and both utility
+slots are stocked, so has_structural_upgrade is False by construction — the
+only band scenario that forces decide_tree's XP branch instead of GEAR. See
+scenario.py's SCENARIOS entry docstring for how the equipment set was
+derived (fixed-point iteration against near_term_gear, verified empirically
+before this test was written)."""
+
 BAND_NAMES = [
     "l15_midband", "l20_band_entry", "l30_band_entry",
-    "l40_band_entry", "l48_capstone_approach",
+    "l40_band_entry", "l48_capstone_approach", L48_BAND_ADEQUATE,
 ]
 
 MAX_SEARCH_NODES = 200_000
@@ -95,21 +104,24 @@ def test_band_liveness_full_stack(name: str) -> None:
 
 @pytest.mark.parametrize("name", BAND_NAMES)
 def test_band_search_is_bounded(name: str) -> None:
-    """The selected goal's own goals_tried entry must stay well under the
-    node cap and must not have been node-capped or timed out — a bounded
-    search that still finds nothing is a different (legitimate) failure
-    mode than an unbounded one that happens to find something."""
+    """EVERY goal the arbiter tried this cycle must stay well under the node
+    cap and must not have been node-capped or timed out — not just the
+    selected goal's own entry. A non-selected goal that floods the search
+    (the feather_coat 237K-node lesson: an unsatisfiable candidate can peg
+    CPU even when it's later demoted and something else gets selected) is
+    still a deadlock precursor; bounding only the winner's entry would let
+    it slip through the net. A bounded search that still finds nothing is a
+    different (legitimate) failure mode than an unbounded one that happens
+    to find something."""
     report = _run(name)
-    selected_repr = repr(report.selected_goal)
-    matches = [g for g in report.goals_tried if g.get("goal") == selected_repr]
-    assert matches, (name, selected_repr, [g.get("goal") for g in report.goals_tried])
-    entry = matches[-1]
-    nodes = cast(int, entry["nodes"])
-    node_capped = cast(bool, entry.get("node_capped", False))
-    timed_out = cast(bool, entry["timed_out"])
-    assert nodes < MAX_SEARCH_NODES, (name, entry)
-    assert not node_capped, (name, entry)
-    assert not timed_out, (name, entry)
+    assert report.goals_tried, (name, report.selected_goal)
+    for entry in report.goals_tried:
+        nodes = cast(int, entry["nodes"])
+        node_capped = cast(bool, entry.get("node_capped", False))
+        timed_out = cast(bool, entry["timed_out"])
+        assert nodes < MAX_SEARCH_NODES, (name, entry)
+        assert not node_capped, (name, entry)
+        assert not timed_out, (name, entry)
 
 
 @pytest.mark.parametrize("name", BAND_NAMES)
@@ -122,3 +134,68 @@ def test_band_trunk_row_matches_milestone_pure(name: str) -> None:
     trunk_row = d.ranking[0]
     assert trunk_row.category == "char_level"
     assert trunk_row.root_repr == repr(expected_trunk)
+
+
+def test_l48_band_adequate_forced_xp_branch() -> None:
+    """l48_band_adequate is constructed so has_structural_upgrade is False
+    (every slot already holds the catalog-best is_attainable_now item, both
+    utility slots stocked past 0 — see the SCENARIOS docstring) — the XP/
+    capstone path the per-band net had no coverage for (test_decide_tree_
+    is_total's under-tier bands all exercise the GEAR branch). With
+    band_adequate explicitly True (the caller-supplied leg decide_tree
+    itself never computes), branch_pick_pure must pick XP and the chosen
+    root/step must be exactly the L48->50 trunk milestone, not a gear
+    candidate."""
+    gd = _bundle()
+    state = scenario_state(SCENARIOS[L48_BAND_ADEQUATE])
+    objective = CharacterObjective.from_game_data(gd)
+    decision = decide_tree(state, gd, objective, band_adequate=True)
+    expected = ReachCharLevel(level=milestone_pure(state.level))
+    assert decision.chosen_root == expected
+    assert decision.chosen_step == expected
+
+
+def test_l48_band_adequate_real_band_adequate_verdict() -> None:
+    """Empirical record of the REAL `_tree_band_adequate()` wiring for
+    l48_band_adequate (as opposed to the hardcoded band_adequate=True in
+    test_l48_band_adequate_forced_xp_branch above) — plan_from_state's
+    actual caller, not a direct decide_tree call.
+
+    `_tree_band_adequate()` ANDs two legs: no structural upgrade (verified
+    True here, matching the scenario's construction) AND a winnable monster
+    exists for the current loadout. The second leg is FALSE in this bundle:
+    the only catalog monsters in the L48 fight window ([47, 50] — duskworm,
+    dusk_beetle, sandwarden, desert_scorpion, solar_desert_scorpion,
+    baby_red_dragon) are all unwinnable against a full non-event mithril-
+    tier loadout at max HP. This is the SAME difficulty wall documented in
+    project_l50_unconditional_descent ("event gear = progression
+    REQUIREMENT") — band_adequate reads False for a real, already-known
+    reason, not a construction bug in this scenario.
+
+    decide_tree's answer is unaffected either way (branch_pick_pure picks
+    XP whenever gear_target_exists is False, regardless of band_adequate —
+    see test_l48_band_adequate_forced_xp_branch), so the plan_from_state
+    seam still selects and plans something: WaitGoal, the documented
+    last-resort fallback (goals/wait.py) — no combat target exists to grind
+    the trunk milestone with. That IS the genuine capstone-path finding
+    this test records rather than hides: at L48 with a complete non-event
+    loadout, this bundle's monster catalog cannot carry a character to L50
+    by combat alone."""
+    gd = _bundle()
+    state = scenario_state(SCENARIOS[L48_BAND_ADEQUATE])
+    objective = CharacterObjective.from_game_data(gd)
+    assert has_structural_upgrade(state, gd, objective) is False
+
+    player = GamePlayer(character=L48_BAND_ADEQUATE, history=None)
+    player.seed_offline(state, load_bundle_game_data(BUNDLE))
+    assert player._pick_winnable_monster() is None, (
+        "no L47-50 window monster should be winnable against this "
+        "non-event loadout in this bundle; if this now finds one, the "
+        "L50-difficulty-wall finding above is stale and must be revised")
+    assert player._tree_band_adequate() is False
+
+    report = player.plan_from_state()
+    assert report.selected_goal is not None
+    assert report.plan, (repr(report.selected_goal), report.plan)
+    assert report.decision.chosen_root == ReachCharLevel(level=50)
+    assert report.decision.chosen_step == ReachCharLevel(level=50)

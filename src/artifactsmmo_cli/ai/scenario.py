@@ -29,6 +29,13 @@ class ScenarioCharacter:
     inventory_max: int = 100
     bank: dict[str, int] | None = field(default_factory=dict)  # None = unknown
     task: tuple[str, str, int, int] | None = None  # code, type, progress, total
+    utility_quantities: dict[str, int] = field(default_factory=dict)
+    """utility1_slot/utility2_slot -> stocked quantity. WorldState defaults
+    both to 0 (unstocked) even when `equipment` names a code in the slot —
+    equipped_potion_qty treats a zero-quantity slot as unprovisioned, so a
+    scenario that means to read as "utility slot already stocked" (e.g.
+    band-adequate gear scenarios where a candidate must not re-appear for
+    an already-held potion) must set this explicitly."""
     description: str = ""
 
 
@@ -57,6 +64,8 @@ def scenario_state(sc: ScenarioCharacter) -> WorldState:
         bank_gold=0 if sc.bank is not None else None,
         bank_capacity=200 if sc.bank is not None else None,
         pending_items=None,
+        utility1_slot_quantity=sc.utility_quantities.get("utility1_slot", 0),
+        utility2_slot_quantity=sc.utility_quantities.get("utility2_slot", 0),
     )
 
 
@@ -183,4 +192,41 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         inventory_max=150,
         description="Approaching the L50 capstone: L40 gear, L45 upgrades on "
                      "offer — empirical capstone-reachability evidence."),
+
+    # --- Band-ADEQUATE capstone counterpart (2026-07-07 fix wave, per
+    # tests/test_ai/scenarios/test_band_liveness.py): l48_capstone_approach
+    # above is deliberately under-tier so the gear branch always has a
+    # target; this scenario is the opposite construction — every slot
+    # already holds the catalog-best is_attainable_now item (empirically
+    # fixed-point-iterated against near_term_gear: mithril tier for the
+    # already-filled slots, plus wooden_shield/copper_ring filling the
+    # previously-empty shield/ring2 slots — no further near_term_gear
+    # candidate exists), and BOTH utility slots are stocked with the real
+    # bootstrap_potion_target (health_splash_potion) at positive quantity so
+    # equipped_potion_qty > 0 excludes the utility candidate too. This
+    # forces has_structural_upgrade False by construction — the XP/capstone
+    # branch path the per-band net had no scenario for. rune/artifact/bag
+    # slots are left empty deliberately: near_term_gear emits no candidate
+    # for them from this state either (verified empirically), so filling
+    # them is not needed to reach has_structural_upgrade == False.
+    "l48_band_adequate": ScenarioCharacter(
+        name="l48_band_adequate", level=48, max_hp=690, gold=800,
+        skills={"mining": 46, "woodcutting": 46, "weaponcrafting": 42,
+                "gearcrafting": 42, "fishing": 42, "cooking": 42,
+                "alchemy": 35, "jewelrycrafting": 35},
+        equipment={
+            "weapon_slot": "mithril_sword", "helmet_slot": "mithril_helm",
+            "body_armor_slot": "mithril_platebody", "leg_armor_slot": "mithril_platelegs",
+            "boots_slot": "mithril_boots", "ring1_slot": "mithril_ring",
+            "ring2_slot": "copper_ring", "amulet_slot": "greater_sapphire_amulet",
+            "shield_slot": "wooden_shield",
+            "utility1_slot": "health_splash_potion", "utility2_slot": "health_splash_potion",
+        },
+        utility_quantities={"utility1_slot": 20, "utility2_slot": 20},
+        bank={"adamantite_ore": 5, "mithril_ore": 10},
+        inventory_max=150,
+        description="Band-ADEQUATE at L48: every slot already holds the "
+                     "best is_attainable_now item, no structural or utility "
+                     "gear candidate exists — the XP/capstone branch, not "
+                     "the gear branch."),
 }
