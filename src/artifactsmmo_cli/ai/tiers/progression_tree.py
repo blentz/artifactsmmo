@@ -42,6 +42,17 @@ def _structural_candidates(state: WorldState, game_data: GameData,
     return candidates
 
 
+def has_structural_upgrade(state: WorldState, game_data: GameData,
+                            objective: CharacterObjective) -> bool:
+    """True when a positive-gain STRUCTURAL upgrade is reachable — the
+    tier-aware leg of band adequacy (2026-07-07 live-shadow correction: a
+    FILLED slot holding under-tier gear must not read as adequate; an empty
+    slot is just the gain-from-zero special case). Utility/potion targets
+    deliberately excluded: consumable restock must never break adequacy or
+    the empty-slot churn loop re-enters through the branch switch."""
+    return bool(_structural_candidates(state, game_data, objective))
+
+
 def _utility_candidates(state: WorldState, game_data: GameData,
                          objective: CharacterObjective) -> list[GearCandidate]:
     """Semantics item 2 (utility slots): skip already-provisioned potions

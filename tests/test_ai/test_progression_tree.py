@@ -12,7 +12,7 @@ from artifactsmmo_cli.ai.player import GamePlayer  # noqa: F401  (scenario seam 
 from artifactsmmo_cli.ai.scenario import SCENARIOS, ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree
+from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree, has_structural_upgrade
 
 BUNDLE = (Path(__file__).parent / "scenarios" / "fixtures"
           / "gamedata_bundle.json")
@@ -208,6 +208,25 @@ class TestAdequacyParameter:
 
 # --- Synthetic-GameData unit tests (coverage of branches the 6 scenarios
 # never reach) ----------------------------------------------------------
+
+class TestHasStructuralUpgrade:
+    """has_structural_upgrade: the tier-aware adequacy leg (2026-07-07 live
+    shadow finding — filled COPPER slots at L14 must NOT read as adequate)."""
+
+    def test_true_when_positive_gain_upgrade_reachable(self):
+        gd = _bundle()
+        state = scenario_state(SCENARIOS["l10_weapon_upgrade"])
+        assert has_structural_upgrade(state, gd,
+                                      CharacterObjective.from_game_data(gd))
+
+    def test_true_for_filled_but_underleveled_set(self):
+        """Full copper set, higher-tier targets exist: NOT adequate —
+        the exact live-review correction (slots filled ≠ at-band-tier)."""
+        gd = _bundle()
+        state = scenario_state(SCENARIOS["l10_copper_adequate"])
+        assert has_structural_upgrade(state, gd,
+                                      CharacterObjective.from_game_data(gd))
+
 
 class TestSyntheticBranches:
     def test_xp_branch_fires_when_candidates_are_truly_empty(self):

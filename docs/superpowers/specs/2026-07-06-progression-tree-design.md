@@ -162,6 +162,20 @@ existing provisioning quantities (win-rate provisioning guard unchanged).
 
 Each phase lands independently valuable and gate-green.
 
+**Phase 3 amendment (2026-07-07, live shadow review):** 6h/527 dual
+cycles: legacy spent 263 cycles (50%) on the small_health_potion root (the
+churn loop, measured); 264 cycles ReachCharLevel(14)!=(20) are
+behavior-class agreement (repr-only). FINDING: tree picked gear 0×527 —
+the adequacy signal's empty-armor-slot leg read a full COPPER set at L14
+as adequate. FIX: adequacy leg replaced with tier-aware
+`has_structural_upgrade` (positive-gain structural candidate reachable ⇒
+NOT adequate; empty slot = gain-from-zero special case, subsumed).
+Utility/potion targets still excluded from the break (churn stays dead);
+when the gear branch fires with utility unstocked, the weighted potion can
+outrank small structural gains — bounded by the provisioned-skip, tuned
+via POTION_TYPE_WEIGHTS at Phase 4. Bot restart required for the corrected
+live shadow.
+
 **Phase 3 SHIPPED (2026-07-07):** commits cb62e5ba (adequacy parameter +
 XP-arm gear-fallback retention + _ordered[0]==core-pick assert — all three
 Phase-2 flags closed), 71aa2861 (shadow wiring: decide_tree computed every

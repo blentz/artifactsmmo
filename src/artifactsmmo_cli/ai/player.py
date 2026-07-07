@@ -97,7 +97,7 @@ from artifactsmmo_cli.ai.tiers import (
 )
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal
-from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree
+from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree, has_structural_upgrade
 from artifactsmmo_cli.ai.tiers.root_progress import root_progress_value
 from artifactsmmo_cli.ai.tiers.sticky_select_core import next_last
 from artifactsmmo_cli.ai.tracer import Tracer
@@ -280,16 +280,21 @@ class GamePlayer:
     def _tree_band_adequate(self) -> bool:
         """The real progression-band adequacy verdict wired into
         `decide_tree`'s `band_adequate`: a winnable monster exists for the
-        current loadout AND no near-term combat armor slot sits empty. Both
-        legs are already-proven cores (`_pick_winnable_monster`,
-        `StrategyEngine._has_empty_armor_slot`) — this is pure composition,
-        not new decision logic. Callers must have state/game_data/strategy
-        seeded (`_compute_tree_shadow` guards this before calling)."""
+        current loadout AND no positive-gain structural upgrade is reachable.
+        The upgrade leg is tier-aware (2026-07-07 live-shadow correction: a
+        full COPPER set at L14 read as adequate under the old
+        empty-armor-slot leg and the tree never geared) and SUBSUMES the old
+        empty-slot check — an empty slot is a gain-from-zero candidate. Both
+        legs are existing cores (`_pick_winnable_monster`,
+        `has_structural_upgrade`) — pure composition, not new decision
+        logic. Callers must have state/game_data/objective seeded
+        (`_compute_tree_shadow` guards this before calling)."""
         assert self.state is not None
         assert self.game_data is not None
-        assert self._strategy is not None
+        assert self._objective is not None
         return (self._pick_winnable_monster() is not None
-                and not self._strategy._has_empty_armor_slot(self.state, self.game_data))
+                and not has_structural_upgrade(self.state, self.game_data,
+                                               self._objective))
 
     def _compute_tree_shadow(self) -> StrategyDecision | None:
         """The Task-2 progression-tree shadow: `decide_tree` composed over
