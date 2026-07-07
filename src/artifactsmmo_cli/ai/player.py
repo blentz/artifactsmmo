@@ -97,7 +97,7 @@ from artifactsmmo_cli.ai.tiers import (
 )
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal
-from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree, has_structural_upgrade
+from artifactsmmo_cli.ai.tiers.progression_tree import has_structural_upgrade
 from artifactsmmo_cli.ai.tiers.root_progress import root_progress_value
 from artifactsmmo_cli.ai.tiers.sticky_select_core import next_last
 from artifactsmmo_cli.ai.tracer import Tracer
@@ -123,35 +123,18 @@ class GamePlayer:
         cycle_observer: "Callable[[CycleSnapshot], None] | None" = None,
         game_data_ttl_minutes: int = 30,
         refresh_game_data: bool = False,
-        progression_tree: bool = False,
     ) -> None:
         self.character = character
         self.verbose = verbose
         self.dry_run = dry_run
         self._game_data_ttl_minutes = game_data_ttl_minutes
         self._refresh_game_data = refresh_game_data
-        # Phase 4a flip flag: when True AND a tree shadow is computable this
-        # cycle, the progression-tree decision (not the legacy StrategyEngine
-        # decision) is the one that actually drives arbiter/select — see
-        # `_decide_band` / `plan_from_state`. Flag-off is byte-identical to
-        # pre-flip behavior (the shadow is still computed and traced either
-        # way; only which decision is ENACTED changes).
-        self._progression_tree = progression_tree
         self.planner = GOAPPlanner()
         self._arbiter = StrategyArbiter(self.planner, history)
+        # Phase 4b (THE FLIP): the progression-tree decision — the ONLY
+        # decision; `StrategyEngine.decide` delegates to `decide_tree`, so
+        # what's stashed here is what drove arbiter/select this cycle.
         self._last_decision: StrategyDecision | None = None
-        # Phase-3 Task 2: the progression-tree shadow decision, computed
-        # alongside the legacy decision every cycle (plan_from_state and the
-        # run-cycle decide path) but never consumed by the arbiter — traced
-        # only, so a live divergence is observable before the Phase-4 flip.
-        self._last_tree_decision: StrategyDecision | None = None
-        # Phase 4a: the decision that actually acted THIS cycle — `decision`
-        # (legacy) when the flag is off or the shadow is unavailable,
-        # `_last_tree_decision` when the flag is on and the shadow computed.
-        # Downstream consumers that care about "what drove selection"
-        # (sticky anchor, PlanReport.decision, the observer's chosen_root
-        # snapshot) read this instead of `_last_decision` directly.
-        self._last_enacted_decision: StrategyDecision | None = None
         self.state: WorldState | None = None
         self.game_data: GameData | None = None
         # Generic blocker registry — replaces what used to be ~5 bank-specific
@@ -265,76 +248,51 @@ class GamePlayer:
             combat_monster=combat_monster,
             last_chosen_root=self._last_strategy_root,
             step_servable=servable_pred,
+            band_adequate=self._tree_band_adequate(),
         )
         self._last_decision = decision
-        self._last_tree_decision = self._compute_tree_shadow()
-        # Phase 4a flip: the tree decision drives selection only when the
-        # flag is on AND the shadow computed this cycle; otherwise the
-        # legacy decision is enacted (flag-off is byte-identical to
-        # pre-flip). `_last_decision`/`_last_tree_decision` stay engine-true
-        # (legacy/tree respectively) — only `enacted` swaps.
-        enacted = (self._last_tree_decision
-                   if self._progression_tree and self._last_tree_decision is not None
-                   else decision)
-        self._last_enacted_decision = enacted
-        cr, cs = enacted.chosen_root, enacted.chosen_step
+        cr, cs = decision.chosen_root, decision.chosen_step
         self._last_servability_diag = {
             "chosen_root_servable": bool(
                 cr is not None and cs is not None and servable_pred(cr, cs)),
             "chosen_root": repr(cr) if cr is not None else None,
         }
-        step = enacted.chosen_step
+        step = decision.chosen_step
         crafting_target = step.code if isinstance(step, ObtainItem) else None
         if crafting_target is None:
-            for alt in getattr(enacted, "fallback_steps", []):
+            for alt in getattr(decision, "fallback_steps", []):
                 if isinstance(alt, ObtainItem):
                     crafting_target = alt.code
                     break
         self.state = state = replace(state, crafting_target=crafting_target)
         selected_goal, plan, goals_tried = self._arbiter.select(
-            enacted, state, game_data, actions, ctx,
+            decision, state, game_data, actions, ctx,
             suppressed=set(self._suppressed_goals),
             objective=self._objective,
         )
         self._update_sticky_anchor(
-            enacted.chosen_root, state, game_data, self._arbiter.chosen_step_alive)
+            decision.chosen_root, state, game_data, self._arbiter.chosen_step_alive)
         self._last_decide_crafting_target = crafting_target
         return selected_goal, plan, goals_tried
 
     def _tree_band_adequate(self) -> bool:
         """The real progression-band adequacy verdict wired into
-        `decide_tree`'s `band_adequate`: a winnable monster exists for the
-        current loadout AND no positive-gain structural upgrade is reachable.
-        The upgrade leg is tier-aware (2026-07-07 live-shadow correction: a
-        full COPPER set at L14 read as adequate under the old
-        empty-armor-slot leg and the tree never geared) and SUBSUMES the old
-        empty-slot check — an empty slot is a gain-from-zero candidate. Both
-        legs are existing cores (`_pick_winnable_monster`,
-        `has_structural_upgrade`) — pure composition, not new decision
-        logic. Callers must have state/game_data/objective seeded
-        (`_compute_tree_shadow` guards this before calling)."""
+        `decide_tree`'s `band_adequate` (via `StrategyEngine.decide`): a
+        winnable monster exists for the current loadout AND no positive-gain
+        structural upgrade is reachable. The upgrade leg is tier-aware
+        (2026-07-07 live-shadow correction: a full COPPER set at L14 read as
+        adequate under the old empty-armor-slot leg and the tree never
+        geared) and SUBSUMES the old empty-slot check — an empty slot is a
+        gain-from-zero candidate. Both legs are existing cores
+        (`_pick_winnable_monster`, `has_structural_upgrade`) — pure
+        composition, not new decision logic. Callers must have
+        state/game_data/objective seeded."""
         assert self.state is not None
         assert self.game_data is not None
         assert self._objective is not None
         return (self._pick_winnable_monster() is not None
                 and not has_structural_upgrade(self.state, self.game_data,
                                                self._objective))
-
-    def _compute_tree_shadow(self) -> StrategyDecision | None:
-        """The Task-2 progression-tree shadow: `decide_tree` composed over
-        the SAME already-validated state/game_data the legacy `decide()`
-        just used, fed the real band-adequacy verdict. Returns None only
-        when the engine isn't seeded yet (construction before
-        `_initialize`/`seed_offline`) — total elsewhere. No try/except (repo
-        rule): composing pure cores over already-validated state cannot
-        raise, so totality is the guarantee, not a caught exception."""
-        state = self.state
-        game_data = self.game_data
-        if (state is None or game_data is None or self._strategy is None
-                or self._objective is None):
-            return None
-        return decide_tree(state, game_data, self._objective,
-                           band_adequate=self._tree_band_adequate())
 
     def _plan_or_reuse(
         self,
@@ -515,19 +473,13 @@ class GamePlayer:
         decision = self._strategy.decide(
             state, game_data, history=self.history, combat_monster=combat_monster,
             last_chosen_root=self._last_strategy_root,
-            step_servable=self._step_servable(state, game_data, ctx))
-        self._last_tree_decision = self._compute_tree_shadow()
-        # Phase 4a flip (see `_decide_band` for the symmetric comment): the
-        # tree decision drives selection only when the flag is on AND the
-        # shadow computed this cycle.
-        enacted = (self._last_tree_decision
-                   if self._progression_tree and self._last_tree_decision is not None
-                   else decision)
-        self._last_enacted_decision = enacted
-        step = enacted.chosen_step
+            step_servable=self._step_servable(state, game_data, ctx),
+            band_adequate=self._tree_band_adequate())
+        self._last_decision = decision
+        step = decision.chosen_step
         crafting_target = step.code if isinstance(step, ObtainItem) else None
         if crafting_target is None:
-            for alt in getattr(enacted, "fallback_steps", []):
+            for alt in getattr(decision, "fallback_steps", []):
                 if isinstance(alt, ObtainItem):
                     crafting_target = alt.code
                     break
@@ -544,13 +496,13 @@ class GamePlayer:
         if committed is not None:
             self._arbiter._committed_repr = committed
         selected_goal, plan, goals_tried = self._arbiter.select(
-            enacted, state, game_data, actions, ctx,
+            decision, state, game_data, actions, ctx,
             suppressed=set(self._suppressed_goals), objective=self._objective)
         # For the chosen objective's recipe, report each monster-drop input's live
         # winnability — an unwinnable drop (e.g. chicken too strong) makes the gear
         # unbuildable, which is the difference between "hunts chickens" and "can't".
         drop_inputs: list[dict[str, object]] = []
-        root = enacted.chosen_root
+        root = decision.chosen_root
         if isinstance(root, ObtainItem):
             for leaf in monster_drop_inputs(root.code, game_data):
                 droppers = [m for m, *_ in game_data.monsters_dropping(leaf)]
@@ -560,16 +512,11 @@ class GamePlayer:
                     and game_data.monster_spawn_known(m))
                 drop_inputs.append({"item": leaf, "droppers": sorted(droppers),
                                     "winnable": winnable})
-        enacted_engine = (
-            "tree" if self._progression_tree and self._last_tree_decision is not None
-            else "legacy")
-        return PlanReport(decision=enacted, selected_goal=selected_goal,
+        return PlanReport(decision=decision, selected_goal=selected_goal,
                           plan=list(plan), goals_tried=goals_tried,
                           drop_inputs=drop_inputs,
                           simulated_doomed=sim_doomed,
-                          simulated_committed=committed,
-                          tree_decision=self._last_tree_decision,
-                          enacted_engine=enacted_engine)
+                          simulated_committed=committed)
 
     def run(self) -> None:
         """Main loop: sense → select goal → plan → act."""
@@ -1251,22 +1198,16 @@ class GamePlayer:
         if self.game_data is not None:
             record["gear"] = {"adequate": self._pick_winnable_monster() is not None}
         if self._strategy is not None and self.game_data is not None:
+            # Phase 4b (THE FLIP): `record["strategy"]` carries the
+            # progression-tree decision — decide() delegates to decide_tree —
+            # in the exact same to_trace shape as before (cycle lockstep
+            # depends on it). The Phase-3/4a `record["tree"]`/`record["enacted"]`
+            # shadow chrome died with the flag: one engine, one record.
             decision = self._last_decision or self._strategy.decide(
                 self.state, self.game_data, history=self.history,
-                combat_monster=self._winnable_farm_target())
+                combat_monster=self._winnable_farm_target(),
+                band_adequate=self._tree_band_adequate())
             record["strategy"] = decision.to_trace()
-            # Phase-3 Task 2: the progression-tree shadow, next to the legacy
-            # strategy trace — emitted only when observable (state/game_data/
-            # strategy/objective all seeded); absent means unobserved, never
-            # a guessed default.
-            tree = self._last_tree_decision or self._compute_tree_shadow()
-            if tree is not None:
-                record["tree"] = tree.to_trace()
-            # Phase 4a: which engine actually drove selection this cycle.
-            # `strategy`/`tree` above stay engine-true (symmetric shadow) —
-            # this is the only field that reflects the flip.
-            record["enacted"] = (
-                "tree" if self._progression_tree and tree is not None else "legacy")
         self.tracer.write_cycle(record)
         self._cycle_counter += 1
 
@@ -1493,13 +1434,12 @@ class GamePlayer:
                 (self.state.cooldown_expires - datetime.now(tz=timezone.utc)).total_seconds(),
             )
         action_kind, action_target = action_kind_of(action) if action is not None else ("other", None)
-        # Phase-3 Task 5: the progression-tree shadow, same fallback
-        # `_emit_trace` uses (`_last_tree_decision or _compute_tree_shadow()`)
-        # so the live-queue CycleSnapshot and the trace-JSONL record agree on
-        # the SAME per-cycle shadow value. `tree_decision is None` means the
-        # shadow engine isn't seeded this cycle (never guessed at); a seeded
-        # shadow that chose no root is still "active", just rootless.
-        tree_decision = self._last_tree_decision or self._compute_tree_shadow()
+        # Phase 4b (THE FLIP): one engine — `_last_decision` IS the tree
+        # decision, so the snapshot's `tree_*` fields mirror `chosen_root`
+        # until Task 5 removes them from CycleSnapshot outright. None means
+        # no decision this cycle (never guessed at); a decision that chose
+        # no root is still "active", just rootless.
+        tree_decision = self._last_decision
         snap = CycleSnapshot(
             cycle_index=self._cycle_counter,
             timestamp=datetime.now(tz=timezone.utc).isoformat(),
@@ -1540,9 +1480,9 @@ class GamePlayer:
             goals_tried=goals_tried,
             suppressed_goals=list(self._suppressed_goals.keys()),
             path_blocked=bool(stats.get("path_blocked", False)),
-            chosen_root=(repr(self._last_enacted_decision.chosen_root)
-                         if self._last_enacted_decision is not None
-                         and self._last_enacted_decision.chosen_root is not None else None),
+            chosen_root=(repr(self._last_decision.chosen_root)
+                         if self._last_decision is not None
+                         and self._last_decision.chosen_root is not None else None),
             strategy_ranking=[
                 RootScoreView(root_repr=r.root_repr, category=r.category,
                               score=float(r.score), step_repr=r.step_repr)

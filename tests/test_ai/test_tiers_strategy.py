@@ -7,11 +7,11 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.strategic_value import strategic_value
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
+from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree
 from artifactsmmo_cli.ai.tiers.strategy import (
     CHAR_CAPSTONE_SCALE,
     CHAR_GAP_PER_LEVEL,
@@ -28,8 +28,6 @@ from artifactsmmo_cli.ai.tiers.strategy import (
     PRIOR_CONSUMABLE_SKILL,
     PRIOR_GATHER_SKILL,
     PRIOR_UTILITY_GEAR,
-    SKILL_GAP_CAP,
-    SKILL_GAP_PER_LEVEL,
     SKILL_MARGINAL,
     STICKY_DOMINANCE_RATIO,
     XP_RATE_REFERENCE,
@@ -96,50 +94,33 @@ def test_desired_state_of():
     assert desired_state_of(None) == {}
 
 
-def test_decide_skips_satisfied_and_ranks_reachable():
+def test_decide_delegates_to_the_progression_tree():
+    """Phase 4b (THE FLIP): `StrategyEngine.decide` is a thin delegate to
+    `decide_tree` — same state/game_data/objective yields the identical
+    decision. The legacy ranking pipeline is bypassed (deleted in Task 2)."""
     gd = _gd()
     obj = CharacterObjective.from_game_data(gd)
     eng = StrategyEngine(objective=obj, personality=BalancedPersonality())
-    d = eng.decide(make_state(level=5, skills={"mining": 3}), gd)
-    assert d.chosen_root is not None
-    assert d.chosen_step is not None
-    assert d.desired_state
-    assert all(rs.cost >= 1 for rs in d.ranking)
+    state = make_state(level=5, skills={"mining": 3})
+    d = eng.decide(state, gd)
+    expected = decide_tree(state, gd, obj)
+    assert d == expected
+    # Legacy-ranking inputs are accepted for callsite stability but ignored:
+    # the tree is deterministic over (state, game_data, objective, band,
+    # servability) alone.
+    assert eng.decide(state, gd, history=None, combat_monster="chicken",
+                      last_chosen_root="ReachCharLevel(level=50)") == expected
 
 
-def test_decide_hp_interrupt_flag_only():
+def test_decide_forwards_band_adequate_and_step_servable():
+    """The two live parameters pass through to `decide_tree` unchanged."""
     gd = _gd()
-    eng = StrategyEngine(objective=CharacterObjective.from_game_data(gd),
-                         personality=BalancedPersonality())
-    low = make_state(level=5, hp=10, max_hp=100)   # 10% < 25%
-    assert eng.decide(low, gd).interrupt == "restore_hp"
-    ok = make_state(level=5, hp=90, max_hp=100)
-    assert eng.decide(ok, gd).interrupt is None
-
-
-def test_personality_reweighting_changes_choice():
-    # Gear-free world so only char-level vs endgame skills compete. All crafting
-    # skills sit AT the near-term bootstrap target (5) so the gap-proportional
-    # catch-up boost is inert (gap 0) — this isolates the char-vs-skill
-    # personality comparison on the flat endgame-50 marginal, as intended.
-    # Skills: alchemy=9 (leader), laggards at 5 → balancing raw=1.5 (gap 4).
-    # BalancedPersonality: char_level=1.48 > skill=0.6*0.2*1.5=0.18 → char wins.
-    # SkillFirst (10x weight): skill=0.6*0.2*1.5*10=1.8 > 1.48 → skill wins.
-    gd = GameData()
-    gd._monster_level = {"chicken": 1}  # char level reachable (combat-capable)
-    fill_monster_stat_defaults(gd)
     obj = CharacterObjective.from_game_data(gd)
-    skill_levels = {s: 5 for s in obj.target_skill_levels}
-    skill_levels["alchemy"] = 9  # leader, putting laggards 4 behind (balancing boost)
-    state = make_state(level=1, skills=skill_levels)
-
-    class SkillFirst:
-        def category_weight(self, category: str) -> Fraction:
-            # P4a: Personality.category_weight returns exact Fractions.
-            return Fraction(10) if category == "skills" else Fraction(1)
-
-    assert root_category(StrategyEngine(obj, BalancedPersonality()).decide(state, gd).chosen_root) == "char_level"
-    assert root_category(StrategyEngine(obj, SkillFirst()).decide(state, gd).chosen_root) == "skills"
+    eng = StrategyEngine(objective=obj, personality=BalancedPersonality())
+    state = make_state(level=5, skills={"mining": 3})
+    servable = lambda root, step: not isinstance(root, ObtainItem)  # noqa: E731
+    assert eng.decide(state, gd, band_adequate=True, step_servable=servable) \
+        == decide_tree(state, gd, obj, band_adequate=True, step_servable=servable)
 
 
 def test_unmet_closure_size_dedups_shared_prereq():
@@ -308,18 +289,6 @@ class TestPotionSupplyUrgency:
         assert eng._value(enhanced, state, gd) < Fraction(5, 2)   # aspirational -> not
 
 
-def test_decide_empty_when_nothing_reachable():
-    gd = GameData()
-    obj = CharacterObjective.from_game_data(gd)
-    eng = StrategyEngine(obj, BalancedPersonality())
-    maxed = make_state(level=50, skills={s: 50 for s in obj.target_skill_levels})
-    d = eng.decide(maxed, gd)
-    assert d.chosen_root is None
-    assert d.desired_state == {}
-    td = d.to_trace()
-    assert td["chosen_root"] is None and td["ranking"] == []
-
-
 def _reach_gd():
     gd = GameData()
     gd._item_stats = {
@@ -451,32 +420,6 @@ def _gd_empty_slots() -> GameData:
     return gd
 
 
-def test_empty_slot_tie_breaks_by_computed_protection_not_alphabet():
-    """Trace 2026-06-17: empty amulet_slot and empty body_armor_slot both
-    flatten to EMPTY_SLOT_URGENCY at equal cost; the old `(-final, effort, repr)`
-    key handed the win to the amulet purely because 'air…' < 'feather…'. The
-    protection tiebreak (computed equip-value gain) now picks the body armor."""
-    gd = _gd_empty_slots()
-    eng = _eng(gd, target_gear={"amulet_slot": "air_and_water_amulet",
-                                "body_armor_slot": "feather_coat"})
-    state = make_state(level=5, skills={"mining": 5, "gearcrafting": 5,
-                                        "jewelrycrafting": 5})
-    d = eng.decide(state, gd)
-
-    gear = {rs.root_repr: rs for rs in d.ranking if "ObtainItem" in rs.root_repr}
-    body = next(rs for r, rs in gear.items() if "feather_coat" in r)
-    amulet = next(rs for r, rs in gear.items() if "air_and_water_amulet" in r)
-    # The tie the bug rode on: equal saturated score AND equal effort.
-    assert body.contribution == amulet.contribution
-    assert body.cost == amulet.cost
-    # Alphabet would seat the amulet first; computed protection outranks it.
-    assert repr(amulet.root_repr) < repr(body.root_repr)
-    assert equip_value(gd.item_stats("feather_coat")) > equip_value(
-        gd.item_stats("air_and_water_amulet"))
-    assert "feather_coat" in repr(d.chosen_root)
-    assert "air_and_water_amulet" not in repr(d.chosen_root)
-
-
 def _gd_near_term_armor() -> GameData:
     """Game data with a near-term usable boot (copper_boots, level 1) and a
     high-level BiS boot (dragon_boots, level 50).
@@ -519,6 +462,33 @@ def test_geared_gate_uses_near_term_not_bis():
                         equipment={**make_state().equipment,
                                    "boots_slot": "copper_boots"})
     assert eng._has_empty_armor_slot(filled, gd) is False
+
+
+def test_geared_gate_skips_weapon_slot():
+    """weapon_slot in near_term_gear is excluded from the armor gate (an
+    empty/unusable weapon is the combat-capability gate's job): a lone empty
+    weapon_slot must NOT read as an empty ARMOR slot."""
+    gd = _gd_near_term_armor()
+    gd._item_stats = {**gd._item_stats,
+                      "copper_dagger": ItemStats(code="copper_dagger", level=1,
+                                                 type_="weapon", attack={"fire": 6},
+                                                 crafting_skill="weaponcrafting",
+                                                 crafting_level=1)}
+    gd._crafting_recipes = {**gd._crafting_recipes, "copper_dagger": {"copper_ore": 2}}
+    eng = _eng(gd, target_gear={"weapon_slot": "copper_dagger"})
+    weapon_empty = make_state(level=10,
+                              equipment={**make_state().equipment,
+                                         "weapon_slot": None,
+                                         "boots_slot": "copper_boots"})
+    assert eng._has_empty_armor_slot(weapon_empty, gd) is False
+
+
+def test_equip_gain_zero_for_non_gear_root():
+    """_equip_gain is 0 for non-ObtainItem roots (char/skill progression has
+    no slot to gain on)."""
+    gd = _gd_near_term_armor()
+    eng = _eng(gd)
+    assert eng._equip_gain(ReachCharLevel(50), make_state(level=5), gd) == 0
 
 
 class TestBalancing:
@@ -636,14 +606,17 @@ class TestAntiDegeneracy:
             assert state.skills.get(d.chosen_root.skill, 1) < state.skills["alchemy"]
 
     def test_lagging_skill_outranks_leader(self):
+        """Converted at THE FLIP from a decide()-ranking assertion to a
+        direct `_value` comparison — the pipeline no longer feeds decide,
+        but the laggard-beats-leader property holds until Task 2 deletes
+        the pipeline outright."""
         gd = GameData()
         eng = _eng(gd)
         state = make_state(level=1, skills={"alchemy": 7, "cooking": 1, "mining": 1, "woodcutting": 1,
                                             "fishing": 1, "weaponcrafting": 1, "gearcrafting": 1, "jewelrycrafting": 1})
-        d = eng.decide(state, gd)
-        skill_scores = {rs.root_repr: rs.score for rs in d.ranking if "ReachSkillLevel" in rs.root_repr}
-        alchemy = skill_scores.get("ReachSkillLevel(skill='alchemy', level=50)", 0.0)
-        assert max(skill_scores.values()) > alchemy   # a laggard beats the leader
+        leader = eng._value(ReachSkillLevel("alchemy", 50), state, gd)
+        laggard = eng._value(ReachSkillLevel("cooking", 50), state, gd)
+        assert laggard > leader   # a laggard beats the leader
 
 
 class TestValueComposition:
@@ -720,131 +693,6 @@ class TestLearnedBlend:
             store.close()
 
 
-class TestGearGatedSkillInheritsValue:
-    def test_skill_gated_gear_step_is_scored_under_gear_root(self):
-        # copper_dagger needs weaponcrafting L3; char has weaponcrafting 1 and the
-        # materials ready -> the gear root's actionable_step is the skill gate, and
-        # it is scored at the gear root's value (combat prior * equip-gain), NOT the
-        # skill's 0.2 standalone prior.
-        gd = GameData()
-        gd._item_stats = {
-            "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
-                                       attack={"fire": 6}, crafting_skill="weaponcrafting", crafting_level=3),
-            "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource"),
-        }
-        gd._crafting_recipes = {"copper_dagger": {"copper_bar": 6}}
-        gd._resource_drops = {}
-        gd._resource_skill = {}
-        eng = _eng(gd, target_gear={"weapon_slot": "copper_dagger"})
-        state = make_state(equipment={"weapon_slot": None},
-                           inventory={"copper_bar": 6},
-                           skills={"weaponcrafting": 1, "alchemy": 1, "mining": 1, "woodcutting": 1,
-                                   "fishing": 1, "gearcrafting": 1, "jewelrycrafting": 1, "cooking": 1})
-        d = eng.decide(state, gd)
-        gear_rs = next((rs for rs in d.ranking
-                        if rs.root_repr == "ObtainItem(code='copper_dagger', quantity=1, slot='weapon_slot')"), None)
-        assert gear_rs is not None
-        assert gear_rs.step_repr == "ReachSkillLevel(skill='weaponcrafting', level=3)"
-        # value inherited from the gear root, not the skill's standalone 0.2 prior
-        assert gear_rs.score == eng._value(ObtainItem("copper_dagger", slot="weapon_slot"), state, gd)
-
-
-class TestStickyCommitment:
-    """Tier-2 sticky commitment: previous chosen_root is kept when it
-    survives the cycle's filters and the new top doesn't dominate."""
-
-    def _two_root_gd(self):
-        """Fixture with two craftable items so two roots compete."""
-        gd = GameData()
-        gd._item_stats = {
-            "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
-                                       attack={"fire": 6}, crafting_skill="weaponcrafting",
-                                       crafting_level=1),
-            "wooden_shield": ItemStats(code="wooden_shield", level=1, type_="shield",
-                                       resistance={"fire": 4}, crafting_skill="gearcrafting",
-                                       crafting_level=1),
-            "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource"),
-            "ash_wood": ItemStats(code="ash_wood", level=1, type_="resource"),
-        }
-        gd._crafting_recipes = {
-            "copper_dagger": {"copper_bar": 6},
-            "wooden_shield": {"ash_wood": 4},
-        }
-        gd._resource_drops = {"rocks": "copper_bar", "tree": "ash_wood"}
-        gd._resource_skill = {"rocks": ("mining", 1), "tree": ("woodcutting", 1)}
-        gd._monster_level = {"chicken": 1}
-        fill_monster_stat_defaults(gd)
-        return gd
-
-    def test_sticky_kept_when_within_dominance_ratio(self):
-        """When last_chosen_root has score >= top/1.5, sticky wins."""
-        gd = self._two_root_gd()
-        eng = _eng(gd)
-        state = make_state(level=5)
-        # First cycle: no sticky → pick natural top.
-        d1 = eng.decide(state, gd)
-        ranking = [(r.root_repr, r.score) for r in d1.ranking]
-        # Precondition (deterministic in _two_root_gd): copper_dagger tops the
-        # ranking (combat-gear prior * equip gain = 2.0) and the SECOND-ranked
-        # root, ReachCharLevel(level=7) (~1.48), sits within the 1.5x dominance
-        # ratio. Plain asserts so a fixture regression FAILS instead of skipping.
-        assert len(ranking) >= 2, "fixture must produce 2+ competing roots"
-        candidate, cand_score = ranking[1]
-        top_score = ranking[0][1]
-        assert cand_score > 0, "second-ranked root must have positive score"
-        assert top_score <= 1.5 * cand_score, (
-            f"fixture must keep second root within dominance ratio: "
-            f"top={top_score} second={cand_score} "
-            f"ratio={top_score/cand_score:.3f} (1.5 threshold)"
-        )
-        # Second cycle with the second-ranked root as prior commitment →
-        # sticky wins over the natural top.
-        d2 = eng.decide(state, gd, last_chosen_root=candidate)
-        assert repr(d2.chosen_root) == candidate, (
-            f"sticky should have won: top={top_score} sticky={cand_score} "
-            f"ratio={top_score/cand_score:.3f} (1.5 threshold)"
-        )
-
-    def test_sticky_dropped_when_unreachable(self):
-        """When last_chosen_root vanishes from candidates (e.g., satisfied or
-        unreachable), sticky doesn't apply and the new top wins."""
-        gd = self._two_root_gd()
-        eng = _eng(gd)
-        state = make_state(level=5)
-        # last_chosen_root that doesn't exist in objective_roots.
-        d = eng.decide(state, gd, last_chosen_root="ObtainItem(code='nonexistent', quantity=1)")
-        # The decide() picks the natural top (sticky candidate not found).
-        d_baseline = eng.decide(state, gd)
-        assert repr(d.chosen_root) == repr(d_baseline.chosen_root)
-
-    def test_sticky_dropped_when_new_top_dominates(self):
-        """When the new top's score strictly exceeds 1.5x sticky's score,
-        sticky correctly loses."""
-        gd = self._two_root_gd()
-        eng = _eng(gd)
-        state = make_state(level=5)
-        d_baseline = eng.decide(state, gd)
-        ranking = [(r.root_repr, r.score) for r in d_baseline.ranking]
-        # Find a candidate whose score is < top / 1.5 (dominated).
-        top_root, top_score = ranking[0]
-        dominated = next(
-            ((repr_, score) for repr_, score in ranking[1:]
-             if score > 0 and top_score > 1.5 * score),
-            None,
-        )
-        # Precondition (deterministic in _two_root_gd): ReachCharLevel(level=50)
-        # scores the flat 1.0 char-level prior while copper_dagger tops at 2.0
-        # (> 1.5 * 1.0), so a strictly dominated candidate always exists. Plain
-        # assert so a fixture regression FAILS instead of skipping.
-        assert dominated is not None, (
-            f"fixture must yield a dominated candidate below top/1.5: "
-            f"top={top_score} ranking={ranking}"
-        )
-        # last_chosen_root is the dominated one → top still wins.
-        d = eng.decide(state, gd, last_chosen_root=dominated[0])
-        assert repr(d.chosen_root) == top_root
-
-
 class TestRelevantToolBoost:
     """Active-task tool boost: when a target_tools item's skill matches
     the bot's active gathering skill, its score beats ReachCharLevel so
@@ -871,8 +719,11 @@ class TestRelevantToolBoost:
         return gd
 
     def test_tool_boost_active_task_beats_char_level(self):
-        """When active task is mining-related, copper_pickaxe's score
-        EXCEEDS ReachCharLevel's. Pre-fix: pickaxe scored 0.1 forever."""
+        """When active task is mining-related, copper_pickaxe's `_value`
+        EXCEEDS ReachCharLevel's. Pre-fix: pickaxe scored 0.1 forever.
+        Converted at THE FLIP from a decide()-ranking assertion to direct
+        `_value` comparisons — the pipeline no longer feeds decide()
+        (Task 2 deletes it outright)."""
         gd = self._gd_with_tool()
         obj = CharacterObjective.from_game_data(gd)
         # Sanity: pickaxe is in target_tools.
@@ -880,18 +731,15 @@ class TestRelevantToolBoost:
         eng = StrategyEngine(obj, BalancedPersonality())
         # task_code is a copper_ore (gather copper_rocks → copper_bar).
         state = make_state(level=5, task_code="copper_ore", task_progress=10, task_total=100)
-        d = eng.decide(state, gd)
-        # The pickaxe ObtainItem must beat ReachCharLevel.
-        ranking = {r.root_repr: r.score for r in d.ranking}
-        pickaxe_score = ranking.get("ObtainItem(code='copper_pickaxe', quantity=1)", 0)
-        char_score = ranking.get("ReachCharLevel(level=50)", 0)
+        pickaxe_score = eng._value(ObtainItem("copper_pickaxe"), state, gd)
+        char_score = eng._value(ReachCharLevel(50), state, gd)
         assert pickaxe_score > char_score, (
             f"pickaxe={pickaxe_score} should beat char_level={char_score}"
         )
 
     def test_no_boost_when_task_skill_mismatched(self):
-        """copper_pickaxe should NOT be boosted when active task is a
-        fishing task (no mining skill in active set)."""
+        """copper_pickaxe should NOT be boosted when no task is active
+        (no mining skill in the active set)."""
         gd = self._gd_with_tool()
         obj = CharacterObjective.from_game_data(gd)
         eng = StrategyEngine(obj, BalancedPersonality())
@@ -900,10 +748,10 @@ class TestRelevantToolBoost:
         # combat_monster set → combat-readiness urgency off; isolates the
         # tool-boost mechanism (a not-combat-capable bot would correctly let
         # the weapon-slot urgency lift the pickaxe, defeating this assertion).
-        d = eng.decide(state, gd, combat_monster="chicken")
-        ranking = {r.root_repr: r.score for r in d.ranking}
-        pickaxe_score = ranking.get("ObtainItem(code='copper_pickaxe', quantity=1)", 0)
-        char_score = ranking.get("ReachCharLevel(level=50)", 0)
+        pickaxe_score = eng._value(ObtainItem("copper_pickaxe"), state, gd,
+                                   combat_monster="chicken")
+        char_score = eng._value(ReachCharLevel(50), state, gd,
+                                combat_monster="chicken")
         assert pickaxe_score <= char_score, (
             f"no boost expected: pickaxe={pickaxe_score} char={char_score}"
         )
@@ -1003,14 +851,6 @@ def _combat_obj(gd: GameData) -> CharacterObjective:
         target_tools={"mining": "iron_pickaxe"})
 
 
-def test_weapon_root_is_chosen_when_not_combat_capable():
-    gd = _combat_gd()
-    eng = StrategyEngine(_combat_obj(gd), BalancedPersonality())
-    state = make_state(level=4, skills={"weaponcrafting": 1, "mining": 1})
-    d = eng.decide(state, gd, history=None, combat_monster=None)
-    assert "iron_sword" in repr(d.chosen_root)
-
-
 def test_decide_returns_a_root_when_combat_capable():
     gd = _combat_gd()
     eng = StrategyEngine(_combat_obj(gd), BalancedPersonality())
@@ -1038,25 +878,25 @@ class TestEmptySlotUrgency:
         return gd
 
     def test_empty_armor_slot_beats_char_bootstrap_through_sticky(self):
+        """Converted at THE FLIP from a decide()-ranking assertion to direct
+        `_value` comparisons — the pipeline no longer feeds decide() (Task 2
+        deletes it outright)."""
         gd = self._gd()
         obj = CharacterObjective.from_game_data(gd)
         eng = StrategyEngine(obj, BalancedPersonality())
         state = make_state(level=6, equipment={"weapon_slot": "copper_dagger"})
-        d = eng.decide(state, gd, combat_monster="chicken",
-                       last_chosen_root=repr(ReachCharLevel(8)))
-        assert d.chosen_root == ObtainItem("copper_armor", slot="body_armor_slot")
-        ranking = {r.root_repr: r.score for r in d.ranking}
-        armor = ranking["ObtainItem(code='copper_armor', quantity=1, slot='body_armor_slot')"]
+        armor = eng._value(ObtainItem("copper_armor", slot="body_armor_slot"),
+                           state, gd, combat_monster="chicken")
         assert armor == EMPTY_SLOT_URGENCY            # prior 1 x max(m,1)x5/2 x bal 1
         assert armor > STICKY_DOMINANCE_RATIO * Fraction(37, 25)   # > 3/2 x 1.48
 
     def test_no_urgency_when_slot_filled(self):
+        """Slot filled with the item itself → no empty-slot urgency; the
+        armor root's `_value` drops below the char bootstrap's. Converted at
+        THE FLIP from a decide()-ranking assertion (see above)."""
         gd = self._gd()
         obj = CharacterObjective.from_game_data(gd)
         eng = StrategyEngine(obj, BalancedPersonality())
-        # Crafting skills held AT the bootstrap target (5) so the recipe-aware
-        # catch-up roots are inert (gap 0) — this isolates the empty-slot-urgency
-        # behaviour under test from the skill-curve interleave.
         state = make_state(
             level=6,
             skills={"mining": 3, "woodcutting": 2, "fishing": 1, "cooking": 1,
@@ -1064,12 +904,10 @@ class TestEmptySlotUrgency:
                     "jewelrycrafting": 5},
             equipment={"weapon_slot": "copper_dagger",
                        "body_armor_slot": "copper_armor"})
-        d = eng.decide(state, gd, combat_monster="chicken")
-        ranking = {r.root_repr: r.score for r in d.ranking}
-        # Slot filled with the item itself → root satisfied, out of ranking.
-        assert "ObtainItem(code='copper_armor', quantity=1, slot='body_armor_slot')" not in ranking
-        # No empty-slot urgency; char bootstrap takes over.
-        assert d.chosen_root == ReachCharLevel(8)
+        armor = eng._value(ObtainItem("copper_armor", slot="body_armor_slot"),
+                           state, gd, combat_monster="chicken")
+        bootstrap = eng._value(ReachCharLevel(8), state, gd, combat_monster="chicken")
+        assert armor < bootstrap
 
     def test_no_urgency_for_over_level_item(self):
         gd = self._gd()

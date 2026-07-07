@@ -207,6 +207,77 @@ class TestAdequacyParameter:
         assert not any(isinstance(r, ObtainItem) for r in d.fallback_roots)
 
 
+# --- step_servable demotion (Phase-4b Task-1: THE FLIP) ---------------------
+#
+# The legacy decide()'s servable filter must survive the cutover: an
+# unservable chosen (root, step) falls through the fallback pairs IN ORDER to
+# the first servable pair; demoted pairs stay in the fallback lists after the
+# promoted one; all-unservable keeps the original choice (the arbiter's
+# doomed-memo handles it, as today).
+
+class TestServabilityDemotion:
+    """l10_weapon_upgrade pins (see TestPerScenarioPins): chosen =
+    ObtainItem(copper_dagger, weapon_slot) / step ObtainItem(copper_bar, 6);
+    fallback_roots = [ReachCharLevel(20), small_health_potion, wooden_shield]."""
+
+    DAGGER = ObtainItem(code="copper_dagger", quantity=1, slot="weapon_slot")
+    TRUNK = ReachCharLevel(level=20)
+    POTION = ObtainItem(code="small_health_potion", quantity=1, slot="utility1_slot")
+    SHIELD = ObtainItem(code="wooden_shield", quantity=1, slot="shield_slot")
+
+    def _decide_with(self, servable):
+        gd = _bundle()
+        state = scenario_state(SCENARIOS["l10_weapon_upgrade"])
+        return decide_tree(state, gd, CharacterObjective.from_game_data(gd),
+                           step_servable=servable)
+
+    def test_servable_chosen_is_untouched(self):
+        d = self._decide_with(lambda root, step: True)
+        assert d.chosen_root == self.DAGGER
+        assert d.fallback_roots == [self.TRUNK, self.POTION, self.SHIELD]
+
+    def test_unservable_chosen_promotes_first_servable_fallback(self):
+        d = self._decide_with(lambda root, step: root != self.DAGGER)
+        assert d.chosen_root == self.TRUNK
+        assert d.chosen_step == self.TRUNK
+        # The demoted pair survives in the fallbacks, ahead of the rest —
+        # original priority order minus the promotion.
+        assert d.fallback_roots == [self.DAGGER, self.POTION, self.SHIELD]
+        assert d.fallback_steps[0] == ObtainItem(code="copper_bar", quantity=6)
+
+    def test_walk_skips_unservable_fallbacks_in_order(self):
+        servable = lambda root, step: root not in (self.DAGGER, self.TRUNK)  # noqa: E731
+        d = self._decide_with(servable)
+        assert d.chosen_root == self.POTION
+        # Demoted pairs (chosen first, then the skipped fallbacks) keep their
+        # relative order after the promoted pair leaves the list.
+        assert d.fallback_roots == [self.DAGGER, self.TRUNK, self.SHIELD]
+
+    def test_all_unservable_keeps_original_choice(self):
+        d = self._decide_with(lambda root, step: False)
+        assert d.chosen_root == self.DAGGER
+        assert d.fallback_roots == [self.TRUNK, self.POTION, self.SHIELD]
+
+    def test_default_none_predicate_is_untouched(self):
+        gd = _bundle()
+        state = scenario_state(SCENARIOS["l10_weapon_upgrade"])
+        d = decide_tree(state, gd, CharacterObjective.from_game_data(gd))
+        assert d.chosen_root == self.DAGGER
+        assert d.fallback_roots == [self.TRUNK, self.POTION, self.SHIELD]
+
+    def test_predicate_sees_root_step_pairs(self):
+        seen: list[tuple[object, object]] = []
+
+        def spy(root, step):
+            seen.append((root, step))
+            return False
+
+        self._decide_with(spy)
+        # Walk order: chosen pair first, then fallbacks in order.
+        assert seen[0] == (self.DAGGER, ObtainItem(code="copper_bar", quantity=6))
+        assert [r for r, _ in seen[1:]] == [self.TRUNK, self.POTION, self.SHIELD]
+
+
 # --- Synthetic-GameData unit tests (coverage of branches the 6 scenarios
 # never reach) ----------------------------------------------------------
 

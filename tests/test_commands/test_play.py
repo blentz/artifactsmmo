@@ -157,25 +157,6 @@ class TestPlayCommandWiring:
             assert result.exit_code == 0
             assert mock_player_cls.call_args.kwargs["refresh_game_data"] is True
 
-    def test_progression_tree_flag_forwarded(self, runner):
-        """--progression-tree reaches the GamePlayer as progression_tree=True;
-        absent, it defaults to False (flag-off byte-identical)."""
-        with patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls:
-            mock_player_cls.return_value = Mock()
-
-            result = runner.invoke(app, ["hero", "--progression-tree"])
-
-            assert result.exit_code == 0
-            assert mock_player_cls.call_args.kwargs["progression_tree"] is True
-
-        with patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls:
-            mock_player_cls.return_value = Mock()
-
-            result = runner.invoke(app, ["hero"])
-
-            assert result.exit_code == 0
-            assert mock_player_cls.call_args.kwargs["progression_tree"] is False
-
     def test_trace_creates_file_tracer_with_default_path(self, runner):
         """--trace builds a FileTracer with the generated default path."""
         with patch("artifactsmmo_cli.commands.play.GamePlayer") as mock_player_cls:

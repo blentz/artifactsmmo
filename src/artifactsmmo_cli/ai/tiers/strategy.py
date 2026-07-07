@@ -10,7 +10,7 @@ from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.projections import expected_yield_per_cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.tiers.decide_key import decide_key
+from artifactsmmo_cli.ai.tiers import progression_tree
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.strategic_value import STRATEGIC_SCALE, strategic_value
 from artifactsmmo_cli.ai.tiers.strategic_weights import strategic_weights
@@ -23,9 +23,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 from artifactsmmo_cli.ai.tiers.leaf_attainable_core import leaf_attainable_pure
 from artifactsmmo_cli.ai.tiers.objective import GOLD, CharacterObjective, _permanent_vendor_purchases
 from artifactsmmo_cli.ai.tiers.personality import Personality
-from artifactsmmo_cli.ai.tiers.servable_filter import keep_servable
-from artifactsmmo_cli.ai.tiers.sticky_select_core import StickyCand, sticky_choose
-from artifactsmmo_cli.ai.tiers.prerequisite_graph import objective_roots, prerequisites
+from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.tiers.skill_classes import (
     COMBAT_CRAFT_SKILLS,
     CONSUMABLE_CRAFT_SKILLS,
@@ -44,7 +42,6 @@ from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
 from artifactsmmo_cli.ai.potion_baseline import potion_baseline_pure
 from artifactsmmo_cli.ai.potion_supply import bootstrap_potion_target
 from artifactsmmo_cli.ai.thresholds import (
-    CRITICAL_HP_FRACTION,
     POTION_HIGH_LEVEL,
     POTION_HIGH_QTY,
     POTION_LOW_LEVEL,
@@ -710,76 +707,25 @@ class StrategyEngine:
                combat_monster: str | None = None,
                last_chosen_root: str | None = None,
                step_servable: Callable[[MetaGoal, MetaGoal], bool] | None = None,
+               band_adequate: bool = False,
                ) -> StrategyDecision:
-        """Pick the top-ranked objective root with Tier-2 sticky commitment.
+        """THE FLIP (Phase 4b Task 1): thin delegate to the progression tree —
+        the flat scalar ranking is bypassed (its pipeline is deleted in Task 2).
 
-        `last_chosen_root` is the previous cycle's chosen_root repr (None on
-        first cycle). When supplied AND the matching candidate survives this
-        cycle's is_satisfied + is_reachable filters AND its score is at least
-        `STICKY_RATIO` (2/3) of the winner's score, prefer it. Eliminates
-        single-cycle objective flap (e.g. transient combat_capable=False
-        flips that would otherwise demote ReachCharLevel for one cycle while
-        an inferior gear objective momentarily wins).
-        """
-        interrupt = "restore_hp" if state.hp_percent < CRITICAL_HP_FRACTION else None
-        candidates: list[tuple[MetaGoal, MetaGoal, Fraction, int, Fraction, int]] = []   # root, step, final, effort, pre, protection
-        for root in objective_roots(self.objective, state):
-            if root.is_satisfied(state, game_data):
-                continue
-            if not is_reachable(root, state, game_data):
-                continue
-            step = actionable_step(root, state, game_data)
-            assert step is not None
-            value = self._value(root, state, game_data, combat_monster, history)
-            final = self._learned_blend(root, value, history, combat_monster)
-            effort = root_cost(root, state, game_data)
-            protection = self._equip_gain(root, state, game_data, history)
-            candidates.append((root, step, final, effort, value, protection))
-        # Servable filter (2026-06-20): drop roots whose actionable step yields no
-        # plannable goal this cycle, WHENEVER at least one root is servable — so
-        # chosen_root is a root the bot can actually work on, not a top-scored but
-        # unbuildable objective (feather_coat: committed to a woodcutting-gated body
-        # armor while the bot char-grinds slimes under-geared; trace 2026-06-20). The
-        # proven decide_key sort + Tier-2 sticky then operate on the servable subset.
-        # step_servable is None in unit tests that don't exercise plannability.
-        if step_servable is not None:
-            flags = [step_servable(c[0], c[1]) for c in candidates]
-            candidates = keep_servable(candidates, flags)
-        # final desc, effort asc, protection desc (computed gear value breaks the
-        # empty-slot-urgency saturation tie), repr last.
-        candidates.sort(key=lambda c: decide_key(-c[2], c[3], -c[5], repr(c[0])))
-        ranking = [
-            RootScore(repr(r), root_category(r), pre, effort, final, repr(s), False)
-            for (r, s, final, effort, pre, _prot) in candidates
-        ]
-        if candidates:
-            # Tier-2 sticky override routed through the kernel-proved pure core
-            # (Formal/Liveness/StickySelect.lean::stickyChoose; differential
-            # formal/diff/test_sticky_select_diff.py). `candidates` is decide_key-sorted
-            # (head = top). The core keeps the top unless last cycle's chosen_root
-            # survives this cycle and the top fails to dominate it by the ratio.
-            sticky_cands = [StickyCand(repr(c[0]), c[2]) for c in candidates]
-            chosen_cand = sticky_choose(sticky_cands, last_chosen_root, STICKY_DOMINANCE_RATIO)
-            assert chosen_cand is not None  # candidates non-empty
-            chosen_tuple = next(c for c in candidates if repr(c[0]) == chosen_cand.repr_)
-            chosen_root: MetaGoal | None = chosen_tuple[0]
-            chosen_step: MetaGoal | None = chosen_tuple[1]
-            # Fallback chain: all OTHER ranked steps below the chosen one,
-            # in ranking order. The arbiter consults these when the top
-            # step's goal is None (combat target missing, etc.). Paired
-            # with their root for intermediate-step → equippable mapping.
-            fallback_steps = [c[1] for c in candidates if c[1] is not chosen_step]
-            fallback_roots = [c[0] for c in candidates if c[1] is not chosen_step]
-        else:
-            chosen_root = chosen_step = None
-            fallback_steps = []
-            fallback_roots = []
-        return StrategyDecision(
-            interrupt=interrupt,
-            chosen_root=chosen_root,
-            chosen_step=chosen_step,
-            desired_state=desired_state_of(chosen_step),
-            ranking=ranking,
-            fallback_steps=fallback_steps,
-            fallback_roots=fallback_roots,
-        )
+        `history`/`combat_monster`/`last_chosen_root` are accepted for
+        callsite stability this task and deliberately unused: the tree is
+        deterministic (326 consecutive identical picks in shadow), so
+        decide-level sticky SCORING and the learned blend die with the
+        ranking. Arbiter-level commitment (`_update_sticky_anchor`,
+        objective-committed arbitration, zombie release) survives untouched.
+        Task 2 prunes whichever parameters end up unused after callers
+        adjust.
+
+        `band_adequate` is the caller's progression-band verdict (see
+        `GamePlayer._tree_band_adequate`); `step_servable` keeps the
+        plannability demotion alive across the cutover (see
+        `progression_tree._servable_promotion`)."""
+        del history, combat_monster, last_chosen_root  # legacy-ranking inputs; tree ignores them
+        return progression_tree.decide_tree(
+            state, game_data, self.objective,
+            band_adequate=band_adequate, step_servable=step_servable)

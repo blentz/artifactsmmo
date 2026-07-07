@@ -251,23 +251,6 @@ def test_plan_command_learn_uses_default_db(capsys):
     assert db_path.endswith("learning.db")
 
 
-def test_plan_command_live_progression_tree_flag_forwarded_to_player():
-    """The `--progression-tree` flag reaches GamePlayer's constructor kwarg
-    on the live (non-scenario) path too."""
-    with patch.object(plan_cmd, "check_mutation_lock",
-                      return_value=MagicMock(state="clear")):
-        with patch.object(plan_cmd.Config, "from_token_file", return_value=MagicMock()):
-            with patch.object(plan_cmd, "LearningStore") as store_cls:
-                store_cls.return_value = MagicMock()
-                player = MagicMock()
-                player.state = make_state(level=6)
-                player.plan_once.return_value = _canned_report()
-                with patch.object(plan_cmd, "GamePlayer", return_value=player) as mock_player_cls:
-                    plan_cmd.plan(character="hero", learn=False, learn_db=None,
-                                  refresh_game_data=False, progression_tree=True)
-    assert mock_player_cls.call_args.kwargs["progression_tree"] is True
-
-
 def test_plan_command_refuses_during_mutation(capsys):
     with patch.object(plan_cmd, "check_mutation_lock",
                       return_value=MagicMock(state="active", pid=123)):
@@ -301,119 +284,20 @@ def test_plan_command_scenario_unknown_name_exits(capsys):
     assert "unknown scenario" in capsys.readouterr().out
 
 
-def test_plan_command_scenario_tree_flag_prints_shadow_block(capsys):
-    """--scenario ... --tree prints the full shadow TREE block (chosen_root,
-    chosen_step, ranking rows) after the legacy report, with an ObtainItem repr
-    from the tree decision's ranking/chosen_step visible in the output."""
+def test_plan_command_scenario_prints_tree_chosen_root(capsys):
+    """Phase 4b (THE FLIP): the scenario report's `chosen_root:` line IS the
+    progression-tree decision — l10_weapon_upgrade pins the weapon-slot
+    ObtainItem (see test_progression_tree's per-scenario pins). The
+    Phase-3/4a shadow chrome (compact `tree:` agreement line, `TREE
+    (shadow` block) is gone from the output."""
     with patch.object(plan_cmd, "check_mutation_lock",
                       return_value=MagicMock(state="clear")):
         with patch.object(plan_cmd.Config, "from_token_file") as cfg:
             plan_cmd.plan(character="ignored", learn=False, learn_db=None,
-                          refresh_game_data=False, scenario="l10_weapon_upgrade",
-                          tree=True)
-            cfg.assert_not_called()
-    out = capsys.readouterr().out
-    assert "TREE (shadow" in out
-    assert "ObtainItem" in out
-
-
-def test_plan_command_scenario_no_tree_flag_prints_compact_line(capsys):
-    """Plain --scenario (no --tree) still prints a compact `tree: ` line inside
-    _print_report whenever the report carries a tree_decision, with an agreement
-    marker comparing it to the legacy chosen_root."""
-    with patch.object(plan_cmd, "check_mutation_lock",
-                      return_value=MagicMock(state="clear")):
-        with patch.object(plan_cmd.Config, "from_token_file") as cfg:
-            plan_cmd.plan(character="ignored", learn=False, learn_db=None,
-                          refresh_game_data=False, scenario="l1_fresh")
-            cfg.assert_not_called()
-    out = capsys.readouterr().out
-    assert "tree: " in out
-    assert ("==" in out) or ("!=" in out)
-    # Without --tree, the full shadow block must NOT be printed.
-    assert "TREE (shadow" not in out
-
-
-def test_plan_command_tree_flag_reports_unavailable_when_no_tree_decision(capsys):
-    """--tree with a report whose tree_decision is None prints the unavailable
-    message instead of a bogus shadow block."""
-    report = _canned_report()
-    assert report.tree_decision is None
-    with patch.object(plan_cmd, "check_mutation_lock",
-                      return_value=MagicMock(state="clear")):
-        with patch.object(plan_cmd.Config, "from_token_file", return_value=MagicMock()):
-            with patch.object(plan_cmd, "LearningStore") as store_cls:
-                store_cls.return_value = MagicMock()
-                player = MagicMock()
-                player.state = make_state(level=6)
-                player.plan_once.return_value = report
-                with patch.object(plan_cmd, "GamePlayer", return_value=player):
-                    plan_cmd.plan(character="hero", learn=False, learn_db=None,
-                                  refresh_game_data=False, tree=True)
-    out = capsys.readouterr().out
-    assert "tree: <unavailable — strategy not seeded>" in out
-    assert "TREE (shadow" not in out
-
-
-def test_plan_command_scenario_progression_tree_flag_enacts_tree_root(capsys):
-    """Phase 4a Task 1: `--scenario ... --progression-tree` flips enactment —
-    the compact `chosen_root:` line shows the tree's ObtainItem root (weapon
-    slot), and the compact tree agreement line reads `==` (report.decision
-    IS report.tree_decision now, since the flag enacted it)."""
-    with patch.object(plan_cmd, "check_mutation_lock",
-                      return_value=MagicMock(state="clear")):
-        with patch.object(plan_cmd.Config, "from_token_file") as cfg:
-            plan_cmd.plan(character="ignored", learn=False, learn_db=None,
-                          refresh_game_data=False, scenario="l10_weapon_upgrade",
-                          progression_tree=True)
+                          refresh_game_data=False, scenario="l10_weapon_upgrade")
             cfg.assert_not_called()
     out = capsys.readouterr().out
     assert "chosen_root: ObtainItem(" in out
     assert "weapon_slot" in out
-    assert "tree: " in out and " == " in out
-
-
-def test_plan_command_scenario_progression_tree_flag_forwarded_to_player():
-    """The `--progression-tree` flag reaches GamePlayer's constructor kwarg
-    (scenario path)."""
-    with patch.object(plan_cmd, "check_mutation_lock",
-                      return_value=MagicMock(state="clear")):
-        with patch.object(plan_cmd, "GamePlayer") as mock_player_cls:
-            mock_player = MagicMock()
-            mock_player.state = None
-            mock_player.plan_from_state.return_value = _canned_report()
-            mock_player_cls.return_value = mock_player
-            plan_cmd.plan(character="ignored", learn=False, learn_db=None,
-                          refresh_game_data=False, scenario="l1_fresh",
-                          progression_tree=True)
-    assert mock_player_cls.call_args.kwargs["progression_tree"] is True
-
-
-def test_plan_command_compact_line_agrees_when_roots_match(capsys):
-    """When tree_decision.chosen_root == legacy chosen_root, the compact line uses
-    the `==` agreement marker."""
-    decision = StrategyDecision(
-        interrupt=None,
-        chosen_root=ObtainItem("feather_coat", 1, "body_armor_slot"),
-        chosen_step=ObtainItem("feather", 2),
-        desired_state={})
-    tree_decision = StrategyDecision(
-        interrupt=None,
-        chosen_root=ObtainItem("feather_coat", 1, "body_armor_slot"),
-        chosen_step=ObtainItem("feather", 2),
-        desired_state={})
-    report = PlanReport(decision=decision, selected_goal=None, plan=[],
-                        goals_tried=[], tree_decision=tree_decision)
-    with patch.object(plan_cmd, "check_mutation_lock",
-                      return_value=MagicMock(state="clear")):
-        with patch.object(plan_cmd.Config, "from_token_file", return_value=MagicMock()):
-            with patch.object(plan_cmd, "LearningStore") as store_cls:
-                store_cls.return_value = MagicMock()
-                player = MagicMock()
-                player.state = make_state(level=6)
-                player.plan_once.return_value = report
-                with patch.object(plan_cmd, "GamePlayer", return_value=player):
-                    plan_cmd.plan(character="hero", learn=False, learn_db=None,
-                                  refresh_game_data=False)
-    out = capsys.readouterr().out
-    assert "tree: " in out and " == " in out
+    assert "tree: " not in out
+    assert "TREE (shadow" not in out

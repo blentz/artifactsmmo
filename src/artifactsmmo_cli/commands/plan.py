@@ -71,28 +71,7 @@ def _print_report(player: GamePlayer, report: PlanReport) -> None:
     print("root ranking (top 8):")
     for rs in d.ranking[:8]:
         print(f"  {rs.score} {rs.category:11s} {rs.root_repr}  ->  step={rs.step_repr}")
-    if report.tree_decision is not None:
-        td = report.tree_decision
-        marker = "==" if repr(td.chosen_root) == repr(d.chosen_root) else "!="
-        print(f"tree: {td.chosen_root!r} {marker} {d.chosen_root!r}")
     print("=" * 70)
-
-
-def _print_tree_block(report: PlanReport) -> None:
-    """--tree: the full progression-tree shadow decision — chosen_root,
-    chosen_step, and its own descent ranking (top 8) — printed AFTER the
-    legacy report so the two decisions can be compared side-by-side without
-    either one feeding into the other (tree_decision is shadow-only)."""
-    if report.tree_decision is None:
-        print("tree: <unavailable — strategy not seeded>")
-        return
-    td = report.tree_decision
-    print("TREE (shadow — not enacted):")
-    print(f"  chosen_root: {td.chosen_root!r}")
-    print(f"  chosen_step: {td.chosen_step!r}")
-    print("  ranking (top 8):")
-    for rs in td.ranking[:8]:
-        print(f"    {rs.score} {rs.category:11s} {rs.root_repr}  ->  step={rs.step_repr}")
 
 
 def plan(
@@ -116,14 +95,6 @@ def plan(
     bundle: str | None = typer.Option(
         None, "--bundle", help="GameData cache-bundle JSON for --scenario "
                                "(default: the committed test fixture)"),
-    tree: bool = typer.Option(
-        False, "--tree", help="Print the full progression-tree shadow decision "
-        "(chosen_root/chosen_step/ranking) alongside the legacy report — "
-        "shadow-only, never enacted"),
-    progression_tree: bool = typer.Option(
-        False, "--progression-tree",
-        help="Enact the progression-tree decision instead of the legacy "
-             "StrategyEngine decision (Phase 4a flip; shadow is always computed)"),
 ) -> None:
     """Print the plan the bot WOULD execute this cycle for CHARACTER, without acting."""
     lock = check_mutation_lock(default_lock_path())
@@ -137,21 +108,17 @@ def plan(
     # rather than trusting the parameter to already be `None`/a plain list.
     doomed = doom if isinstance(doom, list) else []
     committed_goal = committed if isinstance(committed, str) else None
-    tree_flag = tree if isinstance(tree, bool) else False
-    tree_enact_flag = progression_tree if isinstance(progression_tree, bool) else False
     if isinstance(scenario, str):
         if scenario not in SCENARIOS:
             print(f"unknown scenario '{scenario}'; known: {', '.join(sorted(SCENARIOS))}")
             raise typer.Exit(code=2)
         bundle_path = Path(bundle) if isinstance(bundle, str) else _DEFAULT_BUNDLE
-        player = GamePlayer(character=scenario, history=None, progression_tree=tree_enact_flag)
+        player = GamePlayer(character=scenario, history=None)
         player.seed_offline(scenario_state(SCENARIOS[scenario]),
                             load_bundle_game_data(bundle_path))
         print(f"scenario: {scenario} — {SCENARIOS[scenario].description}")
         report = player.plan_from_state(doomed=doomed, committed=committed_goal)
         _print_report(player, report)
-        if tree_flag:
-            _print_tree_block(report)
         return
     config = Config.from_token_file()
     if learn:
@@ -164,12 +131,9 @@ def plan(
             character=character, history=store,
             game_data_ttl_minutes=config.game_data_ttl_minutes,
             refresh_game_data=refresh_game_data,
-            progression_tree=tree_enact_flag,
         )
         report = player.plan_once(doomed=doomed, committed=committed_goal)
         _print_report(player, report)
-        if tree_flag:
-            _print_tree_block(report)
     finally:
         store.end_session(exit_reason="normal")
         store.close()
