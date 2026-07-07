@@ -20,8 +20,10 @@ from rich.table import Table
 from artifactsmmo_cli.ai.trace_stats import (
     TraceStats,
     analyze,
+    analyze_tree_divergence,
     list_sessions,
     load_cycles_from_db,
+    load_trace_records,
 )
 
 app = typer.Typer(help="Inspect GOAP session data from the learning store")
@@ -168,6 +170,26 @@ def _section_task_completions(s: TraceStats) -> Table | None:
     return t
 
 
+def _section_tree_divergence(s: TraceStats) -> Table | None:
+    """Phase-3 progression-tree shadow divergence — populated only when
+    `analyze_tree_divergence` has fed dual (strategy+tree) trace records
+    into `s` (see `--trace-file`); omitted entirely otherwise, matching
+    `_section_errors`'s None-when-empty style."""
+    if not s.tree_dual_cycles:
+        return None
+    t = Table(title="Progression-tree shadow divergence")
+    t.add_column("metric")
+    t.add_column("value", justify="right")
+    t.add_row("dual cycles", str(s.tree_dual_cycles))
+    pct = 100.0 * s.tree_agree / s.tree_dual_cycles
+    t.add_row("agreement", f"{s.tree_agree} ({pct:.1f}%)")
+    for branch, count in s.tree_branch_counts.most_common():
+        t.add_row(f"tree branch: {branch}", str(count))
+    for (legacy_root, tree_root), count in s.tree_divergent_pairs.most_common(5):
+        t.add_row(f"{legacy_root} != {tree_root}", str(count))
+    return t
+
+
 def _section_stuck(s: TraceStats) -> Table | None:
     if not s.stuck_windows:
         return None
@@ -202,6 +224,12 @@ def summary(
                                       help="Show only the planner load table"),
     goals_only: bool = typer.Option(False, "--goals-only",
                                     help="Show only the selected-goal distribution"),
+    trace_file: str | None = typer.Option(
+        None, "--trace-file",
+        help="Path to a trace JSONL log (e.g. play-trace-<char>.jsonl) — "
+             "enables the progression-tree shadow divergence section, "
+             "which the DB alone cannot populate (the shadow decision is "
+             "traced-only, never persisted to the learning store)"),
 ) -> None:
     """Summarise GOAP session data from the SQLite learning store.
 
@@ -211,6 +239,9 @@ def summary(
     if not Path(db).exists():
         console.print(f"[red]DB not found: {db}[/red]")
         raise typer.Exit(1)
+    if trace_file is not None and not Path(trace_file).exists():
+        console.print(f"[red]Trace file not found: {trace_file}[/red]")
+        raise typer.Exit(1)
 
     resolved = None if session == "all" else session
     cycles = load_cycles_from_db(
@@ -219,7 +250,14 @@ def summary(
     )
     s = analyze(cycles)
 
-    if s.cycles == 0:
+    if trace_file is not None:
+        tree_stats = analyze_tree_divergence(load_trace_records(trace_file))
+        s.tree_dual_cycles = tree_stats.tree_dual_cycles
+        s.tree_agree = tree_stats.tree_agree
+        s.tree_branch_counts = tree_stats.tree_branch_counts
+        s.tree_divergent_pairs = tree_stats.tree_divergent_pairs
+
+    if s.cycles == 0 and not s.tree_dual_cycles:
         console.print("[yellow]no cycles matched the filter[/yellow]")
         return
 
@@ -245,6 +283,7 @@ def summary(
         _section_breakdown("Withdraws", s.withdraw_events, top),
         _section_task_completions(s),
         _section_stuck(s),
+        _section_tree_divergence(s),
     ]
     for section in sections:
         if section is not None:

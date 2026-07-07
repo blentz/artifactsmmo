@@ -4,6 +4,7 @@ Writes a small synthetic DB, then invokes the typer apps directly via
 the CliRunner so the test exercises arg parsing, DB plumbing, and
 section rendering in one pass."""
 
+import json
 from datetime import datetime, timezone
 
 from sqlmodel import Session as SqlSession
@@ -246,3 +247,80 @@ def test_sessions_empty_db_says_none_found(tmp_path):
     res = runner.invoke(stats_app, ["sessions", "--db", db])
     assert res.exit_code == 0
     assert "no sessions found" in res.output
+
+
+def _write_trace_file(path: str) -> None:
+    """2 agreeing + 1 divergent dual (strategy+tree) record + 1 legacy-only
+    old-format record with no "tree" key — the Task-4 binding fixture,
+    written as JSONL the way `_emit_trace` would."""
+    lines = [
+        {"cycle": 0, "strategy": {"chosen_root": "ReachCharLevel()"},
+         "tree": {"chosen_root": "ReachCharLevel()"}},
+        {"cycle": 1, "strategy": {"chosen_root": "ObtainItem(copper_boots)"},
+         "tree": {"chosen_root": "ObtainItem(copper_boots)"}},
+        {"cycle": 2, "strategy": {"chosen_root": "PursueTask(copper_ore)"},
+         "tree": {"chosen_root": "ObtainItem(iron_sword)"}},
+        {"cycle": 3, "strategy": {"chosen_root": "GatherMaterials(sunflower)"}},
+    ]
+    with open(path, "w", encoding="utf-8") as fh:
+        for line in lines:
+            fh.write(json.dumps(line) + "\n")
+
+
+def test_summary_trace_file_renders_tree_divergence_section(tmp_path):
+    db = str(tmp_path / "learning.db")
+    _seed_db(db)
+    trace_file = str(tmp_path / "play-trace-Robby.jsonl")
+    _write_trace_file(trace_file)
+    runner = CliRunner()
+    res = runner.invoke(stats_app, [
+        "summary", "--db", db, "--character", "Robby", "--session", "last",
+        "--trace-file", trace_file,
+    ])
+    assert res.exit_code == 0, res.output
+    out = res.output
+    assert "Progression-tree shadow divergence" in out
+    assert "dual cycles" in out
+    assert "3" in out
+    assert "66.7%" in out
+    assert "ObtainItem(iron_sword)" in out
+
+
+def test_summary_omits_tree_divergence_without_trace_file(tmp_path):
+    db = str(tmp_path / "learning.db")
+    _seed_db(db)
+    runner = CliRunner()
+    res = runner.invoke(stats_app, [
+        "summary", "--db", db, "--character", "Robby", "--session", "last",
+    ])
+    assert res.exit_code == 0, res.output
+    assert "Progression-tree shadow divergence" not in res.output
+
+
+def test_summary_trace_file_missing_exits_nonzero(tmp_path):
+    db = str(tmp_path / "learning.db")
+    _seed_db(db)
+    runner = CliRunner()
+    res = runner.invoke(stats_app, [
+        "summary", "--db", db, "--trace-file", str(tmp_path / "nope.jsonl"),
+    ])
+    assert res.exit_code != 0
+    assert "Trace file not found" in res.output
+
+
+def test_summary_trace_file_alone_bypasses_no_cycles_short_circuit(tmp_path):
+    """Zero matching Cycle rows but a non-empty trace file still renders the
+    divergence section — the "no cycles matched" bail-out must not swallow
+    trace-only data."""
+    db = str(tmp_path / "learning.db")
+    _seed_db(db)
+    trace_file = str(tmp_path / "play-trace-Robby.jsonl")
+    _write_trace_file(trace_file)
+    runner = CliRunner()
+    res = runner.invoke(stats_app, [
+        "summary", "--db", db, "--character", "NoSuchChar",
+        "--trace-file", trace_file,
+    ])
+    assert res.exit_code == 0, res.output
+    assert "no cycles matched" not in res.output
+    assert "Progression-tree shadow divergence" in res.output

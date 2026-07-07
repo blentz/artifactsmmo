@@ -11,10 +11,17 @@ learning projections / planner cost cache feed from. No I/O in `analyze`
 — it takes an iterable of `Cycle` rows so it stays trivially testable.
 The CLI layer (`commands/stats.py`) handles DB session bootstrap and rich
 rendering.
+
+Phase-3 progression-tree shadow divergence is the one exception: the
+shadow decision (`record["tree"]`) is traced-only and never persisted to
+the learning store, so `analyze_tree_divergence` reads raw trace JSONL
+records instead (via `load_trace_records`) and populates the `tree_*`
+fields on `TraceStats` in its own single pass, independent of `analyze()`.
 """
 
+import json
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -102,6 +109,17 @@ class TraceStats:
     task_completions: list[TaskCompletion] = field(default_factory=list)
     stuck_windows: list[StuckWindow] = field(default_factory=list)
     useless_repeats: int = 0
+
+    # Phase-3 progression-tree shadow divergence (populated ONLY by
+    # `analyze_tree_divergence`, from raw trace JSONL records — the legacy
+    # `analyze()` pass over `Cycle` DB rows never touches these fields
+    # since the shadow decision is traced-only, not persisted to the
+    # learning store).
+    tree_dual_cycles: int = 0
+    tree_agree: int = 0
+    tree_branch_counts: Counter[str] = field(default_factory=Counter)
+    tree_divergent_pairs: Counter[tuple[str | None, str | None]] = field(
+        default_factory=Counter)
 
 
 def _parse_iso(ts: str) -> datetime | None:
@@ -266,6 +284,67 @@ def analyze(cycles: Iterable[Cycle]) -> TraceStats:
             stats.duration_minutes = (t1 - t0).total_seconds() / 60.0
 
     return stats
+
+
+def _chosen_root_repr(value: object) -> str | None:
+    """`StrategyDecision.to_trace()["chosen_root"]` is `str | None` (a repr,
+    or None when no root was chosen). Anything else (malformed/legacy trace
+    shapes) is treated as unobserved rather than guessed."""
+    return value if isinstance(value, str) else None
+
+
+def analyze_tree_divergence(records: Iterable[Mapping[str, object]]) -> TraceStats:
+    """Single-pass aggregation of Phase-3 progression-tree shadow divergence
+    from raw trace JSONL records — the dicts `Tracer.write_cycle` persists
+    via `GamePlayer._emit_trace` (`{"strategy": ..., "tree": ...}`, each a
+    `StrategyDecision.to_trace()` payload).
+
+    This is a DISTINCT data source from `analyze()`'s `Cycle` DB rows: the
+    shadow tree decision is traced-only (never persisted to the learning
+    store), so it cannot be reached by iterating `Cycle` rows. Records
+    lacking a `"tree"` key (traces from before the Phase-3 shadow wiring,
+    or cycles emitted before strategy/game_data were seeded) are skipped
+    outright — absent means unobserved, never guessed at."""
+    stats = TraceStats()
+    for record in records:
+        strategy = record.get("strategy")
+        tree = record.get("tree")
+        if not isinstance(strategy, dict) or not isinstance(tree, dict):
+            continue
+        stats.tree_dual_cycles += 1
+        legacy_root = _chosen_root_repr(strategy.get("chosen_root"))
+        tree_root = _chosen_root_repr(tree.get("chosen_root"))
+        if legacy_root == tree_root:
+            stats.tree_agree += 1
+        else:
+            stats.tree_divergent_pairs[(legacy_root, tree_root)] += 1
+        if tree_root is not None and tree_root.startswith("ObtainItem"):
+            stats.tree_branch_counts["gear"] += 1
+        elif tree_root is not None and tree_root.startswith("ReachCharLevel"):
+            stats.tree_branch_counts["xp"] += 1
+        else:
+            stats.tree_branch_counts["other"] += 1
+    return stats
+
+
+def load_trace_records(path: str) -> list[dict[str, object]]:
+    """Read a trace JSONL log (one `GamePlayer._emit_trace` record per
+    line) for `analyze_tree_divergence`. Blank lines and lines that fail
+    to parse as JSON (e.g. a truncated final line from a live-tailed log)
+    are skipped rather than aborting the read."""
+    records: list[dict[str, object]] = []
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                parsed = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict):
+                records.append(parsed)
+    return records
 
 
 def load_cycles_from_db(

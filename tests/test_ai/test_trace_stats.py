@@ -8,8 +8,10 @@ from sqlmodel import SQLModel, create_engine
 from artifactsmmo_cli.ai.learning.models import Cycle, Session
 from artifactsmmo_cli.ai.trace_stats import (
     analyze,
+    analyze_tree_divergence,
     list_sessions,
     load_cycles_from_db,
+    load_trace_records,
 )
 
 
@@ -271,3 +273,98 @@ def test_list_sessions_filters_by_character(tmp_path):
     _seed_db(db)
     sess = list_sessions(db, character="Alice")
     assert [s.session_id for s in sess] == ["other"]
+
+
+def _trace(chosen_root: str, tree_root: str) -> dict:
+    """A minimal Phase-3 shadow trace record: only the `chosen_root` keys
+    `analyze_tree_divergence` reads are populated (real records carry the
+    full `StrategyDecision.to_trace()` payload; the analyzer only touches
+    `chosen_root`)."""
+    return {
+        "strategy": {"chosen_root": chosen_root},
+        "tree": {"chosen_root": tree_root},
+    }
+
+
+def test_tree_divergence_empty_input_is_zero_state():
+    s = analyze_tree_divergence([])
+    assert s.tree_dual_cycles == 0
+    assert s.tree_agree == 0
+    assert s.tree_branch_counts == {}
+    assert s.tree_divergent_pairs == {}
+
+
+def test_tree_divergence_binding_scenario():
+    """Brief's binding fixture: 2 agreeing + 1 divergent dual record + 1
+    legacy-only old-format record (no "tree" key) -> 3 dual cycles, 2 agree,
+    old-format record skipped outright (never counted, never guessed)."""
+    records = [
+        _trace("ReachCharLevel()", "ReachCharLevel()"),
+        _trace("ObtainItem(copper_boots)", "ObtainItem(copper_boots)"),
+        _trace("PursueTask(copper_ore)", "ObtainItem(iron_sword)"),
+        {"strategy": {"chosen_root": "GatherMaterials(sunflower)"}},  # no "tree"
+    ]
+    s = analyze_tree_divergence(records)
+    assert s.tree_dual_cycles == 3
+    assert s.tree_agree == 2
+    assert s.tree_divergent_pairs[("PursueTask(copper_ore)", "ObtainItem(iron_sword)")] == 1
+
+
+def test_tree_divergence_branch_counts_gear_vs_xp():
+    records = [
+        _trace("ReachCharLevel()", "ReachCharLevel()"),
+        _trace("X", "ObtainItem(copper_boots)"),
+        _trace("X", "ObtainItem(iron_sword)"),
+    ]
+    s = analyze_tree_divergence(records)
+    assert s.tree_branch_counts["xp"] == 1
+    assert s.tree_branch_counts["gear"] == 2
+
+
+def test_tree_divergence_unrecognized_root_buckets_as_other():
+    """A `chosen_root` that is neither ObtainItem- nor ReachCharLevel-rooted
+    (or is None/absent) buckets as "other" rather than being dropped or
+    guessed into one of the two known branches."""
+    records = [
+        _trace("X", "SomethingElse()"),
+        {"strategy": {"chosen_root": None}, "tree": {"chosen_root": None}},
+    ]
+    s = analyze_tree_divergence(records)
+    assert s.tree_dual_cycles == 2
+    assert s.tree_branch_counts["other"] == 2
+
+
+def test_tree_divergence_skips_record_missing_strategy_key():
+    """Defensive: a record with a "tree" key but no "strategy" key (should
+    not occur from `_emit_trace`, but the analyzer must not guess a
+    comparison) is skipped, same as the missing-"tree" case."""
+    records = [{"tree": {"chosen_root": "ReachCharLevel()"}}]
+    s = analyze_tree_divergence(records)
+    assert s.tree_dual_cycles == 0
+
+
+def test_load_trace_records_reads_jsonl(tmp_path):
+    path = tmp_path / "trace.jsonl"
+    path.write_text(
+        '{"cycle": 0, "strategy": {"chosen_root": "A"}}\n'
+        "\n"
+        '{"cycle": 1, "tree": {"chosen_root": "B"}}\n'
+    )
+    records = load_trace_records(str(path))
+    assert len(records) == 2
+    assert records[0]["cycle"] == 0
+    assert records[1]["tree"] == {"chosen_root": "B"}
+
+
+def test_load_trace_records_skips_malformed_and_non_object_lines(tmp_path):
+    path = tmp_path / "trace.jsonl"
+    path.write_text(
+        '{"cycle": 0}\n'
+        "not-json\n"
+        "5\n"
+        '["also", "not", "a", "record"]\n'
+        '{"cycle": 1}\n'
+    )
+    records = load_trace_records(str(path))
+    assert len(records) == 2
+    assert [r["cycle"] for r in records] == [0, 1]
