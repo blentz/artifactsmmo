@@ -146,6 +146,7 @@ CRAFT_PLAN_DRIVER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_plan_d
 GEAR_TAXONOMY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_taxonomy_core.py"
 BOOST_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "boost_selection.py"
 POTION_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_supply.py"
+PROGRESSION_TREE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree_core.py"
 
 # craft_plan_full / _apply_state mutations (B2 full-plan driver). The CONSUMING
 # model is the soundness-critical part; killed by
@@ -2736,6 +2737,27 @@ RECIPE_PRODUCIBLE_MUTATIONS = [
 ]
 
 
+# Progression-tree cores (2026-07-06): unit-killed group (OBJECTIVE_NOW
+# precedent) bound to tests/test_ai/test_progression_tree_core.py.
+PROGRESSION_TREE_MUTATIONS = [
+    ("tree: branch pick ignores adequacy (gear whenever a target exists)",
+     "    if not band_adequate and gear_target_exists:",
+     "    if gear_target_exists:"),
+    ("tree: milestone off-by-a-band (current band, not next)",
+     "    return min(TRUNK_CAP, (level // BAND + 1) * BAND)",
+     "    return min(TRUNK_CAP, (level // BAND) * BAND)"),
+    ("tree: health weight demoted below boost",
+     '    "hp_restore": Fraction(1),',
+     '    "hp_restore": Fraction(1, 8),'),
+    ("tree: unknown potion family weighs like health",
+     "    return POTION_TYPE_WEIGHTS.get(family, Fraction(0))",
+     "    return POTION_TYPE_WEIGHTS.get(family, Fraction(1))"),
+    ("tree: argmax gain sign flipped (worst upgrade wins)",
+     "    return min(candidates, key=lambda c: (-c.gain, -c.level, c.code, c.slot))",
+     "    return min(candidates, key=lambda c: (c.gain, -c.level, c.code, c.slot))"),
+]
+
+
 def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
               survivors: list[str]) -> None:
     """Collect this group's mutation units into _UNITS (filtered by _ONLY).
@@ -2818,6 +2840,8 @@ _ALL_SRCS = [
     NEXT_CRAFT_CORE_SRC,
     # Gear taxonomy: proved gear-classification core.
     GEAR_TAXONOMY_CORE_SRC,
+    # Progression-tree cores (2026-07-06): unit-killed group.
+    PROGRESSION_TREE_SRC,
 ]
 
 
@@ -5064,6 +5088,8 @@ def _run_all_groups() -> int:
               "tests/test_ai/test_boost_selection.py", survivors)
     run_group(POTION_SUPPLY_SRC, RECIPE_PRODUCIBLE_MUTATIONS,
               "tests/test_ai/test_potion_supply.py", survivors)
+    run_group(PROGRESSION_TREE_SRC, PROGRESSION_TREE_MUTATIONS,
+              "tests/test_ai/test_progression_tree_core.py", survivors)
     _execute(_UNITS, survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
