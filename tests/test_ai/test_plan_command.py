@@ -257,3 +257,28 @@ def test_plan_command_refuses_during_mutation(capsys):
         with pytest.raises(typer.Exit):
             plan_cmd.plan(character="hero", learn=False, learn_db=None, refresh_game_data=False)
     assert "mutation run in progress" in capsys.readouterr().out
+
+
+def test_plan_command_scenario_runs_offline(capsys):
+    """--scenario plans a named synthetic character with no API client:
+    no ClientManager, no GamePlayer._initialize."""
+    with patch.object(plan_cmd, "check_mutation_lock",
+                      return_value=MagicMock(state="clear")):
+        # The scenario branch returns BEFORE Config/LearningStore/GamePlayer
+        # API setup — patching from_token_file proves no live path ran.
+        with patch.object(plan_cmd.Config, "from_token_file") as cfg:
+            plan_cmd.plan(character="ignored", learn=False, learn_db=None,
+                          refresh_game_data=False, scenario="l1_fresh")
+            cfg.assert_not_called()
+    out = capsys.readouterr().out
+    assert "scenario: l1_fresh" in out
+    assert "goals_tried" in out
+
+
+def test_plan_command_scenario_unknown_name_exits(capsys):
+    with patch.object(plan_cmd, "check_mutation_lock",
+                      return_value=MagicMock(state="clear")):
+        with pytest.raises(typer.Exit):
+            plan_cmd.plan(character="ignored", learn=False, learn_db=None,
+                          refresh_game_data=False, scenario="nope")
+    assert "unknown scenario" in capsys.readouterr().out

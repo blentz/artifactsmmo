@@ -12,9 +12,14 @@ import typer
 
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.plan_report import PlanReport
+from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.config import Config
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.utils.mutation_lock import check_mutation_lock, default_lock_path
+
+_DEFAULT_BUNDLE = (
+    Path(__file__).resolve().parents[3] / "tests" / "test_ai" / "scenarios"
+    / "fixtures" / "gamedata_bundle.json")
 
 
 def _default_learn_db_path() -> str:
@@ -83,12 +88,37 @@ def plan(
     committed: str | None = typer.Option(
         None, "--committed", help="Seed the arbiter's sticky commitment with this "
         "goal repr to reproduce a live committed-goal hold"),
+    scenario: str | None = typer.Option(
+        None, "--scenario",
+        help="Plan a named synthetic scenario offline (no API). "
+             "Names: see artifactsmmo_cli.ai.scenario.SCENARIOS"),
+    bundle: str | None = typer.Option(
+        None, "--bundle", help="GameData cache-bundle JSON for --scenario "
+                               "(default: the committed test fixture)"),
 ) -> None:
     """Print the plan the bot WOULD execute this cycle for CHARACTER, without acting."""
     lock = check_mutation_lock(default_lock_path())
     if lock.state == "active":
         print(f"mutation run in progress (pid {lock.pid}) — src/ has live mutants; retry later")
         raise typer.Exit(code=2)
+    # `doom`/`committed`/`bundle` are Typer Option-backed parameters; a direct
+    # (non-Click) call that omits one — as the unit tests below do — leaves the
+    # raw `typer.models.OptionInfo` sentinel in place rather than its declared
+    # default, so every use below is isinstance-guarded rather than trusting
+    # the parameter to already be `None`/a plain list.
+    doomed = doom if isinstance(doom, list) else []
+    committed_goal = committed if isinstance(committed, str) else None
+    if isinstance(scenario, str):
+        if scenario not in SCENARIOS:
+            print(f"unknown scenario '{scenario}'; known: {', '.join(sorted(SCENARIOS))}")
+            raise typer.Exit(code=2)
+        bundle_path = Path(bundle) if isinstance(bundle, str) else _DEFAULT_BUNDLE
+        player = GamePlayer(character=scenario, history=None)
+        player.seed_offline(scenario_state(SCENARIOS[scenario]),
+                            load_bundle_game_data(bundle_path))
+        print(f"scenario: {scenario} — {SCENARIOS[scenario].description}")
+        _print_report(player, player.plan_from_state(doomed=doomed, committed=committed_goal))
+        return
     config = Config.from_token_file()
     if learn:
         store = LearningStore(db_path=learn_db or _default_learn_db_path(), character=character)
@@ -101,7 +131,7 @@ def plan(
             game_data_ttl_minutes=config.game_data_ttl_minutes,
             refresh_game_data=refresh_game_data,
         )
-        report = player.plan_once(doomed=doom, committed=committed)
+        report = player.plan_once(doomed=doomed, committed=committed_goal)
         _print_report(player, report)
     finally:
         store.end_session(exit_reason="normal")
