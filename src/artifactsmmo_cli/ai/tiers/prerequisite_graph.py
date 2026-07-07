@@ -6,10 +6,6 @@ chains terminate; cycles (if any) are left for P3's visited-set traversal."""
 
 from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.gather_skill_resource import (
-    best_gather_resource_drop,
-    first_craftable_level,
-)
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
@@ -19,7 +15,6 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
-from artifactsmmo_cli.ai.tiers.skill_classes import COMBAT_CRAFT_SKILLS, CONSUMABLE_CRAFT_SKILLS
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -84,21 +79,6 @@ def prerequisites(node: MetaGoal, state: WorldState, game_data: GameData) -> lis
     return []  # ReachSkillLevel → leaf (materials enter via ObtainItem chains)
 
 
-_CRAFT_BOOTSTRAP_TARGET = 2
-"""Bootstrap target level for crafting skills (weaponcrafting / gearcrafting /
-jewelrycrafting). The full-objective ReachSkillLevel(skill, 50) root has a
-gap-50 effort proxy and consistently loses Tier-2 ranking to small-effort gear
-chains — but those gear chains then stall because crafting them requires the
-very skill XP the bot never bothers to grind. A small bootstrap root with
-gap 1 (from starting skill 1) ranks competitively, gives LevelSkillGoal a
-real chance to fire, and unlocks the gear chain by lifting the skill off
-the level-1 floor. Removed automatically once the skill reaches the target
-(then the level-50 root takes over)."""
-
-# The skills bootstrapped off the level-1 floor are exactly the gear-producing
-# craft skills (single source: skill_classes.COMBAT_CRAFT_SKILLS).
-_CRAFTING_BOOTSTRAP_SKILLS: frozenset[str] = COMBAT_CRAFT_SKILLS
-
 _CHAR_LEVEL_BOOTSTRAP_HORIZON = 2
 """Look-ahead for the character-level bootstrap root. When `state.level <
 target_char_level`, prepend a `ReachCharLevel(current + _HORIZON)` root so
@@ -130,13 +110,10 @@ def objective_roots(
     and OptimizeLoadout swaps the active item per the current task's
     gathering-skill needs.
 
-    When `state` is supplied, an extra bootstrap `ReachSkillLevel(skill,
-    _CRAFT_BOOTSTRAP_TARGET)` root is prepended for each crafting skill the
-    character is still at the level-1 floor on. This breaks the
-    chicken-and-egg between gear crafting and crafting-skill XP: gear chains
-    need craft levels >= recipe gate, but the skill never grows because no
-    other goal forces a craft. Backwards-compatible — callers that pass no
-    state get the previous root set (legacy tests / replay harnesses)."""
+    Standalone `ReachSkillLevel` ROOTS are no longer emitted (progression-tree
+    Phase 4b Task 2): skills are pure prerequisites — a skill enters the search
+    only as a prereq/step inside a gear/char chain (`prerequisites`,
+    `skill_target_curve`-derived steps), never as its own top-level objective."""
     roots: list[MetaGoal] = [ReachCharLevel(objective.target_char_level)]
     if state is not None:
         # Char-level bootstrap: gap-2 root competing with gear chains so
@@ -144,34 +121,6 @@ def objective_roots(
         char_horizon = state.level + _CHAR_LEVEL_BOOTSTRAP_HORIZON
         if char_horizon < objective.target_char_level:
             roots.append(ReachCharLevel(char_horizon))
-        for skill in _CRAFTING_BOOTSTRAP_SKILLS:
-            if state.skills.get(skill, 1) < _CRAFT_BOOTSTRAP_TARGET:
-                roots.append(ReachSkillLevel(skill, _CRAFT_BOOTSTRAP_TARGET))
-        # Gatherable consumable-craft bootstrap: a skill like alchemy is a
-        # gathering skill whose FIRST craftable sits above level 1 (potions need
-        # alchemy 5). It can't craft-grind up (nothing craftable below 5) and its
-        # resources are consumed only by its own products, so it never self-levels
-        # ambiently — a hard deadlock. Emit a bootstrap root to its first-craftable
-        # level; the objective-step gather-to-level path (strategy_driver) serves it.
-        gd = objective._game_data
-        for skill in CONSUMABLE_CRAFT_SKILLS:
-            # Gate on the SKILL level (not char level) so the emitted root is one
-            # the objective-step gather-server can actually serve: strategy_driver
-            # calls best_gather_resource_drop with the skill level, so keying Part A
-            # on char level could emit a root whose gather step is unservable.
-            skill_level = state.skills.get(skill, 1)
-            if best_gather_resource_drop(skill, skill_level, gd) is None:
-                continue  # not gatherable now (e.g. cooking) -> reactive path only
-            target = first_craftable_level(skill, gd)
-            if target is not None and skill_level < target:
-                roots.append(ReachSkillLevel(skill, target))
-        # Recipe-aware near-term skill curve: hold each crafting skill high
-        # enough to craft gear up to char_level + LOOKAHEAD, so the next tier is
-        # ready just-in-time instead of a catch-up freeze (run-7 finding; spec
-        # docs/superpowers/specs/2026-06-13-recipe-aware-skill-scheduling-design.md).
-        for skill, target in objective.near_term_skill_targets(state).items():
-            if state.skills.get(skill, 1) < target:
-                roots.append(ReachSkillLevel(skill, target))
         # Near-term gear: best usable-at-level upgrade per slot. The BiS
         # target_gear roots below are unreachable at low level (filtered by
         # is_reachable), which left the gear category with no live candidate —
@@ -180,15 +129,11 @@ def objective_roots(
         roots.extend(ObtainItem(code, slot=slot)
                      for slot, code in objective.near_term_gear(state).items())
         # Utility potions are judged by EFFECT, not level (see
-        # utility_potion_targets / bootstrap_potion_target). Emit the single
-        # effect-based heal root at every level — including bootstrap, where the
-        # level-gated near_term_gear emits nothing — so POTION_SUPPLY_URGENCY has
-        # a craftable-now-or-cheapest target to attach to instead of an
-        # aspirational high-tier potion from target_gear.
+        # utility_potion_targets / bootstrap_potion_target): the single
+        # effect-based heal root is emitted at every level — including
+        # bootstrap, where the level-gated near_term_gear emits nothing.
         roots.extend(ObtainItem(code, slot=slot)
                      for slot, code in objective.utility_potion_targets(state).items())
-    roots.extend(ReachSkillLevel(skill, level)
-                 for skill, level in objective.target_skill_levels.items())
     roots.extend(ObtainItem(code, slot=slot) for slot, code in objective.target_gear.items())
     roots.extend(ObtainItem(code) for code in objective.target_tools.values())
     # A near-term target can coincide with a BiS/tool target; one root each.

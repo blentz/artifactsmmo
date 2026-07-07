@@ -1,6 +1,8 @@
 """Approved behavior changes: rune/artifact join combat gear; ring/amulet/rune/artifact
-use per-monster scoring in the dominance gate; rune/artifact get PRIOR_COMBAT_GEAR
-in strategy. Spec: docs/superpowers/plans/2026-06-28-gear-taxonomy.md
+use per-monster scoring in the dominance gate.
+Spec: docs/superpowers/plans/2026-06-28-gear-taxonomy.md
+(The PRIOR_COMBAT_GEAR consumer tests died with the flat ranking —
+progression-tree Phase 4b Task 2.)
 """
 
 import artifactsmmo_cli.ai.combat_targets as ct
@@ -8,10 +10,6 @@ from artifactsmmo_cli.ai.combat_targets import _clear_cache
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.inventory_caps import _is_equippable_dominated
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
-from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
-from artifactsmmo_cli.ai.tiers.strategy import PRIOR_COMBAT_GEAR, StrategyEngine
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, WorldState
 
 
@@ -76,43 +74,6 @@ def test_ring_amulet_are_defensive_for_dominance_gate():
     amulet = ItemStats(code="a", level=1, type_="amulet", resistance={"fire": 10})
     gd = _gd([ring, amulet])
     assert {"ring", "amulet"} <= gd.defensive_gear_types
-
-
-# --- Consumer tests: strategy.py PRIOR_COMBAT_GEAR for rune/artifact ---
-# RED before Step 3 implementation: old _COMBAT_GEAR_SLOTS has no rune/artifact slots →
-# ObtainItem("vampiric_rune") gets PRIOR_UTILITY_GEAR, not PRIOR_COMBAT_GEAR.
-
-
-def _strategy_gd_and_eng(type_: str, code: str, **item_kwargs) -> tuple[GameData, StrategyEngine]:
-    """Build a minimal GameData + StrategyEngine for a single equippable item."""
-    gd = GameData()
-    item = ItemStats(code=code, level=1, type_=type_, **item_kwargs)
-    mat = ItemStats(code="mat", level=1, type_="resource")
-    gd._item_stats = {code: item, "mat": mat}
-    gd._crafting_recipes = {code: {"mat": 1}}
-    gd._resource_drops = {"mat_spot": "mat"}
-    gd._resource_skill = {"mat_spot": ("mining", 1)}
-    obj = CharacterObjective.from_game_data(gd)
-    eng = StrategyEngine(obj, BalancedPersonality())
-    return gd, eng
-
-
-def test_rune_gets_prior_combat_gear():
-    """Rune must score PRIOR_COMBAT_GEAR after reclassification.
-    Old code: rune_slot not in _COMBAT_GEAR_SLOTS → PRIOR_UTILITY_GEAR.
-    Spec: docs/superpowers/plans/2026-06-28-gear-taxonomy.md
-    """
-    gd, eng = _strategy_gd_and_eng("rune", "vampiric_rune", lifesteal=10)
-    assert eng._base_prior(ObtainItem("vampiric_rune"), _make_state(), gd) == PRIOR_COMBAT_GEAR
-
-
-def test_artifact_gets_prior_combat_gear():
-    """Artifact must score PRIOR_COMBAT_GEAR after reclassification.
-    Old code: artifact1_slot not in _COMBAT_GEAR_SLOTS → PRIOR_UTILITY_GEAR.
-    Spec: docs/superpowers/plans/2026-06-28-gear-taxonomy.md
-    """
-    gd, eng = _strategy_gd_and_eng("artifact", "novice_guide", hp_bonus=25)
-    assert eng._base_prior(ObtainItem("novice_guide"), _make_state(), gd) == PRIOR_COMBAT_GEAR
 
 
 # --- Consumer test: inventory_caps.py per-monster for rings ---

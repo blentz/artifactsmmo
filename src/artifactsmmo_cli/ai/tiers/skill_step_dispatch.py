@@ -4,8 +4,8 @@ own gear), GRIND one level-appropriate in-skill item, or NO_GRIND (nothing
 craftable to grind — caller returns None and the arbiter advances; most gathering
 skills self-level via ambient gathering; a gatherable consumable-craft skill like
 alchemy that is gated behind a craftable it can't yet make is served by the
-objective-step gather-to-level path via the bootstrap root in objective_roots,
-not left to absent ambient gathering, skill_gates.py).
+objective-step gather-to-level path when its ReachSkillLevel step arises as a
+prerequisite, not left to absent ambient gathering, skill_gates.py).
 
 `skill_step_dispatch_pure` is the proved decision core (see
 formal/Formal/Extracted/SkillStepDispatch.lean). It composes the already-proved

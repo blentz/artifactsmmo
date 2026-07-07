@@ -59,6 +59,8 @@ def _gd_with_recipes() -> GameData:
                                    crafting_skill="weaponcrafting", crafting_level=1),
         "cooked_beef": ItemStats(code="cooked_beef", level=1, type_="consumable",
                                  crafting_skill="cooking", crafting_level=1),
+        # Non-crafted raw (no crafting_skill): the wrapper's hoist skips it.
+        "ash_wood": ItemStats(code="ash_wood", level=1, type_="resource"),
     }
     return gd
 

@@ -98,8 +98,6 @@ from artifactsmmo_cli.ai.tiers import (
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal
 from artifactsmmo_cli.ai.tiers.progression_tree import has_structural_upgrade
-from artifactsmmo_cli.ai.tiers.root_progress import root_progress_value
-from artifactsmmo_cli.ai.tiers.sticky_select_core import next_last
 from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.ai.winnable_cascade import CascadeInputs, winnable_farm_target_pure
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
@@ -172,18 +170,6 @@ class GamePlayer:
         # shadow — its decision is traced each cycle but does not drive the bot.
         self._objective: CharacterObjective | None = None
         self._strategy: StrategyEngine | None = None
-        # Tier-2 sticky commitment: previous cycle's chosen_root repr.
-        # Threaded into StrategyEngine.decide so a transient flip in
-        # is_reachable (e.g. combat_capable=False for one cycle from a
-        # pick_loadout shift) doesn't demote the active objective.
-        self._last_strategy_root: str | None = None
-        # Progress-gated sticky release (2026-06-20): the committed root's progress
-        # value recorded last cycle. The anchor is re-fed only when this cycle's value
-        # strictly exceeds it (the root advanced on its own axis). Replaces the broken
-        # `chosen_step_alive` gate that re-committed a never-executing zombie grind
-        # forever (weaponcrafting 1028-cycle hold). See
-        # Formal/Liveness/StickySelect.lean + docs/PLAN_zombie_progress_gate.md.
-        self._sticky_progress_value: int | None = None
         # Per-cycle servable-filter diagnostic (2026-06-20): whether the committed
         # chosen_root's step is plannable now. Emitted in the trace so a live run can
         # confirm the filter demotes unservable top roots (feather_coat) instead of
@@ -244,9 +230,6 @@ class GamePlayer:
         self._notify_planning(True)
         decision = self._strategy.decide(
             state, game_data,
-            history=self.history,
-            combat_monster=combat_monster,
-            last_chosen_root=self._last_strategy_root,
             step_servable=servable_pred,
             band_adequate=self._tree_band_adequate(),
         )
@@ -270,8 +253,6 @@ class GamePlayer:
             suppressed=set(self._suppressed_goals),
             objective=self._objective,
         )
-        self._update_sticky_anchor(
-            decision.chosen_root, state, game_data, self._arbiter.chosen_step_alive)
         self._last_decide_crafting_target = crafting_target
         return selected_goal, plan, goals_tried
 
@@ -471,8 +452,7 @@ class GamePlayer:
         combat_monster = self._winnable_farm_target()
         ctx = self._selection_context(combat_monster)
         decision = self._strategy.decide(
-            state, game_data, history=self.history, combat_monster=combat_monster,
-            last_chosen_root=self._last_strategy_root,
+            state, game_data,
             step_servable=self._step_servable(state, game_data, ctx),
             band_adequate=self._tree_band_adequate())
         self._last_decision = decision
@@ -1204,8 +1184,7 @@ class GamePlayer:
             # depends on it). The Phase-3/4a `record["tree"]`/`record["enacted"]`
             # shadow chrome died with the flag: one engine, one record.
             decision = self._last_decision or self._strategy.decide(
-                self.state, self.game_data, history=self.history,
-                combat_monster=self._winnable_farm_target(),
+                self.state, self.game_data,
                 band_adequate=self._tree_band_adequate())
             record["strategy"] = decision.to_trace()
         self.tracer.write_cycle(record)
@@ -1657,33 +1636,6 @@ class GamePlayer:
                                        history=self.history)
             return goal is not None and goal.is_plannable(state, game_data, self.history)
         return servable
-
-    def _update_sticky_anchor(
-        self, chosen_root: MetaGoal | None, state: WorldState,
-        game_data: GameData, chosen_step_alive: bool) -> None:
-        """Progress-gated Tier-2 sticky release (2026-06-20). Re-feed `chosen_root` as
-        next cycle's sticky anchor ONLY when it yielded a goal this cycle AND advanced
-        on its own progress axis since last cycle; otherwise release it so the
-        highest-value plannable root wins next cycle. A freshly-chosen root gets one
-        cycle to act before the progress gate can release it. Mirrors
-        `Formal/Liveness/StickySelect.lean::nextLast`; the frozen-axis release kills the
-        weaponcrafting zombie (1028-cycle hold)."""
-        if chosen_root is None:
-            self._last_strategy_root = None
-            self._sticky_progress_value = None
-            return
-        cur_value = root_progress_value(chosen_root, state, game_data)
-        if repr(chosen_root) == self._last_strategy_root:
-            # Same root as last cycle: the value was recorded then (set in lockstep
-            # with the anchor), so it is non-None here. Progress = it advanced.
-            assert self._sticky_progress_value is not None
-            progressed = cur_value > self._sticky_progress_value
-        else:
-            # Freshly chosen this cycle: one cycle to act before the gate can release.
-            progressed = True
-        progressed = progressed and chosen_step_alive
-        self._last_strategy_root = next_last(repr(chosen_root), progressed)
-        self._sticky_progress_value = cur_value
 
     def _maybe_retry_bank(self) -> None:
         """Periodically retry bank access after an achievement gate failure

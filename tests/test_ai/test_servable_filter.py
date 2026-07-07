@@ -5,12 +5,22 @@ with an UNSERVABLE step is demoted so chosen_root is a root the bot can actually
 work on (the feather_coat mismatch fix, trace 2026-06-20).
 """
 
+import pytest
+
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal
+from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
 from artifactsmmo_cli.ai.tiers.servable_filter import keep_servable
+from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
-from tests.test_ai.test_tiers_strategy import _eng
+
+
+def _eng(gd: GameData) -> StrategyEngine:
+    """Engine over from_game_data (was imported from test_tiers_strategy's
+    `_eng` helper, retired with the flat ranking in Phase 4b Task 2)."""
+    return StrategyEngine(CharacterObjective.from_game_data(gd), BalancedPersonality())
 
 
 def _two_root_gd() -> GameData:
@@ -55,7 +65,6 @@ class TestKeepServable:
         assert keep_servable([], []) == []
 
     def test_length_mismatch_raises(self):
-        import pytest
         with pytest.raises(ValueError, match="equal length"):
             keep_servable(["a"], [True, False])
 

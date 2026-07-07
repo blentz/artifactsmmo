@@ -85,7 +85,7 @@ def bootstrap_potion_target(
     none is craftable yet — the cheapest-to-unlock heal so the arbiter can drive
     the first skill unlock. Level-exempt (a potion's item level never gates it;
     utility is judged by effect, not level). Single source of truth for the
-    utility-slot root and the POTION_SUPPLY_URGENCY gate."""
+    utility-slot root (`CharacterObjective.utility_potion_targets`)."""
     craftable = target_potion_pure(state, game_data, effect)
     if craftable is not None:
         return craftable

@@ -10,7 +10,6 @@ from artifactsmmo_cli.ai.tiers.prerequisite_graph import (
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
-from tests.test_ai.test_skill_target_curve import _gd_with_recipes
 
 
 def _gd() -> GameData:
@@ -109,38 +108,17 @@ def test_best_attainable_weapon_highest_value_with_tiebreak():
     assert best_attainable_weapon(GameData()) is None   # no weapons
 
 
-def test_objective_roots_cover_level_skills_gear():
+def test_objective_roots_cover_level_and_gear_but_never_skills():
+    """Progression-tree Phase 4b Task 2: skills are pure prerequisites —
+    objective_roots emits char-level and gear roots but NO standalone
+    ReachSkillLevel root, with or without state."""
     gd = _gd()
     obj = CharacterObjective.from_game_data(gd)
-    roots = objective_roots(obj)
-    assert ReachCharLevel(50) in roots
-    assert all(ReachSkillLevel(s, 50) in roots for s in SKILL_NAMES)
-    assert any(isinstance(r, ObtainItem) for r in roots)  # gear targets
-
-
-def test_objective_roots_adds_craft_bootstrap_when_skill_at_floor():
-    """Robby's level-3 trace 2026-06-04: weaponcrafting / gearcrafting /
-    jewelrycrafting all sat at level 1 with 0 XP because the level-50
-    ReachSkillLevel root has gap-50 effort and consistently lost ranking
-    to small-effort gear chains. Those gear chains then stalled — copper
-    recipes need weaponcrafting>=1 (technically met) but copper_dagger
-    requires 6 copper_bar which itself needs mining XP; nothing forced a
-    craft, so 951 gold and 1400 mining XP accumulated with zero gear
-    progress.
-
-    Fix: when a crafting skill is at the level-1 floor, objective_roots
-    (with state) prepends ReachSkillLevel(skill, 2) — gap-1 effort, much
-    more likely to win ranking and give LevelSkillGoal an actual cycle to
-    fire."""
-    gd = _gd()
-    obj = CharacterObjective.from_game_data(gd)
-    # Fresh character: all skills at the floor.
-    state = make_state(skills={s: 1 for s in SKILL_NAMES})
-    roots = objective_roots(obj, state)
-    for skill in ("weaponcrafting", "gearcrafting", "jewelrycrafting"):
-        assert ReachSkillLevel(skill, 2) in roots, (
-            f"missing craft-bootstrap root for {skill}; got {roots}"
-        )
+    for roots in (objective_roots(obj),
+                  objective_roots(obj, make_state(skills={s: 1 for s in SKILL_NAMES}))):
+        assert ReachCharLevel(50) in roots
+        assert any(isinstance(r, ObtainItem) for r in roots)  # gear targets
+        assert not any(isinstance(r, ReachSkillLevel) for r in roots)
 
 
 def test_objective_roots_adds_char_level_bootstrap_when_far_from_target():
@@ -180,34 +158,6 @@ def test_objective_roots_omits_char_level_bootstrap_near_target():
     assert len(char_roots) == 1, (
         f"expected exactly the long-haul char-level root, got {char_roots}"
     )
-
-
-def test_objective_roots_omits_craft_bootstrap_when_skill_above_floor():
-    """Once a crafting skill is at or above the bootstrap target (>=2), the
-    small bootstrap root drops out and the long-haul ReachSkillLevel(skill, 50)
-    root takes over without competition from the bootstrap."""
-    gd = _gd()
-    obj = CharacterObjective.from_game_data(gd)
-    # weaponcrafting above target, gearcrafting exactly at target (boundary),
-    # jewelrycrafting still on the level-1 floor.
-    state = make_state(skills={"weaponcrafting": 6, "gearcrafting": 2,
-                                "jewelrycrafting": 1})
-    roots = objective_roots(obj, state)
-    assert ReachSkillLevel("weaponcrafting", 2) not in roots
-    assert ReachSkillLevel("gearcrafting", 2) not in roots
-    assert ReachSkillLevel("jewelrycrafting", 2) in roots  # still at floor
-
-
-def test_objective_roots_backward_compat_without_state():
-    """Legacy callers that don't pass state still get the original root
-    set — no bootstrap roots, no regressions in old replay harnesses."""
-    gd = _gd()
-    obj = CharacterObjective.from_game_data(gd)
-    roots = objective_roots(obj)
-    # No bootstrap roots — only the canonical target=50 ReachSkillLevel.
-    for skill in ("weaponcrafting", "gearcrafting", "jewelrycrafting"):
-        assert ReachSkillLevel(skill, 5) not in roots
-        assert ReachSkillLevel(skill, 50) in roots
 
 
 def test_cyclic_recipe_traversal_terminates():
@@ -296,57 +246,6 @@ def test_objective_roots_no_near_term_without_state():
     assert ObtainItem("copper_armor") not in roots
 
 
-def test_objective_roots_emits_below_curve_skill_root():
-    """Recipe-aware curve: at char 7 a weaponcrafting recipe at craft_level 5
-    (item_level 5, in-window) sets the curve target to 5. With the skill at 2
-    (below curve), objective_roots emits ReachSkillLevel(weaponcrafting, 5) so
-    the skill catches up before the gear commit forces a freeze (run-7)."""
-    gd = _gd_with_recipes()
-    obj = CharacterObjective.from_game_data(gd)
-    state = make_state(level=7, skills={"weaponcrafting": 2})
-    roots = objective_roots(obj, state)
-    assert ReachSkillLevel("weaponcrafting", 5) in roots
-
-
-def test_objective_roots_omits_at_curve_skill_root():
-    """Already at the curve target (weaponcrafting 5, target 5) → no near-term
-    curve root for that skill; it's not below the curve."""
-    gd = _gd_with_recipes()
-    obj = CharacterObjective.from_game_data(gd)
-    state = make_state(level=7, skills={"weaponcrafting": 5})
-    roots = objective_roots(obj, state)
-    assert ReachSkillLevel("weaponcrafting", 5) not in roots
-
-
-def test_objective_roots_curve_root_above_bootstrap_isolates_curve_code():
-    """Isolation test: the curve emission is the ONLY producer of a
-    ReachSkillLevel target ABOVE the _CRAFT_BOOTSTRAP_TARGET=2 floor.
-
-    The craft-bootstrap only ever emits its fixed target (2); any
-    ReachSkillLevel target above 2 (other than the level-50 long-haul root)
-    can only come from the recipe-aware curve. This test discriminates: a
-    weaponcrafting recipe at craft_level 8 (item_level 8) puts the curve
-    target at 8 for a char-7 player (7 + SKILL_CURVE_LOOKAHEAD=3 = 10 >= 8,
-    in-window). The bootstrap can never emit target 8 — only the curve code
-    produces ReachSkillLevel(weaponcrafting, 8). Verified to FAIL with the
-    curve-emission block commented out and PASS with it restored."""
-    gd = GameData()
-    gd._item_stats = {
-        "steel_sword": ItemStats(code="steel_sword", level=8, type_="weapon",
-                                 crafting_skill="weaponcrafting", crafting_level=8),
-        "water_bow": ItemStats(code="water_bow", level=5, type_="weapon",
-                               crafting_skill="weaponcrafting", crafting_level=5),
-    }
-    obj = CharacterObjective.from_game_data(gd)
-    # char 7: window item_level <= 10; steel_sword (item_level 8) qualifies,
-    # max craft_level in window = 8. Skill at 2 is below the curve target 8.
-    state = make_state(level=7, skills={"weaponcrafting": 2})
-    roots = objective_roots(obj, state)
-    assert ReachSkillLevel("weaponcrafting", 8) in roots, (
-        f"curve target 8 (above bootstrap floor 2) not emitted; got {roots}"
-    )
-
-
 def test_gear_roots_are_slot_tagged_and_distinct_per_ring_slot():
     """Two ring slots both wanting copper_ring -> two DISTINCT slot-tagged
     gear roots (so ring2 isn't deduped/satisfied off ring1)."""
@@ -362,72 +261,6 @@ def test_gear_roots_are_slot_tagged_and_distinct_per_ring_slot():
                   if isinstance(r, ObtainItem) and r.code == "copper_ring"]
     assert ObtainItem("copper_ring", slot="ring1_slot") in ring_roots
     assert ObtainItem("copper_ring", slot="ring2_slot") in ring_roots
-
-
-def _gd_alchemy_gatherable() -> GameData:
-    """GameData where alchemy has a gatherable resource (sunflower_field, L1)
-    and a first craftable at level 5 (small_health_potion). Cooking has no
-    gather resource in this fixture, so it takes the reactive-only path."""
-    gd = GameData()
-    gd._item_stats = {
-        "sunflower": ItemStats(code="sunflower", level=1, type_="resource"),
-        "small_health_potion": ItemStats(
-            code="small_health_potion", level=5, type_="consumable",
-            crafting_skill="alchemy", crafting_level=5),
-    }
-    gd._crafting_recipes = {"small_health_potion": {"sunflower": 6}}
-    gd._resource_skill = {"sunflower_field": ("alchemy", 1)}
-    gd._resource_drops = {"sunflower_field": "sunflower"}
-    return gd
-
-
-def test_objective_roots_emits_alchemy_gather_bootstrap_when_below_first_craftable():
-    """Alchemy is gatherable via sunflower_field (L1) and first craftable is L5.
-    At alchemy < 5, objective_roots emits ReachSkillLevel("alchemy", 5) so the
-    objective proactively levels alchemy via gathering rather than waiting for a
-    potion to be explicitly wanted. Pre-fix: no alchemy bootstrap root emitted."""
-    gd = _gd_alchemy_gatherable()
-    obj = CharacterObjective.from_game_data(gd)
-    state = make_state(skills={"alchemy": 1})
-    roots = objective_roots(obj, state)
-    assert ReachSkillLevel("alchemy", 5) in roots, (
-        f"missing alchemy gather-bootstrap root; got {roots}"
-    )
-
-
-def test_objective_roots_omits_alchemy_gather_bootstrap_when_at_first_craftable():
-    """Once alchemy >= first_craftable_level (5), the gather-bootstrap root
-    drops out — the character can already craft, so no deadlock to break."""
-    gd = _gd_alchemy_gatherable()
-    obj = CharacterObjective.from_game_data(gd)
-    state = make_state(skills={"alchemy": 5})
-    roots = objective_roots(obj, state)
-    assert ReachSkillLevel("alchemy", 5) not in roots, (
-        f"alchemy gather-bootstrap root emitted unexpectedly at skill>=5; got {roots}"
-    )
-
-
-def test_objective_roots_does_not_emit_cooking_gather_bootstrap():
-    """Cooking has no gatherable resource (no resource with skill='cooking' in
-    game_data). The gatherability gate naturally excludes it, so even with a
-    first_craftable_level > current_skill, no bootstrap root is emitted for
-    cooking — it takes the reactive-only path."""
-    gd = _gd_alchemy_gatherable()
-    # Add a cooking craftable so first_craftable_level("cooking", gd) = 3 (not None).
-    # If the gatherability gate failed, we'd see ReachSkillLevel("cooking", 3).
-    gd._item_stats["cooked_shrimp"] = ItemStats(
-        code="cooked_shrimp", level=3, type_="consumable",
-        crafting_skill="cooking", crafting_level=3)
-    gd._crafting_recipes["cooked_shrimp"] = {"shrimp": 2}
-    obj = CharacterObjective.from_game_data(gd)
-    # cooking at 1 < 3: IF cooking were gatherable, bootstrap would fire.
-    state = make_state(skills={"alchemy": 1, "cooking": 1})
-    roots = objective_roots(obj, state)
-    # The gather-bootstrap should NOT add a cooking root (no gather resource).
-    # target_skill_levels emits ReachSkillLevel("cooking", 50), not 3 — so 3 is unambiguous.
-    assert ReachSkillLevel("cooking", 3) not in roots, (
-        f"unexpected cooking gather-bootstrap root (cooking not gatherable); got {roots}"
-    )
 
 
 def _gd_with_potions() -> GameData:

@@ -107,9 +107,8 @@ def strategic_value(
     efficiency_budget: int | None = None,
     horizon: tuple[int, int] | None = None,
 ) -> int:
-    """Efficiency-weighted cross-slot value of an equippable — used ONLY by gear
-    cross-slot priority (#14/#16, StrategyEngine._equip_gain), never the combat
-    loadout pick (that stays on the proved `equip_value`).
+    """Efficiency-weighted cross-slot value of an equippable (#14/#16) — never
+    the combat loadout pick (that stays on the proved `equip_value`).
 
     Hoists the ItemStats dict sums to the ints the extracted core takes:
     `combat_raw` is the genuine-combat signal (attack + resistance + hp_restore +
