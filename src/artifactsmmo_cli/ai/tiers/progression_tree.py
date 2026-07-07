@@ -229,6 +229,9 @@ def decide_tree(state: WorldState, game_data: GameData,
         cost=0, score=Fraction(1), step_repr=repr(trunk))
     ranking = [trunk_row, *_gear_ranking_rows(state, game_data, ordered)]
 
+    # interrupt/desired_state are trace-shape compatibility only: RestoreHP
+    # preemption lives in the engine-independent arbiter guard ladder, and
+    # no consumer reads desired_state off the decision post-flip.
     return strategy.StrategyDecision(
         interrupt=None,
         chosen_root=chosen_root,

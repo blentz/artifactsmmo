@@ -713,7 +713,7 @@ open Formal.Liveness.LevelFiftyReachableP
 -- Phase 4b Task 3): their subject — the flat scalar ranking's player-side Tier-2
 -- sticky progress-gated release (sticky_select_core.py / root_progress.py) — was
 -- deleted with the flat ranking. The LIVE arbiter-side commitment (committed-root
--- precedence, zombie release, chosen_step_alive) is proven in ArbiterSelect.lean
+-- precedence, zombie release) is proven in ArbiterSelect.lean
 -- and audited there; the descent tower above never depended on these modules.
 
 -- Unconditional descent (2026-07-04): the hquiet (blockers-quiet) residual of
