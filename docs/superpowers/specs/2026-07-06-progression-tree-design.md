@@ -98,8 +98,9 @@ existing provisioning quantities (win-rate provisioning guard unchanged).
   ClientManager dependency; the CLI `plan` command and tests share this
   single entry point.
 - `tests/scenarios/`: `ScenarioCharacter` builder (level, gear,
-  inventory, bank, skills, task, gold) + GameData loaded from the real
-  snapshot (`formal/sim/game_data_snapshot.json`) — realistic catalog,
+  inventory, bank, skills, task, gold) + GameData loaded offline from a
+  committed copy of the disk-cache bundle (richer than the formal/sim
+  snapshot: includes maps/NPCs/tasks/locations) — realistic catalog,
   deterministic, zero API.
 - Golden scenario tests (expected selected-goal category + first action
   class + plan non-emptiness), e.g.: L1 fresh start → xp branch, fights a
