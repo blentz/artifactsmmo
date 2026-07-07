@@ -102,10 +102,10 @@ def plan(
         print(f"mutation run in progress (pid {lock.pid}) — src/ has live mutants; retry later")
         raise typer.Exit(code=2)
     # `doom`/`committed`/`bundle` are Typer Option-backed parameters; a direct
-    # (non-Click) call that omits one — as the unit tests below do — leaves the
-    # raw `typer.models.OptionInfo` sentinel in place rather than its declared
-    # default, so every use below is isinstance-guarded rather than trusting
-    # the parameter to already be `None`/a plain list.
+    # (non-Click) call that omits one — as tests/test_ai/test_plan_command.py
+    # does — leaves the raw `typer.models.OptionInfo` sentinel in place rather
+    # than its declared default, so every use below is isinstance-guarded
+    # rather than trusting the parameter to already be `None`/a plain list.
     doomed = doom if isinstance(doom, list) else []
     committed_goal = committed if isinstance(committed, str) else None
     if isinstance(scenario, str):

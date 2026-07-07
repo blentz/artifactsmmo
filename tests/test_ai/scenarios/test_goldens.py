@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+from _pytest.mark.structures import ParameterSet
 
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
@@ -58,6 +59,21 @@ XFAIL_TODAY: dict[str, str] = {
         "funding pipeline is plannable; tree drives it as the gear branch"),
 }
 
+# TODAY'S (known-divergent) selected_goal repr for each XFAIL_TODAY scenario —
+# the regression net for Phase-2/3 shadow work. Discovered by running the
+# engine, not designed: e.g. l1_fresh currently routes through the same
+# empty-utility-slot potion defect as l10_copper_adequate, but the arbiter's
+# chosen means for it is a bare material-gather step (the potion recipe's
+# first unmet input), not the UpgradeEquipment goal itself. These pins — and
+# this whole dict/test — are DELETED at the Phase-4 flip, when the strict
+# xfails above flip to hard goldens.
+CURRENT_TODAY: dict[str, str] = {
+    "l1_fresh": "GatherMaterials(sunflower, {sunflower:3})",
+    "l10_copper_adequate": "UpgradeEquipment(small_health_potion->utility1_slot)",
+    "l10_weapon_upgrade": "GatherMaterials(sunflower, {sunflower:3})",
+    "l12_taskgated_bag": "GatherMaterials(sunflower, {sunflower:3})",
+}
+
 
 def _run(name: str) -> PlanReport:
     player = GamePlayer(character=name, history=None)
@@ -66,10 +82,23 @@ def _run(name: str) -> PlanReport:
     return player.plan_from_state()
 
 
-@pytest.mark.parametrize("name", sorted(EXPECTATIONS))
+def _golden_params() -> list[str | ParameterSet]:
+    """Build the parametrize list: scenarios in XFAIL_TODAY get a strict xfail
+    mark (so the engine still runs and a genuine fix XPASSes loudly instead of
+    being silently swallowed by an imperative pytest.xfail() short-circuit);
+    everything else runs as a plain golden assertion."""
+    params: list[str | ParameterSet] = []
+    for name in sorted(EXPECTATIONS):
+        if name in XFAIL_TODAY:
+            params.append(pytest.param(
+                name, marks=pytest.mark.xfail(reason=XFAIL_TODAY[name], strict=True)))
+        else:
+            params.append(name)
+    return params
+
+
+@pytest.mark.parametrize("name", _golden_params())
 def test_scenario_golden(name: str) -> None:
-    if name in XFAIL_TODAY:
-        pytest.xfail(XFAIL_TODAY[name])
     report = _run(name)
     golden = EXPECTATIONS[name]
     # selected_goal is a Goal instance (Goal.__repr__ == class name), not a
@@ -79,6 +108,19 @@ def test_scenario_golden(name: str) -> None:
     if golden.first_action is not None:
         assert report.plan and repr(report.plan[0]).startswith(golden.first_action), (
             name, report.plan)
+
+
+@pytest.mark.parametrize("name", sorted(CURRENT_TODAY))
+def test_scenario_current_behavior_pinned(name: str) -> None:
+    """Pins the engine's TODAY behavior for the XFAIL_TODAY scenarios — the
+    regression net for Phase-2/3 shadow work, so an unintentional behavior
+    shift shows up here before it's mistaken for progress on the design
+    goldens above. These pins encode a KNOWN-DIVERGENT current behavior, not
+    a target; delete this test (and CURRENT_TODAY) at the Phase-4 flip, when
+    the strict xfails in test_scenario_golden flip to hard goldens."""
+    report = _run(name)
+    assert repr(report.selected_goal).startswith(CURRENT_TODAY[name]), (
+        name, repr(report.selected_goal))
 
 
 @pytest.mark.parametrize("name", sorted(EXPECTATIONS))

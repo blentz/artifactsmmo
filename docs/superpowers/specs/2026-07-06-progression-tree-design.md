@@ -162,6 +162,28 @@ existing provisioning quantities (win-rate provisioning guard unchanged).
 
 Each phase lands independently valuable and gate-green.
 
+**Phase 1 SHIPPED (2026-07-06):** commits b626ac4f (from_cache_bundle +
+755KB fixture), 9657a3e9 (seed_offline + plan_from_state split), 4084a89c
+(ScenarioCharacter + registry: l1_fresh, l8_overstocked,
+l10_copper_adequate, l10_weapon_upgrade, l3_low_hp, l12_taskgated_bag),
+8013d9e1 (goldens: 8 pass + 4 xfails = the tree's acceptance set —
+l1_fresh/l10_copper_adequate potion-root defect, l10_weapon_upgrade
+gear-underrank, l12_taskgated_bag bag-root loss), 8a728723
+(`plan --scenario` CLI). Calibration findings: the empty-utility potion
+root wins even at L1; l8_overstocked legitimately resolves to
+DiscardOverstock at 96% pressure (pressure-ladder design, golden
+corrected).
+
+Deferred out of Phase 1 (not gaps — later phases are the right place):
+per-band trunk scenarios (L20/L30/L40/L50) deferred to Phase 2/3, since
+higher-band gear states are best authored alongside the tree's adequacy
+signal rather than against the current flat ranking; the `--scenario
+<file>` form (an ad-hoc scenario loaded from disk) deferred — Phase 1
+ships names-only against the `SCENARIOS` registry, and `--bundle`
+overrides the GameData catalog for a named scenario, not the scenario
+itself; the potion-weight-table golden deferred to Phase 2, since the
+table it would pin doesn't exist yet.
+
 ## Risks
 
 - Adequacy oscillation at band edges → sticky commitment on branch
