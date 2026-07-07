@@ -162,6 +162,17 @@ existing provisioning quantities (win-rate provisioning guard unchanged).
 
 Each phase lands independently valuable and gate-green.
 
+**Phase 2 SHIPPED (2026-07-06):** commits b978bc88 (pure cores:
+milestone/branch/argmax/potion-weights, exact Fractions), 35163ed5
+(Formal/ProgressionTree.lean — 10 theorems core-only, zero sorry/axioms;
+gearTargetPick_perm deferred with docstring rationale), eca0fed9
+(decide_tree assembly, unwired; per-scenario pins: gear-first everywhere
+below adequacy — l1_fresh → copper_dagger via copper_ore step), 249cf05c
+(PROGRESSION_TREE_MUTATIONS, 5/5 unit-killed). Phase-2 interim decisions:
+adequacy = candidate-set-empty (E-tower refinement in Phase 3); utility
+candidates map to hp_restore family only; zero-gain utility trigger +
+gd/objective same-snapshot contract flagged for Phase-3 wiring.
+
 **Phase 1 SHIPPED (2026-07-06):** commits b626ac4f (from_cache_bundle +
 755KB fixture), 9657a3e9 (seed_offline + plan_from_state split), 4084a89c
 (ScenarioCharacter + registry: l1_fresh, l8_overstocked,
