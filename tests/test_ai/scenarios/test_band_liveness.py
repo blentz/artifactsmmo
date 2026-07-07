@@ -195,7 +195,10 @@ def test_l48_band_adequate_real_band_adequate_verdict() -> None:
     assert player._tree_band_adequate() is False
 
     report = player.plan_from_state()
-    assert report.selected_goal is not None
+    # Pin the EXACT last-resort outcome (not just any non-empty plan): the
+    # docstring's finding is only witnessed if Wait is what gets selected.
+    assert repr(report.selected_goal) == "Wait", (
+        repr(report.selected_goal), report.plan)
     assert report.plan, (repr(report.selected_goal), report.plan)
     assert report.decision.chosen_root == ReachCharLevel(level=50)
     assert report.decision.chosen_step == ReachCharLevel(level=50)
