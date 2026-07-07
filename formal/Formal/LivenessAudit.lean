@@ -83,9 +83,6 @@ import Formal.Liveness.MetaGoalDispatch
 import Formal.Liveness.StateFieldGapSemantics
 import Formal.Liveness.TaskPoolSemantics
 import Formal.Liveness.TaskPoolTrajectory
-import Formal.Liveness.StickySelect
-import Formal.Liveness.ZombieFreedom
-import Formal.Liveness.GatedArming
 import Formal.Liveness.UnconditionalDescent
 import Formal.Liveness.DeferFaithful
 import Formal.Liveness.CycleStepDC
@@ -712,21 +709,12 @@ open Formal.Liveness.LevelFiftyReachableP
 #print axioms cycleStepPN_level_ge
 #print axioms cycleStepPN_xp_ge_when_level_eq_throughout
 
--- StickySelect / ZombieFreedom (Tier-2 sticky progress-gated release; no infinite
--- zombie hold). `no_infinite_sticky_hold` uses ONLY the standard axiom set; the
--- measure instantiation `no_infinite_zombie_below_fifty` additionally inherits the
--- pre-existing measure axiom LIV-001 (`Measure.xpToNextLevel`) — NO new axioms.
-open Formal.Liveness.StickySelect
-#print axioms sticky_requires_progress
-#print axioms sticky_progress_safe
-#print axioms released_picks_top
-#print axioms no_infinite_sticky_hold
-open Formal.Liveness.ZombieFreedom
-#print axioms no_infinite_zombie_below_fifty
-open Formal.Liveness.GatedArming
-#print axioms gatedArming_eq_top_of_released
-#print axioms arming_false_of_held_nonfight
-#print axioms no_infinite_zombie_suppression
+-- StickySelect / ZombieFreedom / GatedArming audit rows RETIRED (progression-tree
+-- Phase 4b Task 3): their subject — the flat scalar ranking's player-side Tier-2
+-- sticky progress-gated release (sticky_select_core.py / root_progress.py) — was
+-- deleted with the flat ranking. The LIVE arbiter-side commitment (committed-root
+-- precedence, zombie release, chosen_step_alive) is proven in ArbiterSelect.lean
+-- and audited there; the descent tower above never depended on these modules.
 
 -- Unconditional descent (2026-07-04): the hquiet (blockers-quiet) residual of
 -- ai_reaches_fifty_grounded is DISCHARGED. FMeasure (13-slot cycleStepF-tailored

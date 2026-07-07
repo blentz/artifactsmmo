@@ -6,8 +6,6 @@ import Formal.CombatTargetExistence
 import Formal.ActionApplicability
 import Formal.StepDispatch
 import Formal.LivenessChain
-import Formal.RankingComposition
-import Formal.PersonalityGrounding
 import Formal.CycleInvariants
 import Formal.MultiCycleLiveness
 import Formal.NoActionDeadlock
@@ -313,28 +311,10 @@ open Formal.PriorityBand
 #check @Formal.ObjectiveStepFight.bootstrap_always_fires           -- liveness: ReachCharLevel ∧ monster ∧ gap ≤ 4 ⇒ Fight-led (breaks no-combat livelock)
 #check @Formal.ObjectiveStepFight.completed_task_fires            -- release: items-task done ⇒ stand-down lifts ⇒ Fight-led
 #check @Formal.ObjectiveStepFight.bootstrap_step_always_fires      -- grounded: bootstrap target (level + horizon 2) ⇒ unconditionally Fight-led
--- StrategyBlend required roles:
-#check @Formal.StrategyBlend.balancingScaled_ge_min                -- band-lower: result ≥ balanceMinScaled (= 4 * 0.5 = 2)
-#check @Formal.StrategyBlend.balancingScaled_le_max                -- band-upper: result ≤ balanceMaxScaled (= 4 * 2.0 = 8)
-#check @Formal.StrategyBlend.balancingScaled_at_threshold          -- threshold-identity: leader-current = 2 ⇒ scaled result = 4 (= 4 * 1)
-#check @Formal.StrategyBlend.balancingScaled_at_equal_clamps_to_min -- equal-clamp: leader = current ⇒ scaled result = balanceMinScaled
-#check @Formal.StrategyBlend.balancingScaled_mono                  -- monotone: ↑(leader - current) never decreases the multiplier
-#check @Formal.StrategyBlend.learnedBlend_w_zero                   -- warm-up identity: w = 0 ⇒ blend = value
-#check @Formal.StrategyBlend.learnedBlend_w_one                    -- w = 1 ⇒ blend = normalized (far endpoint)
-#check @Formal.StrategyBlend.learnedBlend_ge_value_when_le         -- convex-bound: value ≤ normalized ⇒ value ≤ blend
-#check @Formal.StrategyBlend.learnedBlend_le_normalized_when_le    -- convex-bound: value ≤ normalized ⇒ blend ≤ normalized
-#check @Formal.StrategyBlend.learnedBlend_ge_normalized_when_ge    -- convex-bound: normalized ≤ value ⇒ normalized ≤ blend
-#check @Formal.StrategyBlend.learnedBlend_le_value_when_ge         -- convex-bound: normalized ≤ value ⇒ blend ≤ value
-#check @Formal.StrategyBlend.learnedBlend_mono_normalized          -- monotone-normalized: ↑normalized never decreases the blend (w ≥ 0)
-#check @Formal.StrategyBlend.learnedBlend_mono_value               -- monotone-value: ↑value never decreases the blend (w ≤ 1)
--- DecideKey required roles:
-#check @Formal.DecideKey.decideCmp_trichotomy                      -- key-total-order: trichotomous
-#check @Formal.DecideKey.decideCmp_swap                            -- key-total-order: antisymmetric (oriented)
-#check @Formal.DecideKey.decideCmp_lt_trans                        -- key-total-order: transitive
-#check @Formal.DecideKey.decideCmp_eq_imp_repr                     -- key-determinism: eq ⇒ equal rootRepr (final tiebreak)
-#check @Formal.DecideKey.decideCmp_eq_imp_negFinal                 -- key-determinism: eq ⇒ equal negFinal
-#check @Formal.DecideKey.decideCmp_eq_imp_effort                   -- key-determinism: eq ⇒ equal effort
-#check @Formal.DecideKey.decideCmp_eq_imp_negProtect              -- key-determinism: eq ⇒ equal negProtect (computed-gear-value tiebreak)
+-- StrategyBlend + decideCmp comparator rows RETIRED (progression-tree Phase 4b
+-- Task 3): their subjects (strategy_blend.py; the flat ranking's decide sort key)
+-- were deleted with the flat scalar ranking.
+-- DecideKey required roles (LIVE strategy_driver.py map_guard/map_means dispatch):
 #check @Formal.DecideKey.goalReprOfGuard_nonempty                  -- exhaustiveness: every GuardKind variant yields a non-empty repr (total dispatcher)
 #check @Formal.DecideKey.goalReprOfMeans_nonempty                  -- exhaustiveness: every MeansKind variant yields a non-empty repr (total dispatcher)
 -- ProgressionReserve required roles:
@@ -805,19 +785,10 @@ open Formal.PriorityBand
 #check @Formal.LivenessChain.chain_emits_fight_when_target_exists_and_applicable
 #check @Formal.LivenessChain.chain_none_implies_picker_or_applicability_blocked
 
--- RankingComposition (G1→ranker bridge):
-#check @Formal.RankingComposition.value_zero_of_base_zero
-#check @Formal.RankingComposition.value_zero_of_marginal_zero
-#check @Formal.RankingComposition.value_zero_of_balancing_zero
-#check @Formal.RankingComposition.value_strict_of_strict_marginal
-#check @Formal.RankingComposition.value_mono_in_marginal
-#check @Formal.RankingComposition.armor_root_outranks_empty_baseline
-#check @Formal.RankingComposition.unique_positive_marginal_dominates
-
--- PersonalityGrounding (discharges G1→ranker hypothesis under BalancedPersonality):
-#check @Formal.PersonalityGrounding.balanced_pos
-#check @Formal.PersonalityGrounding.balanced_armor_outranks_empty_unconditional
-#check @Formal.PersonalityGrounding.balanced_gear_armor_strictly_outranks_empty
+-- RankingComposition / PersonalityGrounding rows RETIRED (Phase 4b Task 3):
+-- the composite `_value = base_prior * marginal * balancing` ranker they bridged
+-- G1 into was deleted with the flat scalar ranking. G1 itself
+-- (GearPolicy.armor_strictly_dominates_empty_slot) remains proven.
 
 -- CycleInvariants (per-cycle Player loop):
 #check @Formal.CycleInvariants.cycle_executes_exactly_one
@@ -1204,32 +1175,18 @@ open Formal.PriorityBand
 #check @Formal.CurrencyAffordFastFail.runPlan_unaffordable    -- unaffordable ⇒ owned invariant ∀ plan
 #check @Formal.CurrencyAffordFastFail.fastfail_sound          -- fast-fail fires ⇒ ∀ plan owned < needed
 
--- ServableFilter required roles (decide() servable filter;
--- src/artifactsmmo_cli/ai/tiers/servable_filter.py::keep_servable):
-#check @Formal.ServableFilter.keepServable_all_servable_of_any  -- any servable ⇒ kept = servable subset
-#check @Formal.ServableFilter.keepServable_id_of_none           -- none servable ⇒ keep all
-#check @Formal.ServableFilter.keepServable_nonempty_of_nonempty -- never drops to empty
+-- ServableFilter rows RETIRED (Phase 4b Task 3): keep_servable / servable_filter.py
+-- died with the flat ranking; the live demotion is progression_tree._servable_promotion
+-- (covered by the progression-tree suite).
 
--- StickySelect required roles (Tier-2 root sticky + progress-gated release;
--- src/artifactsmmo_cli/ai/tiers/strategy.py:582-595 + the player.py:340 fix):
-#check @Formal.Liveness.StickySelect.sticky_requires_progress  -- no-zombie: sticky-held non-top ⇒ progressed
-#check @Formal.Liveness.StickySelect.sticky_progress_safe      -- no-zombie holds ∀ ratio (ratio not the lever)
-#check @Formal.Liveness.StickySelect.released_picks_top        -- released ⇒ top-scored root wins next cycle
-#check @Formal.Liveness.StickySelect.kept_when_progressing     -- non-vacuity: progressing root is kept
-#check @Formal.Liveness.StickySelect.dropped_when_frozen       -- non-vacuity: frozen root is released
-#check @Formal.Liveness.StickySelect.no_infinite_sticky_hold   -- liveness: no infinite zombie hold (∀ WF measure)
-#check @Formal.Liveness.ZombieFreedom.no_infinite_zombie_below_fifty  -- instance at the reach-50 measureLt
--- ObtainProgress (deepened gear-root progress witness faithfulness — root_progress.py):
-#check @Formal.Liveness.ObtainProgress.obtainProgress_gather_strict   -- gather a closure unit ⇒ witness STRICTLY ↑ (no false-flat)
-#check @Formal.Liveness.ObtainProgress.obtainProgress_mono            -- owned ↑ ⇒ witness ↑ (no spurious drop)
-#check @Formal.Liveness.ObtainProgress.obtainProgress_craft_invariant -- single-tier craft ⇒ witness UNCHANGED (no false regression)
+-- StickySelect / ZombieFreedom / ObtainProgress rows RETIRED (Phase 4b Task 3):
+-- the player-side Tier-2 sticky (sticky_select_core.py / root_progress.py) died with
+-- the flat ranking; arbiter-side commitment is proven in ArbiterSelect.lean.
 -- GearBuildTermination (a buildable/Grounded gear target is BUILT in finite steps):
 #check @Formal.Liveness.GearBuildTermination.grounded_builds_target    -- Grounded target ⇒ ∃ finite actionable-step sequence that satisfies it
 #check @Formal.Liveness.GearBuildTermination.grounded_markSat          -- gear progress is monotone: marking a node satisfied never un-grounds the target
 #check @Formal.Liveness.GearBuildTermination.measure_markSat_lt        -- each productive step strictly drops the unmet-count (termination measure)
-#check @Formal.Liveness.GatedArming.gatedArming_eq_top_of_released    -- released ⇒ arming = top root's fight status
-#check @Formal.Liveness.GatedArming.arming_false_of_held_nonfight     -- held non-fight root ⇒ arming suppressed
-#check @Formal.Liveness.GatedArming.no_infinite_zombie_suppression    -- no infinite zombie suppression of the arming
+-- GatedArming rows RETIRED (Phase 4b Task 3) with the sticky machinery they gated.
 -- GearTaxonomy required roles (pure gear-classification core;
 -- src/artifactsmmo_cli/ai/gear_taxonomy_core.py::combat_gear_types):
 #check @Formal.GearTaxonomy.combatGear_mem_iff           -- membership: classified ⇔ combat-bearing ∧ no consumable item

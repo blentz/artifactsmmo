@@ -1,69 +1,29 @@
-"""Pure cores for the strategy decision layer's sort and dispatcher routing.
+"""Pure core for the strategy driver's dispatcher routing.
 
-Two related extractions:
+`goal_repr_of_guard` / `goal_repr_of_means`: the `repr` strings the driver's
+`map_guard` / `map_means` dispatchers produce per enum variant. Pulled out
+for two reasons:
 
-1. `decide_key`: the tuple Python `decide` (in `strategy.py`) sorts candidates
-   by — `(-final, effort, root_repr)`. The lexicographic comparator over this
-   tuple is the property we lock with `formal/Formal/DecideKey.lean`. Distinct
-   candidate roots have distinct reprs, so the comparator is a strict total
-   order on production inputs (the third field is the final tiebreak).
-
-2. `goal_repr_of_guard` / `goal_repr_of_means`: the `repr` strings the driver's
-   `map_guard` / `map_means` dispatchers produce per enum variant. Pulled out
-   for two reasons:
-
-   * the Lean exhaustiveness proof matches every `GuardKind` / `MeansKind`
-     variant against a total `goalReprOfGuard` / `goalReprOfMeans` function,
-     and the compiler enforces total coverage at compile time (NO `raise
-     ValueError` fall-through is possible), and
-   * a small `tests/test_decide_dispatch.py` round-trip pins every enum
-     variant to a non-empty repr (matches the Lean total-match guarantee).
+* the Lean exhaustiveness proof (`formal/Formal/DecideKey.lean`) matches
+  every `GuardKind` / `MeansKind` variant against a total `goalReprOfGuard`
+  / `goalReprOfMeans` function, and the compiler enforces total coverage at
+  compile time (NO `raise ValueError` fall-through is possible), and
+* `tests/test_ai/test_decide_key.py` round-trips every enum variant to a
+  non-empty repr (matches the Lean total-match guarantee).
 
 The Python `map_guard` / `map_means` in `strategy_driver.py` cannot delegate
 their FULL behavior here (they construct parameterized `Goal` instances that
 depend on `GameData` / `WorldState` / `SelectionContext`), but the repr of the
 resulting Goal — the IDENTITY the strategy commits to — is a pure function of
 the enum kind, captured here.
-"""
-from fractions import Fraction
 
+(Historical note: this module also carried `decide_key`, the sort-key tuple of
+the retired flat scalar ranking's `StrategyEngine.decide`. That comparator was
+deleted with the flat ranking in progression-tree Phase 4b; the dispatcher
+tables below bind the LIVE arbiter dispatchers and stay.)
+"""
 from artifactsmmo_cli.ai.tiers.guards import GuardKind
 from artifactsmmo_cli.ai.tiers.means import MeansKind
-
-
-def decide_key(neg_final: Fraction, effort: int, neg_protection: int,
-               root_repr: str) -> tuple[Fraction, int, int, str]:
-    """The sort key tuple `decide` builds: `(-final, effort, -protection,
-    root_repr)`.
-
-    Lower tuple sorts FIRST: smaller `-final` (= higher `final`) wins, ties
-    break by lower `effort`, then by smaller `-protection` (= HIGHER computed
-    gear value), then by string-ordered `root_repr`. The tuple is the SAME
-    shape as Python's tuple lexicographic comparison and Lean's
-    `compareLex`/`compareOn` composition over the four fields.
-
-    `protection = max(0, strategic_value(item) - strategic_value(current_in_slot))`
-    is the exact-int efficiency-weighted gain (`tiers/strategic_value.py`, #16);
-    `decide` passes its negation. This breaks the `EMPTY_SLOT_URGENCY` saturation
-    tie — where every empty combat slot flattens to the same `final` score — by
-    COMPUTED protection, so body armor (large hp_bonus) outranks an amulet on its
-    actual stats instead of on an alphabetical accident. Combat stats carry the
-    dominant SCALE weight so combat-slot ordering is unchanged vs the old
-    equip_value tiebreak; non-combat efficiency stats add their own weight. Either
-    way `decide_key` is AGNOSTIC to the source — it receives an abstract int.
-    Non-gear / stats-unknown roots contribute `0`, leaving them ordered by the
-    leading fields and the repr.
-
-    The fourth field is the GENUINE last tiebreak: in production every distinct
-    candidate root has a distinct `repr` (different MetaGoal types/codes), so
-    no two candidates with distinct roots can tie under the full lex key.
-
-    P4a: `neg_final` is an exact `Fraction` and `neg_protection` an exact `int`
-    (strategy scores / equip values are exact rationals/ints) — lexicographic
-    comparison is exact, no float near-ties.
-    """
-    return (neg_final, effort, neg_protection, root_repr)
-
 
 # --- guard/means dispatcher repr maps --------------------------------------
 # These mirror the strings the parameterized Goal instances `map_guard`/

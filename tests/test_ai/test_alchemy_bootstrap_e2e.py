@@ -9,11 +9,12 @@ returns GatherMaterialsGoal(target_item="sunflower") instead of None.
 
 Without the Task 2 fix, objective_step_goal returned None here, marking the
 potion root (ObtainItem(small_health_potion, utility1_slot)) UNSERVABLE and
-causing keep_servable to drop it from the strategy ranking.
+causing the servability demotion (then keep_servable; now the progression
+tree's _servable_promotion) to drop it from the strategy ranking.
 
 Layer asserted: objective_step_goal directly — the exact predicate that
-_step_servable (player.py:1591) calls.  Testing at this layer avoids live-API
-dependencies while covering the only decision point keep_servable relies on.
+_step_servable (player.py) calls.  Testing at this layer avoids live-API
+dependencies while covering the only decision point servability relies on.
 """
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -94,7 +95,7 @@ class TestAlchemyBootstrapServability:
         assert isinstance(goal, GatherMaterialsGoal), (
             "objective_step_goal must return GatherMaterialsGoal for alchemy NO_GRIND "
             f"(gatherable skill); got {goal!r} — None means the potion root is "
-            "unservable and keep_servable would drop it from the ranking"
+            "unservable and the servability demotion would drop it from the ranking"
         )
         assert "sunflower" in goal.needed, (
             f"gather needed map must target 'sunflower' (sunflower_field drop), "

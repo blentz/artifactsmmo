@@ -173,7 +173,8 @@ class GamePlayer:
         # Per-cycle servable-filter diagnostic (2026-06-20): whether the committed
         # chosen_root's step is plannable now. Emitted in the trace so a live run can
         # confirm the filter demotes unservable top roots (feather_coat) instead of
-        # committing to them while char-grinding. See _step_servable / servable_filter.
+        # committing to them while char-grinding. See _step_servable and the
+        # progression tree's _servable_promotion.
         self._last_servability_diag: dict[str, object] = {}
         # Learned minimum tasks_coin worth attempting a taskmaster exchange. The
         # API does not expose the per-exchange cost as data, so we discover it

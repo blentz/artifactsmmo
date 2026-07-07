@@ -192,25 +192,8 @@ open Formal.WeightedRemaining in
 #print axioms Formal.LowYieldCancel.zero_fast_path_fires_with_low_confidence_witness
 #print axioms Formal.LowYieldCancel.positive_current_fires_implies_margin
 #print axioms Formal.LowYieldCancel.positive_current_fires_implies_confidence
-#print axioms Formal.StrategyBlend.balancingScaled_ge_min
-#print axioms Formal.StrategyBlend.balancingScaled_le_max
-#print axioms Formal.StrategyBlend.balancingScaled_at_threshold
-#print axioms Formal.StrategyBlend.balancingScaled_at_equal_clamps_to_min
-#print axioms Formal.StrategyBlend.balancingScaled_mono
-#print axioms Formal.StrategyBlend.learnedBlend_w_zero
-#print axioms Formal.StrategyBlend.learnedBlend_w_one
-#print axioms Formal.StrategyBlend.learnedBlend_ge_value_when_le
-#print axioms Formal.StrategyBlend.learnedBlend_le_normalized_when_le
-#print axioms Formal.StrategyBlend.learnedBlend_ge_normalized_when_ge
-#print axioms Formal.StrategyBlend.learnedBlend_le_value_when_ge
-#print axioms Formal.StrategyBlend.learnedBlend_mono_normalized
-#print axioms Formal.StrategyBlend.learnedBlend_mono_value
-#print axioms Formal.DecideKey.decideCmp_trichotomy
-#print axioms Formal.DecideKey.decideCmp_swap
-#print axioms Formal.DecideKey.decideCmp_lt_trans
-#print axioms Formal.DecideKey.decideCmp_eq_imp_repr
-#print axioms Formal.DecideKey.decideCmp_eq_imp_negFinal
-#print axioms Formal.DecideKey.decideCmp_eq_imp_effort
+-- (StrategyBlend + DecideKey comparator rows retired with the flat scalar
+-- ranking — progression-tree Phase 4b Task 3.)
 #print axioms Formal.DecideKey.goalReprOfGuard_nonempty
 #print axioms Formal.DecideKey.goalReprOfMeans_nonempty
 #print axioms Formal.CyclesForProgress.cyclesForProgressPure_eq_median_concat
@@ -589,10 +572,6 @@ open Formal.WeightedRemaining in
 -- LivenessChain (de-Mathlib'd safety module)
 #print axioms Formal.LivenessChain.chain_emits_fight_when_target_exists_and_applicable
 #print axioms Formal.LivenessChain.chain_none_implies_picker_or_applicability_blocked
--- PersonalityGrounding (de-Mathlib'd safety module)
-#print axioms Formal.PersonalityGrounding.balanced_pos
-#print axioms Formal.PersonalityGrounding.balanced_armor_outranks_empty_unconditional
-#print axioms Formal.PersonalityGrounding.balanced_gear_armor_strictly_outranks_empty
 -- TaskTradeReadyPriority (de-Mathlib'd safety module)
 #print axioms Formal.TaskTradeReadyPriority.suppress_total
 #print axioms Formal.TaskTradeReadyPriority.suppress_deterministic
@@ -692,14 +671,6 @@ open Formal.WeightedRemaining in
 #print axioms Formal.MultiCycleLiveness.nFights_all_well_formed
 #print axioms Formal.MultiCycleLiveness.multi_fight_raises_xp_by_at_least
 #print axioms Formal.MultiCycleLiveness.bounded_fights_suffice_for_xp_delta
--- RankingComposition (de-Mathlib'd safety module)
-#print axioms Formal.RankingComposition.value_zero_of_base_zero
-#print axioms Formal.RankingComposition.value_zero_of_marginal_zero
-#print axioms Formal.RankingComposition.value_zero_of_balancing_zero
-#print axioms Formal.RankingComposition.value_strict_of_strict_marginal
-#print axioms Formal.RankingComposition.value_mono_in_marginal
-#print axioms Formal.RankingComposition.armor_root_outranks_empty_baseline
-#print axioms Formal.RankingComposition.unique_positive_marginal_dominates
 -- AcceptTaskGate (de-Mathlib'd safety module)
 #print axioms Formal.AcceptTaskGate.fires_total
 #print axioms Formal.AcceptTaskGate.fires_deterministic

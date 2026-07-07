@@ -25,7 +25,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | CurrencyAffordFastFail | core, planner | safety, totality |
 | CycleInvariants | characters, combat | safety, monotonicity |
 | CyclesForProgress | characters | reachability, monotonicity |
-| DecideKey | core, planner | dominance, totality |
+| DecideKey | core, planner | totality |
 | DisposalRoute | inventory | dominance, safety, totality |
 | DominancePareto | equipment, selling | safety |
 | DoomedMemo | core, planner | monotonicity, safety, reachability |
@@ -48,13 +48,9 @@ concept tag, or a concept with no module, is a traceability gap.
 | LeafAttainable | core, planner | validity, monotonicity |
 | LiquidationVenue | grandexchange | dominance, totality, safety, monotonicity |
 | Liveness.CurrencyFunding | liveness, tasks | termination, sufficiency |
-| Liveness.GatedArming | liveness, planner | liveness |
 | Liveness.GearBuildTermination | liveness, planner | liveness |
 | Liveness.ItemsTaskRun | tasks | safety, totality, reachability |
 | Liveness.ItemsTaskTermination | tasks, crafting, bank | safety, totality |
-| Liveness.ObtainProgress | liveness, planner | monotonicity |
-| Liveness.StickySelect | liveness, planner | liveness, safety |
-| Liveness.ZombieFreedom | liveness, planner | liveness |
 | LivenessChain | combat, monsters | reachability, no-deadlock |
 | LoadoutProfiles | gear | validity, monotonicity, totality, safety |
 | LowYieldCancel | tasks | safety, monotonicity |
@@ -70,7 +66,6 @@ concept tag, or a concept with no module, is a traceability gap.
 | ObjectiveStepFight | liveness | safety, liveness, validity |
 | OptimalBuyMix | potion-supply-economics | validity, safety |
 | OwnedCount | items | safety, monotonicity |
-| PersonalityGrounding | characters, items | dominance |
 | Phase7Invariants | items, core | safety |
 | Phase8Invariants | items, crafting, bank | safety, reachability |
 | PlanModel | planner, plan, action | monotonicity, safety |
@@ -82,11 +77,9 @@ concept tag, or a concept with no module, is a traceability gap.
 | ProgressionReserve | core, economy | deduction-accounting, monotonicity |
 | ProgressionTree | progression | safety, totality, dominance |
 | PurposeRouting | items, characters | dominance |
-| RankingComposition | core, planner | dominance, monotonicity |
 | RealizableLoadout | items, characters | safety |
 | RecycleProtection | items, crafting | safety |
 | Scalarizer | core | monotonicity |
-| ServableFilter | core, planner | safety, totality |
 | ShoppingList | resources | dominance, monotonicity, safety, totality |
 | SkillGateFastFail | core, planner | safety, totality |
 | SkillGrindSelection | crafting, planner | safety, totality |
@@ -95,7 +88,6 @@ concept tag, or a concept with no module, is a traceability gap.
 | StepDispatch | core, planner | totality, safety, reachability |
 | StoreWarmup | core | safety |
 | StrategicValue | items, characters | safety, monotonicity |
-| StrategyBlend | core, planner | monotonicity, safety |
 | StrategyTraversal | crafting, planner | reachability, totality |
 | StuckDetector | core | safety |
 | TaskDecision | tasks | dominance, monotonicity |

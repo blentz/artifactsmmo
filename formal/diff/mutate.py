@@ -52,18 +52,14 @@ BANK_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_selection.
 STUCK_DETECTOR_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recovery.py"
 PRIORITY_BAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "priority_band.py"
 OWNED_COUNT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "owned_count.py"
-ROOT_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "root_progress.py"
 UPGRADE_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "upgrade_selection.py"
 SCALAR_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "scalar_core.py"
 PLANNER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "planner.py"
 ARBITER_SELECT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "arbiter_select.py"
-STICKY_SELECT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "sticky_select_core.py"
-SERVABLE_FILTER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "servable_filter.py"
 TASK_DECISION_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_decision_core.py"
 OBJECTIVE_COMPLETION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "objective_completion.py"
 LOW_YIELD_BOUNDARY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "low_yield_boundary.py"
 OBJECTIVE_STEP_FIGHT_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "objective_step_fight_core.py"
-STRATEGY_BLEND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "strategy_blend.py"
 DECIDE_KEY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "decide_key.py"
 CYCLES_FOR_PROGRESS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "cycles_for_progress_core.py"
 GATHER_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gather_apply_core.py"
@@ -1182,29 +1178,6 @@ RECIPE_CLOSURE_YIELD_MUTATIONS = [
 ]
 
 
-# root_progress mutations -- the deepened gear-root progress witness `_obtain_progress`.
-# Each breaks the faithfulness the proved `obtainProgress` theorems guarantee and is killed
-# by formal/diff/test_obtain_progress_diff.py (binds the live function to the Lean def).
-ROOT_PROGRESS_MUTATIONS = [
-    # drop the bank term: banked material no longer counts toward progress, so the
-    # witness undercounts whenever the bot has deposited intermediates (random bank
-    # counts in the diff make py != lean).
-    ("root_progress: drop bank term (inventory only)",
-     "        owned = state.inventory.get(node, 0) + bank.get(node, 0)",
-     "        owned = state.inventory.get(node, 0)"),
-    # drop the raw_material_units weight: unweighted owned count, so a craft conversion
-    # (10 ore -> 1 bar) no longer conserves and gathering registers the wrong magnitude.
-    ("root_progress: drop raw-unit weight (owned * units -> owned)",
-     "            total += owned * raw_material_units(game_data, node)",
-     "            total += owned"),
-    # shallow regression: skip the transitive closure so only the target itself counts
-    # (the original copper_boots never-crafted bug — ore-gathering reads as no progress).
-    ("root_progress: skip transitive closure (target only)",
-     "    closure_demand(code, 1, game_data, demand, frozenset())",
-     "    demand.clear()"),
-]
-
-
 # task_feasibility mutations -- old strings matched to current task_feasibility.py text.
 TASK_FEASIBILITY_MUTATIONS = [
     # worst -> min instead of max: pick the SMALLEST gap rather than the highest
@@ -1368,95 +1341,6 @@ STRATEGY_MUTATIONS = [
      "        count += 1\n"
      "        stack.extend(prerequisites(node, state, game_data))"),
 ]
-
-# Impure ranking-policy mutations killed by UNIT tests (not the differential
-# traversal suite). The bag-slot urgency floor is policy like EMPTY_SLOT_URGENCY;
-# dropping the branch reverts an empty craftable bag slot to marginal 0 (never
-# pursued) — killed by test_empty_bag_slot_scores_nonzero.
-STRATEGY_MARGINAL_MUTATIONS = [
-    ("strategy: drop bag-slot urgency floor",
-     "            elif (slot == \"bag_slot\" and current_code is None\n"
-     "                    and stats.level <= state.level\n"
-     "                    and stats.crafting_skill is not None\n"
-     "                    and state.skills.get(stats.crafting_skill, 0) >= stats.crafting_level):\n"
-     "                marginal = max(marginal, BAG_SLOT_URGENCY)\n",
-     ""),
-]
-
-
-# Occupied-slot upgrade urgency mutations on strategy.py `_marginal` — the
-# branch that fires OCCUPIED_SLOT_UPGRADE_URGENCY when a large upgrade
-# (gain >= GEAR_EQUIP_SCALE) is available for a filled combat armor slot.
-# Killed by unit tests: drop-urgency is killed by test_occupied_slot_big_upgrade
-# (asserts score == 5/2; without multiplier score is 1); >= -> > is killed by
-# the same test at the boundary gain == GEAR_EQUIP_SCALE (score drops from 5/2
-# to 1 when the gate fires for >= but not for >).
-OCCUPIED_UPGRADE_MUTATIONS = [
-    ("strategy: drop occupied-slot upgrade urgency",
-     "                    and gain >= GEAR_EQUIP_SCALE):\n"
-     "                marginal = max(marginal, Fraction(1)) * OCCUPIED_SLOT_UPGRADE_URGENCY\n",
-     "                    and gain >= GEAR_EQUIP_SCALE):\n"
-     "                marginal = marginal\n"),
-    ("strategy: occupied-upgrade gate >= -> >",
-     "and gain >= GEAR_EQUIP_SCALE):", "and gain > GEAR_EQUIP_SCALE):"),
-]
-
-
-# Potion-supply gate mutations on strategy.py `_value` — the effect-based
-# bootstrap_potion_target guard added by the potion-effect-priority feature.
-# This is a runtime-only VALUE gate (not a traversal decision), so the traversal
-# differential (test_strategy_traversal_diff.py) CANNOT observe it. It therefore
-# gets its OWN group bound to the unit test that pins the behavior — never folded
-# into the traversal-diff STRATEGY_MUTATIONS group (the bag-slot lesson: unit-
-# killed mutations need their own group bound to the unit test). Killed by
-# tests/test_ai/test_tiers_strategy.py::TestPotionSupplyUrgency::
-# test_aspirational_tier_not_boosted, which pins that only the effect-best
-# craftable-now target (small) is boosted and an aspirational high-tier potion
-# (enhanced, alchemy 45) is NOT — the 16->45 alchemy-grind regression.
-POTION_GATE_MUTATIONS = [
-    # Flip the bootstrap-target equality: without it an aspirational high-tier
-    # potion would ride the POTION_SUPPLY_URGENCY boost and the effect-best
-    # craftable-now target would lose it (both assertions in the kill-test fail).
-    ("strategy: potion-gate bootstrap-target equality flip (== -> !=)",
-     "                    and root.code == bootstrap_potion_target(state, game_data)",
-     "                    and root.code != bootstrap_potion_target(state, game_data)"),
-]
-
-
-# Skill-grind progress-decay mutations on strategy.py `_marginal` — the
-# (1 - progress) factor that reduces the catch-up boost as the skill
-# approaches its curve target. Killed by test_skill_grind_decays_with_progress
-# (v_far == v_near without decay, breaking v_far > v_near and v_far == 93/100).
-SKILL_DECAY_MUTATIONS = [
-    ("strategy: drop skill-grind progress decay",
-     "boost = (1 - progress) * min(Fraction(gap), SKILL_GAP_CAP) * SKILL_GAP_PER_LEVEL",
-     "boost = min(Fraction(gap), SKILL_GAP_CAP) * SKILL_GAP_PER_LEVEL"),
-]
-
-
-# Capstone-gradient mutations on strategy.py `_marginal` — the progress-scaled
-# bonus (level/root.level × CHAR_CAPSTONE_SCALE) that pulls the bot toward the
-# L50 capstone when gap >= CHAR_REACHABLE_HORIZON. Killed by
-# test_capstone_has_progress_gradient (v10 == Fraction(27, 25) fails when
-# the gradient is flattened back to CHAR_MARGINAL).
-CAPSTONE_GRADIENT_MUTATIONS = [
-    ("strategy: drop capstone gradient (flatten to CHAR_MARGINAL)",
-     "                return CHAR_MARGINAL + Fraction(state.level, root.level) * CHAR_CAPSTONE_SCALE",
-     "                return CHAR_MARGINAL"),
-]
-
-
-# Geared-gate premise mutation on strategy.py `_has_empty_armor_slot` — the
-# `is None` check that detects an empty combat armor slot in near_term_gear.
-# Killed by test_geared_gate_uses_near_term_not_bis (empty case asserts True;
-# the inverted check returns True for FILLED slots, flipping the verdict to
-# False for empty and True for filled — both assertions fail).
-GEARED_GATE_MUTATIONS = [
-    ("strategy: geared-gate empty check inverted (is None -> is not None)",
-     "            if state.equipment.get(slot) is None:\n                return True",
-     "            if state.equipment.get(slot) is not None:\n                return True"),
-]
-
 
 # reachability-invariant mutations: both is_reachable AND actionable_step now use
 # per-DFS-path frozenset cycle-tracking (Phase 13 refactor — Python byte-equivalent
@@ -1832,54 +1716,6 @@ ARBITER_SELECT_MUTATIONS = [
 ]
 
 
-# sticky_select_core mutations -- anchors for sticky_choose / next_last (Lean-proved
-# StickySelect.stickyChoose / nextLast). The differential
-# (test_sticky_select_diff.py) kills each.
-STICKY_SELECT_MUTATIONS = [
-    # sticky never wins: keep top even when it fails to dominate the sticky root.
-    ("sticky_select: sticky never kept (return top instead of sticky)",
-     "    if top.score <= ratio * sticky.score:\n        return sticky",
-     "    if top.score <= ratio * sticky.score:\n        return top"),
-    # dominance comparison flipped: <= -> >. Sticky kept exactly when it should lose.
-    ("sticky_select: dominance comparison flip (<= -> >)",
-     "    if top.score <= ratio * sticky.score:",
-     "    if top.score > ratio * sticky.score:"),
-    # drop the dominance ratio: threshold becomes sticky.score, so a top that should
-    # be kept (ratio*sticky < top <= ... ) wrongly yields to sticky.
-    ("sticky_select: drop dominance ratio",
-     "    if top.score <= ratio * sticky.score:",
-     "    if top.score <= sticky.score:"),
-    # vanished-sticky fallback returns None instead of top -> bot stalls.
-    ("sticky_select: vanished sticky returns None",
-     "    if sticky is None:\n        return top",
-     "    if sticky is None:\n        return None"),
-    # progress gate dropped: feed the anchor back even without progress (the zombie).
-    ("sticky_select: next_last ignores progressed (always feeds anchor)",
-     "    return chosen_repr if progressed else None",
-     "    return chosen_repr"),
-]
-
-
-# servable_filter mutations -- anchors for keep_servable (Lean-proved
-# ServableFilter.keepServable). The differential (test_servable_filter_diff.py) kills each.
-SERVABLE_FILTER_MUTATIONS = [
-    # never filter: keep all items even when some are servable.
-    ("servable_filter: never drops unservable (return all)",
-     "    kept = [it for it, ok in zip(items, servable, strict=True) if ok]\n"
-     "    return kept if kept else list(items)",
-     "    kept = [it for it, ok in zip(items, servable, strict=True) if ok]\n"
-     "    return list(items)"),
-    # invert servable test: keep the UNservable ones.
-    ("servable_filter: servable test inverted (if ok -> if not ok)",
-     "    kept = [it for it, ok in zip(items, servable, strict=True) if ok]",
-     "    kept = [it for it, ok in zip(items, servable, strict=True) if not ok]"),
-    # drop the graceful fallback: return empty when nothing is servable (strands the bot).
-    ("servable_filter: drop graceful fallback (return kept, may be empty)",
-     "    return kept if kept else list(items)",
-     "    return kept"),
-]
-
-
 # task_decision_core mutations -- old strings matched to actual task_decision_core.py text.
 TASK_DECISION_MUTATIONS = [
     # Flip the comparator: `>=` → `>`. At equality (vpc == required) decision flips
@@ -2022,81 +1858,8 @@ BOOTSTRAP_HORIZON_MUTATIONS = [
 ]
 
 
-# strategy_blend mutations -- old strings matched to current strategy_blend.py text.
-STRATEGY_BLEND_MUTATIONS = [
-    # flip the slope sign: + BALANCE_K -> - BALANCE_K. The monotonicity in
-    # (leader - current) breaks; at gap = 4 the python is < 1 and the lean is
-    # > 1 — the diff fires for any gap ≠ 2.
-    ("strategy_blend: balancing slope sign flip (+ K -> - K)",
-     "    raw = 1 + BALANCE_K * (leader - current - BALANCE_THRESHOLD)",
-     "    raw = 1 - BALANCE_K * (leader - current - BALANCE_THRESHOLD)"),
-    # drop the lower band clamp: max(BALANCE_MIN, ...) -> the inner min only.
-    # A skill far ahead of the leader now produces a multiplier below 0.5 (and
-    # possibly negative). The proved lower bound + threshold tests both fire.
-    ("strategy_blend: drop lower band clamp (max -> bare inner min)",
-     "    return max(BALANCE_MIN, min(BALANCE_MAX, raw))",
-     "    return min(BALANCE_MAX, raw)"),
-    # swap BALANCE_K 1/4 -> 1: multiplier amplification per gap-unit is 4x
-    # too strong; clamp kicks in much sooner (essentially everywhere) and the
-    # threshold identity (gap=2 ⇒ 1.0) is preserved BUT the gap=4 → 1.5 test
-    # and the hypothesis-driven mid-band values fail. (P4a re-anchor: the
-    # constant is an exact Fraction now; same semantic intent as 0.25 -> 1.0.)
-    ("strategy_blend: BALANCE_K 1/4 -> 1",
-     "BALANCE_K = Fraction(1, 4)",
-     "BALANCE_K = Fraction(1)"),
-    # P4a byte-equivalence kill: contaminate the exact-Fraction core with a
-    # float literal seed (1 -> 1.0). `1.0 + Fraction` is a float, so mid-band
-    # (unclamped) results stop being Fractions — the diff test asserts the
-    # production result IS a Fraction equal bit-for-bit to the Lean Rat.
-    ("strategy_blend: float-seed balancing (breaks the exact-Fraction core)",
-     "    raw = 1 + BALANCE_K * (leader - current - BALANCE_THRESHOLD)",
-     "    raw = 1.0 + BALANCE_K * (leader - current - BALANCE_THRESHOLD)"),
-    # learned_blend: flip (1 - w) to w. Now blend = w*value + w*normalized,
-    # destroying the convex combination. The convex-bound / warm-up tests fire.
-    ("strategy_blend: learned_blend (1 - w) -> w (drop the complement)",
-     "    return (1 - w) * value + w * normalized",
-     "    return w * value + w * normalized"),
-    # learned_blend: + -> - between the two terms (subtract normalized rather
-    # than blend toward it). The convex bound + monotonicity tests fire.
-    ("strategy_blend: learned_blend + -> - between terms",
-     "    return (1 - w) * value + w * normalized",
-     "    return (1 - w) * value - w * normalized"),
-    # learned_blend: drop the w cap on `normalized` (multiply by w*2): the
-    # blend can exceed `max(value, normalized)` — the anti-Phase-1 unbounded
-    # bonus property breaks. The convex-bound assertion fires.
-    ("strategy_blend: learned_blend doubles the normalized contribution",
-     "    return (1 - w) * value + w * normalized",
-     "    return (1 - w) * value + 2 * w * normalized"),
-]
-
-
 # decide_key mutations -- old strings matched to current decide_key.py text.
 DECIDE_KEY_MUTATIONS = [
-    # swap negFinal and effort in the tuple: the lex order flips priority;
-    # for any inputs with distinct effort the comparator returns a different
-    # ordering vs the Lean oracle (which sorts by negFinal first). The
-    # Hypothesis driver finds a counterexample quickly.
-    ("decide_key: swap negFinal/effort in the sort tuple",
-     "    return (neg_final, effort, neg_protection, root_repr)",
-     "    return (effort, neg_final, neg_protection, root_repr)"),
-    # drop the protection tiebreak: two same-(negFinal, effort) empty-slot gear
-    # keys with different computed equip value now collapse to a CONSTANT third
-    # field, violating the proved `eq_imp_negProtect` lemma at the tuple level.
-    # `test_decide_key_protection_tiebreak_matches_lean` fires: with negProtect
-    # constant, the body-armor key no longer sorts ahead of the amulet (the repr
-    # tiebreak then favours 'air...' < 'feather...').
-    ("decide_key: drop protection tiebreak (constant third field)",
-     "    return (neg_final, effort, neg_protection, root_repr)",
-     "    return (neg_final, effort, 0, root_repr)"),
-    # drop the rootRepr tiebreak: RETURN the fourth field as a CONSTANT, which
-    # violates the proved `eq_imp_repr` lemma at the tuple level. The test fires
-    # when two distinct reprs collide on equal leading fields.
-    ("decide_key: drop rootRepr tiebreak (constant fourth field)",
-     "    return (neg_final, effort, neg_protection, root_repr)",
-     '    return (neg_final, effort, neg_protection, "")'),
-    # GuardKind dispatch: drop one variant entirely (KeyError at runtime, but
-    # the parametrized exhaustiveness test fires immediately). We swap one
-    # mapping to wrong text so the diff-against-Lean fires.
     ("decide_key: HP_CRITICAL repr corrupted",
      "    GuardKind.HP_CRITICAL: \"RestoreHP\",",
      "    GuardKind.HP_CRITICAL: \"WRONG\","),
@@ -2781,9 +2544,9 @@ _ALL_SRCS = [
     GEAR_VALUE_SRC,
     SKILL_XP_CURVE_SRC, RECIPE_CLOSURE_SRC, TASK_FEASIBILITY_SRC, PREREQUISITE_GRAPH_SRC,
     OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, STUCK_DETECTOR_SRC,
-    PRIORITY_BAND_SRC, OWNED_COUNT_SRC, ROOT_PROGRESS_SRC, UPGRADE_SELECTION_SRC, SCALAR_CORE_SRC,
+    PRIORITY_BAND_SRC, OWNED_COUNT_SRC, UPGRADE_SELECTION_SRC, SCALAR_CORE_SRC,
     PLANNER_SRC, ARBITER_SELECT_SRC, TASK_DECISION_CORE_SRC, OBJECTIVE_COMPLETION_SRC,
-    LOW_YIELD_BOUNDARY_SRC, OBJECTIVE_STEP_FIGHT_CORE_SRC, STRATEGY_BLEND_SRC, DECIDE_KEY_SRC,
+    LOW_YIELD_BOUNDARY_SRC, OBJECTIVE_STEP_FIGHT_CORE_SRC, DECIDE_KEY_SRC,
     CYCLES_FOR_PROGRESS_SRC,
     GATHER_APPLY_SRC,
     GATHER_SELECTION_SRC,
@@ -4789,19 +4552,6 @@ def _run_all_groups() -> int:
               "tests/test_ai/test_tiers_objective.py", survivors)
     run_group(STRATEGY_SRC, STRATEGY_MUTATIONS,
               "formal/diff/test_strategy_traversal_diff.py", survivors)
-    run_group(STRATEGY_SRC, POTION_GATE_MUTATIONS,
-              "tests/test_ai/test_tiers_strategy.py::TestPotionSupplyUrgency::test_aspirational_tier_not_boosted",
-              survivors)
-    run_group(STRATEGY_SRC, STRATEGY_MARGINAL_MUTATIONS,
-              "tests/test_ai/test_tiers_strategy.py", survivors)
-    run_group(STRATEGY_SRC, SKILL_DECAY_MUTATIONS,
-              "tests/test_ai/test_tiers_strategy.py", survivors)
-    run_group(STRATEGY_SRC, CAPSTONE_GRADIENT_MUTATIONS,
-              "tests/test_ai/test_tiers_strategy.py", survivors)
-    run_group(STRATEGY_SRC, GEARED_GATE_MUTATIONS,
-              "tests/test_ai/test_tiers_strategy.py", survivors)
-    run_group(STRATEGY_SRC, OCCUPIED_UPGRADE_MUTATIONS,
-              "tests/test_ai/test_tiers_strategy.py", survivors)
     run_group(STRATEGY_SRC, REACHABILITY_MUTATIONS,
               "formal/diff/test_reachability_diff.py", survivors)
     run_group(BANK_SELECTION_SRC, BANK_SELECTION_MUTATIONS,
@@ -4820,10 +4570,6 @@ def _run_all_groups() -> int:
               "formal/diff/test_planner_admissibility_diff.py", survivors)
     run_group(ARBITER_SELECT_SRC, ARBITER_SELECT_MUTATIONS,
               "formal/diff/test_arbiter_select_diff.py", survivors)
-    run_group(STICKY_SELECT_SRC, STICKY_SELECT_MUTATIONS,
-              "formal/diff/test_sticky_select_diff.py", survivors)
-    run_group(SERVABLE_FILTER_SRC, SERVABLE_FILTER_MUTATIONS,
-              "formal/diff/test_servable_filter_diff.py", survivors)
     run_group(TASK_DECISION_CORE_SRC, TASK_DECISION_MUTATIONS,
               "formal/diff/test_task_decision_diff.py", survivors)
     run_group(OBJECTIVE_COMPLETION_SRC, WEIGHTED_REMAINING_MUTATIONS,
@@ -4834,12 +4580,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_objective_step_is_fight_diff.py", survivors)
     run_group(PREREQUISITE_GRAPH_SRC, BOOTSTRAP_HORIZON_MUTATIONS,
               "formal/diff/test_objective_step_is_fight_diff.py", survivors)
-    run_group(STRATEGY_BLEND_SRC, STRATEGY_BLEND_MUTATIONS,
-              "formal/diff/test_strategy_blend_diff.py", survivors)
     run_group(DECIDE_KEY_SRC, DECIDE_KEY_MUTATIONS,
               "formal/diff/test_decide_key_diff.py", survivors)
-    run_group(ROOT_PROGRESS_SRC, ROOT_PROGRESS_MUTATIONS,
-              "formal/diff/test_obtain_progress_diff.py", survivors)
     run_group(PROGRESSION_RESERVE_CORE_SRC, PROGRESSION_RESERVE_MUTATIONS,
               "formal/diff/test_progression_reserve_diff.py", survivors)
     run_group(CYCLES_FOR_PROGRESS_SRC, CYCLES_FOR_PROGRESS_MUTATIONS,

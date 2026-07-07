@@ -1,17 +1,16 @@
-"""Servable-filter: keep only roots whose actionable step is plannable now.
+"""Servable-demotion: decide() demotes roots whose step is not plannable now.
 
-Pure-core tests for keep_servable + a decide()-level test that a top-scored root
-with an UNSERVABLE step is demoted so chosen_root is a root the bot can actually
-work on (the feather_coat mismatch fix, trace 2026-06-20).
+decide()-level tests that a top-scored root with an UNSERVABLE step is demoted
+so chosen_root is a root the bot can actually work on (the feather_coat
+mismatch fix, trace 2026-06-20). The live path is the progression tree's
+`_servable_promotion`; the retired flat-ranking pure core (`keep_servable` in
+the deleted `servable_filter.py`) died with the flat ranking in Phase 4b.
 """
-
-import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
-from artifactsmmo_cli.ai.tiers.servable_filter import keep_servable
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
@@ -48,25 +47,6 @@ def _two_root_gd() -> GameData:
     gd._monster_level = {"chicken": 1}
     fill_monster_stat_defaults(gd)
     return gd
-
-
-class TestKeepServable:
-    def test_keeps_only_servable_when_some_servable(self):
-        assert keep_servable(["a", "b", "c"], [False, True, False]) == ["b"]
-
-    def test_keeps_all_when_none_servable(self):
-        # Graceful fallback: no servable root -> keep everyone (arbiter still walks).
-        assert keep_servable(["a", "b"], [False, False]) == ["a", "b"]
-
-    def test_keeps_all_when_all_servable(self):
-        assert keep_servable(["a", "b"], [True, True]) == ["a", "b"]
-
-    def test_empty(self):
-        assert keep_servable([], []) == []
-
-    def test_length_mismatch_raises(self):
-        with pytest.raises(ValueError, match="equal length"):
-            keep_servable(["a"], [True, False])
 
 
 class TestDecideServableFilter:

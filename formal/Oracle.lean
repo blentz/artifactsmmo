@@ -18,7 +18,6 @@ open Formal.Scalarizer
 open Formal.TaskDecision
 open Formal.WeightedRemaining
 open Formal.LowYieldCancel
-open Formal.StrategyBlend
 open Formal.DecideKey
 open Formal.CyclesForProgress
 open Formal.GatherApply
@@ -32,7 +31,6 @@ open Formal.NearestTile
 open Formal.Liveness.MeansKind (allInLadderOrder)
 open Formal.Liveness.ProductionLadder (fires productionLadder)
 open Formal.Liveness.LadderEval (inertLadderState meansKindName)
-open Formal.Liveness.StickySelect (Cand stickyChoose nextLast)
 open Formal.NextCraftAction
 
 /-- Compute one calculate_path result using the SAME proved `pathFrom`/`manhattan`. -/
@@ -570,36 +568,6 @@ def runRecipeClosure (args : Array Json) : Json :=
   Json.mkObj [("needed_resources", toJson needed), ("craftable_mats", toJson craft),
     ("raw_material_units",
       Json.num (Int.ofNat (rawUnits r (parseYieldFn args (p3 + 2)) fuel queryItem)))]
-
-/-- Compute `obtainProgress r fuel owned nodes` — the deepened gear-root progress witness
-(`Formal.Liveness.ObtainProgress.obtainProgress`). Bridges the real Python
-`_obtain_progress` to the proved Lean def.
-
-args layout (all Nat):
-* `[0]`               nRecipe; then `(item, sub, qty)` triples flat
-* next: nNodes; then the `nodes` closure list
-* next: nOwned; then `(node, count)` owned pairs flat
-* next: fuel -/
-def runObtainProgress (args : Array Json) : Json :=
-  let g := fun i => (intArg args i).toNat
-  let nRecipe := g 0
-  let triples : List (Nat × Nat × Nat) :=
-    (List.range nRecipe).map (fun k => (g (1 + 3*k), g (2 + 3*k), g (3 + 3*k)))
-  let p1 := 1 + 3*nRecipe
-  let nNodes := g p1
-  let nodes : List Nat := (List.range nNodes).map (fun k => g (p1 + 1 + k))
-  let p2 := p1 + 1 + nNodes
-  let nOwned := g p2
-  let ownedPairs : List (Nat × Nat) :=
-    (List.range nOwned).map (fun k => (g (p2 + 1 + 2*k), g (p2 + 2 + 2*k)))
-  let p3 := p2 + 1 + 2*nOwned
-  let fuel := g p3
-  let r := recipeFromTriples triples
-  let owned := fun j =>
-    (ownedPairs.filter (fun pr => decide (pr.1 = j))).foldl (fun acc pr => acc + pr.2) 0
-  Json.mkObj [("obtain_progress",
-    Json.num (Int.ofNat (Formal.Liveness.ObtainProgress.obtainProgress r
-      (parseYieldFn args (p3 + 1)) fuel owned nodes)))]
 
 /-- Build a `TaskFeasibility.Recipe` (Nat → List Nat, ingredient codes only)
 from a list of `(item, sub)` pairs: `r item` = every `sub` whose pair's first
@@ -1282,62 +1250,22 @@ assert it equals the live `_CHAR_LEVEL_BOOTSTRAP_HORIZON`. Drift above 4 would b
 def runBootstrapCharHorizon (_args : Array Json) : Json :=
   Json.mkObj [("horizon", Json.num (Int.ofNat Formal.ObjectiveStepFight.bootstrapCharHorizon))]
 
-/-- Compute one strategy_blend result using the SAME proved cores.
+/-- Compute one decide_key dispatch result using the SAME proved
+`goalReprOfGuard` / `goalReprOfMeans` maps.
 
-args layout (Ints; rationals as num/den pairs):
-* `[0]`      query: 0 = balancing (scaled), 1 = learned_blend
-* For query 0: `[1, 2]` = leader, current (Ints).
-* For query 1: `[1,2]`/`[3,4]`/`[5,6]` = value/normalized/w (num, den each).
+args layout (Ints):
+* `[0]`         query: 1 = goalReprOfGuard, 2 = goalReprOfMeans
+* For query 1: `[1]` = GuardKind index 0..11.
+* For query 2: `[1]` = MeansKind index 0..13.
 
-Emits the scaled Int result for balancing OR the rational num/den for blend. -/
-def runStrategyBlend (args : Array Json) : Json :=
-  let q := intArg args 0
-  if q == 0 then
-    let leader := intArg args 1
-    let current := intArg args 2
-    Json.mkObj [("scaled", Json.num (Formal.StrategyBlend.balancingScaled leader current))]
-  else
-    let value := ratArg args 1
-    let normalized := ratArg args 3
-    let w := ratArg args 5
-    let r := Formal.StrategyBlend.learnedBlend value normalized w
-    Json.mkObj [("blend_num", Json.num r.num), ("blend_den", Json.num (Int.ofNat r.den))]
+(Query 0, the retired flat ranking's `decideCmp` comparator, was deleted with
+the flat scalar ranking in progression-tree Phase 4b; the 1/2 indices are kept
+stable.)
 
-/-- Compute one decide_key result using the SAME proved `decideCmp` / dispatch
-maps.
-
-args layout (Ints; rootRepr/guard/means strings encoded as a single trailing
-JSON field via the outer wrapper isn't supported here, so we tag the query
-type and use a small int encoding for enum kinds and a string lookup via the
-trailing args).
-
-* `[0]`         query: 0 = compare two keys, 1 = goalReprOfGuard, 2 = goalReprOfMeans
-* For query 0: `[1, 2, 3, 4, 5, 6]` = a.negFinal, a.effort, a.negProtect,
-  b.negFinal, b.effort, b.negProtect.
-  Reprs are passed as separate string fields via the JSON wrapper:
-  `[5]`/`[6]` carry the string encodings as integer-tagged codes (we use the
-  string CHARS reconstructed via a separate dispatch path — see diff test).
-  To keep the oracle interface integer-only, the diff test compares ONLY the
-  comparator outcome when reprs are equal-by-construction; otherwise it
-  passes encoded reprs via an out-of-band string-arg array (unsupported here
-  — the diff test uses query 0 only on numeric fields and parameterises repr
-  ties off-line). For simplicity we emit cmp(a, b) treating reprs as equal
-  (the strict-total-order property at the (negFinal, effort) projection).
-* For query 1: `[1]` = GuardKind index 0..8.
-* For query 2: `[1]` = MeansKind index 0..12.
-
-Emits:
-* query 0: cmp outcome as `"lt" | "eq" | "gt"`.
-* query 1/2: the dispatched repr string. -/
+Emits the dispatched repr string. -/
 def runDecideKey (args : Array Json) : Json :=
   let q := intArg args 0
-  if q == 0 then
-    let a : Formal.DecideKey.Key := ⟨intArg args 1, intArg args 2, intArg args 3, ""⟩
-    let b : Formal.DecideKey.Key := ⟨intArg args 4, intArg args 5, intArg args 6, ""⟩
-    let label : String := match Formal.DecideKey.decideCmp a b with
-      | .lt => "lt" | .eq => "eq" | .gt => "gt"
-    Json.mkObj [("cmp", Json.str label)]
-  else if q == 1 then
+  if q == 1 then
     let idx := (intArg args 1).toNat
     let k : Formal.DecideKey.GuardKind := match idx with
       | 0 => .hpCritical
@@ -2587,37 +2515,6 @@ def runCycleStepE (args : Array Json) : Json :=
     ("loadout_adequate", Json.bool post.loadoutAdequate),
     ("gear_gap", Json.num (Int.ofNat post.gearGap))]
 
-/-- Tier-2 sticky override. args: [n, ratioNum, ratioDen, lastChosen("" = none),
-    then per candidate: repr, scoreNum, scoreDen]. Returns the chosen repr or null. -/
-def runStickyChoose (args : Array Json) : Json :=
-  let n := (intArg args 0).toNat
-  let ratio : Rat := (intArg args 1 : Rat) / (intArg args 2 : Rat)
-  let lcStr := strArg args 3
-  let lastChosen : Option String := if lcStr == "" then none else some lcStr
-  let cands : List Cand := (List.range n).map (fun i =>
-    { repr := strArg args (4 + 3 * i),
-      score := (intArg args (5 + 3 * i) : Rat) / (intArg args (6 + 3 * i) : Rat) })
-  match stickyChoose cands lastChosen ratio with
-  | some c => Json.str c.repr
-  | none   => Json.null
-
-/-- Progress-gated feedback. args: [hasChosen(0/1), chosenRepr, progressed(0/1)].
-    Returns the next-cycle lastChosen repr or null. -/
-def runNextLast (args : Array Json) : Json :=
-  let chosen : Option Cand :=
-    if intArg args 0 != 0 then some { repr := strArg args 1, score := 0 } else none
-  match nextLast chosen (intArg args 2 != 0) with
-  | some s => Json.str s
-  | none   => Json.null
-
-/-- Servable filter. args: [n, flag_0..flag_{n-1}]. Items are their indices; returns
-    the kept indices (servable subset, or all when none servable). -/
-def runKeepServable (args : Array Json) : Json :=
-  let n := (intArg args 0).toNat
-  let tagged : List (Int × Bool) :=
-    (List.range n).map (fun (i : Nat) => ((i : Int), intArg args (1 + i) != 0))
-  Json.arr ((Formal.ServableFilter.keepServable tagged).map (fun x => Json.num x)).toArray
-
 /-- Compute one next_craft_target result using the proved `nextCraftTarget`.
 
 args layout (mixed JSON):
@@ -2871,13 +2768,7 @@ def runXpValue (args : Array Json) : Json :=
 def runOne (item : Json) : Json :=
   let kind := (item.getObjValD "kind" |>.getStr?).toOption.getD ""
   let args := ((item.getObjValD "args" |>.getArr?).toOption.getD #[])
-  if kind == "sticky_choose" then
-    runStickyChoose args
-  else if kind == "next_last" then
-    runNextLast args
-  else if kind == "keep_servable" then
-    runKeepServable args
-  else if kind == "calculate_path" then
+  if kind == "calculate_path" then
     runCalculatePath (intArg args 0) (intArg args 1) (intArg args 2) (intArg args 3)
   else if kind == "task_batch" then
     -- args: [taskBranch(0/1), remaining, mats, free, held]
@@ -2928,8 +2819,6 @@ def runOne (item : Json) : Json :=
     runSkillXpCurve args
   else if kind == "recipe_closure" then
     runRecipeClosure args
-  else if kind == "obtain_progress" then
-    runObtainProgress args
   else if kind == "task_feasibility_items" then
     runTaskFeasibilityItems args
   else if kind == "task_feasibility_monster" then
@@ -2980,8 +2869,6 @@ def runOne (item : Json) : Json :=
     runObjectiveStepIsFight args
   else if kind == "bootstrap_char_horizon" then
     runBootstrapCharHorizon args
-  else if kind == "strategy_blend" then
-    runStrategyBlend args
   else if kind == "decide_key" then
     runDecideKey args
   else if kind == "progression_reserve" then

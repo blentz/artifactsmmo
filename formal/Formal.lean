@@ -18,7 +18,6 @@ import Formal.PriorityBand
 import Formal.OwnedCount
 import Formal.UpgradeSelection
 import Formal.Scalarizer
-import Formal.ServableFilter
 import Formal.PlannerAdmissibility
 import Formal.PlannerDepthBound
 import Formal.TieredSelection
@@ -28,7 +27,6 @@ import Formal.TaskDecision
 import Formal.WeightedRemaining
 import Formal.LowYieldCancel
 import Formal.ObjectiveStepFight
-import Formal.StrategyBlend
 import Formal.DecideKey
 import Formal.DominancePareto
 import Formal.ProgressionReserve
@@ -106,8 +104,6 @@ import Formal.EquipValueAugmented
 import Formal.GearValue
 import Formal.StrategicValue
 import Formal.GearPolicy
-import Formal.RankingComposition
-import Formal.PersonalityGrounding
 import Formal.PurposeRouting
 import Formal.FallbackChain
 import Formal.TaskTradeReadyPriority
@@ -211,11 +207,7 @@ import Formal.Liveness.BlockerDescentE
 import Formal.Liveness.GearedDescent
 import Formal.Liveness.CycleStepEC
 import Formal.Liveness.CycleStepDC
-import Formal.Liveness.StickySelect
-import Formal.Liveness.ZombieFreedom
-import Formal.Liveness.ObtainProgress
 import Formal.Liveness.GearBuildTermination
-import Formal.Liveness.GatedArming
 import Formal.Liveness.WarmupCleared
 import Formal.Liveness.Leveling
 import Formal.Liveness.FightReady

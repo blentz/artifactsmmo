@@ -43,7 +43,6 @@ import Formal.GearLatch
 import Formal.TaskDecision
 import Formal.LowYieldCancel
 import Formal.ObjectiveStepFight
-import Formal.StrategyBlend
 import Formal.DecideKey
 import Formal.ProgressionReserve
 import Formal.CyclesForProgress
@@ -70,10 +69,7 @@ import Formal.StoreWarmup
 import Formal.GameDataAccessors
 import Formal.WinnableCascade
 import Formal.RealizableLoadout
-import Formal.Liveness.StickySelect
-import Formal.Liveness.ObtainProgress
 import Formal.Liveness.GearBuildTermination
-import Formal.ServableFilter
 import Formal.StrategicValue
 import Formal.GearTaxonomy
 import Formal.GearValue
@@ -1648,88 +1644,10 @@ example : ∀ (level taskTotal taskProgress : Nat) (taskType taskCode : String),
         taskType taskCode taskTotal taskProgress = true :=
   @Formal.ObjectiveStepFight.bootstrap_step_always_fires
 
-/-! ### StrategyBlend role contracts. -/
+/-! ### DecideKey role contracts (dispatcher exhaustiveness).
+(StrategyBlend + decideCmp comparator pins retired with the flat scalar
+ranking — progression-tree Phase 4b Task 3.) -/
 
-example : ∀ (leader current : Int),
-    Formal.StrategyBlend.balanceMinScaled
-      ≤ Formal.StrategyBlend.balancingScaled leader current :=
-  @Formal.StrategyBlend.balancingScaled_ge_min
-example : ∀ (leader current : Int),
-    Formal.StrategyBlend.balancingScaled leader current
-      ≤ Formal.StrategyBlend.balanceMaxScaled :=
-  @Formal.StrategyBlend.balancingScaled_le_max
-example : ∀ (leader current : Int),
-    leader - current = Formal.StrategyBlend.balanceThresh →
-    Formal.StrategyBlend.balancingScaled leader current = 4 :=
-  @Formal.StrategyBlend.balancingScaled_at_threshold
-example : ∀ (s : Int),
-    Formal.StrategyBlend.balancingScaled s s = Formal.StrategyBlend.balanceMinScaled :=
-  @Formal.StrategyBlend.balancingScaled_at_equal_clamps_to_min
-example : ∀ (leader current leader' current' : Int),
-    leader - current ≤ leader' - current' →
-    Formal.StrategyBlend.balancingScaled leader current
-      ≤ Formal.StrategyBlend.balancingScaled leader' current' :=
-  @Formal.StrategyBlend.balancingScaled_mono
-example : ∀ (value normalized : Rat),
-    Formal.StrategyBlend.learnedBlend value normalized 0 = value :=
-  @Formal.StrategyBlend.learnedBlend_w_zero
-example : ∀ (value normalized : Rat),
-    Formal.StrategyBlend.learnedBlend value normalized 1 = normalized :=
-  @Formal.StrategyBlend.learnedBlend_w_one
-example : ∀ (value normalized w : Rat),
-    0 ≤ w → value ≤ normalized →
-    value ≤ Formal.StrategyBlend.learnedBlend value normalized w :=
-  @Formal.StrategyBlend.learnedBlend_ge_value_when_le
-example : ∀ (value normalized w : Rat),
-    w ≤ 1 → value ≤ normalized →
-    Formal.StrategyBlend.learnedBlend value normalized w ≤ normalized :=
-  @Formal.StrategyBlend.learnedBlend_le_normalized_when_le
-example : ∀ (value normalized w : Rat),
-    w ≤ 1 → normalized ≤ value →
-    normalized ≤ Formal.StrategyBlend.learnedBlend value normalized w :=
-  @Formal.StrategyBlend.learnedBlend_ge_normalized_when_ge
-example : ∀ (value normalized w : Rat),
-    0 ≤ w → normalized ≤ value →
-    Formal.StrategyBlend.learnedBlend value normalized w ≤ value :=
-  @Formal.StrategyBlend.learnedBlend_le_value_when_ge
-example : ∀ (value n n' w : Rat),
-    0 ≤ w → n ≤ n' →
-    Formal.StrategyBlend.learnedBlend value n w
-      ≤ Formal.StrategyBlend.learnedBlend value n' w :=
-  @Formal.StrategyBlend.learnedBlend_mono_normalized
-example : ∀ (v v' normalized w : Rat),
-    w ≤ 1 → v ≤ v' →
-    Formal.StrategyBlend.learnedBlend v normalized w
-      ≤ Formal.StrategyBlend.learnedBlend v' normalized w :=
-  @Formal.StrategyBlend.learnedBlend_mono_value
-
-/-! ### DecideKey role contracts. -/
-
-example : ∀ (a b : Formal.DecideKey.Key),
-    Formal.DecideKey.decideCmp a b = .lt
-      ∨ Formal.DecideKey.decideCmp a b = .eq
-      ∨ Formal.DecideKey.decideCmp a b = .gt :=
-  @Formal.DecideKey.decideCmp_trichotomy
-example : ∀ (a b : Formal.DecideKey.Key),
-    Formal.DecideKey.decideCmp b a = (Formal.DecideKey.decideCmp a b).swap :=
-  @Formal.DecideKey.decideCmp_swap
-example : ∀ {a b c : Formal.DecideKey.Key},
-    Formal.DecideKey.decideCmp a b = .lt →
-    Formal.DecideKey.decideCmp b c = .lt →
-    Formal.DecideKey.decideCmp a c = .lt :=
-  @Formal.DecideKey.decideCmp_lt_trans
-example : ∀ (a b : Formal.DecideKey.Key),
-    Formal.DecideKey.decideCmp a b = .eq → a.rootRepr = b.rootRepr :=
-  @Formal.DecideKey.decideCmp_eq_imp_repr
-example : ∀ (a b : Formal.DecideKey.Key),
-    Formal.DecideKey.decideCmp a b = .eq → a.negFinal = b.negFinal :=
-  @Formal.DecideKey.decideCmp_eq_imp_negFinal
-example : ∀ (a b : Formal.DecideKey.Key),
-    Formal.DecideKey.decideCmp a b = .eq → a.effort = b.effort :=
-  @Formal.DecideKey.decideCmp_eq_imp_effort
-example : ∀ (a b : Formal.DecideKey.Key),
-    Formal.DecideKey.decideCmp a b = .eq → a.negProtect = b.negProtect :=
-  @Formal.DecideKey.decideCmp_eq_imp_negProtect
 example : ∀ (k : Formal.DecideKey.GuardKind),
     (Formal.DecideKey.goalReprOfGuard k).length > 0 :=
   @Formal.DecideKey.goalReprOfGuard_nonempty
@@ -3214,75 +3132,9 @@ example : ∀ (coins reward : Nat), 1 ≤ reward →
     coins < Formal.CompleteTaskIncome.applyComplete coins reward :=
   @Formal.CompleteTaskIncome.applyComplete_monotone
 
--- ─── ServableFilter (decide() servable filter) anti-weakening pins ───
--- ANY servable ⇒ the result is exactly the servable subset (unservable roots dropped).
-example : ∀ {α : Type} (tagged : List (α × Bool)), tagged.any (·.2) = true →
-    Formal.ServableFilter.keepServable tagged
-      = tagged.filterMap (fun p => if p.2 then some p.1 else none) :=
-  @Formal.ServableFilter.keepServable_all_servable_of_any
--- NONE servable ⇒ keep all (graceful fallback, never strands the bot goal-less).
-example : ∀ {α : Type} (tagged : List (α × Bool)), tagged.any (·.2) = false →
-    Formal.ServableFilter.keepServable tagged = tagged.map (·.1) :=
-  @Formal.ServableFilter.keepServable_id_of_none
-
--- ─── StickySelect (Tier-2 root sticky + progress-gated release) anti-weakening pins ───
--- NO-ZOMBIE: if the sticky override keeps a non-top root `c` two cycles running,
--- it MUST have progressed last cycle. Weakening the conclusion (e.g. to `True`) or
--- dropping the `hnottop` hypothesis fails to elaborate against the proven statement.
-example : ∀ {cands₁ : List Formal.Liveness.StickySelect.Cand} {ratio : Rat}
-    {c : Formal.Liveness.StickySelect.Cand} {prog₀ : Bool},
-    Formal.Liveness.StickySelect.stickyChoose cands₁
-        (Formal.Liveness.StickySelect.nextLast (some c) prog₀) ratio = some c →
-    cands₁.head? ≠ some c → prog₀ = true :=
-  @Formal.Liveness.StickySelect.sticky_requires_progress
--- RATIO-INDEPENDENCE: the no-zombie property holds for EVERY ratio (∀-quantified),
--- so the dominance ratio is provably not the liveness lever.
-example : ∀ (ratio : Rat) {cands₁ : List Formal.Liveness.StickySelect.Cand}
-    {c : Formal.Liveness.StickySelect.Cand} {prog₀ : Bool},
-    Formal.Liveness.StickySelect.stickyChoose cands₁
-        (Formal.Liveness.StickySelect.nextLast (some c) prog₀) ratio = some c →
-    cands₁.head? ≠ some c → prog₀ = true :=
-  @Formal.Liveness.StickySelect.sticky_progress_safe
--- RELEASE: lastChosen = none ⇒ the chosen root is exactly the top-scored head.
-example : ∀ {cands : List Formal.Liveness.StickySelect.Cand} {ratio : Rat}
-    {top : Formal.Liveness.StickySelect.Cand}, cands.head? = some top →
-    Formal.Liveness.StickySelect.stickyChoose cands none ratio = some top :=
-  @Formal.Liveness.StickySelect.released_picks_top
--- NO INFINITE ZOMBIE HOLD: for any well-founded measure, a sticky-held non-top root
--- at EVERY cycle (with faithful progress signal) is contradictory. Weakening (e.g.
--- dropping `wf` or the faithfulness hypothesis) fails to elaborate against the proof.
-example : ∀ {σ β : Type} (r : β → β → Prop), WellFounded r → ∀ (μ : σ → β)
-    (st : Nat → σ) (cands : Nat → List Formal.Liveness.StickySelect.Cand) (ratio : Rat)
-    (c : Formal.Liveness.StickySelect.Cand) (prog : Nat → Bool),
-    (∀ k, prog k = true → r (μ (st (k + 1))) (μ (st k))) →
-    (∀ k, Formal.Liveness.StickySelect.stickyChoose (cands (k + 1))
-        (Formal.Liveness.StickySelect.nextLast (some c) (prog k)) ratio = some c) →
-    (∀ k, (cands (k + 1)).head? ≠ some c) → False :=
-  @Formal.Liveness.StickySelect.no_infinite_sticky_hold
-
--- ─── ObtainProgress (deepened gear-root progress witness faithfulness) pins ───
--- GATHER STRICT: gathering one unit of a closure node with positive raw weight strictly
--- raises the witness. Weakening to ≤ (dropping strictness) fails to elaborate. This is
--- the theorem that makes ore-gathering toward copper_boots register as progress — the
--- false-flat that released the sticky anchor (cannibalisation livelock) is impossible.
-example : ∀ (r : Formal.RecipeClosure.Recipe) (y : Nat → Nat) (fuel : Nat) (owned : Nat → Nat)
-    (nodes : List Nat) (g : Nat), g ∈ nodes → nodes.Nodup →
-    0 < Formal.RecipeClosure.rawUnits r y fuel g →
-    Formal.Liveness.ObtainProgress.obtainProgress r y fuel owned nodes
-      < Formal.Liveness.ObtainProgress.obtainProgress r y fuel
-          (fun j => owned j + (if j = g then 1 else 0)) nodes :=
-  @Formal.Liveness.ObtainProgress.obtainProgress_gather_strict
--- CRAFT INVARIANT: a single-intermediate craft (produce 1 `o`, consume `qty` of child `c`
--- with rawUnits o = qty·rawUnits c) leaves the witness unchanged. Weakening the
--- conservation hypothesis or the conclusion (to ≤/≥) fails to elaborate.
-example : ∀ (r : Formal.RecipeClosure.Recipe) (y : Nat → Nat) (fuel : Nat) (owned : Nat → Nat)
-    (nodes : List Nat) (o c qty : Nat), o ∈ nodes → c ∈ nodes → o ≠ c → nodes.Nodup →
-    qty ≤ owned c →
-    Formal.RecipeClosure.rawUnits r y fuel o = qty * Formal.RecipeClosure.rawUnits r y fuel c →
-    Formal.Liveness.ObtainProgress.obtainProgress r y fuel
-        (fun j => (owned j + (if j = o then 1 else 0)) - (if j = c then qty else 0)) nodes
-      = Formal.Liveness.ObtainProgress.obtainProgress r y fuel owned nodes :=
-  @Formal.Liveness.ObtainProgress.obtainProgress_craft_invariant
+-- ─── ServableFilter / StickySelect / ObtainProgress pins RETIRED (Phase 4b Task 3):
+-- their subjects (servable_filter.py, sticky_select_core.py, root_progress.py) died
+-- with the flat scalar ranking. ───
 
 -- ─── GearBuildTermination (buildable gear target is BUILT in finite steps) pin ───
 -- A Grounded (buildable) target over a finite universe covering its unmet closure is
