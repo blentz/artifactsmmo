@@ -251,6 +251,23 @@ def test_plan_command_learn_uses_default_db(capsys):
     assert db_path.endswith("learning.db")
 
 
+def test_plan_command_live_progression_tree_flag_forwarded_to_player():
+    """The `--progression-tree` flag reaches GamePlayer's constructor kwarg
+    on the live (non-scenario) path too."""
+    with patch.object(plan_cmd, "check_mutation_lock",
+                      return_value=MagicMock(state="clear")):
+        with patch.object(plan_cmd.Config, "from_token_file", return_value=MagicMock()):
+            with patch.object(plan_cmd, "LearningStore") as store_cls:
+                store_cls.return_value = MagicMock()
+                player = MagicMock()
+                player.state = make_state(level=6)
+                player.plan_once.return_value = _canned_report()
+                with patch.object(plan_cmd, "GamePlayer", return_value=player) as mock_player_cls:
+                    plan_cmd.plan(character="hero", learn=False, learn_db=None,
+                                  refresh_game_data=False, progression_tree=True)
+    assert mock_player_cls.call_args.kwargs["progression_tree"] is True
+
+
 def test_plan_command_refuses_during_mutation(capsys):
     with patch.object(plan_cmd, "check_mutation_lock",
                       return_value=MagicMock(state="active", pid=123)):
@@ -336,6 +353,40 @@ def test_plan_command_tree_flag_reports_unavailable_when_no_tree_decision(capsys
     out = capsys.readouterr().out
     assert "tree: <unavailable — strategy not seeded>" in out
     assert "TREE (shadow" not in out
+
+
+def test_plan_command_scenario_progression_tree_flag_enacts_tree_root(capsys):
+    """Phase 4a Task 1: `--scenario ... --progression-tree` flips enactment —
+    the compact `chosen_root:` line shows the tree's ObtainItem root (weapon
+    slot), and the compact tree agreement line reads `==` (report.decision
+    IS report.tree_decision now, since the flag enacted it)."""
+    with patch.object(plan_cmd, "check_mutation_lock",
+                      return_value=MagicMock(state="clear")):
+        with patch.object(plan_cmd.Config, "from_token_file") as cfg:
+            plan_cmd.plan(character="ignored", learn=False, learn_db=None,
+                          refresh_game_data=False, scenario="l10_weapon_upgrade",
+                          progression_tree=True)
+            cfg.assert_not_called()
+    out = capsys.readouterr().out
+    assert "chosen_root: ObtainItem(" in out
+    assert "weapon_slot" in out
+    assert "tree: " in out and " == " in out
+
+
+def test_plan_command_scenario_progression_tree_flag_forwarded_to_player():
+    """The `--progression-tree` flag reaches GamePlayer's constructor kwarg
+    (scenario path)."""
+    with patch.object(plan_cmd, "check_mutation_lock",
+                      return_value=MagicMock(state="clear")):
+        with patch.object(plan_cmd, "GamePlayer") as mock_player_cls:
+            mock_player = MagicMock()
+            mock_player.state = None
+            mock_player.plan_from_state.return_value = _canned_report()
+            mock_player_cls.return_value = mock_player
+            plan_cmd.plan(character="ignored", learn=False, learn_db=None,
+                          refresh_game_data=False, scenario="l1_fresh",
+                          progression_tree=True)
+    assert mock_player_cls.call_args.kwargs["progression_tree"] is True
 
 
 def test_plan_command_compact_line_agrees_when_roots_match(capsys):

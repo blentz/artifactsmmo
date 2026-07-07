@@ -44,6 +44,10 @@ def play(
     refresh_game_data: bool = typer.Option(
         False, "--refresh-game-data",
         help="Ignore the cached static game data and re-fetch from the API"),
+    progression_tree: bool = typer.Option(
+        False, "--progression-tree",
+        help="Enact the progression-tree decision instead of the legacy "
+             "StrategyEngine decision (Phase 4a flip; shadow is always computed)"),
 ) -> None:
     """Run the autonomous GOAP AI player for one character."""
     # Mutate<->play interlock: formal/diff/mutate.py live-writes mutants into
@@ -83,11 +87,18 @@ def play(
         store = LearningStore(db_path=":memory:", character=character)
     store.start_session()
 
+    # `progression_tree` is a Typer Option-backed parameter; a direct
+    # (non-Click) call omitting it leaves the raw `typer.models.OptionInfo`
+    # sentinel rather than its declared default — isinstance-guarded like
+    # `plan`'s `--tree`/`--scenario` flags.
+    tree_enact_flag = progression_tree if isinstance(progression_tree, bool) else False
+
     player = GamePlayer(
         character=character, verbose=verbose, dry_run=dry_run,
         tracer=tracer, history=store,
         game_data_ttl_minutes=config.game_data_ttl_minutes,
         refresh_game_data=refresh_game_data,
+        progression_tree=tree_enact_flag,
     )
     exit_reason = "crash"
     try:

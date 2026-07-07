@@ -25,6 +25,11 @@ class PlanReport:
     # into `selected_goal`/`plan`. None only when the tree isn't computable
     # yet (unseeded state/game_data/strategy/objective at construction).
     tree_decision: StrategyDecision | None = None
+    # Phase 4a: which engine's decision actually drove `decision` this cycle —
+    # "legacy" (default; also flag-off, always) or "tree" (flag-on AND a tree
+    # shadow was computable). `tree_decision` above stays the shadow value
+    # either way — this field is the only signal of which one was enacted.
+    enacted_engine: str = "legacy"
     # For the chosen objective's recipe: each pure monster-drop input, its dropping
     # monsters, and whether each is winnable with the LIVE loadout. Answers "will the
     # bot actually hunt these?" — an unwinnable drop makes the gear unbuildable.

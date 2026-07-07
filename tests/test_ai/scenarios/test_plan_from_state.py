@@ -43,3 +43,29 @@ def test_plan_from_state_reports_tree_shadow_for_weapon_upgrade() -> None:
     # The legacy decision flow is unchanged by the shadow's presence — the
     # existing golden (test_goldens.CURRENT_TODAY) still pins its behavior.
     assert report.decision is not None
+    # Flag-off (default): the legacy decision is what's enacted.
+    assert report.enacted_engine == "legacy"
+
+
+def test_plan_from_state_flag_on_enacts_tree_decision_for_weapon_upgrade() -> None:
+    """Phase 4a Task 1: with `progression_tree=True`, the SAME scenario's
+    enacted `report.decision` becomes the tree decision (an ObtainItem for
+    weapon_slot) instead of the legacy StrategyEngine decision — the flip
+    point. `report.tree_decision` is still populated (the shadow is computed
+    unconditionally either way) and, since it's now the enacted decision too,
+    matches `report.decision` exactly."""
+    gd = load_bundle_game_data(BUNDLE)
+    sc = SCENARIOS["l10_weapon_upgrade"]
+    player = GamePlayer(character=sc.name, history=None, progression_tree=True)
+    player.seed_offline(scenario_state(sc), gd)
+    report = player.plan_from_state()
+    assert report.enacted_engine == "tree"
+    assert report.tree_decision is not None
+    assert isinstance(report.decision.chosen_root, ObtainItem)
+    assert report.decision.chosen_root.slot == "weapon_slot"
+    assert repr(report.decision.chosen_root) == repr(report.tree_decision.chosen_root)
+    # Sticky seam: `plan_from_state` stashes the enacted decision (used by
+    # downstream consumers that need "what drove selection") separately from
+    # the shadow — here it equals the tree decision, since the flag flipped.
+    assert player._last_enacted_decision is not None
+    assert repr(player._last_enacted_decision.chosen_root) == repr(report.decision.chosen_root)

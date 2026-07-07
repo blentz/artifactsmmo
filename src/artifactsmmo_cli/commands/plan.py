@@ -120,6 +120,10 @@ def plan(
         False, "--tree", help="Print the full progression-tree shadow decision "
         "(chosen_root/chosen_step/ranking) alongside the legacy report — "
         "shadow-only, never enacted"),
+    progression_tree: bool = typer.Option(
+        False, "--progression-tree",
+        help="Enact the progression-tree decision instead of the legacy "
+             "StrategyEngine decision (Phase 4a flip; shadow is always computed)"),
 ) -> None:
     """Print the plan the bot WOULD execute this cycle for CHARACTER, without acting."""
     lock = check_mutation_lock(default_lock_path())
@@ -134,12 +138,13 @@ def plan(
     doomed = doom if isinstance(doom, list) else []
     committed_goal = committed if isinstance(committed, str) else None
     tree_flag = tree if isinstance(tree, bool) else False
+    tree_enact_flag = progression_tree if isinstance(progression_tree, bool) else False
     if isinstance(scenario, str):
         if scenario not in SCENARIOS:
             print(f"unknown scenario '{scenario}'; known: {', '.join(sorted(SCENARIOS))}")
             raise typer.Exit(code=2)
         bundle_path = Path(bundle) if isinstance(bundle, str) else _DEFAULT_BUNDLE
-        player = GamePlayer(character=scenario, history=None)
+        player = GamePlayer(character=scenario, history=None, progression_tree=tree_enact_flag)
         player.seed_offline(scenario_state(SCENARIOS[scenario]),
                             load_bundle_game_data(bundle_path))
         print(f"scenario: {scenario} — {SCENARIOS[scenario].description}")
@@ -159,6 +164,7 @@ def plan(
             character=character, history=store,
             game_data_ttl_minutes=config.game_data_ttl_minutes,
             refresh_game_data=refresh_game_data,
+            progression_tree=tree_enact_flag,
         )
         report = player.plan_once(doomed=doomed, committed=committed_goal)
         _print_report(player, report)

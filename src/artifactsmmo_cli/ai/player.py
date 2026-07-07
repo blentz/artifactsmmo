@@ -123,12 +123,20 @@ class GamePlayer:
         cycle_observer: "Callable[[CycleSnapshot], None] | None" = None,
         game_data_ttl_minutes: int = 30,
         refresh_game_data: bool = False,
+        progression_tree: bool = False,
     ) -> None:
         self.character = character
         self.verbose = verbose
         self.dry_run = dry_run
         self._game_data_ttl_minutes = game_data_ttl_minutes
         self._refresh_game_data = refresh_game_data
+        # Phase 4a flip flag: when True AND a tree shadow is computable this
+        # cycle, the progression-tree decision (not the legacy StrategyEngine
+        # decision) is the one that actually drives arbiter/select — see
+        # `_decide_band` / `plan_from_state`. Flag-off is byte-identical to
+        # pre-flip behavior (the shadow is still computed and traced either
+        # way; only which decision is ENACTED changes).
+        self._progression_tree = progression_tree
         self.planner = GOAPPlanner()
         self._arbiter = StrategyArbiter(self.planner, history)
         self._last_decision: StrategyDecision | None = None
@@ -137,6 +145,13 @@ class GamePlayer:
         # run-cycle decide path) but never consumed by the arbiter — traced
         # only, so a live divergence is observable before the Phase-4 flip.
         self._last_tree_decision: StrategyDecision | None = None
+        # Phase 4a: the decision that actually acted THIS cycle — `decision`
+        # (legacy) when the flag is off or the shadow is unavailable,
+        # `_last_tree_decision` when the flag is on and the shadow computed.
+        # Downstream consumers that care about "what drove selection"
+        # (sticky anchor, PlanReport.decision, the observer's chosen_root
+        # snapshot) read this instead of `_last_decision` directly.
+        self._last_enacted_decision: StrategyDecision | None = None
         self.state: WorldState | None = None
         self.game_data: GameData | None = None
         # Generic blocker registry — replaces what used to be ~5 bank-specific
@@ -253,27 +268,36 @@ class GamePlayer:
         )
         self._last_decision = decision
         self._last_tree_decision = self._compute_tree_shadow()
-        cr, cs = decision.chosen_root, decision.chosen_step
+        # Phase 4a flip: the tree decision drives selection only when the
+        # flag is on AND the shadow computed this cycle; otherwise the
+        # legacy decision is enacted (flag-off is byte-identical to
+        # pre-flip). `_last_decision`/`_last_tree_decision` stay engine-true
+        # (legacy/tree respectively) — only `enacted` swaps.
+        enacted = (self._last_tree_decision
+                   if self._progression_tree and self._last_tree_decision is not None
+                   else decision)
+        self._last_enacted_decision = enacted
+        cr, cs = enacted.chosen_root, enacted.chosen_step
         self._last_servability_diag = {
             "chosen_root_servable": bool(
                 cr is not None and cs is not None and servable_pred(cr, cs)),
             "chosen_root": repr(cr) if cr is not None else None,
         }
-        step = decision.chosen_step
+        step = enacted.chosen_step
         crafting_target = step.code if isinstance(step, ObtainItem) else None
         if crafting_target is None:
-            for alt in getattr(decision, "fallback_steps", []):
+            for alt in getattr(enacted, "fallback_steps", []):
                 if isinstance(alt, ObtainItem):
                     crafting_target = alt.code
                     break
         self.state = state = replace(state, crafting_target=crafting_target)
         selected_goal, plan, goals_tried = self._arbiter.select(
-            decision, state, game_data, actions, ctx,
+            enacted, state, game_data, actions, ctx,
             suppressed=set(self._suppressed_goals),
             objective=self._objective,
         )
         self._update_sticky_anchor(
-            decision.chosen_root, state, game_data, self._arbiter.chosen_step_alive)
+            enacted.chosen_root, state, game_data, self._arbiter.chosen_step_alive)
         self._last_decide_crafting_target = crafting_target
         return selected_goal, plan, goals_tried
 
@@ -493,10 +517,17 @@ class GamePlayer:
             last_chosen_root=self._last_strategy_root,
             step_servable=self._step_servable(state, game_data, ctx))
         self._last_tree_decision = self._compute_tree_shadow()
-        step = decision.chosen_step
+        # Phase 4a flip (see `_decide_band` for the symmetric comment): the
+        # tree decision drives selection only when the flag is on AND the
+        # shadow computed this cycle.
+        enacted = (self._last_tree_decision
+                   if self._progression_tree and self._last_tree_decision is not None
+                   else decision)
+        self._last_enacted_decision = enacted
+        step = enacted.chosen_step
         crafting_target = step.code if isinstance(step, ObtainItem) else None
         if crafting_target is None:
-            for alt in getattr(decision, "fallback_steps", []):
+            for alt in getattr(enacted, "fallback_steps", []):
                 if isinstance(alt, ObtainItem):
                     crafting_target = alt.code
                     break
@@ -513,13 +544,13 @@ class GamePlayer:
         if committed is not None:
             self._arbiter._committed_repr = committed
         selected_goal, plan, goals_tried = self._arbiter.select(
-            decision, state, game_data, actions, ctx,
+            enacted, state, game_data, actions, ctx,
             suppressed=set(self._suppressed_goals), objective=self._objective)
         # For the chosen objective's recipe, report each monster-drop input's live
         # winnability — an unwinnable drop (e.g. chicken too strong) makes the gear
         # unbuildable, which is the difference between "hunts chickens" and "can't".
         drop_inputs: list[dict[str, object]] = []
-        root = decision.chosen_root
+        root = enacted.chosen_root
         if isinstance(root, ObtainItem):
             for leaf in monster_drop_inputs(root.code, game_data):
                 droppers = [m for m, *_ in game_data.monsters_dropping(leaf)]
@@ -529,12 +560,16 @@ class GamePlayer:
                     and game_data.monster_spawn_known(m))
                 drop_inputs.append({"item": leaf, "droppers": sorted(droppers),
                                     "winnable": winnable})
-        return PlanReport(decision=decision, selected_goal=selected_goal,
+        enacted_engine = (
+            "tree" if self._progression_tree and self._last_tree_decision is not None
+            else "legacy")
+        return PlanReport(decision=enacted, selected_goal=selected_goal,
                           plan=list(plan), goals_tried=goals_tried,
                           drop_inputs=drop_inputs,
                           simulated_doomed=sim_doomed,
                           simulated_committed=committed,
-                          tree_decision=self._last_tree_decision)
+                          tree_decision=self._last_tree_decision,
+                          enacted_engine=enacted_engine)
 
     def run(self) -> None:
         """Main loop: sense → select goal → plan → act."""
@@ -1227,6 +1262,11 @@ class GamePlayer:
             tree = self._last_tree_decision or self._compute_tree_shadow()
             if tree is not None:
                 record["tree"] = tree.to_trace()
+            # Phase 4a: which engine actually drove selection this cycle.
+            # `strategy`/`tree` above stay engine-true (symmetric shadow) —
+            # this is the only field that reflects the flip.
+            record["enacted"] = (
+                "tree" if self._progression_tree and tree is not None else "legacy")
         self.tracer.write_cycle(record)
         self._cycle_counter += 1
 
@@ -1500,9 +1540,9 @@ class GamePlayer:
             goals_tried=goals_tried,
             suppressed_goals=list(self._suppressed_goals.keys()),
             path_blocked=bool(stats.get("path_blocked", False)),
-            chosen_root=(repr(self._last_decision.chosen_root)
-                         if self._last_decision is not None
-                         and self._last_decision.chosen_root is not None else None),
+            chosen_root=(repr(self._last_enacted_decision.chosen_root)
+                         if self._last_enacted_decision is not None
+                         and self._last_enacted_decision.chosen_root is not None else None),
             strategy_ranking=[
                 RootScoreView(root_repr=r.root_repr, category=r.category,
                               score=float(r.score), step_repr=r.step_repr)
