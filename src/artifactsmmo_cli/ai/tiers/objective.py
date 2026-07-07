@@ -16,7 +16,6 @@ from artifactsmmo_cli.ai.potion_supply import bootstrap_potion_target
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value, tool_value
 from artifactsmmo_cli.ai.tiers.leaf_attainable_core import leaf_attainable_pure
 from artifactsmmo_cli.ai.tiers.objective_completion import is_complete_pure
-from artifactsmmo_cli.ai.tiers.skill_target_curve import skill_target_curve
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, SKILL_NAMES, WorldState
 
 # Single source: the duplicate-allowed slot types, read from actions/equip.py's
@@ -308,12 +307,6 @@ class CharacterObjective:
         enumeration (target_gear / near_term_gear) used to emit."""
         code = bootstrap_potion_target(state, self._game_data)
         return {"utility1_slot": code} if code is not None else {}
-
-    def near_term_skill_targets(self, state: WorldState) -> dict[str, int]:
-        """Recipe-aware skill curve: {craft_skill: target_level} the bot should
-        hold at the current char level so gear recipes unlock just-in-time.
-        Thin delegation to the proven skill_target_curve core."""
-        return skill_target_curve(state.level, state, self._game_data)
 
     def _item_value(self, code: str | None) -> int:
         if not code:

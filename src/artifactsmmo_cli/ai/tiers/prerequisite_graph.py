@@ -13,7 +13,6 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachCharLevel,
     ReachSkillLevel,
 )
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -98,49 +97,9 @@ auto-emits at the next horizon. Removed once current_level + horizon >=
 target_char_level (we're already in the home stretch)."""
 
 
-def objective_roots(
-    objective: CharacterObjective,
-    state: WorldState | None = None,
-) -> list[MetaGoal]:
-    """The Tier-1 objective expressed as root meta-goals for P3's search.
-
-    Tools (target_tools) are emitted alongside combat gear (target_gear).
-    Both compete for the weapon_slot in the equipment layer; the planner
-    pursues whichever currently scores higher in the Tier-2 ranking,
-    and OptimizeLoadout swaps the active item per the current task's
-    gathering-skill needs.
-
-    Standalone `ReachSkillLevel` ROOTS are no longer emitted (progression-tree
-    Phase 4b Task 2): skills are pure prerequisites — a skill enters the search
-    only as a prereq/step inside a gear/char chain (`prerequisites`,
-    `skill_target_curve`-derived steps), never as its own top-level objective."""
-    roots: list[MetaGoal] = [ReachCharLevel(objective.target_char_level)]
-    if state is not None:
-        # Char-level bootstrap: gap-2 root competing with gear chains so
-        # GrindCharacterXP actually fires. See _CHAR_LEVEL_BOOTSTRAP_HORIZON.
-        char_horizon = state.level + _CHAR_LEVEL_BOOTSTRAP_HORIZON
-        if char_horizon < objective.target_char_level:
-            roots.append(ReachCharLevel(char_horizon))
-        # Near-term gear: best usable-at-level upgrade per slot. The BiS
-        # target_gear roots below are unreachable at low level (filtered by
-        # is_reachable), which left the gear category with no live candidate —
-        # the 2026-06-11 gear-starvation treadmill. See
-        # CharacterObjective.near_term_gear.
-        roots.extend(ObtainItem(code, slot=slot)
-                     for slot, code in objective.near_term_gear(state).items())
-        # Utility potions are judged by EFFECT, not level (see
-        # utility_potion_targets / bootstrap_potion_target): the single
-        # effect-based heal root is emitted at every level — including
-        # bootstrap, where the level-gated near_term_gear emits nothing.
-        roots.extend(ObtainItem(code, slot=slot)
-                     for slot, code in objective.utility_potion_targets(state).items())
-    roots.extend(ObtainItem(code, slot=slot) for slot, code in objective.target_gear.items())
-    roots.extend(ObtainItem(code) for code in objective.target_tools.values())
-    # A near-term target can coincide with a BiS/tool target; one root each.
-    seen: set[MetaGoal] = set()
-    deduped: list[MetaGoal] = []
-    for root in roots:
-        if root not in seen:
-            seen.add(root)
-            deduped.append(root)
-    return deduped
+# NOTE: `objective_roots` (the Tier-1 objective expressed as P3 search roots)
+# was retired in progression-tree Phase 4b Task 5 — the flat-ranking search it
+# fed was deleted in Task-1's THE FLIP, leaving zero callers (tiers/__init__
+# re-export only). `_CHAR_LEVEL_BOOTSTRAP_HORIZON` above stays: it is a live
+# formal/diff anchor (test_objective_step_is_fight_diff.py,
+# ObjectiveStepFight.lean) independent of the deleted function.

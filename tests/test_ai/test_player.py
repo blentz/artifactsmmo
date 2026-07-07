@@ -1929,12 +1929,12 @@ class TestNotifyObserverCooldown:
         assert snap.plan_tree[0].label == "nonexistent_item"
 
 
-class TestNotifyObserverTreeShadow:
+class TestNotifyObserverChosenRoot:
     """Phase 4b (THE FLIP): one engine — `_last_decision` IS the tree
-    decision, so the snapshot's `tree_*` fields mirror `chosen_root` until
-    Task 5 removes them from CycleSnapshot outright."""
+    decision, so `snap.chosen_root` reflects it directly (progression-tree
+    Phase 4b Task 5 removed the separate shadow `tree_*` mirror fields)."""
 
-    def test_tree_active_and_chosen_root_when_decision_present(self):
+    def test_chosen_root_present_when_decision_present(self):
         captured = []
         player = GamePlayer(character="hero", cycle_observer=captured.append)
         player.game_data = make_game_data_mock()
@@ -1946,13 +1946,10 @@ class TestNotifyObserverTreeShadow:
         player._notify_observer("ReachCharLevel(5)", "FightAction(cow)", "ok", [])
         assert len(captured) == 1
         snap = captured[0]
-        assert snap.tree_active is True
-        assert snap.tree_chosen_root == repr(ObtainItem("nonexistent_item"))
         assert snap.chosen_root == repr(ObtainItem("nonexistent_item"))
 
-    def test_tree_active_with_no_chosen_root(self):
-        """The engine can run and choose no root (e.g. an interrupt cycle) —
-        that's still `tree_active=True`, distinct from no decision at all."""
+    def test_chosen_root_none_when_decision_chooses_no_root(self):
+        """The engine can run and choose no root (e.g. an interrupt cycle)."""
         captured = []
         player = GamePlayer(character="hero", cycle_observer=captured.append)
         player.game_data = make_game_data_mock()
@@ -1963,20 +1960,18 @@ class TestNotifyObserverTreeShadow:
         )
         player._notify_observer("ReachCharLevel(5)", "FightAction(cow)", "ok", [])
         snap = captured[0]
-        assert snap.tree_active is True
-        assert snap.tree_chosen_root is None
+        assert snap.chosen_root is None
 
-    def test_tree_inactive_when_no_decision(self):
-        """No `_last_decision` this cycle — the snapshot reports the tree
-        fields as inactive (never guessed at)."""
+    def test_chosen_root_none_when_no_decision(self):
+        """No `_last_decision` this cycle — the snapshot reports no chosen
+        root (never guessed at)."""
         captured = []
         player = GamePlayer(character="hero", cycle_observer=captured.append)
         player.game_data = make_game_data_mock()
         player.state = make_state(level=4)
         player._notify_observer("ReachCharLevel(5)", "FightAction(cow)", "ok", [])
         snap = captured[0]
-        assert snap.tree_active is False
-        assert snap.tree_chosen_root is None
+        assert snap.chosen_root is None
 
 
 def test_snapshot_carries_chosen_root_and_ranking_and_bank(tmp_path):

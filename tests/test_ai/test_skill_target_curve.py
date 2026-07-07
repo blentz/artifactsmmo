@@ -1,10 +1,4 @@
-from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.tiers.skill_target_curve import (
-    SkillItem,
-    skill_curve_target_pure,
-    skill_target_curve,
-)
-from tests.test_ai.fixtures import make_state
+from artifactsmmo_cli.ai.tiers.skill_target_curve import SkillItem, skill_curve_target_pure
 
 
 def _items():
@@ -48,29 +42,3 @@ def test_qualifying_item_floors_to_one():
     items = [SkillItem("mining", 0, 1, True)]  # craft_level 0 but qualifies
     # best stays 0 -> treated as "no qualifying recipe" -> 0.
     assert skill_curve_target_pure("mining", 99, items, 3, 50) == 0
-
-
-def _gd_with_recipes() -> GameData:
-    gd = GameData()
-    gd._item_stats = {
-        "water_bow": ItemStats(code="water_bow", level=5, type_="weapon",
-                               crafting_skill="weaponcrafting", crafting_level=5),
-        "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
-                                   crafting_skill="weaponcrafting", crafting_level=1),
-        "cooked_beef": ItemStats(code="cooked_beef", level=1, type_="consumable",
-                                 crafting_skill="cooking", crafting_level=1),
-        # Non-crafted raw (no crafting_skill): the wrapper's hoist skips it.
-        "ash_wood": ItemStats(code="ash_wood", level=1, type_="resource"),
-    }
-    return gd
-
-
-def test_wrapper_targets_weaponcrafting_5_at_char7():
-    gd = _gd_with_recipes()
-    state = make_state(level=7)
-    curve = skill_target_curve(state.level, state, gd)
-    # water_bow (weaponcrafting/5, item_level 5) is in-window at char 7;
-    # copper_dagger (craft_level 1) loses the running max -> target 5.
-    assert curve["weaponcrafting"] == 5
-    # cooked_beef is a consumable (not gear-relevant) -> cooking not scheduled.
-    assert "cooking" not in curve

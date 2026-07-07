@@ -1414,12 +1414,6 @@ class GamePlayer:
                 (self.state.cooldown_expires - datetime.now(tz=timezone.utc)).total_seconds(),
             )
         action_kind, action_target = action_kind_of(action) if action is not None else ("other", None)
-        # Phase 4b (THE FLIP): one engine — `_last_decision` IS the tree
-        # decision, so the snapshot's `tree_*` fields mirror `chosen_root`
-        # until Task 5 removes them from CycleSnapshot outright. None means
-        # no decision this cycle (never guessed at); a decision that chose
-        # no root is still "active", just rootless.
-        tree_decision = self._last_decision
         snap = CycleSnapshot(
             cycle_index=self._cycle_counter,
             timestamp=datetime.now(tz=timezone.utc).isoformat(),
@@ -1478,10 +1472,6 @@ class GamePlayer:
                 )
                 if self._last_decision is not None and self.game_data is not None else ()
             ),
-            tree_active=tree_decision is not None,
-            tree_chosen_root=(repr(tree_decision.chosen_root)
-                               if tree_decision is not None
-                               and tree_decision.chosen_root is not None else None),
         )
         self._cycle_observer(snap)
 

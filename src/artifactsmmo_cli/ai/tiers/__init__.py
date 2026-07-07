@@ -24,7 +24,6 @@ from artifactsmmo_cli.ai.tiers.personality import (
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import (
     best_attainable_weapon,
     combat_capable,
-    objective_roots,
     prerequisites,
 )
 from artifactsmmo_cli.ai.tiers.strategy import (
@@ -55,7 +54,6 @@ __all__ = [
     "desired_state_of",
     "equip_value",
     "is_attainable",
-    "objective_roots",
     "owned_count",
     "prerequisites",
     "root_category",

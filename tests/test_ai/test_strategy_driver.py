@@ -1331,13 +1331,12 @@ class _FallbackDecision:
     fallback_roots: list
 
 
-def test_chosen_step_alive_false_when_top_step_yields_no_goal():
+def test_fallback_serves_when_top_step_yields_no_goal():
     """Zombie-commitment release: when the top chosen_step's objective_step_goal
     is None (e.g. ReachCharLevel with no winnable monster, or a reservation-
-    starved skill grind), the arbiter marks chosen_step_alive False so the player
-    releases the stickiness anchor instead of re-committing to the inert root
-    forever (weaponcrafting level-5 plateau, trace 2026-06-19). A fallback still
-    serves the cycle, so select returns a goal."""
+    starved skill grind), a fallback still serves the cycle, so select
+    returns a goal instead of leaving the player idle (weaponcrafting
+    level-5 plateau, trace 2026-06-19)."""
     planner = GOAPPlanner()
     gd = _gd()
     state = make_state(hp=100, max_hp=100, inventory={"wooden_shield": 1},
@@ -1350,14 +1349,14 @@ def test_chosen_step_alive_false_when_top_step_yields_no_goal():
     arbiter = StrategyArbiter(planner, history=None)
     arbiter.set_cycle(0)
     goal, _plan, _gt = arbiter.select(decision, state, gd, actions, _ctx())
-    assert arbiter.chosen_step_alive is False
     assert goal is not None, "a fallback must still serve the cycle"
 
 
-def test_chosen_step_alive_true_when_top_step_yields_goal():
+def test_select_returns_top_step_goal_when_it_yields_a_goal():
     """The complement: a chosen_step that DOES map to a goal (here an owned
-    wooden_shield -> UpgradeEquipmentGoal) keeps chosen_step_alive True, so the
-    player re-anchors stickiness on the live objective normally."""
+    wooden_shield -> EquipOwnedGoal, the one-action equip path) is returned
+    directly — select never falls through to the fallback chain when the top
+    step is alive."""
     planner = GOAPPlanner()
     gd = _gd()
     state = make_state(hp=100, max_hp=100, inventory={"wooden_shield": 1},
@@ -1368,8 +1367,8 @@ def test_chosen_step_alive_true_when_top_step_yields_goal():
         fallback_steps=[], fallback_roots=[])
     arbiter = StrategyArbiter(planner, history=None)
     arbiter.set_cycle(0)
-    arbiter.select(decision, state, gd, actions, _ctx())
-    assert arbiter.chosen_step_alive is True
+    goal, _plan, _gt = arbiter.select(decision, state, gd, actions, _ctx())
+    assert isinstance(goal, EquipOwnedGoal)
 
 
 def test_select_prefers_equip_owned_gear_over_fallback_upgrade():

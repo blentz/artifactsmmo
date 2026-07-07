@@ -477,30 +477,6 @@ def test_is_attainable_now_buy_cycle_safe():
     assert is_attainable_now("a", make_state(level=5, gold=10000), gd) is False
 
 
-def _gd_with_recipes() -> GameData:
-    gd = GameData()
-    gd._item_stats = {
-        "water_bow": ItemStats(code="water_bow", level=5, type_="weapon",
-                               crafting_skill="weaponcrafting", crafting_level=5),
-        "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
-                                   crafting_skill="weaponcrafting", crafting_level=1),
-        "cooked_beef": ItemStats(code="cooked_beef", level=1, type_="consumable",
-                                 crafting_skill="cooking", crafting_level=1),
-    }
-    return gd
-
-
-def test_near_term_skill_targets_uses_curve():
-    """CharacterObjective.near_term_skill_targets delegates to the proven curve:
-    at char 7, water_bow (weaponcrafting/5, item_level 5) is in-window, so the
-    target to hold is 5; the cooking consumable is not gear-relevant."""
-    obj = CharacterObjective.from_game_data(_gd_with_recipes())
-    state = make_state(level=7)
-    targets = obj.near_term_skill_targets(state)
-    assert targets["weaponcrafting"] == 5
-    assert "cooking" not in targets
-
-
 def test_is_attainable_now_judges_winnability_at_full_hp():
     """A transiently-damaged character (hp 1) must not lose its gear
     targets: strategic attainability rests first (G3 winnable_at_max_hp).

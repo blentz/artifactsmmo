@@ -68,7 +68,7 @@ def _print_report(player: GamePlayer, report: PlanReport) -> None:
             verdict = f"WINNABLE via {win}" if win else "NOT WINNABLE — gear unbuildable!"
             print(f"  {di.get('item')}: droppers={di.get('droppers')} -> {verdict}")
     print("-" * 70)
-    print("root ranking (top 8):")
+    print("descent (top 8):")
     for rs in d.ranking[:8]:
         print(f"  {rs.score} {rs.category:11s} {rs.root_repr}  ->  step={rs.step_repr}")
     print("=" * 70)
