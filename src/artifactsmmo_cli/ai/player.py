@@ -97,6 +97,7 @@ from artifactsmmo_cli.ai.tiers import (
 )
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal
+from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree
 from artifactsmmo_cli.ai.tiers.root_progress import root_progress_value
 from artifactsmmo_cli.ai.tiers.sticky_select_core import next_last
 from artifactsmmo_cli.ai.tracer import Tracer
@@ -131,6 +132,11 @@ class GamePlayer:
         self.planner = GOAPPlanner()
         self._arbiter = StrategyArbiter(self.planner, history)
         self._last_decision: StrategyDecision | None = None
+        # Phase-3 Task 2: the progression-tree shadow decision, computed
+        # alongside the legacy decision every cycle (plan_from_state and the
+        # run-cycle decide path) but never consumed by the arbiter — traced
+        # only, so a live divergence is observable before the Phase-4 flip.
+        self._last_tree_decision: StrategyDecision | None = None
         self.state: WorldState | None = None
         self.game_data: GameData | None = None
         # Generic blocker registry — replaces what used to be ~5 bank-specific
@@ -246,6 +252,7 @@ class GamePlayer:
             step_servable=servable_pred,
         )
         self._last_decision = decision
+        self._last_tree_decision = self._compute_tree_shadow()
         cr, cs = decision.chosen_root, decision.chosen_step
         self._last_servability_diag = {
             "chosen_root_servable": bool(
@@ -269,6 +276,36 @@ class GamePlayer:
             decision.chosen_root, state, game_data, self._arbiter.chosen_step_alive)
         self._last_decide_crafting_target = crafting_target
         return selected_goal, plan, goals_tried
+
+    def _tree_band_adequate(self) -> bool:
+        """The real progression-band adequacy verdict wired into
+        `decide_tree`'s `band_adequate`: a winnable monster exists for the
+        current loadout AND no near-term combat armor slot sits empty. Both
+        legs are already-proven cores (`_pick_winnable_monster`,
+        `StrategyEngine._has_empty_armor_slot`) — this is pure composition,
+        not new decision logic. Callers must have state/game_data/strategy
+        seeded (`_compute_tree_shadow` guards this before calling)."""
+        assert self.state is not None
+        assert self.game_data is not None
+        assert self._strategy is not None
+        return (self._pick_winnable_monster() is not None
+                and not self._strategy._has_empty_armor_slot(self.state, self.game_data))
+
+    def _compute_tree_shadow(self) -> StrategyDecision | None:
+        """The Task-2 progression-tree shadow: `decide_tree` composed over
+        the SAME already-validated state/game_data the legacy `decide()`
+        just used, fed the real band-adequacy verdict. Returns None only
+        when the engine isn't seeded yet (construction before
+        `_initialize`/`seed_offline`) — total elsewhere. No try/except (repo
+        rule): composing pure cores over already-validated state cannot
+        raise, so totality is the guarantee, not a caught exception."""
+        state = self.state
+        game_data = self.game_data
+        if (state is None or game_data is None or self._strategy is None
+                or self._objective is None):
+            return None
+        return decide_tree(state, game_data, self._objective,
+                           band_adequate=self._tree_band_adequate())
 
     def _plan_or_reuse(
         self,
@@ -450,6 +487,7 @@ class GamePlayer:
             state, game_data, history=self.history, combat_monster=combat_monster,
             last_chosen_root=self._last_strategy_root,
             step_servable=self._step_servable(state, game_data, ctx))
+        self._last_tree_decision = self._compute_tree_shadow()
         step = decision.chosen_step
         crafting_target = step.code if isinstance(step, ObtainItem) else None
         if crafting_target is None:
@@ -490,7 +528,8 @@ class GamePlayer:
                           plan=list(plan), goals_tried=goals_tried,
                           drop_inputs=drop_inputs,
                           simulated_doomed=sim_doomed,
-                          simulated_committed=committed)
+                          simulated_committed=committed,
+                          tree_decision=self._last_tree_decision)
 
     def run(self) -> None:
         """Main loop: sense → select goal → plan → act."""
@@ -1176,6 +1215,13 @@ class GamePlayer:
                 self.state, self.game_data, history=self.history,
                 combat_monster=self._winnable_farm_target())
             record["strategy"] = decision.to_trace()
+            # Phase-3 Task 2: the progression-tree shadow, next to the legacy
+            # strategy trace — emitted only when observable (state/game_data/
+            # strategy/objective all seeded); absent means unobserved, never
+            # a guessed default.
+            tree = self._last_tree_decision or self._compute_tree_shadow()
+            if tree is not None:
+                record["tree"] = tree.to_trace()
         self.tracer.write_cycle(record)
         self._cycle_counter += 1
 

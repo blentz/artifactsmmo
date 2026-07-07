@@ -20,6 +20,11 @@ class PlanReport:
     selected_goal: Goal | None
     plan: list[Action]
     goals_tried: list[dict[str, object]]
+    # Phase-3 Task 2: the progression-tree shadow decision, computed by the
+    # SAME cycle's `_compute_tree_shadow` — traced/reported only, never fed
+    # into `selected_goal`/`plan`. None only when the tree isn't computable
+    # yet (unseeded state/game_data/strategy/objective at construction).
+    tree_decision: StrategyDecision | None = None
     # For the chosen objective's recipe: each pure monster-drop input, its dropping
     # monsters, and whether each is winnable with the LIVE loadout. Answers "will the
     # bot actually hunt these?" — an unwinnable drop makes the gear unbuildable.
