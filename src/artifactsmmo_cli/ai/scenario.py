@@ -11,7 +11,7 @@ from pathlib import Path
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
-from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, WorldState
+from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, SKILL_NAMES, WorldState
 
 
 @dataclass(frozen=True)
@@ -35,11 +35,19 @@ class ScenarioCharacter:
 def scenario_state(sc: ScenarioCharacter) -> WorldState:
     equipment: dict[str, str | None] = {slot: None for slot in EQUIPMENT_SLOTS}
     equipment.update(sc.equipment)
+    # Every real character carries all 8 craft/gathering skills starting at
+    # level 1 (world_state._fetch_world_state loops SKILL_NAMES with no
+    # omissions) — a scenario that only sets the skills it cares about must
+    # still produce a state with every key present, or planner code that
+    # indexes state.skills[skill] unconditionally (a sound assumption against
+    # live data) raises KeyError.
+    skills: dict[str, int] = {name: 1 for name in SKILL_NAMES}
+    skills.update(sc.skills)
     task_code, task_type, progress, total = sc.task or (None, None, 0, 0)
     return WorldState(
         character=sc.name, level=sc.level, xp=0, max_xp=100,
         hp=sc.hp if sc.hp is not None else sc.max_hp, max_hp=sc.max_hp,
-        gold=sc.gold, skills=dict(sc.skills), x=0, y=0,
+        gold=sc.gold, skills=skills, x=0, y=0,
         inventory=dict(sc.inventory), inventory_max=sc.inventory_max,
         equipment=equipment, cooldown_expires=None,
         task_code=task_code, task_type=task_type,
