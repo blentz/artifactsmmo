@@ -162,6 +162,30 @@ existing provisioning quantities (win-rate provisioning guard unchanged).
 
 Each phase lands independently valuable and gate-green.
 
+**Phase 4a SHIPPED (2026-07-07):** commits 3405472c (`--progression-tree`
+flag on play+plan, default OFF; flip point at both decide sites with
+object-identity flag-off guarantee; enacted decision feeds arbiter, sticky
+anchor, crafting-target, servability, PlanReport.decision +
+enacted_engine; record["enacted"] marker; record["strategy"]/["tree"] stay
+engine-true — symmetric shadow), 532f7d95 (zero-gain utility filter —
+Phase-2 latent flag closed), 3cf535f4 (flag-on tree goldens = the 4b
+promotion set; guards proven engine-independent: RestoreHP /
+DiscardOverstock identical under both engines).
+
+**Phase 4b REQUIRED checklist (data-gated on corrected-shadow review):**
+default flip → legacy-ranking deletion → STRATEGY_MUTATIONS rebind →
+StickySelect scoring-theorem retirement → Phase-1 strict-xfail promotion +
+CURRENT_TODAY deletion + legacy-golden retirement (test_goldens.py vs
+test_goldens_tree.py reconciliation) → TUI descent rendering AND
+strategy_ranking/plan_tree snapshot panes fed from the ENACTED engine
+(final-review REQUIRED item — panes currently legacy-fed, misleading
+during flag-on soak) → flag-on _decide_band live-loop integration test
+(REQUIRED before extended soak) → POTION_TYPE_WEIGHTS tuning (empty
+utility slot currently outranks xp/task-funding in l10_copper_adequate and
+l12_taskgated_bag — deliberate argmax consequence, re-examine at flip) →
+per-band L20-50 scenarios → `enacted:` line in plan output → gate.sh run
+owed (bot was live throughout 4a).
+
 **Phase 3 amendment (2026-07-07, live shadow review):** 6h/527 dual
 cycles: legacy spent 263 cycles (50%) on the small_health_potion root (the
 churn loop, measured); 264 cycles ReachCharLevel(14)!=(20) are
