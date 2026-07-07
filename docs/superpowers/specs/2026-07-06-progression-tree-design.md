@@ -184,7 +184,13 @@ during flag-on soak) → flag-on _decide_band live-loop integration test
 utility slot currently outranks xp/task-funding in l10_copper_adequate and
 l12_taskgated_bag — deliberate argmax consequence, re-examine at flip) →
 per-band L20-50 scenarios → `enacted:` line in plan output → gate.sh run
-owed (bot was live throughout 4a).
+owed (bot was live throughout 4a) → derive enacted markers by identity
+against the enacted object, not by re-deriving the flip condition
+(player.py:563/:1263) → `enacted_engine` as Literal["legacy","tree"] →
+flag-on soak caveat: sticky anchor feeds the TREE root into legacy
+decide's last_chosen_root, biasing record["strategy"] toward agreement —
+and (Phase-3 note) sticky under-counts flag-OFF agreement; read
+divergent-pair CLASSES, never the headline %, in the data review.
 
 **Phase 3 amendment (2026-07-07, live shadow review):** 6h/527 dual
 cycles: legacy spent 263 cycles (50%) on the small_health_potion root (the
