@@ -80,6 +80,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | PrerequisiteGraph | crafting, items | safety, totality |
 | PriorityBand | core, planner | safety |
 | ProgressionReserve | core, economy | deduction-accounting, monotonicity |
+| ProgressionTree | progression | safety, totality, dominance |
 | PurposeRouting | items, characters | dominance |
 | RankingComposition | core, planner | dominance, monotonicity |
 | RealizableLoadout | items, characters | safety |

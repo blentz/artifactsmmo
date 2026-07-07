@@ -171,7 +171,13 @@ below adequacy — l1_fresh → copper_dagger via copper_ore step), 249cf05c
 (PROGRESSION_TREE_MUTATIONS, 5/5 unit-killed). Phase-2 interim decisions:
 adequacy = candidate-set-empty (E-tower refinement in Phase 3); utility
 candidates map to hp_restore family only; zero-gain utility trigger +
-gd/objective same-snapshot contract flagged for Phase-3 wiring.
+gd/objective same-snapshot contract flagged for Phase-3 wiring; ALSO
+Phase-3 must revisit decide_tree's XP arm: under the crude adequacy
+definition band_adequate implies zero candidates, so the XP arm carries no
+gear fallbacks — when the E-tower adequacy signal replaces it, XP can fire
+WITH candidates and the current arm would silently drop them (final-review
+finding); and harden the display/fallback ordering with an assertion that
+_ordered(candidates)[0] equals the proven core's pick.
 
 **Phase 1 SHIPPED (2026-07-06):** commits b626ac4f (from_cache_bundle +
 755KB fixture), 9657a3e9 (seed_offline + plan_from_state split), 4084a89c
