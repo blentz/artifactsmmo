@@ -162,6 +162,23 @@ existing provisioning quantities (win-rate provisioning guard unchanged).
 
 Each phase lands independently valuable and gate-green.
 
+**Phase 3 SHIPPED (2026-07-07):** commits cb62e5ba (adequacy parameter +
+XP-arm gear-fallback retention + _ordered[0]==core-pick assert — all three
+Phase-2 flags closed), 71aa2861 (shadow wiring: decide_tree computed every
+cycle beside legacy, stashed, traced as record["tree"]; PlanReport.
+tree_decision; legacy flow verified byte-identical), 31931812 (`plan
+--tree` full descent block + always-on compact `tree: {root} {==|!=}`
+line), 492ec91d (`stats summary --trace-file <jsonl>` divergence section —
+dual cycles, agreement %, branch counts, top-5 divergent pairs; TraceStats
+reads the learning DB, so divergence aggregates the trace JSONL via
+analyze_tree_divergence), 6375ff9e (TUI: CycleSnapshot tree fields +
+` tree:{==|!=}` log-line suffix — the TUI consumes the live observer
+queue, not trace files). Adequacy signal live = winnable-band-target ∧
+no-empty-armor-slot. LIVE-REVIEW CHECKLIST: run the bot with --trace,
+then `artifactsmmo stats summary --trace-file play-trace-Robby.jsonl`
+(divergence section) and `artifactsmmo plan Robby --tree`; review
+agreement by scenario class before the Phase-4 flip.
+
 **Phase 2 SHIPPED (2026-07-06):** commits b978bc88 (pure cores:
 milestone/branch/argmax/potion-weights, exact Fractions), 35163ed5
 (Formal/ProgressionTree.lean — 10 theorems core-only, zero sorry/axioms;
