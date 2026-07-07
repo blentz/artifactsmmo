@@ -162,6 +162,28 @@ existing provisioning quantities (win-rate provisioning guard unchanged).
 
 Each phase lands independently valuable and gate-green.
 
+**Phase 4b SHIPPED — THE FLIP (2026-07-07):** commits 388f15c2 (decide()
+delegates to decide_tree; servability demotion `_servable_promotion`
+walks fallback pairs in order, all-unservable keeps choice for the
+doomed-memo; goldens promoted — XFAIL_TODAY/CURRENT_TODAY/goldens_tree
+deleted per their delete-at-flip mandates; shadow chrome removed),
+ef67c1d6 (flat ranking DELETED: −1922 lines — all scoring constants, 11
+pipeline methods, standalone skill roots, player-side sticky machinery;
+arbiter-side commitment untouched), b2fc60d9 (formal retire: RankingComposition/
+StickySelect/ObtainProgress/ZombieFreedom/GatedArming/PersonalityGrounding
++ 4 diff harnesses + 10 mutant groups; DecideKey DISPATCHER half KEPT —
+shadows live map_guard/map_means; comparator half deleted; diff 721→703;
+L50 capstone ai_reaches_fifty verified hypothesis-free and building),
+8a3c5774 (descent rendering; chosen_step_alive/objective_roots/
+near_term_skill_targets retired). Sticky decision RECORDED: decide-level
+scoring retired (tree deterministic — 326 identical shadow picks);
+arbiter-level commitment + zombie release survive. Remaining tuning
+surface = POTION_TYPE_WEIGHTS. Post-flip backlog: tree-native
+arming/anti-zombie re-proof; DecideKey repr-vs-dispatch mechanical
+assert; per-band L20-50 scenarios. GATE: full run REQUIRED at next bot
+downtime (red-by-construction risk window closed at b2fc60d9; static
+anchor sweep 535 units 0 stale).
+
 **Phase 4a SHIPPED (2026-07-07):** commits 3405472c (`--progression-tree`
 flag on play+plan, default OFF; flip point at both decide sites with
 object-identity flag-off guarantee; enacted decision feeds arbiter, sticky

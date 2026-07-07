@@ -91,6 +91,19 @@
 
 ---
 
+### Follow-ups promoted from Task-3 review (post-4b backlog, not this plan)
+
+- Tree-native arming/anti-zombie liveness re-proof: GatedArming +
+  no_infinite_zombie_below_fifty retired with the sticky machinery; the L50
+  capstone is verified intact (ai_reaches_fifty hypothesis-free), but if the
+  reach-50 narrative wants an arming story over the TREE's decide path, it
+  needs a new proof over decide_tree/servable-promotion.
+- DecideKey dispatcher half: add a mechanical repr-vs-dispatch assert
+  (goal_repr_of_guard(k) vs map_guard(k) actual goal) to make the kept
+  lockstep binding mechanical rather than conventional.
+- chosen_step_alive (write-only post-flip) + objective_roots re-export:
+  retire or re-consume in Task 5 or the backlog.
+
 ### Task 6: Wrap-up + THE GATE (bot must be down)
 
 - [ ] Spec: "Phase 4b SHIPPED — THE FLIP" note (commits; what died; sticky decision recorded: decide-level scoring retired, arbiter commitment retained; weight table = the remaining tuning surface).
