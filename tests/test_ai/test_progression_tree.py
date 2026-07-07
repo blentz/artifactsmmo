@@ -18,8 +18,12 @@ BUNDLE = (Path(__file__).parent / "scenarios" / "fixtures"
           / "gamedata_bundle.json")
 
 
+def _bundle() -> GameData:
+    return GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
+
+
 def _decide(name: str):
-    gd = GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
+    gd = _bundle()
     state = scenario_state(SCENARIOS[name])
     return decide_tree(state, gd, CharacterObjective.from_game_data(gd)), state
 
@@ -158,6 +162,48 @@ class TestPerScenarioPins:
                                            slot="utility1_slot")
         assert d.chosen_step == ObtainItem(code="sunflower", quantity=3)
         assert len(d.ranking) == 3
+
+
+# --- band_adequate parameter (Phase-3 Task-1) -------------------------------
+#
+# Phase-2 computed band_adequate internally as `candidates == []`. Phase 3
+# replaces that stand-in with a caller-supplied verdict (Task 2 wires the
+# real progression-band signal) — decide_tree defaults band_adequate=False
+# so every existing caller (including all tests above) is unaffected.
+
+class TestAdequacyParameter:
+    def test_adequate_with_candidates_goes_xp_with_gear_fallbacks(self):
+        """Adequate band + upgrades available: XP is chosen, gear candidates
+        survive as arbiter fallbacks (Phase-2 final-review finding — they
+        must NOT be silently dropped)."""
+        gd = _bundle()
+        state = scenario_state(SCENARIOS["l10_weapon_upgrade"])
+        d = decide_tree(state, gd, CharacterObjective.from_game_data(gd),
+                        band_adequate=True)
+        assert isinstance(d.chosen_root, ReachCharLevel)
+        assert any(isinstance(r, ObtainItem) for r in d.fallback_roots), (
+            "gear candidates must survive as fallbacks under the XP branch")
+
+    def test_not_adequate_defaults_preserve_phase2_pins(self):
+        """band_adequate=False (the default) reproduces the Phase-2 behavior
+        pins exactly — the parameter is additive."""
+        gd = _bundle()
+        state = scenario_state(SCENARIOS["l10_weapon_upgrade"])
+        d = decide_tree(state, gd, CharacterObjective.from_game_data(gd))
+        assert isinstance(d.chosen_root, ObtainItem)
+        assert d.chosen_root.slot == "weapon_slot"
+
+    def test_adequate_no_candidates_pure_xp(self):
+        """Adequate + zero candidates: pure XP decision, empty gear
+        fallbacks. Reuses the same empty-GameData synthetic fixture as
+        TestSyntheticBranches.test_xp_branch_fires_when_candidates_are_truly_empty."""
+        gd = GameData()
+        objective = CharacterObjective.from_game_data(gd)
+        state = scenario_state(ScenarioCharacter(name="synthetic_empty", level=5, max_hp=100))
+        d = decide_tree(state, gd, objective, band_adequate=True)
+        assert isinstance(d.chosen_root, ReachCharLevel)
+        assert d.chosen_step == d.chosen_root
+        assert not any(isinstance(r, ObtainItem) for r in d.fallback_roots)
 
 
 # --- Synthetic-GameData unit tests (coverage of branches the 6 scenarios

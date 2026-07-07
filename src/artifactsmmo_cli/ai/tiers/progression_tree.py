@@ -88,45 +88,80 @@ def _gear_ranking_rows(state: WorldState, game_data: GameData,
     return rows
 
 
+def _candidate_fallbacks(state: WorldState, game_data: GameData,
+                         ordered: list[GearCandidate],
+                         skip: GearCandidate | None = None,
+                         ) -> tuple[list[MetaGoal], list[MetaGoal]]:
+    """Root/step pairs for `ordered` (pick order), skipping `skip` (the
+    candidate already promoted to chosen_root, when there is one). Shared by
+    both branches: the GEAR arm skips its own pick, the XP arm skips nothing
+    (the trunk — not a candidate — is the chosen decision there)."""
+    roots: list[MetaGoal] = []
+    steps: list[MetaGoal] = []
+    for candidate in ordered:
+        if candidate == skip:
+            continue
+        root = _candidate_root(candidate)
+        step = actionable_step(root, state, game_data) or root
+        roots.append(root)
+        steps.append(step)
+    return roots, steps
+
+
 def decide_tree(state: WorldState, game_data: GameData,
-                objective: CharacterObjective) -> StrategyDecision:
-    """The Phase-2 tree assembly: trunk milestone, gear/xp branch pivot, and
+                objective: CharacterObjective,
+                band_adequate: bool = False) -> StrategyDecision:
+    """The Phase-2/3 tree assembly: trunk milestone, gear/xp branch pivot, and
     the chosen root/step — composing the Task-1 pure cores exactly per the
-    2026-07-06 BINDING semantics."""
+    2026-07-06 BINDING semantics.
+
+    `band_adequate` is caller-supplied (Task 2 wires the real progression-band
+    verdict into StrategyEngine; here it defaults to False, reproducing the
+    Phase-2 interim stand-in `band_adequate = candidates == []` exactly for
+    every existing caller). `gear_target_exists = candidates != []` stays
+    computed internally — it is a structural fact about this decide_tree call,
+    not something a caller could second-guess."""
     trunk = ReachCharLevel(level=milestone_pure(state.level))
 
     candidates = _structural_candidates(state, game_data, objective) \
         + _utility_candidates(state, game_data, objective)
     gear_target_exists = candidates != []
-    band_adequate = candidates == []
     branch = branch_pick_pure(band_adequate, gear_target_exists)
 
     ordered = _ordered(candidates)
-    fallback_roots: list[MetaGoal] = []
-    fallback_steps: list[MetaGoal] = []
+    pick = gear_target_pick(candidates) if candidates else None
+    if candidates:
+        # Drift-risk hardening: the display order's element 0 must always
+        # agree with the proven core's argmax — gear_target_pick is the
+        # authority, _ordered is a display convenience over the same rule.
+        assert ordered[0] == pick, (
+            "_ordered(candidates)[0] must equal gear_target_pick(candidates) — "
+            "gear_target_pick is the proven authority; the display path may "
+            "never disagree with it"
+        )
+
+    fallback_roots: list[MetaGoal]
+    fallback_steps: list[MetaGoal]
 
     if branch is Branch.GEAR:
-        pick = gear_target_pick(candidates)
         assert pick is not None  # gear_target_exists guarantees a non-empty list
         chosen_root: MetaGoal = _candidate_root(pick)
         chosen_step: MetaGoal = actionable_step(chosen_root, state, game_data) or chosen_root
         # Semantics item 6: the other branch (xp trunk) first, then the
         # remaining gear candidates in pick order, each its own root/step.
-        fallback_roots.append(trunk)
-        fallback_steps.append(trunk)
-        for candidate in ordered:
-            if candidate == pick:
-                continue
-            root = _candidate_root(candidate)
-            step = actionable_step(root, state, game_data) or root
-            fallback_roots.append(root)
-            fallback_steps.append(step)
+        extra_roots, extra_steps = _candidate_fallbacks(state, game_data, ordered, skip=pick)
+        fallback_roots = [trunk, *extra_roots]
+        fallback_steps = [trunk, *extra_steps]
     else:
-        # XP branch: band_adequate implies candidates == [] (branch_pick_pure's
-        # truth table), so there is no gear pick to offer as a fallback —
-        # "impossible by rule" per semantics item 6.
+        # XP branch: the trunk IS the chosen decision. Any gear candidates
+        # (possible now that band_adequate is caller-supplied: adequate band
+        # with upgrades still on offer) must not be silently dropped —
+        # Phase-2 final-review finding — so they survive as fallbacks, in
+        # pick order, so the arbiter can still fall back to gear when the
+        # trunk step yields no goal.
         chosen_root = trunk
         chosen_step = trunk
+        fallback_roots, fallback_steps = _candidate_fallbacks(state, game_data, ordered)
 
     trunk_row = RootScore(
         root_repr=repr(trunk), category="char_level", contribution=Fraction(1),
