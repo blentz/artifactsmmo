@@ -59,7 +59,10 @@ def _utility_candidates(state: WorldState, game_data: GameData,
     (equipped_potion_qty > 0 — refill churn is the guard's job, not the
     tree's); else weight by the hp_restore family (the only family
     utility_potion_targets emits today — see potion_type_weight's docstring
-    for when boost/resist targets join this path)."""
+    for when boost/resist targets join this path). Same `gain > 0` guard
+    _structural_candidates has: a zero-weighted family (unmodeled) or a
+    zero-value item must never arm the gear branch or appear as a
+    candidate."""
     candidates = []
     for slot, code in objective.utility_potion_targets(state).items():
         if equipped_potion_qty(state, code) > 0:
@@ -68,7 +71,8 @@ def _utility_candidates(state: WorldState, game_data: GameData,
         if stats is None:
             continue
         gain = potion_type_weight("hp_restore") * Fraction(equip_value(stats))
-        candidates.append(GearCandidate(slot=slot, code=code, gain=gain, level=stats.level))
+        if gain > 0:
+            candidates.append(GearCandidate(slot=slot, code=code, gain=gain, level=stats.level))
     return candidates
 
 

@@ -7,7 +7,8 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
-from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.item_catalog import ItemCatalog
 from artifactsmmo_cli.ai.player import GamePlayer  # noqa: F401  (scenario seam parity)
 from artifactsmmo_cli.ai.scenario import SCENARIOS, ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
@@ -288,3 +289,31 @@ class TestSyntheticBranches:
         # anywhere in the rendered ranking.
         assert not any(code in r.root_repr for r in d.ranking)
         assert d.chosen_root == ObtainItem(code="copper_dagger", quantity=1, slot="weapon_slot")
+
+    def test_zero_gain_utility_candidate_is_filtered_and_falls_to_xp(self):
+        """A utility target whose own equip_value computes to 0 (all-zero
+        ItemStats) must never arm the gear branch -- the same `gain > 0`
+        guard _structural_candidates already has, applied to the utility
+        leg. Mirrors test_structural_and_utility_candidates_skip_unknown_
+        item_stats's mismatched-game_data trick: the OBJECTIVE stays bound
+        to the full bundle (bootstrap_potion_target legitimately picks
+        small_health_potion there -- it needs hp_restore > 0 to be picked
+        at all), but decide_tree's own `game_data` parameter maps that same
+        code to an all-zero ItemStats, so it survives the `stats is None`
+        skip yet contributes 0 weighted gain. near_term_gear's codes are
+        absent from this catalog entirely (only the potion code is
+        present), so structural_candidates is empty too, and decide_tree
+        must fall all the way to the XP trunk."""
+        gd_full = GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
+        objective = CharacterObjective.from_game_data(gd_full)
+        state = scenario_state(SCENARIOS["l1_fresh"])
+        code = objective.utility_potion_targets(state)["utility1_slot"]
+        assert code == "small_health_potion"  # sanity: matches the Phase-2 pin
+        zero_stats_gd = GameData(items=ItemCatalog(
+            stats={code: ItemStats(code=code, level=1, type_="utility", subtype="tool")}))
+        d = decide_tree(state, zero_stats_gd, objective)
+        assert not any(code in r.root_repr for r in d.ranking)
+        assert d.chosen_root == ReachCharLevel(level=10)
+        assert d.chosen_step == d.chosen_root
+        assert d.fallback_roots == []
+        assert d.fallback_steps == []
