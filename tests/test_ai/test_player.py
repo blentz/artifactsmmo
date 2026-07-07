@@ -1929,6 +1929,59 @@ class TestNotifyObserverCooldown:
         assert snap.plan_tree[0].label == "nonexistent_item"
 
 
+class TestNotifyObserverTreeShadow:
+    """Phase-3 Task 5: `_notify_observer` surfaces the progression-tree
+    shadow's chosen root next to the enacted `chosen_root`, the same pair
+    `analyze_tree_divergence` (Task 4) compares from raw trace JSONL — so the
+    TUI's tree-agreement annotation has a live-queue source, not just a
+    trace-tail one."""
+
+    def test_tree_active_and_chosen_root_when_tree_decision_present(self):
+        captured = []
+        player = GamePlayer(character="hero", cycle_observer=captured.append)
+        player.game_data = make_game_data_mock()
+        player.state = make_state(level=4)
+        player._last_tree_decision = StrategyDecision(
+            interrupt=None, chosen_root=ObtainItem("nonexistent_item"),
+            chosen_step=None, desired_state={}, ranking=[],
+        )
+        player._notify_observer("ReachCharLevel(5)", "FightAction(cow)", "ok", [])
+        assert len(captured) == 1
+        snap = captured[0]
+        assert snap.tree_active is True
+        assert snap.tree_chosen_root == repr(ObtainItem("nonexistent_item"))
+
+    def test_tree_active_with_no_chosen_root(self):
+        """The shadow can run and choose no root (e.g. an interrupt cycle) —
+        that's still `tree_active=True`, distinct from the shadow not
+        running at all."""
+        captured = []
+        player = GamePlayer(character="hero", cycle_observer=captured.append)
+        player.game_data = make_game_data_mock()
+        player.state = make_state(level=4)
+        player._last_tree_decision = StrategyDecision(
+            interrupt=None, chosen_root=None, chosen_step=None,
+            desired_state={}, ranking=[],
+        )
+        player._notify_observer("ReachCharLevel(5)", "FightAction(cow)", "ok", [])
+        snap = captured[0]
+        assert snap.tree_active is True
+        assert snap.tree_chosen_root is None
+
+    def test_tree_inactive_when_no_tree_decision_and_shadow_unseeded(self):
+        """No `_last_tree_decision` AND the shadow engine isn't seeded
+        (no `_strategy`/`_objective`) — `_compute_tree_shadow()`'s fallback
+        also returns None, so the snapshot reports the shadow as inactive."""
+        captured = []
+        player = GamePlayer(character="hero", cycle_observer=captured.append)
+        player.game_data = make_game_data_mock()
+        player.state = make_state(level=4)
+        player._notify_observer("ReachCharLevel(5)", "FightAction(cow)", "ok", [])
+        snap = captured[0]
+        assert snap.tree_active is False
+        assert snap.tree_chosen_root is None
+
+
 def test_snapshot_carries_chosen_root_and_ranking_and_bank(tmp_path):
     """The cycle snapshot exposes the committed strategy root + ranking + bank
     for the TUI plan screen."""

@@ -14,7 +14,14 @@ def build_log_lines(snap: CycleSnapshot) -> list[str]:
     """Rich-markup lines for one cycle: the compact decision line, plus a dim
     'why' line (chosen root score + top-2 alternatives) when a strategy ranking
     is present. Discretionary cycles (no chosen_root / empty ranking) get the
-    single line only."""
+    single line only.
+
+    Phase-3 Task 5: when the cycle carries a progression-tree shadow decision
+    (`snap.tree_active`), the compact line gains a ` tree:{==|!=}` suffix — the
+    same repr comparison of the shadow's chosen root against the enacted
+    `chosen_root` that `analyze_tree_divergence` (Task 4) does over raw trace
+    JSONL. Absent shadow (old traces, or cycles before the engine seeded)
+    means no suffix at all, so old traces render unchanged."""
     outcome_color = _OUTCOME_COLOR.get(snap.outcome, "red")
     ts = snap.timestamp[11:19] if len(snap.timestamp) >= 19 else snap.timestamp
     line1 = (
@@ -24,6 +31,9 @@ def build_log_lines(snap: CycleSnapshot) -> list[str]:
         f"{snap.action:<35} "
         f"[{outcome_color}]{snap.outcome}[/{outcome_color}]"
     )
+    if snap.tree_active:
+        agree = "==" if snap.tree_chosen_root == snap.chosen_root else "!="
+        line1 = f"{line1} tree:{agree}"
     if snap.chosen_root is None or not snap.strategy_ranking:
         return [line1]
 

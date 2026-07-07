@@ -103,3 +103,14 @@ class CycleSnapshot(BaseModel):
     strategy_ranking: list[RootScoreView] = Field(default_factory=list)
     bank_items: dict[str, int] | None = None
     plan_tree: tuple[PlanTreeNode, ...] = ()
+
+    # Phase-3 Task 5: the progression-tree shadow's chosen root, next to
+    # `chosen_root` (the enacted legacy strategy's pick) above — mirrors the
+    # `record["tree"]["chosen_root"]` / `record["strategy"]["chosen_root"]`
+    # pair Task 4's `analyze_tree_divergence` compares from raw trace JSONL.
+    # `tree_active` distinguishes "the shadow ran this cycle and chose no
+    # root" (`tree_active=True`, `tree_chosen_root=None`) from "the shadow
+    # didn't run at all" (`tree_active=False`) — absent means unobserved,
+    # never guessed, same rule Task 4 applied to a missing `"tree"` key.
+    tree_active: bool = False
+    tree_chosen_root: str | None = None

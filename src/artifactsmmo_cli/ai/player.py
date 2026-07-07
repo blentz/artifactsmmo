@@ -1448,6 +1448,13 @@ class GamePlayer:
                 (self.state.cooldown_expires - datetime.now(tz=timezone.utc)).total_seconds(),
             )
         action_kind, action_target = action_kind_of(action) if action is not None else ("other", None)
+        # Phase-3 Task 5: the progression-tree shadow, same fallback
+        # `_emit_trace` uses (`_last_tree_decision or _compute_tree_shadow()`)
+        # so the live-queue CycleSnapshot and the trace-JSONL record agree on
+        # the SAME per-cycle shadow value. `tree_decision is None` means the
+        # shadow engine isn't seeded this cycle (never guessed at); a seeded
+        # shadow that chose no root is still "active", just rootless.
+        tree_decision = self._last_tree_decision or self._compute_tree_shadow()
         snap = CycleSnapshot(
             cycle_index=self._cycle_counter,
             timestamp=datetime.now(tz=timezone.utc).isoformat(),
@@ -1506,6 +1513,10 @@ class GamePlayer:
                 )
                 if self._last_decision is not None and self.game_data is not None else ()
             ),
+            tree_active=tree_decision is not None,
+            tree_chosen_root=(repr(tree_decision.chosen_root)
+                               if tree_decision is not None
+                               and tree_decision.chosen_root is not None else None),
         )
         self._cycle_observer(snap)
 
