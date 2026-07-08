@@ -653,4 +653,55 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         description="l20_dual_utility with utility1 stocked — pins that "
                      "utility2_slot is unreachable by the tree (no "
                      "candidate, no fallback)."),
+
+    # --- GAP-8: craft chain with a monster-drop ingredient (2026-07-08,
+    # LIVE STALL witness). Mirror of live Robby the day the stall was traced
+    # (character + bank queried via the API, at full HP): L13, weaponcrafting
+    # 5, the tree's root is the fire_bow weapon upgrade (its own mats —
+    # spruce_plank 6 + red_slimeball 2 — are already in the bag, so the
+    # material step is satisfied) and the step is
+    # ReachSkillLevel(weaponcrafting, 10). The proven dispatch picks
+    # water_bow (the level-5 grinder with the fewest missing mats once the
+    # banked blue_slimeballs are credited: 2x blue_slimeball [monster drop,
+    # bank 2 + bag 1] + 5x ash_plank [10 ash_wood each]). Before the GAP-8
+    # fix, craft_plan_gen bailed on ANY closure with a monster-drop leaf —
+    # even this bank-covered one — and the raw A* fallback flooded >50K
+    # nodes into timeout/plan_len 0 (live: 38,124 nodes, 65 consecutive
+    # cycles of GrindCharacterXP(red_slime); weaponcrafting frozen).
+    # Pinned by tests/test_ai/scenarios/test_craft_drop_chains.py.
+    "l13_drop_recipe_grind": ScenarioCharacter(
+        name="l13_drop_recipe_grind", level=13, gold=2299,
+        skills={"mining": 12, "woodcutting": 10, "weaponcrafting": 5,
+                "gearcrafting": 10, "alchemy": 16, "cooking": 5,
+                "fishing": 3, "jewelrycrafting": 5},
+        equipment={
+            "weapon_slot": "copper_pickaxe", "helmet_slot": "iron_helm",
+            "body_armor_slot": "feather_coat", "leg_armor_slot": "copper_legs_armor",
+            "boots_slot": "iron_boots", "ring1_slot": "copper_ring",
+            "ring2_slot": "copper_ring", "amulet_slot": "life_amulet",
+            "shield_slot": "wooden_shield", "artifact1_slot": "novice_guide",
+        },
+        inventory={
+            "copper_ring": 2, "copper_axe": 9, "red_slimeball": 17,
+            "fishing_net": 7, "recall_potion": 10, "copper_boots": 1,
+            "copper_helmet": 1, "algae": 5, "wooden_staff": 1, "ash_wood": 1,
+            "spruce_plank": 6, "sap": 1, "blue_slimeball": 1,
+            "emerald_stone": 1, "wool": 1, "topaz_stone": 1,
+            "sapphire_stone": 3,
+        },
+        inventory_max=124,
+        bank={
+            "apple": 13, "blue_slimeball": 2, "copper_dagger": 1,
+            "copper_helmet": 1, "copper_legs_armor": 1, "copper_ring": 2,
+            "egg": 1, "emerald_stone": 15, "red_slimeball": 37,
+            "ruby_stone": 27, "sap": 41, "sapphire_stone": 28,
+            "topaz_stone": 28, "wooden_shield": 1,
+        },
+        derive_combat_stats=True,
+        description="Live-Robby mirror (2026-07-08): L13, weaponcrafting 5, "
+                     "fire_bow root -> ReachSkillLevel(weaponcrafting, 10) -> "
+                     "water_bow grinder whose recipe has a monster-drop leaf "
+                     "(blue_slimeball) — the craft chain must plan instead "
+                     "of flooding A* and falling back to the red_slime "
+                     "grind."),
 }

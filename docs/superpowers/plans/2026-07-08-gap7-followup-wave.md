@@ -53,7 +53,7 @@ Live evidence (2026-07-08, Robby L13): tree root `fire_bow` → step `ReachSkill
 - Generalize: parametrized test over EVERY craftable-with-drop-leaf recipe reachable in the existing scenario fleet's levels (enumerate from the bundle: recipes whose closure contains a monster-drop leaf and whose dropper is winnable at the scenario's stats) asserting generator-or-planner produces a plan — the CLASS net, not one instance.
 - Liveness regression: the l13 scenario joins the band-liveness dimensions (registry/totality/full-stack/bounded/trunk).
 
-- [ ] Failing scenario test (red — reproduces the stall offline) → implement → flip → net green → sweep → commit `fix(craft): monster-drop ingredients plannable — Fight leg in the recipe generator`
+- [x] Failing scenario test (red — reproduces the stall offline) → implement → flip → net green → sweep → commit `fix(craft): monster-drop ingredients plannable — Fight leg in the recipe generator`
 
 ### Task 6: Wrap
 

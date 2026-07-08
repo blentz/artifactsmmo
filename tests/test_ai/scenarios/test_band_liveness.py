@@ -43,6 +43,11 @@ before this test was written)."""
 BAND_NAMES = [
     "l15_midband", "l20_band_entry", "l30_band_entry",
     "l40_band_entry", "l48_capstone_approach", L48_BAND_ADEQUATE,
+    # GAP-8 (2026-07-08): the live-Robby drop-recipe stall witness joins the
+    # net permanently — its GatherMaterials(water_bow) goal used to flood A*
+    # to timeout (38K live / 53K offline nodes), which is exactly the
+    # deadlock-precursor class test_band_search_is_bounded exists to catch.
+    "l13_drop_recipe_grind",
 ]
 
 def _bundle() -> GameData:
@@ -51,14 +56,18 @@ def _bundle() -> GameData:
 
 def _decide(name: str) -> tuple[StrategyDecision, WorldState]:
     gd = _bundle()
-    state = scenario_state(SCENARIOS[name])
+    # game_data is passed through so derive_combat_stats scenarios (the
+    # GAP-8 l13 witness) can sum their gear stats; inert for the hand-
+    # declared zero-stat band scenarios (the parameter is unused there).
+    state = scenario_state(SCENARIOS[name], gd)
     objective = CharacterObjective.from_game_data(gd)
     return decide_tree(state, gd, objective), state
 
 
 def _run(name: str) -> PlanReport:
+    gd = load_bundle_game_data(BUNDLE)
     player = GamePlayer(character=name, history=None)
-    player.seed_offline(scenario_state(SCENARIOS[name]), load_bundle_game_data(BUNDLE))
+    player.seed_offline(scenario_state(SCENARIOS[name], gd), gd)
     return player.plan_from_state()
 
 

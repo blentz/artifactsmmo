@@ -11,6 +11,7 @@ Covers:
 - Intermediate CraftAction is batched to inventory-bounded closure demand (> 1).
 """
 
+from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
@@ -654,3 +655,155 @@ class TestIntermediateCraftSizedInGenerator:
             f"intermediate craft should be batched to demand, "
             f"got quantity={result[0].quantity}"
         )
+
+
+# ---------------------------------------------------------------------------
+# GAP-8: monster-drop leaves get a Fight leg (2026-07-08 live water_bow stall)
+# ---------------------------------------------------------------------------
+
+def _gd_drop_leaf(char_beats_chicken: bool = True) -> GameData:
+    """feather_coat → feather (monster drop; chicken drops it 1-in-8).
+
+    Same closure shape as _gd_monster_drop but WITH a dropper on file, so
+    the goal's relevant_actions can emit the GAP-6-proven dropper Fight.
+    `char_beats_chicken=False` makes the chicken unbeatable (hp/attack far
+    above the test state's stats) so is_winnable gates the fight out."""
+    gd = GameData()
+    gd._item_stats = {
+        "feather": ItemStats(code="feather", level=1, type_="resource"),
+        "feather_coat": ItemStats(
+            code="feather_coat", level=5, type_="body_armor",
+            crafting_skill="gearcrafting", crafting_level=5,
+        ),
+    }
+    gd._crafting_recipes = {
+        "feather_coat": {"feather": 8},
+    }
+    gd._resource_drops = {}
+    gd._workshop_locations = {"gearcrafting": (3, 1)}
+    gd._bank_location = (4, 0)
+    gd._taskmaster_location = (1, 2)
+    gd._monster_level = {"chicken": 1}
+    gd._monster_hp = {"chicken": 60 if char_beats_chicken else 99999}
+    gd._monster_attack = {"chicken": {"air": 4 if char_beats_chicken else 9999}}
+    gd._monster_drops = {"chicken": [("feather", 8, 1, 1)]}
+    fill_monster_stat_defaults(gd)
+    return gd
+
+
+def _fighter_state(**overrides):
+    """A state whose combat stats beat the harmless chicken (mirrors the
+    winnability fixture in test_no_combat_deadlock)."""
+    base = dict(
+        inventory={}, bank_items={}, skills={"gearcrafting": 5},
+        hp=165, max_hp=165, attack={"air": 5}, dmg=18,
+    )
+    base.update(overrides)
+    return make_state(**base)
+
+
+def _drop_leaf_actions() -> list:
+    return [
+        CraftAction(code="feather_coat", workshop_location=(3, 1)),
+        FightAction(monster_code="chicken", locations=frozenset([(0, 1)])),
+    ]
+
+
+class TestDropLeafFightLeg:
+    """GAP-8: a monster-drop leaf with a winnable dropper generates a Fight
+    leg instead of falling back to the A* flood (live Robby water_bow stall:
+    38K nodes/timeout/plan_len 0, 65 cycles of red_slime grinding)."""
+
+    def test_winnable_dropper_returns_fight_leg(self):
+        """Empty holdings → the first (and only, one-leg-per-cycle) action
+        is the dropper Fight; xp-positive at L5 → the PLAIN fight, not the
+        drop_farm variant."""
+        gd = _gd_drop_leaf()
+        state = _fighter_state()
+        goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
+
+        result = generate_next_craft_action(goal, state, gd, _drop_leaf_actions())
+
+        assert result is not None, "winnable dropper must not fall back to A*"
+        assert len(result) == 1, result
+        assert isinstance(result[0], FightAction)
+        assert result[0].monster_code == "chicken"
+        assert result[0].drop_farm is False
+
+    def test_fight_leg_truncates_plan(self):
+        """A recipe whose FIRST short input is gatherable and whose second
+        is a monster drop: the generated plan keeps the deterministic
+        gather leg and TRUNCATES at the Fight — a kill's yield is
+        stochastic, so the steps after it (the craft) are the next cycle's
+        replan, never simulated optimism."""
+        gd = _gd_drop_leaf()
+        gd._item_stats["ash_wood"] = ItemStats(
+            code="ash_wood", level=1, type_="resource")
+        gd._crafting_recipes = {
+            "feather_coat": {"ash_wood": 2, "feather": 1},
+        }
+        gd._resource_drops = {"ash_tree": "ash_wood"}
+        state = _fighter_state(skills={"gearcrafting": 5, "woodcutting": 1})
+        goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
+        actions = [
+            GatherAction(resource_code="ash_tree", locations=frozenset([(0, 2)])),
+            *_drop_leaf_actions(),
+        ]
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        assert result is not None
+        assert [type(a).__name__ for a in result] == \
+            ["GatherAction", "FightAction"], result
+        assert not any(isinstance(a, CraftAction) for a in result), (
+            "no step may be planned past the stochastic Fight leg", result)
+
+    def test_grey_dropper_reuses_drop_farm_variant(self):
+        """At L11 the L1 chicken is GREY (xp_per_kill 0, diff >= 10). The
+        goal's relevant_actions routes it through grey_farm_allowed (the
+        consuming recipe feather_coat has no higher same-family tier →
+        allowed) and emits the drop_farm variant — the generator must reuse
+        exactly that emitted fight, drop_farm flag intact."""
+        gd = _gd_drop_leaf()
+        state = _fighter_state(level=11)
+        goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
+
+        result = generate_next_craft_action(goal, state, gd, _drop_leaf_actions())
+
+        assert result is not None, "grey-farm-allowed dropper must generate"
+        assert isinstance(result[0], FightAction)
+        assert result[0].drop_farm is True
+
+    def test_unwinnable_dropper_returns_none(self):
+        """A dropper exists but is_winnable rejects it → relevant_actions
+        emits no Fight → the generator falls back to A* honestly (the
+        goal's is_plannable owns the pruning)."""
+        gd = _gd_drop_leaf(char_beats_chicken=False)
+        state = _fighter_state()
+        goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
+
+        result = generate_next_craft_action(goal, state, gd, _drop_leaf_actions())
+
+        assert result is None, "unwinnable dropper must fall back to A*"
+
+    def test_banked_drop_leaf_withdraws_not_fights(self):
+        """The live l13 shape in miniature: the drop deficit is covered by
+        the BANK, so the core's withdraw arm serves it and no Fight leg is
+        needed — the plan is the full deterministic Withdraw → Craft chain,
+        untruncated."""
+        gd = _gd_drop_leaf()
+        state = _fighter_state(bank_items={"feather": 8})
+        goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
+        actions = [
+            *_drop_leaf_actions(),
+            WithdrawItemAction(code="feather", quantity=8,
+                               bank_location=(4, 0)),
+        ]
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        assert result is not None
+        assert [type(a).__name__ for a in result] == \
+            ["WithdrawItemAction", "CraftAction"], result
+        assert result[0].code == "feather" and result[0].quantity == 8
+        assert result[-1].code == "feather_coat"
