@@ -15,7 +15,11 @@ from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
 from artifactsmmo_cli.ai.learning.skill_xp_curve import SkillXpCurve
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
+from artifactsmmo_cli.ai.recipe_closure import (
+    closure_demand,
+    gather_serves_closure,
+    recipe_closure,
+)
 from artifactsmmo_cli.ai.world_state import WorldState
 
 MAX_SKILL_GAP = 5
@@ -122,26 +126,28 @@ class LevelSkillGoal(Goal):
             if stats.crafting_level > current:
                 continue
             skill_craftables.add(code)
-        needed_resources, craftable_mats = recipe_closure(game_data, skill_craftables)
-        # Withdraw-eligible item codes: leaf inputs (drops of needed
-        # resources) + intermediate craftables + the in-skill item itself.
-        withdrawable: set[str] = set(craftable_mats) | skill_craftables
-        for res in needed_resources:
-            drop = game_data.resource_drop_item(res)
-            if drop is not None:
-                withdrawable.add(drop)
+        _needed_resources, craftable_mats = recipe_closure(game_data, skill_craftables)
         # Build closure demand for each in-skill craftable (qty=1 each) so
         # intermediate crafts can be inventory-batched via size_intermediate_craft.
         batch_chain: dict[str, int] = {}
         for target_code in skill_craftables:
             closure_demand(target_code, 1, game_data, batch_chain, frozenset())
+        # Withdraw-eligible item codes: every closure material (batch_chain —
+        # leaves included) + intermediate craftables + the in-skill item
+        # itself. (GAP-7: was a per-resource primary-drop loop; the widened
+        # needed_resources would have admitted junk withdraws — the primary
+        # drop of a secondarily-needed resource is not a closure material.)
+        withdrawable: set[str] = set(craftable_mats) | skill_craftables | set(batch_chain)
 
         result: list[Action] = []
         for action in actions:
             if "recovery" in action.tags or "deposit" in action.tags:
                 result.append(action)
             elif isinstance(action, GatherAction):
-                if action.resource_code in needed_resources:
+                # GAP-7 admission precision: EFFECTIVE drop in the closure.
+                if gather_serves_closure(action.resource_code,
+                                         action.drop_item_override,
+                                         game_data.resource_drops, batch_chain):
                     result.append(action)
             elif isinstance(action, WithdrawItemAction):
                 if action.code in withdrawable:

@@ -43,14 +43,11 @@ never endorsements. Gap index:
       l30_rune_fill/l20_dual_utility* comments. l48_event_active was left
       unstocked (its EVENT_ONLY_CANDIDATES table narrowed instead — the
       event's artifact-slot delta is now only artifact2_slot, see that
-      constant's docstring). FOLLOW-UP surfaced by this fix, NOT resolved by
-      it (out of scope — `objective._gatherable` only, per the task brief):
-      perfect_pearl's small_pearls purchase is attainable-now but still
-      UNPLANNABLE — `GatherMaterials(small_pearls, ...)` dies at 1 node/
-      0-length plan, the same "dead at 1 node" shape GAP-3 documents for
-      gold-priced purchases, but here for an ITEM-currency (small_pearls)
-      artifact purchase (GAP-7) — pinned inside
-      test_l35_artifact_fill_pure_drop_gear_farms_dropper.
+      constant's docstring). The FOLLOW-UP this fix surfaced —
+      perfect_pearl's small_pearls purchase attainable-now yet UNPLANNABLE
+      (`GatherMaterials(small_pearls, ...)` dead at 1 node/0-length plan,
+      the same shape GAP-3 documents for gold-priced purchases, but for an
+      ITEM-currency purchase) — was GAP-7, FIXED 2026-07-08 (see below).
   GAP-3 (rune, l30_rune_fill) — FIXED 2026-07-08: gold is not an inventory
       item. `analyze_currency_leaves` judged a gold-priced buy leaf's
       affordability from `inventory["gold"] + bank_items["gold"]` — always
@@ -109,9 +106,26 @@ never endorsements. Gap index:
       not for equip targets (l35 witness: enchanter_boots crafts at
       gearcrafting 35 vs skill 30, within margin, yet nothing arms that
       grind — suppression would re-create the Wait livelock). Pinned
-      positively at the scenario level
-      (test_l35_artifact_fill_pure_drop_gear_farms_dropper) and the unit
-      level (test_upgrade_slot_lock.py's TestTargetDropFights)."""
+      positively at the scenario level — since the GAP-7 fix un-demoted
+      old_boots in l35_artifact_fill, the coverage lives in the
+      pearl-stocked variant (l35_boots_drop_farm,
+      test_l35_boots_drop_farm_fights_grey_dropper) — and the unit
+      level (test_upgrade_slot_lock.py's TestTargetDropFights).
+  GAP-7 (secondary-drop blindness in the GOAP gather layer,
+      l35_artifact_fill) — FIXED 2026-07-08: `recipe_closure` fed
+      `needed_resources` from the primary `resource_drops` map only (one
+      rate-best drop per resource), so a rare SECONDARY drop like
+      small_pearls marked no resource as needed and GatherMaterialsGoal
+      filtered out the action factory's targeted secondary-drop gathers
+      (which existed all along — P1 rare multi-drop targeting). The
+      goal-layer analog of GAP-2, fixed the same way one layer down: the
+      wrapper unions the pure core's `needed_resources` across the
+      secondary-drop layers of `resource_drops_full` (input construction —
+      the proven core, its Lean mirror and the diff harness are untouched;
+      see recipe_closure._secondary_drop_layers). Pinned at the scenario
+      level (test_l35_artifact_fill_pearl_route_plans: the former 1-node
+      dead search now plans Gather(bass_spot->small_pearls)) and the unit
+      level (test_recipe_closure.py's secondary-drop tests)."""
 
 import json
 from pathlib import Path
@@ -138,7 +152,7 @@ BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 NEW_SCENARIOS = [
     "l48_event_active",
     "l10_bag_pursuit", "l12_bag_pursuit",
-    "l35_artifact_fill",
+    "l35_artifact_fill", "l35_boots_drop_farm",
     "l30_rune_fill",
     "l20_dual_utility", "l20_dual_utility_one_stocked",
 ]
@@ -471,34 +485,39 @@ def test_l35_artifact_small_pearls_gatherable_via_full_drop_set() -> None:
     assert is_attainable_now("perfect_pearl", state, gd)      # propagates upward
 
 
-def test_l35_artifact_fill_pure_drop_gear_farms_dropper() -> None:
-    """GAP-6 FIXED (2026-07-08) — the former tripwire
-    (test_l35_artifact_fill_full_stack_waits_on_pure_drop_gear), rewritten
-    positive. Same scenario; the derivation up to the demotion is UNCHANGED
-    from the GAP-2/GAP-3 re-derivations:
+def test_l35_artifact_fill_pearl_route_plans() -> None:
+    """GAP-7 FIXED (2026-07-08) — the former tripwire
+    (test_l35_artifact_fill_pure_drop_gear_farms_dropper's nodes==1 /
+    plan_len==0 pin), rewritten positive. The derivation up to the step is
+    UNCHANGED from the GAP-2/GAP-3/GAP-6 re-derivations:
 
     - chosen_root is still perfect_pearl (equip_value 201 artifact,
-      duplicate-fills all three empty artifact slots, outranks old_boots).
-    - perfect_pearl's step is still dead (GAP-7, DISTINCT pin that STAYS):
-      `GatherMaterials(small_pearls, {small_pearls:1})` plans to 1 node /
-      0-length plan — the GOAP gather layer's primary-drop blindness
-      (`recipe_closure` feeds `needed_resources` from the primary
-      `resource_drops` map only, so the rare SECONDARY drop small_pearls
-      emits no GatherAction; the goal-layer analog of GAP-2's
-      `objective._gatherable` bug, unfixed at this layer, noted in the
-      reports' follow-ups).
+      duplicate-fills all three empty artifact slots, outranks old_boots —
+      which stays in the fallback list, now never reached).
 
-    NEW: when the step-servable demotion falls to old_boots (the first
-    fallback root — a level-20, recipe-less, non-purchasable, pure
-    monster-drop boots item), `_equippable_goal` routes it to
-    UpgradeEquipmentGoal(committed=(old_boots, boots_slot)) whose
-    `relevant_actions` now emits the target's winnable dropper instead of
-    dropping every Fight: spider (L20, the sole dropper, winnable at this
-    loadout) is grey at L35 (xp_per_kill == 0, 15 levels down), so the
-    fight arrives as the drop_farm variant (proven xp-gate bypass) plus the
-    synthesized Equip(old_boots->boots_slot) leg. The cycle plans
-    Fight(spider) -> Equip instead of Wait — a healthy character no longer
-    idles on a farmable upgrade."""
+    NEW: perfect_pearl's step is no longer dead. `recipe_closure` unions
+    the secondary-drop layers of `resource_drops_full` into
+    `needed_resources` (one proven pure-core run per layer — the input-
+    construction fix; the core itself is untouched), so
+    `GatherMaterials(small_pearls, {small_pearls:1})` now admits the action
+    factory's targeted secondary-drop gathers
+    (`GatherAction(drop_item_override='small_pearls')` — those existed all
+    along, P1 rare multi-drop targeting; the goal's primary-map blindness
+    filtered them out). Derived plan, no skill prereq needed: fishing 30
+    opens trout_spot (20) and bass_spot (30); salmon_spot (40) — the
+    rate-best pearl source at 1/100 — is dropped by the admission's
+    _skill_open gate (skills are immutable in-plan, so a skill-closed
+    source can never fire; unchecked it would WIN the yield narrowing and
+    kill the plan). Between the two open spots the effective-drop yield
+    narrowing (select_gather_source, GatherSelection.lean) breaks the
+    300-rate tie on distance — bass_spot's nearest tile is 18 from spawn
+    (0,0) vs trout_spot's 19 — leaving ONE admitted gather. One sim-gather
+    credits one unit (the deliberate drop_item_override abstraction), so
+    the whole step is the single action Gather(bass_spot->small_pearls):
+    2 nodes / 1-length plan, replacing the 1-node dead search. The demotion
+    chain to old_boots therefore never fires here; its GAP-6 drop-farm
+    coverage lives on in the pearl-stocked variant
+    (test_l35_boots_drop_farm_fights_grey_dropper below)."""
     report = _run("l35_artifact_fill")
     assert report.decision.chosen_root == ObtainItem(
         code="perfect_pearl", quantity=1, slot="artifact1_slot")
@@ -507,8 +526,34 @@ def test_l35_artifact_fill_pure_drop_gear_farms_dropper() -> None:
     small_pearls_entries = [g for g in report.goals_tried if str(g.get("goal", ""))
                             .startswith("GatherMaterials(small_pearls")]
     assert small_pearls_entries, report.goals_tried
-    assert all(entry["nodes"] == 1 and entry["plan_len"] == 0
-               for entry in small_pearls_entries), small_pearls_entries  # GAP-7
+    assert all(entry["nodes"] == 2 and entry["plan_len"] == 1
+               for entry in small_pearls_entries), small_pearls_entries  # GAP-7 flip
+    assert repr(report.selected_goal).startswith("GatherMaterials(small_pearls"), (
+        repr(report.selected_goal), report.plan)
+    assert [repr(a) for a in report.plan] == ["Gather(bass_spot->small_pearls)"], \
+        report.plan
+    assert report.plan[0].drop_item_override == "small_pearls"
+
+
+def test_l35_boots_drop_farm_fights_grey_dropper() -> None:
+    """GAP-6 coverage keeper (2026-07-08) — split out of the l35 test when
+    the GAP-7 fix made the pearl route plan (which un-demoted old_boots).
+    Same loadout with the three artifact slots pearl-STOCKED
+    (l35_boots_drop_farm; perfect_pearl is prospecting-only, combat stats
+    unchanged), so the pearl route is already done and old_boots — a
+    level-20, recipe-less, non-purchasable, pure monster-drop boots item —
+    is now the CHOSEN root, not a demotion target. `_equippable_goal`
+    routes it to UpgradeEquipmentGoal(committed=(old_boots, boots_slot))
+    whose `relevant_actions` emits the target's winnable dropper: spider
+    (L20, the sole dropper, winnable at this loadout) is grey at L35
+    (xp_per_kill == 0, 15 levels down), so the fight arrives as the
+    drop_farm variant (proven xp-gate bypass) plus the synthesized
+    Equip(old_boots->boots_slot) leg. The cycle plans Fight(spider) ->
+    Equip instead of Wait — a healthy character still never idles on a
+    farmable upgrade."""
+    report = _run("l35_boots_drop_farm")
+    assert report.decision.chosen_root == ObtainItem(
+        code="old_boots", quantity=1, slot="boots_slot")
     assert repr(report.selected_goal).startswith("UpgradeEquipment"), (
         repr(report.selected_goal), report.plan)
     assert report.plan, report.goals_tried

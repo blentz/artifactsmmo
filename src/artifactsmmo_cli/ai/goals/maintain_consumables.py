@@ -23,7 +23,11 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
+from artifactsmmo_cli.ai.recipe_closure import (
+    closure_demand,
+    gather_serves_closure,
+    recipe_closure,
+)
 from artifactsmmo_cli.ai.world_state import WorldState
 
 MAINTAIN_CONSUMABLES_VALUE = 25.0
@@ -61,12 +65,12 @@ class MaintainConsumablesGoal(Goal):
         code = best_craftable_heal(state, game_data)
         if code is None:
             return []
-        needed_resources, craftable_mats = recipe_closure(game_data, [code])
+        _needed_resources, craftable_mats = recipe_closure(game_data, [code])
+        # Withdraw-eligible codes: craftable intermediates + the heal itself;
+        # every leaf material arrives via the closure-demand union below
+        # (GAP-7: the per-resource primary-drop loop was redundant and, with
+        # the widened needed_resources, would admit junk withdraws).
         withdrawable: set[str] = set(craftable_mats) | {code}
-        for res in needed_resources:
-            drop = game_data.resource_drop_item(res)
-            if drop is not None:
-                withdrawable.add(drop)
         chain: dict[str, int] = {}
         closure_demand(code, 1, game_data, chain, frozenset())
         withdrawable |= set(chain)
@@ -84,7 +88,10 @@ class MaintainConsumablesGoal(Goal):
                                   else dataclasses.replace(a, quantity=deficit))
             elif isinstance(a, CraftAction) and a.code in craftable_mats:
                 result.append(size_intermediate_craft(a, batch_chain, state, game_data))
-            elif isinstance(a, GatherAction) and a.resource_code in needed_resources:
+            elif isinstance(a, GatherAction) and gather_serves_closure(
+                    a.resource_code, a.drop_item_override,
+                    game_data.resource_drops, chain):
+                # GAP-7 admission precision: EFFECTIVE drop in the closure.
                 result.append(a)
             elif isinstance(a, WithdrawItemAction) and a.code in withdrawable:
                 result.append(a)

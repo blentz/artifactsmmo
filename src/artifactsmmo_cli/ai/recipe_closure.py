@@ -11,7 +11,11 @@ over plain data (`recipes` mapping, `drops` mapping) so they can be
 mechanically extracted to Lean (`formal/Formal/Extracted/RecipeClosure.lean`)
 and bridged against the hand model `formal/Formal/RecipeClosure.lean`. The
 public wrappers preserve the original GameData-taking API exactly, reading the
-`crafting_recipes` / `resource_drops` accessors and forwarding.
+`crafting_recipes` / `resource_drops` accessors and forwarding. GAP-7
+(2026-07-08): `recipe_closure` additionally slices `resource_drops_full` into
+single-drop layers and unions the pure core's `needed_resources` verdict
+across them (see `_secondary_drop_layers`) — the widening is pure input
+construction; the cores and their Lean images are unchanged.
 
 The recursions are FUEL-BOUNDED (the shopping_list precedent): each core
 threads an explicit `fuel` seeded with `len(recipes) + 1`, which no input can
@@ -28,7 +32,7 @@ list, and all reads go through order-independent `dict.get`.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Container, Iterable, Mapping
 from typing import Protocol, runtime_checkable
 
 
@@ -50,6 +54,9 @@ class _HasRecipes(Protocol):
 
     @property
     def resource_drops(self) -> Mapping[str, str]: ...
+
+    @property
+    def resource_drops_full(self) -> Mapping[str, list[tuple[str, int, int, int]]]: ...
 
 
 def _closure_visited(fuel: int, material: str, recipes: Mapping[str, dict[str, int]],
@@ -146,14 +153,87 @@ def recipe_closure_pure(roots: list[str], recipes: Mapping[str, dict[str, int]],
     return needed_resources, craftable_mats
 
 
+def _secondary_drop_layers(
+    primary: Mapping[str, str],
+    full: Mapping[str, list[tuple[str, int, int, int]]],
+) -> list[dict[str, str]]:
+    """Layer the multi-drop table into single-drop maps the PURE CORE can eat.
+
+    GAP-7 (2026-07-08): `needed_resources` was fed from the primary
+    `resource_drops` map only (one rate-best drop per resource), so rare
+    SECONDARY drops — small_pearls off trout/bass/salmon fishing spots, gem
+    stones off ordinary rocks — never marked their resource as needed and the
+    factory's targeted secondary-drop GatherActions were filtered out of every
+    GatherMaterials plan (the goal-layer analog of GAP-2's
+    `objective._gatherable` blindness, fixed the same day at that layer).
+
+    The proven core's `drops` input is a one-drop-per-resource association
+    map, so the widening happens HERE, at input construction: layer k maps
+    each resource to its k-th secondary drop (dedup'd, primary excluded,
+    table order preserved). The caller unions `needed_resources` across one
+    pure-core run per layer — a resource is needed iff ANY of its drops is in
+    the closure, and each per-layer verdict is the proven judgment. The pure
+    core, its Lean mirror and the diff harness stay byte-identical.
+    """
+    pending: dict[str, list[str]] = {}
+    for res, table in full.items():
+        prim = primary.get(res)
+        extras: list[str] = []
+        for item, _rate, _mn, _mx in table:
+            if item != prim and item not in extras:
+                extras.append(item)
+        if extras:
+            pending[res] = extras
+    layers: list[dict[str, str]] = []
+    depth = max((len(items) for items in pending.values()), default=0)
+    for k in range(depth):
+        layers.append({res: items[k] for res, items in pending.items()
+                       if k < len(items)})
+    return layers
+
+
 def recipe_closure(game_data: _HasRecipes, roots: Iterable[str]) -> tuple[set[str], set[str]]:
     """Return (needed_resources, craftable_mats) for producing every item in roots.
 
-    needed_resources: resource codes whose drop is some material in the closure.
+    needed_resources: resource codes SOME drop of which (primary or secondary —
+                      see `_secondary_drop_layers`) is a material in the closure.
     craftable_mats:    item codes in the closure that have a crafting recipe.
     """
-    return recipe_closure_pure(list(roots), game_data.crafting_recipes,
-                               game_data.resource_drops)
+    root_list = list(roots)
+    recipes = game_data.crafting_recipes
+    needed, craftable = recipe_closure_pure(root_list, recipes,
+                                            game_data.resource_drops)
+    # GAP-7: union in the resources reachable only via secondary drops. Each
+    # layer is a valid pure-core input; craftable_mats is drop-independent so
+    # the first run's result stands.
+    for layer in _secondary_drop_layers(game_data.resource_drops,
+                                        game_data.resource_drops_full):
+        extra_needed, _craftable = recipe_closure_pure(root_list, recipes, layer)
+        needed |= extra_needed
+    return needed, craftable
+
+
+def gather_serves_closure(resource_code: str, drop_item_override: str | None,
+                          primary_drops: Mapping[str, str],
+                          closure_materials: Container[str]) -> bool:
+    """GAP-7 admission precision: a GatherAction serves a recipe closure iff
+    the item it SIMULATES producing — `drop_item_override` when set (the
+    factory's targeted secondary-drop variant), else the resource's primary
+    drop — is a closure material.
+
+    The pre-GAP-7 goal-layer admission (`resource_code in needed_resources`)
+    admits EVERY drop-variant of a needed resource. With `needed_resources`
+    widened to the full drop set that fanned out: any resource with one
+    relevant secondary dragged its primary gather and every other secondary
+    variant into the search (derived 2026-07-08: CraftPotionsGoal flooded to
+    the 70-98K-node cap on four scenarios — the fishing spots' algae arm).
+    Admission by EFFECTIVE drop keeps exactly the variants that can satisfy
+    the goal; for primary gathers it is equivalent to the old resource-set
+    test (a resource was needed iff its primary drop was in the closure).
+    """
+    effective = drop_item_override if drop_item_override is not None \
+        else primary_drops.get(resource_code)
+    return effective is not None and effective in closure_materials
 
 
 def raw_material_units(

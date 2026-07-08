@@ -6,17 +6,20 @@ from artifactsmmo_cli.ai.recipe_closure import (
     _closure_visited,
     _raw_units,
     closure_demand,
+    gather_serves_closure,
     raw_material_units,
     recipe_closure,
 )
 
 
-def _gd(recipes, drops, yields=None):
+def _gd(recipes, drops, yields=None, drops_full=None):
     gd = GameData()
     gd._crafting_recipes = recipes
     gd._resource_drops = drops
     if yields is not None:
         gd._craft_yields = yields
+    if drops_full is not None:
+        gd._resource_drops_full = drops_full
     return gd
 
 
@@ -61,6 +64,106 @@ def test_multiple_roots_union():
     resources, craftable = recipe_closure(gd, ["copper_bar", "iron_bar"])
     assert resources == {"copper_rocks", "iron_rocks"}
     assert craftable == {"copper_bar", "iron_bar"}
+
+
+# --- GAP-7 (2026-07-08): needed_resources reads the FULL drop set -----------
+# The pure core takes a one-drop-per-resource map; the wrapper unions its
+# verdicts across the secondary-drop layers of resource_drops_full (see
+# _secondary_drop_layers). These tests pin the widening at the wrapper.
+
+def test_secondary_drop_marks_resource_needed():
+    # small_pearls is nobody's PRIMARY drop but a rare secondary of the
+    # fishing spots — the l35 witness. The spot must read as needed.
+    gd = _gd(
+        {},
+        {"bass_spot": "bass", "trout_spot": "trout"},
+        drops_full={
+            "bass_spot": [("bass", 1, 1, 1), ("small_pearls", 300, 1, 1)],
+            "trout_spot": [("trout", 1, 1, 1), ("small_pearls", 300, 1, 1)],
+        },
+    )
+    resources, craftable = recipe_closure(gd, ["small_pearls"])
+    assert resources == {"bass_spot", "trout_spot"}
+    assert craftable == set()
+
+
+def test_secondary_drop_full_table_absent_is_primary_only():
+    # No full drop table (the diff-harness / bare-GameData shape): behavior
+    # is byte-identical to the pre-GAP-7 primary-map read.
+    gd = _gd({}, {"copper_rocks": "copper_ore"})
+    resources, _craftable = recipe_closure(gd, ["copper_ore"])
+    assert resources == {"copper_rocks"}
+    assert recipe_closure(gd, ["small_pearls"]) == (set(), set())
+
+
+def test_secondary_drop_layers_dedup_and_depth():
+    # One resource with three distinct secondaries (two duplicated in the
+    # table) plus its primary repeated: layers dedup, skip the primary, and
+    # every secondary still gets its verdict (the deepest layer included).
+    gd = _gd(
+        {},
+        {"rocks": "stone"},
+        drops_full={"rocks": [
+            ("stone", 1, 1, 1),        # primary — excluded from layers
+            ("topaz", 100, 1, 1),
+            ("topaz", 100, 1, 1),      # duplicate — dedup'd
+            ("emerald", 150, 1, 1),
+            ("ruby", 200, 1, 1),       # 3rd secondary — deepest layer
+        ]},
+    )
+    for gem in ("topaz", "emerald", "ruby"):
+        resources, _ = recipe_closure(gd, [gem])
+        assert resources == {"rocks"}, gem
+    # An item the resource does not drop stays un-needed.
+    assert recipe_closure(gd, ["sapphire"])[0] == set()
+
+
+def test_secondary_drop_via_recipe_closure_material():
+    # The secondary drop feeds a RECIPE material (not the root itself): the
+    # closure walk still marks it and the resource is needed.
+    gd = _gd(
+        {"pearl_ring": {"small_pearls": 2, "gold_bar": 1},
+         "gold_bar": {"gold_ore": 5}},
+        {"bass_spot": "bass", "gold_rocks": "gold_ore"},
+        drops_full={"bass_spot": [("bass", 1, 1, 1),
+                                  ("small_pearls", 300, 1, 1)]},
+    )
+    resources, craftable = recipe_closure(gd, ["pearl_ring"])
+    assert resources == {"bass_spot", "gold_rocks"}
+    assert craftable == {"pearl_ring", "gold_bar"}
+
+
+def test_gather_serves_closure_override_arm():
+    # Targeted secondary-drop variant: judged by the OVERRIDE item alone.
+    primary = {"bass_spot": "bass"}
+    assert gather_serves_closure("bass_spot", "small_pearls", primary,
+                                 {"small_pearls": 1})
+    assert not gather_serves_closure("bass_spot", "small_pearls", primary,
+                                     {"copper_ore": 1})
+
+
+def test_gather_serves_closure_primary_arm():
+    # Plain gather: judged by the resource's primary drop.
+    primary = {"copper_rocks": "copper_ore"}
+    assert gather_serves_closure("copper_rocks", None, primary,
+                                 {"copper_ore": 6})
+    assert not gather_serves_closure("copper_rocks", None, primary,
+                                     {"iron_ore": 6})
+    # Unknown resource (no primary drop): never admissible.
+    assert not gather_serves_closure("mystery_rocks", None, primary,
+                                     {"copper_ore": 6})
+
+
+def test_secondary_drop_union_keeps_primary_resources():
+    # Primary-only resources and secondary-only resources union cleanly.
+    gd = _gd(
+        {},
+        {"copper_rocks": "copper_ore", "bass_spot": "bass"},
+        drops_full={"bass_spot": [("bass", 1, 1, 1),
+                                  ("small_pearls", 300, 1, 1)]},
+    )
+    resources, _ = recipe_closure(gd, ["copper_ore", "small_pearls"])
+    assert resources == {"copper_rocks", "bass_spot"}
 
 
 def test_cyclic_recipe_terminates():

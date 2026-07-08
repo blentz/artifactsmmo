@@ -16,7 +16,11 @@ from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
-from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
+from artifactsmmo_cli.ai.recipe_closure import (
+    closure_demand,
+    gather_serves_closure,
+    recipe_closure,
+)
 from artifactsmmo_cli.ai.world_state import WorldState
 
 _TARGET_SLOT = "utility1_slot"
@@ -43,12 +47,13 @@ def craft_utility_ladder(
     parameterised for reuse by CraftUnlockBoostGoal and other utility-slot
     craft goals.
     """
-    needed_resources, craftable_mats = recipe_closure(game_data, [target_code])
+    _needed_resources, craftable_mats = recipe_closure(game_data, [target_code])
+    # Withdraw-eligible codes: craftable intermediates + target; every leaf
+    # material arrives via the closure-demand union below (the historical
+    # per-resource primary-drop loop was redundant, and with GAP-7's widened
+    # needed_resources it would admit junk withdraws — the primary drop of a
+    # secondarily-needed resource is not a closure material).
     withdrawable: set[str] = set(craftable_mats) | {target_code}
-    for res in needed_resources:
-        drop = game_data.resource_drop_item(res)
-        if drop is not None:
-            withdrawable.add(drop)
     chain: dict[str, int] = {}
     closure_demand(target_code, 1, game_data, chain, frozenset())
     withdrawable |= set(chain)
@@ -66,7 +71,12 @@ def craft_utility_ladder(
                               else dataclasses.replace(a, quantity=runs))
         elif isinstance(a, CraftAction) and a.code in craftable_mats:
             result.append(size_intermediate_craft(a, buy_chain, state, game_data))
-        elif isinstance(a, GatherAction) and a.resource_code in needed_resources:
+        elif isinstance(a, GatherAction) and gather_serves_closure(
+                a.resource_code, a.drop_item_override,
+                game_data.resource_drops, chain):
+            # GAP-7 admission precision: the gather's EFFECTIVE drop
+            # (override or primary) must be a closure material — resource
+            # membership alone fans every drop-variant into the search.
             result.append(a)
         elif isinstance(a, NpcBuyAction) and a.item_code in chain:
             buy_qty = max(1, buy_chain.get(a.item_code, 0)

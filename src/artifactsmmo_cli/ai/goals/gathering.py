@@ -30,7 +30,11 @@ from artifactsmmo_cli.ai.monster_drop_selection import (
 from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.priority_band import clamp_into_band
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor
-from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
+from artifactsmmo_cli.ai.recipe_closure import (
+    closure_demand,
+    gather_serves_closure,
+    recipe_closure,
+)
 from artifactsmmo_cli.ai.scalar_priority import yield_bonus_for_goal
 from artifactsmmo_cli.ai.shopping_list import fully_covered_materials
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -46,6 +50,22 @@ ramp so cold goals (history=None) preserve the pre-Phase-17 priority."""
 PRIORITY_CEILING = 50.0
 """Band ceiling — strictly below SURVIVAL_FLOOR=70. Subsumes the existing
 ramp (which capped at 40.0) plus an above-baseline scalar bonus head-room."""
+
+
+def _skill_open(resource_code: str, state: WorldState, game_data: GameData) -> bool:
+    """A gather can fire only if the resource's skill gate is open NOW:
+    `state.skills` is immutable during GOAP application (gathers accrue
+    `projected_skill_xp_delta`, never levels), so a skill-closed source can
+    never become applicable within a plan. Admitting one is pure branching
+    waste — and worse, it can WIN the yield narrowing below and displace a
+    workable source (derived 2026-07-08: salmon_spot, the rate-best
+    small_pearls dropper at 1/100, is fishing-40-gated; at fishing 30 it
+    beat bass_spot in select_gather_source and the pearl plan died at one
+    node). Mirrors GatherAction.is_applicable's skill arm (default level 1)
+    without its transient inventory-space arm — bag pressure changes
+    in-plan, skill levels do not."""
+    req = game_data.resource_skill_level(resource_code)
+    return req is None or state.skills.get(req[0], 1) >= req[1]
 
 
 class GatherMaterialsGoal(Goal):
@@ -131,13 +151,14 @@ class GatherMaterialsGoal(Goal):
         combat and unrelated gathers. Withdraw is included so a material
         already banked is pulled rather than re-gathered."""
         needed_resources, craftable_mats = recipe_closure(game_data, self._needed)
-        # Withdraw-eligible item codes: drops of needed resources (leaf raw
-        # materials) + the craftable intermediates themselves.
+        # Withdraw-eligible item codes: the craftable intermediates + the
+        # needed items themselves; every LEAF material arrives via the
+        # closure-demand union below (chain covers all closure materials, so
+        # the historical per-resource primary-drop loop was redundant — and
+        # with GAP-7's widened needed_resources it would have admitted junk
+        # withdraws: the PRIMARY drop of a secondarily-needed resource, e.g.
+        # bass for a small_pearls closure, is not a closure material).
         withdrawable: set[str] = set(craftable_mats) | set(self._needed)
-        for res in needed_resources:
-            drop = game_data.resource_drop_item(res)
-            if drop is not None:
-                withdrawable.add(drop)
         # Run-17 trace 2026-06-12 c94: GatherMaterials(feather_coat) was
         # unplannable with 9 feathers IN THE BANK — feather is a MONSTER drop
         # (neither craftable nor a resource drop), so the sets above missed it
@@ -195,31 +216,45 @@ class GatherMaterialsGoal(Goal):
         for action in actions:
             if (
                 isinstance(action, GatherAction)
-                and game_data.resource_drop_item(action.resource_code) in covered
+                and (action.drop_item_override
+                     or game_data.resource_drop_item(action.resource_code)) in covered
             ):
-                # Drop item fully bank/inventory-covered — withdraw, don't gather.
+                # EFFECTIVE drop item (override for a targeted secondary-drop
+                # gather, else the primary) fully bank/inventory-covered —
+                # withdraw, don't gather.
                 continue
+            # GAP-7 admission precision: a gather enters the plan iff its
+            # EFFECTIVE drop is a closure material (gather_serves_closure),
+            # not merely because its resource is in needed_resources — the
+            # widened resource set would otherwise fan every drop-variant of
+            # a secondarily-needed resource into the search (the
+            # CraftPotionsGoal node-cap flood, derived 2026-07-08).
             if isinstance(action, CraftAction) and action.code in craftable_mats:
                 result.append(size_intermediate_craft(action, chain, state, game_data))
             elif (
                 "recovery" in action.tags
                 or "deposit" in action.tags
-                or (isinstance(action, GatherAction) and action.resource_code in needed_resources)
+                or (isinstance(action, GatherAction) and gather_serves_closure(
+                    action.resource_code, action.drop_item_override,
+                    game_data.resource_drops, chain)
+                    and _skill_open(action.resource_code, state, game_data))
                 or (isinstance(action, WithdrawItemAction) and action.code in withdrawable)
                 or (isinstance(action, OptimizeLoadoutAction)
                     and action.target_skill in needed_skills)
             ):
                 result.append(action)
 
-        # Yield-aware narrowing: when a needed item is the PRIMARY drop of >1
-        # resource present in `result`, keep only the source minimizing expected
-        # gathers (proved in formal/Formal/GatherSelection.lean). Single-source
-        # items and non-gather actions are untouched; an unknown drop table
-        # fail-opens (no narrowing).
+        # Yield-aware narrowing: when a needed item is the EFFECTIVE drop of >1
+        # gather present in `result` (primary drop, or the targeted secondary
+        # of a drop_item_override variant — GAP-7), keep only the source
+        # minimizing expected gathers (proved in
+        # formal/Formal/GatherSelection.lean). Single-source items and
+        # non-gather actions are untouched; an unknown drop table fail-opens
+        # (no narrowing).
         gathers = [a for a in result if isinstance(a, GatherAction)]
         by_item: dict[str, list[GatherAction]] = {}
         for a in gathers:
-            drop = game_data.resource_drop_item(a.resource_code)
+            drop = a.drop_item_override or game_data.resource_drop_item(a.resource_code)
             if drop is not None:
                 by_item.setdefault(drop, []).append(a)
         drop_losers: set[int] = set()

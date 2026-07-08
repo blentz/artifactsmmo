@@ -475,14 +475,14 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # unwinnable; corrupted_gem event-monster-only; novice_guide has no
     # acquisition path at all) — see test_slot_coverage.py's
     # test_l35_artifact_perfect_pearl_targeted_others_closed.
-    # perfect_pearl's small_pearls purchase still dead-ends at
-    # GatherMaterials(small_pearls) (GAP-7: item-currency vendor purchases
-    # for a rare-drop leaf don't plan — still a follow-up), but since the
-    # GAP-6 fix (2026-07-08) the step-servable demotion lands on old_boots
-    # and UpgradeEquipment drop-farms its grey dropper: the cycle plans
-    # Fight(spider) -> Equip(old_boots) instead of Waiting — see
-    # test_slot_coverage.py:
-    # test_l35_artifact_fill_pure_drop_gear_farms_dropper.
+    # GAP-7 FIXED 2026-07-08: recipe_closure now unions the secondary-drop
+    # layers into needed_resources, so GatherMaterials(small_pearls) admits
+    # the factory's targeted secondary-drop gather and PLANS
+    # (Gather(bass_spot->small_pearls); fishing 30 covers trout_spot 20 /
+    # bass_spot 30). No demotion any more — the GAP-6 drop-farm story
+    # (Fight(spider) -> Equip(old_boots)) moved to the pearl-stocked
+    # variant l35_boots_drop_farm below. See test_slot_coverage.py:
+    # test_l35_artifact_fill_pearl_route_plans.
     "l35_artifact_fill": ScenarioCharacter(
         name="l35_artifact_fill", level=35, gold=300,
         skills={"mining": 32, "woodcutting": 32, "weaponcrafting": 30,
@@ -500,12 +500,47 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         bank={"gold_ore": 10},
         derive_combat_stats=True,
         description="L35 combat loadout, all three artifact slots empty — "
-                     "RE-DERIVED 2026-07-08 (GAP-6 fixed): perfect_pearl "
+                     "RE-DERIVED 2026-07-08 (GAP-7 fixed): perfect_pearl "
                      "(small_pearls rare-fishing-drop route) is still the "
-                     "argmax artifact target and still dead (GAP-7 purchase "
-                     "dead-end), but the demotion now lands on old_boots, "
-                     "whose grey dropper spider is drop-farmed: the cycle "
-                     "plans Fight(spider) -> Equip instead of Waiting."),
+                     "argmax artifact target and its step now PLANS: "
+                     "recipe_closure reads the full drop set, so the "
+                     "secondary-drop fishing gather is admitted and the "
+                     "cycle gathers pearls instead of Waiting/demoting."),
+
+    # --- GAP-6 coverage keeper (2026-07-08, split out by the GAP-7 fix):
+    # l35_artifact_fill with the three artifact slots STOCKED
+    # (perfect_pearl x3 — prospecting-only, combat stats unchanged), so the
+    # pearl route is already done and the boots upgrade is the live gear
+    # target. Preserves the drop-farm story the GAP-7 flip would otherwise
+    # have erased from the net: old_boots (recipe-less, non-purchasable,
+    # pure monster-drop) routes through UpgradeEquipmentGoal, whose
+    # relevant_actions emits the sole winnable dropper spider (L20 — grey
+    # at L35, xp_per_kill == 0) as the drop_farm Fight plus the synthesized
+    # Equip leg. Pinned by test_slot_coverage.py's
+    # test_l35_boots_drop_farm_fights_grey_dropper.
+    "l35_boots_drop_farm": ScenarioCharacter(
+        name="l35_boots_drop_farm", level=35, gold=300,
+        skills={"mining": 32, "woodcutting": 32, "weaponcrafting": 30,
+                "gearcrafting": 30, "fishing": 30, "cooking": 30,
+                "alchemy": 20, "jewelrycrafting": 20},
+        equipment={
+            "weapon_slot": "dreadful_staff", "helmet_slot": "piggy_helmet",
+            "body_armor_slot": "bandit_armor", "leg_armor_slot": "piggy_pants",
+            "boots_slot": "hard_leather_boots", "ring1_slot": "ring_of_the_adept",
+            "ring2_slot": "ring_of_the_adept", "amulet_slot": "emerald_amulet",
+            "shield_slot": "slime_shield", "bag_slot": "satchel",
+            "artifact1_slot": "perfect_pearl", "artifact2_slot": "perfect_pearl",
+            "artifact3_slot": "perfect_pearl",
+            "utility1_slot": "minor_health_potion", "utility2_slot": "minor_health_potion",
+        },
+        utility_quantities={"utility1_slot": 15, "utility2_slot": 15},
+        bank={"gold_ore": 10},
+        derive_combat_stats=True,
+        description="l35_artifact_fill with the artifact slots already "
+                     "pearl-stocked: the boots upgrade (old_boots, pure "
+                     "monster drop) is the live gear target and its grey "
+                     "dropper spider is drop-farmed — Fight(spider) -> "
+                     "Equip, the GAP-6 coverage keeper."),
 
     # --- Rune slot (deliverable 4). L30 at the near_term_gear fixed point
     # for every other slot (the equip_value argmax set — utility-stat gear

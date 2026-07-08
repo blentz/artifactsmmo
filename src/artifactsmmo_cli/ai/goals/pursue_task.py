@@ -18,7 +18,11 @@ from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.priority_band import clamp_into_band
-from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
+from artifactsmmo_cli.ai.recipe_closure import (
+    closure_demand,
+    gather_serves_closure,
+    recipe_closure,
+)
 from artifactsmmo_cli.ai.scalar_priority import yield_bonus_for_goal
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -79,26 +83,28 @@ class PursueTaskGoal(Goal):
         so a bot whose materials are already in the bank doesn't re-gather
         the whole stack from scratch (trace 2026-06-05: 14-action gather
         plans while the bank held the same ash_wood)."""
-        needed_resources, craftable_mats = recipe_closure(game_data, [self._task_code])
-        # The withdraw-eligible item codes are (a) leaf raw materials —
-        # drops of the needed resources, e.g. ash_wood (drop of ash_tree)
-        # — plus (b) intermediate craftables already in the bank, e.g.
-        # ash_plank waiting to be TaskTraded.
-        withdrawable: set[str] = set(craftable_mats)
-        for res in needed_resources:
-            drop = game_data.resource_drop_item(res)
-            if drop is not None:
-                withdrawable.add(drop)
-        withdrawable.add(self._task_code)  # the task item itself, banked previously
+        _needed_resources, craftable_mats = recipe_closure(game_data, [self._task_code])
         # Build closure demand so intermediate crafts can be inventory-batched.
         chain: dict[str, int] = {}
         closure_demand(self._task_code, self._batch, game_data, chain, frozenset())
+        # The withdraw-eligible item codes are (a) every closure material
+        # (chain — leaf raw materials like ash_wood included) plus (b)
+        # intermediate craftables already in the bank, e.g. ash_plank
+        # waiting to be TaskTraded. (GAP-7: was a per-resource primary-drop
+        # loop; the widened needed_resources would have admitted junk
+        # withdraws — the primary drop of a secondarily-needed resource is
+        # not a closure material.)
+        withdrawable: set[str] = set(craftable_mats) | set(chain)
+        withdrawable.add(self._task_code)  # the task item itself, banked previously
         result: list[Action] = []
         for action in actions:
             if (
                 "recovery" in action.tags
                 or "deposit" in action.tags
-                or (isinstance(action, GatherAction) and action.resource_code in needed_resources)
+                # GAP-7 admission precision: EFFECTIVE drop in the closure.
+                or (isinstance(action, GatherAction) and gather_serves_closure(
+                    action.resource_code, action.drop_item_override,
+                    game_data.resource_drops, chain))
                 or (isinstance(action, TaskTradeAction) and action.code == self._task_code)
                 or (isinstance(action, WithdrawItemAction) and action.code in withdrawable)
             ):

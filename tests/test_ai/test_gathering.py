@@ -74,3 +74,65 @@ class TestIntermediateCraftSizedToDemand:
             f"intermediate craft should be batched to demand, "
             f"got quantity={craft_bars[0].quantity}"
         )
+
+
+class TestSecondaryDropAdmission:
+    """GAP-7 (2026-07-08): gather admission is EFFECTIVE-drop precise and
+    skill-gated. A rare secondary drop opens exactly its targeted override
+    gather; a skill-closed source (which can never fire in-plan — skills are
+    immutable during GOAP application) is excluded even when it is the
+    rate-best source, so it cannot win the yield narrowing and displace a
+    workable spot (the salmon_spot trap)."""
+
+    @staticmethod
+    def _gd_pearls() -> GameData:
+        gd = GameData()
+        gd._item_stats = {
+            "small_pearls": ItemStats(code="small_pearls", level=1, type_="resource"),
+            "bass": ItemStats(code="bass", level=1, type_="resource"),
+            "salmon": ItemStats(code="salmon", level=1, type_="resource"),
+        }
+        gd._crafting_recipes = {}
+        gd._resource_drops = {"bass_spot": "bass", "salmon_spot": "salmon"}
+        gd._resource_drops_full = {
+            "bass_spot": [("bass", 1, 1, 1), ("small_pearls", 300, 1, 1)],
+            "salmon_spot": [("salmon", 1, 1, 1), ("small_pearls", 100, 1, 1)],
+        }
+        gd._resource_skill = {"bass_spot": ("fishing", 30),
+                              "salmon_spot": ("fishing", 40)}
+        gd._bank_location = (4, 0)
+        gd._taskmaster_location = (1, 2)
+        return gd
+
+    def _actions(self):
+        return [
+            GatherAction(resource_code="bass_spot", locations=frozenset([(0, 1)])),
+            GatherAction(resource_code="bass_spot", locations=frozenset([(0, 1)]),
+                         drop_item_override="small_pearls"),
+            GatherAction(resource_code="salmon_spot", locations=frozenset([(0, 2)]),
+                         drop_item_override="small_pearls"),
+        ]
+
+    def test_override_gather_admitted_primary_variant_dropped(self):
+        """Only the pearl-producing variant of the workable spot survives:
+        the primary bass gather produces nothing the closure needs, and
+        salmon_spot (fishing 40 > 30) is skill-closed."""
+        gd = self._gd_pearls()
+        state = make_state(skills={"fishing": 30})
+        goal = GatherMaterialsGoal("small_pearls", {"small_pearls": 1})
+        relevant = goal.relevant_actions(self._actions(), state, gd)
+        gathers = [(a.resource_code, a.drop_item_override)
+                   for a in relevant if isinstance(a, GatherAction)]
+        assert gathers == [("bass_spot", "small_pearls")]
+
+    def test_skill_open_source_wins_narrowing_when_reachable(self):
+        """At fishing 40 both spots are open and the yield narrowing keeps
+        the rate-best source (salmon_spot, 1/100 beats 1/300 — proven
+        select_gather_source core, now judged on the EFFECTIVE drop)."""
+        gd = self._gd_pearls()
+        state = make_state(skills={"fishing": 40})
+        goal = GatherMaterialsGoal("small_pearls", {"small_pearls": 1})
+        relevant = goal.relevant_actions(self._actions(), state, gd)
+        gathers = [(a.resource_code, a.drop_item_override)
+                   for a in relevant if isinstance(a, GatherAction)]
+        assert gathers == [("salmon_spot", "small_pearls")]

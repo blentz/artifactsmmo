@@ -27,7 +27,11 @@ from artifactsmmo_cli.ai.goals.upgrade_selection import (
 )
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.min_plan_length import min_plan_length
-from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
+from artifactsmmo_cli.ai.recipe_closure import (
+    closure_demand,
+    gather_serves_closure,
+    recipe_closure,
+)
 from artifactsmmo_cli.ai.shopping_list import fully_covered_materials
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -201,15 +205,13 @@ class UpgradeEquipmentGoal(Goal):
         # Recipe closure of the target: the resources to gather and the craftable
         # intermediates (copper_bar, copper_dagger). Restrict the action set to
         # this so the planner cannot wander into unrelated crafts/fights/gathers.
-        needed_resources, craftable_mats = recipe_closure(game_data, (target_item,))
+        _needed_resources, craftable_mats = recipe_closure(game_data, (target_item,))
         in_closure_crafts = set(craftable_mats) | {target_item}
-        # Withdraw-eligible item codes: the craftable intermediates + the target
-        # + the leaf raw-material drops of needed resources.
+        # Withdraw-eligible item codes: the craftable intermediates + the
+        # target; every leaf material arrives via the closure-demand union
+        # below (GAP-7: the per-resource primary-drop loop was redundant and,
+        # with the widened needed_resources, would admit junk withdraws).
         withdrawable: set[str] = set(in_closure_crafts)
-        for res in needed_resources:
-            drop = game_data.resource_drop_item(res)
-            if drop is not None:
-                withdrawable.add(drop)
         # Run-18 trace 2026-06-12 20:23: UpgradeEquipment(feather_coat) was
         # unplannable every cycle (111 nodes, plan_len 0) with the deficit
         # feather IN THE BANK — feather is a MONSTER drop (neither craftable
@@ -232,11 +234,17 @@ class UpgradeEquipmentGoal(Goal):
             elif isinstance(action, UnequipAction):
                 continue
             elif isinstance(action, GatherAction):
-                # Keep only closure gathers, and only when their drop is NOT fully
-                # bank/inventory-covered (else the WithdrawItemAction supplies it).
-                if action.resource_code not in needed_resources:
+                # Keep only closure gathers — GAP-7 admission precision: the
+                # gather's EFFECTIVE drop (override or primary) must be a
+                # closure material — and only when that drop is NOT fully
+                # bank/inventory-covered (else the WithdrawItemAction
+                # supplies it).
+                if not gather_serves_closure(action.resource_code,
+                                             action.drop_item_override,
+                                             game_data.resource_drops, chain):
                     continue
-                drop = game_data.resource_drop_item(action.resource_code)
+                drop = (action.drop_item_override
+                        or game_data.resource_drop_item(action.resource_code))
                 if drop is not None and drop in covered:
                     continue
                 result.append(action)
