@@ -109,6 +109,13 @@ class _FakeGameData:
     def resource_drops(self) -> dict[str, str]:
         return self._resource_drops
 
+    def gatherable_drop_items(self) -> set[str]:
+        # objective._gatherable switched from `resource_drops.values()` to this
+        # accessor (GAP-2). This fake models only PRIMARY drops, and the Lean
+        # `drop` predicate's gatherable-raw arm is exactly resource_drops.values()
+        # (see _leaf_codes), so returning that set keeps the differential exact.
+        return set(self._resource_drops.values())
+
     @property
     def all_item_stats(self) -> dict[str, ItemStats]:
         return self._item_stats
