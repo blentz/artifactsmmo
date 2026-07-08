@@ -207,6 +207,11 @@ New scenarios in `tests/test_ai/scenarios/`:
 
 Each phase lands independently valuable and gate-green.
 
+**Phase 1 SHIPPED**: ProfileKind + PROFILE_WEIGHTS (COMBAT zeroes efficiency,
+UTILITY floors combat + lifts efficiency) + score_for_profile + calibration
+pins (combat-beats-prospecting bug-gone, non-vacuous vs equip_value).
+Unwired.
+
 ## Risks
 
 - **Calibration of the COMBAT preset**: if utility weights aren't driven

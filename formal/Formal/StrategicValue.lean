@@ -122,6 +122,26 @@ theorem strategicValue_nonneg (s : Stats) (w : Weights)
   have h5 := Int.mul_nonneg hha hwh
   omega
 
+/-- The Phase 1 equipment-profile presets (Python `PROFILE_WEIGHTS`,
+`tiers/equipment_profile.py`: `COMBAT = (1000, 0, 0, 0, 0)`,
+`UTILITY = (1000, 1, 1, 1, 1)`). `Weights` is `Int`-valued, not `Nat`, so
+nonnegativity is NOT structural here — a future edit introducing a negative
+preset weight would silently violate `strategicValue_nonneg`'s hypotheses.
+This witness pins both presets as genuinely nonneg, so the parametric proof
+above provably covers them; `decide` re-checks it on every build. -/
+def combatProfileWeights : Weights := ⟨1000, 0, 0, 0, 0⟩
+
+def utilityProfileWeights : Weights := ⟨1000, 1, 1, 1, 1⟩
+
+example :
+    0 ≤ combatProfileWeights.combat ∧ 0 ≤ combatProfileWeights.wisdom ∧
+      0 ≤ combatProfileWeights.prospecting ∧ 0 ≤ combatProfileWeights.inventory ∧
+      0 ≤ combatProfileWeights.haste ∧
+    0 ≤ utilityProfileWeights.combat ∧ 0 ≤ utilityProfileWeights.wisdom ∧
+      0 ≤ utilityProfileWeights.prospecting ∧ 0 ≤ utilityProfileWeights.inventory ∧
+      0 ≤ utilityProfileWeights.haste := by
+  decide
+
 /-! ## Monotonicity in each stat (nonneg weights). -/
 
 theorem strategicValue_mono_combatRaw (s : Stats) (w : Weights) (c' : Int)
