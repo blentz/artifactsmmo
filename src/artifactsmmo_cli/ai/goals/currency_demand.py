@@ -21,6 +21,40 @@ one buy away, cycle Waits). Event/unlocated vendors are excluded —
 purchase path (closure + vendor set kept symmetric with
 GatherMaterialsGoal.relevant_actions).
 
+GOLD-RESERVE DISCIPLINE (follow-up wave Task 3, 2026-07-08): a gold-priced leaf
+must ALSO clear the same progression-reserve floor BANK_EXPAND protects
+(`progression_reserve.reserve_floor`), so a discretionary vendor buy never eats
+the gold set aside for near-term gear. Invariant: POST-BUY TOTAL GOLD (pocket +
+bank) >= reserve, i.e. `gold_on_hand >= price * qty + reserve` (P4a exact-int
+form, no signed subtraction — mirrors `progression_reserve_core.affordable`).
+`reserve` is `reserve_floor(state, game_data, leaf)`: buying a leaf that is
+ITSELF a reserved near-term target fulfills that reservation, so
+`effective_floor` deducts the leaf's own entry before applying the floor — a
+leaf is never blocked by its own reservation, only by OTHER unmet targets.
+Item-currency legs are untouched: the reserve is gold-denominated only.
+Threading: `analyze_currency_leaves` already receives `state`/`game_data`, so
+`progression_reserve.reserve_floor` is called directly here — `ai/goals/` does
+NOT participate in the `tiers/means.py` import cycle (that cycle is specific to
+`tiers/means.py` importing back into the `tiers` package via
+`progression_reserve -> tiers.equip_value -> tiers/__init__`; `ai/goals/` is a
+sibling package with no back-edge, confirmed by `gathering.py` already
+importing `reserve_floor` directly for the craft-vs-buy gate, and by a direct
+import smoke test). No new SelectionContext threading needed.
+
+WITHDRAWGOLD DEFICIT AND THE RESERVE (derivation): `gold_deficit` sizes a
+WithdrawGold ferry (bank -> pocket) so NpcBuy's pocket-only gold gate can be
+met. WithdrawGold is gold-CONSERVING — it moves gold between pocket and bank
+but changes neither `gold_on_hand` nor the reserve invariant. The invariant
+therefore binds entirely at the AFFORDABILITY check above (this leaf's spend
+must leave gold_on_hand - price*qty >= reserve); once a leaf passes that gate,
+sizing the withdrawal to cover the pocket shortfall (`gold_demand -
+state.gold`, capped at `bank_gold`) cannot itself push the total below the
+reserve, because the total is unaffected by the transfer. `gold_deficit`'s
+formula is therefore UNCHANGED by this task — the reserve enters exclusively
+through `affordable`. (Aggregating MULTIPLE unowned gold leaves so the reserve
+holds JOINTLY, not just leaf-by-leaf, is Task 4's "joint gold affordability"
+follow-up — out of scope here.)
+
 ONE closure walk serves two consumers (DRY), each reading a DIFFERENT signal:
   - `blocked`  — GatherMaterialsGoal.is_plannable fast-fails when any currency-buy
     leaf is unaffordable (currency_afford_plannable_pure is the proved live
@@ -42,6 +76,7 @@ from typing import NamedTuple
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.currency_afford_core import currency_afford_plannable_pure
 from artifactsmmo_cli.ai.goals.funding_core import funding_cycles_pure
+from artifactsmmo_cli.ai.progression_reserve import reserve_floor
 from artifactsmmo_cli.ai.recipe_closure import closure_demand
 from artifactsmmo_cli.ai.tiers.objective import GOLD
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
@@ -111,12 +146,24 @@ def analyze_currency_leaves(
             if not game_data.is_event_npc(npc) and game_data.npc_location(npc) is not None
         ]
         owned = state.inventory.get(leaf, 0) + bank.get(leaf, 0)
+        # Gold-reserve floor (Task 3): only computed when a gold-priced
+        # vendor exists for this leaf (reserve_floor walks the full item
+        # catalog — skip the cost when no gold route is even on offer).
+        # buying=leaf dedups the leaf's OWN reservation (mirrors
+        # gathering.py's craft-vs-buy `reserve_floor(state, game_data, item)`
+        # call for the same gold-arm discipline).
+        gold_reserve = (
+            reserve_floor(state, game_data, leaf)
+            if any(currency == GOLD for _npc, _price, currency in permanent)
+            else 0
+        )
         # GOLD pays from state.gold (+known bank gold) — it is NOT an inventory
-        # item; item currencies pay from their inventory + bank stacks.
+        # item; item currencies pay from their inventory + bank stacks. A gold
+        # buy must ALSO clear the reserve floor: gold_on_hand >= price*qty +
+        # reserve (P4a exact-int form — see module docstring's derivation).
         affordable = any(
-            (gold_on_hand if currency == GOLD
-             else state.inventory.get(currency, 0) + bank.get(currency, 0))
-            >= price * qty
+            (gold_on_hand >= price * qty + gold_reserve if currency == GOLD
+             else state.inventory.get(currency, 0) + bank.get(currency, 0) >= price * qty)
             for _npc, price, currency in permanent
         )
         # Gold demand for the still-to-buy leaf (cheapest permanent gold

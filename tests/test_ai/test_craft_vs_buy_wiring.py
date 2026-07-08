@@ -456,6 +456,18 @@ def test_gold_leaf_blocked_but_not_funded() -> None:
     )
 
 
+# Task 3 (gold-reserve discipline, 2026-07-08): `widget` (weapon-type, level 1)
+# is itself an in-horizon `crafting_unlock_targets` source — its recipe needs
+# rare_gem (non-gatherable, non-craftable, gold-sold), so
+# `progression_reserve.reserved_targets` always contains {"rare_gem": 500} for
+# this fixture's state. `reserve_floor(state, gd, "rare_gem")` DEDUPS rare_gem's
+# own reservation (buying it fulfills the reservation) down to 0, then floors at
+# `_MIN_SAFETY_FLOOR` (100) — so every gold-priced buy in this fixture now needs
+# 500 (price) + 100 (floor) = 600 gold on hand, not 500. Verified via direct
+# `reserve_floor` computation (progression_reserve.py), not guessed.
+_GOLD_VENDOR_RESERVE = 100
+
+
 def _gold_vendor_gd() -> GameData:
     """widget (craftable) needs rare_gem x1; rare_gem is vendor-only at the
     PERMANENT jeweler for 500 GOLD — the GAP-3 shape (gold-priced buy leaf)."""
@@ -474,11 +486,12 @@ def _gold_vendor_gd() -> GameData:
 
 def test_gold_leaf_affordable_from_pocket_gold() -> None:
     """GAP-3 root fix: gold is NOT an inventory item. A gold-priced leaf's
-    affordability reads state.gold — 500 pocket gold covers the 500-gold
-    rare_gem, so the leaf must NOT block (the old inventory["gold"] read
-    scored this 0 and pruned every gold purchase at is_plannable)."""
+    affordability reads state.gold — 600 pocket gold (500 price +
+    `_GOLD_VENDOR_RESERVE` 100, Task 3) covers the 500-gold rare_gem, so the
+    leaf must NOT block (the old inventory["gold"] read scored this 0 and
+    pruned every gold purchase at is_plannable)."""
     gd = _gold_vendor_gd()
-    state = make_state(skills={"weaponcrafting": 5}, gold=500,
+    state = make_state(skills={"weaponcrafting": 5}, gold=500 + _GOLD_VENDOR_RESERVE,
                        inventory={}, bank_items={}, x=0, y=0)
     result = analyze_currency_leaves({"widget": 1}, state, gd)
     assert result.blocked is False, "pocket gold must fund a gold-priced leaf"
@@ -486,11 +499,16 @@ def test_gold_leaf_affordable_from_pocket_gold() -> None:
 
 
 def test_gold_leaf_affordable_pocket_plus_bank_gold() -> None:
-    """Pocket 200 + bank 300 covers the 500-gold price → not blocked, and
-    gold_deficit=300 sizes the WithdrawGold edge relevant_actions admits
-    (NpcBuy's gold gate is pocket-only; the plan must ferry the rest)."""
+    """Pocket 200 + bank 400 (Task 3: 500 price + 100 reserve = 600 total
+    needed, up from bank 300 pre-reserve) covers the 500-gold price → not
+    blocked. gold_deficit stays 300 — the WithdrawGold ferry sizes off the raw
+    pocket shortfall (`gold_demand - state.gold`), UNCHANGED by the reserve:
+    the ferry only relocates gold pocket<->bank, it never spends it, so it
+    cannot itself violate a reserve floor defined on the TOTAL (see
+    currency_demand.py's module-docstring derivation)."""
     gd = _gold_vendor_gd()
-    state = make_state(skills={"weaponcrafting": 5}, gold=200, bank_gold=300,
+    state = make_state(skills={"weaponcrafting": 5}, gold=200,
+                       bank_gold=300 + _GOLD_VENDOR_RESERVE,
                        inventory={}, bank_items={}, x=0, y=0)
     result = analyze_currency_leaves({"widget": 1}, state, gd)
     assert result.blocked is False
@@ -518,13 +536,73 @@ def test_gold_leaf_owned_stock_needs_no_gold() -> None:
     assert result.gold_deficit == 0, result.gold_deficit
 
 
+# --- Task 3 (gold-reserve discipline, 2026-07-08) ---------------------------
+
+def test_gold_leaf_reserve_boundary_affordable() -> None:
+    """Reserve-boundary case: pocket gold exactly equals price + reserve
+    (500 + 100). `gold_on_hand >= price*qty + reserve` (P4a exact-int form,
+    no signed subtraction) must read affordable AT the boundary, not past
+    it — this is the currency_demand.py module-docstring invariant, pinned."""
+    gd = _gold_vendor_gd()
+    state = make_state(skills={"weaponcrafting": 5},
+                       gold=500 + _GOLD_VENDOR_RESERVE,
+                       inventory={}, bank_items={}, x=0, y=0)
+    result = analyze_currency_leaves({"widget": 1}, state, gd)
+    assert result.blocked is False
+
+
+def test_gold_leaf_reserve_boundary_minus_one_blocked() -> None:
+    """One gold short of the reserve-adjusted price blocks — same honest
+    deferral as plain unaffordable (no funding root; the bot earns gold by
+    its normal means and retries later)."""
+    gd = _gold_vendor_gd()
+    state = make_state(skills={"weaponcrafting": 5},
+                       gold=500 + _GOLD_VENDOR_RESERVE - 1,
+                       inventory={}, bank_items={}, x=0, y=0)
+    result = analyze_currency_leaves({"widget": 1}, state, gd)
+    assert result.blocked is True
+
+
+def test_gold_leaf_reserve_none_bank_still_uncredited() -> None:
+    """The reserve change must not disturb GAP-1's None-bank rule: an UNKNOWN
+    bank (None) credits nothing toward EITHER the price or the reserve —
+    pocket alone (500, short of the reserve-adjusted 600) still blocks."""
+    gd = _gold_vendor_gd()
+    state = make_state(skills={"weaponcrafting": 5}, gold=500, bank_gold=None,
+                       inventory={}, bank_items={}, x=0, y=0)
+    result = analyze_currency_leaves({"widget": 1}, state, gd)
+    assert result.blocked is True, "unknown bank gold must not fund the reserve either"
+
+
+def test_gold_leaf_deficit_sizing_respects_reserve_invariant() -> None:
+    """WithdrawGold deficit-sizing derivation, pinned: pocket 100 + bank 500
+    = 600 = price(500) + reserve(100), the exact boundary. `gold_deficit`
+    tops the pocket up to the PRICE only (400 = 500 - 100) — NOT
+    price+reserve — because WithdrawGold is gold-CONSERVING (a pocket<->bank
+    transfer, never a spend) and so cannot itself violate a reserve floor
+    defined on the TOTAL. The invariant instead falls out algebraically:
+    post-buy total = pocket + bank - price = 600 - 500 = 100, exactly the
+    reserve, independent of how the deficit is split between pocket and
+    withdrawal."""
+    gd = _gold_vendor_gd()
+    pocket, bank = 100, 500
+    state = make_state(skills={"weaponcrafting": 5}, gold=pocket, bank_gold=bank,
+                       inventory={}, bank_items={}, x=0, y=0)
+    result = analyze_currency_leaves({"widget": 1}, state, gd)
+    assert result.blocked is False
+    assert result.gold_deficit == 400, result.gold_deficit
+    assert pocket + bank - 500 == _GOLD_VENDOR_RESERVE, (
+        "post-buy total gold must land exactly at the reserve floor")
+
+
 def test_is_plannable_true_when_gold_leaf_affordable_from_pocket() -> None:
     """The GAP-3 dead end, at the goal seam: with pocket gold covering the
-    gold-priced leaf, GatherMaterialsGoal.is_plannable must admit (the l30
-    tripwire's 0-node prune came exactly from this gate)."""
+    gold-priced leaf AND its reserve floor (Task 3: 500 + 100), GatherMaterials
+    Goal.is_plannable must admit (the l30 tripwire's 0-node prune came exactly
+    from this gate)."""
     gd = _gold_vendor_gd()
     goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1})
-    state = make_state(skills={"weaponcrafting": 5}, gold=500,
+    state = make_state(skills={"weaponcrafting": 5}, gold=500 + _GOLD_VENDOR_RESERVE,
                        inventory={}, bank_items={}, x=0, y=0)
     assert goal.is_plannable(state, gd) is True
 

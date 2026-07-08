@@ -36,6 +36,19 @@ class ScenarioCharacter:
     inventory: dict[str, int] = field(default_factory=dict)
     inventory_max: int = 100
     bank: dict[str, int] | None = field(default_factory=dict)  # None = unknown
+    bank_gold: int | None = None
+    """Explicit KNOWN bank-gold override. None (default) preserves the legacy
+    inference (0 when `bank` is known, None/unknown when `bank` is None) — set
+    this to give a scenario bank gold distinct from pocket `gold` WITHOUT
+    inflating `gold` itself. Needed because `state.gold` (pocket) and
+    `state.bank_gold` are read by DIFFERENT consumers: `tiers/objective.py`'s
+    `is_attainable_now` (near_term_gear candidacy) reads POCKET gold only,
+    while `analyze_currency_leaves` (GAP-3/Task 3's reserve-aware gold-buy
+    affordability) reads pocket + KNOWN bank gold. A scenario that needs extra
+    TOTAL gold to clear the progression-reserve floor for one purchase, without
+    also making an unrelated pricier near-term target look pocket-affordable
+    and widening the candidate surface, ferries the extra gold through the
+    bank instead of the pocket (see l30_rune_fill)."""
     task: tuple[str, str, int, int] | None = None  # code, type, progress, total
     utility_quantities: dict[str, int] = field(default_factory=dict)
     """utility1_slot/utility2_slot -> stocked quantity. WorldState defaults
@@ -166,7 +179,8 @@ def scenario_state(sc: ScenarioCharacter,
         task_progress=progress, task_total=total,
         task_lifecycle_phase=derive_task_lifecycle_phase(task_code, progress, total),
         bank_items=dict(sc.bank) if sc.bank is not None else None,
-        bank_gold=0 if sc.bank is not None else None,
+        bank_gold=(sc.bank_gold if sc.bank_gold is not None
+                   else (0 if sc.bank is not None else None)),
         bank_capacity=200 if sc.bank is not None else None,
         pending_items=None,
         utility1_slot_quantity=sc.utility_quantities.get("utility1_slot", 0),
@@ -575,6 +589,18 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # documented "every other slot at its own fixed point" methodology.
     "l30_rune_fill": ScenarioCharacter(
         name="l30_rune_fill", level=30, gold=25000,
+        # bank_gold RE-DERIVED (Task 3, gold-reserve discipline, 2026-07-08):
+        # the gold arm now also clears `progression_reserve.reserve_floor`,
+        # which at this loadout is 50000 (dedup'd for the rune leaf itself —
+        # the OTHER near-term gold target is `backpack`@50000 for bag_slot,
+        # unrelated to the rune). Affordability needs pocket+bank >= price
+        # (20000) + reserve (50000) = 70000. Pocket stays 25000 so
+        # near_term_gear/is_attainable_now (POCKET-gold-only, unaffected by
+        # the reserve) does NOT also see 70000 pocket gold and admit backpack
+        # as a second candidate — the extra 50000 is ferried through KNOWN
+        # bank gold instead (analyze_currency_leaves reads pocket+bank),
+        # leaving this scenario's single-target isolation intact. 25000 +
+        # 50000 = 75000 >= 70000, a 5000 margin.
         skills={"mining": 28, "woodcutting": 28, "weaponcrafting": 25,
                 "gearcrafting": 25, "fishing": 25, "cooking": 25,
                 "alchemy": 25, "jewelrycrafting": 18},
@@ -596,12 +622,14 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             "utility1_slot": "minor_health_potion", "utility2_slot": "minor_health_potion",
         },
         utility_quantities={"utility1_slot": 15, "utility2_slot": 15},
-        bank={"gold_ore": 5},
+        bank={"gold_ore": 5}, bank_gold=50000,
         derive_combat_stats=True,
-        description="L30, rune_slot empty, 25000 gold for the 20000 "
-                     "lifesteal_rune at the permanent rune_vendor — the "
-                     "tree arms the rune root and the gold buy chain "
-                     "plans NpcBuy (GAP-3 fixed 2026-07-08)."),
+        description="L30, rune_slot empty, 25000 pocket gold + 50000 bank "
+                     "gold for the 20000 lifesteal_rune (permanent "
+                     "rune_vendor) plus its 50000 progression-reserve floor "
+                     "(Task 3, 2026-07-08) — the tree arms the rune root and "
+                     "the gold buy chain plans NpcBuy (GAP-3 fixed "
+                     "2026-07-08; reserve-cleared 2026-07-08)."),
 
     # --- Utility slots, both empty (deliverable 5; RE-DERIVED 2026-07-07
     # hp-derivation fix wave — see report). L20 at the near_term_gear
