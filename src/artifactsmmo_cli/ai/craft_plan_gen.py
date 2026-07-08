@@ -9,7 +9,10 @@ Falls back to None (A* fallback) for:
 - closures that contain a monster-drop leaf with NO winnable-dropper Fight
   in the goal's relevant_actions (GAP-8: a drop leaf whose dropper IS
   emitted — winnable, xp-positive or grey-farm-allowed — gets a Fight leg
-  instead; the generated plan truncates at the Fight, one leg per cycle)
+  instead; the generated plan truncates at the Fight, one leg per cycle),
+  OR whose emitted dropper Fight fails FightAction.is_applicable right now
+  (level+2 suicide guard / HP floor / free inventory — `is_winnable` is a
+  stat-only prediction blind to these structural gates; see `_dropper_fight`)
 - closures that contain NPC-buy / currency leaves
 - closures that have any craft whose skill gate is not yet met
 - closures where a NON-TOP-LEVEL input/intermediate is both banked AND short in
@@ -144,7 +147,7 @@ def generate_next_craft_action(
             # with no dropper) → fall back to A* honestly.
             if relevant is None:
                 relevant = goal.relevant_actions(actions, state, game_data)
-            fight = _dropper_fight(item, relevant, game_data)
+            fight = _dropper_fight(item, relevant, game_data, state)
             if fight is None:
                 return None  # No Fight leg for this leaf → fall back to A*.
             drop_fights[item] = fight
@@ -216,18 +219,34 @@ def _with_rearm(mapped: list[Action], state: WorldState,
 
 
 def _dropper_fight(
-    item: str, relevant: list[Action], game_data: GameData
+    item: str, relevant: list[Action], game_data: GameData, state: WorldState
 ) -> FightAction | None:
-    """The Fight in `relevant` whose monster drops `item`, or None.
+    """The Fight in `relevant` whose monster drops `item` AND that is
+    actually GOAP-applicable right now, or None.
 
     GatherMaterialsGoal.relevant_actions already narrowed every closure
     drop item to at most ONE dropper fight (the expected-kills-optimal
     winnable winner, formal/Formal/MonsterDropSelection.lean; grey droppers
     arrive as the drop_farm variant under grey_farm_allowed) — this helper
-    only re-associates that emitted fight with the leaf it serves."""
+    re-associates that emitted fight with the leaf it serves.
+
+    Admit/emit chokepoint (GAP-8 follow-up): `relevant_actions` narrows by
+    `is_winnable` (a stat-only combat PREDICTION), which is blind to
+    FightAction.is_applicable's STRUCTURAL guards — the level+2 suicide
+    cap, the HP floor, and free inventory space. A stat-winnable dropper
+    three levels above the character (or fought at <30% HP, or with a full
+    bag) would satisfy is_winnable yet fail is_applicable, so A* would
+    never have planned it — but this generator, checking only "is a Fight
+    present", would have emitted it anyway and player.py executes plan[0]
+    with no separate applicability check. This is the ONLY call site that
+    turns a closure drop leaf into a Fight (both the CAN-GENERATE gate's
+    admit decision and `_map_next_action`'s emit both read `drop_fights`,
+    which this function alone populates), so gating on `is_applicable`
+    here keeps admit and emit from ever diverging."""
     droppers = {m for m, _rate, _mn, _mx in game_data.monsters_dropping(item)}
     for action in relevant:
-        if isinstance(action, FightAction) and action.monster_code in droppers:
+        if (isinstance(action, FightAction) and action.monster_code in droppers
+                and action.is_applicable(state, game_data)):
             return action
     return None
 

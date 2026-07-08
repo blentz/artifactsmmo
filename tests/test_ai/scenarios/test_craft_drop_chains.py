@@ -207,12 +207,32 @@ def _drop_leaf_recipes() -> list[str]:
 
 DROP_LEAF_RECIPES = _drop_leaf_recipes()
 
+# Pinned against the current bundle (2026-07-08): copper_armor, fire_staff,
+# iron_helm, iron_shield, sticky_dagger, water_bow. Compared by set equality,
+# not just membership, so the class can neither silently GROW (an untested
+# new recipe rides the parametrized sweep unnoticed but this anchor still
+# needs a deliberate update) nor silently SHRINK to a near-empty net that a
+# bare "water_bow in DROP_LEAF_RECIPES" check would wave through —
+# enumeration rot in either direction fails loudly here first.
+_EXPECTED_DROP_LEAF_RECIPES = frozenset({
+    "copper_armor", "fire_staff", "iron_helm", "iron_shield",
+    "sticky_dagger", "water_bow",
+})
+
 
 def test_drop_leaf_class_is_nonempty() -> None:
     """The sweep must actually cover the class — an empty enumeration would
     green-wash every parametrized case away. water_bow (the live stall's
-    recipe) must be in it."""
+    recipe) must be in it, and the class must match the pinned set exactly
+    (enumerate-and-compare) so a shrinking enumeration can't silently drop
+    coverage without failing anything."""
     assert "water_bow" in DROP_LEAF_RECIPES, DROP_LEAF_RECIPES
+    assert set(DROP_LEAF_RECIPES) == _EXPECTED_DROP_LEAF_RECIPES, (
+        "drop-leaf class enumeration changed — update the pinned set if this "
+        "is an intentional bundle/catalog change",
+        sorted(set(DROP_LEAF_RECIPES) ^ _EXPECTED_DROP_LEAF_RECIPES),
+        sorted(DROP_LEAF_RECIPES),
+    )
 
 
 @pytest.fixture(scope="module")

@@ -15,6 +15,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.craft_plan_gen import generate_next_craft_action
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
@@ -691,6 +692,20 @@ def _gd_drop_leaf(char_beats_chicken: bool = True) -> GameData:
     return gd
 
 
+def _gd_drop_leaf_suicide_guard() -> GameData:
+    """Same recipe/dropper shape as `_gd_drop_leaf`, but the chicken sits 3
+    levels above the fighter's level (5+3=8): weak hp/attack keeps it
+    stat-winnable (predict_win/is_winnable both True, so
+    GatherMaterialsGoal.relevant_actions still emits its Fight), but
+    FightAction.is_applicable's level+2 suicide guard (monster_level <=
+    char_level + 2) rejects it. `is_winnable` is a stat-only PREDICTION
+    blind to that structural gate — reproduces the admit/emit asymmetry
+    finding (scratchpad probe arm 1: chicken L8 vs char L5)."""
+    gd = _gd_drop_leaf()
+    gd._monster_level = {"chicken": 8}
+    return gd
+
+
 def _fighter_state(**overrides):
     """A state whose combat stats beat the harmless chicken (mirrors the
     winnability fixture in test_no_combat_deadlock)."""
@@ -785,6 +800,36 @@ class TestDropLeafFightLeg:
         result = generate_next_craft_action(goal, state, gd, _drop_leaf_actions())
 
         assert result is None, "unwinnable dropper must fall back to A*"
+
+    def test_suicide_guard_dropper_returns_none(self):
+        """Admit/emit asymmetry finding: a dropper 3 levels above the
+        character is stat-winnable (is_winnable True, so
+        relevant_actions emits its Fight) but FightAction.is_applicable's
+        level+2 suicide guard rejects it — A* would never plan it, so the
+        generator must not emit it either. Pre-fix this returned
+        ``[Fight(chicken)]`` even though ``Fight.is_applicable`` was False
+        (confirmed via direct probe), which player.py would then execute
+        with no separate applicability check."""
+        gd = _gd_drop_leaf_suicide_guard()
+        state = _fighter_state()
+        goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
+        actions = _drop_leaf_actions()
+
+        # Sanity: the dropper really is admitted by is_winnable/xp but
+        # rejected by is_applicable — otherwise this test would not be
+        # exercising the asymmetry at all.
+        fight = actions[1]
+        assert isinstance(fight, FightAction)
+        assert is_winnable(state, gd, "chicken") is True
+        assert gd.xp_per_kill("chicken", state.level) > 0
+        assert fight.is_applicable(state, gd) is False
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        assert result is None, (
+            "a stat-winnable dropper that violates the level+2 suicide "
+            "guard must fall back to A*, not be emitted as a Fight leg"
+        )
 
     def test_banked_drop_leaf_withdraws_not_fights(self):
         """The live l13 shape in miniature: the drop deficit is covered by
