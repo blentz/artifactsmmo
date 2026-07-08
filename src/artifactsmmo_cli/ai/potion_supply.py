@@ -27,12 +27,18 @@ def primary_combat_target(state: WorldState, game_data: GameData) -> str | None:
 
 
 def target_potion_pure(
-    state: WorldState, game_data: GameData, effect: str = "hp_restore"
+    state: WorldState, game_data: GameData, effect: str = "hp_restore",
+    exclude: str | None = None,
 ) -> str | None:
     """Highest-``effect``, craftable-now (at the item's own skill/level),
     utility-slot-equippable heal (deterministic smallest-code tie-break); None
     when none qualifies. The crafting skill is read from item metadata, never
     assumed to be alchemy.
+
+    ``exclude`` skips one code from consideration — the second-utility-slot
+    caller passes the slot-1 target so it gets the catalog's SECOND-best heal
+    (utility potions are not in DUPLICATE_SLOT_TYPES, so the same code can't
+    occupy both utility slots; see equip.py's DUPLICATE_SLOT_TYPES comment).
 
     Single source of truth shared by ``CraftPotionsGoal._target_potion`` and
     ``craft_potions_fires`` so guard and goal always select the same target.
@@ -41,6 +47,8 @@ def target_potion_pure(
     best_code: str | None = None
     best_restore = 0
     for code in sorted(game_data.crafting_recipes):
+        if code == exclude:
+            continue
         stats = game_data.item_stats(code)
         if stats is None or stats.type_ != "utility":
             continue
@@ -79,13 +87,23 @@ def _cheapest_heal_potion(game_data: GameData, effect: str = "hp_restore") -> st
 
 
 def bootstrap_potion_target(
-    state: WorldState, game_data: GameData, effect: str = "hp_restore"
+    state: WorldState, game_data: GameData, effect: str = "hp_restore",
 ) -> str | None:
     """The utility heal to pursue: the effect-best potion craftable NOW, or — when
     none is craftable yet — the cheapest-to-unlock heal so the arbiter can drive
     the first skill unlock. Level-exempt (a potion's item level never gates it;
     utility is judged by effect, not level). Single source of truth for the
-    utility-slot root (`CharacterObjective.utility_potion_targets`)."""
+    utility-slot root (`CharacterObjective.utility_potion_targets`).
+
+    No ``exclude`` parameter here deliberately: the second-utility-slot caller
+    (`utility_potion_targets`) uses `target_potion_pure` directly (not this
+    function) for its second-best search — falling through to the
+    cheapest-to-unlock branch a SECOND time (excluding slot 1's pick) would
+    manufacture an aspirational grind target for an empty slot 2 whenever the
+    catalog has no other potion craftable right now, exactly the
+    already-guarded-against anti-pattern (see
+    test_robby_scenario_stocked_small_does_not_force_enhanced_grind). Slot 2
+    only ever gets a target when a second heal is ACTUALLY craftable now."""
     craftable = target_potion_pure(state, game_data, effect)
     if craftable is not None:
         return craftable

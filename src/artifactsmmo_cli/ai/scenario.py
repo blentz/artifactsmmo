@@ -588,11 +588,11 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                      "utility fill (utility1 root demoted to fallback)."),
     # The second-slot probe: utility1 already stocked with the bootstrap
     # target. Same RE-DERIVED fixed-point loadout as l20_dual_utility above.
-    # LIMITATION (pinned): utility_potion_targets only ever emits
-    # utility1_slot, and _utility_candidates drops the candidate entirely
-    # once equipped_potion_qty(target) > 0 — so with slot 1 stocked there
-    # is NO tree path that targets utility2_slot, not even as a fallback.
-    # The second utility slot is unfillable by the progression tree.
+    # GAP-5 FIXED 2026-07-07: utility_potion_targets now emits BOTH slots
+    # (utility2 gets the catalog's second-best heal) and _utility_candidates
+    # skips a slot only when THAT slot's own quantity is stocked — with
+    # slot 1 stocked, utility2_slot now arms a real fallback root (it does
+    # not win the argmax here; XP still outranks it per GAP-4's design).
     "l20_dual_utility_one_stocked": ScenarioCharacter(
         name="l20_dual_utility_one_stocked", level=20, gold=100,
         skills={"mining": 18, "woodcutting": 18, "weaponcrafting": 15,

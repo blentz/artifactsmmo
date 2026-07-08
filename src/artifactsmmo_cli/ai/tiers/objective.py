@@ -12,7 +12,7 @@ from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS
-from artifactsmmo_cli.ai.potion_supply import bootstrap_potion_target
+from artifactsmmo_cli.ai.potion_supply import bootstrap_potion_target, target_potion_pure
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value, tool_value
 from artifactsmmo_cli.ai.tiers.leaf_attainable_core import leaf_attainable_pure
 from artifactsmmo_cli.ai.tiers.objective_completion import is_complete_pure
@@ -341,13 +341,35 @@ class CharacterObjective:
         return targets
 
     def utility_potion_targets(self, state: WorldState) -> dict[str, str]:
-        """The utility-slot heal to pursue, judged by EFFECT not level (potions
-        are level-exempt). Delegates to bootstrap_potion_target — the effect-best
-        potion craftable now, or the cheapest-to-unlock when none is craftable
-        yet. Replaces the level-based best-in-slot utility roots that armor
-        enumeration (target_gear / near_term_gear) used to emit."""
-        code = bootstrap_potion_target(state, self._game_data)
-        return {"utility1_slot": code} if code is not None else {}
+        """The utility-slot heal(s) to pursue, judged by EFFECT not level
+        (potions are level-exempt). utility1_slot delegates to
+        bootstrap_potion_target — the effect-best potion craftable now, or
+        the cheapest-to-unlock when none is craftable yet. utility2_slot gets
+        the catalog's SECOND-best heal, via a plain `target_potion_pure`
+        craftable-now search excluding slot 1's code (deliberately NOT
+        `bootstrap_potion_target` — falling through to that function's
+        cheapest-to-unlock branch a second time would manufacture an
+        aspirational grind target for slot 2 whenever no other heal is
+        craftable right now; see bootstrap_potion_target's docstring). Empty
+        slot 2 (no target) is the correct, honest answer when the catalog
+        offers only one heal the character can craft today. Utility is NOT
+        in DUPLICATE_SLOT_TYPES (see actions/equip.py — the server rejects
+        re-equipping a code already worn in a sibling slot), so the two
+        utility slots can never legally target the same code. Emission order
+        is deterministic (utility1 first, then utility2) and is independent
+        of current equipment/stock — `_utility_candidates` is the layer that
+        skips a slot whose OWN quantity is already stocked. Replaces the
+        level-based best-in-slot utility roots that armor enumeration
+        (target_gear / near_term_gear) used to emit."""
+        targets: dict[str, str] = {}
+        primary = bootstrap_potion_target(state, self._game_data)
+        if primary is None:
+            return targets
+        targets["utility1_slot"] = primary
+        secondary = target_potion_pure(state, self._game_data, exclude=primary)
+        if secondary is not None:
+            targets["utility2_slot"] = secondary
+        return targets
 
     def _item_value(self, code: str | None) -> int:
         if not code:

@@ -58,12 +58,24 @@ never endorsements. Gap index:
       hand. Vendor-only GOLD-priced equippables are unacquirable.
   GAP-4 (utility, l20_dual_utility): at a band-adequate state the XP
       branch outranks empty utility slots by design (has_structural_upgrade
-      deliberately excludes utility) — the utility1 fill only survives as a
-      fallback root.
-  GAP-5 (utility2, l20_dual_utility_one_stocked): utility_potion_targets
-      only ever emits utility1_slot and _utility_candidates drops the
-      candidate entirely once the target potion is stocked in ANY slot —
-      utility2_slot is unreachable by the tree, full stop.
+      deliberately excludes utility) — both utility fills only survive as
+      fallback roots (widened 2026-07-07 by the GAP-5 fix below: both slots
+      now produce a candidate, so the fallback list carries two entries
+      instead of one — the XP-outranks verdict itself is UNCHANGED design).
+  GAP-5 (utility2, l20_dual_utility_one_stocked) — FIXED 2026-07-07:
+      `utility_potion_targets` now emits BOTH utility1_slot (the effect-best
+      craftable-now heal, unchanged) and utility2_slot (the catalog's
+      SECOND-best heal, via `bootstrap_potion_target`'s new `exclude`
+      parameter — same-code dual utility slots are not server-legal, see
+      actions/equip.py's DUPLICATE_SLOT_TYPES comment), and
+      `_utility_candidates` skips a slot only when THAT slot's own quantity
+      is stocked (`state.utility1_slot_quantity`/`utility2_slot_quantity`),
+      not `equipped_potion_qty`'s any-slot sum. Pinned at the CODE level
+      (test_l20_one_stocked_utility2_now_targeted, renamed from
+      ..._never_targeted) and the tree level: with utility1 stocked, slot 2
+      now arms a real fallback root. equipped_potion_qty ITSELF is
+      unchanged — other consumers (guard/goal provisioning) still rely on
+      its any-slot sum.
   GAP-6 (pure-drop dead end, l35_artifact_fill — discovered by the
       2026-07-07 hp-derivation fix wave): a near_term_gear candidate that is
       a recipe-less, non-purchasable, pure MONSTER-DROP item (e.g.
@@ -524,33 +536,48 @@ def test_l30_rune_chain_inert_waits() -> None:
 # --- Deliverable 5: both utility slots ---------------------------------------
 
 def test_l20_dual_utility_xp_outranks_empty_utility() -> None:
-    """LIMITATION (GAP-4, pinned): both utility slots EMPTY, the bootstrap
-    target (minor_health_potion, alchemy 20) craftable with banked mats —
-    and the FIRST decision is still the trunk grind, not utility1.
-    has_structural_upgrade deliberately excludes utility candidates (its
-    docstring: consumable restock must never break adequacy), so a
-    band-adequate state sends the XP branch first and the utility fill
-    survives only as THE fallback root. Empty utility slots therefore fill
-    opportunistically (when the trunk step yields no goal), never as the
-    primary decision. If utility provisioning is ever promoted, this pin
-    flips."""
+    """LIMITATION (GAP-4, pinned — DESIGNED, not a bug): both utility slots
+    EMPTY, the bootstrap target (minor_health_potion, alchemy 20) craftable
+    with banked mats, and the catalog's second-best (small_health_potion,
+    alchemy 5) also craftable now — and the FIRST decision is still the
+    trunk grind, not either utility slot. has_structural_upgrade
+    deliberately excludes utility candidates (its docstring: consumable
+    restock must never break adequacy), so a band-adequate state sends the
+    XP branch first and BOTH utility fills survive only as fallback roots,
+    in pick order (minor_health_potion/utility1 first — bigger gain — then
+    small_health_potion/utility2). RE-DERIVED 2026-07-07 by the GAP-5 fix:
+    the fallback list now carries two entries instead of one (utility2 is
+    reachable — see test_l20_one_stocked_utility2_now_targeted below), but
+    the XP-outranks-empty-utility verdict this test exists to pin is
+    UNCHANGED. Empty utility slots therefore fill opportunistically (when
+    the trunk step yields no goal), never as the primary decision. If
+    utility provisioning is ever promoted, this pin flips."""
     report = _run("l20_dual_utility")
     assert report.decision.chosen_root == ReachCharLevel(level=30)
-    assert report.decision.fallback_roots == [ObtainItem(
-        code="minor_health_potion", quantity=1, slot="utility1_slot")]
+    assert report.decision.fallback_roots == [
+        ObtainItem(code="minor_health_potion", quantity=1, slot="utility1_slot"),
+        ObtainItem(code="small_health_potion", quantity=1, slot="utility2_slot"),
+    ]
     assert repr(report.selected_goal).startswith("GrindCharacterXP"), (
         repr(report.selected_goal))
 
 
-def test_l20_one_stocked_utility2_never_targeted() -> None:
-    """LIMITATION (GAP-5, pinned): stock utility1 with the target potion and
-    the second utility slot becomes UNREACHABLE — utility_potion_targets
-    only ever emits utility1_slot, and _utility_candidates drops the
-    candidate entirely once equipped_potion_qty(target) > 0 anywhere. The
-    decision carries NO utility root at all (chosen or fallback): utility2
-    stays empty until utility1 is fully consumed. Proving BOTH slots get
-    filled is exactly what the tree cannot do today; emitting a
-    utility2_slot target should FAIL this test."""
+def test_l20_one_stocked_utility2_now_targeted() -> None:
+    """GAP-5 FIXED 2026-07-07 (renamed from ..._never_targeted, whose
+    LIMITATION pin this flips): stock utility1 with the bootstrap target and
+    utility2 is now REACHABLE. utility_potion_targets emits BOTH slots
+    unconditionally (utility1: the effect-best craftable-now heal,
+    minor_health_potion; utility2: the catalog's SECOND-best,
+    small_health_potion, via bootstrap_potion_target's new `exclude`
+    parameter — same-code dual utility slots are not server-legal).
+    _utility_candidates then applies the PER-SLOT stock check: utility1's
+    own quantity (15, from the scenario) is > 0 so its candidate is skipped
+    (churn guard intact — a stocked slot is never re-targeted), while
+    utility2's own quantity (0) is not, so its candidate survives into the
+    decision as a fallback root (XP still outranks it here per GAP-4's
+    design — the band is adequate and structural candidates are empty, so
+    the trunk is chosen; the utility2 candidate is real but does not win
+    the argmax in this scenario)."""
     gd = _bundle()
     state = _state("l20_dual_utility_one_stocked", gd)
     objective = CharacterObjective.from_game_data(gd)
@@ -558,14 +585,17 @@ def test_l20_one_stocked_utility2_never_targeted() -> None:
     assert state.equipment["utility1_slot"] == "minor_health_potion"
     assert state.equipment["utility2_slot"] is None
     assert objective.utility_potion_targets(state) == {
-        "utility1_slot": "minor_health_potion"}  # slot-2 never even named
+        "utility1_slot": "minor_health_potion",
+        "utility2_slot": "small_health_potion",
+    }
 
     report = _run("l20_dual_utility_one_stocked")
     assert report.decision.chosen_root == ReachCharLevel(level=30)
-    assert report.decision.fallback_roots == []
+    assert report.decision.fallback_roots == [ObtainItem(
+        code="small_health_potion", quantity=1, slot="utility2_slot")]
     all_reprs = [repr(r) for r in (
         report.decision.chosen_root, report.decision.chosen_step,
         *report.decision.fallback_roots, *report.decision.fallback_steps)]
-    assert not any("utility2_slot" in r for r in all_reprs), all_reprs
+    assert any("utility2_slot" in r for r in all_reprs), all_reprs
     assert repr(report.selected_goal).startswith("GrindCharacterXP"), (
         repr(report.selected_goal))

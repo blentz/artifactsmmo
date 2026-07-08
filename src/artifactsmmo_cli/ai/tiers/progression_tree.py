@@ -17,7 +17,6 @@ executing)."""
 from collections.abc import Callable
 from fractions import Fraction
 
-from artifactsmmo_cli.ai.equipped_potion import equipped_potion_qty
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.tiers import strategy
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
@@ -61,19 +60,34 @@ def has_structural_upgrade(state: WorldState, game_data: GameData,
     return bool(_structural_candidates(state, game_data, objective))
 
 
+_UTILITY_SLOT_QTY_ATTR = {
+    "utility1_slot": "utility1_slot_quantity",
+    "utility2_slot": "utility2_slot_quantity",
+}
+"""Per-slot quantity field, mirrored from equipped_potion.py's `_QTY_ATTR`
+(not imported — that map is keyed the same way but private to its module).
+Used by `_utility_candidates` for the PER-SLOT stock check: unlike
+`equipped_potion_qty` (which sums both slots for a given code — the churn
+guard other consumers rely on and must not change), the tree needs to know
+whether THIS slot specifically is already stocked, so a fill in slot 1 never
+blocks a candidate for the still-empty slot 2."""
+
+
 def _utility_candidates(state: WorldState, game_data: GameData,
                          objective: CharacterObjective) -> list[GearCandidate]:
-    """Semantics item 2 (utility slots): skip already-provisioned potions
-    (equipped_potion_qty > 0 — refill churn is the guard's job, not the
-    tree's); else weight by the hp_restore family (the only family
-    utility_potion_targets emits today — see potion_type_weight's docstring
-    for when boost/resist targets join this path). Same `gain > 0` guard
-    _structural_candidates has: a zero-weighted family (unmodeled) or a
-    zero-value item must never arm the gear branch or appear as a
-    candidate."""
+    """Semantics item 2 (utility slots): skip a slot that is ITSELF already
+    stocked (`state.utility1_slot_quantity`/`utility2_slot_quantity` > 0 —
+    refill churn is the guard's job, not the tree's) — a per-slot check, not
+    `equipped_potion_qty`'s any-slot sum, so utility1 being stocked no longer
+    blacks out utility2's candidate (GAP-5). Weight by the hp_restore family
+    (the only family utility_potion_targets emits today — see
+    potion_type_weight's docstring for when boost/resist targets join this
+    path). Same `gain > 0` guard _structural_candidates has: a zero-weighted
+    family (unmodeled) or a zero-value item must never arm the gear branch or
+    appear as a candidate."""
     candidates = []
     for slot, code in objective.utility_potion_targets(state).items():
-        if equipped_potion_qty(state, code) > 0:
+        if getattr(state, _UTILITY_SLOT_QTY_ATTR[slot]) > 0:
             continue
         stats = game_data.item_stats(code)
         if stats is None:
