@@ -30,7 +30,7 @@ never endorsements. Gap index:
   GAP-3 (rune, l30_rune_fill): the tree arms ObtainItem(lifesteal_rune,
       rune_slot) via the gold-purchase leaf, but objective_step_goal routes
       the recipe-less gold-vendor item to GatherMaterials(lifesteal_rune),
-      which never plans (0 nodes) — the cycle ends in Wait with the gold in
+      which never plans (dead at 1 node) — the cycle ends in Wait with the gold in
       hand. Vendor-only GOLD-priced equippables are unacquirable.
   GAP-4 (utility, l20_dual_utility): at a band-adequate state the XP
       branch outranks empty utility slots by design (has_structural_upgrade
@@ -46,7 +46,7 @@ never endorsements. Gap index:
       old_boots) routes through `_equippable_goal` to `UpgradeEquipmentGoal`,
       whose `relevant_actions` drops every Fight action for an unowned,
       uncommitted target — there is no acquisition path at all, so the goal
-      plans to 0 nodes. When such a candidate OUTRANKS every plannable
+      dies within a node. When such a candidate OUTRANKS every plannable
       alternative (equip_value's utility-stat weighting, per follow-up #5,
       is large enough to beat even a craftable candidate), the cycle ends in
       Wait with a real, healthy state sitting idle."""
@@ -210,6 +210,15 @@ L47_50_WINDOW_MONSTERS = (
 """The FightAction level window [char_level-1, char_level+2] at char_level
 48 (`_pick_winnable_monster`'s PREFERRED band) — every non-event monster in
 this bundle whose level falls in [47, 50]."""
+
+
+def test_window_tuple_matches_bundle() -> None:
+    """Tripwire for bundle regeneration: L47_50_WINDOW_MONSTERS must be
+    EXACTLY the bundle's [47, 50] monster set — a regenerated catalog that
+    adds a window monster must not silently escape the wall test below."""
+    gd = _bundle()
+    window = {code for code, lvl in gd.monster_levels.items() if 47 <= lvl <= 50}
+    assert window == set(L47_50_WINDOW_MONSTERS)
 
 
 def test_l48_event_window_monsters_still_unwinnable_with_real_stats() -> None:

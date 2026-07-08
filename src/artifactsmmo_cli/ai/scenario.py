@@ -92,8 +92,11 @@ def _derived_combat_totals(
 ) -> _CombatTotals:
     """Sum of every equipped item's catalog stats: a character's base combat
     stats are zero, so the server's reported totals are exactly the gear sum.
-    Utility potions contribute nothing (their catalog combat stats are all
-    zero), so the uniform all-slots sum is exact."""
+    Utility slots are SKIPPED: boost-family potions fold boost_dmg_*/boost_
+    res_*/boost_hp into dmg_elements/resistance/hp_bonus at catalog-build
+    time (game_data.py fill), which are combat-time effects the live sheet
+    does NOT report as permanent totals — summing them here would repeat the
+    zero-stats/hp contamination a third time."""
     attack: dict[str, int] = {}
     dmg = 0
     dmg_elements: dict[str, int] = {}
@@ -101,8 +104,8 @@ def _derived_combat_totals(
     critical_strike = 0
     initiative = 0
     hp_bonus = 0
-    for code in equipment.values():
-        if code is None:
+    for slot, code in equipment.items():
+        if code is None or slot.startswith("utility"):
             continue
         stats = game_data.item_stats(code)
         if stats is None:
@@ -454,7 +457,10 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # unattainable — the exact 'primary-drop map understates
     # gatherability' gap documented on GameData.gatherable_drop_items).
     # The tree never targets an artifact slot here; the gear branch
-    # chases the equip_value-utility items instead (wolf_ears et al).
+    # arms chosen_root=old_boots — a pure monster-drop candidate the goal
+    # layer has NO acquisition path for (GAP-6, see test_slot_coverage.py:
+    # LIMITATION — Fight actions are dropped for uncommitted targets, so
+    # UpgradeEquipment(old_boots) never plans and the cycle Waits).
     "l35_artifact_fill": ScenarioCharacter(
         name="l35_artifact_fill", level=35, gold=300,
         skills={"mining": 32, "woodcutting": 32, "weaponcrafting": 30,
@@ -515,7 +521,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # structural fixed point (no slot upgrade exists), alchemy 20
     # (minor_health_potion is the bootstrap target) with its mats banked
     # (nettle_leaf + algae), BOTH utility slots empty. At the corrected max_hp
-    # formula (520 here, vs the old hand-declared 360) the old loadout was
+    # formula (530 on this loadout, vs the old hand-declared 360) the old loadout was
     # no longer a fixed point: wolf_ears/mushmush_bow opened as new
     # near_term_gear candidates (their droppers become winnable at the real
     # hp) and outranked the XP branch outright — re-iterated to a fixed
