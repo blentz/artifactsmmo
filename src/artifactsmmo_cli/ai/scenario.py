@@ -58,12 +58,19 @@ class ScenarioCharacter:
     base 0 + gear, so this reproduces what a live character wearing this
     loadout would report. Requires game_data at scenario_state time.
 
+    Also derives max_hp = 115 + 5*level + sum(equipped gear hp_bonus) — the
+    same base-HP formula the server uses, live-validated against a real
+    character (L10: 115 + 50 = 165 base, +gear; matched the live /character
+    response). Under this flag the derived value REPLACES the scenario's
+    hand-declared `max_hp`; a scenario opting into derive_combat_stats drops
+    its own max_hp field (dead weight — it's overwritten either way).
+
     Default False: the pre-existing scenarios were all empirically pinned
     (goldens, band-adequate fixed points) under the harness's original
     zero-stat states, where `is_winnable` is False against EVERY monster
     (predict_win sees 0 attack). Flipping them retroactively would silently
-    re-derive their pins, so realistic combat stats are opt-in per scenario.
-    max_hp stays scenario-declared (NOT summed from gear hp bonuses)."""
+    re-derive their pins, so realistic combat stats (including derived
+    max_hp) are opt-in per scenario."""
     description: str = ""
 
 
@@ -77,6 +84,7 @@ class _CombatTotals:
     resistance: dict[str, int] = field(default_factory=dict)
     critical_strike: int = 0
     initiative: int = 0
+    hp_bonus: int = 0
 
 
 def _derived_combat_totals(
@@ -92,6 +100,7 @@ def _derived_combat_totals(
     resistance: dict[str, int] = {}
     critical_strike = 0
     initiative = 0
+    hp_bonus = 0
     for code in equipment.values():
         if code is None:
             continue
@@ -107,6 +116,7 @@ def _derived_combat_totals(
         dmg += stats.dmg
         critical_strike += stats.critical_strike
         initiative += stats.initiative
+        hp_bonus += stats.hp_bonus
     return _CombatTotals(
         attack={k: v for k, v in attack.items() if v},
         dmg=dmg,
@@ -114,6 +124,7 @@ def _derived_combat_totals(
         resistance={k: v for k, v in resistance.items() if v},
         critical_strike=critical_strike,
         initiative=initiative,
+        hp_bonus=hp_bonus,
     )
 
 
@@ -122,12 +133,17 @@ def scenario_state(sc: ScenarioCharacter,
     equipment: dict[str, str | None] = {slot: None for slot in EQUIPMENT_SLOTS}
     equipment.update(sc.equipment)
     combat = _CombatTotals()
+    max_hp = sc.max_hp
     if sc.derive_combat_stats:
         if game_data is None:
             raise ValueError(
                 "derive_combat_stats scenarios need game_data at "
                 "scenario_state time (gear stats come from the catalog)")
         combat = _derived_combat_totals(equipment, game_data)
+        # Server base HP = 115 + 5*level (live-validated against a real
+        # character); derived max_hp REPLACES the scenario's hand-declared
+        # value under this flag — see ScenarioCharacter.derive_combat_stats.
+        max_hp = 115 + 5 * sc.level + combat.hp_bonus
     # Every real character carries all 8 craft/gathering skills starting at
     # level 1 (world_state._fetch_world_state loops SKILL_NAMES with no
     # omissions) — a scenario that only sets the skills it cares about must
@@ -139,7 +155,7 @@ def scenario_state(sc: ScenarioCharacter,
     task_code, task_type, progress, total = sc.task or (None, None, 0, 0)
     return WorldState(
         character=sc.name, level=sc.level, xp=0, max_xp=100,
-        hp=sc.hp if sc.hp is not None else sc.max_hp, max_hp=sc.max_hp,
+        hp=sc.hp if sc.hp is not None else max_hp, max_hp=max_hp,
         gold=sc.gold, skills=skills, x=0, y=0,
         inventory=dict(sc.inventory), inventory_max=sc.inventory_max,
         equipment=equipment, cooldown_expires=None,
@@ -338,7 +354,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # the WITH/WITHOUT candidate sets on this same state, and the Wait
     # isolation witness stays l48_band_adequate (zero-stat, untouched).
     "l48_event_active": ScenarioCharacter(
-        name="l48_event_active", level=48, max_hp=690, gold=800,
+        name="l48_event_active", level=48, gold=800,
         skills={"mining": 46, "woodcutting": 46, "weaponcrafting": 42,
                 "gearcrafting": 42, "fishing": 42, "cooking": 42,
                 "alchemy": 35, "jewelrycrafting": 35},
@@ -360,20 +376,23 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                      "(corrupted_crown/corrupted_skull via corrupted_gem) "
                      "must enter the candidate surface."),
 
-    # --- Bag-slot pursuit (2026-07-07 slot-coverage pass, deliverable 2).
-    # L10 in the best L10-tier loadout (full iron + life_amulet, the
-    # near_term_gear fixed point at this level under real stats), bag_slot
-    # EMPTY, and the bank holding the satchel recipe's full monster-drop
-    # inputs (cowhide 5/5 + feather 2/2 — only the task-funded
-    # jasper_crystal missing, 0 tasks_coin held). LIMITATION (pinned by
-    # tests/test_ai/scenarios/test_slot_coverage.py): satchel is NOT
-    # attainable-now here — cow is unwinnable at any L10 loadout in this
-    # bundle and is_attainable_now's recipe walk has NO held/banked-stock
-    # arm, so the 5 banked cowhide open nothing. The bag slot is invisible
-    # to the tree at L10; the planner grinds slimes instead. The
-    # l12_bag_pursuit twin below is the chain-live witness.
+    # --- Bag-slot pursuit (2026-07-07 slot-coverage pass, deliverable 2;
+    # RE-DERIVED 2026-07-07 hp-derivation fix wave — see report). L10 in the
+    # best L10-tier loadout (full iron + life_amulet), bag_slot EMPTY, and
+    # the bank holding the satchel recipe's full monster-drop inputs
+    # (cowhide 5/5 + feather 2/2 — only the task-funded jasper_crystal
+    # missing, 0 tasks_coin held). At the CORRECTED max_hp formula (115 +
+    # 5*level + gear hp, 375 here) cow IS winnable and the satchel chain IS
+    # live — the original "invisible at L10" framing relied on the
+    # harness's hand-declared max_hp (240) undershooting reality and is
+    # retired (GAP-1 is now pinned directly, scenario-independent, by
+    # test_bag_slot_banked_stock_not_credited). The ACTUAL L10 behavior:
+    # iron_armor is ALSO not yet a fixed point, so adventurer_vest
+    # (craftable from the same banked cowhide) is a competing near_term_gear
+    # candidate that outranks bag_slot outright — satchel survives only as
+    # a fallback root. See test_l10_bag_pursuit_satchel_live_but_vest_outranks.
     "l10_bag_pursuit": ScenarioCharacter(
-        name="l10_bag_pursuit", level=10, max_hp=240,
+        name="l10_bag_pursuit", level=10,
         skills={"mining": 10, "woodcutting": 10, "weaponcrafting": 10,
                 "gearcrafting": 10, "alchemy": 5},
         equipment={
@@ -388,24 +407,28 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         bank={"cowhide": 5, "feather": 2},
         derive_combat_stats=True,
         description="L10, bag_slot empty, satchel mats banked bar the "
-                     "task-funded jasper_crystal — pins that the bag chain "
-                     "is INVISIBLE at L10 (cow unwinnable; banked mats "
-                     "don't count toward attainability)."),
-    # The minimal delta that makes the satchel chain LIVE: +2 levels (cow
-    # flips winnable at L12 with this loadout — max_hp is the flip, the
-    # gear is identical) and the cowhide-crafted adventurer_vest already
-    # equipped so the vest doesn't outrank the bag. near_term_gear then
-    # covers bag_slot -> satchel as the SOLE candidate and the full stack
-    # runs the task-funding chain (ReachCurrency(tasks_coin, 8) ->
-    # AcceptTask/Fight/CompleteTask) toward the jasper_crystal buy.
+                     "task-funded jasper_crystal — at real hp the chain is "
+                     "LIVE but a competing body-armor upgrade (same banked "
+                     "cowhide) outranks it; satchel survives as fallback."),
+    # The witness that ISOLATES the satchel chain: +2 levels (matches the
+    # original "minimal delta" framing) PLUS every other slot pushed to its
+    # own near_term_gear fixed point (RE-DERIVED 2026-07-07 hp-derivation fix
+    # wave: at corrected hp the old loadout was no longer a fixed point
+    # either — adventurer_helmet/forest_ring opened as new candidates and
+    # out-ranked the bag entirely, same competing-candidate effect as
+    # l10_bag_pursuit above). With every slot but bag_slot already at its
+    # argmax, near_term_gear covers bag_slot -> satchel as the SOLE
+    # candidate and the full stack runs the task-funding chain
+    # (ReachCurrency(tasks_coin, 8) -> AcceptTask/Fight/CompleteTask) toward
+    # the jasper_crystal buy.
     "l12_bag_pursuit": ScenarioCharacter(
-        name="l12_bag_pursuit", level=12, max_hp=280,
+        name="l12_bag_pursuit", level=12,
         skills={"mining": 10, "woodcutting": 10, "weaponcrafting": 10,
                 "gearcrafting": 10, "alchemy": 5},
         equipment={
-            "weapon_slot": "iron_dagger", "helmet_slot": "iron_helm",
+            "weapon_slot": "iron_dagger", "helmet_slot": "adventurer_helmet",
             "body_armor_slot": "adventurer_vest", "leg_armor_slot": "iron_legs_armor",
-            "boots_slot": "iron_boots", "ring1_slot": "iron_ring",
+            "boots_slot": "iron_boots", "ring1_slot": "forest_ring",
             "ring2_slot": "iron_ring", "shield_slot": "iron_shield",
             "amulet_slot": "life_amulet",
             "utility1_slot": "small_health_potion", "utility2_slot": "small_health_potion",
@@ -413,9 +436,10 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         utility_quantities={"utility1_slot": 20, "utility2_slot": 20},
         bank={"cowhide": 5, "feather": 2},
         derive_combat_stats=True,
-        description="L12 twin of l10_bag_pursuit: cow winnable, vest "
-                     "pre-equipped — satchel is the sole candidate and the "
-                     "task-funding chain fires."),
+        description="L12 twin of l10_bag_pursuit: cow winnable, every other "
+                     "slot at its own near_term_gear fixed point (vest, "
+                     "helmet, ring1) — satchel is the sole remaining "
+                     "candidate and the task-funding chain fires."),
 
     # --- Artifact slots (deliverable 3). L35, plausible combat loadout
     # (l30_band_entry gear + slime_shield/satchel, both rings filled),
@@ -432,7 +456,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # The tree never targets an artifact slot here; the gear branch
     # chases the equip_value-utility items instead (wolf_ears et al).
     "l35_artifact_fill": ScenarioCharacter(
-        name="l35_artifact_fill", level=35, max_hp=540, gold=300,
+        name="l35_artifact_fill", level=35, gold=300,
         skills={"mining": 32, "woodcutting": 32, "weaponcrafting": 30,
                 "gearcrafting": 30, "fishing": 30, "cooking": 30,
                 "alchemy": 20, "jewelrycrafting": 20},
@@ -466,7 +490,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # path never plans), so the cycle ends in Wait with 25000 gold on
     # hand and the rune one purchase away.
     "l30_rune_fill": ScenarioCharacter(
-        name="l30_rune_fill", level=30, max_hp=480, gold=25000,
+        name="l30_rune_fill", level=30, gold=25000,
         skills={"mining": 28, "woodcutting": 28, "weaponcrafting": 25,
                 "gearcrafting": 25, "fishing": 25, "cooking": 25,
                 "alchemy": 25, "jewelrycrafting": 18},
@@ -486,22 +510,30 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                      "tree arms the rune root but the buy chain is inert "
                      "(pinned Wait)."),
 
-    # --- Utility slots, both empty (deliverable 5). L20 at the structural
-    # fixed point (no slot upgrade exists), alchemy 20 (minor_health_potion
-    # is the bootstrap target) with its mats banked (nettle_leaf + algae),
-    # BOTH utility slots empty. LIMITATION (pinned): the band reads
-    # adequate (winnable monster + no structural upgrade — empty utility
-    # slots deliberately DON'T count, per has_structural_upgrade), so the
-    # XP branch outranks the utility fill: the first decision is the trunk
+    # --- Utility slots, both empty (deliverable 5; RE-DERIVED 2026-07-07
+    # hp-derivation fix wave — see report). L20 at the near_term_gear
+    # structural fixed point (no slot upgrade exists), alchemy 20
+    # (minor_health_potion is the bootstrap target) with its mats banked
+    # (nettle_leaf + algae), BOTH utility slots empty. At the corrected max_hp
+    # formula (520 here, vs the old hand-declared 360) the old loadout was
+    # no longer a fixed point: wolf_ears/mushmush_bow opened as new
+    # near_term_gear candidates (their droppers become winnable at the real
+    # hp) and outranked the XP branch outright — re-iterated to a fixed
+    # point under real stats (helmet_slot -> wolf_ears, weapon_slot ->
+    # mushmush_bow) to restore the scenario's design intent: no structural
+    # gear candidate at all. LIMITATION (pinned): the band reads adequate
+    # (winnable monster + no structural upgrade — empty utility slots
+    # deliberately DON'T count, per has_structural_upgrade), so the XP
+    # branch outranks the utility fill: the first decision is the trunk
     # grind, and ObtainItem(minor_health_potion, utility1_slot) survives
     # only as a fallback root.
     "l20_dual_utility": ScenarioCharacter(
-        name="l20_dual_utility", level=20, max_hp=360, gold=100,
+        name="l20_dual_utility", level=20, gold=100,
         skills={"mining": 18, "woodcutting": 18, "weaponcrafting": 15,
                 "gearcrafting": 15, "fishing": 15, "cooking": 15,
                 "alchemy": 20, "jewelrycrafting": 10},
         equipment={
-            "weapon_slot": "highwayman_dagger", "helmet_slot": "adventurer_helmet",
+            "weapon_slot": "mushmush_bow", "helmet_slot": "wolf_ears",
             "body_armor_slot": "adventurer_vest", "leg_armor_slot": "adventurer_pants",
             "boots_slot": "adventurer_boots", "ring1_slot": "life_ring",
             "ring2_slot": "forest_ring", "amulet_slot": "wisdom_amulet",
@@ -513,18 +545,19 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                      "mats banked — pins that the XP branch outranks the "
                      "utility fill (utility1 root demoted to fallback)."),
     # The second-slot probe: utility1 already stocked with the bootstrap
-    # target. LIMITATION (pinned): utility_potion_targets only ever emits
+    # target. Same RE-DERIVED fixed-point loadout as l20_dual_utility above.
+    # LIMITATION (pinned): utility_potion_targets only ever emits
     # utility1_slot, and _utility_candidates drops the candidate entirely
     # once equipped_potion_qty(target) > 0 — so with slot 1 stocked there
     # is NO tree path that targets utility2_slot, not even as a fallback.
     # The second utility slot is unfillable by the progression tree.
     "l20_dual_utility_one_stocked": ScenarioCharacter(
-        name="l20_dual_utility_one_stocked", level=20, max_hp=360, gold=100,
+        name="l20_dual_utility_one_stocked", level=20, gold=100,
         skills={"mining": 18, "woodcutting": 18, "weaponcrafting": 15,
                 "gearcrafting": 15, "fishing": 15, "cooking": 15,
                 "alchemy": 20, "jewelrycrafting": 10},
         equipment={
-            "weapon_slot": "highwayman_dagger", "helmet_slot": "adventurer_helmet",
+            "weapon_slot": "mushmush_bow", "helmet_slot": "wolf_ears",
             "body_armor_slot": "adventurer_vest", "leg_armor_slot": "adventurer_pants",
             "boots_slot": "adventurer_boots", "ring1_slot": "life_ring",
             "ring2_slot": "forest_ring", "amulet_slot": "wisdom_amulet",
