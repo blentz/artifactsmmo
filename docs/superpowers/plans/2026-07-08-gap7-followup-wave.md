@@ -40,6 +40,21 @@ Mirror GAP-2 exactly at the goal layer: the closure's gatherability check switch
 
 - [ ] Failing tests → implement joint check → pin route preference (derive actual) → sweep → commit `fix(currency): joint gold affordability; test: drop-vs-craft route pinned`
 
-### Task 5: Wrap
+### Task 5: GAP-8 — craft chains with monster-drop ingredients (LIVE STALL, highest priority)
+
+Live evidence (2026-07-08, Robby L13): tree root `fire_bow` → step `ReachSkillLevel(weaponcrafting, 10)` → proven dispatch picks `water_bow` (level-5 grinder) → `GatherMaterials(water_bow)` NEVER plans: `water_bow = 2× blue_slimeball (monster drop) + 5× ash_plank`, and `craft_plan_gen.py:127` bails on monster-drop leaves → raw A* floods 38,124 nodes → timeout → plan_len 0 → arbiter falls back to `GrindCharacterXP(red_slime)` — 65 consecutive cycles, weaponcrafting permanently stalled.
+
+**Files:** `src/artifactsmmo_cli/ai/craft_plan_gen.py` (`generate_next_craft_action` ~:125-127 drop-leaf bail); `src/artifactsmmo_cli/ai/scenario.py` (new scenario); `tests/test_ai/scenarios/test_slot_coverage.py` or a new `test_craft_drop_chains.py`; unit tests beside existing craft_plan_gen tests.
+
+**Fix:** teach the generator a Fight leg for monster-drop leaves — mirror GAP-6's PROVEN wiring exactly (`select_monster_for_drop` winner, `is_winnable`-gated, xp-positive → plain Fight, grey → `dataclasses.replace(fight, drop_farm=True)` via `grey_farm_allowed` — a recipe ingredient IS a recipe-consumer, so the existing policy arm applies, no bypass needed). One-leg-per-cycle: the Fight is the generated next action; replan handles subsequent legs. Unwinnable-dropper leaf → keep returning None honestly (A* fallback; the goal's is_plannable prunes). NPC-buy leaves stay out of scope (GatherMaterials' buy arm owns them).
+
+**Scenario class coverage (BINDING — user directive):**
+- `l13_drop_recipe_grind`: reproduce Robby's exact stall — L13, weaponcrafting 5, woodcutting ≥5, copper-tier loadout (derive_combat_stats), blue_slime winnable, empty-ish bank. Full stack must produce a NON-EMPTY plan progressing the water_bow chain (Fight(blue_slime) or ash leg — pin the actual first leg) AND `assert_search_bounded` must hold (the 38K flood becomes a caught bound violation class).
+- Generalize: parametrized test over EVERY craftable-with-drop-leaf recipe reachable in the existing scenario fleet's levels (enumerate from the bundle: recipes whose closure contains a monster-drop leaf and whose dropper is winnable at the scenario's stats) asserting generator-or-planner produces a plan — the CLASS net, not one instance.
+- Liveness regression: the l13 scenario joins the band-liveness dimensions (registry/totality/full-stack/bounded/trunk).
+
+- [ ] Failing scenario test (red — reproduces the stall offline) → implement → flip → net green → sweep → commit `fix(craft): monster-drop ingredients plannable — Fight leg in the recipe generator`
+
+### Task 6: Wrap
 
 - [ ] Full scenario net + suite; spec addendum ("GAP-7 + follow-up wave SHIPPED", excluded-by-design items named with rationale + the open design questions for the user: equip_value combat-vs-utility weighting, drop-rate cost modeling); ledger; memory; note gate owed.
