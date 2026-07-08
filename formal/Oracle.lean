@@ -1320,6 +1320,25 @@ def runProgressionReserve (args : Array Json) : Json :=
     ("floor", Json.num (Int.ofNat (Formal.ProgressionReserve.effectiveFloor reserved buying))),
     ("affordable", Json.bool (Formal.ProgressionReserve.affordable gold price reserved buying))]
 
+/-- progression_reserve_multi: args layout (all Nat ≥ 0):
+* `[0]`               nReserved (number of (code, cost) pairs)
+* `[1 .. 2*nReserved]` pairs flat: code0 cost0 code1 cost1 ...  (codes are ints,
+  stringified to match the Python str keys)
+* next: nBuying, then `nBuying` buying codes (ints, stringified). Callers pass
+  DISTINCT codes (the `List.Nodup` contract of the proved core).
+Emits `{"floor_multi"}` against the proved `effectiveFloorMulti` core. -/
+def runProgressionReserveMulti (args : Array Json) : Json :=
+  let g := fun i => intArg args i
+  let n := (g 0).toNat
+  let reserved : Formal.ProgressionReserve.Reserved :=
+    (List.range n).map (fun k => (toString (g (1 + 2*k)), (g (2 + 2*k)).toNat))
+  let p := 1 + 2*n
+  let m := (g p).toNat
+  let buying : List String := (List.range m).map (fun k => toString (g (p + 1 + k)))
+  Json.mkObj [
+    ("floor_multi",
+      Json.num (Int.ofNat (Formal.ProgressionReserve.effectiveFloorMulti reserved buying)))]
+
 /-- Compute one cycles_for_progress result using the SAME proved
 `cyclesForProgressPure`.
 
@@ -2873,6 +2892,8 @@ def runOne (item : Json) : Json :=
     runDecideKey args
   else if kind == "progression_reserve" then
     runProgressionReserve args
+  else if kind == "progression_reserve_multi" then
+    runProgressionReserveMulti args
   else if kind == "cycles_for_progress" then
     runCyclesForProgress args
   else if kind == "gather_apply" then

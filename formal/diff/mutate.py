@@ -1893,6 +1893,23 @@ PROGRESSION_RESERVE_MUTATIONS = [
      "    return gold >= effective_floor(reserved, buying)"),
 ]
 
+# effective_floor_multi (joint-affordability) mutations -- each breaks the
+# MULTI deduction so the Python joint floor diverges from the proved Lean
+# `effectiveFloorMulti` oracle. Killed by
+# formal/diff/test_progression_reserve_multi_diff.py.
+PROGRESSION_RESERVE_MULTI_MUTATIONS = [
+    # Drop the joint deduction entirely: every co-bought leaf is wrongly blocked
+    # by its own reservation -> floor stays the full total.
+    ("progression_reserve_multi: drop joint deduction (floor = full total)",
+     "    return reserve_total(reserved) - sum(reserved.get(b, 0) for b in buying)",
+     "    return reserve_total(reserved)"),
+    # Add instead of subtract the summed deductions -> floor balloons past the
+    # total, over-protecting the reserve.
+    ("progression_reserve_multi: add deductions instead of subtract",
+     "    return reserve_total(reserved) - sum(reserved.get(b, 0) for b in buying)",
+     "    return reserve_total(reserved) + sum(reserved.get(b, 0) for b in buying)"),
+]
+
 
 # bank_expansion mutations (REAL BUG #15: BuyBankExpansionAction.apply must
 # project +BANK_EXPANSION_SLOTS into state.bank_capacity, otherwise the
@@ -4584,6 +4601,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_decide_key_diff.py", survivors)
     run_group(PROGRESSION_RESERVE_CORE_SRC, PROGRESSION_RESERVE_MUTATIONS,
               "formal/diff/test_progression_reserve_diff.py", survivors)
+    run_group(PROGRESSION_RESERVE_CORE_SRC, PROGRESSION_RESERVE_MULTI_MUTATIONS,
+              "formal/diff/test_progression_reserve_multi_diff.py", survivors)
     run_group(CYCLES_FOR_PROGRESS_SRC, CYCLES_FOR_PROGRESS_MUTATIONS,
               "formal/diff/test_cycles_for_progress_diff.py", survivors)
     run_group(GATHER_APPLY_SRC, GATHER_APPLY_MUTATIONS,
