@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/recipe_closure.py (sha256: 6900af933f8e225f86988909d498928d15ca946b2a8d54bfce654f4365bc5276) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/recipe_closure.py (sha256: 5a26452b3b9c7895cadd0952cfbffce508df42800e08fb813dc126e604358e5b) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.RecipeClosure
@@ -18,7 +18,7 @@ def _dictSet {α : Type} (m : List (String × α)) (k : String) (v : α) : List 
   | [] => [(k, v)]
   | (k', v') :: rest => if k' == k then (k', v) :: rest else (k', v') :: _dictSet rest k v
 
-/-- Extracted from `_closure_visited` (line 55; the Python `fuel <= 0` guard
+/-- Extracted from `_closure_visited` (line 62; the Python `fuel <= 0` guard
 is the `Nat` fuel-zero arm — recursion is structural on the fuel). -/
 def _closure_visited :
     Nat → String → (List (String × List (String × Int))) → (List (String × Int)) → (List (String × Int))
@@ -40,7 +40,7 @@ def _closure_visited :
         visited recipe
       visited)
 
-/-- Extracted from `_raw_units` (line 71; the Python `fuel <= 0` guard
+/-- Extracted from `_raw_units` (line 78; the Python `fuel <= 0` guard
 is the `Nat` fuel-zero arm — recursion is structural on the fuel). -/
 def _raw_units :
     Nat → String → (List (String × List (String × Int))) → (List (String × Int)) → (List (String × Int)) → Int
@@ -69,7 +69,7 @@ def _raw_units :
         let y := (_dictGetD yields item 1)
         (-(Int.fdiv (-total) y))))
 
-/-- Extracted from `_closure_demand` (line 97; the Python `fuel <= 0` guard
+/-- Extracted from `_closure_demand` (line 104; the Python `fuel <= 0` guard
 is the `Nat` fuel-zero arm — recursion is structural on the fuel). -/
 def _closure_demand :
     Nat → String → Int → (List (String × List (String × Int))) → (List (String × Int)) → (List (String × Int)) → (List (String × Int)) → (List (String × Int))
@@ -117,7 +117,7 @@ def _closure_demand :
           out recipe
         out))
 
-/-- Extracted from `recipe_closure_pure` (line 131). -/
+/-- Extracted from `recipe_closure_pure` (line 138). -/
 def recipe_closure_pure (roots : List String) (recipes : List (String × List (String × Int))) (drops : List (String × String)) :
     ((List String) × (List String)) :=
   let visited : List (String × Int) := []
