@@ -17,7 +17,8 @@ inventory_space as strongly as combat)."""
 
 from enum import Enum
 
-from artifactsmmo_cli.ai.tiers.strategic_value import STRATEGIC_SCALE
+from artifactsmmo_cli.ai.game_data import ItemStats
+from artifactsmmo_cli.ai.tiers.strategic_value import STRATEGIC_SCALE, strategic_value
 
 
 class ProfileKind(Enum):
@@ -43,3 +44,10 @@ def profile_weights(kind: ProfileKind) -> tuple[int, int, int, int, int]:
     """The strategic_value weight tuple for `kind`. Direct index: an
     unmapped kind is a programming error, not a runtime default."""
     return PROFILE_WEIGHTS[kind]
+
+
+def score_for_profile(stats: ItemStats, kind: ProfileKind) -> int:
+    """Profile-aware strategic value of an equippable — the scorer the tree's
+    gear branch consumes (Phase 3). COMBAT ranks by combat content only;
+    UTILITY gives efficiency stats their weight over the combat floor."""
+    return strategic_value(stats, profile_weights(kind))
