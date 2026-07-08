@@ -1,14 +1,23 @@
 """Progression goal: equipment upgrades."""
 
+import dataclasses
+
 from artifactsmmo_cli.ai.actions.base import Action
+from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS, EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
+from artifactsmmo_cli.ai.monster_drop_selection import (
+    MonsterDropCandidate,
+    select_monster_for_drop,
+)
+from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.goals.upgrade_selection import (
     UpgradeCandidate,
     best_by_key,
@@ -250,8 +259,87 @@ class UpgradeEquipmentGoal(Goal):
                 result.append(action)
             # Everything else (Fight, Recycle, NpcBuy/Sell, OptimizeLoadout, task
             # actions, gold/bank-expansion, map transitions) is irrelevant to
-            # building+equipping the target — drop it to bound the search.
+            # building+equipping the target — drop it to bound the search,
+            # EXCEPT the target's own dropper fight re-emitted below.
+        # GAP-6 (2026-07-08): the loop above drops every FightAction, so a
+        # target that is itself a MONSTER DROP (old_boots: recipe=None, no
+        # buyable vendor, sole dropper spider) had NO acquisition edge at all —
+        # UpgradeEquipment(old_boots) died at 1 node and the cycle Waited with
+        # a healthy character (l35_artifact_fill tripwire). Mirror
+        # GatherMaterialsGoal's proven dropper wiring for the goal's OWN
+        # target: emit the expected-kills-optimal winnable dropper's fight,
+        # and synthesize the Equip leg the factory cannot enumerate for an
+        # unowned recipe-less item (its equip loop covers craftable + OWNED
+        # codes only). Skipped when the target is already held/banked — the
+        # withdraw+equip edges above already serve it.
+        if owned.get(target_item, 0) <= 0:
+            fight = self._target_drop_fight(actions, state, game_data, target_item)
+            if fight is not None:
+                result.append(fight)
+                if not any(isinstance(a, EquipAction) and a.code == target_item
+                           and a.slot == target_slot for a in result):
+                    result.append(EquipAction(code=target_item, slot=target_slot))
         return result
+
+    def _target_drop_fight(self, actions: list[Action], state: WorldState,
+                           game_data: GameData,
+                           target_item: str) -> FightAction | None:
+        """Expected-kills-optimal WINNABLE dropper fight for the goal's own
+        target item, or None when no winnable dropper exists.
+
+        Mirrors GatherMaterialsGoal.relevant_actions' monster-drop narrowing
+        (the live caller of the proved select_monster_for_drop core,
+        formal/Formal/MonsterDropSelection.lean): never plan a losing fight
+        (is_winnable gate), keep exactly one dropper (the lex-argmin of the
+        expected-kills metric), and route a GREY dropper (zero xp at this
+        level) through the drop_farm variant — the proven xp-gate bypass
+        (formal/Formal/ActionApplicability.lean, dropFarm arm: every
+        structural gate still applies).
+
+        grey_farm_allowed is deliberately NOT consulted here. That policy
+        gates RECIPE-material farming, where next-tier suppression is safe
+        because the consuming recipe's own family carries the substitute
+        (skill rises, the demand shifts to the next-tier recipe). An equip
+        TARGET is its own consumer: the progression tree's attainable-argmax
+        already arbitrated it against every craftable same-family alternative
+        on equip_value, and nothing arms a grind toward a not-yet-attainable
+        alternative — suppression would re-create the Wait livelock this
+        emission exists to fix (l35 witness: enchanter_boots, equip_value 485
+        > old_boots 371, crafts at gearcrafting 35 vs skill 30, within
+        GREY_FARM_NEXT_TIER_MARGIN — the margin rule would suppress the only
+        live route while no goal grinds gearcrafting). The demand gate holds
+        structurally: the drop IS the goal's target, so a grey fight emitted
+        here can never serve an xp-grind plan."""
+        droppers = game_data.monsters_dropping(target_item)
+        if not droppers:
+            return None
+        fights_by_code: dict[str, FightAction] = {
+            a.monster_code: a for a in actions if isinstance(a, FightAction)
+        }
+        drop_candidates: list[MonsterDropCandidate] = []
+        winner_fights: dict[str, FightAction] = {}
+        for monster_code, rate, mn, mx in droppers:
+            fight = fights_by_code.get(monster_code)
+            if fight is None:
+                continue
+            if not is_winnable(state, game_data, monster_code):
+                continue
+            if fight.locations:
+                loc = nearest_or_error(state.x, state.y, fight.locations, "gather")
+                dist = abs(loc[0] - state.x) + abs(loc[1] - state.y)
+            else:
+                dist = 0
+            drop_candidates.append(MonsterDropCandidate(
+                monster_code=monster_code, rate=rate,
+                min_quantity=mn, max_quantity=mx, distance=dist))
+            winner_fights[monster_code] = fight
+        chosen = select_monster_for_drop(target_item, drop_candidates)
+        if chosen is None:
+            return None
+        fight = winner_fights[chosen]
+        if game_data.xp_per_kill(chosen, state.level) > 0:
+            return fight
+        return dataclasses.replace(fight, drop_farm=True)
 
     def find_upgrade_target(self, state: WorldState, game_data: GameData) -> tuple[str, str] | None:
         """Find the best upgrade (inventory or craftable) ignoring material availability.

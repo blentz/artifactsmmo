@@ -49,8 +49,8 @@ never endorsements. Gap index:
       UNPLANNABLE — `GatherMaterials(small_pearls, ...)` dies at 1 node/
       0-length plan, the same "dead at 1 node" shape GAP-3 documents for
       gold-priced purchases, but here for an ITEM-currency (small_pearls)
-      artifact purchase — see
-      test_l35_artifact_fill_full_stack_waits_on_pure_drop_gear.
+      artifact purchase (GAP-7) — pinned inside
+      test_l35_artifact_fill_pure_drop_gear_farms_dropper.
   GAP-3 (rune, l30_rune_fill) — FIXED 2026-07-08: gold is not an inventory
       item. `analyze_currency_leaves` judged a gold-priced buy leaf's
       affordability from `inventory["gold"] + bank_items["gold"]` — always
@@ -89,17 +89,29 @@ never endorsements. Gap index:
       unchanged — other consumers (guard/goal provisioning) still rely on
       its any-slot sum.
   GAP-6 (pure-drop dead end, l35_artifact_fill — discovered by the
-      2026-07-07 hp-derivation fix wave): a near_term_gear candidate that is
-      a recipe-less, non-purchasable, pure MONSTER-DROP item (e.g.
-      old_boots) routes through `_equippable_goal` to `UpgradeEquipmentGoal`,
-      whose `relevant_actions` drops every Fight action for an unowned,
-      uncommitted target — there is no acquisition path at all, so the goal
-      dies within a node. When such a candidate OUTRANKS every plannable
-      alternative (equip_value's utility-stat weighting, per follow-up #5,
-      is large enough to beat even a craftable candidate), the cycle ends in
-      Wait with a real, healthy state sitting idle. Still present after the
-      GAP-2 fix, now one rank below perfect_pearl (a fallback, not the
-      argmax) — see test_l35_artifact_fill_full_stack_waits_on_pure_drop_gear."""
+      2026-07-07 hp-derivation fix wave) — FIXED 2026-07-08: a near_term_gear
+      candidate that is a recipe-less, non-purchasable, pure MONSTER-DROP
+      item (old_boots, sole dropper spider) routes through `_equippable_goal`
+      to `UpgradeEquipmentGoal`, whose `relevant_actions` used to drop every
+      Fight action — no acquisition edge at all, the goal died within a node
+      and the cycle Waited with a healthy character. `relevant_actions` now
+      mirrors GatherMaterialsGoal's proven dropper wiring
+      (select_monster_for_drop core, Formal/MonsterDropSelection.lean) for
+      the goal's OWN target item: the expected-kills-optimal WINNABLE
+      dropper's FightAction is emitted — plain when xp-positive, as the
+      drop_farm variant (proven xp-gate bypass,
+      Formal/ActionApplicability.lean dropFarm arm) when grey — plus a
+      synthesized Equip leg for the unowned recipe-less target (the factory
+      only enumerates equips for craftable/owned items). grey_farm_allowed
+      is deliberately NOT consulted for the goal's own equip target: that
+      policy's next-tier suppression assumes the substitute grind is armed
+      by the suppressed recipe's own family, which holds for materials but
+      not for equip targets (l35 witness: enchanter_boots crafts at
+      gearcrafting 35 vs skill 30, within margin, yet nothing arms that
+      grind — suppression would re-create the Wait livelock). Pinned
+      positively at the scenario level
+      (test_l35_artifact_fill_pure_drop_gear_farms_dropper) and the unit
+      level (test_upgrade_slot_lock.py's TestTargetDropFights)."""
 
 import json
 from pathlib import Path
@@ -459,57 +471,51 @@ def test_l35_artifact_small_pearls_gatherable_via_full_drop_set() -> None:
     assert is_attainable_now("perfect_pearl", state, gd)      # propagates upward
 
 
-def test_l35_artifact_fill_full_stack_waits_on_pure_drop_gear() -> None:
-    """RE-DERIVED 2026-07-07 (GAP-2 fixed) — the argmax candidate AND the
-    dead-end reason both changed from the prior pin; the Wait outcome
-    itself did not.
+def test_l35_artifact_fill_pure_drop_gear_farms_dropper() -> None:
+    """GAP-6 FIXED (2026-07-08) — the former tripwire
+    (test_l35_artifact_fill_full_stack_waits_on_pure_drop_gear), rewritten
+    positive. Same scenario; the derivation up to the demotion is UNCHANGED
+    from the GAP-2/GAP-3 re-derivations:
 
-    Previously (GAP-6, discovered by the hp-derivation fix wave): the
-    argmax was old_boots — a level-20, PURE monster-drop boots item
-    (recipe=None, no permanent vendor) that only outranked everything else
-    via equip_value's utility-stat weighting. GAP-2's fix opens a NEW,
-    higher-ranked candidate ahead of it: perfect_pearl (equip_value 201, an
-    artifact — small_pearls, its currency, is the rare fishing-spot drop
-    GAP-2 makes gatherable). perfect_pearl duplicate-fills all three empty
-    artifact slots and outranks old_boots outright, so it — not old_boots —
-    is now `chosen_root`/`chosen_step`.
+    - chosen_root is still perfect_pearl (equip_value 201 artifact,
+      duplicate-fills all three empty artifact slots, outranks old_boots).
+    - perfect_pearl's step is still dead (GAP-7, DISTINCT pin that STAYS):
+      `GatherMaterials(small_pearls, {small_pearls:1})` plans to 1 node /
+      0-length plan — the GOAP gather layer's primary-drop blindness
+      (`recipe_closure` feeds `needed_resources` from the primary
+      `resource_drops` map only, so the rare SECONDARY drop small_pearls
+      emits no GatherAction; the goal-layer analog of GAP-2's
+      `objective._gatherable` bug, unfixed at this layer, noted in the
+      reports' follow-ups).
 
-    perfect_pearl's acquisition is ALSO dead, but for a DIFFERENT,
-    previously-unobserved reason, not GAP-6's Fight-drop exclusion:
-    `goals_tried` shows `GatherMaterials(small_pearls, {small_pearls:1})`
-    planning to 1 node / 0-length plan. RE-VERIFIED 2026-07-08 (GAP-3
-    fixed): this dead end has a DISTINCT root from GAP-3's — GAP-3 was
-    gold-affordability blindness in `analyze_currency_leaves` (gold read
-    as an inventory item), while this one is the GOAP gather layer's
-    primary-drop blindness: `recipe_closure` feeds `needed_resources` from
-    the primary `resource_drops` map only, so a rare SECONDARY drop like
-    small_pearls emits no GatherAction (the goal-layer analog of the
-    GAP-2 bug `objective._gatherable` had, unfixed at this layer). The
-    GAP-3 fix does not open it; this pin stays (GAP-7) — noted in the
-    reports' follow-ups, not fixed here.
-
-    Once perfect_pearl's step is (correctly) judged unservable, the
-    arbiter's step-servable demotion falls through the ranking exactly as
-    before: old_boots is STILL there (GAP-6 unchanged, now a fallback
-    candidate instead of the argmax — same Fight-drop dead end,
-    `relevant_actions` still drops every Fight action for an uncommitted
-    target), then wolf_ears (same pure-drop dead end), then wisdom_amulet
-    (pre-existing green_cloth craft gap, unrelated), then wooden_club — all
-    dead, so the cycle still ends in Wait. GAP-2 alone does not resolve
-    this scenario; it substitutes one dead-end argmax for another (higher-
-    ranked) one, and leaves GAP-6 fully intact underneath."""
+    NEW: when the step-servable demotion falls to old_boots (the first
+    fallback root — a level-20, recipe-less, non-purchasable, pure
+    monster-drop boots item), `_equippable_goal` routes it to
+    UpgradeEquipmentGoal(committed=(old_boots, boots_slot)) whose
+    `relevant_actions` now emits the target's winnable dropper instead of
+    dropping every Fight: spider (L20, the sole dropper, winnable at this
+    loadout) is grey at L35 (xp_per_kill == 0, 15 levels down), so the
+    fight arrives as the drop_farm variant (proven xp-gate bypass) plus the
+    synthesized Equip(old_boots->boots_slot) leg. The cycle plans
+    Fight(spider) -> Equip instead of Wait — a healthy character no longer
+    idles on a farmable upgrade."""
     report = _run("l35_artifact_fill")
     assert report.decision.chosen_root == ObtainItem(
         code="perfect_pearl", quantity=1, slot="artifact1_slot")
     assert ObtainItem(code="old_boots", quantity=1, slot="boots_slot") \
-        in report.decision.fallback_roots  # GAP-6 still real, now a fallback
+        in report.decision.fallback_roots
     small_pearls_entries = [g for g in report.goals_tried if str(g.get("goal", ""))
                             .startswith("GatherMaterials(small_pearls")]
     assert small_pearls_entries, report.goals_tried
     assert all(entry["nodes"] == 1 and entry["plan_len"] == 0
-               for entry in small_pearls_entries), small_pearls_entries
-    assert repr(report.selected_goal) == "Wait", (
+               for entry in small_pearls_entries), small_pearls_entries  # GAP-7
+    assert repr(report.selected_goal).startswith("UpgradeEquipment"), (
         repr(report.selected_goal), report.plan)
+    assert report.plan, report.goals_tried
+    fights = [a for a in report.plan if repr(a) == "Fight(spider)"]
+    assert fights and all(a.drop_farm for a in fights), report.plan
+    assert any(repr(a) == "Equip(old_boots->boots_slot)" for a in report.plan), \
+        report.plan
 
 
 # --- Deliverable 4: rune slot ------------------------------------------------

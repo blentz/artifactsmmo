@@ -8,6 +8,7 @@ shield's materials. Lock to the slot: only the target item, target-slot crafts,
 and recipe-chain materials survive.
 """
 
+from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
@@ -119,3 +120,134 @@ def test_is_satisfied_uncommitted_uses_initial_snapshot():
     assert goal.is_satisfied(changed) is True
     unchanged = make_state(equipment={"weapon_slot": "copper_axe"})
     assert goal.is_satisfied(unchanged) is False
+
+
+# --- GAP-6 (2026-07-08): monster-drop acquisition for the goal's own target --
+
+
+def _drop_gd(monster_level: int = 1, monster_hp: int = 60,
+             monster_attack: int = 4) -> GameData:
+    """spider drops old_boots — a recipe-less pure-drop equippable (the
+    l35_artifact_fill GAP-6 shape, shrunk to a unit fixture)."""
+    gd = GameData()
+    gd._item_stats = {
+        "old_boots": ItemStats(code="old_boots", level=20, type_="boots"),
+    }
+    gd._crafting_recipes = {}
+    gd._monster_locations = {"spider": (1, 0)}
+    gd._monster_level = {"spider": monster_level}
+    gd._monster_hp = {"spider": monster_hp}
+    gd._monster_attack = {"spider": {"air": monster_attack}}
+    gd._monster_resistance = {"spider": {}}
+    gd._monster_critical_strike = {"spider": 0}
+    gd._monster_initiative = {"spider": 0}
+    gd._monster_drops = {"spider": [("old_boots", 300, 1, 1)]}
+    return gd
+
+
+def _boots_goal() -> UpgradeEquipmentGoal:
+    return UpgradeEquipmentGoal(committed_target=("old_boots", "boots_slot"))
+
+
+class TestTargetDropFights:
+    def test_grey_winnable_dropper_emits_drop_farm_fight_and_equip(self):
+        """L12 vs L1 spider (grey: xp_per_kill == 0, >= 10 levels down): the
+        target's sole winnable dropper arrives as the drop_farm variant, and
+        the unowned recipe-less target gets its synthesized Equip leg (the
+        factory only enumerates equips for craftable/owned items)."""
+        gd = _drop_gd(monster_level=1)
+        state = make_state(level=12, attack={"air": 10}, dmg=10)
+        fight = FightAction(monster_code="spider", locations=frozenset({(1, 0)}))
+        kept = _boots_goal().relevant_actions([fight], state, gd)
+        fights = [a for a in kept if isinstance(a, FightAction)]
+        assert [f.monster_code for f in fights] == ["spider"]
+        assert fights[0].drop_farm is True
+        equips = [a for a in kept if isinstance(a, EquipAction)]
+        assert [repr(e) for e in equips] == ["Equip(old_boots->boots_slot)"]
+
+    def test_xp_positive_dropper_emits_plain_fight(self):
+        """L2 vs L1 spider (xp-positive): the plain fight, no drop_farm."""
+        gd = _drop_gd(monster_level=1)
+        state = make_state(level=2, attack={"air": 10}, dmg=10)
+        fight = FightAction(monster_code="spider", locations=frozenset({(1, 0)}))
+        kept = _boots_goal().relevant_actions([fight], state, gd)
+        fights = [a for a in kept if isinstance(a, FightAction)]
+        assert [f.monster_code for f in fights] == ["spider"]
+        assert fights[0].drop_farm is False
+
+    def test_unwinnable_dropper_emits_nothing(self):
+        """Never plan a losing fight: an unwinnable sole dropper contributes
+        no FightAction — and without an acquisition edge, no synthesized
+        Equip either (the goal honestly stays dead)."""
+        gd = _drop_gd(monster_level=1, monster_hp=100000, monster_attack=200)
+        state = make_state(level=12, attack={"air": 10}, dmg=10)
+        fight = FightAction(monster_code="spider", locations=frozenset({(1, 0)}))
+        kept = _boots_goal().relevant_actions([fight], state, gd)
+        assert not any(isinstance(a, FightAction) for a in kept)
+        assert not any(isinstance(a, EquipAction) for a in kept)
+
+    def test_owned_target_skips_the_fight(self):
+        """Held/banked target: the withdraw+equip edges already serve it —
+        no dropper fight is emitted."""
+        gd = _drop_gd(monster_level=1)
+        for stock in ({"inventory": {"old_boots": 1}},
+                      {"bank_items": {"old_boots": 1}}):
+            state = make_state(level=12, attack={"air": 10}, dmg=10, **stock)
+            fight = FightAction(monster_code="spider", locations=frozenset({(1, 0)}))
+            kept = _boots_goal().relevant_actions([fight], state, gd)
+            assert not any(isinstance(a, FightAction) for a in kept)
+
+    def test_dropper_without_base_fight_action_emits_nothing(self):
+        """The emission narrows the base action set — it never invents a
+        fight the factory did not enumerate."""
+        gd = _drop_gd(monster_level=1)
+        state = make_state(level=12, attack={"air": 10}, dmg=10)
+        kept = _boots_goal().relevant_actions([], state, gd)
+        assert kept == []
+
+    def test_unlocated_fight_uses_zero_distance(self):
+        """A dropper fight with no known locations still qualifies (distance
+        0 in the expected-kills metric, mirroring GatherMaterialsGoal)."""
+        gd = _drop_gd(monster_level=1)
+        state = make_state(level=12, attack={"air": 10}, dmg=10)
+        fight = FightAction(monster_code="spider", locations=frozenset())
+        kept = _boots_goal().relevant_actions([fight], state, gd)
+        fights = [a for a in kept if isinstance(a, FightAction)]
+        assert [f.monster_code for f in fights] == ["spider"]
+        assert fights[0].drop_farm is True
+
+    def test_base_equip_action_is_not_duplicated(self):
+        """When the base set already carries the target's equip (owned or
+        craftable enumeration), the synthesized leg is skipped."""
+        gd = _drop_gd(monster_level=1)
+        state = make_state(level=12, attack={"air": 10}, dmg=10)
+        actions = [
+            FightAction(monster_code="spider", locations=frozenset({(1, 0)})),
+            EquipAction(code="old_boots", slot="boots_slot"),
+        ]
+        kept = _boots_goal().relevant_actions(actions, state, gd)
+        equips = [a for a in kept if isinstance(a, EquipAction)]
+        assert len(equips) == 1
+
+    def test_winner_selection_skips_unwinnable_dropper(self):
+        """Two droppers, the expected-kills-better one unwinnable: the
+        winnable one is chosen (is_winnable gates BEFORE the argmin)."""
+        gd = _drop_gd(monster_level=1)
+        gd._monster_locations["ogre"] = (2, 0)
+        gd._monster_level["ogre"] = 1
+        gd._monster_hp["ogre"] = 100000
+        gd._monster_attack["ogre"] = {"air": 200}
+        gd._monster_resistance["ogre"] = {}
+        gd._monster_critical_strike["ogre"] = 0
+        gd._monster_initiative["ogre"] = 0
+        # ogre's rate (1) beats spider's (300) on expected kills — but it is
+        # unwinnable, so spider must win.
+        gd._monster_drops["ogre"] = [("old_boots", 1, 1, 1)]
+        state = make_state(level=12, attack={"air": 10}, dmg=10)
+        actions = [
+            FightAction(monster_code="spider", locations=frozenset({(1, 0)})),
+            FightAction(monster_code="ogre", locations=frozenset({(2, 0)})),
+        ]
+        kept = _boots_goal().relevant_actions(actions, state, gd)
+        fights = [a for a in kept if isinstance(a, FightAction)]
+        assert [f.monster_code for f in fights] == ["spider"]

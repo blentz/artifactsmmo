@@ -46,12 +46,14 @@ class FightAction(Action):
     # P5b: access region the folded movement stays inside; the planner only
     # offers this action when the character is in the same region.
     travel_region: str = "overworld"
-    # Drop-farm variant: bypasses ONLY the xpPositive lower gate so a recipe
-    # demand can hunt a grey mob's drops (server drops loot regardless of xp).
-    # Set exclusively by GatherMaterialsGoal.relevant_actions under the
-    # grey_farm_allowed policy — never by xp-grind paths. Excluded from
-    # compare/repr so learned-cost history keys and action identity don't
-    # fork. Mirrored in Formal/ActionApplicability.lean (dropFarm arm).
+    # Drop-farm variant: bypasses ONLY the xpPositive lower gate so a DEMAND
+    # can hunt a grey mob's drops (server drops loot regardless of xp). Set
+    # exclusively by the two demand-serving goals — GatherMaterialsGoal
+    # (recipe-closure drops, under the grey_farm_allowed policy) and
+    # UpgradeEquipmentGoal (its own committed equip target's dropper, GAP-6
+    # 2026-07-08) — never by xp-grind paths. Excluded from compare/repr so
+    # learned-cost history keys and action identity don't fork. Mirrored in
+    # Formal/ActionApplicability.lean (dropFarm arm).
     drop_farm: bool = field(default=False, compare=False, repr=False)
 
     _MIN_FREE_SLOTS = 1  # combat can drop loot; need at least 1 free capacity

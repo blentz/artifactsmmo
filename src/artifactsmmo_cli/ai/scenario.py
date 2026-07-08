@@ -474,14 +474,15 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # tier for its own, unrelated reason (lich/rosenblood/cultist_emperor
     # unwinnable; corrupted_gem event-monster-only; novice_guide has no
     # acquisition path at all) — see test_slot_coverage.py's
-    # test_l35_artifact_perfect_pearl_targeted_others_closed. The full
-    # stack still Waits: perfect_pearl's small_pearls purchase dead-ends at
-    # GatherMaterials(small_pearls) (a NEW, distinct gap this fix surfaced
-    # — item-currency vendor purchases for a rare-drop leaf don't plan,
-    # noted as a follow-up, not fixed by this task), and GAP-6 (old_boots'
-    # Fight-drop dead end) is still present underneath, now as a fallback
-    # rather than the argmax — see test_slot_coverage.py:
-    # test_l35_artifact_fill_full_stack_waits_on_pure_drop_gear.
+    # test_l35_artifact_perfect_pearl_targeted_others_closed.
+    # perfect_pearl's small_pearls purchase still dead-ends at
+    # GatherMaterials(small_pearls) (GAP-7: item-currency vendor purchases
+    # for a rare-drop leaf don't plan — still a follow-up), but since the
+    # GAP-6 fix (2026-07-08) the step-servable demotion lands on old_boots
+    # and UpgradeEquipment drop-farms its grey dropper: the cycle plans
+    # Fight(spider) -> Equip(old_boots) instead of Waiting — see
+    # test_slot_coverage.py:
+    # test_l35_artifact_fill_pure_drop_gear_farms_dropper.
     "l35_artifact_fill": ScenarioCharacter(
         name="l35_artifact_fill", level=35, gold=300,
         skills={"mining": 32, "woodcutting": 32, "weaponcrafting": 30,
@@ -499,10 +500,12 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         bank={"gold_ore": 10},
         derive_combat_stats=True,
         description="L35 combat loadout, all three artifact slots empty — "
-                     "RE-DERIVED 2026-07-07 (GAP-2 fixed): perfect_pearl "
-                     "(small_pearls rare-fishing-drop route) is now the "
-                     "argmax artifact target, though the full stack still "
-                     "Waits (purchase dead-end, distinct from GAP-6)."),
+                     "RE-DERIVED 2026-07-08 (GAP-6 fixed): perfect_pearl "
+                     "(small_pearls rare-fishing-drop route) is still the "
+                     "argmax artifact target and still dead (GAP-7 purchase "
+                     "dead-end), but the demotion now lands on old_boots, "
+                     "whose grey dropper spider is drop-farmed: the cycle "
+                     "plans Fight(spider) -> Equip instead of Waiting."),
 
     # --- Rune slot (deliverable 4). L30 at the near_term_gear fixed point
     # for every other slot (the equip_value argmax set — utility-stat gear

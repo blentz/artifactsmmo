@@ -77,11 +77,13 @@ structure FightInputs where
   minFreeSlots  : Int
   xpPerKill     : Int       -- game_data.xp_per_kill(monster, playerLevel)
   dropFarm      : Bool := false
-  -- Drop-farm variant (2026-07-06): GatherMaterialsGoal may emit a fight
-  -- whose sole purpose is the monster's DROPS (grey mob, zero xp). The flag
-  -- bypasses ONLY the xpPositive lower gate; every structural gate
-  -- (locations, inventory room, hp floor, level+2 suicide guard) still
-  -- applies. Mirrors Python FightAction.drop_farm.
+  -- Drop-farm variant (2026-07-06): a demand-serving goal may emit a fight
+  -- whose sole purpose is the monster's DROPS (grey mob, zero xp) —
+  -- GatherMaterialsGoal for recipe-closure drops (grey_farm_allowed policy)
+  -- and, since 2026-07-08 (GAP-6), UpgradeEquipmentGoal for its own equip
+  -- target's dropper. The flag bypasses ONLY the xpPositive lower gate;
+  -- every structural gate (locations, inventory room, hp floor, level+2
+  -- suicide guard) still applies. Mirrors Python FightAction.drop_farm.
 
 /-- The composite predicate. Matches Python `FightAction.is_applicable`
 term-by-term: locations, inventory room, hp floor, (drop-farm OR xp>0)
@@ -266,9 +268,10 @@ theorem winnable_inWindow_imp_fightApplicable_nonvacuous :
 
 /-! ## Drop-farm bypass scope (2026-07-06).
 
-The drop-farm variant exists so a RECIPE demand can hunt a grey mob's drops
-(server drops loot regardless of xp). The bypass must be EXACTLY the xp gate:
-every structural veto survives. -/
+The drop-farm variant exists so a DEMAND — a recipe material or, since
+2026-07-08 (GAP-6), the emitting goal's own equip target — can hunt a grey
+mob's drops (server drops loot regardless of xp). The bypass must be EXACTLY
+the xp gate: every structural veto survives. -/
 
 /-- With `dropFarm` set and zero xp, applicability reduces exactly to the
 four structural gates — the bypass swallows nothing else. -/

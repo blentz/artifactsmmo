@@ -10,8 +10,16 @@ Policy (user directive 2026-07-06): grey farming is allowed IFF
   1. the drop SERVES A DEMAND — some crafting recipe consumes it, or it is
      the CURRENCY of an NPC purchase (Fight×N → NpcBuy chains, e.g.
      sandwhisper_coin @ sea_marauder buying greater_lifesteal_rune).
-     Structural: only GatherMaterialsGoal emits drop-farm fights, and only
-     for closure items, so a grey fight can never enter an xp-grind plan. AND
+     Structural: only the demand-serving goals emit drop-farm fights —
+     GatherMaterialsGoal for closure items under THIS policy, and (GAP-6,
+     2026-07-08) UpgradeEquipmentGoal for its OWN equip target's dropper,
+     where the demand gate holds structurally (the drop IS the goal's
+     target) and this policy's next-tier suppression is deliberately not
+     consulted (rationale on UpgradeEquipmentGoal._target_drop_fight: the
+     tree's attainable-argmax already arbitrated the target against every
+     craftable same-family alternative, and nothing arms a grind toward a
+     not-yet-attainable one). A grey fight can never enter an xp-grind
+     plan either way. AND
   2. the NEXT-TIER recipe of that recipe's family is too far a skill-grind
      away (or absent). When a same-family recipe just a few levels up exists
      (health_potion at alchemy 18 vs large_health_potion at 20), grinding the
