@@ -242,13 +242,13 @@ def spentOf (admitted : List (Nat × String)) : Nat :=
 /-- The cheapest-first prefix admission walk. `acc` is the reversed admitted
 prefix; a candidate joins iff gold covers spent-so-far + its cost + the floor of
 the resulting leaf set, else the walk stops (prefix semantics: `break`). -/
-def admit (gold : Nat) (floorFn : List String → Nat) :
+def admitPrefix (gold : Nat) (floorFn : List String → Nat) :
     List (Nat × String) → List (Nat × String) → List (Nat × String)
   | acc, [] => acc
   | acc, (cost, leaf) :: rest =>
     let trial := acc ++ [(cost, leaf)]
     if gold ≥ spentOf trial + floorFn (trial.map (·.2)) then
-      admit gold floorFn trial rest
+      admitPrefix gold floorFn trial rest
     else
       acc
 
@@ -271,14 +271,14 @@ precondition beyond the trivially-true `budgetSafe gold floorFn []`. -/
 theorem admit_preserves_budgetSafe (gold : Nat) (floorFn : List String → Nat) :
     ∀ (rest acc : List (Nat × String)),
       budgetSafe gold floorFn acc →
-      budgetSafe gold floorFn (admit gold floorFn acc rest) := by
+      budgetSafe gold floorFn (admitPrefix gold floorFn acc rest) := by
   intro rest
   induction rest with
-  | nil => intro acc hsafe; simpa [admit] using hsafe
+  | nil => intro acc hsafe; simpa [admitPrefix] using hsafe
   | cons c rest ih =>
     intro acc hsafe
     obtain ⟨cost, leaf⟩ := c
-    unfold admit
+    unfold admitPrefix
     by_cases hcheck : gold ≥ spentOf (acc ++ [(cost, leaf)])
         + floorFn ((acc ++ [(cost, leaf)]).map (·.2))
     · simp only [hcheck, if_true]
@@ -291,7 +291,7 @@ from `[]` always returns a budget-safe admitted set — the corner-free
 never-overspend conclusion. -/
 theorem admit_from_empty_budgetSafe (gold : Nat) (floorFn : List String → Nat)
     (cands : List (Nat × String)) :
-    budgetSafe gold floorFn (admit gold floorFn [] cands) :=
+    budgetSafe gold floorFn (admitPrefix gold floorFn [] cands) :=
   admit_preserves_budgetSafe gold floorFn cands [] (Or.inl rfl)
 
 end Formal.ProgressionReserve
