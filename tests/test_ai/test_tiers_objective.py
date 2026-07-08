@@ -697,3 +697,43 @@ def test_is_attainable_now_partial_stock_still_credits_boolean():
     state = make_state(level=5, attack={"air": 5}, bank_items={"dragon_scale": 1})
     assert is_attainable_now("dragon_scale", state, gd) is True
     assert is_attainable_now("dragon_helm", state, gd) is True
+
+
+def _gd_item_currency_no_other_source() -> GameData:
+    """A recipe-less rune sold by a permanent vendor for an ITEM currency
+    (magic_dust) that has NO gather/drop/task/vendor acquisition path of
+    its own — the only way to credit it is the held/banked-stock arm
+    threaded into the currency-recursion `_attainable_closure` call inside
+    `is_attainable_now`'s `leaf_ok` (objective.py ~:210, GAP-1 fold-in)."""
+    gd = GameData()
+    gd._item_stats = {
+        "dust_rune": ItemStats(code="dust_rune", level=5, type_="rune"),
+    }
+    gd._npc_stock = {"dust_trader": {"dust_rune": 3}}
+    gd._npc_buy_currency = {"dust_trader": {"dust_rune": "magic_dust"}}
+    gd._npc_locations = {"dust_trader": (4, 4)}
+    return gd
+
+
+def test_is_attainable_now_credits_held_bank_currency():
+    """GAP-1 fold-in (task-2 review): a purchase paid in an ITEM currency
+    the character already holds in the BANK is attainable-now through the
+    stock short-circuit, even though magic_dust has no other production
+    source at all (not gatherable, not dropped, not task-earnable, no
+    vendor sells it) — the currency-recursion call inside `leaf_ok` passes
+    `stock_ok` through, so `_attainable_closure(currency, ...)` finds the
+    held stock before it would otherwise fail every leaf arm."""
+    gd = _gd_item_currency_no_other_source()
+    state = make_state(level=5, gold=0, bank_items={"magic_dust": 20})
+    assert is_attainable_now("dust_rune", state, gd) is True
+
+
+def test_is_attainable_now_bank_none_currency_not_credited():
+    """Negative twin: `bank_items=None` (bank unknown) must not be conflated
+    with 'the currency is available' — with no bank data and nothing
+    carried, and no other acquisition source for magic_dust, the purchase
+    stays unattainable."""
+    gd = _gd_item_currency_no_other_source()
+    state = make_state(level=5, gold=0, bank_items=None)
+    assert state.bank_items is None
+    assert is_attainable_now("dust_rune", state, gd) is False

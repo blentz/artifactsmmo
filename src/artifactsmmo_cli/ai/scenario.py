@@ -317,10 +317,19 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # bootstrap_potion_target (health_splash_potion) at positive quantity so
     # equipped_potion_qty > 0 excludes the utility candidate too. This
     # forces has_structural_upgrade False by construction — the XP/capstone
-    # branch path the per-band net had no scenario for. rune/artifact/bag
-    # slots are left empty deliberately: near_term_gear emits no candidate
-    # for them from this state either (verified empirically), so filling
-    # them is not needed to reach has_structural_upgrade == False.
+    # branch path the per-band net had no scenario for. rune slot is left
+    # empty deliberately: near_term_gear emits no candidate for it from this
+    # state either (verified empirically). ARTIFACT slots stock perfect_pearl
+    # (RE-DERIVED 2026-07-07 GAP-2 fix — objective._gatherable now reads the
+    # FULL drop set, so small_pearls, a rare fishing-spot drop, opens
+    # perfect_pearl's archaeologist-vendor route as attainable-now at ANY
+    # level ≥ 19; left unequipped this scenario was no longer a fixed point,
+    # perfect_pearl (equip_value 201, all prospecting) became a real
+    # near_term_gear candidate and has_structural_upgrade flipped True).
+    # Stocking it (duplicate-fill artifact type, same item all 3 slots)
+    # restores the "no structural candidate" invariant this scenario exists
+    # to provide — see tests/test_ai/scenarios/test_slot_coverage.py's GAP-2
+    # note for the un-restocked witness (l35_artifact_fill).
     "l48_band_adequate": ScenarioCharacter(
         name="l48_band_adequate", level=48, max_hp=690, gold=800,
         skills={"mining": 46, "woodcutting": 46, "weaponcrafting": 42,
@@ -332,6 +341,8 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             "boots_slot": "mithril_boots", "ring1_slot": "mithril_ring",
             "ring2_slot": "copper_ring", "amulet_slot": "greater_sapphire_amulet",
             "shield_slot": "wooden_shield",
+            "artifact1_slot": "perfect_pearl", "artifact2_slot": "perfect_pearl",
+            "artifact3_slot": "perfect_pearl",
             "utility1_slot": "health_splash_potion", "utility2_slot": "health_splash_potion",
         },
         utility_quantities={"utility1_slot": 20, "utility2_slot": 20},
@@ -350,12 +361,19 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # (winnable at this loadout) drops corrupted_gem, the permanent
     # cultist_wizard sells corrupted_crown/corrupted_skull for
     # corrupted_gem, and near_term_gear gains event-only candidates
-    # (helmet corrupted_crown; artifact1/2/3 corrupted_skull). Without the
-    # event the same monsters have no known spawn, the currency leaf stays
-    # closed, and (with real stats) the shield/ring2/boots/bag slots also
-    # open non-event candidates — so the event-attribution tests compare
-    # the WITH/WITHOUT candidate sets on this same state, and the Wait
-    # isolation witness stays l48_band_adequate (zero-stat, untouched).
+    # (helmet corrupted_crown; artifact2_slot corrupted_skull — RE-DERIVED
+    # 2026-07-07 GAP-2 fix: artifact1_slot/artifact3_slot are no longer
+    # event-exclusive, perfect_pearl duplicate-fills them regardless of the
+    # event once objective._gatherable opens the small_pearls rare-drop
+    # route; see test_slot_coverage.py's EVENT_ONLY_CANDIDATES docstring).
+    # Artifact slots are deliberately left UNSTOCKED here (unlike
+    # l48_band_adequate/l30_rune_fill/l20_dual_utility) so the event's
+    # residual artifact2_slot delta stays observable. Without the event the
+    # same monsters have no known spawn, the currency leaf stays closed, and
+    # (with real stats) the shield/ring2/boots/bag slots also open non-event
+    # candidates — so the event-attribution tests compare the WITH/WITHOUT
+    # candidate sets on this same state, and the Wait isolation witness
+    # stays l48_band_adequate (zero-stat, untouched).
     "l48_event_active": ScenarioCharacter(
         name="l48_event_active", level=48, gold=800,
         skills={"mining": 46, "woodcutting": 46, "weaponcrafting": 42,
@@ -447,20 +465,23 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # --- Artifact slots (deliverable 3). L35, plausible combat loadout
     # (l30_band_entry gear + slime_shield/satchel, both rings filled),
     # artifact1/2/3_slot ALL empty, utilities stocked with the bootstrap
-    # target so no utility candidate fires. LIMITATION (pinned): NO
-    # artifact in this bundle is attainable-now at L35 — every artifact is
-    # a recipe-less vendor purchase whose currency leaf is closed (lich/
-    # rosenblood/cultist_emperor unwinnable at this tier; corrupted_gem is
-    # event-monster-only; small_pearls IS gatherable as a rare fishing
-    # drop but objective._gatherable consults the PRIMARY resource_drops
-    # map only, so the perfect_pearl/archaeologist route reads
-    # unattainable — the exact 'primary-drop map understates
-    # gatherability' gap documented on GameData.gatherable_drop_items).
-    # The tree never targets an artifact slot here; the gear branch
-    # arms chosen_root=old_boots — a pure monster-drop candidate the goal
-    # layer has NO acquisition path for (GAP-6, see test_slot_coverage.py:
-    # LIMITATION — Fight actions are dropped for uncommitted targets, so
-    # UpgradeEquipment(old_boots) never plans and the cycle Waits).
+    # target so no utility candidate fires. GAP-2 FIXED 2026-07-07:
+    # objective._gatherable now reads the FULL drop set, so small_pearls (a
+    # rare fishing-spot drop) is gatherable and perfect_pearl's
+    # archaeologist-vendor route opens — the tree NOW targets all three
+    # artifact slots (perfect_pearl, duplicate-filled) as the argmax
+    # candidate. Every other artifact in the bundle stays closed at this
+    # tier for its own, unrelated reason (lich/rosenblood/cultist_emperor
+    # unwinnable; corrupted_gem event-monster-only; novice_guide has no
+    # acquisition path at all) — see test_slot_coverage.py's
+    # test_l35_artifact_perfect_pearl_targeted_others_closed. The full
+    # stack still Waits: perfect_pearl's small_pearls purchase dead-ends at
+    # GatherMaterials(small_pearls) (a NEW, distinct gap this fix surfaced
+    # — item-currency vendor purchases for a rare-drop leaf don't plan,
+    # noted as a follow-up, not fixed by this task), and GAP-6 (old_boots'
+    # Fight-drop dead end) is still present underneath, now as a fallback
+    # rather than the argmax — see test_slot_coverage.py:
+    # test_l35_artifact_fill_full_stack_waits_on_pure_drop_gear.
     "l35_artifact_fill": ScenarioCharacter(
         name="l35_artifact_fill", level=35, gold=300,
         skills={"mining": 32, "woodcutting": 32, "weaponcrafting": 30,
@@ -478,9 +499,10 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         bank={"gold_ore": 10},
         derive_combat_stats=True,
         description="L35 combat loadout, all three artifact slots empty — "
-                     "pins that no artifact is attainable-now at L35 (every "
-                     "currency leaf closed) and the tree never targets "
-                     "artifact slots here."),
+                     "RE-DERIVED 2026-07-07 (GAP-2 fixed): perfect_pearl "
+                     "(small_pearls rare-fishing-drop route) is now the "
+                     "argmax artifact target, though the full stack still "
+                     "Waits (purchase dead-end, distinct from GAP-6)."),
 
     # --- Rune slot (deliverable 4). L30 at the near_term_gear fixed point
     # for every other slot (the equip_value argmax set — utility-stat gear
@@ -495,6 +517,12 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # rune is neither gatherable nor monster-dropped and the gold NpcBuy
     # path never plans), so the cycle ends in Wait with 25000 gold on
     # hand and the rune one purchase away.
+    # ARTIFACT slots stock perfect_pearl (RE-DERIVED 2026-07-07 GAP-2 fix —
+    # see l48_band_adequate's comment for the mechanism: perfect_pearl became
+    # a real near_term_gear candidate at any level >= 19 once
+    # objective._gatherable started reading the full drop set). Restocked so
+    # the rune slot stays the SOLE isolated target, per this scenario's
+    # documented "every other slot at its own fixed point" methodology.
     "l30_rune_fill": ScenarioCharacter(
         name="l30_rune_fill", level=30, gold=25000,
         skills={"mining": 28, "woodcutting": 28, "weaponcrafting": 25,
@@ -506,6 +534,8 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             "boots_slot": "hard_leather_boots", "ring1_slot": "ring_of_the_adept",
             "ring2_slot": "forest_ring", "amulet_slot": "wisdom_amulet",
             "shield_slot": "iron_shield", "bag_slot": "satchel",
+            "artifact1_slot": "perfect_pearl", "artifact2_slot": "perfect_pearl",
+            "artifact3_slot": "perfect_pearl",
             "utility1_slot": "minor_health_potion", "utility2_slot": "minor_health_potion",
         },
         utility_quantities={"utility1_slot": 15, "utility2_slot": 15},
@@ -533,6 +563,10 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # branch outranks the utility fill: the first decision is the trunk
     # grind, and ObtainItem(minor_health_potion, utility1_slot) survives
     # only as a fallback root.
+    # ARTIFACT slots stock perfect_pearl (RE-DERIVED 2026-07-07 GAP-2 fix —
+    # see l48_band_adequate's comment for the mechanism). Restocked so the
+    # XP-vs-utility comparison this scenario exists for stays isolated from
+    # the unrelated artifact-slot candidate GAP-2 opened.
     "l20_dual_utility": ScenarioCharacter(
         name="l20_dual_utility", level=20, gold=100,
         skills={"mining": 18, "woodcutting": 18, "weaponcrafting": 15,
@@ -544,6 +578,8 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             "boots_slot": "adventurer_boots", "ring1_slot": "life_ring",
             "ring2_slot": "forest_ring", "amulet_slot": "wisdom_amulet",
             "shield_slot": "iron_shield", "bag_slot": "satchel",
+            "artifact1_slot": "perfect_pearl", "artifact2_slot": "perfect_pearl",
+            "artifact3_slot": "perfect_pearl",
         },
         bank={"nettle_leaf": 30, "algae": 15},
         derive_combat_stats=True,
@@ -568,6 +604,8 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             "boots_slot": "adventurer_boots", "ring1_slot": "life_ring",
             "ring2_slot": "forest_ring", "amulet_slot": "wisdom_amulet",
             "shield_slot": "iron_shield", "bag_slot": "satchel",
+            "artifact1_slot": "perfect_pearl", "artifact2_slot": "perfect_pearl",
+            "artifact3_slot": "perfect_pearl",
             "utility1_slot": "minor_health_potion",
         },
         utility_quantities={"utility1_slot": 15},

@@ -25,10 +25,32 @@ never endorsements. Gap index:
       framing (cow unwinnable at L10) was retired by the 2026-07-07
       hp-derivation fix wave — cow IS winnable at real L10 hp (375), so that
       scenario no longer demonstrates the gap by itself.
-  GAP-2 (artifacts, l35_artifact_fill): no artifact is attainable-now at
-      L35; in particular perfect_pearl's small_pearls currency IS a real
-      (rare) fishing drop but objective._gatherable consults the PRIMARY
-      resource_drops map only, so the archaeologist route reads closed.
+  GAP-2 (artifacts, l35_artifact_fill) — FIXED 2026-07-07: objective._gatherable
+      now consults the FULL drop set (`gatherable_drop_items()`, not just the
+      primary `resource_drops` map), so a rare secondary drop like
+      small_pearls (off trout/bass/salmon fishing spots) reads gatherable and
+      perfect_pearl's archaeologist-vendor route opens. Pinned at the CODE
+      level (test_l35_artifact_small_pearls_gatherable_via_full_drop_set) AND
+      at the scenario level: l35_artifact_fill's empty artifact slots NOW
+      target perfect_pearl (test_l35_artifact_perfect_pearl_targeted_others_
+      closed) — the fix's blast radius reaches every scenario in this bundle
+      with an empty artifact slot at level >= 19 (perfect_pearl's equip_value,
+      201, all `prospecting`, is high enough to duplicate-fill all three
+      artifact slots outright); scenarios NOT under test for artifact
+      candidacy were re-fixed-pointed by stocking perfect_pearl in
+      scenario.py (mirrors the earlier hp-derivation fix wave's wolf_ears/
+      mushmush_bow re-iteration) — see scenario.py's l48_band_adequate/
+      l30_rune_fill/l20_dual_utility* comments. l48_event_active was left
+      unstocked (its EVENT_ONLY_CANDIDATES table narrowed instead — the
+      event's artifact-slot delta is now only artifact2_slot, see that
+      constant's docstring). FOLLOW-UP surfaced by this fix, NOT resolved by
+      it (out of scope — `objective._gatherable` only, per the task brief):
+      perfect_pearl's small_pearls purchase is attainable-now but still
+      UNPLANNABLE — `GatherMaterials(small_pearls, ...)` dies at 1 node/
+      0-length plan, the same "dead at 1 node" shape GAP-3 documents for
+      gold-priced purchases, but here for an ITEM-currency (small_pearls)
+      artifact purchase — see
+      test_l35_artifact_fill_full_stack_waits_on_pure_drop_gear.
   GAP-3 (rune, l30_rune_fill): the tree arms ObtainItem(lifesteal_rune,
       rune_slot) via the gold-purchase leaf, but objective_step_goal routes
       the recipe-less gold-vendor item to GatherMaterials(lifesteal_rune),
@@ -51,7 +73,9 @@ never endorsements. Gap index:
       dies within a node. When such a candidate OUTRANKS every plannable
       alternative (equip_value's utility-stat weighting, per follow-up #5,
       is large enough to beat even a craftable candidate), the cycle ends in
-      Wait with a real, healthy state sitting idle."""
+      Wait with a real, healthy state sitting idle. Still present after the
+      GAP-2 fix, now one rank below perfect_pearl (a fallback, not the
+      argmax) — see test_l35_artifact_fill_full_stack_waits_on_pure_drop_gear."""
 
 import json
 from pathlib import Path
@@ -87,14 +111,24 @@ ARTIFACT_SLOTS = {"artifact1_slot", "artifact2_slot", "artifact3_slot"}
 
 EVENT_ONLY_CANDIDATES = {
     "helmet_slot": "corrupted_crown",
-    "artifact1_slot": "corrupted_skull",
     "artifact2_slot": "corrupted_skull",
-    "artifact3_slot": "corrupted_skull",
 }
 """What the corrupted_ogre event adds to l48_event_active's candidate
 surface: the L20 ogre (winnable at this loadout) drops corrupted_gem, and
 the permanent cultist_wizard sells crown + skull for it — with the event
-down those monsters have no known spawn and the currency leaf is closed."""
+down those monsters have no known spawn and the currency leaf is closed.
+
+RE-DERIVED 2026-07-07 (GAP-2 fix): artifact1_slot/artifact3_slot dropped
+from this table. perfect_pearl (equip_value 201 — the small_pearls rare-
+fishing-drop route GAP-2 opened) now ranks #1 among attainable-now
+artifacts EVEN WITHOUT the event, and DUPLICATE_SLOT_TYPES fills the extra
+artifact slots by repeating the best attainable item — so artifact1_slot
+and artifact3_slot both read perfect_pearl in the WITHOUT-event state too
+(`_slot_assignments` duplicate-fill), no longer an event-exclusive delta.
+corrupted_skull (value 17, event-only) still displaces perfect_pearl at
+the SECOND ranked position (`_slot_assignments`' index-1 slot,
+artifact2_slot) whenever it is attainable — the narrower, but still real,
+event-attributable artifact-slot candidate that survives the fix."""
 
 
 def _bundle() -> GameData:
@@ -143,10 +177,12 @@ def test_l48_event_candidates_are_event_gated() -> None:
     """The exact candidate delta the corrupted_ogre event buys, measured on
     the SAME state with only the game-data event overlay toggled (the very
     seeding seed_offline performs from state.active_events): with the event
-    down the event items are absent; with it up, crown + all three artifact
-    slots appear. This is the attribution test — the full-stack test below
-    can't distinguish 'event opened the leaf' from 'the leaf was open
-    anyway' on its own."""
+    down the event items are absent; with it up, crown appears and
+    corrupted_skull outranks perfect_pearl at artifact2_slot (RE-DERIVED
+    2026-07-07, GAP-2 fix: artifact1_slot/artifact3_slot are no longer
+    event-exclusive, see EVENT_ONLY_CANDIDATES's docstring). This is the
+    attribution test — the full-stack test below can't distinguish 'event
+    opened the leaf' from 'the leaf was open anyway' on its own."""
     gd = _bundle()
     state = _state("l48_event_active", gd)
     objective = CharacterObjective.from_game_data(gd)
@@ -159,9 +195,13 @@ def test_l48_event_candidates_are_event_gated() -> None:
     for slot, code in EVENT_ONLY_CANDIDATES.items():
         assert with_event.get(slot) == code, (slot, with_event)
         assert without.get(slot) != code, (slot, without)
-    # the event only ADDS candidates — the non-event surface is unchanged
-    assert {s: c for s, c in with_event.items()
-            if s not in EVENT_ONLY_CANDIDATES} == without
+    # the event only CHANGES the EVENT_ONLY_CANDIDATES slots — every other
+    # slot's candidate is unaffected by the toggle (compare both sides with
+    # those slots excluded, since a slot can have a real non-event default
+    # candidate the event candidate outranks, not merely an absent one).
+    excluded = set(EVENT_ONLY_CANDIDATES)
+    assert {s: c for s, c in with_event.items() if s not in excluded} == \
+           {s: c for s, c in without.items() if s not in excluded}
 
 
 def test_l48_event_active_pursues_event_gear() -> None:
@@ -346,74 +386,100 @@ def test_l12_bag_pursuit_satchel_chain_live() -> None:
 
 # --- Deliverable 3: artifact slots ------------------------------------------
 
-def test_l35_artifact_slots_never_targeted() -> None:
-    """LIMITATION (GAP-2, pinned): with all three artifact slots EMPTY at
-    L35, the tree's candidate surface contains NO artifact slot — every
-    artifact in the bundle is a recipe-less vendor purchase whose currency
-    leaf is closed at this tier (lich/rosenblood/cultist_emperor unwinnable;
-    corrupted_gem event-gated; novice_guide has no acquisition path at
-    all). The planner chases equip_value utility gear instead. Empty
-    artifact slots are simply invisible at L35."""
+def test_l35_artifact_perfect_pearl_targeted_others_closed() -> None:
+    """RE-DERIVED 2026-07-07 (GAP-2 FIXED): with all three artifact slots
+    EMPTY at L35, the tree's candidate surface now DOES contain an
+    artifact — perfect_pearl. Its currency, small_pearls, is a rare
+    trout/bass/salmon fishing-spot drop that `objective._gatherable` used
+    to miss (primary-drop-map only); now reading the full drop set
+    (`gatherable_drop_items()`), it opens the archaeologist-vendor route.
+    At equip_value 201 (all `prospecting`) perfect_pearl duplicate-fills
+    all three artifact slots (DUPLICATE_SLOT_TYPES). Every OTHER artifact
+    in the bundle stays closed at this tier for its own, unrelated reason —
+    GAP-2's fix is narrow, opening exactly the one rare-drop route it
+    targets, not every artifact: lich/rosenblood/cultist_emperor (their
+    vendor currencies) are unwinnable; corrupted_gem is event-gated;
+    novice_guide has no acquisition path at all."""
     gd = _bundle()
     state = _state("l35_artifact_fill", gd)
     objective = CharacterObjective.from_game_data(gd)
     for slot in ARTIFACT_SLOTS:
         assert state.equipment[slot] is None  # scenario construction
     targets = objective.near_term_gear(state)
-    assert not (set(targets) & ARTIFACT_SLOTS), targets
+    assert {slot: targets[slot] for slot in ARTIFACT_SLOTS if slot in targets} == {
+        slot: "perfect_pearl" for slot in ARTIFACT_SLOTS}
     artifacts = [code for code, stats in gd.all_item_stats.items()
                  if stats.type_ == "artifact"]
     assert artifacts  # the bundle really has artifacts to miss
-    for code in artifacts:
-        assert not is_attainable_now(code, state, gd), code
+    assert {code for code in artifacts if is_attainable_now(code, state, gd)} == {
+        "perfect_pearl"}
 
 
-def test_l35_artifact_small_pearls_primary_map_gap() -> None:
-    """The sharpest edge of GAP-2: perfect_pearl (L20 artifact, permanent
-    archaeologist vendor, 20 small_pearls) SHOULD be reachable — small_pearls
-    is a real gatherable, dropped (rarely) by the trout/bass/salmon fishing
-    spots this character can already work (fishing 30). It reads
-    unattainable only because objective._gatherable consults the PRIMARY
-    resource_drops map, which keeps one drop per resource; the full drop
-    table (gatherable_drop_items — grown for exactly this reason, see its
-    docstring's gem-stone note) knows better. Fixing _gatherable to use the
-    full table should FAIL this test's last assertion."""
+def test_l35_artifact_small_pearls_gatherable_via_full_drop_set() -> None:
+    """GAP-2 FIXED, 2026-07-07: perfect_pearl (L20 artifact, permanent
+    archaeologist vendor, 20 small_pearls) is reachable — small_pearls is a
+    real gatherable, dropped (rarely) by the trout/bass/salmon fishing spots
+    this character can already work (fishing 30). `objective._gatherable`
+    now consults the FULL drop table (`gatherable_drop_items()`, grown for
+    exactly this reason — see its docstring's gem-stone note), not just the
+    primary `resource_drops` map (which keeps one drop per resource and was
+    blind to small_pearls). small_pearls itself is a leaf (gatherable is
+    state-independent) so `is_attainable_now` needs no affordability check
+    for it; perfect_pearl's currency-recursion arm then finds that leaf and
+    opens the vendor route."""
     gd = _bundle()
     state = _state("l35_artifact_fill", gd)
     assert "small_pearls" in gd.gatherable_drop_items()      # truly gatherable
     assert "small_pearls" not in set(gd.resource_drops.values())  # primary-map blind
-    assert not is_attainable_now("perfect_pearl", state, gd)  # the consequence
+    assert is_attainable_now("small_pearls", state, gd)       # the fixed leaf
+    assert is_attainable_now("perfect_pearl", state, gd)      # propagates upward
 
 
 def test_l35_artifact_fill_full_stack_waits_on_pure_drop_gear() -> None:
-    """LIMITATION (GAP-6, discovered by the 2026-07-07 hp-derivation fix
-    wave, pinned): at real 915 hp the argmax gear candidate flips from
-    mushmush_bow (a CRAFTED weapon blocked only on task-funded jasper_crystal
-    — the chain that used to fire here) to old_boots — a level-20, PURE
-    monster-drop boots item (recipe=None, no permanent vendor) with no
-    combat value of its own (hp_bonus 90 / wisdom 70 / prospecting 20) that
-    only outranks everything else via equip_value's utility-stat weighting
-    (same inflation effect noted for mushmush_bow/wolf_ears in the project
-    report's follow-up #5 — now strong enough to beat a CRAFTABLE candidate
-    outright, not just a combat-tier one). is_attainable_now says True (its
-    dropper, spider, is winnable at this hp), so near_term_gear offers it —
-    but `_equippable_goal` routes an unowned, recipe-less, non-purchasable
-    target straight to `UpgradeEquipmentGoal`, whose `relevant_actions`
-    drops EVERY Fight action for an uncommitted acquisition (progression.py
-    ~line 251: 'Everything else (Fight, ...) is irrelevant to
-    building+equipping the target'). There is no GOAP path from 'need to
-    fight for old_boots' to 'wearing old_boots' at all, so the goal plans to
-    0 nodes and every other near_term_gear candidate here (wolf_ears: same
-    pure-drop dead end; wisdom_amulet: pre-existing green_cloth craft gap,
-    unrelated) is equally inert — the cycle ends in Wait. This is the
-    monster-drop counterpart of GAP-1 (bag): a pure-drop equippable that
-    OUTRANKS a plannable candidate is worse than invisible, it's a silent
-    dead end. Wiring a Fight-to-acquire arm into `_equippable_goal` for
-    unowned pure-drop targets should FAIL this pin (Wait -> a working gear
-    chain, most likely the old mushmush_bow/ReachCurrency(tasks_coin) path)."""
+    """RE-DERIVED 2026-07-07 (GAP-2 fixed) — the argmax candidate AND the
+    dead-end reason both changed from the prior pin; the Wait outcome
+    itself did not.
+
+    Previously (GAP-6, discovered by the hp-derivation fix wave): the
+    argmax was old_boots — a level-20, PURE monster-drop boots item
+    (recipe=None, no permanent vendor) that only outranked everything else
+    via equip_value's utility-stat weighting. GAP-2's fix opens a NEW,
+    higher-ranked candidate ahead of it: perfect_pearl (equip_value 201, an
+    artifact — small_pearls, its currency, is the rare fishing-spot drop
+    GAP-2 makes gatherable). perfect_pearl duplicate-fills all three empty
+    artifact slots and outranks old_boots outright, so it — not old_boots —
+    is now `chosen_root`/`chosen_step`.
+
+    perfect_pearl's acquisition is ALSO dead, but for a DIFFERENT,
+    previously-unobserved reason, not GAP-6's Fight-drop exclusion:
+    `goals_tried` shows `GatherMaterials(small_pearls, {small_pearls:1})`
+    planning to 1 node / 0-length plan — the same "dead at 1 node" shape
+    GAP-3 documents for gold-priced vendor purchases (`l30_rune_fill`), but
+    here for an ITEM-currency (small_pearls) artifact purchase. This is a
+    NEW gap this task's fix surfaced, out of this task's scope
+    (`objective._gatherable` only, per the brief) — noted in the report's
+    follow-ups, not fixed here.
+
+    Once perfect_pearl's step is (correctly) judged unservable, the
+    arbiter's step-servable demotion falls through the ranking exactly as
+    before: old_boots is STILL there (GAP-6 unchanged, now a fallback
+    candidate instead of the argmax — same Fight-drop dead end,
+    `relevant_actions` still drops every Fight action for an uncommitted
+    target), then wolf_ears (same pure-drop dead end), then wisdom_amulet
+    (pre-existing green_cloth craft gap, unrelated), then wooden_club — all
+    dead, so the cycle still ends in Wait. GAP-2 alone does not resolve
+    this scenario; it substitutes one dead-end argmax for another (higher-
+    ranked) one, and leaves GAP-6 fully intact underneath."""
     report = _run("l35_artifact_fill")
     assert report.decision.chosen_root == ObtainItem(
-        code="old_boots", quantity=1, slot="boots_slot")
+        code="perfect_pearl", quantity=1, slot="artifact1_slot")
+    assert ObtainItem(code="old_boots", quantity=1, slot="boots_slot") \
+        in report.decision.fallback_roots  # GAP-6 still real, now a fallback
+    small_pearls_entries = [g for g in report.goals_tried if str(g.get("goal", ""))
+                            .startswith("GatherMaterials(small_pearls")]
+    assert small_pearls_entries, report.goals_tried
+    assert all(entry["nodes"] == 1 and entry["plan_len"] == 0
+               for entry in small_pearls_entries), small_pearls_entries
     assert repr(report.selected_goal) == "Wait", (
         repr(report.selected_goal), report.plan)
 

@@ -85,8 +85,19 @@ def _attainable_closure(code: str, game_data: GameData,
 
 
 def _gatherable(code: str, game_data: GameData) -> bool:
-    """A raw resource-drop leaf (`code in resource_drops.values()`)."""
-    return code in game_data.resource_drops.values()
+    """A raw resource-drop leaf: any item a gatherable resource can drop.
+
+    GAP-2 (2026-07-07): previously consulted only the PRIMARY drop map
+    (`resource_drops`, one drop code per resource — the rate-best entry),
+    which understates real gatherability: rare secondary drops (gem stones
+    off ordinary rocks, `small_pearls` off fishing spots) are invisible to
+    it even though they are genuine, if infrequent, gathering yields.
+    `gatherable_drop_items()` is the FULL drop set (grown for exactly this
+    reason — see its docstring). Attainability is a reachability question
+    ("is there a real acquisition source at all"), not a rate judgment —
+    filter-at-use-time stays downstream (planning/cost layers weigh rate,
+    this gate only asks yes/no)."""
+    return code in game_data.gatherable_drop_items()
 
 
 def _drops_from_spawning_monster(code: str, game_data: GameData) -> bool:
