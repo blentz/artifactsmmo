@@ -608,12 +608,20 @@ def test_is_plannable_true_when_gold_leaf_affordable_from_pocket() -> None:
 
 
 def test_relevant_actions_ferries_gold_deficit_via_withdraw() -> None:
-    """Admit/emit symmetry (GAP-3): pocket 200 short of the 500-gold leaf,
-    bank holds 300 → relevant_actions must admit ONE WithdrawGold sized to
-    the 300 deficit (resized from the factory-emitted template so bank
-    location/accessibility survive), enabling WithdrawGold → NpcBuy."""
+    """Admit/emit symmetry (GAP-3 + Task 4's joint gold check): pocket 200 +
+    bank 300 + _GOLD_VENDOR_RESERVE (400) = 600 total, exactly price(500) +
+    reserve(100) — the leaf is ADMITTED (Task 4's joint check; a single-leaf
+    admission reduces to the Task 3 single-leaf boundary). relevant_actions
+    must admit ONE WithdrawGold sized to the 300 POCKET deficit (500 - 200,
+    resized from the factory-emitted template so bank location/accessibility
+    survive), enabling WithdrawGold → NpcBuy. (Pre-Task-4, bank_gold=300 left
+    the leaf reserve-BLOCKED at total 500 < 600 needed, yet the ferry still
+    sized to 300 because gold_demand accumulated unconditionally before the
+    affordability check — Task 4 makes gold_demand track the ADMITTED set
+    only, so this fixture now uses an actually-admitted total.)"""
     gd = _gold_vendor_gd()
-    state = make_state(skills={"weaponcrafting": 5}, gold=200, bank_gold=300,
+    state = make_state(skills={"weaponcrafting": 5}, gold=200,
+                       bank_gold=300 + _GOLD_VENDOR_RESERVE,
                        inventory={}, bank_items={}, x=0, y=0)
     goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1})
     template = WithdrawGoldAction(quantity=100, bank_location=(1, 1))
@@ -766,3 +774,100 @@ def test_directly_requested_currency_item_affordable_not_blocked() -> None:
     result = analyze_currency_leaves({"gem": 1}, state, gd)
     assert result.blocked is False
     assert result.funding_target is None
+
+
+# --- Task 4 (joint gold affordability, follow-up wave 2026-07-08) -----------
+
+
+def _two_gold_vendor_gd() -> GameData:
+    """gizmo (craftable) needs gem_a x1 (200 gold) + gem_b x1 (250 gold), both
+    vendor-only at PERMANENT gold vendors — TWO gold-priced currency-buy
+    leaves in ONE closure walk. `gizmo` is a "resource"-type item (no
+    ITEM_TYPE_TO_SLOTS entry), so `crafting_unlock_targets` never picks up
+    its own recipe inputs as reserve sources — `reserved_targets` stays empty
+    and the reserve floor is the flat `_MIN_SAFETY_FLOOR` (100), independent
+    of gem_a/gem_b's own prices. That isolates the JOINT-overspend defect
+    from Task 3's self-dedup mechanics: the two leaves have nothing to do
+    with each other's reservation, only with the SHARED gold_on_hand pool."""
+    gd = GameData()
+    gd._crafting_recipes = {"gizmo": {"gem_a": 1, "gem_b": 1}}
+    gd._npc_stock = {"vendor_a": {"gem_a": 200}, "vendor_b": {"gem_b": 250}}
+    gd._npc_locations = {"vendor_a": (0, 0), "vendor_b": (0, 0)}
+    return gd
+
+
+def test_joint_gold_leaves_each_safe_alone_overspend_together() -> None:
+    """THE BUG (pre-Task-4 behavior, documented not reproduced — Task 3's gate
+    checked each leaf independently): gold_on_hand=500, reserve=100 (flat,
+    see fixture docstring). gem_a costs 200: 500 >= 200+100=300 -> "safe"
+    checked alone. gem_b costs 250: 500 >= 250+100=350 -> ALSO "safe" checked
+    alone. But buying BOTH costs 450, +100 reserve = 550 > 500 — a 50-gold
+    joint overspend two individually-passing per-leaf checks would have both
+    admitted.
+
+    THE FIX, pinned here: the joint check admits only what the SHARED 500
+    actually covers. Cheapest-first: gem_a (200) is tried first, fits (500 >=
+    0+200+100=300) -> ADMITTED. gem_b (250) tried next, does NOT fit (500 <
+    200+250+100=550) -> REJECTED, and since it's the last (priciest)
+    candidate, no further candidates are tried. Net: gem_a affordable,
+    gem_b blocked overall (`blocked=True`) — the closure genuinely cannot
+    fund both leaves from 500 gold, and the planner is told so honestly
+    instead of being handed two "affordable" verdicts that jointly do not
+    fit."""
+    gd = _two_gold_vendor_gd()
+    state = make_state(skills={"jewelrycrafting": 1}, gold=500, bank_gold=0,
+                       inventory={}, bank_items={}, x=0, y=0)
+    result = analyze_currency_leaves({"gizmo": 1}, state, gd)
+    assert result.blocked is True, "gem_b cannot jointly be funded -> honest block"
+    # gold_deficit reflects ONLY the admitted leaf (gem_a, 200) — the ferry
+    # must never size for the rejected leaf (admit/emit symmetry).
+    assert result.gold_deficit == 0, result.gold_deficit  # 200 admitted <= state.gold (500)
+
+
+def test_joint_gold_leaves_both_admitted_when_budget_covers_the_sum() -> None:
+    """Sanity/non-regression: when gold_on_hand genuinely covers the SUM of
+    both leaves plus the (single, flat) reserve, both are admitted and
+    nothing blocks — the joint check is not simply stricter than the old
+    per-leaf one, it is CORRECT: 200 + 250 + 100 = 550 exactly."""
+    gd = _two_gold_vendor_gd()
+    state = make_state(skills={"jewelrycrafting": 1}, gold=550, bank_gold=0,
+                       inventory={}, bank_items={}, x=0, y=0)
+    result = analyze_currency_leaves({"gizmo": 1}, state, gd)
+    assert result.blocked is False
+    assert result.gold_deficit == 0, result.gold_deficit  # 450 admitted <= state.gold (550)
+
+
+def test_joint_gold_leaves_admission_is_cheapest_first_not_iteration_order() -> None:
+    """The admission order is a semantic key (total cost), not the closure's
+    incidental walk order: `needed={"gizmo": 1}` walks gem_a before gem_b in
+    the recipe dict, but making gem_a the PRICIER one still admits the
+    CHEAPER leaf (now gem_b) first — proving the sort key is cost, not
+    dict/iteration position. Budget 400: gem_a costs 300 (checked first if
+    order mattered), gem_b costs 100. Cheapest-first admits gem_b (100 + 100
+    reserve = 200 <= 400) then tries gem_a (100+300+100=500 > 400) ->
+    rejected. If admission were iteration-order instead of cost-order, gem_a
+    (checked first in dict order) would be tried first and might wrongly
+    win the budget over the cheaper gem_b."""
+    gd = _two_gold_vendor_gd()
+    gd._npc_stock = {"vendor_a": {"gem_a": 300}, "vendor_b": {"gem_b": 100}}
+    state = make_state(skills={"jewelrycrafting": 1}, gold=400, bank_gold=0,
+                       inventory={}, bank_items={}, x=0, y=0)
+    result = analyze_currency_leaves({"gizmo": 1}, state, gd)
+    assert result.blocked is True  # gem_a rejected -> closure still blocked
+    assert result.gold_deficit == 0, result.gold_deficit  # only gem_b (100) admitted, <= 400
+
+
+def test_joint_gold_leaves_deficit_sizes_only_the_admitted_leaf() -> None:
+    """gold_deficit ferry sizing must match the ADMITTED set (Task 4's
+    explicit directive), demonstrated with a POCKET-short split so the
+    deficit is nonzero and observably tied to gem_a alone: pocket 50 + bank
+    450 = 500 total (same joint-safe/joint-unsafe split as the first test).
+    gem_a (200) is admitted; gem_b (250) is rejected. gold_deficit sizes the
+    WithdrawGold ferry to gem_a's pocket shortfall only: 200 - 50 = 150 — NOT
+    inflated by gem_b's 250, which the joint check already rejected."""
+    gd = _two_gold_vendor_gd()
+    state = make_state(skills={"jewelrycrafting": 1}, gold=50, bank_gold=450,
+                       inventory={}, bank_items={}, x=0, y=0)
+    result = analyze_currency_leaves({"gizmo": 1}, state, gd)
+    assert result.blocked is True
+    assert result.gold_deficit == 150, result.gold_deficit

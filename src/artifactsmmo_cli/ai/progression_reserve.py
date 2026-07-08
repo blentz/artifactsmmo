@@ -7,7 +7,11 @@ Craftable-now / unsellable items contribute nothing (no gold needed).
 """
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.progression_reserve_core import effective_floor, reserve_total
+from artifactsmmo_cli.ai.progression_reserve_core import (
+    effective_floor,
+    effective_floor_multi,
+    reserve_total,
+)
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -134,3 +138,21 @@ def reserve_floor(state: WorldState, game_data: GameData,
     floored at `_MIN_SAFETY_FLOOR`."""
     reserved = reserved_targets(state, game_data)
     return max(_MIN_SAFETY_FLOOR, effective_floor(reserved, buying))
+
+
+def reserve_floor_multi(state: WorldState, game_data: GameData,
+                        buying: frozenset[str]) -> int:
+    """The deduction-aware reserve floor that applies while JOINTLY buying
+    EVERY leaf in `buying` (follow-up wave Task 4's joint gold-affordability
+    check): dedups each admitted leaf's own reservation from the total, not
+    just one — generalizes `reserve_floor` (`reserve_floor_multi(s, gd,
+    frozenset({x})) == reserve_floor(s, gd, x)` for any `x`). Floored at
+    `_MIN_SAFETY_FLOOR` same as the single-leaf form.
+
+    Two individually reserve-safe gold-priced leaves can jointly overspend the
+    reserve when each is checked against `reserve_floor(..., leaf)`
+    independently (that dedups ONLY its own leaf, so the OTHER leaf's price
+    is double-counted as spendable room by both checks). Checking the whole
+    admitted SET against this joint floor closes that gap."""
+    reserved = reserved_targets(state, game_data)
+    return max(_MIN_SAFETY_FLOOR, effective_floor_multi(reserved, buying))

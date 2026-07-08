@@ -8,6 +8,7 @@ from artifactsmmo_cli.ai.progression_reserve import (
     gear_targets,
     progression_reserve,
     reserve_floor,
+    reserve_floor_multi,
     reserved_targets,
 )
 from tests.test_ai.fixtures import make_state
@@ -196,3 +197,48 @@ def test_minimum_safety_floor_when_nothing_reserved():
     gd._monster_level = {"chicken": 1}
     state = make_state(level=5)
     assert progression_reserve(state, gd) == 100   # _MIN_SAFETY_FLOOR
+
+
+# --- reserve_floor_multi (follow-up wave Task 4: joint gold affordability) ---
+
+
+def test_reserve_floor_multi_matches_single_leaf_for_singleton():
+    """`reserve_floor_multi(s, gd, frozenset({x}))` must equal
+    `reserve_floor(s, gd, x)` — the joint check must reduce EXACTLY to Task
+    3's single-leaf gate when only one leaf is in play, never a silent
+    behavior fork."""
+    gd = _gd_buyable_armor()
+    state = make_state(level=5, equipment={"body_armor_slot": "rags"})
+    assert (reserve_floor_multi(state, gd, frozenset({"iron_armor"}))
+            == reserve_floor(state, gd, "iron_armor") == 100)
+    assert (reserve_floor_multi(state, gd, frozenset({"copper_ore"}))
+            == reserve_floor(state, gd, "copper_ore") == 120)
+
+
+def test_reserve_floor_multi_dedups_every_leaf_in_the_set():
+    """Two DISTINCT reserved targets (iron_armor 250, a second gear upgrade
+    200 — priced well above `_MIN_SAFETY_FLOOR` so the floor clamp doesn't
+    mask the dedup arithmetic) bought TOGETHER dedup BOTH from the floor —
+    checking either alone would only dedup itself, silently crediting the
+    other's price as still-protected room (the exact joint-overspend gap
+    Task 4 closes)."""
+    gd = _gd_buyable_armor()
+    gd._npc_stock["merchant"]["iron_armor"] = 250
+    gd._item_stats["shiny_ring"] = ItemStats(
+        code="shiny_ring", level=5, type_="ring", hp_bonus=1)
+    gd._npc_stock["jeweler"] = {"shiny_ring": 200}
+    state = make_state(level=5, equipment={"body_armor_slot": "rags", "ring1_slot": None})
+    assert reserved_targets(state, gd) == {"iron_armor": 250, "shiny_ring": 200}
+    # Buying iron_armor alone: only its own 250 dedups -> floor 200 (shiny_ring protected).
+    assert reserve_floor_multi(state, gd, frozenset({"iron_armor"})) == 200
+    # Buying BOTH together: both dedup -> raw floor 0, clamped to _MIN_SAFETY_FLOOR.
+    assert reserve_floor_multi(state, gd, frozenset({"iron_armor", "shiny_ring"})) == 100
+    assert reserve_floor_multi(state, gd, frozenset()) == 450  # nothing bought -> full total
+
+
+def test_reserve_floor_multi_floors_at_min_safety():
+    gd = GameData()
+    gd._item_stats = {}
+    gd._monster_level = {"chicken": 1}
+    state = make_state(level=5)
+    assert reserve_floor_multi(state, gd, frozenset({"anything"})) == _MIN_SAFETY_FLOOR
