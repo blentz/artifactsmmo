@@ -162,6 +162,27 @@ existing provisioning quantities (win-rate provisioning guard unchanged).
 
 Each phase lands independently valuable and gate-green.
 
+**GAP-7 + follow-up wave SHIPPED (2026-07-08, 9ebc927c..c50dd926):**
+GAP-7: recipe_closure reads secondary drops via caller-side layer union
+(proven core byte-identical, union proven exact) + gather_serves_closure
+precision admission at 6 sites (flood self-caught by the bound net; net
+6× faster). GAP-8 (live Robby stall): craft chains with monster-drop
+ingredients plan via a Fight leg in the generator (GAP-6's proven wiring;
+is_applicable-gated at the single chokepoint after review caught the
+suicide-guard bypass); l13_drop_recipe_grind = live-API-mirror scenario +
+6-recipe class sweep (set-equality pinned). Dup-allowed slots (rings AND
+artifacts had the identical quirk) fill with the best duplicate. Vendor
+gold buys respect the progression reserve (post-buy total ≥ reserve,
+exact ints) and joint affordability holds over the admitted SET
+(cheapest-first prefix, full-set invariant re-check per admission —
+20K-trial fuzz, zero overspends). Drop-vs-craft route pinned: CRAFT
+(9.0 < 10.0). DEBTS at next bot downtime: full gate + lake build +
+effective_floor_multi Lean mirror (multi floor_plus_cost identity,
+singleton reduction, oracle arm). OPEN DESIGN QUESTIONS (user call):
+equip_value utility-stat weighting (deliberate, now dominates argmax at
+scale — near_term_gear fixed points can be combat-weaker); drop-rate
+cost modeling (1-fight-per-unit optimism now live in argmax).
+
 **Slot-gap fix wave SHIPPED (2026-07-08, 563a5759..c9455a4f):** the five
 real gaps pinned by the slot-coverage net are fixed, each tripwire flipped
 to a positive test: ①held/banked stock credits is_attainable_now (incl.
