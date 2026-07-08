@@ -54,7 +54,8 @@ own attainability must be established by recursion."""
 
 def _attainable_closure(code: str, game_data: GameData,
                         leaf_ok: Callable[[str, frozenset[str]], bool],
-                        _path: frozenset[str] = frozenset()) -> bool:
+                        _path: frozenset[str] = frozenset(),
+                        stock_ok: Callable[[str], bool] | None = None) -> bool:
     """Shared cycle-safe producibility walk: an item is attainable iff it has a
     craft recipe whose materials are all attainable, else its `leaf_ok` holds.
     The recipe walk is IDENTICAL for the perfect-sheet (`is_attainable`) and the
@@ -62,13 +63,23 @@ def _attainable_closure(code: str, game_data: GameData,
     the walk lives here once. `leaf_ok` receives the current `_path` so a
     purchase edge can recurse on its currency's attainability under the same
     cycle guard. Mirrors the proved `Formal.Objective.attainAux`, parametric in
-    its leaf (`drop`) and purchase (`buys`) relations. Cycle-safe via `_path`."""
+    its leaf (`drop`) and purchase (`buys`) relations. Cycle-safe via `_path`.
+
+    `stock_ok` (GAP-1, 2026-07-07) is an OPTIONAL held/banked-stock
+    short-circuit, checked BEFORE the recipe test at every node — a node
+    already in hand needs no acquisition path at all, whether it is a leaf
+    (raw material) or a recipe node (the crafted item itself: a banked
+    satchel makes satchel attainable-now without walking its recipe). `None`
+    for `is_attainable` (the state-independent perfect-sheet gate has no
+    stock to consult)."""
+    if stock_ok is not None and stock_ok(code):
+        return True
     recipe = game_data.crafting_recipe(code)
     if recipe is not None:
         if code in _path:
             return False
         sub_path = _path | {code}
-        return all(_attainable_closure(mat, game_data, leaf_ok, sub_path)
+        return all(_attainable_closure(mat, game_data, leaf_ok, sub_path, stock_ok)
                    for mat in recipe)
     return leaf_ok(code, _path)
 
@@ -151,8 +162,27 @@ def is_attainable_now(code: str, state: WorldState, game_data: GameData) -> bool
     AFFORDABILITY is conservative for v1: a gold purchase needs `state.gold ≥
     price`; a non-gold (item) currency only needs the currency item attainable-
     now (quantity is not yet modeled — an over-approximation on quantity, refined
-    when a buy goal lands)."""
+    when a buy goal lands).
+
+    HELD/BANKED STOCK (GAP-1, 2026-07-07): before any acquisition-source
+    check, a node already held (inventory or bank, either alone > 0) is
+    attainable-now outright — mirrors the strategy tier's `_producible`
+    held-stock arm (b6328a3a, "already IN HAND: nothing left to produce").
+    Without this the walk only ever asked "can I produce MORE right now",
+    so a fully-banked recipe leaf whose only acquisition source is
+    currently closed (e.g. cowhide when cow is unwinnable) read as
+    unattainable despite the bank already holding the full recipe demand —
+    and a banked CRAFTED item (a satchel bought/found a cycle ago) still
+    walked its own recipe instead of short-circuiting. `state.bank_items is
+    None` means UNKNOWN, not zero — `bank_items or {}` naturally treats
+    that as no credit, same as `_producible`. Boolean only: partial stock
+    (holding 1 of a 5-needed material) still credits attainable — quantity
+    accounting stays the planner's job, not this gate's."""
     rested = replace(state, hp=state.max_hp)
+    bank = state.bank_items or {}
+
+    def stock_ok(node: str) -> bool:
+        return state.inventory.get(node, 0) > 0 or bank.get(node, 0) > 0
 
     def leaf_ok(leaf: str, path: frozenset[str]) -> bool:
         if _gatherable(leaf, game_data):
@@ -177,11 +207,11 @@ def is_attainable_now(code: str, state: WorldState, game_data: GameData) -> bool
             if currency == GOLD:
                 if state.gold >= price:
                     return True
-            elif _attainable_closure(currency, game_data, leaf_ok, sub):
+            elif _attainable_closure(currency, game_data, leaf_ok, sub, stock_ok):
                 return True
         return False
 
-    return _attainable_closure(code, game_data, leaf_ok)
+    return _attainable_closure(code, game_data, leaf_ok, stock_ok=stock_ok)
 
 
 @dataclass(frozen=True)

@@ -153,16 +153,28 @@ class TestPerScenarioPins:
         assert d.chosen_step == ObtainItem(code="copper_ore", quantity=10)
         assert len(d.ranking) == 8
 
-    def test_l12_taskgated_bag_pins_potion_branch(self):
-        """Full copper set + empty utility slot, no sunflower banked (only
-        cowhide/feather) -> small_health_potion is still the unprovisioned
-        utility target and wins over wooden_shield -> GEAR branch, gather
-        leaf for sunflower (not held, not banked)."""
+    def test_l12_taskgated_bag_pins_iron_boots_branch(self):
+        """RE-DERIVED (GAP-1 fix, 2026-07-07): this scenario has zero attack
+        (no derive_combat_stats) so cow AND chicken are both unwinnable here
+        — before the fix, is_attainable_now's recipe walk had no
+        held/banked-stock arm, so the banked cowhide(5)/feather(2) counted
+        for nothing and every cowhide/feather-consuming recipe
+        (iron_armor, iron_legs_armor, iron_dagger, iron_boots, satchel) read
+        unattainable, leaving only small_health_potion + wooden_shield as
+        gear candidates (ranking len 3: char_level + those two). Now that
+        held/banked stock credits attainability, all five of those recipes
+        open (iron_boots's full recipe, iron_bar via gatherable iron_ore +
+        feather via the banked 2 — boolean stock credit, not gated on the
+        recipe's higher qty-3 demand) and iron_boots's higher equip_value
+        contribution (66) outranks small_health_potion (61) outright ->
+        GEAR branch, boots_slot, gather leaf for the still-short feather
+        (2 banked, 3 needed — the STEP goal is quantity-aware even though
+        attainability isn't)."""
         d, _ = _decide("l12_taskgated_bag")
-        assert d.chosen_root == ObtainItem(code="small_health_potion", quantity=1,
-                                           slot="utility1_slot")
-        assert d.chosen_step == ObtainItem(code="sunflower", quantity=3)
-        assert len(d.ranking) == 3
+        assert d.chosen_root == ObtainItem(code="iron_boots", quantity=1,
+                                           slot="boots_slot")
+        assert d.chosen_step == ObtainItem(code="feather", quantity=3)
+        assert len(d.ranking) == 8
 
 
 # --- band_adequate parameter (Phase-3 Task-1) -------------------------------

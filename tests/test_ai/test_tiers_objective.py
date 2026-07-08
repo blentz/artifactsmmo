@@ -639,3 +639,61 @@ def test_is_attainable_now_still_rejects_unaffordable_gold_leaf():
     gd._task_reward_item_codes = {"tasks_coin"}
     state = make_state(level=5, attack={"air": 5}, gold=10)
     assert is_attainable_now("gold_helm", state, gd) is False
+
+
+# --- GAP-1: held/banked stock credits is_attainable_now (2026-07-07) --------
+
+def test_is_attainable_now_credits_banked_leaf():
+    """A recipe-leaf material with NO current acquisition source (dragon,
+    its only dropper, is unwinnable) still reads attainable-now when the
+    full recipe demand is already sitting in the bank — held stock is its
+    own acquisition source, independent of gather/drop/task/vendor."""
+    gd = _gd_drop_recipes()
+    state = make_state(level=5, attack={"air": 5}, bank_items={"dragon_scale": 2})
+    assert is_attainable_now("dragon_scale", state, gd) is True
+    assert is_attainable_now("dragon_helm", state, gd) is True  # propagates
+
+
+def test_is_attainable_now_credits_inventory_leaf():
+    """Same held-stock credit via CARRIED inventory instead of the bank —
+    either counts (mirrors strategy._producible's `inventory or bank`)."""
+    gd = _gd_drop_recipes()
+    state = make_state(level=5, attack={"air": 5}, inventory={"dragon_scale": 2})
+    assert is_attainable_now("dragon_scale", state, gd) is True
+    assert is_attainable_now("dragon_helm", state, gd) is True
+
+
+def test_is_attainable_now_credits_banked_crafted_item_itself():
+    """Held stock of the CRAFTED item itself short-circuits the recipe walk:
+    a banked dragon_helm reads attainable-now even though its material
+    (dragon_scale) is neither held NOR producible — the walk never needs to
+    descend into the recipe at all once the crafted item is already in
+    hand."""
+    gd = _gd_drop_recipes()
+    state = make_state(level=5, attack={"air": 5}, bank_items={"dragon_helm": 1})
+    assert is_attainable_now("dragon_scale", state, gd) is False  # material alone: still closed
+    assert is_attainable_now("dragon_helm", state, gd) is True    # but the crafted item short-circuits
+
+
+def test_is_attainable_now_bank_none_not_credited():
+    """`bank_items=None` means UNKNOWN (bank not yet visited), not zero —
+    but it must not be conflated with 'everything available' either: with
+    no bank data and nothing carried, an otherwise-unattainable material
+    stays unattainable (no crash, no false credit)."""
+    gd = _gd_drop_recipes()
+    state = make_state(level=5, attack={"air": 5}, bank_items=None)
+    assert state.bank_items is None
+    assert is_attainable_now("dragon_scale", state, gd) is False
+    assert is_attainable_now("dragon_helm", state, gd) is False
+
+
+def test_is_attainable_now_partial_stock_still_credits_boolean():
+    """Attainability is boolean, not quantity-aware: holding only 1 of the
+    2 dragon_scale the recipe needs still credits the leaf (and the
+    material's own attainability doesn't even need to match the FULL
+    recipe count — quantity accounting stays the planner's job, not this
+    gate's)."""
+    gd = _gd_drop_recipes()
+    state = make_state(level=5, attack={"air": 5}, bank_items={"dragon_scale": 1})
+    assert is_attainable_now("dragon_scale", state, gd) is True
+    assert is_attainable_now("dragon_helm", state, gd) is True

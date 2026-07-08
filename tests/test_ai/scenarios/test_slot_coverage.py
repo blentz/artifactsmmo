@@ -15,14 +15,16 @@ LIMITATION comment naming the gap; fixing the gap should FAIL that pin and
 force the test (and the report) to be updated — the pins are tripwires,
 never endorsements. Gap index:
 
-  GAP-1 (bag, held/banked-stock arm): is_attainable_now's recipe walk has
-      no held/banked-stock arm — banked cowhide open nothing for a leaf
-      whose only acquisition path (a monster drop) is currently unwinnable,
-      even when the bank already holds the full recipe quantity. Pinned at
-      the CODE level (test_bag_slot_banked_stock_not_credited): the original
-      l10_bag_pursuit framing (cow unwinnable at L10) was retired by the
-      2026-07-07 hp-derivation fix wave — cow IS winnable at real L10 hp
-      (375), so that scenario no longer demonstrates the gap by itself.
+  GAP-1 (bag, held/banked-stock arm) — FIXED 2026-07-07: is_attainable_now's
+      recipe walk now short-circuits on held/banked stock (mirrors
+      strategy._producible's held-stock arm) — banked cowhide credits
+      attainability even when the leaf's only acquisition path (a monster
+      drop) is currently unwinnable, and a banked CRAFTED item short-circuits
+      its own recipe walk. Pinned at the CODE level
+      (test_bag_slot_banked_stock_credited): the original l10_bag_pursuit
+      framing (cow unwinnable at L10) was retired by the 2026-07-07
+      hp-derivation fix wave — cow IS winnable at real L10 hp (375), so that
+      scenario no longer demonstrates the gap by itself.
   GAP-2 (artifacts, l35_artifact_fill): no artifact is attainable-now at
       L35; in particular perfect_pearl's small_pearls currency IS a real
       (rare) fishing drop but objective._gatherable consults the PRIMARY
@@ -243,32 +245,39 @@ def test_l48_event_window_monsters_still_unwinnable_with_real_stats() -> None:
 
 # --- Deliverable 2: bag slot / satchel chain --------------------------------
 
-def test_bag_slot_banked_stock_not_credited() -> None:
-    """GAP-1, pinned at the CODE level (2026-07-07 hp-derivation fix wave):
-    is_attainable_now's recipe walk has NO held/banked-stock arm. A minimal
-    L1, zero-stat probe character (below any real gear/level story) with the
-    satchel's full cowhide requirement (5) ALREADY BANKED still reads
-    'cowhide not attainable-now', because the walk only asks 'can I produce
-    MORE right now' (cow winnable? gatherable? task-earnable? vendor?) and
-    never asks 'do I already hold enough' — the 5 banked cowhide count for
-    nothing. This supersedes the old l10_bag_pursuit framing: that scenario
-    demonstrated the gap only incidentally, by relying on cow being
+def test_bag_slot_banked_stock_credited() -> None:
+    """GAP-1, FIXED 2026-07-07: is_attainable_now's recipe walk now has a
+    held/banked-stock short-circuit (mirrors strategy._producible). A
+    minimal L1, zero-stat probe character (below any real gear/level story,
+    both cow AND chicken unwinnable to it — cowhide and feather's only
+    droppers) with satchel's cowhide (5) AND feather (2) requirements ALREADY
+    BANKED (the third material, jasper_crystal, is independently
+    task-earnable — the C4 funding loop is always available) reads both
+    materials, and satchel itself, attainable-now via the stock credit alone
+    — the walk no longer only asks 'can I produce MORE right now' (cow/
+    chicken winnable? gatherable? task-earnable? vendor?); it first asks 'do
+    I already hold enough', and the banked stock answers yes for both. This
+    supersedes the old l10_bag_pursuit framing: that scenario demonstrated
+    the (now-fixed) gap only incidentally, by relying on cow being
     unwinnable at L10 in this bundle — a fact the hp-derivation fix
-    overturned (cow IS winnable at real L10 hp, 375). The gap itself is a
+    overturned (cow IS winnable at real L10 hp, 375). The fix itself is a
     property of is_attainable_now's recipe walk, independent of any
     scenario's winnability threshold, so it is pinned directly against a
-    throwaway probe state instead. Fixing the walk to credit held/banked
-    stock should FAIL this test."""
+    throwaway probe state instead."""
     gd = _bundle()
     probe = ScenarioCharacter(
-        name="gap1_probe", level=1, max_hp=120, bank={"cowhide": 5},
-        description="Throwaway GAP-1 probe: zero-stat L1, cow unwinnable, "
-                     "cowhide's full recipe demand already banked.")
+        name="gap1_probe", level=1, max_hp=120, bank={"cowhide": 5, "feather": 2},
+        description="Throwaway GAP-1 probe: zero-stat L1, cow+chicken "
+                     "unwinnable, satchel's cowhide+feather recipe demand "
+                     "already banked.")
     state = scenario_state(probe, gd)
-    assert not is_winnable(state, gd, "cow")  # the leaf's only dropper
+    assert not is_winnable(state, gd, "cow")      # cowhide's only dropper
+    assert not is_winnable(state, gd, "chicken")  # feather's only dropper
     assert (state.bank_items or {}).get("cowhide", 0) >= 5  # fully banked
-    assert not is_attainable_now("cowhide", state, gd)  # GAP-1, directly
-    assert not is_attainable_now("satchel", state, gd)  # propagates upward
+    assert (state.bank_items or {}).get("feather", 0) >= 2  # fully banked
+    assert is_attainable_now("cowhide", state, gd)  # GAP-1 fix, directly
+    assert is_attainable_now("feather", state, gd)  # GAP-1 fix, directly
+    assert is_attainable_now("satchel", state, gd)  # propagates upward
 
 
 def test_l10_bag_pursuit_satchel_live_but_vest_outranks() -> None:
