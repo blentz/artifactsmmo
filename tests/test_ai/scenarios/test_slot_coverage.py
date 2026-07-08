@@ -51,11 +51,23 @@ never endorsements. Gap index:
       gold-priced purchases, but here for an ITEM-currency (small_pearls)
       artifact purchase — see
       test_l35_artifact_fill_full_stack_waits_on_pure_drop_gear.
-  GAP-3 (rune, l30_rune_fill): the tree arms ObtainItem(lifesteal_rune,
-      rune_slot) via the gold-purchase leaf, but objective_step_goal routes
-      the recipe-less gold-vendor item to GatherMaterials(lifesteal_rune),
-      which never plans (dead at 1 node) — the cycle ends in Wait with the gold in
-      hand. Vendor-only GOLD-priced equippables are unacquirable.
+  GAP-3 (rune, l30_rune_fill) — FIXED 2026-07-08: gold is not an inventory
+      item. `analyze_currency_leaves` judged a gold-priced buy leaf's
+      affordability from `inventory["gold"] + bank_items["gold"]` — always
+      0, whatever `state.gold` held — so GatherMaterialsGoal.is_plannable
+      pruned GatherMaterials(lifesteal_rune) before the search started
+      (the pinned 0-node dead end) with the full 25000-gold purchase price
+      in state.gold. The gold arm now reads `state.gold + bank_gold`
+      (None-safe: an UNKNOWN bank credits nothing, mirroring the GAP-1
+      bank-stock rule), and `relevant_actions` admits a deficit-sized
+      WithdrawGold edge when the pocket alone is short but pocket+bank
+      covers (admit/emit symmetry: NpcBuyAction's gold gate is
+      POCKET-only, so the plan chains WithdrawGold -> NpcBuy). Pinned
+      positively (test_l30_rune_gold_buy_chain_plans): the cycle plans
+      NpcBuy(lifesteal_rune) instead of Wait. NOTE: an UNAFFORDABLE gold
+      price still defers honestly (blocked, no funding root — gold
+      grinding as a tree-funded root is a design extension, see the GAP-3
+      report's follow-ups).
   GAP-4 (utility, l20_dual_utility): at a band-adequate state the XP
       branch outranks empty utility slots by design (has_structural_upgrade
       deliberately excludes utility) — both utility fills only survive as
@@ -465,12 +477,16 @@ def test_l35_artifact_fill_full_stack_waits_on_pure_drop_gear() -> None:
     perfect_pearl's acquisition is ALSO dead, but for a DIFFERENT,
     previously-unobserved reason, not GAP-6's Fight-drop exclusion:
     `goals_tried` shows `GatherMaterials(small_pearls, {small_pearls:1})`
-    planning to 1 node / 0-length plan — the same "dead at 1 node" shape
-    GAP-3 documents for gold-priced vendor purchases (`l30_rune_fill`), but
-    here for an ITEM-currency (small_pearls) artifact purchase. This is a
-    NEW gap this task's fix surfaced, out of this task's scope
-    (`objective._gatherable` only, per the brief) — noted in the report's
-    follow-ups, not fixed here.
+    planning to 1 node / 0-length plan. RE-VERIFIED 2026-07-08 (GAP-3
+    fixed): this dead end has a DISTINCT root from GAP-3's — GAP-3 was
+    gold-affordability blindness in `analyze_currency_leaves` (gold read
+    as an inventory item), while this one is the GOAP gather layer's
+    primary-drop blindness: `recipe_closure` feeds `needed_resources` from
+    the primary `resource_drops` map only, so a rare SECONDARY drop like
+    small_pearls emits no GatherAction (the goal-layer analog of the
+    GAP-2 bug `objective._gatherable` had, unfixed at this layer). The
+    GAP-3 fix does not open it; this pin stays (GAP-7) — noted in the
+    reports' follow-ups, not fixed here.
 
     Once perfect_pearl's step is (correctly) judged unservable, the
     arbiter's step-servable demotion falls through the ranking exactly as
@@ -511,26 +527,28 @@ def test_l30_rune_candidate_armed() -> None:
     assert is_attainable_now("lifesteal_rune", state, gd)
 
 
-def test_l30_rune_chain_inert_waits() -> None:
-    """LIMITATION (GAP-3, pinned): past the tree, the rune chain is INERT.
-    decide_tree promotes ObtainItem(lifesteal_rune, rune_slot) to chosen
-    root, but objective_step_goal/_equippable_goal routes the recipe-less
-    gold-vendor item to GatherMaterials(lifesteal_rune) — item-currency
-    purchases get the incremental fund-and-buy treatment there, GOLD-priced
-    ones are documented to 'fall through to the buy attempt', and that buy
-    attempt never plans (0 nodes: the rune is neither gatherable nor
-    monster-dropped and no NpcBuy path fires). The cycle ends in Wait with
-    the full purchase price in hand and the rune one buy away. Wiring a
-    gold NpcBuy path should FAIL this test (Wait -> a buy/equip goal)."""
+def test_l30_rune_gold_buy_chain_plans() -> None:
+    """GAP-3 FIXED (2026-07-08) — the former tripwire, rewritten positive.
+    Same scenario, new expectation: decide_tree still promotes
+    ObtainItem(lifesteal_rune, rune_slot) to chosen root and
+    objective_step_goal/_equippable_goal still routes the recipe-less
+    gold-vendor rune to GatherMaterials(lifesteal_rune) — but the gold arm
+    in analyze_currency_leaves now reads state.gold (+known bank_gold), so
+    with 25000 >= the 20000 price the goal is plannable and the search
+    finds the one-step buy: NpcBuy(lifesteal_rune×1@rune_vendor) (movement
+    to the vendor folds into NpcBuyAction.apply; the equip is the NEXT
+    cycle's stepwise leg, per the one-leg-per-cycle idiom). The cycle no
+    longer Waits with the purchase price in hand."""
     report = _run("l30_rune_fill")
     assert report.decision.chosen_root == ObtainItem(
         code="lifesteal_rune", quantity=1, slot="rune_slot")
-    rune_entries = [g for g in report.goals_tried
-                    if str(g.get("goal", "")).startswith("GatherMaterials(lifesteal_rune")]
-    assert rune_entries, report.goals_tried
-    assert all(entry["nodes"] == 0 for entry in rune_entries), rune_entries
-    assert repr(report.selected_goal) == "Wait", (
-        repr(report.selected_goal), report.plan)
+    assert repr(report.selected_goal).startswith(
+        "GatherMaterials(lifesteal_rune"), (
+        repr(report.selected_goal),
+        [g.get("goal") for g in report.goals_tried])
+    assert report.plan and any(
+        repr(a).startswith("NpcBuy(lifesteal_rune") for a in report.plan
+    ), report.plan
 
 
 # --- Deliverable 5: both utility slots ---------------------------------------

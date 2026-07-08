@@ -8,8 +8,10 @@ loop: no-seller skip, non-BUY skip.
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
+from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
 from artifactsmmo_cli.ai.craft_vs_buy import Method, acquisition_method
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
@@ -452,6 +454,109 @@ def test_gold_leaf_blocked_but_not_funded() -> None:
         "must NOT route ReachCurrencyGoal toward gold (unfundable by tasks): "
         f"got {result.funding_target}"
     )
+
+
+def _gold_vendor_gd() -> GameData:
+    """widget (craftable) needs rare_gem x1; rare_gem is vendor-only at the
+    PERMANENT jeweler for 500 GOLD — the GAP-3 shape (gold-priced buy leaf)."""
+    gd = GameData()
+    gd._crafting_recipes = {"widget": {"rare_gem": 1}}
+    gd._item_stats = {
+        "widget": ItemStats(code="widget", level=1, type_="weapon",
+                            crafting_skill="weaponcrafting", crafting_level=1),
+    }
+    gd._npc_stock = {"jeweler": {"rare_gem": 500}}
+    gd._npc_buy_currency = {"jeweler": {"rare_gem": "gold"}}
+    gd._npc_locations = {"jeweler": (3, 3)}
+    gd._task_coin_rewards = {"chicken": 1}  # min_task_coin_reward defined
+    return gd
+
+
+def test_gold_leaf_affordable_from_pocket_gold() -> None:
+    """GAP-3 root fix: gold is NOT an inventory item. A gold-priced leaf's
+    affordability reads state.gold — 500 pocket gold covers the 500-gold
+    rare_gem, so the leaf must NOT block (the old inventory["gold"] read
+    scored this 0 and pruned every gold purchase at is_plannable)."""
+    gd = _gold_vendor_gd()
+    state = make_state(skills={"weaponcrafting": 5}, gold=500,
+                       inventory={}, bank_items={}, x=0, y=0)
+    result = analyze_currency_leaves({"widget": 1}, state, gd)
+    assert result.blocked is False, "pocket gold must fund a gold-priced leaf"
+    assert result.gold_deficit == 0, result.gold_deficit
+
+
+def test_gold_leaf_affordable_pocket_plus_bank_gold() -> None:
+    """Pocket 200 + bank 300 covers the 500-gold price → not blocked, and
+    gold_deficit=300 sizes the WithdrawGold edge relevant_actions admits
+    (NpcBuy's gold gate is pocket-only; the plan must ferry the rest)."""
+    gd = _gold_vendor_gd()
+    state = make_state(skills={"weaponcrafting": 5}, gold=200, bank_gold=300,
+                       inventory={}, bank_items={}, x=0, y=0)
+    result = analyze_currency_leaves({"widget": 1}, state, gd)
+    assert result.blocked is False
+    assert result.gold_deficit == 300, result.gold_deficit
+
+
+def test_gold_leaf_unknown_bank_gold_not_credited() -> None:
+    """bank_gold=None is UNKNOWN, not zero — it credits nothing (GAP-1's
+    bank-stock rule): pocket 200 alone < 500 → blocked, honest deferral."""
+    gd = _gold_vendor_gd()
+    state = make_state(skills={"weaponcrafting": 5}, gold=200, bank_gold=None,
+                       inventory={}, bank_items={}, x=0, y=0)
+    result = analyze_currency_leaves({"widget": 1}, state, gd)
+    assert result.blocked is True, "unknown bank gold must not fund the leaf"
+
+
+def test_gold_leaf_owned_stock_needs_no_gold() -> None:
+    """A leaf already owned (inventory/bank stock >= closure qty) demands no
+    gold: gold_deficit stays 0 even with an empty pocket."""
+    gd = _gold_vendor_gd()
+    state = make_state(skills={"weaponcrafting": 5}, gold=0,
+                       inventory={"rare_gem": 1}, bank_items={}, x=0, y=0)
+    result = analyze_currency_leaves({"widget": 1}, state, gd)
+    assert result.blocked is False
+    assert result.gold_deficit == 0, result.gold_deficit
+
+
+def test_is_plannable_true_when_gold_leaf_affordable_from_pocket() -> None:
+    """The GAP-3 dead end, at the goal seam: with pocket gold covering the
+    gold-priced leaf, GatherMaterialsGoal.is_plannable must admit (the l30
+    tripwire's 0-node prune came exactly from this gate)."""
+    gd = _gold_vendor_gd()
+    goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1})
+    state = make_state(skills={"weaponcrafting": 5}, gold=500,
+                       inventory={}, bank_items={}, x=0, y=0)
+    assert goal.is_plannable(state, gd) is True
+
+
+def test_relevant_actions_ferries_gold_deficit_via_withdraw() -> None:
+    """Admit/emit symmetry (GAP-3): pocket 200 short of the 500-gold leaf,
+    bank holds 300 → relevant_actions must admit ONE WithdrawGold sized to
+    the 300 deficit (resized from the factory-emitted template so bank
+    location/accessibility survive), enabling WithdrawGold → NpcBuy."""
+    gd = _gold_vendor_gd()
+    state = make_state(skills={"weaponcrafting": 5}, gold=200, bank_gold=300,
+                       inventory={}, bank_items={}, x=0, y=0)
+    goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1})
+    template = WithdrawGoldAction(quantity=100, bank_location=(1, 1))
+    relevant = goal.relevant_actions([template], state, gd)
+    withdraws = [a for a in relevant if isinstance(a, WithdrawGoldAction)]
+    assert [w.quantity for w in withdraws] == [300], withdraws
+    assert withdraws[0].bank_location == (1, 1)
+    assert any(isinstance(a, NpcBuyAction) and a.item_code == "rare_gem"
+               for a in relevant), "the gold-buy edge itself must be admitted"
+
+
+def test_relevant_actions_no_gold_withdraw_when_pocket_covers() -> None:
+    """Pocket gold alone covers the gold-buy leaves → no WithdrawGold edge
+    (deficit 0; the buy pays straight from the pocket)."""
+    gd = _gold_vendor_gd()
+    state = make_state(skills={"weaponcrafting": 5}, gold=600, bank_gold=300,
+                       inventory={}, bank_items={}, x=0, y=0)
+    goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1})
+    template = WithdrawGoldAction(quantity=100, bank_location=(1, 1))
+    relevant = goal.relevant_actions([template], state, gd)
+    assert not [a for a in relevant if isinstance(a, WithdrawGoldAction)]
 
 
 def test_tasks_coin_leaf_blocked_and_funded() -> None:

@@ -10,6 +10,7 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
+from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.buy_source_venue import BuyVenue, choose_buy_venue
 from artifactsmmo_cli.ai.combat import is_winnable
@@ -385,6 +386,25 @@ class GatherMaterialsGoal(Goal):
                     order_id=order_id, item_code=item, price=price,
                     quantity=qty, ge_location=ge_loc,
                 ))
+
+        # Gold ferry for the buy edges above (GAP-3, 2026-07-08): gold is NOT
+        # an inventory item — NpcBuyAction's gold gate reads POCKET gold only,
+        # while is_plannable's affordability (analyze_currency_leaves) credits
+        # pocket + KNOWN bank gold. When the pocket alone cannot pay for the
+        # closure's gold-buy leaves, admit ONE deficit-sized WithdrawGold so
+        # the plan can chain WithdrawGold → NpcBuy (admit/emit symmetry —
+        # without this edge, a pocket-short/bank-rich state is admitted by
+        # is_plannable but the search has no gold source and dies at 0-length).
+        # Resized from a factory-emitted action so bank location/accessibility
+        # survive; capped at the KNOWN bank balance (a None bank ferries
+        # nothing — WithdrawGoldAction.is_applicable rejects it anyway).
+        deficit = analyze_currency_leaves(self._needed, state, game_data).gold_deficit
+        if deficit > 0 and state.bank_gold is not None and state.bank_gold > 0:
+            template = next(
+                (a for a in actions if isinstance(a, WithdrawGoldAction)), None)
+            if template is not None:
+                result.append(dataclasses.replace(
+                    template, quantity=min(deficit, state.bank_gold)))
 
         return result
 

@@ -9,10 +9,17 @@ currency (e.g. jasper_crystal @ tasks_trader for 8 tasks_coin). Such a leaf:
   - is sold by at least one NPC (npc_purchases non-empty).
 
 A leaf is AFFORDABLE when some PERMANENT, located vendor offers it at a currency
-price the character can cover from inventory + bank (>= price * closure_qty).
-Event/unlocated vendors are excluded — `relevant_actions` emits no NpcBuy for
-them, so they must not count as a usable purchase path (closure + vendor set kept
-symmetric with GatherMaterialsGoal.relevant_actions).
+price the character can cover (>= price * closure_qty). An ITEM currency pays
+from inventory + bank stacks of that item; GOLD pays from `state.gold` plus
+KNOWN bank gold (`state.bank_gold or 0` — an unknown bank credits nothing,
+GAP-1's bank-stock rule). Gold is NOT an inventory item: reading
+`inventory["gold"]` scored every gold price as unaffordable no matter how much
+gold the character held, which pruned every gold-priced vendor purchase at
+is_plannable (GAP-3, l30_rune_fill: 25000 gold in hand, the 20000 lifesteal_rune
+one buy away, cycle Waits). Event/unlocated vendors are excluded —
+`relevant_actions` emits no NpcBuy for them, so they must not count as a usable
+purchase path (closure + vendor set kept symmetric with
+GatherMaterialsGoal.relevant_actions).
 
 ONE closure walk serves two consumers (DRY), each reading a DIFFERENT signal:
   - `blocked`  — GatherMaterialsGoal.is_plannable fast-fails when any currency-buy
@@ -36,6 +43,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.currency_afford_core import currency_afford_plannable_pure
 from artifactsmmo_cli.ai.goals.funding_core import funding_cycles_pure
 from artifactsmmo_cli.ai.recipe_closure import closure_demand
+from artifactsmmo_cli.ai.tiers.objective import GOLD
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 
@@ -47,10 +55,18 @@ class CurrencyLeafAnalysis(NamedTuple):
     `funding_target`: (tasks_coin, required_amount) for the FIRST unaffordable
     leaf the arbiter can fund via ReachCurrencyGoal, or None when no unaffordable
     leaf is tasks_coin-funded.
+    `gold_deficit`: how much POCKET gold is missing to cover the closure's
+    still-unowned gold-buy leaves at their cheapest permanent vendors
+    (max(0, gold_demand - state.gold)). NpcBuyAction's gold gate is
+    pocket-only, so when affordability was granted on pocket+bank the plan
+    must chain WithdrawGold → NpcBuy — GatherMaterialsGoal.relevant_actions
+    sizes that withdraw edge from this figure (admit/emit symmetry). 0 when
+    pocket gold alone covers (or nothing gold-priced remains to buy).
     """
 
     blocked: bool
     funding_target: tuple[str, int] | None
+    gold_deficit: int
 
 
 def analyze_currency_leaves(
@@ -59,12 +75,17 @@ def analyze_currency_leaves(
     """Walk the recipe closure of `needed` once, returning the `blocked` signal
     (for is_plannable) and the `funding_target` (for the arbiter)."""
     bank = state.bank_items or {}
+    # Gold on hand: pocket + KNOWN bank gold. `bank_gold or 0` is the GAP-1
+    # unknown-bank rule — None means unknown, which credits nothing (never a
+    # default; the WithdrawGold edge is likewise inapplicable on a None bank).
+    gold_on_hand = state.gold + (state.bank_gold or 0)
     chain: dict[str, int] = {}
     for code, qty in needed.items():
         closure_demand(code, qty, game_data, chain, frozenset())
 
     blocked = False
     funding_target: tuple[str, int] | None = None
+    gold_demand = 0
 
     for leaf, qty in chain.items():
         # The requested item ITSELF is analyzed too: stepwise decomposition
@@ -90,10 +111,22 @@ def analyze_currency_leaves(
             if not game_data.is_event_npc(npc) and game_data.npc_location(npc) is not None
         ]
         owned = state.inventory.get(leaf, 0) + bank.get(leaf, 0)
+        # GOLD pays from state.gold (+known bank gold) — it is NOT an inventory
+        # item; item currencies pay from their inventory + bank stacks.
         affordable = any(
-            (state.inventory.get(currency, 0) + bank.get(currency, 0)) >= price * qty
+            (gold_on_hand if currency == GOLD
+             else state.inventory.get(currency, 0) + bank.get(currency, 0))
+            >= price * qty
             for _npc, price, currency in permanent
         )
+        # Gold demand for the still-to-buy leaf (cheapest permanent gold
+        # vendor): feeds `gold_deficit`, which sizes the WithdrawGold edge in
+        # relevant_actions when the pocket alone cannot pay at the counter.
+        if owned < qty:
+            gold_prices = [price for _npc, price, currency in permanent
+                           if currency == GOLD]
+            if gold_prices:
+                gold_demand += min(gold_prices) * qty
         # currency_afford_plannable_pure is the proved live decision: a leaf is
         # only blocking when not affordable AND not already owned in sufficient
         # quantity. True ⇒ not blocking (affordable or owned, or no closure need).
@@ -127,4 +160,6 @@ def analyze_currency_leaves(
         funding_target = (best_currency, best_target)
         break  # blocked is already True and we have the FIRST fundable target.
 
-    return CurrencyLeafAnalysis(blocked=blocked, funding_target=funding_target)
+    return CurrencyLeafAnalysis(
+        blocked=blocked, funding_target=funding_target,
+        gold_deficit=max(0, gold_demand - state.gold))

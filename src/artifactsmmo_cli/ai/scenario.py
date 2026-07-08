@@ -511,12 +511,13 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # target (no utility candidate), and 25000 gold ≥ the 20000
     # lifesteal_rune price at the permanent rune_vendor — the rune IS
     # attainable-now via the gold-purchase leaf and near_term_gear covers
-    # rune_slot. LIMITATION (pinned): the chain is INERT past the tree —
+    # rune_slot. GAP-3 FIXED 2026-07-08: the chain is LIVE end to end —
     # objective_step_goal routes the recipe-less gold-vendor rune to
-    # GatherMaterials(lifesteal_rune), which is unplannable (0 nodes: the
-    # rune is neither gatherable nor monster-dropped and the gold NpcBuy
-    # path never plans), so the cycle ends in Wait with 25000 gold on
-    # hand and the rune one purchase away.
+    # GatherMaterials(lifesteal_rune), whose is_plannable now credits
+    # state.gold (analyze_currency_leaves' gold arm; gold is not an
+    # inventory item), and the search finds the one-step
+    # NpcBuy(lifesteal_rune x1 @rune_vendor) plan (movement folds into the
+    # buy's apply; the equip is the next stepwise cycle's leg).
     # ARTIFACT slots stock perfect_pearl (RE-DERIVED 2026-07-07 GAP-2 fix —
     # see l48_band_adequate's comment for the mechanism: perfect_pearl became
     # a real near_term_gear candidate at any level >= 19 once
@@ -543,8 +544,8 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         derive_combat_stats=True,
         description="L30, rune_slot empty, 25000 gold for the 20000 "
                      "lifesteal_rune at the permanent rune_vendor — the "
-                     "tree arms the rune root but the buy chain is inert "
-                     "(pinned Wait)."),
+                     "tree arms the rune root and the gold buy chain "
+                     "plans NpcBuy (GAP-3 fixed 2026-07-08)."),
 
     # --- Utility slots, both empty (deliverable 5; RE-DERIVED 2026-07-07
     # hp-derivation fix wave — see report). L20 at the near_term_gear
