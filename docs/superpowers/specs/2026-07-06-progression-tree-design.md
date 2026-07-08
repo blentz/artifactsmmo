@@ -162,6 +162,27 @@ existing provisioning quantities (win-rate provisioning guard unchanged).
 
 Each phase lands independently valuable and gate-green.
 
+**Slot-gap fix wave SHIPPED (2026-07-08, 563a5759..c9455a4f):** the five
+real gaps pinned by the slot-coverage net are fixed, each tripwire flipped
+to a positive test: ①held/banked stock credits is_attainable_now (incl.
+currency recursion) ②full gather-drop set feeds _gatherable (rare drops →
+vendor routes open; perfect_pearl now a fleet-wide artifact default)
+⑤both utility slots fillable — per-slot stock check; slot 2 =
+second-best craftable-now heal (same-code dual slots are server-illegal:
+the old utility2 livelock) ③gold-priced vendor buys plannable — root was
+gold read as an INVENTORY item in analyze_currency_leaves; proven
+WithdrawGoldAction admitted+deficit-sized (zero new formal surface)
+⑥equip targets acquire via targeted drops — gathering.py's proven
+dropper wiring mirrored into UpgradeEquipmentGoal (grey-farm bypass for
+the goal's own argmax-committed target; Lean dropFarm scope =
+comments-only). GAP-4 (XP outranks empty utility) RETAINED as designed.
+NEW GAP-7 pinned: recipe_closure still reads the primary drop map
+(goal-layer analog of ②) — item-currency purchases (small_pearls →
+perfect_pearl) die at 1 node. Follow-ups: GAP-7; gold-funding root;
+gold-buy vs reserve floor; equip_value utility inflation; dup-slot
+second-ranked quirk; craftable-target route-preference test. Full gate
+owed at next bot downtime.
+
 **Phase 4b SHIPPED — THE FLIP (2026-07-07):** commits 388f15c2 (decide()
 delegates to decide_tree; servability demotion `_servable_promotion`
 walks fallback pairs in order, all-unservable keeps choice for the
