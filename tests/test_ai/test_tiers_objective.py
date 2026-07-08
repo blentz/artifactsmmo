@@ -41,11 +41,17 @@ def test_best_gear_per_slot():
     assert "copper_ore" not in obj.target_gear.values()    # resources excluded
 
 
-def test_paired_ring_slots_get_top_two_distinct():
+def test_paired_ring_slots_duplicate_best_over_second_distinct():
+    """RE-DERIVED (Task 2, GAP-2 review, 2026-07-08): rings are duplicate-
+    allowed (DUPLICATE_SLOT_TYPES), so a 2nd copy of the best ring
+    (gold_ring, attack 8) strictly dominates the 2nd-ranked DISTINCT ring
+    (ruby_ring, attack 6) — both slots target gold_ring. Previously pinned
+    ring1=gold_ring/ring2=ruby_ring encoded the same "ranked-distinct" quirk
+    Task 2 fixed for artifacts; rings share `_slot_assignments` and shared
+    the bug."""
     obj = CharacterObjective.from_game_data(_gd())
-    # gold_ring(8) > ruby_ring(6) > copper_ring(2): top-2 fill ring1/ring2.
     assert obj.target_gear["ring1_slot"] == "gold_ring"
-    assert obj.target_gear["ring2_slot"] == "ruby_ring"
+    assert obj.target_gear["ring2_slot"] == "gold_ring"
 
 
 def test_slot_with_no_candidate_is_omitted():
@@ -255,11 +261,15 @@ def test_near_term_gear_skips_unattainable_items():
 
 
 def test_near_term_gear_fills_paired_ring_slots():
-    """Top-2 usable rings fill ring1/ring2 (silver > copper at level 5)."""
+    """RE-DERIVED (Task 2, GAP-2 review, 2026-07-08): rings are duplicate-
+    allowed, so both ring slots target the single best usable ring
+    (silver_ring, attack 4) rather than the 2nd-ranked distinct copper_ring
+    (attack 2) — duplicating the best strictly dominates. See
+    test_paired_ring_slots_duplicate_best_over_second_distinct."""
     obj = CharacterObjective.from_game_data(_gd_near_term())
     targets = obj.near_term_gear(make_state(level=5))
     assert targets["ring1_slot"] == "silver_ring"
-    assert targets["ring2_slot"] == "copper_ring"
+    assert targets["ring2_slot"] == "silver_ring"
 
 
 def _gd_drop_recipes() -> GameData:
@@ -532,6 +542,33 @@ def test_near_term_gear_duplicate_fills_empty_second_ring():
     state = make_state(level=5, equipment={"ring1_slot": "copper_ring"})
     nt = obj.near_term_gear(state)
     assert nt.get("ring2_slot") == "copper_ring"  # empty 2nd ring slot still targeted
+
+
+def test_artifact_slots_duplicate_best_over_second_ranked_distinct():
+    """GAP-2 review quirk (Task 2, follow-up wave): with TWO distinct
+    attainable artifacts, artifact2_slot must get a 2nd copy of the BEST
+    artifact (perfect_relic, equip_value from attack 100) rather than the
+    2nd-ranked DISTINCT artifact (lesser_relic, attack 5) — duplicating the
+    top item is dup-allowed (DUPLICATE_SLOT_TYPES) and strictly higher value
+    than any lower-ranked distinct item, since `attainable` is already
+    sorted descending by value. Ownership is NOT a constraint at this
+    target-setting layer (acquisition/ownership caps live downstream in
+    scoring.py's pick_loadout) — mirrors the ring precedent
+    (test_paired_ring_slots_duplicate_best_over_second_distinct)."""
+    gd = GameData()
+    gd._item_stats = {
+        "perfect_relic": ItemStats(code="perfect_relic", level=1, type_="artifact",
+                                    attack={"fire": 100}),
+        "lesser_relic": ItemStats(code="lesser_relic", level=1, type_="artifact",
+                                   attack={"fire": 5}),
+    }
+    gd._crafting_recipes = {"perfect_relic": {"bar": 1}, "lesser_relic": {"bar": 1}}
+    gd._resource_drops = {"rocks": "bar"}
+    gd._resource_skill = {"rocks": ("mining", 1)}
+    obj = CharacterObjective.from_game_data(gd)
+    assert obj.target_gear["artifact1_slot"] == "perfect_relic"
+    assert obj.target_gear["artifact2_slot"] == "perfect_relic"
+    assert obj.target_gear["artifact3_slot"] == "perfect_relic"
 
 
 # --- C1: task-currency leaf ---

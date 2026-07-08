@@ -32,16 +32,30 @@ consumables) stay distinct, so their remaining slots are left untargeted."""
 def _slot_assignments(type_: str, slots: list[str],
                       attainable: list[tuple[int, str]]) -> list[tuple[str, int, str]]:
     """(slot, value, code) for each slot: ranked attainable assigned in order,
-    then for rings any remaining slots filled by repeating the best attainable."""
+    EXCEPT for duplicate-allowed types (rings, artifacts — DUPLICATE_SLOT_TYPES),
+    where every slot targets the single BEST attainable item.
+
+    GAP-2-review Task 2 (2026-07-08): `attainable` is already sorted
+    descending by value, so for a dup-allowed type a 2nd copy of the
+    top-ranked item is NEVER worse than any lower-ranked DISTINCT item —
+    duplicating rank-0 strictly dominates assigning rank-1, rank-2, ...
+    per slot (additive equip_value, no diminishing returns modeled). The
+    previous "ranked-distinct-then-duplicate-when-exhausted" rule could
+    hand a duplicate-allowed slot a far weaker distinct item (e.g. a
+    value-17 2nd-ranked artifact) when duplicating the value-201 best was
+    strictly better. Ownership/acquisition caps are NOT enforced here —
+    this is the aspirational target-setting layer; the ownership cap lives
+    downstream in `equipment/scoring.py`'s `pick_loadout` (dual-ring
+    carve-out), which already caps a duplicate fill at physical ownership."""
+    if not attainable:
+        return []
+    if type_ in _DUPLICATE_FILL_TYPES:
+        value, code = attainable[0]
+        return [(slot, value, code) for slot in slots]
     out: list[tuple[str, int, str]] = []
     for i, slot in enumerate(slots):
         if i < len(attainable):
-            value, code = attainable[i]
-        elif type_ in _DUPLICATE_FILL_TYPES and attainable:
-            value, code = attainable[0]
-        else:
-            continue
-        out.append((slot, value, code))
+            out.append((slot, attainable[i][0], attainable[i][1]))
     return out
 
 

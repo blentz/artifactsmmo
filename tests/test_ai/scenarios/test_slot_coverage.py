@@ -41,9 +41,10 @@ never endorsements. Gap index:
       scenario.py (mirrors the earlier hp-derivation fix wave's wolf_ears/
       mushmush_bow re-iteration) — see scenario.py's l48_band_adequate/
       l30_rune_fill/l20_dual_utility* comments. l48_event_active was left
-      unstocked (its EVENT_ONLY_CANDIDATES table narrowed instead — the
-      event's artifact-slot delta is now only artifact2_slot, see that
-      constant's docstring). The FOLLOW-UP this fix surfaced —
+      unstocked (its EVENT_ONLY_CANDIDATES table narrowed instead — RE-
+      NARROWED AGAIN by Task 2 below: the event's artifact-slot delta is
+      gone entirely, see that constant's docstring). The FOLLOW-UP this fix
+      surfaced —
       perfect_pearl's small_pearls purchase attainable-now yet UNPLANNABLE
       (`GatherMaterials(small_pearls, ...)` dead at 1 node/0-length plan,
       the same shape GAP-3 documents for gold-priced purchases, but for an
@@ -161,7 +162,6 @@ ARTIFACT_SLOTS = {"artifact1_slot", "artifact2_slot", "artifact3_slot"}
 
 EVENT_ONLY_CANDIDATES = {
     "helmet_slot": "corrupted_crown",
-    "artifact2_slot": "corrupted_skull",
 }
 """What the corrupted_ogre event adds to l48_event_active's candidate
 surface: the L20 ogre (winnable at this loadout) drops corrupted_gem, and
@@ -175,10 +175,19 @@ artifacts EVEN WITHOUT the event, and DUPLICATE_SLOT_TYPES fills the extra
 artifact slots by repeating the best attainable item — so artifact1_slot
 and artifact3_slot both read perfect_pearl in the WITHOUT-event state too
 (`_slot_assignments` duplicate-fill), no longer an event-exclusive delta.
-corrupted_skull (value 17, event-only) still displaces perfect_pearl at
-the SECOND ranked position (`_slot_assignments`' index-1 slot,
-artifact2_slot) whenever it is attainable — the narrower, but still real,
-event-attributable artifact-slot candidate that survives the fix."""
+
+RE-DERIVED AGAIN 2026-07-08 (Task 2, GAP-2-review duplicate-slot-best-fill
+fix): artifact2_slot dropped from this table too. `_slot_assignments` used
+to hand a dup-allowed slot the 2nd-ranked DISTINCT item once the ranked
+list ran past index 0 — so corrupted_skull (value 17, event-only) could
+outrank perfect_pearl at the index-1 artifact2_slot even though a 2nd
+COPY of perfect_pearl (value 201) is strictly better and duplication is
+legal (DUPLICATE_SLOT_TYPES). Fixed: every dup-allowed slot now targets
+the single best attainable item, so perfect_pearl duplicate-fills all
+three artifact slots regardless of the event, and corrupted_skull is no
+longer a near_term_gear candidate anywhere in this loadout (its equip_value
+never clears the perfect_pearl-duplicate bar). The event's ONLY remaining
+candidate-surface delta is the non-dup helmet_slot."""
 
 
 def _bundle() -> GameData:
@@ -227,12 +236,13 @@ def test_l48_event_candidates_are_event_gated() -> None:
     """The exact candidate delta the corrupted_ogre event buys, measured on
     the SAME state with only the game-data event overlay toggled (the very
     seeding seed_offline performs from state.active_events): with the event
-    down the event items are absent; with it up, crown appears and
-    corrupted_skull outranks perfect_pearl at artifact2_slot (RE-DERIVED
-    2026-07-07, GAP-2 fix: artifact1_slot/artifact3_slot are no longer
-    event-exclusive, see EVENT_ONLY_CANDIDATES's docstring). This is the
-    attribution test — the full-stack test below can't distinguish 'event
-    opened the leaf' from 'the leaf was open anyway' on its own."""
+    down the event items are absent; with it up, crown appears at
+    helmet_slot (RE-DERIVED 2026-07-08, Task 2 duplicate-slot-best-fill fix:
+    artifact2_slot is no longer event-exclusive either — see
+    EVENT_ONLY_CANDIDATES's docstring, corrupted_skull never outranks a
+    perfect_pearl duplicate). This is the attribution test — the full-stack
+    test below can't distinguish 'event opened the leaf' from 'the leaf was
+    open anyway' on its own."""
     gd = _bundle()
     state = _state("l48_event_active", gd)
     objective = CharacterObjective.from_game_data(gd)

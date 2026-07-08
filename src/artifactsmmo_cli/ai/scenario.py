@@ -360,20 +360,25 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # and the corrupted_ogre event up. With the event active the L20 ogre
     # (winnable at this loadout) drops corrupted_gem, the permanent
     # cultist_wizard sells corrupted_crown/corrupted_skull for
-    # corrupted_gem, and near_term_gear gains event-only candidates
-    # (helmet corrupted_crown; artifact2_slot corrupted_skull — RE-DERIVED
-    # 2026-07-07 GAP-2 fix: artifact1_slot/artifact3_slot are no longer
-    # event-exclusive, perfect_pearl duplicate-fills them regardless of the
-    # event once objective._gatherable opens the small_pearls rare-drop
-    # route; see test_slot_coverage.py's EVENT_ONLY_CANDIDATES docstring).
-    # Artifact slots are deliberately left UNSTOCKED here (unlike
-    # l48_band_adequate/l30_rune_fill/l20_dual_utility) so the event's
-    # residual artifact2_slot delta stays observable. Without the event the
-    # same monsters have no known spawn, the currency leaf stays closed, and
-    # (with real stats) the shield/ring2/boots/bag slots also open non-event
-    # candidates — so the event-attribution tests compare the WITH/WITHOUT
-    # candidate sets on this same state, and the Wait isolation witness
-    # stays l48_band_adequate (zero-stat, untouched).
+    # corrupted_gem, and near_term_gear gains an event-only candidate at
+    # helmet_slot (corrupted_crown). RE-DERIVED 2026-07-07 GAP-2 fix:
+    # artifact1_slot/artifact3_slot are no longer event-exclusive,
+    # perfect_pearl duplicate-fills them regardless of the event once
+    # objective._gatherable opens the small_pearls rare-drop route.
+    # RE-DERIVED AGAIN 2026-07-08 (Task 2, duplicate-slot-best-fill fix):
+    # artifact2_slot is no longer event-exclusive EITHER — corrupted_skull
+    # (value 17) never outranks a 2nd copy of perfect_pearl (value 201),
+    # dup-allowed slots always duplicate-fill the single best item now, so
+    # helmet_slot is the event's ONLY remaining candidate-surface delta; see
+    # test_slot_coverage.py's EVENT_ONLY_CANDIDATES docstring. Artifact
+    # slots are deliberately left UNSTOCKED here (unlike l48_band_adequate/
+    # l30_rune_fill/l20_dual_utility) — perfect_pearl duplicate-filling them
+    # is itself part of the observed WITHOUT-event candidate set. Without
+    # the event the same monsters have no known spawn, the currency leaf
+    # stays closed, and (with real stats) the shield/ring2/boots/bag slots
+    # also open non-event candidates — so the event-attribution tests
+    # compare the WITH/WITHOUT candidate sets on this same state, and the
+    # Wait isolation witness stays l48_band_adequate (zero-stat, untouched).
     "l48_event_active": ScenarioCharacter(
         name="l48_event_active", level=48, gold=800,
         skills={"mining": 46, "woodcutting": 46, "weaponcrafting": 42,
@@ -450,7 +455,13 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             "weapon_slot": "iron_dagger", "helmet_slot": "adventurer_helmet",
             "body_armor_slot": "adventurer_vest", "leg_armor_slot": "iron_legs_armor",
             "boots_slot": "iron_boots", "ring1_slot": "forest_ring",
-            "ring2_slot": "iron_ring", "shield_slot": "iron_shield",
+            # ring2 RE-DERIVED (Task 2, GAP-2 review, 2026-07-08): rings are
+            # duplicate-allowed, so near_term_gear's true fixed point is BOTH
+            # ring slots holding the single best attainable-now ring
+            # (forest_ring) — a distinct, weaker 2nd ring (iron_ring) is no
+            # longer a fixed point once _slot_assignments duplicates the
+            # best instead of ranking distinct items into each slot.
+            "ring2_slot": "forest_ring", "shield_slot": "iron_shield",
             "amulet_slot": "life_amulet",
             "utility1_slot": "small_health_potion", "utility2_slot": "small_health_potion",
         },
@@ -459,7 +470,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         derive_combat_stats=True,
         description="L12 twin of l10_bag_pursuit: cow winnable, every other "
                      "slot at its own near_term_gear fixed point (vest, "
-                     "helmet, ring1) — satchel is the sole remaining "
+                     "helmet, both rings) — satchel is the sole remaining "
                      "candidate and the task-funding chain fires."),
 
     # --- Artifact slots (deliverable 3). L35, plausible combat loadout
@@ -571,7 +582,14 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             "weapon_slot": "mushmush_bow", "helmet_slot": "wolf_ears",
             "body_armor_slot": "bandit_armor", "leg_armor_slot": "piggy_pants",
             "boots_slot": "hard_leather_boots", "ring1_slot": "ring_of_the_adept",
-            "ring2_slot": "forest_ring", "amulet_slot": "wisdom_amulet",
+            # ring2 RE-DERIVED (Task 2, GAP-2 review, 2026-07-08): rings are
+            # duplicate-allowed. ring_of_the_adept (ring1) is not itself
+            # attainable-now at this loadout (already owned, not currently
+            # acquirable), so it isn't a candidate; among attainable-now
+            # rings, life_ring is the argmax and near_term_gear's true fixed
+            # point for ring2 is a 2nd life_ring, not the weaker forest_ring
+            # a distinct-ranked-fill used to leave in place.
+            "ring2_slot": "life_ring", "amulet_slot": "wisdom_amulet",
             "shield_slot": "iron_shield", "bag_slot": "satchel",
             "artifact1_slot": "perfect_pearl", "artifact2_slot": "perfect_pearl",
             "artifact3_slot": "perfect_pearl",
@@ -615,7 +633,13 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             "weapon_slot": "mushmush_bow", "helmet_slot": "wolf_ears",
             "body_armor_slot": "adventurer_vest", "leg_armor_slot": "adventurer_pants",
             "boots_slot": "adventurer_boots", "ring1_slot": "life_ring",
-            "ring2_slot": "forest_ring", "amulet_slot": "wisdom_amulet",
+            # ring2 RE-DERIVED (Task 2, GAP-2 review, 2026-07-08): rings are
+            # duplicate-allowed, so the true near_term_gear fixed point is a
+            # 2nd life_ring (the argmax attainable-now ring, matching ring1)
+            # rather than the weaker forest_ring a distinct-ranked-fill used
+            # to leave in place — restores this scenario's "no structural
+            # gear candidate" design intent.
+            "ring2_slot": "life_ring", "amulet_slot": "wisdom_amulet",
             "shield_slot": "iron_shield", "bag_slot": "satchel",
             "artifact1_slot": "perfect_pearl", "artifact2_slot": "perfect_pearl",
             "artifact3_slot": "perfect_pearl",
@@ -641,7 +665,9 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             "weapon_slot": "mushmush_bow", "helmet_slot": "wolf_ears",
             "body_armor_slot": "adventurer_vest", "leg_armor_slot": "adventurer_pants",
             "boots_slot": "adventurer_boots", "ring1_slot": "life_ring",
-            "ring2_slot": "forest_ring", "amulet_slot": "wisdom_amulet",
+            # ring2 RE-DERIVED (Task 2, GAP-2 review, 2026-07-08) — see
+            # l20_dual_utility's comment; same fixed-point loadout.
+            "ring2_slot": "life_ring", "amulet_slot": "wisdom_amulet",
             "shield_slot": "iron_shield", "bag_slot": "satchel",
             "artifact1_slot": "perfect_pearl", "artifact2_slot": "perfect_pearl",
             "artifact3_slot": "perfect_pearl",
