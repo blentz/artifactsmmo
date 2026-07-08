@@ -14,7 +14,6 @@ precursor this net exists to catch — see project_feather_coat_cpu_peg)."""
 
 import json
 from pathlib import Path
-from typing import cast
 
 import pytest
 
@@ -28,6 +27,7 @@ from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree, has_structur
 from artifactsmmo_cli.ai.tiers.progression_tree_core import milestone_pure
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
 from artifactsmmo_cli.ai.world_state import WorldState
+from tests.test_ai.scenarios.search_bounds import assert_search_bounded
 
 BUNDLE = Path(__file__).parent / "fixtures" / "gamedata_bundle.json"
 
@@ -44,14 +44,6 @@ BAND_NAMES = [
     "l15_midband", "l20_band_entry", "l30_band_entry",
     "l40_band_entry", "l48_capstone_approach", L48_BAND_ADEQUATE,
 ]
-
-MAX_SEARCH_NODES = 200_000
-"""The feather_coat lesson (project_feather_coat_cpu_peg): an unsatisfiable
-GatherMaterials goal exploded to 237K nodes/cycle before a plan-cache /
-memo fix landed. A band scenario that lands anywhere near that magnitude,
-even while still emitting SOME plan, is a deadlock precursor — treat it as
-a failure, not a warning."""
-
 
 def _bundle() -> GameData:
     return GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
@@ -104,24 +96,10 @@ def test_band_liveness_full_stack(name: str) -> None:
 
 @pytest.mark.parametrize("name", BAND_NAMES)
 def test_band_search_is_bounded(name: str) -> None:
-    """EVERY goal the arbiter tried this cycle must stay well under the node
-    cap and must not have been node-capped or timed out — not just the
-    selected goal's own entry. A non-selected goal that floods the search
-    (the feather_coat 237K-node lesson: an unsatisfiable candidate can peg
-    CPU even when it's later demoted and something else gets selected) is
-    still a deadlock precursor; bounding only the winner's entry would let
-    it slip through the net. A bounded search that still finds nothing is a
-    different (legitimate) failure mode than an unbounded one that happens
-    to find something."""
-    report = _run(name)
-    assert report.goals_tried, (name, report.selected_goal)
-    for entry in report.goals_tried:
-        nodes = cast(int, entry["nodes"])
-        node_capped = cast(bool, entry.get("node_capped", False))
-        timed_out = cast(bool, entry["timed_out"])
-        assert nodes < MAX_SEARCH_NODES, (name, entry)
-        assert not node_capped, (name, entry)
-        assert not timed_out, (name, entry)
+    """Every tried goal bounded — see search_bounds.assert_search_bounded
+    (extracted for reuse by the slot-coverage net; the bound and its
+    rationale live there now)."""
+    assert_search_bounded(_run(name), name)
 
 
 @pytest.mark.parametrize("name", BAND_NAMES)

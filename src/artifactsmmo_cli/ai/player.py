@@ -415,6 +415,13 @@ class GamePlayer:
         blockers ARE seeded from game_data so scenario plans see the same
         near-future gates the live bot does."""
         self.game_data = game_data
+        # Mirror the live per-cycle event overlay (_fetch_world_state sets
+        # game_data.active_event_codes from the freshly-fetched active
+        # events): an offline state that declares active events must surface
+        # the same event monster/resource/NPC spawns the live planner sees,
+        # or event-gated attainability (near_term_gear via
+        # monster_spawn_known) is silently inert in scenarios.
+        self.game_data.active_event_codes = set(state.active_events)
         self._objective = CharacterObjective.from_game_data(game_data)
         self._strategy = StrategyEngine(self._objective, BalancedPersonality())
         self.state = state

@@ -114,8 +114,10 @@ def plan(
             raise typer.Exit(code=2)
         bundle_path = Path(bundle) if isinstance(bundle, str) else _DEFAULT_BUNDLE
         player = GamePlayer(character=scenario, history=None)
-        player.seed_offline(scenario_state(SCENARIOS[scenario]),
-                            load_bundle_game_data(bundle_path))
+        scenario_game_data = load_bundle_game_data(bundle_path)
+        player.seed_offline(
+            scenario_state(SCENARIOS[scenario], scenario_game_data),
+            scenario_game_data)
         print(f"scenario: {scenario} — {SCENARIOS[scenario].description}")
         report = player.plan_from_state(doomed=doomed, committed=committed_goal)
         _print_report(player, report)
