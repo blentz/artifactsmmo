@@ -20,6 +20,7 @@ from hypothesis import given, settings, strategies as st
 
 from artifactsmmo_cli.ai.game_data import ItemStats
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
+from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainable
 from artifactsmmo_cli.ai.world_state import SKILL_NAMES, WorldState
 from formal.diff.oracle_client import run_oracle
@@ -427,7 +428,7 @@ def test_gap_matches_lean(seed):
     }
     recipes = {1: {999: 1}}
     drops = {100: 999}
-    target_val = equip_value(item_stats[1])  # P4a: exact int
+    target_val = pursuit_value(item_stats[1])  # gap() measures gear in pursuit_value units
 
     # equipped weapon: maybe none, maybe a weaker/stronger item
     have_val = 0
@@ -436,7 +437,7 @@ def test_gap_matches_lean(seed):
         eq = _stats(2, "weapon", rng.randint(0, 12), rng.randint(0, 12), rng.randint(0, 12))
         item_stats[2] = eq
         equipment["weapon_slot"] = "2"
-        have_val = equip_value(eq)  # P4a: exact int
+        have_val = pursuit_value(eq)  # gap() measures gear in pursuit_value units
 
     gd = _FakeGameData(recipes, drops, item_stats)
     obj = CharacterObjective.from_game_data(gd)
