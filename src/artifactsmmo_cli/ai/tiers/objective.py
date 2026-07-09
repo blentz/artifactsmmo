@@ -15,6 +15,7 @@ from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS
 from artifactsmmo_cli.ai.potion_supply import bootstrap_potion_target, target_potion_pure
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value, tool_value
 from artifactsmmo_cli.ai.tiers.leaf_attainable_core import leaf_attainable_pure
+from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
 from artifactsmmo_cli.ai.tiers.objective_completion import is_complete_pure
 from artifactsmmo_cli.ai.world_state import EQUIPMENT_SLOTS, SKILL_NAMES, WorldState
 
@@ -322,9 +323,16 @@ class CharacterObjective:
         )
 
     def near_term_gear(self, state: WorldState) -> dict[str, str]:
-        """Best usable-NOW upgrade per equipment slot: highest equip_value
+        """Best usable-NOW upgrade per equipment slot: highest pursuit_value
         attainable item with `stats.level <= state.level` that strictly beats
         the currently-equipped value (empty slot counts as 0).
+
+        Scored on `pursuit_value` (combat-dominant efficiency budget), the same
+        ruler `_structural_candidates` ranks gain on, so the per-slot pick and
+        the cross-slot gain agree. Within a single slot this only re-orders
+        efficiency-bearing utility slots (combat slots already pick the same
+        best-combat item); `target_gear`/`from_game_data` (the endgame BiS
+        sheet) deliberately stays on flat `equip_value`.
 
         The perfect-sheet `target_gear` is endgame BiS, which at low character
         level is unreachable (drops from unwinnable monsters) and gets filtered
@@ -340,7 +348,7 @@ class CharacterObjective:
                     or stats.type_ == "utility"
                     or stats.level > state.level):
                 continue
-            value = equip_value(stats)
+            value = pursuit_value(stats)
             if value > 0:
                 by_type.setdefault(stats.type_, []).append((value, code))
         targets: dict[str, str] = {}
@@ -386,10 +394,20 @@ class CharacterObjective:
         return targets
 
     def _item_value(self, code: str | None) -> int:
+        """Pursuit-path value of an equipped/target item code (0 when empty).
+
+        On `pursuit_value` (combat-dominant), matching `near_term_gear` and
+        `_structural_candidates` so the current-equipped baseline is on the same
+        ruler as the candidates. Also consumed by `gap()` for the gear-progress
+        fraction: that fraction is now measured in combat-dominant units too,
+        which is the correct axis for "how much gear progress remains" (a
+        prospecting artifact should not read as near-complete gear) — a ratio,
+        so the scale change cancels and objective-completion thresholds hold
+        (verified by test_tiers_objective_completion)."""
         if not code:
             return 0
         stats = self._game_data.item_stats(code)
-        return equip_value(stats) if stats is not None else 0
+        return pursuit_value(stats) if stats is not None else 0
 
     def gap(self, state: WorldState) -> ObjectiveGap:
         char_level_gap = max(0, self.target_char_level - state.level)

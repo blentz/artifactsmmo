@@ -30,20 +30,28 @@ from artifactsmmo_cli.ai.tiers.progression_tree_core import (
     milestone_pure,
     potion_type_weight,
 )
+from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
 def _structural_candidates(state: WorldState, game_data: GameData,
                             objective: CharacterObjective) -> list[GearCandidate]:
-    """Semantics item 2 (structural slots): near-term gear whose equip_value
-    strictly beats the currently-equipped item, weight 1 (no scaling)."""
+    """Semantics item 2 (structural slots): near-term gear whose pursuit_value
+    strictly beats the currently-equipped item, weight 1 (no scaling).
+
+    Scored on `pursuit_value` (combat-dominant efficiency budget), NOT the flat
+    `equip_value`: cross-slot GAIN ranking (`_ordered`) must let a combat weapon
+    outrank a pure-utility artifact instead of chasing the prospecting artifact
+    that flat equip_value mistakenly scored highest (the cross-slot bug). Both
+    the candidate stats AND the current-equipped baseline (`_item_value`, also
+    pursuit_value) are on the SAME ruler, so the gain is consistent."""
     candidates = []
     for slot, code in objective.near_term_gear(state).items():
         stats = game_data.item_stats(code)
         if stats is None:
             continue
         current_value = objective._item_value(state.equipment.get(slot))
-        gain = Fraction(equip_value(stats) - current_value)
+        gain = Fraction(pursuit_value(stats) - current_value)
         if gain > 0:
             candidates.append(GearCandidate(slot=slot, code=code, gain=gain, level=stats.level))
     return candidates

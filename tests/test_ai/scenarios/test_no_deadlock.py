@@ -131,17 +131,25 @@ def test_l10_gearcrafting_gap_combat_blocked_no_winnable_monster() -> None:
 def test_l10_gearcrafting_gap_combat_blocked_retargets_not_char_grind() -> None:
     """The ramp: losing the feather closure's only dropper does NOT make
     the planner thrash GrindCharacterXP against an unwinnable monster — it
-    re-targets to a still-reachable candidate (the utility-potion branch,
-    small_health_potion via sunflower, which needs no combat at all). Pins
-    the ACTUAL observed re-target, not just "any non-GrindCharacterXP
-    outcome"."""
+    re-targets to a still-reachable candidate that needs no combat at all.
+    The GUARANTEE (never GrindCharacterXP against the unwinnable) is the
+    criterion; the specific re-target is pinned to the ACTUAL observed value.
+
+    RE-DERIVED 2026-07-08 (Task-3 pursuit_value bug-fix landing): under
+    combat-dominant `pursuit_value` the structural gather `wooden_shield`
+    (shield_slot, gathered from ash_wood via ash_tree — no combat) now
+    outranks the utility-potion branch, so the re-target shifted from
+    `GatherMaterials(sunflower)`/`small_health_potion` to
+    `GatherMaterials(ash_wood)`/`wooden_shield`. Still a plannable,
+    combat-free gather — the GUARANTEE (not GrindCharacterXP) is unchanged."""
     report = _run(CRITERION_1_RAMP)
+    # GUARANTEE: re-target to a reachable non-combat goal, never XP-thrash.
     assert not isinstance(report.selected_goal, GrindCharacterXPGoal), (
         repr(report.selected_goal), report.plan)
-    assert repr(report.selected_goal) == "GatherMaterials(sunflower, {sunflower:3})"
-    assert [repr(a) for a in report.plan] == ["Gather(sunflower_field)"]
+    assert repr(report.selected_goal) == "GatherMaterials(ash_wood, {ash_wood:10})"
+    assert [repr(a) for a in report.plan] == ["Gather(ash_tree)"]
     assert report.decision.chosen_root == ObtainItem(
-        code="small_health_potion", quantity=1, slot="utility1_slot")
+        code="wooden_shield", quantity=1, slot="shield_slot")
 
 
 def test_l10_gearcrafting_gap_combat_blocked_search_bounded() -> None:
@@ -157,7 +165,18 @@ def test_l20_dual_utility_chosen_root_is_char_level_when_winnable() -> None:
     winnable monster (highwayman) in reach: the REAL `_tree_band_adequate`-
     wired decision (not the bare decide_tree default) must pick the
     char-level trunk, and the arbiter must plan a combat grind against it —
-    never a skill/craft goal."""
+    never a skill/craft goal.
+
+    FIXTURE RE-FIXED-POINT 2026-07-08 (Task-3 pursuit_value): the scenario's
+    helmet_slot/body_armor_slot were re-equipped to the combat-dominant
+    pursuit_value argmax (hard_leather_helmet / mushmush_jacket) — the old
+    efficiency picks (wolf_ears +50 wisdom, adventurer_vest) that flat
+    equip_value over-ranked were genuine COMBAT upgrades under pursuit_value,
+    so the band read inadequate and the tree wanted the helmet. Restoring the
+    true combat fixed point makes the band genuinely adequate again, so this
+    criterion-2 pin (grind XP when full-build + winnable) holds with its
+    ORIGINAL assertions (see scenario.py's l20_dual_utility re-fixed-point
+    comment)."""
     report = _run(CRITERION_2_WINNABLE)
     assert report.decision.chosen_root == ReachCharLevel(level=30)
     assert isinstance(report.selected_goal, GrindCharacterXPGoal), (

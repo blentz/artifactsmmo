@@ -162,32 +162,31 @@ ARTIFACT_SLOTS = {"artifact1_slot", "artifact2_slot", "artifact3_slot"}
 
 EVENT_ONLY_CANDIDATES = {
     "helmet_slot": "corrupted_crown",
+    "artifact1_slot": "corrupted_skull",
+    "artifact2_slot": "corrupted_skull",
+    "artifact3_slot": "corrupted_skull",
 }
 """What the corrupted_ogre event adds to l48_event_active's candidate
 surface: the L20 ogre (winnable at this loadout) drops corrupted_gem, and
 the permanent cultist_wizard sells crown + skull for it — with the event
 down those monsters have no known spawn and the currency leaf is closed.
 
-RE-DERIVED 2026-07-07 (GAP-2 fix): artifact1_slot/artifact3_slot dropped
-from this table. perfect_pearl (equip_value 201 — the small_pearls rare-
-fishing-drop route GAP-2 opened) now ranks #1 among attainable-now
-artifacts EVEN WITHOUT the event, and DUPLICATE_SLOT_TYPES fills the extra
-artifact slots by repeating the best attainable item — so artifact1_slot
-and artifact3_slot both read perfect_pearl in the WITHOUT-event state too
-(`_slot_assignments` duplicate-fill), no longer an event-exclusive delta.
+RE-DERIVED 2026-07-08 (Task-3 pursuit_value): the three artifact slots are
+BACK in this table (corrupted_skull), reversing the equip_value-era Task-2
+narrowing below. Under combat-dominant pursuit_value corrupted_skull
+(combat_raw 8 -> pursuit_value 8000) strictly outranks perfect_pearl
+(prospecting-only, combat_raw 0 -> pursuit_value 100) — exactly the class of
+bug being fixed (a combat item must beat an all-efficiency item). So with the
+event UP the artifact slots target corrupted_skull; with it DOWN they fall
+back to perfect_pearl (the best NON-event artifact). The event's candidate
+delta is therefore the helmet PLUS all three artifact slots.
 
-RE-DERIVED AGAIN 2026-07-08 (Task 2, GAP-2-review duplicate-slot-best-fill
-fix): artifact2_slot dropped from this table too. `_slot_assignments` used
-to hand a dup-allowed slot the 2nd-ranked DISTINCT item once the ranked
-list ran past index 0 — so corrupted_skull (value 17, event-only) could
-outrank perfect_pearl at the index-1 artifact2_slot even though a 2nd
-COPY of perfect_pearl (value 201) is strictly better and duplication is
-legal (DUPLICATE_SLOT_TYPES). Fixed: every dup-allowed slot now targets
-the single best attainable item, so perfect_pearl duplicate-fills all
-three artifact slots regardless of the event, and corrupted_skull is no
-longer a near_term_gear candidate anywhere in this loadout (its equip_value
-never clears the perfect_pearl-duplicate bar). The event's ONLY remaining
-candidate-surface delta is the non-dup helmet_slot."""
+HISTORICAL (equip_value era, now superseded by pursuit_value): under the flat
+equip_value ruler perfect_pearl (value 201, all prospecting) outranked
+corrupted_skull (value 17) so the artifact slots read perfect_pearl in BOTH
+states and were dropped from this table (GAP-2 fix 2026-07-07 +
+duplicate-slot-best-fill fix Task-2 2026-07-08). pursuit_value's combat
+dominance flips that comparison, which is the intended correction."""
 
 
 def _bundle() -> GameData:
@@ -236,13 +235,13 @@ def test_l48_event_candidates_are_event_gated() -> None:
     """The exact candidate delta the corrupted_ogre event buys, measured on
     the SAME state with only the game-data event overlay toggled (the very
     seeding seed_offline performs from state.active_events): with the event
-    down the event items are absent; with it up, crown appears at
-    helmet_slot (RE-DERIVED 2026-07-08, Task 2 duplicate-slot-best-fill fix:
-    artifact2_slot is no longer event-exclusive either — see
-    EVENT_ONLY_CANDIDATES's docstring, corrupted_skull never outranks a
-    perfect_pearl duplicate). This is the attribution test — the full-stack
-    test below can't distinguish 'event opened the leaf' from 'the leaf was
-    open anyway' on its own."""
+    down the event items are absent (artifact slots fall back to
+    perfect_pearl); with it up, corrupted_crown appears at helmet_slot AND
+    corrupted_skull at all three artifact slots (RE-DERIVED 2026-07-08, Task-3
+    pursuit_value: corrupted_skull's combat content now outranks the
+    prospecting-only perfect_pearl — see EVENT_ONLY_CANDIDATES's docstring).
+    This is the attribution test — the full-stack test below can't distinguish
+    'event opened the leaf' from 'the leaf was open anyway' on its own."""
     gd = _bundle()
     state = _state("l48_event_active", gd)
     objective = CharacterObjective.from_game_data(gd)
@@ -528,11 +527,15 @@ def test_l35_artifact_fill_pearl_route_plans() -> None:
     chain to old_boots therefore never fires here; its GAP-6 drop-farm
     coverage lives on in the pearl-stocked variant
     (test_l35_boots_drop_farm_fights_grey_dropper below)."""
+    # RE-FIXED-POINT 2026-07-08 (Task-3 pursuit_value): weapon_slot/boots_slot
+    # are now equipped at their combat argmax (wooden_club/snakeskin_boots), so
+    # the artifact slots are the SOLE candidates and perfect_pearl is the chosen
+    # root outright — no old_boots demotion chain any more (old_boots is
+    # correctly outranked by snakeskin_boots and no longer a candidate; its
+    # drop-farm coverage moved to l35_boots_drop_farm's wooden_club re-target).
     report = _run("l35_artifact_fill")
     assert report.decision.chosen_root == ObtainItem(
         code="perfect_pearl", quantity=1, slot="artifact1_slot")
-    assert ObtainItem(code="old_boots", quantity=1, slot="boots_slot") \
-        in report.decision.fallback_roots
     small_pearls_entries = [g for g in report.goals_tried if str(g.get("goal", ""))
                             .startswith("GatherMaterials(small_pearls")]
     assert small_pearls_entries, report.goals_tried
@@ -546,30 +549,33 @@ def test_l35_artifact_fill_pearl_route_plans() -> None:
 
 
 def test_l35_boots_drop_farm_fights_grey_dropper() -> None:
-    """GAP-6 coverage keeper (2026-07-08) — split out of the l35 test when
-    the GAP-7 fix made the pearl route plan (which un-demoted old_boots).
-    Same loadout with the three artifact slots pearl-STOCKED
-    (l35_boots_drop_farm; perfect_pearl is prospecting-only, combat stats
-    unchanged), so the pearl route is already done and old_boots — a
-    level-20, recipe-less, non-purchasable, pure monster-drop boots item —
-    is now the CHOSEN root, not a demotion target. `_equippable_goal`
-    routes it to UpgradeEquipmentGoal(committed=(old_boots, boots_slot))
-    whose `relevant_actions` emits the target's winnable dropper: spider
-    (L20, the sole dropper, winnable at this loadout) is grey at L35
-    (xp_per_kill == 0, 15 levels down), so the fight arrives as the
-    drop_farm variant (proven xp-gate bypass) plus the synthesized
-    Equip(old_boots->boots_slot) leg. The cycle plans Fight(spider) ->
-    Equip instead of Wait — a healthy character still never idles on a
-    farmable upgrade."""
+    """GAP-6 coverage keeper — drop-farm a recipe-less, non-purchasable, pure
+    monster-drop equip target via its grey winnable dropper.
+
+    RE-TARGETED 2026-07-08 (Task-3 pursuit_value): the original target,
+    old_boots (a pure-drop boots), is correctly outranked under combat-dominant
+    pursuit_value by the craftable snakeskin_boots (combat_raw 96 vs 90), so it
+    can no longer be a boots argmax — combat gear beating an under-ranked
+    efficiency/drop item is the bug fix, not a regression. The GAP-6 MECHANISM
+    is preserved with a target that IS an argmax under pursuit_value:
+    wooden_club (weapon, recipe-less, combat_raw 71, sole dropper the L20 ogre).
+    With snakeskin_boots equipped (boots filled at its combat argmax),
+    wooden_club is the SOLE candidate and the CHOSEN root. `_equippable_goal`
+    routes it to UpgradeEquipmentGoal whose `relevant_actions` emits the
+    target's winnable dropper: ogre (L20, grey at L35 — xp_per_kill == 0, 15
+    levels down), so the fight arrives as the drop_farm variant (proven xp-gate
+    bypass) plus the synthesized Equip(wooden_club->weapon_slot) leg. The cycle
+    plans Fight(ogre) -> Equip instead of Wait — a healthy character still never
+    idles on a farmable upgrade."""
     report = _run("l35_boots_drop_farm")
     assert report.decision.chosen_root == ObtainItem(
-        code="old_boots", quantity=1, slot="boots_slot")
+        code="wooden_club", quantity=1, slot="weapon_slot")
     assert repr(report.selected_goal).startswith("UpgradeEquipment"), (
         repr(report.selected_goal), report.plan)
     assert report.plan, report.goals_tried
-    fights = [a for a in report.plan if repr(a) == "Fight(spider)"]
+    fights = [a for a in report.plan if repr(a) == "Fight(ogre)"]
     assert fights and all(a.drop_farm for a in fights), report.plan
-    assert any(repr(a) == "Equip(old_boots->boots_slot)" for a in report.plan), \
+    assert any(repr(a) == "Equip(wooden_club->weapon_slot)" for a in report.plan), \
         report.plan
 
 

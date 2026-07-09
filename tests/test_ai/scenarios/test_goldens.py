@@ -66,30 +66,29 @@ EXPECTATIONS: dict[str, Golden] = {
     "l1_fresh": Golden(
         goal_class="GatherMaterials(copper_ore", first_action="Gather"),
 
-    # l10_copper_adequate: full copper set (band-adequate: a winnable
-    # monster exists and no positive-gain structural upgrade remains for
-    # equipped slots) but utility1_slot is EMPTY — an empty consumable slot
-    # is still a gain-from-zero candidate the tree targets, so chosen_root
-    # is ObtainItem(small_health_potion, utility1_slot), same as legacy's
-    # (buggy, flat-ranking) empty-utility-slot pick — but here it's the
-    # DESIGNED outcome, not a defect: the bank holds the potion's sunflower
-    # mats (20), so the goal resolves straight to
-    # UpgradeEquipment(small_health_potion->utility1_slot) with a Withdraw
-    # first action, not the guessed GrindCharacterXP.
+    # l10_copper_adequate: full copper set but shield_slot is empty.
+    # GEAR-FIRST re-derivation 2026-07-08 (Task-3 pursuit_value; user ruling):
+    # the empty shield_slot's wooden_shield is a STRUCTURAL candidate scored by
+    # combat-dominant pursuit_value (gain 8000), which outranks the empty
+    # utility slot's small_health_potion (utility, gain 61) — so chosen_root is
+    # ObtainItem(wooden_shield, shield_slot), not the potion (the flat-ranking
+    # empty-utility pick that used to win). wooden_shield isn't craftable-now,
+    # so the mapper resolves to GatherMaterials(ash_wood), first action
+    # Gather(ash_tree). Combat/gear outranks potion-stocking; potion still
+    # pursued once no structural upgrade remains.
     "l10_copper_adequate": Golden(
-        goal_class="UpgradeEquipment(small_health_potion->utility1_slot",
-        first_action="Withdraw(sunflower"),
+        goal_class="GatherMaterials(ash_wood",
+        first_action="Gather(ash_tree"),
 
-    # l12_taskgated_bag: same empty-utility1_slot branch as
-    # l10_copper_adequate (chosen_root ObtainItem(small_health_potion,
-    # utility1_slot)) rather than the guessed ReachCurrency/bag-funding
-    # root — the tree ranks the empty gear slot over the task-funding
-    # branch here. Unlike l10_copper_adequate, the bank holds no sunflower
-    # (only cowhide/feather), so the mapper falls through to the raw
-    # material gather: GatherMaterials(sunflower, {sunflower:3}), first
-    # action Gather(sunflower_field).
+    # l12_taskgated_bag: GEAR-FIRST re-derivation 2026-07-08 (Task-3
+    # pursuit_value; user ruling). The tree's chosen_root is
+    # ObtainItem(iron_boots, boots_slot) (the GAP-1 attainability fix opened
+    # iron_boots; combat-dominant pursuit_value ranks it over the utility
+    # potion the flat scorer used to pick). iron_boots' recipe closure resolves
+    # through the mapper to its first unmet input: GatherMaterials(copper_bar,
+    # {copper_bar:1}), first action Gather(copper_rocks).
     "l12_taskgated_bag": Golden(
-        goal_class="GatherMaterials(sunflower", first_action="Gather(sunflower_field"),
+        goal_class="GatherMaterials(copper_bar", first_action="Gather(copper_rocks"),
 }
 
 

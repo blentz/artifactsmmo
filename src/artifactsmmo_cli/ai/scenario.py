@@ -514,9 +514,16 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                 "gearcrafting": 30, "fishing": 30, "cooking": 30,
                 "alchemy": 20, "jewelrycrafting": 20},
         equipment={
-            "weapon_slot": "dreadful_staff", "helmet_slot": "piggy_helmet",
+            # weapon/boots RE-FIXED-POINT 2026-07-08 (Task-3 pursuit_value):
+            # combat-dominant pursuit_value ranks wooden_club (combat_raw 71)
+            # over the equipped dreadful_staff (55) and snakeskin_boots (96)
+            # over hard_leather_boots (49, whose +50 prospecting flat
+            # equip_value over-credited) — those were structural candidates
+            # masking the artifact slots. Equipping the true combat argmax in
+            # each restores the "artifact slots the SOLE target" design.
+            "weapon_slot": "wooden_club", "helmet_slot": "piggy_helmet",
             "body_armor_slot": "bandit_armor", "leg_armor_slot": "piggy_pants",
-            "boots_slot": "hard_leather_boots", "ring1_slot": "ring_of_the_adept",
+            "boots_slot": "snakeskin_boots", "ring1_slot": "ring_of_the_adept",
             "ring2_slot": "ring_of_the_adept", "amulet_slot": "emerald_amulet",
             "shield_slot": "slime_shield", "bag_slot": "satchel",
             "utility1_slot": "minor_health_potion", "utility2_slot": "minor_health_potion",
@@ -549,9 +556,21 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                 "gearcrafting": 30, "fishing": 30, "cooking": 30,
                 "alchemy": 20, "jewelrycrafting": 20},
         equipment={
+            # RE-DERIVED 2026-07-08 (Task-3 pursuit_value): the GAP-6 drop-farm
+            # target was old_boots (a pure-drop boots), but combat-dominant
+            # pursuit_value correctly ranks the craftable snakeskin_boots
+            # (combat_raw 96) above old_boots (90), so old_boots can no longer
+            # be a boots argmax. The GAP-6 mechanism (drop-farm a recipe-less,
+            # pure monster-drop equip target) is preserved with a target that
+            # IS an argmax under pursuit_value: wooden_club (weapon, recipe-less,
+            # combat_raw 71, dropped by the grey L20 ogre). snakeskin_boots is
+            # equipped here (fills boots at its combat argmax) so wooden_club is
+            # the SOLE remaining candidate and the drop-farm story isolates
+            # cleanly. weapon_slot deliberately stays dreadful_staff (55 < 71)
+            # so wooden_club remains a live upgrade.
             "weapon_slot": "dreadful_staff", "helmet_slot": "piggy_helmet",
             "body_armor_slot": "bandit_armor", "leg_armor_slot": "piggy_pants",
-            "boots_slot": "hard_leather_boots", "ring1_slot": "ring_of_the_adept",
+            "boots_slot": "snakeskin_boots", "ring1_slot": "ring_of_the_adept",
             "ring2_slot": "ring_of_the_adept", "amulet_slot": "emerald_amulet",
             "shield_slot": "slime_shield", "bag_slot": "satchel",
             "artifact1_slot": "perfect_pearl", "artifact2_slot": "perfect_pearl",
@@ -561,11 +580,11 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         utility_quantities={"utility1_slot": 15, "utility2_slot": 15},
         bank={"gold_ore": 10},
         derive_combat_stats=True,
-        description="l35_artifact_fill with the artifact slots already "
-                     "pearl-stocked: the boots upgrade (old_boots, pure "
-                     "monster drop) is the live gear target and its grey "
-                     "dropper spider is drop-farmed — Fight(spider) -> "
-                     "Equip, the GAP-6 coverage keeper."),
+        description="l35 loadout, artifacts pearl-stocked, boots filled at "
+                     "the combat argmax (snakeskin_boots): the sole gear "
+                     "target is the pure-drop wooden_club (weapon) and its "
+                     "grey dropper ogre is drop-farmed — Fight(ogre) -> "
+                     "Equip, the GAP-6 coverage keeper (Task-3 re-target)."),
 
     # --- Rune slot (deliverable 4). L30 at the near_term_gear fixed point
     # for every other slot (the equip_value argmax set — utility-stat gear
@@ -605,9 +624,17 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                 "gearcrafting": 25, "fishing": 25, "cooking": 25,
                 "alchemy": 25, "jewelrycrafting": 18},
         equipment={
-            "weapon_slot": "mushmush_bow", "helmet_slot": "wolf_ears",
+            # helmet/boots/amulet RE-FIXED-POINT 2026-07-08 (Task-3
+            # pursuit_value): the old efficiency picks (wolf_ears helmet,
+            # hard_leather_boots [+50 prospecting], wisdom_amulet [+60 wisdom])
+            # are outranked under combat-dominant pursuit_value by the combat
+            # argmax in each slot (hard_leather_helmet cr93, adventurer_boots,
+            # emerald_amulet cr70) — those combat upgrades were masking the
+            # rune. Equipping the true argmax in each restores the "every other
+            # slot at its own fixed point, rune_slot the SOLE target" design.
+            "weapon_slot": "mushmush_bow", "helmet_slot": "hard_leather_helmet",
             "body_armor_slot": "bandit_armor", "leg_armor_slot": "piggy_pants",
-            "boots_slot": "hard_leather_boots", "ring1_slot": "ring_of_the_adept",
+            "boots_slot": "adventurer_boots", "ring1_slot": "ring_of_the_adept",
             # ring2 RE-DERIVED (Task 2, GAP-2 review, 2026-07-08): rings are
             # duplicate-allowed. ring_of_the_adept (ring1) is not itself
             # attainable-now at this loadout (already owned, not currently
@@ -615,7 +642,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             # rings, life_ring is the argmax and near_term_gear's true fixed
             # point for ring2 is a 2nd life_ring, not the weaker forest_ring
             # a distinct-ranked-fill used to leave in place.
-            "ring2_slot": "life_ring", "amulet_slot": "wisdom_amulet",
+            "ring2_slot": "life_ring", "amulet_slot": "emerald_amulet",
             "shield_slot": "iron_shield", "bag_slot": "satchel",
             "artifact1_slot": "perfect_pearl", "artifact2_slot": "perfect_pearl",
             "artifact3_slot": "perfect_pearl",
@@ -658,8 +685,17 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                 "gearcrafting": 15, "fishing": 15, "cooking": 15,
                 "alchemy": 20, "jewelrycrafting": 10},
         equipment={
-            "weapon_slot": "mushmush_bow", "helmet_slot": "wolf_ears",
-            "body_armor_slot": "adventurer_vest", "leg_armor_slot": "adventurer_pants",
+            # helmet/body RE-FIXED-POINT 2026-07-08 (Task-3 pursuit_value):
+            # under combat-dominant pursuit_value the old efficiency helmet
+            # (wolf_ears, +50 wisdom) and vest (adventurer_vest) are no longer
+            # the argmax — the combat helmet hard_leather_helmet (combat_raw 93
+            # vs wolf_ears' 66) and mushmush_jacket outrank them, so they were
+            # structural candidates masking the utility comparison. Equipping
+            # the true pursuit_value argmax in both restores this scenario's
+            # "no structural gear candidate" design intent (band-adequate), so
+            # the XP-outranks-empty-utility verdict is isolated again.
+            "weapon_slot": "mushmush_bow", "helmet_slot": "hard_leather_helmet",
+            "body_armor_slot": "mushmush_jacket", "leg_armor_slot": "adventurer_pants",
             "boots_slot": "adventurer_boots", "ring1_slot": "life_ring",
             # ring2 RE-DERIVED (Task 2, GAP-2 review, 2026-07-08): rings are
             # duplicate-allowed, so the true near_term_gear fixed point is a
@@ -690,8 +726,10 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                 "gearcrafting": 15, "fishing": 15, "cooking": 15,
                 "alchemy": 20, "jewelrycrafting": 10},
         equipment={
-            "weapon_slot": "mushmush_bow", "helmet_slot": "wolf_ears",
-            "body_armor_slot": "adventurer_vest", "leg_armor_slot": "adventurer_pants",
+            # helmet/body RE-FIXED-POINT 2026-07-08 (Task-3 pursuit_value) —
+            # see l20_dual_utility's comment; same combat-argmax fixed point.
+            "weapon_slot": "mushmush_bow", "helmet_slot": "hard_leather_helmet",
+            "body_armor_slot": "mushmush_jacket", "leg_armor_slot": "adventurer_pants",
             "boots_slot": "adventurer_boots", "ring1_slot": "life_ring",
             # ring2 RE-DERIVED (Task 2, GAP-2 review, 2026-07-08) — see
             # l20_dual_utility's comment; same fixed-point loadout.

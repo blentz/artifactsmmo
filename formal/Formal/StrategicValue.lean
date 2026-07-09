@@ -194,7 +194,13 @@ theorem pure_bag_scores_positive :
   decide
 
 /-- Combat weight dominates the efficiency weights: a single point of combat_raw
-(×1000) outscores a 35-slot bag (×1) — combat-slot ordering is preserved. -/
+(×1000) outscores a 35-slot bag (×1) — combat-slot ordering is preserved.
+
+`ai/tiers/pursuit_value.pursuit_value` is the Python INSTANCE of this: it calls
+`strategic_value` with exactly these weights ⟨1000,1,1,1,1⟩ and an efficiency
+budget of 999 (< the 1000 combat weight proven dominant here), so any combat
+item outranks any all-efficiency item cross-slot. A thin parameter pin of this
+proved core — no separate theorem (would restate this witness verbatim). -/
 theorem combat_weight_dominates_efficiency :
     strategicValue ⟨0, 0, 0, 35, 0⟩ ⟨1000, 1, 1, 1, 1⟩
       < strategicValue ⟨1, 0, 0, 0, 0⟩ ⟨1000, 1, 1, 1, 1⟩ := by
