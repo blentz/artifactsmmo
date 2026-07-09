@@ -48,7 +48,7 @@ Scenario derivations (BINDING — the investigation confirmed these outcomes; re
 
 The current `sorted(unmet, key=repr)` orders unmet prerequisites alphabetically — `ObtainItem` reprs sort before `ReachSkillLevel` ('O'<'R'), so materials happen to be tried before skill gates. Replace with an EXPLICIT semantic key (`no_alphabetical_tiebreak` memory): a small priority function `_prereq_order(node)` ranking by prerequisite KIND (obtainable materials before skill-level gates before char-level gates, or whatever the correct dependency order is — DERIVE it from why materials-before-skill is correct: you need the mats in hand to craft, and skilling is the slower gate; document the rationale), with a semantic secondary key (e.g. code/skill name) NOT repr as the FINAL disambiguator only.
 
-- [ ] Failing test: two unmet prereqs (an ObtainItem material + a ReachSkillLevel gate) whose repr order would flip under a rename — assert the SEMANTIC order holds regardless of repr. → implement `_prereq_order` → the Task-1 `l12_gearcrafting_gap` pin must still pass (same materials-before-skill outcome, now intentional) → if actionable_step is mutation/diff-anchored, rebind + kill-check → static anchor sweep → commit `fix(strategy): semantic prerequisite order in actionable_step (retire repr-sort tiebreak)`.
+- [ ] Failing test: two unmet prereqs (an ObtainItem material + a ReachSkillLevel gate) whose repr order would flip under a rename — assert the SEMANTIC order holds regardless of repr. → implement `_prereq_order` → the Task-1 `l10_gearcrafting_gap` pin must still pass (same materials-before-skill outcome, now intentional) → if actionable_step is mutation/diff-anchored, rebind + kill-check → static anchor sweep → commit `fix(strategy): semantic prerequisite order in actionable_step (retire repr-sort tiebreak)`.
 
 CAUTION: `actionable_step` is on the live decide path. Changing the order could change plans. The Task-1 pins + full scenario net are the guard — they must stay green. If the semantic order differs from the alphabetical one in any scenario, that's a behavior change to derive honestly, not silently accept.
 
@@ -72,6 +72,21 @@ CAUTION: `actionable_step` is on the live decide path. Changing the order could 
 - [ ] Commit `fix(tree): pursuit_value combat-dominant budget — weapon beats artifact cross-slot, no utility regression`.
 
 ---
+
+### Task 3.5 (DISCOVERED — GAP-9, surface to user): L12 grey-farm criterion-1 deadlock
+
+Task-1 review CONFIRMED (independently reproduced): at L12, an iron_boots
+upgrade is wanted (chosen_root=ObtainItem(iron_boots)) but selected_goal
+falls to GrindCharacterXP(blue_slime) — grey_farm.py's nearest-consumer
+policy (`min(consumers, key=(crafting_level, code))`) picks apprentice_gloves
+as feather's reference recipe; its next-tier margin suppresses grey-farming
+feather → GatherMaterials(feather) becomes unplannable → XP fallback. This
+is a REAL criterion-1 violation (deadlock on mobs when gear needs
+upgrading), pre-existing, grey-farm-mechanism-specific. NOT fixed by
+pursuit_value (Task 3). Needs its own investigation: should the grey-farm
+reference recipe be the TARGET's recipe (iron_boots), not the nearest
+consumer? grey_farm.py is proven/anchored (Lean dropFarm scope) — fix needs
+care + gate. SURFACE TO USER before fixing; may be its own workstream.
 
 ### Task 4: Wrap-up
 
