@@ -217,12 +217,18 @@ def test_prereq_order_is_repr_independent(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(ObtainItem, "__repr__", lambda self: f"Zzz({self.code})")
     obtain = ObtainItem("iron_ore", 5)
     skill = ReachSkillLevel("mining", 10)
+    char = ReachCharLevel(level=20)
     # Under the OLD `sorted(unmet, key=repr)` this renamed repr would now put
     # the skill gate first ("ReachSkillLevel..." < "Zzz(...)").
     assert repr(skill) < repr(obtain)
-    pair: list[MetaGoal] = [skill, obtain]
-    ordered = sorted(pair, key=_prereq_order)
-    assert ordered == [obtain, skill]  # materials still rank first, repr notwithstanding
+    # All three prerequisite KINDS ordered: materials (ObtainItem) before skill
+    # gates (ReachSkillLevel) before char-level gates (ReachCharLevel), whatever
+    # the reprs. Covers _prereq_order's ReachCharLevel arm directly (the case
+    # production never emits as a sibling — see _PREREQ_KIND_RANK's docstring).
+    trio: list[MetaGoal] = [char, skill, obtain]
+    ordered = sorted(trio, key=_prereq_order)
+    assert ordered == [obtain, skill, char]  # semantic kind order, repr notwithstanding
+    assert _prereq_order(char) == (2, "", 20)
 
 
 def test_actionable_step_prefers_materials_over_skill_gate() -> None:
