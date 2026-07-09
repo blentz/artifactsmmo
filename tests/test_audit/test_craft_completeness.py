@@ -218,3 +218,20 @@ def test_craft_verdict_is_frozen() -> None:
         pass
     else:
         raise AssertionError("CraftVerdict must be frozen")
+
+
+def test_craft_cell_verdict_rejects_higher_tier_same_skill_craft() -> None:
+    """Tier-aware skill-grind: crafting a HIGHER-tier same-skill item is NOT a
+    grind toward a lower-tier target (you can't make it yet, not directional).
+    iron_boots is gearcrafting 10; a gearcrafting item above level 10 crafted
+    as plan[0] must FAIL, not pass via the skill-grind arm."""
+    gd = _gd()
+    # find a real gearcrafting item above iron_boots' level 10
+    higher = next(c for c, st in gd.all_item_stats.items()
+                  if st.crafting_skill == "gearcrafting"
+                  and (st.crafting_level or 0) > 10
+                  and gd.crafting_recipe(c))
+    assert higher not in (gd.crafting_recipe("iron_boots") or {})  # not a real ingredient
+    v = craft_cell_verdict("iron_boots", [CraftAction(code=higher)], gd)
+    assert v.passed is False, (higher, v)
+    assert v.reason.startswith("unrelated:"), v

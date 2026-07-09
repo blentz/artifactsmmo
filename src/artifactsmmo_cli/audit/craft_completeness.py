@@ -133,7 +133,8 @@ def _closure_item_set(recipe: str, needed_resources: set[str],
 
 
 def _advances_closure(action: Action, closure_items: frozenset[str],
-                      skill: str | None, game_data: GameData) -> bool:
+                      skill: str | None, skill_ceiling: int,
+                      game_data: GameData) -> bool:
     """True iff `action` — as `plan[0]` — makes progress toward `recipe`'s
     closure (`closure_items`, from `_closure_item_set`) or grinds `skill`
     (`recipe`'s `crafting_skill`).
@@ -170,8 +171,13 @@ def _advances_closure(action: Action, closure_items: frozenset[str],
         if action.code in closure_items:
             return True
         stats = game_data.item_stats(action.code)
+        # Tier-aware: a skill-grind craft must be AT OR BELOW the target's
+        # craft level — you grind toward X by crafting items you can already
+        # make, never a higher-tier same-skill item (which is itself
+        # unreachable and not directional toward X).
         return (stats is not None and skill is not None
-                and stats.crafting_skill == skill)
+                and stats.crafting_skill == skill
+                and stats.crafting_level <= skill_ceiling)
     if isinstance(action, GatherAction):
         produced = (action.drop_item_override
                    or game_data.resource_drop_item(action.resource_code)
@@ -179,8 +185,11 @@ def _advances_closure(action: Action, closure_items: frozenset[str],
         if produced in closure_items:
             return True
         resource_skill = game_data.resource_skill_level(action.resource_code)
+        # Tier-aware (same rule as the craft arm): the gathered resource's
+        # required skill level must be at/below the target's craft level.
         return (resource_skill is not None and skill is not None
-                and resource_skill[0] == skill)
+                and resource_skill[0] == skill
+                and resource_skill[1] <= skill_ceiling)
     if isinstance(action, FightAction):
         return any(item in closure_items
                   for item, _rate, _min_q, _max_q
@@ -208,8 +217,9 @@ def craft_cell_verdict(recipe: str, plan: list[Action],
         return CraftVerdict(False, "wait")
     stats = game_data.item_stats(recipe)
     skill = stats.crafting_skill if stats is not None else None
+    skill_ceiling = stats.crafting_level if stats is not None else 0
     needed_resources, craftable_mats = recipe_closure(game_data, [recipe])
     closure_items = _closure_item_set(recipe, needed_resources, craftable_mats, game_data)
-    if _advances_closure(first, closure_items, skill, game_data):
+    if _advances_closure(first, closure_items, skill, skill_ceiling, game_data):
         return CraftVerdict(True, "")
     return CraftVerdict(False, f"unrelated:{first!r}")
