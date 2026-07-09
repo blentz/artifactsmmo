@@ -6,9 +6,17 @@ from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.equipment_profile import (
     PROFILE_WEIGHTS,
     ProfileKind,
+    is_utility_objective,
+    profile_for,
     profile_weights,
     score_for_profile,
 )
+from artifactsmmo_cli.ai.tiers.meta_goal import (
+    ObtainItem,
+    ReachCharLevel,
+    ReachSkillLevel,
+)
+from artifactsmmo_cli.ai.tiers.strategy import root_category
 from artifactsmmo_cli.ai.tiers.strategic_value import STRATEGIC_SCALE
 
 
@@ -95,3 +103,38 @@ class TestUtilityCalibration:
         artifact = _utility_item(999)
         assert score_for_profile(weapon, ProfileKind.UTILITY) > \
             score_for_profile(artifact, ProfileKind.UTILITY)
+
+
+_SKILL = ReachSkillLevel(skill="weaponcrafting", level=10)
+_XP = ReachCharLevel(level=20)
+_GEAR = ObtainItem(code="fire_bow", quantity=1, slot="weapon_slot")
+
+
+class TestIsUtilityObjective:
+    def test_skills_is_utility(self):
+        assert is_utility_objective(_SKILL) is True
+
+    def test_char_level_and_gear_are_not_utility(self):
+        assert is_utility_objective(_XP) is False
+        assert is_utility_objective(_GEAR) is False
+
+    def test_taxonomy_tracks_root_category(self):
+        """Drift guard: is_utility_objective must agree with root_category's
+        'skills' bucket across every tree root type — if root_category gains
+        a category, this catches the profile taxonomy going stale."""
+        for root in (_SKILL, _XP, _GEAR):
+            assert is_utility_objective(root) == (root_category(root) == "skills")
+
+
+class TestProfileFor:
+    def test_plan_gate_forces_combat_when_inadequate(self):
+        # ¬band_adequate ⇒ COMBAT, for EVERY root type (the floor):
+        for root in (_SKILL, _XP, _GEAR):
+            assert profile_for(root, band_adequate=False) is ProfileKind.COMBAT
+
+    def test_utility_objective_when_adequate_is_utility(self):
+        assert profile_for(_SKILL, band_adequate=True) is ProfileKind.UTILITY
+
+    def test_combat_objective_when_adequate_is_combat(self):
+        assert profile_for(_XP, band_adequate=True) is ProfileKind.COMBAT
+        assert profile_for(_GEAR, band_adequate=True) is ProfileKind.COMBAT
