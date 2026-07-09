@@ -4,11 +4,22 @@ REAL planner at one recipe via the production obtain-X path."""
 import json
 from pathlib import Path
 
+from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
+from artifactsmmo_cli.ai.actions.rest import RestAction
+from artifactsmmo_cli.ai.actions.wait import WaitAction
+from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
-from artifactsmmo_cli.audit.craft_completeness import CraftCell, craft_grid, plan_craft
+from artifactsmmo_cli.audit.craft_completeness import (
+    CraftCell,
+    CraftVerdict,
+    craft_cell_verdict,
+    craft_grid,
+    plan_craft,
+)
 
 BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
 
@@ -83,3 +94,127 @@ def test_craft_grid_cell_is_frozen_and_field_accessible() -> None:
         pass
     else:
         raise AssertionError("CraftCell must be frozen")
+
+
+# --- craft_cell_verdict -----------------------------------------------------
+#
+# copper_bar (crafting_skill=mining, level=1): recipe {copper_ore: 10}.
+# copper_ore is gathered from copper_rocks (resource_drop_item). closure_items
+# = {copper_bar, copper_ore, topaz_stone, emerald_stone, ruby_stone,
+#    sapphire_stone} (the last four are copper_rocks' rare secondary drops).
+#
+# iron_boots (crafting_skill=gearcrafting, level=10): recipe
+# {iron_bar: 5, feather: 3}; iron_bar recipe {iron_ore: 10}. iron_ore comes
+# from iron_rocks; feather is a MONSTER-ONLY drop (chicken, no resource
+# node at all — resource_for_drop('feather') is None). closure_items =
+# {iron_boots, iron_bar, iron_ore, feather, topaz_stone, emerald_stone,
+#  ruby_stone, sapphire_stone} (iron_rocks' rare secondary drops).
+# copper_helmet (crafting_skill=gearcrafting, level=1) is NOT in iron_boots'
+# closure but shares its crafting_skill — a skill-grind leg.
+
+
+def test_craft_cell_verdict_fails_empty_plan() -> None:
+    gd = _gd()
+    verdict = craft_cell_verdict("copper_bar", [], gd)
+    assert verdict == CraftVerdict(False, "empty")
+
+
+def test_craft_cell_verdict_fails_wait_plan() -> None:
+    gd = _gd()
+    verdict = craft_cell_verdict("copper_bar", [WaitAction()], gd)
+    assert verdict == CraftVerdict(False, "wait")
+
+
+def test_craft_cell_verdict_passes_gather_of_closure_material() -> None:
+    """Gathering copper_rocks yields copper_ore (its resource_drop_item),
+    a copper_bar recipe ingredient — plan[0] advances the closure."""
+    gd = _gd()
+    plan = [GatherAction(resource_code="copper_rocks")]
+    verdict = craft_cell_verdict("copper_bar", plan, gd)
+    assert verdict == CraftVerdict(True, "")
+
+
+def test_craft_cell_verdict_passes_craft_of_the_recipe_itself() -> None:
+    gd = _gd()
+    plan = [CraftAction(code="copper_bar")]
+    verdict = craft_cell_verdict("copper_bar", plan, gd)
+    assert verdict == CraftVerdict(True, "")
+
+
+def test_craft_cell_verdict_passes_craft_of_a_closure_intermediate() -> None:
+    """iron_boots' closure includes iron_bar (a craftable_mats member, one
+    recipe input away from iron_boots) — crafting it advances the closure
+    even though it is not the root recipe."""
+    gd = _gd()
+    plan = [CraftAction(code="iron_bar")]
+    verdict = craft_cell_verdict("iron_boots", plan, gd)
+    assert verdict == CraftVerdict(True, "")
+
+
+def test_craft_cell_verdict_passes_fight_for_a_closure_leaf_dropper() -> None:
+    """chicken drops feather, a direct iron_boots recipe ingredient with NO
+    resource node (monster-only leaf) — recipe_closure's two-set return
+    can't see it, but the recipe-ingredient union in _closure_item_set does."""
+    gd = _gd()
+    plan = [FightAction(monster_code="chicken")]
+    verdict = craft_cell_verdict("iron_boots", plan, gd)
+    assert verdict == CraftVerdict(True, "")
+
+
+def test_craft_cell_verdict_passes_skill_grind_craft() -> None:
+    """copper_helmet (gearcrafting 1) never enters iron_boots' (gearcrafting
+    10) recipe tree, but crafting it levels the exact skill gate iron_boots
+    needs — the skill-grind arm of _advances_closure."""
+    gd = _gd()
+    stats = gd.item_stats("copper_helmet")
+    assert stats is not None and stats.crafting_skill == "gearcrafting"
+    assert "copper_helmet" not in gd.crafting_recipe("iron_boots")  # sanity: off-closure
+    plan = [CraftAction(code="copper_helmet")]
+    verdict = craft_cell_verdict("iron_boots", plan, gd)
+    assert verdict == CraftVerdict(True, "")
+
+
+def test_craft_cell_verdict_passes_npc_buy_of_closure_material() -> None:
+    """An NpcBuyAction buying a closure material (copper_ore, the copper_bar
+    recipe ingredient) advances the closure via .item_code."""
+    gd = _gd()
+    plan = [NpcBuyAction(npc_code="some_merchant", item_code="copper_ore")]
+    verdict = craft_cell_verdict("copper_bar", plan, gd)
+    assert verdict == CraftVerdict(True, "")
+
+
+def test_craft_cell_verdict_passes_withdraw_of_closure_material() -> None:
+    """A WithdrawItemAction pulling a closure material (copper_ore) from the
+    bank advances the closure via .code."""
+    gd = _gd()
+    plan = [WithdrawItemAction(code="copper_ore", quantity=1)]
+    verdict = craft_cell_verdict("copper_bar", plan, gd)
+    assert verdict == CraftVerdict(True, "")
+
+
+def test_craft_cell_verdict_fails_unrelated_gather() -> None:
+    """ash_tree (woodcutting) neither drops an iron_boots closure material
+    nor shares iron_boots' gearcrafting skill."""
+    gd = _gd()
+    plan = [GatherAction(resource_code="ash_tree")]
+    verdict = craft_cell_verdict("iron_boots", plan, gd)
+    assert verdict == CraftVerdict(False, f"unrelated:{plan[0]!r}")
+    assert verdict.reason == "unrelated:Gather(ash_tree)"
+
+
+def test_craft_cell_verdict_fails_unrelated_rest() -> None:
+    gd = _gd()
+    plan = [RestAction()]
+    verdict = craft_cell_verdict("iron_boots", plan, gd)
+    assert verdict == CraftVerdict(False, f"unrelated:{plan[0]!r}")
+    assert verdict.reason == "unrelated:Rest"
+
+
+def test_craft_verdict_is_frozen() -> None:
+    verdict = CraftVerdict(passed=True, reason="")
+    try:
+        verdict.passed = False  # type: ignore[misc]
+    except AttributeError:
+        pass
+    else:
+        raise AssertionError("CraftVerdict must be frozen")
