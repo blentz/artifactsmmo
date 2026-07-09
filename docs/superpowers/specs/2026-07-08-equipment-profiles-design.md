@@ -230,3 +230,41 @@ Unwired.
 - **strategic_value's horizon/budget** currently defers inventory_space and
   haste at parity 1000 — Phase 1 must decide their profile weights
   explicitly rather than inherit the dormant defaults.
+
+
+## SUPERSEDED — gear-pursuit-correctness (2026-07-08)
+
+The two-preset binary switch (Phase 1-2: ProfileKind / PROFILE_WEIGHTS /
+profile_for / score_for_profile + Formal/EquipmentProfile.lean) is
+SUPERSEDED. Mapping the code for Phase 3 surfaced two fatal problems with
+the binary switch: (1) COMBAT profile zeroes utility stats → bags/runes/
+artifacts (combat_raw 0) never pursued = regression; (2) the tree's
+chosen_root is only ever char_level/gear, never `skills` → the UTILITY
+switch could never fire. A live investigation ALSO found both deadlock
+criteria the user cared about already held (gear-needs-skill pursues the
+skill-grind chain; full-build pivots to XP; combat-blocked re-targets).
+
+RESOLUTION (plan docs/superpowers/plans/2026-07-08-gear-pursuit-correctness.md,
+commits bc508899..c94d9276): a SINGLE combat-dominant scorer
+`pursuit_value = strategic_value(stats, (1000,1,1,1,1),
+efficiency_budget=999)` replaces flat equip_value on the tree pursuit path
+(_structural_candidates/near_term_gear/_item_value). Combat structurally
+dominates cross-slot (one combat point ×1000 > the capped efficiency block
+≤999 → weapon always beats a prospecting artifact = the equip_value bug
+fixed) while utility still ORDERS utility slots (bags/runes/artifacts
+nonzero, still pursued = no regression). Potions stay on equip_value; the
+merged argmax naturally deprioritizes them below structural pursuit
+(GEAR-FIRST, user ruling 2026-07-08). Also: no-deadlock + combat-viability
+criteria pinned as regression tests (test_no_deadlock.py); actionable_step
+repr-sort retired for a semantic _prereq_order.
+
+The Phase 1-2 profile machinery is left DORMANT (proven, unwired) — retire
+in a future cleanup once confirmed dead. The equip_value flat-parity bug
+this whole epic targeted is FIXED via pursuit_value.
+
+OPEN (surfaced, not yet fixed): GAP-9 — at L12 an iron_boots upgrade
+deadlocks to GrindCharacterXP because grey_farm.py's nearest-consumer
+policy suppresses feather-gathering (the reference recipe is
+apprentice_gloves, not the target iron_boots). A real criterion-1
+violation at that specific level; pre-existing; grey-farm-mechanism, not
+pursuit_value. Needs its own workstream (grey_farm.py is proven/anchored).
