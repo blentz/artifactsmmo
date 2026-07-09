@@ -28,7 +28,7 @@ deadlocks under-skill is a caught gap, not a miss.
 
 ## The grid (per recipe)
 
-Recipe X with craft skill `S`, craft level `L`, tier `T = L // 10 + 1`:
+Recipe X with craft skill `S`, craft level `L`, tier `T = (L-1)//10 + 1` (decade-inclusive: L=10 is the last level of tier 1, not the first of tier 2):
 
 - **Character-level cells** (3): the tier's nominal char level — `1` for
   T1 (L ≤ 9), else `10·T` — plus the two tier-boundary offsets `10·T − 2`
