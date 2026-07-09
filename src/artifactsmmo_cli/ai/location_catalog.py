@@ -142,6 +142,13 @@ class LocationCatalog:
         """True if this NPC only exists during a timed event window."""
         return npc_code in self.npc_event_codes
 
+    def is_event_monster(self, monster_code: str) -> bool:
+        """True if this monster only spawns during a timed event window (its
+        only known tiles come from an event overlay). Monster analog of
+        `is_event_npc` — membership in the event-monster spawn registry,
+        independent of whether the event is active right now."""
+        return monster_code in self.event_monster_locations
+
     def _content_event_active(self, code: str) -> bool:
         """True iff `code` is event-spawned content whose event is live now."""
         ev = self.event_code_of_content.get(code)

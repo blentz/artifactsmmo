@@ -11,11 +11,14 @@ from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
-from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.audit.craft_completeness import (
     CraftCell,
     CraftVerdict,
+    GapClass,
+    _leaf_status,
+    classify_gap,
     craft_cell_verdict,
     craft_grid,
     plan_craft,
@@ -235,3 +238,302 @@ def test_craft_cell_verdict_rejects_higher_tier_same_skill_craft() -> None:
     v = craft_cell_verdict("iron_boots", [CraftAction(code=higher)], gd)
     assert v.passed is False, (higher, v)
     assert v.reason.startswith("unrelated:"), v
+
+
+# --- classify_gap -----------------------------------------------------------
+#
+# Witness catalogs built as bare GameData() instances with only the fields the
+# classifier reads populated (the tests/ai/test_grey_farm.py idiom: a real
+# GameData whose underscore-backed catalogs are set directly). Each witness is
+# minimal and isolates ONE gap class; the precedence tests combine two blocked
+# leaves to pin the cascade order.
+
+
+def _fill_monster_defaults(gd: GameData) -> None:
+    """Give every declared monster the combat-stat defaults predict_win reads,
+    so is_winnable never KeyErrors on a sparsely-specified fixture monster."""
+    for code in gd._monster_level:
+        gd._monster_hp.setdefault(code, 0)
+        gd._monster_attack.setdefault(code, {})
+        gd._monster_resistance.setdefault(code, {})
+        gd._monster_critical_strike.setdefault(code, 0)
+        gd._monster_initiative.setdefault(code, 0)
+
+
+def _mat(code: str) -> ItemStats:
+    """A non-craftable base material item (a closure leaf)."""
+    return ItemStats(code=code, level=1, type_="resource", subtype="mob")
+
+
+def _craftable(code: str, skill: str, level: int) -> ItemStats:
+    return ItemStats(code=code, level=level, type_="resource", subtype="craft",
+                     crafting_skill=skill, crafting_level=level)
+
+
+def _cell(char_level: int = 5, skill: str = "gearcrafting",
+          skill_level: int = 1) -> CraftCell:
+    return CraftCell(char_level=char_level, skill_name=skill,
+                     skill_level=skill_level)
+
+
+def test_classify_gap_planner_bug_when_all_reachable() -> None:
+    """widget (gearcrafting 5) crafts from gear_ore, a gatherable ore; the
+    skill has a lower-tier grind item (trinket, gearcrafting 1). Every leaf is
+    reachable and the skill is grindable, so the FAIL is the actionable
+    residual — PLANNER_BUG."""
+    gd = GameData()
+    gd._item_stats = {
+        "widget": _craftable("widget", "gearcrafting", 5),
+        "trinket": _craftable("trinket", "gearcrafting", 1),
+        "gear_ore": _mat("gear_ore"),
+    }
+    gd._crafting_recipes = {"widget": {"gear_ore": 2}, "trinket": {"gear_ore": 1}}
+    gd._resource_drops = {"gear_rocks": "gear_ore"}
+    gd._resource_skill = {"gear_rocks": ("mining", 1)}
+    assert classify_gap("widget", _cell(skill_level=1), gd) is GapClass.PLANNER_BUG
+
+
+def test_classify_gap_material_unreachable_dead_end_leaf() -> None:
+    """phantom_mat has NO source at all — not gatherable, not craftable, no
+    dropper, no vendor, not task-earnable — a static-catalog dead end."""
+    gd = GameData()
+    gd._item_stats = {
+        "relic": _craftable("relic", "gearcrafting", 1),
+        "phantom_mat": _mat("phantom_mat"),
+    }
+    gd._crafting_recipes = {"relic": {"phantom_mat": 1}}
+    assert classify_gap("relic", _cell(), gd) is GapClass.MATERIAL_UNREACHABLE
+
+
+def test_classify_gap_combat_blocked_unwinnable_dropper() -> None:
+    """beast_hide drops only from cow, a PERMANENTLY-spawning monster that is
+    unwinnable at the bare cell loadout (zero attack) — COMBAT_BLOCKED, a
+    strength limit at a real, always-present source."""
+    gd = GameData()
+    gd._item_stats = {
+        "beast_armor": _craftable("beast_armor", "gearcrafting", 5),
+        "beast_hide": _mat("beast_hide"),
+    }
+    gd._crafting_recipes = {"beast_armor": {"beast_hide": 2}}
+    gd._monster_locations = {"cow": (1, 0)}
+    gd._monster_level = {"cow": 30}
+    gd._monster_hp = {"cow": 2000}
+    gd._monster_attack = {"cow": {"earth": 200}}
+    gd._monster_drops = {"cow": [("beast_hide", 10, 1, 1)]}
+    _fill_monster_defaults(gd)
+    assert classify_gap("beast_armor", _cell(), gd) is GapClass.COMBAT_BLOCKED
+
+
+def test_classify_gap_event_gated_event_monster_dropper() -> None:
+    """event_gem drops only from event_ogre, an EVENT monster with no
+    permanent spawn (unknown spawn in the event-free audit) — EVENT_GATED, the
+    most-specific expected limit."""
+    gd = GameData()
+    gd._item_stats = {
+        "crown": _craftable("crown", "gearcrafting", 5),
+        "event_gem": _mat("event_gem"),
+    }
+    gd._crafting_recipes = {"crown": {"event_gem": 1}}
+    gd._monster_level = {"event_ogre": 20}
+    gd._monster_drops = {"event_ogre": [("event_gem", 10, 1, 1)]}
+    gd.world.event_monster_locations = {"event_ogre": [(5, 5)]}
+    gd.world.event_code_of_content = {"event_ogre": "corrupt"}
+    _fill_monster_defaults(gd)
+    assert classify_gap("crown", _cell(), gd) is GapClass.EVENT_GATED
+
+
+def test_classify_gap_skill_unreachable_no_grind_ladder() -> None:
+    """lonely_blade (gearcrafting 10) is the ONLY gearcrafting item; its leaf
+    is a gatherable ore (reachable), so no material class fires, but at
+    gearcrafting 5 there is nothing of that skill below level 10 to grind on —
+    SKILL_UNREACHABLE."""
+    gd = GameData()
+    gd._item_stats = {
+        "lonely_blade": _craftable("lonely_blade", "gearcrafting", 10),
+        "gear_ore": _mat("gear_ore"),
+    }
+    gd._crafting_recipes = {"lonely_blade": {"gear_ore": 2}}
+    gd._resource_drops = {"gear_rocks": "gear_ore"}
+    gd._resource_skill = {"gear_rocks": ("mining", 1)}
+    verdict = classify_gap("lonely_blade", _cell(skill_level=5), gd)
+    assert verdict is GapClass.SKILL_UNREACHABLE
+
+
+def test_classify_gap_event_gated_outranks_combat_blocked() -> None:
+    """A recipe with BOTH an event-gated leaf and a combat-blocked leaf is
+    reported EVENT_GATED — the cascade ranks the expected event limit first."""
+    gd = GameData()
+    gd._item_stats = {
+        "dual": _craftable("dual", "gearcrafting", 5),
+        "event_gem": _mat("event_gem"),
+        "beast_hide": _mat("beast_hide"),
+    }
+    gd._crafting_recipes = {"dual": {"event_gem": 1, "beast_hide": 1}}
+    gd._monster_locations = {"cow": (1, 0)}
+    gd._monster_level = {"cow": 30, "event_ogre": 20}
+    gd._monster_hp = {"cow": 2000}
+    gd._monster_attack = {"cow": {"earth": 200}}
+    gd._monster_drops = {
+        "cow": [("beast_hide", 10, 1, 1)],
+        "event_ogre": [("event_gem", 10, 1, 1)],
+    }
+    gd.world.event_monster_locations = {"event_ogre": [(5, 5)]}
+    gd.world.event_code_of_content = {"event_ogre": "corrupt"}
+    _fill_monster_defaults(gd)
+    assert classify_gap("dual", _cell(), gd) is GapClass.EVENT_GATED
+
+
+def test_classify_gap_combat_blocked_outranks_material_unreachable() -> None:
+    """A combat-blocked leaf (beatable-later source) outranks a dead-end
+    material leaf — COMBAT_BLOCKED is the softer, more-specific game limit."""
+    gd = GameData()
+    gd._item_stats = {
+        "mix": _craftable("mix", "gearcrafting", 5),
+        "beast_hide": _mat("beast_hide"),
+        "phantom_mat": _mat("phantom_mat"),
+    }
+    gd._crafting_recipes = {"mix": {"beast_hide": 1, "phantom_mat": 1}}
+    gd._monster_locations = {"cow": (1, 0)}
+    gd._monster_level = {"cow": 30}
+    gd._monster_hp = {"cow": 2000}
+    gd._monster_attack = {"cow": {"earth": 200}}
+    gd._monster_drops = {"cow": [("beast_hide", 10, 1, 1)]}
+    _fill_monster_defaults(gd)
+    assert classify_gap("mix", _cell(), gd) is GapClass.COMBAT_BLOCKED
+
+
+def test_classify_gap_reachable_via_permanent_gold_vendor() -> None:
+    """A leaf sold by a permanent gold vendor is reachable — no material class
+    fires. With the skill grindable the residual is PLANNER_BUG (the vendor
+    buyable arm of _leaf_status returned None)."""
+    gd = GameData()
+    gd._item_stats = {
+        "bought_gear": _craftable("bought_gear", "gearcrafting", 1),
+        "shop_mat": _mat("shop_mat"),
+        "grind_item": _craftable("grind_item", "gearcrafting", 1),
+    }
+    gd._crafting_recipes = {
+        "bought_gear": {"shop_mat": 1},
+        "grind_item": {"shop_mat": 1},
+    }
+    gd.world.npc_stock = {"merchant": {"shop_mat": 5}}
+    gd.world.npc_tiles = {"merchant": (2, 2)}
+    assert classify_gap("bought_gear", _cell(), gd) is GapClass.PLANNER_BUG
+
+
+def test_classify_gap_reachable_via_vendor_for_attainable_currency() -> None:
+    """A leaf sold for a non-gold currency that is itself attainable-now (a
+    gatherable coin) is reachable via the currency-recursion buyable arm."""
+    gd = GameData()
+    gd._item_stats = {
+        "coin_gear": _craftable("coin_gear", "gearcrafting", 1),
+        "coin_mat": _mat("coin_mat"),
+        "trade_coin": _mat("trade_coin"),
+        "grind_item": _craftable("grind_item", "gearcrafting", 1),
+    }
+    gd._crafting_recipes = {
+        "coin_gear": {"coin_mat": 1},
+        "grind_item": {"coin_mat": 1},
+    }
+    gd._resource_drops = {"coin_vein": "trade_coin"}
+    gd._resource_skill = {"coin_vein": ("mining", 1)}
+    gd.world.npc_stock = {"trader": {"coin_mat": 3}}
+    gd.world.npc_tiles = {"trader": (4, 4)}
+    gd.world.npc_buy_currency = {"trader": {"coin_mat": "trade_coin"}}
+    assert classify_gap("coin_gear", _cell(), gd) is GapClass.PLANNER_BUG
+
+
+def test_classify_gap_event_gated_via_event_only_vendor() -> None:
+    """A leaf sold ONLY by an event-window NPC (no permanent vendor, no
+    dropper) is EVENT_GATED through the event-vendor arm."""
+    gd = GameData()
+    gd._item_stats = {
+        "festival_gear": _craftable("festival_gear", "gearcrafting", 5),
+        "festival_token": _mat("festival_token"),
+    }
+    gd._crafting_recipes = {"festival_gear": {"festival_token": 1}}
+    gd.world.npc_stock = {"festival_vendor": {"festival_token": 10}}
+    gd.world.event_npc_spawns = {"festival_vendor": (7, 7)}
+    gd.world.npc_event_codes = {"festival_vendor": "festival"}
+    assert classify_gap("festival_gear", _cell(), gd) is GapClass.EVENT_GATED
+
+
+def test_classify_gap_reachable_via_task_earnable_leaf() -> None:
+    """A task-earnable leaf (awarded by the always-available task loop) is
+    reachable — the task arm of _leaf_status returns None."""
+    gd = GameData()
+    gd._item_stats = {
+        "task_gear": _craftable("task_gear", "gearcrafting", 1),
+        "task_mat": _mat("task_mat"),
+        "grind_item": _craftable("grind_item", "gearcrafting", 1),
+    }
+    gd._crafting_recipes = {
+        "task_gear": {"task_mat": 1},
+        "grind_item": {"task_mat": 1},
+    }
+    gd._task_reward_item_codes = frozenset({"task_mat"})
+    assert classify_gap("task_gear", _cell(), gd) is GapClass.PLANNER_BUG
+
+
+def test_classify_gap_skill_grindable_via_gatherable_of_skill() -> None:
+    """A mining-skill recipe (a smelt) is grindable through a gatherable
+    resource of the mining skill even with no lower craftable — pins the
+    resource arm of _skill_grindable (result is PLANNER_BUG, not
+    SKILL_UNREACHABLE)."""
+    gd = GameData()
+    gd._item_stats = {
+        "ore_bar": _craftable("ore_bar", "mining", 5),
+        "raw_ore": _mat("raw_ore"),
+    }
+    gd._crafting_recipes = {"ore_bar": {"raw_ore": 2}}
+    gd._resource_drops = {"ore_rocks": "raw_ore"}
+    gd._resource_skill = {"ore_rocks": ("mining", 1)}
+    verdict = classify_gap("ore_bar", _cell(skill="mining", skill_level=1), gd)
+    assert verdict is GapClass.PLANNER_BUG
+
+
+def test_classify_gap_skill_already_at_target_is_grindable() -> None:
+    """When the cell skill already meets the recipe's craft level, no grind is
+    needed — the skill_level >= target early-return keeps it out of
+    SKILL_UNREACHABLE (PLANNER_BUG residual)."""
+    gd = GameData()
+    gd._item_stats = {
+        "atlevel_blade": _craftable("atlevel_blade", "gearcrafting", 10),
+        "gear_ore": _mat("gear_ore"),
+    }
+    gd._crafting_recipes = {"atlevel_blade": {"gear_ore": 2}}
+    gd._resource_drops = {"gear_rocks": "gear_ore"}
+    gd._resource_skill = {"gear_rocks": ("mining", 1)}
+    verdict = classify_gap("atlevel_blade", _cell(skill_level=10), gd)
+    assert verdict is GapClass.PLANNER_BUG
+
+
+def test_leaf_status_reachable_via_winnable_permanent_dropper() -> None:
+    """A leaf whose permanent dropper IS winnable at the (geared) cell loadout
+    is reachable — _leaf_status returns None via the winnable-drop arm. Exercised
+    directly on _leaf_status with a combat-capable state, since classify_gap's
+    census cell carries no loadout and can beat nothing."""
+    gd = GameData()
+    gd._item_stats = {
+        "meat": _mat("meat"),
+        "blade": ItemStats(code="blade", level=1, type_="weapon", subtype="",
+                           attack={"fire": 100}),
+    }
+    gd._monster_locations = {"rat": (1, 0)}
+    gd._monster_level = {"rat": 1}
+    gd._monster_hp = {"rat": 10}
+    gd._monster_drops = {"rat": [("meat", 10, 1, 1)]}
+    _fill_monster_defaults(gd)
+    sc = ScenarioCharacter(name="fighter", level=5,
+                           equipment={"weapon_slot": "blade"},
+                           derive_combat_stats=True)
+    state = scenario_state(sc, gd)
+    assert _leaf_status("meat", state, gd) is None
+
+
+def test_classify_gap_unknown_recipe_is_its_own_unreachable_leaf() -> None:
+    """An item with no catalog stats collapses to a closure whose sole 'leaf'
+    is itself, with no acquisition source — the classifier returns
+    MATERIAL_UNREACHABLE rather than raising on the missing stats."""
+    gd = GameData()
+    assert classify_gap("nonexistent_item", _cell(), gd) is GapClass.MATERIAL_UNREACHABLE

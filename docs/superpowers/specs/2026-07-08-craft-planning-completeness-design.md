@@ -177,3 +177,17 @@ is orchestration + doc rendering (no decision logic).
   its own root context (band adequacy, sticky). The census measures "can the
   planner plan to make X when X is the objective," which is the intended
   question; tree-arbitration interplay is out of scope.
+
+## Phases
+
+- **Phase 1 SHIPPED**: plan_craft + craft_grid + craft_cell_verdict +
+  classify_gap (pure cores, unit-tested); generator/docs + regression pin +
+  plan --craft are Phase 2-3.
+- **Phase 2** — generator + docs: `scripts/gen_craft_completeness.py` renders
+  `docs/craft_completeness/MATRIX.md` + `BACKLOG.md` + SUMMARY over all 321
+  recipes on the committed bundle.
+- **Phase 3** — regression pin + CLI: `tests/test_ai/scenarios/
+  test_craft_completeness.py` pins ~30 must-PASS cells; `plan --craft <item>`
+  single-cell debugging mode.
+- **Phase 4** — triage: fix the PLANNER_BUG gaps the census finds, each its
+  own systematic-debug.

@@ -891,6 +891,13 @@ class GameData:
         """Event code whose active window spawns this NPC, or None if not an event NPC."""
         return self.world.npc_event_code(npc_code)
 
+    def is_event_monster(self, monster_code: str) -> bool:
+        """True if this monster only spawns during a timed event window.
+        Monster analog of `is_event_npc`: registry membership, independent of
+        the current active-event overlay (so a caller in the event-free audit
+        state can still tell an event-only dropper from a permanent one)."""
+        return self.world.is_event_monster(monster_code)
+
     def npc_sells_item(self, npc_code: str, item_code: str) -> int | None:
         """Buy price of item_code from npc_code, or None if the NPC doesn't sell it."""
         return self.world.npc_sells_item(npc_code, item_code)
