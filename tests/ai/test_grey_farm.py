@@ -145,6 +145,64 @@ class TestGreyFarmPolicy:
         assert grey_farm_allowed("feather", beyond, gd) is True
 
 
+def _gd_gap9() -> GameData:
+    """GAP-9 shape: feather is consumed by a LOW-tier unrelated item
+    (low_glove, gearcrafting 1) whose same-family next tier (mid_glove,
+    gearcrafting 8) is CLOSE — and by the committed target iron_boots
+    (gearcrafting 10, boots) whose next tier (steel_boots, gc15) is FAR.
+    mid_glove/steel_boots exist for the family next-tier lookup but do NOT
+    consume feather. The old lowest-consumer heuristic evaluated only
+    low_glove (close -> suppress); the ANY-consumer policy allows because
+    iron_boots is non-obsolete."""
+    gd = GameData()
+    gd._monster_locations = {"chicken": (1, 0)}
+    gd._monster_level = {"chicken": 1}
+    gd._monster_hp = {"chicken": 60}
+    gd._monster_attack = {"chicken": {"air": 4}}
+    gd._monster_drops = {"chicken": [("feather", 10, 1, 1)]}
+    gd._item_stats = {
+        "feather": ItemStats(code="feather", level=1, type_="resource", subtype="mob"),
+        "low_glove": ItemStats(code="low_glove", level=1, type_="weapon",
+                               subtype="tool", crafting_skill="gearcrafting",
+                               crafting_level=1),
+        "mid_glove": ItemStats(code="mid_glove", level=8, type_="weapon",
+                               subtype="tool", crafting_skill="gearcrafting",
+                               crafting_level=8),
+        "iron_boots": ItemStats(code="iron_boots", level=10, type_="boots",
+                                subtype="", crafting_skill="gearcrafting",
+                                crafting_level=10),
+        "steel_boots": ItemStats(code="steel_boots", level=15, type_="boots",
+                                 subtype="", crafting_skill="gearcrafting",
+                                 crafting_level=15),
+    }
+    # ONLY low_glove and iron_boots consume feather; the next-tier items don't.
+    gd._crafting_recipes = {
+        "low_glove": {"feather": 2}, "mid_glove": {"sunflower": 1},
+        "iron_boots": {"feather": 3}, "steel_boots": {"iron_bar": 1},
+    }
+    fill_monster_stat_defaults(gd)
+    return gd
+
+
+class TestGreyFarmAnyConsumer:
+    """GAP-9: farm-worthy iff ANY consumer is non-obsolete — an unrelated
+    low-tier consumer with a near next tier must not suppress farming a drop
+    a committed far-next-tier recipe genuinely needs."""
+
+    def test_allowed_when_a_far_consumer_exists_despite_close_low_consumer(self) -> None:
+        # low_glove (gc1) next tier mid_glove gc8 -> close at gc5 (8 !> 10);
+        # iron_boots (gc10) next tier steel_boots gc15 -> far (15 > 10) -> ALLOW.
+        gd = _gd_gap9()
+        state = make_state(skills={"gearcrafting": 5})
+        assert grey_farm_allowed("feather", state, gd) is True
+
+    def test_suppressed_when_every_consumer_is_obsolete(self) -> None:
+        # Raise gearcrafting so BOTH consumers' next tiers are within margin:
+        # low_glove next 8 <= 10+5; iron_boots next 15 <= 10+5 -> both close.
+        gd = _gd_gap9()
+        state = make_state(skills={"gearcrafting": 10})
+        assert grey_farm_allowed("feather", state, gd) is False
+
 class TestDropFarmMechanism:
     def test_drop_farm_flag_bypasses_xp_gate(self) -> None:
         gd = _gd()

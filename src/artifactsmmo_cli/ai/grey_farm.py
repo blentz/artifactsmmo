@@ -62,9 +62,23 @@ def grey_farm_allowed(item_code: str, state: WorldState,
                       game_data: GameData) -> bool:
     """True when fighting a zero-xp dropper of `item_code` is worth it.
 
-    The consuming recipe is the LOWEST-crafting-level item whose recipe
-    contains `item_code` (the recipe this farm most plausibly serves —
-    semantic key, code as pure disambiguator between identical levels)."""
+    Farm-worthy IFF the drop serves AT LEAST ONE crafting recipe whose next
+    same-family tier is too far a skill-grind away (or absent) — i.e. some
+    live, not-about-to-be-obsolete demand needs it. When EVERY consuming
+    recipe has a near next tier, grinding the skill for the better item beats
+    farming greys for the soon-obsolete one (the user's 2026-07-06 directive:
+    health_potion vs large_health_potion two alchemy levels up).
+
+    GAP-9 (2026-07-08): the old heuristic evaluated only the LOWEST-level
+    consumer as "the reference recipe", so farming feather for a committed
+    iron_boots (gearcrafting 10, next boot tier far — legitimately farmable)
+    was wrongly suppressed because feather's globally-lowest consumer is an
+    unrelated apprentice_gloves (gearcrafting 1, next tool tier close). The
+    demand that armed the farm is a specific committed recipe, unknown to this
+    policy (the goal step is ObtainItem(feather), the committed gear root is
+    upstream) — so instead of guessing one reference, we allow when ANY
+    consumer is non-obsolete. This is the honest reading of the directive
+    across every recipe the drop serves."""
     consumers = [
         stats
         for stats in game_data.all_item_stats.values()
@@ -80,9 +94,11 @@ def grey_farm_allowed(item_code: str, state: WorldState,
             for currency in per_item.values()
         }
         return item_code in purchase_currencies
-    recipe_item = min(consumers, key=lambda s: (s.crafting_level, s.code))
-    next_tier = _next_tier_level(recipe_item, game_data)
-    if next_tier is None:
-        return True
-    skill = state.skills.get(recipe_item.crafting_skill or "", 0)
-    return next_tier > skill + GREY_FARM_NEXT_TIER_MARGIN
+    for recipe_item in consumers:
+        next_tier = _next_tier_level(recipe_item, game_data)
+        if next_tier is None:
+            return True
+        skill = state.skills.get(recipe_item.crafting_skill or "", 0)
+        if next_tier > skill + GREY_FARM_NEXT_TIER_MARGIN:
+            return True
+    return False

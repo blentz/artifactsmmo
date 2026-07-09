@@ -216,3 +216,19 @@ def test_l48_band_adequate_chosen_root_is_wait_when_no_winnable_monster() -> Non
 
 def test_l48_band_adequate_search_bounded() -> None:
     assert_search_bounded(_run(CRITERION_2_WALLED), CRITERION_2_WALLED)
+
+
+def test_l12_gearcrafting_gap_grey_farm_no_deadlock() -> None:
+    """GAP-9 regression: at L12 the feather leaf's dropper (chicken) is GREY,
+    so iron_boots' feather must be grey-farmed. The old lowest-consumer policy
+    suppressed it (evaluated against unrelated apprentice_gloves) -> deadlock
+    to GrindCharacterXP. Pins the FIXED behavior: pursue iron_boots via the
+    feather grey-farm, never GrindCharacterXP."""
+    report = _run("l12_gearcrafting_gap")
+    assert repr(report.decision.chosen_root).startswith("ObtainItem(code='iron_boots'"), \
+        report.decision.chosen_root
+    goal = repr(report.selected_goal)
+    assert "GrindCharacterXP" not in goal, goal  # the criterion-1 guarantee
+    assert goal.startswith("GatherMaterials(feather"), goal
+    assert report.plan and "Fight(chicken)" in repr(report.plan[0]), report.plan
+    assert_search_bounded(report, "l12_gearcrafting_gap")

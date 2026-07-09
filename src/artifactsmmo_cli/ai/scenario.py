@@ -839,6 +839,31 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                      "skill-grind step (GatherMaterials(feather) -> "
                      "Fight(chicken)), never GrindCharacterXP."),
 
+    # GAP-9 regression (2026-07-08): at L12 the feather-dropping chicken (L1)
+    # is GREY (level diff 11 >= 10 -> zero xp), so the feather leaf must go
+    # through grey_farm_allowed. The old lowest-consumer heuristic evaluated
+    # feather against apprentice_gloves (an unrelated gc1 tool with a near
+    # next tier) and wrongly suppressed the farm -> GatherMaterials(feather)
+    # unplannable -> the whole plan deadlocked to GrindCharacterXP even though
+    # a committed iron_boots (gc10, far next boot tier) genuinely needed the
+    # feather. The ANY-consumer policy allows the farm. iron_bar is pre-banked
+    # so the remaining unmet material IS the grey-farmed feather.
+    "l12_gearcrafting_gap": ScenarioCharacter(
+        name="l12_gearcrafting_gap", level=12,
+        skills={"mining": 10, "woodcutting": 10, "weaponcrafting": 5,
+                "gearcrafting": 5, "jewelrycrafting": 5, "cooking": 5,
+                "alchemy": 5, "fishing": 5},
+        equipment=dict(_COPPER_SET),
+        bank={"iron_bar": 10},
+        derive_combat_stats=True,
+        description="GAP-9: L12, copper gear, gearcrafting 5, iron_bar banked "
+                     "-> the committed iron_boots upgrade needs feather from a "
+                     "GREY chicken (diff 11). The planner must farm feather "
+                     "(GatherMaterials(feather) -> Fight(chicken) drop-farm), "
+                     "never deadlock to GrindCharacterXP. Fixed by the "
+                     "any-consumer grey-farm policy (was suppressed against "
+                     "the unrelated lowest feather consumer)."),
+
     # --- Criterion-1 ramp: the same character, but the iron_boots material
     # closure's feather leaf is now combat-blocked (no winnable dropper) —
     # chicken is removed from this scenario's reachable monster set by
