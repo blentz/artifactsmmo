@@ -758,4 +758,68 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
                      "(blue_slimeball) — the craft chain must plan instead "
                      "of flooding A* and falling back to the red_slime "
                      "grind."),
+
+    # --- Gear-pursuit correctness Task 1 (2026-07-09, docs/superpowers/sdd
+    # gear-pursuit-correctness plan): no-deadlock criterion 1 witness. L10,
+    # full copper set (L1/L5 tier), mining 10 (meets iron_ore's gather-level
+    # gate — iron_rocks requires mining 10) but weaponcrafting/gearcrafting
+    # only 5 (below iron_boots' craft-skill gate of 10). iron_boots
+    # (gearcrafting 10, item level 10 <= state.level, recipe iron_bar x5 +
+    # feather x3, both closures open at this state: iron_ore gathers at
+    # mining 10, feather drops off the chicken) is a real near_term_gear
+    # candidate — the planner must target it via the craft/skill-grind
+    # path, NOT fall back to a character-level grind, when the blocking gap
+    # is a CRAFTING skill rather than combat viability.
+    #
+    # RE-DERIVED from the investigation's original "L12" framing (2026-07-09
+    # Task 1): at L12 the chicken (level 1) reads as a GREY dropper
+    # (xp_per_kill formula zeroes at level-diff >= 10; 12-1=11), which routes
+    # feather acquisition through `grey_farm_allowed` — and that policy's
+    # "nearest consumer" arm picks `apprentice_gloves` (weaponcrafting level
+    # 1, the LOWEST-level recipe that consumes feather, not iron_boots) as
+    # the reference recipe, whose next tier is within the grind-margin at
+    # weaponcrafting 5 — so grey-farming feather is SUPPRESSED and
+    # GatherMaterials(feather) has no action to reach its target at all
+    # (plan_len 0), and the arbiter falls through to GrindCharacterXP after
+    # all. That is a real planner finding, but it is an ARTIFACT of the
+    # chicken/apprentice_gloves grey-farm interaction, not the craft-skill
+    # criterion this scenario exists to witness. At L10 (diff 10-1=9, still
+    # inside the xp-positive window) chicken is a normal winnable dropper —
+    # FightAction(chicken) is emitted unconditionally (no grey-farm gate
+    # consulted) — and the craft/skill-grind chain runs cleanly. Confirmed
+    # by direct planner run (see docs/superpowers/sdd/task-1-report.md).
+    "l10_gearcrafting_gap": ScenarioCharacter(
+        name="l10_gearcrafting_gap", level=10,
+        skills={"mining": 10, "weaponcrafting": 5, "gearcrafting": 5},
+        equipment=dict(_COPPER_SET),
+        derive_combat_stats=True,
+        description="Criterion 1 (no-deadlock-on-skilling-gear): L10, copper "
+                     "gear, mining 10 / gearcrafting+weaponcrafting 5 — "
+                     "iron_boots is a reachable near_term_gear candidate "
+                     "gated on a CRAFTING skill, not combat; the planner "
+                     "must pursue ObtainItem(iron_boots) via a gather/craft "
+                     "skill-grind step (GatherMaterials(feather) -> "
+                     "Fight(chicken)), never GrindCharacterXP."),
+
+    # --- Criterion-1 ramp: the same character, but the iron_boots material
+    # closure's feather leaf is now combat-blocked (no winnable dropper) —
+    # chicken is removed from this scenario's reachable monster set by
+    # leaving combat stats at the harness's zero-stat default
+    # (derive_combat_stats=False; l1_fresh/l8_overstocked use the same
+    # convention for "no monster is winnable here" — is_winnable sees 0
+    # attack against every monster). Pins the ramp: the planner must
+    # re-target a reachable candidate or Wait, never thrash GrindCharacterXP
+    # against an unwinnable monster.
+    "l10_gearcrafting_gap_combat_blocked": ScenarioCharacter(
+        name="l10_gearcrafting_gap_combat_blocked", level=10, max_hp=240,
+        skills={"mining": 10, "weaponcrafting": 5, "gearcrafting": 5},
+        equipment=dict(_COPPER_SET),
+        description="Criterion-1 ramp: l10_gearcrafting_gap with combat "
+                     "stats at the harness's zero-attack default (no "
+                     "derive_combat_stats) so every monster including the "
+                     "feather-dropping chicken reads unwinnable — the "
+                     "iron_boots closure is combat-blocked. Pins that the "
+                     "planner re-targets to a reachable candidate (the "
+                     "utility-potion branch) instead of thrashing "
+                     "GrindCharacterXP against an unwinnable monster."),
 }
