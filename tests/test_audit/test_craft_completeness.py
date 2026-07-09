@@ -11,6 +11,7 @@ from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.audit.craft_completeness import (
@@ -18,6 +19,7 @@ from artifactsmmo_cli.audit.craft_completeness import (
     CraftVerdict,
     GapClass,
     _leaf_status,
+    census_state,
     classify_gap,
     craft_cell_verdict,
     craft_grid,
@@ -510,9 +512,10 @@ def test_classify_gap_skill_already_at_target_is_grindable() -> None:
 
 def test_leaf_status_reachable_via_winnable_permanent_dropper() -> None:
     """A leaf whose permanent dropper IS winnable at the (geared) cell loadout
-    is reachable — _leaf_status returns None via the winnable-drop arm. Exercised
-    directly on _leaf_status with a combat-capable state, since classify_gap's
-    census cell carries no loadout and can beat nothing."""
+    is reachable — _leaf_status returns None via the winnable-drop arm.
+    Exercised directly on _leaf_status with a hand-built combat-capable
+    state (classify_gap's own census_state loadout is pinned separately by
+    test_census_state_gears_the_cell_and_flips_combat_blocked_to_reachable)."""
     gd = GameData()
     gd._item_stats = {
         "meat": _mat("meat"),
@@ -537,3 +540,110 @@ def test_classify_gap_unknown_recipe_is_its_own_unreachable_leaf() -> None:
     MATERIAL_UNREACHABLE rather than raising on the missing stats."""
     gd = GameData()
     assert classify_gap("nonexistent_item", _cell(), gd) is GapClass.MATERIAL_UNREACHABLE
+
+
+# --- census_state -----------------------------------------------------------
+#
+# Review finding: classify_gap used to build its cell state with an EMPTY
+# loadout, so is_winnable was uniformly False and every monster-drop-only
+# closure leaf classified COMBAT_BLOCKED regardless of whether a plausible
+# starter/tier loadout could actually beat the dropper (masking real
+# PLANNER_BUGs). census_state fixes this per the spec's grid State
+# definition ("realistic combat stats from the equipped starter/tier gear
+# via derive_combat_stats"). These tests pin that gear ACTUALLY changes the
+# verdict — not merely that the plumbing compiles.
+
+
+def test_census_state_equips_near_term_gear_and_derives_combat_stats() -> None:
+    """census_state picks the best attainable-now item per slot at the
+    cell's level (near_term_gear, seeded from a bare same-level state) and
+    equips it with derive_combat_stats=True, so the resulting state carries
+    non-zero attack/max_hp from the gear rather than the zero-stat empty
+    loadout."""
+    gd = GameData()
+    gd._item_stats = {
+        "iron_blade": ItemStats(code="iron_blade", level=1, type_="weapon",
+                                subtype="", attack={"fire": 50}),
+    }
+    gd._resource_drops = {"blade_vein": "iron_blade"}
+    cell = _cell(char_level=5, skill_level=1)
+    state = census_state(cell, gd)
+    assert state.equipment.get("weapon_slot") == "iron_blade"
+    assert state.attack.get("fire") == 50
+    assert state.level == 5
+    assert state.skills["gearcrafting"] == 1
+    assert state.inventory == {}
+    assert state.bank_items == {}
+
+
+def test_census_state_gears_the_cell_and_flips_combat_blocked_to_reachable() -> None:
+    """critter (a permanent, zero-attack, 5-HP monster) is UNWINNABLE at the
+    OLD empty-loadout state (raw_player == 0 never kills anything) but
+    winnable once census_state equips iron_blade (a level-1, gatherable
+    weapon near_term_gear picks up). With the leaf reachable and the skill
+    grindable via basic_gear, the recipe now classifies PLANNER_BUG (the
+    actionable residual) instead of the false COMBAT_BLOCKED the empty
+    loadout produced."""
+    gd = GameData()
+    gd._item_stats = {
+        "trinket_gear": _craftable("trinket_gear", "gearcrafting", 5),
+        "basic_gear": _craftable("basic_gear", "gearcrafting", 1),
+        "critter_meat": _mat("critter_meat"),
+        "iron_blade": ItemStats(code="iron_blade", level=1, type_="weapon",
+                                subtype="", attack={"fire": 50}),
+    }
+    gd._crafting_recipes = {
+        "trinket_gear": {"critter_meat": 2},
+        "basic_gear": {"critter_meat": 1},
+    }
+    gd._resource_drops = {"blade_vein": "iron_blade"}
+    gd._monster_locations = {"critter": (1, 0)}
+    gd._monster_level = {"critter": 1}
+    gd._monster_hp = {"critter": 5}
+    gd._monster_drops = {"critter": [("critter_meat", 10, 1, 1)]}
+    _fill_monster_defaults(gd)
+    cell = _cell(char_level=5, skill_level=1)
+
+    # The pre-fix empty-loadout state cannot win: zero attack never kills
+    # anything (the exact bug the finding describes).
+    bare = scenario_state(
+        ScenarioCharacter(name="bare", level=cell.char_level,
+                          skills={cell.skill_name: cell.skill_level}), gd)
+    assert not is_winnable(bare, gd, "critter")
+
+    # The fixed census state equips iron_blade and CAN win.
+    geared = census_state(cell, gd)
+    assert geared.equipment.get("weapon_slot") == "iron_blade"
+    assert is_winnable(geared, gd, "critter")
+
+    assert classify_gap("trinket_gear", cell, gd) is GapClass.PLANNER_BUG
+
+
+def test_classify_gap_combat_blocked_survives_geared_loadout_against_overleveled_monster() -> None:
+    """A real near_term_gear loadout (iron_blade, attack 50 at the cell's
+    level) is still nowhere near enough to beat cow (level 30, 2000 HP, 200
+    attack) — COMBAT_BLOCKED must survive the gear fix for a genuinely
+    over-leveled dropper, pinning that census_state does not silently flip
+    every combat leaf to reachable regardless of the opponent."""
+    gd = GameData()
+    gd._item_stats = {
+        "beast_armor": _craftable("beast_armor", "gearcrafting", 5),
+        "beast_hide": _mat("beast_hide"),
+        "iron_blade": ItemStats(code="iron_blade", level=1, type_="weapon",
+                                subtype="", attack={"fire": 50}),
+    }
+    gd._crafting_recipes = {"beast_armor": {"beast_hide": 2}}
+    gd._resource_drops = {"blade_vein": "iron_blade"}
+    gd._monster_locations = {"cow": (1, 0)}
+    gd._monster_level = {"cow": 30}
+    gd._monster_hp = {"cow": 2000}
+    gd._monster_attack = {"cow": {"earth": 200}}
+    gd._monster_drops = {"cow": [("beast_hide", 10, 1, 1)]}
+    _fill_monster_defaults(gd)
+    cell = _cell()
+
+    geared = census_state(cell, gd)
+    assert geared.equipment.get("weapon_slot") == "iron_blade"
+    assert not is_winnable(geared, gd, "cow")
+
+    assert classify_gap("beast_armor", cell, gd) is GapClass.COMBAT_BLOCKED

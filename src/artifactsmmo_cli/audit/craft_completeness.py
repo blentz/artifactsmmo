@@ -346,11 +346,45 @@ def _skill_grindable(recipe: str, skill: str, target_level: int,
                for res_skill, res_level in game_data.resource_skills.values())
 
 
+def census_state(cell: CraftCell, game_data: GameData) -> WorldState:
+    """The plausibly-GEARED census character state for `cell` (spec grid
+    `State` definition, docs/superpowers/specs/2026-07-08-craft-planning-
+    completeness-design.md): `cell.char_level` + `cell.skill_name` at
+    `cell.skill_level`, empty inventory AND bank, equipped with the best
+    usable-NOW item per slot and combat stats DERIVED from that loadout —
+    so `is_winnable` reflects a plausible starter/tier loadout, not zero
+    stats.
+
+    Gear source: a bare (ungeared) state at the cell seeds `CharacterObjective
+    .near_term_gear`, which picks the best attainable-now item per equipment
+    slot at `cell.char_level` (empty-slot baseline, so every positive-value
+    attainable item wins its slot). That `{slot: code}` loadout is then
+    equipped on the real census character with `derive_combat_stats=True`,
+    which sums the equipped items' catalog stats into the server-total
+    combat stats (attack/dmg/resistance/critical_strike/initiative) and the
+    derived max_hp — exactly what a live character wearing this loadout
+    would report.
+
+    Used by both `classify_gap` (the `is_winnable` reachability check) and
+    the Phase-2 generator (`plan_craft`'s driving state), so the census and
+    the classifier agree on what "plausible loadout" means for a cell."""
+    bare = scenario_state(
+        ScenarioCharacter(name="census_bare", level=cell.char_level,
+                          skills={cell.skill_name: cell.skill_level}),
+        game_data)
+    gear = CharacterObjective.from_game_data(game_data).near_term_gear(bare)
+    sc = ScenarioCharacter(name="craft_audit", level=cell.char_level,
+                           skills={cell.skill_name: cell.skill_level},
+                           equipment=gear, derive_combat_stats=True)
+    return scenario_state(sc, game_data)
+
+
 def classify_gap(recipe: str, cell: CraftCell,
                  game_data: GameData) -> GapClass:
     """Classify a FAIL cell's root cause as an ORDERED cascade over `recipe`'s
-    closure leaves, at a state rebuilt from the cell (`cell.char_level` +
-    the single crafting skill at `cell.skill_level`). Pure over
+    closure leaves, at a state rebuilt from the cell via `census_state`
+    (`cell.char_level` + the single crafting skill at `cell.skill_level`,
+    equipped with a plausible near-term loadout). Pure over
     (`recipe`, `cell`, `game_data`).
 
     Precedence — EVENT_GATED → COMBAT_BLOCKED → MATERIAL_UNREACHABLE →
@@ -374,9 +408,7 @@ def classify_gap(recipe: str, cell: CraftCell,
 
     A leaf's own status is decided by `_leaf_status`; the cascade then ranks
     the leaf statuses by the precedence above."""
-    sc = ScenarioCharacter(name="craft_audit", level=cell.char_level,
-                           skills={cell.skill_name: cell.skill_level})
-    state = scenario_state(sc, game_data)
+    state = census_state(cell, game_data)
     statuses = {_leaf_status(leaf, state, game_data)
                 for leaf in _closure_leaves(recipe, game_data)}
     for gap in (GapClass.EVENT_GATED, GapClass.COMBAT_BLOCKED,
