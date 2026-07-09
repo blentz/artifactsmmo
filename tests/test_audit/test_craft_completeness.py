@@ -494,6 +494,47 @@ def test_classify_gap_skill_grindable_via_gatherable_of_skill() -> None:
     assert verdict is GapClass.PLANNER_BUG
 
 
+def test_classify_gap_skill_unreachable_at_zero_skill_below_lowest_rung() -> None:
+    """Review finding (classifier-soundness): the under-skill grid cell for a
+    T1 recipe (craft_level<=5) is skill_level=0 (`max(0, craft_level-5)`).
+    lonely_bar's crafting skill (mining) has exactly one grind rung —
+    ore_vein at mining level 1 — which is NOT actionable at skill 0 (you need
+    mining 1 to gather it). The old `<= target_level` bound let a level-1 rung
+    pass against a target of 1, wrongly declaring the skill grindable and
+    surfacing a phantom PLANNER_BUG; the honest read is that the character
+    cannot bootstrap the skill from 0 at all — SKILL_UNREACHABLE."""
+    gd = GameData()
+    gd._item_stats = {
+        "lonely_bar": _craftable("lonely_bar", "mining", 1),
+        "raw_ore": _mat("raw_ore"),
+    }
+    gd._crafting_recipes = {"lonely_bar": {"raw_ore": 2}}
+    gd._resource_drops = {"ore_vein": "raw_ore"}
+    gd._resource_skill = {"ore_vein": ("mining", 1)}
+    verdict = classify_gap("lonely_bar", _cell(skill="mining", skill_level=0), gd)
+    assert verdict is GapClass.SKILL_UNREACHABLE
+
+
+def test_classify_gap_skill_grindable_true_positive_survives_at_nonzero_skill() -> None:
+    """Regression pin (must NOT over-correct): iron_bar-shaped true positive.
+    mining's lowest grind rung sits at level 1 (copper_rocks-equivalent); the
+    target craft level is 10 (iron_bar-style); the under-skill cell is
+    skill_level=5 (`max(0, 10-5)`). mining IS bootstrappable from 5 (the
+    level-1 rung is well within reach at skill 5), so this must STILL report
+    PLANNER_BUG — the fix narrows the bound to `<= skill_level`, not to
+    "nothing below target is ever grindable"."""
+    gd = GameData()
+    gd._item_stats = {
+        "iron_bar_like": _craftable("iron_bar_like", "mining", 10),
+        "iron_ore": _mat("iron_ore"),
+    }
+    gd._crafting_recipes = {"iron_bar_like": {"iron_ore": 2}}
+    gd._resource_drops = {"copper_rocks": "iron_ore"}
+    gd._resource_skill = {"copper_rocks": ("mining", 1)}
+    verdict = classify_gap("iron_bar_like", _cell(skill="mining", skill_level=5), gd)
+    assert verdict is GapClass.PLANNER_BUG
+
+
 def test_classify_gap_skill_already_at_target_is_grindable() -> None:
     """When the cell skill already meets the recipe's craft level, no grind is
     needed — the skill_level >= target early-return keeps it out of

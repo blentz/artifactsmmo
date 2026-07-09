@@ -330,19 +330,24 @@ def _skill_grindable(recipe: str, skill: str, target_level: int,
                      skill_level: int, game_data: GameData) -> bool:
     """The recipe's crafting skill can be leveled from the cell's `skill_level`
     up to the recipe's required `target_level`. Trivially true when already at
-    or above target; otherwise there must be SOME other item of that skill to
-    grind on within the band — a craftable of the same `crafting_skill` at a
-    level ≤ target, or a gatherable resource of that skill at a level ≤ target
-    (this game reuses the raw-gathering skill name as the tier-1 processed
-    good's `crafting_skill`). A recipe that is the sole item of its skill at
-    its level, with the character below it, cannot be reached — SKILL_UNREACHABLE."""
+    or above target; otherwise there must be SOME grind rung STARTABLE AT THE
+    CELL'S CURRENT `skill_level` — a craftable of the same `crafting_skill` at
+    a level ≤ `skill_level`, or a gatherable resource of that skill at a level
+    ≤ `skill_level` (this game reuses the raw-gathering skill name as the
+    tier-1 processed good's `crafting_skill`). Bounding by `skill_level` (not
+    `target_level`) is deliberate: a rung above the target is irrelevant
+    either way, but a rung AT OR BELOW the target yet ABOVE the character's
+    current skill is not actionable NOW — it is itself ungrindable from here.
+    A skill whose lowest rung sits above `skill_level` cannot be bootstrapped
+    from this cell at all — SKILL_UNREACHABLE (e.g. skill_level=0: even a
+    level-1 rung needs skill 1 just to act on it)."""
     if skill_level >= target_level:
         return True
     for code, stats in game_data.all_item_stats.items():
         if (code != recipe and stats.crafting_skill == skill
-                and 0 < (stats.crafting_level or 0) <= target_level):
+                and 0 < (stats.crafting_level or 0) <= skill_level):
             return True
-    return any(res_skill == skill and res_level <= target_level
+    return any(res_skill == skill and res_level <= skill_level
                for res_skill, res_level in game_data.resource_skills.values())
 
 
