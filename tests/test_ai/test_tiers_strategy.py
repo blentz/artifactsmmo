@@ -1,10 +1,13 @@
+import pytest
+
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
+from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, ReachCharLevel, ReachSkillLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
 from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree
 from artifactsmmo_cli.ai.tiers.strategy import (
     StrategyEngine,
+    _prereq_order,
     _producible,
     actionable_step,
     desired_state_of,
@@ -200,6 +203,48 @@ def test_is_reachable_satisfied_and_cycle():
 def test_actionable_step_none_for_unproducible_leaf():
     gd = _reach_gd()
     assert actionable_step(ObtainItem("drop_blade"), make_state(), gd) is None
+
+
+# --- Task 2: semantic (not repr) prerequisite order ---
+
+def test_prereq_order_is_repr_independent(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`_prereq_order` ranks by prerequisite KIND (materials before skill
+    gates before char-level gates), never by `repr()`. Proven by forcing
+    ObtainItem's repr to sort AFTER ReachSkillLevel's — as an unrelated
+    class/field rename could — and confirming the semantic order (materials
+    first) is unaffected. Retires the `sorted(unmet, key=repr)` antipattern
+    (feedback_no_alphabetical_tiebreak)."""
+    monkeypatch.setattr(ObtainItem, "__repr__", lambda self: f"Zzz({self.code})")
+    obtain = ObtainItem("iron_ore", 5)
+    skill = ReachSkillLevel("mining", 10)
+    # Under the OLD `sorted(unmet, key=repr)` this renamed repr would now put
+    # the skill gate first ("ReachSkillLevel..." < "Zzz(...)").
+    assert repr(skill) < repr(obtain)
+    pair: list[MetaGoal] = [skill, obtain]
+    ordered = sorted(pair, key=_prereq_order)
+    assert ordered == [obtain, skill]  # materials still rank first, repr notwithstanding
+
+
+def test_actionable_step_prefers_materials_over_skill_gate() -> None:
+    """Integration-level pin: a craftable item with BOTH an unmet material
+    and an unmet crafting-skill gate descends into the MATERIAL branch first
+    (the concrete, immediate thing the character can act on), not the skill
+    gate (the slower background grind) — even though the skill gate, being a
+    leaf, would itself be immediately 'actionable' if visited first."""
+    gd = GameData()
+    gd._item_stats = {
+        "widget": ItemStats(code="widget", level=5, type_="ring",
+                             crafting_skill="weaving", crafting_level=5),
+        "thread": ItemStats(code="thread", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"widget": {"thread": 3}}
+    gd._resource_drops = {"thread_patch": "thread"}
+    gd._resource_skill = {"thread_patch": ("gathering", 1)}
+    gd._monster_level = {"chicken": 1}
+    fill_monster_stat_defaults(gd)
+    state = make_state(level=5, skills={"weaving": 1})
+    step = actionable_step(ObtainItem("widget"), state, gd)
+    assert step == ObtainItem("thread", 3)
 
 
 def test_decide_skips_root_unreachable_in_current_game_data():

@@ -1361,9 +1361,9 @@ REACHABILITY_MUTATIONS = [
     # forever (RecursionError) — the cyclic test graphs catch it.
     ("reachability: actionable_step drop sub_path extension (no cycle termination)",
      "        sub_path = path | {node}\n"
-     "        for prereq in sorted(unmet, key=repr):\n"
+     "        for prereq in sorted(unmet, key=_prereq_order):\n"
      "            step = _step(prereq, sub_path)",
-     "        for prereq in sorted(unmet, key=repr):\n"
+     "        for prereq in sorted(unmet, key=_prereq_order):\n"
      "            step = _step(prereq, path)"),
     # is_reachable bottoms out a cyclic node as reachable: drop the per-path cycle
     # guard so a node on its own path reads reachable. Then is_reachable=True on a
