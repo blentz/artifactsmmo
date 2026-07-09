@@ -212,6 +212,8 @@ UTILITY floors combat + lifts efficiency) + score_for_profile + calibration
 pins (combat-beats-prospecting bug-gone, non-vacuous vs equip_value).
 Unwired.
 
+**Phase 2 SHIPPED**: profile_for + is_utility_objective (plan-gate floor); Lean profileFor totality + planGate_forces_combat + utility_iff; differential + 3 kill-checked mutants. Unwired. Phase-3 obligation recorded: feed the selector the ENACTED root (not the in-flight one) to avoid circularity.
+
 ## Risks
 
 - **Calibration of the COMBAT preset**: if utility weights aren't driven

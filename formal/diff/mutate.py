@@ -143,6 +143,7 @@ GEAR_TAXONOMY_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_taxono
 BOOST_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "boost_selection.py"
 POTION_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_supply.py"
 PROGRESSION_TREE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree_core.py"
+EQUIPMENT_PROFILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "equipment_profile.py"
 
 # craft_plan_full / _apply_state mutations (B2 full-plan driver). The CONSUMING
 # model is the soundness-critical part; killed by
@@ -2537,6 +2538,21 @@ PROGRESSION_TREE_MUTATIONS = [
      "    return min(candidates, key=lambda c: (c.gain, -c.level, c.code, c.slot))"),
 ]
 
+# equipment_profile.profile_for selector (2026-07-08): plan-gate combat floor +
+# utility-objective axis. Killed by formal/diff/test_equipment_profile_diff.py
+# (the 6 category x adequacy cases against Lean profileFor's truth table).
+EQUIPMENT_PROFILE_MUTATIONS = [
+    ("profiles: plan-gate dropped (utility even when inadequate)",
+     "    if not band_adequate:\n        return ProfileKind.COMBAT",
+     "    if False:\n        return ProfileKind.COMBAT"),
+    ("profiles: utility objective inverted",
+     "    return isinstance(root, ReachSkillLevel)",
+     "    return not isinstance(root, ReachSkillLevel)"),
+    ("profiles: utility branch forced combat (utility never fires)",
+     "    if is_utility_objective(root):\n        return ProfileKind.UTILITY",
+     "    if is_utility_objective(root):\n        return ProfileKind.COMBAT"),
+]
+
 
 def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
               survivors: list[str]) -> None:
@@ -2622,6 +2638,8 @@ _ALL_SRCS = [
     GEAR_TAXONOMY_CORE_SRC,
     # Progression-tree cores (2026-07-06): unit-killed group.
     PROGRESSION_TREE_SRC,
+    # Equipment-profile selector (2026-07-08): differential-killed group.
+    EQUIPMENT_PROFILE_SRC,
 ]
 
 
@@ -4851,6 +4869,8 @@ def _run_all_groups() -> int:
               "tests/test_ai/test_potion_supply.py", survivors)
     run_group(PROGRESSION_TREE_SRC, PROGRESSION_TREE_MUTATIONS,
               "tests/test_ai/test_progression_tree_core.py", survivors)
+    run_group(EQUIPMENT_PROFILE_SRC, EQUIPMENT_PROFILE_MUTATIONS,
+              "formal/diff/test_equipment_profile_diff.py", survivors)
     _execute(_UNITS, survivors)
     if survivors:
         print(f"GATE FAIL: survivors={survivors}")
