@@ -118,9 +118,12 @@ def test_gap_measures_level_and_skill_and_gear_deficit():
     assert g.char_level_gap == 40
     assert g.skill_gaps["mining"] == 45
     assert g.skill_gaps["woodcutting"] == 49  # default level 1 → gap 49
-    # weapon target iron_sword(2*30+1=61) vs equipped wooden_stick(2*4+1=9)
-    # → gap 52 (augmented equip_value: 2*raw + nonToolBonus).
-    assert g.gear_gaps["weapon_slot"] == 52.0
+    # RE-DERIVED 2026-07-08 (Task-3 pursuit_value): gap() rides `_item_value`,
+    # now pursuit_value (combat-dominant). weapon target iron_sword
+    # (combat_raw 30 -> 30*1000 = 30000) vs equipped wooden_stick
+    # (combat_raw 4 -> 4000) -> gap 26000 (was equip_value's 2*raw+nonTool
+    # delta 61-9 = 52). The gear gap is now measured in combat-dominant units.
+    assert g.gear_gaps["weapon_slot"] == 26000
     assert 0.0 < g.char_level_fraction <= 1.0
     assert 0.0 < g.gear_fraction <= 1.0
 
@@ -129,8 +132,10 @@ def test_empty_slot_scores_full_target_value():
     obj = CharacterObjective.from_game_data(_gd())
     state = make_state(level=50, skills={s: 50 for s in SKILL_NAMES}, equipment={})
     g = obj.gap(state)
-    # Empty slot: full augmented iron_sword value = 2*30 + 1 (non-tool) = 61.
-    assert g.gear_gaps["weapon_slot"] == 61.0
+    # RE-DERIVED 2026-07-08 (Task-3 pursuit_value): empty slot scores the full
+    # target value on the pursuit_value ruler — iron_sword combat_raw 30 ->
+    # 30*1000 = 30000 (was equip_value's 2*30+1 = 61).
+    assert g.gear_gaps["weapon_slot"] == 30000
 
 
 def test_gear_fraction_zero_and_complete_when_no_gear_targeted():
