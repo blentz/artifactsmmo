@@ -30,6 +30,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | DominancePareto | equipment, selling | safety |
 | DoomedMemo | core, planner | monotonicity, safety, reachability |
 | EquipValueAugmented | items, characters | dominance, monotonicity |
+| EquipmentProfile | equipment-profile | safety, validity, totality |
 | EventWindow | events | totality, safety, dominance, monotonicity, reachability |
 | FallbackChain | core, planner | totality, dominance |
 | GameDataAccessors | core | safety |

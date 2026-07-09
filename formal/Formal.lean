@@ -231,3 +231,4 @@ import Formal.PotionBaseline
 import Formal.MaxBatchFromHeld
 import Formal.OptimalBuyMix
 import Formal.ProgressionTree
+import Formal.EquipmentProfile
