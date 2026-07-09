@@ -49,7 +49,7 @@ def test_plan_craft_plans_a_simple_smelt() -> None:
 
 def test_craft_grid_cells_for_a_tier2_recipe() -> None:
     """iron_boots: gearcrafting 10 (L=10, decade-boundary tier). char cells
-    10-2/10/10+2=8,10,12; skill cells max(0,10-5)=5 and 10."""
+    10-2/10/10+2=8,10,12; skill cells max(1,10-5)=5 and 10."""
     gd = _gd()
     cells = craft_grid("iron_boots", gd)
     char_levels = sorted({c.char_level for c in cells})
@@ -60,21 +60,22 @@ def test_craft_grid_cells_for_a_tier2_recipe() -> None:
     assert len(cells) == 6
 
 
-def test_craft_grid_tier1_uses_level_1_and_skill_0() -> None:
-    """A T1 recipe (craft level <= 9): nominal char level is 1; under-skill
-    clamps to 0 when L-5 < 0. copper_bar: mining 1 (L=1, T=1). nominal 1;
-    the boundary offsets 10*T±2 straddle the T1/T2 decade line, giving the
-    full three-way set {1, 8, 12} (not just a min-only check)."""
+def test_craft_grid_tier1_low_recipe_floors_skill_at_1_and_collapses() -> None:
+    """A T1 recipe (craft level <= 9): nominal char level is 1; the under-skill
+    floor is 1 (skills start at level 1 — skill_level=0 is impossible). For
+    copper_bar (mining 1, L=1, T=1), under-skill max(1, 1-5)=1 equals at-skill
+    1, so the two skill cells collapse to {1} and the grid yields 3 cells (the
+    three-way char set {1, 8, 12}, not just a min-only check), not 6."""
     gd = _gd()
     cells = craft_grid("copper_bar", gd)
     char_levels = sorted({c.char_level for c in cells})
     skill_levels = sorted({c.skill_level for c in cells})
     assert char_levels == [1, 8, 12]
     assert min(c.char_level for c in cells) == 1
-    assert skill_levels == [0, 1]
-    assert min(c.skill_level for c in cells) == 0  # max(0, 1-5)
+    assert skill_levels == [1]
+    assert min(c.skill_level for c in cells) == 1  # max(1, 1-5)
     assert all(c.skill_name == "mining" for c in cells)
-    assert len(cells) == 6
+    assert len(cells) == 3
 
 
 def test_craft_grid_returns_empty_for_a_non_craftable_item() -> None:
@@ -494,24 +495,24 @@ def test_classify_gap_skill_grindable_via_gatherable_of_skill() -> None:
     assert verdict is GapClass.PLANNER_BUG
 
 
-def test_classify_gap_skill_unreachable_at_zero_skill_below_lowest_rung() -> None:
-    """Review finding (classifier-soundness): the under-skill grid cell for a
-    T1 recipe (craft_level<=5) is skill_level=0 (`max(0, craft_level-5)`).
-    lonely_bar's crafting skill (mining) has exactly one grind rung —
-    ore_vein at mining level 1 — which is NOT actionable at skill 0 (you need
-    mining 1 to gather it). The old `<= target_level` bound let a level-1 rung
-    pass against a target of 1, wrongly declaring the skill grindable and
-    surfacing a phantom PLANNER_BUG; the honest read is that the character
-    cannot bootstrap the skill from 0 at all — SKILL_UNREACHABLE."""
+def test_classify_gap_skill_unreachable_when_lowest_rung_above_current_skill() -> None:
+    """Classifier-soundness (`_skill_grindable` bounds the grind rung to the
+    cell's current `skill_level`, not the target). lonely_bar needs mining 2;
+    the cell is at mining 1 (a real under-skill grid cell — skills start at 1).
+    Mining's only grind rung here — ore_vein at mining 2 — is NOT actionable at
+    skill 1 (you need mining 2 to gather it), and there is no lower rung to
+    bootstrap from. A `<= target_level` bound would let the level-2 rung pass
+    against a target of 2 and wrongly surface a phantom PLANNER_BUG; the honest
+    read is that the skill cannot be leveled from here — SKILL_UNREACHABLE."""
     gd = GameData()
     gd._item_stats = {
-        "lonely_bar": _craftable("lonely_bar", "mining", 1),
+        "lonely_bar": _craftable("lonely_bar", "mining", 2),
         "raw_ore": _mat("raw_ore"),
     }
     gd._crafting_recipes = {"lonely_bar": {"raw_ore": 2}}
     gd._resource_drops = {"ore_vein": "raw_ore"}
-    gd._resource_skill = {"ore_vein": ("mining", 1)}
-    verdict = classify_gap("lonely_bar", _cell(skill="mining", skill_level=0), gd)
+    gd._resource_skill = {"ore_vein": ("mining", 2)}
+    verdict = classify_gap("lonely_bar", _cell(skill="mining", skill_level=1), gd)
     assert verdict is GapClass.SKILL_UNREACHABLE
 
 
@@ -519,7 +520,7 @@ def test_classify_gap_skill_grindable_true_positive_survives_at_nonzero_skill() 
     """Regression pin (must NOT over-correct): iron_bar-shaped true positive.
     mining's lowest grind rung sits at level 1 (copper_rocks-equivalent); the
     target craft level is 10 (iron_bar-style); the under-skill cell is
-    skill_level=5 (`max(0, 10-5)`). mining IS bootstrappable from 5 (the
+    skill_level=5 (`max(1, 10-5)`). mining IS bootstrappable from 5 (the
     level-1 rung is well within reach at skill 5), so this must STILL report
     PLANNER_BUG — the fix narrows the bound to `<= skill_level`, not to
     "nothing below target is ever grindable"."""

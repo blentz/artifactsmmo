@@ -49,8 +49,12 @@ class CraftCell:
 def craft_grid(recipe: str, game_data: GameData) -> list[CraftCell]:
     """The level/skill census cells for `recipe` (spec grid): 3 character
     levels (decade-tier nominal + boundary offsets, clamped [1,50]) x 2
-    skill levels (under-skill `craft_level-5` clamped >=0, and at-skill
-    `craft_level`) = up to 6 cells. `recipe`'s tier bucket is the decade its
+    skill levels (under-skill `craft_level-5` clamped >=1, and at-skill
+    `craft_level`) = up to 6 cells. Skills start at level 1 in this game
+    (min gatherable/craftable rung is level 1), so the under-skill floor is
+    1, not 0 — a skill_level=0 cell is an impossible game state. Low-level
+    recipes whose `craft_level-5 <= 1` collapse under-skill into at-skill,
+    yielding fewer cells. `recipe`'s tier bucket is the decade its
     crafting_level falls into ((craft_level-1)//10+1, so crafting_level=10
     is the LAST level of tier 1, not the first of tier 2) — the boundary
     offsets `10*tier±2` straddle that decade line; for a tier-1 recipe
@@ -68,7 +72,7 @@ def craft_grid(recipe: str, game_data: GameData) -> list[CraftCell]:
         max(1, min(50, lvl))
         for lvl in (nominal, 10 * tier - 2, 10 * tier + 2)
     })
-    skill_levels = sorted({max(0, craft_level - 5), craft_level})
+    skill_levels = sorted({max(1, craft_level - 5), craft_level})
     return [CraftCell(cl, skill, sl)
             for cl in char_levels for sl in skill_levels]
 

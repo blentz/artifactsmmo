@@ -34,7 +34,11 @@ Recipe X with craft skill `S`, craft level `L`, tier `T = (L-1)//10 + 1` (decade
   T1 (L ≤ 9), else `10·T` — plus the two tier-boundary offsets `10·T − 2`
   and `10·T + 2`. (e.g. T2 recipe → char levels 18, 20, 22.) Clamp to
   `[1, 50]`.
-- **Skill cells** (2): under-skill `max(0, L − 5)` and at-skill `L`.
+- **Skill cells** (2): under-skill `max(1, L − 5)` and at-skill `L`. Skills
+  start at level 1 in this game (the minimum gatherable/craftable rung is
+  level 1), so the under-skill floor is 1 — a `skill_level = 0` cell is an
+  impossible game state. Low recipes where `L − 5 ≤ 1` collapse under-skill
+  into at-skill, yielding fewer than 6 cells.
 - **State**: empty inventory AND empty bank; realistic combat stats from the
   equipped starter/tier gear via `derive_combat_stats` (so `is_winnable`
   reflects a plausible loadout, not zero stats); no materials pre-granted —
