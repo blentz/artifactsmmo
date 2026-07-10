@@ -46,6 +46,7 @@ concept tag, or a concept with no module, is a traceability gap.
 | GuardCoverage | core | no-deadlock, safety |
 | InventoryChainSafe | bank, items | safety |
 | InventoryProfile | bank, items, crafting | safety |
+| InventoryRoom | inventory, slot-room | safety |
 | LeafAttainable | core, planner | validity, monotonicity |
 | LiquidationVenue | grandexchange | dominance, totality, safety, monotonicity |
 | Liveness.CurrencyFunding | liveness, tasks | termination, sufficiency |
