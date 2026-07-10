@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/inventory_caps.py (sha256: 72f2f6cb19fa58373b208eb472f74382ae62f98f2e9f54f766e5d05e045b9900) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/inventory_caps.py (sha256: fd31b13ecbb94052b9d239defe537883fc56b48f01f87a7c1e1f875ebbdf4b76) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.InventoryCaps
