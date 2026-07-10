@@ -322,7 +322,31 @@ theorem restApplicable_false_at_full (hp maxHp : Int) (h : hp = maxHp) :
 
 EquipAction requires the item to be OWNED (inventory or current slot) and
 of compatible type for the slot. Modeled abstractly: ownership is an
-opaque flag, slot compatibility is decidable. -/
+opaque flag, slot compatibility is decidable.
+
+**HONESTY NOTE — slot-room gate lives in Python, deliberately omitted here
+(slot-aware-inventory-room spec 2026-07-09, Task 5/8).** `EquipAction.
+is_applicable` (Python `actions/equip.py`) carries a NET-slot-room gate:
+equipping C into an occupied slot displaces the worn item O back into the
+bag, so it needs `has_room(new_stacks, added_qty=0, slots_free, qty_free)`
+where `new_stacks = max(0, O_needs_slot − C_frees_slot)` — the gate that
+rejects the 20/20-slots-full "497-doomed equip" livelock (a held upgrade
+whose displaced armor has nowhere to land). `equipApplicable` below models
+ONLY ownership + slot-type compatibility and intentionally OMITS that slot
+term: it is a partial proof-side sketch, NOT a differential mirror. Unlike
+`fightApplicable` (which term-by-term mirrors Python and is exercised by the
+liveness chain), `equipApplicable` is bound to no oracle and no
+`formal/diff` value-lockstep — the Manifest carries only its
+`#check equipApplicable_iff` proof-existence reference. Adding a
+`hasSlotRoom` conjunct here would therefore be DEAD Lean (proven against
+nothing). The slot gate's correctness is instead pinned in Python: the unit
+gate (`actions/equip.py` + its tests) and the end-to-end livelock scenario
+`tests/test_ai/scenarios/test_slot_exhaustion.py` (relief routed before the
+doomed equip), plus the shared `InventoryRoom.hasRoom` core (mirrored in
+`formal/Formal/InventoryRoom.lean`, differentially tested) that Python
+`inventory_room.has_room` computes. Fight is NOT slot-gated in this fix
+(its `hasInventoryRoom` term is the pre-existing QUANTITY floor,
+`inventory_free ≥ 1`), so nothing changes there. -/
 
 structure EquipInputs where
   ownedCount   : Int      -- spare copies in inventory (excludes equipped)
