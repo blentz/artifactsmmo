@@ -49,6 +49,7 @@ def _mkstate(
         skills={}, x=0, y=0,
         inventory=dict(inventory or {}),
         inventory_max=inventory_max,
+        inventory_slots_max=inventory_max,
         equipment=dict(equipment or {}),
         cooldown_expires=None,
         task_code=task_code, task_type=None,

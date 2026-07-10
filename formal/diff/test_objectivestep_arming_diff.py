@@ -118,7 +118,8 @@ def _make_world(scn: Scenario) -> WorldState:
     return WorldState(
         character="diff", level=scn.level, xp=0, max_xp=999999,
         hp=100, max_hp=100, gold=0, skills={}, x=0, y=0,
-        inventory={}, inventory_max=40, equipment={}, cooldown_expires=None,
+        inventory={}, inventory_max=40, inventory_slots_max=40,
+        equipment={}, cooldown_expires=None,
         bank_items=None, bank_gold=None, pending_items=None,
         task_code=scn.task_code, task_type=scn.task_type,
         task_progress=scn.task_progress, task_total=scn.task_total,

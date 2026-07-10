@@ -137,7 +137,7 @@ def _make_world(level: int) -> WorldState:
     return WorldState(
         character="diff", level=level, xp=0, max_xp=999999,
         hp=120, max_hp=120, gold=0, skills={}, x=0, y=0,
-        inventory={}, inventory_max=40,
+        inventory={}, inventory_max=40, inventory_slots_max=40,
         attack={"fire": 50}, resistance={}, critical_strike=0, initiative=10,
         equipment={}, cooldown_expires=None,
         bank_items=None, bank_gold=None, pending_items=None,

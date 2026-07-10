@@ -166,7 +166,8 @@ def _base_world(**overrides) -> WorldState:
     defaults: dict[str, object] = dict(
         character="diff", level=5, xp=0, max_xp=999999,
         hp=100, max_hp=100, gold=0, skills={},
-        x=0, y=0, inventory={}, inventory_max=20, equipment={},
+        x=0, y=0, inventory={}, inventory_max=20, inventory_slots_max=20,
+        equipment={},
         cooldown_expires=None,
         task_code=None, task_type=None, task_progress=0, task_total=0,
         bank_items=None, bank_gold=None, pending_items=None,

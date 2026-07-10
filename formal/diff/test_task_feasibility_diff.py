@@ -62,6 +62,7 @@ def _make_state(task_code: str, task_type: str, task_total: int,
     return WorldState(
         character="c", level=level, xp=0, max_xp=100, hp=10, max_hp=10, gold=0,
         skills=skills, x=0, y=0, inventory={}, inventory_max=100,
+        inventory_slots_max=100,
         equipment={}, cooldown_expires=None, task_code=task_code, task_type=task_type,
         task_progress=0, task_total=task_total, bank_items=None,
         bank_gold=None, pending_items=None,

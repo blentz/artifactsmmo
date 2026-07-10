@@ -65,6 +65,7 @@ def _make_state() -> WorldState:
         # Pre-load enough non-task items to trigger bank-pressure (> 80% of 20):
         inventory={"copper_ore": 14, "ash_wood": 4},
         inventory_max=20,
+        inventory_slots_max=20,
         equipment=eq,
         cooldown_expires=None,
         task_code="chicken", task_type="monsters",

@@ -123,6 +123,7 @@ def _base_world(
         y=0,
         inventory=inventory,
         inventory_max=max(0, inventory_max),
+        inventory_slots_max=max(0, inventory_max),
         equipment={},
         cooldown_expires=None,
         task_code=task_code,

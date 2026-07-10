@@ -165,6 +165,7 @@ def _base_world_state(
         character="witness", level=level, xp=0, max_xp=999999,
         hp=base_row["max_hp"] + hp_bonus_ceiling, max_hp=base_row["max_hp"],
         gold=0, skills={}, x=0, y=0, inventory=inventory, inventory_max=40,
+        inventory_slots_max=40,
         equipment={}, cooldown_expires=None, task_code=None, task_type=None,
         task_progress=0, task_total=0, bank_items=None, bank_gold=None,
         pending_items=None, attack=base_attack, dmg=0, dmg_elements={},

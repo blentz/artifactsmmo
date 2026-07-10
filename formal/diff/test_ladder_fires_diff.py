@@ -349,6 +349,7 @@ def _make_world(scn: Scenario) -> WorldState:
         character="diff", level=scn.level, xp=scn.xp, max_xp=999999,
         hp=scn.hp, max_hp=scn.max_hp, gold=scn.gold, skills={},
         x=0, y=0, inventory=inv, inventory_max=scn.inventory_max,
+        inventory_slots_max=scn.inventory_max,
         equipment={}, cooldown_expires=None,
         bank_items=bank_items, bank_gold=None,
         pending_items=(("pid", "pcode"),) if scn.has_pending else None,
@@ -946,6 +947,7 @@ def _craft_relief_world(inventory_max: int) -> WorldState:
         character="diff", level=5, xp=0, max_xp=999999, hp=100, max_hp=100,
         gold=0, skills={"woodcutting": 1}, x=0, y=0,
         inventory={"log": 4}, inventory_max=inventory_max,
+        inventory_slots_max=inventory_max,
         equipment={}, cooldown_expires=None, bank_items=None, bank_gold=None,
         pending_items=None,
         task_code="plank", task_type="items", task_progress=1, task_total=5)
@@ -1037,7 +1039,7 @@ def _recycle_world(dagger_qty: int) -> WorldState:
         character="diff", level=5, xp=0, max_xp=999999, hp=100, max_hp=100,
         gold=0, skills={"weaponcrafting": 1}, x=0, y=0,
         inventory={"dagger": dagger_qty} if dagger_qty > 0 else {},
-        inventory_max=20, equipment={}, cooldown_expires=None,
+        inventory_max=20, inventory_slots_max=20, equipment={}, cooldown_expires=None,
         bank_items={}, bank_gold=None, pending_items=None,
         task_code=None, task_type=None, task_progress=0, task_total=0)
 
@@ -1117,6 +1119,7 @@ def _drain_world(bank_sap_qty: int) -> WorldState:
     return WorldState(
         character="diff", level=5, xp=0, max_xp=999999, hp=100, max_hp=100,
         gold=0, skills={}, x=0, y=0, inventory={}, inventory_max=20,
+        inventory_slots_max=20,
         equipment={}, cooldown_expires=None,
         bank_items={"sap": bank_sap_qty} if bank_sap_qty > 0 else {},
         bank_gold=None, pending_items=None,
@@ -1245,6 +1248,7 @@ def _rest_combat_world(hp: int, max_hp: int) -> WorldState:
     return WorldState(
         character="diff", level=10, xp=0, max_xp=999999, hp=hp, max_hp=max_hp,
         gold=0, skills={}, x=0, y=0, inventory={}, inventory_max=20,
+        inventory_slots_max=20,
         equipment={"weapon_slot": None}, cooldown_expires=None,
         bank_items=None, bank_gold=None, pending_items=None,
         task_code=None, task_type=None, task_progress=0, task_total=0,
@@ -1345,6 +1349,7 @@ def _maintain_world(potion_qty: int) -> WorldState:
         character="diff", level=10, xp=0, max_xp=999999, hp=100, max_hp=100,
         gold=0, skills={"alchemy": 1}, x=0, y=0,
         inventory=inv, inventory_max=20,
+        inventory_slots_max=20,
         equipment={"weapon_slot": None}, cooldown_expires=None,
         bank_items=None, bank_gold=None, pending_items=None,
         task_code=None, task_type=None, task_progress=0, task_total=0)
@@ -1504,6 +1509,7 @@ def _monsters_task_world(*, task_code: str, progress: int, total: int) -> WorldS
     return WorldState(
         character="diff", level=5, xp=0, max_xp=999999, hp=100, max_hp=100,
         gold=0, skills={}, x=0, y=0, inventory={}, inventory_max=20,
+        inventory_slots_max=20,
         equipment={}, cooldown_expires=None, bank_items=None, bank_gold=None,
         pending_items=None, task_code=task_code, task_type="monsters",
         task_progress=progress, task_total=total)
@@ -1613,6 +1619,7 @@ def _items_task_world(*, progress: int, total: int) -> WorldState:
     return WorldState(
         character="diff", level=5, xp=0, max_xp=999999, hp=100, max_hp=100,
         gold=0, skills={}, x=0, y=0, inventory={}, inventory_max=20,
+        inventory_slots_max=20,
         equipment={}, cooldown_expires=None, bank_items=None, bank_gold=None,
         pending_items=None, task_code="widget", task_type="items",
         task_progress=progress, task_total=total)
@@ -1654,6 +1661,7 @@ def test_pursue_task_near_miss_too_hard() -> None:
     w = WorldState(
         character="diff", level=5, xp=0, max_xp=999999, hp=100, max_hp=100,
         gold=0, skills={}, x=0, y=0, inventory={}, inventory_max=20,
+        inventory_slots_max=20,
         equipment={}, cooldown_expires=None, bank_items=None, bank_gold=None,
         pending_items=None, task_code="gizmo", task_type="items",
         task_progress=0, task_total=5)
@@ -1697,6 +1705,7 @@ def _farm_items_world(*, progress: int, total: int) -> WorldState:
     return WorldState(
         character="diff", level=10, xp=0, max_xp=999999, hp=100, max_hp=100,
         gold=0, skills={}, x=0, y=0, inventory={}, inventory_max=20,
+        inventory_slots_max=20,
         equipment={}, cooldown_expires=None, bank_items=None, bank_gold=None,
         pending_items=None, task_code="widget", task_type="items",
         task_progress=progress, task_total=total)

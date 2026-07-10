@@ -68,6 +68,7 @@ def _make_state(level: int, inventory: dict[str, int],
     return WorldState(
         character="c", level=level, xp=0, max_xp=100, hp=10, max_hp=50,
         gold=0, skills={}, x=0, y=0, inventory=dict(inventory), inventory_max=1000,
+        inventory_slots_max=1000,
         equipment=dict(equipment), cooldown_expires=None, task_code=None,
         task_type=None, task_progress=0, task_total=0,
         bank_items=None, bank_gold=None, pending_items=None,

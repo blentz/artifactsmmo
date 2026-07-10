@@ -33,6 +33,7 @@ def _state(cap: int | None, items: int) -> WorldState:
                 "gearcrafting": 1, "jewelrycrafting": 1, "cooking": 1, "alchemy": 1},
         x=4, y=0,
         inventory={}, inventory_max=20,
+        inventory_slots_max=20,
         equipment={
             "weapon_slot": None, "rune_slot": None, "shield_slot": None,
             "helmet_slot": None, "body_armor_slot": None, "leg_armor_slot": None,

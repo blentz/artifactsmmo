@@ -110,6 +110,7 @@ def _base_state(**overrides) -> WorldState:
         y=0,
         inventory={},
         inventory_max=20,
+        inventory_slots_max=20,
         equipment={},
         cooldown_expires=None,
         task_code=None,

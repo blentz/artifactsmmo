@@ -112,6 +112,7 @@ def _make_state(
         x=x, y=y,
         inventory=inventory or {},
         inventory_max=20,
+        inventory_slots_max=20,
         equipment=eq,
         cooldown_expires=None,
         task_code=task_code, task_type=task_type,

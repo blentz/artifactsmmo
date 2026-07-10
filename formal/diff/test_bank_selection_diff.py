@@ -83,6 +83,7 @@ def _build_state(
         y=0,
         inventory={_code(c): q for c, q in inventory.items()},
         inventory_max=inventory_max,
+        inventory_slots_max=inventory_max,
         equipment=equipment,
         cooldown_expires=None,
         task_code=(_code(task_code) if task_code is not None else None),

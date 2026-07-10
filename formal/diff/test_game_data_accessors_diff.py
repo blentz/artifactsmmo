@@ -122,7 +122,8 @@ def test_predict_win_unknown_monster_no_longer_silent_true():
     gd = GameData()
     s = WorldState(
         character="c", level=1, xp=0, max_xp=100, hp=100, max_hp=100, gold=0,
-        skills={}, x=0, y=0, inventory={}, inventory_max=20, equipment={},
+        skills={}, x=0, y=0, inventory={}, inventory_max=20,
+        inventory_slots_max=20, equipment={},
         cooldown_expires=None, task_code=None, task_type=None,
         task_progress=0, task_total=0,
         bank_items={}, bank_gold=0, pending_items=None,

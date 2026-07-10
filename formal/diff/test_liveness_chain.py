@@ -72,6 +72,7 @@ def _state(level: int, hp: int, max_hp: int) -> WorldState:
         hp=hp, max_hp=max_hp, gold=0, skills={},
         x=0, y=0,
         inventory={"wooden_stick": 1}, inventory_max=100,
+        inventory_slots_max=100,
         equipment=_empty_equipment(),
         cooldown_expires=None,
         task_code=None, task_type=None, task_progress=0, task_total=0,

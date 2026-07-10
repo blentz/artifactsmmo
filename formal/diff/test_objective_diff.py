@@ -31,6 +31,7 @@ def _make_state(level: int, skills: dict[str, int],
     return WorldState(
         character="t", level=level, xp=0, max_xp=100, hp=1, max_hp=1, gold=0,
         skills=skills, x=0, y=0, inventory={}, inventory_max=100,
+        inventory_slots_max=100,
         equipment=equipment, cooldown_expires=None, task_code=None,
         task_type=None, task_progress=0, task_total=0, bank_items=None,
         bank_gold=None, pending_items=None)

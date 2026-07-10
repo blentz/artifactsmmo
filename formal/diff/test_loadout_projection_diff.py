@@ -77,6 +77,7 @@ def _make_state(equipment: dict[str, str | None], current: dict) -> WorldState:
     return WorldState(
         character="c", level=1, xp=0, max_xp=100, hp=10, max_hp=current["max_hp"],
         gold=0, skills={}, x=0, y=0, inventory={}, inventory_max=1000,
+        inventory_slots_max=1000,
         equipment=equipment, cooldown_expires=None, task_code=None,
         task_type=None, task_progress=0, task_total=0,
         bank_items=None, bank_gold=None, pending_items=None,

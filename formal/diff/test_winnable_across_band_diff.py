@@ -175,6 +175,7 @@ def _base_world_state(
         y=0,
         inventory=inventory,
         inventory_max=40,
+        inventory_slots_max=40,
         equipment={},
         cooldown_expires=None,
         task_code=None,
