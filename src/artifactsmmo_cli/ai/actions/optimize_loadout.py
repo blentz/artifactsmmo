@@ -84,18 +84,22 @@ class OptimizeLoadoutAction(Action):
         swaps = self._swap_plan(state, game_data)
         if not swaps:
             return False
-        # SLOT ROOM: apply()/execute() are TWO-PHASE — every displaced item
-        # across ALL swap slots is returned to inventory FIRST (unequip pass),
+        # ROOM: apply()/execute() are TWO-PHASE — every displaced item across
+        # ALL swap slots is returned to inventory FIRST (unequip pass),
         # strictly before any incoming code is equipped (equip pass, which
-        # only ever shrinks or empties inventory stacks). So the peak slot
-        # usage happens right after the unequip pass, and a slot freed by an
-        # incoming equip in the SAME action arrives too late to help an
-        # outgoing item fit — unlike EquipAction's single atomic swap
-        # (equip.py:79-95), there is no "C frees a slot" credit here. A
-        # displaced item needs a NEW slot only if its code isn't already a
-        # held stack; distinct slots displacing the SAME code (e.g. two
-        # identical rings) are deduplicated since inventory is keyed by code,
-        # not by slot — this must NOT double-count.
+        # only ever shrinks or empties inventory stacks). So the peak
+        # slot+quantity usage happens right after the unequip pass, and a
+        # slot/quantity freed by an incoming equip in the SAME action arrives
+        # too late to help an outgoing item fit — unlike EquipAction's single
+        # atomic swap (equip.py:79-95), there is no "C frees room" credit
+        # here. A displaced item needs a NEW slot only if its code isn't
+        # already a held stack; distinct slots displacing the SAME code (e.g.
+        # two identical rings) are deduplicated for the SLOT term since
+        # inventory is keyed by code, not by slot — this must NOT
+        # double-count. The QUANTITY term is NOT deduped the same way: every
+        # displaced item — regardless of whether its code is already a held
+        # stack — adds +1 quantity back to inventory at the unequip-pass
+        # peak, so it counts each displaced slot once.
         displaced_codes = {
             state.equipment.get(slot)
             for slot in swaps
@@ -104,8 +108,11 @@ class OptimizeLoadoutAction(Action):
         total_new_stacks = sum(
             1 for code in displaced_codes if code not in state.inventory
         )
+        displaced_items = sum(
+            1 for slot in swaps if state.equipment.get(slot) is not None
+        )
         return has_room(
-            total_new_stacks, added_qty=0,
+            total_new_stacks, added_qty=displaced_items,
             slots_free=state.inventory_slots_free,
             qty_free=state.inventory_free,
         )

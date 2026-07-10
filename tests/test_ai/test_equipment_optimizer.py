@@ -443,14 +443,19 @@ class TestOptimizeLoadoutAction:
             assert action.is_applicable(state, gd) is False
 
     def test_applicable_when_full_bag_but_displaced_item_already_held(self):
-        """Full bag, but the displaced weapon (wooden_stick) is ALREADY a
-        held stack -> no new slot is needed, so the swap is applicable
-        despite zero free slots."""
+        """Bag full on SLOTS (20/20 stacks), but the displaced weapon
+        (wooden_stick) is ALREADY a held stack -> no new slot is needed, so
+        the swap is applicable despite zero free slots. inventory_max is set
+        well above the slot-implied total so the (correctly-modeled)
+        unequip-pass quantity peak has headroom too -- this test isolates
+        the SLOT-dedup mechanic; the quantity peak is covered separately by
+        test_not_applicable_when_unequip_pass_quantity_peak_exceeds_cap."""
         gd = _gd_with_combat_items()
         full_inventory = {f"j{n}": 1 for n in range(19)}
         full_inventory["wooden_stick"] = 1
         state = make_state(
-            level=1, inventory=full_inventory, inventory_slots_max=20,
+            level=1, inventory=full_inventory,
+            inventory_slots_max=20, inventory_max=1000,
             equipment={"weapon_slot": "wooden_stick"},
         )
         action = OptimizeLoadoutAction(target_monster_code="yellow_slime")
@@ -462,17 +467,65 @@ class TestOptimizeLoadoutAction:
 
     def test_dedupes_same_code_displaced_from_two_slots(self):
         """Two slots displacing the SAME code (e.g. duplicate rings) must
-        cost exactly ONE new slot, not two -- inventory is keyed by code."""
+        cost exactly ONE new slot, not two -- inventory is keyed by code.
+        inventory_max is set well above the slot-implied total so the
+        unequip-pass quantity peak (+2, one per displaced slot -- the
+        quantity term is NOT deduped by code) has headroom; this test
+        isolates the SLOT-dedup mechanic."""
         gd = _gd_with_combat_items()
         inv = {f"j{n}": 1 for n in range(19)}  # 19 stacks -> 1 slot free
         state = make_state(
-            level=1, inventory=inv, inventory_slots_max=20,
+            level=1, inventory=inv,
+            inventory_slots_max=20, inventory_max=1000,
             equipment={"ring1_slot": "copper_ring", "ring2_slot": "copper_ring"},
         )
         action = OptimizeLoadoutAction(target_monster_code="yellow_slime")
         with patch(
             "artifactsmmo_cli.ai.actions.optimize_loadout.pick_loadout_cached",
             return_value={"ring1_slot": "silver_ring", "ring2_slot": "silver_ring"},
+        ):
+            assert action.is_applicable(state, gd) is True
+
+    def test_not_applicable_when_unequip_pass_quantity_peak_exceeds_cap(self):
+        """apply()/execute() are two-phase: unequip ALL displaced items first
+        (every one lands back in inventory, +1 qty each), THEN equip the
+        incoming items. So the quantity peak is current + displaced-count,
+        even when every displaced code is ALREADY a held stack (so the SLOT
+        term is 0 and plenty of slots are free). Two slots displace two
+        already-held codes with only 1 unit of quantity headroom -> the
+        unequip-pass peak (+2) blows the quantity cap even though the swap
+        needs zero new slots."""
+        gd = _gd_with_combat_items()
+        state = make_state(
+            level=1,
+            inventory={"wooden_stick": 1, "leather_armor": 1},
+            inventory_max=3,  # qty_free = 3 - 2 = 1 < 2 displaced items
+            inventory_slots_max=20,  # plenty of slot room
+            equipment={"weapon_slot": "wooden_stick", "body_armor_slot": "leather_armor"},
+        )
+        action = OptimizeLoadoutAction(target_monster_code="yellow_slime")
+        with patch(
+            "artifactsmmo_cli.ai.actions.optimize_loadout.pick_loadout_cached",
+            return_value={"weapon_slot": "fishing_net", "body_armor_slot": "water_robe"},
+        ):
+            assert action.is_applicable(state, gd) is False
+
+    def test_applicable_when_unequip_pass_quantity_peak_has_room(self):
+        """Control for the quantity-peak test above: same two-slot swap of
+        already-held codes, but with enough quantity headroom (qty_free=8
+        >= 2 displaced items) -> applicable."""
+        gd = _gd_with_combat_items()
+        state = make_state(
+            level=1,
+            inventory={"wooden_stick": 1, "leather_armor": 1},
+            inventory_max=10,  # qty_free = 10 - 2 = 8 >= 2 displaced items
+            inventory_slots_max=20,
+            equipment={"weapon_slot": "wooden_stick", "body_armor_slot": "leather_armor"},
+        )
+        action = OptimizeLoadoutAction(target_monster_code="yellow_slime")
+        with patch(
+            "artifactsmmo_cli.ai.actions.optimize_loadout.pick_loadout_cached",
+            return_value={"weapon_slot": "fishing_net", "body_armor_slot": "water_robe"},
         ):
             assert action.is_applicable(state, gd) is True
 
