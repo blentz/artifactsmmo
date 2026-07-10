@@ -35,7 +35,12 @@ def _make_state(
         skills=skills or {"woodcutting": 5},
         x=0, y=0,
         inventory=inventory or {}, inventory_max=20,
-        inventory_slots_max=len(inventory or {}),
+        # Non-binding slot cap (matches inventory_max) — these loadout/gather
+        # cost fixtures do not exercise the slot-exhaustion gate, so the bag
+        # must have slot headroom or an OptimizeLoadout tool-swap (which
+        # displaces the current weapon into inventory as a new stack) would be
+        # spuriously blocked by the slot-room precondition.
+        inventory_slots_max=20,
         equipment=eq, cooldown_expires=None,
         task_code=None, task_type=None, task_progress=0, task_total=0,
         task_lifecycle_phase=derive_task_lifecycle_phase(None, 0, 0),
