@@ -2713,22 +2713,26 @@ CYCLES_FOR_PROGRESS_MUTATIONS = [
 
 # gather_apply mutations -- old strings matched to current gather_apply_core.py text.
 GATHER_APPLY_MUTATIONS = [
-    # Drop the slot precondition: apply is now unguarded by free-slot count.
-    # The is_applicable diff (with k = MIN_FREE_SLOTS at boundary) catches it.
-    ("gather_apply: is_applicable always-true (drop slot check)",
-     "    return (inv.cap - inv.used) >= min_free",
-     "    return True"),
+    # Drop the slot-cap term: force `new_stacks -> 0` so a NEW drop code is
+    # treated as never needing a free slot (Task 4's slot restructure). The
+    # slot-aware diff rows catch it: test_slot_new_drop_no_free_slot_blocked_
+    # against_lean (new code, 0 free slots must refuse) +
+    # test_slot_aware_applicable_matches_lean fuzz.
+    ("gather_apply: is_applicable drop slot term (new_stacks -> 0)",
+     "    return has_room(new_stacks, added_qty=1, slots_free=slots_free, qty_free=qty_free)",
+     "    return has_room(0, added_qty=1, slots_free=slots_free, qty_free=qty_free)"),
     # Off-by-one on the mint: +1 becomes +2 (apply mints two items, blowing the cap
     # boundary). The diff test pins post.used == used + 1 against the Lean oracle.
     ("gather_apply: mint +1 -> +2 (off-by-one)",
      "    return replace(inv, used=inv.used + 1, item_count=new_counts)",
      "    return replace(inv, used=inv.used + 2, item_count=new_counts)"),
-    # Tighten >= to > on the slot check: at exactly k free slots the precondition
-    # should hold, but now it spuriously refuses. The boundary test
+    # Tighten the quantity floor `< min_free` -> `<= min_free`: at exactly
+    # min_free free slots the precondition should hold, but now it spuriously
+    # refuses. The boundary test
     # `test_boundary_exactly_three_free_is_applicable_against_lean` fires.
-    ("gather_apply: is_applicable >= -> > (off-by-one on slot floor)",
-     "    return (inv.cap - inv.used) >= min_free",
-     "    return (inv.cap - inv.used) > min_free"),
+    ("gather_apply: is_applicable off-by-one on quantity floor (< -> <=)",
+     "    if (inv.cap - inv.used) < min_free:",
+     "    if (inv.cap - inv.used) <= min_free:"),
 ]
 
 
@@ -3475,6 +3479,8 @@ NPC_BUY_MUTATIONS = [
     # test_currency_consumption_frees_net_space.
     ("npc_buy: drop currency consumption in currency apply",
      "    new_inventory[currency] = new_inventory.get(currency, 0) - total_spent\n"
+     "    if new_inventory[currency] <= 0:\n"
+     "        del new_inventory[currency]\n"
      "    return new_inventory",
      "    return new_inventory"),
 ]
@@ -4000,28 +4006,51 @@ COST_CORE_MUTATIONS = [
 # assert / coin decrement. Killed by
 # `formal/diff/test_inventory_chain_safe_diff.py`.
 WITHDRAW_ITEM_MUTATIONS = [
-    # Drop the slot-floor check: resurrects REAL BUG #7 (pre-fix >0). The
-    # regression-pin (used=9 cap=10 qty=5) fires.
-    ("withdraw_item: drop inventory_free check",
-     "        return (\n"
-     "            state.bank_items.get(self.code, 0) >= self.quantity\n"
-     "            and state.inventory_free >= self.quantity\n"
+    # Drop the quantity-room term: force `added_qty -> 0` so is_applicable stops
+    # requiring quantity headroom (resurrects REAL BUG #7, pre-fix >0). Task 6's
+    # slot restructure replaced the bare `inventory_free >= quantity` conjunct
+    # with a `has_room(...)` call, so the anchor now mutates its `added_qty` arg.
+    # The regression-pin (used=9 cap=10 qty=5) fires.
+    ("withdraw_item: drop inventory_free (quantity room) check",
+     "        return has_room(\n"
+     "            new_stacks, added_qty=self.quantity,\n"
+     "            slots_free=state.inventory_slots_free,\n"
+     "            qty_free=state.inventory_free,\n"
      "        )",
-     "        return state.bank_items.get(self.code, 0) >= self.quantity"),
-    # Off-by-one: flip >= to > on the slot floor.
-    ("withdraw_item: flip >= to > on inventory_free check",
-     "            and state.inventory_free >= self.quantity",
-     "            and state.inventory_free > self.quantity"),
-    # Drop the apply assert: even if is_applicable is correct, the planner
-    # could (incorrectly) call apply without going through it; the assert is
-    # the chain_safe defense. The diff test exercises apply via is_applicable,
-    # so dropping the assert alone wouldn't fail an oracle-agreement test
-    # — but the diff's `post.inventory_used <= post.inventory_max` invariant
-    # still holds because is_applicable is unchanged. We instead loosen the
-    # is_applicable AND drop the assert in one mutation, mirroring NpcBuy.
-    ("withdraw_item: weaken is_applicable to >= 1 only",
-     "            and state.inventory_free >= self.quantity",
-     "            and state.inventory_free >= 1"),
+     "        return has_room(\n"
+     "            new_stacks, added_qty=0,\n"
+     "            slots_free=state.inventory_slots_free,\n"
+     "            qty_free=state.inventory_free,\n"
+     "        )"),
+    # Off-by-one: over-require quantity room by 1 (`added_qty=self.quantity + 1`),
+    # so a withdraw of exactly `inventory_free` items is wrongly refused — the
+    # `<=` boundary in has_room now bites one short. The boundary test
+    # (used=5 cap=10 qty=5) fires.
+    ("withdraw_item: off-by-one on quantity room (over-require +1)",
+     "        return has_room(\n"
+     "            new_stacks, added_qty=self.quantity,\n"
+     "            slots_free=state.inventory_slots_free,\n"
+     "            qty_free=state.inventory_free,\n"
+     "        )",
+     "        return has_room(\n"
+     "            new_stacks, added_qty=self.quantity + 1,\n"
+     "            slots_free=state.inventory_slots_free,\n"
+     "            qty_free=state.inventory_free,\n"
+     "        )"),
+    # Weaken to a bare 1-unit room check (`added_qty -> 1`): only one quantity
+    # unit of headroom is required regardless of `self.quantity`, resurrecting
+    # the pre-fix `>= 1`-only bug. The regression-pin (used=9 cap=10 qty=5) fires.
+    ("withdraw_item: weaken quantity room to added_qty=1 only",
+     "        return has_room(\n"
+     "            new_stacks, added_qty=self.quantity,\n"
+     "            slots_free=state.inventory_slots_free,\n"
+     "            qty_free=state.inventory_free,\n"
+     "        )",
+     "        return has_room(\n"
+     "            new_stacks, added_qty=1,\n"
+     "            slots_free=state.inventory_slots_free,\n"
+     "            qty_free=state.inventory_free,\n"
+     "        )"),
 ]
 
 CLAIM_MUTATIONS = [
