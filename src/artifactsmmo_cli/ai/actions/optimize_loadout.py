@@ -16,6 +16,7 @@ from artifactsmmo_cli.ai.constants import ERROR_CODE_ALREADY_EQUIPPED
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Combat, Gather
+from artifactsmmo_cli.ai.inventory_room import has_room
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -80,7 +81,34 @@ class OptimizeLoadoutAction(Action):
         }
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
-        return bool(self._swap_plan(state, game_data))
+        swaps = self._swap_plan(state, game_data)
+        if not swaps:
+            return False
+        # SLOT ROOM: apply()/execute() are TWO-PHASE — every displaced item
+        # across ALL swap slots is returned to inventory FIRST (unequip pass),
+        # strictly before any incoming code is equipped (equip pass, which
+        # only ever shrinks or empties inventory stacks). So the peak slot
+        # usage happens right after the unequip pass, and a slot freed by an
+        # incoming equip in the SAME action arrives too late to help an
+        # outgoing item fit — unlike EquipAction's single atomic swap
+        # (equip.py:79-95), there is no "C frees a slot" credit here. A
+        # displaced item needs a NEW slot only if its code isn't already a
+        # held stack; distinct slots displacing the SAME code (e.g. two
+        # identical rings) are deduplicated since inventory is keyed by code,
+        # not by slot — this must NOT double-count.
+        displaced_codes = {
+            state.equipment.get(slot)
+            for slot in swaps
+            if state.equipment.get(slot) is not None
+        }
+        total_new_stacks = sum(
+            1 for code in displaced_codes if code not in state.inventory
+        )
+        return has_room(
+            total_new_stacks, added_qty=0,
+            slots_free=state.inventory_slots_free,
+            qty_free=state.inventory_free,
+        )
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         swaps = self._swap_plan(state, game_data)

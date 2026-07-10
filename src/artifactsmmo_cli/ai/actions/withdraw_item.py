@@ -13,6 +13,7 @@ from artifactsmmo_api_client.models.simple_item_schema import SimpleItemSchema
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.inventory_room import has_room
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -31,22 +32,36 @@ class WithdrawItemAction(Action):
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         if not self.accessible or state.bank_items is None:
             return False
-        # Defense in depth: the slot floor must cover the full withdraw quantity,
-        # not just a single slot. Pre-fix `>= 1` allowed a withdraw of N items
-        # while only 1 slot was free, and apply minted `+N`, overflowing the cap.
-        # The post-fix is the chain_safe shape used by NpcBuy / Gather.
-        return (
-            state.bank_items.get(self.code, 0) >= self.quantity
-            and state.inventory_free >= self.quantity
+        if state.bank_items.get(self.code, 0) < self.quantity:
+            return False
+        # SLOT + QUANTITY ROOM: the game enforces both a per-slot cap and a
+        # total-quantity cap. Withdrawing a code NOT already held mints a new
+        # distinct stack and needs a free slot; growing an already-held stack
+        # only needs quantity headroom. `added_qty=self.quantity` against
+        # `qty_free` subsumes the old `inventory_free >= quantity` check.
+        # Pre-fix defense-in-depth note (kept for history): a bare `>= 1`
+        # slot check allowed a withdraw of N items while only 1 slot was
+        # free, and apply minted `+N`, overflowing the cap.
+        new_stacks = 0 if self.code in state.inventory else 1
+        return has_room(
+            new_stacks, added_qty=self.quantity,
+            slots_free=state.inventory_slots_free,
+            qty_free=state.inventory_free,
         )
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         # Mirror the is_applicable precondition. The planner re-checks
         # is_applicable on every popped node; this assert is the
         # chain_safe defense that crashes loudly if a caller bypasses the gate.
-        assert state.inventory_free >= self.quantity, (
-            f"WithdrawItemAction.apply requires inventory_free >= quantity "
-            f"({state.inventory_free} < {self.quantity})"
+        new_stacks = 0 if self.code in state.inventory else 1
+        assert has_room(
+            new_stacks, added_qty=self.quantity,
+            slots_free=state.inventory_slots_free,
+            qty_free=state.inventory_free,
+        ), (
+            f"WithdrawItemAction.apply requires room for quantity={self.quantity} "
+            f"new_stacks={new_stacks} "
+            f"(slots_free={state.inventory_slots_free}, qty_free={state.inventory_free})"
         )
         dest = self.bank_location
         new_inventory = dict(state.inventory)

@@ -426,6 +426,56 @@ class TestOptimizeLoadoutAction:
     def test_repr(self):
         assert repr(OptimizeLoadoutAction(target_monster_code="chicken")) == "OptimizeLoadout(chicken)"
 
+    def test_not_applicable_when_swap_displaces_new_stack_on_full_bag(self):
+        """Full bag (20/20 slots): a swap whose displaced weapon is NOT
+        already held would mint a brand-new inventory stack -> blocked."""
+        gd = _gd_with_combat_items()
+        full_inventory = {f"j{n}": 1 for n in range(20)}
+        state = make_state(
+            level=1, inventory=full_inventory, inventory_slots_max=20,
+            equipment={"weapon_slot": "wooden_stick"},
+        )
+        action = OptimizeLoadoutAction(target_monster_code="yellow_slime")
+        with patch(
+            "artifactsmmo_cli.ai.actions.optimize_loadout.pick_loadout_cached",
+            return_value={"weapon_slot": "fishing_net"},
+        ):
+            assert action.is_applicable(state, gd) is False
+
+    def test_applicable_when_full_bag_but_displaced_item_already_held(self):
+        """Full bag, but the displaced weapon (wooden_stick) is ALREADY a
+        held stack -> no new slot is needed, so the swap is applicable
+        despite zero free slots."""
+        gd = _gd_with_combat_items()
+        full_inventory = {f"j{n}": 1 for n in range(19)}
+        full_inventory["wooden_stick"] = 1
+        state = make_state(
+            level=1, inventory=full_inventory, inventory_slots_max=20,
+            equipment={"weapon_slot": "wooden_stick"},
+        )
+        action = OptimizeLoadoutAction(target_monster_code="yellow_slime")
+        with patch(
+            "artifactsmmo_cli.ai.actions.optimize_loadout.pick_loadout_cached",
+            return_value={"weapon_slot": "fishing_net"},
+        ):
+            assert action.is_applicable(state, gd) is True
+
+    def test_dedupes_same_code_displaced_from_two_slots(self):
+        """Two slots displacing the SAME code (e.g. duplicate rings) must
+        cost exactly ONE new slot, not two -- inventory is keyed by code."""
+        gd = _gd_with_combat_items()
+        inv = {f"j{n}": 1 for n in range(19)}  # 19 stacks -> 1 slot free
+        state = make_state(
+            level=1, inventory=inv, inventory_slots_max=20,
+            equipment={"ring1_slot": "copper_ring", "ring2_slot": "copper_ring"},
+        )
+        action = OptimizeLoadoutAction(target_monster_code="yellow_slime")
+        with patch(
+            "artifactsmmo_cli.ai.actions.optimize_loadout.pick_loadout_cached",
+            return_value={"ring1_slot": "silver_ring", "ring2_slot": "silver_ring"},
+        ):
+            assert action.is_applicable(state, gd) is True
+
 
 class TestActionTagsIntegration:
     def test_optimize_loadout_has_equip_tag(self):

@@ -465,6 +465,26 @@ class TestWithdrawItemAction:
         assert new_state.bank_items["copper_ore"] == 2
         assert (new_state.x, new_state.y) == (4, 0)
 
+    def test_not_applicable_new_code_blocked_when_no_free_slot(self):
+        """Withdrawing a code NOT held into a full bag needs a slot -> blocked,
+        even with quantity headroom."""
+        action = WithdrawItemAction(code="iron_ore", quantity=3, bank_location=(4, 0))
+        inv = {f"j{n}": 1 for n in range(20)}
+        state = make_state(x=0, y=0, inventory=inv, inventory_max=100,
+                           inventory_slots_max=20, bank_items={"iron_ore": 10})
+        gd = make_game_data(bank_loc=(4, 0))
+        assert action.is_applicable(state, gd) is False
+
+    def test_applicable_held_code_grows_stack_when_no_free_slot(self):
+        """Withdrawing MORE of a held code grows its stack -> no new slot
+        needed, so quantity headroom alone decides."""
+        action = WithdrawItemAction(code="iron_ore", quantity=3, bank_location=(4, 0))
+        inv = {"iron_ore": 2, **{f"j{n}": 1 for n in range(19)}}
+        state = make_state(x=0, y=0, inventory=inv, inventory_max=100,
+                           inventory_slots_max=20, bank_items={"iron_ore": 10})
+        gd = make_game_data(bank_loc=(4, 0))
+        assert action.is_applicable(state, gd) is True
+
 
 class TestCraftAction:
     def test_applicable_with_workshop_location_and_materials(self):
