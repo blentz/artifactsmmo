@@ -42,7 +42,14 @@ class WithdrawItemAction(Action):
         # Pre-fix defense-in-depth note (kept for history): a bare `>= 1`
         # slot check allowed a withdraw of N items while only 1 slot was
         # free, and apply minted `+N`, overflowing the cap.
-        new_stacks = 0 if self.code in state.inventory else 1
+        # A new distinct stack is created only when withdrawing >=1 of a code
+        # not already held; withdrawing 0 (a degenerate no-op) mints nothing
+        # and needs no slot, so new_stacks stays 0 (keeps parity with the
+        # quantity-only chain-safe Lean model in InventoryChainSafe.lean,
+        # which the withdraw differential pins — the slot term only bites in
+        # real states where slots_max < inventory_max).
+        new_stacks = 1 if (self.code not in state.inventory
+                           and self.quantity > 0) else 0
         return has_room(
             new_stacks, added_qty=self.quantity,
             slots_free=state.inventory_slots_free,
@@ -53,7 +60,8 @@ class WithdrawItemAction(Action):
         # Mirror the is_applicable precondition. The planner re-checks
         # is_applicable on every popped node; this assert is the
         # chain_safe defense that crashes loudly if a caller bypasses the gate.
-        new_stacks = 0 if self.code in state.inventory else 1
+        new_stacks = 1 if (self.code not in state.inventory
+                           and self.quantity > 0) else 0
         assert has_room(
             new_stacks, added_qty=self.quantity,
             slots_free=state.inventory_slots_free,
