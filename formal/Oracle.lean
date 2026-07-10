@@ -1399,6 +1399,17 @@ def runGatherApply (args : Array Json) : Json :=
     Json.mkObj [("used", Json.num (Int.ofNat post.used)),
                 ("cap", Json.num (Int.ofNat post.cap))]
 
+/-- Compute one inventory_room result. args: `[newStacks, addedQty, slotsFree,
+qtyFree]`. Emits `{"has_room": Bool}`. Reuses the proved
+`InventoryRoom.hasRoom` directly. -/
+def runInventoryRoom (args : Array Json) : Json :=
+  let newStacks := intArg args 0
+  let addedQty := intArg args 1
+  let slotsFree := intArg args 2
+  let qtyFree := intArg args 3
+  Json.mkObj [("has_room",
+    Json.bool (InventoryRoom.hasRoom newStacks addedQty slotsFree qtyFree))]
+
 /-- Compute one gather_selection result using the SAME proved
 `Formal.GatherSelection.selectGatherSource`.
 
@@ -2898,6 +2909,8 @@ def runOne (item : Json) : Json :=
     runCyclesForProgress args
   else if kind == "gather_apply" then
     runGatherApply args
+  else if kind == "inventory_room" then
+    runInventoryRoom args
   else if kind == "gather_selection" then
     runGatherSelection args
   else if kind == "shopping_list" then

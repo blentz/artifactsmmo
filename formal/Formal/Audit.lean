@@ -920,3 +920,10 @@ open Formal.WeightedRemaining in
 #print axioms Formal.SkillGateFastFail.applyStep_gate_closed
 #print axioms Formal.SkillGateFastFail.runPlan_gate_closed
 #print axioms Formal.SkillGateFastFail.fastfail_sound
+#print axioms InventoryRoom.hasRoom_false_of_no_slot
+#print axioms InventoryRoom.hasRoom_false_of_no_qty
+#print axioms InventoryRoom.hasRoom_grow_ignores_slots
+#print axioms InventoryRoom.hasRoom_both_room_witness
+#print axioms InventoryRoom.hasRoom_no_slot_witness
+#print axioms InventoryRoom.hasRoom_no_qty_witness
+#print axioms InventoryRoom.hasRoom_grow_full_slots_witness

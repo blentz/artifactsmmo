@@ -144,6 +144,7 @@ BOOST_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "boost_selectio
 POTION_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_supply.py"
 PROGRESSION_TREE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree_core.py"
 EQUIPMENT_PROFILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "equipment_profile.py"
+INVENTORY_ROOM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_room.py"
 
 # craft_plan_full / _apply_state mutations (B2 full-plan driver). The CONSUMING
 # model is the soundness-critical part; killed by
@@ -2582,6 +2583,7 @@ _ALL_SRCS = [
     LOW_YIELD_BOUNDARY_SRC, OBJECTIVE_STEP_FIGHT_CORE_SRC, DECIDE_KEY_SRC,
     CYCLES_FOR_PROGRESS_SRC,
     GATHER_APPLY_SRC,
+    INVENTORY_ROOM_SRC,
     GATHER_SELECTION_SRC,
     MONSTER_DROP_SELECTION_SRC,
     CRAFT_VS_BUY_SRC,
@@ -2727,6 +2729,49 @@ GATHER_APPLY_MUTATIONS = [
     ("gather_apply: is_applicable >= -> > (off-by-one on slot floor)",
      "    return (inv.cap - inv.used) >= min_free",
      "    return (inv.cap - inv.used) > min_free"),
+]
+
+
+# inventory_room mutations -- pure-core anchors for `has_room` (slot+quantity
+# room decision). Each flips one operator / conjunct / arg-order and is killed
+# by formal/diff/test_inventory_room_diff.py, which binds the live Python
+# `has_room` to the proved `InventoryRoom.hasRoom` over the boundary table +
+# a 300-example fuzz. Mirrors the three independence theorems.
+# NOTE: the module docstring repeats `new_stacks <= slots_free` /
+# `added_qty <= qty_free`, so every anchor below is scoped to the CODE line
+# (`return ... and ...`) — the harness replaces only the FIRST occurrence, and
+# the docstring uses an uppercase `AND` so the lowercase `and` disambiguates.
+INVENTORY_ROOM_MUTATIONS = [
+    # Slot check <= -> < : at new_stacks == slots_free the row should PASS but
+    # now spuriously refuses. Killed by the ((2,10,2,10) -> True) boundary row.
+    ("inventory_room: slot check <= -> <",
+     "return new_stacks <= slots_free",
+     "return new_stacks < slots_free"),
+    # Quantity check <= -> < : at added_qty == qty_free the row should PASS.
+    # Killed by the ((2,10,2,10) -> True) boundary row.
+    ("inventory_room: qty check <= -> <",
+     "and added_qty <= qty_free",
+     "and added_qty < qty_free"),
+    # Conjunction and -> or : either cap alone would admit. Killed by the
+    # no-slot ((1,5,0,10) -> False) and qty-full ((1,11,5,10) -> False) rows.
+    ("inventory_room: and -> or (drop conjunction)",
+     "slots_free and added_qty",
+     "slots_free or added_qty"),
+    # Slot arg swap: `new_stacks <= slots_free` -> `slots_free <= new_stacks`.
+    # Killed by the no-slot ((1,5,0,10) -> False) row (0<=1 is True).
+    ("inventory_room: slot arg swap",
+     "return new_stacks <= slots_free",
+     "return slots_free <= new_stacks"),
+    # Drop the slot check entirely (always-true). Killed by the multi-new-stack
+    # ((2,5,1,10) -> False) row.
+    ("inventory_room: slot check always-true",
+     "return new_stacks <= slots_free and",
+     "return True and"),
+    # Drop the quantity check entirely (always-true). Killed by the qty-full
+    # ((1,11,5,10) -> False) row.
+    ("inventory_room: qty check always-true",
+     "and added_qty <= qty_free",
+     "and True"),
 ]
 
 
@@ -4625,6 +4670,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_cycles_for_progress_diff.py", survivors)
     run_group(GATHER_APPLY_SRC, GATHER_APPLY_MUTATIONS,
               "formal/diff/test_gather_apply_diff.py", survivors)
+    run_group(INVENTORY_ROOM_SRC, INVENTORY_ROOM_MUTATIONS,
+              "formal/diff/test_inventory_room_diff.py", survivors)
     run_group(GATHER_APPLY_SRC, MONSTER_DROP_APPLY_MUTATIONS,
               "formal/diff/test_monster_drop_apply_diff.py", survivors)
     run_group(GATHER_SELECTION_SRC, GATHER_SELECTION_MUTATIONS,

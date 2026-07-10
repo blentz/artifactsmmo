@@ -232,3 +232,4 @@ import Formal.MaxBatchFromHeld
 import Formal.OptimalBuyMix
 import Formal.ProgressionTree
 import Formal.EquipmentProfile
+import Formal.InventoryRoom
