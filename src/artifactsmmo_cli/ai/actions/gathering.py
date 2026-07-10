@@ -74,14 +74,19 @@ class GatherAction(Action):
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         if not self.locations:
             return False
+        drop_item = (self.drop_item_override
+                     or game_data.resource_drop_item(self.resource_code)
+                     or self.resource_code)
         inv = GatherInv(used=state.inventory_used, cap=state.inventory_max,
-                        item_count=state.inventory)
+                        item_count=state.inventory,
+                        slots_used=state.inventory_slots_used,
+                        slots_max=state.inventory_slots_max)
         skill_req = game_data.resource_skill_level(self.resource_code)
         if skill_req is None:
-            return gather_is_applicable_pure(inv, self._MIN_FREE_SLOTS)
+            return gather_is_applicable_pure(inv, self._MIN_FREE_SLOTS, drop_item)
         skill, level = skill_req
         return (state.skills.get(skill, 1) >= level
-                and gather_is_applicable_pure(inv, self._MIN_FREE_SLOTS))
+                and gather_is_applicable_pure(inv, self._MIN_FREE_SLOTS, drop_item))
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         dest = nearest_or_error(state.x, state.y, self.locations, "gather")

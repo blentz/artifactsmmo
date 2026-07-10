@@ -7,7 +7,9 @@ precondition (`inventory_free >= MIN_FREE_SLOTS`).
 The Lean module `formal/Formal/GatherApply.lean` proves three contracts on
 these pure cores:
 
-* `gather_is_applicable_pure(inv, k)` returns True iff `max - used >= k`.
+* `gather_is_applicable_pure(inv, k, drop_item)` returns True iff `max - used
+  >= k` AND (when `drop_item` is known) the drop fits the slot cap: a NEW drop
+  code needs a free slot, growing a held code does not (`inventory_room.has_room`).
 * `gather_apply_pure(inv, code)` produces an inventory whose `used = used + 1`,
   `max` unchanged, and `item_count[code]` incremented by 1 (all other entries
   preserved).
@@ -25,6 +27,8 @@ being a slot-floor.
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 
+from artifactsmmo_cli.ai.inventory_room import has_room
+
 
 @dataclass(frozen=True)
 class GatherInv:
@@ -33,15 +37,29 @@ class GatherInv:
     used: int                       # sum of inventory values (inventory_used)
     cap: int                        # inventory_max
     item_count: Mapping[str, int]   # inventory dict
+    slots_used: int = 0             # distinct stacks held (inventory_slots_used)
+    slots_max: int = 0              # slot cap (inventory_slots_max)
 
 
-def gather_is_applicable_pure(inv: GatherInv, min_free: int) -> bool:
-    """True iff inventory has `min_free` slots available.
+def gather_is_applicable_pure(inv: GatherInv, min_free: int,
+                              drop_item: str | None = None) -> bool:
+    """Gathering is applicable iff there is room for the yielded drop under BOTH
+    the quantity floor (`min_free`) and the slot cap. A gather yields the ore
+    plus possible bonus drops; `min_free` remains the quantity floor. When
+    `drop_item` is known, gathering a NEW code (not in `item_count`) also needs
+    a free slot; gathering more of a held code does not.
 
-    Mirrors the slot half of `GatherAction.is_applicable` (the skill-level half
-    is orthogonal and lives in `is_applicable` itself).
+    `drop_item=None` preserves the old quantity-only behavior for callers that
+    do not resolve the drop.
     """
-    return (inv.cap - inv.used) >= min_free
+    if (inv.cap - inv.used) < min_free:
+        return False
+    if drop_item is None:
+        return True
+    new_stacks = 0 if drop_item in inv.item_count else 1
+    slots_free = inv.slots_max - inv.slots_used
+    qty_free = inv.cap - inv.used
+    return has_room(new_stacks, added_qty=1, slots_free=slots_free, qty_free=qty_free)
 
 
 def gather_apply_pure(inv: GatherInv, drop_item: str) -> GatherInv:

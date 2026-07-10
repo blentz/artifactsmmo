@@ -1,4 +1,5 @@
 -- @concept: resources, items @property: safety
+import Formal.InventoryRoom
 /-
 Formal model of the slot-bookkeeping core of
 `src/artifactsmmo_cli/ai/actions/gathering.py`
@@ -50,6 +51,21 @@ slots remain. -/
 def isApplicable (i : Inv) (k : Nat) : Bool :=
   decide (k ≤ i.cap - i.used)
 
+/-- Slot-aware `GatherAction.is_applicable`, mirroring the extended pure core
+`gather_is_applicable_pure(inv, k, drop_item)`. The quantity floor
+(`k ≤ cap - used`) is retained; when the drop is known (`hasDrop = true`) the
+yielded stack must ALSO fit the per-slot cap via `InventoryRoom.hasRoom` — a
+NEW drop code needs a free slot (`newStacks = 1`), growing a held code does not
+(`newStacks = 0`). `hasDrop = false` recovers the quantity-only `isApplicable`
+(the `drop_item = None` caller path). `qtyFree = cap - used`, `slotsFree =
+slotsMax - slotsUsed`, `addedQty = 1` (the planner mints exactly one). -/
+def isApplicableSlot (i : Inv) (k : Nat) (hasDrop : Bool)
+    (newStacks slotsUsed slotsMax : Int) : Bool :=
+  decide (k ≤ i.cap - i.used) &&
+    (if hasDrop then
+        InventoryRoom.hasRoom newStacks 1 (slotsMax - slotsUsed) ((i.cap : Int) - i.used)
+      else true)
+
 /-- Planner-projection of `GatherAction.apply` over inventory slots: mint
 exactly one item, leaving `cap` unchanged. The pure core's item-dict bookkeeping
 is exercised by the differential test; only the slot count matters here. -/
@@ -79,6 +95,55 @@ theorem apply_inventory_safe (i : Inv) (k : Nat) (hk : 1 ≤ k)
 theorem apply_inventory_safe_prod (i : Inv) (h : isApplicable i MIN_FREE_SLOTS = true) :
     (apply i).used ≤ i.cap :=
   apply_inventory_safe i MIN_FREE_SLOTS (by decide) h
+
+/-! ### Slot-aware contracts (mirror `gather_is_applicable_pure(inv, k, drop_item)`). -/
+
+/-- The slot-aware check still implies the quantity floor (first conjunct): a
+passing `isApplicableSlot` guarantees the same `k ≤ cap - used` the quantity-only
+`isApplicable` did. The slot term is strictly additive. -/
+theorem isApplicableSlot_imp_free_ge (i : Inv) (k : Nat) (hasDrop : Bool)
+    (newStacks slotsUsed slotsMax : Int)
+    (h : isApplicableSlot i k hasDrop newStacks slotsUsed slotsMax = true) :
+    k ≤ i.cap - i.used := by
+  unfold isApplicableSlot at h
+  simp only [Bool.and_eq_true, decide_eq_true_eq] at h
+  exact h.1
+
+/-- **Per-step mint safety still holds** under the slot-aware check: a passing
+gather (with `k ≥ 1`) cannot mint past the inventory cap. Reduces to the
+existing `apply_inventory_safe` via the retained quantity floor. -/
+theorem apply_inventory_safe_slot (i : Inv) (k : Nat) (hk : 1 ≤ k) (hasDrop : Bool)
+    (newStacks slotsUsed slotsMax : Int)
+    (h : isApplicableSlot i k hasDrop newStacks slotsUsed slotsMax = true) :
+    (apply i).used ≤ i.cap := by
+  have hfree := isApplicableSlot_imp_free_ge i k hasDrop newStacks slotsUsed slotsMax h
+  simp only [apply]
+  omega
+
+/-- **Per-step slot safety**: a passing gather of a KNOWN drop cannot create a
+stack past the slot cap — `newStacks` distinct new stacks always fit the free
+slot budget (`newStacks ≤ slotsMax - slotsUsed`). For a NEW drop
+(`newStacks = 1`) this witnesses a free slot; for a held drop
+(`newStacks = 0`) it is trivially satisfied. -/
+theorem isApplicableSlot_slot_safe (i : Inv) (k : Nat)
+    (newStacks slotsUsed slotsMax : Int)
+    (h : isApplicableSlot i k true newStacks slotsUsed slotsMax = true) :
+    newStacks ≤ slotsMax - slotsUsed := by
+  unfold isApplicableSlot InventoryRoom.hasRoom at h
+  simp only [if_true, Bool.and_eq_true, decide_eq_true_eq] at h
+  omega
+
+/-- Witness: a NEW drop (`newStacks = 1`) at 0 free slots is BLOCKED even though
+quantity has ample room (`cap - used = 104`). Mirrors the Python slot-exhaustion
+test `test_gather_blocked_when_new_drop_needs_slot_but_none_free`. -/
+theorem isApplicableSlot_new_drop_no_slot_witness :
+    isApplicableSlot { used := 20, cap := 124 } 1 true 1 20 20 = false := by decide
+
+/-- Witness: growing a HELD drop (`newStacks = 0`) at 0 free slots is ALLOWED
+(quantity permitting). Mirrors the Python test
+`test_gather_allowed_when_drop_grows_held_stack_with_no_free_slot`. -/
+theorem isApplicableSlot_held_drop_no_slot_witness :
+    isApplicableSlot { used := 20, cap := 124 } 1 true 0 20 20 = true := by decide
 
 /-- Iterated `apply`. -/
 def applyN : Inv → Nat → Inv

@@ -1377,13 +1377,17 @@ def runCyclesForProgress (args : Array Json) : Json :=
 /-- Compute one gather_apply result.
 
 Two queries (chosen by `args[0]`):
-* query 0 = `is_applicable` slot check. args: `[0, used, cap, k]`. Emits
-  `{"applicable": Bool, "free": Int}`.
+* query 0 = `is_applicable` slot-aware check. args:
+  `[0, used, cap, k, hasDrop, newStacks, slotsUsed, slotsMax]`. Emits
+  `{"applicable": Bool, "free": Int}`. `hasDrop = 0` recovers the quantity-only
+  check (the `drop_item = None` caller path); `hasDrop = 1` also enforces the
+  per-slot cap via `InventoryRoom.hasRoom` (`newStacks = 1` for a new drop code,
+  `0` for growing a held code).
 * query 1 = `apply` projection. args: `[1, used, cap, n]` where `n` is the
   number of chained applies (typically 1). Emits the post-state
   `{"used": Int, "cap": Int}` after `applyN n`.
 
-Reuses the proved `Formal.GatherApply.isApplicable` / `applyN` directly. -/
+Reuses the proved `Formal.GatherApply.isApplicableSlot` / `applyN` directly. -/
 def runGatherApply (args : Array Json) : Json :=
   let q := intArg args 0
   let used := (intArg args 1).toNat
@@ -1391,7 +1395,12 @@ def runGatherApply (args : Array Json) : Json :=
   let i : Formal.GatherApply.Inv := { used := used, cap := cap }
   if q == 0 then
     let k := (intArg args 3).toNat
-    Json.mkObj [("applicable", Json.bool (Formal.GatherApply.isApplicable i k)),
+    let hasDrop := intArg args 4 != 0
+    let newStacks := intArg args 5
+    let slotsUsed := intArg args 6
+    let slotsMax := intArg args 7
+    Json.mkObj [("applicable", Json.bool
+                  (Formal.GatherApply.isApplicableSlot i k hasDrop newStacks slotsUsed slotsMax)),
                 ("free", Json.num (Int.ofNat (Formal.GatherApply.free i)))]
   else
     let n := (intArg args 3).toNat
