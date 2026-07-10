@@ -194,7 +194,15 @@ def generate_next_craft_action(
                 # remaining legs from the REAL post-fight inventory (the
                 # same grind-one-replan idiom the skill dispatch uses).
                 break
-        return _with_rearm(mapped, state, game_data)
+        result = _with_rearm(mapped, state, game_data)
+        # The directed fast-path emits a deterministic gather/craft leg but does
+        # NOT model inventory-room preconditions. If the first leg is not
+        # applicable NOW (e.g. a stack-creating gather blocked by a full slot
+        # cap — the slot-exhaustion case), defer to A*, which sequences the
+        # slot-freeing relief (DepositAll/Recycle/Sell) before the leg.
+        if result and not result[0].is_applicable(state, game_data):
+            return None
+        return result
     return None  # all needed items already satisfied — let normal path handle it
 
 

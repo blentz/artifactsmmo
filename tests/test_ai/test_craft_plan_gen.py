@@ -141,6 +141,73 @@ class TestCopperRingGatherPhase:
         assert result[0].code == "copper_ring"
 
 
+class TestFullSlotsDefersToAStar:
+    """Live Robby 497 livelock (2026-07-09): 20/20 slots full with quantity
+    headroom. The directed generator emits a deterministic gather leg but does
+    NOT model inventory-room preconditions, so it would surface a plan whose
+    plan[0] gather is NOT applicable (a NEW-stack gather blocked by the full
+    slot cap — the Task-4 slot gate). The generator must detect the
+    inapplicable first leg and return None so A* sequences the slot-freeing
+    relief (DepositAll/Recycle/Sell) before the gather."""
+
+    @staticmethod
+    def _full_bag_inventory(n_stacks: int) -> dict[str, int]:
+        """`n_stacks` distinct junk stacks (none in the copper_ring closure)."""
+        return {f"junk_{i}": 1 for i in range(n_stacks)}
+
+    def test_full_slots_new_stack_gather_returns_none(self):
+        """slots_free == 0 (distinct stacks == slot cap) with plenty of quantity
+        headroom → the copper_ore gather is a NEW stack blocked by the slot cap,
+        so its is_applicable is False → generator returns None (A* fallback)."""
+        gd = _gd_copper_ring()
+        state = make_state(
+            inventory=self._full_bag_inventory(5),
+            inventory_slots_max=5,   # 5 distinct stacks → slots_free == 0
+            inventory_max=100,       # ample quantity headroom (not the blocker)
+            bank_items={},
+            skills={"mining": 5, "jewelrycrafting": 5},
+        )
+        goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
+        actions = _copper_ring_actions()
+
+        # Sanity: the slot cap really is what blocks the leg (quantity fits).
+        assert state.inventory_slots_free == 0
+        assert state.inventory_max - state.inventory_used >= 3
+        gather = actions[0]
+        assert isinstance(gather, GatherAction)
+        assert gather.is_applicable(state, gd) is False
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        assert result is None, (
+            "a full-slot state whose first leg (new-stack gather) is not "
+            "applicable must defer to A* for slot-freeing relief"
+        )
+
+    def test_room_for_new_stack_returns_gather_leg(self):
+        """Control: one free slot → the copper_ore gather IS applicable, so the
+        generator fires and returns the gather leg (non-None)."""
+        gd = _gd_copper_ring()
+        state = make_state(
+            inventory=self._full_bag_inventory(5),
+            inventory_slots_max=6,   # one free slot for the new copper_ore stack
+            inventory_max=100,
+            bank_items={},
+            skills={"mining": 5, "jewelrycrafting": 5},
+        )
+        goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
+        actions = _copper_ring_actions()
+
+        assert state.inventory_slots_free == 1
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        assert result is not None, "room for the new stack → generator must fire"
+        assert isinstance(result[0], GatherAction)
+        assert result[0].resource_code == "copper_rocks"
+        assert result[0].is_applicable(state, gd) is True
+
+
 class TestWithdrawsBankedIntermediate:
     """Banked craftable intermediate → emit a WithdrawItemAction (no A* bank-gate)."""
 
