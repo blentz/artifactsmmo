@@ -13,6 +13,7 @@ from artifactsmmo_cli.ai.goals.discard_overstock import (
 from artifactsmmo_cli.ai.inventory_caps import (
     BATCH_BUFFER,
     CONSUMABLE_KEEP,
+    DISCARD_WATERMARK,
     SAFETY_FLOOR,
     _is_dominated_pure,
     _is_equippable_dominated,
@@ -358,6 +359,40 @@ class TestOverstockedItems:
     def test_empty_when_no_overstock(self):
         gd = _gd_with_sap_recipes()
         state = make_state(level=1, inventory={"sap": 3})
+        assert overstocked_items(state, gd) == {}
+
+    def test_fires_on_slots_full_though_quantity_low(self):
+        """Task 7 (slot-aware-inventory-room) livelock fix: 20/20 SLOTS full
+        (20 singleton junk stacks, no per-item useful floor) but only 20/124
+        total QUANTITY — well below the 85% watermark on `used/cap` alone.
+        Without the slot-full OR, `overstock_excess`'s pressure gate never
+        opens and nothing is ever flagged overstock even though slots are
+        the binding constraint. With the fix, zero free slots is treated as
+        full pressure and every over-floor item (floor 0 for unknown junk)
+        is reported."""
+        gd = GameData()
+        gd._item_stats = {}
+        gd._crafting_recipes = {}
+        inventory = {f"junk_{i}": 1 for i in range(20)}
+        state = make_state(level=1, inventory=inventory, inventory_max=124,
+                           inventory_slots_max=20)
+        assert state.inventory_slots_free == 0
+        assert state.inventory_used / state.inventory_max < DISCARD_WATERMARK
+        excess = overstocked_items(state, gd)
+        assert excess == {f"junk_{i}": 1 for i in range(20)}
+
+    def test_stays_empty_at_same_quantity_fraction_without_slots_full(self):
+        """Control for the slots-full fix above: the SAME 20/124 quantity
+        fraction, but with enough slot room (slots_max=124) that slots are
+        NOT full, must still report no overstock — the fix is additive, not
+        a quantity-watermark regression."""
+        gd = GameData()
+        gd._item_stats = {}
+        gd._crafting_recipes = {}
+        inventory = {f"junk_{i}": 1 for i in range(20)}
+        state = make_state(level=1, inventory=inventory, inventory_max=124,
+                           inventory_slots_max=124)
+        assert state.inventory_slots_free > 0
         assert overstocked_items(state, gd) == {}
 
 

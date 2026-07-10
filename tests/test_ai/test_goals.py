@@ -161,6 +161,34 @@ class TestDepositInventoryGoal:
         v = goal.value(state, self._gd())
         assert 20.0 < v < 35.0  # ~26.7, between 0 and 80
 
+    def test_value_fires_on_slots_full_though_quantity_low(self):
+        """Task 7 (slot-aware-inventory-room) livelock fix: 20/20 SLOTS full
+        (20 singleton junk stacks) but only 20/124 total QUANTITY — well
+        below the 85% RAMP_START watermark on `used_fraction` alone. Without
+        the slot-full OR, this goal never gets priority and junk never gets
+        banked, so the bag can never free a slot. With the fix, zero free
+        slots forces the goal to its max urgency (80.0), same as 100%
+        quantity-full."""
+        goal = DepositInventoryGoal(game_data=self._gd())
+        inventory = {f"item_{i}": 1 for i in range(20)}  # 20 stacks, qty 20/124
+        state = make_state(inventory=inventory, inventory_max=124,
+                           inventory_slots_max=20)
+        assert state.inventory_slots_free == 0
+        assert state.inventory_used / state.inventory_max < DepositInventoryGoal._RAMP_START
+        assert abs(goal.value(state, self._gd()) - 80.0) < 0.1
+
+    def test_value_stays_zero_at_same_quantity_fraction_without_slots_full(self):
+        """Control for the slots-full fix above: the SAME 20/124 quantity
+        fraction, but with enough slot room (slots_max=124) that slots are
+        NOT full, must still return 0 — the fix is additive, not a quantity
+        watermark regression."""
+        goal = DepositInventoryGoal(game_data=self._gd())
+        inventory = {f"item_{i}": 1 for i in range(20)}
+        state = make_state(inventory=inventory, inventory_max=124,
+                           inventory_slots_max=124)
+        assert state.inventory_slots_free > 0
+        assert goal.value(state, self._gd()) == 0.0
+
     def test_satisfied_when_only_kept_items_remain(self):
         """No fixed-fraction rule: satisfaction is purely 'nothing bankable'."""
         goal = DepositInventoryGoal(game_data=self._gd())

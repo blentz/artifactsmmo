@@ -47,6 +47,20 @@ class DepositInventoryGoal(Goal):
         if self.is_satisfied(state):
             return 0.0
         used_fraction = state.inventory_used / state.inventory_max
+        # SLOTS-FULL livelock fix (Task 7, slot-aware-inventory-room): 20/20
+        # distinct stacks full but low total QUANTITY (e.g. 20 singleton
+        # junk stacks in a 124-capacity bag) never crosses the RAMP_START
+        # watermark on `used_fraction` alone, so this goal never gets
+        # priority and junk never gets banked — the slot-exhaustion
+        # livelock. Zero free slots is treated as maximal pressure by
+        # forcing `used_fraction` to 1.0 (the top of the ramp's domain)
+        # rather than adding a new branch: `depositInventoryValue` in
+        # formal/Formal/GoalSystem.lean proves this EXACT ramp formula for
+        # every `usedFraction` the bridge lifts into `[0, 1]`, so feeding it
+        # the value 1.0 stays inside the already-proven universal domain —
+        # no Lean mirror change needed.
+        if state.inventory_slots_free == 0:
+            used_fraction = 1.0
         if used_fraction < self._RAMP_START:
             return 0.0
         # Linear ramp from _RAMP_START → 1.0 mapped onto 0 → _MAX_VALUE.

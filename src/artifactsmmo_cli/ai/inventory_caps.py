@@ -546,6 +546,18 @@ def overstocked_items(
     profile = profile or {}
     used = state.inventory_used
     cap = state.inventory_max
+    # SLOTS-FULL livelock fix (Task 7, slot-aware-inventory-room): 20/20
+    # distinct stacks full but low total QUANTITY never crosses the
+    # `used/cap >= watermark` pressure gate on quantity alone, so overstock
+    # relief never engages even though slots are the binding constraint.
+    # Rather than adding a new branch to the proven `overstock_excess` core
+    # (formal/Formal/InventoryProfile.lean `overstockExcess`/`underPressure`,
+    # differentially tested in formal/diff/test_inventory_profile_diff.py),
+    # feed it `used = cap` — forcing its ALREADY-PROVEN full-pressure branch
+    # via a substitution within the core's existing universally-quantified
+    # `used`/`cap` domain. No Lean mirror change needed.
+    if cap > 0 and state.inventory_slots_free == 0:
+        used = cap
     watermark_num, watermark_den = watermark
     excess: dict[str, int] = {}
     for code, qty in state.inventory.items():
