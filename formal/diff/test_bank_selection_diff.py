@@ -66,6 +66,7 @@ def _build_state(
     task_is_items: bool,
     crafting_target: int | None,
     inventory_max: int = 1000,
+    inventory_slots_max: int | None = None,
 ) -> WorldState:
     equipment: dict[str, str | None] = {
         f"slot_{i}": _code(c) for i, c in enumerate(equipped)
@@ -83,7 +84,8 @@ def _build_state(
         y=0,
         inventory={_code(c): q for c, q in inventory.items()},
         inventory_max=inventory_max,
-        inventory_slots_max=inventory_max,
+        inventory_slots_max=(inventory_slots_max if inventory_slots_max is not None
+                             else inventory_max),
         equipment=equipment,
         cooldown_expires=None,
         task_code=(_code(task_code) if task_code is not None else None),
@@ -107,6 +109,7 @@ def _encode_args(
     attrs: dict[int, dict],
     fuel: int,
     inventory_max: int = 1000,
+    inventory_slots_max: int | None = None,
 ) -> list[int]:
     args: list[int] = [TASKS_COIN_INT]
     args += [1, task_code] if task_code is not None else [0, 0]
@@ -130,7 +133,8 @@ def _encode_args(
     for code, a in attr_items:
         is_weapon = 1 if a["type_"] == "weapon" else 0
         args += [code, a["attack"], is_weapon, 1 if a["is_tool"] else 0, a["hp_restore"], a["sell"]]
-    args += [fuel, inventory_max]
+    slots_max = inventory_slots_max if inventory_slots_max is not None else inventory_max
+    args += [fuel, inventory_max, slots_max]
     return args
 
 
@@ -146,10 +150,10 @@ def _keep_set_ints(state: WorldState, gd: GameData) -> set[int]:
 
 
 def _run(inventory, equipped, task_code, task_is_items, crafting_target, recipes, attrs, fuel,
-         inventory_max=1000):
+         inventory_max=1000, inventory_slots_max=None):
     gd = _build_game_data(recipes, attrs)
     state = _build_state(inventory, equipped, task_code, task_is_items, crafting_target,
-                         inventory_max)
+                         inventory_max, inventory_slots_max)
 
     py_keep = _keep_set_ints(state, gd)
     py_deposits = [
@@ -159,7 +163,7 @@ def _run(inventory, equipped, task_code, task_is_items, crafting_target, recipes
 
     args = _encode_args(
         inventory, equipped, task_code, task_is_items, crafting_target, recipes, attrs, fuel,
-        inventory_max,
+        inventory_max, inventory_slots_max,
     )
     lean = run_oracle("bank_selection", [args])[0]
     lean_keep = set(lean["keep"])
@@ -285,6 +289,51 @@ def test_last_resort_at_full_bag_matches_lean():
     code, _ = py_deposits[0]
     # a recipe material (non-critical) is shed before the task item / coins.
     assert code in {2, 3} and code not in {TASKS_COIN_INT, 1}
+
+
+def test_last_resort_at_slots_full_quantity_headroom_matches_lean():
+    """SLOT-AWARE last-resort (follow-up 2026-07-09): every inventory SLOT is
+    occupied (slots_free==0) but the total quantity cap has plenty of headroom
+    (inventory_free>0), and the whole bag is keep-set. Python and Lean must BOTH
+    fire the last-resort (banking one non-critical keep stack) — the older
+    inventory_free==0-only gate never reached this reachable stall."""
+    recipes = {1: {2: 1, 3: 1}}  # task item 1 <- materials 2, 3 (both kept)
+    attrs = {
+        1: {"type_": "resource", "attack": 0, "is_tool": False, "hp_restore": 0, "sell": 5},
+        2: {"type_": "resource", "attack": 0, "is_tool": False, "hp_restore": 0, "sell": 0},
+        3: {"type_": "resource", "attack": 0, "is_tool": False, "hp_restore": 0, "sell": 0},
+    }
+    inventory = {1: 1, 2: 1, 3: 1}  # 3 stacks, total qty 3
+    # inventory_max=100 → free = 97 > 0 (quantity headroom);
+    # inventory_slots_max=3 → slots_used=3, slots_free=0 (all slots full).
+    py_keep, py_deposits, lean_keep, lean_deposits = _run(
+        inventory, [], 1, True, None, recipes, attrs, 12,
+        inventory_max=100, inventory_slots_max=3,
+    )
+    assert py_keep == lean_keep
+    assert py_deposits == lean_deposits  # slots-full last-resort agreement
+    assert len(py_deposits) == 1  # exactly one stack freed to open a slot
+    code, _ = py_deposits[0]
+    # a recipe material (non-critical) sheds before the task item / coins.
+    assert code in {2, 3} and code not in {TASKS_COIN_INT, 1}
+
+
+def test_slots_full_with_bankable_uses_normal_path_matches_lean():
+    """slots_free==0 but something is normally bankable → the NORMAL deposit path
+    fires (not the last-resort), and Python and Lean agree even with the slot
+    condition now live."""
+    recipes: dict[int, dict[int, int]] = {}
+    attrs = {
+        1: {"type_": "weapon", "attack": 10, "is_tool": False, "hp_restore": 0, "sell": 5},
+        2: {"type_": "resource", "attack": 0, "is_tool": False, "hp_restore": 0, "sell": 7},
+    }
+    inventory = {1: 1, 2: 1}  # 2 stacks; slots_max=2 → slots_free=0, but qty headroom
+    py_keep, py_deposits, lean_keep, lean_deposits = _run(
+        inventory, [], None, False, None, recipes, attrs, 8,
+        inventory_max=100, inventory_slots_max=2,
+    )
+    assert py_deposits == lean_deposits
+    assert py_deposits == [(2, 1)]  # weapon kept; resource banked normally, no last-resort
 
 
 def test_full_bag_with_bankable_uses_normal_path_matches_lean():

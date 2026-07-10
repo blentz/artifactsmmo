@@ -1097,20 +1097,23 @@ example : ∀ (s : Formal.BankSelection.State) (c : Nat),
     Formal.BankSelection.bestWeaponCode s = some c →
       Formal.BankSelection.isFightingWeapon s c = true :=
   @Formal.BankSelection.best_weapon_is_fighting
--- freeze_invariant_of_free_pos: while ANY slot is free, the full production
--- selectBankDeposits keeps the freeze (deposits ∩ keep = ∅). The relaxed safety
--- contract — the last-resort relief only fires at free == 0.
+-- freeze_invariant_of_free_pos: while the bag can still admit an item (quantity
+-- room AND slot room both remain), the full production selectBankDeposits keeps the
+-- freeze (deposits ∩ keep = ∅). The relaxed safety contract — the last-resort relief
+-- only fires when free == 0 OR slots_free == 0 (SLOT-AWARE).
 example : ∀ (s : Formal.BankSelection.State) (fuel : Nat) (cq : Nat × Nat),
     Formal.BankSelection.inventoryFree s > 0 →
+    Formal.BankSelection.inventorySlotsFree s > 0 →
     cq ∈ Formal.BankSelection.selectBankDeposits s fuel →
       cq.1 ∉ Formal.BankSelection.keepList s fuel :=
   @Formal.BankSelection.freeze_invariant_of_free_pos
--- selectBankDeposits_frees_slot_when_full: at free == 0 with nothing normally
--- bankable, the last-resort banks exactly one real inventory stack — so a slot
--- frees and FightAction can fire (the livelock-breaking guarantee).
+-- selectBankDeposits_frees_slot_when_full: when the bag can admit no more items —
+-- quantity-full (free == 0) OR slots-full (slots_free == 0) — with nothing normally
+-- bankable, the last-resort banks exactly one real inventory stack — so a slot frees
+-- and FightAction can fire (the livelock-breaking guarantee, now SLOT-AWARE).
 example : ∀ (s : Formal.BankSelection.State) (fuel : Nat),
     Formal.BankSelection.deposits s fuel = [] →
-    Formal.BankSelection.inventoryFree s = 0 →
+    (Formal.BankSelection.inventoryFree s = 0 ∨ Formal.BankSelection.inventorySlotsFree s = 0) →
     ∀ (cq : Nat × Nat), Formal.BankSelection.lastResortDeposit s = some cq →
       Formal.BankSelection.selectBankDeposits s fuel = [cq] ∧ cq ∈ s.inventory ∧ cq.2 > 0 :=
   @Formal.BankSelection.selectBankDeposits_frees_slot_when_full

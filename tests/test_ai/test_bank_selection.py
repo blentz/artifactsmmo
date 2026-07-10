@@ -212,6 +212,37 @@ def test_last_resort_noop_on_empty_bag():
     assert select_bank_deposits(state, gd) == []
 
 
+def test_last_resort_frees_a_slot_when_slots_full_but_quantity_headroom():
+    """SLOT-AWARE last-resort (follow-up 2026-07-09): all inventory SLOTS occupied
+    by keep-set stacks (slots_free==0) with plenty of QUANTITY headroom
+    (inventory_free>0). The bag still cannot admit another item — combat needs a
+    free slot — so one non-critical keep stack is shed. The same state with slot
+    headroom banks NOTHING (proving the slot condition, not quantity, drives it)."""
+    gd = _gd()  # iron_dagger recipe = {iron_bar: 6, spruce_plank: 2}
+    # 4 keep-set stacks (task item, coins, two recipe mats), each low count.
+    inventory = {"iron_dagger": 1, "tasks_coin": 1, "iron_bar": 1, "spruce_plank": 1}
+    slots_full = make_state(
+        inventory=inventory, task_code="iron_dagger", task_type="items",
+        inventory_max=100, inventory_slots_max=4,
+    )
+    assert slots_full.inventory_free > 0       # quantity cap NOT hit
+    assert slots_full.inventory_slots_free == 0  # every slot occupied
+    result = select_bank_deposits(slots_full, gd)
+    assert len(result) == 1  # last-resort frees exactly one slot
+    code, _ = result[0]
+    assert code in {"iron_bar", "spruce_plank"}       # non-critical recipe mat shed
+    assert code not in {"iron_dagger", "tasks_coin"}  # task item / coins protected
+
+    # Same bag, but with a free slot → keep-set untouched (non-vacuous contrast).
+    slots_slack = make_state(
+        inventory=inventory, task_code="iron_dagger", task_type="items",
+        inventory_max=100, inventory_slots_max=5,
+    )
+    assert slots_slack.inventory_free > 0
+    assert slots_slack.inventory_slots_free > 0
+    assert select_bank_deposits(slots_slack, gd) == []
+
+
 def test_last_resort_sheds_critical_only_as_final_fallback():
     """If the full bag is ALL hard-critical items, still free a slot (recoverable)
     rather than stall — the lowest-value critical item is banked."""

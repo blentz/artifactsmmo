@@ -150,11 +150,15 @@ def select_bank_deposits(state: WorldState, game_data: GameData,
     crafting-target materials, AND the active goal's profile codes). Items
     with no known NPC buy-back price get value 0 and sort last.
 
-    LAST-RESORT relief: when the bag has ZERO free slots and nothing is normally
-    bankable (the whole bag is keep-set protected), bank ONE least-critical keep
-    item to free a slot — otherwise the bot cannot fight (needs a free slot) and
-    no other relief fires, stalling leveling. Gated on `inventory_free == 0` so
-    the keep-set is untouched while any slack remains."""
+    LAST-RESORT relief: when the bag cannot admit another item — EITHER the total
+    item capacity is exhausted (`inventory_free == 0`) OR every inventory SLOT is
+    occupied (`inventory_slots_free == 0`) — and nothing is normally bankable (the
+    whole bag is keep-set protected), bank ONE least-critical keep item to free a
+    slot. Otherwise the bot cannot fight (combat needs a free slot) and no other
+    relief fires, stalling leveling. A bag of many low-count keep-set stacks fills
+    all 20 slots long before the quantity cap, so gating on `inventory_free == 0`
+    alone missed that stall; the slot condition is the real "cannot act" test. The
+    keep-set is untouched while ANY room (quantity AND slots) remains."""
     keep = _keep_codes(state, game_data, profile_codes)
 
     deposits = [
@@ -164,7 +168,7 @@ def select_bank_deposits(state: WorldState, game_data: GameData,
     deposits.sort(key=lambda cq: (-_sell_value(cq[0], game_data), cq[0]))
     if deposits:
         return deposits
-    if state.inventory_free == 0:
+    if state.inventory_free == 0 or state.inventory_slots_free == 0:
         item = _last_resort_deposit(state, game_data, profile_codes)
         if item is not None:
             return [item]

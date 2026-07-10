@@ -869,7 +869,9 @@ args layout (Ints; codes/qtys/flags are Nat ≥ 0, attack/sellValue may be any I
 * next: nAttr, then per-item 6-int blocks:
   `code, attack, isWeapon(0/1), isTool(0/1), hpRestore, sellValue`
 * next: fuel
-* next: inventoryMax (capacity; with Σ qty gives inventoryFree for the last-resort branch)
+* next: inventoryMax (quantity cap; with Σ qty gives inventoryFree for the last-resort branch)
+* next: inventorySlotsMax (slot cap; with #positive-stacks gives inventorySlotsFree —
+  the OTHER last-resort trigger: all slots occupied even with quantity headroom)
 
 Emits the sorted keep-set codes and the deposit list (`selectBankDeposits`, in order:
 normal sorted deposits, else the single last-resort keep item when inventory_free==0). -/
@@ -904,9 +906,11 @@ def runBankSelection (args : Array Json) : Json :=
   let p4 := p3 + 1 + 6*nAttr
   let fuel := gN p4
   let inventoryMax := gN (p4 + 1)
+  let inventorySlotsMax := gN (p4 + 2)
   let s : State := {
     tasksCoin := tasksCoin, taskCode := taskCode, taskIsItems := taskIsItems,
     craftingTarget := craftingTarget, inventory := inventory, inventoryMax := inventoryMax,
+    inventorySlotsMax := inventorySlotsMax,
     equipped := equipped,
     recipe := recipeFromTriples triples,
     attack := attrLookup attackTbl id 0,
