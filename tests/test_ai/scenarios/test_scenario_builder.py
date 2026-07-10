@@ -115,6 +115,34 @@ def test_derive_combat_stats_sums_equipped_catalog_stats() -> None:
     assert bare.attack == {} and bare.dmg == 0
 
 
+def test_slots_max_defaults_to_quantity_cap_not_stack_count() -> None:
+    """Task 0+1 review fix: `inventory_slots_max` must default to
+    `inventory_max` (the quantity cap), NOT `len(sc.inventory)` — the latter
+    made every scenario read slots_used == slots_max (0 free) by
+    construction, spuriously gating any consumer that reads
+    inventory_slots_free. Defaulting to the quantity cap (always >=
+    distinct-stack count) means slots never bind before quantity, preserving
+    every existing scenario's exact pre-slot behavior."""
+    sc = ScenarioCharacter(name="t", level=5,
+                           inventory={"feather": 2, "copper_ore": 5},
+                           inventory_max=100)
+    w = scenario_state(sc)
+    assert w.inventory_slots_max == 100
+    assert w.inventory_slots_free >= w.inventory_free
+    assert w.inventory_slots_free > 0
+
+
+def test_slots_max_explicit_override_is_honored() -> None:
+    """A scenario that wants to test slot limits sets inventory_slots_max
+    explicitly, overriding the quantity-cap default."""
+    sc = ScenarioCharacter(name="t", level=5,
+                           inventory={"feather": 2, "copper_ore": 5},
+                           inventory_max=100, inventory_slots_max=2)
+    w = scenario_state(sc)
+    assert w.inventory_slots_max == 2
+    assert w.inventory_slots_free == 0  # 2 distinct stacks == 2 slots
+
+
 def test_seed_offline_seeds_active_event_codes_from_state() -> None:
     """seed_offline must mirror the live per-cycle overlay: the offline
     game_data's active_event_codes come from the state's active_events, so

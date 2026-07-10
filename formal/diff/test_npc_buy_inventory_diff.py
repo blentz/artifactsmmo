@@ -210,6 +210,9 @@ def test_currency_consumption_frees_net_space():
     """Paying more currency units than items bought lowers net used (10→6)."""
     post = npc_buy_currency_apply_pure({"r": 0, "coin": 5}, "r", 1, "coin", 5)
     assert post["r"] == 1
-    assert post["coin"] == 0
+    # Exact-balance spend deletes the currency key (Task 0+1 review fix)
+    # rather than leaving a phantom `coin: 0` stack — WorldState.inventory_
+    # slots_used would otherwise miscount it as an occupied slot.
+    assert "coin" not in post
     lean = run_oracle("npc_buy_inventory", [[3, 10, 20, 1, 5]])[0]
     assert lean["used"] == 6

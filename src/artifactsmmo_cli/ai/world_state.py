@@ -191,8 +191,14 @@ class WorldState:
 
     @property
     def inventory_slots_used(self) -> int:
-        """Number of occupied inventory SLOTS = distinct stacks held."""
-        return len(self.inventory)
+        """Number of occupied inventory SLOTS = distinct stacks held.
+
+        Counts only POSITIVE stacks. A `code: 0` key can appear transiently
+        (an apply core that draws a quantity to exactly zero without
+        deleting the key) — such a phantom entry must not be miscounted as
+        an occupied slot, so this is robust to it regardless of whether
+        every apply core also deletes on zero."""
+        return sum(1 for q in self.inventory.values() if q > 0)
 
     @property
     def inventory_slots_free(self) -> int:

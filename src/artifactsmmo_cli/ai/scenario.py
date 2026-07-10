@@ -35,6 +35,16 @@ class ScenarioCharacter:
     equipment: dict[str, str] = field(default_factory=dict)  # slot -> code
     inventory: dict[str, int] = field(default_factory=dict)
     inventory_max: int = 100
+    inventory_slots_max: int | None = None
+    """Explicit inventory SLOT cap override. None (default) makes
+    `scenario_state` fall back to `inventory_max` (the QUANTITY cap, always
+    >= distinct-stack count) rather than `len(inventory)` — the latter made
+    every scenario read slots_used == slots_max (0 free) by construction,
+    spuriously gating any consumer that reads `inventory_slots_free`
+    (relief/gating logic). Defaulting to the quantity cap means slots never
+    bind before quantity, preserving every existing scenario's exact
+    pre-slot behavior. A scenario that wants to test slot limits sets this
+    field explicitly."""
     bank: dict[str, int] | None = field(default_factory=dict)  # None = unknown
     bank_gold: int | None = None
     """Explicit KNOWN bank-gold override. None (default) preserves the legacy
@@ -174,7 +184,9 @@ def scenario_state(sc: ScenarioCharacter,
         hp=sc.hp if sc.hp is not None else max_hp, max_hp=max_hp,
         gold=sc.gold, skills=skills, x=0, y=0,
         inventory=dict(sc.inventory), inventory_max=sc.inventory_max,
-        inventory_slots_max=len(sc.inventory),
+        inventory_slots_max=(sc.inventory_slots_max
+                             if sc.inventory_slots_max is not None
+                             else sc.inventory_max),
         equipment=equipment, cooldown_expires=None,
         task_code=task_code, task_type=task_type,
         task_progress=progress, task_total=total,

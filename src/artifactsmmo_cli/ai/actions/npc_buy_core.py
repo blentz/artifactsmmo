@@ -99,8 +99,16 @@ def npc_buy_currency_apply_pure(
     `Formal.NpcBuyInventory.applyCurrency`. The production `NpcBuyAction.apply`
     asserts the slot precondition and `is_applicable` guarantees
     `currency_on_hand >= total_spent`, so the currency count stays non-negative.
+
+    If the spend exactly exhausts the currency stack, the `currency` key is
+    DELETED rather than left at `0` (matches the `del`-on-zero guard in
+    `EquipAction.apply` / `WithdrawItemAction.apply`) — a phantom `code: 0`
+    key would otherwise be miscounted as an occupied inventory SLOT by
+    `WorldState.inventory_slots_used`.
     """
     new_inventory = dict(inventory)
     new_inventory[item_code] = new_inventory.get(item_code, 0) + quantity
     new_inventory[currency] = new_inventory.get(currency, 0) - total_spent
+    if new_inventory[currency] <= 0:
+        del new_inventory[currency]
     return new_inventory

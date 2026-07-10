@@ -56,3 +56,12 @@ def test_slots_free_zero_when_all_stacks_occupy_capacity() -> None:
     assert s.inventory_slots_used == 20
     assert s.inventory_slots_free == 0
     assert s.inventory_free > 0              # quantity has headroom (124-20)
+
+
+def test_slots_used_ignores_zero_quantity_phantom_key() -> None:
+    """A stray `code: 0` key (e.g. left by an apply core that draws a currency
+    stack to exactly zero without deleting the key) must NOT count as an
+    occupied slot — the property counts only POSITIVE stacks."""
+    s = _bare_state({"x": 0, "copper_ore": 5}, slots_max=20)
+    assert s.inventory_slots_used == 1
+    assert s.inventory_slots_free == 19
