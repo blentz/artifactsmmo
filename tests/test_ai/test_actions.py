@@ -106,7 +106,7 @@ class TestMoveAction:
         post_state = WorldState(
             character=state.character, level=1, xp=0, max_xp=100,
             hp=100, max_hp=100, gold=0, skills={}, x=4, y=13,
-            inventory={}, inventory_max=100, equipment={},
+            inventory={}, inventory_max=100, inventory_slots_max=0, equipment={},
             cooldown_expires=future,
             task_code=None, task_type=None, task_progress=0, task_total=0,
             bank_items={}, bank_gold=0, pending_items=(),

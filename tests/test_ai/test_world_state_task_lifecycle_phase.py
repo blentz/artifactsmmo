@@ -104,6 +104,7 @@ class TestWorldStatePhaseInvariant:
             y=base.y,
             inventory=base.inventory,
             inventory_max=base.inventory_max,
+            inventory_slots_max=base.inventory_slots_max,
             equipment=base.equipment,
             cooldown_expires=base.cooldown_expires,
             task_code=base.task_code,

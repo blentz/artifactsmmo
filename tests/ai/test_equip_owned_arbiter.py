@@ -53,6 +53,7 @@ def _state() -> WorldState:
     return WorldState(
         character="c", level=10, xp=0, max_xp=100, hp=100, max_hp=100, gold=0,
         skills={}, x=0, y=0, inventory={"novice_guide": 1}, inventory_max=20,
+        inventory_slots_max=1,
         equipment=dict(_ALL_SLOTS), cooldown_expires=None, task_code=None,
         task_type=None, task_progress=0, task_total=0,
         task_lifecycle_phase=derive_task_lifecycle_phase(None, 0, 0),

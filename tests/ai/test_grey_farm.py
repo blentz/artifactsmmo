@@ -40,6 +40,7 @@ def make_state(level: int = 5, hp: int | None = None, max_hp: int = 100,
         hp=hp if hp is not None else max_hp, max_hp=max_hp, gold=0,
         skills=skills or {}, x=0, y=0,
         inventory=inventory or {}, inventory_max=20,
+        inventory_slots_max=len(inventory or {}),
         equipment=dict(_ALL_SLOTS), cooldown_expires=None,
         attack={"air": 10}, dmg=10,  # enough to be winnable vs the fixture chicken
         task_code=None, task_type=None, task_progress=0, task_total=0,

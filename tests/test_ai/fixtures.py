@@ -54,6 +54,7 @@ def make_state(**overrides) -> WorldState:
         y=0,
         inventory={},
         inventory_max=20,
+        inventory_slots_max=20,
         equipment={
             "weapon_slot": None, "shield_slot": None, "helmet_slot": None,
             "body_armor_slot": None, "leg_armor_slot": None, "boots_slot": None,

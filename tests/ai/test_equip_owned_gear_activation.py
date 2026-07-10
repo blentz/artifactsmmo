@@ -60,6 +60,7 @@ def _state(inventory: dict[str, int]) -> WorldState:
     return WorldState(
         character="Robby", level=10, xp=0, max_xp=1000, hp=150, max_hp=150, gold=0,
         skills={}, x=0, y=0, inventory=dict(inventory), inventory_max=100,
+        inventory_slots_max=len(inventory),
         equipment=dict(_ALL_SLOTS), cooldown_expires=None,
         task_code="chicken", task_type="monsters", task_progress=0, task_total=10,
         task_lifecycle_phase=derive_task_lifecycle_phase("chicken", 0, 10),

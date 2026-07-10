@@ -29,6 +29,7 @@ def _make_state(**overrides) -> WorldState:
         y=0,
         inventory={},
         inventory_max=20,
+        inventory_slots_max=20,
         equipment={slot: None for slot in EQUIPMENT_SLOTS},
         cooldown_expires=None,
         task_code=None,

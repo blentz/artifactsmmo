@@ -30,7 +30,7 @@ def _make_state(**kwargs: object) -> WorldState:
     defaults: dict[str, object] = dict(
         character="Robby", level=5, xp=100, max_xp=500,
         hp=100, max_hp=100, gold=50, skills={}, x=0, y=0,
-        inventory={}, inventory_max=20, equipment=dict(_ALL_SLOTS),
+        inventory={}, inventory_max=20, inventory_slots_max=0, equipment=dict(_ALL_SLOTS),
         cooldown_expires=None, task_code=None, task_type=None,
         task_progress=0, task_total=0,
         bank_items=None, bank_gold=None, bank_capacity=None, pending_items=None,

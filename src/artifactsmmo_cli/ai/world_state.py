@@ -71,6 +71,7 @@ class WorldState:
     y: int
     inventory: dict[str, int]        # item_code -> quantity
     inventory_max: int               # max total item quantity (not unique stacks)
+    inventory_slots_max: int         # number of inventory SLOTS (distinct-stack cap)
     equipment: dict[str, str | None] # slot -> item_code | None
     cooldown_expires: datetime | None
     task_code: str | None
@@ -189,6 +190,16 @@ class WorldState:
         return self.inventory_max - self.inventory_used
 
     @property
+    def inventory_slots_used(self) -> int:
+        """Number of occupied inventory SLOTS = distinct stacks held."""
+        return len(self.inventory)
+
+    @property
+    def inventory_slots_free(self) -> int:
+        """Remaining inventory SLOTS (slot cap minus distinct stacks held)."""
+        return self.inventory_slots_max - self.inventory_slots_used
+
+    @property
     def hp_percent(self) -> float:
         """Current HP as a fraction of max HP."""
         if self.max_hp == 0:
@@ -213,7 +224,9 @@ class WorldState:
     ) -> "WorldState":
         """Build WorldState from a CharacterSchema API response."""
         inventory: dict[str, int] = {}
+        slots_max = 0
         if not isinstance(char.inventory, Unset) and char.inventory:
+            slots_max = len(char.inventory)
             for slot in char.inventory:
                 if slot.code and slot.quantity > 0:
                     inventory[slot.code] = inventory.get(slot.code, 0) + slot.quantity
@@ -266,6 +279,7 @@ class WorldState:
             y=char.y,
             inventory=inventory,
             inventory_max=char.inventory_max_items,
+            inventory_slots_max=slots_max,
             equipment=equipment,
             cooldown_expires=cooldown_expires,
             task_code=task_code_norm,
