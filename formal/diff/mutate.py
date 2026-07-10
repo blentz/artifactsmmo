@@ -4053,6 +4053,23 @@ WITHDRAW_ITEM_MUTATIONS = [
      "        )"),
 ]
 
+# withdraw_item SLOT term (separate group, separate kill-test): the diff-test
+# fixtures in test_inventory_chain_safe_diff.py all set slots_max==cap so the
+# SLOT term never binds there (only the QUANTITY term above is exercised).
+# `str.replace(old, new, 1)` hits the FIRST occurrence in the file, which is
+# the is_applicable copy (line ~51) — apply's identical text is guarded by
+# `assert has_room(...)` (different prefix), so this anchor cannot
+# accidentally land on apply's copy. Killed by
+# `tests/test_ai/test_actions.py::TestWithdrawItemAction::
+# test_not_applicable_new_code_blocked_when_no_free_slot` (full bag, new code,
+# quantity headroom present — only the slot term can block it).
+WITHDRAW_ITEM_SLOT_MUTATIONS = [
+    ("withdraw_item: drop the slot-room term (new_stacks forced to 0)",
+     "        new_stacks = 1 if (self.code not in state.inventory\n"
+     "                           and self.quantity > 0) else 0",
+     "        new_stacks = 0"),
+]
+
 CLAIM_MUTATIONS = [
     # Drop the slot-floor check: resurrects REAL BUG #8.
     ("claim: drop inventory_free >= 1 check",
@@ -4784,6 +4801,14 @@ def _run_all_groups() -> int:
               "tests/test_ai/test_level_skill_goal.py", survivors)
     run_group(WITHDRAW_ITEM_SRC, WITHDRAW_ITEM_MUTATIONS,
               "formal/diff/test_inventory_chain_safe_diff.py", survivors)
+    # SLOT term isn't mutation-gated by the diff test above (its fixtures all
+    # set slots_max==cap, non-binding) — anchored against the unit test that
+    # DOES bind it instead. run_group's test_path is a single subprocess argv
+    # token (see _run_pytest), so one group can only cite one test file; this
+    # is a second, separate group rather than adding a second file to the
+    # existing one.
+    run_group(WITHDRAW_ITEM_SRC, WITHDRAW_ITEM_SLOT_MUTATIONS,
+              "tests/test_ai/test_actions.py", survivors)
     run_group(APPLY_CLAIM_SRC, CLAIM_MUTATIONS,
               "formal/diff/test_inventory_chain_safe_diff.py", survivors)
     run_group(UNEQUIP_SRC, UNEQUIP_MUTATIONS,
