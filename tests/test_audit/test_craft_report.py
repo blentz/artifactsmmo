@@ -50,6 +50,13 @@ def test_summary_line_counts_and_percentages() -> None:
     assert "combat_blocked 1" in line
 
 
+def test_summary_line_empty_results_is_zero_not_crash() -> None:
+    """summary_line over no cells reports zeros without dividing by zero."""
+    line = summary_line([])
+    assert "0 recipes, 0 cells" in line
+    assert "PASS 0 (0%)" in line
+
+
 def test_render_matrix_groups_by_skill_and_tier() -> None:
     """Matrix has the generated-header, a per-(skill,tier) section, and one
     row per recipe with each cell rendered as char/skill + verdict."""

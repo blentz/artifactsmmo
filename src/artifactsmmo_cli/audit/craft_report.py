@@ -6,6 +6,7 @@ no I/O — the generator script owns file writes and the census run."""
 from collections import defaultdict
 
 from artifactsmmo_cli.audit.craft_census import CellResult
+from artifactsmmo_cli.audit.craft_completeness import nominal_char_level, tier_of
 
 GAP_ABBREV: dict[str, str] = {
     "event_gated": "EG",
@@ -24,14 +25,6 @@ _GENERATED_HEADER = (
 )
 
 
-def _tier(craft_level: int) -> int:
-    return (craft_level - 1) // 10 + 1
-
-
-def _nominal(craft_level: int) -> int:
-    return 1 if craft_level <= 9 else 10 * _tier(craft_level)
-
-
 def _cell_token(r: CellResult) -> str:
     verdict = "PASS" if r.passed else GAP_ABBREV[r.gap] if r.gap else "FAIL"
     return f"{r.char_level}/{r.skill_level} {verdict}"
@@ -46,7 +39,7 @@ def summary_line(results: list[CellResult]) -> str:
     passed = sum(1 for r in results if r.passed)
     nominal_cells = [
         r for r in results
-        if r.char_level == _nominal(r.craft_level) and r.skill_level == r.craft_level
+        if r.char_level == nominal_char_level(r.craft_level) and r.skill_level == r.craft_level
     ]
     nominal_pass = sum(1 for r in nominal_cells if r.passed)
     pct = 100 * passed / total if total else 0.0
@@ -75,7 +68,7 @@ def render_matrix(results: list[CellResult]) -> str:
         head = cells[0]
         tokens = " · ".join(_cell_token(c) for c in cells)
         row = f"| {recipe} | {head.craft_level} | {tokens} |"
-        groups[(head.skill, _tier(head.craft_level))].append(row)
+        groups[(head.skill, tier_of(head.craft_level))].append(row)
     lines = [
         "# Craft-Planning Completeness — Matrix",
         "",

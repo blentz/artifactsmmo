@@ -46,6 +46,17 @@ class CraftCell:
     skill_level: int
 
 
+def tier_of(craft_level: int) -> int:
+    """The decade-inclusive tier bucket of a craft level: (L-1)//10+1, so
+    craft_level=10 is the LAST level of tier 1, not the first of tier 2."""
+    return (craft_level - 1) // 10 + 1
+
+
+def nominal_char_level(craft_level: int) -> int:
+    """The tier's nominal character level: 1 for tier 1 (L<=9), else 10*tier."""
+    return 1 if craft_level <= 9 else 10 * tier_of(craft_level)
+
+
 def craft_grid(recipe: str, game_data: GameData) -> list[CraftCell]:
     """The level/skill census cells for `recipe` (spec grid): 3 character
     levels (decade-tier nominal + boundary offsets, clamped [1,50]) x 2
@@ -66,8 +77,8 @@ def craft_grid(recipe: str, game_data: GameData) -> list[CraftCell]:
         return []
     craft_level = stats.crafting_level
     skill = stats.crafting_skill
-    tier = (craft_level - 1) // 10 + 1
-    nominal = 1 if craft_level <= 9 else 10 * tier
+    tier = tier_of(craft_level)
+    nominal = nominal_char_level(craft_level)
     char_levels = sorted({
         max(1, min(50, lvl))
         for lvl in (nominal, 10 * tier - 2, 10 * tier + 2)
