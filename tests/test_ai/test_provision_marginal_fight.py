@@ -63,7 +63,13 @@ def test_relevant_actions_constructs_the_scaled_equip() -> None:
 def test_goal_plans_the_equip_end_to_end() -> None:
     """Integration: the goal must actually PLAN its equip (verifies desired_state /
     is_satisfied wiring against the real planner)."""
+    # inventory_max=100 (the fixture default of 20 would leave this 100-qty
+    # single-stack state over the total-quantity cap — invisible before the
+    # EquipAction net-slot room guard, which now correctly reads inventory_free
+    # off inventory_max and would reject the quantity-neutral equip on a
+    # negative headroom that predates this test's guard-relevant assertion).
     state = make_state(level=5, inventory={"small_health_potion": 100},
+                       inventory_max=100,
                        equipment={"utility1_slot": None, "utility2_slot": None})
     gd = _gd_with_consumable("small_health_potion", hp_restore=60, level=1)
     goal = _goal()

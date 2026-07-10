@@ -821,6 +821,46 @@ class TestEquipAction:
         out = EquipAction("small_health_potion", "utility2_slot", quantity=30).apply(state, gd)
         assert out.utility2_slot_quantity == 50  # 20 + 30
 
+    def test_equip_blocked_when_displaced_item_needs_slot_and_bag_full(self):
+        """Full bag (0 slots free), equipping C displaces a NEW item O not held
+        and C's stack does NOT empty (qty=2 held, equipping 1) -> O needs a
+        slot -> not applicable (net-slot room guard, equip.py)."""
+        stats = ItemStats(code="C", level=1, type_="body_armor")
+        inv = {"C": 2, **{f"j{n}": 1 for n in range(19)}}
+        state = make_state(
+            inventory=inv, inventory_slots_max=20, inventory_max=999, level=5,
+            equipment={**make_state().equipment, "body_armor_slot": "O"},
+        )
+        gd = make_game_data(item_stats={"C": stats})
+        action = EquipAction(code="C", slot="body_armor_slot")
+        assert action.is_applicable(state, gd) is False
+
+    def test_equip_allowed_when_equipped_stack_frees_slot_for_displaced(self):
+        """C has qty 1 -> equipping empties C's slot, which absorbs displaced
+        O -> net zero new slots -> applicable even at 0 free slots."""
+        stats = ItemStats(code="C", level=1, type_="body_armor")
+        inv = {"C": 1, **{f"j{n}": 1 for n in range(19)}}
+        state = make_state(
+            inventory=inv, inventory_slots_max=20, inventory_max=999, level=5,
+            equipment={**make_state().equipment, "body_armor_slot": "O"},
+        )
+        gd = make_game_data(item_stats={"C": stats})
+        action = EquipAction(code="C", slot="body_armor_slot")
+        assert action.is_applicable(state, gd) is True
+
+    def test_equip_allowed_when_displaced_item_already_held(self):
+        """Displaced O already a held stack -> returning it grows that stack,
+        no new slot -> applicable at 0 free slots."""
+        stats = ItemStats(code="C", level=1, type_="body_armor")
+        inv = {"C": 2, "O": 3, **{f"j{n}": 1 for n in range(18)}}
+        state = make_state(
+            inventory=inv, inventory_slots_max=20, inventory_max=999, level=5,
+            equipment={**make_state().equipment, "body_armor_slot": "O"},
+        )
+        gd = make_game_data(item_stats={"C": stats})
+        action = EquipAction(code="C", slot="body_armor_slot")
+        assert action.is_applicable(state, gd) is True
+
 
 def _consumable_stats(code: str = "cooked_chicken", hp_restore: int = 80) -> dict[str, ItemStats]:
     return {code: ItemStats(code=code, level=1, type_="consumable", hp_restore=hp_restore)}

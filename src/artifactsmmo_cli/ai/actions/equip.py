@@ -13,6 +13,7 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOT as ITEM_TYPE_TO_SLOT
 from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOTS as ITEM_TYPE_TO_SLOTS
+from artifactsmmo_cli.ai.inventory_room import has_room
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -74,6 +75,23 @@ class EquipAction(Action):
             for slot, equipped in state.equipment.items()
             if slot != self.slot
         ):
+            return False
+        # NET-SLOT ROOM: equipping C into self.slot displaces the currently
+        # worn item O (state.equipment[self.slot]). Quantity is conserved by
+        # the swap (added_qty=0: -1 C, +1 O). O needs a NEW slot only if it is
+        # a genuinely new stack (not already held elsewhere in inventory); C
+        # frees its own slot only if equipping consumes its ENTIRE held stack.
+        # Net new-slot need = max(0, O_needs_slot - C_frees_slot). Without
+        # this guard a full bag can plan an equip whose displaced item has
+        # nowhere to land, which is non-executable on the server.
+        displaced = state.equipment.get(self.slot)
+        o_needs_slot = 1 if (displaced is not None
+                             and displaced not in state.inventory) else 0
+        c_frees_slot = 1 if state.inventory.get(self.code, 0) == self.quantity else 0
+        new_stacks = max(0, o_needs_slot - c_frees_slot)
+        if not has_room(new_stacks, added_qty=0,
+                        slots_free=state.inventory_slots_free,
+                        qty_free=state.inventory_free):
             return False
         return state.level >= stats.level
 
