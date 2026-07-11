@@ -2,6 +2,7 @@
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
+from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -66,7 +67,15 @@ class UnlockBankGoal(Goal):
         ]
         cleanup_actions: list[Action] = [a for a in actions if "cleanup" in a.tags]
         recovery_actions: list[Action] = [a for a in actions if "recovery" in a.tags]
-        return fight_actions + cleanup_actions + recovery_actions
+        # Task 6c: the target-monster fight above has no companion swap in
+        # this goal's menu, so a suboptimal equipped weapon makes it
+        # inapplicable with no way to fix it (Task 6b regression, mirrored
+        # here). Self-guarding: inapplicable once the loadout is optimal.
+        swap_actions: list[Action] = []
+        if fight_actions and self._target_monster is not None:
+            swap_actions.append(OptimizeLoadoutAction(
+                target_monster_code=self._target_monster, game_data=game_data))
+        return fight_actions + swap_actions + cleanup_actions + recovery_actions
 
     def _target_monster_is_unreachable(self, state: WorldState, game_data: GameData) -> bool:
         """True when the target monster is over-level enough that combat is hopeless."""

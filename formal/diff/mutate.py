@@ -4485,6 +4485,22 @@ PROGRESSION_GOAL_MUTATIONS = [
      "_UPGRADE_EQUIPMENT_RELEVANT_TOOL = 500.0"),
 ]
 
+# Task 6c (2026-07-11): the GAP-6 re-emitted dropper fight (UpgradeEquipmentGoal's
+# OWN monster-drop target — a recipe-less equippable like old_boots) needs its own
+# companion combat OptimizeLoadout, mirroring the gathering-goal anchor above
+# ("gathering goal: drop the OptimizeLoadout admission ..."): without it,
+# FightAction's hard optimal-loadout gate (Task 3) leaves the re-emitted fight
+# permanently inapplicable while a suboptimal weapon is equipped, and this goal's
+# own relevant_actions has no swap action to fix it (Task 6b regression,
+# mirrored here). Killed by tests/test_ai/test_upgrade_slot_lock.py
+# (TestDropFightCompanionSwap).
+PROGRESSION_DROP_SWAP_MUTATIONS = [
+    ("progression: drop the GAP-6 dropper-fight companion OptimizeLoadout",
+     "                result.append(OptimizeLoadoutAction(\n"
+     "                    target_monster_code=fight.monster_code, game_data=game_data))\n",
+     ""),
+]
+
 RESTORE_HP_GOAL_MUTATIONS = [
     # Drop the (1 - hp_percent) translation: raw hp_percent * 100 — wrong direction.
     ("restore_hp: drop (1 - hp_percent) translation",
@@ -4883,6 +4899,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_goal_system_value_diff.py", survivors)
     run_group(PROGRESSION_GOAL_SRC, PROGRESSION_GOAL_MUTATIONS,
               "formal/diff/test_goal_system_value_diff.py", survivors)
+    run_group(PROGRESSION_GOAL_SRC, PROGRESSION_DROP_SWAP_MUTATIONS,
+              "tests/test_ai/test_upgrade_slot_lock.py", survivors)
     run_group(RESTORE_HP_GOAL_SRC, RESTORE_HP_GOAL_MUTATIONS,
               "formal/diff/test_goal_system_value_diff.py", survivors)
     run_group(DEPOSIT_INVENTORY_GOAL_SRC, DEPOSIT_INVENTORY_GOAL_MUTATIONS,

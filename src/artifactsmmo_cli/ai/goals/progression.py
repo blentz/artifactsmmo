@@ -7,6 +7,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS, EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.combat import is_winnable
@@ -284,6 +285,14 @@ class UpgradeEquipmentGoal(Goal):
             fight = self._target_drop_fight(actions, state, game_data, target_item)
             if fight is not None:
                 result.append(fight)
+                # Task 6c: the GAP-6 re-emission above bypasses the factory's
+                # normal Fight+OptimizeLoadout pairing (that loop drops every
+                # FightAction at line 268-271), so this re-emitted dropper
+                # fight needs its own companion swap. Self-guarding: inapplicable
+                # when the loadout is already optimal for this monster (mirrors
+                # GatherMaterialsGoal's Task 6b fix).
+                result.append(OptimizeLoadoutAction(
+                    target_monster_code=fight.monster_code, game_data=game_data))
                 if not any(isinstance(a, EquipAction) and a.code == target_item
                            and a.slot == target_slot for a in result):
                     result.append(EquipAction(code=target_item, slot=target_slot))

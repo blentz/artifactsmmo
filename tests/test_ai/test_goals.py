@@ -8,6 +8,7 @@ from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
+from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
@@ -27,6 +28,7 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
 
@@ -1585,6 +1587,98 @@ class TestUnlockBankGoal:
         relevant_reprs = [repr(a) for a in relevant]
         assert "Fight(chicken)" not in relevant_reprs
         assert "Fight(wolf)" not in relevant_reprs
+
+    def test_relevant_actions_includes_companion_swap_for_target_monster(self):
+        """Task 6c: a target-monster fight needs its own companion swap or
+        FightAction's hard optimal-loadout gate makes it permanently
+        inapplicable while a suboptimal weapon is equipped, with no swap
+        action in this goal's own menu to fix it (the same stall Task 6b
+        fixed for GatherMaterialsGoal's monster-drop emission)."""
+        goal = UnlockBankGoal(bank_locked=True, initial_xp=100, target_monster="chicken")
+        state = make_state(xp=100)
+        gd = self._make_gd_with_sellables()
+        actions = [FightAction(monster_code="chicken")]
+        relevant = goal.relevant_actions(actions, state, gd)
+        reprs = [repr(a) for a in relevant]
+        swaps = [a for a in relevant
+                 if isinstance(a, OptimizeLoadoutAction)
+                 and a.target_monster_code == "chicken"]
+        assert swaps, reprs
+
+    def test_relevant_actions_no_companion_swap_without_target_monster(self):
+        """No target_monster set (falls back to all fights) — no swap is
+        admitted; there is no single monster to arm for."""
+        goal = UnlockBankGoal(bank_locked=True, initial_xp=100)
+        state = make_state(xp=100)
+        gd = self._make_gd_with_sellables()
+        actions = [FightAction(monster_code="chicken")]
+        relevant = goal.relevant_actions(actions, state, gd)
+        assert not any(isinstance(a, OptimizeLoadoutAction) for a in relevant)
+
+    def test_relevant_actions_no_companion_swap_when_target_fight_unavailable(self):
+        """No admitted fight for the target monster — no swap is admitted
+        either (nothing to arm for)."""
+        goal = UnlockBankGoal(bank_locked=True, initial_xp=100, target_monster="dragon")
+        state = make_state(xp=100)
+        gd = self._make_gd_with_sellables()
+        actions = [FightAction(monster_code="chicken")]
+        relevant = goal.relevant_actions(actions, state, gd)
+        assert not any(isinstance(a, OptimizeLoadoutAction) for a in relevant)
+
+    def test_plan_sequences_optimize_loadout_before_target_fight_when_suboptimal(self):
+        """GREEN: a suboptimal-loadout state (wooden_stick equipped,
+        iron_sword owned unequipped) still yields a non-empty plan that arms
+        iron_sword before fighting the target monster — pre-fix (see `git
+        show HEAD~1:src/artifactsmmo_cli/ai/goals/unlock_bank.py` — no
+        companion OptimizeLoadoutAction in the emitted action set)
+        FightAction.is_applicable was permanently False under the Task-3
+        loadout gate and A* had no swap action to fix it, so this planned
+        empty."""
+        gd = self._make_gd_with_sellables()
+        gd._monster_level = {"chicken": 1}
+        fill_monster_stat_defaults(gd)
+        gd._item_stats = {
+            "wooden_stick": ItemStats(code="wooden_stick", level=1, type_="weapon",
+                                      attack={"air": 1}),
+            "iron_sword": ItemStats(code="iron_sword", level=1, type_="weapon",
+                                    attack={"air": 20}),
+        }
+        equipment = {**make_state().equipment, "weapon_slot": "wooden_stick"}
+        state = make_state(xp=100, level=5, equipment=equipment,
+                           inventory={"iron_sword": 1})
+        goal = UnlockBankGoal(bank_locked=True, initial_xp=100, target_monster="chicken")
+        actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}))]
+        planner = GOAPPlanner()
+        plan = planner.plan(state, goal, actions, gd, budget_seconds=10.0)
+        reprs = [repr(a) for a in plan]
+        assert reprs, (
+            f"UnlockBank(chicken) planned empty even with the companion swap "
+            f"(explored={planner.last_stats.nodes_explored})"
+        )
+        assert "OptimizeLoadout(chicken)" in reprs, reprs
+        assert "Fight(chicken)" in reprs, reprs
+        assert reprs.index("Fight(chicken)") > reprs.index("OptimizeLoadout(chicken)"), reprs
+
+    def test_no_swap_when_loadout_already_optimal(self):
+        """Self-guarding control: iron_sword already equipped, no better
+        weapon owned — the plan fights directly with no swap step."""
+        gd = self._make_gd_with_sellables()
+        gd._monster_level = {"chicken": 1}
+        fill_monster_stat_defaults(gd)
+        gd._item_stats = {
+            "iron_sword": ItemStats(code="iron_sword", level=1, type_="weapon",
+                                    attack={"air": 20}),
+        }
+        equipment = {**make_state().equipment, "weapon_slot": "iron_sword"}
+        state = make_state(xp=100, level=5, equipment=equipment)
+        goal = UnlockBankGoal(bank_locked=True, initial_xp=100, target_monster="chicken")
+        actions = [FightAction(monster_code="chicken", locations=frozenset({(1, 0)}))]
+        planner = GOAPPlanner()
+        plan = planner.plan(state, goal, actions, gd, budget_seconds=10.0)
+        reprs = [repr(a) for a in plan]
+        assert reprs, "UnlockBank(chicken) planned empty from the optimal-loadout baseline"
+        assert "Fight(chicken)" in reprs, reprs
+        assert not any("OptimizeLoadout" in r for r in reprs), reprs
 
     def test_repr_with_no_target_monster(self):
         goal = UnlockBankGoal(bank_locked=True, initial_xp=100)

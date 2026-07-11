@@ -17,6 +17,7 @@ from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
+from artifactsmmo_cli.ai.planner import GOAPPlanner
 from tests.test_ai.fixtures import make_state
 
 
@@ -251,3 +252,100 @@ class TestTargetDropFights:
         kept = _boots_goal().relevant_actions(actions, state, gd)
         fights = [a for a in kept if isinstance(a, FightAction)]
         assert [f.monster_code for f in fights] == ["spider"]
+
+
+# --- Task 6c: the GAP-6 re-emitted dropper fight (above) needs its own
+# companion OptimizeLoadout, or FightAction's hard optimal-loadout gate
+# (Task 3) makes it unplannable while a suboptimal weapon is equipped and
+# there is no swap action in this goal's own menu to fix it — the same
+# stall Task 6b fixed for GatherMaterialsGoal's monster-drop emission.
+
+
+def _weapon_gd(monster_level: int = 1) -> GameData:
+    """`_drop_gd` (spider drops old_boots) plus two weapons of very different
+    combat value against spider's flat (no-resistance) profile, so
+    `pick_loadout` unambiguously prefers `iron_sword` whenever it is owned."""
+    gd = _drop_gd(monster_level=monster_level)
+    gd._item_stats["wooden_stick"] = ItemStats(
+        code="wooden_stick", level=1, type_="weapon", attack={"air": 1})
+    gd._item_stats["iron_sword"] = ItemStats(
+        code="iron_sword", level=1, type_="weapon", attack={"air": 20})
+    return gd
+
+
+def _suboptimal_weapon_state(**overrides):
+    # level=20 (== old_boots' item level, not the 12 used by the grey-dropper
+    # tests above): EquipAction requires state.level >= item.level, so a
+    # full swap->fight->equip plan needs a char who can actually wear the
+    # target, not just one who can win the fight.
+    equipment = {**make_state().equipment, "weapon_slot": "wooden_stick"}
+    kwargs = dict(level=20, attack={"air": 10}, dmg=10,
+                  equipment=equipment, inventory={"iron_sword": 1})
+    kwargs.update(overrides)
+    return make_state(**kwargs)
+
+
+class TestDropFightCompanionSwap:
+    """RED (pre-fix, documented): with `wooden_stick` equipped and
+    `iron_sword` owned unequipped, `UpgradeEquipment(old_boots)`'s
+    GAP-6-emitted `Fight(spider)` had no companion swap in the goal's own
+    action menu — `FightAction.is_applicable` was permanently False under
+    the Task-3 loadout gate (`equipped_matches_loadout` fails: wooden_stick
+    != iron_sword) and A* had nothing to fix it, so the goal planned empty.
+    Verified against `git show HEAD~1:src/artifactsmmo_cli/ai/goals/progression.py`'s
+    GAP-6 block (lines ~283-289): it appends only `fight` and the synthesized
+    `Equip`, never an `OptimizeLoadoutAction`. GREEN below is the fixed
+    behavior (Task 6c)."""
+
+    def test_relevant_actions_pairs_optimize_loadout_with_dropper_fight(self):
+        """Unit-level companion-emission check: `relevant_actions` for the
+        suboptimal-loadout state now contains an `OptimizeLoadoutAction`
+        targeting the chosen dropper (`spider`) alongside its
+        `FightAction` — the exact pairing Task 6c adds to the GAP-6
+        monster-drop-target emission block."""
+        gd = _weapon_gd()
+        state = _suboptimal_weapon_state()
+        fight = FightAction(monster_code="spider", locations=frozenset({(1, 0)}))
+        kept = _boots_goal().relevant_actions([fight], state, gd)
+        reprs = [repr(a) for a in kept]
+        assert "Fight(spider)" in reprs, reprs
+        swaps = [a for a in kept
+                 if isinstance(a, OptimizeLoadoutAction)
+                 and a.target_monster_code == "spider"]
+        assert swaps, reprs
+
+    def test_plan_sequences_optimize_loadout_before_dropper_fight_when_suboptimal(self):
+        """GREEN: GOAPPlanner can now satisfy the hard optimal-loadout gate
+        on the re-emitted dropper fight — a non-empty plan that arms
+        iron_sword before fighting spider. Pre-fix (see class docstring)
+        this planned empty."""
+        gd = _weapon_gd()
+        state = _suboptimal_weapon_state()
+        actions = [FightAction(monster_code="spider", locations=frozenset({(1, 0)}))]
+        plan = GOAPPlanner().plan(state, _boots_goal(), actions, gd,
+                                   history=None, budget_seconds=10.0)
+        reprs = [repr(a) for a in plan]
+        assert reprs, "UpgradeEquipment(old_boots) planned empty even with the companion swap"
+        assert "OptimizeLoadout(spider)" in reprs, reprs
+        assert "Fight(spider)" in reprs, reprs
+        assert reprs.index("Fight(spider)") > reprs.index("OptimizeLoadout(spider)"), reprs
+
+    def test_no_swap_when_loadout_already_optimal(self):
+        """Self-guarding control: iron_sword already equipped, no better
+        weapon owned. `relevant_actions` still admits the companion
+        `OptimizeLoadoutAction` unconditionally (mirrors Task 6b's
+        gathering-goal emission) — the self-guard is
+        `OptimizeLoadoutAction.is_applicable` (empty `_swap_plan`), not
+        admission — so the PLAN fights directly with no swap step."""
+        gd = _weapon_gd()
+        equipment = {**make_state().equipment, "weapon_slot": "iron_sword"}
+        state = _suboptimal_weapon_state(equipment=equipment, inventory={})
+        fight = FightAction(monster_code="spider", locations=frozenset({(1, 0)}))
+        swap = OptimizeLoadoutAction(target_monster_code="spider", game_data=gd)
+        assert swap.is_applicable(state, gd) is False
+        plan = GOAPPlanner().plan(state, _boots_goal(), [fight], gd,
+                                   history=None, budget_seconds=10.0)
+        plan_reprs = [repr(a) for a in plan]
+        assert plan_reprs, "UpgradeEquipment(old_boots) planned empty from the optimal-loadout baseline"
+        assert "Fight(spider)" in plan_reprs, plan_reprs
+        assert not any("OptimizeLoadout" in r for r in plan_reprs), plan_reprs

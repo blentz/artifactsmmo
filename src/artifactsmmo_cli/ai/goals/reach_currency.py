@@ -10,6 +10,7 @@ from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.complete_task import CompleteTaskAction
+from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.funding_core import funding_cycles_pure
@@ -62,10 +63,26 @@ class ReachCurrencyGoal(Goal):
         (live 2026-07-06: 24K nodes / 10s cheap-pass timeout with crafts;
         milliseconds without). Execution replans against the server's REAL
         task each cycle, so an items task is worked by the task machinery,
-        not by this in-model projection."""
+        not by this in-model projection.
+
+        Task 6c: every admitted FightAction also gets a companion swap
+        (self-guarding OptimizeLoadoutAction) so a suboptimal equipped
+        weapon can't stall the loop with no way to fix it (Task 6b
+        regression, mirrored here). Deduped by monster_code — this goal is
+        search-flood sensitive, so one swap per distinct monster, not one
+        per fight."""
+        fight_actions = [a for a in actions if isinstance(a, FightAction)]
+        seen_monsters: set[str] = set()
+        swap_actions: list[Action] = []
+        for fight in fight_actions:
+            if fight.monster_code in seen_monsters:
+                continue
+            seen_monsters.add(fight.monster_code)
+            swap_actions.append(OptimizeLoadoutAction(
+                target_monster_code=fight.monster_code, game_data=game_data))
         return [a for a in actions
-                if isinstance(a, (AcceptTaskAction, CompleteTaskAction,
-                                  FightAction))]
+                if isinstance(a, (AcceptTaskAction, CompleteTaskAction))
+                ] + fight_actions + swap_actions
 
     @property
     def max_depth(self) -> int:
