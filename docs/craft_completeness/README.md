@@ -25,7 +25,11 @@ planner (not a proof), turning "gap discovered by chance" (GAP-8, GAP-9) into
 uv run python scripts/gen_craft_completeness.py
 ```
 
-Offline (loads the committed bundle, no API). Serial ≈ 50 min over ~1758 cells;
-~16% of cells hit the planner's 10 s wall-clock budget and their verdict can
-vary between regens — treat borderline cells as approximate. The SUMMARY line
-printed at the end is the completeness metric tracked over time.
+Offline (loads the committed bundle, no API). Parallel across a process pool
+(one GameData per worker) — ≈ 37 s on 32 cores over ~1758 cells (was ≈ an hour
+serial); pass an optional worker count as the sole argument. A minority of cells
+hit the planner's 10 s wall-clock budget and their verdict can vary between
+regens — treat borderline cells as approximate, and regenerate on an idle
+machine (the budget is wall-clock, so heavy concurrent CPU load inflates
+timeouts). The SUMMARY line printed at the end is the completeness metric
+tracked over time.
