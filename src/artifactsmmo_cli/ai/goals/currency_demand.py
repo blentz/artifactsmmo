@@ -176,6 +176,15 @@ def _classify_leaves(
     both need. Chain-walk order is preserved (deterministic, non-alphabetical:
     the same order the funding-target loop iterates below)."""
     bank = state.bank_items or {}
+    # FULL gatherable set (primary `resource_drops` UNION every `resource_drops_full`
+    # secondary drop). Using the primary map alone UNDERSTATES gatherability — a
+    # low-rate secondary drop (a gem, or `algae` at 1/100 from a resource) is
+    # gatherable for free yet absent from `resource_drops.values()`, so it was
+    # mis-classified as a currency-buy leaf and, when its gold vendor was
+    # unaffordable, FALSELY pruned every recipe needing it at is_plannable (live
+    # census 2026-07-11: earth_boost_potion / greater_health_potion via `algae`).
+    # Hoisted once (gatherable_drop_items rebuilds a frozenset per call).
+    gatherable = game_data.gatherable_drop_items()
     leaves: list[_CurrencyLeaf] = []
     for leaf, qty in chain.items():
         # The requested item ITSELF is analyzed too: stepwise decomposition
@@ -186,7 +195,7 @@ def _classify_leaves(
         # monster-dropped requests still skip via the guards below.
         if game_data.crafting_recipe(leaf) is not None:
             continue
-        if leaf in game_data.resource_drops.values():
+        if leaf in gatherable:
             continue
         if game_data.monsters_dropping(leaf):
             continue

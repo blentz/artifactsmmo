@@ -324,6 +324,41 @@ def test_is_plannable_not_pruned_when_leaf_is_resource_drop() -> None:
     assert goal.is_plannable(state, gd) is True
 
 
+def test_is_plannable_not_pruned_when_leaf_is_secondary_resource_drop() -> None:
+    """A leaf gatherable ONLY via a SECONDARY drop (`resource_drops_full` — a
+    gem/algae dropped at a low rate, absent from the primary `resource_drops`
+    map) is still gatherable, so it is NOT a currency-buy leaf even when a
+    located gold vendor also sells it. Live census 2026-07-11: `algae`
+    (fish_merchant @ 50 gold, but a secondary resource drop) FALSELY pruned every
+    recipe needing it (earth_boost_potion, greater_health_potion) at is_plannable,
+    because `_classify_leaves` tested the primary `resource_drops.values()`
+    (which — per its own docstring — understates gatherability) instead of
+    `gatherable_drop_items()`. Production then skipped goals it could plan by
+    simply gathering the leaf."""
+    from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
+
+    gd = GameData()
+    gd._crafting_recipes = {"widget": {"algae": 1}}
+    gd._item_stats = {
+        "widget": ItemStats(code="widget", level=1, type_="weapon",
+                            crafting_skill="weaponcrafting", crafting_level=1),
+    }
+    # algae: NOT a primary resource_drop, but a SECONDARY drop of algae_field.
+    gd._resource_drops = {}
+    gd._resource_drops_full = {"algae_field": [("algae", 100, 1, 1)]}
+    # ...and a located gold vendor the character cannot afford (the pre-fix trap).
+    gd._npc_stock = {"fish_merchant": {"algae": 50}}
+    gd._npc_buy_currency = {"fish_merchant": {"algae": "gold"}}
+    gd._npc_locations = {"fish_merchant": (0, 0)}
+    gd._task_coin_rewards = {"chicken": 1}
+    state = make_state(skills={"weaponcrafting": 5}, inventory={"gold": 0},
+                       bank_items={}, x=0, y=0)
+    result = analyze_currency_leaves({"widget": 1}, state, gd)
+    assert result.blocked is False, "gatherable-via-secondary-drop leaf must NOT block"
+    goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1})
+    assert goal.is_plannable(state, gd) is True
+
+
 def test_is_plannable_not_pruned_when_leaf_is_monster_drop() -> None:
     """_currency_leaves_affordable: monster-drop leaf is skipped."""
     from tests.test_ai._monster_fixture import fill_monster_stat_defaults
