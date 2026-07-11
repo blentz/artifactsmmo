@@ -755,6 +755,7 @@ open Formal.PriorityBand
 #check @Formal.ActionApplicability.fightApplicable_mono_in_hp
 #check @Formal.ActionApplicability.fightApplicable_false_above_level_window
 #check @Formal.ActionApplicability.winnable_does_not_imply_applicable
+#check @Formal.ActionApplicability.fightApplicable_false_of_suboptimal_loadout
 #check @Formal.ActionApplicability.fightApplicable_iff
 #check @Formal.ActionApplicability.below_old_window_xp_positive_is_applicable
 #check @Formal.ActionApplicability.winnable_inWindow_imp_fightApplicable

@@ -13,11 +13,14 @@ two ORTHOGONAL filters, and the bot's target picker conflated them.
 
 This module:
 
-1. Specifies `fightApplicable` as a conjunction of 5 atomic conditions
+1. Specifies `fightApplicable` as a conjunction of 6 atomic conditions
    (mirrors Python `FightAction.is_applicable` in `actions/combat.py`
    exactly). The gear pre-filter (`best_eq >= monster_level - 1`) was
    REMOVED 2026-06-29 in lockstep with Python (commits 0cd5407b,
-   5de3ce42) — it starved combat when no owned gear met the window.
+   5de3ce42) — it starved combat when no owned gear met the window. The
+   sixth condition, `loadoutOptimal` (2026-07-10), gates on the equipped
+   loadout matching the best on-hand combat loadout; it is an opaque
+   Python-pinned oracle, not a `formal/diff` value-lockstep mirror.
 2. Proves the conditions are independent — each can falsify
    applicability on its own.
 3. Proves applicability is MONOTONE in hp: more current hp never breaks
@@ -66,6 +69,15 @@ def monsterNotOverleveled (playerLevel monsterLevel : Int) : Bool :=
 def hasInventoryRoom (inventoryFree minFreeSlots : Int) : Bool :=
   decide (inventoryFree ≥ minFreeSlots)
 
+/-- Loadout gate (2026-07-10): the equipped loadout must MATCH the best
+on-hand combat loadout for the monster. Python `FightAction.is_applicable`
+computes this via `equipped_matches_loadout(equipment,
+pick_loadout_cached(Combat(monster), ...))`; here it is an opaque Bool oracle
+(like `winnable`), because a loadout-dict comparison has no arithmetic to
+mirror and is pinned in Python (unit + no_deadlock scenarios), not by a
+`formal/diff` value-lockstep. -/
+def loadoutOptimal (b : Bool) : Bool := b
+
 /-- Map of the FightAction's input. -/
 structure FightInputs where
   hasLocations  : Bool      -- the monster has at least one known tile
@@ -84,6 +96,10 @@ structure FightInputs where
   -- target's dropper. The flag bypasses ONLY the xpPositive lower gate;
   -- every structural gate (locations, inventory room, hp floor, level+2
   -- suicide guard) still applies. Mirrors Python FightAction.drop_farm.
+  loadoutMatches : Bool := true
+  -- Loadout gate (2026-07-10): equipped == best on-hand combat loadout.
+  -- Defaults true so every pre-existing witness/proof that predates the gate
+  -- stays a valid `fightApplicable = true` state (an already-optimal loadout).
 
 /-- The composite predicate. Matches Python `FightAction.is_applicable`
 term-by-term: locations, inventory room, hp floor, (drop-farm OR xp>0)
@@ -97,6 +113,7 @@ def fightApplicable (i : FightInputs) : Bool :=
     && hpAboveFightFloor i.hp i.maxHp
     && (i.dropFarm || xpPositive i.xpPerKill)
     && monsterNotOverleveled i.playerLevel i.monsterLevel
+    && loadoutOptimal i.loadoutMatches
 
 /-! ## Independence of the conditions. -/
 
@@ -143,6 +160,16 @@ theorem fightApplicable_false_of_overleveled_monster (i : FightInputs)
   have : ¬ (i.monsterLevel ≤ i.playerLevel + 2) := by omega
   simp [this]
 
+/-- If the equipped loadout is NOT the best on-hand combat loadout, the
+predicate is false — the 2026-07-10 gate. The planner must run
+OptimizeLoadout(combat) (slot-relief first when the bag is full) to reach the
+optimal loadout before the fight becomes applicable. -/
+theorem fightApplicable_false_of_suboptimal_loadout (i : FightInputs)
+    (h : i.loadoutMatches = false) :
+    fightApplicable i = false := by
+  unfold fightApplicable loadoutOptimal
+  simp [h]
+
 /-! ## Monotonicity. -/
 
 /-- More current hp never breaks applicability (max_hp held fixed). -/
@@ -152,7 +179,7 @@ theorem fightApplicable_mono_in_hp (i : FightInputs) (hp' : Int)
     fightApplicable { i with hp := hp' } = true := by
   unfold fightApplicable at hApp
   simp only [Bool.and_eq_true] at hApp
-  obtain ⟨⟨⟨⟨hLoc, hInv⟩, hHp⟩, hXp⟩, hLvl⟩ := hApp
+  obtain ⟨⟨⟨⟨⟨hLoc, hInv⟩, hHp⟩, hXp⟩, hLvl⟩, hLoad⟩ := hApp
   have hHp' : hpAboveFightFloor hp' i.maxHp = true := by
     unfold hpAboveFightFloor at hHp ⊢
     simp at hHp
@@ -162,7 +189,7 @@ theorem fightApplicable_mono_in_hp (i : FightInputs) (hp' : Int)
     omega
   unfold fightApplicable
   simp only [Bool.and_eq_true]
-  exact ⟨⟨⟨⟨hLoc, hInv⟩, hHp'⟩, hXp⟩, hLvl⟩
+  exact ⟨⟨⟨⟨⟨hLoc, hInv⟩, hHp'⟩, hXp⟩, hLvl⟩, hLoad⟩
 
 /-! ## Level-gate structure after the P0 revision.
 
@@ -196,16 +223,17 @@ theorem winnable_does_not_imply_applicable
   refine ⟨?_, rfl⟩
   exact fightApplicable_false_of_zero_xp i hZero hFarm
 
-/-- Exact characterization of the predicate as a conjunction of the five
-atomic conditions (the lower gate is now the drop-farm/xp disjunction).
-Used to show the below-window case is now LIVE. -/
+/-- Exact characterization of the predicate as a conjunction of the six
+atomic conditions (the lower gate is the drop-farm/xp disjunction; the sixth
+is the 2026-07-10 loadout gate). Used to show the below-window case is now
+LIVE. -/
 theorem fightApplicable_iff (i : FightInputs) :
     fightApplicable i = true ↔
       i.hasLocations = true ∧ i.inventoryFree ≥ i.minFreeSlots ∧
       i.hp * 100 > 50 * i.maxHp ∧ (i.dropFarm = true ∨ i.xpPerKill > 0) ∧
-      i.monsterLevel ≤ i.playerLevel + 2 := by
+      i.monsterLevel ≤ i.playerLevel + 2 ∧ i.loadoutMatches = true := by
   unfold fightApplicable hasInventoryRoom hpAboveFightFloor xpPositive
-    monsterNotOverleveled
+    monsterNotOverleveled loadoutOptimal
   simp [and_assoc]
 
 /-- **P0 regression witness (2026-06-09)**: a monster BELOW the old hard
@@ -219,9 +247,10 @@ theorem below_old_window_xp_positive_is_applicable
     (hHp   : i.hp * 100 > 50 * i.maxHp)
     (hXp   : i.xpPerKill > 0)
     (hUp   : i.monsterLevel ≤ i.playerLevel + 2)
+    (hLoad : i.loadoutMatches = true)
     (_hBelow : i.monsterLevel < max 1 (i.playerLevel - 1)) :
     fightApplicable i = true := by
-  exact (fightApplicable_iff i).mpr ⟨hLoc, hInv, hHp, Or.inr hXp, hUp⟩
+  exact (fightApplicable_iff i).mpr ⟨hLoc, hInv, hHp, Or.inr hXp, hUp, hLoad⟩
 
 /-! ## Capability ⇒ structural applicability (the L50 fight-liveness seam). -/
 
@@ -230,26 +259,28 @@ theorem below_old_window_xp_positive_is_applicable
 preconditions hold, then `fightApplicable` is true. The "fight never
 deadlocks given a winnable in-window target" seam for the L50 proof.
 
-Hypotheses match the five surviving gates of the post-edit `fightApplicable`
-exactly (gear pre-filter removed). They are JOINTLY SATISFIABLE — see
-`winnable_inWindow_imp_fightApplicable_nonvacuous` below for a concrete
-`FightInputs` meeting all five. -/
+Hypotheses match the six surviving gates of the post-edit `fightApplicable`
+exactly (gear pre-filter removed; loadout gate added 2026-07-10). They are
+JOINTLY SATISFIABLE — see `winnable_inWindow_imp_fightApplicable_nonvacuous`
+below for a concrete `FightInputs` meeting all six. -/
 theorem winnable_inWindow_imp_fightApplicable
     (i : FightInputs)
     (hLoc : i.hasLocations = true)
     (hInv : hasInventoryRoom i.inventoryFree i.minFreeSlots = true)
     (hHp  : hpAboveFightFloor i.hp i.maxHp = true)
     (hWin : i.monsterLevel ≤ i.playerLevel + 2)
-    (hXp  : xpPositive i.xpPerKill = true) :
+    (hXp  : xpPositive i.xpPerKill = true)
+    (hLoad : loadoutOptimal i.loadoutMatches = true) :
     fightApplicable i = true := by
   unfold fightApplicable
   simp only [Bool.and_eq_true]
-  refine ⟨⟨⟨⟨hLoc, hInv⟩, hHp⟩, ?_⟩, decide_eq_true hWin⟩
+  refine ⟨⟨⟨⟨⟨hLoc, hInv⟩, hHp⟩, ?_⟩, decide_eq_true hWin⟩, hLoad⟩
   simp [hXp]
 
 /-- **Non-vacuity witness** for `winnable_inWindow_imp_fightApplicable`:
-a concrete `FightInputs` that simultaneously satisfies all five hypotheses
-(`hasLocations`, full inventory room, full HP, in-window, positive XP). This
+a concrete `FightInputs` that simultaneously satisfies all six hypotheses
+(`hasLocations`, full inventory room, full HP, in-window, positive XP, and the
+loadout gate `loadoutOptimal` via the `loadoutMatches := true` default). This
 kernel-checks that the consistency lemma's premises are jointly realizable,
 so the lemma is NOT vacuously true. -/
 theorem winnable_inWindow_imp_fightApplicable_nonvacuous :
@@ -262,8 +293,9 @@ theorem winnable_inWindow_imp_fightApplicable_nonvacuous :
       ∧ hpAboveFightFloor i.hp i.maxHp = true
       ∧ i.monsterLevel ≤ i.playerLevel + 2
       ∧ xpPositive i.xpPerKill = true
+      ∧ loadoutOptimal i.loadoutMatches = true
       ∧ fightApplicable i = true := by
-  refine ⟨rfl, by decide, by decide, by decide, by decide, ?_⟩
+  refine ⟨rfl, by decide, by decide, by decide, by decide, by decide, ?_⟩
   decide
 
 /-! ## Drop-farm bypass scope (2026-07-06).
@@ -279,7 +311,8 @@ theorem dropFarm_zero_xp_applicable_iff_structural (i : FightInputs)
     (hFarm : i.dropFarm = true) (_hZero : i.xpPerKill ≤ 0) :
     fightApplicable i = true ↔
       i.hasLocations = true ∧ i.inventoryFree ≥ i.minFreeSlots ∧
-      i.hp * 100 > 50 * i.maxHp ∧ i.monsterLevel ≤ i.playerLevel + 2 := by
+      i.hp * 100 > 50 * i.maxHp ∧ i.monsterLevel ≤ i.playerLevel + 2 ∧
+      i.loadoutMatches = true := by
   rw [fightApplicable_iff]
   simp [hFarm]
 
@@ -346,7 +379,11 @@ doomed equip), plus the shared `InventoryRoom.hasRoom` core (mirrored in
 `formal/Formal/InventoryRoom.lean`, differentially tested) that Python
 `inventory_room.has_room` computes. Fight is NOT slot-gated in this fix
 (its `hasInventoryRoom` term is the pre-existing QUANTITY floor,
-`inventory_free ≥ 1`), so nothing changes there. -/
+`inventory_free ≥ 1`), so nothing changes there. The 2026-07-10 loadout
+gate adds `loadoutOptimal` to `fightApplicable` as a separate, Python-pinned
+opaque conjunct (unit + no_deadlock scenarios) — distinct from the
+omitted slot-room term above: it gates on loadout IDENTITY (equipped ==
+best on-hand), not slot ARITHMETIC. -/
 
 structure EquipInputs where
   ownedCount   : Int      -- spare copies in inventory (excludes equipped)
