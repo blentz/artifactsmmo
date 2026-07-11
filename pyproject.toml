@@ -54,6 +54,7 @@ ignore = [
     "B904",   # raise-without-from in except blocks; pervasive repo style (78 sites).
     "RUF001", # repo convention: typographic unicode (en dash, x) in strings.
     "RUF002", # same convention in docstrings.
+    "RUF003", # same convention in comments (e.g. Withdraw(ash_plank x7)).
 ]
 
 [tool.ruff.lint.flake8-bugbear]

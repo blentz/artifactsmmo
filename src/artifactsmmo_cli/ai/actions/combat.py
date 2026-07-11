@@ -59,7 +59,14 @@ class FightAction(Action):
 
     _MIN_FREE_SLOTS = 1  # combat can drop loot; need at least 1 free capacity
 
-    def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
+    def _structurally_applicable(self, state: WorldState, game_data: GameData) -> bool:
+        """Pre-loadout structural gates only: locations + inventory room, HP
+        floor, level+2 suicide cap, and the xp/drop-farm gate. Deliberately
+        excludes the loadout gate below — used by the directed craft generator
+        (craft_plan_gen._dropper_fight) to admit a dropper whose loadout merely
+        needs a swap (a sequencing precondition, not infeasibility), while still
+        enforcing the structural guards is_winnable is blind to (level+2, HP,
+        inventory room)."""
         if not self.locations or state.inventory_free < self._MIN_FREE_SLOTS:
             return False
         monster_level = game_data.monster_level(self.monster_code)
@@ -81,7 +88,10 @@ class FightAction(Action):
         # dropFarm bypass arm). drop_farm bypasses ONLY this lower gate — the
         # structural gates above (locations, inventory room, hp floor, level+2
         # suicide guard) always apply.
-        if not (self.drop_farm or game_data.xp_per_kill(self.monster_code, state.level) > 0):
+        return self.drop_farm or game_data.xp_per_kill(self.monster_code, state.level) > 0
+
+    def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
+        if not self._structurally_applicable(state, game_data):
             return False
         # HARD optimal-loadout gate: never fight with a loadout worse than the
         # best on-hand combat loadout. is_winnable/predict_win COMMIT on that

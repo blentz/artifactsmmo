@@ -85,3 +85,32 @@ def test_loadout_gate_applies_to_drop_farm(cow_fight: FightAction) -> None:
     state = _state(equipment={"weapon_slot": "copper_pickaxe"},
                    inventory={"water_bow": 1})
     assert farm.is_applicable(state, gd) is False
+
+
+def test_structurally_applicable_true_when_only_loadout_gate_fails(
+    cow_fight: FightAction,
+) -> None:
+    """Task 5b Part 1: `_structurally_applicable` is the pre-loadout gate set.
+    Same suboptimal-loadout state as test_inapplicable_when_gathering_tool_equipped
+    (is_applicable False), but every STRUCTURAL gate (locations, inventory room,
+    HP floor, level+2, xp-positive) passes -> _structurally_applicable is True.
+    This is what lets the directed craft generator admit a dropper whose
+    loadout merely needs a swap (Task 5b Part 2/3), instead of bailing to A*."""
+    gd = _gd()
+    state = _state(equipment={"weapon_slot": "copper_pickaxe"},
+                   inventory={"water_bow": 1})
+    assert cow_fight.is_applicable(state, gd) is False
+    assert cow_fight._structurally_applicable(state, gd) is True
+
+
+def test_structurally_applicable_false_when_structural_gate_fails(
+    cow_fight: FightAction,
+) -> None:
+    """A structural gate failure (monster over level+2 of the character) makes
+    _structurally_applicable False too -- the helper is not a rubber stamp,
+    it still enforces the guards is_winnable is blind to."""
+    gd = _gd()
+    gd._monster_level = {"cow": 20}  # char level 13 + 2 = 15 ceiling; 20 > 15
+    state = _state(equipment={"weapon_slot": "water_bow"}, inventory={})
+    assert cow_fight._structurally_applicable(state, gd) is False
+    assert cow_fight.is_applicable(state, gd) is False

@@ -14,6 +14,7 @@ Covers:
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.craft_plan_gen import generate_next_craft_action
@@ -773,6 +774,31 @@ def _gd_drop_leaf_suicide_guard() -> GameData:
     return gd
 
 
+def _gd_drop_leaf_suboptimal_loadout() -> GameData:
+    """Same recipe/dropper shape as `_gd_drop_leaf`, plus two weapons: a weak
+    one (equipped) and a strictly stronger one (owned, unequipped). Chicken's
+    resistance is all-zero (fill_monster_stat_defaults), so `pick_loadout`
+    unambiguously prefers the higher flat attack `strong_bow` over the
+    equipped `weak_stick` — the "dropper is structurally fine, only its
+    loadout needs a swap" shape Task 5b Part 2/3 fixes (mirrors
+    test_fight_loadout_precondition.py's water_bow/copper_pickaxe fixture)."""
+    gd = _gd_drop_leaf()
+    gd._item_stats["weak_stick"] = ItemStats(
+        code="weak_stick", level=1, type_="weapon", attack={"earth": 2})
+    gd._item_stats["strong_bow"] = ItemStats(
+        code="strong_bow", level=1, type_="weapon", attack={"air": 10})
+    return gd
+
+
+_ALL_SLOTS: dict[str, str | None] = {
+    "weapon_slot": None, "shield_slot": None, "helmet_slot": None,
+    "body_armor_slot": None, "leg_armor_slot": None, "boots_slot": None,
+    "ring1_slot": None, "ring2_slot": None, "amulet_slot": None,
+    "artifact1_slot": None, "artifact2_slot": None, "artifact3_slot": None,
+    "utility1_slot": None, "utility2_slot": None, "bag_slot": None, "rune_slot": None,
+}
+
+
 def _fighter_state(**overrides):
     """A state whose combat stats beat the harmless chicken (mirrors the
     winnability fixture in test_no_combat_deadlock)."""
@@ -919,3 +945,69 @@ class TestDropLeafFightLeg:
             ["WithdrawItemAction", "CraftAction"], result
         assert result[0].code == "feather" and result[0].quantity == 8
         assert result[-1].code == "feather_coat"
+
+
+class TestDropLeafSuboptimalLoadoutRearm:
+    """Task 5b: `_dropper_fight` (Part 2) admits a structurally-fine dropper
+    even when its equipped loadout is suboptimal — the loadout mismatch is a
+    SEQUENCING precondition, not infeasibility. `_with_rearm` (Part 3) then
+    fronts `OptimizeLoadout(<monster>)` so the fast path never executes a
+    suboptimal Fight as plan[0] (mirrors the pre-existing Gather-first
+    re-arm). Regression coverage for the L13 water_bow flood (31148 A*
+    nodes) this task fixes."""
+
+    def test_suboptimal_loadout_dropper_generates_rearm_then_fight(self):
+        """weak_stick equipped, strong_bow owned unequipped: the generator
+        must still admit the chicken dropper (not fall back to A*) and the
+        generated plan must open with OptimizeLoadout(chicken), Fight(chicken)
+        strictly after it — never a bare suboptimal Fight as plan[0]."""
+        gd = _gd_drop_leaf_suboptimal_loadout()
+        eq = dict(_ALL_SLOTS)
+        eq["weapon_slot"] = "weak_stick"
+        state = _fighter_state(equipment=eq, inventory={"strong_bow": 1})
+        goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
+        actions = _drop_leaf_actions()
+
+        # Sanity: the exact admit/emit shape this task fixes — structurally
+        # fine, but is_applicable's loadout gate rejects it.
+        fight = actions[1]
+        assert isinstance(fight, FightAction)
+        assert fight._structurally_applicable(state, gd) is True
+        assert fight.is_applicable(state, gd) is False
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        assert result is not None, (
+            "a structurally-fine dropper with only a loadout mismatch must "
+            "not fall back to A*"
+        )
+        assert [type(a).__name__ for a in result] == \
+            ["OptimizeLoadoutAction", "FightAction"], result
+        rearm, fought = result
+        assert isinstance(rearm, OptimizeLoadoutAction)
+        assert rearm.target_monster_code == "chicken"
+        assert fought.monster_code == "chicken"
+        # The fronted rearm must itself be applicable NOW — the generator's
+        # own post-hoc plan[0].is_applicable check (generate_next_craft_action)
+        # would otherwise silently discard this plan and fall back to A*.
+        assert rearm.is_applicable(state, gd) is True
+
+    def test_optimal_loadout_dropper_generates_fight_only(self):
+        """strong_bow already equipped -> no rearm is fronted; matches the
+        pre-existing test_winnable_dropper_returns_fight_leg shape."""
+        gd = _gd_drop_leaf_suboptimal_loadout()
+        eq = dict(_ALL_SLOTS)
+        eq["weapon_slot"] = "strong_bow"
+        state = _fighter_state(equipment=eq, inventory={})
+        goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
+        actions = _drop_leaf_actions()
+
+        fight = actions[1]
+        assert isinstance(fight, FightAction)
+        assert fight.is_applicable(state, gd) is True
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        assert result is not None
+        assert [type(a).__name__ for a in result] == ["FightAction"], result
+        assert result[0].monster_code == "chicken"

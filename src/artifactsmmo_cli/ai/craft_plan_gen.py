@@ -208,13 +208,32 @@ def generate_next_craft_action(
 
 def _with_rearm(mapped: list[Action], state: WorldState,
                 game_data: GameData) -> list[Action]:
-    """Front the per-skill loadout optimizer when the plan opens with a Gather
-    whose loadout is suboptimal. This generated path bypasses A* entirely
-    (nodes=0), so GATHER_LOADOUT_PENALTY never gets a vote here — live trace
-    2026-07-05: every generated helmet plan opened bare-handed while the
-    ferried copper_pickaxe rode in the bag. Plans opening with a Craft are
-    left alone; a later Gather-first regeneration re-arms then."""
+    """Front the per-skill (Gather) or per-monster (Fight) loadout optimizer
+    when the plan opens with a leg whose loadout is suboptimal. This
+    generated path bypasses A* entirely (nodes=0), so the loadout-penalty
+    cost terms never get a vote here — live trace 2026-07-05: every
+    generated helmet plan opened bare-handed while the ferried
+    copper_pickaxe rode in the bag. Plans opening with a Craft are left
+    alone; a later Gather/Fight-first regeneration re-arms then.
+
+    Fight-first mirror (Task 5b Part 3): `_dropper_fight` admits a dropper
+    on STRUCTURAL applicability only (Part 2), so a mapped plan's leading
+    Fight may be structurally fine but equipped suboptimally for the
+    monster — the Task 3 hard loadout gate would then reject it at
+    execution (player.py runs plan[0] directly, with no separate
+    applicability re-check). Front `OptimizeLoadout(target_monster_code=...)`
+    whenever it is `is_applicable`: `_swap_plan` is empty (and so
+    `is_applicable` False) when the equipped loadout is already optimal for
+    that monster, so this check is self-guarding — no separate
+    `equipped_matches_loadout` predicate needed here."""
     first = mapped[0] if mapped else None
+    if isinstance(first, FightAction):
+        rearm = OptimizeLoadoutAction(
+            target_monster_code=first.monster_code, game_data=game_data
+        )
+        if not rearm.is_applicable(state, game_data):
+            return mapped  # loadout already optimal for this monster
+        return [rearm, *mapped]
     if not isinstance(first, GatherAction):
         return mapped
     skill_req = game_data.resource_skill_level(first.resource_code)
@@ -230,7 +249,7 @@ def _dropper_fight(
     item: str, relevant: list[Action], game_data: GameData, state: WorldState
 ) -> FightAction | None:
     """The Fight in `relevant` whose monster drops `item` AND that is
-    actually GOAP-applicable right now, or None.
+    STRUCTURALLY GOAP-applicable right now, or None.
 
     GatherMaterialsGoal.relevant_actions already narrowed every closure
     drop item to at most ONE dropper fight (the expected-kills-optimal
@@ -240,21 +259,33 @@ def _dropper_fight(
 
     Admit/emit chokepoint (GAP-8 follow-up): `relevant_actions` narrows by
     `is_winnable` (a stat-only combat PREDICTION), which is blind to
-    FightAction.is_applicable's STRUCTURAL guards — the level+2 suicide
-    cap, the HP floor, and free inventory space. A stat-winnable dropper
-    three levels above the character (or fought at <30% HP, or with a full
-    bag) would satisfy is_winnable yet fail is_applicable, so A* would
-    never have planned it — but this generator, checking only "is a Fight
-    present", would have emitted it anyway and player.py executes plan[0]
-    with no separate applicability check. This is the ONLY call site that
-    turns a closure drop leaf into a Fight (both the CAN-GENERATE gate's
-    admit decision and `_map_next_action`'s emit both read `drop_fights`,
-    which this function alone populates), so gating on `is_applicable`
-    here keeps admit and emit from ever diverging."""
+    FightAction._structurally_applicable's STRUCTURAL guards — the level+2
+    suicide cap, the HP floor, and free inventory space. A stat-winnable
+    dropper three levels above the character (or fought at <30% HP, or with
+    a full bag) would satisfy is_winnable yet fail _structurally_applicable,
+    so A* would never have planned it — but this generator, checking only
+    "is a Fight present", would have emitted it anyway and player.py
+    executes plan[0] with no separate applicability check. This is the ONLY
+    call site that turns a closure drop leaf into a Fight (both the
+    CAN-GENERATE gate's admit decision and `_map_next_action`'s emit both
+    read `drop_fights`, which this function alone populates), so gating on
+    `_structurally_applicable` here keeps admit and emit from ever diverging.
+
+    Deliberately does NOT gate on the loadout conjunct of
+    `is_applicable` (Task 3's hard optimal-loadout gate): a dropper whose
+    equipped loadout merely needs a swap is still a valid drop leg, not an
+    infeasible one — the loadout mismatch is a SEQUENCING precondition, not
+    structural infeasibility. `_with_rearm` fronts an `OptimizeLoadout`
+    (combat) leg when the mapped plan would otherwise open with this Fight
+    suboptimally equipped; if the Fight is truncated deeper in the plan
+    (GAP-8 one-leg-per-cycle), the next cycle's replan re-derives it and A*
+    sequences the swap as usual. Using the full `is_applicable` here
+    wrongly rejected a structurally-fine, merely-unswapped dropper and
+    flooded the A* fallback (31148 nodes, L13 water_bow regression)."""
     droppers = {m for m, _rate, _mn, _mx in game_data.monsters_dropping(item)}
     for action in relevant:
         if (isinstance(action, FightAction) and action.monster_code in droppers
-                and action.is_applicable(state, game_data)):
+                and action._structurally_applicable(state, game_data)):
             return action
     return None
 
