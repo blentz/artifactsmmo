@@ -21,6 +21,7 @@ from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_value_core import Combat
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.loadout_match import equipped_matches_loadout
 from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -143,7 +144,7 @@ class FightAction(Action):
                    game_data.monster_resistance(self.monster_code)),
             state, game_data,
         )
-        if any(state.equipment.get(slot) != code for slot, code in optimal.items()):
+        if not equipped_matches_loadout(state.equipment, optimal):
             base += LOADOUT_PENALTY
         return base
 
