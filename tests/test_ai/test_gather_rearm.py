@@ -7,9 +7,11 @@ relevant_actions filtered OptimizeLoadout out, so GATHER_LOADOUT_PENALTY had no
 action that could remove it and the re-arm was inert.
 """
 
+from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
+from artifactsmmo_cli.ai.craft_plan_gen import _with_rearm, generate_next_craft_action
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
@@ -28,6 +30,16 @@ def _gd() -> GameData:
     gd._resource_drops = {"copper_rocks": "copper_ore"}
     gd._resource_skill = {"copper_rocks": ("mining", 1)}
     gd._resource_locations = {"copper_rocks": [(2, 0)]}
+    return gd
+
+
+def _gd_combat() -> GameData:
+    """`_gd()` plus a `rat` monster so pick_loadout(Combat(rat)) can score the
+    combat weapons (copper_dagger beats the mining copper_pickaxe)."""
+    gd = _gd()
+    gd._monster_attack = {"rat": {"earth": 3}}
+    gd._monster_resistance = {"rat": {}}
+    gd._monster_level = {"rat": 1}
     return gd
 
 
@@ -71,7 +83,6 @@ def test_generator_plan_prepends_rearm_when_tool_in_bag() -> None:
     its cost model entirely, so GATHER_LOADOUT_PENALTY never spoke there —
     live 2026-07-05: every generated helmet plan opened with Gather while the
     ferried pickaxe rode in the bag. The generator must front the re-arm."""
-    from artifactsmmo_cli.ai.craft_plan_gen import generate_next_craft_action
     gd = _gd()
     gd._item_stats["copper_bar"] = ItemStats(
         code="copper_bar", level=1, type_="resource",
@@ -102,3 +113,34 @@ def test_generator_plan_unchanged_when_loadout_already_optimal() -> None:
     plan = generate_next_craft_action(goal, state, gd, _actions())
     assert plan is not None
     assert isinstance(plan[0], GatherAction), [type(a).__name__ for a in plan]
+
+
+def test_with_rearm_fronts_combat_swap_for_suboptimal_fight() -> None:
+    """`_with_rearm` fronts OptimizeLoadout(monster) when a generated plan opens
+    with a Fight whose equipped combat loadout is suboptimal — a mining
+    copper_pickaxe is worn while a better combat weapon (copper_dagger) rides in
+    the bag. Without the prepend the fast path runs plan[0]=Fight bare-handed,
+    losing a winnable fight (the Task 3 loadout gate rejects it at execution).
+    Kills the 'fight never front the re-arm' mutation."""
+    gd = _gd_combat()
+    state = make_state(inventory={"copper_dagger": 1},
+                       equipment={"weapon_slot": "copper_pickaxe"},
+                       skills={"mining": 12})
+    fight = FightAction(monster_code="rat", locations=frozenset({(1, 1)}))
+    result = _with_rearm([fight], state, gd)
+    assert isinstance(result[0], OptimizeLoadoutAction), [type(a).__name__ for a in result]
+    assert result[0].target_monster_code == "rat"
+    assert result[1] is fight
+
+
+def test_with_rearm_leaves_optimal_fight_bare() -> None:
+    """When the equipped combat loadout is already optimal for the monster,
+    `_with_rearm` does NOT front a redundant swap — OptimizeLoadout.is_applicable
+    is False on an empty swap plan (self-guarding). Kills the 'fight front the
+    re-arm unconditionally' mutation (which would prepend a no-op swap)."""
+    gd = _gd_combat()
+    state = make_state(equipment={"weapon_slot": "copper_dagger"},
+                       skills={"mining": 12})
+    fight = FightAction(monster_code="rat", locations=frozenset({(1, 1)}))
+    result = _with_rearm([fight], state, gd)
+    assert result == [fight]

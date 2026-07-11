@@ -2388,16 +2388,34 @@ RECYCLE_PROTECTED_MUTATIONS = [
      "    if ctx.gear_keep:\n        return protected_gear_codes(ctx)"),
 ]
 
-# Gather re-arm activation (2026-07-05): the goal must admit the per-skill
-# OptimizeLoadout or GATHER_LOADOUT_PENALTY has no action that removes it.
-# Killed by tests/test_ai/test_gather_rearm.py.
+# Gather/Fight re-arm activation (2026-07-05, Fight branch 2026-07-11): the goal
+# must admit the per-skill OptimizeLoadout or GATHER_LOADOUT_PENALTY has no action
+# that removes it; the craft generator's `_with_rearm` must front the per-skill
+# (Gather) AND per-monster (Fight) swap so a bare fast-path plan never opens with
+# a suboptimally-equipped leg. Killed by tests/test_ai/test_gather_rearm.py.
+#
+# NOTE: the two `_with_rearm` return sites are disambiguated by their preceding
+# "for this skill" / "for this monster" comment — the bare `return [rearm, *mapped]`
+# string is a substring of BOTH (the 8-space Fight-branch line contains the 4-space
+# match), so an un-anchored find silently mutates only the first (Fight) site.
 GATHER_REARM_MUTATIONS = [
-    ("craft_plan_gen: never front the re-arm (generated plans stay bare-handed)",
+    ("craft_plan_gen: gather never front the re-arm (bare-handed gathers)",
+     "        return mapped  # loadout already optimal for this skill\n"
      "    return [rearm, *mapped]",
+     "        return mapped  # loadout already optimal for this skill\n"
      "    return mapped"),
-    ("craft_plan_gen: front the re-arm unconditionally (equips on every generated plan)",
+    ("craft_plan_gen: gather front the re-arm unconditionally (equips on every gather plan)",
      "    if not rearm.is_applicable(state, game_data):\n"
      "        return mapped  # loadout already optimal for this skill\n",
+     ""),
+    ("craft_plan_gen: fight never front the re-arm (bare-handed fights)",
+     "        return mapped  # loadout already optimal for this monster\n"
+     "        return [rearm, *mapped]",
+     "        return mapped  # loadout already optimal for this monster\n"
+     "        return mapped"),
+    ("craft_plan_gen: fight front the re-arm unconditionally (equips on every fight plan)",
+     "        if not rearm.is_applicable(state, game_data):\n"
+     "            return mapped  # loadout already optimal for this monster\n",
      ""),
 
     ("gathering goal: drop the OptimizeLoadout admission (re-arm inert again)",
@@ -4923,9 +4941,9 @@ def _run_all_groups() -> int:
               "tests/test_ai/test_recycle_protection.py", survivors)
     run_group(RECYCLE_SURPLUS_SRC, RECYCLE_KIT_MUTATIONS,
               "tests/test_ai/test_recycle_protection.py", survivors)
-    run_group(GATHERING_GOAL_SRC, GATHER_REARM_MUTATIONS[2:],
+    run_group(GATHERING_GOAL_SRC, GATHER_REARM_MUTATIONS[4:],
               "tests/test_ai/test_gather_rearm.py", survivors)
-    run_group(CRAFT_PLAN_GEN_SRC, GATHER_REARM_MUTATIONS[:2],
+    run_group(CRAFT_PLAN_GEN_SRC, GATHER_REARM_MUTATIONS[:4],
               "tests/test_ai/test_gather_rearm.py", survivors)
     run_group(RECYCLE_SURPLUS_GOAL_SRC, RECYCLE_SNAPSHOT_MUTATIONS,
               "tests/test_ai/test_recycle_urgency.py", survivors)
