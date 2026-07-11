@@ -5,7 +5,7 @@
 > Census drives the REAL planner over the committed bundle. Cells whose plan hits the 10 s wall-clock budget (~16% of cells) can vary between regens; treat their verdict as approximate.
 
 
-321 recipes, 1758 cells; PASS 106 (6%); nominal-at-skill PASS 35/321; gaps: event_gated 518, combat_blocked 878, material_unreachable 3, skill_unreachable 0, planner_bug 253
+321 recipes, 1758 cells; PASS 108 (6%); nominal-at-skill PASS 37/321; gaps: event_gated 518, combat_blocked 878, material_unreachable 3, skill_unreachable 0, planner_bug 251
 
 Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unreachable, PB=planner_bug.
 
@@ -14,7 +14,7 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 | Recipe | Craft lvl | Cells (char/skill → verdict) |
 |---|---|---|
 | air_boost_potion | 10 | 8/5 CB · 8/10 CB · 10/5 CB · 10/10 CB · 12/5 CB · 12/10 CB |
-| earth_boost_potion | 10 | 8/5 PB · 8/10 PASS · 10/5 PB · 10/10 PASS · 12/5 PB · 12/10 PASS |
+| earth_boost_potion | 10 | 8/5 PB · 8/10 PB · 10/5 PB · 10/10 PB · 12/5 PB · 12/10 PB |
 | fire_boost_potion | 10 | 8/5 CB · 8/10 CB · 10/5 CB · 10/10 CB · 12/5 CB · 12/10 CB |
 | recall_potion | 5 | 1/1 PB · 1/5 PASS · 8/1 PB · 8/5 PASS · 12/1 PB · 12/5 PASS |
 | small_health_potion | 5 | 1/1 PB · 1/5 PASS · 8/1 PB · 8/5 PASS · 12/1 PB · 12/5 PASS |
@@ -25,7 +25,7 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 | Recipe | Craft lvl | Cells (char/skill → verdict) |
 |---|---|---|
 | forest_bank_potion | 20 | 18/15 PB · 18/20 PB · 20/15 PB · 20/20 PB · 22/15 PB · 22/20 PB |
-| minor_health_potion | 20 | 18/15 PB · 18/20 PASS · 20/15 PB · 20/20 PASS · 22/15 PB · 22/20 PASS |
+| minor_health_potion | 20 | 18/15 PB · 18/20 PB · 20/15 PB · 20/20 PB · 22/15 PB · 22/20 PB |
 | small_antidote | 20 | 18/15 CB · 18/20 CB · 20/15 CB · 20/20 CB · 22/15 CB · 22/20 CB |
 
 ## alchemy — tier 3
@@ -34,7 +34,7 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 |---|---|---|
 | antidote | 30 | 28/25 PB · 28/30 PB · 30/25 PB · 30/30 PB · 32/25 PB · 32/30 PB |
 | health_potion | 30 | 28/25 PB · 28/30 PASS · 30/25 PB · 30/30 PASS · 32/25 PB · 32/30 PASS |
-| health_splash_potion | 30 | 28/25 PB · 28/30 PASS · 30/25 PB · 30/30 PASS · 32/25 PB · 32/30 PASS |
+| health_splash_potion | 30 | 28/25 PB · 28/30 PB · 30/25 PB · 30/30 PB · 32/25 PB · 32/30 PB |
 
 ## alchemy — tier 4
 
@@ -45,7 +45,7 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 | enchanted_potion | 40 | 38/35 PB · 38/40 PB · 40/35 PB · 40/40 PB · 42/35 PB · 42/40 PB |
 | enhanced_boost_potion | 40 | 38/35 CB · 38/40 CB · 40/35 CB · 40/40 CB · 42/35 CB · 42/40 CB |
 | fire_res_potion | 40 | 38/35 PB · 38/40 PB · 40/35 PB · 40/40 PB · 42/35 PB · 42/40 PB |
-| greater_health_potion | 40 | 38/35 PB · 38/40 PASS · 40/35 PB · 40/40 PASS · 42/35 PB · 42/40 PASS |
+| greater_health_potion | 40 | 38/35 PB · 38/40 PB · 40/35 PB · 40/40 PB · 42/35 PB · 42/40 PB |
 | health_boost_potion | 40 | 38/35 CB · 38/40 CB · 40/35 CB · 40/40 CB · 42/35 CB · 42/40 CB |
 | water_res_potion | 40 | 38/35 PB · 38/40 PB · 40/35 PB · 40/40 PB · 42/35 PB · 42/40 PB |
 
@@ -113,8 +113,8 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 | copper_armor | 5 | 1/1 CB · 1/5 CB · 8/1 CB · 8/5 CB · 12/1 CB · 12/5 CB |
 | copper_boots | 1 | 1/1 PASS · 8/1 PASS · 12/1 PASS |
 | copper_helmet | 1 | 1/1 PASS · 8/1 PASS · 12/1 PASS |
-| copper_legs_armor | 5 | 1/1 PB · 1/5 PB · 8/1 PB · 8/5 PB · 12/1 PB · 12/5 PB |
-| feather_coat | 5 | 1/1 PB · 1/5 PB · 8/1 PB · 8/5 PB · 12/1 PB · 12/5 PB |
+| copper_legs_armor | 5 | 1/1 PB · 1/5 PASS · 8/1 PB · 8/5 PASS · 12/1 PB · 12/5 PASS |
+| feather_coat | 5 | 1/1 PB · 1/5 PASS · 8/1 PB · 8/5 PASS · 12/1 PB · 12/5 PASS |
 | iron_armor | 10 | 8/5 CB · 8/10 CB · 10/5 CB · 10/10 CB · 12/5 CB · 12/10 CB |
 | iron_boots | 10 | 8/5 PB · 8/10 PB · 10/5 PB · 10/10 PB · 12/5 PB · 12/10 PB |
 | iron_helm | 10 | 8/5 CB · 8/10 CB · 10/5 CB · 10/10 CB · 12/5 CB · 12/10 CB |
@@ -357,7 +357,7 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 
 | Recipe | Craft lvl | Cells (char/skill → verdict) |
 |---|---|---|
-| gold_bar | 30 | 28/25 PB · 28/30 PB · 30/25 PB · 30/30 PB · 32/25 PB · 32/30 PB |
+| gold_bar | 30 | 28/25 PB · 28/30 PASS · 30/25 PB · 30/30 PASS · 32/25 PB · 32/30 PASS |
 | obsidian_bar | 30 | 28/25 CB · 28/30 CB · 30/25 CB · 30/30 CB · 32/25 CB · 32/30 CB |
 
 ## mining — tier 4
@@ -365,14 +365,14 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 | Recipe | Craft lvl | Cells (char/skill → verdict) |
 |---|---|---|
 | diamond | 35 | 38/30 PB · 38/35 PB · 40/30 PB · 40/35 PB · 42/30 PB · 42/35 PB |
-| mithril_bar | 40 | 38/35 PB · 38/40 PB · 40/35 PB · 40/40 PB · 42/35 PB · 42/40 PB |
+| mithril_bar | 40 | 38/35 PB · 38/40 PASS · 40/35 PB · 40/40 PASS · 42/35 PB · 42/40 PASS |
 | strangold_bar | 35 | 38/30 PB · 38/35 PB · 40/30 PB · 40/35 PB · 42/30 PB · 42/35 PB |
 
 ## mining — tier 5
 
 | Recipe | Craft lvl | Cells (char/skill → verdict) |
 |---|---|---|
-| adamantite_bar | 50 | 48/45 PB · 48/50 PB · 50/45 PB · 50/50 PB |
+| adamantite_bar | 50 | 48/45 PB · 48/50 PASS · 50/45 PB · 50/50 PASS |
 | alexandrite | 50 | 48/45 PB · 48/50 PB · 50/45 PB · 50/50 PB |
 
 ## weaponcrafting — tier 1
@@ -394,7 +394,7 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 | leather_gloves | 10 | 8/5 CB · 8/10 CB · 10/5 CB · 10/10 CB · 12/5 CB · 12/10 CB |
 | spruce_fishing_rod | 10 | 8/5 PB · 8/10 PB · 10/5 PB · 10/10 PB · 12/5 PB · 12/10 PB |
 | sticky_dagger | 5 | 1/1 CB · 1/5 CB · 8/1 CB · 8/5 CB · 12/1 CB · 12/5 CB |
-| sticky_sword | 5 | 1/1 PB · 1/5 PB · 8/1 PB · 8/5 PB · 12/1 PB · 12/5 PB |
+| sticky_sword | 5 | 1/1 PB · 1/5 PASS · 8/1 PB · 8/5 PASS · 12/1 PB · 12/5 PASS |
 | water_bow | 5 | 1/1 CB · 1/5 CB · 8/1 CB · 8/5 CB · 12/1 CB · 12/5 CB |
 | wooden_staff | 1 | 1/1 MU · 8/1 MU · 12/1 MU |
 
@@ -487,7 +487,7 @@ Legend: EG=event_gated, CB=combat_blocked, MU=material_unreachable, SU=skill_unr
 | Recipe | Craft lvl | Cells (char/skill → verdict) |
 |---|---|---|
 | dead_wood_plank | 30 | 28/25 PB · 28/30 PASS · 30/25 PB · 30/30 PASS · 32/25 PB · 32/30 PASS |
-| sap | 30 | 28/25 PASS · 28/30 PASS · 30/25 PASS · 30/30 PASS · 32/25 PASS · 32/30 PASS |
+| sap | 30 | 28/25 PB · 28/30 PASS · 30/25 PB · 30/30 PASS · 32/25 PB · 32/30 PASS |
 
 ## woodcutting — tier 4
 
