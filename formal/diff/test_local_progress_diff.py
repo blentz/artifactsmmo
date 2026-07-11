@@ -24,7 +24,6 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.world_state import WorldState
-
 from formal.sim.fake_server import FakeServer
 from formal.sim.measure import Measure, lex_lt, measure
 
@@ -98,6 +97,14 @@ def _make_game_data() -> GameData:
     gd._workshop_locations = {}
     gd._monster_locations = {"chicken": [(0, 1)]}
     gd._monster_level = {"chicken": 1}
+    # FightAction.is_applicable now computes the optimal combat loadout (the
+    # 2026-07-10 optimal-loadout gate), so it reads the monster's attack /
+    # resistance profile — every real monster carries these. The probe owns only
+    # copper_dagger (equipped) so pick_loadout returns it unchanged and the gate
+    # stays transparent to this progress simulation; without the data the gate
+    # would KeyError before ever comparing loadouts.
+    gd._monster_attack = {"chicken": {"fire": 2}}
+    gd._monster_resistance = {"chicken": {}}
     gd._bank_location = (4, 0)
     gd._next_expansion_cost = 1000
     return gd

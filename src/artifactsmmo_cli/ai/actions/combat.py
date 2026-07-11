@@ -81,7 +81,29 @@ class FightAction(Action):
         # dropFarm bypass arm). drop_farm bypasses ONLY this lower gate — the
         # structural gates above (locations, inventory room, hp floor, level+2
         # suicide guard) always apply.
-        return self.drop_farm or game_data.xp_per_kill(self.monster_code, state.level) > 0
+        if not (self.drop_farm or game_data.xp_per_kill(self.monster_code, state.level) > 0):
+            return False
+        # HARD optimal-loadout gate: never fight with a loadout worse than the
+        # best on-hand combat loadout. is_winnable/predict_win COMMIT on that
+        # best loadout (combat.py is_winnable uses pick_loadout_cached), but the
+        # server executes whatever is EQUIPPED — so a stale gathering tool in the
+        # weapon slot loses a winnable fight (live Robby vs cow, 2026-07-09). When
+        # equipped != optimal, the fight is inapplicable and the planner sequences
+        # OptimizeLoadout(combat) first (itself slot-gated, so relief frees a slot
+        # at a full bag: relief -> OptimizeLoadout -> Fight). pick_loadout is
+        # memoized (pick_loadout_cached) and returns a REALIZABLE loadout, so the
+        # swap can always reach it -> no permanent block. Same shared predicate as
+        # FightAction.cost (one locus, no divergence). NOT modeled as a Lean
+        # differential mirror — pinned in Python (unit + no_deadlock scenarios).
+        # The companion formal task adds an opaque `loadoutOptimal` conjunct to
+        # Lean `fightApplicable` to model this gate; until it lands the Lean model
+        # omits it (as it already omits the equip slot-room gate).
+        optimal = pick_loadout_cached(
+            Combat(game_data.monster_attack(self.monster_code),
+                   game_data.monster_resistance(self.monster_code)),
+            state, game_data,
+        )
+        return equipped_matches_loadout(state.equipment, optimal)
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         dest = nearest_or_error(state.x, state.y, self.locations, "combat")
