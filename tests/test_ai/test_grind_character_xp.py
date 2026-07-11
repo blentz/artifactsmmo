@@ -175,9 +175,11 @@ class TestFightCostPenalty:
         optimal = make_state(level=1, equipment={"weapon_slot": "sword"}, inventory={}, x=0, y=0)
         assert fight.cost(under, gd) == fight.cost(optimal, gd) + LOADOUT_PENALTY
 
-    def test_planner_fights_directly_regardless_of_loadout(self):
-        """Satisfaction = XP gain only. The planner picks Fight(chicken) in both
-        suboptimal and optimal loadout states — loadout is a cost signal, not a gate."""
+    def test_planner_swaps_to_optimal_loadout_before_fighting(self):
+        """FightAction.is_applicable hard-gates on the optimal loadout: a
+        suboptimal equipped weapon (with a better one owned) forces the planner
+        to front-load OptimizeLoadout(chicken) before Fight(chicken). An
+        already-optimal loadout still fights directly with no swap."""
         gd = _combat_gd()
         actions = [
             FightAction(monster_code="chicken", locations=frozenset({(0, 0)})),
@@ -187,7 +189,8 @@ class TestFightCostPenalty:
                                 equipment={"weapon_slot": "twig"}, inventory={"sword": 1}, x=0, y=0)
         goal = GrindCharacterXPGoal("chicken", initial_xp=0)
         plan = GOAPPlanner().plan(suboptimal, goal, actions, gd, None)
-        assert plan and repr(plan[0]) == "Fight(chicken)"
+        assert plan and repr(plan[0]) == "OptimizeLoadout(chicken)"
+        assert "Fight(chicken)" in [repr(a) for a in plan]
 
         equipped = make_state(level=1, xp=0, task_code=None, hp=100, max_hp=100,
                               equipment={"weapon_slot": "sword"}, inventory={}, x=0, y=0)
