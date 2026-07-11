@@ -20,7 +20,9 @@ import dataclasses
 from pathlib import Path
 
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
+from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
+from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachCharLevel
@@ -180,3 +182,118 @@ class TestFullBagRelief:
         assert state.inventory_slots_free == 1
         action = OptimizeLoadoutAction(target_monster_code=TARGET_MONSTER, game_data=gd)
         assert action.is_applicable(state, gd) is True
+
+
+# --- Task 6b: GatherMaterialsGoal must emit a companion combat
+# OptimizeLoadout alongside a monster-drop Fight, mirroring the swap the
+# GrindCharacterXPGoal path above already gets for free from the shared
+# planner action menu. Without it, `FightAction.is_applicable`'s hard
+# optimal-loadout gate makes ANY monster-drop demand unplannable while a
+# suboptimal weapon is equipped — the goal's own `relevant_actions` emits the
+# dropper Fight but no swap action, so A* has an inapplicable Fight and
+# nothing to fix it (live-reproduced for feather/chicken here; also cowhide
+# etc. — see `docs/superpowers/specs/2026-07-10-fight-for-drop-fullbag-followup.md`).
+
+DROP_TARGET_MONSTER = "chicken"
+"""l10_gearcrafting_gap's xp-positive feather dropper (level 10 vs chicken
+level 1, diff 9 — inside the xp-positive window per that scenario's own
+derivation, so `FightAction(chicken)` is emitted unconditionally with no
+grey-farm gate involved)."""
+DROP_WEAK_WEAPON = "wooden_stick"
+DROP_OPTIMAL_WEAPON = "copper_dagger"
+"""l10_gearcrafting_gap's real weapon (`_COPPER_SET`) — unambiguously
+preferred over `wooden_stick` by `pick_loadout` for any winnable fight."""
+
+
+def _drop_demand_suboptimal_scenario():
+    """l10_gearcrafting_gap (Criterion-1 witness: iron_boots's feather
+    material closure resolves to `GatherMaterials(feather) ->
+    Fight(chicken)`) with the weak weapon equipped and copper_dagger — the
+    scenario's real weapon — owned unequipped: the same "stale tool
+    equipped, better weapon in the bag" shape as `_suboptimal_scenario`
+    above, but exercising `GatherMaterialsGoal`'s own monster-drop emission
+    path (Task 6b) rather than the shared combat-goal action menu."""
+    base = SCENARIOS["l10_gearcrafting_gap"]
+    return dataclasses.replace(
+        base,
+        equipment={**base.equipment, "weapon_slot": DROP_WEAK_WEAPON},
+        inventory={**base.inventory, DROP_OPTIMAL_WEAPON: 1},
+    )
+
+
+def _gather_materials_plan(sc, needed: dict[str, int]):
+    """Plan `GatherMaterialsGoal(needed)` directly against the real bundle +
+    the live action factory (`GamePlayer._build_actions`), mirroring
+    `test_goals.py::test_plan_crafts_gear_from_banked_monster_drops` and
+    `test_craft_drop_chains.py`'s bare-sweep harness — bypasses the full
+    StrategyArbiter so the assertion is scoped to this one goal's
+    plannability, not which root/step the arbiter happens to pick."""
+    gd = _bundle()
+    state = scenario_state(sc, gd)
+    player = GamePlayer(character=sc.name, history=None)
+    player.seed_offline(state, gd)
+    actions = list(player._build_actions())
+    goal = GatherMaterialsGoal(target_item="feather", needed=needed)
+    plan = GOAPPlanner().plan(state, goal, actions, gd, history=None,
+                               budget_seconds=10.0)
+    return state, gd, actions, goal, plan
+
+
+class TestDropDemandCompanionSwap:
+    """RED (pre-fix, documented): with `wooden_stick` equipped and
+    `copper_dagger` owned unequipped, `GatherMaterials(feather)` planned
+    empty (`plan == []`) even though `Fight(chicken)` was winnable and
+    xp-positive — verified by running this exact repro against the pre-fix
+    `relevant_actions` (no companion `OptimizeLoadoutAction` in the emitted
+    action set, so `FightAction(chicken).is_applicable` was permanently
+    False under the Task-3 loadout gate and A* had no swap action to fix
+    it). GREEN below is the fixed behavior."""
+
+    def test_relevant_actions_pairs_optimize_loadout_with_dropper_fight(self) -> None:
+        """Unit-level companion-emission check: `relevant_actions` for the
+        suboptimal-loadout state now contains an `OptimizeLoadoutAction`
+        targeting the chosen dropper (`chicken`) alongside its
+        `FightAction` — the exact pairing Task 6b adds to the monster-drop
+        emission block."""
+        gd = _bundle()
+        sc = _drop_demand_suboptimal_scenario()
+        state = scenario_state(sc, gd)
+        player = GamePlayer(character=sc.name, history=None)
+        player.seed_offline(state, gd)
+        actions = list(player._build_actions())
+        goal = GatherMaterialsGoal(target_item="feather", needed={"feather": 5})
+        result = goal.relevant_actions(actions, state, gd)
+        reprs = [repr(a) for a in result]
+        assert "Fight(chicken)" in reprs, reprs
+        swaps = [a for a in result
+                 if isinstance(a, OptimizeLoadoutAction)
+                 and a.target_monster_code == DROP_TARGET_MONSTER]
+        assert swaps, reprs
+
+    def test_drop_demand_plans_with_leading_swap_when_loadout_suboptimal(self) -> None:
+        """GREEN: the same suboptimal-loadout state now yields a non-empty
+        plan that sequences `OptimizeLoadout(chicken)` strictly before
+        `Fight(chicken)` — A* can satisfy the hard optimal-loadout gate
+        because the companion swap is in the goal's own action menu."""
+        _state, _gd, _actions, _goal, plan = _gather_materials_plan(
+            _drop_demand_suboptimal_scenario(), {"feather": 5})
+        assert plan, "GatherMaterials(feather) planned empty even after Task 6b's fix"
+        reprs = [repr(a) for a in plan]
+        assert "OptimizeLoadout(chicken)" in reprs, reprs
+        assert "Fight(chicken)" in reprs, reprs
+        assert reprs.index("Fight(chicken)") > reprs.index("OptimizeLoadout(chicken)"), reprs
+
+    def test_no_swap_when_loadout_already_optimal(self) -> None:
+        """Self-guarding control: the unmodified l10_gearcrafting_gap
+        scenario (copper_dagger already equipped, no better weapon owned)
+        plans the same drop demand with NO OptimizeLoadout — the companion
+        swap is only ever admitted when a swap actually applies
+        (`OptimizeLoadoutAction.is_applicable` is False for an empty
+        `_swap_plan`), so this fix does not force a swap into every
+        monster-drop plan."""
+        _state, _gd, _actions, _goal, plan = _gather_materials_plan(
+            SCENARIOS["l10_gearcrafting_gap"], {"feather": 5})
+        assert plan, "GatherMaterials(feather) planned empty from the baseline scenario"
+        reprs = [repr(a) for a in plan]
+        assert "Fight(chicken)" in reprs, reprs
+        assert not any("OptimizeLoadout" in r for r in reprs), reprs

@@ -1,5 +1,8 @@
 # Fight-for-drop deadlock — follow-up (Task 6 of fight-loadout-precondition)
 
+Status: RESOLVED by Task 6b (companion combat OptimizeLoadout in
+GatherMaterialsGoal.relevant_actions) — retained as the root-cause record.
+
 Date: 2026-07-10
 Status: root-caused, NOT fixed here (out of core scope per the design doc's
 §5 "Scope / non-goals" — this document is the required decision record)

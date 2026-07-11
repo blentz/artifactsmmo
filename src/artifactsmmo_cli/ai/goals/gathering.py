@@ -333,8 +333,10 @@ class GatherMaterialsGoal(Goal):
             chosen = select_monster_for_drop(item, drop_candidates)
             if chosen is not None and chosen in winner_fights:
                 fight = winner_fights[chosen]
+                emitted = False
                 if game_data.xp_per_kill(chosen, state.level) > 0:
                     result.append(fight)
+                    emitted = True
                 elif grey_farm_allowed(item, state, game_data):
                     # GREY dropper (zero xp at this level): the plain fight is
                     # inapplicable (xpPositive gate), so a recipe demand could
@@ -345,6 +347,21 @@ class GatherMaterialsGoal(Goal):
                     # same-family recipe is within reach, grinding the skill
                     # beats farming greys, and no fight is emitted.
                     result.append(dataclasses.replace(fight, drop_farm=True))
+                    emitted = True
+                if emitted:
+                    # Companion combat swap so A* can satisfy FightAction's
+                    # hard optimal-loadout gate: the drop Fight is
+                    # inapplicable while a suboptimal weapon is equipped, and
+                    # without a swap action in the goal's own menu the goal
+                    # is unplannable for the drop demand (any bag occupancy —
+                    # Task 6b). Self-guarding: OptimizeLoadout.is_applicable
+                    # is False when the loadout is already optimal (empty
+                    # _swap_plan), so A* sequences it only when a swap is
+                    # actually needed. At a full bag it is slot-gated; the
+                    # relief guard preempts across cycles (see
+                    # slot-exhaustion fix).
+                    result.append(OptimizeLoadoutAction(
+                        target_monster_code=chosen, game_data=game_data))
 
         # C4 Task 1: emit NpcBuy for deep recipe-closure leaves that are
         # currency-bought. A top-level needed item is handled below; a TRANSITIVE
