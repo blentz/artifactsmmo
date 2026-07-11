@@ -3725,8 +3725,8 @@ LADDER_GUARD_FIRES_MUTATIONS = [
     ),
     (
         "ladder/guards: DISCARD_CRITICAL fill comparator >= -> > (boundary 0.95 leaks)",
-        "                and _used_fraction(state) >= DISCARD_CRITICAL_FRACTION)",
-        "                and _used_fraction(state) > DISCARD_CRITICAL_FRACTION)",
+        "                and _quantity_fraction(state) >= DISCARD_CRITICAL_FRACTION)",
+        "                and _quantity_fraction(state) > DISCARD_CRITICAL_FRACTION)",
     ),
     (
         "ladder/guards: DEPOSIT_FULL fill comparator >= -> > (boundary 0.90 leaks)",
@@ -3737,8 +3737,32 @@ LADDER_GUARD_FIRES_MUTATIONS = [
     ),
     (
         "ladder/guards: DISCARD_HIGH fill comparator >= -> > (boundary 0.85 leaks)",
-        "                and _used_fraction(state) >= DISCARD_HIGH_FRACTION)",
-        "                and _used_fraction(state) > DISCARD_HIGH_FRACTION)",
+        "                and _quantity_fraction(state) >= DISCARD_HIGH_FRACTION)",
+        "                and _quantity_fraction(state) > DISCARD_HIGH_FRACTION)",
+    ),
+]
+
+# Slot-aware SPACE pressure (2026-07-11): guards._used_fraction is
+# max(quantity_fraction, slot_fraction) so the space-relief guards fire when the
+# per-slot cap is hit at low quantity (live Robby 20/20 slots, 0.61 quantity,
+# doomed Craft 497). Killed by tests/test_ai/test_tiers_guards.py.
+GUARD_SLOT_PRESSURE_MUTATIONS = [
+    (
+        "guards: drop the SLOT term from space pressure (slot-full never relieves)",
+        "    return max(_quantity_fraction(state), slot_fraction)",
+        "    return _quantity_fraction(state)",
+    ),
+]
+
+# DELETE must stay QUANTITY-gated: DISCARD firing on slot-aware pressure would
+# delete a bankable item at slot-full (live regression 2026-07-11: DISCARD_CRITICAL
+# deleting golden_egg ahead of DEPOSIT_FULL). Killed by the slot-exhaustion routing
+# scenario (relief must be non-destructive before the doomed action).
+GUARD_DISCARD_QUANTITY_MUTATIONS = [
+    (
+        "guards: DISCARD_CRITICAL on slot-aware pressure (deletes at slot-full instead of banking)",
+        "                and _quantity_fraction(state) >= DISCARD_CRITICAL_FRACTION)",
+        "                and _used_fraction(state) >= DISCARD_CRITICAL_FRACTION)",
     ),
 ]
 
@@ -4825,6 +4849,10 @@ def _run_all_groups() -> int:
     # to these `_fires` predicates through the ladder_fires oracle).
     run_group(GUARDS_SRC, LADDER_GUARD_FIRES_MUTATIONS,
               "formal/diff/test_ladder_fires_diff.py", survivors)
+    run_group(GUARDS_SRC, GUARD_SLOT_PRESSURE_MUTATIONS,
+              "tests/test_ai/test_tiers_guards.py", survivors)
+    run_group(GUARDS_SRC, GUARD_DISCARD_QUANTITY_MUTATIONS,
+              "tests/test_ai/scenarios/test_slot_exhaustion.py", survivors)
     run_group(THRESHOLDS_SRC, LADDER_THRESHOLD_VALUE_MUTATIONS,
               "formal/diff/test_ladder_fires_diff.py", survivors)
     run_group(MEANS_SRC, LADDER_MEANS_FIRES_MUTATIONS,

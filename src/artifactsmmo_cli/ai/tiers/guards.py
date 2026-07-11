@@ -178,10 +178,34 @@ def _has_sellable(state: WorldState, game_data: GameData) -> bool:
     return False
 
 
-def _used_fraction(state: WorldState) -> float:
+def _quantity_fraction(state: WorldState) -> float:
+    """QUANTITY pressure only (total items / quantity cap). Drives the DISCARD
+    guards: deleting items is destructive and only warranted when the bag is
+    genuinely drowning in accumulated junk QUANTITY — NOT merely because the slot
+    cap is hit (that is relieved non-destructively by banking, below)."""
     if state.inventory_max <= 0:
         return 0.0
     return state.inventory_used / state.inventory_max
+
+
+def _used_fraction(state: WorldState) -> float:
+    """SPACE pressure = max of the quantity-fraction and the SLOT-fraction. The
+    bag is "full" when EITHER the total-quantity cap OR the per-slot cap is hit,
+    and in practice the 20 slots fill long before the ~124 quantity cap — live
+    Robby 2026-07-10 sat at 20/20 SLOTS while only 76/124 QUANTITY (0.61), so a
+    quantity-only metric never fired the space-relief guards (DEPOSIT_FULL,
+    CRAFT_RELIEF) and doomed Craft(iron_bar) 497'd every cycle (recovery=None)
+    with junk that served no plan for the next several levels. Feeding slot
+    pressure here makes those guards bank/consolidate the junk and free a slot
+    before the doomed action. NON-DESTRUCTIVE relief only — the DISCARD guards
+    stay on `_quantity_fraction` so slot pressure never DELETES an item that
+    banking would have saved (live regression caught 2026-07-11: DISCARD_CRITICAL
+    deleting golden_egg ahead of DEPOSIT_FULL). Mirrors the slots-aware relief the
+    slot-exhaustion fix wired into bank_selection / deposit_inventory (this
+    guard-tier metric was the one spot left quantity-only)."""
+    slot_fraction = (state.inventory_slots_used / state.inventory_slots_max
+                     if state.inventory_slots_max > 0 else 0.0)
+    return max(_quantity_fraction(state), slot_fraction)
 
 
 def active_profile(state: WorldState, game_data: GameData,
@@ -267,7 +291,7 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
         return (bool(overstocked_items(state, game_data,
                                        profile=active_profile(state, game_data, ctx,
                                                               step_profile)))
-                and _used_fraction(state) >= DISCARD_CRITICAL_FRACTION)
+                and _quantity_fraction(state) >= DISCARD_CRITICAL_FRACTION)
     if kind is GuardKind.CRAFT_RELIEF:
         if _used_fraction(state) < CRAFT_RELIEF_FRACTION:
             return False
@@ -306,7 +330,7 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
         return (bool(overstocked_items(state, game_data,
                                        profile=active_profile(state, game_data, ctx,
                                                               step_profile)))
-                and _used_fraction(state) >= DISCARD_HIGH_FRACTION)
+                and _quantity_fraction(state) >= DISCARD_HIGH_FRACTION)
     if kind is GuardKind.GEAR_REVIEW:
         return ctx.gear_review_active
     if kind is GuardKind.CRAFT_POTIONS:

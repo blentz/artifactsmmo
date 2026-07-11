@@ -3,11 +3,14 @@
 from unittest.mock import patch
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.thresholds import DEPOSIT_FULL_FRACTION
 from artifactsmmo_cli.ai.tiers.guards import (
     GUARD_ORDER,
     GuardKind,
     SelectionContext,
     _fires,
+    _quantity_fraction,
+    _used_fraction,
     active_guards,
 )
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -98,6 +101,34 @@ def test_deposit_full_fires_when_inventory_high_and_depositable_item():
     gd._bank_capacity = 50
     guards = active_guards(state, gd, None, _ctx(bank_accessible=True))
     assert GuardKind.DEPOSIT_FULL in guards
+
+
+def test_space_pressure_is_slot_aware_but_delete_stays_quantity_only():
+    """The SPACE-pressure metric (drives DEPOSIT_FULL / CRAFT_RELIEF) counts SLOT
+    fullness, so it crosses the deposit threshold at 20/20 slots even when
+    quantity is low — the live Robby 2026-07-10 loop (76/124 quantity but 20/20
+    SLOTS, doomed Craft(iron_bar) 497'd every cycle because a quantity-only metric
+    never fired the relief guards). The DELETE metric stays QUANTITY-only, so slot
+    pressure alone never deletes an item that banking would have saved (regression
+    caught 2026-07-11: DISCARD_CRITICAL deleting golden_egg ahead of DEPOSIT_FULL).
+    End-to-end firing is covered by the slot_exhaustion scenario + live plan."""
+    inv: dict[str, int] = {"ore": 40, "wood": 20}
+    for i in range(18):
+        inv[f"j{i}"] = 1
+    state = make_state(inventory=inv, inventory_max=124, inventory_slots_max=20)
+    assert state.inventory_slots_free == 0            # slot-full
+    assert _used_fraction(state) == 1.0               # space pressure is slot-driven
+    assert _used_fraction(state) >= DEPOSIT_FULL_FRACTION  # crosses the deposit gate
+    assert _quantity_fraction(state) < 0.85           # delete metric stays low → no delete
+
+
+def test_space_pressure_uses_quantity_when_slots_have_headroom():
+    """With slot headroom the space metric falls back to quantity pressure (both
+    metrics agree), so the deposit/craft-relief guards are unchanged for a bag
+    that is quantity-full but not slot-full."""
+    state = make_state(inventory={"ore": 90}, inventory_max=100, inventory_slots_max=20)
+    assert state.inventory_slots_free > 0
+    assert _used_fraction(state) == _quantity_fraction(state) == 0.9
 
 
 def test_used_fraction_zero_when_inventory_max_zero():

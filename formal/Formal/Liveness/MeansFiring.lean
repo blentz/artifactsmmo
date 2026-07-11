@@ -81,8 +81,20 @@ open Formal.GoalSystem
 def hpPercentRat (s : State) : Rat :=
   if s.maxHp = 0 then 1 else (s.hp : Rat) / (s.maxHp : Rat)
 
-/-- Production `state.inventory_used / state.inventory_max`, with
-    `inventory_max == 0 ⇒ 0`. -/
+/-- The QUANTITY component of production `guards._used_fraction`
+    (`inventory_used / inventory_max`, `inventory_max == 0 ⇒ 0`). This `State`
+    has no slot dimension, so it models the quantity term only. Production
+    (2026-07-11) takes `max(quantity_fraction, slot_fraction)` so the space-relief
+    guards fire when the SLOT cap is hit at low quantity (live Robby 20/20 slots
+    at 0.61 quantity). The slot term is Python-pinned (guards unit tests + the
+    `test_slot_exhaustion` scenario + live `plan Robby`), NOT mirrored here: the
+    differential lockstep stays exact because every diff scenario sets
+    `inventory_slots_max == inventory_max`, where distinct-stacks ≤ total-quantity
+    forces `slot_fraction ≤ quantity_fraction` and the `max` collapses to this
+    quantity fraction. The slot term only bites in real slot-limited states
+    (`slots_max < inventory_max`, i.e. 20 < 124) which the diff never generates —
+    adding a slot dimension to this liveness `State` is deferred (the DELETE
+    guards remain purely quantity-driven, so this liveness measure is unchanged). -/
 def usedFractionRat (s : State) : Rat :=
   if s.inventoryMax = 0 then 0 else (s.inventoryUsed : Rat) / (s.inventoryMax : Rat)
 
