@@ -23,6 +23,7 @@ from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.recipe_closure import recipe_closure
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
+from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.tiers.objective import (
     GOLD,
     CharacterObjective,
@@ -90,17 +91,28 @@ def craft_grid(recipe: str, game_data: GameData) -> list[CraftCell]:
 
 def plan_craft(recipe: str, state: WorldState,
                game_data: GameData) -> list[Action]:
-    """The plan the production planner produces for obtaining `recipe` from
-    `state` — the exact obtain-X path the tree's gear branch uses, aimed at
-    any recipe. task_exchange_min_coins=0: task funding is irrelevant to
-    craft planning."""
+    """The plan the REAL production planner produces for obtaining `recipe`
+    from `state`.
+
+    Drives `StrategyArbiter._plans` — the EXACT per-goal planning seam the live
+    bot runs: the `is_plannable` reachability gate, the directed craft generator
+    fast path (`generate_next_craft_action`, nodes=0), AND the A* fallback, in
+    that order. It deliberately does NOT call the raw `GOAPPlanner` (a
+    sub-component the live bot never invokes directly): a census that re-planned
+    through a lower layer, or re-implemented the generator/A* ordering itself,
+    would be a SECOND implementation testing nothing that ships. The audit exists
+    to answer "does the production planner meet spec for this recipe" — so it must
+    call production.
+
+    task_exchange_min_coins=0: task funding is irrelevant to craft planning."""
     objective = CharacterObjective.from_game_data(game_data)
     actions = build_actions(
         game_data, state, objective,
         bank_accessible=True, task_exchange_min_coins=0)
     goal = GatherMaterialsGoal(target_item=recipe, needed={recipe: 1})
-    return GOAPPlanner().plan(state, goal, actions, game_data,
-                              budget_seconds=CRAFT_AUDIT_BUDGET_SECONDS)
+    arbiter = StrategyArbiter(GOAPPlanner(), None)
+    return arbiter._plans(goal, state, game_data, actions,
+                          budget_seconds=CRAFT_AUDIT_BUDGET_SECONDS)
 
 
 @dataclass(frozen=True)
