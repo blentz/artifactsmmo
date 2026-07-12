@@ -15,6 +15,9 @@ Spec: `docs/superpowers/specs/2026-07-12-inventory-keep-unification-design.md` (
 - `uv run` prefix on every Python command (uv is at `/home/blentz/.local/bin/uv`, NOT on PATH).
 - Run test suites with `env -u FORCE_COLOR` — this shell sets `FORCE_COLOR=3`, which breaks ~10 ANSI-assertion tests in `tests/test_commands/`. Not a code bug.
 - Two-lane suite: `uv run pytest -n auto tests/ --ignore=tests/test_ai/scenarios` then `uv run pytest tests/test_ai/scenarios --cov-append`. Never `-n auto` the scenarios dir (wall-clock flakes).
+- **`tests/ai/` and `tests/test_ai/` are SEPARATE directories — run BOTH.** A prior epic shipped a break because a task ran only `tests/test_ai/`.
+- **`formal/diff/` is NOT in the default pytest path. Any change to a shared signature/symbol (`SelectionContext` fields, `recyclable_surplus`/`select_bank_deposits`/`useful_quantity_cap` signatures) MUST run `uv run pytest formal/diff` before the task is done.** A prior epic broke 262 formal/diff constructors this exact way. `test_bank_selection_diff.py`, `test_inventory_caps_diff.py`, `test_cycle_step_diff.py`, `test_plan_exists_diff.py` and `mutate.py` all consume these cores.
+- New `SelectionContext` fields MUST have a default (the codebase constructs it in ~26 formal/diff helpers); a required field breaks them all.
 - Success criteria: 0 errors, 0 warnings, 0 skipped, 100% coverage.
 - No inline imports. Never catch `Exception`. Never use `if TYPE_CHECKING`. One behavioral class per file.
 - Use only API/game data or fail with an error — no defaulting to paper over missing data.
@@ -55,7 +58,7 @@ Derived from EVERY existing blanket site (`bank_selection._keep_codes`, `recycle
 |---|---|---|---|
 | `CURRENCY` | owned + in_bag | `KEEP_ALL` | `_keep_codes`: `{TASKS_COIN_CODE}` |
 | `ACTIVE_TASK` | owned + in_bag | remaining task qty (`task_total - task_progress`) | `_keep_codes`: `state.task_code` |
-| `HEALING_CONSUMABLE` | in_bag | held (all copies in bag) | `_keep_codes`: `stats.hp_restore > 0` |
+| `HEALING_CONSUMABLE` | in_bag | `heal_stock_target(...)` (`ai/consumable_supply.py`) | `_keep_codes`: `stats.hp_restore > 0` |
 | `COMBAT_WEAPON` | in_bag | 1 | `_keep_codes`: `_best_fighting_weapon` |
 | `WORKING_KIT` | in_bag | 1 | `_keep_codes` + `recycle_surplus`: `_best_gathering_tools` |
 | `COMMITTED_RECIPE` | in_bag | recipe qty needed | `_keep_codes`: `_recipe_materials(crafting_target, items-task)` |
@@ -64,7 +67,7 @@ Derived from EVERY existing blanket site (`bank_selection._keep_codes`, `recycle
 | `GEAR_DEMAND` | owned | `ctx.gear_keep[code]` | `guards._gear_protected`, `gear_keep` |
 | `RECIPE_DEMAND` | owned | `useful_quantity_cap` recipe/batch/safety-floor logic | `useful_quantity_cap` |
 
-`HEALING_CONSUMABLE` keeps ALL bag copies today. Preserve that quantity exactly in P1 (it is `in_bag` only, so potions are still *sellable/recyclable* via `keep_owned` — unchanged from today). Tightening it is explicitly out of scope; if the census shows a potion hoard, that is a follow-up, not this epic.
+`HEALING_CONSUMABLE` keeps ALL bag copies today (`_keep_codes` adds every `hp_restore > 0` code). **That is the blanket, merely re-expressed as a quantity — instance #5 of the same bug**, and the reason-coverage gate correctly refuses it: with `keep == held`, `bankable == 0` forever, so it could never pass a LIVENESS cell. **Resolution (user ruling, pre-flight):** use the system's own existing target, `consumable_supply.heal_stock_target(desired)` = `max(HEAL_STOCK_FLOOR, min(desired, UTILITY_SLOT_MAX_STACK))`. Surplus potions above the stock target become **bankable** — and because `HEALING_CONSUMABLE` feeds `in_bag` ONLY, they are never sold or deleted, just banked (recoverable, and it frees slots). `desired` comes from the same call site `consumable_supply` already uses to size the heal stock.
 
 ---
 
