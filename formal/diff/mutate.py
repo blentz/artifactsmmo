@@ -2206,8 +2206,8 @@ WITHDRAW_TOOLS_BAND_MUTATIONS = [
 # tests/test_ai/test_recycle_surplus.py.
 RECYCLE_SURPLUS_ELIGIBILITY_MUTATIONS = [
     ("recyclable_surplus: re-introduce blanket equipped-code skip (spares hoard)",
-     "        if qty <= 0 or code in protected_codes or code in kit:",
-     "        if qty <= 0 or code in protected_codes or code in kit or code in {"
+     "        if qty <= 0 or code in protected_codes:",
+     "        if qty <= 0 or code in protected_codes or code in {"
      "c for c in state.equipment.values() if c}:"),
 
     ("recyclable_surplus: at-cap counts as surplus (qty > cap -> >=, zero-qty entries)",
@@ -2266,9 +2266,18 @@ RECYCLE_HOIST_MUTATIONS = [
 # with gear_keep present the blanket exclusion turned "keep 1" into "keep 41".
 # Killed by tests/test_ai/test_recycle_protection.py.
 RECYCLE_KIT_MUTATIONS = [
-    ("recyclable_surplus: drop the working-kit skip (recycles the ferried tool)",
-     "        if qty <= 0 or code in protected_codes or code in kit:",
-     "        if qty <= 0 or code in protected_codes:"),
+    # Working-kit protection is a cap FLOOR of 1, not a code skip (live Robby
+    # 2026-07-12: the blanket skip shielded ALL 18 copper_axe + 7 fishing_net —
+    # both best-in-skill kit AND weaponcrafting grind rungs — so the hoard grew
+    # unbounded). Both directions must stay killed: dropping the floor eats the
+    # ferried tool, and restoring the blanket skip re-hoards its spares.
+    ("recyclable_surplus: drop the working-kit floor (recycles the ferried tool)",
+     "            cap = max(cap, 1)",
+     "            cap = max(cap, 0)"),
+
+    ("recyclable_surplus: re-introduce blanket working-kit skip (tool hoard)",
+     "        if qty <= 0 or code in protected_codes:",
+     "        if qty <= 0 or code in protected_codes or code in kit:"),
 ]
 
 RECYCLE_PROTECTED_MUTATIONS = [

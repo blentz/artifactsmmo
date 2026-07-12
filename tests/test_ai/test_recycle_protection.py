@@ -75,6 +75,24 @@ def test_best_gathering_tool_is_never_recyclable_surplus() -> None:
     assert "copper_pickaxe" not in surplus
 
 
+def test_working_kit_keeps_ONE_and_recycles_the_spares() -> None:
+    """The kit rule protects the TOOL, not the HOARD. Live Robby 2026-07-12:
+    18 copper_axe + 7 fishing_net sat in the bag — both are weaponcrafting GRIND
+    RUNGS, so the skill grind kept crafting them, and both are the best owned
+    tool for their skill, so the blanket `code in kit` skip shielded EVERY copy.
+    recyclable_surplus reported only {copper_ring:1, water_bow:1} while 25 junk
+    items filled the bag (17/20 slots) and never came back as materials.
+
+    Same blanket-vs-cap flaw the equipped-code skip already fixed (copper_helmet
+    x41): keep ONE (the tool the gather re-arm is about to wear) and reclaim the
+    rest."""
+    gd = _gd()
+    state = make_state(level=10, skills={"gearcrafting": 8, "weaponcrafting": 2},
+                       inventory={"copper_pickaxe": 18})
+    surplus = recyclable_surplus(state, gd, frozenset(), gear_keep={})
+    assert surplus.get("copper_pickaxe") == 17
+
+
 def test_outclassed_spare_tool_is_still_recyclable() -> None:
     """Only the BEST owned tool per skill is kit; a worse spare stays scrap."""
     gd = _gd()

@@ -65,7 +65,14 @@ def recyclable_surplus(
     # Working kit: the best owned tool per gathering skill is equipment the
     # gather re-arm is ABOUT to wear (WithdrawTools ferries it a cycle before
     # OptimizeLoadout equips it) — recycling must never race the equip and eat
-    # it (live probe 2026-07-05: copper_pickaxe surfaced as surplus 1).
+    # it (live probe 2026-07-05: copper_pickaxe surfaced as surplus 1). Kit
+    # membership is a cap FLOOR of 1 (applied below), NOT a code skip: it
+    # protects the TOOL, not a HOARD of it. A blanket skip shielded every copy,
+    # and the gathering tools are also weaponcrafting GRIND RUNGS, so the skill
+    # grind fed the pile forever — live Robby 2026-07-12 carried 18 copper_axe +
+    # 7 fishing_net (both best-in-skill kit) in a 17/20-slot bag while
+    # recyclable_surplus reported neither. Same blanket-vs-cap flaw the
+    # equipped-code skip already fixed (copper_helmet x41).
     kit = _best_gathering_tools(state, game_data)
     out: dict[str, int] = {}
     for code, qty in state.inventory.items():
@@ -74,7 +81,7 @@ def recyclable_surplus(
         # already keeps >=1 for an equipped code — the old skip shielded every
         # spare of a worn code from recycling (copper_helmet x25 hoard,
         # trace 2026-07-05).
-        if qty <= 0 or code in protected_codes or code in kit:
+        if qty <= 0 or code in protected_codes:
             continue
         stats = game_data.item_stats(code)
         if stats is None or not stats.crafting_skill:
@@ -88,6 +95,10 @@ def recyclable_surplus(
         if game_data.workshop_location(stats.crafting_skill) is None:
             continue  # no workshop known → cannot recycle
         cap = useful_quantity_cap(code, state, game_data, gear_keep=gear_keep)
+        if code in kit:
+            # Keep the ONE working tool the gather re-arm is about to equip; its
+            # spares are scrap like any other over-cap gear.
+            cap = max(cap, 1)
         if qty > cap:
             out[code] = qty - cap
     return out
