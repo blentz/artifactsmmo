@@ -826,18 +826,20 @@ class TestGatherMaterialsGoal:
         state = make_state(inventory={"copper_ore": 4}, bank_items={"copper_ore": 6})
         assert goal.is_satisfied(state) is True
 
-    def test_not_plannable_when_target_craft_skill_gated(self):
-        """Trace 2026-06-11 18:10: GatherMaterials(feather_coat,
-        {feather_coat: 1}) with gearcrafting 2 < 5 burned the full 90s budget
-        (97k-99k nodes) to plan_len 0 every probe — the gated final craft
-        makes the goal unplannable; fail fast instead."""
+    def test_plannable_when_target_craft_skill_gated(self):
+        """LevelSkill epic P2: an under-skill craft target is NO LONGER pruned
+        by is_plannable. The planner admits a LevelSkill action, so
+        GatherMaterials(feather_coat) with gearcrafting 2 < 5 is reachable via a
+        grind->craft sequence — the former skill-gate fast-fail is retired. The
+        remaining fast-fail (currency-leaf affordability) does not fire here (no
+        currency-buy leaves in the feather_coat closure)."""
         gd = make_game_data()
         gd._item_stats["feather_coat"] = ItemStats(
             code="feather_coat", level=5, type_="body_armor",
             crafting_skill="gearcrafting", crafting_level=5)
         goal = GatherMaterialsGoal(target_item="feather_coat", needed={"feather_coat": 1})
-        state = make_state(inventory={}, bank_items={})
-        assert goal.is_plannable(state, gd) is False
+        state = make_state(skills={"gearcrafting": 2}, inventory={}, bank_items={})
+        assert goal.is_plannable(state, gd) is True
 
     def test_plannable_when_target_craft_skill_met(self):
         gd = make_game_data()

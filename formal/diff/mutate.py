@@ -276,8 +276,7 @@ EVENT_VISIBILITY_MUTATIONS = [
      "        return ev is not None and ev not in self.active_event_codes"),
 ]
 
-# Skill-gate fast-fail + doomed-memo (2026-06-15 feather_coat CPU-peg fix).
-GATHER_PLANNABLE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "gather_plannable_core.py"
+# Doomed-memo (2026-06-15 feather_coat CPU-peg fix).
 LEAF_ATTAINABLE_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "leaf_attainable_core.py"
 COMPLETE_TASK_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "complete_task_core.py"
 FUNDING_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "funding_core.py"
@@ -2167,20 +2166,6 @@ def _execute_parallel(units: list[_Unit], survivors: list[str]) -> None:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-# Killed by formal/diff/test_skill_gate_fastfail_diff.py (binds gather_plannable_pure
-# to the proved Formal.SkillGateFastFail.isPlannable).
-GATHER_PLANNABLE_MUTATIONS = [
-    ("gather_plannable: drop the owned-fallback (always plannable when gated)",
-     "    return owned >= needed",
-     "    return True"),
-    ("gather_plannable: skill gate off-by-one (>= becomes >)",
-     "    if not has_craft_gate or cur_level >= craft_level:",
-     "    if not has_craft_gate or cur_level > craft_level:"),
-    ("gather_plannable: owned-fallback off-by-one (>= becomes >)",
-     "    return owned >= needed",
-     "    return owned > needed"),
-]
-
 # Killed by formal/diff/test_leaf_attainable_diff.py (binds leaf_attainable_pure
 # to the proved Formal.LeafAttainable.leafAttainable).
 LEAF_ATTAINABLE_MUTATIONS = [
@@ -2614,7 +2599,7 @@ def run_group(src: Path, mutations: list[tuple[str, str, str]], test_path: str,
 
 
 _ALL_SRCS = [
-    GATHER_PLANNABLE_CORE_SRC, DOOMED_MEMO_SRC, STRATEGY_DRIVER_SRC, EQUIP_VALUE_SRC,
+    DOOMED_MEMO_SRC, STRATEGY_DRIVER_SRC, EQUIP_VALUE_SRC,
     GEAR_VALUE_CORE_SRC,
     GAME_DATA_PARSE_SRC, LOCATION_CATALOG_SRC,
     SRC, TASK_BATCH_SRC, INVENTORY_CAPS_SRC, COMBAT_SRC, PROJECTION_SRC, SCORING_SRC,
@@ -4981,8 +4966,6 @@ def _run_all_groups() -> int:
     # P0 2026-06-09 — items-task material reservation differential.
     run_group(TASK_RESERVATION_SRC, TASK_RESERVATION_MUTATIONS,
               "formal/diff/test_task_reservation_diff.py", survivors)
-    run_group(GATHER_PLANNABLE_CORE_SRC, GATHER_PLANNABLE_MUTATIONS,
-              "formal/diff/test_skill_gate_fastfail_diff.py", survivors)
     run_group(LEAF_ATTAINABLE_CORE_SRC, LEAF_ATTAINABLE_MUTATIONS,
               "formal/diff/test_leaf_attainable_diff.py", survivors)
     run_group(COMPLETE_TASK_CORE_SRC, COMPLETE_TASK_MUTATIONS,

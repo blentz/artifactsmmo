@@ -275,11 +275,13 @@ def test_is_plannable_true_when_currency_buy_leaf_affordable_bank() -> None:
     assert goal.is_plannable(state, gd) is True
 
 
-def test_is_plannable_skill_gate_still_fires_independently() -> None:
-    """C4 Task 5 regression: the existing skill-gate fast-fail is unaffected.
+def test_is_plannable_true_for_under_skill_craft_goal() -> None:
+    """LevelSkill epic P2: the under-skill craft goal is NO LONGER fast-failed.
 
-    feather_coat: gearcrafting level 5, player skill = 2 → skill gate prunes
-    regardless of affordability (no currency-buy leaves in this closure).
+    feather_coat: gearcrafting level 5, player skill = 2. The former skill-gate
+    fast-fail pruned this; it is retired now that the planner admits a LevelSkill
+    action and can sequence grind->craft. The currency arm does not fire (no
+    currency-buy leaves in this closure), so is_plannable is True.
     """
     gd = GameData()
     gd._crafting_recipes = {}
@@ -291,7 +293,7 @@ def test_is_plannable_skill_gate_still_fires_independently() -> None:
     }
     goal = GatherMaterialsGoal(target_item="feather_coat", needed={"feather_coat": 1})
     state = make_state(skills={"gearcrafting": 2}, inventory={}, bank_items={}, x=0, y=0)
-    assert goal.is_plannable(state, gd) is False
+    assert goal.is_plannable(state, gd) is True
 
 
 def test_is_plannable_not_pruned_when_leaf_is_craftable() -> None:

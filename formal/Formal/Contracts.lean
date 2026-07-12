@@ -15,7 +15,6 @@ import Formal.SkillStepDispatch
 import Formal.DoomedMemo
 import Formal.NextCraftAction
 import Formal.CraftPlanDriver
-import Formal.SkillGateFastFail
 import Formal.CurrencyAffordFastFail
 import Formal.LeafAttainable
 import Formal.CompleteTaskIncome
@@ -3080,19 +3079,6 @@ example : ∀ (recipes : String → Option (List (String × Nat)))
       qty ≤ (Formal.CraftPlanDriver.foldPlan recipes (owned, bank)
               (Formal.CraftPlanDriver.craftPlan recipes target qty innerFuel owned bank fuel)).1 target :=
   @Formal.CraftPlanDriver.craftPlan_reaches
-
--- ─── SkillGateFastFail (GatherMaterialsGoal.is_plannable) anti-weakening pins ───
--- gate closed ⇒ owned count invariant across the ENTIRE plan.
-example : ∀ (owned : Nat) (plan : List Formal.SkillGateFastFail.Step),
-    Formal.SkillGateFastFail.runPlan false owned plan = owned :=
-  @Formal.SkillGateFastFail.runPlan_gate_closed
--- SOUNDNESS: fast-fail fires ⇒ EVERY plan leaves owned strictly below needed
--- (the pruned goal is genuinely unreachable; weakening `< needed` to `≤ needed`
--- fails to elaborate against the proven `<`).
-example : ∀ (targetInNeeded hasGate : Bool) (curLevel craftLevel owned needed : Nat),
-    Formal.SkillGateFastFail.isPlannable targetInNeeded hasGate curLevel craftLevel owned needed = false →
-    ∀ plan, Formal.SkillGateFastFail.runPlan (decide (craftLevel ≤ curLevel)) owned plan < needed :=
-  @Formal.SkillGateFastFail.fastfail_sound
 
 -- ─── LeafAttainable (acquisition-leaf attainability) anti-weakening pins ───
 -- VALIDITY: the decision is EXACTLY the 4-way source disjunction (weakening any

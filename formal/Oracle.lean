@@ -2341,14 +2341,6 @@ def runDoomedIsDoomed (args : Array Json) : Json :=
     (intArg args 3).toNat (intArg args 4).toNat (intArg args 5) (intArg args 6).toNat
   Json.mkObj [("doomed", Json.bool d)]
 
--- SkillGateFastFail: is_plannable fast-fail.
--- args = [targetInNeeded(0/1), hasGate(0/1), curLevel, craftLevel, owned, needed]
-def runGatherPlannable (args : Array Json) : Json :=
-  let p := Formal.SkillGateFastFail.isPlannable
-    (intArg args 0 != 0) (intArg args 1 != 0)
-    (intArg args 2).toNat (intArg args 3).toNat (intArg args 4).toNat (intArg args 5).toNat
-  Json.mkObj [("plannable", Json.bool p)]
-
 -- LeafAttainable: acquisition-leaf attainability.
 -- args = [gatherable(0/1), knownSpawnDrop(0/1), taskEarnable(0/1), buyable(0/1)]
 def runLeafAttainable (args : Array Json) : Json :=
@@ -3022,8 +3014,6 @@ def runOne (item : Json) : Json :=
     runDoomedTtl args
   else if kind == "doomed_is_doomed" then
     runDoomedIsDoomed args
-  else if kind == "gather_plannable" then
-    runGatherPlannable args
   else if kind == "leaf_attainable" then
     runLeafAttainable args
   else if kind == "complete_task_income" then

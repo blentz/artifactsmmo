@@ -19,7 +19,6 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_selection import GatherCandidate, select_gather_source
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.currency_demand import analyze_currency_leaves
-from artifactsmmo_cli.ai.goals.gather_plannable_core import gather_plannable_pure
 from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed
 from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
 from artifactsmmo_cli.ai.learning.store import LearningStore
@@ -517,31 +516,16 @@ class GatherMaterialsGoal(Goal):
 
     def is_plannable(self, state: WorldState, game_data: GameData,
                      history: LearningStore | None = None) -> bool:
-        """Fail fast when satisfaction requires CRAFTING the target and the
-        crafting skill is below the recipe gate — CraftAction.is_applicable
-        blocks the craft, so no plan exists. Trace 2026-06-11 18:10: the
-        fallback GatherMaterials(feather_coat) (materials owned, gearcrafting
-        2 < 5) burned 97k-99k nodes / the full 90s budget to plan_len 0 on
-        every probe cycle. Materials-only goals (finished target not among
-        `needed`) stay plannable — gathering inputs never needs the gated
-        final craft.
-
-        Also fast-fails when a currency-buy leaf in the recipe closure is
+        """Fast-fail only when a currency-buy leaf in the recipe closure is
         unaffordable (C4 Task 5): no plan can acquire a jasper_crystal-style
-        leaf without the requisite currency. Both gates must pass."""
-        if not self._currency_leaves_affordable(state, game_data):
-            return False
-        if self._target_item not in self._needed:
-            return gather_plannable_pure(False, False, 0, 0, 0, 0)
-        stats = game_data.item_stats(self._target_item)
-        if stats is None or not stats.crafting_skill:
-            return gather_plannable_pure(True, False, 0, 0, 0, 0)
-        bank = state.bank_items or {}
-        owned = (state.inventory.get(self._target_item, 0)
-                 + bank.get(self._target_item, 0))
-        return gather_plannable_pure(
-            True, True, state.skills.get(stats.crafting_skill, 1),
-            stats.crafting_level, owned, self._needed[self._target_item])
+        leaf without the requisite currency, so pruning discards nothing
+        reachable.
+
+        Under-skill craft goals are NOT pruned here (LevelSkill epic P2): the
+        planner admits LevelSkill into the GatherMaterials action set, so an
+        under-skill target is now reachable via a grind->craft sequence. The
+        former crafting-skill fast-fail (which pruned such goals) is retired."""
+        return self._currency_leaves_affordable(state, game_data)
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"inventory": self._needed}

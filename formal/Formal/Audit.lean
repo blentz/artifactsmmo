@@ -923,9 +923,6 @@ open Formal.WeightedRemaining in
 #print axioms Formal.DoomedMemo.isDoomed_window
 #print axioms Formal.DoomedMemo.isDoomed_expires
 #print axioms Formal.DoomedMemo.escalation_grows_window
-#print axioms Formal.SkillGateFastFail.applyStep_gate_closed
-#print axioms Formal.SkillGateFastFail.runPlan_gate_closed
-#print axioms Formal.SkillGateFastFail.fastfail_sound
 #print axioms InventoryRoom.hasRoom_false_of_no_slot
 #print axioms InventoryRoom.hasRoom_false_of_no_qty
 #print axioms InventoryRoom.hasRoom_grow_ignores_slots

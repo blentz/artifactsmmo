@@ -22,7 +22,6 @@ import Formal.BankExpansionTiming
 import Formal.LoadoutProfiles
 import Formal.CraftPlanDriver
 import Formal.DoomedMemo
-import Formal.SkillGateFastFail
 import Formal.LeafAttainable
 import Formal.CompleteTaskIncome
 import Formal.AccumulationSell
@@ -1154,12 +1153,6 @@ open Formal.PriorityBand
 #check @Formal.CraftPlanDriver.craftPlan_nil_iff       -- empty plan ⇔ target already satisfied
 #check @Formal.CraftPlanDriver.craftPlan_steps_valid   -- every step is a genuine nextCraftTarget output
 #check @Formal.CraftPlanDriver.craftPlan_reaches       -- completion-correctness: complete plan reaches target
-
--- SkillGateFastFail required roles (GatherMaterialsGoal.is_plannable;
--- src/artifactsmmo_cli/ai/goals/gathering.py:316-335):
-#check @Formal.SkillGateFastFail.applyStep_gate_closed  -- gate closed ⇒ step is a no-op on owned
-#check @Formal.SkillGateFastFail.runPlan_gate_closed    -- gate closed ⇒ owned invariant ∀ plan
-#check @Formal.SkillGateFastFail.fastfail_sound         -- fast-fail fires ⇒ ∀ plan owned < needed
 
 -- LeafAttainable required roles (acquisition-leaf attainability;
 -- src/artifactsmmo_cli/ai/tiers/leaf_attainable_core.py + tiers/objective.py is_attainable):

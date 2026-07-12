@@ -7,8 +7,11 @@ A closure leaf (e.g. jasper_crystal) acquired ONLY by NpcBuy for a currency
 (tasks_coin) cannot have its owned count raised while UNAFFORDABLE: the buy is
 inapplicable (currency_on_hand < price·qty) and GatherMaterials' action set has NO
 task-earning action, so the currency cannot rise mid-search. Affordability is
-therefore CONSTANT across the plan — the same invariant SkillGateFastFail relies
-on for the crafting skill. Pruning loses no satisfiable plan.
+therefore CONSTANT across the plan. Pruning loses no satisfiable plan. (This is
+now the ONLY fast-fail arm of `is_plannable`: the former crafting-skill gate was
+retired in the LevelSkill epic P2, since the planner can now grind the skill
+mid-plan via a `LevelSkill` action — a crafting skill level is NOT constant
+across the plan the way a currency balance is.)
 
 Lean core only — no mathlib.
 -/

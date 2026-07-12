@@ -218,7 +218,6 @@ import Formal.Liveness.WitnessAcquirable
 import Formal.DoomedMemo
 import Formal.NextCraftAction
 import Formal.CraftPlanDriver
-import Formal.SkillGateFastFail
 import Formal.CurrencyAffordFastFail
 import Formal.PlanModel
 import Formal.LeafAttainable
