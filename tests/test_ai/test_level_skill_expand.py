@@ -32,8 +32,74 @@ def test_next_grind_goal_targets_the_rung_skill_grind() -> None:
     goal = next_grind_goal("gearcrafting", state, gd)
     assert isinstance(goal, GatherMaterialsGoal)
     assert goal.skill_grind is True
-    # targets the selected rung, held+1 (mirrors strategy_driver:866-871)
-    assert goal.needed == {"trinket": 1}
+    # Descends to the rung's actionable_step: trinket's ore is unmet, so the
+    # goal targets gear_ore. Behaviourally identical for this SHALLOW rung —
+    # the player executes only leg 0, and Gather(gear_rocks) is the first
+    # action either way — while a DEEP rung's direct goal would explode (see
+    # test_next_grind_goal_descends_to_deepest_unmet_material). Once the ore is
+    # held the step becomes the trinket itself and the craft earns the XP.
+    assert goal.needed == {"gear_ore": 1}
+
+
+def _deep_gd() -> GameData:
+    """A rung whose recipe is a DEEP chain — the live fire_staff shape:
+    fire_staff (weaponcrafting 5) <- {red_slimeball:2 (held), ash_plank:5}
+    and ash_plank <- {ash_wood:10}. Targeting the RUNG makes the GOAP search
+    interleave 50 gathers with crafts/deposits and EXPLODE (live 2026-07-12:
+    1M nodes, no plan)."""
+    gd = GameData()
+    gd._item_stats = {
+        "fire_staff": ItemStats(code="fire_staff", level=5, type_="weapon",
+                                subtype="", crafting_skill="weaponcrafting",
+                                crafting_level=5),
+        "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource",
+                               subtype="craft", crafting_skill="woodcutting",
+                               crafting_level=1),
+        "ash_wood": ItemStats(code="ash_wood", level=1, type_="resource",
+                              subtype="woodcutting"),
+        "red_slimeball": ItemStats(code="red_slimeball", level=1,
+                                   type_="resource", subtype="mob"),
+    }
+    gd._crafting_recipes = {"fire_staff": {"red_slimeball": 2, "ash_plank": 5},
+                            "ash_plank": {"ash_wood": 10}}
+    gd._resource_drops = {"ash_tree": "ash_wood", "slime_pit": "red_slimeball"}
+    gd._resource_skill = {"ash_tree": ("woodcutting", 1),
+                          "slime_pit": ("alchemy", 1)}
+    gd._resource_locations = {"ash_tree": [(5, 5)], "slime_pit": [(6, 6)]}
+    gd._workshop_locations = {"weaponcrafting": (2, 2), "woodcutting": (1, 1)}
+    return gd
+
+
+def test_next_grind_goal_descends_to_deepest_unmet_material() -> None:
+    """A rung with a DEEP recipe must NOT be targeted directly — the GOAP search
+    over the gather/craft/deposit interleavings explodes (live Robby 2026-07-12:
+    GatherMaterials(fire_staff) hit 1M nodes / no plan, so _execute_level_skill
+    raised every cycle and the bot LIVELOCKED on error:other). Descend to the
+    rung's actionable_step (the raw base material) — a FLAT gather that plans
+    within budget, exactly as the gear path does (gather_step_target's docstring
+    documents this same explosion)."""
+    gd = _deep_gd()
+    state = scenario_state(
+        ScenarioCharacter(name="t", level=13, skills={"weaponcrafting": 6},
+                          bank={"red_slimeball": 20}), gd)
+    goal = next_grind_goal("weaponcrafting", state, gd)
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert goal.skill_grind is True
+    # ash_wood (the deepest unmet leaf), NOT fire_staff (the rung).
+    assert goal.needed == {"ash_wood": 10}
+
+
+def test_next_grind_goal_targets_rung_when_materials_in_hand() -> None:
+    """Once the rung's materials are held, its actionable_step IS the rung — so
+    the goal targets the rung itself and the plan is the (cheap) craft that earns
+    the skill XP. held+1 keeps the grind perpetual (craft ANOTHER for XP)."""
+    gd = _deep_gd()
+    state = scenario_state(
+        ScenarioCharacter(name="t", level=13, skills={"weaponcrafting": 6},
+                          bank={"red_slimeball": 20, "ash_plank": 5}), gd)
+    goal = next_grind_goal("weaponcrafting", state, gd)
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert goal.needed == {"fire_staff": 1}
 
 
 def test_next_grind_goal_none_when_no_rung() -> None:

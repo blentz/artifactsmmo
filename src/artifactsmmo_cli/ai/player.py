@@ -751,9 +751,20 @@ class GamePlayer:
         real skill reaches target, is_applicable turns False and the plan advances
         to the gated craft.
 
-        The first two guards are for states LevelSkill.is_applicable already
-        excludes (no grind rung / an empty sub-plan) — unreachable in a correct
-        plan, so they raise rather than swallow.
+        The no-rung guard is for a state LevelSkill.is_applicable already
+        excludes, so it raises rather than swallow.
+
+        The empty-sub-plan guard is NOT "unreachable": the planner also returns
+        [] when it exhausts its wall-clock budget on a plannable goal. That made
+        a search blow-up indistinguishable from a logic error, and since the raise
+        degrades to an `error:other` cycle that changes no state, the next replan
+        re-picked the same LevelSkill — a zero-progress LIVELOCK (live Robby
+        2026-07-12: GatherMaterials(fire_staff) hit the 1M-node cap, every cycle,
+        forever). The blow-up itself is fixed at the source — `next_grind_goal`
+        now descends to the rung's actionable_step, a FLAT gather that plans in
+        ~70 nodes — so an empty sub-plan here is once again a genuine dead end
+        and still raises; a repeat is caught by the repeated-action-failure
+        StuckDetector rather than being silently swallowed here.
 
         Recursion is bounded by a cycle guard. A grind rung can need a cross-skill
         under-level intermediate (real: lizard_skin_armor gearcrafting-25 needs
