@@ -4,8 +4,9 @@ Among items that are same-skill, in-level, and OBTAINABLE (every recipe input
 reachable by gather/craft/winnable-drop), prefer the shallowest material chain
 (fewest missing on hand), then the highest skill level (more XP); a full tie keeps
 the FIRST-SEEN candidate (insertion order) — there is no string/alphabetical
-tie-break. Returns None when no such in-skill recipe exists — the caller falls back to
-LevelSkillGoal on the SAME skill (never cross-skill). Inclusion is a recipe-table
+tie-break. Returns None when no such in-skill recipe exists — the caller (the
+LevelSkill action's is_applicable / grind expansion, always same-skill, never
+cross-skill) then has no craftable rung. Inclusion is a recipe-table
 + reachability fact, free of bank-freshness false positives (only `mats_missing`
 ordering reads holdings).
 

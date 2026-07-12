@@ -84,11 +84,11 @@ def depositApply (s : State) (depositCount : Nat) : State :=
 @[simp] theorem depositApply_taskProgress (s : State) (n : Nat) :
     (depositApply s n).taskProgress = s.taskProgress := rfl
 
-@[simp] theorem depositApply_projectedSkillXpDelta (s : State) (n : Nat) :
-    (depositApply s n).projectedSkillXpDelta = s.projectedSkillXpDelta := rfl
+@[simp] theorem depositApply_trackedSkillLevel (s : State) (n : Nat) :
+    (depositApply s n).trackedSkillLevel = s.trackedSkillLevel := rfl
 
-@[simp] theorem depositApply_targetSkillXp (s : State) (n : Nat) :
-    (depositApply s n).targetSkillXp = s.targetSkillXp := rfl
+@[simp] theorem depositApply_targetSkillLevel (s : State) (n : Nat) :
+    (depositApply s n).targetSkillLevel = s.targetSkillLevel := rfl
 
 /-! ## Headline progress lemma -/
 

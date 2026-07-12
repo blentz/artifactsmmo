@@ -74,7 +74,7 @@ theorem cycleStepPN_succ (n : Nat) (s : State) :
 /-! ## The refresh leaves the lex measure unchanged
 
 `Measure.measure` reads only `level`/`xp`/`taskTotal`/`taskProgress`/
-`targetSkillXp`/`projectedSkillXpDelta`/`inventoryUsed`/`inventoryMax`/`maxHp`/
+`targetSkillLevel`/`trackedSkillLevel`/`inventoryUsed`/`inventoryMax`/`maxHp`/
 `hp` — every one preserved by `perceptionRefresh` (which touches ONLY the two
 objective Bools). So the measure is invariant under the refresh. -/
 

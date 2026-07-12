@@ -9,7 +9,6 @@ import Formal.InventoryProfile
 import Formal.PredictWin
 import Formal.LoadoutProjection
 import Formal.EquipmentScoring
-import Formal.SkillTargetCurve
 import Formal.SkillGrindSelection
 import Formal.DoomedMemo
 import Formal.NextCraftAction
@@ -472,24 +471,6 @@ example : ∀ (item : Item) (monsterRes : ElemStats),
     (∀ e ∈ elements, 0 ≤ elemGet item.attack e) → 0 ≤ item.crit →
     0 ≤ WScore item monsterRes :=
   @weapon_score_nonneg
-
-/-! ### SkillTargetCurve role contracts.
-
-`Item`/`skillCurveTarget` clash with `EquipmentScoring.Item` (opened above); we
-fully-qualify the `SkillTargetCurve` names. The `hmax : 0 ≤ maxSkill` hypothesis
-is load-bearing — a negative clamp ceiling would invert the order. -/
-
--- curve_le_max: target never exceeds maxSkill (given 0 ≤ maxSkill)
-example : ∀ (skill charLevel lookahead maxSkill : Int)
-    (items : List Formal.SkillTargetCurve.Item), 0 ≤ maxSkill →
-    Formal.SkillTargetCurve.skillCurveTarget skill charLevel lookahead maxSkill items ≤ maxSkill :=
-  @Formal.SkillTargetCurve.curve_le_max
--- curve_monotone_in_char_level: higher char level never lowers the target
-example : ∀ (skill l1 l2 lookahead maxSkill : Int)
-    (items : List Formal.SkillTargetCurve.Item), l1 ≤ l2 → 0 ≤ maxSkill →
-    Formal.SkillTargetCurve.skillCurveTarget skill l1 lookahead maxSkill items
-      ≤ Formal.SkillTargetCurve.skillCurveTarget skill l2 lookahead maxSkill items :=
-  @Formal.SkillTargetCurve.curve_monotone_in_char_level
 
 /-! ### SkillGrindSelection role contracts.
 

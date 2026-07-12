@@ -408,41 +408,6 @@ def test_gather() -> None:
     )
 
 
-# ----------------------------------------------------------------------------
-# Projected skill XP delta — NEW field outside the 8-field baseline contract.
-# Gather/Craft.apply MUST add to it; the contract over `skill_xp` is unaffected.
-# ----------------------------------------------------------------------------
-
-def test_gather_increments_projected_skill_xp_delta() -> None:
-    """Regression pin: GatherAction.apply must add +1 to the projected XP
-    accumulator for the resource's gathering skill (the LevelSkillGoal
-    plannability fix)."""
-    gd = _make_game_data_basic()
-    gd._resource_skill = {"copper_rocks": ("mining", 1)}
-    gd._resource_drops = {"copper_rocks": "copper_ore"}
-    gd._resource_locations = {"copper_rocks": [(2, 0)]}
-    state = _make_state()
-    after = GatherAction(
-        resource_code="copper_rocks", locations=frozenset([(2, 0)])
-    ).apply(state, gd)
-    _assert_preserved(state, after)  # 8-field contract still holds
-    assert after.projected_skill_xp_delta.get("mining", 0) == 1
-    # state's own delta untouched (frozen dataclass).
-    assert state.projected_skill_xp_delta == {}
-
-
-def test_craft_increments_projected_skill_xp_delta_by_quantity() -> None:
-    """Regression pin: CraftAction.apply must add +quantity to the projected
-    XP accumulator for the recipe's crafting skill."""
-    gd = _gd_with_recipe()
-    state = _make_state(inventory={"copper_ore": 12})
-    after = CraftAction(
-        code="copper_dagger", quantity=2, workshop_location=(3, 0)
-    ).apply(state, gd)
-    _assert_preserved(state, after)  # 8-field contract still holds
-    assert after.projected_skill_xp_delta.get("weaponcrafting", 0) == 2
-
-
 def test_fight() -> None:
     gd = _make_game_data_basic()
     state = _make_state(hp=100, max_hp=100,

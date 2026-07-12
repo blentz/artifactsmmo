@@ -2320,8 +2320,8 @@ noncomputable def fixtureFreshState : State where
   maxHp := 100
   taskType := some "items"
   taskCode := some "adamantite_axe"
-  projectedSkillXpDelta := 0
-  targetSkillXp := 0
+  trackedSkillLevel := 0
+  targetSkillLevel := 0
   gold := 0
   bankAccessible := true
   bankJunkNonempty := false

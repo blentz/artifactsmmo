@@ -252,14 +252,13 @@ def applyActionKindC (xpNext : Nat) : ActionKind → State → State
   -- abstraction level. Phase 22 (Cycle Loop) will compose the actual
   -- planner output through the sub-goal.
   | .objectiveStep, s => { s with objectiveStepFires := false }
-  -- Phase 23d-7: .gather advances the projected skill-xp counter by 1.
-  -- Mirrors production GatherAction.apply (gathering.py:52-83) which
-  -- updates state.projected_skill_xp_delta[skill] += 1 when the gathered
-  -- resource has a skill requirement. The Lean model carries a single
-  -- scalar (projectedSkillXpDelta) per Phase-19c's design; advancing
-  -- it by 1 per .gather suffices for the skill-gap closure proof
-  -- (Phase 23d-7). All task fields are preserved (gather is task-
-  -- agnostic; it never touches taskCode/Progress/Total or phase).
+  -- Phase 23d-7: .gather is the modeled grind rung — it raises the tracked
+  -- skill LEVEL by 1 (single-level abstraction of the planner-native
+  -- LevelSkill action grind). The Lean model carries a single scalar
+  -- (trackedSkillLevel); advancing it by 1 per .gather suffices for the
+  -- skill-gap closure proof (Phase 23d-7). All task fields are preserved
+  -- (gather is task-agnostic; it never touches taskCode/Progress/Total
+  -- or phase).
   | .gather, s =>
       -- Item 4a: also bump the inventory entry for the current gather
       -- target by 1. When gatherTarget is none, leave inventory unchanged
@@ -269,13 +268,13 @@ def applyActionKindC (xpNext : Nat) : ActionKind → State → State
         match s.gatherTarget with
         | some code => (code, 1) :: s.inventoryItems
         | none => s.inventoryItems
-      -- Item 4e: bump per-skill XP delta for gatherSkill. Legacy
-      -- scalar projectedSkillXpDelta still advances for backward-compat.
+      -- Item 4e: bump per-skill XP delta map for gatherSkill (distinct from
+      -- the scalar trackedSkillLevel, which the grind rung raises by 1).
       let newSkillXp : List (Skill × Nat) :=
         match s.gatherSkill with
         | some sk => (sk, 1) :: s.skillXpDelta
         | none => s.skillXpDelta
-      { s with projectedSkillXpDelta := s.projectedSkillXpDelta + 1,
+      { s with trackedSkillLevel := s.trackedSkillLevel + 1,
                inventoryItems := newInv,
                skillXpDelta := newSkillXp }
   -- Phase 23d-8: .craft advances the abstract craftableSlots counter

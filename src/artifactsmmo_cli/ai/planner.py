@@ -47,9 +47,9 @@ def _state_key(state: WorldState) -> tuple[object, ...]:
     skill-gated craft it unlocks can then never be reached in-search
     (GatherMaterials(under-skill widget) planned to length 0). Adding skills
     only makes the dedup FINER, so it cannot break Dijkstra optimality
-    (PlannerAdmissibility.lean); and since no LIVE action mutates
-    state.skills (gathers/crafts accrue projected_skill_xp_delta, never
-    levels), the skills component is constant across every node of every live
+    (PlannerAdmissibility.lean); and since gathers/crafts never raise
+    state.skills in-search (skill grind is a separate LevelSkill action leg),
+    the skills component is constant across every node of a GatherMaterials
     search — the in-search partition is unchanged. This key is also compared
     cross-cycle for StuckSignal.STATE_FROZEN (player.py); there the addition is
     strictly MORE precise: a real skill-level gain re-synced between cycles now

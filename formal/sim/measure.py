@@ -49,22 +49,22 @@ class Measure:
 def measure(
     state: WorldState,
     xp_to_next_level: int,
-    target_skill_xp: int,
-    projected_skill_xp_delta: int,
+    target_skill_level: int,
+    tracked_skill_level: int,
 ) -> Measure:
     """Compute the Lean `Measure.measure` projection on a `WorldState`.
 
     `xp_to_next_level` is the value of the LIV-001 axiom at `state.level`.
-    `target_skill_xp` / `projected_skill_xp_delta` are the single-skill
-    scalars described in `Measure.lean` (the headline operates on one
-    LevelSkillGoal at a time).
+    `target_skill_level` / `tracked_skill_level` are the single-skill LEVEL
+    scalars described in `Measure.lean` (`ReachSkillGoal.is_satisfied` reads
+    `state.skills`; the headline operates on one skill grind at a time).
     """
     return Measure(
         level_deficit=_sat_sub(50, state.level),
         xp_deficit=_sat_sub(xp_to_next_level, state.xp),
         task_cycles=_sat_sub(state.task_total, state.task_progress),
-        skill_xp_deficit_projected=_sat_sub(target_skill_xp,
-                                            projected_skill_xp_delta),
+        skill_xp_deficit_projected=_sat_sub(target_skill_level,
+                                            tracked_skill_level),
         bank_pressure=_sat_sub(state.inventory_used,
                                bank_pressure_threshold(state.inventory_max)),
         hp_deficit=_sat_sub(state.max_hp, state.hp),

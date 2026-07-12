@@ -54,7 +54,7 @@ ramp (which capped at 40.0) plus an above-baseline scalar bonus head-room."""
 def _skill_open(resource_code: str, state: WorldState, game_data: GameData) -> bool:
     """True iff the resource's skill gate is open against the FIXED initial
     `state` passed to `relevant_actions`. Gathers alone never raise a skill
-    (they accrue `projected_skill_xp_delta`, not levels), so a gather whose
+    (they raise skill XP server-side, not planner-tracked levels), so a gather whose
     gate is closed here cannot become applicable via gathering. Admitting one
     unconditionally is branching waste — and worse, it can WIN the yield
     narrowing below and displace a workable source (derived 2026-07-08:

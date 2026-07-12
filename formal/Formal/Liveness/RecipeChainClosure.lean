@@ -89,8 +89,8 @@ def Recipe.craftCount (r : Recipe) : Nat :=
   `craftableSlots` counter on State. This is the modeling extension
   for recipe-chain closure. Production's CraftAction.apply
   (crafting.py:39-68) does substantially more (inventory composition,
-  task_progress for crafting tasks, projected_skill_xp_delta), but
-  for the structural completion claim a counter advance suffices.
+  task_progress for crafting tasks), but for the structural completion
+  claim a counter advance suffices.
 -/
 
 /-- `.craft` advances `craftableSlots` by 1. -/
@@ -213,7 +213,7 @@ theorem recipe_produces_item :
   set s' := applyPlan (List.replicate r.gatherCount .gather) s with hsdef
   have hSlots_s' : s'.craftableSlots = s.craftableSlots := by
     rw [hsdef]
-    -- .gather advances projectedSkillXpDelta, NOT craftableSlots, so K-step
+    -- .gather advances trackedSkillLevel, NOT craftableSlots, so K-step
     -- preservation: prove by induction.
     have aux : ∀ n t, (applyPlan (List.replicate n .gather) t).craftableSlots
                        = t.craftableSlots := by

@@ -499,7 +499,7 @@ def test_task_exchange_storm_state_plans_short() -> None:
 def test_objective_step_honestly_skipped() -> None:
     """OBJECTIVE_STEP is the synthetic tier-dispatch ActionKind (Phase
     21d-1). Production materialises a sub-goal (UpgradeEquipmentGoal,
-    GatherMaterialsGoal, GrindCharacterXPGoal, LevelSkillGoal) per the
+    GatherMaterialsGoal, GrindCharacterXPGoal, ReachSkillGoal) per the
     chosen MetaGoal shape; the planner finds a plan for each via ordinary
     Actions. This differential pins the FLAT means; the objective tier
     is exercised by the Tier-2 differential

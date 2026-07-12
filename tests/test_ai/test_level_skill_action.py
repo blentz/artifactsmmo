@@ -17,7 +17,7 @@ from artifactsmmo_cli.ai.world_state import WorldState
 
 def _state(gd: GameData, skills: dict[str, int]) -> WorldState:
     # scenario_state builds a valid WorldState with all required fields
-    # (inventory slots, projected_skill_xp_delta, etc.) — never hand-build.
+    # (inventory slots, skill_xp, etc.) — never hand-build.
     return scenario_state(ScenarioCharacter(name="t", level=5, skills=skills), gd)
 
 

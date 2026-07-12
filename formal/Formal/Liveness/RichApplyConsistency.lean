@@ -9,7 +9,7 @@ import Mathlib.Tactic
 After Items 4a-4e added richer state fields (`inventoryItems`,
 `equipment`, `posX`/`posY`, `skillXpDelta`, etc.) and updated the
 matching apply branches, the scalar fields used by Phase 19's measure
-lemmas (`inventoryUsed`, `inventoryMax`, `projectedSkillXpDelta`, etc.)
+lemmas (`inventoryUsed`, `inventoryMax`, `trackedSkillLevel`, etc.)
 ARE PRESERVED as separate, independent state. This module ships the
 preservation theorems explicitly so Phase 19 / 23 proofs that read
 the scalar fields continue to hold structurally — the richer mutations
@@ -69,11 +69,11 @@ theorem move_inventoryUsed_invariant (s : State) :
         | none => s).inventoryUsed = s.inventoryUsed
   cases s.moveTarget <;> rfl
 
-/-- `.gather` STILL advances the legacy scalar `projectedSkillXpDelta`
-    by 1 — Item 4e added per-skill map alongside, not replacing. -/
-theorem gather_projectedSkillXpDelta_advances (s : State) :
-    (applyActionKind .gather s).projectedSkillXpDelta
-    = s.projectedSkillXpDelta + 1 := by
+/-- `.gather` (the modeled grind rung) advances the scalar `trackedSkillLevel`
+    by 1 — Item 4e added the per-skill map alongside, not replacing it. -/
+theorem gather_trackedSkillLevel_advances (s : State) :
+    (applyActionKind .gather s).trackedSkillLevel
+    = s.trackedSkillLevel + 1 := by
   rfl
 
 /-- `.completeTask` preserves scalar `inventoryUsed` (Item 4d added

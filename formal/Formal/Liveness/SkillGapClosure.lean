@@ -14,19 +14,19 @@ User mandate (2026-06-01):
 > skill or level required to progress the task.
 
 Closes Part C of Phase 23d-6: when a task's prerequisites are NOT met
-(`projectedSkillXpDelta < targetSkillXp`), the planner can chain
+(`trackedSkillLevel < targetSkillLevel`), the planner can chain
 `.gather` actions to close the skill gap, then chain `.taskTrade`
 actions to complete the task.
 
 Two-stage K-step plan:
-  K_skill   = `targetSkillXp - projectedSkillXpDelta` `.gather` steps
+  K_skill   = `targetSkillLevel - trackedSkillLevel` `.gather` steps
   K_complete = `taskTotal - taskProgress`             `.taskTrade` steps
 
 Total K = K_skill + K_complete. Finite under the precondition that
 both gaps are bounded.
 
 NO new axioms. Pure structural composition of:
-- Phase 23d-7's `.gather` apply (advances `projectedSkillXpDelta` by 1).
+- Phase 23d-7's `.gather` apply (advances `trackedSkillLevel` by 1).
 - Phase 23d-6's `taskComplete_reachable` (`.taskTrade` chain).
 -/
 
@@ -40,15 +40,15 @@ open Formal.Liveness.TaskCompleteReachable
 
 /-! ## Per-step preservation under `.gather` -/
 
-/-- `.gather` advances `projectedSkillXpDelta` by 1. -/
+/-- `.gather` advances `trackedSkillLevel` by 1. -/
 theorem gather_skill_succ (s : State) :
-    (applyActionKind .gather s).projectedSkillXpDelta
-      = s.projectedSkillXpDelta + 1 := by
+    (applyActionKind .gather s).trackedSkillLevel
+      = s.trackedSkillLevel + 1 := by
   rfl
 
-/-- `.gather` preserves `targetSkillXp`. -/
-theorem gather_targetSkillXp_preserved (s : State) :
-    (applyActionKind .gather s).targetSkillXp = s.targetSkillXp := by
+/-- `.gather` preserves `targetSkillLevel`. -/
+theorem gather_targetSkillLevel_preserved (s : State) :
+    (applyActionKind .gather s).targetSkillLevel = s.targetSkillLevel := by
   rfl
 
 /-- `.gather` preserves `taskCode`. -/
@@ -73,11 +73,11 @@ theorem gather_phase_preserved (s : State) :
 
 /-! ## Replicate-application lemmas -/
 
-/-- K `.gather` steps advance `projectedSkillXpDelta` by exactly K. -/
+/-- K `.gather` steps advance `trackedSkillLevel` by exactly K. -/
 theorem replicate_gather_skill_progress :
     ∀ (n : Nat) (s : State),
-      (applyPlan (List.replicate n .gather) s).projectedSkillXpDelta
-        = s.projectedSkillXpDelta + n := by
+      (applyPlan (List.replicate n .gather) s).trackedSkillLevel
+        = s.trackedSkillLevel + n := by
   intro n
   induction n with
   | zero =>
@@ -85,17 +85,17 @@ theorem replicate_gather_skill_progress :
     simp [applyPlan]
   | succ k ih =>
     intro s
-    show (applyPlan (.gather :: List.replicate k .gather) s).projectedSkillXpDelta
-           = s.projectedSkillXpDelta + (k + 1)
+    show (applyPlan (.gather :: List.replicate k .gather) s).trackedSkillLevel
+           = s.trackedSkillLevel + (k + 1)
     rw [applyPlan_cons]
     rw [ih (applyActionKind .gather s)]
     rw [gather_skill_succ]
     omega
 
-/-- K `.gather` steps preserve `targetSkillXp`. -/
-theorem replicate_gather_targetSkillXp :
+/-- K `.gather` steps preserve `targetSkillLevel`. -/
+theorem replicate_gather_targetSkillLevel :
     ∀ (n : Nat) (s : State),
-      (applyPlan (List.replicate n .gather) s).targetSkillXp = s.targetSkillXp := by
+      (applyPlan (List.replicate n .gather) s).targetSkillLevel = s.targetSkillLevel := by
   intro n
   induction n with
   | zero =>
@@ -103,11 +103,11 @@ theorem replicate_gather_targetSkillXp :
     simp [applyPlan]
   | succ k ih =>
     intro s
-    show (applyPlan (.gather :: List.replicate k .gather) s).targetSkillXp
-           = s.targetSkillXp
+    show (applyPlan (.gather :: List.replicate k .gather) s).targetSkillLevel
+           = s.targetSkillLevel
     rw [applyPlan_cons]
     rw [ih (applyActionKind .gather s)]
-    rw [gather_targetSkillXp_preserved]
+    rw [gather_targetSkillLevel_preserved]
 
 /-- K `.gather` steps preserve `taskCode`. -/
 theorem replicate_gather_taskCode :
@@ -164,25 +164,25 @@ theorem replicate_gather_taskTotal :
 
 /-- **Skill prerequisite closable**.
 
-    Applying `K_skill = targetSkillXp - projectedSkillXpDelta`
-    `.gather` steps brings `projectedSkillXpDelta` to at least
-    `targetSkillXp` (skill prerequisite satisfied), while preserving
-    all task fields and `targetSkillXp`. -/
+    Applying `K_skill = targetSkillLevel - trackedSkillLevel`
+    `.gather` steps brings `trackedSkillLevel` to at least
+    `targetSkillLevel` (skill prerequisite satisfied), while preserving
+    all task fields and `targetSkillLevel`. -/
 theorem skill_prerequisite_reachable (s : State)
-    (hSkillGap : s.projectedSkillXpDelta < s.targetSkillXp) :
-    let s' := applyPlan (List.replicate (s.targetSkillXp - s.projectedSkillXpDelta) .gather) s
-    s'.projectedSkillXpDelta ≥ s.targetSkillXp ∧
-    s'.targetSkillXp = s.targetSkillXp ∧
+    (hSkillGap : s.trackedSkillLevel < s.targetSkillLevel) :
+    let s' := applyPlan (List.replicate (s.targetSkillLevel - s.trackedSkillLevel) .gather) s
+    s'.trackedSkillLevel ≥ s.targetSkillLevel ∧
+    s'.targetSkillLevel = s.targetSkillLevel ∧
     s'.taskCode = s.taskCode ∧
     s'.taskProgress = s.taskProgress ∧
     s'.taskTotal = s.taskTotal := by
-  set K_skill := s.targetSkillXp - s.projectedSkillXpDelta with hKdef
+  set K_skill := s.targetSkillLevel - s.trackedSkillLevel with hKdef
   refine ⟨?_, ?_, ?_, ?_, ?_⟩
-  · -- projectedSkillXpDelta after K_skill gathers = original + K_skill
+  · -- trackedSkillLevel after K_skill gathers = original + K_skill
     rw [replicate_gather_skill_progress K_skill s]
-    -- K_skill = targetSkillXp - projectedSkillXpDelta, and gap > 0, so sum ≥ targetSkillXp
+    -- K_skill = targetSkillLevel - trackedSkillLevel, and gap > 0, so sum ≥ targetSkillLevel
     omega
-  · exact replicate_gather_targetSkillXp K_skill s
+  · exact replicate_gather_targetSkillLevel K_skill s
   · exact replicate_gather_taskCode K_skill s
   · exact replicate_gather_taskProgress K_skill s
   · exact replicate_gather_taskTotal K_skill s
@@ -195,20 +195,20 @@ theorem skill_prerequisite_reachable (s : State)
     work and (2) a skill prerequisite gap, the K-step plan
     `K_skill .gather` ++ `K_complete .taskTrade` reaches `phase = .complete`.
 
-    Witness: K_skill = `targetSkillXp - projectedSkillXpDelta`,
+    Witness: K_skill = `targetSkillLevel - trackedSkillLevel`,
              K_complete = `taskTotal - taskProgress`.
     Total K = K_skill + K_complete, finite. -/
 theorem skill_gap_then_complete_reachable (s : State)
     (hCode : s.taskCode.isSome = true)
     (hTot : s.taskTotal > 0)
     (hLT : s.taskProgress < s.taskTotal)
-    (_hSkillGap : s.projectedSkillXpDelta < s.targetSkillXp) :
+    (_hSkillGap : s.trackedSkillLevel < s.targetSkillLevel) :
     ∃ (K_skill K_complete : Nat),
       (applyPlan
         ((List.replicate K_skill .gather) ++ (List.replicate K_complete .taskTrade))
         s).taskLifecyclePhase = TaskLifecyclePhase.complete := by
   -- Build the two stages.
-  set K_skill := s.targetSkillXp - s.projectedSkillXpDelta with hSkillDef
+  set K_skill := s.targetSkillLevel - s.trackedSkillLevel with hSkillDef
   set K_complete := s.taskTotal - s.taskProgress with hCompleteDef
   refine ⟨K_skill, K_complete, ?_⟩
   -- Split applyPlan over append: applyPlan (xs ++ ys) s = applyPlan ys (applyPlan xs s).

@@ -86,17 +86,9 @@ class CraftAction(Action):
 
         # skill_xp is a server-snapshot baseline field (see WorldState docstring);
         # the planner never simulates it locally — apply preserves it. The next
-        # real API call returns the updated server values. We DO advance the
-        # separate `projected_skill_xp_delta` accumulator (outside the baseline
-        # contract) so LevelSkillGoal.is_satisfied can read planner-projected
-        # XP progress without polluting the server snapshot.
-        new_delta = dict(state.projected_skill_xp_delta)
-        stats = game_data.item_stats(self.code)
-        if stats is not None and stats.crafting_skill is not None:
-            new_delta[stats.crafting_skill] = (
-                new_delta.get(stats.crafting_skill, 0) + produced
-            )
-
+        # real API call returns the updated server values. Crafting does NOT
+        # raise skill levels in-search either; the planner-native skill grind is
+        # a separate LevelSkill action leg.
         return dataclasses.replace(
             state,
             x=dest[0],
@@ -104,7 +96,6 @@ class CraftAction(Action):
             inventory=new_inventory,
             cooldown_expires=None,
             task_progress=new_progress,
-            projected_skill_xp_delta=new_delta,
         )
 
     def cost(self, state: WorldState, game_data: GameData,

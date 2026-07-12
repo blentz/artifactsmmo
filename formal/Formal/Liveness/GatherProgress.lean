@@ -1,12 +1,13 @@
 /-
   Formal.Liveness.GatherProgress
 
-  Phase-19c deliverable. Models `GatherAction.is_applicable` and
-  `GatherAction.apply` from `src/artifactsmmo_cli/ai/actions/gathering.py`
-  and proves that, on every productive Gather (one with a skill
-  requirement, where the active LevelSkillGoal's target xp strictly
-  exceeds the projected skill xp delta), the lex measure strictly
-  decreases.
+  Models the abstract grind rung `.gather` (a single skill-raising step) and
+  proves that, on every productive Gather (one with a skill requirement, where
+  the target skill LEVEL strictly exceeds the currently-tracked skill level),
+  the lex measure strictly decreases. The rung raises the tracked skill LEVEL
+  by one — the single-level abstraction of the planner-native `LevelSkill`
+  action grind. (Production `GatherAction.apply` itself does not level a skill
+  per action; this liveness lemma pins the modeled grind's monotone descent.)
 
   ## Production reference (verified 2026-05-30 against gathering.py:40)
 
@@ -16,27 +17,27 @@
     * if `skill_req = (skill, level)` is present:
         `state.skills.get(skill, 1) >= level`
 
-  `apply(state, gd)`:
+  `apply` (modeled grind rung):
     * inventory[drop_item] += 1                  (inventoryUsed += 1)
     * if `skill_req` present:
-        projected_skill_xp_delta[skill_name] += 1
+        trackedSkillLevel += 1  (single-level abstraction of the grind)
     * (x, y), cooldown_expires updated — irrelevant to the measure
 
   Note `apply` does NOT increment `task_progress`. See the production
   comment at `gathering.py:59`: only `TaskTradeAction` advances task
   progress, because the server only counts items when DELIVERED to the
   taskmaster. Modelling Gather as +taskProgress is the bug that motivated
-  splitting `projected_skill_xp_delta` from the server-snapshot baseline.
+  keeping the skill-progress slot ABOVE `bankPressure` in the measure.
 
   ## Load-bearing hypotheses on the headline lemma — HONEST disclosure
 
     * `happ`  — `gatherIsApplicable s skillReq minFree = true`. Carried
        for caller parity; the proof body uses the measure-arithmetic
        hypotheses directly.
-    * `hprog` — `s.targetSkillXp > s.projectedSkillXpDelta`. The gather is
-       PRODUCTIVE: the active LevelSkillGoal still has room to advance.
-       Without this, `targetSkillXp - (delta + 1)` and `targetSkillXp -
-       delta` are both zero (Nat saturation) and the measure does not
+    * `hprog` — `s.targetSkillLevel > s.trackedSkillLevel`. The grind is
+       PRODUCTIVE: the tracked skill level is still below its target.
+       Without this, `targetSkillLevel - (tracked + 1)` and `targetSkillLevel -
+       tracked` are both zero (Nat saturation) and the measure does not
        decrease.
     * `hskill` — `skill.isSome`. When no skill requirement exists (e.g.
        the tutorial resource at L1), Gather only grows inventory and the
@@ -73,10 +74,10 @@ def gatherIsApplicable
 def gatherApply (s : State) (_drop : String) (skill : Option String) : State :=
   { s with
       inventoryUsed         := s.inventoryUsed + 1
-      projectedSkillXpDelta :=
+      trackedSkillLevel :=
         match skill with
-        | none   => s.projectedSkillXpDelta
-        | some _ => s.projectedSkillXpDelta + 1 }
+        | none   => s.trackedSkillLevel
+        | some _ => s.trackedSkillLevel + 1 }
 
 /-! ## Aux: `gatherApply` preserves higher-priority slots -/
 
@@ -96,8 +97,8 @@ def gatherApply (s : State) (_drop : String) (skill : Option String) : State :=
     (gatherApply s d sk).taskProgress = s.taskProgress := by
   cases sk <;> rfl
 
-@[simp] theorem gatherApply_targetSkillXp (s : State) (d : String) (sk : Option String) :
-    (gatherApply s d sk).targetSkillXp = s.targetSkillXp := by
+@[simp] theorem gatherApply_targetSkillLevel (s : State) (d : String) (sk : Option String) :
+    (gatherApply s d sk).targetSkillLevel = s.targetSkillLevel := by
   cases sk <;> rfl
 
 /-! ## Headline progress lemma -/
@@ -109,7 +110,7 @@ set_option linter.unusedVariables false
 
   Load-bearing hypotheses (honest disclosure — see module docstring):
     * `happ`   — applicability guard, carried for parity.
-    * `hprog`  — `s.targetSkillXp > s.projectedSkillXpDelta` — the
+    * `hprog`  — `s.targetSkillLevel > s.trackedSkillLevel` — the
        LevelSkillGoal still has room. Without this, slot 4 saturates.
     * `hskill` — `skill.isSome`. Skill-less resources don't witness
        progress (out of scope).
@@ -123,7 +124,7 @@ theorem gather_decreases_measure
     (s : State) (skillReq : Option (String × Nat)) (minFree : Nat)
     (drop : String) (skill : Option String)
     (happ   : gatherIsApplicable s skillReq minFree = true)
-    (hprog  : s.targetSkillXp > s.projectedSkillXpDelta)
+    (hprog  : s.targetSkillLevel > s.trackedSkillLevel)
     (hskill : skill.isSome) :
     measureLt (Measure.measure (gatherApply s drop skill))
               (Measure.measure s) := by
@@ -132,7 +133,7 @@ theorem gather_decreases_measure
   | none      => simp [Option.isSome] at hskill
   | some name =>
     -- Slots 1-3 unchanged because gatherApply only touches inventoryUsed
-    -- and projectedSkillXpDelta.
+    -- and trackedSkillLevel.
     have hLevel :
         (Measure.measure (gatherApply s drop (some name))).levelDeficit
           = (Measure.measure s).levelDeficit := by
@@ -145,13 +146,13 @@ theorem gather_decreases_measure
         (Measure.measure (gatherApply s drop (some name))).taskCycles
           = (Measure.measure s).taskCycles := by
       unfold Measure.measure; rfl
-    -- Slot 4: skillXpDeficitProjected = targetSkillXp - (delta + 1) <
-    --                                   targetSkillXp - delta
+    -- Slot 4: skillXpDeficitProjected = targetSkillLevel - (delta + 1) <
+    --                                   targetSkillLevel - delta
     have hSkill :
         (Measure.measure (gatherApply s drop (some name))).skillXpDeficitProjected
           < (Measure.measure s).skillXpDeficitProjected := by
-      show s.targetSkillXp - (s.projectedSkillXpDelta + 1)
-            < s.targetSkillXp - s.projectedSkillXpDelta
+      show s.targetSkillLevel - (s.trackedSkillLevel + 1)
+            < s.targetSkillLevel - s.trackedSkillLevel
       omega
     exact measureLt_of_skillXpDeficit_dec hLevel hXp hTask hSkill
 

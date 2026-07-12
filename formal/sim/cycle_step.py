@@ -46,8 +46,8 @@ class CycleState:
     max_hp: int
     task_type: str | None
     task_code: str | None
-    projected_skill_xp_delta: int
-    target_skill_xp: int
+    tracked_skill_level: int
+    target_skill_level: int
     gold: int
     bank_accessible: bool
     bank_unlock_monster_present: bool

@@ -50,8 +50,8 @@ def inertLadderState : State where
   maxHp := 100
   taskType := none
   taskCode := none
-  projectedSkillXpDelta := 0
-  targetSkillXp := 0
+  trackedSkillLevel := 0
+  targetSkillLevel := 0
   gold := 0
   bankAccessible := false
   bankUnlockMonsterPresent := false

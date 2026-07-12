@@ -206,38 +206,6 @@ class TestCraftActionApplyYield:
 
         assert new_state.task_progress == 3  # 3 runs × 1
 
-    def test_apply_yield2_xp_proxy_uses_produced(self):
-        """projected_skill_xp_delta advances by runs×Y (prior path)."""
-        gd = _make_crafting_game_data(
-            "potion", {"herb": 1}, craft_yield_value=2,
-            crafting_skill="alchemy",
-        )
-        state = make_state(
-            inventory={"herb": 10},
-            skills={"alchemy": 1},
-        )
-        action = CraftAction(code="potion", quantity=3)
-
-        new_state = action.apply(state, gd)
-
-        assert new_state.projected_skill_xp_delta.get("alchemy", 0) == 6  # 3×2
-
-    def test_apply_yield1_xp_proxy_unchanged(self):
-        """Y=1: xp proxy advances by quantity (same as before)."""
-        gd = _make_crafting_game_data(
-            "copper_dagger", {"copper_ore": 6}, craft_yield_value=1,
-            crafting_skill="weaponcrafting",
-        )
-        state = make_state(
-            inventory={"copper_ore": 18},
-            skills={"weaponcrafting": 1},
-        )
-        action = CraftAction(code="copper_dagger", quantity=3)
-
-        new_state = action.apply(state, gd)
-
-        assert new_state.projected_skill_xp_delta.get("weaponcrafting", 0) == 3  # 3×1
-
     def test_apply_ingredient_consumption_unchanged(self):
         """Ingredient consumption is per-run (mat_qty × quantity), unaffected by yield."""
         gd = _make_crafting_game_data("potion", {"herb": 2}, craft_yield_value=2)

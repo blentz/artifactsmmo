@@ -9,9 +9,10 @@ of the four Tier-1 Server axioms used by `FightProgress`, `GatherProgress`,
                      monsters-task. (Mirrors `FightAction.apply` / the Lean
                      `fightApply`.)
   * Server.gather  — adds one drop unit to inventory; if the resource has a
-                     skill requirement, `projected_skill_xp_delta[skill]`
-                     advances by 1. (Mirrors `GatherAction.apply` /
-                     `gatherApply`.)
+                     skill requirement, the tracked skill LEVEL `skills[skill]`
+                     advances by 1 (single-level abstraction of the modeled
+                     grind rung — mirrors the Lean `.gather` raising
+                     `trackedSkillLevel`).
   * Server.deposit — every `(code, qty)` selected by `select_bank_deposits`
                      is moved out of inventory into the bank. (Mirrors
                      `DepositAllAction.apply` / `depositApply`.)
@@ -74,17 +75,18 @@ class FakeServer:
         return self._state
 
     def gather(self, drop_item: str, skill_name: str | None) -> WorldState:
-        """Server.gather axiom: +1 drop_item, skill delta +1 iff skill_name."""
+        """Server.gather axiom: +1 drop_item, tracked skill LEVEL +1 iff
+        skill_name (single-level abstraction of the modeled grind rung)."""
         s = self._state
         new_inventory = dict(s.inventory)
         new_inventory[drop_item] = new_inventory.get(drop_item, 0) + 1
-        new_delta = dict(s.projected_skill_xp_delta)
+        new_skills = dict(s.skills)
         if skill_name is not None:
-            new_delta[skill_name] = new_delta.get(skill_name, 0) + 1
+            new_skills[skill_name] = new_skills.get(skill_name, 1) + 1
         self._state = dataclasses.replace(
             s,
             inventory=new_inventory,
-            projected_skill_xp_delta=new_delta,
+            skills=new_skills,
             cooldown_expires=None,
         )
         return self._state

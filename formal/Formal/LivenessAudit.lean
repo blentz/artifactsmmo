@@ -494,7 +494,7 @@ open Formal.Liveness.RichApplyConsistency
 #print axioms equip_inventoryUsed_invariant
 #print axioms unequip_inventoryUsed_invariant
 #print axioms move_inventoryUsed_invariant
-#print axioms gather_projectedSkillXpDelta_advances
+#print axioms gather_trackedSkillLevel_advances
 #print axioms completeTask_inventoryUsed_invariant
 #print axioms npcSell_inventoryUsed_invariant
 

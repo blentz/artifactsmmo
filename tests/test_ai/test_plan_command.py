@@ -194,7 +194,7 @@ def test_plan_command_passes_and_prints_simulated_state(capsys):
                                   desired_state={}, ranking=[]),
         selected_goal=None, plan=[], goals_tried=[],
         simulated_doomed=("GrindCharacterXP(green_slime)",),
-        simulated_committed="ReachSkillLevel(jewelrycrafting)")
+        simulated_committed="ReachSkill(jewelrycrafting->20)")
     with patch.object(plan_cmd, "check_mutation_lock",
                       return_value=MagicMock(state="clear")):
         with patch.object(plan_cmd.Config, "from_token_file", return_value=MagicMock()):
@@ -207,14 +207,14 @@ def test_plan_command_passes_and_prints_simulated_state(capsys):
                     plan_cmd.plan(character="hero", learn=False, learn_db=None,
                                   refresh_game_data=False,
                                   doom=["GrindCharacterXP(green_slime)"],
-                                  committed="ReachSkillLevel(jewelrycrafting)")
+                                  committed="ReachSkill(jewelrycrafting->20)")
     assert player.plan_once.call_args.kwargs == {
         "doomed": ["GrindCharacterXP(green_slime)"],
-        "committed": "ReachSkillLevel(jewelrycrafting)"}
+        "committed": "ReachSkill(jewelrycrafting->20)"}
     out = capsys.readouterr().out
     assert "SIMULATED" in out
     assert "GrindCharacterXP(green_slime)" in out
-    assert "ReachSkillLevel(jewelrycrafting)" in out
+    assert "ReachSkill(jewelrycrafting->20)" in out
 
 
 def test_plan_command_empty_plan_branch(capsys):

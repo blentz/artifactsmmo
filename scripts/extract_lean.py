@@ -413,20 +413,6 @@ MODULES: tuple[ModuleSpec, ...] = (
         functions=("tool_value_pure",),
     ),
     ModuleSpec(
-        source="src/artifactsmmo_cli/ai/tiers/skill_target_curve.py",
-        output=f"{GENERATED_DIR}/SkillTargetCurve.lean",
-        core_name="SkillTargetCurve",
-        functions=("skill_curve_target_pure",),
-        structures=("SkillItem",),
-    ),
-    ModuleSpec(
-        source="src/artifactsmmo_cli/ai/tiers/next_tier_cap.py",
-        output=f"{GENERATED_DIR}/NextTierCap.lean",
-        core_name="NextTierCap",
-        functions=("next_tier_cap_pure", "next_tier_dampened_pure"),
-        structures=("SkillItem",),  # SkillItem imported from skill_target_curve; emit a namespaced copy
-    ),
-    ModuleSpec(
         source="src/artifactsmmo_cli/ai/tiers/skill_grind_selection.py",
         output=f"{GENERATED_DIR}/SkillGrindSelection.lean",
         core_name="SkillGrindSelection",
@@ -2148,8 +2134,7 @@ def _extract_constants(spec: ModuleSpec, tree: ast.Module) -> tuple[list[str], d
 def _resolve_imported_class(tree: ast.Module, name: str) -> ast.ClassDef | None:
     """Locate a `@dataclass` `name` that this module IMPORTS from a sibling
     module (`from artifactsmmo_cli...sub import name`) so a registered structure
-    reused across modules (e.g. `SkillItem`, defined in `skill_target_curve` and
-    imported by `next_tier_cap`) can be emitted as a namespaced copy. Follows the
+    reused across modules can be emitted as a namespaced copy. Follows the
     import to the sibling source file under `src/` and returns its ClassDef."""
     for node in tree.body:
         if not isinstance(node, ast.ImportFrom) or node.module is None:

@@ -108,9 +108,6 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @pickslot_empty_fills         -- empty slot + candidate ⇒ filled with argmax
 #check @pickslot_no_candidates_keeps -- no feasible candidate ⇒ slot left as-is
 #check @weapon_score_nonneg          -- WScore ≥ 0 (the clamp earns this)
--- SkillTargetCurve required roles (recipe-aware skill-target curve over Int):
-#check @Formal.SkillTargetCurve.curve_le_max               -- target ≤ maxSkill (given 0 ≤ maxSkill)
-#check @Formal.SkillTargetCurve.curve_monotone_in_char_level -- ↑char level never lowers the target
 -- SkillGrindSelection required roles (recipe-aware skill-grind target selector):
 #check @Formal.SkillGrindSelection.grind_same_skill -- non-empty result is a same-skill candidate
 #check @Formal.SkillGrindSelection.grind_in_level   -- selected candidate is in level

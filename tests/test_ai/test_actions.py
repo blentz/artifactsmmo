@@ -388,27 +388,6 @@ class TestGatherAction:
         new_state = action.apply(state, gd)
         assert new_state.inventory.get("copper", 0) == 1
 
-    def test_apply_increments_projected_skill_xp_delta(self):
-        """GatherAction.apply records +1 projected XP for the resource's
-        gathering skill, in the NEW `projected_skill_xp_delta` field (NOT in
-        `skill_xp`, which is the server-snapshot baseline)."""
-        action = GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]))
-        gd = make_game_data(resource_skills={"copper_rocks": ("mining", 1)})
-        gd._resource_drops = {"copper_rocks": "copper_ore"}
-        state = make_state(x=0, y=0, inventory={})
-        new_state = action.apply(state, gd)
-        assert new_state.projected_skill_xp_delta.get("mining", 0) == 1
-
-    def test_apply_accumulates_projected_xp_across_gathers(self):
-        """Repeated apply accumulates the projected delta (plan-path local)."""
-        action = GatherAction(resource_code="copper_rocks", locations=frozenset([(2, 0)]))
-        gd = make_game_data(resource_skills={"copper_rocks": ("mining", 1)})
-        gd._resource_drops = {"copper_rocks": "copper_ore"}
-        state = make_state(x=0, y=0, inventory={}, inventory_max=20,
-                           projected_skill_xp_delta={"mining": 4})
-        new_state = action.apply(state, gd)
-        assert new_state.projected_skill_xp_delta["mining"] == 5
-
 
 class TestDepositAllAction:
     def test_applicable_with_items(self):
@@ -574,7 +553,6 @@ class TestCraftAction:
         new_state = action.apply(state, gd)
         assert new_state.inventory["copper_dagger"] == 2
         assert new_state.inventory.get("copper_ore", 0) == 0
-        assert new_state.projected_skill_xp_delta["weaponcrafting"] == 2
 
     def test_not_applicable_when_skill_below_recipe_gate(self):
         """Skill below the recipe's crafting_level blocks the craft even with
@@ -656,46 +634,6 @@ class TestCraftAction:
         )
         new_state = action.apply(state, gd)
         assert new_state.skill_xp["alchemy"] == 777
-
-    def test_apply_increments_projected_skill_xp_delta_by_quantity(self):
-        """CraftAction.apply records +quantity projected XP for the recipe's
-        crafting skill, in the NEW `projected_skill_xp_delta` field (NOT in
-        `skill_xp`, the server-snapshot baseline)."""
-        action = CraftAction(code="copper_dagger", quantity=3, workshop_location=(3, 0))
-        stats = ItemStats(
-            code="copper_dagger", level=1, type_="weapon",
-            crafting_skill="weaponcrafting", crafting_level=1,
-        )
-        state = make_state(
-            x=0, y=0, skills={"weaponcrafting": 5},
-            inventory={"copper_ore": 18},
-        )
-        gd = make_game_data(
-            workshop_locs={"weaponcrafting": (3, 0)},
-            item_stats={"copper_dagger": stats},
-            recipes={"copper_dagger": {"copper_ore": 6}},
-        )
-        new_state = action.apply(state, gd)
-        assert new_state.projected_skill_xp_delta["weaponcrafting"] == 3
-
-    def test_apply_accumulates_projected_xp_across_crafts(self):
-        action = CraftAction(code="copper_dagger", quantity=2, workshop_location=(3, 0))
-        stats = ItemStats(
-            code="copper_dagger", level=1, type_="weapon",
-            crafting_skill="weaponcrafting", crafting_level=1,
-        )
-        state = make_state(
-            x=0, y=0, skills={"weaponcrafting": 5},
-            inventory={"copper_ore": 12},
-            projected_skill_xp_delta={"weaponcrafting": 4},
-        )
-        gd = make_game_data(
-            workshop_locs={"weaponcrafting": (3, 0)},
-            item_stats={"copper_dagger": stats},
-            recipes={"copper_dagger": {"copper_ore": 6}},
-        )
-        new_state = action.apply(state, gd)
-        assert new_state.projected_skill_xp_delta["weaponcrafting"] == 6
 
 
 def _gd_with_utility_heal(code: str, hp_restore: int) -> GameData:

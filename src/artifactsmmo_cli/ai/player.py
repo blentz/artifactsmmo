@@ -57,7 +57,6 @@ from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.projections import PathPlan, cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.scalarizer import _max_sell_back_price
-from artifactsmmo_cli.ai.learning.skill_xp_curve import SkillXpCurve
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.level_skill_expand import next_grind_goal
 from artifactsmmo_cli.ai.loadout_profiles import (
@@ -1732,15 +1731,6 @@ class GamePlayer:
         assert self.game_data is not None
         if combat_monster is None:
             combat_monster = self._winnable_farm_target()
-        # Build per-skill SkillXpCurve from observed learning history; empty
-        # dict if no history (no projection-based satisfaction available —
-        # LevelSkillGoal falls back to the server-snapshot path).
-        skill_xp_curves: dict[str, SkillXpCurve] = {}
-        if self.history is not None:
-            for skill in self.state.skills:
-                observed = self.history.skill_max_xp_observations(skill)
-                if observed:
-                    skill_xp_curves[skill] = SkillXpCurve(observed=observed)
         # CRAFT_RELIEF guard needs the long-term gear / tool targets so it
         # can score craftable-from-inventory candidates that advance the
         # equipment chain (not just the active task item).
@@ -1766,7 +1756,6 @@ class GamePlayer:
             # applies the full progression-reserve floor (same call the goal
             # makes inside should_expand_bank's inputs).
             gold_reserve=reserve_floor(self.state, self.game_data, None),
-            skill_xp_curves=skill_xp_curves,
             target_gear=target_gear,
             target_tools=target_tools,
             near_term_targets=near_term_targets,

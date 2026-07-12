@@ -39,7 +39,6 @@ CRAFT_PLAN_GEN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "craft_plan_gen.
 OPTIMIZE_LOADOUT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "optimize_loadout.py"
 GEAR_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_value.py"
 SKILL_XP_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "skill_xp_curve.py"
-SKILL_TARGET_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "skill_target_curve.py"
 SKILL_GRIND_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "skill_grind_selection.py"
 ACTION_FACTORY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "factory.py"
 RECIPE_CLOSURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recipe_closure.py"
@@ -864,65 +863,6 @@ SKILL_XP_CURVE_MUTATIONS = [
     ("skill_xp_curve: total drops last term (range -1)",
      "        return sum(self.required_xp(lvl) for lvl in range(current_level, target_level))",
      "        return sum(self.required_xp(lvl) for lvl in range(current_level, target_level - 1))"),
-]
-
-
-# skill_target_curve mutations -- pure-core anchors for skill_curve_target_pure.
-# Each substring is copied verbatim from skill_target_curve.py (indentation
-# included) so the mutation applies unambiguously; killed by the differential
-# test formal/diff/test_skill_target_curve_diff.py (mirrors the equipment_scoring
-# pure-core anchors).
-SKILL_TARGET_CURVE_MUTATIONS = [
-    # drop the lookahead window widening -- items that should be in range are
-    # excluded, lowering targets the diff test catches.
-    ("skill_target_curve: drop +lookahead window",
-     "                and it.item_level <= char_level + lookahead\n",
-     "                and it.item_level <= char_level\n"),
-    # drop the max-skill clamp -- a malformed craft_level > max leaks through;
-    # diff catches the unclamped value.
-    ("skill_target_curve: drop max_skill clamp",
-     "    if best > max_skill_level:\n        return max_skill_level\n",
-     "    if False:\n        return max_skill_level\n"),
-    # flip the running-max compare to <, under-targeting.
-    ("skill_target_curve: running max becomes running min",
-     "                and it.craft_level > best):\n",
-     "                and it.craft_level < best):\n"),
-]
-
-
-# next_tier_cap mutations -- pure-core anchors for next_tier_cap_pure and
-# next_tier_dampened_pure. Each substring is copied verbatim from
-# next_tier_cap.py (indentation included) so the mutation applies
-# unambiguously; killed by the differential test
-# formal/diff/test_next_tier_cap_diff.py.
-NEXT_TIER_CAP_SRC = ROOT / "src/artifactsmmo_cli/ai/tiers/next_tier_cap.py"
-
-NEXT_TIER_CAP_MUTATIONS = [
-    # drop the band lower bound -- items below floor slip through, raising the
-    # cap erroneously; the diff test catches the inflated target.
-    ("next_tier_cap: band lower bound dropped",
-     "                and floor <= it.item_level and it.item_level <= floor + 9\n",
-     "                and it.item_level <= floor + 9\n"),
-    # use current tier instead of next -- floor stays at char_level boundary,
-    # so the wrong band is scanned; diff catches the wrong cap.
-    ("next_tier_cap: wrong tier (current instead of next)",
-     "    floor: int = ((char_level // 10) + 1) * 10\n",
-     "    floor: int = (char_level // 10) * 10\n"),
-    # flip running max to min -- lowest craft_level wins instead of highest,
-    # under-targeting; diff catches the reduced cap.
-    ("next_tier_cap: running max becomes running min",
-     "                and it.craft_level > best):\n",
-     "                and it.craft_level < best):\n"),
-    # drop max_skill clamp -- craft_level above max leaks through unclamped;
-    # diff catches the overshooting value.
-    ("next_tier_cap: drop max_skill clamp",
-     "    if best > max_skill_level:\n        return max_skill_level\n",
-     "    if False:\n        return max_skill_level\n"),
-    # flip >= to > in dampened gate -- skill exactly at cap is not dampened,
-    # allowing unnecessary grind; diff catches the missed suppression.
-    ("next_tier_dampened: >= becomes >",
-     "    return next_tier_cap > 0 and current_skill >= next_tier_cap\n",
-     "    return next_tier_cap > 0 and current_skill > next_tier_cap\n"),
 ]
 
 
@@ -3925,31 +3865,6 @@ APPLY_CLAIM_MUTATIONS = [
 ]
 
 
-# projected_skill_xp_delta mutations -- the Phase-4 LevelSkillGoal predictability
-# fix. Each mutant either (a) drops the GatherAction.apply delta update so the
-# projected accumulator stays at 0 (LevelSkillGoal can never see plan-projected
-# satisfaction), (b) flips the += into a -= (corrupts the delta), or (c) drops
-# the projected-delta check in LevelSkillGoal.is_satisfied. Each killed by
-# `formal/diff/test_apply_baseline_diff.py::test_gather_increments_projected_skill_xp_delta`
-# (for a/b) or by the test_level_skill_goal projection tests (for c).
-GATHERING_APPLY_MUTATIONS = [
-    (
-        "gathering.apply: drop projected_skill_xp_delta update (no XP accumulation)",
-        "        new_delta = dict(state.projected_skill_xp_delta)\n"
-        "        skill_req = game_data.resource_skill_level(self.resource_code)\n"
-        "        if skill_req is not None:\n"
-        "            skill_name, _ = skill_req\n"
-        "            new_delta[skill_name] = new_delta.get(skill_name, 0) + 1",
-        "        new_delta = dict(state.projected_skill_xp_delta)",
-    ),
-    (
-        "gathering.apply: flip += to -= on projected delta",
-        "            new_delta[skill_name] = new_delta.get(skill_name, 0) + 1",
-        "            new_delta[skill_name] = new_delta.get(skill_name, 0) - 1",
-    ),
-]
-
-
 # cost_core mutations -- old strings matched to current cost_core.py text.
 # These attack the Phase-2 Dijkstra-optimality precondition: every
 # Action.cost(...) must return ≥ 0. Each mutation breaks the non-negativity
@@ -4497,16 +4412,6 @@ LIVENESS_MEASURE_MUTATIONS = [
      "    return a.as_tuple() > b.as_tuple()"),
 ]
 
-LIVENESS_GATHERING_MUTATIONS = [
-    # Negate the projected_skill_xp_delta increment: +1 -> 0. Gather no
-    # longer advances slot 4, so a productive Gather cycle (when no other
-    # slot moves) registers as "equal", and the planner-side state diverges
-    # from FakeServer's measure tuple — the differential fires twice.
-    ("liveness gathering: skill-delta +1 -> +0",
-     "            new_delta[skill_name] = new_delta.get(skill_name, 0) + 1",
-     "            new_delta[skill_name] = new_delta.get(skill_name, 0) + 0"),
-]
-
 # Phase 21d-2 — `_build_actions` mutations. Each drops a specific Action
 # class from the canonical action menu. The body moved verbatim to
 # `actions/factory.py::build_actions` (GamePlayer._build_actions delegates),
@@ -4646,8 +4551,6 @@ def _run_all_groups() -> int:
               "formal/diff/test_realizable_loadout_diff.py", survivors)
     run_group(SKILL_XP_CURVE_SRC, SKILL_XP_CURVE_MUTATIONS,
               "formal/diff/test_skill_xp_curve_diff.py", survivors)
-    run_group(SKILL_TARGET_CURVE_SRC, SKILL_TARGET_CURVE_MUTATIONS,
-              "formal/diff/test_skill_target_curve_diff.py", survivors)
     run_group(SKILL_GRIND_SELECTION_SRC, SKILL_GRIND_SELECTION_MUTATIONS,
               "formal/diff/test_skill_grind_selection_diff.py", survivors)
     run_group(LEVEL_SKILL_ACTION_SRC, LEVEL_SKILL_ACTION_MUTATIONS,
@@ -4787,8 +4690,6 @@ def _run_all_groups() -> int:
               "formal/diff/test_ladder_fires_diff.py", survivors)
     run_group(MEANS_SRC, LADDER_MEANS_FIRES_MUTATIONS,
               "formal/diff/test_ladder_fires_diff.py", survivors)
-    run_group(GATHERING_APPLY_SRC, GATHERING_APPLY_MUTATIONS,
-              "formal/diff/test_apply_baseline_diff.py", survivors)
     run_group(WITHDRAW_ITEM_SRC, WITHDRAW_ITEM_MUTATIONS,
               "formal/diff/test_inventory_chain_safe_diff.py", survivors)
     # SLOT term isn't mutation-gated by the diff test above (its fixtures all
@@ -4865,8 +4766,6 @@ def _run_all_groups() -> int:
               "formal/diff/test_goal_system_value_diff.py", survivors)
     # Phase-19d — Tier-1 liveness differential.
     run_group(MEASURE_SRC, LIVENESS_MEASURE_MUTATIONS,
-              "formal/diff/test_local_progress_diff.py", survivors)
-    run_group(GATHERING_APPLY_SRC, LIVENESS_GATHERING_MUTATIONS,
               "formal/diff/test_local_progress_diff.py", survivors)
     run_group(APPLY_REST_SRC, LIVENESS_REST_MUTATIONS,
               "formal/diff/test_local_progress_diff.py", survivors)
@@ -4948,8 +4847,6 @@ def _run_all_groups() -> int:
     # picker-consistency test and the Task-1 regression test.
     run_group(APPLY_FIGHT_SRC, FIGHT_APPLICABILITY_MUTATIONS,
               "tests/test_ai/test_no_combat_deadlock.py", survivors)
-    run_group(NEXT_TIER_CAP_SRC, NEXT_TIER_CAP_MUTATIONS,
-              "formal/diff/test_next_tier_cap_diff.py", survivors)
     run_group(MONSTER_CATALOG_SRC, XP_POSITIVE_MUTATIONS,
               "formal/diff/test_xp_positive_diff.py", survivors)
     run_group(MONSTER_CATALOG_SRC, XP_VALUE_MUTATIONS,

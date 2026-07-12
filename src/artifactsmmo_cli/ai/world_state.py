@@ -92,15 +92,6 @@ class WorldState:
     (only BuyBankExpansionAction does so today); every other apply preserves
     it automatically via `dataclasses.replace`."""
     skill_xp: dict[str, int] = field(default_factory=dict)
-    projected_skill_xp_delta: dict[str, int] = field(default_factory=dict)
-    """Per-plan-path projected skill XP delta accumulated by Gather/Craft.apply.
-    This is NOT a server-snapshot baseline field — the planner mutates it
-    locally so LevelSkillGoal.is_satisfied can register that the simulated plan
-    has accumulated enough XP to plausibly cross a level boundary. It is OUTSIDE
-    the 8-field ApplyBaseline contract (see ApplyBaseline.lean header) by
-    design; the contract over `skill_xp` (server snapshot) is unaffected.
-    Initialized to `{}` by `from_character_schema` — never seeded from the API
-    schema."""
     wisdom: int = 0
     """Wisdom stat — factors into documented XP-per-kill formula
     (+0.1% XP per wisdom point). Defaults 0 so older WorldState

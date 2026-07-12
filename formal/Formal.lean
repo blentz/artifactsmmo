@@ -70,12 +70,8 @@ import Formal.Extracted.Bridges4
 import Formal.Extracted.Bridges5
 import Formal.Extracted.Bridges6
 import Formal.Extracted.Bridges7
-import Formal.Extracted.Bridges8
 import Formal.Extracted.Bridges9
-import Formal.Extracted.Bridges10
-import Formal.Extracted.NextTierCap
 import Formal.Extracted.StrategicValue
-import Formal.Extracted.SkillTargetCurve
 import Formal.Extracted.SkillGrindSelection
 import Formal.InventoryChainSafe
 import Formal.Contracts
@@ -165,8 +161,6 @@ import Formal.Liveness.RichApplyConsistency
 import Formal.Liveness.LearningStoreBridge
 import Formal.Liveness.MetaGoalDispatch
 import Formal.Liveness.StateFieldGapSemantics
-import Formal.SkillTargetCurve
-import Formal.NextTierCap
 import Formal.XpPositive
 import Formal.XpValue
 import Formal.SkillGrindSelection

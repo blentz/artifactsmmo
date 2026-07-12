@@ -17,7 +17,6 @@ from artifactsmmo_cli.ai.craft_relief import (
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_caps import overstocked_items
 from artifactsmmo_cli.ai.inventory_profile import inventory_profile
-from artifactsmmo_cli.ai.learning.skill_xp_curve import SkillXpCurve
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
@@ -60,12 +59,6 @@ class SelectionContext:
     # (which imports back into the tiers package — circular). Default 0 =
     # reserve-free (legacy fixtures keep their old semantics).
     gold_reserve: int = 0
-    # Learned SkillXpCurve per skill, sourced from history. Used by
-    # LevelSkillGoal to convert `projected_skill_xp_delta` into a real
-    # "would cross the level threshold" satisfaction check; with an empty
-    # entry the projection-based satisfaction is inert and only the
-    # server-snapshot path applies.
-    skill_xp_curves: dict[str, SkillXpCurve] = field(default_factory=dict)
     # Long-term gear and tool codes — fed by player from the
     # CharacterObjective so the CRAFT_RELIEF guard can score gear/tool
     # craft candidates alongside the active task item. Empty fallback

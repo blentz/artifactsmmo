@@ -27,7 +27,7 @@
       — the perception invariant disclosed in `FightProgress`. Discharge:
         Phase 22 cycle model.
     * `gather skillReq minFree drop skill`:
-        `s.targetSkillXp > s.projectedSkillXpDelta ∧ skill.isSome`
+        `s.targetSkillLevel > s.trackedSkillLevel ∧ skill.isSome`
       — productivity guard. Discharge: planner-side (a LevelSkillGoal is
         active and a skill-bearing resource was selected).
     * `deposit accessible nonempty depositCount`:
@@ -87,7 +87,7 @@ def actionIsApplicable (s : State) : ProgressAction → Bool
     concrete proposition whose discharge is documented above. -/
 def validInvariants (s : State) : ProgressAction → Prop
   | .fight _ _           => s.level < 50 ∧ s.xp < xpToNextLevel s.level
-  | .gather _ _ _ skill  => s.targetSkillXp > s.projectedSkillXpDelta
+  | .gather _ _ _ skill  => s.targetSkillLevel > s.trackedSkillLevel
                             ∧ skill.isSome
   | .deposit _ _ n       => n > 0 ∧ s.inventoryUsed ≥ n
                             ∧ s.inventoryUsed > bankPressureThreshold s.inventoryMax
@@ -124,7 +124,7 @@ theorem step_decreases_measure
     obtain ⟨hlvl, hxpInv⟩ := hinv
     exact fight_decreases_measure s ml matchesTask happ hlvl hxpInv
   | gather skillReq minFree drop skill =>
-    -- hinv : s.targetSkillXp > s.projectedSkillXpDelta ∧ skill.isSome
+    -- hinv : s.targetSkillLevel > s.trackedSkillLevel ∧ skill.isSome
     obtain ⟨hprog, hskill⟩ := hinv
     exact gather_decreases_measure s skillReq minFree drop skill
             happ hprog hskill

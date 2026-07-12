@@ -323,10 +323,10 @@ def test_anti_grind_boost_skill_gated_guard_does_not_fire():
     - Only the skill gate (alchemy=5 < crafting_level=20) blocks it.
 
     The anti-grind discipline is enforced exclusively by best_boost_potion:
-    it gates by craftable-now, never schedules a ReachSkillLevel to reach
-    the boost's skill requirement.  Guard silence means no CraftPotionsGoal
-    is ever queued for the boost, so no planner step can emit ReachSkillLevel
-    for the boost crafting skill.
+    it gates by craftable-now, never schedules a skill grind to reach the
+    boost's skill requirement.  Guard silence means no CraftPotionsGoal is
+    ever queued for the boost, so no planner step can grind (via a LevelSkill
+    leg) the boost crafting skill.
     """
     gd = _gd_boost_skill_gated()
     state = _state_heals_stocked_low_alchemy()

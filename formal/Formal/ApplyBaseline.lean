@@ -45,16 +45,6 @@ untouched syntactically, and the preservation theorems are 1-line `rfl`-style.
 The headline `all_actions_preserve_baseline` enumerates the union.
 
 Lean core only — no mathlib. Axioms ⊆ {propext, Classical.choice, Quot.sound}.
-
-# Phase-4 addendum: `projected_skill_xp_delta`
-
-A NEW Python field `WorldState.projected_skill_xp_delta : dict[str, int]` was
-added (post the 8-field baseline contract) as a per-plan-path XP accumulator
-for `LevelSkillGoal.is_satisfied`. It is intentionally OUTSIDE the modeled
-baseline: it is NOT a server-snapshot field, and Gather/Craft.apply DO mutate
-it (by design — the planner needs projection-based satisfaction). It IS modeled
-as a mutable field in `WorldStateLean` below so the Gather/Craft apply
-functions can reflect the Python mutation.
 -/
 
 namespace Formal.ApplyBaseline
@@ -80,7 +70,6 @@ structure WorldStateLean where
   bank_gold                : Option Int
   pending_items            : Option (List (String × String))
   bank_capacity            : Option Nat
-  projected_skill_xp_delta : List (String × Int)
   -- the 8 baseline stat fields (server-snapshot, must be preserved)
   attack          : List (String × Nat)
   dmg             : Int
@@ -189,11 +178,11 @@ theorem teleportApply_preserves_baseline (s : WorldStateLean)
 `GatherAction`, `NpcBuyAction`, `WithdrawGoldAction`, `WithdrawItemAction`,
 `ClaimPendingItemAction`. Inventory (or gold) grows; cooldown cleared. -/
 
-/-- `GatherAction.apply` model: inventory grows by one drop; projected delta
-    increments. Position move + cooldown clear also occur in the Python source. -/
+/-- `GatherAction.apply` model: inventory grows by one drop. Position move +
+    cooldown clear also occur in the Python source. -/
 def gatherApply (s : WorldStateLean) (newInv : List (String × Nat))
-    (newDelta : List (String × Int)) (newX newY : Int) : WorldStateLean :=
-  { s with inventory := newInv, projected_skill_xp_delta := newDelta
+    (newX newY : Int) : WorldStateLean :=
+  { s with inventory := newInv
          , x := newX, y := newY, cooldown_expires := none }
 
 /-- `NpcBuyAction.apply` model: gold decrements, inventory grows; cooldown. -/
@@ -221,8 +210,8 @@ def claimApply (s : WorldStateLean) (newInv : List (String × Nat))
          , cooldown_expires := none }
 
 theorem gatherApply_preserves_baseline (s : WorldStateLean) (i : List (String × Nat))
-    (d : List (String × Int)) (x y : Int) :
-    preservesBaseline s (gatherApply s i d x y) := by
+    (x y : Int) :
+    preservesBaseline s (gatherApply s i x y) := by
   unfold preservesBaseline gatherApply
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
@@ -256,11 +245,11 @@ theorem claimApply_preserves_baseline (s : WorldStateLean)
 `DepositAllAction`, `UseConsumableAction`, `DeleteItemAction`. Inventory (or
 gold) shrinks; banking-style ones also bump bank_*. -/
 
-/-- `CraftAction.apply` model: inventory consumed/minted; projected delta bumped;
-    position moves to workshop; cooldown cleared. -/
+/-- `CraftAction.apply` model: inventory consumed/minted; position moves to
+    workshop; cooldown cleared. -/
 def craftApply (s : WorldStateLean) (newInv : List (String × Nat))
-    (newDelta : List (String × Int)) (newX newY : Int) : WorldStateLean :=
-  { s with inventory := newInv, projected_skill_xp_delta := newDelta
+    (newX newY : Int) : WorldStateLean :=
+  { s with inventory := newInv
          , x := newX, y := newY, cooldown_expires := none }
 
 /-- `RecycleAction.apply` model: inventory consumed, mats restored. -/
@@ -302,8 +291,8 @@ def deleteApply (s : WorldStateLean) (newInv : List (String × Nat)) : WorldStat
   { s with inventory := newInv, cooldown_expires := none }
 
 theorem craftApply_preserves_baseline (s : WorldStateLean)
-    (i : List (String × Nat)) (d : List (String × Int)) (x y : Int) :
-    preservesBaseline s (craftApply s i d x y) := by
+    (i : List (String × Nat)) (x y : Int) :
+    preservesBaseline s (craftApply s i x y) := by
   unfold preservesBaseline craftApply
   exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
@@ -525,7 +514,6 @@ inductive ModeledApply where
                       (newX newY : Int) : ModeledApply
   -- Family 2: inventory-mint
   | gather            (newInv : List (String × Nat))
-                      (newDelta : List (String × Int))
                       (newX newY : Int) : ModeledApply
   | npcBuy            (newGold : Int) (newInv : List (String × Nat))
                       (newX newY : Int) : ModeledApply
@@ -538,7 +526,6 @@ inductive ModeledApply where
                       (newPending : Option (List (String × String))) : ModeledApply
   -- Family 3: inventory-consume
   | craft             (newInv : List (String × Nat))
-                      (newDelta : List (String × Int))
                       (newX newY : Int) : ModeledApply
   | recycle           (newInv : List (String × Nat)) (newX newY : Int) : ModeledApply
   | npcSell           (newInv : List (String × Nat)) (newGold : Int)
@@ -586,12 +573,12 @@ def ModeledApply.run (a : ModeledApply) (s : WorldStateLean) : WorldStateLean :=
   | .moveSemantic x y               => moveSemanticApply s x y
   | .mapTransition                  => mapTransitionApply s
   | .teleport i x y                 => teleportApply s i x y
-  | .gather i d x y                 => gatherApply s i d x y
+  | .gather i x y                   => gatherApply s i x y
   | .npcBuy g i x y                 => npcBuyApply s g i x y
   | .withdrawGold g bg x y          => withdrawGoldApply s g bg x y
   | .withdrawItem i b x y           => withdrawItemApply s i b x y
   | .claim i p                      => claimApply s i p
-  | .craft i d x y                  => craftApply s i d x y
+  | .craft i x y                    => craftApply s i x y
   | .recycle i x y                  => recycleApply s i x y
   | .npcSell i g x y                => npcSellApply s i g x y
   | .depositGold g bg x y           => depositGoldApply s g bg x y
@@ -620,12 +607,12 @@ theorem all_actions_preserve_baseline (s : WorldStateLean) (a : ModeledApply) :
   | moveSemantic x y              => exact moveSemanticApply_preserves_baseline s x y
   | mapTransition                 => exact mapTransitionApply_preserves_baseline s
   | teleport i x y                => exact teleportApply_preserves_baseline s i x y
-  | gather i d x y                => exact gatherApply_preserves_baseline s i d x y
+  | gather i x y                  => exact gatherApply_preserves_baseline s i x y
   | npcBuy g i x y                => exact npcBuyApply_preserves_baseline s g i x y
   | withdrawGold g bg x y         => exact withdrawGoldApply_preserves_baseline s g bg x y
   | withdrawItem i b x y          => exact withdrawItemApply_preserves_baseline s i b x y
   | claim i p                     => exact claimApply_preserves_baseline s i p
-  | craft i d x y                 => exact craftApply_preserves_baseline s i d x y
+  | craft i x y                   => exact craftApply_preserves_baseline s i x y
   | recycle i x y                 => exact recycleApply_preserves_baseline s i x y
   | npcSell i g x y               => exact npcSellApply_preserves_baseline s i g x y
   | depositGold g bg x y          => exact depositGoldApply_preserves_baseline s g bg x y
@@ -668,10 +655,9 @@ theorem move_mutates_only_declared_fields (s : WorldStateLean) (newX newY : Int)
     s'.task_code = s.task_code ∧ s'.task_type = s.task_type ∧
     s'.task_progress = s.task_progress ∧ s'.task_total = s.task_total ∧
     s'.bank_items = s.bank_items ∧ s'.bank_gold = s.bank_gold ∧
-    s'.pending_items = s.pending_items ∧ s'.bank_capacity = s.bank_capacity ∧
-    s'.projected_skill_xp_delta = s.projected_skill_xp_delta := by
+    s'.pending_items = s.pending_items ∧ s'.bank_capacity = s.bank_capacity := by
   unfold moveApply
-  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- Rest only mutates (hp, cooldown_expires). All other non-baseline fields preserved. -/
 theorem rest_mutates_only_declared_fields (s : WorldStateLean) :
@@ -709,10 +695,9 @@ theorem equip_mutates_only_declared_fields (s : WorldStateLean)
     s'.task_code = s.task_code ∧ s'.task_type = s.task_type ∧
     s'.task_progress = s.task_progress ∧ s'.task_total = s.task_total ∧
     s'.bank_items = s.bank_items ∧ s'.bank_gold = s.bank_gold ∧
-    s'.pending_items = s.pending_items ∧ s'.bank_capacity = s.bank_capacity ∧
-    s'.projected_skill_xp_delta = s.projected_skill_xp_delta := by
+    s'.pending_items = s.pending_items ∧ s'.bank_capacity = s.bank_capacity := by
   unfold equipApply
-  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- Claim only mutates (inventory, pending_items, cooldown). -/
 theorem claim_mutates_only_declared_fields (s : WorldStateLean)
@@ -724,10 +709,9 @@ theorem claim_mutates_only_declared_fields (s : WorldStateLean)
     s'.task_code = s.task_code ∧ s'.task_type = s.task_type ∧
     s'.task_progress = s.task_progress ∧ s'.task_total = s.task_total ∧
     s'.bank_items = s.bank_items ∧ s'.bank_gold = s.bank_gold ∧
-    s'.bank_capacity = s.bank_capacity ∧
-    s'.projected_skill_xp_delta = s.projected_skill_xp_delta := by
+    s'.bank_capacity = s.bank_capacity := by
   unfold claimApply
-  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-- Fight only mutates (hp, inventory, task_progress, x, y, cooldown). Equipment,
     gold, max_hp, task_code/type/total, banking, pending all preserved. -/
@@ -739,10 +723,9 @@ theorem fight_mutates_only_declared_fields (s : WorldStateLean) (h : Nat)
     s'.task_code = s.task_code ∧ s'.task_type = s.task_type ∧
     s'.task_total = s.task_total ∧
     s'.bank_items = s.bank_items ∧ s'.bank_gold = s.bank_gold ∧
-    s'.pending_items = s.pending_items ∧ s'.bank_capacity = s.bank_capacity ∧
-    s'.projected_skill_xp_delta = s.projected_skill_xp_delta := by
+    s'.pending_items = s.pending_items ∧ s'.bank_capacity = s.bank_capacity := by
   unfold fightApply
-  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 /-! ## Non-vacuity witnesses
 
@@ -761,7 +744,6 @@ def witnessState : WorldStateLean :=
   , task_progress := 0, task_total := 0
   , bank_items := none, bank_gold := none
   , pending_items := none, bank_capacity := none
-  , projected_skill_xp_delta := []
   , attack          := [("fire", 30)]
   , dmg             := 15
   , dmg_elements    := [("fire", 10)]

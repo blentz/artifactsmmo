@@ -49,10 +49,10 @@ def restApply (s : State) : State := { s with hp := s.maxHp }
     (restApply s).taskTotal = s.taskTotal := rfl
 @[simp] theorem restApply_taskProgress (s : State) :
     (restApply s).taskProgress = s.taskProgress := rfl
-@[simp] theorem restApply_projectedSkillXpDelta (s : State) :
-    (restApply s).projectedSkillXpDelta = s.projectedSkillXpDelta := rfl
-@[simp] theorem restApply_targetSkillXp (s : State) :
-    (restApply s).targetSkillXp = s.targetSkillXp := rfl
+@[simp] theorem restApply_trackedSkillLevel (s : State) :
+    (restApply s).trackedSkillLevel = s.trackedSkillLevel := rfl
+@[simp] theorem restApply_targetSkillLevel (s : State) :
+    (restApply s).targetSkillLevel = s.targetSkillLevel := rfl
 @[simp] theorem restApply_inventoryUsed (s : State) :
     (restApply s).inventoryUsed = s.inventoryUsed := rfl
 @[simp] theorem restApply_inventoryMax (s : State) :

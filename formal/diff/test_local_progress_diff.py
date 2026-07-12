@@ -1,18 +1,24 @@
 """Differential test for Phase-19d Tier-1 local progress.
 
-Runs K cycles of Fight / Gather / Deposit / Rest against `FakeServer` AND
-the planner-side `Action.apply` projections. After every cycle, the
-Python-side `measure` tuple must satisfy lex-decrease OR level-up OR no-op.
-Zero "measure increased without level-up" is tolerated.
+Runs K cycles of Fight / Deposit / Rest against `FakeServer` AND the
+planner-side `Action.apply` projections. After every cycle, the Python-side
+`measure` tuple must satisfy lex-decrease OR level-up OR no-op. Zero "measure
+increased without level-up" is tolerated.
 
 This pins the Tier-1 Lean headline (`step_decreases_or_levels`) at the
 Python level — any divergence between the Lean axioms and the production
 `Action.apply` implementations surfaces as a regression.
 
+Gather is NOT exercised here: the skill-progress slot (slot 4) is now a
+skill-LEVEL deficit (`ReachSkillGoal.is_satisfied` reads `state.skills`), and
+production `GatherAction.apply` no longer advances any skill-progress signal
+(the planner-native grind is the `LevelSkill` action). The modeled grind
+rung's monotone descent is proven purely in Lean (`GatherProgress.lean`) and
+mirrored by the `FakeServer.gather` axiom (exercised by the no-deadlock diff).
+
 Mutation targets that this test KILLS:
   * `formal/sim/measure.py` — drop hpDeficit slot from lex.
   * `formal/sim/measure.py` — invert lex direction.
-  * `src/artifactsmmo_cli/ai/actions/gathering.py` — flip skill-delta +1 -> -1.
   * `src/artifactsmmo_cli/ai/actions/rest.py` — drop hp restoration.
 """
 
@@ -20,7 +26,6 @@ import dataclasses
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
-from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -35,10 +40,11 @@ def _xp_to_next_level(level: int) -> int:
     return 100 * max(1, level)
 
 
-# Tier-1 single-skill target the headline operates on (LevelSkillGoal in
-# `mining` to 5 — well above the per-cycle delta the differential applies).
+# Tier-1 single-skill target LEVEL the measure's slot 4 operates on. Set well
+# above the tracked skill level so the slot-4 deficit is a positive constant
+# (no action in this Fight/Deposit/Rest differential raises a skill level).
 _SKILL_NAME = "mining"
-_SKILL_TARGET = 10_000
+_SKILL_TARGET_LEVEL = 10_000
 
 
 def _slots() -> list[str]:
@@ -79,7 +85,6 @@ def _make_state() -> WorldState:
         initiative=0,
         wisdom=0,
         skill_xp={"mining": 0},
-        projected_skill_xp_delta={_SKILL_NAME: 0},
     )
 
 
@@ -114,8 +119,8 @@ def _state_measure(s: WorldState) -> Measure:
     return measure(
         s,
         xp_to_next_level=_xp_to_next_level(s.level),
-        target_skill_xp=_SKILL_TARGET,
-        projected_skill_xp_delta=s.projected_skill_xp_delta.get(_SKILL_NAME, 0),
+        target_skill_level=_SKILL_TARGET_LEVEL,
+        tracked_skill_level=s.skills.get(_SKILL_NAME, 1),
     )
 
 
@@ -129,17 +134,15 @@ def _measure_advance(prev: Measure, new: Measure) -> str:
 
 
 def _pick_action(state: WorldState, gd: GameData, cycle: int):
-    """Round-robin pick over the four Tier-1 actions; falls back to None when
+    """Round-robin pick over the three Tier-1 actions; falls back to None when
     no action is applicable, which the test classifies as a no-op."""
     fight = FightAction(monster_code="chicken",
                         locations=frozenset({(0, 1)}))
-    gather = GatherAction(resource_code="copper_rocks",
-                          locations=frozenset({(2, 0)}))
     deposit = DepositAllAction(bank_location=(4, 0), accessible=True, game_data=gd)
     rest = RestAction()
-    schedule = [rest, gather, fight, deposit]
+    schedule = [rest, fight, deposit]
     # Try the round-robin pick first; if not applicable, scan the others.
-    primary = schedule[cycle % 4]
+    primary = schedule[cycle % 3]
     if primary.is_applicable(state, gd):
         return primary
     for candidate in schedule:
@@ -158,11 +161,6 @@ def _apply_via_fake_server(action, state: WorldState, gd: GameData) -> WorldStat
                    and state.task_code == action.monster_code)
         return server.fight(monster_code=action.monster_code,
                             monster_matches_task=matches)
-    if isinstance(action, GatherAction):
-        drop = gd.resource_drop_item(action.resource_code) or action.resource_code
-        skill_req = gd.resource_skill_level(action.resource_code)
-        skill_name = skill_req[0] if skill_req is not None else None
-        return server.gather(drop_item=drop, skill_name=skill_name)
     if isinstance(action, DepositAllAction):
         items = action._deposits(state)
         return server.deposit(items=items)
@@ -252,15 +250,14 @@ def test_tier1_local_progress_holds_for_K_cycles() -> None:
         # through to Rest (still applicable as long as hp < max_hp).
         # If inventory drained below the deposit threshold, the next
         # Deposit becomes a no-op and the test records it as such.
-        # Re-seed to keep the diff exercising all four actions over the
+        # Re-seed to keep the diff exercising all three actions over the
         # full CYCLES window: top up inventory if it dropped below the
-        # bank-pressure floor AND no LevelSkillGoal progress remains
-        # available for this skill (i.e. we'd otherwise no-op forever).
+        # bank-pressure floor (i.e. we'd otherwise no-op forever).
         if (state.inventory_used <= ((state.inventory_max * 4) // 5)
                 and isinstance(action, DepositAllAction)):
             # Re-seed: bank-pressure was relieved; refill the inventory
-            # so subsequent Gather/Deposit cycles continue exercising
-            # the lex slots 4-5.
+            # so subsequent Deposit cycles continue exercising the lex
+            # bankPressure slot.
             refill = dict(state.inventory)
             refill["copper_ore"] = refill.get("copper_ore", 0) + 14
             state = dataclasses.replace(state, inventory=refill)

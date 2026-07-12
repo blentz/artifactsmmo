@@ -30,8 +30,9 @@ def _progression_gd() -> GameData:
 
 def test_liv_skill_1_gate_yields_a_forward_action():
     """A gating craft skill yields a plannable craft-one target — the forward
-    action that breaks the deadlock (never a no-op). The objective-step mapper
-    routes a ReachSkillLevel step to GatherMaterials(<this target>)."""
+    action that breaks the deadlock (never a no-op). The LevelSkill action's
+    grind rung (skill_grind_target) is this target; the player expands a
+    LevelSkill leg into GatherMaterials(<this target>)."""
     gd = _progression_gd()
     state = make_state(skills={"weaponcrafting": 2})
     target = skill_grind_target("weaponcrafting", state, gd)

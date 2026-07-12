@@ -20,8 +20,9 @@
     (1) levelDeficit             : 50 - state.level
     (2) xpDeficit                : xpToNext - state.xp
     (3) taskCycles               : taskTotal - taskProgress
-    (4) skillXpDeficitProjected  : targetSkillXp - projectedSkillXpDelta
-        (NEW in 19c — decreases on Gather)
+    (4) skillXpDeficitProjected  : targetSkillLevel - trackedSkillLevel
+        (skill-level deficit — decreases on the modeled grind rung `.gather`,
+         which raises the tracked skill level by one)
     (5) bankPressure             : max(0, inventoryUsed - 4 * inventoryMax / 5)
         (decreases on Deposit; Gather may INCREASE it, dominated by slot 4)
     (6) hpDeficit                : maxHp - hp
@@ -54,16 +55,18 @@ cooldown — those are irrelevant to the local-progress measure.
 Field names use Lean conventions (camelCase). Each maps one-to-one onto a
 `WorldState` field (snake_case), documented inline.
 
-Phase 19c adds two scalar fields for the single-skill MVP of
-`projected_skill_xp_delta` / the active LevelSkillGoal's target:
+Two scalar fields model the single-skill grind toward a target skill LEVEL
+(`ReachSkillGoal.is_satisfied` reads `state.skills`; the planner-native
+skill grind is the `LevelSkill` action, which raises the tracked level):
 
-  * `projectedSkillXpDelta` — single-skill scalar of
-    `WorldState.projected_skill_xp_delta[skill]` for the currently-tracked
-    skill. The dict is collapsed to a scalar because the headline lemma
-    operates on a single (drop, skill) pair.
-  * `targetSkillXp` — the active `LevelSkillGoal`'s target xp for that
-    skill. State-carried (NOT a new axiom). When no LevelSkillGoal is
-    active, callers pass `0` and the slot is a no-op (deficit is `0 - 0 = 0`).
+  * `trackedSkillLevel` — single-skill scalar of `WorldState.skills[skill]`
+    (the current LEVEL) for the currently-tracked skill. The dict is
+    collapsed to a scalar because the headline lemma operates on a single
+    (drop, skill) pair.
+  * `targetSkillLevel` — the target skill LEVEL for that skill (the level a
+    recipe/gate requires). State-carried (NOT a new axiom). When no skill
+    grind is active, callers pass `0` and the slot is a no-op (deficit is
+    `0 - 0 = 0`).
 -/
 
 /-- Planner-side projected state. Mirrors only the WorldState fields used by
@@ -89,12 +92,12 @@ structure State where
   taskType      : Option String
   /-- `WorldState.task_code`. -/
   taskCode      : Option String
-  /-- Single-skill scalar of `WorldState.projected_skill_xp_delta[skill]`
+  /-- Single-skill scalar of `WorldState.skills[skill]` (the current LEVEL)
       for the currently-tracked skill. See module docstring. -/
-  projectedSkillXpDelta : Nat
-  /-- Active `LevelSkillGoal`'s target xp for the tracked skill. Pass `0`
-      when no such goal is active (slot becomes a no-op). -/
-  targetSkillXp : Nat
+  trackedSkillLevel : Nat
+  /-- Target skill LEVEL for the tracked skill. Pass `0` when no skill grind
+      is active (slot becomes a no-op). -/
+  targetSkillLevel : Nat
   -- Phase 20a-v2 extensions — fields read by the production ladder.
   -- These fields exist solely to let `Formal.Liveness.ProductionLadder.fires`
   -- mirror the production `_fires_*` predicates in `tiers/guards.py` /
@@ -343,10 +346,10 @@ structure State where
       `state.skill_xp_delta : dict[Skill, int]`. List-of-pairs
       representation; missing skill means 0. `.gather` reads
       `gatherSkill` and bumps the corresponding entry; `.craft`
-      reads `craftSkill` similarly. The legacy scalar
-      `projectedSkillXpDelta` is retained for backward-compat with
-      Phase 19 measure lemmas; the per-skill map is the structural
-      successor. -/
+      reads `craftSkill` similarly. Distinct from the scalar
+      `trackedSkillLevel` (the tracked skill's current LEVEL, read by the
+      Phase 19 measure lemmas): this map tracks projected per-skill XP
+      since the last perception refresh. -/
   skillXpDelta : List (Skill × Nat)
   /-- Item 4e: skill associated with the current `.gather` action. -/
   gatherSkill : Option Skill
@@ -539,7 +542,7 @@ structure Measure where
   xpDeficit    : Nat
   /-- `state.taskTotal - state.taskProgress`. -/
   taskCycles   : Nat
-  /-- `state.targetSkillXp - state.projectedSkillXpDelta`. NEW in 19c. -/
+  /-- Skill-level deficit: `state.targetSkillLevel - state.trackedSkillLevel`. -/
   skillXpDeficitProjected : Nat
   /-- `max 0 (state.inventoryUsed - state.inventoryMax * 4 / 5)`. -/
   bankPressure : Nat
@@ -558,7 +561,7 @@ noncomputable def measure (s : State) : Measure :=
   { levelDeficit := 50 - s.level
     xpDeficit    := xpToNextLevel s.level - s.xp
     taskCycles   := s.taskTotal - s.taskProgress
-    skillXpDeficitProjected := s.targetSkillXp - s.projectedSkillXpDelta
+    skillXpDeficitProjected := s.targetSkillLevel - s.trackedSkillLevel
     bankPressure := s.inventoryUsed - bankPressureThreshold s.inventoryMax
     hpDeficit    := s.maxHp - s.hp }
 
