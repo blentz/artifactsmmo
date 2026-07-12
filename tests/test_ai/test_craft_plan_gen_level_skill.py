@@ -81,3 +81,52 @@ class TestDirectedGeneratorEmitsLevelSkillLeg:
         result = generate_next_craft_action(goal, state, gd, actions)
 
         assert result is None
+
+
+def _gd_no_rung() -> GameData:
+    """widget (gearcrafting lv5) made from gear_ore (a gatherable raw), but NO
+    in-level gearcrafting grind rung: widget itself is the only gearcrafting
+    recipe and it is above the character's current level, so
+    `skill_grind_target(gearcrafting, ...)` returns None → the LevelSkill
+    build_actions emits is present-but-NOT-applicable. Fix A must gate the emit
+    on `is_applicable` and fall back to A* (None), never emit the dead rung."""
+    gd = GameData()
+    gd._item_stats = {
+        "widget": ItemStats(code="widget", level=5, type_="resource",
+                            subtype="craft", crafting_skill="gearcrafting",
+                            crafting_level=5),
+        "gear_ore": ItemStats(code="gear_ore", level=1, type_="resource",
+                              subtype="mob"),
+    }
+    gd._crafting_recipes = {"widget": {"gear_ore": 2}}
+    gd._resource_drops = {"gear_ore_rocks": "gear_ore"}
+    gd._workshop_locations = {"gearcrafting": (2, 2)}
+    gd._bank_location = (1, 1)
+    gd._taskmaster_location = (0, 0)
+    fill_monster_stat_defaults(gd)
+    return gd
+
+
+class TestDirectedGeneratorGatesLevelSkillOnApplicable:
+    """Fix A: the matching LevelSkill is present in `actions` but its
+    `is_applicable` is False (no obtainable in-level grind rung) → the
+    generator must fall back to A* (None), NOT emit the inapplicable rung
+    (which, at execution, would hit the grind dead-end guard)."""
+
+    def test_inapplicable_level_skill_falls_back_to_none(self) -> None:
+        gd = _gd_no_rung()
+        state = make_state(inventory={}, bank_items={},
+                           skills={"gearcrafting": 1})
+        objective = CharacterObjective.from_game_data(gd)
+        actions = build_actions(gd, state, objective, bank_accessible=True,
+                                task_exchange_min_coins=0)
+        # Sanity: build_actions DID emit the (now-inapplicable) LevelSkill, so
+        # this test exercises the is_applicable gate, not a missing-action path.
+        lvl = next(a for a in actions if isinstance(a, LevelSkill))
+        assert lvl == LevelSkill(skill="gearcrafting", target_level=5)
+        assert lvl.is_applicable(state, gd) is False
+        goal = GatherMaterialsGoal("widget", {"widget": 1})
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        assert result is None, result

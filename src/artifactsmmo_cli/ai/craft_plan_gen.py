@@ -148,7 +148,15 @@ def generate_next_craft_action(
                             if isinstance(a, LevelSkill)
                             and a.skill == stats.crafting_skill
                             and a.target_level == stats.crafting_level), None)
-                return [lvl] if lvl is not None else None
+                # Gate the emit on is_applicable NOW: a LevelSkill with no
+                # obtainable grind rung (skill_grind_target is None) must never
+                # be emitted — it would reach the player's grind dead-end guard.
+                # Fall back to A* (also is_applicable-gated → won't pick it →
+                # honest no-plan) instead. Restores the safety net that
+                # build_actions' emit-per-(skill,level) otherwise bypasses.
+                if lvl is not None and lvl.is_applicable(state, game_data):
+                    return [lvl]
+                return None
             if game_data.workshop_location(stats.crafting_skill) is None:
                 return None  # No workshop for this skill → fall back to A*.
         elif item not in gatherable_items:

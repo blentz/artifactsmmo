@@ -78,24 +78,50 @@ def test_level_skill_step_runs_grind_leg_not_execute() -> None:
 
 
 def test_level_skill_step_raises_when_no_rung() -> None:
-    """Unreachable in a correct plan (is_applicable gates it): no grind rung ->
-    the guard raises rather than silently no-op."""
+    """The guard itself still raises (asserted at `_execute_level_skill`, where
+    the raise originates): no grind rung -> RuntimeError rather than a silent
+    no-op. `_execute` wraps this into an error cycle instead of crashing (see
+    test_level_skill_step_degrades_not_crash_*)."""
     player = _under_skill_player()
     client = MagicMock()
     with patch("artifactsmmo_cli.ai.player.next_grind_goal", return_value=None):
         with pytest.raises(RuntimeError, match="no grind rung"):
-            player._execute(LevelSkill("gearcrafting", 5), client)
+            player._execute_level_skill(LevelSkill("gearcrafting", 5), client)
 
 
 def test_level_skill_step_raises_when_grind_produces_no_leg() -> None:
-    """Unreachable in a correct plan: a rung exists but the grind goal yields no
-    plan -> the guard raises."""
+    """The guard itself still raises (asserted at `_execute_level_skill`): a rung
+    exists but the grind goal yields no plan -> RuntimeError. `_execute` degrades
+    this to an error cycle (see test_level_skill_step_degrades_not_crash_*)."""
     player = _under_skill_player()
     client = MagicMock()
     with patch.object(player, "_build_actions", return_value=[]), \
             patch.object(player.planner, "plan", return_value=[]):
         with pytest.raises(RuntimeError, match="no leg"):
-            player._execute(LevelSkill("gearcrafting", 5), client)
+            player._execute_level_skill(LevelSkill("gearcrafting", 5), client)
+
+
+def test_level_skill_step_degrades_not_crash_when_no_leg() -> None:
+    """Fix B (crash-SAFETY): an EMPTY grind sub-plan is reachable by an ordinary
+    planner timeout / node-cap (`GOAPPlanner.plan` returns [] under the 10s
+    CHEAP_BUDGET_SECONDS), not only by logic errors. Dispatched INSIDE
+    `_execute`'s try, the guard's RuntimeError is caught and converted to an
+    `error:other` cycle — the session must NOT crash (`run()` has no `except`).
+    Before Fix B the dispatch was BEFORE the try, so this propagated out of
+    `run()` and ended the session with exit_reason="crash"."""
+    player = _under_skill_player()
+    client = MagicMock()
+    refreshed = replace(player.state, x=9, y=9)
+    with patch.object(player, "_build_actions", return_value=[]), \
+            patch.object(player.planner, "plan", return_value=[]), \
+            patch.object(player, "_fetch_world_state",
+                         return_value=refreshed) as fetch:
+        new_state, outcome = player._execute(
+            LevelSkill("gearcrafting", 5), client)
+
+    assert outcome == "error:other"
+    assert new_state is refreshed
+    fetch.assert_called_once()
 
 
 # --- Cross-skill nested grind (REAL planner, no planner.plan mock) ------------

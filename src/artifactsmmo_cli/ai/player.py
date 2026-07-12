@@ -795,8 +795,6 @@ class GamePlayer:
         don't conflate wins with losses.
         """
         assert self.state is not None
-        if isinstance(action, LevelSkill):
-            return self._execute_level_skill(action, client)
         if isinstance(action, CraftAction):
             action.history = self.history
             if self.game_data is not None:
@@ -811,6 +809,14 @@ class GamePlayer:
                 if feasible >= 1 and feasible != action.quantity:
                     action = replace(action, quantity=feasible)
         try:
+            # LevelSkill is player-expanded (never LevelSkill.execute, which
+            # raises). Dispatched INSIDE the try so its grind dead-end guards
+            # (no rung / empty sub-plan — reachable by an ordinary planner
+            # timeout returning [] — / cyclic skill dep) DEGRADE to an
+            # `error:*` cycle via `except RuntimeError` below instead of
+            # propagating out of run() and crashing the session.
+            if isinstance(action, LevelSkill):
+                return self._execute_level_skill(action, client)
             new_state = action.execute(self.state, client)
             # Re-sync bank state after visiting bank
             if isinstance(action, (DepositAllAction, DepositItemAction, WithdrawItemAction)):
