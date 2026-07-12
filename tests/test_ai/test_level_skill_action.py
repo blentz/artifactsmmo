@@ -43,6 +43,34 @@ def _gd_with_grind_rung() -> GameData:
     return gd
 
 
+def _gd_gather_skill() -> GameData:
+    """alchemy: lowest craftable is level 5 (no craft rung <=1), but a gatherable
+    resource `sunflower` exists at alchemy 1 — grindable only via the gather arm."""
+    gd = GameData()
+    gd._item_stats = {
+        "small_potion": ItemStats(code="small_potion", level=5, type_="consumable",
+                                  subtype="potion", crafting_skill="alchemy",
+                                  crafting_level=5),
+        "sunflower": ItemStats(code="sunflower", level=1, type_="resource",
+                               subtype="alchemy"),
+    }
+    gd._crafting_recipes = {"small_potion": {"sunflower": 3}}
+    gd._resource_drops = {"sunflower_field": "sunflower"}
+    gd._resource_skill = {"sunflower_field": ("alchemy", 1)}
+    gd._resource_locations = {"sunflower_field": [(4, 4)]}
+    return gd
+
+
+def test_applicable_via_gather_arm_when_no_craft_rung() -> None:
+    """A gather skill (alchemy) whose lowest craftable rung is above the current
+    level is still grindable by GATHERING an in-skill resource — is_applicable
+    must be True via best_gather_resource_drop even though skill_grind_target is
+    None (the small_health_potion @ alchemy-1 census case, LevelSkill epic P4)."""
+    gd = _gd_gather_skill()
+    action = LevelSkill(skill="alchemy", target_level=5)
+    assert action.is_applicable(_state(gd, {"alchemy": 1}), gd) is True
+
+
 def test_apply_sets_skill_to_target() -> None:
     gd = _gd_with_grind_rung()
     state = _state(gd, {"gearcrafting": 1})

@@ -1072,8 +1072,18 @@ LEVEL_SKILL_ACTION_MUTATIONS = [
     # under-target, violating the hasGrindRung conjunct. Killed by the no-rung
     # fixture (under-target but no feasible rung).
     ("level_skill: drop grind-rung conjunct",
-     "        return skill_grind_target(self.skill, state, game_data) is not None\n",
+     "        return (skill_grind_target(self.skill, state, game_data) is not None\n"
+     "                or best_gather_resource_drop(self.skill, current, game_data)\n"
+     "                is not None)\n",
      "        return True\n"),
+    # drop the GATHER arm of the rung conjunct -- a gather skill with no craft
+    # rung (alchemy @ 1) becomes not-applicable, violating hasGrindRung. Killed
+    # by the gather-skill fixture (skill_grind_target None, best_gather present).
+    ("level_skill: drop gather arm of grind-rung conjunct",
+     "        return (skill_grind_target(self.skill, state, game_data) is not None\n"
+     "                or best_gather_resource_drop(self.skill, current, game_data)\n"
+     "                is not None)\n",
+     "        return skill_grind_target(self.skill, state, game_data) is not None\n"),
     # off-by-one on the optimistic apply -- sets skills[skill] := target + 1,
     # diverging from levelSkillApply (:= target). Killed by every apply case.
     ("level_skill: apply off-by-one (target -> target + 1)",

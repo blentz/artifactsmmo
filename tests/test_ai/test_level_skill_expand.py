@@ -47,3 +47,27 @@ def test_next_grind_goal_none_when_no_rung() -> None:
     state = scenario_state(
         ScenarioCharacter(name="t", level=5, skills={"gearcrafting": 5}), gd)
     assert next_grind_goal("gearcrafting", state, gd) is None
+
+
+def test_next_grind_goal_gather_arm_when_no_craft_rung() -> None:
+    """A gather skill (alchemy) with no craftable rung at the current level
+    grinds by GATHERING an in-skill resource: next_grind_goal targets the
+    gatherable drop, not a craft (LevelSkill epic P4 gather arm)."""
+    gd = GameData()
+    gd._item_stats = {
+        "small_potion": ItemStats(code="small_potion", level=5, type_="consumable",
+                                  subtype="potion", crafting_skill="alchemy",
+                                  crafting_level=5),
+        "sunflower": ItemStats(code="sunflower", level=1, type_="resource",
+                               subtype="alchemy"),
+    }
+    gd._crafting_recipes = {"small_potion": {"sunflower": 3}}
+    gd._resource_drops = {"sunflower_field": "sunflower"}
+    gd._resource_skill = {"sunflower_field": ("alchemy", 1)}
+    gd._resource_locations = {"sunflower_field": [(4, 4)]}
+    state = scenario_state(
+        ScenarioCharacter(name="t", level=5, skills={"alchemy": 1}), gd)
+    goal = next_grind_goal("alchemy", state, gd)
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert goal.skill_grind is True
+    assert goal.needed == {"sunflower": 1}
