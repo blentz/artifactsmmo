@@ -31,6 +31,7 @@ from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.deposit_item import DepositItemAction
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.task_exchange import TaskExchangeAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.blockers import BlockerRegistry, seed_documented_blockers
@@ -58,6 +59,7 @@ from artifactsmmo_cli.ai.learning.projections import PathPlan, cheapest_path_to_
 from artifactsmmo_cli.ai.learning.scalarizer import _max_sell_back_price
 from artifactsmmo_cli.ai.learning.skill_xp_curve import SkillXpCurve
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.level_skill_expand import next_grind_goal
 from artifactsmmo_cli.ai.loadout_profiles import (
     active_profile_gear,
     combat_key,
@@ -83,6 +85,7 @@ from artifactsmmo_cli.ai.recovery import (
 )
 from artifactsmmo_cli.ai.should_replan import should_replan
 from artifactsmmo_cli.ai.strategy_driver import (
+    CHEAP_BUDGET_SECONDS,
     StrategyArbiter,
     monster_drop_inputs,
     objective_step_goal,
@@ -739,6 +742,32 @@ class GamePlayer:
         finally:
             self.tracer.close()
 
+    def _execute_level_skill(self, action: LevelSkill,
+                             client: AuthenticatedClient) -> tuple[WorldState, str]:
+        """Run ONE grind cycle for a LevelSkill plan step: pick the rung, plan the
+        skill_grind GatherMaterials goal, execute its first leg. The next cycle's
+        replan re-derives the remaining grind (one-leg-per-cycle idiom); when the
+        real skill reaches target, is_applicable turns False and the plan advances
+        to the gated craft.
+
+        The two guards are for states LevelSkill.is_applicable already excludes
+        (no grind rung / an empty sub-plan) — unreachable in a correct plan, so
+        they raise rather than swallow.
+        """
+        assert self.state is not None and self.game_data is not None
+        goal = next_grind_goal(action.skill, self.state, self.game_data)
+        if goal is None:
+            raise RuntimeError(
+                f"LevelSkill({action.skill}) has no grind rung at execution — "
+                "is_applicable should have gated this")
+        actions = self._build_actions()
+        sub_plan = self.planner.plan(self.state, goal, actions, self.game_data,
+                                     budget_seconds=CHEAP_BUDGET_SECONDS)
+        if not sub_plan:
+            raise RuntimeError(
+                f"LevelSkill({action.skill}) grind produced no leg")
+        return self._execute(sub_plan[0], client)
+
     def _execute(self, action: Action, client: AuthenticatedClient) -> tuple[WorldState, str]:
         """Execute an action. Returns (new_state, outcome_str).
 
@@ -747,6 +776,8 @@ class GamePlayer:
         don't conflate wins with losses.
         """
         assert self.state is not None
+        if isinstance(action, LevelSkill):
+            return self._execute_level_skill(action, client)
         if isinstance(action, CraftAction):
             action.history = self.history
             if self.game_data is not None:
