@@ -13,6 +13,8 @@ GAP_ABBREV: dict[str, str] = {
     "combat_blocked": "CB",
     "material_unreachable": "MU",
     "skill_unreachable": "SU",
+    "grey_farm_suppressed": "GF",
+    "purchase_recursion": "PR",
     "planner_bug": "PB",
 }
 
@@ -110,9 +112,11 @@ def render_backlog(results: list[CellResult]) -> str:
         "",
     ]
     if not ranked:
-        lines.append("No PLANNER_BUG cells — every FAIL is a game limit "
-                     "(combat/event/material/skill). The planner produces a "
-                     "directional plan for every reachable recipe cell.")
+        lines.append("No PLANNER_BUG cells — every FAIL is an explained limit "
+                     "(event/combat/material/grey-farm policy, a skill "
+                     "prerequisite, or the tracked purchase-recursion gap). The "
+                     "planner produces a directional plan for every recipe cell "
+                     "it is aimed at with the skill in hand.")
         return "\n".join(lines) + "\n"
     lines.append("| Rank | Recipe | Skill | Craft lvl | # bug cells | Cells | Reason |")
     lines.append("|---|---|---|---|---|---|---|")

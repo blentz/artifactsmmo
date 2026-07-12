@@ -2,6 +2,7 @@
 from a list of CellResult — no planner, no game data."""
 
 from artifactsmmo_cli.audit.craft_census import CellResult
+from artifactsmmo_cli.audit.craft_completeness import GapClass
 from artifactsmmo_cli.audit.craft_report import (
     GAP_ABBREV,
     render_backlog,
@@ -22,13 +23,7 @@ def _fail(recipe: str, skill: str, lvl: int, char: int, sk: int,
 def test_gap_abbrev_exports_all_gap_classes() -> None:
     """GAP_ABBREV is the public code table Task 3 (and the matrix legend)
     depend on: every gap class has a short code."""
-    assert set(GAP_ABBREV) == {
-        "event_gated",
-        "combat_blocked",
-        "material_unreachable",
-        "skill_unreachable",
-        "planner_bug",
-    }
+    assert set(GAP_ABBREV) == {g.value for g in GapClass}
     assert GAP_ABBREV["planner_bug"] == "PB"
 
 

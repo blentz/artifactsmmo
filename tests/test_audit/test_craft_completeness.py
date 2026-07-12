@@ -7,6 +7,7 @@ from pathlib import Path
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
@@ -31,6 +32,30 @@ BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
 
 def _gd() -> GameData:
     return GameData.from_cache_bundle(json.loads(BUNDLE.read_text()))
+
+
+def test_classify_gap_real_bundle_new_classes_regression_pin() -> None:
+    """Regression pin over the committed bundle. Two honest gap classes are
+    stable (classify_gap is pure/deterministic):
+      - iron_axe at-skill: needs jasper_crystal, sold only by tasks_trader for
+        tasks_coin (task-earned) -> PURCHASE_RECURSION.
+      - cooked_chicken at char 12 / cooking 1: raw_chicken's only dropper is the
+        grey L1 chicken and a near next-tier food exists -> GREY_FARM_SUPPRESSED.
+    And the LevelSkill acceptance (epic P4): an under-skill grindable cell no
+    longer classifies as a gap at all — the planner plans a LevelSkill first leg
+    and `craft_cell_verdict` PASSes it (was SKILL_PREREQUISITE, now retired)."""
+    gd = _gd()
+    assert classify_gap("iron_axe", CraftCell(8, "weaponcrafting", 10),
+                        gd) is GapClass.PURCHASE_RECURSION
+    assert classify_gap("cooked_chicken", CraftCell(12, "cooking", 1),
+                        gd) is GapClass.GREY_FARM_SUPPRESSED
+    # iron_bar under-skill (mining 5 < craft 10): plans [LevelSkill(mining->10)]
+    # and PASSES on that leg — no SKILL_PREREQUISITE classification.
+    cell = CraftCell(8, "mining", 5)
+    state = census_state("iron_bar", cell, gd)
+    plan = plan_craft("iron_bar", state, gd)
+    assert plan and isinstance(plan[0], LevelSkill), [repr(a) for a in plan]
+    assert craft_cell_verdict("iron_bar", plan, gd).passed
 
 
 def test_plan_craft_plans_a_simple_smelt() -> None:
@@ -279,11 +304,15 @@ def _cell(char_level: int = 5, skill: str = "gearcrafting",
                      skill_level=skill_level)
 
 
-def test_classify_gap_planner_bug_when_all_reachable() -> None:
-    """widget (gearcrafting 5) crafts from gear_ore, a gatherable ore; the
-    skill has a lower-tier grind item (trinket, gearcrafting 1). Every leaf is
-    reachable and the skill is grindable, so the FAIL is the actionable
-    residual — PLANNER_BUG."""
+def test_classify_gap_planner_bug_when_under_skill_grindable_fails() -> None:
+    """widget (gearcrafting 5) crafts from gear_ore, a gatherable ore; the skill
+    has a lower-tier grind item (trinket, gearcrafting 1). Every leaf is
+    reachable and the skill IS grindable, but the cell is UNDER-SKILL
+    (gearcrafting 1 < 5). Post-LevelSkill (epic P4) a grindable under-skill cell
+    is NO LONGER a gap class: the planner plans a LevelSkill leg and the cell
+    PASSES `craft_cell_verdict`, so it never reaches classify. If it IS
+    classified (a FAIL despite LevelSkill being in reach), that is the actionable
+    PLANNER_BUG residual — NOT the retired SKILL_PREREQUISITE."""
     gd = GameData()
     gd._item_stats = {
         "widget": _craftable("widget", "gearcrafting", 5),
@@ -293,7 +322,77 @@ def test_classify_gap_planner_bug_when_all_reachable() -> None:
     gd._crafting_recipes = {"widget": {"gear_ore": 2}, "trinket": {"gear_ore": 1}}
     gd._resource_drops = {"gear_rocks": "gear_ore"}
     gd._resource_skill = {"gear_rocks": ("mining", 1)}
+    gd._resource_locations = {"gear_rocks": [(3, 3)]}
     assert classify_gap("widget", _cell(skill_level=1), gd) is GapClass.PLANNER_BUG
+
+
+def test_classify_gap_planner_bug_when_all_reachable_at_skill() -> None:
+    """At-skill (gearcrafting 5 == widget's level): every leaf reachable, no
+    skill grind needed, yet no directional plan — the actionable PLANNER_BUG
+    residual (the class the census exists to surface)."""
+    gd = GameData()
+    gd._item_stats = {
+        "widget": _craftable("widget", "gearcrafting", 5),
+        "gear_ore": _mat("gear_ore"),
+    }
+    gd._crafting_recipes = {"widget": {"gear_ore": 2}}
+    gd._resource_drops = {"gear_rocks": "gear_ore"}
+    gd._resource_skill = {"gear_rocks": ("mining", 1)}
+    gd._resource_locations = {"gear_rocks": [(3, 3)]}
+    assert classify_gap("widget", _cell(skill_level=5), gd) is GapClass.PLANNER_BUG
+
+
+def test_classify_gap_grey_farm_suppressed_when_only_dropper_is_grey_and_obsolete() -> None:
+    """low_food (cooking 1) needs raw_meat, dropped only by hen (level 1). At a
+    char_level=12 cell the hen is GREY (11 levels below → zero xp-per-kill), and
+    a near next-tier same-family food (mid_food, cooking 5) exists, so
+    `grey_farm_allowed(raw_meat)` is False: production grinds cooking toward the
+    better food instead of farming the obsolete drop. The FAIL is the intended
+    grey-farm policy, not a planner hole — GREY_FARM_SUPPRESSED. (Live census
+    2026-07-11: cooked_chicken at char 12 / cooking 1.)"""
+    gd = GameData()
+    gd._item_stats = {
+        "low_food": ItemStats(code="low_food", level=1, type_="consumable",
+                              subtype="food", crafting_skill="cooking",
+                              crafting_level=1, hp_restore=80),
+        "mid_food": ItemStats(code="mid_food", level=5, type_="consumable",
+                              subtype="food", crafting_skill="cooking",
+                              crafting_level=5, hp_restore=120),
+        "raw_meat": _mat("raw_meat"),
+        "other_mat": _mat("other_mat"),
+        "iron_blade": ItemStats(code="iron_blade", level=1, type_="weapon",
+                                subtype="", attack={"fire": 50}),
+    }
+    gd._crafting_recipes = {"low_food": {"raw_meat": 1},
+                            "mid_food": {"other_mat": 1}}
+    gd._resource_drops = {"blade_vein": "iron_blade"}
+    gd._monster_locations = {"hen": (0, 1)}
+    gd._monster_level = {"hen": 1}
+    gd._monster_hp = {"hen": 10}
+    gd._monster_drops = {"hen": [("raw_meat", 50, 1, 1)]}
+    _fill_monster_defaults(gd)
+    cell = _cell(char_level=12, skill="cooking", skill_level=1)
+    assert classify_gap("low_food", cell, gd) is GapClass.GREY_FARM_SUPPRESSED
+
+
+def test_classify_gap_material_unreachable_when_dropping_resource_unlocated() -> None:
+    """A leaf whose sole gather source is a resource that carries a skill and a
+    drop table but is UNPLACED (no location) is NOT actually gatherable —
+    MATERIAL_UNREACHABLE, not PLANNER_BUG. Mirrors the live diamond_stone case
+    (strange_rocks is unplaced in the bundle). `gatherable_drop_items()` alone
+    would count `rare_stone` as gatherable and let the cascade fall through to a
+    phantom PLANNER_BUG; the location check in `_has_located_gather_source`
+    prevents that."""
+    gd = GameData()
+    gd._item_stats = {
+        "rare_gem": _craftable("rare_gem", "jewelrycrafting", 1),
+        "rare_stone": _mat("rare_stone"),
+    }
+    gd._crafting_recipes = {"rare_gem": {"rare_stone": 2}}
+    gd._resource_drops = {"strange_rocks": "rare_stone"}
+    gd._resource_skill = {"strange_rocks": ("mining", 1)}
+    # strange_rocks is deliberately UNLOCATED (no _resource_locations entry).
+    assert classify_gap("rare_gem", _cell(), gd) is GapClass.MATERIAL_UNREACHABLE
 
 
 def test_classify_gap_material_unreachable_dead_end_leaf() -> None:
@@ -358,6 +457,7 @@ def test_classify_gap_skill_unreachable_no_grind_ladder() -> None:
     gd._crafting_recipes = {"lonely_blade": {"gear_ore": 2}}
     gd._resource_drops = {"gear_rocks": "gear_ore"}
     gd._resource_skill = {"gear_rocks": ("mining", 1)}
+    gd._resource_locations = {"gear_rocks": [(3, 3)]}
     verdict = classify_gap("lonely_blade", _cell(skill_level=5), gd)
     assert verdict is GapClass.SKILL_UNREACHABLE
 
@@ -424,9 +524,11 @@ def test_classify_gap_reachable_via_permanent_gold_vendor() -> None:
     assert classify_gap("bought_gear", _cell(), gd) is GapClass.PLANNER_BUG
 
 
-def test_classify_gap_reachable_via_vendor_for_attainable_currency() -> None:
-    """A leaf sold for a non-gold currency that is itself attainable-now (a
-    gatherable coin) is reachable via the currency-recursion buyable arm."""
+def test_classify_gap_reachable_via_vendor_for_directly_attainable_currency() -> None:
+    """A leaf sold for a non-gold currency the planner can DIRECTLY acquire (a
+    LOCATED gatherable coin — Gather → NpcBuy) is reachable via the vendor arm,
+    so the residual is PLANNER_BUG. Contrast PURCHASE_RECURSION, where the
+    currency is task-only."""
     gd = GameData()
     gd._item_stats = {
         "coin_gear": _craftable("coin_gear", "gearcrafting", 1),
@@ -440,10 +542,32 @@ def test_classify_gap_reachable_via_vendor_for_attainable_currency() -> None:
     }
     gd._resource_drops = {"coin_vein": "trade_coin"}
     gd._resource_skill = {"coin_vein": ("mining", 1)}
+    gd._resource_locations = {"coin_vein": [(3, 3)]}
     gd.world.npc_stock = {"trader": {"coin_mat": 3}}
     gd.world.npc_tiles = {"trader": (4, 4)}
     gd.world.npc_buy_currency = {"trader": {"coin_mat": "trade_coin"}}
     assert classify_gap("coin_gear", _cell(), gd) is GapClass.PLANNER_BUG
+
+
+def test_classify_gap_purchase_recursion_when_currency_is_task_only() -> None:
+    """A leaf whose ONLY source is a permanent vendor selling it for a TASK-only
+    currency (a coin earned solely by completing tasks — not gatherable, not a
+    monster drop) is PURCHASE_RECURSION: the planner does not yet plan the
+    recursive Task → earn-coin → NpcBuy edge (npc_purchase_acquisition Phase
+    2-4). Mirrors the live jasper_crystal @ tasks_trader (tasks_coin) case."""
+    gd = GameData()
+    gd._item_stats = {
+        "coin_gear": _craftable("coin_gear", "gearcrafting", 1),
+        "vendor_mat": _mat("vendor_mat"),
+        "task_coin": _mat("task_coin"),
+    }
+    gd._crafting_recipes = {"coin_gear": {"vendor_mat": 1}}
+    gd.world.npc_stock = {"tasks_trader": {"vendor_mat": 8}}
+    gd.world.npc_tiles = {"tasks_trader": (4, 4)}
+    gd.world.npc_buy_currency = {"tasks_trader": {"vendor_mat": "task_coin"}}
+    # task_coin has NO gather source and NO dropper — only task rewards would
+    # yield it, which the planner cannot recursively plan.
+    assert classify_gap("coin_gear", _cell(), gd) is GapClass.PURCHASE_RECURSION
 
 
 def test_classify_gap_event_gated_via_event_only_vendor() -> None:
@@ -481,8 +605,9 @@ def test_classify_gap_reachable_via_task_earnable_leaf() -> None:
 def test_classify_gap_skill_grindable_via_gatherable_of_skill() -> None:
     """A mining-skill recipe (a smelt) is grindable through a gatherable
     resource of the mining skill even with no lower craftable — pins the
-    resource arm of _skill_grindable (result is PLANNER_BUG, not
-    SKILL_UNREACHABLE)."""
+    resource arm of _skill_grindable (GRINDABLE under-skill is NOT
+    SKILL_UNREACHABLE; post-LevelSkill it falls through to the PLANNER_BUG
+    residual rather than the retired SKILL_PREREQUISITE)."""
     gd = GameData()
     gd._item_stats = {
         "ore_bar": _craftable("ore_bar", "mining", 5),
@@ -491,6 +616,7 @@ def test_classify_gap_skill_grindable_via_gatherable_of_skill() -> None:
     gd._crafting_recipes = {"ore_bar": {"raw_ore": 2}}
     gd._resource_drops = {"ore_rocks": "raw_ore"}
     gd._resource_skill = {"ore_rocks": ("mining", 1)}
+    gd._resource_locations = {"ore_rocks": [(3, 3)]}
     verdict = classify_gap("ore_bar", _cell(skill="mining", skill_level=1), gd)
     assert verdict is GapClass.PLANNER_BUG
 
@@ -512,18 +638,22 @@ def test_classify_gap_skill_unreachable_when_lowest_rung_above_current_skill() -
     gd._crafting_recipes = {"lonely_bar": {"raw_ore": 2}}
     gd._resource_drops = {"ore_vein": "raw_ore"}
     gd._resource_skill = {"ore_vein": ("mining", 2)}
+    gd._resource_locations = {"ore_vein": [(3, 3)]}
     verdict = classify_gap("lonely_bar", _cell(skill="mining", skill_level=1), gd)
     assert verdict is GapClass.SKILL_UNREACHABLE
 
 
 def test_classify_gap_skill_grindable_true_positive_survives_at_nonzero_skill() -> None:
-    """Regression pin (must NOT over-correct): iron_bar-shaped true positive.
-    mining's lowest grind rung sits at level 1 (copper_rocks-equivalent); the
-    target craft level is 10 (iron_bar-style); the under-skill cell is
-    skill_level=5 (`max(1, 10-5)`). mining IS bootstrappable from 5 (the
-    level-1 rung is well within reach at skill 5), so this must STILL report
-    PLANNER_BUG — the fix narrows the bound to `<= skill_level`, not to
-    "nothing below target is ever grindable"."""
+    """Regression pin for the `_skill_grindable` bound (must NOT over-correct):
+    iron_bar-shaped true positive. mining's lowest grind rung sits at level 1
+    (copper_rocks-equivalent); the target craft level is 10 (iron_bar-style);
+    the under-skill cell is skill_level=5 (`max(1, 10-5)`). mining IS
+    bootstrappable from 5 (the level-1 rung is well within reach at skill 5), so
+    this is NOT SKILL_UNREACHABLE — the `_skill_grindable` bound is `<= skill_
+    level`, not "nothing below target is ever grindable". A grindable under-skill
+    cell falls through to the PLANNER_BUG residual (the retired
+    SKILL_PREREQUISITE): post-LevelSkill the planner should plan it, so a FAIL is
+    actionable, not an expected skill gap."""
     gd = GameData()
     gd._item_stats = {
         "iron_bar_like": _craftable("iron_bar_like", "mining", 10),
@@ -532,6 +662,7 @@ def test_classify_gap_skill_grindable_true_positive_survives_at_nonzero_skill() 
     gd._crafting_recipes = {"iron_bar_like": {"iron_ore": 2}}
     gd._resource_drops = {"copper_rocks": "iron_ore"}
     gd._resource_skill = {"copper_rocks": ("mining", 1)}
+    gd._resource_locations = {"copper_rocks": [(3, 3)]}
     verdict = classify_gap("iron_bar_like", _cell(skill="mining", skill_level=5), gd)
     assert verdict is GapClass.PLANNER_BUG
 
@@ -548,6 +679,7 @@ def test_classify_gap_skill_already_at_target_is_grindable() -> None:
     gd._crafting_recipes = {"atlevel_blade": {"gear_ore": 2}}
     gd._resource_drops = {"gear_rocks": "gear_ore"}
     gd._resource_skill = {"gear_rocks": ("mining", 1)}
+    gd._resource_locations = {"gear_rocks": [(3, 3)]}
     verdict = classify_gap("atlevel_blade", _cell(skill_level=10), gd)
     assert verdict is GapClass.PLANNER_BUG
 
@@ -609,7 +741,7 @@ def test_census_state_equips_near_term_gear_and_derives_combat_stats() -> None:
     }
     gd._resource_drops = {"blade_vein": "iron_blade"}
     cell = _cell(char_level=5, skill_level=1)
-    state = census_state(cell, gd)
+    state = census_state("iron_blade", cell, gd)
     assert state.equipment.get("weapon_slot") == "iron_blade"
     assert state.attack.get("fire") == 50
     assert state.level == 5
@@ -622,10 +754,9 @@ def test_census_state_gears_the_cell_and_flips_combat_blocked_to_reachable() -> 
     """critter (a permanent, zero-attack, 5-HP monster) is UNWINNABLE at the
     OLD empty-loadout state (raw_player == 0 never kills anything) but
     winnable once census_state equips iron_blade (a level-1, gatherable
-    weapon near_term_gear picks up). With the leaf reachable and the skill
-    grindable via basic_gear, the recipe now classifies PLANNER_BUG (the
-    actionable residual) instead of the false COMBAT_BLOCKED the empty
-    loadout produced."""
+    weapon near_term_gear picks up). At-skill (gearcrafting 5) with the leaf
+    reachable, the recipe now classifies PLANNER_BUG (the actionable residual)
+    instead of the false COMBAT_BLOCKED the empty loadout produced."""
     gd = GameData()
     gd._item_stats = {
         "trinket_gear": _craftable("trinket_gear", "gearcrafting", 5),
@@ -644,7 +775,7 @@ def test_census_state_gears_the_cell_and_flips_combat_blocked_to_reachable() -> 
     gd._monster_hp = {"critter": 5}
     gd._monster_drops = {"critter": [("critter_meat", 10, 1, 1)]}
     _fill_monster_defaults(gd)
-    cell = _cell(char_level=5, skill_level=1)
+    cell = _cell(char_level=5, skill_level=5)
 
     # The pre-fix empty-loadout state cannot win: zero attack never kills
     # anything (the exact bug the finding describes).
@@ -654,7 +785,7 @@ def test_census_state_gears_the_cell_and_flips_combat_blocked_to_reachable() -> 
     assert not is_winnable(bare, gd, "critter")
 
     # The fixed census state equips iron_blade and CAN win.
-    geared = census_state(cell, gd)
+    geared = census_state("trinket_gear", cell, gd)
     assert geared.equipment.get("weapon_slot") == "iron_blade"
     assert is_winnable(geared, gd, "critter")
 
@@ -684,7 +815,7 @@ def test_classify_gap_combat_blocked_survives_geared_loadout_against_overleveled
     _fill_monster_defaults(gd)
     cell = _cell()
 
-    geared = census_state(cell, gd)
+    geared = census_state("beast_armor", cell, gd)
     assert geared.equipment.get("weapon_slot") == "iron_blade"
     assert not is_winnable(geared, gd, "cow")
 

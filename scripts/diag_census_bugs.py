@@ -36,7 +36,7 @@ def _diag(work: tuple[str, CraftCell]) -> dict:
     assert gd is not None
     stats = gd.item_stats(recipe)
     craft = stats.crafting_level
-    state = census_state(cell, gd)
+    state = census_state(recipe, cell, gd)
     t0 = time.monotonic()
     plan = plan_craft(recipe, state, gd)
     el = time.monotonic() - t0

@@ -14,20 +14,21 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.factory import build_actions
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.grey_farm import grey_farm_allowed
 from artifactsmmo_cli.ai.planner import GOAPPlanner
-from artifactsmmo_cli.ai.recipe_closure import recipe_closure
+from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.tiers.objective import (
     GOLD,
     CharacterObjective,
-    is_attainable_now,
 )
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -232,6 +233,19 @@ def _advances_closure(action: Action, closure_items: frozenset[str],
         return action.item_code in closure_items
     if isinstance(action, WithdrawItemAction):
         return action.code in closure_items
+    if isinstance(action, LevelSkill):
+        # A skill-grind leg (the planner-native LevelSkill action) is
+        # directional iff it levels the crafting skill of SOME closure
+        # craftable — `recipe` itself or an intermediate whose own craft gate
+        # blocks the chain. That is exactly the gate the craft needs; executing
+        # the LevelSkill grinds toward it (one grind cycle per player expansion,
+        # LevelSkill epic P2). The 108 formerly-SKILL_PREREQUISITE under-skill
+        # cells now PASS on this leg instead of being classified.
+        return any(
+            (stats := game_data.item_stats(code)) is not None
+            and stats.crafting_skill == action.skill
+            for code in closure_items
+        )
     return False
 
 
@@ -277,6 +291,18 @@ class GapClass(Enum):
     """Every leaf is reachable, but the recipe's crafting skill cannot be
     leveled to its required level at the cell (no in-band craftable/gatherable
     of that skill to grind on)."""
+    GREY_FARM_SUPPRESSED = "grey_farm_suppressed"
+    """A monster-drop leaf's only permanent dropper is GREY (zero xp-per-kill at
+    the cell's char level) and `grey_farm_allowed` declines the farm because a
+    near next-tier same-family recipe is the better skill-grind. Production
+    deliberately grinds toward the better tier instead of farming the obsolete
+    drop — the intended policy (grey_farm.py), not a planner hole."""
+    PURCHASE_RECURSION = "purchase_recursion"
+    """A leaf's ONLY source is buying it from a permanent vendor with a non-gold
+    currency that is itself earned (a task/monster coin) — a recursive buy-edge
+    (Fight/Task -> earn currency -> NpcBuy -> craft). The planner does not yet
+    plan recursive currency purchases; it is the tracked npc_purchase_acquisition
+    Phase 2-4 feature, a known scoped gap rather than an unexplained bug."""
     PLANNER_BUG = "planner_bug"
     """The residual: every closure leaf is reachable AND the skill is
     grindable at the cell, yet the planner still produced no directional plan.
@@ -298,18 +324,46 @@ def _closure_leaves(recipe: str, game_data: GameData) -> frozenset[str]:
                      if not game_data.crafting_recipe(item))
 
 
+def _currency_directly_attainable(currency: str, state: WorldState,
+                                  game_data: GameData) -> bool:
+    """A purchase currency the planner can acquire with a DIRECT action edge:
+    gold, a located gatherable, or a winnable permanent monster drop (the
+    Fight×N → NpcBuy chain grey_farm.py already serves). Deliberately NARROWER
+    than `is_attainable_now`, which also credits a TASK-earned currency
+    (tasks_coin) — earning a task coin then exchanging it is a recursive
+    buy-edge the planner does not yet plan (npc_purchase_acquisition Phase 2-4),
+    so a task-only currency is NOT directly attainable here."""
+    if currency == GOLD or _has_located_gather_source(currency, game_data):
+        return True
+    permanent = [m for m, _r, _mn, _mx in game_data.monsters_dropping(currency)
+                 if game_data.monster_spawn_known(m)
+                 and not game_data.is_event_monster(m)]
+    return any(is_winnable(state, game_data, m) for m in permanent)
+
+
 def _permanently_buyable(leaf: str, state: WorldState,
                          game_data: GameData) -> bool:
     """`leaf` is purchasable from a PERMANENT, reachable vendor for gold or a
-    currency that is itself attainable now — the buyable arm of
-    `is_attainable_now`, restricted to non-event, located NPCs (an event
-    vendor is handled by the EVENT_GATED arm)."""
+    currency the planner can DIRECTLY acquire (`_currency_directly_attainable`),
+    restricted to non-event, located NPCs (an event vendor is handled by the
+    EVENT_GATED arm; a task-only-currency vendor by the PURCHASE_RECURSION arm)."""
     for npc, _price, currency in game_data.npc_purchases(leaf):
         if game_data.is_event_npc(npc) or game_data.npc_location(npc) is None:
             continue
-        if currency == GOLD or is_attainable_now(currency, state, game_data):
+        if _currency_directly_attainable(currency, state, game_data):
             return True
     return False
+
+
+def _recursive_purchase_only(leaf: str, game_data: GameData) -> bool:
+    """`leaf` has a PERMANENT, reachable, non-event vendor but only for a
+    currency the planner cannot directly acquire (reached only after
+    `_permanently_buyable` has already failed, so every such vendor's currency
+    is task-earned) — the recursive buy-edge tracked as
+    npc_purchase_acquisition Phase 2-4, a known scoped gap."""
+    return any(not game_data.is_event_npc(npc)
+               and game_data.npc_location(npc) is not None
+               for npc, _price, _currency in game_data.npc_purchases(leaf))
 
 
 def _sold_only_by_event_npc(leaf: str, game_data: GameData) -> bool:
@@ -317,6 +371,24 @@ def _sold_only_by_event_npc(leaf: str, game_data: GameData) -> bool:
     arm having already failed) — an event-gated purchase source."""
     return any(game_data.is_event_npc(npc)
                for npc, _price, _currency in game_data.npc_purchases(leaf))
+
+
+def _has_located_gather_source(leaf: str, game_data: GameData) -> bool:
+    """True iff some PLACED resource drops `leaf`. `gatherable_drop_items()`
+    alone is theoretical — it counts a drop even when its resource has no
+    location: `strange_rocks` (diamond_stone's sole source) carries a skill and
+    a drop table but is UNPLACED in the bundle, so diamond_stone cannot actually
+    be gathered. Treating such a leaf as reachable made `classify_gap` fall
+    through to PLANNER_BUG for a MATERIAL dead end (live census 2026-07-11:
+    diamond, adamantite gear). The gathering-SKILL requirement is handled
+    upstream by `census_state` (it grants the recipe's prerequisite gathering
+    skills), so LOCATION is the remaining check here."""
+    for resource, table in game_data.resource_drops_full.items():
+        if (resource in game_data.all_resource_locations
+                and any(item == leaf for item, _rate, _mn, _mx in table)):
+            return True
+    return any(drop == leaf and resource in game_data.all_resource_locations
+               for resource, drop in game_data.resource_drops.items())
 
 
 def _leaf_status(leaf: str, state: WorldState,
@@ -332,7 +404,7 @@ def _leaf_status(leaf: str, state: WorldState,
     a leaf whose only dropper is an event monster is EVENT_GATED (the source
     itself is absent in the event-free audit). A leaf with neither a reachable
     source nor an event source is MATERIAL_UNREACHABLE."""
-    if leaf in game_data.gatherable_drop_items():
+    if _has_located_gather_source(leaf, game_data):
         return None
     if game_data.is_task_earnable(leaf):
         return None
@@ -342,34 +414,46 @@ def _leaf_status(leaf: str, state: WorldState,
     permanent = [m for m, _r, _mn, _mx in droppers
                  if game_data.monster_spawn_known(m)
                  and not game_data.is_event_monster(m)]
-    if any(is_winnable(state, game_data, m) for m in permanent):
-        return None
+    winnable = [m for m in permanent if is_winnable(state, game_data, m)]
+    if winnable:
+        # A winnable dropper only makes the leaf reachable if the planner would
+        # actually FIGHT it. An xp-positive dropper always qualifies; a GREY
+        # dropper (zero xp-per-kill, ≥10 levels below the character) is fought
+        # only under `grey_farm_allowed`. When every winnable dropper is grey
+        # AND the grey-farm policy declines it (a near next-tier same-family
+        # recipe is the better skill-grind), production grinds toward that tier
+        # instead — the drop is policy-suppressed, not a planner hole.
+        if (any(game_data.xp_per_kill(m, state.level) > 0 for m in winnable)
+                or grey_farm_allowed(leaf, state, game_data)):
+            return None
+        return GapClass.GREY_FARM_SUPPRESSED
     if permanent:
         return GapClass.COMBAT_BLOCKED
     if any(game_data.is_event_monster(m) for m, _r, _mn, _mx in droppers):
         return GapClass.EVENT_GATED
     if _sold_only_by_event_npc(leaf, game_data):
         return GapClass.EVENT_GATED
+    if _recursive_purchase_only(leaf, game_data):
+        return GapClass.PURCHASE_RECURSION
     return GapClass.MATERIAL_UNREACHABLE
 
 
-def _skill_grindable(recipe: str, skill: str, target_level: int,
+def _skill_grindable(recipe: str, skill: str,
                      skill_level: int, game_data: GameData) -> bool:
     """The recipe's crafting skill can be leveled from the cell's `skill_level`
-    up to the recipe's required `target_level`. Trivially true when already at
-    or above target; otherwise there must be SOME grind rung STARTABLE AT THE
-    CELL'S CURRENT `skill_level` — a craftable of the same `crafting_skill` at
-    a level ≤ `skill_level`, or a gatherable resource of that skill at a level
-    ≤ `skill_level` (this game reuses the raw-gathering skill name as the
-    tier-1 processed good's `crafting_skill`). Bounding by `skill_level` (not
-    `target_level`) is deliberate: a rung above the target is irrelevant
-    either way, but a rung AT OR BELOW the target yet ABOVE the character's
-    current skill is not actionable NOW — it is itself ungrindable from here.
-    A skill whose lowest rung sits above `skill_level` cannot be bootstrapped
-    from this cell at all — SKILL_UNREACHABLE (e.g. skill_level=0: even a
-    level-1 rung needs skill 1 just to act on it)."""
-    if skill_level >= target_level:
-        return True
+    up to the recipe's required `target_level`. The sole caller (`classify_gap`)
+    invokes this ONLY for under-skill cells (`skill_level < target_level`), so
+    the question is always non-trivial: there must be SOME grind rung STARTABLE
+    AT THE CELL'S CURRENT `skill_level` — a craftable of the same
+    `crafting_skill` at a level ≤ `skill_level`, or a gatherable resource of
+    that skill at a level ≤ `skill_level` (this game reuses the raw-gathering
+    skill name as the tier-1 processed good's `crafting_skill`). Bounding by
+    `skill_level` (not `target_level`) is deliberate: a rung above the target is
+    irrelevant either way, but a rung AT OR BELOW the target yet ABOVE the
+    character's current skill is not actionable NOW — it is itself ungrindable
+    from here. A skill whose lowest rung sits above `skill_level` cannot be
+    bootstrapped from this cell at all — SKILL_UNREACHABLE (e.g. skill_level=1
+    with only a level-2 rung: you need skill 2 just to act on it)."""
     for code, stats in game_data.all_item_stats.items():
         if (code != recipe and stats.crafting_skill == skill
                 and 0 < (stats.crafting_level or 0) <= skill_level):
@@ -378,35 +462,79 @@ def _skill_grindable(recipe: str, skill: str, target_level: int,
                for res_skill, res_level in game_data.resource_skills.values())
 
 
-def census_state(cell: CraftCell, game_data: GameData) -> WorldState:
-    """The plausibly-GEARED census character state for `cell` (spec grid
-    `State` definition, docs/superpowers/specs/2026-07-08-craft-planning-
-    completeness-design.md): `cell.char_level` + `cell.skill_name` at
-    `cell.skill_level`, empty inventory AND bank, equipped with the best
-    usable-NOW item per slot and combat stats DERIVED from that loadout —
-    so `is_winnable` reflects a plausible starter/tier loadout, not zero
-    stats.
+def _closure_gather_skills(recipe: str, game_data: GameData) -> dict[str, int]:
+    """The prerequisite GATHERING skills (skill -> level) a character must have
+    leveled to source `recipe`'s closure materials from a LOCATED resource — the
+    cheapest (lowest-level) placed source per material fixes the level.
 
-    Gear source: a bare (ungeared) state at the cell seeds `CharacterObjective
+    A plausibly-progressed crafter of `recipe` HAS these skills: you cannot amass
+    a recipe's raw materials without having leveled the skills that gather them,
+    and the grid pairs each recipe's `char_level` with its own tier, so a
+    tier-N recipe is only ever tried at a tier-N character — where a tier-N
+    gathering skill is plausible. Without this, `census_state` granted ONLY the
+    crafting skill, leaving every cross-skill material ungatherable (a
+    weaponcrafting cell with mining 1 could never gather iron_ore) — a
+    CENSUS-STATE artifact that mislabeled cross-skill recipes as PLANNER_BUG
+    (live census 2026-07-11: iron_dagger, cooked_shrimp, water_bow). Unplaced
+    or higher-than-tier sources are deliberately excluded — a material sourced
+    only from an unplaced resource is genuinely unreachable (MATERIAL, via
+    `_leaf_status`), not a skill the census should hand out."""
+    chain: dict[str, int] = {}
+    closure_demand(recipe, 1, game_data, chain, frozenset())
+    skills: dict[str, int] = {}
+    for leaf in chain:
+        best: tuple[str, int] | None = None
+        for resource, table in game_data.resource_drops_full.items():
+            if (resource in game_data.all_resource_locations
+                    and any(item == leaf for item, _rate, _mn, _mx in table)):
+                req = game_data.resource_skills.get(resource)
+                if req is not None and (best is None or req[1] < best[1]):
+                    best = req
+        for resource, drop in game_data.resource_drops.items():
+            if drop == leaf and resource in game_data.all_resource_locations:
+                req = game_data.resource_skills.get(resource)
+                if req is not None and (best is None or req[1] < best[1]):
+                    best = req
+        if best is not None:
+            skill, level = best
+            skills[skill] = max(skills.get(skill, 0), level)
+    return skills
+
+
+def census_state(recipe: str, cell: CraftCell, game_data: GameData) -> WorldState:
+    """The plausibly-GEARED, plausibly-SKILLED census character state for
+    attempting `recipe` at `cell` (spec grid `State` definition,
+    docs/superpowers/specs/2026-07-08-craft-planning-completeness-design.md):
+    `cell.char_level` + `cell.skill_name` at `cell.skill_level` PLUS the
+    prerequisite gathering skills the recipe's materials need (`_closure_gather_
+    skills`), empty inventory AND bank, equipped with the best usable-NOW item
+    per slot and combat stats DERIVED from that loadout — so `is_winnable`
+    reflects a plausible starter/tier loadout, not zero stats.
+
+    Prereq skills NEVER override `cell.skill_name`: the cell's crafting-skill
+    level is the tested dimension (under- vs at-skill), so it stays exactly
+    `cell.skill_level` even if the recipe also gathers with that skill.
+
+    Gear source: a bare state at the cell seeds `CharacterObjective
     .near_term_gear`, which picks the best attainable-now item per equipment
-    slot at `cell.char_level` (empty-slot baseline, so every positive-value
-    attainable item wins its slot). That `{slot: code}` loadout is then
-    equipped on the real census character with `derive_combat_stats=True`,
-    which sums the equipped items' catalog stats into the server-total
-    combat stats (attack/dmg/resistance/critical_strike/initiative) and the
-    derived max_hp — exactly what a live character wearing this loadout
-    would report.
+    slot at `cell.char_level` (empty-slot baseline). That `{slot: code}` loadout
+    is equipped with `derive_combat_stats=True`, which sums the equipped items'
+    catalog stats into the server-total combat stats — what a live character
+    wearing this loadout would report.
 
-    Used by both `classify_gap` (the `is_winnable` reachability check) and
-    the Phase-2 generator (`plan_craft`'s driving state), so the census and
-    the classifier agree on what "plausible loadout" means for a cell."""
+    Used by both `classify_gap` and `plan_craft`'s driving state, so the census
+    and the classifier agree on the cell's plausible character."""
+    skills = {cell.skill_name: cell.skill_level}
+    for skill, level in _closure_gather_skills(recipe, game_data).items():
+        if skill != cell.skill_name:
+            skills[skill] = level
     bare = scenario_state(
         ScenarioCharacter(name="census_bare", level=cell.char_level,
-                          skills={cell.skill_name: cell.skill_level}),
+                          skills=dict(skills)),
         game_data)
     gear = CharacterObjective.from_game_data(game_data).near_term_gear(bare)
     sc = ScenarioCharacter(name="craft_audit", level=cell.char_level,
-                           skills={cell.skill_name: cell.skill_level},
+                           skills=dict(skills),
                            equipment=gear, derive_combat_stats=True)
     return scenario_state(sc, game_data)
 
@@ -420,7 +548,15 @@ def classify_gap(recipe: str, cell: CraftCell,
     (`recipe`, `cell`, `game_data`).
 
     Precedence — EVENT_GATED → COMBAT_BLOCKED → MATERIAL_UNREACHABLE →
-    SKILL_UNREACHABLE → PLANNER_BUG — runs most-specific-first:
+    GREY_FARM_SUPPRESSED → PURCHASE_RECURSION → SKILL_UNREACHABLE →
+    PLANNER_BUG — runs most-specific-first. The first five are leaf-level (a
+    specific closure leaf blocks); SKILL_UNREACHABLE is recipe-level (the
+    crafting skill is below level AND cannot be bootstrapped from here);
+    PLANNER_BUG is the residual. A GRINDABLE under-skill cell is NOT a gap class:
+    the planner-native LevelSkill action (epic P2) plans grind→craft, so
+    `craft_cell_verdict` PASSes it on the LevelSkill first leg — it never reaches
+    this cascade (a grindable under-skill FAIL would be an actionable PLANNER_BUG,
+    not an expected limit):
 
     - EVENT_GATED is the most specific and most EXPECTED limit (a leaf whose
       only source is a timed event, deliberately absent from the event-free
@@ -440,17 +576,26 @@ def classify_gap(recipe: str, cell: CraftCell,
 
     A leaf's own status is decided by `_leaf_status`; the cascade then ranks
     the leaf statuses by the precedence above."""
-    state = census_state(cell, game_data)
+    state = census_state(recipe, cell, game_data)
     statuses = {_leaf_status(leaf, state, game_data)
                 for leaf in _closure_leaves(recipe, game_data)}
     for gap in (GapClass.EVENT_GATED, GapClass.COMBAT_BLOCKED,
-                GapClass.MATERIAL_UNREACHABLE):
+                GapClass.MATERIAL_UNREACHABLE, GapClass.GREY_FARM_SUPPRESSED,
+                GapClass.PURCHASE_RECURSION):
         if gap in statuses:
             return gap
     stats = game_data.item_stats(recipe)
     skill = (stats.crafting_skill or "") if stats is not None else ""
     target_level = (stats.crafting_level or 0) if stats is not None else 0
-    if not _skill_grindable(recipe, skill, target_level,
-                            cell.skill_level, game_data):
+    if (cell.skill_level < target_level
+            and not _skill_grindable(recipe, skill, cell.skill_level, game_data)):
+        # Under-skill AND the skill cannot be bootstrapped from here (no in-band
+        # rung to grind on) — a genuine skill dead end, SKILL_UNREACHABLE.
+        # A GRINDABLE under-skill cell is NOT classified here: the planner-native
+        # LevelSkill action (epic P2) plans grind→craft, so `craft_cell_verdict`
+        # PASSes it on the LevelSkill first leg and it never reaches classify. If
+        # a grindable under-skill cell DOES fail, the planner had LevelSkill in
+        # reach and should have used it — that is the actionable PLANNER_BUG
+        # residual (the fall-through below), not an expected skill gap.
         return GapClass.SKILL_UNREACHABLE
     return GapClass.PLANNER_BUG

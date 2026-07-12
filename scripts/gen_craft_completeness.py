@@ -13,6 +13,12 @@ memo; only the budget-bound cells (deep chains that hit the 10 s wall) vary
 between regens, exactly as in the serial run. Run:
 
     uv run python scripts/gen_craft_completeness.py [max_workers]
+
+CI gate: pass `--check` to exit non-zero when any cell classifies as
+PLANNER_BUG (the actionable residual must stay 0). `--check` still writes the
+docs, so a failing pipeline also surfaces the regenerated MATRIX/BACKLOG:
+
+    uv run python scripts/gen_craft_completeness.py --check [max_workers]
 """
 
 import json
@@ -50,7 +56,10 @@ def _run_one(work: tuple[str, CraftCell]) -> CellResult:
 
 
 def main() -> None:
-    max_workers = int(sys.argv[1]) if len(sys.argv) > 1 else (os.cpu_count() or 4)
+    argv = sys.argv[1:]
+    check = "--check" in argv
+    positional = [a for a in argv if not a.startswith("--")]
+    max_workers = int(positional[0]) if positional else (os.cpu_count() or 4)
     bundle_dict = json.loads(BUNDLE.read_text())
     gd = GameData.from_cache_bundle(bundle_dict)
     recipes = craftable_recipes(gd)
@@ -76,6 +85,16 @@ def main() -> None:
     (OUT_DIR / "BACKLOG.md").write_text(render_backlog(results))
     print(f"census done in {time.monotonic() - start:.0f}s", file=sys.stderr)
     print(summary_line(results))
+    if check:
+        bugs = [r for r in results if r.gap == "planner_bug"]
+        if bugs:
+            print(f"CENSUS NOT CLEAN: {len(bugs)} PLANNER_BUG cell(s):",
+                  file=sys.stderr)
+            for r in bugs:
+                print(f"  {r.recipe} {r.char_level}/{r.skill_level} "
+                      f"({r.skill} {r.craft_level})", file=sys.stderr)
+            sys.exit(1)
+        print("CENSUS CLEAN: 0 PLANNER_BUG cells.", file=sys.stderr)
 
 
 if __name__ == "__main__":

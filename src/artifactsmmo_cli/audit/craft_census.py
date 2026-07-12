@@ -41,7 +41,7 @@ def run_cell(recipe: str, cell: CraftCell, game_data: GameData) -> CellResult:
     stats = game_data.item_stats(recipe)
     if stats is None or not stats.crafting_skill:
         raise ValueError(f"{recipe} is not a craftable recipe")
-    state = census_state(cell, game_data)
+    state = census_state(recipe, cell, game_data)
     plan = plan_craft(recipe, state, game_data)
     verdict = craft_cell_verdict(recipe, plan, game_data)
     gap = None if verdict.passed else classify_gap(recipe, cell, game_data).value

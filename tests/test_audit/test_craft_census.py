@@ -52,7 +52,8 @@ def test_run_cell_records_gap_on_failure() -> None:
     else:
         assert result.gap in {
             "event_gated", "combat_blocked", "material_unreachable",
-            "skill_unreachable", "planner_bug",
+            "skill_unreachable", "grey_farm_suppressed",
+            "purchase_recursion", "planner_bug",
         }
         assert result.reason != ""
 
