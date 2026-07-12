@@ -62,8 +62,9 @@ def test_plannable_when_no_upgrade_target():
 
 
 def _gd_skill_gated() -> GameData:
-    """copper_legs_armor needs gearcrafting 5 — the trace 2026-06-11 17:47
-    hijack shape (mats nearly in hand, skill 2 < 5, no plan can exist)."""
+    """copper_legs_armor needs gearcrafting 5 — the under-skill craftable shape
+    (mats nearly in hand, skill 2 < 5). Post-P3a a LevelSkill grind makes it
+    reachable, so is_plannable admits it rather than pruning at the skill gate."""
     gd = _gd_boots()
     gd._item_stats = {
         "copper_legs_armor": ItemStats(code="copper_legs_armor", level=6,
@@ -76,16 +77,19 @@ def _gd_skill_gated() -> GameData:
     return gd
 
 
-def test_not_plannable_when_crafting_skill_below_recipe_level():
-    """Materials in hand but gearcrafting below the recipe gate:
-    CraftAction.is_applicable blocks the final craft, so no plan exists —
-    the goal must yield the step slot instead of planning to exhaustion."""
+def test_plannable_when_crafting_skill_below_recipe_level():
+    """LevelSkill epic P3a: an under-skill craftable equippable is NO LONGER
+    pruned by is_plannable. relevant_actions admits a scoped LevelSkill, so the
+    gated final craft is reachable via a grind->craft->equip sequence — the
+    former crafting-skill fast-fail is retired (mirrors P2 for GatherMaterials).
+    With the materials in hand the depth bound is satisfied, so the goal stays
+    plannable."""
     goal = UpgradeEquipmentGoal(committed_target=("copper_legs_armor", "leg_armor_slot"))
     state = make_state(inventory={"copper_bar": 5},
                        skills={"gearcrafting": 2, "mining": 3, "woodcutting": 2,
                                "fishing": 1, "weaponcrafting": 1, "jewelrycrafting": 1,
                                "cooking": 1, "alchemy": 1})
-    assert goal.is_plannable(state, _gd_skill_gated()) is False
+    assert goal.is_plannable(state, _gd_skill_gated()) is True
 
 
 def test_plannable_when_crafting_skill_meets_recipe_level():

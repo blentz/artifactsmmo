@@ -141,7 +141,16 @@ class UpgradeEquipmentGoal(Goal):
         80 gathers ≫ max_depth 32: the Robby first-cycle stall. When the
         target (or its materials) is already in hand/bank the count drops and the
         short craft+equip plan IS reachable, so the goal stays plannable and
-        GatherMaterials does the accumulating across cycles."""
+        GatherMaterials does the accumulating across cycles.
+
+        Under-skill craft targets are NOT pruned here (LevelSkill epic P3a): the
+        former crafting-skill fast-fail (which returned False while the character
+        was below the recipe's crafting_level — the pre-LevelSkill CPU guard
+        against the arbiter planning a gated final craft to exhaustion) is
+        retired. `relevant_actions` now admits a SCOPED LevelSkill for the
+        target's own gated (skill, level), so an under-skill equippable is
+        reachable via a grind->craft->equip sequence — the same fix P2 applied to
+        GatherMaterialsGoal. Only the depth-reachability bound remains."""
         if self.is_satisfied(state):
             return True
         target = self.find_upgrade_target(state, game_data)
@@ -153,19 +162,6 @@ class UpgradeEquipmentGoal(Goal):
             owned[code] = owned.get(code, 0) + qty
         if owned.get(item, 0) > 0:
             return True
-        # Crafting-skill gate: the target is not owned, so the FINAL craft
-        # must be performed, and CraftAction.is_applicable blocks it while
-        # the skill is below the recipe level — no plan can exist. Without
-        # this check the goal hijacked the arbiter's step slot and planned
-        # to exhaustion every cycle (trace 2026-06-11 17:47: gearcrafting
-        # 2 < 5 for copper_legs_armor; 486-887 nodes, plan_len 0, then
-        # fall-through to grinding — the one ore gathered at cycle 0
-        # flipped min_gathers under max_depth and shut off the productive
-        # GatherMaterials route for the rest of the run).
-        stats = game_data.item_stats(item)
-        if (stats is not None and stats.crafting_skill
-                and state.skills.get(stats.crafting_skill, 1) < stats.crafting_level):
-            return False
         return min_plan_length(
             item, 1, game_data.crafting_recipes, owned,
             game_data.max_gather_yield, equip=True,
@@ -228,9 +224,32 @@ class UpgradeEquipmentGoal(Goal):
         for code, qty in (state.bank_items or {}).items():
             owned[code] = owned.get(code, 0) + qty
         covered = fully_covered_materials(target_item, 1, game_data.crafting_recipes, owned)
+        # LevelSkill admission scope (P3a): a skill-grind action only serves THIS
+        # goal when a closure craftable (the target or a craftable intermediate)
+        # is gated behind that exact (skill, level) and the character is under it
+        # — the gear-unlock grind. Mirrors GatherMaterialsGoal.gated_skill_levels:
+        # an UNCONDITIONAL skill_grind admission fans EVERY emitted LevelSkill
+        # (one per craft level in the whole recipe table) into every search,
+        # timing out under load (the P2 ff4401ac regression), and would also
+        # break the slot-lock by admitting grinds unrelated to the target.
+        gated_skill_levels: set[tuple[str, int]] = set()
+        for code in in_closure_crafts:
+            stats = game_data.item_stats(code)
+            if (stats is not None and stats.crafting_skill
+                    and game_data.crafting_recipe(code) is not None
+                    and state.skills.get(stats.crafting_skill, 1)
+                    < stats.crafting_level):
+                gated_skill_levels.add((stats.crafting_skill, stats.crafting_level))
         result: list[Action] = []
         for action in actions:
             if "recovery" in action.tags or "deposit" in action.tags:
+                result.append(action)
+            elif ("skill_grind" in action.tags
+                    and (getattr(action, "skill", ""),
+                         getattr(action, "target_level", 0)) in gated_skill_levels):
+                # Gear-unlock grind (P3a): admit a LevelSkill only for the
+                # target's own gated (skill, level) — duck-typed so the goal need
+                # not import LevelSkill. Scoped to keep the slot-lock intact.
                 result.append(action)
             elif isinstance(action, UnequipAction):
                 continue
