@@ -55,3 +55,37 @@ def test_planner_sequences_level_skill_before_gated_craft() -> None:
     level_idx = next(i for i, a in enumerate(plan)
                      if isinstance(a, LevelSkill))
     assert level_idx < craft_idx, f"LevelSkill must precede Craft(widget): {reprs}"
+
+
+def test_relevant_actions_scopes_level_skill_to_gated_closure() -> None:
+    """A LevelSkill enters a GatherMaterials search ONLY when a closure craftable
+    is gated behind that exact (skill, level) and the char is under it. Without
+    this scope the unconditional skill_grind tag admission fanned EVERY emitted
+    LevelSkill into every search — a non-craftable acquisition (the l30 gold-buy
+    rune shape) inherited useless grind branches and timed out under load
+    (activation regression 2026-07-12)."""
+    gd = _gd()
+    ls_gear5 = LevelSkill(skill="gearcrafting", target_level=5)
+    ls_mining9 = LevelSkill(skill="mining", target_level=9)  # irrelevant grind
+    actions = [ls_gear5, ls_mining9]
+
+    # under-skill widget craft (gearcrafting 1 < 5): admits the gearcrafting-5
+    # grind, excludes the irrelevant mining grind.
+    under = scenario_state(
+        ScenarioCharacter(name="t", level=5, skills={"gearcrafting": 1}), gd)
+    goal = GatherMaterialsGoal(target_item="widget", needed={"widget": 1})
+    admitted = goal.relevant_actions(actions, under, gd)
+    assert ls_gear5 in admitted
+    assert ls_mining9 not in admitted
+
+    # at-skill widget craft (gearcrafting 5, not gated): NO LevelSkill admitted.
+    at = scenario_state(
+        ScenarioCharacter(name="t", level=5, skills={"gearcrafting": 5}), gd)
+    assert not [a for a in goal.relevant_actions(actions, at, gd)
+                if isinstance(a, LevelSkill)]
+
+    # non-craftable closure (gear_ore is a raw leaf, no craftable to gate):
+    # zero LevelSkill — the l30 gold-buy-rune shape that regressed.
+    leaf_goal = GatherMaterialsGoal(target_item="gear_ore", needed={"gear_ore": 1})
+    assert not [a for a in leaf_goal.relevant_actions(actions, under, gd)
+                if isinstance(a, LevelSkill)]

@@ -211,6 +211,25 @@ class GatherMaterialsGoal(Goal):
             if skill_req is not None:
                 needed_skills.add(skill_req[0])
 
+        # LevelSkill admission scope: a skill-grind action only serves THIS goal
+        # when a closure craftable is gated behind that exact (skill, level) and
+        # the character is under it. Without this scope the unconditional
+        # `skill_grind` tag admission fanned EVERY emitted LevelSkill (one per
+        # craft level in the whole recipe table) into every GatherMaterials
+        # search — a pure gold-buy closure (l30 lifesteal_rune) has no craftable
+        # yet inherited ~15 useless LevelSkill branches, enlarging the search
+        # enough to time out under load (test_slot_scenario_search_is_bounded
+        # [l30_rune_fill], activation regression 2026-07-12). Mirrors the
+        # OptimizeLoadout `needed_skills` scoping just above.
+        gated_skill_levels: set[tuple[str, int]] = set()
+        for code in set(craftable_mats) | set(self._needed):
+            stats = game_data.item_stats(code)
+            if (stats is not None and stats.crafting_skill
+                    and game_data.crafting_recipe(code) is not None
+                    and state.skills.get(stats.crafting_skill, 1)
+                    < stats.crafting_level):
+                gated_skill_levels.add((stats.crafting_skill, stats.crafting_level))
+
         result: list[Action] = []
         for action in actions:
             if (
@@ -233,7 +252,9 @@ class GatherMaterialsGoal(Goal):
             elif (
                 "recovery" in action.tags
                 or "deposit" in action.tags
-                or "skill_grind" in action.tags
+                or ("skill_grind" in action.tags
+                    and (getattr(action, "skill", ""),
+                         getattr(action, "target_level", 0)) in gated_skill_levels)
                 or (isinstance(action, GatherAction) and gather_serves_closure(
                     action.resource_code, action.drop_item_override,
                     game_data.resource_drops, chain)
