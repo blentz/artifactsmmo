@@ -26,7 +26,6 @@ from artifactsmmo_cli.ai.goals.equip_owned_gear import EquipOwnedGoal
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
-from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
 from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.pursue_task import PursueTaskGoal  # noqa: F401 (used in repr checks)
@@ -1814,7 +1813,7 @@ class TestLevelLookahead:
         state = make_state(task_code="copper_bar", task_type="items",
                            task_total=20, task_progress=0, skills={"weaponcrafting": 1})
         goal = map_means(MeansKind.PURSUE_TASK, gd, _ctx(), state)
-        assert repr(goal) == "LevelSkill(weaponcrafting->4)"   # min(50, 1+3)
+        assert repr(goal) == "ReachSkill(weaponcrafting->4)"   # min(50, 1+3)
 
     def test_skill_step_caps_at_required_level(self):
         # current+LEVEL_LOOKAHEAD overshoots the gate -> cap at the required level.
@@ -1825,7 +1824,7 @@ class TestLevelLookahead:
         state = make_state(task_code="copper_bar", task_type="items",
                            task_total=20, task_progress=0, skills={"weaponcrafting": 48})
         goal = map_means(MeansKind.PURSUE_TASK, gd, _ctx(), state)
-        assert repr(goal) == "LevelSkill(weaponcrafting->50)"   # min(50, 48+3)
+        assert repr(goal) == "ReachSkill(weaponcrafting->50)"   # min(50, 48+3)
 
 
 # ---------------------------------------------------------------------------
@@ -1849,7 +1848,7 @@ class TestPursueTaskMapping:
         state = make_state(task_code="copper_bar", task_type="items",
                            task_total=20, task_progress=0, skills={"weaponcrafting": 1})
         goal = map_means(MeansKind.PURSUE_TASK, gd, _ctx(), state)
-        assert repr(goal) == "LevelSkill(weaponcrafting->3)"   # min(gate=3, 1+LEVEL_LOOKAHEAD=4) -> 3
+        assert repr(goal) == "ReachSkill(weaponcrafting->3)"   # min(gate=3, 1+LEVEL_LOOKAHEAD=4) -> 3
 
     def test_pursue_task_goal_carries_batch(self):
         gd = GameData()

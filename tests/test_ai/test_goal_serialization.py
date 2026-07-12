@@ -9,6 +9,7 @@ from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.pursue_task import PursueTaskGoal
+from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 
 
 def test_gather_round_trips():
@@ -80,21 +81,28 @@ def test_pursue_task_defaults_round_trip():
     assert repr(back) == repr(g)
 
 
-def test_level_skill_round_trips():
+def test_reach_skill_round_trips():
+    g = ReachSkillGoal("weaponcrafting", target_level=5)
+    d = goal_to_dict(g)
+    assert d["type"] == "ReachSkillGoal"
+    back = goal_from_dict(d, game_data=None)
+    assert isinstance(back, ReachSkillGoal)
+    assert repr(back) == repr(g)
+    assert back._skill_name == "weaponcrafting"
+    assert back._target_level == 5
+
+
+def test_persisted_level_skill_goal_rehydrates_as_reach_skill():
+    """COMPAT SHIM (P3a Task 2): a plan persisted before ReachSkillGoal existed
+    stored a LevelSkillGoal dict; it must rehydrate as ReachSkillGoal (dropping
+    the initial_skill_xp/xp_curve fields) rather than hard-raising."""
     g = LevelSkillGoal("weaponcrafting", target_level=5, initial_skill_xp=100)
     d = goal_to_dict(g)
     assert d["type"] == "LevelSkillGoal"
     back = goal_from_dict(d, game_data=None)
-    assert repr(back) == repr(g)
+    assert isinstance(back, ReachSkillGoal)
     assert back._skill_name == "weaponcrafting"
     assert back._target_level == 5
-    assert back._initial_skill_xp == 100
-
-
-def test_level_skill_xp_curve_not_serialized():
-    g = LevelSkillGoal("gearcrafting", target_level=3)
-    d = goal_to_dict(g)
-    assert "xp_curve" not in d
 
 
 def test_upgrade_equipment_no_commitment_round_trips():

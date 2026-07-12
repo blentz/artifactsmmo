@@ -10,9 +10,9 @@ from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.craft_relief import CraftReliefGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
-from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.pursue_task import PursueTaskGoal
+from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 
 
 def goal_to_dict(goal: object) -> dict[str, object] | None:
@@ -45,12 +45,19 @@ def goal_from_dict(data: dict[str, object], game_data: GameData | None) -> Goal:
         return GrindCharacterXPGoal(
             cast(str, data["target_monster"]),
             cast(int, data["initial_xp"]))
-    if t == "LevelSkillGoal":
-        return LevelSkillGoal(
+    if t == "ReachSkillGoal":
+        return ReachSkillGoal(
             cast(str, data["skill_name"]),
-            cast(int, data["target_level"]),
-            cast(int, data["initial_skill_xp"]),
-            None)
+            cast(int, data["target_level"]))
+    if t == "LevelSkillGoal":
+        # COMPAT SHIM: a plan persisted before P3a Task 2 rehydrates as the new
+        # ReachSkillGoal (which aims the planner-native LevelSkill action). The
+        # old initial_skill_xp/xp_curve fields are dropped — ReachSkillGoal
+        # satisfies purely on the skills-level snapshot, so they are unneeded.
+        # Without this branch such a plan would hard-raise below on rehydrate.
+        return ReachSkillGoal(
+            cast(str, data["skill_name"]),
+            cast(int, data["target_level"]))
     if t == "UpgradeEquipmentGoal":
         committed_raw = data["committed_target"]
         committed: tuple[str, str] | None = None

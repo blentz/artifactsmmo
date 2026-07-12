@@ -39,13 +39,13 @@ from artifactsmmo_cli.ai.goals.equip_owned_gear import EquipOwnedGoal
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
-from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
 from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
 from artifactsmmo_cli.ai.goals.maintain_consumables import MaintainConsumablesGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.goals.provision_marginal_fight import ProvisionMarginalFightGoal
 from artifactsmmo_cli.ai.goals.pursue_task import PursueTaskGoal
 from artifactsmmo_cli.ai.goals.reach_currency import ReachCurrencyGoal
+from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
 from artifactsmmo_cli.ai.goals.recycle_surplus import RecycleSurplusGoal
 from artifactsmmo_cli.ai.goals.restore_hp import RestoreHPGoal
@@ -437,9 +437,10 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
         if req is not None and req.skill != "combat":
             current = state.skills.get(req.skill, 0)
             target = min(req.required_level, current + LEVEL_LOOKAHEAD)
-            return LevelSkillGoal(skill_name=req.skill, target_level=target,
-                                  initial_skill_xp=state.skill_xp.get(req.skill, 0),
-                                  xp_curve=ctx.skill_xp_curves.get(req.skill))
+            # P3a Task 2: route the task-skill grind through the planner-native
+            # LevelSkill action (via ReachSkillGoal) instead of LevelSkillGoal
+            # (retired in P3b). Arbiter ordering is unchanged (both fire at 55.0).
+            return ReachSkillGoal(skill_name=req.skill, target_level=target)
         assert state.task_code is not None  # _fires guarantees an active task
         return PursueTaskGoal(task_code=state.task_code,
                               initial_progress=state.task_progress,
