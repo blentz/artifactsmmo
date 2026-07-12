@@ -743,18 +743,33 @@ class GamePlayer:
             self.tracer.close()
 
     def _execute_level_skill(self, action: LevelSkill,
-                             client: AuthenticatedClient) -> tuple[WorldState, str]:
+                             client: AuthenticatedClient,
+                             _grinding: frozenset[str] = frozenset()
+                             ) -> tuple[WorldState, str]:
         """Run ONE grind cycle for a LevelSkill plan step: pick the rung, plan the
         skill_grind GatherMaterials goal, execute its first leg. The next cycle's
         replan re-derives the remaining grind (one-leg-per-cycle idiom); when the
         real skill reaches target, is_applicable turns False and the plan advances
         to the gated craft.
 
-        The two guards are for states LevelSkill.is_applicable already excludes
-        (no grind rung / an empty sub-plan) — unreachable in a correct plan, so
-        they raise rather than swallow.
+        The first two guards are for states LevelSkill.is_applicable already
+        excludes (no grind rung / an empty sub-plan) — unreachable in a correct
+        plan, so they raise rather than swallow.
+
+        Recursion is bounded by a cycle guard. A grind rung can need a cross-skill
+        under-level intermediate (real: lizard_skin_armor gearcrafting-25 needs
+        dead_wood_plank woodcutting-30), so sub_plan[0] may itself be a LevelSkill
+        for ANOTHER skill. We recurse into _execute_level_skill directly (not via
+        _execute) so the _grinding set of skills already in the current recursion
+        chain threads through; a cyclic skill-dependency is detected and raised
+        rather than looping. Recursion depth is thus <= the number of distinct
+        skills.
         """
         assert self.state is not None and self.game_data is not None
+        if action.skill in _grinding:
+            raise RuntimeError(
+                f"cyclic skill-grind dependency for {action.skill}: "
+                f"{sorted(_grinding)}")
         goal = next_grind_goal(action.skill, self.state, self.game_data)
         if goal is None:
             raise RuntimeError(
@@ -766,7 +781,11 @@ class GamePlayer:
         if not sub_plan:
             raise RuntimeError(
                 f"LevelSkill({action.skill}) grind produced no leg")
-        return self._execute(sub_plan[0], client)
+        first = sub_plan[0]
+        if isinstance(first, LevelSkill):
+            return self._execute_level_skill(first, client,
+                                             _grinding | {action.skill})
+        return self._execute(first, client)
 
     def _execute(self, action: Action, client: AuthenticatedClient) -> tuple[WorldState, str]:
         """Execute an action. Returns (new_state, outcome_str).
