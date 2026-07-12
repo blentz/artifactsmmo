@@ -234,6 +234,7 @@ class GatherMaterialsGoal(Goal):
             elif (
                 "recovery" in action.tags
                 or "deposit" in action.tags
+                or "skill_grind" in action.tags
                 or (isinstance(action, GatherAction) and gather_serves_closure(
                     action.resource_code, action.drop_item_override,
                     game_data.resource_drops, chain)

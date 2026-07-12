@@ -12,6 +12,7 @@ reconciles the optimism with reality.
 
 import dataclasses
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 from artifactsmmo_api_client import AuthenticatedClient
 
@@ -38,6 +39,11 @@ into a craft-cycle count. Refined by observation; never a hardcoded curve."""
 @dataclass
 class LevelSkill(Action):
     """Raise `skill` to `target_level`. Optimistic apply; player-expanded at execution."""
+
+    tags: ClassVar[frozenset[str]] = frozenset({"skill_grind"})
+    """Admits this action into GatherMaterialsGoal.relevant_actions' search
+    space (tag-based so the goal need not import LevelSkill). New tag in the
+    base.py vocabulary."""
 
     skill: str
     target_level: int

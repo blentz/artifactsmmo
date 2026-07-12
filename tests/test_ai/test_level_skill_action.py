@@ -102,3 +102,9 @@ def test_execute_raises_direct_call_guard() -> None:
     gd = _gd_with_grind_rung()
     with pytest.raises(RuntimeError, match="player skill-grind hook"):
         LevelSkill("gearcrafting", 5).execute(_state(gd, {"gearcrafting": 1}), None)
+
+
+def test_level_skill_carries_skill_grind_tag() -> None:
+    # relevant_actions admits LevelSkill into the search by this tag
+    # (tag-based, so gathering.py need not import LevelSkill).
+    assert LevelSkill("gearcrafting", 5).tags == frozenset({"skill_grind"})

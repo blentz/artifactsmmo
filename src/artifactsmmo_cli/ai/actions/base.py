@@ -52,7 +52,7 @@ class Action(ABC):
 
     Tag vocabulary (kept small on purpose):
       combat, gather, craft, movement, recovery, bank, task, npc, equip,
-      cleanup, claim, produces_char_xp, produces_skill_xp.
+      cleanup, claim, produces_char_xp, produces_skill_xp, skill_grind.
 
     ClassVar so dataclass-decorated subclasses don't treat it as a field.
     """

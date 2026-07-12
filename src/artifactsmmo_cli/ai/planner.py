@@ -38,7 +38,19 @@ never approach it."""
 
 
 def _state_key(state: WorldState) -> tuple[object, ...]:
-    """Hashable key over the full WorldState for the visited set."""
+    """Hashable key over the full WorldState for the visited set.
+
+    Includes `state.skills`: an action whose ONLY effect is a skill-level
+    change (LevelSkill's optimistic apply) produces a next_state that is
+    otherwise identical to its parent, so without skills in the key that
+    child collides with the already-visited parent and is pruned — the
+    skill-gated craft it unlocks can then never be reached in-search
+    (GatherMaterials(under-skill widget) planned to length 0). Adding skills
+    only makes the dedup FINER, so it cannot break Dijkstra optimality
+    (PlannerAdmissibility.lean); and since no LIVE action mutates
+    state.skills (gathers/crafts accrue projected_skill_xp_delta, never
+    levels), the skills component is constant across every node of every live
+    search — the partition is unchanged, so this is inert for the live bot."""
     return (
         state.x, state.y,
         state.hp, state.gold,
@@ -47,6 +59,7 @@ def _state_key(state: WorldState) -> tuple[object, ...]:
         tuple(sorted(state.inventory.items())),
         tuple(sorted(state.equipment.items())),
         tuple(sorted((state.bank_items or {}).items())),
+        tuple(sorted(state.skills.items())),
     )
 
 
