@@ -3,7 +3,7 @@
 
 namespace Extracted.NextTierCap
 
-/-- Extracted from `@dataclass SkillItem` (line 22). -/
+/-- Extracted from `@dataclass SkillItem` (line 24). -/
 structure SkillItem where
   craft_skill : String
   craft_level : Int

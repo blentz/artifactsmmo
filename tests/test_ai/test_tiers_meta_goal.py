@@ -2,7 +2,6 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
-    ReachSkillLevel,
     owned_count,
 )
 from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
@@ -14,15 +13,6 @@ GD = GameData()
 def test_reach_char_level_satisfaction():
     assert ReachCharLevel(10).is_satisfied(make_state(level=10), GD) is True
     assert ReachCharLevel(10).is_satisfied(make_state(level=9), GD) is False
-
-
-def test_reach_skill_level_satisfaction():
-    s = make_state(skills={"mining": 5})
-    assert ReachSkillLevel("mining", 5).is_satisfied(s, GD) is True
-    assert ReachSkillLevel("mining", 6).is_satisfied(s, GD) is False
-    # default skill level is 1 when absent
-    assert ReachSkillLevel("cooking", 2).is_satisfied(s, GD) is False
-    assert ReachSkillLevel("cooking", 1).is_satisfied(s, GD) is True
 
 
 def test_owned_count_inventory_bank_equipped():
@@ -58,7 +48,7 @@ def test_obtain_item_satisfaction_against_quantity():
 
 def test_nodes_are_hashable():
     # frozen dataclasses → usable in visited-sets during P3 traversal
-    assert {ReachCharLevel(5), ReachSkillLevel("mining", 3), ObtainItem("x", 2)}
+    assert {ReachCharLevel(5), ReachCharLevel(3), ObtainItem("x", 2)}
     assert ObtainItem("x", 2) == ObtainItem("x", 2)
 
 

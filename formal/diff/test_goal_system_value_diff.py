@@ -12,8 +12,7 @@ derived from those same objects, and assert bit-exact agreement under
 
 Modeled goals:
   Constant       : AcceptTask, ClaimPending, TaskExchange, TaskCancel,
-                   LevelSkill, ExpandBank, CompleteTask, ReachUnlockLevel,
-                   LowYieldCancel
+                   ExpandBank, CompleteTask, ReachUnlockLevel, LowYieldCancel
   Branching      : UnlockBank, DiscardOverstock, UpgradeEquipment
   Computed       : RestoreHP, DepositInventory, SellInventory
 
@@ -31,11 +30,6 @@ from artifactsmmo_cli.ai.goals.complete_task_goal import CompleteTaskGoal
 from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
 from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
-from artifactsmmo_cli.ai.goals.level_skill import (
-    MAX_SKILL_GAP,
-    PRIORITY_WHEN_FIRING as LEVEL_SKILL_PRIORITY,
-    LevelSkillGoal,
-)
 from artifactsmmo_cli.ai.goals.low_yield_cancel import (
     LOW_YIELD_CANCEL,
     LowYieldCancelGoal,
@@ -83,16 +77,6 @@ def task_cancel_value_model(satisfied: bool, pivots: bool) -> Fraction:
     if pivots:
         return Fraction(12)
     return Fraction(0)
-
-
-def level_skill_value_model(satisfied: bool, gap: int, has_craftable: bool) -> Fraction:
-    if satisfied:
-        return Fraction(0)
-    if gap <= 0 or gap > MAX_SKILL_GAP:
-        return Fraction(0)
-    if not has_craftable:
-        return Fraction(0)
-    return Fraction(int(LEVEL_SKILL_PRIORITY))
 
 
 def expand_bank_value_model(accessible: bool, satisfied: bool, unknown: bool,
@@ -276,21 +260,6 @@ def test_task_cancel_unsatisfied_no_pivot_returns_zero():
     # Either 0 (no pivot) or 12 (pivot) — must match model with same pivot flag.
     pivots = v == Fraction(12)
     assert v == task_cancel_value_model(False, pivots)
-
-
-def test_level_skill_satisfied_returns_zero():
-    gd = _gd()
-    goal = LevelSkillGoal(skill_name="mining", target_level=2)
-    s = make_state(skills={"mining": 5})
-    assert Fraction(goal.value(s, gd)) == level_skill_value_model(True, -3, False)
-
-
-def test_level_skill_gap_too_big_returns_zero():
-    gd = _gd()
-    goal = LevelSkillGoal(skill_name="mining", target_level=100)
-    s = make_state(skills={"mining": 1})
-    # gap=99 > MAX_SKILL_GAP=5
-    assert Fraction(goal.value(s, gd)) == level_skill_value_model(False, 99, False)
 
 
 def test_expand_bank_not_accessible_returns_zero():
@@ -530,14 +499,6 @@ def test_low_yield_cancel_constant_is_70_when_fires():
 
 def test_seize_window_value_constant_is_60():
     assert SEIZE_WINDOW_VALUE == 60.0
-
-
-def test_level_skill_constant_is_55():
-    assert LEVEL_SKILL_PRIORITY == 55.0
-
-
-def test_max_skill_gap_is_5():
-    assert MAX_SKILL_GAP == 5
 
 
 def test_max_achievable_gap_is_5():

@@ -14,7 +14,6 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
-    ReachSkillLevel,
 )
 from artifactsmmo_cli.ai.tiers.objective import GOLD, CharacterObjective, _permanent_vendor_purchases
 from artifactsmmo_cli.ai.tiers.personality import Personality
@@ -25,51 +24,37 @@ from artifactsmmo_cli.ai.world_state import WorldState
 def root_category(node: MetaGoal) -> str:
     if isinstance(node, ReachCharLevel):
         return "char_level"
-    if isinstance(node, ReachSkillLevel):
-        return "skills"
     return "gear"  # ObtainItem
 
 
 def desired_state_of(node: MetaGoal | None) -> dict[str, object]:
     if isinstance(node, ObtainItem):
         return {"have": {node.code: node.quantity}}
-    if isinstance(node, ReachSkillLevel):
-        return {"skill": {node.skill: node.level}}
     if isinstance(node, ReachCharLevel):
         return {"level": node.level}
     return {}
 
 
-_PREREQ_KIND_RANK: dict[type, int] = {ObtainItem: 0, ReachSkillLevel: 1, ReachCharLevel: 2}
+_PREREQ_KIND_RANK: dict[type, int] = {ObtainItem: 0, ReachCharLevel: 1}
 """Sibling-descent priority for `actionable_step`'s DFS (retires the
 `sorted(unmet, key=repr)` alphabetical tiebreak — feedback_no_alphabetical_
-tiebreak). Materials (ObtainItem) rank before skill-level gates
-(ReachSkillLevel) before char-level gates (ReachCharLevel): the mats are the
-concrete, immediate thing the character can act on right now (gather/craft),
-a skill-level gate is the slower background grind, and a char-level gate is
-the broadest/slowest of the three. This happens to match the OLD repr order
-too (`ObtainItem(...)` always sorted before `ReachSkillLevel(...)` /
-`ReachCharLevel(...)` — the class name is the first repr token — so no
-production behavior changes) but the rank is now an intentional, named
-decision instead of an accident of Python's default repr.
-
-In practice `prerequisites()` never emits ReachCharLevel and ReachSkillLevel
-as siblings of each other (a node's direct prereqs contain at most one
-skill/char-level gate, paired only with ObtainItem materials), so the
-2-vs-1 relative rank between those two kinds is unobserved by production
-code; it is fixed here anyway for a total, well-defined order."""
+tiebreak). Materials (ObtainItem) rank before char-level gates
+(ReachCharLevel): the mats are the concrete, immediate thing the character
+can act on right now (gather/craft), while a char-level gate is the
+broadest/slowest kind. This matches the OLD repr order too (`ObtainItem(...)`
+always sorted before `ReachCharLevel(...)` — the class name is the first repr
+token — so no production behavior changes) but the rank is now an intentional,
+named decision instead of an accident of Python's default repr."""
 
 
 def _prereq_order(node: MetaGoal) -> tuple[int, str, int]:
     """Semantic descent-priority key for `sorted(unmet, ...)`: (kind rank,
     semantic name, semantic level). The secondary/tertiary fields are the
-    node's OWN identifying data (item code, or skill/char level) — never a
-    repr string — so a tie only breaks on the same semantic field the node
-    already exposes."""
+    node's OWN identifying data (item code, or char level) — never a repr
+    string — so a tie only breaks on the same semantic field the node already
+    exposes."""
     if isinstance(node, ObtainItem):
         return (_PREREQ_KIND_RANK[ObtainItem], node.code, node.quantity)
-    if isinstance(node, ReachSkillLevel):
-        return (_PREREQ_KIND_RANK[ReachSkillLevel], node.skill, node.level)
     assert isinstance(node, ReachCharLevel), f"unhandled MetaGoal kind: {node!r}"
     return (_PREREQ_KIND_RANK[ReachCharLevel], "", node.level)
 
@@ -123,8 +108,6 @@ def root_cost(root: MetaGoal, state: WorldState, game_data: GameData) -> int:
     craft/gather chain size for gear. Floored at 1."""
     if isinstance(root, ReachCharLevel):
         return max(1, root.level - state.level)
-    if isinstance(root, ReachSkillLevel):
-        return max(1, root.level - state.skills.get(root.skill, 1))
     return unmet_closure_size(root, state, game_data)
 
 
@@ -205,8 +188,6 @@ def is_reachable(root: MetaGoal, state: WorldState, game_data: GameData,
         return True
     if root in path:
         return False
-    if isinstance(root, ReachSkillLevel):
-        return True  # grinding the skill is always an available action
     prereqs = prerequisites(root, state, game_data)
     if isinstance(root, ObtainItem) and not prereqs:
         return _producible(root.code, state, game_data)

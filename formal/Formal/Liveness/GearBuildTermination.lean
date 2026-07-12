@@ -60,16 +60,15 @@ theorem grounded_markSat (g : Graph) (a : Nat) :
   intro n h
   induction h with
   | @sat m hs => exact Grounded.sat (by simp [hs])
-  | @skill m hk => exact Grounded.skill (by simpa using hk)
   | @leaf m hns hk hempty hp =>
     by_cases hma : m = a
     · exact Grounded.sat (by simp [hma])
     · exact Grounded.leaf (by simp [hns, hma]) (by simpa using hk)
         (by simpa using hempty) (by simpa using hp)
-  | @node m hns hk hobt _ ih =>
+  | @node m hns hobt _ ih =>
     by_cases hma : m = a
     · exact Grounded.sat (by simp [hma])
-    · exact Grounded.node (by simp [hns, hma]) (by simpa using hk)
+    · exact Grounded.node (by simp [hns, hma])
         (by simpa using hobt) (by intro p hp; simp only [markSat_prereqs] at hp; exact ih p hp)
 
 /-- `markSat` only PRUNES unmet prereqs (a satisfied node is dropped from the unmet set);
@@ -167,9 +166,8 @@ theorem grounded_builds_target (g : Graph) (hwf : WellFormed g) (U : List Nat)
         rw [← hk]; exact measure_markSat_lt g U a hau hauns
       -- premises preserved for the recursive call.
       have hwf' : WellFormed (markSat g a) := by
-        refine ⟨?_, ?_⟩
-        · intro n hk1 hk2; have := hwf.1 n (by simpa using hk1) (by simpa using hk2); simpa using this
-        · intro n hk1; have := hwf.2 n (by simpa using hk1); simpa using this
+        intro n hk1 hk2
+        have := hwf n (by simpa using hk1) (by simpa using hk2); simpa using this
       have ht' : Grounded (markSat g a) t := grounded_markSat g a ht
       have hcov' : ∀ b, UnmetReach (markSat g a) t b → b ∈ U :=
         fun b hb => hcov b (unmetReach_markSat g a hb)

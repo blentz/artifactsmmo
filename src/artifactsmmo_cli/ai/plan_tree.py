@@ -1,7 +1,9 @@
 """Pure builder: the chosen strategy root's prerequisite tree for the TUI plan
-screen. Recurses prerequisites() (skill gates + materials down to raw gathers);
-non-chosen ranked roots are leaf stubs; the current step gets a synthetic serve
-child sourced from the running goal + action. No planning or I/O."""
+screen. Recurses prerequisites() (material ObtainItem edges down to raw gathers;
+skill grinds are planner-native LevelSkill legs, not prerequisite nodes, since
+epic P3); non-chosen ranked roots are leaf stubs; the current step gets a
+synthetic serve child sourced from the running goal + action. No planning or
+I/O."""
 
 from artifactsmmo_cli.ai.cycle_snapshot import PlanTreeNode
 from artifactsmmo_cli.ai.game_data import GameData
@@ -9,7 +11,6 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
-    ReachSkillLevel,
 )
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
@@ -26,8 +27,6 @@ def _label(node: MetaGoal) -> tuple[str, str]:
     if isinstance(node, ObtainItem):
         qty = "" if node.quantity == 1 else f" ×{node.quantity}"
         return f"{node.code}{qty}", "obtain"
-    if isinstance(node, ReachSkillLevel):
-        return f"{node.skill} → {node.level}", "skill"
     if isinstance(node, ReachCharLevel):
         return f"character → {node.level}", "charlevel"
     return short_root(repr(node)), "obtain"

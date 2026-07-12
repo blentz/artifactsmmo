@@ -33,8 +33,8 @@ FAITHFULNESS NOTES:
     as a `String` with the empty string standing for both; `taskCode ≠ ""` mirrors
     `bool(task_code)`. The differential harness encodes Python `None → ""`.
 
-  * Honest slice (NOT a surrogate). The other `objective_step_goal` branches
-    (`ObtainItem`, `ReachSkillLevel`) are by definition NOT combat-led and yield
+  * Honest slice (NOT a surrogate). The other `objective_step_goal` branch
+    (`ObtainItem`) is by definition NOT combat-led and yields
     `objectiveStepIsFight = False`; modelling only the `ReachCharLevel` slice is the
     entire meaning of the Bool, not a stand-in for the whole routing function.
 

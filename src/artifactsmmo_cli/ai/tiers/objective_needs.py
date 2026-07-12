@@ -14,7 +14,6 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
-    ReachSkillLevel,
 )
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -69,10 +68,6 @@ def _producible_by_self(code: str, game_data: GameData) -> bool:
 
 def objective_needs(root: MetaGoal, state: WorldState, game_data: GameData) -> NeedSet:
     """Unmet needs of `root`. Empty NeedSet when the objective is already met."""
-    if isinstance(root, ReachSkillLevel):
-        current = state.skills.get(root.skill, 0)
-        skill = frozenset({root.skill}) if current < root.level else frozenset()
-        return NeedSet(frozenset(), skill, frozenset(), char_xp=False)
     if isinstance(root, ReachCharLevel):
         return NeedSet(frozenset(), frozenset(), frozenset(),
                        char_xp=state.level < root.level)

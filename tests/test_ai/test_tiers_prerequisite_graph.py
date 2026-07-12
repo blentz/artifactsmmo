@@ -1,5 +1,5 @@
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import (
     best_attainable_weapon,
     combat_capable,
@@ -26,11 +26,13 @@ def _gd() -> GameData:
     return gd
 
 
-def test_obtain_craftable_yields_skill_and_materials():
+def test_obtain_craftable_yields_only_materials():
+    # P3b: the crafting-skill gate is no longer emitted as a prerequisite node
+    # (under-skill gear grinds via UpgradeEquipmentGoal + the LevelSkill action).
+    # An ObtainItem's prereqs are just its material ObtainItems.
     gd = _gd()
     prereqs = prerequisites(ObtainItem("copper_dagger"), make_state(), gd)
-    assert ReachSkillLevel("weaponcrafting", 1) in prereqs
-    assert ObtainItem("copper_bar", 6) in prereqs
+    assert prereqs == [ObtainItem("copper_bar", 6)]
 
 
 def test_obtain_already_owned_has_no_prereqs():
@@ -47,9 +49,11 @@ def test_obtain_already_equipped_is_satisfied_leaf():
     assert prerequisites(ObtainItem("copper_dagger"), s, gd) == []
 
 
-def test_obtain_gatherable_yields_gather_skill():
+def test_obtain_gatherable_is_leaf():
+    # P3b: a gatherable (recipe-less) item is a leaf — no skill-gate prereq is
+    # emitted; the material enters via the ObtainItem chain of its consumer.
     gd = _gd()
-    assert prerequisites(ObtainItem("copper_ore"), make_state(), gd) == [ReachSkillLevel("mining", 1)]
+    assert prerequisites(ObtainItem("copper_ore"), make_state(), gd) == []
 
 
 def test_obtain_unknown_source_is_leaf():
@@ -77,10 +81,6 @@ def test_reach_char_level_leaf_when_no_weapon_exists():
     gd._monster_level = {"dragon": 40}
     fill_monster_stat_defaults(gd)
     assert prerequisites(ReachCharLevel(50), make_state(level=1), gd) == []
-
-
-def test_reach_skill_level_is_leaf():
-    assert prerequisites(ReachSkillLevel("mining", 30), make_state(), _gd()) == []
 
 
 def test_combat_capable_uses_stat_prediction_not_level_margin():

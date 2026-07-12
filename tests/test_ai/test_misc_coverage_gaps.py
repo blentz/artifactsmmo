@@ -3,15 +3,9 @@
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
 from artifactsmmo_cli.ai.scalar_priority import yield_bonus_for_goal
 from artifactsmmo_cli.ai.tiers.guards import _has_sellable
 from tests.test_ai.fixtures import make_state
-
-
-def test_level_skill_goal_max_depth_is_100():
-    """Crafts can need deep recipe chains; budget matches GatherMaterials."""
-    assert LevelSkillGoal("weaponcrafting", 3).max_depth == 100
 
 
 def test_yield_bonus_for_goal_history_none_returns_zero():

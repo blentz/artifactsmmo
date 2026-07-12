@@ -1,14 +1,20 @@
 """GAP-8: craft chains with monster-drop ingredients (2026-07-08 LIVE STALL).
 
-Live evidence (Robby, L13): tree root `fire_bow` -> step
-`ReachSkillLevel(weaponcrafting, 10)` -> proven dispatch picks `water_bow`
-(the level-5 grinder) -> `GatherMaterials(water_bow)` NEVER planned:
+Live evidence (Robby, L13): a craft chain grinding weaponcrafting picked
+`water_bow` (a level-5 grinder) -> `GatherMaterials(water_bow)` NEVER planned:
 `water_bow = 2x blue_slimeball (monster drop) + 5x ash_plank`, and
 craft_plan_gen's CAN-GENERATE gate bailed on ANY closure containing a
 monster-drop leaf — even one whose deficit the bank already covered — so
 the raw A* fallback flooded 38,124 nodes into timeout / plan_len 0 and the
 arbiter fell back to `GrindCharacterXP(red_slime)` for 65 consecutive
 cycles. Weaponcrafting was permanently stalled.
+
+The ARBITER-level water_bow-selection pin was retired in epic P3b: skill-grind
+no longer dispatches to an in-skill craftable (grinding is planner-native via
+the LevelSkill action), so the tree no longer routes fire_bow's skill gate to
+`GatherMaterials(water_bow)`. The GAP-8 GENERATOR fix below is what mattered and
+stays pinned by the class-net sweep (`test_drop_leaf_recipe_generates_plan`) and
+the craft_plan_gen unit tests.
 
 The fix (mirroring GAP-6's proven dropper wiring, which
 GatherMaterialsGoal.relevant_actions already carries): the generator now
@@ -40,7 +46,6 @@ from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachSkillLevel
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.scenarios.search_bounds import assert_search_bounded
 
@@ -68,56 +73,6 @@ def test_l13_registered() -> None:
     """Registry-first (TDD): the scenario must exist under the exact
     binding name before anything else in this file can run."""
     assert L13 in SCENARIOS
-
-
-def test_l13_water_bow_chain_plans() -> None:
-    """The stall, flipped positive. The derivation up to the goal is the
-    UNCHANGED live shape (verified against the pre-fix code, which
-    reproduced it exactly: GatherMaterials(water_bow) flooded 53,159 nodes
-    offline / 38,124 live into timeout + plan_len 0, and the cycle fell
-    back to GrindCharacterXP(red_slime)):
-
-    - chosen_root: ObtainItem(fire_bow, weapon_slot) — the weapon upgrade;
-      its own mats (spruce_plank 6 + red_slimeball 2) ride in the bag, so
-      the material step is satisfied.
-    - chosen_step: ReachSkillLevel(weaponcrafting, 10) — fire_bow's skill
-      gate (5 < 10).
-    - dispatch: water_bow, the level-5 in-skill grinder with the fewest
-      missing mats once holdings are credited (blue_slimeball 2 needed vs
-      bag 1 + bank 2; ash_plank 5 missing) — reserved-material flags
-      exclude fire_staff (red_slimeball is fire_bow's own reserved input).
-
-    NEW: the goal now PLANS via the generator (nodes 0 — the A* flood class
-    is gone for drop recipes). Derived plan, pinned exactly: the core's
-    withdraw arm serves the bank-covered blue_slimeball deficit first
-    (recipe order; bag 1 + withdraw 1 = 2), then the ash leg: gather 49
-    ash_wood (bag already holds 1 of the 50 = 5 plank x 10 wood), batch-
-    craft the planks, craft the bow. No Fight leg HERE — the bank covers
-    the drop deficit, so the first leg is the Withdraw; the Fight leg of
-    the same generator path is pinned by the empty-holdings sweep and the
-    unit tests (tests/test_ai/test_craft_plan_gen.py)."""
-    report = _run(L13)
-    assert report.decision.chosen_root == ObtainItem(
-        code="fire_bow", quantity=1, slot="weapon_slot")
-    assert report.decision.chosen_step == ReachSkillLevel(
-        skill="weaponcrafting", level=10)
-    assert repr(report.selected_goal) == \
-        "GatherMaterials(water_bow, {water_bow:1})", (
-        repr(report.selected_goal),
-        [g.get("goal") for g in report.goals_tried])
-    water_bow_entries = [g for g in report.goals_tried
-                         if str(g.get("goal", "")).startswith(
-                             "GatherMaterials(water_bow")]
-    assert water_bow_entries, report.goals_tried
-    assert all(entry["nodes"] == 0 and not entry["timed_out"]
-               and entry["plan_len"] == len(report.plan)
-               for entry in water_bow_entries), water_bow_entries
-    assert [repr(a) for a in report.plan] == [
-        "Withdraw(blue_slimeball×1)",
-        "Gather(ash_tree)",
-        "Craft(ash_plank×5)",
-        "Craft(water_bow×1)",
-    ], report.plan
 
 
 def test_l13_search_is_bounded() -> None:

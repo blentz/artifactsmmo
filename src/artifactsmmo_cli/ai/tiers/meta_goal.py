@@ -40,15 +40,6 @@ class ReachCharLevel:
         return state.level >= self.level
 
 
-@dataclass(frozen=True)
-class ReachSkillLevel:
-    skill: str
-    level: int
-
-    def is_satisfied(self, state: WorldState, game_data: GameData) -> bool:
-        return state.skills.get(self.skill, 1) >= self.level
-
-
 @dataclass(frozen=True, repr=False)
 class ObtainItem:
     code: str

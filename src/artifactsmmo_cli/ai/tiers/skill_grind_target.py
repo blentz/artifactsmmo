@@ -52,8 +52,7 @@ def build_grind_candidates(skill: str, state: WorldState,
                            game_data: GameData) -> list[GrindCandidate]:
     """Hoist every in-skill craftable into a `GrindCandidate` (mats_missing
     against inventory+bank, recursive obtainability). No reservation filter —
-    callers apply their own (single-set `skill_grind_target`, two-set
-    `skill_step_dispatch`)."""
+    the caller (`skill_grind_target`) applies its own single-set filter."""
     bank = state.bank_items or {}
     candidates: list[GrindCandidate] = []
     for code, stats in game_data.all_item_stats.items():
@@ -72,8 +71,9 @@ def build_grind_candidates(skill: str, state: WorldState,
             craft_level=stats.crafting_level,
             mats_missing=mats_missing,
             obtainable=is_obtainable(code, state, game_data, frozenset()),
-            # No objective context in this standalone (non-live) path; the live
-            # grind goes through skill_step_dispatch, which sets wanted=is_target.
+            # No objective context in this standalone path: the live grind goes
+            # through the LevelSkill action (its is_applicable calls
+            # skill_grind_target for the rung); wanted has no bearing there.
             wanted=False,
         ))
     return candidates

@@ -508,10 +508,8 @@ open Formal.Liveness.LearningStoreBridge
 -- Item 7: MetaGoal dispatch + .objectiveStep discharge.
 open Formal.Liveness.MetaGoalDispatch
 #print axioms dispatch_reachCharLevel
-#print axioms dispatch_reachSkillLevel
 #print axioms dispatch_obtainItem
 #print axioms applyDispatch_reachCharLevel
-#print axioms applyDispatch_reachSkillLevel
 #print axioms applyDispatch_obtainItem
 
 -- Item 8: state field gap closure invariance.

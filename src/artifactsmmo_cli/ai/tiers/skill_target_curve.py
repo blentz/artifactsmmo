@@ -8,12 +8,14 @@ schedule this skill". Returns Int (the proven contract; mirrors EquipmentScoring
 
 Progression-tree Phase 4b Task 5: the impure wrapper `skill_target_curve` and
 its only caller (`CharacterObjective.near_term_skill_targets`) were retired as
-dead code post-flip — live recipe-aware skilling runs through
-`next_tier_cap_pure`/`skill_step_dispatch_pure` in strategy_driver.py instead,
-which consume `SkillItem` directly. `skill_curve_target_pure` (this module's
-pure core) stays: it is proven+differentially tested independent of the wrapper
+dead code post-flip. The tree-level skill-grind dispatch that later consumed
+this module's `SkillItem` view (`next_tier_cap_pure` + the skill-step dispatch)
+was itself retired in epic P3 — skill grinds now run planner-natively through
+the `LevelSkill` action. `skill_curve_target_pure` (this module's pure core)
+remains proven + differentially tested independent of any caller
 (formal/diff/test_skill_target_curve_diff.py imports only `SkillItem` and
-`skill_curve_target_pure`, never the wrapper)."""
+`skill_curve_target_pure`); it and `next_tier_cap` are retained as proven cores
+pending a future extraction-bridge cleanup."""
 
 from dataclasses import dataclass
 

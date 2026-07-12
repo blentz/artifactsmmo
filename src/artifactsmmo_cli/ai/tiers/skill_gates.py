@@ -7,8 +7,8 @@ level. Gather/resource skill gates are EXCLUDED: gather skills generally self-le
 through the gathering the bot already does; only craft skills can stall because
 nothing in the routine forces a craft. Exception: a gatherable consumable-craft
 skill (alchemy) whose FIRST craftable sits above level 1 cannot self-level via
-craft-grind — its ReachSkillLevel prerequisite step routes to the objective-step
-gather-to-level path (strategy_driver), which levels it by gathering.
+craft-grind — its skill-grind is served by gathering its resource (the LevelSkill
+action's gather-to-level fallback), which levels it by gathering.
 
 See docs/superpowers/specs/2026-06-08-levelskill-gating-prioritization-design.md
 (LIV-SKILL-1/2/3).

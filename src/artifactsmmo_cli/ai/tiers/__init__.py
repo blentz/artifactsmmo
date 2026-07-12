@@ -8,7 +8,6 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
-    ReachSkillLevel,
     owned_count,
 )
 from artifactsmmo_cli.ai.tiers.objective import (
@@ -44,7 +43,6 @@ __all__ = [
     "ObtainItem",
     "Personality",
     "ReachCharLevel",
-    "ReachSkillLevel",
     "RootScore",
     "StrategyDecision",
     "StrategyEngine",

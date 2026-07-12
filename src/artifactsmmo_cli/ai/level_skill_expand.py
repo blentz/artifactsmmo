@@ -2,8 +2,8 @@
 
 The LevelSkill action is a planner abstraction (its apply optimistically levels
 the skill); at execution the player runs ONE cycle of the concrete grind — craft
-one in-skill rung — and replans, exactly as the retired ReachSkillLevel dispatch
-did (strategy_driver.py:866-871). This picks the rung and builds the
+one in-skill rung — and replans, exactly as the retired tree-level skill-grind
+dispatch did. This picks the rung and builds the
 skill_grind GatherMaterials goal; the caller plans it and executes its first leg.
 """
 
@@ -22,8 +22,8 @@ def next_grind_goal(skill: str, state: WorldState,
     Prefers a craftable in-skill rung (`skill_grind_target`); falls back to a
     gatherable in-skill resource (`best_gather_resource_drop`) for a gather
     skill whose lowest craftable rung is out of reach (e.g. alchemy at level 1,
-    ground by gathering sunflower). Mirrors the retired ReachSkillLevel
-    grind/no_grind arms (strategy_driver.py:866-885)."""
+    ground by gathering sunflower). Mirrors the retired tree-level skill-grind
+    grind/no_grind arms."""
     rung = skill_grind_target(skill, state, game_data)
     if rung is None:
         rung = best_gather_resource_drop(

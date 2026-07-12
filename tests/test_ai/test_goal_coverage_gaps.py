@@ -11,7 +11,6 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
 from artifactsmmo_cli.ai.goals.expand_bank import ExpandBankGoal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
-from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
 from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
 from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
@@ -105,43 +104,6 @@ class TestExpandBankGaps:
         gd = self._gd(capacity=30)
         goal = ExpandBankGoal(bank_accessible=True, game_data=gd)
         assert goal.desired_state(make_state(), gd) == {"bank_capacity": 31}
-
-
-# --- LevelSkillGoal -------------------------------------------------------
-
-class TestLevelSkillGaps:
-    def _gd(self) -> GameData:
-        gd = GameData()
-        gd._item_stats = {
-            "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
-                                       crafting_skill="weaponcrafting", crafting_level=1),
-        }
-        gd._crafting_recipes = {"copper_dagger": {"copper_bar": 6}}
-        return gd
-
-    def test_desired_state_targets_skill_level(self):
-        goal = LevelSkillGoal("weaponcrafting", 3)
-        assert goal.desired_state(make_state(), self._gd()) == {
-            "skills": {"weaponcrafting": 3}
-        }
-
-    def test_relevant_actions_keeps_deposit(self):
-        goal = LevelSkillGoal("weaponcrafting", 3)
-        deposit = DepositAllAction()
-        relevant = goal.relevant_actions([deposit], make_state(), self._gd())
-        assert deposit in relevant
-
-    def test_has_craftable_skips_recipe_with_missing_or_wrong_skill_stats(self):
-        """A recipe whose item has no ItemStats (or a different skill) is
-        skipped; with no usable recipe at level, the goal does not fire."""
-        gd = GameData()
-        # recipe present but NO item_stats for it -> _has_craftable_in_skill
-        # hits the `stats is None` continue and finds nothing craftable.
-        gd._item_stats = {}
-        gd._crafting_recipes = {"mystery_item": {"x": 1}}
-        goal = LevelSkillGoal("weaponcrafting", 3)
-        state = make_state(skills={"weaponcrafting": 1})
-        assert goal.value(state, gd) == 0.0
 
 
 # --- LowYieldCancelGoal ---------------------------------------------------

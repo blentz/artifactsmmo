@@ -764,8 +764,8 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
     # (character + bank queried via the API, at full HP): L13, weaponcrafting
     # 5, the tree's root is the fire_bow weapon upgrade (its own mats —
     # spruce_plank 6 + red_slimeball 2 — are already in the bag, so the
-    # material step is satisfied) and the step is
-    # ReachSkillLevel(weaponcrafting, 10). The proven dispatch picks
+    # material step is satisfied) and the step is fire_bow's weaponcrafting
+    # skill gate (5 < 10). The retired tree-level skill-grind dispatch picked
     # water_bow (the level-5 grinder with the fewest missing mats once the
     # banked blue_slimeballs are credited: 2x blue_slimeball [monster drop,
     # bank 2 + bag 1] + 5x ash_plank [10 ash_wood each]). Before the GAP-8
@@ -804,7 +804,7 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         },
         derive_combat_stats=True,
         description="Live-Robby mirror (2026-07-08): L13, weaponcrafting 5, "
-                     "fire_bow root -> ReachSkillLevel(weaponcrafting, 10) -> "
+                     "fire_bow root -> weaponcrafting skill gate -> "
                      "water_bow grinder whose recipe has a monster-drop leaf "
                      "(blue_slimeball) — the craft chain must plan instead "
                      "of flooding A* and falling back to the red_slime "

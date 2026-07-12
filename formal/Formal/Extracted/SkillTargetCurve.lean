@@ -1,16 +1,16 @@
--- GENERATED from src/artifactsmmo_cli/ai/tiers/skill_target_curve.py (sha256: 38c4b3a3d8080acbdd807d06b2cce57d0b3752fff7e0c2f911e38232fb873db7) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/tiers/skill_target_curve.py (sha256: 5b81814a856ddc5c7497474243f2b30237146cdeca9cee4ce9cf55fdb6fc07e2) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.SkillTargetCurve
 
-/-- Extracted from `@dataclass SkillItem` (line 22). -/
+/-- Extracted from `@dataclass SkillItem` (line 24). -/
 structure SkillItem where
   craft_skill : String
   craft_level : Int
   item_level : Int
   gear_relevant : Bool
 
-/-- Extracted from `skill_curve_target_pure` (line 32). -/
+/-- Extracted from `skill_curve_target_pure` (line 34). -/
 def skill_curve_target_pure (skill : String) (char_level : Int) (items : List SkillItem) (lookahead : Int) (max_skill_level : Int) :
     Int :=
   let best : Int := 0

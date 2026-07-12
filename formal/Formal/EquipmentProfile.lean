@@ -6,42 +6,49 @@
    (formal/diff/mutate.py). -/
 namespace Formal.EquipmentProfile
 
-inductive RootCategory | charLevel | skills | gear
+inductive RootCategory | charLevel | gear
 deriving DecidableEq, Repr
 
 inductive ProfileKind | combat | utility
 deriving DecidableEq, Repr
 
+/-- Utility axis retired in epic P3: skill-level roots — the only former
+utility-axis pursuit — grind planner-natively via the LevelSkill action, so no
+strategy root is utility-axis anymore. `is_utility_objective` is a constant
+`false`. -/
 def isUtilityObjective : RootCategory → Bool
-  | .skills => true
   | .charLevel => false
   | .gear => false
 
-def profileFor (cat : RootCategory) (bandAdequate : Bool) : ProfileKind :=
-  if !bandAdequate then .combat
-  else if isUtilityObjective cat then .utility
-  else .combat
+/-- `profile_for` is a constant COMBAT for every root and adequacy (utility axis
+retired in P3b — an item's own combat/utility nature is decided by the scorer,
+not this selector). Pure/total. -/
+def profileFor (_cat : RootCategory) (_bandAdequate : Bool) : ProfileKind :=
+  .combat
 
-/-- PLAN-GATE INVARIANT: combat-inadequate ⇒ COMBAT, for every root
-category. This is the combat floor the whole design rests on. -/
+/-- PLAN-GATE INVARIANT: combat-inadequate ⇒ COMBAT, for every root category.
+Now a corollary of the constant selector, retained as the combat floor the whole
+design rests on. -/
 theorem planGate_forces_combat (cat : RootCategory) :
-    profileFor cat false = .combat := by
+    profileFor cat false = .combat := rfl
+
+/-- The selector NEVER chooses UTILITY: every root is COMBAT-axis (the retired
+utility axis). -/
+theorem never_utility (cat : RootCategory) (adequate : Bool) :
+    profileFor cat adequate ≠ .utility := by
+  show ProfileKind.combat ≠ ProfileKind.utility
+  decide
+
+/-- `is_utility_objective` is a constant `false` — no root is utility-axis. -/
+theorem isUtilityObjective_false (cat : RootCategory) :
+    isUtilityObjective cat = false := by
   cases cat <;> rfl
 
-/-- Utility is chosen ONLY when adequate AND the objective is utility. -/
-theorem utility_iff (cat : RootCategory) (adequate : Bool) :
-    profileFor cat adequate = .utility ↔
-      (adequate = true ∧ isUtilityObjective cat = true) := by
-  cases adequate <;> cases cat <;> simp [profileFor, isUtilityObjective]
-
-/-- Totality is structural (profileFor is a total function over the finite
-enum product); this example pins every one of the 6 cases explicitly so a
-future edit that broke a case fails the build. -/
+/-- The constant selector pins every one of the 4 remaining cases explicitly so
+a future edit that broke the constant COMBAT selector fails the build. -/
 example :
-    profileFor .skills true = .utility ∧
     profileFor .charLevel true = .combat ∧
     profileFor .gear true = .combat ∧
-    profileFor .skills false = .combat ∧
     profileFor .charLevel false = .combat ∧
     profileFor .gear false = .combat := by
   decide

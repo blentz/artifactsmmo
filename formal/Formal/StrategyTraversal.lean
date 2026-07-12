@@ -16,22 +16,21 @@ The prerequisite graph (`prerequisites`) and `is_satisfied` are already proven i
                                  (already the unsatisfied-pruned data edges);
 * `isSat   : Nat → Bool`       — `MetaGoal.is_satisfied`;
 * `producible : Nat → Bool`    — `strategy._producible` (recipe ∨ resource-drop);
-* `kind    : Nat → Kind`       — `obtain` / `skill` / `char`.
+* `kind    : Nat → Kind`       — `obtain` / `char`.
 
 This is the genuine traversal logic over an arbitrary graph; cycles, satisfied
 interior nodes, and unsatisfiable leaves are all expressible.
 
 ## `is_reachable` = grounding fixpoint
 
-`is_reachable(root, path)` (strategy.py:125):
+`is_reachable(root, path)` (strategy.py:183):
 * `isSat root`              → true;
 * `root ∈ path`             → false  (cycle guard);
-* `kind root = skill`       → true   (grinding the skill is always available);
 * let `ps = prereqs root`; if `kind root = obtain ∧ ps = []` → `producible root`;
 * else                      → all prereqs reachable under `path ∪ {root}`.
 
 The well-founded GROUNDING fixpoint: a node grounds iff it is satisfied, OR
-kind=skill, OR (kind=obtain with no prereqs AND producible), OR all its prereqs
+(kind=obtain with no prereqs AND producible), OR all its prereqs
 ground. A node on a cycle of un-grounded nodes is NOT grounded → NOT reachable.
 We prove the path-recursion = the grounding least fixpoint (soundness +
 completeness) reusing the saturation / minimal-round technique of
@@ -56,7 +55,7 @@ existence. Cycle pruning affects only termination, not which nodes are reachable
 
 ## `root_cost` floored at 1
 
-char/skill roots: `max(1, target − have)`; gear roots: `unmet_closure_size`
+char roots: `max(1, target − have)`; gear (obtain) roots: `unmet_closure_size`
 (itself `≥ 1`). So `root_cost ≥ 1` always.
 
 Lean core only — no mathlib.
@@ -66,9 +65,9 @@ namespace Formal.StrategyTraversal
 
 /-! ### The node-kind tag and the abstract node graph. -/
 
-/-- The meta-goal kind: `ObtainItem`, `ReachSkillLevel`, `ReachCharLevel`. -/
+/-- The meta-goal kind: `ObtainItem`, `ReachCharLevel`. -/
 inductive Kind where
-  | obtain | skill | char
+  | obtain | char
 deriving DecidableEq, Repr
 
 /-- An abstract node graph (the proven `prerequisites` / `is_satisfied` /
@@ -86,9 +85,8 @@ frozenset bounds it; we thread fuel so the function is total). Mirrors
 `is_reachable` branch-for-branch:
 * `isSat node`         → true;
 * `node ∈ path`        → false;
-* `kind node = skill`  → true;
 * `prereqs node = []`  →  `kind node = obtain` ? `producible node` : true
-  (char/skill with no prereqs ground via the empty `all`; the Python `all([])`
+  (a char node with no prereqs grounds via the empty `all`; the Python `all([])`
   is `true`, and only ObtainItem consults `_producible`);
 * otherwise            → all prereqs reachable under `node :: path`. -/
 def reachAux (g : Graph) : Nat → List Nat → Nat → Bool
@@ -96,7 +94,6 @@ def reachAux (g : Graph) : Nat → List Nat → Nat → Bool
   | fuel + 1, path, node =>
     if g.isSat node then true
     else if node ∈ path then false
-    else if g.kind node = Kind.skill then true
     else match g.prereqs node with
       | [] => if g.kind node = Kind.obtain then g.producible node else true
       | ps => ps.all (fun p => reachAux g fuel (node :: path) p)
@@ -110,17 +107,15 @@ def isReachable (g : Graph) (fuel : Nat) (root : Nat) : Bool :=
 
 /-- `Grounded g node`: the least set such that
 * a satisfied node grounds;
-* a `skill` node grounds;
 * an `obtain` node with NO prereqs grounds iff it is producible;
 * a node ALL of whose prereqs ground, grounds.
 
 A node on a cycle of un-grounded nodes has no finite derivation → not grounded. -/
 inductive Grounded (g : Graph) : Nat → Prop
   | sat {n : Nat} (h : g.isSat n = true) : Grounded g n
-  | skill {n : Nat} (h : g.kind n = Kind.skill) : Grounded g n
   | leaf {n : Nat} (hns : g.isSat n = false) (hk : g.kind n = Kind.obtain)
       (hempty : g.prereqs n = []) (hp : g.producible n = true) : Grounded g n
-  | node {n : Nat} (hns : g.isSat n = false) (hk : g.kind n ≠ Kind.skill)
+  | node {n : Nat} (hns : g.isSat n = false)
       (hobt : g.kind n = Kind.obtain → g.prereqs n ≠ [])
       (hall : ∀ p ∈ g.prereqs n, Grounded g p) : Grounded g n
 
@@ -131,7 +126,6 @@ def groundedByN (g : Graph) : Nat → Nat → Bool
   | 0, _ => false
   | n + 1, node =>
     if g.isSat node then true
-    else if g.kind node = Kind.skill then true
     else match g.prereqs node with
       | [] => if g.kind node = Kind.obtain then g.producible node else true
       | ps => ps.all (fun p => groundedByN g n p)
@@ -150,16 +144,13 @@ theorem groundedByN_mono (g : Graph) :
     by_cases hs : g.isSat node = true
     · simp only [hs, if_true]
     · simp only [hs, Bool.false_eq_true, if_false] at h ⊢
-      by_cases hk : g.kind node = Kind.skill
-      · simp only [hk, if_true]
-      · simp only [hk, if_false] at h ⊢
-        cases hp : g.prereqs node with
-        | nil => simp only [hp] at h ⊢; exact h
-        | cons hd tl =>
-          simp only [hp] at h ⊢
-          rw [List.all_eq_true] at h ⊢
-          intro p hpmem
-          exact ih p (h p hpmem)
+      cases hp : g.prereqs node with
+      | nil => simp only [hp] at h ⊢; exact h
+      | cons hd tl =>
+        simp only [hp] at h ⊢
+        rw [List.all_eq_true] at h ⊢
+        intro p hpmem
+        exact ih p (h p hpmem)
 
 theorem groundedByN_mono_le (g : Graph) (n k node : Nat)
     (h : groundedByN g n node = true) : groundedByN g (n + k) node = true := by
@@ -186,44 +177,35 @@ theorem groundedByN_sound (g : Graph) :
     by_cases hs : g.isSat node = true
     · exact Grounded.sat hs
     · simp only [hs, Bool.false_eq_true, if_false] at h
-      by_cases hk : g.kind node = Kind.skill
-      · exact Grounded.skill hk
-      · simp only [hk, if_false] at h
-        have hsf : g.isSat node = false := by simpa using hs
-        cases hp : g.prereqs node with
-        | nil =>
-          simp only [hp] at h
-          by_cases hko : g.kind node = Kind.obtain
-          · simp only [hko, if_true] at h
-            exact Grounded.leaf hsf hko hp h
-          · -- kind ≠ skill ∧ kind ≠ obtain ⇒ char; grounds via empty prereqs
-            exact Grounded.node hsf hk (fun ho => absurd ho hko)
-              (by intro p hpm; rw [hp] at hpm; simp at hpm)
-        | cons hd tl =>
-          simp only [hp] at h
-          rw [List.all_eq_true] at h
-          refine Grounded.node hsf hk (fun _ => by rw [hp]; simp) ?_
-          intro p hpmem
-          rw [hp] at hpmem
-          exact ih p (h p hpmem)
+      have hsf : g.isSat node = false := by simpa using hs
+      cases hp : g.prereqs node with
+      | nil =>
+        simp only [hp] at h
+        by_cases hko : g.kind node = Kind.obtain
+        · simp only [hko, if_true] at h
+          exact Grounded.leaf hsf hko hp h
+        · -- kind ≠ obtain ⇒ char; grounds via empty prereqs
+          exact Grounded.node hsf (fun ho => absurd ho hko)
+            (by intro p hpm; rw [hp] at hpm; simp at hpm)
+      | cons hd tl =>
+        simp only [hp] at h
+        rw [List.all_eq_true] at h
+        refine Grounded.node hsf (fun _ => by rw [hp]; simp) ?_
+        intro p hpmem
+        rw [hp] at hpmem
+        exact ih p (h p hpmem)
 
 /-- COMPLETENESS: every `Grounded` node is accepted by some saturation round. -/
 theorem grounded_groundedByN (g : Graph) {node : Nat} (h : Grounded g node) :
     ∃ n, groundedByN g n node = true := by
   induction h with
   | @sat n hs => exact ⟨1, by unfold groundedByN; simp [hs]⟩
-  | @skill n hk =>
-    refine ⟨1, ?_⟩
-    unfold groundedByN
-    by_cases hs : g.isSat n = true
-    · simp [hs]
-    · simp only [hs, Bool.false_eq_true, if_false, hk, if_true]
   | @leaf n hns hk hempty hp =>
     refine ⟨1, ?_⟩
     unfold groundedByN
     simp only [hns, Bool.false_eq_true, if_false, hempty, hk, if_true]
     exact hp
-  | @node n hns hk hobt hall ih =>
+  | @node n hns hobt hall ih =>
     -- a common round bounding all prereqs
     have hbound : ∀ (l : List Nat),
         (∀ p ∈ l, ∃ m, groundedByN g m p = true) →
@@ -244,7 +226,7 @@ theorem grounded_groundedByN (g : Graph) {node : Nat} (h : Grounded g node) :
     obtain ⟨N, hN⟩ := hbound (g.prereqs n) ih
     refine ⟨N + 1, ?_⟩
     unfold groundedByN
-    simp only [hns, Bool.false_eq_true, if_false, hk, if_false]
+    simp only [hns, Bool.false_eq_true, if_false]
     cases hp : g.prereqs n with
     | nil =>
       have hko : g.kind n ≠ Kind.obtain := fun ho => (hobt ho) hp
@@ -273,25 +255,22 @@ theorem reachAux_sound (g : Graph) :
       by_cases hpath : node ∈ path
       · simp only [hpath, if_true] at h; exact absurd h (by simp)
       · simp only [hpath, if_false] at h
-        by_cases hk : g.kind node = Kind.skill
-        · exact Grounded.skill hk
-        · simp only [hk, if_false] at h
-          have hsf : g.isSat node = false := by simpa using hs
-          cases hp : g.prereqs node with
-          | nil =>
-            simp only [hp] at h
-            by_cases hko : g.kind node = Kind.obtain
-            · simp only [hko, if_true] at h
-              exact Grounded.leaf hsf hko hp h
-            · exact Grounded.node hsf hk (fun ho => absurd ho hko)
-                (by intro p hpm; rw [hp] at hpm; simp at hpm)
-          | cons hd tl =>
-            simp only [hp] at h
-            rw [List.all_eq_true] at h
-            refine Grounded.node hsf hk (fun _ => by rw [hp]; simp) ?_
-            intro p hpmem
-            rw [hp] at hpmem
-            exact ih (node :: path) p (h p hpmem)
+        have hsf : g.isSat node = false := by simpa using hs
+        cases hp : g.prereqs node with
+        | nil =>
+          simp only [hp] at h
+          by_cases hko : g.kind node = Kind.obtain
+          · simp only [hko, if_true] at h
+            exact Grounded.leaf hsf hko hp h
+          · exact Grounded.node hsf (fun ho => absurd ho hko)
+              (by intro p hpm; rw [hp] at hpm; simp at hpm)
+        | cons hd tl =>
+          simp only [hp] at h
+          rw [List.all_eq_true] at h
+          refine Grounded.node hsf (fun _ => by rw [hp]; simp) ?_
+          intro p hpmem
+          rw [hp] at hpmem
+          exact ih (node :: path) p (h p hpmem)
 
 /-! ### Completeness via the MINIMAL grounding round (strict measure).
 
@@ -329,14 +308,14 @@ theorem minRound_unique (g : Graph) (node m1 m2 : Nat)
   · exact heq
   · exact absurd hg2 (by rw [hl1 m2 hgt]; simp)
 
-/-- If a `node` (not satisfied, not skill, nonempty prereqs) has minimal round
+/-- If a `node` (not satisfied, nonempty prereqs) has minimal round
 `m+1`, every prereq is grounded by round `m`. -/
 theorem prereqs_grounded_pred (g : Graph) (n node : Nat)
-    (hns : g.isSat node = false) (hk : g.kind node ≠ Kind.skill)
+    (hns : g.isSat node = false)
     (h : groundedByN g (n + 1) node = true) :
     ∀ p ∈ g.prereqs node, groundedByN g n p = true := by
   unfold groundedByN at h
-  simp only [hns, Bool.false_eq_true, if_false, hk, if_false] at h
+  simp only [hns, Bool.false_eq_true, if_false] at h
   intro p hp
   cases hpr : g.prereqs node with
   | nil => rw [hpr] at hp; simp at hp
@@ -379,36 +358,33 @@ theorem reachAux_complete_min (g : Graph) :
         have := hpath node hin (k + 1) ⟨hg, hmin'⟩
         omega
       simp only [hnp, if_false]
-      by_cases hk : g.kind node = Kind.skill
-      · simp [hk]
-      · simp only [hk, if_false]
-        -- materials fact, derived WITHOUT consuming `hg` (keep the round-(k+1)
-        -- grounding intact for the minimal-round uniqueness argument)
-        have hmats := prereqs_grounded_pred g k node hsf hk hg
-        cases hp : g.prereqs node with
-        | nil =>
-          -- empty prereqs: the round-(k+1) grounding pins the (obtain?producible:true) branch
-          have := hg
-          unfold groundedByN at this
-          simp only [hsf, Bool.false_eq_true, if_false, hk, if_false, hp] at this
-          simpa using this
-        | cons hd tl =>
-          rw [List.all_eq_true]
-          intro p hpmem
-          have hpmem' : p ∈ g.prereqs node := by rw [hp]; exact hpmem
-          have hpg : groundedByN g k p = true := hmats p hpmem'
-          obtain ⟨mm, hmm⟩ := exists_minRound g ⟨k, hpg⟩
-          have hmmk : mm ≤ k := by
-            rcases Nat.lt_or_ge k mm with hkm | hge
-            · exact absurd hpg (by rw [hmm.2 k hkm]; simp)
-            · exact hge
-          refine ih mm (by omega) p (node :: path) hmm ?_ f' (by omega)
-          intro a ha ma hma
-          rcases List.mem_cons.mp ha with he | hold
-          · have hma' : IsMinRound g ma node := he ▸ hma
-            have : ma = k + 1 := minRound_unique g node ma (k + 1) hma' ⟨hg, hmin'⟩
-            omega
-          · have := hpath a hold ma hma; omega
+      -- materials fact, derived WITHOUT consuming `hg` (keep the round-(k+1)
+      -- grounding intact for the minimal-round uniqueness argument)
+      have hmats := prereqs_grounded_pred g k node hsf hg
+      cases hp : g.prereqs node with
+      | nil =>
+        -- empty prereqs: the round-(k+1) grounding pins the (obtain?producible:true) branch
+        have := hg
+        unfold groundedByN at this
+        simp only [hsf, Bool.false_eq_true, if_false, hp] at this
+        simpa using this
+      | cons hd tl =>
+        rw [List.all_eq_true]
+        intro p hpmem
+        have hpmem' : p ∈ g.prereqs node := by rw [hp]; exact hpmem
+        have hpg : groundedByN g k p = true := hmats p hpmem'
+        obtain ⟨mm, hmm⟩ := exists_minRound g ⟨k, hpg⟩
+        have hmmk : mm ≤ k := by
+          rcases Nat.lt_or_ge k mm with hkm | hge
+          · exact absurd hpg (by rw [hmm.2 k hkm]; simp)
+          · exact hge
+        refine ih mm (by omega) p (node :: path) hmm ?_ f' (by omega)
+        intro a ha ma hma
+        rcases List.mem_cons.mp ha with he | hold
+        · have hma' : IsMinRound g ma node := he ▸ hma
+          have : ma = k + 1 := minRound_unique g node ma (k + 1) hma' ⟨hg, hmin'⟩
+          omega
+        · have := hpath a hold ma hma; omega
 
 /-- COMPLETENESS at the top level: a grounded node is accepted by `isReachable`
 with the EMPTY path, for any fuel ≥ its minimal grounding round. -/
@@ -456,14 +432,14 @@ example :
       kind := fun _ => Kind.obtain }
     isReachable g 8 0 = true := by decide
 
-/-- A skill node is ALWAYS reachable (grinding is always available), even with no
-prereqs and not producible. -/
+/-- A char node with no prereqs is ALWAYS reachable (grounds via the empty
+`all`), even when not producible (only ObtainItem consults `_producible`). -/
 example :
     let g : Graph := {
       prereqs := fun _ => [],
       isSat := fun _ => false,
       producible := fun _ => false,
-      kind := fun _ => Kind.skill }
+      kind := fun _ => Kind.char }
     isReachable g 4 0 = true := by decide
 
 /-! ### `unmet_closure_size` — the unmet-closure node count (min 1).
@@ -965,13 +941,12 @@ theorem actionable_step_none_iff (g : Graph) (root : Nat)
 
 /-! ### `root_cost` floored at 1. -/
 
-/-- `root_cost` (strategy.py:107): char/skill roots → `max(1, target − have)`
-(`Nat` subtraction truncates at 0); gear roots → `unmet_closure_size` (itself
-`≥ 1`). We model the value as a `Nat`. -/
+/-- `root_cost` (strategy.py:106): char roots → `max(1, target − have)`
+(`Nat` subtraction truncates at 0); gear (obtain) roots → `unmet_closure_size`
+(itself `≥ 1`). We model the value as a `Nat`. -/
 def rootCost (g : Graph) (kind : Kind) (target have_ : Nat) (root fuel : Nat) : Nat :=
   match kind with
   | Kind.char => max 1 (target - have_)
-  | Kind.skill => max 1 (target - have_)
   | Kind.obtain => unmetClosureSize g root fuel
 
 /-- `root_cost_floored`: the effort proxy is ALWAYS ≥ 1, for EVERY root kind. -/
@@ -980,7 +955,6 @@ theorem rootCost_ge_one (g : Graph) (kind : Kind) (target have_ root fuel : Nat)
   unfold rootCost
   cases kind with
   | char => exact Nat.le_max_left 1 _
-  | skill => exact Nat.le_max_left 1 _
   | obtain => exact unmetClosureSize_ge_one g root fuel
 
 /-! ### Worked examples: actionable_step on cycles / satisfied-interior nodes. -/
@@ -1072,52 +1046,41 @@ proof-rigging restriction. (A non-producible `obtain` node is necessarily a leaf
 with no prereqs; `is_reachable` would already reject it as unreachable, so it
 never gates the assert.) -/
 
-/-- The production graph invariants, both genuine properties of `prerequisites`:
-* an `obtain` node with nonempty direct prereqs is producible (nonempty prereqs
-  come from a crafting recipe, and a recipe ⇒ `_producible`);
-* a `skill` node (`ReachSkillLevel`) is a LEAF — `prerequisites` returns `[]` for
-  it (materials enter only via `ObtainItem` chains, strategy/prerequisite_graph.py).
-Neither is a proof-rigging restriction; both hold for every graph the production
-code constructs. -/
+/-- The production graph invariant, a genuine property of `prerequisites`:
+an `obtain` node with nonempty direct prereqs is producible (nonempty prereqs
+come from a crafting recipe, and a recipe ⇒ `_producible`). This is NOT a
+proof-rigging restriction; it holds for every graph the production code
+constructs. -/
 def WellFormed (g : Graph) : Prop :=
-  (∀ n, g.kind n = Kind.obtain → g.prereqs n ≠ [] → g.producible n = true) ∧
-  (∀ n, g.kind n = Kind.skill → g.prereqs n = [])
+  ∀ n, g.kind n = Kind.obtain → g.prereqs n ≠ [] → g.producible n = true
 
 /-- BRIDGE (core graph fact): an UNMET `Grounded` node has a `UnmetReach`-able
 `ActionableNode` descendant. Induction on the grounding derivation: a satisfied
-node is excluded by hypothesis; a `skill` / producible-`leaf` node with all
-direct prereqs satisfied (vacuously / by being a leaf) is itself actionable; a
-`node` either has all prereqs satisfied (then IT is actionable — obtain ⇒
-producible via `WellFormed`) or has an unmet (hence still-grounded) prereq from
-which an actionable node is reachable, lifted through `UnmetReach.head`. -/
+node is excluded by hypothesis; a producible-`leaf` node with all direct prereqs
+satisfied (by being a leaf) is itself actionable; a `node` either has all prereqs
+satisfied (then IT is actionable — obtain ⇒ producible via `WellFormed`) or has
+an unmet (hence still-grounded) prereq from which an actionable node is
+reachable, lifted through `UnmetReach.head`. -/
 theorem grounded_unmet_has_actionable (g : Graph) (hwf : WellFormed g) :
     ∀ {node : Nat}, Grounded g node → g.isSat node = false →
       ∃ a, UnmetReach g node a ∧ ActionableNode g a := by
   intro node h
   induction h with
   | @sat n hs => intro hns; rw [hs] at hns; exact absurd hns (by simp)
-  | @skill n hk =>
-    intro hns
-    -- skill node: a leaf (WellFormed.2), hence trivially all prereqs satisfied;
-    -- kind=skill ≠ obtain so the producible obligation is vacuous → actionable.
-    have hempty : g.prereqs n = [] := hwf.2 n hk
-    refine ⟨n, UnmetReach.refl hns, hns, ?_, ?_⟩
-    · intro p hpmem; rw [hempty] at hpmem; simp at hpmem
-    · intro hko; rw [hk] at hko; exact absurd hko (by simp)
   | @leaf n hns' hk hempty hp =>
     intro hns
     refine ⟨n, UnmetReach.refl hns, hns, ?_, ?_⟩
     · intro p hpmem; rw [hempty] at hpmem; simp at hpmem
     · intro _; exact hp
-  | @node n hns' hk hobt hall ih =>
+  | @node n hns' hobt hall ih =>
     intro hns
     -- Case split: are all direct prereqs satisfied?
     by_cases hallsat : ∀ p ∈ g.prereqs n, g.isSat p = true
     · -- n itself is actionable: unmet, all prereqs satisfied, obtain ⇒ producible.
       refine ⟨n, UnmetReach.refl hns, hns, hallsat, ?_⟩
       intro hko
-      -- obtain node: hobt gives prereqs ≠ [], so WellFormed.1 gives producible.
-      exact hwf.1 n hko (hobt hko)
+      -- obtain node: hobt gives prereqs ≠ [], so WellFormed gives producible.
+      exact hwf n hko (hobt hko)
     · -- some direct prereq p is UNMET; it is grounded (hall), recurse.
       -- Extract the witnessing unmet prereq without push_neg/mathlib, via the
       -- decidable `List.find?` over the prereqs for an unmet one.

@@ -33,7 +33,6 @@ namespace Formal.StepDispatch
 /-- A meta-goal: the strategy-engine's notion of progress unit. -/
 inductive MetaGoal where
   | obtainItem : (code : Int) → (isEquippable : Bool) → MetaGoal
-  | reachSkillLevel : (skill : Int) → (level : Int) → MetaGoal
   | reachCharLevel : (level : Int) → MetaGoal
 deriving Repr, DecidableEq
 
@@ -70,7 +69,6 @@ structure DispatchContext where
   → `GatherMaterials(code, 1)` (drive the gather so materials accumulate;
   UpgradeEquipment fires once they're in hand);
 * `ObtainItem(code, equippable=false)` → `GatherMaterials(code, 1)`
-* `ReachSkillLevel(skill, level)` → `LevelSkill(skill, level)`
 * `ReachCharLevel(level)` with `combatMonster = some _` → `GrindCharacterXP`
 * `ReachCharLevel(level)` with `combatMonster = none` → `None` (safe fail).
 -/
@@ -80,8 +78,6 @@ def stepDispatch (ctx : DispatchContext) : MetaGoal → Option GoalClass
       else some (GoalClass.gatherMaterials code 1)
   | MetaGoal.obtainItem code false =>
       some (GoalClass.gatherMaterials code 1)
-  | MetaGoal.reachSkillLevel skill level =>
-      some (GoalClass.levelSkill skill level)
   | MetaGoal.reachCharLevel _ =>
       match ctx.combatMonster with
       | some monster => some (GoalClass.grindCharacterXP monster)
@@ -96,7 +92,6 @@ theorem stepDispatch_total (ctx : DispatchContext) (step : MetaGoal) :
   cases step with
   | obtainItem code eq =>
     cases eq <;> simp only [stepDispatch] <;> cases ctx.targetReachable <;> simp
-  | reachSkillLevel skill level => simp [stepDispatch]
   | reachCharLevel level =>
     simp [stepDispatch]
     cases ctx.combatMonster with
@@ -138,12 +133,6 @@ theorem dispatch_obtain_nonequippable_goes_to_gather (ctx : DispatchContext)
     (code : Int) :
     stepDispatch ctx (MetaGoal.obtainItem code false) =
       some (GoalClass.gatherMaterials code 1) := rfl
-
-/-- ReachSkillLevel dispatches to LevelSkill. -/
-theorem dispatch_reach_skill_goes_to_level_skill (ctx : DispatchContext)
-    (skill level : Int) :
-    stepDispatch ctx (MetaGoal.reachSkillLevel skill level) =
-      some (GoalClass.levelSkill skill level) := rfl
 
 /-- ReachCharLevel with a combat target dispatches to GrindCharacterXP. -/
 theorem dispatch_reach_char_with_target_goes_to_grind (level monster : Int) :
@@ -188,15 +177,6 @@ theorem obtain_only_routes_to_obtain_classes (ctx : DispatchContext)
     rw [dispatch_obtain_nonequippable_goes_to_gather] at hG
     cases hG
     right; exact ⟨code, 1, rfl⟩
-
-/-- A ReachSkillLevel step never dispatches to a non-skill goal class. -/
-theorem reach_skill_only_routes_to_level_skill (ctx : DispatchContext)
-    (skill level : Int) :
-    ∀ g, stepDispatch ctx (MetaGoal.reachSkillLevel skill level) = some g →
-      g = GoalClass.levelSkill skill level := by
-  intros g hG
-  rw [dispatch_reach_skill_goes_to_level_skill] at hG
-  exact (Option.some_inj.mp hG).symm
 
 /-- A ReachCharLevel step never dispatches to a non-char goal class. -/
 theorem reach_char_only_routes_to_grind (ctx : DispatchContext) (level : Int) :

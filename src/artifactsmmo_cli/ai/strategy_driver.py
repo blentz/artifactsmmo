@@ -23,7 +23,6 @@ from artifactsmmo_cli.ai.equipment.bank_tool_fills import bank_tool_fills
 from artifactsmmo_cli.ai.equipment.empty_slot_fills import empty_slot_rank_fills
 from artifactsmmo_cli.ai.expected_damage import expected_damage_per_fight
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.gather_skill_resource import best_gather_resource_drop
 from artifactsmmo_cli.ai.gather_step_target import gather_step_target
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -84,24 +83,9 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
-    ReachSkillLevel,
-)
-from artifactsmmo_cli.ai.tiers.next_tier_cap import (
-    next_tier_cap_pure,
-    next_tier_dampened_pure,
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, _permanent_vendor_purchases
 from artifactsmmo_cli.ai.tiers.objective_needs import objective_needs
-from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
-from artifactsmmo_cli.ai.tiers.skill_grind_target import build_grind_candidates
-from artifactsmmo_cli.ai.tiers.skill_step_dispatch import (
-    DispatchCandidate,
-    FlagInputs,
-    cannibalize_pure,
-    dispatch_candidate_flags,
-    skill_step_dispatch_pure,
-)
-from artifactsmmo_cli.ai.tiers.skill_target_curve import SkillItem
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -236,78 +220,6 @@ def _materials_in_hand(item: str, state: WorldState, game_data: GameData) -> boo
     return bool(recipe) and all(
         state.inventory.get(mat, 0) + bank.get(mat, 0) >= qty for mat, qty in recipe.items())
 
-
-def _gated_behind_skill(code: str, skill: str, current_level: int,
-                        game_data: GameData) -> bool:
-    """True when `code` is gear/tool crafted by `skill` at a level ABOVE
-    `current_level` — i.e. it is SKILL-GATED behind the very skill being
-    grinded. Its recipe materials must NOT be reserved against that grind: the
-    grind toward `skill` is this objective's own legitimate bootstrap, and
-    reserving the shared material self-locks (the copper_bar held for the gated
-    copper_legs_armor is the same copper_bar the grind must spend to reach
-    gearcrafting 5 and unlock it). Trace 2026-06-14 192617."""
-    stats = game_data.item_stats(code)
-    return (stats is not None and stats.crafting_skill == skill
-            and stats.crafting_level > current_level)
-
-
-def _skill_dispatch_candidates(
-    skill: str, state: WorldState, game_data: GameData,
-    reserved_full: set[str], reserved_relaxed: set[str],
-    current_level: int, objective_targets: frozenset[str],
-    wanted_targets: frozenset[str],
-) -> list[DispatchCandidate]:
-    """Hoist in-skill grind candidates with the two reserved-set membership
-    flags the proved dispatch core consumes (relaxed ⊆ full, so a candidate
-    whose recipe avoids `reserved_full` also avoids `reserved_relaxed`).
-
-    Reservation EXEMPTION (trace 2026-06-14 230824): a candidate that is itself
-    an unowned, craftable-now committed OBJECTIVE target (in `objective_targets`)
-    is exempt from the reserved flags. Crafting it advances BOTH a gear slot and
-    the grinding skill — it is objective progress, never throwaway
-    cannibalization — so it must not be blocked by the very reservation that
-    protects its own materials. The unowned guard avoids re-grinding a target
-    already in hand (the '6 helmets, 0 boots' over-craft); throwaway (non-target)
-    in-skill items stay reservation-blocked.
-
-    LAST-RESORT CANNIBALIZATION: a `ReachSkillLevel` grind is always skill-gated
-    (we are here only because the objective needs a higher skill). When we
-    already own ≥1 of EVERY craftable-now in-skill item — no unowned target left
-    to skill up on — the FULL pass finds nothing and we would freeze. In that
-    narrow corner only, free the RELAXED pass entirely so it may re-craft (eat a
-    reserved material) to keep leveling. The full pass still respects every
-    reservation, so cannibalization happens solely when there is genuinely no
-    non-consuming option left."""
-    equipped = [c for c in state.equipment.values() if c is not None]
-
-    def owned(code: str) -> bool:
-        return owned_count_pure(state.inventory, state.bank_items, equipped, code) >= 1
-
-    raw = build_grind_candidates(skill, state, game_data)
-    flag_inputs = [
-        FlagInputs(code=gc.code,
-                   recipe_mats=tuple(game_data.crafting_recipe(gc.code) or {}),
-                   craft_level=gc.craft_level, obtainable=gc.obtainable,
-                   is_target=gc.code in objective_targets, owned=owned(gc.code))
-        for gc in raw
-    ]
-    cannibalize = cannibalize_pure(current_level, flag_inputs)
-    rf, rr = frozenset(reserved_full), frozenset(reserved_relaxed)
-    out: list[DispatchCandidate] = []
-    for gc, fi in zip(raw, flag_inputs, strict=False):
-        uses_full, uses_relaxed = dispatch_candidate_flags(fi, current_level, rf, rr, cannibalize)
-        out.append(DispatchCandidate(
-            code=gc.code, craft_skill=gc.craft_skill, craft_level=gc.craft_level,
-            mats_missing=gc.mats_missing, obtainable=gc.obtainable,
-            uses_reserved_full=uses_full, uses_reserved_relaxed=uses_relaxed,
-            # Prefer crafting a real, usable-NOW gear/tool target (or the committed
-            # objective item) over a throwaway for skill XP. NOTE: `wanted_targets`
-            # is near-term (near_term_gear ∪ target_tools ∪ committed), NOT the
-            # BiS `is_target` set used for reservation — at low char level no BiS
-            # item is craftable, so is_target would never fire (dead-code trap).
-            wanted=gc.code in wanted_targets,
-        ))
-    return out
 
 # ---------------------------------------------------------------------------
 # Flat map functions + StrategyArbiter
@@ -754,9 +666,9 @@ def objective_step_goal(
                 # gear roots produced 0-node dead candidates and the
                 # arbiter fell through to slime grinding with the bar
                 # objective abandoned at 1/5). Once the materials are in
-                # hand the strategy's actionable_step advances to
-                # ReachSkillLevel(craft_skill, N) and the branch below
-                # grinds the skill.
+                # hand the equippable branch above handles the skill-gated
+                # root craft — UpgradeEquipmentGoal grinds the crafting skill
+                # planner-natively via the LevelSkill action (epic P3).
                 if (root_stats is not None and root_stats.crafting_skill
                         and state.skills.get(root_stats.crafting_skill, 1)
                         < root_stats.crafting_level):
@@ -780,111 +692,6 @@ def objective_step_goal(
                     game_data.max_gather_yield)
                 return GatherMaterialsGoal(target_item=tgt_code, needed={tgt_code: tgt_qty})
         return GatherMaterialsGoal(target_item=step.code, needed={step.code: step.quantity})
-    if isinstance(step, ReachSkillLevel):
-        # A "reach skill level N" step is width-unfindable as a single GOAP goal
-        # (the planner can't simulate grinding many crafts to cross a whole
-        # level — trace 2026-06-14 192617: the old LevelSkillGoal fallback timed
-        # out 25/25 cycles, 60968 nodes/90s/plan_len 0). Route it through the
-        # PROVED skill_step_dispatch core: craft ONE level-appropriate in-skill
-        # item this cycle, replan, repeat — always plannable. The core decides
-        # SUPPRESS / GRIND(code) / NO_GRIND; see
-        # formal/Formal/Extracted/SkillStepDispatch.lean and
-        # docs/PLAN_skill_step_dispatch_proof.md.
-        #
-        # Reservation (trace 2026-06-14): the grind must not cannibalize the
-        # committed objective's materials. `reserved_full` covers both roots and
-        # the committed objective gear/tools; `reserved_relaxed` frees the mats of
-        # any objective SKILL-GATED behind step.skill (its grind is its own
-        # bootstrap — project_skill_gated_self_lock). The core prefers a
-        # full-respecting grind and relaxes only when the full pass finds nothing.
-        current = state.skills.get(step.skill, 0)
-        committed_skill, committed_level = "", 0
-        if isinstance(committed_root, ObtainItem):
-            cs = game_data.item_stats(committed_root.code)
-            if cs is not None and cs.crafting_skill:
-                committed_skill, committed_level = cs.crafting_skill, cs.crafting_level
-        committed_codes = frozenset(r.code for r in (root, committed_root)
-                                     if isinstance(r, ObtainItem))
-        # Items the bot WANTS a keeper of right now: the usable-now near-term gear
-        # and tool targets plus the committed objective item(s). The grind prefers
-        # crafting one of these over a throwaway (same skill XP, plus a keeper).
-        # SATISFIED filter (trace 2026-06-24 cyc319-344): a wanted item stays
-        # `wanted` only while the bot does NOT yet hold enough to fill its slot(s)
-        # (rings/utility = 2, else 1). Without this, the `held + 1` grind quantity
-        # ratchets a wanted single-slot item forever — Robby ground 11 wooden_shields
-        # (6 ash_plank each), stuffing the bag until an expensive craft could not
-        # fit (5 free < 6 needed) and the loop became Withdraw(ash_plank)↔DepositAll.
-        # Once satisfied, the item is no longer wanted and the grind reverts to the
-        # cheap throwaway (copper_helmet, 1 mat), which fits and skills up.
-        equipped_now = [c for c in state.equipment.values() if c is not None]
-
-        def _unsatisfied(code: str) -> bool:
-            stats = game_data.item_stats(code)
-            slots = ITEM_TYPE_TO_SLOTS.get(stats.type_) if stats is not None else None
-            demand = len(slots) if slots else 1
-            return owned_count_pure(state.inventory, state.bank_items, equipped_now, code) < demand
-
-        wanted_targets = frozenset(
-            c for c in (ctx.near_term_targets | committed_codes) if _unsatisfied(c))
-        source_codes: list[str] = list(committed_codes)
-        source_codes += list(ctx.target_gear | ctx.target_tools)
-        reserved_full: set[str] = set()
-        reserved_relaxed: set[str] = set()
-        for code in source_codes:
-            rec = game_data.crafting_recipe(code)
-            if not rec:
-                continue
-            reserved_full.update(rec)
-            if not _gated_behind_skill(code, step.skill, current, game_data):
-                reserved_relaxed.update(rec)
-        candidates = _skill_dispatch_candidates(
-            step.skill, state, game_data, reserved_full, reserved_relaxed,
-            current, ctx.target_gear | ctx.target_tools, wanted_targets)
-        # Next-tier throwaway dampener (project next-tier skill-grind dampener):
-        # when this gear-crafting skill can ALREADY craft every gear item in the
-        # 10-level band one tier above the character's level, a speculative
-        # throwaway grind only over-skills a tier the committed root already
-        # covers. Hoist the SkillItem view (mirrors skill_target_curve) and let
-        # the proved cores decide; the dispatch core suppresses only a NOT-wanted
-        # grind under this flag (need-exemption preserved).
-        # Only the step's own skill is needed (next_tier_cap_pure filters
-        # craft_skill == skill), so restrict the hoist to it instead of building
-        # a SkillItem for every crafting item of every skill each cycle.
-        skill_items = [
-            SkillItem(
-                stats.crafting_skill, stats.crafting_level, stats.level,
-                (stats.type_ in ITEM_TYPE_TO_SLOTS or stats.subtype == "tool"),
-            )
-            for stats in game_data.all_item_stats.values()
-            if stats.crafting_skill == step.skill
-        ]
-        next_cap = next_tier_cap_pure(step.skill, state.level, skill_items,
-                                      game_data.max_skill_level)
-        dampened = next_tier_dampened_pure(current, next_cap)
-        decision = skill_step_dispatch_pure(step.skill, current,
-                                            committed_skill, committed_level,
-                                            candidates, dampened=dampened)
-        if decision.kind == "grind":
-            bank = state.bank_items or {}
-            held = state.inventory.get(decision.code, 0) + bank.get(decision.code, 0)
-            return GatherMaterialsGoal(target_item=decision.code,
-                                       needed={decision.code: held + 1},
-                                       skill_grind=True)
-        # SUPPRESS: committed root crafts its own gear — no objective-step goal.
-        # NO_GRIND: no craftable to grind. If the skill is gatherable at the
-        # current level, LEVEL IT BY GATHERING its resource (grind-one-replan) —
-        # a gatherable-but-no-low-craftable skill (alchemy: lowest recipe L5,
-        # sunflower_field gives XP at L1) climbs to its first craftable level this
-        # way. Skills with no gather resource fall through to None (arbiter
-        # advances). Mirrors the "grind" branch's grind-one-replan.
-        if decision.kind == "no_grind":
-            drop = best_gather_resource_drop(step.skill, current, game_data)
-            if drop is not None:
-                bank = state.bank_items or {}
-                held = state.inventory.get(drop, 0) + bank.get(drop, 0)
-                return GatherMaterialsGoal(target_item=drop, needed={drop: held + 1},
-                                           skill_grind=True)
-        return None
     if isinstance(step, ReachCharLevel):
         if ctx.combat_monster is None:
             return None

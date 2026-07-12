@@ -1,31 +1,24 @@
-"""Differential lockstep: Python profile_for <-> Lean profileFor (the 6
-category x adequacy cases). Binds the real src selector.
+"""Differential lockstep: Python profile_for <-> Lean profileFor.
 
-Mirrors Formal/EquipmentProfile.lean's truth table exactly: the plan-gate
-combat floor forces COMBAT whenever the band is inadequate; once adequate a
-utility objective (ReachSkillLevel) selects UTILITY, and every other root
-(ReachCharLevel xp grind, ObtainItem gear) stays COMBAT. The harness imports
-the REAL profile_for from src -- it never reimplements the selector."""
+Skill-level roots — the only former utility-axis pursuit — were retired in epic
+P3 (under-skill gear grinds planner-natively via the LevelSkill action, not a
+tree-level skill root), so `profile_for` is now a constant COMBAT for every root
+and adequacy. The mirror stays: the harness imports the REAL profile_for from
+src and checks it agrees with Lean profileFor over the remaining root kinds."""
 
 import pytest
 
 from artifactsmmo_cli.ai.tiers.equipment_profile import ProfileKind, profile_for
-from artifactsmmo_cli.ai.tiers.meta_goal import (
-    ObtainItem,
-    ReachCharLevel,
-    ReachSkillLevel,
-)
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
 
-_SKILL = ReachSkillLevel(skill="weaponcrafting", level=10)
 _XP = ReachCharLevel(level=20)
 _GEAR = ObtainItem(code="fire_bow", quantity=1, slot="weapon_slot")
 
-# (root, band_adequate) -> expected, matching Lean profileFor exactly.
+# (root, band_adequate) -> expected, matching Lean profileFor exactly: COMBAT
+# for every root and adequacy (utility axis retired in P3).
 _CASES = [
-    (_SKILL, True, ProfileKind.UTILITY),
     (_XP, True, ProfileKind.COMBAT),
     (_GEAR, True, ProfileKind.COMBAT),
-    (_SKILL, False, ProfileKind.COMBAT),
     (_XP, False, ProfileKind.COMBAT),
     (_GEAR, False, ProfileKind.COMBAT),
 ]

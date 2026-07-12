@@ -11,7 +11,6 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
     ObtainItem,
     ReachCharLevel,
-    ReachSkillLevel,
 )
 from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -58,24 +57,18 @@ def prerequisites(node: MetaGoal, state: WorldState, game_data: GameData) -> lis
             return []
         recipe = game_data.crafting_recipe(node.code)
         if recipe is not None:
-            prereqs: list[MetaGoal] = []
-            stats = game_data.item_stats(node.code)
-            if stats is not None and stats.crafting_skill:
-                prereqs.append(ReachSkillLevel(stats.crafting_skill, stats.crafting_level))
-            prereqs.extend(ObtainItem(mat, qty) for mat, qty in recipe.items())
-            return prereqs
-        for res_code, drop in game_data.resource_drops.items():
-            if drop == node.code:
-                skill_level = game_data.resource_skill_level(res_code)
-                if skill_level is not None:
-                    return [ReachSkillLevel(skill_level[0], skill_level[1])]
-        return []  # buyable / monster-drop / unknown → leaf
+            # An ObtainItem's prereqs are just its material ObtainItems. The
+            # crafting-skill gate is no longer emitted as a prerequisite node:
+            # under-skill gear is grinded planner-natively by UpgradeEquipmentGoal
+            # via the LevelSkill action (epic P3), not by a tree-level skill root.
+            return [ObtainItem(mat, qty) for mat, qty in recipe.items()]
+        return []  # buyable / monster-drop / gatherable / unknown → leaf
     if isinstance(node, ReachCharLevel):
         if combat_capable(state, game_data):
             return []
         weapon = best_attainable_weapon(game_data)
         return [ObtainItem(weapon)] if weapon is not None else []
-    return []  # ReachSkillLevel → leaf (materials enter via ObtainItem chains)
+    return []
 
 
 _CHAR_LEVEL_BOOTSTRAP_HORIZON = 2

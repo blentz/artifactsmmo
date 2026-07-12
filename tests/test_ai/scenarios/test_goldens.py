@@ -84,11 +84,15 @@ EXPECTATIONS: dict[str, Golden] = {
     # pursuit_value; user ruling). The tree's chosen_root is
     # ObtainItem(iron_boots, boots_slot) (the GAP-1 attainability fix opened
     # iron_boots; combat-dominant pursuit_value ranks it over the utility
-    # potion the flat scorer used to pick). iron_boots' recipe closure resolves
-    # through the mapper to its first unmet input: GatherMaterials(copper_bar,
-    # {copper_bar:1}), first action Gather(copper_rocks).
+    # potion the flat scorer used to pick). iron_boots' closure resolves to
+    # GatherMaterials(iron_ore) for the iron_bar leg. iron_ore's sole source
+    # (iron_rocks) is mining-10-gated and the char is at mining 1, so the plan
+    # grinds the gather skill planner-natively: first action LevelSkill(mining
+    # ->10), then Gather(iron_rocks). This retired the old copper_bar skill-
+    # grind route (prereq-graph ReachSkillLevel node), completed by the P3b
+    # gather-skill-gate LevelSkill admission (2026-07-12).
     "l12_taskgated_bag": Golden(
-        goal_class="GatherMaterials(copper_bar", first_action="Gather(copper_rocks"),
+        goal_class="GatherMaterials(iron_ore", first_action="LevelSkill(mining->10)"),
 }
 
 

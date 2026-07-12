@@ -26,7 +26,6 @@ DOMINANCE_PARETO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "dominance_par
 COMBAT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat.py"
 PROJECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "projection.py"
 GATHERING_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gathering.py"
-LEVEL_SKILL_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "level_skill.py"
 LEVEL_SKILL_ACTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "level_skill.py"
 SCORING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "scoring.py"
 LOADOUT_PICKER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "loadout_picker.py"
@@ -42,7 +41,6 @@ GEAR_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "gear_value.py"
 SKILL_XP_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "learning" / "skill_xp_curve.py"
 SKILL_TARGET_CURVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "skill_target_curve.py"
 SKILL_GRIND_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "skill_grind_selection.py"
-SKILL_STEP_DISPATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "skill_step_dispatch.py"
 ACTION_FACTORY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "factory.py"
 RECIPE_CLOSURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recipe_closure.py"
 TASK_FEASIBILITY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_feasibility.py"
@@ -1025,35 +1023,6 @@ SKILL_GRIND_SELECTION_MUTATIONS = [
 ]
 
 
-# skill_step_dispatch mutations -- anchors for the EXTRACTED combine_dispatch_pure
-# (the reservation-aware grind/suppress/no-grind combiner). Killed by the
-# differential test formal/diff/test_skill_step_dispatch_diff.py, which encodes
-# the role theorems (suppress_correct / full_preference / forward_progress /
-# grind_valid) from formal/Formal/SkillStepDispatch.lean. The combine-direct case
-# feeds BOTH picks non-empty so the full-preference branch is exercised (the
-# pipeline wrapper short-circuits it).
-SKILL_STEP_DISPATCH_MUTATIONS = [
-    # drop the suppress guard -- never suppresses, violating suppress_correct.
-    ("skill_step_dispatch: drop suppress guard",
-     "    if committed_skill == skill and committed_level <= current_level:\n",
-     "    if False:\n"),
-    # suppress boundary <= -> < -- a craftable-now committed item at the exact
-    # current level no longer suppresses; violates suppress_correct.
-    ("skill_step_dispatch: suppress boundary <= to <",
-     "    if committed_skill == skill and committed_level <= current_level:\n",
-     "    if committed_skill == skill and committed_level < current_level:\n"),
-    # flip the full/relaxed preference -- prefers the relaxed pick, violating
-    # full_preference (reservation honored only when forced to relax).
-    ("skill_step_dispatch: full-preference flip",
-     '    pick = full_pick if full_pick != "" else relaxed_pick\n',
-     '    pick = relaxed_pick if relaxed_pick != "" else full_pick\n'),
-    # always-grind -- returns ("grind", "") when both passes are empty, violating
-    # the NO_GRIND contract (grind_valid would have no candidate).
-    ("skill_step_dispatch: drop no-grind guard",
-     '    if pick != "":\n',
-     "    if True:\n"),
-]
-
 # level_skill action mutations -- anchors for the REAL LevelSkill.apply /
 # is_applicable, bound to formal/diff/test_level_skill_diff.py, which encodes the
 # proved Lean mirror Formal.ActionApplicability.levelSkillApply / levelSkillApplicable
@@ -1121,40 +1090,6 @@ STRATEGIC_VALUE_MUTATIONS = [
     ("strategic_value: combat product becomes sum",
      "        combat_raw * combat_weight",
      "        combat_raw + combat_weight"),
-]
-
-
-# grind_ladder mutations -- anchors for dispatch_candidate_flags / cannibalize_pure
-# (the reservation-flag hoisting). Killed by formal/diff/test_grind_ladder_diff.py,
-# which binds them to Formal.GrindLadder.flagsFor / cannibalizeModel -- the SAME
-# defs the liveness theorems (grind_when_unowned_target / grind_when_all_owned)
-# are proved over. Same source file as the combine mutations above.
-GRIND_LADDER_MUTATIONS = [
-    # drop the target exemption -- a target's mats are no longer freed, so the
-    # grind freezes (the 2026-06-14 230824 regression); flags diverge from Lean.
-    ("grind_ladder: drop exempt guard",
-     "    exempt = c.is_target and c.craft_level <= current_level and not c.owned\n",
-     "    exempt = False\n"),
-    # exempt OWNED instead of unowned -- re-grinds owned targets (over-craft) and
-    # withholds the exemption from unowned ones.
-    ("grind_ladder: exempt owned instead of unowned",
-     "    exempt = c.is_target and c.craft_level <= current_level and not c.owned\n",
-     "    exempt = c.is_target and c.craft_level <= current_level and c.owned\n"),
-    # relaxed pass ignores cannibalize -- never frees the relaxed reservation, so
-    # the all-owned corner freezes instead of cannibalizing.
-    ("grind_ladder: relaxed ignores cannibalize",
-     "    uses_relaxed = ((not exempt) and (not cannibalize)\n",
-     "    uses_relaxed = ((not exempt) and (True)\n"),
-    # flip the cannibalize ownership test -- fires cannibalization while unowned
-    # items remain (and withholds it when all owned).
-    ("grind_ladder: cannibalize ownership flip",
-     "    return len(feasible) > 0 and not any(not c.owned for c in feasible)\n",
-     "    return len(feasible) > 0 and any(not c.owned for c in feasible)\n"),
-    # drop the obtainable filter in the feasible set -- an unobtainable item wrongly
-    # counts toward the all-owned cannibalize decision.
-    ("grind_ladder: cannibalize drop obtainable filter",
-     "                if c.craft_level <= current_level and c.obtainable]\n",
-     "                if c.craft_level <= current_level]\n"),
 ]
 
 
@@ -1241,21 +1176,12 @@ TASK_FEASIBILITY_MUTATIONS = [
 
 # prerequisite_graph mutations -- old strings matched to current prerequisite_graph.py text.
 PREREQUISITE_GRAPH_MUTATIONS = [
-    # drop the crafting-skill prerequisite edge: a craftable item no longer gates
-    # on ReachSkillLevel(crafting_skill) (wrong edge set, skill edge missing).
-    ("prerequisite_graph: drop crafting-skill prereq edge",
-     "                prereqs.append(ReachSkillLevel(stats.crafting_skill, stats.crafting_level))",
-     "                pass"),
     # drop the ingredient edges: a craftable item produces no ObtainItem(mat)
-    # edges (wrong edge set, material edges missing).
+    # edges — the recipe branch collapses to a leaf (wrong edge set, material
+    # edges missing). The only prerequisite the ObtainItem branch now emits.
     ("prerequisite_graph: drop ingredient ObtainItem edges",
-     "            prereqs.extend(ObtainItem(mat, qty) for mat, qty in recipe.items())",
-     "            prereqs.extend([])"),
-    # drop the resource-skill prereq edge: a resource-drop item becomes a leaf
-    # instead of gating on its gather skill (wrong edge set on the resource branch).
-    ("prerequisite_graph: drop resource-skill prereq edge",
-     "                    return [ReachSkillLevel(skill_level[0], skill_level[1])]",
-     "                    return []"),
+     "            return [ObtainItem(mat, qty) for mat, qty in recipe.items()]",
+     "            return []"),
     # combat_capable any -> all: requires EVERY monster beatable rather than SOME
     # (the anti-gaming aggregation flip the De Morgan contract catches).
     ("prerequisite_graph: combat_capable any -> all",
@@ -2580,19 +2506,17 @@ PROGRESSION_TREE_MUTATIONS = [
      "    return min(candidates, key=lambda c: (c.gain, -c.level, c.code, c.slot))"),
 ]
 
-# equipment_profile.profile_for selector (2026-07-08): plan-gate combat floor +
-# utility-objective axis. Killed by formal/diff/test_equipment_profile_diff.py
-# (the 6 category x adequacy cases against Lean profileFor's truth table).
+# equipment_profile.profile_for selector (2026-07-08; utility axis retired in P3b):
+# profile_for is now a CONSTANT COMBAT for every root and adequacy (skill-level
+# roots — the only former utility-axis pursuit — grind planner-natively via the
+# LevelSkill action). Killed by formal/diff/test_equipment_profile_diff.py, which
+# pins every (root, adequacy) case against Lean profileFor's constant COMBAT.
 EQUIPMENT_PROFILE_MUTATIONS = [
-    ("profiles: plan-gate dropped (utility even when inadequate)",
-     "    if not band_adequate:\n        return ProfileKind.COMBAT",
-     "    if False:\n        return ProfileKind.COMBAT"),
-    ("profiles: utility objective inverted",
-     "    return isinstance(root, ReachSkillLevel)",
-     "    return not isinstance(root, ReachSkillLevel)"),
-    ("profiles: utility branch forced combat (utility never fires)",
-     "    if is_utility_objective(root):\n        return ProfileKind.UTILITY",
-     "    if is_utility_objective(root):\n        return ProfileKind.COMBAT"),
+    # flip the constant selector to UTILITY: every pursuit wrongly selects the
+    # utility profile. Caught by every (root, adequacy) case in the diff test.
+    ("profiles: constant selector flipped to utility",
+     "    return ProfileKind.COMBAT",
+     "    return ProfileKind.UTILITY"),
 ]
 
 
@@ -2642,7 +2566,7 @@ _ALL_SRCS = [
     APPLY_REST_SRC, APPLY_FIGHT_SRC, APPLY_BANK_EXPANSION_SRC, APPLY_TELEPORT_SRC,
     CONSUMABLE_SUPPLY_SRC, MEANS_SRC, GUARDS_SRC, THRESHOLDS_SRC,
     WITHDRAW_ITEM_SRC, UNEQUIP_SRC, TASK_EXCHANGE_SRC, TASK_CANCEL_SRC,
-    GATHERING_APPLY_SRC, LEVEL_SKILL_GOAL_SRC,
+    GATHERING_APPLY_SRC,
     MONSTER_CATALOG_SRC,
     WINNABLE_CASCADE_SRC,
     COMBAT_PICKER_SRC,
@@ -4026,21 +3950,6 @@ GATHERING_APPLY_MUTATIONS = [
 ]
 
 
-LEVEL_SKILL_GOAL_MUTATIONS = [
-    (
-        "level_skill_goal.is_satisfied: drop projected-delta check (only skills snapshot path)",
-        "        current_level = state.skills.get(self._skill_name, 0)\n"
-        "        required = self._xp_curve.required_xp(current_level)\n"
-        "        if required <= 0:\n"
-        "            return False\n"
-        "        current_xp = state.skill_xp.get(self._skill_name, 0)\n"
-        "        projected = state.projected_skill_xp_delta.get(self._skill_name, 0)\n"
-        "        return current_xp + projected >= required",
-        "        return False",
-    ),
-]
-
-
 # cost_core mutations -- old strings matched to current cost_core.py text.
 # These attack the Phase-2 Dijkstra-optimality precondition: every
 # Action.cost(...) must return ≥ 0. Each mutation breaks the non-negativity
@@ -4741,14 +4650,10 @@ def _run_all_groups() -> int:
               "formal/diff/test_skill_target_curve_diff.py", survivors)
     run_group(SKILL_GRIND_SELECTION_SRC, SKILL_GRIND_SELECTION_MUTATIONS,
               "formal/diff/test_skill_grind_selection_diff.py", survivors)
-    run_group(SKILL_STEP_DISPATCH_SRC, SKILL_STEP_DISPATCH_MUTATIONS,
-              "formal/diff/test_skill_step_dispatch_diff.py", survivors)
     run_group(LEVEL_SKILL_ACTION_SRC, LEVEL_SKILL_ACTION_MUTATIONS,
               "formal/diff/test_level_skill_diff.py", survivors)
     run_group(STRATEGIC_VALUE_SRC, STRATEGIC_VALUE_MUTATIONS,
               "formal/diff/test_strategic_value_diff.py", survivors)
-    run_group(SKILL_STEP_DISPATCH_SRC, GRIND_LADDER_MUTATIONS,
-              "formal/diff/test_grind_ladder_diff.py", survivors)
     run_group(RECIPE_CLOSURE_SRC, RECIPE_CLOSURE_MUTATIONS + RECIPE_CLOSURE_YIELD_MUTATIONS,
               "formal/diff/test_recipe_closure_diff.py", survivors)
     run_group(TASK_FEASIBILITY_SRC, TASK_FEASIBILITY_MUTATIONS,
@@ -4884,8 +4789,6 @@ def _run_all_groups() -> int:
               "formal/diff/test_ladder_fires_diff.py", survivors)
     run_group(GATHERING_APPLY_SRC, GATHERING_APPLY_MUTATIONS,
               "formal/diff/test_apply_baseline_diff.py", survivors)
-    run_group(LEVEL_SKILL_GOAL_SRC, LEVEL_SKILL_GOAL_MUTATIONS,
-              "tests/test_ai/test_level_skill_goal.py", survivors)
     run_group(WITHDRAW_ITEM_SRC, WITHDRAW_ITEM_MUTATIONS,
               "formal/diff/test_inventory_chain_safe_diff.py", survivors)
     # SLOT term isn't mutation-gated by the diff test above (its fixtures all

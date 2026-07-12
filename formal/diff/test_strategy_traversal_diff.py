@@ -9,9 +9,8 @@ We exercise the genuine TRAVERSAL logic by controlling the abstract node graph:
 * monkeypatch `strategy._producible` to a controlled per-node bool.
 
 Nodes are `Nat` ids. Each id maps to a real `MetaGoal` so `isinstance` dispatch
-(ObtainItem / ReachSkillLevel / ReachCharLevel = the `kind`) is faithful:
+(ObtainItem / ReachCharLevel = the `kind`) is faithful:
 * obtain id i → `ObtainItem(str(i))`
-* skill  id i → `ReachSkillLevel(str(i), 1)`
 * char   id i → `ReachCharLevel(i)`   (distinct levels; is_satisfied is patched)
 
 The SAME graph is encoded for the Lean oracle (flat ints). The satisfied-interior
@@ -28,12 +27,11 @@ from artifactsmmo_cli.ai.tiers import strategy
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
-    ReachSkillLevel,
 )
 from formal.diff.oracle_client import run_oracle
 
-# kind codes match the Lean oracle: 0 = obtain, 1 = skill, 2 = char
-KIND_OBTAIN, KIND_SKILL, KIND_CHAR = 0, 1, 2
+# kind codes match the Lean oracle: 0 = obtain, 2 = char
+KIND_OBTAIN, KIND_CHAR = 0, 2
 
 
 class _Graph:
@@ -47,18 +45,13 @@ class _Graph:
         self.prereqs = prereqs      # id -> list[int]
 
     def node(self, i):
-        k = self.kinds[i]
-        if k == KIND_OBTAIN:
+        if self.kinds[i] == KIND_OBTAIN:
             return ObtainItem(str(i))
-        if k == KIND_SKILL:
-            return ReachSkillLevel(str(i), 1)
         return ReachCharLevel(i)
 
     def id_of(self, node):
         if isinstance(node, ObtainItem):
             return int(node.code)
-        if isinstance(node, ReachSkillLevel):
-            return int(node.skill)
         return int(node.level)
 
 
@@ -79,7 +72,6 @@ def _install(graph, mp):
     mp.setattr(strategy, "prerequisites", fake_prerequisites)
     mp.setattr(strategy, "_producible", fake_producible)
     mp.setattr(ObtainItem, "is_satisfied", make_is_sat(graph))
-    mp.setattr(ReachSkillLevel, "is_satisfied", make_is_sat(graph))
     mp.setattr(ReachCharLevel, "is_satisfied", make_is_sat(graph))
 
 
@@ -97,9 +89,9 @@ def _rand_graph(rng, allow_cycle):
     n = rng.randint(1, 7)
     kinds, sat, prod, prereqs = {}, {}, {}, {}
     for i in range(n):
-        # mostly obtain (exercises closure/producible); some skill/char
+        # mostly obtain (exercises closure/producible); some char
         r = rng.random()
-        kinds[i] = KIND_OBTAIN if r < 0.7 else (KIND_SKILL if r < 0.85 else KIND_CHAR)
+        kinds[i] = KIND_OBTAIN if r < 0.75 else KIND_CHAR
         prod[i] = rng.random() < 0.5
         subs = []
         if rng.random() < 0.6:
@@ -179,7 +171,7 @@ def _is_actionable(graph, i):
 @settings(max_examples=200, deadline=None)
 @given(seed=st.integers(min_value=0, max_value=2**31 - 1))
 def test_root_cost_matches_lean(seed):
-    """`root_cost`: char/skill = max(1, target − have); gear = unmet_closure_size."""
+    """`root_cost`: char = max(1, target − have); gear (obtain) = unmet_closure_size."""
     rng = random.Random(seed)
     graph, root, fuel = _rand_graph(rng, rng.random() < 0.5)
     game_data = object()
@@ -196,16 +188,6 @@ def test_root_cost_matches_lean(seed):
                 level = have
             py = strategy.root_cost(root_node, _S(), game_data)
             args = _encode_root_cost(graph, root, fuel, KIND_CHAR, target, have)
-        elif kind == KIND_SKILL:
-            target = rng.randint(1, 40)
-            have = rng.randint(1, 40)
-            root_node = ReachSkillLevel(str(root), target)
-
-            class _S:
-                skills = {str(root): have}
-                level = 1
-            py = strategy.root_cost(root_node, _S(), game_data)
-            args = _encode_root_cost(graph, root, fuel, KIND_SKILL, target, have)
         else:
             root_node = graph.node(root)
             py = strategy.root_cost(root_node, object(), game_data)

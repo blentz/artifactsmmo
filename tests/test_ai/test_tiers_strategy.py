@@ -1,7 +1,7 @@
 import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, ReachCharLevel, ReachSkillLevel
+from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
 from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree
@@ -57,13 +57,11 @@ def test_unmet_closure_size_counts_unmet_nodes():
 
 def test_root_category():
     assert root_category(ReachCharLevel(50)) == "char_level"
-    assert root_category(ReachSkillLevel("mining", 50)) == "skills"
     assert root_category(ObtainItem("x")) == "gear"
 
 
 def test_desired_state_of():
     assert desired_state_of(ObtainItem("copper_ore", 6)) == {"have": {"copper_ore": 6}}
-    assert desired_state_of(ReachSkillLevel("mining", 7)) == {"skill": {"mining": 7}}
     assert desired_state_of(ReachCharLevel(12)) == {"level": 12}
     assert desired_state_of(None) == {}
 
@@ -115,11 +113,10 @@ def test_decide_skips_blocked_unmet_root():
     assert d.chosen_root is not None
 
 
-def test_root_cost_is_levels_remaining_for_leaf_goals():
+def test_root_cost_is_levels_remaining_for_char_level():
     gd = _gd()
-    assert root_cost(ReachSkillLevel("mining", 50), make_state(skills={"mining": 3}), gd) == 47
     assert root_cost(ReachCharLevel(50), make_state(level=3), gd) == 47
-    assert root_cost(ReachSkillLevel("mining", 5), make_state(skills={"mining": 5}), gd) == 1  # floor
+    assert root_cost(ReachCharLevel(4), make_state(level=4), gd) == 1  # floor
 
 
 def test_root_cost_for_gear_uses_closure_size():
@@ -175,9 +172,8 @@ def test_is_reachable_false_for_unproducible_and_blocked_material():
     assert is_reachable(ObtainItem("cursed_helm"), s, gd) is False
 
 
-def test_is_reachable_skill_and_char_level():
+def test_is_reachable_char_level():
     gd = _reach_gd()
-    assert is_reachable(ReachSkillLevel("mining", 50), make_state(level=1), gd) is True
     # ReachCharLevel reachable because the player can beat a monster once it can
     # deal damage (combat_capable now uses predict_win, not a level margin).
     assert is_reachable(ReachCharLevel(50), make_state(level=1, attack={"fire": 10}), gd) is True
@@ -208,35 +204,34 @@ def test_actionable_step_none_for_unproducible_leaf():
 # --- Task 2: semantic (not repr) prerequisite order ---
 
 def test_prereq_order_is_repr_independent(monkeypatch: pytest.MonkeyPatch) -> None:
-    """`_prereq_order` ranks by prerequisite KIND (materials before skill
-    gates before char-level gates), never by `repr()`. Proven by forcing
-    ObtainItem's repr to sort AFTER ReachSkillLevel's — as an unrelated
-    class/field rename could — and confirming the semantic order (materials
-    first) is unaffected. Retires the `sorted(unmet, key=repr)` antipattern
-    (feedback_no_alphabetical_tiebreak)."""
+    """`_prereq_order` ranks by prerequisite KIND (materials before char-level
+    gates), never by `repr()`. Proven by forcing ObtainItem's repr to sort AFTER
+    ReachCharLevel's — as an unrelated class/field rename could — and confirming
+    the semantic order (materials first) is unaffected. Retires the
+    `sorted(unmet, key=repr)` antipattern (feedback_no_alphabetical_tiebreak).
+    (Skill-level prerequisite gates were retired in P3b — under-skill gear grinds
+    via the LevelSkill action, not a tree-level skill node.)"""
     monkeypatch.setattr(ObtainItem, "__repr__", lambda self: f"Zzz({self.code})")
     obtain = ObtainItem("iron_ore", 5)
-    skill = ReachSkillLevel("mining", 10)
     char = ReachCharLevel(level=20)
     # Under the OLD `sorted(unmet, key=repr)` this renamed repr would now put
-    # the skill gate first ("ReachSkillLevel..." < "Zzz(...)").
-    assert repr(skill) < repr(obtain)
-    # All three prerequisite KINDS ordered: materials (ObtainItem) before skill
-    # gates (ReachSkillLevel) before char-level gates (ReachCharLevel), whatever
-    # the reprs. Covers _prereq_order's ReachCharLevel arm directly (the case
-    # production never emits as a sibling — see _PREREQ_KIND_RANK's docstring).
-    trio: list[MetaGoal] = [char, skill, obtain]
-    ordered = sorted(trio, key=_prereq_order)
-    assert ordered == [obtain, skill, char]  # semantic kind order, repr notwithstanding
-    assert _prereq_order(char) == (2, "", 20)
+    # the char-level gate first ("ReachCharLevel..." < "Zzz(...)").
+    assert repr(char) < repr(obtain)
+    # Both remaining prerequisite KINDS ordered: materials (ObtainItem) before
+    # char-level gates (ReachCharLevel), whatever the reprs. Covers _prereq_order's
+    # ReachCharLevel arm directly.
+    pair: list[MetaGoal] = [char, obtain]
+    ordered = sorted(pair, key=_prereq_order)
+    assert ordered == [obtain, char]  # semantic kind order, repr notwithstanding
+    assert _prereq_order(char) == (1, "", 20)
 
 
-def test_actionable_step_prefers_materials_over_skill_gate() -> None:
-    """Integration-level pin: a craftable item with BOTH an unmet material
-    and an unmet crafting-skill gate descends into the MATERIAL branch first
-    (the concrete, immediate thing the character can act on), not the skill
-    gate (the slower background grind) — even though the skill gate, being a
-    leaf, would itself be immediately 'actionable' if visited first."""
+def test_actionable_step_descends_to_material_for_underskill_craftable() -> None:
+    """Integration-level pin: an under-skill craftable descends into its MATERIAL
+    branch — the concrete, immediate thing the character can act on. The crafting
+    skill is no longer emitted as a prerequisite node (P3b): under-skill gear
+    grinds via UpgradeEquipmentGoal + the LevelSkill action, so actionable_step
+    routes straight to the gatherable material."""
     gd = GameData()
     gd._item_stats = {
         "widget": ItemStats(code="widget", level=5, type_="ring",

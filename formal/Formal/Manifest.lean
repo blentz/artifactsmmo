@@ -118,17 +118,6 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.SkillGrindSelection.grind_actionable -- feasible non-empty candidate ⇒ non-empty result
 #check @Formal.SkillGrindSelection.beats_prefers_wanted   -- wanted candidate beats non-wanted incumbent
 #check @Formal.SkillGrindSelection.unwanted_not_beats_wanted -- non-wanted never displaces wanted incumbent
--- SkillStepDispatch required roles (reservation-aware grind/suppress/no-grind routing):
-#check @Formal.SkillStepDispatch.suppress_correct    -- SUPPRESS iff committed same-skill craftable-now
-#check @Formal.SkillStepDispatch.full_preference     -- full pass picks ⇒ that pick is the result
-#check @Formal.SkillStepDispatch.reservation_safety  -- a full-pass grind code never uses a reserved mat
-#check @Formal.SkillStepDispatch.forward_progress    -- feasible relaxed candidate ⇒ never NO_GRIND
-#check @Formal.SkillStepDispatch.grind_valid         -- a grind code is a feasible candidate
--- GrindLadder required roles (reservation-flag computation + grind liveness):
-#check @Formal.GrindLadder.flags_exempt              -- unowned in-level target ⇒ both flags false
-#check @Formal.GrindLadder.flags_cannibalize         -- cannibalize ⇒ relaxed flag false
-#check @Formal.GrindLadder.grind_when_unowned_target -- feasible unowned target ⇒ grind (never freeze)
-#check @Formal.GrindLadder.grind_when_all_owned      -- all feasible owned + cannibalize ⇒ grind
 -- MonsterDropApply required roles (Fight.apply drop loop reachability):
 #check @Formal.MonsterDropApply.applyDrops_monotone  -- a kill never decreases any item count
 #check @Formal.MonsterDropApply.fight_drop_reachable -- room ⇒ a dropped item's count rises ≥ 1
@@ -163,12 +152,9 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.TaskFeasibility.monster_gate_just_past      -- monster at clvl+3 DOES gate
 #check @Formal.TaskFeasibility.monster_gate_zero_never     -- monster_level 0 never gates
 -- PrerequisiteGraph required roles:
-#check @Formal.PrerequisiteGraph.prereqs_recipe_with_skill -- craftable+skill ⇒ skill edge :: item edges
-#check @Formal.PrerequisiteGraph.prereqs_recipe_no_skill   -- craftable, no skill ⇒ item edges only
-#check @Formal.PrerequisiteGraph.prereqs_membership        -- EXACT edge set (skill ∨ ingredient item)
-#check @Formal.PrerequisiteGraph.prereqs_resource          -- resource-drop ⇒ single resource-skill edge
-#check @Formal.PrerequisiteGraph.prereqs_leaf              -- non-craftable, non-resource ⇒ leaf
-#check @Formal.PrerequisiteGraph.resource_branch_no_item   -- resource branch emits no item edge
+#check @Formal.PrerequisiteGraph.prereqs_recipe           -- craftable ⇒ item edges only (no skill edge)
+#check @Formal.PrerequisiteGraph.prereqs_membership        -- EXACT edge set (ingredient item edges)
+#check @Formal.PrerequisiteGraph.prereqs_leaf              -- non-craftable ⇒ leaf (resource branch retired)
 #check @Formal.PrerequisiteGraph.combat_capable_iff        -- combat_capable ↔ ∃ beatable monster
 #check @Formal.PrerequisiteGraph.combat_capable_demorgan   -- ¬capable ↔ all unbeatable (any≠all)
 #check @Formal.PrerequisiteGraph.combat_capable_empty      -- no monsters ⇒ not capable
@@ -681,10 +667,6 @@ open Formal.PriorityBand
 #check @Formal.GoalSystem.taskCancel_value_in_range
 #check @Formal.GoalSystem.taskCancel_cold_satisfied_zero
 #check @Formal.GoalSystem.taskCancel_cold_no_pivot_zero
-#check @Formal.GoalSystem.levelSkill_value_in_range
-#check @Formal.GoalSystem.levelSkill_cold_satisfied_zero
-#check @Formal.GoalSystem.levelSkill_cold_gap_too_big_zero
-#check @Formal.GoalSystem.levelSkill_cold_no_craftable_zero
 #check @Formal.GoalSystem.expandBank_value_in_range
 #check @Formal.GoalSystem.expandBank_cold_not_accessible_zero
 #check @Formal.GoalSystem.expandBank_cold_satisfied_zero
@@ -775,11 +757,9 @@ open Formal.PriorityBand
 #check @Formal.StepDispatch.dispatch_obtain_equippable_goes_to_upgrade
 #check @Formal.StepDispatch.dispatch_obtain_equippable_unreachable_goes_to_gather
 #check @Formal.StepDispatch.dispatch_obtain_nonequippable_goes_to_gather
-#check @Formal.StepDispatch.dispatch_reach_skill_goes_to_level_skill
 #check @Formal.StepDispatch.dispatch_reach_char_with_target_goes_to_grind
 #check @Formal.StepDispatch.dispatch_reach_char_no_target_safe_fails
 #check @Formal.StepDispatch.obtain_only_routes_to_obtain_classes
-#check @Formal.StepDispatch.reach_skill_only_routes_to_level_skill
 #check @Formal.StepDispatch.reach_char_only_routes_to_grind
 -- Piece-C feasibility router (gather_step_target):
 #check @Formal.StepDispatch.minGathers_raw

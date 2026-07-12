@@ -42,7 +42,6 @@ concept tag, or a concept with no module, is a traceability gap.
 | GearValue | items, gear | validity, dominance |
 | GoalSystem | core, planner | safety |
 | GoalValueBands | core, planner | safety, monotonicity |
-| GrindLadder | crafting, planner | liveness, safety |
 | GuardCoverage | core | no-deadlock, safety |
 | InventoryChainSafe | bank, items | safety |
 | InventoryProfile | bank, items, crafting | safety |
@@ -84,7 +83,6 @@ concept tag, or a concept with no module, is a traceability gap.
 | Scalarizer | core | monotonicity |
 | ShoppingList | resources | dominance, monotonicity, safety, totality |
 | SkillGrindSelection | crafting, planner | safety, totality |
-| SkillStepDispatch | crafting, planner | safety, liveness |
 | SkillTargetCurve | crafting, planner | safety, monotonicity |
 | StepDispatch | core, planner | totality, safety, reachability |
 | StoreWarmup | core | safety |

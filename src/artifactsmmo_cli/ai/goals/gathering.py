@@ -52,19 +52,36 @@ ramp (which capped at 40.0) plus an above-baseline scalar bonus head-room."""
 
 
 def _skill_open(resource_code: str, state: WorldState, game_data: GameData) -> bool:
-    """A gather can fire only if the resource's skill gate is open NOW:
-    `state.skills` is immutable during GOAP application (gathers accrue
-    `projected_skill_xp_delta`, never levels), so a skill-closed source can
-    never become applicable within a plan. Admitting one is pure branching
-    waste — and worse, it can WIN the yield narrowing below and displace a
-    workable source (derived 2026-07-08: salmon_spot, the rate-best
-    small_pearls dropper at 1/100, is fishing-40-gated; at fishing 30 it
-    beat bass_spot in select_gather_source and the pearl plan died at one
-    node). Mirrors GatherAction.is_applicable's skill arm (default level 1)
-    without its transient inventory-space arm — bag pressure changes
-    in-plan, skill levels do not."""
+    """True iff the resource's skill gate is open against the FIXED initial
+    `state` passed to `relevant_actions`. Gathers alone never raise a skill
+    (they accrue `projected_skill_xp_delta`, not levels), so a gather whose
+    gate is closed here cannot become applicable via gathering. Admitting one
+    unconditionally is branching waste — and worse, it can WIN the yield
+    narrowing below and displace a workable source (derived 2026-07-08:
+    salmon_spot, the rate-best small_pearls dropper at 1/100, is fishing-40-
+    gated; at fishing 30 it beat bass_spot in select_gather_source and the
+    pearl plan died at one node). A skill-closed gather is therefore admitted
+    ONLY through the `openable_locked_gathers` fallback below — when the
+    LevelSkill action can raise the gate mid-search (`LevelSkill.apply` DOES
+    mutate `state.skills`) and the drop has no open source, so the plan is
+    LevelSkill→Gather rather than a wasted branch. Mirrors
+    GatherAction.is_applicable's skill arm (default level 1) without its
+    transient inventory-space arm — bag pressure changes in-plan."""
     req = game_data.resource_skill_level(resource_code)
     return req is None or state.skills.get(req[0], 1) >= req[1]
+
+
+def level_below_and_grindable(req: tuple[str, int], state: WorldState,
+                              game_data: GameData) -> bool:
+    """True when the character is UNDER the gather-skill gate `req` = (skill,
+    level) and that level is reachable by a LevelSkill grind (level within the
+    server skill ceiling). Gates the fallback admission of a skill-locked gather
+    to ones a LevelSkill can actually open — a source gated above
+    max_skill_level stays excluded (no route), preserving _skill_open's
+    permanently-closed exclusion."""
+    skill, level = req
+    return (state.skills.get(skill, 1) < level
+            and level <= game_data.max_skill_level)
 
 
 class GatherMaterialsGoal(Goal):
@@ -230,6 +247,46 @@ class GatherMaterialsGoal(Goal):
                     < stats.crafting_level):
                 gated_skill_levels.add((stats.crafting_skill, stats.crafting_level))
 
+        # Gather-skill-gate openings (P3b completion): a closure material whose
+        # ONLY gather source is skill-locked (iron_ore ← iron_rocks, mining 10)
+        # is unreachable by gathering alone. Mirror the craft-skill gate — admit
+        # a LevelSkill(skill->level) that opens it plus the locked gather itself
+        # (the gather's own is_applicable enforces the raised skill mid-search,
+        # so it fires only after LevelSkill). Restricted to drops with NO
+        # currently-open source: a workable open source must never be displaced
+        # by a locked one that would force a needless grind (the fishing-40
+        # salmon vs fishing-30 bass narrowing hazard, _skill_open docstring).
+        open_drops: set[str] = set()
+        locked_by_drop: dict[str, list[tuple[str, str, int]]] = {}
+        for action in actions:
+            if not isinstance(action, GatherAction):
+                continue
+            if not gather_serves_closure(action.resource_code,
+                                         action.drop_item_override,
+                                         game_data.resource_drops, chain):
+                continue
+            drop = (action.drop_item_override
+                    or game_data.resource_drop_item(action.resource_code))
+            if drop is None or drop in covered:
+                continue
+            if _skill_open(action.resource_code, state, game_data):
+                open_drops.add(drop)
+                continue
+            req = game_data.resource_skill_level(action.resource_code)
+            # _skill_open above returned False, so this gather IS skill-gated —
+            # req is non-None (an unskilled gather reads as open, not gated).
+            assert req is not None
+            if level_below_and_grindable(req, state, game_data):
+                locked_by_drop.setdefault(drop, []).append(
+                    (action.resource_code, req[0], req[1]))
+        openable_locked_gathers: set[str] = set()
+        for drop, locked in locked_by_drop.items():
+            if drop in open_drops:
+                continue  # a workable open source exists — no forced grind
+            for res, skill, level in locked:
+                openable_locked_gathers.add(res)
+                gated_skill_levels.add((skill, level))
+
         result: list[Action] = []
         for action in actions:
             if (
@@ -258,7 +315,8 @@ class GatherMaterialsGoal(Goal):
                 or (isinstance(action, GatherAction) and gather_serves_closure(
                     action.resource_code, action.drop_item_override,
                     game_data.resource_drops, chain)
-                    and _skill_open(action.resource_code, state, game_data))
+                    and (_skill_open(action.resource_code, state, game_data)
+                         or action.resource_code in openable_locked_gathers))
                 or (isinstance(action, WithdrawItemAction) and action.code in withdrawable)
                 or (isinstance(action, OptimizeLoadoutAction)
                     and action.target_skill in needed_skills)

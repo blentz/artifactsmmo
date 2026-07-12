@@ -16,7 +16,7 @@ mirrors this predicate; the differential gate asserts the two agree over random
 inputs.
 
 Faithfulness note: the OTHER `objective_step_goal` branches (ObtainItem ->
-gear/currency/gather, ReachSkillLevel -> skill grind) are by definition NOT
+gear/currency/gather/skill-grind) are by definition NOT
 combat-led, so they yield `objectiveStepIsFight = False`. This module models only
 the combat slice because that is the entire meaning of the Bool — it is the
 relevant slice, not a surrogate for the whole routing function.

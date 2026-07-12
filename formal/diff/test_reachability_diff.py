@@ -16,8 +16,7 @@ nodes, deep chains) AND cross-checks both functions against the Lean oracle.
 
 WELL-FORMEDNESS (a genuine property of `prerequisites`/`_producible`, not a rig):
 * an `obtain` node with NONEMPTY direct prereqs is producible — nonempty prereqs
-  come from a crafting recipe, and a recipe ⇒ `_producible`;
-* a `skill` node is a LEAF — `prerequisites` returns `[]` for ReachSkillLevel.
+  come from a crafting recipe, and a recipe ⇒ `_producible`.
 We GENERATE only well-formed graphs (the only graphs the production code builds)
 and assert the invariant; we ALSO generate arbitrary graphs to confirm the Python
 two-tracker functions still match the Lean oracle there.
@@ -35,11 +34,10 @@ from artifactsmmo_cli.ai.tiers import strategy
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
-    ReachSkillLevel,
 )
 from formal.diff.oracle_client import run_oracle
 
-KIND_OBTAIN, KIND_SKILL, KIND_CHAR = 0, 1, 2
+KIND_OBTAIN, KIND_CHAR = 0, 2
 
 
 class _Graph:
@@ -51,18 +49,13 @@ class _Graph:
         self.prereqs = prereqs
 
     def node(self, i):
-        k = self.kinds[i]
-        if k == KIND_OBTAIN:
+        if self.kinds[i] == KIND_OBTAIN:
             return ObtainItem(str(i))
-        if k == KIND_SKILL:
-            return ReachSkillLevel(str(i), 1)
         return ReachCharLevel(i)
 
     def id_of(self, node):
         if isinstance(node, ObtainItem):
             return int(node.code)
-        if isinstance(node, ReachSkillLevel):
-            return int(node.skill)
         return int(node.level)
 
 
@@ -81,7 +74,6 @@ def _install(graph, mp):
     mp.setattr(strategy, "prerequisites", fake_prerequisites)
     mp.setattr(strategy, "_producible", fake_producible)
     mp.setattr(ObtainItem, "is_satisfied", make_is_sat(graph))
-    mp.setattr(ReachSkillLevel, "is_satisfied", make_is_sat(graph))
     mp.setattr(ReachCharLevel, "is_satisfied", make_is_sat(graph))
 
 
@@ -97,10 +89,8 @@ def _encode(graph, root, fuel):
 
 def _make_wellformed(graph):
     """Coerce a graph to the production invariant in-place: obtain-with-prereqs ⇒
-    producible; skill ⇒ leaf."""
+    producible."""
     for i in range(graph.n):
-        if graph.kinds[i] == KIND_SKILL:
-            graph.prereqs[i] = []          # ReachSkillLevel is a leaf
         if graph.kinds[i] == KIND_OBTAIN and graph.prereqs[i]:
             graph.prod[i] = True           # nonempty prereqs come from a recipe
     return graph
@@ -111,7 +101,7 @@ def _rand_graph(rng, allow_cycle, deep):
     kinds, sat, prod, prereqs = {}, {}, {}, {}
     for i in range(n):
         r = rng.random()
-        kinds[i] = KIND_OBTAIN if r < 0.7 else (KIND_SKILL if r < 0.85 else KIND_CHAR)
+        kinds[i] = KIND_OBTAIN if r < 0.75 else KIND_CHAR
         prod[i] = rng.random() < 0.5
         subs = []
         # deep chains: link i -> i+1 to force long unmet chains

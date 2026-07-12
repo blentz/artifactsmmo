@@ -113,6 +113,17 @@ def build_actions(
             for mat_code, mat_qty in recipe.items():
                 if mat_qty > materials_to_withdraw.get(mat_code, 0):
                     materials_to_withdraw[mat_code] = mat_qty
+    # Gather-skill gates: a resource whose gather is skill-locked (iron_rocks,
+    # mining 10) needs a LevelSkill(skill->level) to open it inside a
+    # GatherMaterials search, exactly as an under-skill craft does. Craft gates
+    # above cover a level only when some item is CRAFTED at it; a pure gather
+    # gate (ore/wood/fish source with no coinciding craft) would otherwise have
+    # no LevelSkill and its ore closure would be unplannable (the P3b
+    # gather-gate livelock — l12_taskgated_bag iron_ore).
+    for _res in game_data.resource_drops:
+        _req = game_data.resource_skill_level(_res)
+        if _req is not None:
+            _level_skill_seen.add(_req)
     for _skill, _lvl in _level_skill_seen:
         actions.append(LevelSkill(skill=_skill, target_level=_lvl))
 

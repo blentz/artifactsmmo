@@ -1,7 +1,7 @@
 """Tests for objective_needs: the committed objective's unmet NeedSet."""
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel, ReachSkillLevel
+from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective_needs import _producible_by_self, objective_needs
 from tests.test_ai.fixtures import make_state
 
@@ -55,13 +55,6 @@ def test_owned_material_not_a_need():
     needs = objective_needs(ObtainItem("iron_sword"), state, gd)
     assert "iron_bar" not in needs.materials
     assert "weaponcrafting" not in needs.skill_xp
-
-
-def test_reach_skill_level_objective_needs_that_skill():
-    gd = _gd()
-    state = make_state(skills={"weaponcrafting": 1})
-    needs = objective_needs(ReachSkillLevel("weaponcrafting", 5), state, gd)
-    assert needs.skill_xp == frozenset({"weaponcrafting"})
 
 
 def test_reach_char_level_sets_char_xp():

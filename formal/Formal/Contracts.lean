@@ -11,7 +11,6 @@ import Formal.LoadoutProjection
 import Formal.EquipmentScoring
 import Formal.SkillTargetCurve
 import Formal.SkillGrindSelection
-import Formal.SkillStepDispatch
 import Formal.DoomedMemo
 import Formal.NextCraftAction
 import Formal.CraftPlanDriver
@@ -19,7 +18,6 @@ import Formal.CurrencyAffordFastFail
 import Formal.LeafAttainable
 import Formal.CompleteTaskIncome
 import Formal.Liveness.CurrencyFunding
-import Formal.GrindLadder
 import Formal.MonsterDropApply
 import Formal.SkillXpCurve
 import Formal.RecipeClosure
@@ -547,83 +545,6 @@ example : ∀ (c b : Extracted.SkillGrindSelection.GrindCandidate),
     Extracted.SkillGrindSelection._beats c (some b) = false :=
   @Formal.SkillGrindSelection.unwanted_not_beats_wanted
 
-/-! ### SkillStepDispatch role contracts.
-
-The reservation-aware grind/suppress/no-grind routing over the proved selection.
-Binder order matches each theorem signature. -/
-
--- suppress_correct: SUPPRESS iff the committed item is same-skill craftable now.
-example : ∀ (skill : String) (cl : Int) (cs : String) (clv : Int)
-    (cands : List Formal.SkillStepDispatch.DC),
-    (Formal.SkillStepDispatch.dispatch skill cl cs clv cands).1 = "suppress"
-      ↔ (cs = skill ∧ clv ≤ cl) :=
-  @Formal.SkillStepDispatch.suppress_correct
--- full_preference: when NOT suppressed and the FULL pass picks, the result is
--- exactly that full pick.
-example : ∀ (skill : String) (cl : Int) (cs : String) (clv : Int)
-    (cands : List Formal.SkillStepDispatch.DC), ¬ (cs = skill ∧ clv ≤ cl) →
-    Extracted.SkillGrindSelection.skill_grind_selection_pure skill cl
-        (Formal.SkillStepDispatch.fullList cands) ≠ "" →
-    Formal.SkillStepDispatch.dispatch skill cl cs clv cands
-      = ("grind", Extracted.SkillGrindSelection.skill_grind_selection_pure skill cl
-          (Formal.SkillStepDispatch.fullList cands)) :=
-  @Formal.SkillStepDispatch.full_preference
--- reservation_safety: a FULL-pass grind code belongs to a candidate whose
--- uses_reserved_full flag is false (never eats a reserved objective material).
-example : ∀ (skill : String) (cl : Int) (cs : String) (clv : Int)
-    (cands : List Formal.SkillStepDispatch.DC), ¬ (cs = skill ∧ clv ≤ cl) →
-    Extracted.SkillGrindSelection.skill_grind_selection_pure skill cl
-        (Formal.SkillStepDispatch.fullList cands) ≠ "" →
-    ∃ c, c ∈ cands ∧ c.uses_reserved_full = false
-      ∧ c.code = (Formal.SkillStepDispatch.dispatch skill cl cs clv cands).2 :=
-  @Formal.SkillStepDispatch.reservation_safety
--- forward_progress: NOT suppressed + a feasible RELAXED candidate (non-empty
--- codes) ⇒ a "grind" decision (never the dead NO_GRIND fallback).
-example : ∀ (skill : String) (cl : Int) (cs : String) (clv : Int)
-    (cands : List Formal.SkillStepDispatch.DC), ¬ (cs = skill ∧ clv ≤ cl) →
-    ∀ (c : Formal.SkillStepDispatch.DC), c ∈ cands → c.uses_reserved_relaxed = false →
-    Formal.SkillStepDispatch.feasibleDC skill cl c →
-    (∀ d ∈ Formal.SkillStepDispatch.relaxedList cands, d.code ≠ "") →
-    (Formal.SkillStepDispatch.dispatch skill cl cs clv cands).1 = "grind" :=
-  @Formal.SkillStepDispatch.forward_progress
--- grind_valid: a "grind" decision's code is a same-skill, in-level, obtainable
--- candidate.
-example : ∀ (skill : String) (cl : Int) (cs : String) (clv : Int)
-    (cands : List Formal.SkillStepDispatch.DC),
-    (Formal.SkillStepDispatch.dispatch skill cl cs clv cands).1 = "grind" →
-    ∃ c, c ∈ cands ∧ c.code = (Formal.SkillStepDispatch.dispatch skill cl cs clv cands).2
-      ∧ Formal.SkillStepDispatch.feasibleDC skill cl c :=
-  @Formal.SkillStepDispatch.grind_valid
-
-/-! ### GrindLadder liveness contracts.
-
-The reservation-flag computation over raw candidates, and the two corners where
-the grind ladder guarantees it never freezes (an unowned in-skill target is
-always grindable; once all feasible items are owned the grind cannibalizes). -/
-
--- grind_when_unowned_target: NOT suppressed + a feasible, unowned, in-skill
--- TARGET (non-empty codes) ⇒ "grind".
-example : ∀ (skill : String) (cl : Int) (cs : String) (clv : Int)
-    (rf rr : List String) (rcs : List Formal.GrindLadder.RC),
-    ¬ (cs = skill ∧ clv ≤ cl) →
-    ∀ (rc : Formal.GrindLadder.RC), rc ∈ rcs →
-    Formal.GrindLadder.feasibleRC skill cl rc →
-    rc.is_target = true → rc.owned = false →
-    (∀ r ∈ rcs, r.code ≠ "") →
-    (Formal.GrindLadder.dispatchFromRaw skill cl cs clv rf rr rcs).1 = "grind" :=
-  @Formal.GrindLadder.grind_when_unowned_target
--- grind_when_all_owned: NOT suppressed + a feasible candidate + cannibalization
--- active (≥1 of every feasible item owned) ⇒ "grind" (the never-freeze backstop).
-example : ∀ (skill : String) (cl : Int) (cs : String) (clv : Int)
-    (rf rr : List String) (rcs : List Formal.GrindLadder.RC),
-    ¬ (cs = skill ∧ clv ≤ cl) →
-    ∀ (rc : Formal.GrindLadder.RC), rc ∈ rcs →
-    Formal.GrindLadder.feasibleRC skill cl rc →
-    Formal.GrindLadder.cannibalizeModel cl rcs = true →
-    (∀ r ∈ rcs, r.code ≠ "") →
-    (Formal.GrindLadder.dispatchFromRaw skill cl cs clv rf rr rcs).1 = "grind" :=
-  @Formal.GrindLadder.grind_when_all_owned
-
 /-! ### MonsterDropApply reachability contracts.
 
 The monster-drop loop in Fight.apply: a kill never decreases any item count, and
@@ -808,48 +729,22 @@ example : ∀ (charLevel : Nat),
 
 /-! ### PrerequisiteGraph role contracts. -/
 
--- prereqs_recipe_with_skill: craftable item WITH a crafting skill ⇒ EXACTLY the
--- skill edge first, then one item edge per ingredient (data-derived edge set).
-example : ∀ (ingredients : List (Nat × Nat)) (s l : Nat)
-    (resDrops : List (Nat × Nat × Option (Nat × Nat))) (code : Nat),
-    Formal.PrerequisiteGraph.prereqEdges (some ingredients) (some (s, l)) resDrops code
-      = Formal.PrerequisiteGraph.Edge.skill s l ::
-          ingredients.map (fun p => Formal.PrerequisiteGraph.Edge.item p.1 p.2) :=
-  @Formal.PrerequisiteGraph.prereqs_recipe_with_skill
--- prereqs_recipe_no_skill: craftable item with NO crafting skill ⇒ EXACTLY one
--- item edge per ingredient and NO skill edge.
-example : ∀ (ingredients : List (Nat × Nat))
-    (resDrops : List (Nat × Nat × Option (Nat × Nat))) (code : Nat),
-    Formal.PrerequisiteGraph.prereqEdges (some ingredients) none resDrops code
+-- prereqs_recipe: craftable item ⇒ EXACTLY one item edge per ingredient, in
+-- recipe order, and NO skill edge (data-derived edge set).
+example : ∀ (ingredients : List (Nat × Nat)),
+    Formal.PrerequisiteGraph.prereqEdges (some ingredients)
       = ingredients.map (fun p => Formal.PrerequisiteGraph.Edge.item p.1 p.2) :=
-  @Formal.PrerequisiteGraph.prereqs_recipe_no_skill
+  @Formal.PrerequisiteGraph.prereqs_recipe
 -- prereqs_membership: EXACT edge set for a craftable item — an edge is present
--- IFF it is the skill edge (skill present) OR an item edge of some ingredient.
-example : ∀ (ingredients : List (Nat × Nat)) (craftSkill : Option (Nat × Nat))
-    (resDrops : List (Nat × Nat × Option (Nat × Nat))) (code : Nat)
-    (e : Formal.PrerequisiteGraph.Edge),
-    e ∈ Formal.PrerequisiteGraph.prereqEdges (some ingredients) craftSkill resDrops code
-      ↔ (∃ s l, craftSkill = some (s, l) ∧ e = Formal.PrerequisiteGraph.Edge.skill s l)
-        ∨ (∃ mat qty, (mat, qty) ∈ ingredients ∧ e = Formal.PrerequisiteGraph.Edge.item mat qty) :=
+-- IFF it is an item edge of some ingredient (NO skill edge).
+example : ∀ (ingredients : List (Nat × Nat)) (e : Formal.PrerequisiteGraph.Edge),
+    e ∈ Formal.PrerequisiteGraph.prereqEdges (some ingredients)
+      ↔ ∃ mat qty, (mat, qty) ∈ ingredients ∧ e = Formal.PrerequisiteGraph.Edge.item mat qty :=
   @Formal.PrerequisiteGraph.prereqs_membership
--- prereqs_resource: NON-craftable item whose first matching resource drop has a
--- skill ⇒ EXACTLY that single resource-skill edge.
-example : ∀ (resDrops : List (Nat × Nat × Option (Nat × Nat))) (code s l : Nat),
-    Formal.PrerequisiteGraph.firstResSkill resDrops code = some (s, l) →
-    Formal.PrerequisiteGraph.prereqEdges none none resDrops code
-      = [Formal.PrerequisiteGraph.Edge.skill s l] :=
-  @Formal.PrerequisiteGraph.prereqs_resource
--- prereqs_leaf: NON-craftable, non-resource item ⇒ LEAF (no prerequisites).
-example : ∀ (resDrops : List (Nat × Nat × Option (Nat × Nat))) (code : Nat),
-    Formal.PrerequisiteGraph.firstResSkill resDrops code = none →
-    Formal.PrerequisiteGraph.prereqEdges none none resDrops code = [] :=
+-- prereqs_leaf: NON-craftable item ⇒ LEAF (no prerequisites; resource branch
+-- retired).
+example : Formal.PrerequisiteGraph.prereqEdges none = ([] : List Formal.PrerequisiteGraph.Edge) :=
   @Formal.PrerequisiteGraph.prereqs_leaf
--- resource_branch_no_item: the resource branch NEVER emits an item edge (recipe
--- is the only source of item edges).
-example : ∀ (resDrops : List (Nat × Nat × Option (Nat × Nat))) (code c q : Nat),
-    Formal.PrerequisiteGraph.Edge.item c q
-      ∉ Formal.PrerequisiteGraph.prereqEdges none none resDrops code :=
-  @Formal.PrerequisiteGraph.resource_branch_no_item
 -- combat_capable_iff: combat_capable ↔ ∃ beatable monster (independent
 -- existential, NOT the any-fold reapplied).
 example : ∀ (beatable : Nat → Bool) (monsters : List Nat),

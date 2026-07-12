@@ -18,7 +18,6 @@ CONSTANT-VALUE (value ∈ {0, K}):
   * ClaimPending        {0, 25}
   * TaskExchange        {0, 22}
   * TaskCancel          {0, 12}
-  * LevelSkill          {0, 55}
   * ExpandBank          {0, 40}
   * CompleteTask        {0, 90}
   * ReachUnlockLevel    {0, 85}
@@ -123,38 +122,8 @@ theorem taskCancel_cold_no_pivot_zero :
     taskCancelValue false false = 0 := by
   unfold taskCancelValue; decide
 
-/-! ### LevelSkillGoal — {0, 55}. -/
-
-def maxSkillGap : Int := 5
-
-def levelSkillValue (satisfied : Bool) (gap : Int) (hasCraftable : Bool) : Rat :=
-  if satisfied then 0
-  else if gap ≤ 0 ∨ gap > maxSkillGap then 0
-  else if ¬ hasCraftable then 0
-  else 55
-
-theorem levelSkill_value_in_range
-    (s : Bool) (gap : Int) (hc : Bool) :
-    0 ≤ levelSkillValue s gap hc ∧ levelSkillValue s gap hc ≤ 55 := by
-  unfold levelSkillValue
-  grind
-
-theorem levelSkill_cold_satisfied_zero (gap : Int) (hc : Bool) :
-    levelSkillValue true gap hc = 0 := by
-  unfold levelSkillValue; simp
-
-theorem levelSkill_cold_gap_too_big_zero (s : Bool) (hc : Bool) :
-    levelSkillValue s 100 hc = 0 := by
-  unfold levelSkillValue maxSkillGap
-  cases s <;> grind
-
-theorem levelSkill_cold_no_craftable_zero (gap : Int)
-    (h1 : 1 ≤ gap) (h2 : gap ≤ maxSkillGap) :
-    levelSkillValue false gap false = 0 := by
-  unfold levelSkillValue
-  have hgnz : ¬ gap ≤ 0 := by omega
-  have hgnt : ¬ gap > maxSkillGap := by omega
-  simp [hgnz, hgnt]
+-- LevelSkillGoal value model RETIRED (epic P3, 2026-07-12): the goal was
+-- retired when the LevelSkill ACTION replaced the tree-level skill-grind goal.
 
 /-! ### ExpandBankGoal — {0, 40}. -/
 

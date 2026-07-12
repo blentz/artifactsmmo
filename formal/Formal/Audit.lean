@@ -61,13 +61,9 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #print axioms Formal.TaskFeasibility.monster_gate_boundary_false
 #print axioms Formal.TaskFeasibility.monster_gate_just_past
 #print axioms Formal.TaskFeasibility.monster_gate_zero_never
-#print axioms Formal.PrerequisiteGraph.prereqs_recipe_with_skill
-#print axioms Formal.PrerequisiteGraph.prereqs_recipe_no_skill
+#print axioms Formal.PrerequisiteGraph.prereqs_recipe
 #print axioms Formal.PrerequisiteGraph.prereqs_membership
-#print axioms Formal.PrerequisiteGraph.prereqs_resource
 #print axioms Formal.PrerequisiteGraph.prereqs_leaf
-#print axioms Formal.PrerequisiteGraph.resource_branch_no_item
-#print axioms Formal.PrerequisiteGraph.firstResSkill_sound
 #print axioms Formal.PrerequisiteGraph.combat_capable_iff
 #print axioms Formal.PrerequisiteGraph.combat_capable_demorgan
 #print axioms Formal.PrerequisiteGraph.combat_capable_empty
@@ -521,10 +517,6 @@ open Formal.WeightedRemaining in
 #print axioms Formal.GoalSystem.taskCancel_value_in_range
 #print axioms Formal.GoalSystem.taskCancel_cold_satisfied_zero
 #print axioms Formal.GoalSystem.taskCancel_cold_no_pivot_zero
-#print axioms Formal.GoalSystem.levelSkill_value_in_range
-#print axioms Formal.GoalSystem.levelSkill_cold_satisfied_zero
-#print axioms Formal.GoalSystem.levelSkill_cold_gap_too_big_zero
-#print axioms Formal.GoalSystem.levelSkill_cold_no_craftable_zero
 #print axioms Formal.GoalSystem.expandBank_value_in_range
 #print axioms Formal.GoalSystem.expandBank_cold_not_accessible_zero
 #print axioms Formal.GoalSystem.expandBank_cold_satisfied_zero
@@ -661,11 +653,9 @@ open Formal.WeightedRemaining in
 #print axioms Formal.StepDispatch.dispatch_obtain_equippable_goes_to_upgrade
 #print axioms Formal.StepDispatch.dispatch_obtain_equippable_unreachable_goes_to_gather
 #print axioms Formal.StepDispatch.dispatch_obtain_nonequippable_goes_to_gather
-#print axioms Formal.StepDispatch.dispatch_reach_skill_goes_to_level_skill
 #print axioms Formal.StepDispatch.dispatch_reach_char_with_target_goes_to_grind
 #print axioms Formal.StepDispatch.dispatch_reach_char_no_target_safe_fails
 #print axioms Formal.StepDispatch.obtain_only_routes_to_obtain_classes
-#print axioms Formal.StepDispatch.reach_skill_only_routes_to_level_skill
 #print axioms Formal.StepDispatch.reach_char_only_routes_to_grind
 #print axioms Formal.StepDispatch.minGathers_raw
 #print axioms Formal.StepDispatch.minGathers_raw_unowned

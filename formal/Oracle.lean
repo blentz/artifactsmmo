@@ -621,46 +621,25 @@ def runTaskFeasibilityItems (args : Array Json) : Json :=
 
 /-- Compute one prerequisite_graph edge list using the proved `prereqEdges`.
 
-Models the DATA-DERIVED edges of an unsatisfied `ObtainItem code`.
+Models the DATA-DERIVED edges of an unsatisfied `ObtainItem code`: one item edge
+per recipe ingredient when craftable, else a leaf. No skill edge, no resource
+branch (retired in epic P3 — under-skill gear grinds planner-natively).
 
 args layout (all Nat ≥ 0):
 * `[0]`              hasRecipe (0/1)
 * `[1]`              nIngredients
 * `[2 .. 2*n+1]`     ingredients flat: mat0 qty0 mat1 qty1 ...  (only read when hasRecipe=1)
-* next: hasCraftSkill (0/1), craftSkill, craftLevel  (skill/level only meaningful when 1)
-* next: nDrops, then `(res, drop, hasSkill(0/1), skill, level)` quintuples flat
-* next: code
 
-Emits the edge list as tagged JSON objects:
-`{"kind":"skill","a":skill,"b":level}` or `{"kind":"item","a":code,"b":qty}`. -/
+Emits the edge list as tagged JSON objects: `{"kind":"item","a":code,"b":qty}`. -/
 def runPrerequisiteGraph (args : Array Json) : Json :=
   let g := fun i => (intArg args i).toNat
   let hasRecipe := g 0 != 0
   let nIng := g 1
   let ingredients : List (Nat × Nat) :=
     (List.range nIng).map (fun k => (g (2 + 2*k), g (3 + 2*k)))
-  let p1 := 2 + 2*nIng
-  let hasCraftSkill := g p1 != 0
-  let craftSkill : Option (Nat × Nat) :=
-    if hasCraftSkill then some (g (p1 + 1), g (p1 + 2)) else none
-  let p2 := p1 + 3
-  let nDrops := g p2
-  let resDrops : List (Nat × Nat × Option (Nat × Nat)) :=
-    (List.range nDrops).map (fun k =>
-      let base := p2 + 1 + 5*k
-      let res := g base
-      let drop := g (base + 1)
-      let skill : Option (Nat × Nat) :=
-        if g (base + 2) != 0 then some (g (base + 3), g (base + 4)) else none
-      (res, drop, skill))
-  let p3 := p2 + 1 + 5*nDrops
-  let code := g p3
   let recipe : Option (List (Nat × Nat)) := if hasRecipe then some ingredients else none
-  let edges := Formal.PrerequisiteGraph.prereqEdges recipe craftSkill resDrops code
+  let edges := Formal.PrerequisiteGraph.prereqEdges recipe
   let edgeJson := fun (e : Formal.PrerequisiteGraph.Edge) => match e with
-    | Formal.PrerequisiteGraph.Edge.skill s l =>
-      Json.mkObj [("kind", Json.str "skill"), ("a", Json.num (Int.ofNat s)),
-        ("b", Json.num (Int.ofNat l))]
     | Formal.PrerequisiteGraph.Edge.item c q =>
       Json.mkObj [("kind", Json.str "item"), ("a", Json.num (Int.ofNat c)),
         ("b", Json.num (Int.ofNat q))]
@@ -778,7 +757,7 @@ together with the node count.
 
 args node-graph layout (all Nat ≥ 0), starting at offset `o`:
 * `[o]`        n (number of nodes; node codes are `0 .. n-1`)
-* then n node blocks, each: `isSat(0/1), producible(0/1), kind(0=obtain,1=skill,2=char),
+* then n node blocks, each: `isSat(0/1), producible(0/1), kind(0=obtain,2=char),
   nPrereqs, prereq0, prereq1, ...`
 
 Returns `(graph, n, nextOffset)`. Out-of-range nodes default to leaf/unmet/obtain. -/
@@ -797,8 +776,7 @@ def parseGraph (args : Array Json) (o : Nat) :
     let producible := g (p + 1) != 0
     let kindCode := g (p + 2)
     let kind : Formal.StrategyTraversal.Kind :=
-      if kindCode == 1 then Formal.StrategyTraversal.Kind.skill
-      else if kindCode == 2 then Formal.StrategyTraversal.Kind.char
+      if kindCode == 2 then Formal.StrategyTraversal.Kind.char
       else Formal.StrategyTraversal.Kind.obtain
     let nPre := g (p + 3)
     let prereqs := (List.range nPre).map (fun k => g (p + 4 + k))
@@ -841,8 +819,7 @@ def runStrategyTraversal (query : String) (args : Array Json) : Json :=
     let target := tail 3
     let have_ := tail 4
     let kind : Formal.StrategyTraversal.Kind :=
-      if kindCode == 1 then Formal.StrategyTraversal.Kind.skill
-      else if kindCode == 2 then Formal.StrategyTraversal.Kind.char
+      if kindCode == 2 then Formal.StrategyTraversal.Kind.char
       else Formal.StrategyTraversal.Kind.obtain
     Json.mkObj [("root_cost",
       Json.num (Int.ofNat (Formal.StrategyTraversal.rootCost g kind target have_ root fuel)))]
@@ -2207,54 +2184,6 @@ def runSkillGrindSelection (args : Array Json) : Json :=
     skill currentLevel candidates
   Json.mkObj [("code", Json.str result)]
 
-/-- Compute one combine_dispatch result via the EXTRACTED
-`Extracted.SkillStepDispatch.combine_dispatch_pure` directly (arbitrary pick
-strings, exercising the full-preference branch the wrapper short-circuits).
-
-args: `[skill, current_level, committed_skill, committed_level, full_pick,
-relaxed_pick]`. Emits `{"kind": String, "code": String}`. -/
-def runCombineDispatch (args : Array Json) : Json :=
-  let result := Extracted.SkillStepDispatch.combine_dispatch_pure
-    (strArg args 0) (intArg args 1) (strArg args 2) (intArg args 3)
-    (strArg args 4) (strArg args 5)
-  Json.mkObj [("kind", Json.str result.1), ("code", Json.str result.2)]
-
-/-- Compute one skill_step_dispatch result via the hand model
-`Formal.SkillStepDispatch.dispatch` (filter → proved selection → extracted
-combine). Mirrors the real `skill_step_dispatch_pure`.
-
-args layout (mixed String/Int):
-* `[0]` skill            (String)
-* `[1]` current_level    (Int)
-* `[2]` committed_skill  (String, "" = none)
-* `[3]` committed_level  (Int)
-* then candidate blocks of 8:
-  `code(String), craft_skill(String), craft_level(Int), mats_missing(Int),
-   obtainable(0/1), uses_reserved_full(0/1), uses_reserved_relaxed(0/1),
-   wanted(0/1)`
-
-Emits `{"kind": String, "code": String}`. -/
-def runSkillStepDispatch (args : Array Json) : Json :=
-  let skill := strArg args 0
-  let currentLevel := intArg args 1
-  let committedSkill := strArg args 2
-  let committedLevel := intArg args 3
-  let nCand := (args.size - 4) / 8
-  let candidates : List Formal.SkillStepDispatch.DC :=
-    (List.range nCand).map (fun k =>
-      let base := 4 + 8 * k
-      { code := strArg args base,
-        craft_skill := strArg args (base + 1),
-        craft_level := intArg args (base + 2),
-        mats_missing := intArg args (base + 3),
-        obtainable := intArg args (base + 4) != 0,
-        uses_reserved_full := intArg args (base + 5) != 0,
-        uses_reserved_relaxed := intArg args (base + 6) != 0,
-        wanted := intArg args (base + 7) != 0 })
-  let result := Formal.SkillStepDispatch.dispatch
-    skill currentLevel committedSkill committedLevel candidates
-  Json.mkObj [("kind", Json.str result.1), ("code", Json.str result.2)]
-
 /-- Compute the LevelSkill optimistic apply via
 `Formal.ActionApplicability.levelSkillApply`. Builds a constant prior skills map
 `fun _ => current`, applies the update at skill `"s"` to `target`, and reads back
@@ -2295,37 +2224,6 @@ def runMonsterDropApply (args : Array Json) : Json :=
   let out := Formal.MonsterDropApply.applyDrops inv drops
   Json.mkObj [("used", Json.num (Int.ofNat out.used)),
               ("counts", Json.arr ((query.map (fun k => Json.num (Int.ofNat (out.counts k)))).toArray))]
-
-/-- Compute `dispatch_candidate_flags` via `Formal.GrindLadder.flagsFor`.
-args: `[cl, craft_level, is_target(0/1), owned(0/1), cann(0/1), n_mats, n_rf,
-n_rr]` then the mats / reserved_full / reserved_relaxed code strings in that
-order. Emits `{"full": Bool, "relaxed": Bool}`. -/
-def runCandidateFlags (args : Array Json) : Json :=
-  let cl := intArg args 0
-  let nMats := (intArg args 5).toNat
-  let nRf := (intArg args 6).toNat
-  let nRr := (intArg args 7).toNat
-  let mats := (List.range nMats).map (fun i => strArg args (8 + i))
-  let rf := (List.range nRf).map (fun i => strArg args (8 + nMats + i))
-  let rr := (List.range nRr).map (fun i => strArg args (8 + nMats + nRf + i))
-  let rc : Formal.GrindLadder.RC :=
-    { code := "x", craft_skill := "s", craft_level := intArg args 1, mats_missing := 0,
-      obtainable := true, is_target := intArg args 2 != 0, owned := intArg args 3 != 0,
-      recipe_mats := mats }
-  let f := Formal.GrindLadder.flagsFor rc cl rf rr (intArg args 4 != 0)
-  Json.mkObj [("full", Json.bool f.1), ("relaxed", Json.bool f.2)]
-
-/-- Compute `cannibalize_pure` via `Formal.GrindLadder.cannibalizeModel`.
-args: `[cl, n]` then per candidate `[craft_level, obtainable(0/1), owned(0/1)]`.
-Emits `{"cannibalize": Bool}`. -/
-def runCannibalize (args : Array Json) : Json :=
-  let n := (intArg args 1).toNat
-  let rcs : List Formal.GrindLadder.RC := (List.range n).map (fun k =>
-    let b := 2 + 3 * k
-    { code := "c", craft_skill := "s", craft_level := intArg args b, mats_missing := 0,
-      obtainable := intArg args (b + 1) != 0, is_target := false,
-      owned := intArg args (b + 2) != 0, recipe_mats := [] })
-  Json.mkObj [("cannibalize", Json.bool (Formal.GrindLadder.cannibalizeModel (intArg args 0) rcs))]
 
 /-- Dispatch one tagged request `{"kind": ..., "args": [...]}`. -/
 -- DoomedMemo: re-probe window ttl(base, maxR, failures).
@@ -2996,18 +2894,10 @@ def runOne (item : Json) : Json :=
     runTaskReservation args
   else if kind == "skill_grind_selection" then
     runSkillGrindSelection args
-  else if kind == "skill_step_dispatch" then
-    runSkillStepDispatch args
   else if kind == "level_skill_apply" then
     runLevelSkillApply args
   else if kind == "level_skill_applicable" then
     runLevelSkillApplicable args
-  else if kind == "combine_dispatch" then
-    runCombineDispatch args
-  else if kind == "candidate_flags" then
-    runCandidateFlags args
-  else if kind == "cannibalize" then
-    runCannibalize args
   else if kind == "monster_drop_apply" then
     runMonsterDropApply args
   else if kind == "doomed_ttl" then

@@ -8,21 +8,15 @@ worth-suppressed for items tasks — it only runs via the bypass pass), and
 Craft(copper_helmet) ate 6 bars. Task restarted from zero, forever.
 """
 
-from dataclasses import dataclass, field
-
 from artifactsmmo_cli.ai.actions.wait import WaitAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
-from artifactsmmo_cli.ai.goals.level_skill import LevelSkillGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
-from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.goals.reach_skill import ReachSkillGoal
 from artifactsmmo_cli.ai.planner import PlanStats
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
 from artifactsmmo_cli.ai.task_reservation import consumes_reserved, task_reserved_demand
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.means import MeansKind
-from artifactsmmo_cli.ai.tiers.meta_goal import ReachCharLevel, ReachSkillLevel
-from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from tests.test_ai.fixtures import make_state
 
 
@@ -162,16 +156,8 @@ def test_bank_none_is_conservative():
 
 
 # ---------------------------------------------------------------------------
-# Strategy-driver wiring — trace-locked regression
+# Strategy-driver wiring — _TrivialPlanner harness for the reservation units
 # ---------------------------------------------------------------------------
-
-@dataclass
-class _Decision:
-    chosen_step: object = None
-    chosen_root: object = None
-    fallback_steps: list = field(default_factory=list)
-    fallback_roots: list = field(default_factory=list)
-
 
 class _TrivialPlanner:
     """Constructor-injected GOAPPlanner stand-in: plans every goal as a single
@@ -184,76 +170,6 @@ class _TrivialPlanner:
 
     def plan(self, state, goal, actions, game_data, history, budget_seconds=None):
         return [WaitAction()]
-
-
-def _ctx() -> SelectionContext:
-    return SelectionContext(bank_accessible=True, bank_required_level=0,
-                            bank_unlock_monster=None, initial_xp=0,
-                            task_exchange_min_coins=1, combat_monster=None,
-                            gear_review_active=False)
-
-
-def _objective(gd: GameData) -> CharacterObjective:
-    return CharacterObjective(target_char_level=50, target_skill_levels={},
-                              target_gear={}, _game_data=gd, target_tools={})
-
-
-def _select(state, gd, decision, tmp_path, name):
-    store = LearningStore(db_path=str(tmp_path / f"{name}.db"),
-                          character="testchar")
-    try:
-        arbiter = StrategyArbiter(_TrivialPlanner(), history=store)
-        return arbiter.select(decision, state, gd, [], _ctx(),
-                              objective=_objective(gd))
-    finally:
-        store.close()
-
-
-def test_trace_helmet_step_deferred_pursue_wins_via_bypass(tmp_path):
-    """THE trace: 5 copper_bars held, items task copper_bar 0/11, step tier
-    resolves ReachSkillLevel(gearcrafting,5) -> GatherMaterials(copper_helmet)
-    via skill_grind_target. The reservation defers the helmet step (its craft
-    eats 6 reserved bars) and the worth-suppressed PursueTask wins via the
-    bypass pass — the bars survive for TaskTrade."""
-    state = _task_state()
-    decision = _Decision(chosen_step=ReachSkillLevel("gearcrafting", 5),
-                         chosen_root=ReachCharLevel(50))
-    goal, _plan, tried = _select(state, _gd(), decision, tmp_path, "trace_defer")
-    attempted = [str(t["goal"]) for t in tried]
-    assert not any(a.startswith("GatherMaterials(copper_helmet") for a in attempted), (
-        f"helmet step must be reservation-deferred; goals_tried={attempted}"
-    )
-    assert repr(goal) == "PursueTask(copper_bar)", f"got {goal!r}"
-    assert "worth_gate_bypassed" in attempted
-
-
-def test_trace_surplus_allows_helmet_step(tmp_path):
-    """17 bars (11 reserved + 6 for the helmet) => surplus: the step runs."""
-    state = _task_state(inventory={"copper_bar": 17})
-    decision = _Decision(chosen_step=ReachSkillLevel("gearcrafting", 5),
-                         chosen_root=ReachCharLevel(50))
-    goal, _plan, _tried = _select(state, _gd(), decision, tmp_path,
-                                  "trace_surplus")
-    assert repr(goal) == "GatherMaterials(copper_helmet, {copper_helmet:1})", f"got {goal!r}"
-
-
-def test_leak_fallback_step_also_suppressed(tmp_path):
-    """LEAK regression: the same helmet goal arriving via fallback_steps (not
-    the top step) was re-appended UNSUPPRESSED by _build_candidates pre-fix.
-    It must be deferred there too."""
-    state = _task_state()
-    decision = _Decision(chosen_step=None,
-                         chosen_root=ReachCharLevel(50),
-                         fallback_steps=[ReachSkillLevel("gearcrafting", 5)],
-                         fallback_roots=[None])
-    goal, _plan, tried = _select(state, _gd(), decision, tmp_path, "trace_leak")
-    attempted = [str(t["goal"]) for t in tried]
-    assert not any(a.startswith("GatherMaterials(copper_helmet") for a in attempted), (
-        f"fallback-leaked helmet step must be reservation-deferred; "
-        f"goals_tried={attempted}"
-    )
-    assert repr(goal) == "PursueTask(copper_bar)", f"got {goal!r}"
-    assert "worth_gate_bypassed" in attempted
 
 
 # ---------------------------------------------------------------------------
@@ -329,10 +245,9 @@ def test_trade_ready_clause_still_fires_on_surplus():
 
 
 def test_non_consuming_goal_type_passes():
-    """LevelSkill (no craft closure) is a sustained goal — never deferred."""
+    """ReachSkill (no craft closure) is a sustained goal — never deferred."""
     state = _task_state()
-    goal = LevelSkillGoal(skill_name="gearcrafting", target_level=5,
-                          initial_skill_xp=0)
+    goal = ReachSkillGoal(skill_name="gearcrafting", target_level=5)
     out = _arbiter()._suppress_step_for_task(
         goal, [MeansKind.PURSUE_TASK], state, _gd())
     assert out is goal
