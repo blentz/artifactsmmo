@@ -18,6 +18,7 @@ from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.deposit_gold import DepositGoldAction
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS, EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
@@ -93,12 +94,15 @@ def build_actions(
     # Craft, equip, and withdraw actions carry workshop/bank locations
     materials_to_withdraw: dict[str, int] = {}
     unit_withdraw_codes: set[str] = set()
+    _level_skill_seen: set[tuple[str, int]] = set()
     for item_code, recipe in game_data.crafting_recipes.items():
         stats = game_data.item_stats(item_code)
         if stats is None:
             continue
         workshop_loc = game_data.workshop_location(stats.crafting_skill) if stats.crafting_skill else None
         actions.append(CraftAction(code=item_code, quantity=1, workshop_location=workshop_loc))
+        if stats.crafting_skill and stats.crafting_level:
+            _level_skill_seen.add((stats.crafting_skill, stats.crafting_level))
         for slot in ITEM_TYPE_TO_SLOTS.get(stats.type_, []):
             actions.append(EquipAction(code=item_code, slot=slot))
         if ITEM_TYPE_TO_SLOTS.get(stats.type_):
@@ -109,6 +113,8 @@ def build_actions(
             for mat_code, mat_qty in recipe.items():
                 if mat_qty > materials_to_withdraw.get(mat_code, 0):
                     materials_to_withdraw[mat_code] = mat_qty
+    for _skill, _lvl in _level_skill_seen:
+        actions.append(LevelSkill(skill=_skill, target_level=_lvl))
 
     # OWNED recipe-less equippables (NPC-bought bags/runes/artifacts, task
     # rewards): the loop above enumerates equips only for CRAFTABLE items, so
