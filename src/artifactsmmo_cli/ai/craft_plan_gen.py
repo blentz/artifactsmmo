@@ -14,7 +14,11 @@ Falls back to None (A* fallback) for:
   (level+2 suicide guard / HP floor / free inventory — `is_winnable` is a
   stat-only prediction blind to these structural gates; see `_dropper_fight`)
 - closures that contain NPC-buy / currency leaves
-- closures that have any craft whose skill gate is not yet met
+- closures that have any craft whose skill gate is not yet met AND no matching
+  `LevelSkill(skill, craft_level)` is present in `actions` (P2: when one IS
+  present, the generator emits `[LevelSkill]` instead — one leg per cycle,
+  mirroring the Fight truncation — so the next cycle's replan re-derives the
+  gather/craft legs once the grind lands)
 - closures where a NON-TOP-LEVEL input/intermediate is both banked AND short in
   inventory: that banked material would need a WithdrawItemAction before use;
   the generator cannot emit withdraws, so A* handles Withdraw→Craft correctly.
@@ -33,6 +37,7 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.craft_plan_driver_core import craft_plan_full
@@ -85,7 +90,10 @@ def generate_next_craft_action(
       resource, AND has no winnable-dropper Fight in the goal's
       relevant_actions (NPC-buy leaves, unwinnable/suppressed droppers —
       GatherMaterials' buy arm / A* / is_plannable own those honestly)
-    - Any craftable item in the closure has a skill gate the character has not met
+    - Any craftable item in the closure has a skill gate the character has not
+      met AND ``actions`` has no matching ``LevelSkill(skill, craft_level)``
+      (when one IS present, returns ``[LevelSkill]`` instead — one leg per
+      cycle, same truncation idiom as the Fight leg below)
     - A closure INPUT/INTERMEDIATE (not a top-level target in ``goal._needed``) is
       banked AND inventory is short of the required quantity: that item must be
       withdrawn before crafting; the generator has no "withdraw" step, so it defers
@@ -133,7 +141,14 @@ def generate_next_craft_action(
             if stats is None or stats.crafting_skill is None:
                 return None  # Unknown craft requirements → fall back to A*.
             if state.skills.get(stats.crafting_skill, 1) < stats.crafting_level:
-                return None  # Skill gate not met → fall back to A*.
+                # Skill gate not met: emit the matching LevelSkill leg
+                # (one-leg-per-cycle, mirroring the Fight truncation below)
+                # if the caller surfaced one; otherwise fall back to A*.
+                lvl = next((a for a in actions
+                            if isinstance(a, LevelSkill)
+                            and a.skill == stats.crafting_skill
+                            and a.target_level == stats.crafting_level), None)
+                return [lvl] if lvl is not None else None
             if game_data.workshop_location(stats.crafting_skill) is None:
                 return None  # No workshop for this skill → fall back to A*.
         elif item not in gatherable_items:
