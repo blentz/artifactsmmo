@@ -50,7 +50,10 @@ def _state_key(state: WorldState) -> tuple[object, ...]:
     (PlannerAdmissibility.lean); and since no LIVE action mutates
     state.skills (gathers/crafts accrue projected_skill_xp_delta, never
     levels), the skills component is constant across every node of every live
-    search — the partition is unchanged, so this is inert for the live bot."""
+    search — the in-search partition is unchanged. This key is also compared
+    cross-cycle for StuckSignal.STATE_FROZEN (player.py); there the addition is
+    strictly MORE precise: a real skill-level gain re-synced between cycles now
+    correctly counts as state progress instead of reading as frozen."""
     return (
         state.x, state.y,
         state.hp, state.gold,

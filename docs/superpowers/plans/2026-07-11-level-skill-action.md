@@ -272,16 +272,72 @@ git commit -m "feat(planner): LevelSkill action — optimistic skill-level apply
 
 ---
 
-## Task 2: Planner plans grind→craft (the Phase-1 capability proof)
+## Task 2: Admit LevelSkill into the search + plan grind→craft (capability proof)
+
+**Discovered during implementation:** `GOAPPlanner.plan` narrows the action set
+via `goal.relevant_actions(actions, state, game_data)` (`ai/planner.py:108`)
+BEFORE A*. `GatherMaterialsGoal.relevant_actions` admits actions only by
+isinstance (`CraftAction`/`GatherAction`/`WithdrawItemAction`/
+`OptimizeLoadoutAction`) or tag (`recovery`/`deposit`). An untagged `LevelSkill`
+is dropped — so merely appending it to the action set is not enough. This task
+adds the minimal admission: a `"skill_grind"` tag on `LevelSkill` and one tag
+clause in `relevant_actions`. It stays **live-inert** — `build_actions` still
+emits no `LevelSkill`, and the live arbiter's `is_plannable` under-skill
+fast-fail (removed in P2) still intercepts before any live search — so no live
+plan changes; only a manually-supplied `LevelSkill` (the test, and P2's
+`build_actions` wiring) can now enter the search.
 
 **Files:**
-- Test: `tests/test_ai/test_level_skill_planning.py`
+- Modify: `src/artifactsmmo_cli/ai/actions/level_skill.py` (add `tags` ClassVar)
+- Modify: `src/artifactsmmo_cli/ai/goals/gathering.py` (`GatherMaterialsGoal.relevant_actions` admission clause)
+- Modify: `tests/test_ai/test_level_skill_action.py` (tag assertion)
+- Create: `tests/test_ai/test_level_skill_planning.py`
 
 **Interfaces:**
-- Consumes: `GOAPPlanner().plan(state: WorldState, goal: Goal, actions: list[Action], game_data: GameData, *, budget_seconds: float|None=None) -> list[Action]` (`ai/planner.py:83`); `GatherMaterialsGoal(target_item: str, needed: dict[str,int])` (`ai/goals/gathering.py`); `build_actions(game_data, state, objective, *, bank_accessible, task_exchange_min_coins)` (`ai/actions/factory.py`); `CharacterObjective.from_game_data(game_data)` (`ai/tiers/objective.py`); `LevelSkill` (Task 1).
-- Produces: proof that with `LevelSkill(gearcrafting, 5)` in the action set, `GOAPPlanner.plan` for `GatherMaterialsGoal("widget", {"widget": 1})` at gearcrafting 1 returns a plan that contains a `LevelSkill` step preceding a `CraftAction(code="widget")`.
+- Consumes: `GOAPPlanner().plan(state, goal, actions, game_data, *, budget_seconds=None) -> list[Action]` (`ai/planner.py:83`, narrows via `relevant_actions` at :108); `GatherMaterialsGoal(target_item, needed)` (`ai/goals/gathering.py`); `build_actions(game_data, state, objective, *, bank_accessible, task_exchange_min_coins)` (`ai/actions/factory.py`); `CharacterObjective.from_game_data(game_data)`; `LevelSkill` (Task 1); `Action.tags: ClassVar[frozenset[str]]` (`ai/actions/base.py`).
+- Produces: `LevelSkill.tags == frozenset({"skill_grind"})`; `GatherMaterialsGoal.relevant_actions` admits any `"skill_grind"`-tagged action; a plan for `GatherMaterialsGoal("widget", {"widget":1})` at gearcrafting 1 (with a `LevelSkill(gearcrafting,5)` in the set) that sequences a `LevelSkill` before `CraftAction(code="widget")`.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Add the tag test (RED)**
+
+Append to `tests/test_ai/test_level_skill_action.py`:
+
+```python
+def test_level_skill_carries_skill_grind_tag() -> None:
+    # relevant_actions admits LevelSkill into the search by this tag
+    # (tag-based, so gathering.py need not import LevelSkill).
+    assert LevelSkill("gearcrafting", 5).tags == frozenset({"skill_grind"})
+```
+
+Run: `uv run pytest tests/test_ai/test_level_skill_action.py::test_level_skill_carries_skill_grind_tag -q --no-cov`
+Expected: FAIL — `tags` inherits the base empty frozenset.
+
+- [ ] **Step 2: Add the tag to LevelSkill (GREEN)**
+
+In `src/artifactsmmo_cli/ai/actions/level_skill.py`, add the ClassVar to the class body (import `ClassVar` from `typing` at top):
+
+```python
+    tags: ClassVar[frozenset[str]] = frozenset({"skill_grind"})
+    """Admits this action into GatherMaterialsGoal.relevant_actions' search
+    space (tag-based so the goal need not import LevelSkill). New tag in the
+    base.py vocabulary."""
+```
+
+Also add `skill_grind` to the tag-vocabulary comment in `src/artifactsmmo_cli/ai/actions/base.py:55` (append `, skill_grind` to the list).
+
+Run: `uv run pytest tests/test_ai/test_level_skill_action.py -q --no-cov`
+Expected: PASS (9 passed).
+
+- [ ] **Step 3: Admit skill_grind-tagged actions in relevant_actions**
+
+In `src/artifactsmmo_cli/ai/goals/gathering.py`, in `GatherMaterialsGoal.relevant_actions`, the admission `elif (...)` chain (the block containing `"recovery" in action.tags or "deposit" in action.tags`), add one clause:
+
+```python
+                or "skill_grind" in action.tags
+```
+
+so a `LevelSkill` (or any future skill-grind action) supplied in the action set enters the search. No import of `LevelSkill` — tag-based, avoiding a circular import.
+
+- [ ] **Step 4: Write the failing capability test**
 
 ```python
 # tests/test_ai/test_level_skill_planning.py
@@ -342,25 +398,32 @@ def test_planner_sequences_level_skill_before_gated_craft() -> None:
     assert level_idx < craft_idx, f"LevelSkill must precede Craft(widget): {reprs}"
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 5: Run the capability test to verify it fails, then passes**
 
 Run: `uv run pytest tests/test_ai/test_level_skill_planning.py -q --no-cov`
-Expected: FAIL — before the action is in the set the planner cannot cross the skill gate (empty plan / no `LevelSkill`); with the action appended the assertion pins the new capability. If it fails on plan construction details (workshop/resource wiring), fix the fixture until the planner returns the `[…, LevelSkill, …, Craft(widget)]` shape — do NOT weaken the assertion.
+Expected FIRST (before Step 3's admission clause): FAIL — `LevelSkill` dropped by `relevant_actions`, empty plan, `StopIteration` on `craft_idx`. After Step 3's admission clause: PASS, with a plan sequencing `LevelSkill(gearcrafting→5)` before `Craft(widget×1)`. If it still fails on plan construction (workshop/resource wiring), fix the FIXTURE until the planner returns the `[…, LevelSkill, …, Craft(widget)]` shape — do NOT weaken the `level_idx < craft_idx` assertion. (Author the test at Step 4 before Step 3's admission if you want a clean RED; either order is fine as long as you observe both the RED and the GREEN.)
 
-- [ ] **Step 3: (no new production code)**
+- [ ] **Step 6: Regression — run the gathering-goal suite**
 
-Task 1 already provides `LevelSkill`. This task is a pure integration proof; it passes once the fixture drives the planner correctly. If `build_actions` needs the workshop/resource wiring above to emit `CraftAction(widget)`/`GatherAction(gear_ore)`, that wiring is in the fixture, not production.
+The `relevant_actions` change touches a hot path. Confirm no regression:
 
-- [ ] **Step 4: Run test to verify it passes**
+Run: `uv run pytest tests/test_ai/ -k "gather or relevant or plan" -q --no-cov`
+Expected: all pass (no admission-clause regression). Also lint/type the two changed production files:
+```
+uv run ruff check src/artifactsmmo_cli/ai/actions/level_skill.py src/artifactsmmo_cli/ai/goals/gathering.py
+uv run mypy src/artifactsmmo_cli/ai/actions/level_skill.py src/artifactsmmo_cli/ai/goals/gathering.py
+```
+Expected: ruff `All checks passed!`; mypy `Success`.
 
-Run: `uv run pytest tests/test_ai/test_level_skill_planning.py -q --no-cov`
-Expected: PASS.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add tests/test_ai/test_level_skill_planning.py
-git commit -m "test(planner): planner sequences LevelSkill before a gated craft (P1)"
+git add src/artifactsmmo_cli/ai/actions/level_skill.py \
+        src/artifactsmmo_cli/ai/actions/base.py \
+        src/artifactsmmo_cli/ai/goals/gathering.py \
+        tests/test_ai/test_level_skill_action.py \
+        tests/test_ai/test_level_skill_planning.py
+git commit -m "feat(planner): admit LevelSkill into GatherMaterials search + capability proof (P1)"
 ```
 
 ---
