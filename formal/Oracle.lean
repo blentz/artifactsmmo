@@ -2255,6 +2255,32 @@ def runSkillStepDispatch (args : Array Json) : Json :=
     skill currentLevel committedSkill committedLevel candidates
   Json.mkObj [("kind", Json.str result.1), ("code", Json.str result.2)]
 
+/-- Compute the LevelSkill optimistic apply via
+`Formal.ActionApplicability.levelSkillApply`. Builds a constant prior skills map
+`fun _ => current`, applies the update at skill `"s"` to `target`, and reads back
+`"s"`. Mirrors the real `LevelSkill.apply(...).skills[skill]`.
+
+args layout: `[current(Int), target(Int)]`. Emits `{"level": Int}`. -/
+def runLevelSkillApply (args : Array Json) : Json :=
+  let current := intArg args 0
+  let target := intArg args 1
+  let skills : String → Int := fun _ => current
+  let out := Formal.ActionApplicability.levelSkillApply skills "s" target
+  Json.mkObj [("level", Json.num (out "s"))]
+
+/-- Compute `LevelSkill.is_applicable` via
+`Formal.ActionApplicability.levelSkillApplicable`. The grind-rung feasibility is
+the opaque `hasGrindRung` flag (the diff test derives it from the real
+`skill_grind_target`).
+
+args layout: `[current(Int), target(Int), has_grind_rung(0/1)]`.
+Emits `{"applicable": Bool}`. -/
+def runLevelSkillApplicable (args : Array Json) : Json :=
+  let i : Formal.ActionApplicability.LevelSkillInputs :=
+    { current := intArg args 0, target := intArg args 1,
+      hasGrindRung := intArg args 2 != 0 }
+  Json.mkObj [("applicable", Json.bool (Formal.ActionApplicability.levelSkillApplicable i))]
+
 /-- Compute `apply_monster_drops_pure` via `Formal.MonsterDropApply.applyDrops`
 from an EMPTY initial inventory. args: `[used, cap, n_drops, n_query]` then the
 drop code strings then the query code strings. Emits `{"used": Nat,
@@ -2980,6 +3006,10 @@ def runOne (item : Json) : Json :=
     runSkillGrindSelection args
   else if kind == "skill_step_dispatch" then
     runSkillStepDispatch args
+  else if kind == "level_skill_apply" then
+    runLevelSkillApply args
+  else if kind == "level_skill_applicable" then
+    runLevelSkillApplicable args
   else if kind == "combine_dispatch" then
     runCombineDispatch args
   else if kind == "candidate_flags" then

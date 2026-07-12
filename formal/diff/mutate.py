@@ -27,6 +27,7 @@ COMBAT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat.py"
 PROJECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "projection.py"
 GATHERING_APPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "gathering.py"
 LEVEL_SKILL_GOAL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "goals" / "level_skill.py"
+LEVEL_SKILL_ACTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "level_skill.py"
 SCORING_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "scoring.py"
 LOADOUT_PICKER_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "loadout_picker.py"
 EMPTY_SLOT_FILLS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "empty_slot_fills.py"
@@ -1052,6 +1053,33 @@ SKILL_STEP_DISPATCH_MUTATIONS = [
     ("skill_step_dispatch: drop no-grind guard",
      '    if pick != "":\n',
      "    if True:\n"),
+]
+
+# level_skill action mutations -- anchors for the REAL LevelSkill.apply /
+# is_applicable, bound to formal/diff/test_level_skill_diff.py, which encodes the
+# proved Lean mirror Formal.ActionApplicability.levelSkillApply / levelSkillApplicable
+# (Oracle keys level_skill_apply / level_skill_applicable). The diff test derives
+# the opaque grind-rung flag from the REAL skill_grind_target and feeds it to the
+# oracle, so a mutation to EITHER the under-target guard or the rung conjunct
+# diverges from the Lean model.
+LEVEL_SKILL_ACTION_MUTATIONS = [
+    # flip the under-target guard >= -> > : at exactly-at-target the action
+    # becomes applicable, violating levelSkillApplicable (current < target).
+    # Killed by the at-target case (_check(_RUNG_GD, 5, 5)).
+    ("level_skill: under-target guard >= to >",
+     "        if state.skills.get(self.skill, 1) >= self.target_level:\n",
+     "        if state.skills.get(self.skill, 1) > self.target_level:\n"),
+    # drop the grind-rung feasibility conjunct -- always applicable when
+    # under-target, violating the hasGrindRung conjunct. Killed by the no-rung
+    # fixture (under-target but no feasible rung).
+    ("level_skill: drop grind-rung conjunct",
+     "        return skill_grind_target(self.skill, state, game_data) is not None\n",
+     "        return True\n"),
+    # off-by-one on the optimistic apply -- sets skills[skill] := target + 1,
+    # diverging from levelSkillApply (:= target). Killed by every apply case.
+    ("level_skill: apply off-by-one (target -> target + 1)",
+     "        new_skills[self.skill] = self.target_level\n",
+     "        new_skills[self.skill] = self.target_level + 1\n"),
 ]
 
 STRATEGIC_VALUE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "strategic_value.py"
@@ -4720,6 +4748,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_skill_grind_selection_diff.py", survivors)
     run_group(SKILL_STEP_DISPATCH_SRC, SKILL_STEP_DISPATCH_MUTATIONS,
               "formal/diff/test_skill_step_dispatch_diff.py", survivors)
+    run_group(LEVEL_SKILL_ACTION_SRC, LEVEL_SKILL_ACTION_MUTATIONS,
+              "formal/diff/test_level_skill_diff.py", survivors)
     run_group(STRATEGIC_VALUE_SRC, STRATEGIC_VALUE_MUTATIONS,
               "formal/diff/test_strategic_value_diff.py", survivors)
     run_group(SKILL_STEP_DISPATCH_SRC, GRIND_LADDER_MUTATIONS,

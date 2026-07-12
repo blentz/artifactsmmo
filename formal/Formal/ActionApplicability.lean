@@ -401,4 +401,80 @@ theorem equipApplicable_iff (e : EquipInputs) :
   unfold equipApplicable
   simp
 
+/-! ## LevelSkill apply/applicability (LevelSkill epic Phase 1, 2026-07-11).
+
+Pure-Lean mirror of `src/artifactsmmo_cli/ai/actions/level_skill.py`.
+
+`LevelSkill.apply` OPTIMISTICALLY sets `skills[skill] := target_level` (the whole
+grind assumed complete, the FightAction optimistic-apply idiom) so a downstream
+under-skill `CraftAction` becomes applicable in the SIMULATED plan; every other
+skill is preserved (Python `dataclasses.replace(state, skills={**skills,
+skill: target})`).
+
+`LevelSkill.is_applicable` is `current < target_level` AND a feasible in-skill
+grind rung exists (`skill_grind_target(skill, state, gd) is not None`).
+
+**Abstraction (mirrors `fightApplicable`'s `loadoutOptimal` and the omitted
+equip slot-room gate).** The grind-rung feasibility is an OPAQUE Bool input
+`hasGrindRung`, NOT arithmetic modeled here: `skill_grind_target` is a
+recipe-table + recursive-reachability search over live game data with no scalar
+to mirror. The differential test (`formal/diff/test_level_skill_diff.py`) derives
+the flag by calling the REAL `skill_grind_target` on a fixture and feeds it in,
+exactly as the diff scenarios pin it — so this opaque conjunct is value-lockstepped
+end-to-end even though the Lean model takes it as a given. -/
+
+structure LevelSkillInputs where
+  current      : Int   -- state.skills.get(skill, 1)
+  target       : Int   -- target_level
+  hasGrindRung : Bool  -- skill_grind_target(...) is not None (opaque, diff-pinned)
+
+/-- Mirror of `LevelSkill.is_applicable`: under-target AND a feasible in-skill
+grind rung exists. -/
+def levelSkillApplicable (i : LevelSkillInputs) : Bool :=
+  decide (i.current < i.target) && i.hasGrindRung
+
+/-- Mirror of `LevelSkill.apply`: functional update of the skills map at `skill`
+to `target`; every other skill is preserved. -/
+def levelSkillApply (skills : String → Int) (skill : String) (target : Int) :
+    String → Int :=
+  fun k => if k = skill then target else skills k
+
+/-- Exact characterization: applicable iff under-target and a rung exists. -/
+theorem levelSkillApplicable_iff (i : LevelSkillInputs) :
+    levelSkillApplicable i = true ↔ i.current < i.target ∧ i.hasGrindRung = true := by
+  unfold levelSkillApplicable
+  simp
+
+/-- At or above target ⇒ not applicable (the `>=` under-target guard). -/
+theorem levelSkillApplicable_false_of_at_target (i : LevelSkillInputs)
+    (h : i.target ≤ i.current) : levelSkillApplicable i = false := by
+  unfold levelSkillApplicable
+  have : ¬ (i.current < i.target) := by omega
+  simp [this]
+
+/-- No feasible grind rung ⇒ not applicable, independent of the level gap. -/
+theorem levelSkillApplicable_false_of_no_rung (i : LevelSkillInputs)
+    (h : i.hasGrindRung = false) : levelSkillApplicable i = false := by
+  unfold levelSkillApplicable
+  simp [h]
+
+/-- `apply` sets the target skill to `target`. -/
+theorem levelSkillApply_sets_target (skills : String → Int) (skill : String)
+    (target : Int) : levelSkillApply skills skill target skill = target := by
+  unfold levelSkillApply
+  simp
+
+/-- `apply` preserves every other skill. -/
+theorem levelSkillApply_preserves_other (skills : String → Int) (skill : String)
+    (target : Int) (k : String) (h : k ≠ skill) :
+    levelSkillApply skills skill target k = skills k := by
+  unfold levelSkillApply
+  simp [h]
+
+/-- Non-vacuity witness: under-target with a rung IS applicable (the live case
+this action exists for — an under-skill gear target). -/
+theorem levelSkillApplicable_under_with_rung_witness :
+    levelSkillApplicable { current := 1, target := 5, hasGrindRung := true } = true := by
+  decide
+
 end Formal.ActionApplicability

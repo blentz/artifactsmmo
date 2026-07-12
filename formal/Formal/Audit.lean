@@ -603,6 +603,12 @@ open Formal.WeightedRemaining in
 #print axioms Formal.ActionApplicability.winnable_inWindow_imp_fightApplicable_nonvacuous
 #print axioms Formal.ActionApplicability.restApplicable_iff_subfull
 #print axioms Formal.ActionApplicability.equipApplicable_iff
+#print axioms Formal.ActionApplicability.levelSkillApplicable_iff
+#print axioms Formal.ActionApplicability.levelSkillApplicable_false_of_at_target
+#print axioms Formal.ActionApplicability.levelSkillApplicable_false_of_no_rung
+#print axioms Formal.ActionApplicability.levelSkillApply_sets_target
+#print axioms Formal.ActionApplicability.levelSkillApply_preserves_other
+#print axioms Formal.ActionApplicability.levelSkillApplicable_under_with_rung_witness
 -- NoActionDeadlock (de-Mathlib'd safety module)
 #print axioms Formal.NoActionDeadlock.at_least_wait_applicable
 #print axioms Formal.NoActionDeadlock.progress_available_when_any_capability

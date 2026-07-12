@@ -762,6 +762,13 @@ open Formal.PriorityBand
 #check @Formal.ActionApplicability.winnable_inWindow_imp_fightApplicable_nonvacuous
 #check @Formal.ActionApplicability.restApplicable_iff_subfull
 #check @Formal.ActionApplicability.equipApplicable_iff
+-- LevelSkill apply/applicability (LevelSkill epic Phase 1):
+#check @Formal.ActionApplicability.levelSkillApplicable_iff
+#check @Formal.ActionApplicability.levelSkillApplicable_false_of_at_target
+#check @Formal.ActionApplicability.levelSkillApplicable_false_of_no_rung
+#check @Formal.ActionApplicability.levelSkillApply_sets_target
+#check @Formal.ActionApplicability.levelSkillApply_preserves_other
+#check @Formal.ActionApplicability.levelSkillApplicable_under_with_rung_witness
 
 -- StepDispatch (Phase G5):
 #check @Formal.StepDispatch.stepDispatch_total
