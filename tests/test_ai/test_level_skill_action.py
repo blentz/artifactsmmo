@@ -94,8 +94,11 @@ def test_cost_uses_curve_when_observed() -> None:
     assert action.cost(_state(gd, {"gearcrafting": 1}), gd) > 0
 
 
-def test_repr_uses_arrow() -> None:
-    assert repr(LevelSkill("gearcrafting", 5)) == "LevelSkill(gearcrafting→5)"
+def test_repr_uses_ascii_arrow() -> None:
+    # ASCII '->' matches LevelSkillGoal + loadout_profiles._SKILL_RE / macro
+    # segmentation parsers, so the action repr is parseable once it enters
+    # live plan traces (P2).
+    assert repr(LevelSkill("gearcrafting", 5)) == "LevelSkill(gearcrafting->5)"
 
 
 def test_execute_raises_direct_call_guard() -> None:

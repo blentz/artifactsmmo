@@ -77,4 +77,4 @@ class LevelSkill(Action):
         )
 
     def __repr__(self) -> str:
-        return f"LevelSkill({self.skill}→{self.target_level})"
+        return f"LevelSkill({self.skill}->{self.target_level})"
