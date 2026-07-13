@@ -6,6 +6,7 @@ from artifactsmmo_cli.ai.inventory_keep import KeepReason
 from artifactsmmo_cli.audit.inventory_census import CellResult
 from artifactsmmo_cli.audit.inventory_report import (
     GAP_ABBREV,
+    band_summary,
     render_matrix,
     render_reason_coverage,
     summary_line,
@@ -13,13 +14,13 @@ from artifactsmmo_cli.audit.inventory_report import (
 
 
 def _pass(reason: str, cap: str, kind: str, pressure: str, code: str,
-          held: int = 5, keep: int = 5) -> CellResult:
-    return CellResult(reason, cap, kind, pressure, code, held, keep, True, None)
+          held: int = 5, keep: int = 5, band: str = "in_band") -> CellResult:
+    return CellResult(reason, cap, kind, pressure, band, code, held, keep, True, None)
 
 
 def _fail(reason: str, cap: str, kind: str, pressure: str, code: str, gap: str,
-          held: int = 11, keep: int = 5) -> CellResult:
-    return CellResult(reason, cap, kind, pressure, code, held, keep, False, gap)
+          held: int = 11, keep: int = 5, band: str = "in_band") -> CellResult:
+    return CellResult(reason, cap, kind, pressure, band, code, held, keep, False, gap)
 
 
 _FULL_COVERAGE = {reason: True for reason in KeepReason}
@@ -69,32 +70,53 @@ def test_render_reason_coverage_marks_currency_exempt() -> None:
     assert "| equipped | PASS |" in md
 
 
-def test_render_matrix_groups_by_reason_and_kind() -> None:
-    """Matrix has the generated header, one row per (reason, kind) with cap/
-    pressure tokens, and the reason-coverage table appended."""
+def test_render_matrix_groups_by_reason_kind_and_band() -> None:
+    """Matrix has the generated header, one row per (reason, kind, BAND) with
+    cap/pressure tokens, and the reason-coverage table appended. BAND is a row
+    key so a reason's two level-distance halves sit side by side."""
     results = [
         _pass("currency", "in_bag", "safety", "slot_full", "tasks_coin"),
         _fail("working_kit", "in_bag", "liveness", "slot_full", "copper_axe",
               "inventory_bug"),
         _fail("working_kit", "in_bag", "liveness", "qty_full", "copper_axe",
               "inventory_bug"),
+        _pass("working_kit", "in_bag", "liveness", "qty_full", "copper_axe",
+              band="far"),
     ]
     coverage = dict(_FULL_COVERAGE)
     coverage[KeepReason.WORKING_KIT] = False
     md = render_matrix(results, coverage)
     assert "GENERATED — do not hand-edit" in md
-    assert "| currency | safety | tasks_coin | in_bag/slot_full PASS |" in md
+    assert "| currency | safety | in_band | tasks_coin | in_bag/slot_full PASS |" in md
+    assert "| working_kit | liveness | far | copper_axe | in_bag/qty_full PASS |" in md
     assert "in_bag/slot_full IB" in md
     assert "in_bag/qty_full IB" in md
     assert "## Reason coverage" in md
     assert "| working_kit | FAIL |" in md
 
 
+def test_band_summary_splits_pass_counts_by_level_distance() -> None:
+    """The band split is the headline diagnostic for the level-distance ceiling:
+    a reason that passes IN_BAND and fails FAR is a protection being clamped by a
+    HOARDING heuristic, which is exactly the defect the band dimension found."""
+    results = [
+        _pass("recipe_demand", "owned", "safety", "qty_full", "copper_bar"),
+        _fail("recipe_demand", "owned", "safety", "qty_full", "copper_bar",
+              "inventory_bug", band="far"),
+        _pass("currency", "in_bag", "safety", "slot_full", "tasks_coin",
+              band="far"),
+    ]
+    line = band_summary(results)
+    assert line == ("by band: far 1/2 (inventory_bug 1); "
+                    "in_band 1/1 (inventory_bug 0)")
+    assert band_summary([]) == "by band: "
+
+
 def test_cell_token_fail_branch_when_gap_is_none() -> None:
     """A hand-built CellResult with passed=False and gap=None cannot arise
     through run_cell (which always sets a gap on failure), but _cell_token
     must still be total over any CellResult: it renders the bare FAIL token."""
-    results = [CellResult("mystery", "in_bag", "safety", "slot_full", "x",
-                          5, 5, False, None)]
+    results = [CellResult("mystery", "in_bag", "safety", "slot_full", "in_band",
+                          "x", 5, 5, False, None)]
     md = render_matrix(results, dict(_FULL_COVERAGE))
     assert "in_bag/slot_full FAIL" in md

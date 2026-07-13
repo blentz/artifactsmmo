@@ -23,14 +23,15 @@ from artifactsmmo_cli.audit.inventory_completeness import (
 
 @dataclass(frozen=True)
 class CellResult:
-    """One census outcome: a `KeepReason` exercised at one (cap, kind,
-    pressure) cell. `passed` mirrors `inventory_cell_verdict`; `gap` is the
+    """One census outcome: a `KeepReason` exercised at one (cap, kind, pressure,
+    band) cell. `passed` mirrors `inventory_cell_verdict`; `gap` is the
     `InventoryGapClass` value string on failure (None on pass)."""
 
     reason: str
     cap: str
     kind: str
     pressure: str
+    band: str
     code: str
     held: int
     keep: int
@@ -40,7 +41,8 @@ class CellResult:
 
 def run_cell(cell: InventoryCell, game_data: GameData) -> CellResult:
     """Drive the Task-4 cores for one grid cell and record the outcome."""
-    state = census_state(cell.reason, cell.cap, cell.pressure, cell.held, game_data)
+    state = census_state(cell.reason, cell.cap, cell.pressure, cell.held,
+                         game_data, cell.band)
     plan = plan_inventory(cell, state, game_data)
     passed = inventory_cell_verdict(cell, plan, state, game_data)
     gap = None if passed else classify_gap(cell, state, game_data).value
@@ -49,6 +51,7 @@ def run_cell(cell: InventoryCell, game_data: GameData) -> CellResult:
         cap=cell.cap,
         kind=cell.kind,
         pressure=cell.pressure,
+        band=cell.band,
         code=cell.code,
         held=cell.held,
         keep=cell.keep,

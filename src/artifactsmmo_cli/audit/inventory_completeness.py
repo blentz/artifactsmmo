@@ -36,6 +36,29 @@ while the DESTRUCTIVE discard guards deliberately stay quantity-only, so a
 slot-pressured bag and a quantity-pressured bag reach DIFFERENT production routes.
 A census with one "full" state would be blind to half of them.
 
+LEVEL DISTANCE IS THE THIRD DIMENSION, and it closes the census's original blind
+spot. The grid used to be `reason x cap x pressure` at ONE fixed character level,
+so nothing in it could see `inventory_caps.level_distance_keep_ceiling` — which
+silently CLAMPS the ownership cap (via `RECIPE_DEMAND`) for any item whose level
+sits far from the character's. Two live defects hid in that gap: surplus heals
+became DESTROYABLE at 10+ levels' distance (the `CONSUMABLE_KEEP = 999` blanket
+clamped to 5), and the bank drain pulled a live task chain's OWN materials out of
+the bank (`keep_in_bag = 300`, `keep_owned = 5` on the same copper_ore). Every
+cell is therefore generated in BOTH bands (`BANDS`) — same items, same skills,
+only the CHARACTER'S LEVEL moves — so the ceiling is the single variable between
+a cell's two copies.
+
+THE BAND OBLIGATION IS INVARIANCE, and it is what makes a too-LOW cap
+falsifiable. A cell's `held` is DERIVED from its `keep`, so a census whose `keep`
+is re-measured in each band could never fail for a cap that shrank: the surplus
+would shrink with it. `keep` is therefore the reason's DEMAND — measured once, at
+the IN-BAND probe — and the FAR cell is driven holding exactly that many copies.
+This is sound because NO keep reason takes the character's level as an input: a
+recipe needs 10 copper_ore per bar, a task needs its remaining 5 eggs, and the
+heal stock target is a constant, whether the character is level 5 or level 50.
+Level distance is a HOARDING heuristic, not a demand — so a FAR cell that lets
+production destroy copies the reason demands is exactly the bug, and it FAILS.
+
 INERT: this module only MEASURES. The runner + `--check` CI gate is Task 5; the
 consumer migration (`bank_selection`, `recycle_surplus`, `guards`) is Tasks 6-9.
 It is EXPECTED to land RED — the un-migrated consumers still carry the code-set
@@ -99,10 +122,36 @@ cell holds a plausible stock and the verdict clamps `keep` to `held` — "every
 copy is protected", which is exactly what KEEP_ALL means."""
 
 CENSUS_LEVEL = 5
-"""Character level for every cell. Chosen so the tier-1 (level-1) census items
-sit INSIDE `inventory_caps.LEVEL_BAND_NEAR` (distance 4 < 5): the level-distance
-keep ceiling would otherwise clamp the caps and the cell's `keep` would no longer
-be the reason's own quantity."""
+"""Character level in the IN_BAND half of the grid. Chosen so the tier-1
+(level-1) census items sit INSIDE `inventory_caps.LEVEL_BAND_NEAR` (distance
+4 < 5): no level-distance ceiling applies, so a cell's `keep` here is the
+reason's own, unclamped quantity — the DEMAND every FAR cell is measured
+against."""
+
+CENSUS_LEVEL_FAR = 20
+"""Character level in the FAR half of the grid. The census items are level 1, so
+the distance is 19 — at or above `inventory_caps.LEVEL_BAND_FAR` (10), where the
+TIGHTEST ceiling (`KEEP_CEILING_FAR` = 5) bites. Everything else about the cell
+is held fixed (same items, same `CENSUS_SKILL_LEVEL`, so recipe REACHABILITY is
+unchanged): the level-distance ceiling is the ONLY difference between a cell's
+two bands, which is what makes a band FAIL attributable to it."""
+
+BANDS: tuple[str, ...] = ("in_band", "far")
+"""The level-distance bands every cell is generated in. See the module docstring:
+without this dimension the grid is blind to `level_distance_keep_ceiling`, and the
+ceiling is the mechanism by which the OWNERSHIP cap (which answers destruction,
+the one irreversible route) disagrees with the bag cap on the same item."""
+
+
+def band_level(band: str) -> int:
+    """The character level realizing `band`. The BAND, not the item, is what
+    moves — every reason's scenario item stays the same, so a cell and its
+    far-band twin differ in exactly one input."""
+    if band == "in_band":
+        return CENSUS_LEVEL
+    if band == "far":
+        return CENSUS_LEVEL_FAR
+    raise ValueError(f"unknown level band {band!r}")
 
 CENSUS_SKILL_LEVEL = 5
 """Every gathering/crafting skill at this level, so the census character can
@@ -155,8 +204,33 @@ WEAPON_CODE = "copper_dagger"
 TOOL_CODE = "copper_axe"
 CRAFT_TARGET_CODE = "copper_axe"
 CRAFT_MATERIAL_CODE = "copper_bar"
-GOAL_STEP_CODE = "ash_plank"
-GOAL_MATERIAL_CODE = "ash_wood"
+CRAFT_TASK_CODE = "copper_dagger"
+CRAFT_TASK_TOTAL = 7
+"""COMMITTED_RECIPE's scenario runs TWO disjoint committed roots: an in-flight
+craft (`state.crafting_target` = one `copper_axe`) AND an items-task for
+`copper_dagger` x7. Both are needed for the cell to BIND on the OWNED cap.
+
+`_committed_recipe` SUMS the chains of disjoint roots (44 ore, not 36 — see its
+docstring), while its owned-side sibling `RECIPE_DEMAND` takes a MAX over
+components, one of which is the very same items-task chain walk. So with the task
+alone the two TIE, and with the craft alone the sibling's generous
+`5 x max_recipe_demand` heuristic (40 copper_bar) strictly out-asks the one axe's
+6 — `check_binding` would refuse the cell either way. Together they separate:
+6 + 42 = 48 committed against the sibling's max(40, 42) = 42. That gap IS the
+ownership hole the reason exists to close, so the cell tests it directly."""
+GOAL_STEP_CODE = "cooked_beef"
+GOAL_STEP_QUANTITY = 6
+GOAL_MATERIAL_CODE = "raw_beef"
+"""The objective step must OUT-ASK its owned-side sibling to bind, and that is
+what picked this recipe. `RECIPE_DEMAND`'s unclamped heuristic is
+`BATCH_BUFFER x max_recipe_demand`, so the step's own demand only exceeds it where
+the material's largest single consumer is SMALL: `raw_beef` is consumed 1-per by
+exactly one recipe (`cooked_beef`), giving a heuristic of 5, which a 6-unit step
+clears by 1. The previous pairing (`ash_plank` <- 10x `ash_wood`, heuristic 350)
+would have needed a 40-plank step and a 400-item bag — and that bag made
+`DiscardOverstock` time out in the planner (49,569 nodes), which would have shown
+up as a census FAIL with nothing to do with the keep authority. A cell must fail
+for the reason it names or not at all."""
 GEAR_CODE = "copper_boots"
 GEAR_KEEP_QTY = 2
 RECIPE_MATERIAL_CODE = "copper_bar"
@@ -165,17 +239,21 @@ RECIPE_MATERIAL_CODE = "copper_bar"
 @dataclass(frozen=True)
 class InventoryCell:
     """One planner-drive point in the keep census grid: hold `held` copies of
-    `code` in a bag under `pressure`, in the state that ACTIVATES `reason`, and
-    ask what the production planner does about the copies above `keep`.
+    `code` in a bag under `pressure`, at level-distance `band`, in the state that
+    ACTIVATES `reason`, and ask what the production planner does about the copies
+    above `keep`.
 
-    `keep` is the AUTHORITY's answer for `cap` at that state (`keep_in_bag` /
-    `keep_owned`), and `reason` is BINDING on it (the cell's state is built so
-    this reason's quantity IS the cap — see `_cell`), so the cell tests the
-    reason it names."""
+    `keep` is the reason's DEMAND — the AUTHORITY's answer for `cap` at the
+    IN_BAND probe state (`keep_in_bag` / `keep_owned`), which is band-invariant
+    because no keep reason reads the character's level. `reason` is BINDING on
+    the cap at the cell's OWN state (see `_cell`/`check_binding`), so the cell
+    tests the reason it names; and the FAR twin of a cell must honor the SAME
+    demand, or a hoarding heuristic has overwritten a protection."""
 
     reason: KeepReason
     kind: Literal["safety", "liveness"]
     cap: Literal["in_bag", "owned"]
+    band: Literal["in_band", "far"]
     code: str
     held: int
     keep: int
@@ -225,12 +303,14 @@ def scenario_for(reason: KeepReason, game_data: GameData) -> Scenario:
     if reason is KeepReason.WORKING_KIT:
         return Scenario(code=_require(TOOL_CODE, game_data))
     if reason is KeepReason.COMMITTED_RECIPE:
+        task_code = _require(CRAFT_TASK_CODE, game_data)
         return Scenario(code=_require(CRAFT_MATERIAL_CODE, game_data),
-                        crafting_target=_require(CRAFT_TARGET_CODE, game_data))
+                        crafting_target=_require(CRAFT_TARGET_CODE, game_data),
+                        task=(task_code, "items", 0, CRAFT_TASK_TOTAL))
     if reason is KeepReason.GOAL_MATERIALS:
         return Scenario(code=_require(GOAL_MATERIAL_CODE, game_data),
                         step=ObtainItem(code=_require(GOAL_STEP_CODE, game_data),
-                                        quantity=1))
+                                        quantity=GOAL_STEP_QUANTITY))
     if reason is KeepReason.EQUIPPED:
         code = _require(WEAPON_CODE, game_data)
         return Scenario(code=code, equipment=(("weapon_slot", code),))
@@ -355,13 +435,17 @@ def _capacities(pressure: str, used: int, stacks: int) -> tuple[int, int]:
 
 
 def census_state(reason: KeepReason, cap: str, pressure: str, held: int,
-                 game_data: GameData) -> WorldState:
+                 game_data: GameData, band: str) -> WorldState:
     """The census character holding `held` copies of `reason`'s item under
-    `pressure` — the state both `plan_inventory` and `classify_gap` read, so the
-    planner and the classifier always judge the SAME world.
+    `pressure` at level-distance `band` — the state both `plan_inventory` and
+    `classify_gap` read, so the planner and the classifier always judge the SAME
+    world.
 
-    Level/skills are fixed (`CENSUS_LEVEL`, `CENSUS_SKILL_LEVEL`) so the cells vary
-    only along the dimensions the census is about: reason x cap x pressure."""
+    SKILLS are fixed (`CENSUS_SKILL_LEVEL`) while the character LEVEL follows the
+    band: recipe reachability (`inventory_caps.reachable_recipe_demand`, a SKILL
+    reading) is therefore identical across the two bands and the level-distance
+    ceiling is the only thing that moves. The cells vary only along the dimensions
+    the census is about: reason x cap x pressure x band."""
     scenario = scenario_for(reason, game_data)
     bag = _bag(scenario, held, game_data)
     used = sum(bag.values())
@@ -370,7 +454,7 @@ def census_state(reason: KeepReason, cap: str, pressure: str, held: int,
     state = scenario_state(
         ScenarioCharacter(
             name="inventory_audit",
-            level=CENSUS_LEVEL,
+            level=band_level(band),
             skills=skills,
             equipment=dict(scenario.equipment),
             inventory=bag,
@@ -430,10 +514,10 @@ def _cap_value(cap: str, code: str, state: WorldState, game_data: GameData,
     raise ValueError(f"unknown cap {cap!r}")
 
 
-def _probe_keep(reason: KeepReason, cap: str, pressure: str,
+def _probe_keep(reason: KeepReason, cap: str, pressure: str, band: str,
                 game_data: GameData) -> int:
-    """The cap value for `reason`'s item, measured at a PROBE state that holds
-    plainly more than any reason could want (`KEEP_ALL` copies are not
+    """The cap value for `reason`'s item, measured at a PROBE state in `band`
+    that holds plainly more than any reason could want (`KEEP_ALL` copies are not
     representable, so the probe holds `SENTINEL_HELD + KEEP_ALL`-free stock).
 
     The probe breaks the circularity in cell construction: a cell's `held` is
@@ -442,9 +526,13 @@ def _probe_keep(reason: KeepReason, cap: str, pressure: str,
     copies are held (task remaining, recipe demand, gear demand, best-tool 1) or
     saturating in it (HEALING_CONSUMABLE's greedy share of the heal-stock
     target), so asking the authority while holding MORE than the cap yields the
-    cap itself — and `_cell` re-asserts it at the final state."""
+    cap itself — and `_cell` re-asserts it at the final state.
+
+    The IN_BAND probe is additionally the DEMAND every cell's `keep` is set from
+    (see `_cell`): no reason reads the character's level, so the demand it yields
+    is the same quantity the FAR cell must honor."""
     probe_held = _probe_quantity(reason)
-    state = census_state(reason, cap, pressure, probe_held, game_data)
+    state = census_state(reason, cap, pressure, probe_held, game_data, band)
     ctx = census_ctx(reason, state, game_data)
     return _cap_value(cap, scenario_for(reason, game_data).code, state, game_data, ctx)
 
@@ -478,14 +566,19 @@ def _held_for(keep: int, kind: str, reason: KeepReason) -> int:
     raise ValueError(f"unknown cell kind {kind!r}")
 
 
-def check_binding(reason: KeepReason, cap: str, pressure: str, code: str,
+def check_binding(reason: KeepReason, cap: str, pressure: str, band: str, code: str,
                   probe_keep: int, cap_keep: int, reason_keep: int) -> None:
     """CHECK THE CELL TESTS WHAT IT NAMES, or raise.
 
     Two ways a cell can lie about itself, both fatal to the census:
 
-    * the cap MOVED between the probe state and the cell state, so the cell's
-      `keep` is not the authority's answer at the state the planner is driven in;
+    * the cap MOVED between the probe state and the cell state — WITHIN THE SAME
+      BAND. Both are measured in `band`, so this arm is purely about the probe's
+      saturation assumption (hold more than any reason wants and the authority
+      yields the cap itself); it says nothing about the cell's `keep`, which is
+      the reason's band-invariant DEMAND. A cap that moves BETWEEN bands is not a
+      lying cell — it is the defect under test, and the VERDICT must catch it, so
+      it is deliberately not raised here.
     * a SIBLING reason OUT-ASKS this one. `keep_in_bag`/`keep_owned` are a MAX
       over their reason ladder, so a cell whose state let another reason demand
       more copies would silently exercise THAT reason — its "surplus" would be
@@ -497,30 +590,40 @@ def check_binding(reason: KeepReason, cap: str, pressure: str, code: str,
     what they name is worse than no census."""
     if cap_keep != probe_keep:
         raise ValueError(
-            f"{reason.value}/{cap}/{pressure}: cap moved between the probe "
-            f"({probe_keep}) and the cell state ({cap_keep}) — the cell's `keep` "
-            f"would not be the authority's answer")
+            f"{reason.value}/{cap}/{pressure}/{band}: cap moved between the probe "
+            f"({probe_keep}) and the cell state ({cap_keep}) — the cell would not "
+            f"be driven at the authority's answer")
     if reason_keep != cap_keep:
         raise ValueError(
-            f"{reason.value}/{cap}/{pressure}: another keep reason out-asks it "
-            f"({cap_keep} > {reason_keep}) for {code!r} — the cell would test "
+            f"{reason.value}/{cap}/{pressure}/{band}: another keep reason out-asks "
+            f"it ({cap_keep} > {reason_keep}) for {code!r} — the cell would test "
             f"the sibling reason")
 
 
-def _cell(reason: KeepReason, cap: str, kind: str, pressure: str,
+def _cell(reason: KeepReason, cap: str, kind: str, pressure: str, band: str,
           game_data: GameData) -> InventoryCell:
     """Build one cell, and `check_binding` it against the authority at its own
-    state."""
-    keep = _probe_keep(reason, cap, pressure, game_data)
+    state.
+
+    `keep` is the reason's DEMAND — the authority's answer at the IN_BAND probe —
+    NOT the cap re-measured in `band`. Re-measuring would make a shrinking cap
+    unfalsifiable: `held` is derived from `keep`, so a FAR cell whose cap was
+    clamped to 5 would hold 5 copies, have no surplus, and pass vacuously. Held
+    at the demand instead, the FAR cell asks the question that matters — with
+    exactly the copies this reason needs in hand, does production destroy any? —
+    and the level-distance ceiling has nowhere to hide."""
+    keep = _probe_keep(reason, cap, pressure, "in_band", game_data)
     held = _held_for(keep, kind, reason)
     code = scenario_for(reason, game_data).code
-    state = census_state(reason, cap, pressure, held, game_data)
+    state = census_state(reason, cap, pressure, held, game_data, band)
     ctx = census_ctx(reason, state, game_data)
-    check_binding(reason, cap, pressure, code, keep,
+    check_binding(reason, cap, pressure, band, code,
+                  _probe_keep(reason, cap, pressure, band, game_data),
                   _cap_value(cap, code, state, game_data, ctx),
                   reason_quantity(reason, code, state, game_data, ctx))
-    return InventoryCell(reason=reason, kind=kind, cap=cap, code=code,  # type: ignore[arg-type]
-                         held=held, keep=keep, pressure=pressure)  # type: ignore[arg-type]
+    return InventoryCell(reason=reason, kind=kind, cap=cap, band=band,  # type: ignore[arg-type]
+                         code=code, held=held, keep=keep,
+                         pressure=pressure)  # type: ignore[arg-type]
 
 
 def caps_for(reason: KeepReason) -> list[str]:
@@ -541,26 +644,29 @@ def caps_for(reason: KeepReason) -> list[str]:
 
 def inventory_grid(game_data: GameData) -> list[InventoryCell]:
     """The census grid, DERIVED from the `KeepReason` registry: every reason x
-    every cap it feeds (`IN_BAG_REASONS` / `OWNED_REASONS`) x every pressure
-    state, one SAFETY cell (`held == keep`) in each of the three pressure states
-    and one LIVENESS cell (`held == keep + SURPLUS`) in each of the two PRESSURED
-    ones.
+    every cap it feeds (`IN_BAG_REASONS` / `OWNED_REASONS`) x every level-distance
+    band x every pressure state, one SAFETY cell (`held == keep`) in each of the
+    three pressure states and one LIVENESS cell (`held == keep + SURPLUS`) in each
+    of the two PRESSURED ones.
 
     Derivation is the whole point: nothing is hand-picked, so a reason added to
     the registry cannot slip into production without the census exercising both
-    its halves. `CURRENCY` yields SAFETY cells only — the single declared liveness
-    exemption (`InventoryGapClass.KEEP_ALL_SENTINEL`), because `KEEP_ALL` means no
-    copy is ever disposable and a liveness demand would contradict the authority
-    itself."""
+    its halves, in both bands. `CURRENCY` yields SAFETY cells only — the single
+    declared liveness exemption (`InventoryGapClass.KEEP_ALL_SENTINEL`), because
+    `KEEP_ALL` means no copy is ever disposable and a liveness demand would
+    contradict the authority itself."""
     cells: list[InventoryCell] = []
     for reason in KeepReason:
         for cap in caps_for(reason):
-            for pressure in PRESSURE_STATES:
-                cells.append(_cell(reason, cap, "safety", pressure, game_data))
-            if reason is KeepReason.CURRENCY:
-                continue
-            for pressure in PRESSURED:
-                cells.append(_cell(reason, cap, "liveness", pressure, game_data))
+            for band in BANDS:
+                for pressure in PRESSURE_STATES:
+                    cells.append(_cell(reason, cap, "safety", pressure, band,
+                                       game_data))
+                if reason is KeepReason.CURRENCY:
+                    continue
+                for pressure in PRESSURED:
+                    cells.append(_cell(reason, cap, "liveness", pressure, band,
+                                       game_data))
     return cells
 
 
@@ -648,9 +754,16 @@ def inventory_cell_verdict(cell: InventoryCell, plan: list[Action],
     """The cell's verdict against the keep authority.
 
     SAFETY — PASS iff the plan leaves at least `keep` copies: it may dispose the
-    slack above the cap (there is none, `held == keep`) but never a protected
+    slack above the DEMAND (there is none, `held == keep`) but never a protected
     copy. `keep` is clamped to `held` for the `KEEP_ALL` sentinel, whose cap
     exceeds any holdable stock and means "every copy is protected".
+
+    This is the arm the FAR band strengthens. `keep` is the reason's demand, not
+    the cap re-measured at the cell's level distance — so a plan that sheds copies
+    because `level_distance_keep_ceiling` shrank the ownership cap FAILS here even
+    though the (shrunken) authority licensed the shed. That is the point: the
+    authority is the oracle only where it is self-consistent, and a cap that
+    contradicts its own in-band answer on the same item is not.
 
     LIVENESS — PASS iff the plan disposes SOME copy of the code. The authority
     says `SURPLUS` copies are sheddable (`bankable`/`destroyable` return exactly

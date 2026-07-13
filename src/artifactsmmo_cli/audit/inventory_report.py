@@ -31,6 +31,21 @@ def _cell_token(r: CellResult) -> str:
     return f"{r.cap}/{r.pressure} {verdict}"
 
 
+def band_summary(results: list[CellResult]) -> str:
+    """PASS counts split by level-distance BAND. A band that passes only IN_BAND
+    is the signature of `inventory_caps.level_distance_keep_ceiling` clamping a
+    protection it has no business clamping (the two defects the band dimension was
+    added to expose), so the split is reported next to the headline metric."""
+    bands = sorted({r.band for r in results})
+    parts = []
+    for band in bands:
+        cells = [r for r in results if r.band == band]
+        passed = sum(1 for r in cells if r.passed)
+        bugs = sum(1 for r in cells if r.gap == "inventory_bug")
+        parts.append(f"{band} {passed}/{len(cells)} (inventory_bug {bugs})")
+    return "by band: " + "; ".join(parts)
+
+
 def summary_line(results: list[CellResult]) -> str:
     """One-line completeness metric: cell totals, overall PASS%, and per-gap
     counts (`inventory_bug` is the must-be-zero residual)."""
@@ -43,6 +58,22 @@ def summary_line(results: list[CellResult]) -> str:
             gap_counts[r.gap] += 1
     gaps = ", ".join(f"{k} {gap_counts[k]}" for k in GAP_ABBREV)
     return f"{total} cells; PASS {passed} ({pct:.0f}%); gaps: {gaps}"
+
+
+def render_matrix_rows(results: list[CellResult]) -> list[str]:
+    """One markdown row per (reason, kind, band): the code, then each cell's
+    cap/pressure verdict. BAND is a row key, not a cell token, so a reason's two
+    bands sit side by side and a ceiling-induced FAIL is visible at a glance."""
+    by_row: dict[tuple[str, str, str], list[CellResult]] = defaultdict(list)
+    for r in results:
+        by_row[(r.reason, r.kind, r.band)].append(r)
+    rows = []
+    for reason_val, kind, band in sorted(by_row):
+        cells = sorted(by_row[(reason_val, kind, band)],
+                       key=lambda r: (r.cap, r.pressure))
+        tokens = " · ".join(_cell_token(c) for c in cells)
+        rows.append(f"| {reason_val} | {kind} | {band} | {cells[0].code} | {tokens} |")
+    return rows
 
 
 def render_reason_coverage(coverage: dict[KeepReason, bool]) -> str:
@@ -69,11 +100,8 @@ def render_reason_coverage(coverage: dict[KeepReason, bool]) -> str:
 def render_matrix(results: list[CellResult],
                   coverage: dict[KeepReason, bool]) -> str:
     """The reason x cell MATRIX, grouped by `KeepReason`. One row per
-    (reason, kind): its code and each cell's cap/pressure -> PASS or gap
+    (reason, kind, band): its code and each cell's cap/pressure -> PASS or gap
     abbrev, followed by the reason-coverage table."""
-    by_reason_kind: dict[tuple[str, str], list[CellResult]] = defaultdict(list)
-    for r in results:
-        by_reason_kind[(r.reason, r.kind)].append(r)
     lines = [
         "# Inventory Keep/Disposal Completeness — Matrix",
         "",
@@ -81,17 +109,14 @@ def render_matrix(results: list[CellResult],
         "",
         summary_line(results),
         "",
+        band_summary(results),
+        "",
         "Legend: " + ", ".join(f"{v}={k}" for k, v in GAP_ABBREV.items()) + ".",
         "",
-        "| Reason | Kind | Code | Cells (cap/pressure → verdict) |",
-        "|---|---|---|---|",
+        "| Reason | Kind | Band | Code | Cells (cap/pressure → verdict) |",
+        "|---|---|---|---|---|",
     ]
-    for reason_val, kind in sorted(by_reason_kind):
-        cells = sorted(by_reason_kind[(reason_val, kind)],
-                       key=lambda r: (r.cap, r.pressure))
-        code = cells[0].code
-        tokens = " · ".join(_cell_token(c) for c in cells)
-        lines.append(f"| {reason_val} | {kind} | {code} | {tokens} |")
+    lines.extend(render_matrix_rows(results))
     lines.append("")
     lines.append(render_reason_coverage(coverage))
     return "\n".join(lines) + "\n"

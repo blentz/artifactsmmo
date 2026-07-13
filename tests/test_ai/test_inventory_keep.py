@@ -1,6 +1,13 @@
+from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
+from artifactsmmo_cli.ai.consumable_supply import HEAL_STOCK_FLOOR
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.inventory_caps import (
+    CONSUMABLE_KEEP,
+    KEEP_CEILING_FAR,
+    useful_quantity_cap,
+)
 from artifactsmmo_cli.ai.inventory_keep import (
     IN_BAG_REASONS,
     KEEP_ALL,
@@ -297,7 +304,10 @@ def test_reason_cap_sets_are_exactly_the_registry():
 
     WORKING_KIT and COMBAT_WEAPON are in BOTH ladders: "keep ONE in the bag"
     (the copy the gather re-arm equips) and "never melt your LAST one" are two
-    different obligations, and the second is an OWNERSHIP invariant."""
+    different obligations, and the second is an OWNERSHIP invariant. So are
+    COMMITTED_RECIPE and GOAL_MATERIALS, for the same reason, since 2026-07-13:
+    a LIVE craft chain's and a LIVE objective step's own materials must survive
+    BOTH the deposit ladder and the destruction ladder."""
     assert frozenset({
         KeepReason.CURRENCY, KeepReason.ACTIVE_TASK, KeepReason.HEALING_CONSUMABLE,
         KeepReason.COMBAT_WEAPON, KeepReason.WORKING_KIT, KeepReason.COMMITTED_RECIPE,
@@ -305,24 +315,26 @@ def test_reason_cap_sets_are_exactly_the_registry():
     }) == IN_BAG_REASONS
     assert frozenset({
         KeepReason.CURRENCY, KeepReason.ACTIVE_TASK, KeepReason.COMBAT_WEAPON,
-        KeepReason.WORKING_KIT, KeepReason.EQUIPPED, KeepReason.GEAR_DEMAND,
-        KeepReason.RECIPE_DEMAND,
+        KeepReason.WORKING_KIT, KeepReason.COMMITTED_RECIPE, KeepReason.GOAL_MATERIALS,
+        KeepReason.EQUIPPED, KeepReason.GEAR_DEMAND, KeepReason.RECIPE_DEMAND,
     }) == OWNED_REASONS
     assert frozenset(KeepReason) == IN_BAG_REASONS | OWNED_REASONS
-    # The bag-only reasons must never gate DESTRUCTION: a surplus potion or a
-    # gather goal's material pile is BANKABLE, never disposable.
-    for bag_only in (KeepReason.HEALING_CONSUMABLE, KeepReason.COMMITTED_RECIPE,
-                     KeepReason.GOAL_MATERIALS):
-        assert bag_only not in OWNED_REASONS
+    # HEALING_CONSUMABLE is the ONE bag-only reason: its quantity is the heal
+    # STOCK TARGET, so the surplus above it is BANKABLE. Its protection from
+    # DESTRUCTION is RECIPE_DEMAND's CONSUMABLE_KEEP blanket, not this reason —
+    # filing the target here as an owned floor would be strictly weaker.
+    assert KeepReason.HEALING_CONSUMABLE not in OWNED_REASONS
     # ...and the ownership-only reasons must never pin BAG slots.
     for owned_only in (KeepReason.EQUIPPED, KeepReason.GEAR_DEMAND,
                        KeepReason.RECIPE_DEMAND):
         assert owned_only not in IN_BAG_REASONS
-    # The kit reasons are the ONLY ones in both ladders — keep ONE in the bag
-    # AND at least one owned.
+    # Everything else is in BOTH ladders: a live commitment (the task item, the
+    # working kit, the craft chain, the step materials, currency) must survive
+    # banking AND destruction.
     assert frozenset({
         KeepReason.CURRENCY, KeepReason.ACTIVE_TASK,
         KeepReason.COMBAT_WEAPON, KeepReason.WORKING_KIT,
+        KeepReason.COMMITTED_RECIPE, KeepReason.GOAL_MATERIALS,
     }) == IN_BAG_REASONS & OWNED_REASONS
 
 
@@ -657,3 +669,123 @@ def test_gear_demand_is_owned_only_when_it_is_the_sole_reason():
     assert reason_quantity(KeepReason.GEAR_DEMAND, "copper_bar", state, gd, ctx) == 4
     assert keep_in_bag("copper_bar", state, gd, ctx) == 0
     assert bankable("copper_bar", state, gd, ctx) == 10
+
+
+# ---------------------------------------------------------------------------
+# The level-distance ceiling must never bound the OWNERSHIP cap.
+#
+# `inventory_caps.level_distance_keep_ceiling` is a HOARDING policy — "is this
+# item worth the space, given how far its level sits from mine". It answers a
+# SPACE question, so it belongs on the space gates (`overstocked_items`,
+# `bank_drain`'s `junk_excess`). Applied to `keep_owned` it bounded the cap that
+# licenses DESTRUCTION, and these two defects fell straight out of it (found by
+# the census's level-distance band, 2026-07-13). Both are pinned at a character
+# level >= LEVEL_BAND_FAR (10) above the item's, where the tightest ceiling
+# (KEEP_CEILING_FAR = 5) bites.
+# ---------------------------------------------------------------------------
+
+def test_far_out_of_band_heals_are_never_destroyable():
+    """I2. `CONSUMABLE_KEEP = 999` is a BLANKET ("consumables stack, so capping
+    low frees zero slots while throwing away survival value") and it must hold at
+    every level distance. The ceiling clamped it to 5, so a level-20 character
+    holding 30 `cooked_chicken` (item level 1) had `keep_owned = 5` and 25 heals
+    were SELL/DELETE fodder.
+
+    The bag cap is unchanged — the heal STOCK TARGET is 5, so 25 stay BANKABLE.
+    That is the whole point of the two-cap split: bankable (reversible) is not
+    destroyable (not)."""
+    gd = _gd()
+    ctx = _ctx()
+    far = make_state(level=20, inventory={"cooked_chicken": 30})
+    assert keep_owned("cooked_chicken", far, gd, ctx) == CONSUMABLE_KEEP
+    assert destroyable("cooked_chicken", far, gd, ctx) == 0
+    # The surplus above the stock target is still shed to the BANK, as before.
+    assert keep_in_bag("cooked_chicken", far, gd, ctx) == HEAL_STOCK_FLOOR
+    assert bankable("cooked_chicken", far, gd, ctx) == 30 - HEAL_STOCK_FLOOR
+
+    # ...and the in-band character (distance 4, no ceiling) always agreed: the
+    # two bands now give the SAME ownership answer, which is the invariant.
+    near = make_state(level=5, inventory={"cooked_chicken": 30})
+    assert keep_owned("cooked_chicken", near, gd, ctx) == CONSUMABLE_KEEP
+    assert destroyable("cooked_chicken", near, gd, ctx) == 0
+
+
+def test_far_out_of_band_task_chain_is_never_drained_from_the_bank():
+    """I3. A LIVE items-task's own chain material, banked. `keep_in_bag` said 300
+    (COMMITTED_RECIPE: 5 daggers x 8 ore x ... the transitive chain) while the
+    ceiling clamped `keep_owned` to 5 — a 60x disagreement between the two caps on
+    the SAME material — so `bank_drain` was licensed to pull 35 of the task's own
+    copper_ore out of the bank and onto the discard ladder.
+
+    The bag-side `min(bankable, destroyable)` masked it while the task root stayed
+    chosen (nothing in the bag to shed), which is exactly why it needed the
+    OWNERSHIP cap to say no: one cycle on a different root drops `keep_in_bag` to
+    0 and the copies become bag-destroyable."""
+    gd = _gd()
+    ctx = _ctx()
+    far = make_state(level=20, skills={"weaponcrafting": 2}, inventory={},
+                     bank_items={"copper_ore": 40},
+                     task_code="copper_dagger", task_type="items",
+                     task_total=5, task_progress=0)
+    # The chain demand is 5 x 8 = 40 ore; the ownership cap must cover it...
+    assert reason_quantity(KeepReason.COMMITTED_RECIPE, "copper_ore",
+                           far, gd, ctx) == 40
+    assert keep_owned("copper_ore", far, gd, ctx) >= 40
+    assert destroyable("copper_ore", far, gd, ctx) == 0
+    # ...so the drain takes nothing: the task's own materials stay banked.
+    assert bank_drain_excess(far, gd, ctx) == {}
+
+
+def test_far_out_of_band_goal_step_materials_are_never_destroyable():
+    """I3, the objective-step half. `GOAL_MATERIALS` (the active step's own
+    material map) had NO owned-side representation at all: `useful_quantity_cap`
+    has no term for `ctx.step_profile`, so the step's materials leaned entirely on
+    the RECIPE_DEMAND heuristic happening to be generous — and the ceiling took
+    that away too. 60 banked `ash_wood` against a step needing 59 drained 55.
+
+    The step here demands MORE than the heuristic (200 > the fixture's
+    `5 x max_recipe_demand` = 180), so GOAL_MATERIALS is the sole reason holding
+    the line — the case that proves it must feed `keep_owned` in its own right and
+    not lean on a sibling. The drain still takes the GENUINE surplus (50 above the
+    step's demand): this is a protection, not a new blanket."""
+    gd = _gd()
+    ctx = _ctx(step_profile={"copper_ore": 200})
+    far = make_state(level=20, inventory={}, bank_items={"copper_ore": 250})
+    assert reason_quantity(KeepReason.GOAL_MATERIALS, "copper_ore",
+                           far, gd, ctx) == 200
+    assert reason_quantity(KeepReason.RECIPE_DEMAND, "copper_ore",
+                           far, gd, ctx) == 180  # the sibling is NOT enough
+    assert keep_owned("copper_ore", far, gd, ctx) == 200
+    assert destroyable("copper_ore", far, gd, ctx) == 50
+    assert bank_drain_excess(far, gd, ctx) == {"copper_ore": 50}
+
+
+def test_the_ceiling_still_governs_the_SPACE_gates():
+    """The other direction: the ceiling is not dead, it is RE-HOMED. It still
+    bounds `useful_quantity_cap` for every caller that asks a SPACE question — the
+    overstock gate and the bank-drain junk policy both take the default
+    `level_ceiling=True` — and it still declines to HOARD far-out-of-band stock.
+    Only the DESTRUCTION cap stopped listening to it."""
+    gd = _gd()
+    far = make_state(level=20, inventory={"cooked_chicken": 30})
+    # SPACE question: still clamped to KEEP_CEILING_FAR.
+    assert useful_quantity_cap("cooked_chicken", far, gd) == KEEP_CEILING_FAR
+    # OWNERSHIP question: the demand, unclamped.
+    assert useful_quantity_cap("cooked_chicken", far, gd,
+                               level_ceiling=False) == CONSUMABLE_KEEP
+
+
+def test_chain_reasons_feed_BOTH_caps():
+    """The registry pin for the fix: a LIVE craft chain and a LIVE objective step
+    protect their materials from BANKING *and* from DESTRUCTION. They were bag-only,
+    and their only owned-side cover was the RECIPE_DEMAND heuristic — which knows
+    nothing about `state.crafting_target` and nothing about `ctx.step_profile`."""
+    assert KeepReason.COMMITTED_RECIPE in IN_BAG_REASONS
+    assert KeepReason.COMMITTED_RECIPE in OWNED_REASONS
+    assert KeepReason.GOAL_MATERIALS in IN_BAG_REASONS
+    assert KeepReason.GOAL_MATERIALS in OWNED_REASONS
+    # HEALING_CONSUMABLE stays bag-only ON PURPOSE: its quantity is the stock
+    # TARGET (5), which would be a strictly WEAKER owned floor than the
+    # CONSUMABLE_KEEP=999 blanket RECIPE_DEMAND already gives it.
+    assert KeepReason.HEALING_CONSUMABLE in IN_BAG_REASONS
+    assert KeepReason.HEALING_CONSUMABLE not in OWNED_REASONS

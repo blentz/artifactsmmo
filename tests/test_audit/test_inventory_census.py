@@ -24,9 +24,9 @@ def _gd() -> GameData:
 
 
 def _cell_of(cells: list[InventoryCell], reason: KeepReason, kind: str,
-             cap: str, pressure: str) -> InventoryCell:
+             cap: str, pressure: str, band: str = "in_band") -> InventoryCell:
     matches = [c for c in cells if c.reason is reason and c.kind == kind
-               and c.cap == cap and c.pressure == pressure]
+               and c.cap == cap and c.pressure == pressure and c.band == band]
     assert len(matches) == 1
     return matches[0]
 
@@ -42,6 +42,7 @@ def test_run_cell_records_a_passing_safety_cell() -> None:
     assert result.cap == "in_bag"
     assert result.kind == "safety"
     assert result.pressure == "slot_full"
+    assert result.band == "in_band"
     assert result.code == cell.code
     assert result.held == cell.held
     assert result.keep == cell.keep
@@ -56,17 +57,18 @@ def test_run_cell_records_gap_on_failure() -> None:
     `golden_egg` has no recipe (no RECYCLE route), its only buyer is the dormant
     event `nomadic_merchant` (no SELL route), and slot pressure deliberately does
     not open the DELETE route — so production is right to keep holding it, and the
-    cell classifies VENUE_UNREACHABLE. (GOAL_MATERIALS, the cell this test used to
-    pin as the last INVENTORY_BUG, now PASSes: the CRAFT_RELIEF slot gate stopped
-    the remainder-leaving craft from preempting the DEPOSIT_FULL that sheds the
-    surplus — see `test_craft_relief.TestSlotHonestRelief`.)"""
+    cell classifies VENUE_UNREACHABLE. It fails identically in BOTH bands: the
+    limit is the WORLD's, and the character's level has nothing to do with it."""
     gd = _gd()
     cells = inventory_grid(gd)
-    cell = _cell_of(cells, KeepReason.ACTIVE_TASK, "liveness", "owned", "slot_full")
-    result = run_cell(cell, gd)
-    assert result.reason == "active_task"
-    assert result.passed is False
-    assert result.gap == "venue_unreachable"
+    for band in ("in_band", "far"):
+        cell = _cell_of(cells, KeepReason.ACTIVE_TASK, "liveness", "owned",
+                        "slot_full", band)
+        result = run_cell(cell, gd)
+        assert result.reason == "active_task"
+        assert result.band == band
+        assert result.passed is False
+        assert result.gap == "venue_unreachable"
 
 
 def test_census_cells_is_the_grid() -> None:
@@ -152,55 +154,68 @@ def test_reason_coverage_total_over_keepreason() -> None:
 
 
 def test_census_full_grid_reaches_zero_inventory_bug() -> None:
-    """THE ACCEPTANCE: 66 cells, 64 PASS, **0 INVENTORY_BUG** — down from the
-    Task-5 RED baseline of 42 PASS / 13 INVENTORY_BUG.
+    """THE ACCEPTANCE: 152 cells, 144 PASS, **0 INVENTORY_BUG**.
 
-    The grid GREW by 10 over the Task-5 baseline because cells are DERIVED from
-    the cap sets: the two kit reasons now feed `keep_owned` too, so each gained an
-    owned column (3 SAFETY + 2 LIVENESS cells). All 10 PASS — a banked kit surplus
-    is genuinely destroyed by the production recycle route, and the last copy
-    survives.
+    The grid DOUBLED (66 -> 132) when the LEVEL-DISTANCE band was added, and then
+    grew to 152 because cells are DERIVED from the cap sets and COMMITTED_RECIPE /
+    GOAL_MATERIALS joined `OWNED_REASONS` (an owned column each: 3 SAFETY +
+    2 LIVENESS, per band).
 
-    The 2 residual FAILs are WORLD limits, not planner defects — both are cells
-    whose surplus has no route that could fire this cycle:
-      * active_task owned/liveness/slot_full (`golden_egg`) — VENUE_UNREACHABLE:
-        no recipe (no recycle), and its only buyer is a dormant event merchant;
-      * recipe_demand owned/liveness/slot_full (`copper_bar`) — NO_ROUTE_AVAILABLE:
-        the bank is full (an owned-cap cell's precondition), it is not sellable,
-        and slot pressure deliberately does not open the DELETE route.
+    The band dimension landed RED at 1 INVENTORY_BUG —
+    `recipe_demand owned/safety/qty_full/far` (`copper_bar`, held 40, keep 40): at
+    19 levels' distance `level_distance_keep_ceiling` clamped `keep_owned` from 40
+    to 5 and production DELETED 35 copies of a material the recipe demands. That
+    was the shared root cause of both live defects (surplus heals destroyable at
+    distance; the bank drain pulling a live task chain's own ore). The ceiling is
+    now a SPACE policy only (`useful_quantity_cap(level_ceiling=False)` on the
+    ownership arm), so the two bands agree cell-for-cell — which is the invariant
+    the band dimension exists to enforce.
+
+    The 8 residual FAILs are WORLD limits, not planner defects. EVERY ONE is an
+    `owned/liveness/SLOT_FULL` cell, and they all fail for the same designed
+    reason: an owned cell's bank is FULL by construction (banking is not an
+    ownership route), and slot pressure deliberately does NOT open the DELETE route
+    (`guards._fires` is quantity-only, so slot pressure never deletes what banking
+    could have saved). With no recycle route either, production has nothing to fire
+    and is right to keep holding. Their `owned/qty_full` twins — where the DELETE
+    watermark IS reached — all PASS.
 
     A regression here means either a consumer got migrated (should be caught by
     the owning task, not silently here) or the census stopped seeing the bug class
     it exists to catch."""
     gd = _gd()
     results = run_census(gd, inventory_grid(gd))
-    assert len(results) == 66
+    assert len(results) == 152
     passed = sum(1 for r in results if r.passed)
-    assert passed == 64
-    # The kit reasons' new OWNED cells all pass — the ownership cap is both SAFE
+    assert passed == 144
+    # The kit reasons' OWNED cells all pass — the ownership cap is both SAFE
     # (the last tool/weapon survives) and LIVE (the surplus above it is shed).
     kit_owned = [r for r in results if r.cap == "owned"
                  and r.reason in ("working_kit", "combat_weapon")]
-    assert len(kit_owned) == 10
+    assert len(kit_owned) == 20
     assert all(r.passed for r in kit_owned)
     gap_counts: dict[str, int] = {}
     for r in results:
         if r.gap is not None:
             gap_counts[r.gap] = gap_counts.get(r.gap, 0) + 1
-    assert gap_counts == {"no_route_available": 1, "venue_unreachable": 1}
-    # THE residual class is EMPTY. The two `goal_materials in_bag/liveness` cells
-    # (slot_full + qty_full) were the last INVENTORY_BUGs: CRAFT_RELIEF fired on a
-    # craft that freed 9 QUANTITY units while ADDING a stack (16 ash_wood -> 6
-    # ash_wood + 1 ash_plank), preempting DEPOSIT_FULL — which it out-ranks — and
-    # eating the ash_wood `keep_in_bag` protects. The slot gate closed them.
+    assert gap_counts == {"no_route_available": 6, "venue_unreachable": 2}
+    # THE residual class is EMPTY.
     assert not any(r.gap == "inventory_bug" for r in results)
-    assert all(r.passed for r in results
-               if r.reason == "goal_materials" and r.kind == "liveness")
-    # `active_task owned/slot_full` (golden_egg) left INVENTORY_BUG when the SELL
-    # migration (Task 8) taught the classifier what a sale actually costs: its only
-    # buyer is the `nomadic_merchant` EVENT NPC, dormant in this bundle, so there is
-    # NO executable sale — and with no recipe there is no recycle, and slot pressure
-    # deliberately does not open DELETE. Production is right to keep holding it.
+    # ...and it is empty in BOTH bands, cell-for-cell: the level-distance ceiling
+    # no longer moves a single protection. A FAR cell that passes only because its
+    # cap shrank is impossible by construction (`keep` is the IN_BAND demand).
+    by_key = {(r.reason, r.cap, r.kind, r.pressure, r.band): r for r in results}
+    for (reason, cap, kind, pressure, band), r in by_key.items():
+        if band != "in_band":
+            continue
+        twin = by_key[(reason, cap, kind, pressure, "far")]
+        assert (twin.keep, twin.held) == (r.keep, r.held), (reason, cap, pressure)
+        assert twin.passed == r.passed, (reason, cap, kind, pressure)
+    # Every FAIL is an owned/liveness/slot_full cell — the designed dead end
+    # (bank full by construction + slot pressure never opens DELETE).
+    for r in results:
+        if not r.passed:
+            assert (r.cap, r.kind, r.pressure) == ("owned", "liveness", "slot_full"), r
     unreachable = {(r.reason, r.cap, r.pressure) for r in results
                    if r.gap == "venue_unreachable"}
     assert unreachable == {("active_task", "owned", "slot_full")}

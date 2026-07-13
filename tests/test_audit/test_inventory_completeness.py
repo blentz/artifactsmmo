@@ -23,6 +23,7 @@ from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.inventory_caps import LEVEL_BAND_FAR, LEVEL_BAND_NEAR
 from artifactsmmo_cli.ai.inventory_keep import (
     IN_BAG_REASONS,
     KEEP_ALL,
@@ -30,10 +31,15 @@ from artifactsmmo_cli.ai.inventory_keep import (
     KeepReason,
     bankable,
     destroyable,
+    keep_owned,
+    reason_quantity,
 )
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, active_guards
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 from artifactsmmo_cli.audit.inventory_completeness import (
+    BANDS,
+    CENSUS_LEVEL,
+    CENSUS_LEVEL_FAR,
     FILLER_STACKS,
     SENTINEL_HELD,
     SURPLUS,
@@ -47,6 +53,7 @@ from artifactsmmo_cli.audit.inventory_completeness import (
     _held_for,
     _recyclable,
     _sellable,
+    band_level,
     caps_for,
     census_ctx,
     census_decision,
@@ -95,9 +102,9 @@ def test_gap_classes_have_no_expected_bug_class() -> None:
 # ---------------------------------------------------------------------------
 
 def _cell_of(cells: list[InventoryCell], reason: KeepReason, kind: str,
-             cap: str, pressure: str) -> InventoryCell:
+             cap: str, pressure: str, band: str = "in_band") -> InventoryCell:
     matches = [c for c in cells if c.reason is reason and c.kind == kind
-               and c.cap == cap and c.pressure == pressure]
+               and c.cap == cap and c.pressure == pressure and c.band == band]
     assert len(matches) == 1, matches
     return matches[0]
 
@@ -124,7 +131,8 @@ def test_working_kit_liveness_cell_PASSES_against_the_real_arbiter(
     assert cell.code == "copper_axe"
     assert (cell.held, cell.keep) == (1 + SURPLUS, 1)
 
-    state = census_state(cell.reason, cell.cap, cell.pressure, cell.held, gd)
+    state = census_state(cell.reason, cell.cap, cell.pressure, cell.held, gd,
+                         cell.band)
     ctx = census_ctx(cell.reason, state, gd)
 
     # The authority licenses shedding the surplus...
@@ -158,7 +166,8 @@ def test_currency_safety_cell_passes_against_the_real_arbiter(
     cell = _cell_of(inventory_grid(gd), KeepReason.CURRENCY,
                     "safety", "in_bag", "slot_full")
     assert (cell.code, cell.held, cell.keep) == (TASKS_COIN_CODE, SENTINEL_HELD, KEEP_ALL)
-    state = census_state(cell.reason, cell.cap, cell.pressure, cell.held, gd)
+    state = census_state(cell.reason, cell.cap, cell.pressure, cell.held, gd,
+                         cell.band)
     plan = plan_inventory(cell, state, gd)
     assert disposed_quantity(cell, plan, state, gd) == 0
     assert inventory_cell_verdict(cell, plan, state, gd) is True
@@ -173,7 +182,8 @@ def test_owned_liveness_cell_drives_the_real_arbiter_under_a_full_bank(
     gd = bundle_game_data
     cell = _cell_of(inventory_grid(gd), KeepReason.EQUIPPED,
                     "liveness", "owned", "qty_full")
-    state = census_state(cell.reason, cell.cap, cell.pressure, cell.held, gd)
+    state = census_state(cell.reason, cell.cap, cell.pressure, cell.held, gd,
+                         cell.band)
     ctx = census_ctx(cell.reason, state, gd)
     assert state.bank_items is not None and len(state.bank_items) == gd.bank_capacity
     assert destroyable(cell.code, state, gd, ctx) == SURPLUS
@@ -214,9 +224,12 @@ def test_grid_separates_slot_pressure_from_quantity_pressure(
     qty = _cell_of(cells, KeepReason.WORKING_KIT, "liveness", "in_bag", "qty_full")
     roomy = _cell_of(cells, KeepReason.WORKING_KIT, "safety", "in_bag", "below_threshold")
 
-    slot_state = census_state(slot.reason, slot.cap, slot.pressure, slot.held, gd)
-    qty_state = census_state(qty.reason, qty.cap, qty.pressure, qty.held, gd)
-    roomy_state = census_state(roomy.reason, roomy.cap, roomy.pressure, roomy.held, gd)
+    slot_state = census_state(slot.reason, slot.cap, slot.pressure, slot.held, gd,
+                              slot.band)
+    qty_state = census_state(qty.reason, qty.cap, qty.pressure, qty.held, gd,
+                             qty.band)
+    roomy_state = census_state(roomy.reason, roomy.cap, roomy.pressure, roomy.held, gd,
+                               roomy.band)
 
     assert slot_state.inventory_slots_free == 1
     assert slot_state.inventory_free > 1  # quantity is NOT the binding limit
@@ -236,8 +249,10 @@ def test_in_bag_cells_get_a_roomy_bank_and_owned_cells_a_full_one(
     full — otherwise production would rightly bank instead of destroy and the
     liveness obligation would be unsatisfiable by design, not by bug)."""
     gd = bundle_game_data
-    in_bag = census_state(KeepReason.WORKING_KIT, "in_bag", "slot_full", 7, gd)
-    owned = census_state(KeepReason.EQUIPPED, "owned", "slot_full", 7, gd)
+    in_bag = census_state(KeepReason.WORKING_KIT, "in_bag", "slot_full", 7, gd,
+                          "in_band")
+    owned = census_state(KeepReason.EQUIPPED, "owned", "slot_full", 7, gd,
+                         "in_band")
     assert in_bag.bank_items == {}
     assert owned.bank_items is not None and len(owned.bank_items) == gd.bank_capacity
     # No bank stock of the cell's own code: it would credit `destroyable`.
@@ -266,16 +281,23 @@ def test_census_ctx_binds_the_goal_step_profile_from_production(
         bundle_game_data: GameData) -> None:
     """GOAL_MATERIALS is only live when `ctx.step_profile` is populated, and the
     census must populate it the way the arbiter does — from the production
-    `_step_protection_profile` of the production step goal, not by hand."""
+    `_step_protection_profile` of the production step goal, not by hand.
+
+    The step (6 `cooked_beef` <- 6 `raw_beef`) is chosen so GOAL_MATERIALS BINDS on
+    the OWNED cap: `raw_beef`'s owned-side sibling RECIPE_DEMAND is only 5
+    (`BATCH_BUFFER x max_recipe_demand(raw_beef)`, and exactly one recipe consumes
+    it, 1-per), so a 6-unit step out-asks it by 1. `check_binding` would refuse the
+    cell otherwise — see GOAL_STEP_CODE."""
     gd = bundle_game_data
-    state = census_state(KeepReason.GOAL_MATERIALS, "in_bag", "slot_full", 16, gd)
+    state = census_state(KeepReason.GOAL_MATERIALS, "in_bag", "slot_full", 12, gd,
+                         "in_band")
     ctx = census_ctx(KeepReason.GOAL_MATERIALS, state, gd)
-    assert ctx.step_profile == {"ash_plank": 1, "ash_wood": 10}
+    assert ctx.step_profile == {"cooked_beef": 6, "raw_beef": 6}
     # ...and the decision handed to the arbiter carries the SAME step, so the
     # arbiter re-derives that map itself.
     decision = census_decision(KeepReason.GOAL_MATERIALS, gd)
     assert decision.chosen_step is not None
-    assert decision.chosen_step.code == "ash_plank"
+    assert decision.chosen_step.code == "cooked_beef"
     # Every other reason is exercised with no step: the disposal ladder answers.
     assert census_decision(KeepReason.WORKING_KIT, gd).chosen_step is None
     assert census_ctx(KeepReason.WORKING_KIT, state, gd).step_profile == {}
@@ -283,17 +305,34 @@ def test_census_ctx_binds_the_goal_step_profile_from_production(
 
 def test_gear_demand_scenario_binds_gear_keep(bundle_game_data: GameData) -> None:
     gd = bundle_game_data
-    state = census_state(KeepReason.GEAR_DEMAND, "owned", "slot_full", 8, gd)
+    state = census_state(KeepReason.GEAR_DEMAND, "owned", "slot_full", 8, gd,
+                         "in_band")
     ctx = census_ctx(KeepReason.GEAR_DEMAND, state, gd)
     assert ctx.gear_keep == {"copper_boots": 2}
 
 
-def test_committed_recipe_scenario_sets_the_crafting_target(
+def test_committed_recipe_scenario_runs_two_disjoint_committed_roots(
         bundle_game_data: GameData) -> None:
+    """The scenario carries an in-flight craft AND an items-task, because
+    COMMITTED_RECIPE only BINDS on the OWNED cap when it out-asks RECIPE_DEMAND —
+    and it can only do that by SUMMING two disjoint roots (its own semantics: 44
+    ore, not 36). With the craft alone the sibling's `5 x max_recipe_demand`
+    heuristic (40 copper_bar) wins; with the task alone the two TIE, because
+    RECIPE_DEMAND's `task_cap` term is the very same chain walk."""
     gd = bundle_game_data
-    state = census_state(KeepReason.COMMITTED_RECIPE, "in_bag", "slot_full", 12, gd)
+    state = census_state(KeepReason.COMMITTED_RECIPE, "in_bag", "slot_full", 54, gd,
+                         "in_band")
     assert state.crafting_target == "copper_axe"
-    assert state.inventory["copper_bar"] == 12
+    assert (state.task_code, state.task_type, state.task_total) == (
+        "copper_dagger", "items", 7)
+    assert state.inventory["copper_bar"] == 54
+    ctx = census_ctx(KeepReason.COMMITTED_RECIPE, state, gd)
+    # 1 axe (6 bars) + 7 daggers (42 bars) = 48 — strictly above RECIPE_DEMAND's 42.
+    assert reason_quantity(KeepReason.COMMITTED_RECIPE, "copper_bar",
+                           state, gd, ctx) == 48
+    assert reason_quantity(KeepReason.RECIPE_DEMAND, "copper_bar",
+                           state, gd, ctx) == 42
+    assert keep_owned("copper_bar", state, gd, ctx) == 48
 
 
 def test_every_cell_keep_is_the_authority_answer(bundle_game_data: GameData) -> None:
@@ -301,7 +340,8 @@ def test_every_cell_keep_is_the_authority_answer(bundle_game_data: GameData) -> 
     `keep_owned` return at that cell's own state — no hand-written expectations."""
     gd = bundle_game_data
     for cell in inventory_grid(gd):
-        state = census_state(cell.reason, cell.cap, cell.pressure, cell.held, gd)
+        state = census_state(cell.reason, cell.cap, cell.pressure, cell.held,
+                             gd, cell.band)
         ctx = census_ctx(cell.reason, state, gd)
         assert _cap_value(cell.cap, cell.code, state, gd, ctx) == cell.keep
         assert state.inventory[cell.code] == cell.held
@@ -331,21 +371,22 @@ def test_caps_for_rejects_a_reason_that_protects_nothing() -> None:
 def test_check_binding_accepts_a_tie() -> None:
     """Two reasons wanting the SAME quantity is fine — the cap is the same either
     way, so the cell still tests what it names."""
-    check_binding(KeepReason.ACTIVE_TASK, "owned", "slot_full", "golden_egg", 5, 5, 5)
+    check_binding(KeepReason.ACTIVE_TASK, "owned", "slot_full", "in_band",
+                  "golden_egg", 5, 5, 5)
 
 
 def test_check_binding_rejects_a_moving_cap() -> None:
     with pytest.raises(ValueError, match="cap moved"):
-        check_binding(KeepReason.ACTIVE_TASK, "owned", "slot_full", "golden_egg",
-                      5, 7, 7)
+        check_binding(KeepReason.ACTIVE_TASK, "owned", "slot_full", "in_band",
+                      "golden_egg", 5, 7, 7)
 
 
 def test_check_binding_rejects_a_shadowed_reason() -> None:
     """A sibling reason out-asking this one would make the "surplus" protected by
     the SIBLING — the liveness FAIL would be a census artifact, not a bug."""
     with pytest.raises(ValueError, match="out-asks"):
-        check_binding(KeepReason.ACTIVE_TASK, "owned", "slot_full", "copper_ore",
-                      400, 400, 5)
+        check_binding(KeepReason.ACTIVE_TASK, "owned", "slot_full", "in_band",
+                      "copper_ore", 400, 400, 5)
 
 
 def test_held_for_safety_liveness_and_the_keep_all_sentinel() -> None:
@@ -359,10 +400,40 @@ def test_held_for_safety_liveness_and_the_keep_all_sentinel() -> None:
 
 def test_cap_value_rejects_an_unknown_cap(bundle_game_data: GameData) -> None:
     gd = bundle_game_data
-    state = census_state(KeepReason.WORKING_KIT, "in_bag", "slot_full", 7, gd)
+    state = census_state(KeepReason.WORKING_KIT, "in_bag", "slot_full", 7, gd,
+                         "in_band")
     ctx = census_ctx(KeepReason.WORKING_KIT, state, gd)
     with pytest.raises(ValueError, match="unknown cap"):
         _cap_value("sideways", "copper_axe", state, gd, ctx)
+
+
+def test_band_level_maps_each_band_and_rejects_an_unknown_one() -> None:
+    """The band IS the character level — the only input that differs between a
+    cell and its far twin. IN_BAND sits inside `LEVEL_BAND_NEAR` of the level-1
+    census items (distance 4, no ceiling); FAR sits at or beyond
+    `LEVEL_BAND_FAR` (distance 19, the tightest ceiling). An unknown band raises
+    rather than silently defaulting to a level whose distance nobody chose."""
+    assert band_level("in_band") == CENSUS_LEVEL
+    assert band_level("far") == CENSUS_LEVEL_FAR
+    assert abs(1 - CENSUS_LEVEL) < LEVEL_BAND_NEAR
+    assert abs(1 - CENSUS_LEVEL_FAR) >= LEVEL_BAND_FAR
+    with pytest.raises(ValueError, match="unknown level band"):
+        band_level("sideways")
+
+
+def test_bands_are_the_grid_dimension(bundle_game_data: GameData) -> None:
+    """Every cell exists in BOTH bands, and the two halves are identical except
+    for the character's level: same code, same `keep` (the reason's DEMAND is
+    band-invariant — no reason reads the character's level), same `held`. That
+    equality is the obligation; a FAR cap that disagrees is the bug."""
+    cells = inventory_grid(bundle_game_data)
+    assert {c.band for c in cells} == set(BANDS)
+    by_key = {(c.reason, c.cap, c.kind, c.pressure, c.band): c for c in cells}
+    for (reason, cap, kind, pressure, band), cell in by_key.items():
+        if band != "in_band":
+            continue
+        twin = by_key[(reason, cap, kind, pressure, "far")]
+        assert (twin.code, twin.keep, twin.held) == (cell.code, cell.keep, cell.held)
 
 
 def test_capacities_rejects_an_unknown_pressure() -> None:
@@ -503,8 +574,9 @@ def test_disposed_quantity_walks_the_plan_through_production_apply() -> None:
     DepositAll sees the bag the first one left behind."""
     gd = _disposal_gd()
     state = make_state(inventory={"copper_bar": 9}, bank_items={})
-    cell = InventoryCell(reason=KeepReason.RECIPE_DEMAND, kind="liveness", cap="in_bag",
-                         code="copper_bar", held=9, keep=3, pressure="slot_full")
+    cell = InventoryCell(reason=KeepReason.RECIPE_DEMAND, kind="liveness",
+                         cap="in_bag", band="in_band", code="copper_bar",
+                         held=9, keep=3, pressure="slot_full")
     plan = [DepositItemAction(code="copper_bar", quantity=4),
             DepositAllAction(bank_location=(7, 13), game_data=gd)]
     # 4 banked explicitly, then DepositAll banks the 5 that remain.
@@ -516,8 +588,9 @@ def test_disposed_quantity_ignores_consumption_that_is_not_disposal() -> None:
     down is not evidence the surplus was shed. (Deleting the same copies IS.)"""
     gd = _disposal_gd()
     state = make_state(inventory={"copper_bar": 9}, bank_items={})
-    cell = InventoryCell(reason=KeepReason.RECIPE_DEMAND, kind="liveness", cap="owned",
-                         code="copper_bar", held=9, keep=3, pressure="qty_full")
+    cell = InventoryCell(reason=KeepReason.RECIPE_DEMAND, kind="liveness",
+                         cap="owned", band="in_band", code="copper_bar",
+                         held=9, keep=3, pressure="qty_full")
     # Deposits never satisfy an OWNED obligation.
     assert disposed_quantity(
         cell, [DepositItemAction(code="copper_bar", quantity=6)], state, gd) == 0
@@ -528,16 +601,17 @@ def test_disposed_quantity_ignores_consumption_that_is_not_disposal() -> None:
 def test_verdicts_are_conformance_to_the_authority() -> None:
     gd = _disposal_gd()
     state = make_state(inventory={"copper_bar": 3}, bank_items={})
-    safety = InventoryCell(reason=KeepReason.RECIPE_DEMAND, kind="safety", cap="in_bag",
-                           code="copper_bar", held=3, keep=3, pressure="slot_full")
+    safety = InventoryCell(reason=KeepReason.RECIPE_DEMAND, kind="safety",
+                           cap="in_bag", band="in_band", code="copper_bar",
+                           held=3, keep=3, pressure="slot_full")
     assert inventory_cell_verdict(safety, [], state, gd) is True
     assert inventory_cell_verdict(
         safety, [DepositItemAction(code="copper_bar", quantity=1)], state, gd) is False
 
     live_state = make_state(inventory={"copper_bar": 9}, bank_items={})
     liveness = InventoryCell(reason=KeepReason.RECIPE_DEMAND, kind="liveness",
-                             cap="in_bag", code="copper_bar", held=9, keep=3,
-                             pressure="slot_full")
+                             cap="in_bag", band="in_band", code="copper_bar",
+                             held=9, keep=3, pressure="slot_full")
     assert inventory_cell_verdict(liveness, [], live_state, gd) is False
     assert inventory_cell_verdict(
         liveness, [DepositItemAction(code="copper_bar", quantity=1)],
@@ -546,8 +620,8 @@ def test_verdicts_are_conformance_to_the_authority() -> None:
     with pytest.raises(ValueError, match="unknown cell kind"):
         inventory_cell_verdict(
             InventoryCell(reason=KeepReason.RECIPE_DEMAND, kind="sideways",  # type: ignore[arg-type]
-                          cap="in_bag", code="copper_bar", held=9, keep=3,
-                          pressure="slot_full"), [], live_state, gd)
+                          cap="in_bag", band="in_band", code="copper_bar",
+                          held=9, keep=3, pressure="slot_full"), [], live_state, gd)
 
 
 def test_keep_all_safety_verdict_clamps_the_sentinel() -> None:
@@ -557,8 +631,8 @@ def test_keep_all_safety_verdict_clamps_the_sentinel() -> None:
     gd = _disposal_gd()
     state = make_state(inventory={TASKS_COIN_CODE: SENTINEL_HELD})
     cell = InventoryCell(reason=KeepReason.CURRENCY, kind="safety", cap="in_bag",
-                         code=TASKS_COIN_CODE, held=SENTINEL_HELD, keep=KEEP_ALL,
-                         pressure="slot_full")
+                         band="in_band", code=TASKS_COIN_CODE,
+                         held=SENTINEL_HELD, keep=KEEP_ALL, pressure="slot_full")
     assert inventory_cell_verdict(cell, [], state, gd) is True
     assert inventory_cell_verdict(
         cell, [DeleteItemAction(code=TASKS_COIN_CODE, quantity=1)], state, gd) is False
@@ -570,8 +644,9 @@ def test_keep_all_safety_verdict_clamps_the_sentinel() -> None:
 
 def _gap_cell(reason: KeepReason, cap: str, code: str,
               kind: str = "liveness") -> InventoryCell:
-    return InventoryCell(reason=reason, kind=kind, cap=cap, code=code,  # type: ignore[arg-type]
-                         held=9, keep=3, pressure="slot_full")  # type: ignore[arg-type]
+    return InventoryCell(reason=reason, kind=kind, cap=cap,  # type: ignore[arg-type]
+                         band="in_band", code=code, held=9, keep=3,
+                         pressure="slot_full")  # type: ignore[arg-type]
 
 
 def test_keep_all_sentinel_classifies_only_the_declared_liveness_exemption() -> None:

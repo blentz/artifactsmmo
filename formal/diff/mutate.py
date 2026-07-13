@@ -2812,11 +2812,43 @@ INVENTORY_KEEP_MUTATIONS = [
     # reason covers it. Killed by test_reason_cap_sets_are_exactly_the_registry
     # and by the sole-contributor pins
     # (test_working_kit_is_the_sole_reason_in_BOTH_caps, keep_owned == 1).
+    # (Re-anchored 2026-07-13: COMMITTED_RECIPE/GOAL_MATERIALS joined the OWNED
+    # ladder between WORKING_KIT and EQUIPPED, so the quoted run moved. EQUIPPED
+    # is what keeps the anchor unique to OWNED_REASONS -- IN_BAG_REASONS carries
+    # the same four leading members but never EQUIPPED.)
     ("inventory_keep: WORKING_KIT/COMBAT_WEAPON are not OWNED reasons",
      "    KeepReason.COMBAT_WEAPON,\n"
      "    KeepReason.WORKING_KIT,\n"
+     "    KeepReason.COMMITTED_RECIPE,\n"
+     "    KeepReason.GOAL_MATERIALS,\n"
+     "    KeepReason.EQUIPPED,",
+     "    KeepReason.COMMITTED_RECIPE,\n"
+     "    KeepReason.GOAL_MATERIALS,\n"
+     "    KeepReason.EQUIPPED,"),
+    # The CHAIN reasons are filed out of the OWNED ladder -- the pre-2026-07-13
+    # split, where a LIVE items-task's own materials and a LIVE objective step's
+    # own materials were protected in the BAG (keep_in_bag 300) and destroyable
+    # from OWNERSHIP (keep_owned 5), so the bank drain pulled 35 copper_ore out
+    # from under the running task. Killed by test_reason_cap_sets_are_exactly_the_registry,
+    # test_chain_reasons_feed_BOTH_caps, and the behavioural pin
+    # test_far_out_of_band_goal_step_materials_are_never_destroyable (keep_owned
+    # 200 from the step, not the sibling heuristic's 180).
+    ("inventory_keep: COMMITTED_RECIPE/GOAL_MATERIALS are not OWNED reasons",
+     "    KeepReason.COMMITTED_RECIPE,\n"
+     "    KeepReason.GOAL_MATERIALS,\n"
      "    KeepReason.EQUIPPED,",
      "    KeepReason.EQUIPPED,"),
+    # RECIPE_DEMAND re-applies the level-distance keep ceiling to the OWNERSHIP
+    # cap -- THE defect the census's level-distance band exposed. A hoarding
+    # policy ("is this worth the space") clamps the cap that licenses DESTRUCTION,
+    # so a level-20 character's 30 cooked_chicken (item level 1) drop from the
+    # CONSUMABLE_KEEP=999 blanket to keep_owned 5 (25 heals become SELL/DELETE
+    # fodder) and a live task chain's copper_ore from 300 to 5. Killed by
+    # test_far_out_of_band_heals_are_never_destroyable and
+    # test_far_out_of_band_task_chain_is_never_drained_from_the_bank.
+    ("inventory_keep: the level-distance ceiling clamps the OWNERSHIP cap",
+     "                               level_ceiling=False)",
+     "                               level_ceiling=True)"),
     # HEALING_CONSUMABLE charges the whole held stack instead of its share of the
     # aggregate stock target -- the heal-stock blanket. Killed by
     # test_healing_consumable_caps_at_stock_target_not_the_whole_stack (5, not 40)

@@ -49,7 +49,11 @@ from artifactsmmo_cli.audit.inventory_census import (
     run_cell,
 )
 from artifactsmmo_cli.audit.inventory_completeness import InventoryCell
-from artifactsmmo_cli.audit.inventory_report import render_matrix, summary_line
+from artifactsmmo_cli.audit.inventory_report import (
+    band_summary,
+    render_matrix,
+    summary_line,
+)
 
 BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
 OUT_DIR = Path("docs/behavioral_completeness")
@@ -89,6 +93,7 @@ def main() -> None:
     (OUT_DIR / "INVENTORY_MATRIX.md").write_text(render_matrix(results, coverage))
     print(f"census done in {time.monotonic() - start:.0f}s", file=sys.stderr)
     print(summary_line(results))
+    print(band_summary(results))
     if not check:
         return
 
@@ -101,8 +106,8 @@ def main() -> None:
     if bugs:
         print(f"GATE 1 FAILED: {len(bugs)} INVENTORY_BUG cell(s):", file=sys.stderr)
         for r in bugs:
-            print(f"  {r.reason} {r.cap}/{r.kind}/{r.pressure} ({r.code})",
-                  file=sys.stderr)
+            print(f"  {r.reason} {r.cap}/{r.kind}/{r.pressure}/{r.band} "
+                  f"({r.code}) held={r.held} keep={r.keep}", file=sys.stderr)
     else:
         print("GATE 1 CLEAN: 0 INVENTORY_BUG cells.", file=sys.stderr)
 

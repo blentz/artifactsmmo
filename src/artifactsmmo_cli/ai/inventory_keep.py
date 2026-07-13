@@ -99,6 +99,8 @@ OWNED_REASONS: frozenset[KeepReason] = frozenset({
     KeepReason.ACTIVE_TASK,
     KeepReason.COMBAT_WEAPON,
     KeepReason.WORKING_KIT,
+    KeepReason.COMMITTED_RECIPE,
+    KeepReason.GOAL_MATERIALS,
     KeepReason.EQUIPPED,
     KeepReason.GEAR_DEMAND,
     KeepReason.RECIPE_DEMAND,
@@ -110,13 +112,27 @@ Membership is load-bearing and pinned by test: an owned-only reason leaking
 into `IN_BAG_REASONS` would pin bank-worthy gear demand into the bag and eat
 the slots this epic exists to free.
 
-WORKING_KIT and COMBAT_WEAPON are in BOTH ladders (quantity 1 in each): "keep
-ONE in the bag" (the copy the gather re-arm equips) and "never melt your LAST
-one" are DIFFERENT obligations, and the second is an OWNERSHIP invariant. Filed
-bag-only they left a DESTRUCTION hole: the tool the deposit migration leaves at
-0-in-bag/17-in-bank has no bag copy to protect, so `keep_owned` was 0 and a
-consumer reading `destroyable` (the bank drain) would melt every copy of the
-character's best axe — strictly worse than the hoard bug this module fixes."""
+FOUR reasons are in BOTH ladders, and every one of them is there because a
+bag-only filing left a DESTRUCTION hole:
+
+  * WORKING_KIT / COMBAT_WEAPON (quantity 1 each): "keep ONE in the bag" (the
+    copy the gather re-arm equips) and "never melt your LAST one" are DIFFERENT
+    obligations, and the second is an OWNERSHIP invariant. Filed bag-only, the
+    tool the deposit migration leaves at 0-in-bag/17-in-bank has no bag copy to
+    protect, so `keep_owned` was 0 and a consumer reading `destroyable` (the bank
+    drain) would melt every copy of the character's best axe.
+  * COMMITTED_RECIPE / GOAL_MATERIALS (the chain/step demand): SAME SHAPE, found
+    by the census's level-distance dimension (2026-07-13). The materials of a
+    LIVE items-task or a LIVE objective step must not be destroyable in ANY
+    state. Filed bag-only, their only owned-side cover was RECIPE_DEMAND — and
+    that cover is accidental, not structural. `useful_quantity_cap` does not know
+    about `state.crafting_target` at all, and it has NO term for the step
+    profile; it merely happens to compute a generous `5 x max_recipe_demand`
+    heuristic that usually dominates. It does not always: two DISJOINT committed
+    roots (an in-flight craft alongside an items task) SUM their chains and
+    out-ask it, and a batch step (40 ash_plank -> 400 ash_wood) out-asks it
+    outright. Relying on a heuristic to cover a fact is how the bank drain came
+    to pull a live task's own 35 copper_ore out of the bank."""
 
 
 def _currency(code: str, state: WorldState, game_data: GameData,
@@ -175,8 +191,23 @@ def _healing_consumable(code: str, state: WorldState, game_data: GameData,
         every apple bankable — after DepositAll the real `heal_stock` is 3,
         below target, so `MaintainConsumables` re-fires and crafts more: churn).
 
-    Surplus beyond the aggregate stays bankable — never sold or deleted,
-    because HEALING_CONSUMABLE feeds `in_bag` only."""
+    Surplus beyond the aggregate stays BANKABLE, and it is not destroyed — but
+    NOT for the reason this docstring used to give. "Never sold or deleted,
+    because HEALING_CONSUMABLE feeds `in_bag` only" was exactly backwards:
+    feeding `in_bag` ONLY is why this reason does not protect a single copy from
+    destruction. `destroyable` reads `keep_owned`, which this reason is not in.
+
+    The heal stock's owned-side floor is `RECIPE_DEMAND` ->
+    `inventory_caps.CONSUMABLE_KEEP` (999, "consumables stack, so capping low
+    frees zero slots while throwing away survival value"). That blanket was
+    silently clamped to 5 for any heal 10+ levels below the character by
+    `level_distance_keep_ceiling` — 30 `cooked_chicken` at character level 20 gave
+    `keep_owned = 5`, `destroyable = 25`, and DISCARD/SELL were licensed to melt
+    25 heals. `_recipe_demand` now takes the cap with `level_ceiling=False`, so
+    the blanket holds at every level distance. This reason is left bag-only ON
+    PURPOSE: its quantity is the STOCK TARGET (5), and adding it to
+    `OWNED_REASONS` would be a strictly weaker owned floor than the 999 it
+    already has."""
     remaining = heal_stock_target(HEAL_STOCK_FLOOR)
     for held_code, qty, _restore in _held_heals(state, game_data):
         if remaining <= 0:
@@ -285,7 +316,21 @@ def _gear_demand(code: str, state: WorldState, game_data: GameData,
 
 def _recipe_demand(code: str, state: WorldState, game_data: GameData,
                    ctx: SelectionContext) -> int:
-    return useful_quantity_cap(code, state, game_data, gear_keep=ctx.gear_keep or None)
+    """The useful-quantity cap, WITHOUT the level-distance ceiling.
+
+    `level_ceiling=False` is the whole point. This reason feeds `keep_owned`
+    ONLY, and `keep_owned` is what licenses DESTRUCTION — while
+    `inventory_caps.level_distance_keep_ceiling` is a HOARDING policy ("is this
+    worth the space") that answers a different question and clamps to 5/10 copies
+    at level distance. Applied here it made the ownership cap contradict the bag
+    cap on the SAME material by 60x (`keep_in_bag = 300`, `keep_owned = 5` on an
+    items-task's own copper_ore) and put the heal stock and the live task chain on
+    the destruction ladder. The SPACE gates that should carry it still do — see
+    `inventory_caps.overstocked_items` and `bank_drain`'s `junk_excess`, both of
+    which take the default `level_ceiling=True`."""
+    return useful_quantity_cap(code, state, game_data,
+                               gear_keep=ctx.gear_keep or None,
+                               level_ceiling=False)
 
 
 _REASON_FUNCS = {

@@ -213,9 +213,24 @@ def level_distance_keep_ceiling(stats: ItemStats | None, char_level: int) -> int
 
     A missing catalog entry yields `None` (the bot fails loud elsewhere if it
     must act on an unknown item; here we do not impose a ceiling we cannot
-    justify). Applied as a `min` clamp ON TOP of the base cap by the cap shell
-    and the bank keep-floor — never lifts a cap, only lowers it, and never
-    below an equipped/currency floor (those exceed the ceilings)."""
+    justify). Applied as a `min` clamp ON TOP of the base cap — never lifts a cap,
+    only lowers it, and never below an equipped/currency floor (those exceed the
+    ceilings).
+
+    THIS IS A HOARDING POLICY, NOT A PROTECTION — and the distinction is
+    load-bearing (inventory-census level-distance dimension, 2026-07-13). It
+    answers "is this worth the SPACE it occupies", so it belongs on the SPACE
+    gates: `overstocked_items`'s useful floor and `bank_drain`'s `junk_excess`.
+    It must NEVER clamp `inventory_keep.keep_owned`, the cap that answers
+    DESTRUCTION — that is why `useful_quantity_cap` takes `level_ceiling` and why
+    `inventory_keep._recipe_demand` passes False. Applying it to ownership put
+    the character's own live commitments on the destruction ladder: a level-20
+    character's 30 `cooked_chicken` (item level 1) had `keep_owned` clamped from
+    the `CONSUMABLE_KEEP = 999` blanket to 5, so 25 heals became SELL/DELETE
+    fodder; and an items-task's own chain material had `keep_in_bag = 300` while
+    `keep_owned` read 5, so the bank drain pulled 35 copper_ore out from under the
+    live task. A hoard heuristic may decline to STORE something. It may not
+    license DESTROYING what the plan is about to use."""
     if stats is None or stats.tradeable is False:
         return None
     distance = abs(stats.level - char_level)
@@ -250,6 +265,7 @@ def useful_quantity_cap(
     item_code: str, state: WorldState, game_data: GameData,
     batch_buffer: int = BATCH_BUFFER, safety_floor: int = SAFETY_FLOOR,
     gear_keep: dict[str, int] | None = None,
+    level_ceiling: bool = True,
 ) -> int:
     """Return the maximum count of `item_code` worth keeping.
 
@@ -268,11 +284,20 @@ def useful_quantity_cap(
     in no active profile and not in-flight then has keep 0 (becomes reclaimable).
     `None` (the default) keeps the legacy blanket-1 + dominance behavior so every
     pre-migration caller is unchanged.
+
+    `level_ceiling=False` suppresses the `level_distance_keep_ceiling` clamp,
+    leaving the DEMAND components (recipe, task chain, consumable, currency,
+    equippable, equipped) unclamped. The ONE caller that needs it is
+    `inventory_keep._recipe_demand`, the owned-side arm of the keep authority:
+    the ceiling is a hoarding POLICY about space and must not shrink the cap that
+    licenses DESTRUCTION (see `level_distance_keep_ceiling`). Every SPACE gate —
+    `overstocked_items`, `bank_drain`'s `junk_excess` — keeps the default True.
     """
     # Equipped items: never count below 1
     equipped = {code for code in state.equipment.values() if code}
     return _cap_from_state(item_code, state, game_data, batch_buffer,
-                           safety_floor, item_code in equipped, gear_keep)
+                           safety_floor, item_code in equipped, gear_keep,
+                           level_ceiling)
 
 
 def _is_equippable_dominated(item_code: str, state: WorldState,
@@ -465,7 +490,8 @@ def reachable_recipe_demand(item_code: str, state: WorldState, game_data: GameDa
 
 def _cap_from_state(item_code: str, state: WorldState, game_data: GameData,
                     batch_buffer: int, safety_floor: int, equipped: bool,
-                    gear_keep: dict[str, int] | None = None) -> int:
+                    gear_keep: dict[str, int] | None = None,
+                    level_ceiling: bool = True) -> int:
     """Assemble the plain-data inputs of `useful_quantity_cap_pure` from the
     GameData/WorldState accessors (the impure shell of the cap decision).
 
@@ -474,7 +500,13 @@ def _cap_from_state(item_code: str, state: WorldState, game_data: GameData,
     dominance gate are suppressed (`is_equippable`/`is_dominated` set False) and
     the profile demand `gear_keep.get(item_code, 0)` is injected as a keep floor
     through the `action_cap` slot of the unchanged pure core — un-profiled,
-    not-in-flight gear thus drops to keep 0 (reclaimable). Legacy when None."""
+    not-in-flight gear thus drops to keep 0 (reclaimable). Legacy when None.
+
+    `level_ceiling=False` returns the proven core's cap UNCLAMPED — the DEMAND,
+    with no hoarding heuristic on top. The ownership cap
+    (`inventory_keep.keep_owned`) is the only caller that takes it: see
+    `level_distance_keep_ceiling` for why a SPACE policy must never bound a
+    DESTRUCTION cap."""
     hp_restore = 0
     stats = game_data.item_stats(item_code)
     if stats is not None:
@@ -500,6 +532,8 @@ def _cap_from_state(item_code: str, state: WorldState, game_data: GameData,
         state.task_total, state.task_progress, game_data.crafting_recipes,
         action_cap,
         is_equippable, is_dominated, hp_restore, equipped)
+    if not level_ceiling:
+        return base
     # "Only keep currently useful items": clamp the base cap by the level-distance
     # ceiling for non-unique items far above/below the character's level.
     ceiling = level_distance_keep_ceiling(stats, state.level)
