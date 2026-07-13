@@ -12,6 +12,7 @@ destroying anything (CompleteTask, AcceptTask, ClaimPending, …) could satisfy
 made the working copper_axe a PREFERRED victim.
 """
 
+import dataclasses
 import inspect
 
 from artifactsmmo_cli.ai.actions.combat import FightAction
@@ -24,6 +25,7 @@ from artifactsmmo_cli.ai.destructive_license import (
     destructive_demand,
     license_destructive_actions,
     licensed_quantity,
+    licensed_recycle_quantity,
 )
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
@@ -77,19 +79,27 @@ def test_the_working_tool_gets_no_destructive_action_at_all():
 
 def test_the_surplus_above_both_caps_keeps_its_destructive_actions():
     """The licence is a cap, not a ban: 18 axes held means 17 may go, so the pool
-    keeps its quantity=1 routes (this is the hoard the epic exists to shed)."""
+    keeps its quantity=1 routes (this is the hoard the epic exists to shed).
+
+    Recycle now routes through `licensed_recycle_quantity`, which agrees with
+    `licensed_quantity` here (no bank copies, so the bank route contributes
+    nothing new) but STAMPS the surviving action with `bag_floor = keep_in_bag`
+    (1, WORKING_KIT) — so the kept action is `dataclasses.replace(pool[0],
+    bag_floor=1)`, not the unstamped input object."""
     gd = _gd()
     state = make_state(level=10, skills={"weaponcrafting": 2},
                        inventory={"copper_axe": 18})
     ctx = _ctx()
     assert licensed_quantity("copper_axe", state, gd, ctx) == 17
     pool = [RecycleAction(code="copper_axe", quantity=1, workshop_location=(3, 1))]
-    assert license_destructive_actions(pool, state, gd, ctx) == pool
+    kept = license_destructive_actions(pool, state, gd, ctx)
+    assert kept == [dataclasses.replace(pool[0], bag_floor=1)]
 
 
 def test_a_quantity_above_the_licence_is_refused():
     """The check is per-QUANTITY, not per-code: a batch bigger than the authority
-    licenses is not admitted."""
+    licenses is not admitted. The surviving action is stamped with its bag_floor
+    (WORKING_KIT keeps 1 in-bag), same reasoning as the test above."""
     gd = _gd()
     state = make_state(level=10, skills={"weaponcrafting": 2},
                        inventory={"copper_axe": 3})
@@ -97,7 +107,8 @@ def test_a_quantity_above_the_licence_is_refused():
     assert licensed_quantity("copper_axe", state, gd, ctx) == 2
     ok = RecycleAction(code="copper_axe", quantity=2, workshop_location=(3, 1))
     too_many = RecycleAction(code="copper_axe", quantity=3, workshop_location=(3, 1))
-    assert license_destructive_actions([ok, too_many], state, gd, ctx) == [ok]
+    kept = license_destructive_actions([ok, too_many], state, gd, ctx)
+    assert kept == [dataclasses.replace(ok, bag_floor=1)]
 
 
 def test_an_unheld_code_is_licensed_for_nothing():
@@ -152,3 +163,62 @@ def test_the_factory_no_longer_carries_a_code_set_protection():
     # The axe is the objective's TOOL target — the old code-set skipped its Recycle
     # (and hoarded all 18 copies). The menu now carries it; the licence decides.
     assert "copper_axe" in recycles
+
+
+def test_bank_only_recycle_source_is_licensed():
+    """7 fishing_net in the BANK, none in the bag. The old bag short-circuit
+    (`licensed_quantity`) dropped the RecycleAction entirely, making
+    Withdraw -> Recycle unplannable — the MAIN path now that DEPOSIT_FULL banks
+    the surplus. `fishing_net` is unregistered in `_gd()` on purpose: it carries
+    no WORKING_KIT/gear protection at all, so this proves the pure bank route."""
+    gd = _gd()
+    state = make_state(level=10, inventory={}, bank_items={"fishing_net": 7})
+    ctx = _ctx()
+    assert licensed_recycle_quantity("fishing_net", state, gd, ctx) == 7
+    pool = [RecycleAction(code="fishing_net", quantity=1, workshop_location=(2, 1))]
+    kept = license_destructive_actions(pool, state, gd, ctx)
+    assert [a.code for a in kept] == ["fishing_net"]
+    assert kept[0].bag_floor == 0
+
+
+def test_licensed_recycle_is_stamped_with_the_bag_floor():
+    """1 working copper_axe in the bag (WORKING_KIT keeps 1 in-bag), 17 more in
+    the bank. The action SURVIVES (a bank copy is destroyable) but carries floor
+    1, so the WORKING copy cannot be consumed — GOAP must withdraw a bank copy
+    first. This is the safety property: liveness (a bank route exists) AND
+    safety (the bag floor blocks the current bag) proven together."""
+    gd = _gd()
+    state = make_state(level=10, skills={"weaponcrafting": 2},
+                       inventory={"copper_axe": 1}, bank_items={"copper_axe": 17})
+    ctx = _ctx()
+    assert licensed_recycle_quantity("copper_axe", state, gd, ctx) == 17
+    pool = [RecycleAction(code="copper_axe", quantity=1, workshop_location=(3, 1))]
+    kept = license_destructive_actions(pool, state, gd, ctx)
+    assert len(kept) == 1
+    assert kept[0].bag_floor == 1
+    assert kept[0].is_applicable(state, gd) is False
+
+
+def test_fully_protected_code_gets_no_recycle_at_all():
+    """1 copper_axe owned total, and it IS the WORKING_KIT tool: destroyable ==
+    0. No bank copy, no bankable copy -> NO RecycleAction at all. The
+    anti-tool-melting property: admitting a bank route must never admit a code
+    whose only copy is the one the gather re-arm needs."""
+    gd = _gd()
+    state = make_state(level=10, skills={"weaponcrafting": 2},
+                       inventory={"copper_axe": 1})
+    ctx = _ctx()
+    assert licensed_recycle_quantity("copper_axe", state, gd, ctx) == 0
+    pool = [RecycleAction(code="copper_axe", quantity=1, workshop_location=(3, 1))]
+    assert license_destructive_actions(pool, state, gd, ctx) == []
+
+
+def test_npc_sell_keeps_the_bag_side_rule():
+    """Only RECYCLE gains the bank route. A bank-only code is still unsellable
+    — selling has not become a second acquisition route."""
+    gd = _gd()
+    state = make_state(level=10, inventory={}, bank_items={"fishing_net": 7})
+    ctx = _ctx()
+    pool = [NpcSellAction(npc_code="merchant", item_code="fishing_net",
+                          quantity=1, npc_location=(1, 1))]
+    assert license_destructive_actions(pool, state, gd, ctx) == []
