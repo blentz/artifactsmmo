@@ -21,9 +21,15 @@ profile-less case is served by the EQUIPPED / RECIPE_DEMAND arms
 
 MIGRATION (item-protection-authority epic): `bank_selection.select_bank_deposits`
 is LIVE on this authority (Task 6) — DepositAll banks `bankable(code)` copies of
-every held code, which is what finally sheds the 17 surplus copper_axe. The
-remaining set-based consumers (`recycle_surplus`'s `protected_codes`/`kit`,
-`guards._gear_protected`) are migrated by Tasks 7-9.
+every held code, which is what finally sheds the 17 surplus copper_axe. So is
+`recycle_surplus.recyclable_surplus` (Task 7) — RECYCLE destroys the copies above
+BOTH caps, `min(bankable, destroyable)`: `destroyable` because destruction is
+irreversible and answers to OWNERSHIP, `bankable` because the destruction happens
+BAG-side and a copy the bag must keep (WORKING_KIT: the tool the gather re-arm is
+about to equip) must not be eaten when banking it was the correct move. Its
+`protected_codes` frozenset, its `kit` code-set and `guards.recycle_protected_codes`
+are all DELETED. The remaining set-based consumer (`guards._gear_protected`, on
+the bank-drain path) is migrated by Tasks 8-9.
 """
 
 from enum import Enum

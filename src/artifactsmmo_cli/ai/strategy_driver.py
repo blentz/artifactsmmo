@@ -74,7 +74,6 @@ from artifactsmmo_cli.ai.tiers.guards import (
     active_guards,
     active_profile,
     deposit_context,
-    recycle_protected_codes,
 )
 from artifactsmmo_cli.ai.tiers.means import (
     SELL_PRESSURE_FRACTION,
@@ -284,13 +283,10 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
             batch=top.quantity,
         )
     if kind is GuardKind.RECYCLE_RELIEF:
-        protected = recycle_protected_codes(ctx)
         return RecycleSurplusGoal(
-            game_data=game_data, protected_codes=protected,
-            gear_keep=ctx.gear_keep or None,
+            game_data=game_data, ctx=ctx,
             initial_total=sum(recyclable_surplus(
-                state, game_data, protected,
-                gear_keep=ctx.gear_keep or None).values()) if state else None)
+                state, game_data, ctx).values()) if state else None)
     if kind is GuardKind.SELL_RELIEF:
         return SellInventoryGoal(bank_accessible=ctx.bank_accessible,
                                  gear_keep=ctx.gear_keep or None)
@@ -335,13 +331,10 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
         return SellInventoryGoal(bank_accessible=ctx.bank_accessible,
                                  gear_keep=ctx.gear_keep or None)
     if kind is MeansKind.RECYCLE_SURPLUS:
-        protected = recycle_protected_codes(ctx)
         return RecycleSurplusGoal(
-            game_data=game_data, protected_codes=protected,
-            gear_keep=ctx.gear_keep or None,
+            game_data=game_data, ctx=ctx,
             initial_total=sum(recyclable_surplus(
-                state, game_data, protected,
-                gear_keep=ctx.gear_keep or None).values()))
+                state, game_data, ctx).values()))
     if kind is MeansKind.DRAIN_BANK_JUNK:
         return DrainBankJunkGoal(game_data=game_data,
                                  protected_codes=_gear_protected(ctx),
@@ -1123,16 +1116,12 @@ class StrategyArbiter:
         # before more grinding. Pressure-gated like the discretionary means:
         # recycling MINTS materials into the bag, so under space pressure the
         # deposit/discard guards own the bag instead.
-        recycle_surplus_map = recyclable_surplus(
-            state, game_data, recycle_protected_codes(ctx),
-            gear_keep=ctx.gear_keep or None)
+        recycle_surplus_map = recyclable_surplus(state, game_data, ctx)
         hoist_recycle = (recycle_urgency(recycle_surplus_map) >= RECYCLE_HOIST_URGENCY
                          and _used_fraction(state) < SELL_PRESSURE_FRACTION)
         if hoist_recycle:
             rs_goal = RecycleSurplusGoal(
-                game_data=game_data,
-                protected_codes=recycle_protected_codes(ctx),
-                gear_keep=ctx.gear_keep or None,
+                game_data=game_data, ctx=ctx,
                 initial_total=sum(recycle_surplus_map.values()))
             candidates.append(Candidate(goal=rs_goal, is_means=True,
                                         repr_=repr(rs_goal), band=BAND_COLLECT))

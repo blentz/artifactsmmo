@@ -25,7 +25,6 @@ from artifactsmmo_cli.ai.tiers.guards import (
     _gear_protected,
     _has_sellable,
     _used_fraction,
-    recycle_protected_codes,
 )
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
@@ -152,14 +151,12 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
 
     if kind is MeansKind.RECYCLE_SURPLUS:
         # Idle/low-pressure only: recovered materials need room to land (under
-        # pressure the deposit/discard guards handle space). Fires when surplus
-        # craftable gear (not the committed objective) can be recycled for mats.
-        # Gear protection (spec 2026-06-28-gear-loadout-profiles): active-profile
-        # gear set + cap when available, else the legacy target_gear fallback.
+        # pressure the deposit/discard guards handle space). Fires when the keep
+        # authority (`ai/inventory_keep`) licenses the destruction of surplus
+        # craftable gear — copies above BOTH keep_in_bag and keep_owned, so the
+        # equipped copy, the profile's demand and the working tool are never it.
         return (_used_fraction(state) < SELL_PRESSURE_FRACTION
-                and bool(recyclable_surplus(
-                    state, game_data, recycle_protected_codes(ctx),
-                    gear_keep=ctx.gear_keep or None)))
+                and bool(recyclable_surplus(state, game_data, ctx)))
 
     if kind is MeansKind.DRAIN_BANK_JUNK:
         # Idle/low-pressure only: the withdraw mints items into the bag, so it

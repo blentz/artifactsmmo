@@ -123,10 +123,10 @@ def test_unprofiled_gear_becomes_reclaimable():
     # gear_keep protects only copper_boots — copper_helmet is in NO profile and
     # not in-flight, so its keep drops to 0 → the held unit is reclaimable.
     gear_keep = {"copper_boots": 1}
-    assert recyclable_surplus(state, gd, frozenset({"copper_boots"}),
-                              gear_keep=gear_keep) == {"copper_helmet": 1}
-    # Pre-migration behavior (legacy): EQUIPPABLE_KEEP=1 → cap 1 → not surplus.
-    assert recyclable_surplus(state, gd, frozenset({"copper_boots"})) == {}
+    assert recyclable_surplus(state, gd, _ctx(gear_keep=gear_keep)) == {"copper_helmet": 1}
+    # No profile info at all (legacy fallback): EQUIPPABLE_KEEP=1 → keep 1 → not
+    # surplus. The keep authority reads BOTH modes off the ctx.
+    assert recyclable_surplus(state, gd, _ctx()) == {}
 
 
 # --------------------------------------------------------------------------- #
@@ -137,10 +137,9 @@ def test_profiled_gear_protected():
     state = make_state(level=5, skills={"gearcrafting": 1, "weaponcrafting": 1},
                        inventory={"copper_dagger": 2})
     gear_keep = {"copper_dagger": 2}  # a profile that wants 2 copper_dagger
-    protected = frozenset(gear_keep)
     # Kept up to demand: cap == 2 (held 2 → no surplus).
     assert useful_quantity_cap("copper_dagger", state, gd, gear_keep=gear_keep) == 2
-    assert recyclable_surplus(state, gd, protected, gear_keep=gear_keep) == {}
+    assert recyclable_surplus(state, gd, _ctx(gear_keep=gear_keep)) == {}
     # Not sold by accumulation-sell (cap == demand, not over-ratio).
     assert "copper_dagger" not in sellable_accumulation(state, gd, gear_keep=gear_keep)
     # Not DESTROYED: gear demand is an OWNERSHIP demand (GEAR_DEMAND feeds
@@ -169,8 +168,7 @@ def test_inflight_upgrade_not_recycled():
     # copper_helmet is the in-flight upgrade (in no profile, keep=1 spare).
     gear_keep = {"copper_helmet": 1}
     assert useful_quantity_cap("copper_helmet", state, gd, gear_keep=gear_keep) == 1
-    assert recyclable_surplus(state, gd, frozenset({"copper_helmet"}),
-                              gear_keep=gear_keep) == {}
+    assert recyclable_surplus(state, gd, _ctx(gear_keep=gear_keep)) == {}
 
 
 # --------------------------------------------------------------------------- #

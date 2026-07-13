@@ -6,6 +6,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus, recycle_urgency
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
 RECYCLE_SURPLUS_VALUE = 20.0
@@ -24,17 +25,22 @@ at RECYCLE_HOIST_URGENCY (strategy_driver._build_candidates)."""
 class RecycleSurplusGoal(Goal):
     """Recycle surplus craftable equipment to recover its materials.
 
-    Targets gear held above its useful keep-cap that is NOT the committed
-    objective (recycling the boots you're building would be self-defeating).
+    Targets the BAG copies the keep authority licenses for destruction — gear
+    held above BOTH `keep_in_bag` and `keep_owned` (so the equipped copy, the
+    active profile's demand, the working tool and the committed recipe's inputs
+    all survive: recycling the boots you're building would be self-defeating).
     Recovered materials flow to the bank / the gear chain. See
     `ai/recycle_surplus.recyclable_surplus` for the eligibility rule.
     """
 
-    def __init__(self, game_data: GameData, protected_codes: frozenset[str],
-                 gear_keep: dict[str, int] | None = None,
+    def __init__(self, game_data: GameData, ctx: SelectionContext,
                  initial_total: int | None = None) -> None:
         self._gd = game_data
-        self._protected = protected_codes
+        # The per-cycle SelectionContext the keep authority reads (gear_keep,
+        # step_profile). It REPLACES the old `protected_codes` frozenset + the
+        # `gear_keep` map: protection is a QUANTITY the authority owns, not a
+        # code-set this goal carries (item-protection-authority epic, Task 7).
+        self._ctx = ctx
         # Construction-time surplus snapshot: ANY reduction below it satisfies,
         # so a bag-space-capped Recycle batch is a complete 1-action plan and a
         # big hoard melts one batch per cycle. All-or-nothing satisfaction
@@ -42,22 +48,16 @@ class RecycleSurplusGoal(Goal):
         # the space cap, plan_len=0 — the hoist selected a goal it could never
         # plan). None keeps the strict all-clear semantics.
         self._initial_total = initial_total
-        # Active-profile gear-demand keep map (spec
-        # 2026-06-28-gear-loadout-profiles): rerouted the equippable cap so
-        # un-profiled, not-in-flight gear is reclaimable. None = legacy cap.
-        self._gear_keep = gear_keep
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
-        surplus = recyclable_surplus(state, self._gd, self._protected,
-                                     gear_keep=self._gear_keep)
+        surplus = recyclable_surplus(state, self._gd, self._ctx)
         if not surplus:
             return 0.0
         return RECYCLE_SURPLUS_VALUE * recycle_urgency(surplus)
 
     def is_satisfied(self, state: WorldState) -> bool:
-        surplus = recyclable_surplus(state, self._gd, self._protected,
-                                     gear_keep=self._gear_keep)
+        surplus = recyclable_surplus(state, self._gd, self._ctx)
         if not surplus:
             return True
         return (self._initial_total is not None
@@ -76,8 +76,7 @@ class RecycleSurplusGoal(Goal):
         slots (server HTTP 497). The remainder is reclaimed on a later idle
         cycle once the recovered materials are deposited.
         """
-        surplus = recyclable_surplus(state, game_data, self._protected,
-                                     gear_keep=self._gear_keep)
+        surplus = recyclable_surplus(state, game_data, self._ctx)
         result: list[Action] = []
         for code, surplus_qty in surplus.items():
             # recyclable_surplus guarantees a non-None stats with a crafting

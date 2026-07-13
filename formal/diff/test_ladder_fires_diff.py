@@ -988,9 +988,10 @@ def test_craft_relief_near_miss_zero_net_relief() -> None:
 # ---------------------------------------------------------------------------
 # Slot 2 — recycleSurplus (arg[23]).  Production RECYCLE_SURPLUS means fires
 # iff `_used_fraction < 0.85` AND `recyclable_surplus(...)` non-empty
-# (tiers/means.py + recycle_surplus.py): a craftable EQUIPPABLE held above its
-# useful cap (EQUIPPABLE_KEEP=1), skill at recipe level, workshop known, NOT
-# equipped, NOT in ctx.target_gear/target_tools.
+# (tiers/means.py + recycle_surplus.py): a craftable EQUIPPABLE the keep
+# authority licenses for destruction (held above BOTH `keep_in_bag` and
+# `keep_owned` — for a bare weapon that is EQUIPPABLE_KEEP=1), skill at recipe
+# level, workshop known.
 #
 # SELECTION NOTE (a real Lean-model finding, reported): recycleSurplus sits
 # below the lifecycle slots, and for EVERY phase some higher slot fires on the
@@ -1015,19 +1016,22 @@ def _recycle_gd() -> GameData:
 
 
 def _recycle_ctx(*, protect_dagger: bool = False) -> SelectionContext:
-    # Protect via target_TOOLS, not target_gear: recyclable_surplus protects on
-    # `target_gear | target_tools`, but the ACCEPT_TASK gear-deferral loop reads
-    # only `target_gear`. Using target_tools isolates the recycle protection
-    # near-miss from the (separately-deferred) acceptTask gear-deferral
-    # over-approximation, so acceptTask stays == Lean (phase none) here.
+    # Protect via GEAR_KEEP, not target_gear/target_tools: since the keep
+    # authority took over the recycle path (item-protection-authority epic,
+    # Task 7) `recyclable_surplus` protects QUANTITIES, and the code-SETS
+    # `target_gear`/`target_tools` are PURSUIT targets that shield nothing. A
+    # gear_keep demand of 2 against the 2 held daggers is the near-miss: nothing
+    # destroyable. It also leaves `target_gear` empty, which keeps the
+    # (separately-deferred) acceptTask gear-deferral over-approximation quiet, so
+    # acceptTask stays == Lean (phase none) here.
     # bank_accessible=True + bank has room → RECYCLE_RELIEF is quiet (bank has
-    # room, so the bank-full pressure condition is False). Without room the new
+    # room, so the bank-full pressure condition is False). Without room the
     # RECYCLE_RELIEF guard would preempt ACCEPT_TASK and win selection.
     return SelectionContext(
         bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
-        target_gear=frozenset(),
-        target_tools=frozenset({"dagger"}) if protect_dagger else frozenset(),
+        target_gear=frozenset(), target_tools=frozenset(),
+        gear_keep={"dagger": 2} if protect_dagger else {},
         gear_review_active=False)
 
 
@@ -1062,8 +1066,9 @@ def test_recycle_surplus_drives_true() -> None:
 
 
 def test_recycle_surplus_near_miss_protected() -> None:
-    """Near-miss: dagger IS a committed objective code (ctx.target_gear) ->
-    `recyclable_surplus` excludes it -> RECYCLE_SURPLUS does NOT fire."""
+    """Near-miss: the active gear profile DEMANDS both daggers
+    (`ctx.gear_keep['dagger'] == 2`, KeepReason.GEAR_DEMAND) -> the keep
+    authority licenses nothing -> RECYCLE_SURPLUS does NOT fire."""
     w = _recycle_world(dagger_qty=2)
     gd = _recycle_gd()
     prod, _, lean, _ = drive_and_contest(

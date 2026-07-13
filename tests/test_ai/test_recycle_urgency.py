@@ -89,7 +89,7 @@ def _state(helmets: int, inventory_max: int = 118) -> WorldState:
 
 def test_goal_value_scales_with_hoard() -> None:
     gd = _gd()
-    goal = RecycleSurplusGoal(game_data=gd, protected_codes=frozenset())
+    goal = RecycleSurplusGoal(game_data=gd, ctx=_ctx())
     # 40 held, cap 1 -> surplus 39 -> urgency 8.
     assert goal.value(_state(40), gd) == 8 * RECYCLE_SURPLUS_VALUE
     # 4 held -> surplus 3 -> baseline.
@@ -185,8 +185,7 @@ def test_goal_with_snapshot_satisfied_by_partial_progress() -> None:
     Recycle x14, plan_len=0). With the initial-total snapshot, ANY reduction
     satisfies — one batch per cycle, converging across cycles."""
     gd = _gd()
-    goal = RecycleSurplusGoal(game_data=gd, protected_codes=frozenset(),
-                              initial_total=39)
+    goal = RecycleSurplusGoal(game_data=gd, ctx=_ctx(), initial_total=39)
     assert not goal.is_satisfied(_state(40))       # 39 surplus: no progress yet
     assert goal.is_satisfied(_state(26))           # 25 surplus < 39: progress
     assert goal.is_satisfied(_state(1))            # cleared entirely

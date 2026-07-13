@@ -1,16 +1,27 @@
-"""Recycle protection semantics: caps beat blankets, working kit is sacred.
+"""Recycle protection semantics: caps beat blankets, the working tool is sacred.
 
-Regression (trace 2026-07-05, post-restart): `_gear_protected` blanket-excluded
-every gear_keep KEY from recyclable_surplus, so gear_keep['copper_helmet']=1
-("keep ONE") acted as "keep ALL 41" and the grind hoard stayed invisible to
-both the discretionary recycle and the urgency hoist. Meanwhile the freshly
-ferried copper_pickaxe (in the bag, not yet equipped) showed up as recyclable
-surplus — recycling would have EATEN the working kit.
+Protection on the recycle path is the keep authority's (`ai/inventory_keep.py`),
+a QUANTITY — never a code-SET, whose type can only say "keep ALL copies". Three
+blankets died here, one bug each:
+
+  * `_gear_protected` blanket-excluded every `gear_keep` KEY, so
+    gear_keep['copper_helmet']=1 ("keep ONE") acted as "keep ALL 41" and the
+    grind hoard stayed invisible to both the discretionary recycle and the
+    urgency hoist (trace 2026-07-05).
+  * the profile-less `target_gear | target_tools` fallback did the same for every
+    BiS code — all 18 `copper_axe` (trace 2026-07-12).
+  * meanwhile a `code in kit` skip shielded every copy of the best tool, while
+    dropping the kit rule entirely would have EATEN the freshly ferried
+    copper_pickaxe (in the bag, not yet equipped).
+
+The authority resolves all three at once: recycle may destroy the copies above
+BOTH `keep_in_bag` (which is where WORKING_KIT lives — keep the ONE tool) and
+`keep_owned` (EQUIPPED / GEAR_DEMAND / RECIPE_DEMAND / ACTIVE_TASK / CURRENCY).
 """
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext, recycle_protected_codes
+from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from tests.test_ai.fixtures import make_state
 
 
@@ -20,20 +31,6 @@ def _ctx(**kw: object) -> SelectionContext:
                 gear_review_active=False)
     base.update(kw)
     return SelectionContext(**base)
-
-
-def test_with_profile_caps_no_blanket_protection() -> None:
-    """gear_keep quantities are enforced INSIDE recyclable_surplus via
-    useful_quantity_cap — a blanket code exclusion on top turns 'keep 1'
-    into 'keep all'."""
-    ctx = _ctx(gear_keep={"copper_helmet": 1, "iron_boots": 2})
-    assert recycle_protected_codes(ctx) == frozenset()
-
-
-def test_without_profile_legacy_blanket_stands() -> None:
-    ctx = _ctx(target_gear=frozenset({"iron_helm"}),
-               target_tools=frozenset({"iron_pickaxe"}))
-    assert recycle_protected_codes(ctx) == frozenset({"iron_helm", "iron_pickaxe"})
 
 
 def _gd() -> GameData:
@@ -58,10 +55,20 @@ def test_grind_hoard_visible_with_cap_only_protection() -> None:
     state = make_state(level=10, skills={"gearcrafting": 8, "weaponcrafting": 2},
                        inventory={"copper_helmet": 41},
                        equipment={"helmet_slot": "copper_helmet"})
-    ctx = _ctx(gear_keep={"copper_helmet": 1})
-    surplus = recyclable_surplus(state, gd, recycle_protected_codes(ctx),
-                                 gear_keep=ctx.gear_keep or None)
+    surplus = recyclable_surplus(state, gd, _ctx(gear_keep={"copper_helmet": 1}))
     assert surplus.get("copper_helmet") == 40
+
+
+def test_bis_target_code_is_capped_not_blanketed() -> None:
+    """The profile-less blanket is GONE: a `target_tools` / `target_gear` code is
+    a PURSUIT target, not a hoard licence. 18 pickaxes with no loadout profile
+    recorded → keep the 1 the re-arm will wear, reclaim 17."""
+    gd = _gd()
+    state = make_state(level=10, skills={"weaponcrafting": 2},
+                       inventory={"copper_pickaxe": 18})
+    ctx = _ctx(target_tools=frozenset({"copper_pickaxe"}),
+               target_gear=frozenset({"copper_helmet"}))
+    assert recyclable_surplus(state, gd, ctx) == {"copper_pickaxe": 17}
 
 
 def test_best_gathering_tool_is_never_recyclable_surplus() -> None:
@@ -71,8 +78,20 @@ def test_best_gathering_tool_is_never_recyclable_surplus() -> None:
     state = make_state(level=10, skills={"gearcrafting": 8, "weaponcrafting": 2},
                        inventory={"copper_pickaxe": 1},
                        equipment={"weapon_slot": "copper_dagger"})
-    surplus = recyclable_surplus(state, gd, frozenset(), gear_keep={})
-    assert "copper_pickaxe" not in surplus
+    assert "copper_pickaxe" not in recyclable_surplus(state, gd, _ctx())
+
+
+def test_working_tool_survives_even_when_the_bank_holds_the_spares() -> None:
+    """The ownership cap ALONE would eat it: 18 owned (1 ferried into the bag by
+    WithdrawTools, 17 banked by DepositAll), keep_owned 1 → 17 destroyable — and
+    the ONLY reachable copy is the working one. `keep_in_bag` (WORKING_KIT) is
+    what makes the bag copy untouchable, which is why the recycle path answers to
+    both caps."""
+    gd = _gd()
+    state = make_state(level=10, skills={"weaponcrafting": 2},
+                       inventory={"copper_pickaxe": 1},
+                       bank_items={"copper_pickaxe": 17})
+    assert recyclable_surplus(state, gd, _ctx()) == {}
 
 
 def test_working_kit_keeps_ONE_and_recycles_the_spares() -> None:
@@ -89,7 +108,7 @@ def test_working_kit_keeps_ONE_and_recycles_the_spares() -> None:
     gd = _gd()
     state = make_state(level=10, skills={"gearcrafting": 8, "weaponcrafting": 2},
                        inventory={"copper_pickaxe": 18})
-    surplus = recyclable_surplus(state, gd, frozenset(), gear_keep={})
+    surplus = recyclable_surplus(state, gd, _ctx())
     assert surplus.get("copper_pickaxe") == 17
 
 
@@ -103,6 +122,6 @@ def test_outclassed_spare_tool_is_still_recyclable() -> None:
     gd._crafting_recipes["rusty_pickaxe"] = {"copper_bar": 4}
     state = make_state(level=10, skills={"weaponcrafting": 2},
                        inventory={"copper_pickaxe": 1, "rusty_pickaxe": 2})
-    surplus = recyclable_surplus(state, gd, frozenset(), gear_keep={})
+    surplus = recyclable_surplus(state, gd, _ctx())
     assert "copper_pickaxe" not in surplus
-    assert surplus.get("rusty_pickaxe") == 2  # cap 0 under profile mode
+    assert surplus.get("rusty_pickaxe") == 2  # dominated by copper_pickaxe → keep 0

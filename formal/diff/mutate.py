@@ -2221,19 +2221,19 @@ WITHDRAW_TOOLS_BAND_MUTATIONS = [
 # is working kit — depositing it re-creates the bare-handed grind. Killed by
 # tests/test_ai/test_bank_selection.py.
 # Recyclable-surplus eligibility (2026-07-05 copper_helmet x25 hoard). The worn
-# copy lives in equipment (not inventory) and useful_quantity_cap keeps >=1 for
-# an equipped code, so a blanket equipped-code skip (the old bug) or an
-# off-by-one cap comparison silently shields spares from recycling. Killed by
-# tests/test_ai/test_recycle_surplus.py.
+# copy lives in equipment (not inventory) and the keep authority keeps exactly 1
+# for an equipped code (KeepReason.EQUIPPED), so a blanket equipped-code skip
+# (the old bug) or an off-by-one surplus comparison silently shields spares from
+# recycling. Killed by tests/test_ai/test_recycle_surplus.py.
 RECYCLE_SURPLUS_ELIGIBILITY_MUTATIONS = [
     ("recyclable_surplus: re-introduce blanket equipped-code skip (spares hoard)",
-     "        if qty <= 0 or code in protected_codes:",
-     "        if qty <= 0 or code in protected_codes or code in {"
-     "c for c in state.equipment.values() if c}:"),
+     "        if qty <= 0:\n            continue\n        stats = game_data.item_stats(code)",
+     "        if qty <= 0 or code in {c for c in state.equipment.values() if c}:\n"
+     "            continue\n        stats = game_data.item_stats(code)"),
 
-    ("recyclable_surplus: at-cap counts as surplus (qty > cap -> >=, zero-qty entries)",
-     "        if qty > cap:",
-     "        if qty >= cap:"),
+    ("recyclable_surplus: at-cap counts as surplus (surplus > 0 -> >= 0, zero-qty entries)",
+     "        if surplus > 0:",
+     "        if surplus >= 0:"),
 ]
 
 # Hoard-scaled recycle urgency (2026-07-05): every 5 surplus copies of the
@@ -2283,28 +2283,34 @@ RECYCLE_HOIST_MUTATIONS = [
      "            if False and mk is MeansKind.RECYCLE_SURPLUS:"),
 ]
 
-# Recycle protection semantics (2026-07-05 post-restart): caps beat blankets —
-# with gear_keep present the blanket exclusion turned "keep 1" into "keep 41".
+# Recycle protection semantics (item-protection-authority epic, Task 7): recycle
+# is a BAG-side DESTRUCTION, so the licensed quantity is `min(bankable,
+# destroyable)` — surplus to BOTH keep caps. Each term is load-bearing and each
+# mutant re-creates a shipped bug:
+#   * drop `destroyable` → the OWNED demands (EQUIPPED / GEAR_DEMAND /
+#     RECIPE_DEMAND / ACTIVE_TASK / CURRENCY) stop licensing anything and the
+#     recycle destroys gear the profile still wants;
+#   * drop `bankable` → the IN-BAG demands stop, and WORKING_KIT with them: the
+#     ferried-but-not-yet-equipped tool gets eaten (live probe 2026-07-05,
+#     copper_pickaxe) — and once DepositAll has banked the spares, the ONE axe
+#     left in the bag is exactly the working copy;
+#   * take the raw held qty → both caps gone (the blanket, in its purest form).
 # Killed by tests/test_ai/test_recycle_protection.py.
 RECYCLE_KIT_MUTATIONS = [
-    # Working-kit protection is a cap FLOOR of 1, not a code skip (live Robby
-    # 2026-07-12: the blanket skip shielded ALL 18 copper_axe + 7 fishing_net —
-    # both best-in-skill kit AND weaponcrafting grind rungs — so the hoard grew
-    # unbounded). Both directions must stay killed: dropping the floor eats the
-    # ferried tool, and restoring the blanket skip re-hoards its spares.
-    ("recyclable_surplus: drop the working-kit floor (recycles the ferried tool)",
-     "            cap = max(cap, 1)",
-     "            cap = max(cap, 0)"),
+    ("recyclable_surplus: ignore keep_owned (recycles gear the profile demands)",
+     "        surplus = min(bankable(code, state, game_data, ctx),\n"
+     "                      destroyable(code, state, game_data, ctx))",
+     "        surplus = bankable(code, state, game_data, ctx)"),
 
-    ("recyclable_surplus: re-introduce blanket working-kit skip (tool hoard)",
-     "        if qty <= 0 or code in protected_codes:",
-     "        if qty <= 0 or code in protected_codes or code in kit:"),
-]
+    ("recyclable_surplus: ignore keep_in_bag (eats the ferried working tool)",
+     "        surplus = min(bankable(code, state, game_data, ctx),\n"
+     "                      destroyable(code, state, game_data, ctx))",
+     "        surplus = destroyable(code, state, game_data, ctx)"),
 
-RECYCLE_PROTECTED_MUTATIONS = [
-    ("recycle_protected_codes: blanket protection even with profile caps",
-     "    if ctx.gear_keep:\n        return frozenset()",
-     "    if ctx.gear_keep:\n        return protected_gear_codes(ctx)"),
+    ("recyclable_surplus: no keep authority at all (blanket hoard reclaim)",
+     "        surplus = min(bankable(code, state, game_data, ctx),\n"
+     "                      destroyable(code, state, game_data, ctx))",
+     "        surplus = qty"),
 ]
 
 # Gather/Fight re-arm activation (2026-07-05, Fight branch 2026-07-11): the goal
@@ -4904,8 +4910,6 @@ def _run_all_groups() -> int:
               "tests/test_ai/test_recycle_urgency.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, RECYCLE_HOIST_MUTATIONS,
               "tests/test_ai/test_recycle_urgency.py", survivors)
-    run_group(GUARDS_SRC, RECYCLE_PROTECTED_MUTATIONS,
-              "tests/test_ai/test_recycle_protection.py", survivors)
     run_group(RECYCLE_SURPLUS_SRC, RECYCLE_KIT_MUTATIONS,
               "tests/test_ai/test_recycle_protection.py", survivors)
     run_group(GATHERING_GOAL_SRC, GATHER_REARM_MUTATIONS[4:],

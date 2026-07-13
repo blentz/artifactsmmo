@@ -62,17 +62,12 @@ def protected_gear_codes(ctx: SelectionContext) -> frozenset[str]:
     return frozenset(ctx.gear_keep)
 
 
-def recycle_protected_codes(ctx: SelectionContext) -> frozenset[str]:
-    """Recycle-eligibility protection: with profile info the per-code CAP
-    (ctx.gear_keep, enforced inside `recyclable_surplus` via
-    `useful_quantity_cap`) already keeps the demanded copies, so a blanket
-    code exclusion on top turns "keep 1" into "keep all" — gear_keep
-    ['copper_helmet']=1 hid a 41-helmet grind hoard from every recycle path
-    (trace 2026-07-05). Blanket protection survives only for the profile-less
-    legacy fallback, where no caps exist to do the job."""
-    if ctx.gear_keep:
-        return frozenset()
-    return ctx.target_gear | ctx.target_tools
+# `recycle_protected_codes` is GONE (item-protection-authority epic, Task 7):
+# the recycle path asks `ai/inventory_keep` how many copies it may destroy
+# (`min(bankable, destroyable)`), so there is no protected code-SET left to
+# compute. Its profile-less arm returned `target_gear | target_tools`, i.e.
+# "keep ALL copies of every BiS gear/tool code" — the blanket that hid all 18
+# `copper_axe` from every recycle path while the grind kept making more.
 
 
 def _gear_protected(ctx: SelectionContext) -> frozenset[str]:
@@ -286,15 +281,17 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
             step_items=frozenset(step_profile or ()),
         ))
     if kind is GuardKind.RECYCLE_RELIEF:
-        # Gear protection (spec 2026-06-28-gear-loadout-profiles): the protected
-        # set + the per-code cap come from the active-profile gear set when
-        # available, else the legacy target_gear/target_tools fallback.
-        recycle_protected = recycle_protected_codes(ctx)
+        # Protection is the keep authority's (`ai/inventory_keep`): recycle may
+        # destroy the copies that are surplus to BOTH caps. The ctx carries it
+        # (gear_keep + step_profile) — `deposit_context` merges the resolved
+        # step goal's needed map exactly as the DEPOSIT_FULL arm does, so a
+        # material the active step is accumulating is never RECYCLED out from
+        # under it either (destruction is the irreversible half of the same
+        # protection the deposit guard applies).
         return (not bank_has_room(ctx.bank_accessible, state.bank_items,
                                   game_data.bank_capacity)
                 and bool(recyclable_surplus(
-                    state, game_data, recycle_protected,
-                    gear_keep=ctx.gear_keep or None)))
+                    state, game_data, deposit_context(ctx, step_profile))))
     if kind is GuardKind.SELL_RELIEF:
         return (not bank_has_room(ctx.bank_accessible, state.bank_items,
                                   game_data.bank_capacity)
