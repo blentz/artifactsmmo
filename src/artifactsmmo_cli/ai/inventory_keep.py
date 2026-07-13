@@ -216,9 +216,18 @@ def _committed_recipe(code: str, state: WorldState, game_data: GameData,
 
 def _goal_materials(code: str, state: WorldState, game_data: GameData,
                     ctx: SelectionContext) -> int:
-    """The active objective-step goal's `needed` map. The `step_profile` field
-    exists on `SelectionContext` (defaulting to empty); Task 2 of this epic
-    populates it from the player's active objective step."""
+    """The active objective-step goal's `needed` map (plus the recipe closure of
+    each needed item's still-missing quantity), as computed by
+    `strategy_driver._step_protection_profile` and bound onto the ctx by
+    `StrategyArbiter.select` — the SAME map the deposit/discard guards merge via
+    `guards.active_profile`, so the keep authority and the guards protect the
+    same quantities.
+
+    A QUANTITY, not the old `bank_selection` blanket: without ANY protection an
+    active GatherMaterials goal's own target materials get banked out from under
+    it, undoing the withdraw and livelocking the gather; with a BLANKET the whole
+    growing pile is pinned in the bag. The needed quantity stays, the surplus
+    above it banks."""
     return ctx.step_profile.get(code, 0)
 
 

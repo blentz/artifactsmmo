@@ -85,8 +85,11 @@ class SelectionContext:
     # Active objective-step goal's material profile {code: needed_qty} — the
     # GOAL_MATERIALS keep reason (`ai/inventory_keep.py`) reads it so the
     # materials the current step is accumulating are never banked out from
-    # under it. Empty (the default) means "no active step profile"; the player
-    # populates it per cycle. A DEFAULT is mandatory: ~26 formal/diff helpers
+    # under it. Empty (the default) means "no active step profile";
+    # `StrategyArbiter.select` binds it per cycle from the SAME
+    # `_step_protection_profile` map it hands the deposit/discard guards (the
+    # step goal is resolved FROM this ctx, so it cannot be filled in earlier).
+    # A DEFAULT is mandatory: ~26 formal/diff helpers
     # construct SelectionContext positionally-by-keyword and a required field
     # would break every one of them.
     step_profile: dict[str, int] = field(default_factory=dict)

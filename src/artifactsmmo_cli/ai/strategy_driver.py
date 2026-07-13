@@ -3,6 +3,8 @@ existing goal.
 
 Lives above goals/ and tiers/ (imports both) to avoid the goals→tiers cycle."""
 
+from dataclasses import replace
+
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.actions.wait import WaitAction
@@ -901,6 +903,15 @@ class StrategyArbiter:
         # GatherMaterials grind goal (needed = held + 1) was accumulating —
         # the guard's profile only knew crafting_target/gear/tools/task.
         step_profile = _step_protection_profile(step_goal, state, game_data)
+        # ...and the SAME map rides the ctx from here down, so the keep authority
+        # (`ai/inventory_keep.KeepReason.GOAL_MATERIALS`) protects exactly the
+        # quantities the guards' `active_profile` merge protects. This is the one
+        # point where the resolved step goal exists: the goal is resolved FROM
+        # `ctx` (`_resolve_step_goal`), so the player cannot fill `step_profile`
+        # in when it builds the ctx — it would have to re-resolve the step goal
+        # WITHOUT the fallback walk and task suppression above, and the two
+        # derivations would drift. Re-binding the frozen ctx here keeps one source.
+        ctx = replace(ctx, step_profile=dict(step_profile or {}))
         guard_kinds = active_guards(state, game_data, self._history, ctx, step_profile)
         # Phase B3: snapshot the fired kinds for the trace (selection-time
         # truth; recomputing at emit time would drift on ctx-dependent flags).

@@ -1,4 +1,6 @@
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.inventory_keep import (
     IN_BAG_REASONS,
     KEEP_ALL,
@@ -10,7 +12,12 @@ from artifactsmmo_cli.ai.inventory_keep import (
     keep_owned,
     reason_quantity,
 )
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
+from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.strategy_driver import Candidate, StrategyArbiter
+from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext
+from artifactsmmo_cli.ai.tiers.means import MeansKind
+from artifactsmmo_cli.ai.tiers.strategy import MetaGoal, ObtainItem, StrategyDecision
+from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.fixtures import make_state
 
 
@@ -391,6 +398,115 @@ def test_healing_fill_stops_at_the_target_and_never_over_keeps():
     # A heal code that is not held keeps 0 rather than reserving a share.
     assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "cooked_chicken",
                            make_state(level=10, inventory={"apple": 9}), gd, ctx) == 0
+
+
+class _CtxSpyArbiter(StrategyArbiter):
+    """The real arbiter, recording the `SelectionContext` and step goal it hands
+    the goal layer. Nothing is stubbed — `_build_candidates` delegates to the
+    real implementation — so what is asserted is what the live goals receive."""
+
+    def __init__(self, planner: GOAPPlanner) -> None:
+        super().__init__(planner, history=None)
+        self.seen_ctx: SelectionContext | None = None
+        self.seen_step_goal: Goal | None = None
+
+    def _build_candidates(
+        self,
+        guard_kinds: list[GuardKind],
+        collect_kinds: list[MeansKind],
+        discretionary_kinds: list[MeansKind],
+        step_goal: Goal | None,
+        fallback_steps: list[MetaGoal],
+        fallback_roots: list[MetaGoal],
+        state: WorldState,
+        game_data: GameData,
+        ctx: SelectionContext,
+        step_profile: dict[str, int] | None = None,
+        chosen_root: MetaGoal | None = None,
+    ) -> list[Candidate]:
+        self.seen_ctx = ctx
+        self.seen_step_goal = step_goal
+        return super()._build_candidates(
+            guard_kinds, collect_kinds, discretionary_kinds, step_goal,
+            fallback_steps, fallback_roots, state, game_data, ctx, step_profile,
+            chosen_root=chosen_root)
+
+
+def _gather_gd() -> GameData:
+    """`ash_plank <- 10 ash_wood`, the ash_wood gathered from an ash_tree: an
+    active GatherMaterials step accumulating a raw material in the bag — the
+    shape of the livelock this keep reason exists to stop."""
+    gd = GameData()
+    gd._item_stats = {
+        "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource",
+                               crafting_skill="woodcutting", crafting_level=1),
+        "ash_wood": ItemStats(code="ash_wood", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"ash_plank": {"ash_wood": 10}}
+    gd._resource_drops = {"ash_tree": "ash_wood"}
+    gd._resource_skill = {"ash_tree": ("woodcutting", 1)}
+    gd._resource_locations = {"ash_tree": [(2, 2)]}
+    gd._workshop_locations = {"woodcutting": (1, 5)}
+    gd._bank_location = (4, 0)
+    return gd
+
+
+def test_goal_materials_is_LIVE_end_to_end_through_the_arbiter():
+    """GOAL_MATERIALS is worth nothing unless something POPULATES
+    `ctx.step_profile`: the reason was DEAD ON ARRIVAL (the field was always
+    `{}`) until `StrategyArbiter.select` bound the resolved step goal's needed
+    map onto the ctx.
+
+    So drive the REAL arbiter — real `StrategyDecision`, real step-goal
+    resolution, real `_step_protection_profile` — and assert on the ctx the goal
+    layer ACTUALLY receives (`_build_candidates` is delegated to, not stubbed):
+    the material the active GatherMaterials step is accumulating (10 ash_wood,
+    the recipe closure of the 1 ash_plank it needs) is kept in the bag, which is
+    the protection `bank_selection` documents the loss of as a gather livelock —
+    DepositAll banks the materials out from under the gather, undoing the
+    withdraw. The surplus ABOVE the needed quantity still banks: the old
+    `profile_codes` frozenset was a code-SET, so it pinned the whole growing
+    pile in the bag instead.
+
+    This test FAILS if `step_profile` stays `{}` — the control at the bottom is
+    the same state with a bare ctx, where nothing keeps the wood at all."""
+    planner = GOAPPlanner()
+    gd = _gather_gd()
+    surplus = 7
+    needed_wood = 10  # ash_plank's recipe: the closure of the step's needed plank
+    state = make_state(
+        level=10, hp=100, max_hp=100,
+        skills={"woodcutting": 1},
+        inventory={"ash_wood": needed_wood + surplus}, inventory_max=110,
+    )
+    step = ObtainItem("ash_plank", 1)
+    decision = StrategyDecision(interrupt=None, chosen_root=step, chosen_step=step,
+                                desired_state={})
+    arbiter = _CtxSpyArbiter(planner)
+    arbiter.set_cycle(0)
+    arbiter.select(decision, state, gd, [], _ctx())
+
+    step_goal = arbiter.seen_step_goal
+    assert isinstance(step_goal, GatherMaterialsGoal), step_goal
+    assert step_goal.needed == {"ash_plank": 1}, step_goal.needed
+
+    ctx = arbiter.seen_ctx
+    assert ctx is not None
+    # The live wiring: the resolved gather goal's material map reached the ctx...
+    assert ctx.step_profile == {"ash_plank": 1, "ash_wood": needed_wood}
+    assert reason_quantity(KeepReason.GOAL_MATERIALS, "ash_wood",
+                           state, gd, ctx) == needed_wood
+    # ...so the gather's own materials survive a DepositAll...
+    assert keep_in_bag("ash_wood", state, gd, ctx) >= needed_wood
+    # ...and ONLY the needed quantity does — the surplus above it still banks.
+    assert bankable("ash_wood", state, gd, ctx) == surplus
+
+    # Control: the SAME state with an unpopulated ctx keeps nothing in the bag,
+    # so every assertion above is carried by `step_profile`, not by a sibling
+    # reason quietly holding the wood.
+    bare = _ctx()
+    assert keep_in_bag("ash_wood", state, gd, bare) == 0
+    assert bankable("ash_wood", state, gd, bare) == needed_wood + surplus
 
 
 def test_gear_demand_is_owned_only_when_it_is_the_sole_reason():
