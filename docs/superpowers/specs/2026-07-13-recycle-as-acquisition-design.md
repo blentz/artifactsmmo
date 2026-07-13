@@ -140,14 +140,64 @@ only *fail to admit* a licensed one, which is the present bug.
 
 ### 2.4 Bank sources — `Withdraw -> Recycle`
 
-`RecycleAction.is_applicable` requires the item **in the bag**. `recoverable`
-counts bag+bank anyway, because `GatherMaterialsGoal` already admits
-`WithdrawItemAction`, so GOAP chains `Withdraw(fishing_net) -> Recycle -> Craft`.
-
-This is **required, not optional**: the keep-unification epic just made
+Bank sources are **required, not optional**: the keep-unification epic just made
 `DEPOSIT_FULL` bank surplus. A bag-only rule would let deposit strand the fuel in
 the bank, `recoverable` would go empty, and the descent would silently revert to
 chopping 50 `ash_wood` — the same bug, re-caused by its own sibling feature.
+
+Making that work needs three corrections found while planning. **Without them
+the bank route is unimplementable, and one of them is a tool-melting hazard.**
+
+**(a) `licensed_quantity` short-circuits bank-only codes to zero.**
+`destructive_license.py:73` returns 0 when `state.inventory.get(code, 0) <= 0`.
+A bank-only `fishing_net` therefore gets **no `RecycleAction` in the pool at
+all**, so GOAP cannot chain `Withdraw -> Recycle` no matter what the descent
+claims. Recycle needs a bank route:
+
+```
+Recycle(code, q) licensed  iff  destroyable(code) >= q
+                            and (bankable(code) >= q or bank_copies(code) >= q)
+```
+
+`NpcSell` and `Delete` keep the existing bag-side `min(bankable, destroyable)`
+rule — recycle is the only route that just acquired a second purpose, so it is
+the only one that gets a second reachability path.
+
+**(b) The bag floor — a tool-melting hazard.** The world model does not
+distinguish *which* copy a `Recycle` consumes; it just decrements the count. With
+the working `copper_axe` alone in the bag and 17 in the bank, admitting Recycle
+lets GOAP recycle **the bag copy** — the working tool — instead of withdrawing a
+bank copy first. This is the same failure the keep epic already paid for once
+(*"`destroyable` alone on the bag side EATS THE WORKING TOOL"*).
+
+Fix: `RecycleAction` gains `bag_floor: int = 0` (`repr=False`), stamped at
+licence time where the ctx is complete — exactly how `workshop_location` is
+already baked in — and `is_applicable` gains:
+
+```python
+if state.inventory.get(self.code, 0) - self.quantity < self.bag_floor:
+    return False
+```
+
+with `bag_floor = keep_in_bag(code, state, game_data, ctx)`. A protected bag copy
+can then never be consumed, so GOAP is *forced* to `Withdraw` first. This is what
+makes rule (a) safe: `destroyable` bounds how many copies may cease to exist,
+and `bag_floor` bounds *which* copies are reachable — the conservative `min` is
+replaced by a precise guard rather than simply loosened.
+
+**(c) The recycle SOURCE is not in the material closure.**
+`GatherMaterialsGoal.relevant_actions` builds `withdrawable` from the needed
+closure, and `fishing_net` is not in the `ash_plank` closure — it is *upstream* of
+it. So `WithdrawItemAction(fishing_net)` is not admitted either. Edge 2 must admit
+withdraws for the recycle **source** codes, not only for closure materials.
+
+### 2.6 Eligibility must match the executor
+
+`recoverable_materials` must apply the **same gates** `RecycleAction.is_applicable`
+applies, or the descent leafs a node the executor cannot serve and the bot stalls:
+the item has a crafting recipe, has a known `crafting_skill`, the character meets
+its `crafting_level`, and the skill's workshop location is known. These are the
+gates `recycle_surplus.recyclable_surplus` already enumerates.
 
 ### 2.5 Plumbing
 
