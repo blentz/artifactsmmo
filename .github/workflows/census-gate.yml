@@ -1,0 +1,55 @@
+name: census-gate
+# Behavioral-completeness censuses. Each drives the REAL StrategyArbiter over a
+# grid derived from production's own structure, and fails on an UNEXPLAINED cell.
+#
+#   craft:     can the planner plan every craftable recipe?   -> planner_bug == 0
+#   inventory: does the planner obey the keep authority?      -> inventory_bug == 0
+#              plus REASON COVERAGE: every KeepReason (except CURRENCY, whose
+#              KEEP_ALL means nothing is ever disposable) must have a PASSing
+#              LIVENESS cell. This is the anti-rot mechanism: a new protection
+#              reason cannot be added without proving its surplus is still
+#              disposable. It is what makes "keep ALL copies" — the type-level
+#              defect behind seven hoard bugs — unable to come back silently.
+#
+# Both gates were previously documented but never actually enforced in CI.
+on:
+  pull_request:
+    paths:
+      - "src/**/*.py"
+      - "scripts/gen_craft_completeness.py"
+      - "scripts/gen_inventory_completeness.py"
+      - ".github/workflows/census-gate.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/**/*.py"
+      - "scripts/gen_craft_completeness.py"
+      - "scripts/gen_inventory_completeness.py"
+      - ".github/workflows/census-gate.yml"
+  workflow_dispatch: {}
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.2.0
+        with:
+          enable-cache: false
+      - name: Generate artifactsmmo-api-client
+        run: |
+          set -euxo pipefail
+          pip install openapi-python-client
+          bash generate_openapi_client.sh
+      - name: Sync deps
+        run: uv sync --dev
+
+      - name: inventory census — inventory_bug == 0 AND every KeepReason has a passing LIVENESS cell
+        run: uv run python scripts/gen_inventory_completeness.py --check
+
+      - name: craft census — planner_bug == 0
+        run: uv run python scripts/gen_craft_completeness.py --check
