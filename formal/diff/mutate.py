@@ -143,6 +143,7 @@ POTION_SUPPLY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "potion_supply.py
 PROGRESSION_TREE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "progression_tree_core.py"
 EQUIPMENT_PROFILE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "equipment_profile.py"
 INVENTORY_ROOM_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_room.py"
+INVENTORY_KEEP_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_keep.py"
 
 # craft_plan_full / _apply_state mutations (B2 full-plan driver). The CONSUMING
 # model is the soundness-critical part; killed by
@@ -2498,6 +2499,7 @@ _ALL_SRCS = [
     CYCLES_FOR_PROGRESS_SRC,
     GATHER_APPLY_SRC,
     INVENTORY_ROOM_SRC,
+    INVENTORY_KEEP_SRC,
     GATHER_SELECTION_SRC,
     MONSTER_DROP_SELECTION_SRC,
     CRAFT_VS_BUY_SRC,
@@ -2690,6 +2692,63 @@ INVENTORY_ROOM_MUTATIONS = [
     ("inventory_room: qty check always-true",
      "and added_qty <= qty_free",
      "and True"),
+]
+
+
+# inventory_keep mutations -- anchors for the SINGLE KEEP AUTHORITY
+# (src/artifactsmmo_cli/ai/inventory_keep.py). Killed by
+# tests/test_ai/test_inventory_keep.py; the same caps are value-locked to the
+# proved Lean combinator Formal.InventoryKeep.keepInBag / keepOwned / bankable /
+# destroyable by formal/diff/test_inventory_keep_diff.py (Oracle keys
+# keep_in_bag / keep_owned).
+#
+# Every anchor here re-introduces ONE of the two defects the epic exists to kill:
+# a reason that means "keep ALL copies" (the frozenset[str] blanket, which made
+# `keep == held` so the disposable quantity was 0 forever -- 18 copper_axe, the
+# whole heal stock), or a combinator that over-protects (sum instead of max, a
+# mis-filed cap set, a destroyable that ignores banked copies).
+INVENTORY_KEEP_MUTATIONS = [
+    # WORKING_KIT returns the WHOLE held stack instead of 1 -- the axe bug,
+    # verbatim. Killed by test_working_kit_keeps_ONE_in_bag_not_the_hoard
+    # (reason_quantity == 1, bankable == 17 of 18).
+    ("inventory_keep: WORKING_KIT keeps ALL copies (the blanket bug)",
+     "    return 1 if code in _best_gathering_tools(state, game_data) else 0",
+     "    return (state.inventory.get(code, 0)\n"
+     "            if code in _best_gathering_tools(state, game_data) else 0)"),
+    # HEALING_CONSUMABLE charges the whole held stack instead of its share of the
+    # aggregate stock target -- the heal-stock blanket. Killed by
+    # test_healing_consumable_caps_at_stock_target_not_the_whole_stack (5, not 40)
+    # and test_healing_target_is_GREEDILY_FILLED_across_held_heals.
+    ("inventory_keep: HEALING_CONSUMABLE keeps the whole stack (blanket)",
+     "        share = min(qty, remaining)",
+     "        share = qty"),
+    # keep_in_bag combines its reasons by SUM -- over-protects whenever two
+    # reasons are live (the cap exceeds every single demand). Killed by
+    # test_keep_in_bag_combines_by_MAX_not_sum (COMMITTED_RECIPE 36 +
+    # GOAL_MATERIALS 50 -> 50, not 86).
+    ("inventory_keep: keep_in_bag combines by sum not max (over-protects)",
+     "    return max(reason_quantity(r, code, state, game_data, ctx) for r in IN_BAG_REASONS)",
+     "    return sum(reason_quantity(r, code, state, game_data, ctx) for r in IN_BAG_REASONS)"),
+    # keep_owned combines its reasons by SUM. Killed by
+    # test_destroyable_counts_bank_copies_toward_owned (GEAR_DEMAND 2 +
+    # RECIPE_DEMAND 2 -> keep 2, not 4).
+    ("inventory_keep: keep_owned combines by sum not max (over-protects)",
+     "    return max(reason_quantity(r, code, state, game_data, ctx) for r in OWNED_REASONS)",
+     "    return sum(reason_quantity(r, code, state, game_data, ctx) for r in OWNED_REASONS)"),
+    # keep_in_bag reads the OWNED registry -- the mis-filed cap set: ownership-only
+    # demand (gear) would pin BAG slots, eating the slots this epic frees. Killed
+    # by test_gear_demand_is_owned_only_when_it_is_the_sole_reason
+    # (keep_in_bag == 0 with a gear_keep of 4).
+    ("inventory_keep: keep_in_bag reads the OWNED reason set (mis-filed cap)",
+     "for r in IN_BAG_REASONS)",
+     "for r in OWNED_REASONS)"),
+    # destroyable ignores the BANK copies -- keep_owned is about OWNERSHIP, so a
+    # banked copy already satisfies it; a bag-only count under-reports the surplus
+    # and re-hoards. Killed by test_destroyable_counts_bank_copies_toward_owned
+    # (1 in bag + 5 in bank, keep 2 -> 4 destroyable, not 0).
+    ("inventory_keep: destroyable ignores bank copies",
+     "    owned = state.inventory.get(code, 0) + (state.bank_items or {}).get(code, 0)",
+     "    owned = state.inventory.get(code, 0)"),
 ]
 
 
@@ -4618,6 +4677,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_gather_apply_diff.py", survivors)
     run_group(INVENTORY_ROOM_SRC, INVENTORY_ROOM_MUTATIONS,
               "formal/diff/test_inventory_room_diff.py", survivors)
+    run_group(INVENTORY_KEEP_SRC, INVENTORY_KEEP_MUTATIONS,
+              "tests/test_ai/test_inventory_keep.py", survivors)
     run_group(GATHER_APPLY_SRC, MONSTER_DROP_APPLY_MUTATIONS,
               "formal/diff/test_monster_drop_apply_diff.py", survivors)
     run_group(GATHER_SELECTION_SRC, GATHER_SELECTION_MUTATIONS,

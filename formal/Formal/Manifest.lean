@@ -1171,3 +1171,19 @@ open Formal.PriorityBand
 #check @Formal.GearTaxonomy.combatGear_combat_mono       -- combat-monotone: false→true combat never removes a type
 #check @Formal.GearTaxonomy.combatGear_consumable_anti   -- consumable-antitone: a consumable item only removes a type
 #check @Formal.GearTaxonomy.combatGear_subset_equippable -- every classified type appears as some row's type
+-- InventoryKeep required roles (the single keep authority; the COMBINATOR over the
+-- KeepReason registry's quantities — src/artifactsmmo_cli/ai/inventory_keep.py::
+-- keep_in_bag / keep_owned / bankable / destroyable). The reason FUNCTIONS are opaque
+-- (diff-pinned via formal/diff/test_inventory_keep_diff.py, which calls the REAL
+-- reason_quantity); the theorems are about the combinator, because that is where the
+-- seven hoard bugs lived — a code-SET reason could only mean "keep ALL copies".
+#check @Formal.InventoryKeep.keep_dominates_each_reason      -- max dominates: every reason's quantity is honoured
+#check @Formal.InventoryKeep.keep_is_a_reason                -- the cap IS a reason (or 0): reasons never SUM
+#check @Formal.InventoryKeep.surplus_is_disposable           -- LIVENESS: bag > keep_in_bag ⇒ bankable > 0 (the hoard property)
+#check @Formal.InventoryKeep.owned_surplus_is_destroyable    -- LIVENESS: owned > keep_owned ⇒ destroyable > 0
+#check @Formal.InventoryKeep.blanket_requires_keep_ge_held   -- a blanket is legal only if the cap IS everything held
+#check @Formal.InventoryKeep.owned_blanket_requires_keep_ge_owned -- same, on the ownership cap
+#check @Formal.InventoryKeep.bankable_never_eats_keep        -- SAFETY: what must stay in the bag never leaves
+#check @Formal.InventoryKeep.destroyable_never_eats_keep     -- SAFETY: what must stay owned is never destroyed
+#check @Formal.InventoryKeep.destroyable_counts_bank_copies  -- bank copies satisfy keep_owned (no double-pinning)
+#check @Formal.InventoryKeep.copper_axe_hoard_refuted        -- non-vacuity: the 18-axe incident, on the real numbers

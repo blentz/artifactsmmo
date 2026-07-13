@@ -223,3 +223,4 @@ import Formal.OptimalBuyMix
 import Formal.ProgressionTree
 import Formal.EquipmentProfile
 import Formal.InventoryRoom
+import Formal.InventoryKeep

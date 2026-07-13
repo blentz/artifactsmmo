@@ -3,6 +3,7 @@ import Formal.Liveness.ItemsTaskTermination
 import Formal.Liveness.ItemsTaskRun
 import Formal.TaskBatch
 import Formal.InventoryCaps
+import Formal.InventoryKeep
 import Formal.AccumulationSell
 import Formal.DominancePareto
 import Formal.InventoryProfile
@@ -3214,3 +3215,59 @@ example : ∀ (cs : List Formal.ArbiterSelect.Candidate) (cid : Nat)
     Formal.ArbiterSelect.precedes cs d.id cid = true →
     (Formal.ArbiterSelect.stickyOutcome cs (some cid) plannable satisfied suppressed).1 = none :=
   @Formal.ArbiterSelect.select_pure_no_sticky_preempt_lower_band
+
+/-! ### InventoryKeep role contracts (the single keep authority's COMBINATOR).
+
+Fully-qualified — `Formal.InventoryKeep` is NOT opened, so these pin the exact
+Nat/List-Nat statements without clashing with the opened `InventoryCaps`.
+
+These are the invariants ALL SEVEN hoard bugs violated. A protection expressed as
+a `frozenset[str]` code-set can only mean "keep ALL copies", so `keep = held` and
+the disposable quantity was 0 forever (18 `copper_axe`, the whole healing stock,
+the BiS `target_gear | target_tools` blanket). Weakening any pin below —
+`surplus_is_disposable` in particular — re-admits that bug class. -/
+
+-- keep_dominates_each_reason: the cap honours EVERY reason's quantity (max dominates).
+example : ∀ (contribs : List Nat) (q : Nat), q ∈ contribs →
+    Formal.InventoryKeep.keepFrom contribs ≥ q :=
+  @Formal.InventoryKeep.keep_dominates_each_reason
+-- keep_is_a_reason: the cap is 0 or IS one of the reasons — reasons never SUM
+-- (a `sum` combinator over-protects and re-hoards from the other side).
+example : ∀ (contribs : List Nat),
+    Formal.InventoryKeep.keepFrom contribs = 0 ∨
+      Formal.InventoryKeep.keepFrom contribs ∈ contribs :=
+  @Formal.InventoryKeep.keep_is_a_reason
+-- surplus_is_disposable: bag above keep_in_bag ⇒ a POSITIVE bankable quantity.
+example : ∀ (bag : Nat) (inBag : List Nat), bag > Formal.InventoryKeep.keepInBag inBag →
+    Formal.InventoryKeep.bankable bag inBag > 0 :=
+  @Formal.InventoryKeep.surplus_is_disposable
+-- owned_surplus_is_destroyable: bag+bank above keep_owned ⇒ POSITIVE destroyable.
+example : ∀ (bag bank : Nat) (owned : List Nat),
+    bag + bank > Formal.InventoryKeep.keepOwned owned →
+    Formal.InventoryKeep.destroyable bag bank owned > 0 :=
+  @Formal.InventoryKeep.owned_surplus_is_destroyable
+-- blanket_requires_keep_ge_held: nothing bankable ⇒ the cap genuinely IS everything.
+example : ∀ (bag : Nat) (inBag : List Nat), Formal.InventoryKeep.bankable bag inBag = 0 →
+    Formal.InventoryKeep.keepInBag inBag ≥ bag :=
+  @Formal.InventoryKeep.blanket_requires_keep_ge_held
+-- owned_blanket_requires_keep_ge_owned: nothing destroyable ⇒ keep_owned IS the pile.
+example : ∀ (bag bank : Nat) (owned : List Nat),
+    Formal.InventoryKeep.destroyable bag bank owned = 0 →
+    Formal.InventoryKeep.keepOwned owned ≥ bag + bank :=
+  @Formal.InventoryKeep.owned_blanket_requires_keep_ge_owned
+-- bankable_never_eats_keep: SAFETY — banking the surplus leaves the keep demand.
+example : ∀ (bag : Nat) (inBag : List Nat),
+    bag - Formal.InventoryKeep.bankable bag inBag ≥
+      min bag (Formal.InventoryKeep.keepInBag inBag) :=
+  @Formal.InventoryKeep.bankable_never_eats_keep
+-- destroyable_never_eats_keep: SAFETY — destroying the surplus leaves the owned demand.
+example : ∀ (bag bank : Nat) (owned : List Nat),
+    (bag + bank) - Formal.InventoryKeep.destroyable bag bank owned ≥
+      min (bag + bank) (Formal.InventoryKeep.keepOwned owned) :=
+  @Formal.InventoryKeep.destroyable_never_eats_keep
+-- destroyable_counts_bank_copies: a banked copy satisfies keep_owned (ownership,
+-- not bag residency) — a bag-only accounting under-reports the surplus.
+example : ∀ (bag bank : Nat) (owned : List Nat),
+    Formal.InventoryKeep.destroyable bag bank owned ≥
+      Formal.InventoryKeep.destroyable bag 0 owned :=
+  @Formal.InventoryKeep.destroyable_counts_bank_copies

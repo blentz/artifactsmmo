@@ -1340,6 +1340,39 @@ def runInventoryRoom (args : Array Json) : Json :=
   Json.mkObj [("has_room",
     Json.bool (InventoryRoom.hasRoom newStacks addedQty slotsFree qtyFree))]
 
+/-- The keep-reason contribution vector, flattened the same way as the other
+variable-length keys: `args = [bag, bank, N, q0, q1, ..., q(N-1)]` where each
+`qi` is ONE registry reason's quantity, computed by the REAL Python
+`inventory_keep.reason_quantity` on the differential side (the reason functions
+are opaque here — see `Formal/InventoryKeep.lean`). -/
+def keepContribs (args : Array Json) : List Nat :=
+  let n := (intArg args 2).toNat
+  (List.range n).map (fun i => (intArg args (3 + i)).toNat)
+
+/-- Compute one keep_in_bag result using the SAME proved
+`Formal.InventoryKeep.keepInBag` / `bankable`. args: `[bag, bank, N, q0..]`
+(`bank` is ignored by this key — banking is a BAG decision). Emits
+`{"keep": Int, "bankable": Int}`. -/
+def runKeepInBag (args : Array Json) : Json :=
+  let bag := (intArg args 0).toNat
+  let contribs := keepContribs args
+  Json.mkObj
+    [("keep", Json.num (Int.ofNat (Formal.InventoryKeep.keepInBag contribs))),
+     ("bankable", Json.num (Int.ofNat (Formal.InventoryKeep.bankable bag contribs)))]
+
+/-- Compute one keep_owned result using the SAME proved
+`Formal.InventoryKeep.keepOwned` / `destroyable`. args: `[bag, bank, N, q0..]`.
+Emits `{"keep": Int, "destroyable": Int}` — the destroyable surplus counts the
+BANK copies, because `keep_owned` is about OWNERSHIP. -/
+def runKeepOwned (args : Array Json) : Json :=
+  let bag := (intArg args 0).toNat
+  let bank := (intArg args 1).toNat
+  let contribs := keepContribs args
+  Json.mkObj
+    [("keep", Json.num (Int.ofNat (Formal.InventoryKeep.keepOwned contribs))),
+     ("destroyable",
+      Json.num (Int.ofNat (Formal.InventoryKeep.destroyable bag bank contribs)))]
+
 /-- Compute one gather_selection result using the SAME proved
 `Formal.GatherSelection.selectGatherSource`.
 
@@ -2778,6 +2811,10 @@ def runOne (item : Json) : Json :=
     runGatherApply args
   else if kind == "inventory_room" then
     runInventoryRoom args
+  else if kind == "keep_in_bag" then
+    runKeepInBag args
+  else if kind == "keep_owned" then
+    runKeepOwned args
   else if kind == "gather_selection" then
     runGatherSelection args
   else if kind == "shopping_list" then

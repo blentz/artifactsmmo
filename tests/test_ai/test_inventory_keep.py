@@ -193,6 +193,29 @@ def test_committed_recipe_scales_with_the_remaining_task_quantity():
                            done, gd, ctx) == 12
 
 
+def test_keep_in_bag_combines_by_MAX_not_sum():
+    """The COMBINATOR, with two reasons live at once and nothing to hide behind:
+    the items-task axe wants 36 ore (COMMITTED_RECIPE) while the active step
+    profile wants 50 (GOAL_MATERIALS). The cap is the LARGER demand, 50 — a
+    `sum` combinator would keep 86 of the 60 held and bank nothing, which is the
+    over-protection half of the hoard bug (the cap must never exceed every
+    single reason; Lean `keep_is_a_reason`).
+
+    Every other cap-level test has exactly ONE non-zero reason, so `sum` and
+    `max` agree there and the defect would survive them all."""
+    gd = _gd()
+    state = make_state(level=10, inventory={"copper_ore": 60},
+                       task_code="copper_axe", task_type="items",
+                       task_total=1, task_progress=0)
+    ctx = _ctx(step_profile={"copper_ore": 50})
+    assert reason_quantity(KeepReason.COMMITTED_RECIPE, "copper_ore",
+                           state, gd, ctx) == 36
+    assert reason_quantity(KeepReason.GOAL_MATERIALS, "copper_ore",
+                           state, gd, ctx) == 50
+    assert keep_in_bag("copper_ore", state, gd, ctx) == 50
+    assert bankable("copper_ore", state, gd, ctx) == 10
+
+
 def test_combat_weapon_keeps_one_in_bag():
     gd = _gd()
     state = make_state(level=10, inventory={"copper_dagger": 5})
