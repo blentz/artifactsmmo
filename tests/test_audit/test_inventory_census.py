@@ -181,10 +181,18 @@ def test_census_full_grid_matches_the_post_deposit_migration_baseline() -> None:
     for r in results:
         if r.gap is not None:
             gap_counts[r.gap] = gap_counts.get(r.gap, 0) + 1
-    assert gap_counts == {"inventory_bug": 3, "no_route_available": 1}
+    assert gap_counts == {"inventory_bug": 2, "no_route_available": 1,
+                          "venue_unreachable": 1}
     bugs = {(r.reason, r.cap, r.pressure) for r in results if r.gap == "inventory_bug"}
     assert bugs == {
         ("goal_materials", "in_bag", "slot_full"),
         ("goal_materials", "in_bag", "qty_full"),
-        ("active_task", "owned", "slot_full"),
     }
+    # `active_task owned/slot_full` (golden_egg) left INVENTORY_BUG when the SELL
+    # migration (Task 8) taught the classifier what a sale actually costs: its only
+    # buyer is the `nomadic_merchant` EVENT NPC, dormant in this bundle, so there is
+    # NO executable sale — and with no recipe there is no recycle, and slot pressure
+    # deliberately does not open DELETE. Production is right to keep holding it.
+    unreachable = {(r.reason, r.cap, r.pressure) for r in results
+                   if r.gap == "venue_unreachable"}
+    assert unreachable == {("active_task", "owned", "slot_full")}

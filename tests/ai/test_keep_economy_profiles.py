@@ -140,14 +140,14 @@ def test_profiled_gear_protected():
     # Kept up to demand: cap == 2 (held 2 → no surplus).
     assert useful_quantity_cap("copper_dagger", state, gd, gear_keep=gear_keep) == 2
     assert recyclable_surplus(state, gd, _ctx(gear_keep=gear_keep)) == {}
-    # Not sold by accumulation-sell (cap == demand, not over-ratio).
-    assert "copper_dagger" not in sellable_accumulation(state, gd, gear_keep=gear_keep)
     # Not DESTROYED: gear demand is an OWNERSHIP demand (GEAR_DEMAND feeds
     # keep_owned), so both copies must remain owned.
     ctx = SelectionContext(bank_accessible=True, bank_required_level=0,
                            bank_unlock_monster=None, initial_xp=0,
                            task_exchange_min_coins=0, combat_monster=None,
                            gear_keep=gear_keep)
+    # Not SOLD either — the keep authority licenses nothing (Task 8).
+    assert sellable_accumulation(state, gd, ctx) == {}
     assert destroyable("copper_dagger", state, gd, ctx) == 0
     # BANKING, though, is reversible — and deliberately NOT blanket-blocked (the
     # in-bag ladder has no GEAR_DEMAND arm, spec Task 1). The copy the character

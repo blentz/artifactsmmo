@@ -678,9 +678,11 @@ class InventoryGapClass(Enum):
     plan DISPOSED currency, which is a bug like any other and falls through this
     arm to the cascade below."""
     VENUE_UNREACHABLE = "venue_unreachable"
-    """The route's venue exists in the catalog but has no tile the character can
-    reach: no bank location for a bag-cap cell; an unplaced workshop / vendor for
-    an owned-cap cell. Nothing the planner can do this cycle."""
+    """The route's venue exists in the catalog but the character cannot trade at
+    it this cycle: no bank location for a bag-cap cell; an unplaced workshop, or a
+    vendor with no reachable tile — including an EVENT merchant whose spawn window
+    is shut, which is the only kind of gold buyer this game has (see `_sellable`).
+    Nothing the planner can do this cycle."""
     BANK_FULL = "bank_full"
     """The bank is at capacity, so DEPOSIT cannot take the surplus. A bag-cap
     (`keep_in_bag`) explanation only: for an owned-cap cell the bank was never a
@@ -713,10 +715,26 @@ def _recyclable(code: str, game_data: GameData) -> bool:
     return game_data.workshop_location(stats.crafting_skill) is not None
 
 
-def _sellable(code: str, game_data: GameData) -> bool:
-    """Some PLACED NPC buys `code` (intrinsic, protection-free — same rationale as
-    `_recyclable`)."""
-    return any(game_data.npc_location(npc) is not None
+def _sellable(code: str, state: WorldState, game_data: GameData) -> bool:
+    """A sale of `code` is EXECUTABLE this cycle — `NpcSellAction.is_applicable`
+    accepts it (intrinsic to the ITEM and the WORLD, protection-free: same
+    rationale, and the same EXECUTABILITY standard, as `_recyclable`'s "the
+    workshop is on the map").
+
+    A PLACED buyer is NOT enough. Every gold merchant in this game is an EVENT
+    NPC (`nomadic_merchant`, `gemstone_merchant`, `fish_merchant`, …) and it keeps
+    its spawn TILE in the catalog while its window is SHUT, so a location-only
+    probe reports a sell route that `NpcSellAction` refuses to take
+    (`event_availability.event_npc_tradeable`) — and the cell it "explains" is
+    then blamed on the planner for not taking a sale the server would reject.
+    That mis-classification is what made `active_task owned/liveness/slot_full`
+    (`golden_egg`, whose only buyer is the dormant `nomadic_merchant`) read as
+    INVENTORY_BUG: with no recipe there is no RECYCLE route, no live buyer there
+    is no SELL route, and slot pressure deliberately does not open the DELETE
+    route — production is right to keep holding it."""
+    return any(NpcSellAction(npc_code=npc, item_code=code, quantity=1,
+                             npc_location=game_data.npc_location(npc)
+                             ).is_applicable(state, game_data)
                for npc, _price in game_data.npcs_buying_item(code))
 
 
@@ -760,7 +778,7 @@ def classify_gap(cell: InventoryCell, state: WorldState,
             return InventoryGapClass.BANK_FULL
         return InventoryGapClass.INVENTORY_BUG
     recyclable = _recyclable(cell.code, game_data)
-    sellable = _sellable(cell.code, game_data)
+    sellable = _sellable(cell.code, state, game_data)
     stats = game_data.item_stats(cell.code)
     if (not recyclable and stats is not None and game_data.crafting_recipe(cell.code)
             and stats.crafting_skill in RECYCLING_SKILLS):

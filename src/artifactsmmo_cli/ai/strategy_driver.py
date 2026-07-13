@@ -288,8 +288,16 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
             initial_total=sum(recyclable_surplus(
                 state, game_data, ctx).values()) if state else None)
     if kind is GuardKind.SELL_RELIEF:
-        return SellInventoryGoal(bank_accessible=ctx.bank_accessible,
-                                 gear_keep=ctx.gear_keep or None)
+        # relief=True: this guard's own predicate is `not bank_has_room`, so the
+        # ratio gate (whose point is "bank it instead of selling it") has no
+        # object — the goal may sell the WHOLE licensed surplus. It also takes
+        # `deposit_context(ctx, step_profile)`, the same merged context
+        # DEPOSIT_FULL/RECYCLE_RELIEF use, so the active step's materials are not
+        # SOLD out from under it either (a sale is irreversible).
+        return SellInventoryGoal(game_data=game_data,
+                                 ctx=deposit_context(ctx, step_profile),
+                                 bank_accessible=ctx.bank_accessible,
+                                 relief=True)
     if kind is GuardKind.GEAR_REVIEW:
         if state is None:
             raise ValueError("GEAR_REVIEW guard requires a state")
@@ -328,8 +336,11 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
     if kind is MeansKind.COMPLETE_TASK:
         return CompleteTaskGoal()
     if kind is MeansKind.SELL_PRESSURED or kind is MeansKind.SELL_IDLE:
-        return SellInventoryGoal(bank_accessible=ctx.bank_accessible,
-                                 gear_keep=ctx.gear_keep or None)
+        # No `relief`: a bank route still exists (SELL_RELIEF is the guard that
+        # fires when it does not), so only the RATIO-gated hoards are sold —
+        # banking is reversible and preferred.
+        return SellInventoryGoal(game_data=game_data, ctx=ctx,
+                                 bank_accessible=ctx.bank_accessible)
     if kind is MeansKind.RECYCLE_SURPLUS:
         return RecycleSurplusGoal(
             game_data=game_data, ctx=ctx,

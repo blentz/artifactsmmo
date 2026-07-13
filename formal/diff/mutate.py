@@ -409,7 +409,7 @@ INVENTORY_CAPS_MUTATIONS = [
 # formal/diff/test_accumulation_sell_diff.py (real core vs the proved
 # Formal.AccumulationSell defs through the `accumulation_sell` oracle).
 ACCUMULATION_SELL_MUTATIONS = [
-    # weaken the ratio gate (5 -> 3): items below 5x cap wrongly become excess.
+    # weaken the ratio gate (5 -> 3): items below 5x keep wrongly become excess.
     ("accumulation_sell: ACCUM_MULT 5 -> 3",
      "ACCUM_MULT = 5",
      "ACCUM_MULT = 3"),
@@ -432,6 +432,46 @@ ACCUMULATION_SELL_MUTATIONS = [
     ("accumulation_sell: keep eff_cap not true cap",
      "    keep = cap if cap > 0 else 0",
      "    keep = cap if cap > 0 else 1"),
+]
+
+
+# The SELL path's keep composition (item-protection-authority epic, Task 8).
+# A sale is a BAG-side ALIENATION and it is IRREVERSIBLE, so the licensed
+# quantity is `min(bankable, destroyable)` — the copies surplus to BOTH caps.
+# One mutant per term (the `recyclable_surplus` invariant, one route over):
+#   * drop `destroyable` → the OWNED demands (EQUIPPED / GEAR_DEMAND /
+#     RECIPE_DEMAND / ACTIVE_TASK / CURRENCY) stop licensing anything and the
+#     sale alienates gear the profile still wants;
+#   * drop `bankable` → the IN-BAG demands stop, and WORKING_KIT / COMBAT_WEAPON
+#     with them: 6 axes in the bag + 12 in the bank is `keep_owned` 1, so a bare
+#     `destroyable` sells 6 of the 6 reachable copies — the working tool
+#     included. It also stops bounding the sale by what is physically in the bag;
+#   * take the raw held qty → both caps gone (the blanket, in its purest form:
+#     this is what the old `useful_quantity_cap` cap DID for an un-profiled
+#     equippable, whose cap is 0 — all 18 copper_axe offered for sale).
+# Killed by tests/test_ai/test_sell_protection.py.
+SELL_KEEP_MUTATIONS = [
+    ("sellable_surplus: ignore keep_owned (sells gear the profile demands)",
+     "        surplus = min(bankable(code, state, game_data, ctx),\n"
+     "                      destroyable(code, state, game_data, ctx))",
+     "        surplus = bankable(code, state, game_data, ctx)"),
+
+    ("sellable_surplus: ignore keep_in_bag (sells the working tool)",
+     "        surplus = min(bankable(code, state, game_data, ctx),\n"
+     "                      destroyable(code, state, game_data, ctx))",
+     "        surplus = destroyable(code, state, game_data, ctx)"),
+
+    ("sellable_surplus: no keep authority at all (blanket sell-off)",
+     "        surplus = min(bankable(code, state, game_data, ctx),\n"
+     "                      destroyable(code, state, game_data, ctx))",
+     "        surplus = held"),
+
+    # The ratio gate must read the AUTHORITY's keep, not a bare 0: with keep 0 the
+    # gate degenerates to `held >= 5` and a 5-copy pile of the best axe sells down
+    # to nothing while the authority says keep 1.
+    ("sellable_accumulation: ratio gate ignores the authority keep",
+     "        if accumulation_excess(held, held - surplus) > 0:",
+     "        if accumulation_excess(held, 0) > 0:"),
 ]
 
 
@@ -4647,6 +4687,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_inventory_profile_diff.py", survivors)
     run_group(ACCUMULATION_SELL_SRC, ACCUMULATION_SELL_MUTATIONS,
               "formal/diff/test_accumulation_sell_diff.py", survivors)
+    run_group(ACCUMULATION_SELL_SRC, SELL_KEEP_MUTATIONS,
+              "tests/test_ai/test_sell_protection.py", survivors)
     run_group(LOADOUT_PROFILES_CORE_SRC, LOADOUT_PROFILES_CORE_MUTATIONS,
               "formal/diff/test_loadout_profiles_diff.py", survivors)
     run_group(EXPAND_BANK_GOAL_SRC, EXPAND_BANK_FLOOR_MUTATIONS,

@@ -642,8 +642,26 @@ def test_owned_gap_venue_unreachable_for_an_unplaced_buyer() -> None:
     assert classify_gap(cell, state, gd) is InventoryGapClass.VENUE_UNREACHABLE
     # Place the vendor and the route is real again -> the FAIL is unexplained.
     gd.world.npc_tiles = {"floating_merchant": (4, 4)}
-    assert _sellable("copper_bar", gd)
+    assert _sellable("copper_bar", state, gd)
     assert classify_gap(cell, state, gd) is InventoryGapClass.INVENTORY_BUG
+
+
+def test_owned_gap_venue_unreachable_for_a_dormant_event_merchant() -> None:
+    """A PLACED buyer is not a route when its event window is SHUT: every gold
+    merchant in this game is an event NPC, and `NpcSellAction` refuses the sale.
+    A location-only probe would blame the planner for not taking a sale the
+    server would reject (`active_task owned/slot_full`, golden_egg)."""
+    gd = _disposal_gd()
+    gd.world.npc_sell_prices = {"nomadic_merchant": {"copper_bar": 4}}
+    gd.world.npc_tiles = {"nomadic_merchant": (4, 4)}
+    gd._npc_event_code["nomadic_merchant"] = "nomadic_merchant"
+    gd._event_npc_spawns["nomadic_merchant"] = (4, 4)
+    cell = _gap_cell(KeepReason.RECIPE_DEMAND, "owned", "copper_bar")
+    state = make_state(inventory={"copper_bar": 9},
+                       bank_items={f"junk_{i}": 1 for i in range(gd.bank_capacity)},
+                       inventory_max=100)
+    assert _sellable("copper_bar", state, gd) is False
+    assert classify_gap(cell, state, gd) is InventoryGapClass.VENUE_UNREACHABLE
 
 
 def test_recyclable_is_intrinsic_to_the_item_and_the_world() -> None:

@@ -1,9 +1,19 @@
 from artifactsmmo_cli.ai.accumulation_sell import (
-    ACCUM_MULT, SEVERE_STEPS, _is_sellable, accumulation_excess, accumulation_steps,
-    sellable_accumulation, worst_accumulation_steps,
+    ACCUM_MULT,
+    SEVERE_STEPS,
+    _is_sellable,
+    accumulation_excess,
+    accumulation_steps,
+    sell_targets,
+    sellable_accumulation,
+    sellable_surplus,
+    worst_accumulation_steps,
 )
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai.fixtures import make_state
+
+CTX = NO_PROFILE_CONTEXT
 
 
 def test_is_sellable_requires_a_reachable_buyer():
@@ -20,7 +30,7 @@ def test_is_sellable_requires_a_reachable_buyer():
     # also excluded from the accumulation set when unreachable
     gd._npc_locations = {}
     state = make_state(level=1, inventory={"x": 40})
-    assert sellable_accumulation(state, gd) == {}
+    assert sellable_accumulation(state, gd, CTX) == {}
 
 
 def _gd_with_buyer() -> GameData:
@@ -39,23 +49,37 @@ def _gd_with_buyer() -> GameData:
 
 def test_sellable_accumulation_targets_over_ratio_sellable_gear():
     gd = _gd_with_buyer()
-    # 14 shields, cap 1 (equippable keep, not dominated) -> r=14 -> excess 13.
+    # 14 shields, keep 1 (the authority's EQUIPPED/RECIPE_DEMAND arm) -> 13 licensed,
+    # and 14 >= ACCUM_MULT * 1 clears the ratio gate.
     state = make_state(level=1, inventory={"wooden_shield": 14})
-    assert sellable_accumulation(state, gd) == {"wooden_shield": 13}
+    assert sellable_accumulation(state, gd, CTX) == {"wooden_shield": 13}
 
 
 def test_sellable_accumulation_skips_unsellable_and_below_gate():
     gd = _gd_with_buyer()
     # gold_coin has no buyer -> skipped even if accumulated.
     state = make_state(level=1, inventory={"wooden_shield": 4, "gold_coin": 999})
-    assert sellable_accumulation(state, gd) == {}  # 4 < 5*1; coin not sellable
+    assert sellable_accumulation(state, gd, CTX) == {}  # 4 < 5*1; coin not sellable
+
+
+def test_sellable_surplus_is_the_licence_the_ratio_gate_holds_back():
+    """The AUTHORITY licenses the 3 spare shields; the ratio gate (4 < 5*1) is
+    what declines to sell them while the bank can still take them. The two
+    functions differ exactly there, and `sell_targets(relief=True)` — the
+    bank-full cascade's SELL rung — takes the licence."""
+    gd = _gd_with_buyer()
+    state = make_state(level=1, inventory={"wooden_shield": 4})
+    assert sellable_surplus(state, gd, CTX) == {"wooden_shield": 3}
+    assert sellable_accumulation(state, gd, CTX) == {}
+    assert sell_targets(state, gd, CTX) == {}
+    assert sell_targets(state, gd, CTX, relief=True) == {"wooden_shield": 3}
 
 
 def test_worst_accumulation_steps_is_max_over_items():
     gd = _gd_with_buyer()
     state = make_state(level=1, inventory={"wooden_shield": 40})  # steps 5
-    assert worst_accumulation_steps(state, gd) == 5
-    assert worst_accumulation_steps(make_state(level=1), gd) == 0
+    assert worst_accumulation_steps(state, gd, CTX) == 5
+    assert worst_accumulation_steps(make_state(level=1), gd, CTX) == 0
 
 
 def test_steps_is_floor_log2_ratio():
@@ -89,7 +113,6 @@ def test_constants():
 
 def test_sellable_accumulation_excludes_non_tradeable_even_with_buyer():
     """A non-tradeable item with a buyer is excluded by sellable_accumulation."""
-    from artifactsmmo_cli.ai.accumulation_sell import _is_sellable
     gd = GameData()
     gd._item_stats = {
         "bound_blade": ItemStats(code="bound_blade", level=1, type_="weapon",
@@ -105,7 +128,8 @@ def test_sellable_accumulation_excludes_non_tradeable_even_with_buyer():
 
     # Even with held=20 (well above gate 5*1), it should be excluded.
     state = make_state(level=1, inventory={"bound_blade": 20})
-    assert sellable_accumulation(state, gd) == {}
+    assert sellable_accumulation(state, gd, CTX) == {}
+    assert sellable_surplus(state, gd, CTX) == {}
 
 
 def test_worst_accumulation_steps_skips_unsellable_and_zero_qty():
@@ -121,8 +145,8 @@ def test_worst_accumulation_steps_skips_unsellable_and_zero_qty():
 
     # State with zero qty and one unsellable item -> worst_accumulation_steps returns 0
     state = make_state(level=1, inventory={"unsellable_item": 0})
-    assert worst_accumulation_steps(state, gd) == 0
+    assert worst_accumulation_steps(state, gd, CTX) == 0
 
     # Also test with negative qty (edge case, but ensures continue is exercised)
     state = make_state(level=1, inventory={"unsellable_item": -5})
-    assert worst_accumulation_steps(state, gd) == 0
+    assert worst_accumulation_steps(state, gd, CTX) == 0

@@ -18,10 +18,10 @@ Modeled goals:
 
 Mirrors the Lean theorems in `Formal.GoalSystem` (see file docstring there).
 """
-from datetime import datetime, timezone
 from fractions import Fraction
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
@@ -48,9 +48,9 @@ from artifactsmmo_cli.ai.goals.sell_inventory import (
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 from tests.test_ai.fixtures import make_state
-
 
 # ---------------------------------------------------------------------------
 # Lean model mirrors. These reproduce `Formal.GoalSystem.<goal>Value` exactly
@@ -440,12 +440,15 @@ def test_sell_inventory_matches_model_no_window(used, cap):
     if used > cap:
         used = cap
     gd = _gd()
-    goal = SellInventoryGoal(bank_accessible=False)
+    goal = SellInventoryGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT, bank_accessible=False)
     s = make_state(inventory={"copper_ore": used} if used else {},
                    inventory_max=cap)
+    # `satisfied` is an OPAQUE bit in the Lean model, so it is bound from the REAL
+    # goal — since Task 8 it means "the keep authority licenses no executable sale"
+    # (it was a free-space fraction), and the model is agnostic to which.
     # Empty GameData → no NPCs buy → sellable=False → 0.
     assert Fraction(goal.value(s, gd)) == sell_inventory_value_model(
-        cap == 0, s.inventory_free >= 5, False, False, Fraction(s.inventory_used, cap), False,
+        cap == 0, goal.is_satisfied(s), False, False, Fraction(s.inventory_used, cap), False,
     )
 
 
@@ -543,7 +546,7 @@ def test_restore_hp_value_in_band_0_110():
 def test_sell_inventory_value_in_band_0_100():
     """value ∈ [0, 100] across used ∈ [0, cap]. Kills mutants that overshoot."""
     gd = _gd()
-    goal = SellInventoryGoal(bank_accessible=False)
+    goal = SellInventoryGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT, bank_accessible=False)
     for used in (0, 5, 10, 15, 20):
         s = make_state(inventory={"copper_ore": used} if used else {}, inventory_max=20)
         v = goal.value(s, gd)
@@ -553,7 +556,8 @@ def test_sell_inventory_value_in_band_0_100():
 def test_discard_overstock_constants_in_band():
     """Pin the three pressure-tier constants and their ordering."""
     from artifactsmmo_cli.ai.goals.discard_overstock import (
-        CRITICAL_PRESSURE_FRACTION, HIGH_PRESSURE_FRACTION,
+        CRITICAL_PRESSURE_FRACTION,
+        HIGH_PRESSURE_FRACTION,
         PRIORITY_WHEN_OVERSTOCKED,
     )
     assert PRIORITY_WHEN_OVERSTOCKED == 40.0
