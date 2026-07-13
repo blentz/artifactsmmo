@@ -124,7 +124,10 @@ src/artifactsmmo_cli/ai/
 ├── shopping_list.py        # bank-aware acquisition (fueled, DAG-safe)
 ├── craft_relief.py         # CRAFT_RELIEF candidates — net-relief gate + batched crafts
 ├── inventory_caps.py / inventory_profile.py  # per-goal soft-target profiles
-├── bank_selection.py       # select_bank_deposits with keep-set
+├── inventory_keep.py       # THE keep authority: keep_in_bag/keep_owned/bankable/
+│                           #   destroyable — per-reason QUANTITIES (no code-sets)
+├── bank_selection.py       # select_bank_deposits — banks bankable(code) per held code
+├── kit_selection.py        # best fighting weapon / best gathering tool per skill
 ├── recipe_closure.py       # walk crafting_recipe transitively (fueled)
 ├── trace_stats.py          # SQLite-backed session analyzer
 │

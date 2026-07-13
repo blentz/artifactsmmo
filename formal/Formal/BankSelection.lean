@@ -1,104 +1,87 @@
 -- @concept: bank, items, crafting @property: safety
 /-
-Formal model of `select_bank_deposits` (and `_keep_codes`, `_recipe_materials`,
-`_best_fighting_weapon`) from `src/artifactsmmo_cli/ai/bank_selection.py`.
+Formal model of `select_bank_deposits` (and `hard_critical_codes`,
+`_last_resort_deposit`, `kit_selection.best_fighting_weapon` /
+`best_gathering_tools`) from `src/artifactsmmo_cli/ai/bank_selection.py`.
 
-## The policy
+## The policy — QUANTITIES, not a keep-SET
 
-`select_bank_deposits(state, game_data)` computes a KEEP-SET of protected item
-codes, then deposits exactly the inventory items with `qty > 0` NOT in the keep
-set, sorted by `(-sell_value, code)`.
+`select_bank_deposits(state, game_data, ctx)` deposits, for every held code, the
+copies that exceed its BAG keep cap:
 
-KEEP-SET (`_keep_codes`):
-* `{TASKS_COIN}` always;
-* `{task_code}` if the character has an active task;
-* every inventory item whose `hp_restore > 0` (HP-restore consumables);
-* the BEST fighting weapon over `inventory ∪ equipped` — the max-attack `weapon`
-  with NO `skill_effects` (tools excluded), ties broken by code ascending;
-* `_recipe_materials({crafting_target} ∪ {items-task code})` — the transitive
-  recipe-material closure of the equipment crafting target and the active
-  items-task item. Banking a task's OWN inputs starves PursueTask and FREEZES
-  task progress (the documented freeze invariant).
+    deposit qty = bankable(code) = max 0 (bag[code] - keep_in_bag(code))
 
-`_recipe_materials(roots)` is a DFS over `_crafting_recipes` adding every
-material key reached by following recipe-submaterial edges from the roots. It
-adds the CHILDREN (materials), recursing — exactly the recipe-child relation of
-`RecipeClosure`. We REUSE `Formal.RecipeClosure.Reachable` / `satN` /
-`closureItems` to model this least-fixpoint walk. NOTE: the Python `walk` adds a
-material when it is a *child* of a visited item — i.e. `Reachable` from the roots
-but reached via at least one recipe edge. A root that is never a child of any
-reachable item is NOT added unless it is itself a child. So `recipeMaterials` =
-`{m | StepReachable r roots m}` where `StepReachable` is "reachable via ≥ 1
-recipe-child edge from the roots". We define it inductively and relate it to
-`Reachable`.
+sorted by `(-sell_value, code)`.
+
+This REPLACES the old keep-SET policy (`_keep_codes : set[str]`, deleted). A
+code-set can only express "keep ALL copies", and that type-level defect WAS the
+hoard bug: the best woodcutting tool was in the set, so all EIGHTEEN `copper_axe`
+were shielded and DepositAll banked none of them while the weaponcrafting grind
+manufactured more. The theorems below are therefore no longer about set
+membership (`deposits ∩ keep = ∅`) but about COPIES: what leaves the bag is
+exactly the surplus, and what stays is exactly the cap.
+
+## `keepInBag` is OPAQUE here — deliberately
+
+The keep quantity is `inventory_keep.keep_in_bag`, whose combinator (the MAX over
+the `KeepReason` registry) is proved in `Formal.InventoryKeep` and whose
+individual reasons (a greedy aggregate heal fill, a fuel-bounded recipe-chain
+walk, ...) are game-data searches with no scalar to mirror. It enters this model
+as an opaque `keepInBag : Nat → Nat` field — exactly the discipline
+`Formal.InventoryKeep` uses for its contributions — and is pinned to the REAL
+Python end-to-end by `formal/diff/test_bank_selection_diff.py`, which calls the
+production `inventory_keep.keep_in_bag` for every code and feeds the resulting
+vector to the oracle. What is proved HERE is the deposit selector built on top of
+it: the surplus arithmetic, the freeze, the sort, and the last-resort branch.
+
+The transitive task-input protection the deleted `_recipe_materials` walk used to
+provide is NOT lost: it is the `COMMITTED_RECIPE` reason of the keep authority
+(`inventory_caps._task_chain_demand_pure`, modelled in `Formal.InventoryCaps` /
+`Formal.InventoryChainSafe`), and it is now a task-quantity-SCALED demand rather
+than a blanket over the closure. `kept_code_not_deposited` below is the general
+form of `task_material_not_deposited`: whatever the authority demands to the full
+held amount is never deposited, whichever reason demanded it.
 
 ## Model
 
-Items are `Nat` codes. `recipe : Nat → List (Nat × Nat)` is the
-`_crafting_recipes` ingredient map (reused `RecipeClosure.Recipe`). Each inventory
-item carries `(code, qty)`. Weapon attributes are abstracted to
-`attack : Nat → Int` (sum of element attacks), `isWeapon : Nat → Bool`,
-`isTool : Nat → Bool` (has skill_effects), `hpRestore : Nat → Int`. Sell value is
-`sellValue : Nat → Int`. We prove `select_bank_deposits` deposits EXACTLY the
-qty>0 inventory codes outside the keep set, the freeze invariant
-`deposits ∩ keep = ∅`, task-input protection, and keep-closure under the
-recipe-material walk (the reused fixpoint).
+Items are `Nat` codes. Each inventory item carries `(code, qty)`. Weapon
+attributes are abstracted to `attack : Nat → Int`, `isWeapon`, `isTool` (has
+skill_effects), `hpRestore`. Sell value is `sellValue : Nat → Int`.
 
 Lean core only — no mathlib.
 
-## LAST-RESORT relief (modelled 2026-06-19, in lockstep with bank_selection.py)
+## LAST-RESORT relief (modelled 2026-06-19, slot-aware 2026-07-09)
 
-`select_bank_deposits` has a LAST-RESORT branch (commit 4548d9e): when the bag can
-admit NO further item AND nothing is normally bankable (the whole bag is keep-set
-protected), it banks ONE least-critical KEEP item to free a slot — otherwise
-`FightAction` (needs a free slot) cannot fire and leveling stalls (the
-full-of-useful-items livelock). "Cannot admit another item" is now SLOT-AWARE
-(follow-up 2026-07-09): it fires when the total quantity cap is hit
-(`inventory_free == 0`) OR when every inventory SLOT is occupied
-(`inventory_slots_free == 0`). A bag of many low-count keep stacks fills all 20 slots
-long before the quantity cap — the slots-full case was the reachable stall the earlier
-`inventory_free == 0`-only gate missed. This is now FAITHFULLY MODELLED here:
-* `State.inventoryMax` + `inventoryUsed`/`inventoryFree` carry quantity capacity;
-* `State.inventorySlotsMax` + `inventorySlotsUsed` (count of positive stacks) /
-  `inventorySlotsFree` carry SLOT capacity;
-* `lastResortDeposit` mirrors `_last_resort_deposit` (least-critical pick);
-* `selectBankDeposits` IS the full production function (normal path, else last-resort
-  when `free == 0 ∨ slots_free == 0`). The oracle/differential drive it, including the
-  slots-full-but-quantity-headroom case.
-The unconditional `freeze_invariant` (`deposits ∩ keep = ∅`) is about the NORMAL path
-`deposits` (unchanged, still proven); the production `selectBankDeposits` satisfies the
-RELAXED `freeze_invariant_of_free_pos` — the freeze holds while the bag can still admit
-an item (quantity room AND slot room both remain), and when EITHER capacity is
-exhausted the last-resort deliberately banks one (recoverable) keep item, which
-`selectBankDeposits_frees_slot_when_full` shows frees a slot from the inventory.
+When the bag can admit NO further item — the quantity cap is hit
+(`inventory_free == 0`) OR every slot is occupied (`inventory_slots_free == 0`) —
+AND nothing is bankable (every held code sits at or below its keep cap), one
+least-critical stack is banked anyway to free a slot; otherwise `FightAction`
+(which needs a free slot) cannot fire and leveling stalls. The pick is ordered by
+`hard_critical_codes` (`inKeepBase` here: coin / task item / HP consumable / best
+weapon / working tool), then sell value, then code. Banking is recoverable, so
+this loses nothing. `selectBankDeposits` IS the full production function.
 -/
 
-import Formal.RecipeClosure
-
 namespace Formal.BankSelection
-
-open Formal.RecipeClosure
 
 /-! ### State abstraction. -/
 
 /-- The inputs `select_bank_deposits` reads, abstracted to integer/Nat data.
-* `tasksCoin`    — the `TASKS_COIN` code (always kept);
-* `taskCode`     — `some c` if the character has an active task, else `none`;
-* `taskIsItems` — whether `task_type = "items"`;
-* `craftingTarget` — `some t` if an equipment crafting target is set;
-* `inventory`    — `(code, qty)` association list (Python `state.inventory.items()`);
-* `equipped`     — equipped item codes (`state.equipment` values, non-None);
-* `recipe`       — `_crafting_recipes` ingredient map;
-* `attack`       — Σ element attack for a weapon item;
-* `isWeapon`     — `stats.type_ = "weapon"`;
-* `isTool`       — `stats.skill_effects` nonempty (a gathering tool);
-* `hpRestore`    — `stats.hp_restore`;
-* `sellValue`    — max NPC buy price (0 if none). -/
+* `tasksCoin`  — the `TASKS_COIN` code (the `CURRENCY` / `KEEP_ALL` code);
+* `taskCode`   — `some c` if the character has an active task, else `none`;
+* `inventory`  — `(code, qty)` association list (Python `state.inventory.items()`);
+* `equipped`   — equipped item codes (`state.equipment` values, non-None);
+* `attack`     — Σ element attack for a weapon item;
+* `isWeapon`   — `stats.type_ = "weapon"`;
+* `isTool`     — `stats.skill_effects` nonempty (a gathering tool);
+* `hpRestore`  — `stats.hp_restore`;
+* `sellValue`  — max NPC buy price (0 if none);
+* `keepInBag`  — `inventory_keep.keep_in_bag(code, ...)`: the copies that must
+  STAY in the bag. Opaque (see the header): proved in `Formal.InventoryKeep`,
+  pinned to the real Python by the differential. -/
 structure State where
   tasksCoin : Nat
   taskCode : Option Nat
-  taskIsItems : Bool
-  craftingTarget : Option Nat
   inventory : List (Nat × Nat)
   /-- `state.inventory_max` — total item capacity. With `inventoryUsed` (Σ qty) this
       gives `inventoryFree`, which the LAST-RESORT relief branch reads (`== 0`). -/
@@ -106,17 +89,22 @@ structure State where
   /-- `state.inventory_slots_max` — the number of inventory SLOTS (distinct-stack
       cap). With `inventorySlotsUsed` (count of positive stacks) this gives
       `inventorySlotsFree`, the OTHER exhaustion the last-resort branch reads
-      (`== 0`): many low-count keep stacks fill all slots before the quantity cap. -/
+      (`== 0`): many low-count kept stacks fill all slots before the quantity cap. -/
   inventorySlotsMax : Nat
   equipped : List Nat
-  recipe : Recipe
   attack : Nat → Int
   isWeapon : Nat → Bool
   isTool : Nat → Bool
   hpRestore : Nat → Int
   sellValue : Nat → Int
+  keepInBag : Nat → Nat
 
-/-! ### Best fighting weapon (argmax over inventory ∪ equipped). -/
+/-! ### Best fighting weapon (argmax over inventory ∪ equipped).
+
+`kit_selection.best_fighting_weapon`. It identifies the ONE code the character
+fights with; the keep authority's `COMBAT_WEAPON` reason turns that into the
+quantity 1. (Conflating the two — "this is the weapon" with "keep every copy of
+it" — is the bug class this file's header describes.) -/
 
 /-- Weapon candidates: inventory codes ∪ equipped codes (deduplicated). Mirrors
 `set(state.inventory)`+`equipment.values()`; dedup keeps the fold deterministic. -/
@@ -155,14 +143,13 @@ def bestWeaponCode (s : State) : Option Nat :=
   | none => none
   | some (_, code) => some code
 
-/-! ### Best gathering tool (banked-tool ferry keep, 2026-07-05).
+/-! ### Best gathering tool (`kit_selection.best_gathering_tools`).
 
-Python `_best_gathering_tools` keeps, per gathering skill, the argmax of
-`abs(gather_score)` over inventory ∪ equipped, ties broken by code ascending —
-depositing the working kit undid the WithdrawTools ferry and re-created the
-bare-handed grind. In THIS model's input abstraction toolness is a single
-boolean (the differential fixture maps every tool to one skill at unit
-magnitude), so the per-skill argmax reduces exactly to the LOWEST tool code. -/
+Python keeps, per gathering skill, the argmax of `abs(gather_score)` over
+inventory ∪ equipped, ties broken by code ascending. In THIS model's input
+abstraction toolness is a single boolean (the differential fixture maps every tool
+to one skill at unit magnitude), so the per-skill argmax reduces exactly to the
+LOWEST tool code. -/
 
 /-- Fold step for the best gathering tool: first/lowest tool code wins. -/
 def betterTool (s : State) (best : Option Nat) (code : Nat) : Option Nat :=
@@ -173,64 +160,31 @@ def betterTool (s : State) (best : Option Nat) (code : Nat) : Option Nat :=
   else best
 
 /-- Tool candidates: inventory codes with qty > 0 ∪ equipped. Python's
-`_best_gathering_tools` filters `q > 0` — a zero-qty stack is not an owned
+`best_gathering_tools` filters `q > 0` — a zero-qty stack is not an owned
 tool (unlike `weaponCandidates`, whose Python twin iterates codes only). -/
 def toolCandidates (s : State) : List Nat :=
   ((s.inventory.filter (fun cq => cq.2 > 0)).map Prod.fst ++ s.equipped).eraseDups
 
-/-- The kept gathering-tool code (lowest owned tool), if any tool is owned. -/
+/-- The working gathering-tool code (lowest owned tool), if any tool is owned. -/
 def bestToolCode (s : State) : Option Nat :=
   (toolCandidates s).foldl (betterTool s) none
 
-/-! ### Recipe-material walk — REUSED from `RecipeClosure`.
+/-! ### Hard-critical codes (`bank_selection.hard_critical_codes`).
 
-`_recipe_materials(roots)` adds a material when it is reached as a recipe CHILD of
-a visited item (the root itself is added only if it is also a child). We model the
-"reachable via ≥ 1 recipe-child edge" relation and relate it to the reused
-`Reachable`. -/
-
-/-- The protected recipe roots: the crafting target (if any) and the items-task
-code (if the task is an items task). Mirrors the `recipe_roots` list. -/
-def recipeRoots (s : State) : List Nat :=
-  (match s.craftingTarget with | some t => [t] | none => []) ++
-  (if s.taskIsItems then (match s.taskCode with | some c => [c] | none => []) else [])
-
-/-- `StepReachable r roots m`: `m` is reached from `roots` via AT LEAST ONE
-recipe-child edge — exactly the materials the DFS `walk` ADDS (a material is added
-only as a `mat` child of some visited item). -/
-inductive StepReachable (r : Recipe) (roots : List Nat) : Nat → Prop
-  | base {item child : Nat} (h : item ∈ roots)
-      (hc : child ∈ (r item).map Prod.fst) : StepReachable r roots child
-  | step {item child : Nat} (hi : StepReachable r roots item)
-      (hc : child ∈ (r item).map Prod.fst) : StepReachable r roots child
-
-/-- The recipe-material set as a Prop: exactly `StepReachable`. -/
-def recipeMaterials (s : State) (m : Nat) : Prop :=
-  StepReachable s.recipe (recipeRoots s) m
-
-/-- Every step-reachable material is `Reachable` (it sits in the reused least
-fixpoint seeded by the roots). The walk never escapes the recipe closure. -/
-theorem stepReachable_reachable (r : Recipe) (roots : List Nat) {m : Nat}
-    (h : StepReachable r roots m) : Reachable r roots m := by
-  induction h with
-  | base hr hc => exact Reachable.step (Reachable.root hr) hc
-  | step _ hc ih => exact Reachable.step ih hc
-
-/-! ### The keep set. -/
+A criticality RANKING for the last-resort pick — NOT a keep-set (nothing in this
+file protects a code; only `keepInBag` protects, and it protects COPIES). -/
 
 /-- A code is HP-restoring AND in the inventory (Python iterates `state.inventory`
 adding codes with `hp_restore > 0`). -/
 def isKeptHp (s : State) (code : Nat) : Bool :=
   decide (code ∈ s.inventory.map Prod.fst) && decide (s.hpRestore code > 0)
 
-/-- The keep-set as a decidable predicate over codes EXCEPT the recipe-material
-closure (which is a Prop via the reused fixpoint). `inKeepBase` is the
-finitely-checkable part:
+/-- `hard_critical_codes`: the codes the last-resort sheds LAST —
 * `code = tasksCoin`, or
 * `some code = taskCode`, or
-* HP-restore item in inventory, or
-* `code = bestWeaponCode`, or
-* `code = bestToolCode` (banked-tool ferry protection). -/
+* an HP-restore item in the inventory, or
+* the best fighting weapon, or
+* the working gathering tool. -/
 def inKeepBase (s : State) (code : Nat) : Bool :=
   decide (code = s.tasksCoin)
   || decide (s.taskCode = some code)
@@ -238,239 +192,155 @@ def inKeepBase (s : State) (code : Nat) : Bool :=
   || decide (bestWeaponCode s = some code)
   || decide (bestToolCode s = some code)
 
-/-- The FULL keep predicate: the base part OR a recipe material. -/
-def InKeep (s : State) (code : Nat) : Prop :=
-  inKeepBase s code = true ∨ recipeMaterials s code
+/-! ### The deposit list — the surplus above `keepInBag`. -/
 
-/-! ### Computable keep set (for the oracle).
+/-- `inventory_keep.bankable` at one inventory entry: the copies above the bag
+cap. Nat subtraction saturates, which IS the Python `max(0, ...)` — so a cap that
+EXCEEDS the held amount (two committed roots whose combined demand does not fit,
+or the `KEEP_ALL` currency sentinel) yields 0, never a negative deposit. -/
+def bankableQty (s : State) (cq : Nat × Nat) : Nat := cq.2 - s.keepInBag cq.1
 
-The recipe-material walk is computed via the reused `closureItems`; a code is a
-material iff it is in the closure of `recipeRoots` AND is itself a recipe child of
-something (i.e. `StepReachable`). For the oracle we compute the closure and then
-filter to those reached via an edge. The simplest faithful executable form: the
-walk's added set is `closureItems r roots fuel` minus any root that is never a
-child. We compute the material list directly as the children-union over the
-closure. -/
+/-- An entry contributes a deposit iff it is held (`qty > 0`) and has surplus. -/
+def isBankable (s : State) (cq : Nat × Nat) : Bool :=
+  decide (cq.2 > 0) && decide (bankableQty s cq > 0)
 
-/-- Computable recipe-material list: every recipe child of every item in the
-reachable closure of `recipeRoots`. Mirrors the DFS adding `mat` for each
-`(mat) ∈ recipe[item]` over every visited `item`. -/
-def recipeMaterialList (s : State) (fuel : Nat) : List Nat :=
-  (childrenOf s.recipe (closureItems s.recipe (recipeRoots s) fuel)).eraseDups
-
-/-- Computable keep-set list: the base codes present in inventory/equipped plus the
-recipe materials. We collect over the universe of relevant codes = inventory ∪
-equipped ∪ {tasksCoin} ∪ taskCode ∪ recipe materials. -/
-def keepList (s : State) (fuel : Nat) : List Nat :=
-  let baseUniverse :=
-    (s.tasksCoin :: (match s.taskCode with | some c => [c] | none => []) ++
-      s.inventory.map Prod.fst ++ s.equipped)
-  ((baseUniverse.filter (fun c => inKeepBase s c)) ++ recipeMaterialList s fuel).eraseDups
-
-/-! ### The deposit list. -/
-
-/-- Whether an inventory entry is deposited: `qty > 0` AND code is not in the keep
-set (computable form, fuel-parametrized). -/
-def isDeposited (s : State) (fuel : Nat) (cq : Nat × Nat) : Bool :=
-  decide (cq.2 > 0) && !decide (cq.1 ∈ keepList s fuel)
-
-/-- The deposit candidates: inventory entries with `qty > 0` not in the keep set,
+/-- The deposit candidates: one `(code, surplus)` per held code with surplus,
 BEFORE sorting. -/
-def depositCandidates (s : State) (fuel : Nat) : List (Nat × Nat) :=
-  s.inventory.filter (isDeposited s fuel)
+def depositCandidates (s : State) : List (Nat × Nat) :=
+  (s.inventory.filter (isBankable s)).map (fun cq => (cq.1, bankableQty s cq))
 
 /-- Sort key comparison: `(-sellValue, code)` ascending = sellValue descending,
-then code ascending. `cq₁` sorts before-or-equal `cq₂` iff higher sell value, or
-equal sell value with `≤` code. -/
+then code ascending. -/
 def depositLe (s : State) (cq₁ cq₂ : Nat × Nat) : Bool :=
   let v1 := s.sellValue cq₁.1
   let v2 := s.sellValue cq₂.1
   decide (v1 > v2) || (decide (v1 = v2) && decide (cq₁.1 ≤ cq₂.1))
 
 /-- The deposit list, sorted by `(-sellValue, code)`. -/
-def deposits (s : State) (fuel : Nat) : List (Nat × Nat) :=
-  (depositCandidates s fuel).mergeSort (fun a b => depositLe s a b)
+def deposits (s : State) : List (Nat × Nat) :=
+  (depositCandidates s).mergeSort (fun a b => depositLe s a b)
 
-/-! ### Theorems. -/
+/-! ### Theorems: the deposit is EXACTLY the surplus. -/
 
-/-- `deposits_exact`: the deposit CANDIDATES are EXACTLY the inventory entries with
-`qty > 0` and code ∉ keep. Membership characterization (the sort is a permutation;
-`deposits_perm` relates the sorted list to the candidates). -/
-theorem deposits_exact (s : State) (fuel : Nat) (cq : Nat × Nat) :
-    cq ∈ depositCandidates s fuel
-      ↔ cq ∈ s.inventory ∧ cq.2 > 0 ∧ cq.1 ∉ keepList s fuel := by
-  unfold depositCandidates isDeposited
-  rw [List.mem_filter]
+/-- `deposits_exact`: the deposit CANDIDATES are EXACTLY one entry per held code
+whose held amount EXCEEDS its bag cap, carrying the excess. (The sort is a
+permutation; `deposits_perm` relates the sorted list to the candidates.) -/
+theorem deposits_exact (s : State) (cq : Nat × Nat) :
+    cq ∈ depositCandidates s
+      ↔ ∃ held, (cq.1, held) ∈ s.inventory ∧ held > 0
+          ∧ held > s.keepInBag cq.1 ∧ cq.2 = held - s.keepInBag cq.1 := by
+  unfold depositCandidates
+  rw [List.mem_map]
   constructor
-  · rintro ⟨hmem, hcond⟩
+  · rintro ⟨⟨ac, aq⟩, hmem, heq⟩
+    rw [List.mem_filter] at hmem
+    obtain ⟨hinv, hcond⟩ := hmem
+    unfold isBankable bankableQty at hcond
     rw [Bool.and_eq_true] at hcond
-    obtain ⟨hq, hk⟩ := hcond
-    refine ⟨hmem, by simpa using hq, ?_⟩
-    rw [Bool.not_eq_true', decide_eq_false_iff_not] at hk
-    exact hk
-  · rintro ⟨hmem, hq, hk⟩
-    refine ⟨hmem, ?_⟩
-    rw [Bool.and_eq_true]
-    refine ⟨by simpa using hq, ?_⟩
-    rw [Bool.not_eq_true', decide_eq_false_iff_not]
-    exact hk
+    obtain ⟨hq, hs⟩ := hcond
+    simp only [decide_eq_true_eq] at hq hs
+    subst heq
+    exact ⟨aq, hinv, hq, by simpa using (by omega : s.keepInBag ac < aq), rfl⟩
+  · rintro ⟨held, hinv, hq, hgt, hval⟩
+    refine ⟨(cq.1, held), ?_, ?_⟩
+    · rw [List.mem_filter]
+      refine ⟨hinv, ?_⟩
+      unfold isBankable bankableQty
+      simp only [Bool.and_eq_true, decide_eq_true_eq]
+      exact ⟨hq, by omega⟩
+    · unfold bankableQty
+      simp only
+      rw [← hval]
 
-/-- The sorted deposit list is a PERMUTATION of the candidates (so it contains
-exactly the same entries; only the order changes). -/
-theorem deposits_perm (s : State) (fuel : Nat) :
-    (deposits s fuel).Perm (depositCandidates s fuel) :=
+/-- The sorted deposit list is a PERMUTATION of the candidates (same entries,
+different order). -/
+theorem deposits_perm (s : State) :
+    (deposits s).Perm (depositCandidates s) :=
   List.mergeSort_perm _ _
 
-/-- `deposits` membership = candidate membership (via the permutation) — the
-sorted list deposits EXACTLY the qty>0 non-kept inventory entries. -/
-theorem deposits_mem_iff (s : State) (fuel : Nat) (cq : Nat × Nat) :
-    cq ∈ deposits s fuel
-      ↔ cq ∈ s.inventory ∧ cq.2 > 0 ∧ cq.1 ∉ keepList s fuel := by
+/-- `deposits` membership = candidate membership (via the permutation). -/
+theorem deposits_mem_iff (s : State) (cq : Nat × Nat) :
+    cq ∈ deposits s
+      ↔ ∃ held, (cq.1, held) ∈ s.inventory ∧ held > 0
+          ∧ held > s.keepInBag cq.1 ∧ cq.2 = held - s.keepInBag cq.1 := by
   rw [← deposits_exact]
-  exact (deposits_perm s fuel).mem_iff
+  exact (deposits_perm s).mem_iff
 
-/-- `freeze_invariant`: NO deposited code is in the keep set — `deposits ∩ keep =
-∅`. This is the PursueTask-freeze guarantee: a protected item (task coin, task
-item, HP consumable, best weapon, or a recipe material of a protected root) is
-NEVER banked. -/
-theorem freeze_invariant (s : State) (fuel : Nat) (cq : Nat × Nat)
-    (h : cq ∈ deposits s fuel) : cq.1 ∉ keepList s fuel :=
-  ((deposits_mem_iff s fuel cq).mp h).2.2
+/-- **THE safety theorem** (the freeze invariant, re-cast onto copies): banking a
+deposited quantity leaves EXACTLY the keep cap in the bag. Nothing the keep
+authority demands ever leaves — and nothing above it ever stays. This is strictly
+stronger than the old set-level `deposits ∩ keep = ∅`, which could only say that a
+protected CODE was untouched (and therefore hoarded every copy of it). -/
+theorem deposit_leaves_keep (s : State) (cq : Nat × Nat) (h : cq ∈ deposits s) :
+    ∃ held, (cq.1, held) ∈ s.inventory ∧ held - cq.2 = s.keepInBag cq.1 := by
+  obtain ⟨held, hinv, _, hgt, hval⟩ := (deposits_mem_iff s cq).mp h
+  exact ⟨held, hinv, by omega⟩
 
 /-- Every deposited entry came from the inventory and has positive quantity. -/
-theorem deposits_from_inventory (s : State) (fuel : Nat) (cq : Nat × Nat)
-    (h : cq ∈ deposits s fuel) : cq ∈ s.inventory ∧ cq.2 > 0 :=
-  let hm := (deposits_mem_iff s fuel cq).mp h
-  ⟨hm.1, hm.2.1⟩
+theorem deposits_from_inventory (s : State) (cq : Nat × Nat) (h : cq ∈ deposits s) :
+    (∃ held, (cq.1, held) ∈ s.inventory ∧ held > 0) ∧ cq.2 > 0 := by
+  obtain ⟨held, hinv, hq, hgt, hval⟩ := (deposits_mem_iff s cq).mp h
+  exact ⟨⟨held, hinv, hq⟩, by omega⟩
 
-/-! ### Task-input protection (the freeze root cause). -/
+/-- **`kept_code_not_deposited`**: a code the authority demands to (at least) the
+full held amount is NEVER deposited, in ANY quantity.
 
-/-- Membership in the computable recipe-material list ⟺ the code is a recipe child
-of some item in the reachable closure. -/
-theorem recipeMaterialList_iff (s : State) (fuel : Nat) (m : Nat) :
-    m ∈ recipeMaterialList s fuel
-      ↔ ∃ item ∈ closureItems s.recipe (recipeRoots s) fuel,
-          m ∈ (s.recipe item).map Prod.fst := by
-  unfold recipeMaterialList childrenOf
-  rw [List.mem_eraseDups, List.mem_flatMap]
+This is the general form of the old `task_material_not_deposited`. Instantiate it
+with `COMMITTED_RECIPE` and it says the active task's own recipe inputs are never
+banked (the PursueTask freeze guarantee); with `CURRENCY` (`KEEP_ALL`) it says the
+task coins never are; with `WORKING_KIT` at held ≤ 1 it says the last working axe
+never is — while the 17 spares, whose held EXCEEDS the cap, do bank. -/
+theorem kept_code_not_deposited (s : State) (c : Nat)
+    (h : ∀ held, (c, held) ∈ s.inventory → held ≤ s.keepInBag c) :
+    ∀ q, (c, q) ∉ deposits s := by
+  intro q hmem
+  obtain ⟨held, hinv, _, hgt, _⟩ := (deposits_mem_iff s (c, q)).mp hmem
+  exact absurd (h held hinv) (by simpa using Nat.not_le.mpr hgt)
 
-/-- A `Reachable` item that is a recipe child of another item is itself
-`StepReachable` (reached via ≥ 1 edge). Proven by induction on the reachability
-derivation. -/
-theorem stepReachable_of_reachable (r : Recipe) (roots : List Nat) {item : Nat}
-    (hi : Reachable r roots item) :
-    ∀ {child : Nat}, child ∈ (r item).map Prod.fst → StepReachable r roots child := by
-  induction hi with
-  | root hroot => intro child hc; exact StepReachable.base hroot hc
-  | step _ hc' ih => intro child hc; exact StepReachable.step (ih hc') hc
+/-- The `KEEP_ALL` currency escape hatch at the deposit boundary: with the coin's
+cap at the sentinel, no holdable quantity of `tasks_coin` is ever banked. (The
+sentinel exceeds any bag the server can hand out, which is the second hypothesis —
+stated, not assumed away.) -/
+theorem currency_never_deposited (s : State)
+    (hcap : s.keepInBag s.tasksCoin = 1000000)
+    (hbag : ∀ held, (s.tasksCoin, held) ∈ s.inventory → held ≤ 1000000) :
+    ∀ q, (s.tasksCoin, q) ∉ deposits s :=
+  kept_code_not_deposited s s.tasksCoin (fun held hmem => by
+    rw [hcap]; exact hbag held hmem)
 
-/-- A code in the computable recipe-material list is a genuine recipe material
-(`StepReachable`) — SOUNDNESS of the executable walk wrt the inductive relation. -/
-theorem recipeMaterialList_sound (s : State) (fuel : Nat) {m : Nat}
-    (h : m ∈ recipeMaterialList s fuel) : recipeMaterials s m := by
-  rw [recipeMaterialList_iff] at h
-  obtain ⟨item, hitem, hchild⟩ := h
-  have hr : Reachable s.recipe (recipeRoots s) item := closureItems_sound _ _ _ hitem
-  exact stepReachable_of_reachable s.recipe (recipeRoots s) hr hchild
+/-! ### Non-vacuity: the axe row.
 
-/-- `task_inputs_protected`: every recipe material of the protected roots
-(crafting target ∪ items-task code) is in the keep set. Banking a task's own
-inputs is impossible. We state it over the computable keep set: any recipe
-material captured within `fuel` is kept. -/
-theorem task_inputs_protected (s : State) (fuel : Nat) {m : Nat}
-    (h : m ∈ recipeMaterialList s fuel) : m ∈ keepList s fuel := by
-  unfold keepList
-  rw [List.mem_eraseDups, List.mem_append]
-  exact Or.inr h
+Every hypothesis above is satisfiable, and the headline bug is refuted on the
+exact numbers of the live incident: 18 `copper_axe` held, `WORKING_KIT` demands 1,
+so 17 are selected for deposit and 1 stays. Under the deleted code-set the axe was
+simply "kept" and 0 were selected. -/
 
-/-- A protected recipe material is NEVER deposited — the direct freeze guarantee
-for task inputs (combines `task_inputs_protected` with `freeze_invariant`). -/
-theorem task_material_not_deposited (s : State) (fuel : Nat) (cq : Nat × Nat)
-    (hmat : cq.1 ∈ recipeMaterialList s fuel) : cq ∉ deposits s fuel := by
-  intro hdep
-  exact freeze_invariant s fuel cq hdep (task_inputs_protected s fuel hmat)
+/-- The surplus arithmetic on the live row. -/
+theorem copper_axe_surplus (s : State) (c : Nat) (hkeep : s.keepInBag c = 1) :
+    bankableQty s (c, 18) = 17 := by
+  unfold bankableQty
+  simp [hkeep]
 
-/-! ### Keep-closure under the recipe-material walk (the reused fixpoint).
+/-- ...and the row really IS selected: `(axe, 17)` is a deposit candidate, so
+`deposits_exact`'s hypothesis is satisfiable (the theorem is not vacuous) and the
+17 spares leave the bag. -/
+theorem copper_axe_hoard_refuted (s : State) (c : Nat)
+    (hkeep : s.keepInBag c = 1) (hmem : (c, 18) ∈ s.inventory) :
+    (c, 17) ∈ depositCandidates s := by
+  rw [deposits_exact]
+  refine ⟨18, hmem, by omega, ?_, ?_⟩ <;> simp [hkeep]
 
-The protected roots' transitive materials are ALL kept: the keep set is closed
-under the recipe-material walk. We show the keep set contains every
-`StepReachable` material captured by `fuel`, and that `StepReachable` is closed
-under taking further recipe children. -/
-
-/-- `StepReachable` is closed under taking a recipe child: a material's own recipe
-children are also materials. This is the closure property of the walk — once a
-material is protected, all its sub-materials are too. -/
-theorem recipeMaterials_closed (s : State) {item child : Nat}
-    (hi : recipeMaterials s item) (hc : child ∈ (s.recipe item).map Prod.fst) :
-    recipeMaterials s child :=
-  StepReachable.step hi hc
-
-/-- `keep_closed`: the keep set is closed under the recipe-material walk seeded by
-the protected roots. Formally: every `StepReachable` material that is captured in
-the computable closure within `fuel` is in the keep set. Combined with
-`recipeMaterials_closed`, the protected roots' ENTIRE transitive material set is
-kept (the reused least-fixpoint closure). -/
-theorem keep_closed (s : State) (fuel : Nat) {m : Nat}
-    (hmat : m ∈ recipeMaterialList s fuel) :
-    m ∈ keepList s fuel ∧ recipeMaterials s m :=
-  ⟨task_inputs_protected s fuel hmat, recipeMaterialList_sound s fuel hmat⟩
-
-/-- COMPLETENESS of the recipe-material capture: any material reachable via a
-recipe edge from an item captured at round `n ≤ fuel` is in the material list (so
-with adequate fuel, the full `StepReachable` set is kept). -/
-theorem recipeMaterialList_complete (s : State) (fuel n : Nat) (hle : n ≤ fuel)
-    {item m : Nat} (hitem : item ∈ satN s.recipe (recipeRoots s) n)
-    (hc : m ∈ (s.recipe item).map Prod.fst) : m ∈ recipeMaterialList s fuel := by
-  rw [recipeMaterialList_iff]
-  exact ⟨item, closureItems_complete _ _ _ _ hle hitem, hc⟩
-
-/-! ### Base keep-set membership: the non-recipe protections. -/
-
-/-- The TASKS_COIN is always kept (it is in the base universe and satisfies
-`inKeepBase`). -/
-theorem tasks_coin_kept_base (s : State) : inKeepBase s s.tasksCoin = true := by
-  unfold inKeepBase
-  simp
-
-/-- The active task code is kept (base). -/
-theorem task_code_kept_base (s : State) (c : Nat) (h : s.taskCode = some c) :
-    inKeepBase s c = true := by
-  unfold inKeepBase
-  simp [h]
-
-/-- An inventory HP-restore item is kept (base). -/
-theorem hp_item_kept_base (s : State) (c : Nat)
-    (hmem : c ∈ s.inventory.map Prod.fst) (hhp : s.hpRestore c > 0) :
-    inKeepBase s c = true := by
-  unfold inKeepBase isKeptHp
-  simp [hmem, hhp]
-
-/-- The best fighting weapon is kept (base), when one exists. -/
-theorem best_weapon_kept_base (s : State) (c : Nat) (h : bestWeaponCode s = some c) :
-    inKeepBase s c = true := by
-  unfold inKeepBase
-  simp [h]
-
-/-- The kept gathering tool is kept (base), when one exists — the banked-tool
-ferry protection: the working kit never deposits. -/
-theorem best_tool_kept_base (s : State) (c : Nat) (h : bestToolCode s = some c) :
-    inKeepBase s c = true := by
-  unfold inKeepBase
-  simp [h]
+/-- ...while the ONE working copy is untouchable: at 1 held (cap 1) nothing of the
+code is deposited. Both halves hold of the SAME code — that is what a quantity can
+express and a code-set cannot. -/
+theorem copper_axe_working_copy_kept (s : State) (c : Nat)
+    (hkeep : s.keepInBag c = 1)
+    (hinv : ∀ held, (c, held) ∈ s.inventory → held ≤ 1) :
+    ∀ q, (c, q) ∉ deposits s :=
+  kept_code_not_deposited s c (fun held hmem => by rw [hkeep]; exact hinv held hmem)
 
 /-! ### Capacity + the LAST-RESORT relief (production parity, 2026-06-19;
-slot-aware 2026-07-09).
-
-Mirrors `select_bank_deposits`'s last-resort branch (bank_selection.py, commit
-4548d9e): when the bag can admit NO further item — the quantity cap is hit
-(`inventory_free == 0`) OR every slot is occupied (`inventory_slots_free == 0`) — AND
-nothing is normally bankable (the whole bag is keep-set protected), bank ONE
-least-critical keep item to free a slot — else `FightAction` (needs a free slot) cannot
-fire and leveling stalls. The
-least-critical pick is, among inventory entries with `qty > 0`: NOT `inKeepBase`
-(weapon / HP consumable / task item / coin) before those, then lowest `sellValue`,
-then code ascending. (Python's `profile_codes` tiebreak is modelled as empty — the
-differential drives `select_bank_deposits` with the default empty profile.) -/
+slot-aware 2026-07-09). -/
 
 /-- `state.inventory_used` — Σ stack quantities. -/
 def inventoryUsed (s : State) : Nat := (s.inventory.map Prod.snd).sum
@@ -480,9 +350,7 @@ def inventoryFree (s : State) : Nat := s.inventoryMax - inventoryUsed s
 
 /-- `state.inventory_slots_used` — the number of occupied SLOTS = count of DISTINCT
 inventory codes holding a POSITIVE quantity. Mirrors the Python property
-`sum(1 for q in inventory.values() if q > 0)` exactly: the differential drives this
-from a dict (unique keys), so counting positive stacks equals counting distinct
-positive codes; `eraseDups` keeps it robust to any duplicate-code input. -/
+`sum(1 for q in inventory.values() if q > 0)` exactly. -/
 def inventorySlotsUsed (s : State) : Nat :=
   ((s.inventory.filter (fun cq => decide (cq.2 > 0))).map Prod.fst).eraseDups.length
 
@@ -491,9 +359,9 @@ def inventorySlotsUsed (s : State) : Nat :=
 real "cannot admit another item" stall even when quantity capacity remains. -/
 def inventorySlotsFree (s : State) : Nat := s.inventorySlotsMax - inventorySlotsUsed s
 
-/-- Last-resort sort comparator: `(inKeepBase, sellValue, code)` ascending. `cq₁`
-sorts before-or-equal `cq₂` iff non-critical-vs-critical, else lower sell value, else
-`≤` code. Mirrors `_last_resort_deposit`'s key (profile term modelled empty). -/
+/-- Last-resort sort comparator: `(inKeepBase, sellValue, code)` ascending. Mirrors
+`_last_resort_deposit`'s key (the `ctx.step_profile` term is modelled empty — the
+differential drives `select_bank_deposits` with the default no-profile context). -/
 def lastResortLe (s : State) (cq₁ cq₂ : Nat × Nat) : Bool :=
   let c1 := inKeepBase s cq₁.1
   let c2 := inKeepBase s cq₂.1
@@ -502,24 +370,23 @@ def lastResortLe (s : State) (cq₁ cq₂ : Nat × Nat) : Bool :=
   (!c1 && c2)
   || (c1 == c2 && (decide (v1 < v2) || (decide (v1 = v2) && decide (cq₁.1 ≤ cq₂.1))))
 
-/-- Last-resort candidates: inventory entries with `qty > 0` (the keep-set is the whole
-bag in this branch, so criticality only orders the pick). -/
+/-- Last-resort candidates: inventory entries with `qty > 0` (in this branch every
+held code is at or below its cap, so criticality only ORDERS the pick). -/
 def lastResortCandidates (s : State) : List (Nat × Nat) :=
   s.inventory.filter (fun cq => decide (cq.2 > 0))
 
-/-- The single least-critical stack to bank when the bag is full of keep-set items;
-`none` only when the bag is empty. Mirrors `_last_resort_deposit`. -/
+/-- The single least-critical stack to bank when the bag is full and nothing is
+bankable; `none` only when the bag is empty. Mirrors `_last_resort_deposit`. -/
 def lastResortDeposit (s : State) : Option (Nat × Nat) :=
   match (lastResortCandidates s).mergeSort (fun a b => lastResortLe s a b) with
   | [] => none
   | x :: _ => some x
 
-/-- **`select_bank_deposits` IN FULL** (the production function): the normal sorted
-deposits when non-empty, else — only when `inventory_free == 0` — the single
-last-resort keep item, else `[]`. The existing `deposits` def is the NORMAL path; this
-wraps it with the last-resort branch. -/
-def selectBankDeposits (s : State) (fuel : Nat) : List (Nat × Nat) :=
-  if deposits s fuel ≠ [] then deposits s fuel
+/-- **`select_bank_deposits` IN FULL** (the production function): the surplus
+deposits when non-empty, else — only when the bag can admit no further item — the
+single last-resort stack, else `[]`. -/
+def selectBankDeposits (s : State) : List (Nat × Nat) :=
+  if deposits s ≠ [] then deposits s
   else if inventoryFree s = 0 ∨ inventorySlotsFree s = 0 then
     match lastResortDeposit s with
     | some item => [item]
@@ -528,38 +395,34 @@ def selectBankDeposits (s : State) (fuel : Nat) : List (Nat × Nat) :=
 
 /-! ### selectBankDeposits theorems — normal-path parity + the relaxed freeze. -/
 
-/-- On the NORMAL path (BOTH quantity room `inventory_free > 0` AND slot room
-`inventory_slots_free > 0`), `selectBankDeposits = deposits`: the last-resort branch
-never fires while the bag can still admit another item. So every existing `deposits`
-theorem (incl. `freeze_invariant`) transfers verbatim. RESTATED (slot-aware): the
-last-resort now also fires when SLOTS are exhausted, so the normal path requires slot
-headroom too — the old single `inventory_free > 0` hypothesis no longer suffices. -/
-theorem selectBankDeposits_eq_deposits_of_free_pos (s : State) (fuel : Nat)
+/-- On the NORMAL path (BOTH quantity room AND slot room), `selectBankDeposits =
+deposits`: the last-resort never fires while the bag can still admit an item, so
+every `deposits` theorem (incl. `deposit_leaves_keep`) transfers verbatim. -/
+theorem selectBankDeposits_eq_deposits_of_free_pos (s : State)
     (hfree : inventoryFree s > 0) (hslots : inventorySlotsFree s > 0) :
-    selectBankDeposits s fuel = deposits s fuel := by
+    selectBankDeposits s = deposits s := by
   unfold selectBankDeposits
-  by_cases hd : deposits s fuel = []
+  by_cases hd : deposits s = []
   · rw [if_neg (by simp [hd])]
     have hfull : ¬ (inventoryFree s = 0 ∨ inventorySlotsFree s = 0) := by
       rintro (h | h) <;> omega
     rw [if_neg hfull, hd]
   · rw [if_pos hd]
 
-/-- **Relaxed freeze invariant** — the honest replacement for the unconditional
-`freeze_invariant`: while the bag can still admit another item (quantity room AND slot
-room both remain), no deposited code is in the keep set. When EITHER capacity is
-exhausted the last-resort deliberately banks ONE keep item (recoverable), so the
-freeze CANNOT hold there — and must not, or the bag stalls. RESTATED (slot-aware):
-carries the extra `inventorySlotsFree s > 0` hypothesis. -/
-theorem freeze_invariant_of_free_pos (s : State) (fuel : Nat) (cq : Nat × Nat)
+/-- **Relaxed freeze invariant** — the honest statement of the guarantee: while the
+bag can still admit another item, every deposit leaves EXACTLY the keep cap behind.
+When either capacity is exhausted the last-resort deliberately banks ONE protected
+stack (recoverable), so the freeze CANNOT hold there — and must not, or the bag
+stalls and the bot stops fighting. -/
+theorem keep_respected_of_free_pos (s : State) (cq : Nat × Nat)
     (hfree : inventoryFree s > 0) (hslots : inventorySlotsFree s > 0)
-    (h : cq ∈ selectBankDeposits s fuel) :
-    cq.1 ∉ keepList s fuel := by
-  rw [selectBankDeposits_eq_deposits_of_free_pos s fuel hfree hslots] at h
-  exact freeze_invariant s fuel cq h
+    (h : cq ∈ selectBankDeposits s) :
+    ∃ held, (cq.1, held) ∈ s.inventory ∧ held - cq.2 = s.keepInBag cq.1 := by
+  rw [selectBankDeposits_eq_deposits_of_free_pos s hfree hslots] at h
+  exact deposit_leaves_keep s cq h
 
-/-- The last-resort pick is a real inventory entry with positive quantity — so banking
-it FREES a slot (the production guarantee that breaks the livelock). -/
+/-- The last-resort pick is a real inventory entry with positive quantity — so
+banking it FREES a slot (the production guarantee that breaks the livelock). -/
 theorem lastResortDeposit_mem (s : State) (cq : Nat × Nat)
     (h : lastResortDeposit s = some cq) : cq ∈ s.inventory ∧ cq.2 > 0 := by
   unfold lastResortDeposit at h
@@ -576,23 +439,19 @@ theorem lastResortDeposit_mem (s : State) (cq : Nat × Nat)
     exact ⟨hcand.1, by simpa using hcand.2⟩
 
 /-- **Last-resort relief frees a slot.** When the bag can admit no more items —
-EITHER quantity-full (`inventory_free == 0`) OR slots-full (`inventory_slots_free ==
-0`) — and nothing is normally bankable, `selectBankDeposits` banks exactly one
-inventory stack, so a slot frees and the fight can fire. (`lastResortDeposit` is
-`none` only on an empty bag, which cannot exhaust either capacity with positive caps.)
-RESTATED (slot-aware): the fullness hypothesis is now the DISJUNCTION quantity-full ∨
-slots-full — the slots-full case is the newly-closed stall. -/
-theorem selectBankDeposits_frees_slot_when_full (s : State) (fuel : Nat)
-    (hd : deposits s fuel = [])
+EITHER quantity-full OR slots-full — and nothing is bankable, `selectBankDeposits`
+banks exactly one inventory stack, so a slot frees and the fight can fire. -/
+theorem selectBankDeposits_frees_slot_when_full (s : State)
+    (hd : deposits s = [])
     (hfull : inventoryFree s = 0 ∨ inventorySlotsFree s = 0)
     (cq : Nat × Nat) (hlr : lastResortDeposit s = some cq) :
-    selectBankDeposits s fuel = [cq] ∧ cq ∈ s.inventory ∧ cq.2 > 0 := by
+    selectBankDeposits s = [cq] ∧ cq ∈ s.inventory ∧ cq.2 > 0 := by
   refine ⟨?_, lastResortDeposit_mem s cq hlr⟩
   unfold selectBankDeposits
   rw [if_neg (by simp [hd]), if_pos hfull, hlr]
 
-/-! ### best_weapon_argmax (optional): the best fighting weapon is the max-attack
-non-tool weapon over inventory ∪ equipped, ties broken by code ascending. -/
+/-! ### best_weapon_argmax: the best fighting weapon is the max-attack non-tool
+weapon over inventory ∪ equipped, ties broken by code ascending. -/
 
 /-- The running best after a fold prefix is always a fighting weapon (or none). -/
 theorem bestWeaponFold_isFighting (s : State) :
@@ -662,12 +521,9 @@ theorem bestWeaponFold_ge (s : State) :
   | cons x xs ih =>
     intro acc
     simp only [List.foldl_cons]
-    -- compute acc' = betterWeapon s acc x and its attack relationship
     rcases ih (betterWeapon s acc x) with ⟨q, hfold, hacc', hcands'⟩ | hnone
     · refine Or.inl ⟨q, hfold, ?_, ?_⟩
-      · -- acc ≤ acc' ≤ q
-        intro ap hap
-        -- show ap.1 ≤ q.1 via acc' chain
+      · intro ap hap
         have hkey : ∀ ap', acc = some ap' →
             ∃ bp, betterWeapon s acc x = some bp ∧ ap'.1 ≤ bp.1 := by
           intro ap' hap'
@@ -687,11 +543,9 @@ theorem bestWeaponFold_ge (s : State) :
             rw [hap']; unfold betterWeapon; rw [if_neg hf]
         obtain ⟨bp, hbp, hle⟩ := hkey ap hap
         exact Int.le_trans hle (hacc' bp hbp)
-      · -- candidates: x and every y ∈ xs
-        intro y hy hfy
+      · intro y hy hfy
         rcases List.mem_cons.mp hy with hyx | hyxs
         · subst hyx
-          -- y = x is a fighting weapon ⇒ betterWeapon picks attack ≥ s.attack y
           have hkey : ∃ bp, betterWeapon s acc y = some bp ∧ s.attack y ≤ bp.1 := by
             cases acc with
             | none => exact ⟨(s.attack y, y), by simp only [betterWeapon, hfy, if_true], Int.le_refl _⟩

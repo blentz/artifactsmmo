@@ -12,14 +12,16 @@ legacy blanket equippable keep (so every pre-migration test is untouched); a
 populated map switches to the profile-aware economy.
 """
 
+from dataclasses import replace
 from datetime import datetime, timezone
 
 import pytest
 
 from artifactsmmo_cli.ai.accumulation_sell import sellable_accumulation
-from artifactsmmo_cli.ai.bank_selection import _keep_codes, select_bank_deposits
+from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.inventory_caps import useful_quantity_cap
+from artifactsmmo_cli.ai.inventory_keep import destroyable, keep_in_bag
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loadout_profiles import active_profile_gear
@@ -141,10 +143,20 @@ def test_profiled_gear_protected():
     assert recyclable_surplus(state, gd, protected, gear_keep=gear_keep) == {}
     # Not sold by accumulation-sell (cap == demand, not over-ratio).
     assert "copper_dagger" not in sellable_accumulation(state, gd, gear_keep=gear_keep)
-    # Not banked: profile-gear code stays in the bank keep-set.
-    keep = _keep_codes(state, gd, profile_codes=protected)
-    assert "copper_dagger" in keep
-    assert "copper_dagger" not in dict(select_bank_deposits(state, gd, protected))
+    # Not DESTROYED: gear demand is an OWNERSHIP demand (GEAR_DEMAND feeds
+    # keep_owned), so both copies must remain owned.
+    ctx = SelectionContext(bank_accessible=True, bank_required_level=0,
+                           bank_unlock_monster=None, initial_xp=0,
+                           task_exchange_min_coins=0, combat_monster=None,
+                           gear_keep=gear_keep)
+    assert destroyable("copper_dagger", state, gd, ctx) == 0
+    # BANKING, though, is reversible — and deliberately NOT blanket-blocked (the
+    # in-bag ladder has no GEAR_DEMAND arm, spec Task 1). The copy the character
+    # actually fights with stays in the bag (COMBAT_WEAPON = 1); the profile's
+    # SECOND copy is banked, still owned, and withdrawn when the loadout needs it.
+    # Pinning it in the bag is what ate the slots this epic exists to free.
+    assert keep_in_bag("copper_dagger", state, gd, ctx) == 1
+    assert dict(select_bank_deposits(state, gd, ctx))["copper_dagger"] == 1
 
 
 # --------------------------------------------------------------------------- #
@@ -198,15 +210,21 @@ def test_nongear_protection_unchanged():
         assert (useful_quantity_cap(code, state, gd, gear_keep=gear_keep)
                 == useful_quantity_cap(code, state, gd)), code
 
-    # The bank keep-set's NON-gear members are identical with vs without the
-    # profile codes: task item, task coins, HP consumables, and the
-    # crafting-target + task recipe materials are protected exactly as before.
-    legacy_keep = _keep_codes(state, gd, profile_codes=frozenset())
-    profile_keep = _keep_codes(state, gd, profile_codes=frozenset(gear_keep))
+    # The bank keep CAPS of the NON-gear members are identical with vs without a
+    # gear profile, and every one of them is strictly protected: task item, task
+    # coins, HP consumables, and the crafting-target + task recipe materials.
+    # (`gear_keep` only reroutes the EQUIPPABLE component, which the in-bag ladder
+    # does not read at all.)
+    base_ctx = SelectionContext(bank_accessible=True, bank_required_level=0,
+                                bank_unlock_monster=None, initial_xp=0,
+                                task_exchange_min_coins=0, combat_monster=None)
+    profile_ctx = replace(base_ctx, gear_keep=gear_keep)
     for code in (TASKS_COIN_CODE, "copper_helmet", "cooked_chicken",
                  "copper_ore", "copper_bar"):
-        assert (code in legacy_keep) == (code in profile_keep), code
-        assert code in legacy_keep, code
+        legacy = keep_in_bag(code, state, gd, base_ctx)
+        profiled = keep_in_bag(code, state, gd, profile_ctx)
+        assert legacy == profiled, code
+        assert legacy > 0, code
 
 
 # --------------------------------------------------------------------------- #

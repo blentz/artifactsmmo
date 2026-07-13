@@ -48,12 +48,15 @@ def _fishing_net_gd() -> GameData:
     return gd
 
 
-def _ctx() -> SelectionContext:
-    # fishing_net is a target TOOL of the long-term objective.
+def _ctx(step_profile: dict[str, int] | None = None) -> SelectionContext:
+    # fishing_net is a target TOOL of the long-term objective. `step_profile` is
+    # the active goal's material demand — the GOAL_MATERIALS keep reason, and the
+    # QUANTITY-typed replacement for the old `profile_codes` code-set.
     return SelectionContext(
         bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=6, combat_monster=None,
         target_tools=frozenset({"fishing_net"}),
+        step_profile=dict(step_profile or {}),
     )
 
 
@@ -77,9 +80,10 @@ def test_ash_wood_not_deposited_when_in_profile():
     state = make_state(inventory={"ash_wood": 8}, inventory_max=20,
                        task_code="copper_ore", task_type="items",
                        task_total=20, task_progress=5)
-    profile_codes = frozenset(inventory_profile(
-        state, gd, gear_codes=frozenset({"fishing_net"})))
-    deposits = select_bank_deposits(state, gd, profile_codes)
+    profile = inventory_profile(state, gd, gear_codes=frozenset({"fishing_net"}))
+    # 10 ash_wood demanded, 8 held: the whole holding is under the demand, so
+    # nothing is bankable (and NOT because a code-set blanketed it).
+    deposits = select_bank_deposits(state, gd, _ctx(profile))
     codes = {c for c, _ in deposits}
     assert "ash_wood" not in codes, (
         "ash_wood is an active-profile material; depositing it undoes the "
@@ -113,38 +117,37 @@ def test_ash_wood_not_discarded_with_free_slots():
     assert "ash_wood" not in codes
 
 
-def test_deposit_all_action_honors_profile_codes():
+def test_deposit_all_action_honors_the_goal_profile():
     """Run-5 trace 2026-06-11 23:05 (cycle 10): DepositAll banked all ~59
     ash_wood the active wooden_shield grind needed, forcing a 14-cycle
-    withdraw round-trip. The goal's profile_codes never reached the ACTION —
-    DepositAllAction._deposits called select_bank_deposits without them. The
-    action must honor the same keep-set the goal used to plan."""
+    withdraw round-trip. The goal's profile never reached the ACTION —
+    DepositAllAction._deposits called select_bank_deposits without it. The
+    action must honor the same keep caps the goal used to plan."""
     gd = _fishing_net_gd()
     state = make_state(inventory={"ash_wood": 8, "junk": 9}, inventory_max=20)
     unprotected = DepositAllAction(bank_location=(4, 0), game_data=gd)
     assert "ash_wood" in {c for c, _ in unprotected._deposits(state)}
     protected = DepositAllAction(bank_location=(4, 0), game_data=gd,
-                                 profile_codes=frozenset({"ash_wood"}))
+                                 ctx=_ctx({"ash_wood": 10}))
     codes = {c for c, _ in protected._deposits(state)}
     assert "ash_wood" not in codes
     assert "junk" in codes
 
 
 def test_deposit_goal_injects_profile_into_action():
-    """DepositInventoryGoal must hand its profile_codes to the deposit actions
-    it offers the planner — otherwise the goal plans with the keep-set but the
-    executed DepositAll ignores it (run-5 cycle-10 incoherence)."""
+    """DepositInventoryGoal must hand its ctx to the deposit actions it offers the
+    planner — otherwise the goal plans with the keep caps but the executed
+    DepositAll ignores them (run-5 cycle-10 incoherence)."""
     gd = _fishing_net_gd()
     state = make_state(inventory={"ash_wood": 8, "junk": 9}, inventory_max=20)
-    goal = DepositInventoryGoal(game_data=gd,
-                                profile_codes=frozenset({"ash_wood"}))
+    goal = DepositInventoryGoal(game_data=gd, ctx=_ctx({"ash_wood": 10}))
     actions = goal.relevant_actions(
         [DepositAllAction(bank_location=(4, 0), game_data=gd)], state, gd)
     assert actions, "deposit-tagged action must survive the filter"
     for act in actions:
         codes = {c for c, _ in act._deposits(state)}
         assert "ash_wood" not in codes, (
-            "the goal's profile_codes must reach the executed action"
+            "the goal's step profile must reach the executed action"
         )
 
 
@@ -156,12 +159,12 @@ def test_ash_wood_accumulates_no_oscillation():
     gd = _fishing_net_gd()
     profile = inventory_profile(make_state(), gd,
                                 gear_codes=frozenset({"fishing_net"}))
-    profile_codes = frozenset(profile)
-    deposit_goal = DepositInventoryGoal(game_data=gd, profile_codes=profile_codes)
+    ctx = _ctx(profile)
+    deposit_goal = DepositInventoryGoal(game_data=gd, ctx=ctx)
     discard_goal = DiscardOverstockGoal(game_data=gd, profile=profile)
     for held in (8, 9, 10):
         state = make_state(inventory={"ash_wood": held}, inventory_max=20)
-        deposits = select_bank_deposits(state, gd, profile_codes)
+        deposits = select_bank_deposits(state, gd, ctx)
         assert "ash_wood" not in {c for c, _ in deposits}
         # Deposit goal sees nothing to bank (ash_wood is the only item) -> satisfied.
         assert deposit_goal.is_satisfied(state) is True

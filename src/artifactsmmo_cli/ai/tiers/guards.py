@@ -4,7 +4,7 @@ instrumental means. The only surviving priority ladder, scoped to guards.
 Pure: predicates read state/game_data/history + an explicit SelectionContext
 (player runtime flags). No Goal-class imports — the driver maps GuardKind to goals."""
 
-from dataclasses import dataclass, field, replace
+from dataclasses import replace
 from enum import Enum
 
 from artifactsmmo_cli.ai.bank_room import bank_has_room
@@ -20,6 +20,9 @@ from artifactsmmo_cli.ai.inventory_profile import inventory_profile
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
+# Explicit re-export (`X as X`): `SelectionContext` lives one layer down now, but
+# `tiers.guards` remains its public home for every existing importer.
+from artifactsmmo_cli.ai.selection_context import SelectionContext as SelectionContext
 from artifactsmmo_cli.ai.thresholds import (
     CRITICAL_HP_FRACTION,
     DEPOSIT_FULL_FRACTION,
@@ -44,55 +47,12 @@ DISCARD_CRITICAL_FRACTION = PRESSURE_CRITICAL_FRACTION
 MAX_ACHIEVABLE_GAP = 5
 
 
-@dataclass(frozen=True)
-class SelectionContext:
-    bank_accessible: bool
-    bank_required_level: int
-    bank_unlock_monster: str | None
-    initial_xp: int
-    task_exchange_min_coins: int
-    combat_monster: str | None
-    # Gold-reserve safety floor (`progression_reserve.reserve_floor(state,
-    # game_data, None)`), computed by the player per cycle. Threaded here so
-    # the BANK_EXPAND means guard applies the SAME reserve gate as the proven
-    # should_expand_bank core WITHOUT means.py importing progression_reserve
-    # (which imports back into the tiers package — circular). Default 0 =
-    # reserve-free (legacy fixtures keep their old semantics).
-    gold_reserve: int = 0
-    # Long-term gear and tool codes — fed by player from the
-    # CharacterObjective so the CRAFT_RELIEF guard can score gear/tool
-    # craft candidates alongside the active task item. Empty fallback
-    # leaves the guard task-only.
-    target_gear: frozenset[str] = field(default_factory=frozenset)
-    target_tools: frozenset[str] = field(default_factory=frozenset)
-    # Usable-NOW gear/tool targets (near_term_gear ∪ target_tools): the codes the
-    # skill-grind treats as `wanted` keepers so it crafts a real upgrade for skill
-    # XP instead of a throwaway. Distinct from `target_gear` (endgame BiS, which is
-    # never craftable at low char level — using it would make the preference dead).
-    near_term_targets: frozenset[str] = field(default_factory=frozenset)
-    # Post-level-up / post-fight-loss gear prioritization latch. Set by the
-    # player's GearLatch and cleared when no craftable upgrade remains.
-    gear_review_active: bool = False
-    # Active-profile gear-demand KEEP map {code: keep_count} (spec
-    # 2026-06-28-gear-loadout-profiles): the deduped per-code demand across the
-    # active loadout profiles UNION the in-flight upgrade codes (+1 spare). This
-    # is the GEAR portion of every keep/recycle/deposit/sell protection — it
-    # REPLACES the `target_gear`/`target_tools` recipe-closure protection (which
-    # remains the PURSUIT target for crafting). Empty (the default) means no
-    # profile info → consumers fall back to the legacy blanket equippable keep,
-    # so a freshly-started bot with no recorded profiles never strips its gear.
-    gear_keep: dict[str, int] = field(default_factory=dict)
-    # Active objective-step goal's material profile {code: needed_qty} — the
-    # GOAL_MATERIALS keep reason (`ai/inventory_keep.py`) reads it so the
-    # materials the current step is accumulating are never banked out from
-    # under it. Empty (the default) means "no active step profile";
-    # `StrategyArbiter.select` binds it per cycle from the SAME
-    # `_step_protection_profile` map it hands the deposit/discard guards (the
-    # step goal is resolved FROM this ctx, so it cannot be filled in earlier).
-    # A DEFAULT is mandatory: ~26 formal/diff helpers
-    # construct SelectionContext positionally-by-keyword and a required field
-    # would break every one of them.
-    step_profile: dict[str, int] = field(default_factory=dict)
+# `SelectionContext` now lives in `ai/selection_context.py` and is RE-EXPORTED
+# here: the keep authority (`ai/inventory_keep.py`) and the deposit selector
+# (`ai/bank_selection.py`) both need it, and this module imports both — defining
+# it here made `guards -> bank_selection -> inventory_keep -> guards` a cycle the
+# moment deposit started asking the authority how many copies it may bank. Every
+# `from artifactsmmo_cli.ai.tiers.guards import SelectionContext` still resolves.
 
 
 def protected_gear_codes(ctx: SelectionContext) -> frozenset[str]:
@@ -247,6 +207,28 @@ def active_profile(state: WorldState, game_data: GameData,
     return profile
 
 
+def deposit_context(ctx: SelectionContext,
+                    step_profile: dict[str, int] | None = None) -> SelectionContext:
+    """`ctx` with the resolved step goal's `needed` map merged (per-code max) into
+    `step_profile` — the context the DEPOSIT decision is taken under.
+
+    `StrategyArbiter.select` already binds the same map onto the ctx before the
+    ladder runs, so this is normally the identity. It exists because the guard
+    predicate ALSO receives `step_profile` as an argument (older callers, and the
+    goal mapper, thread it that way), and the deposit selector must never see a
+    SMALLER profile than the one the firing predicate used: the keep authority's
+    GOAL_MATERIALS reason reads `ctx.step_profile`, so a step profile that never
+    reached the ctx would let DepositAll bank the very materials the active gather
+    step is accumulating (the withdraw↔deposit livelock, trace 2026-06-11 23:05)."""
+    if not step_profile:
+        return ctx
+    merged = dict(ctx.step_profile)
+    for code, qty in step_profile.items():
+        if qty > merged.get(code, 0):
+            merged[code] = qty
+    return replace(ctx, step_profile=merged)
+
+
 def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
            history: LearningStore | None, ctx: SelectionContext,
            step_profile: dict[str, int] | None = None) -> bool:
@@ -323,8 +305,7 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
                                   game_data.bank_capacity)
                 and _used_fraction(state) >= DEPOSIT_FULL_FRACTION
                 and bool(select_bank_deposits(
-                    state, game_data,
-                    frozenset(active_profile(state, game_data, ctx, step_profile)))))
+                    state, game_data, deposit_context(ctx, step_profile))))
     if kind is GuardKind.DISCARD_HIGH:
         # Same as DISCARD_CRITICAL: overstock above the need/value cap is shed
         # regardless of bank room (don't hoard junk). Fires at the lower

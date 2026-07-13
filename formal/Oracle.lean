@@ -771,44 +771,39 @@ def attrLookup {α : Type} (tbl : List (Nat × Int)) (f : Int → α) (d : α) :
     | some p => f p.2
     | none => d
 
-/-- Compute one bank_selection result using the proved `keepList` / `deposits`.
+/-- Compute one bank_selection result using the proved `deposits` /
+`selectBankDeposits` (the surplus-above-`keepInBag` selector) and the proved
+`inKeepBase` (the last-resort criticality ranking = `hard_critical_codes`).
 
 args layout (Ints; codes/qtys/flags are Nat ≥ 0, attack/sellValue may be any Int):
 * `[0]`            tasksCoin
 * `[1]`            hasTask (0/1)
 * `[2]`            taskCode (meaningful only when hasTask = 1)
-* `[3]`            taskIsItems (0/1)
-* `[4]`            hasCraftTarget (0/1)
-* `[5]`            craftingTarget (meaningful only when hasCraftTarget = 1)
-* `[6]`            nInv, then nInv pairs flat: code0 qty0 code1 qty1 ...
+* `[3]`            nInv, then nInv pairs flat: code0 qty0 code1 qty1 ...
 * next: nEquip, then equip codes flat
-* next: nRecipe, then `(item, sub, qty)` triples flat
 * next: nAttr, then per-item 6-int blocks:
   `code, attack, isWeapon(0/1), isTool(0/1), hpRestore, sellValue`
-* next: fuel
+* next: nKeep, then `(code, keepInBag)` pairs flat — the REAL
+  `inventory_keep.keep_in_bag` quantities, which are opaque to this model
+  (proved in `Formal.InventoryKeep`; the differential supplies them from the
+  production authority). Codes absent from the table keep 0.
 * next: inventoryMax (quantity cap; with Σ qty gives inventoryFree for the last-resort branch)
 * next: inventorySlotsMax (slot cap; with #positive-stacks gives inventorySlotsFree —
   the OTHER last-resort trigger: all slots occupied even with quantity headroom)
 
-Emits the sorted keep-set codes and the deposit list (`selectBankDeposits`, in order:
-normal sorted deposits, else the single last-resort keep item when inventory_free==0). -/
+Emits the sorted hard-critical codes and the deposit list (`selectBankDeposits`, in
+order: the surplus deposits, else the single last-resort stack when the bag is full). -/
 def runBankSelection (args : Array Json) : Json :=
   let gN := fun i => (intArg args i).toNat
   let tasksCoin := gN 0
   let taskCode : Option Nat := if intArg args 1 != 0 then some (gN 2) else none
-  let taskIsItems := intArg args 3 != 0
-  let craftingTarget : Option Nat := if intArg args 4 != 0 then some (gN 5) else none
-  let nInv := gN 6
+  let nInv := gN 3
   let inventory : List (Nat × Nat) :=
-    (List.range nInv).map (fun k => (gN (7 + 2*k), gN (8 + 2*k)))
-  let p1 := 7 + 2*nInv
+    (List.range nInv).map (fun k => (gN (4 + 2*k), gN (5 + 2*k)))
+  let p1 := 4 + 2*nInv
   let nEquip := gN p1
   let equipped : List Nat := (List.range nEquip).map (fun k => gN (p1 + 1 + k))
-  let p2 := p1 + 1 + nEquip
-  let nRecipe := gN p2
-  let triples : List (Nat × Nat × Nat) :=
-    (List.range nRecipe).map (fun k => (gN (p2 + 1 + 3*k), gN (p2 + 2 + 3*k), gN (p2 + 3 + 3*k)))
-  let p3 := p2 + 1 + 3*nRecipe
+  let p3 := p1 + 1 + nEquip
   let nAttr := gN p3
   let attackTbl : List (Nat × Int) :=
     (List.range nAttr).map (fun k => (gN (p3 + 1 + 6*k), intArg args (p3 + 2 + 6*k)))
@@ -821,26 +816,31 @@ def runBankSelection (args : Array Json) : Json :=
   let sellTbl : List (Nat × Int) :=
     (List.range nAttr).map (fun k => (gN (p3 + 1 + 6*k), intArg args (p3 + 6 + 6*k)))
   let p4 := p3 + 1 + 6*nAttr
-  let fuel := gN p4
-  let inventoryMax := gN (p4 + 1)
-  let inventorySlotsMax := gN (p4 + 2)
+  let nKeep := gN p4
+  let keepTbl : List (Nat × Int) :=
+    (List.range nKeep).map (fun k => (gN (p4 + 1 + 2*k), intArg args (p4 + 2 + 2*k)))
+  let p5 := p4 + 1 + 2*nKeep
+  let inventoryMax := gN p5
+  let inventorySlotsMax := gN (p5 + 1)
   let s : State := {
-    tasksCoin := tasksCoin, taskCode := taskCode, taskIsItems := taskIsItems,
-    craftingTarget := craftingTarget, inventory := inventory, inventoryMax := inventoryMax,
+    tasksCoin := tasksCoin, taskCode := taskCode,
+    inventory := inventory, inventoryMax := inventoryMax,
     inventorySlotsMax := inventorySlotsMax,
     equipped := equipped,
-    recipe := recipeFromTriples triples,
     attack := attrLookup attackTbl id 0,
     isWeapon := attrLookup weaponTbl (fun v => decide (v != 0)) false,
     isTool := attrLookup toolTbl (fun v => decide (v != 0)) false,
     hpRestore := attrLookup hpTbl id 0,
-    sellValue := attrLookup sellTbl id 0 }
-  let keep := (keepList s fuel).mergeSort (· ≤ ·) |>.eraseDups
-  let deps := selectBankDeposits s fuel
-  let keepJson := Json.arr ((keep.map (fun n => Json.num (Int.ofNat n))).toArray)
+    sellValue := attrLookup sellTbl id 0,
+    keepInBag := attrLookup keepTbl Int.toNat 0 }
+  let universe_ := (tasksCoin :: (match taskCode with | some c => [c] | none => []) ++
+    inventory.map Prod.fst ++ equipped).eraseDups
+  let critical := (universe_.filter (fun c => inKeepBase s c)).mergeSort (· ≤ ·) |>.eraseDups
+  let deps := selectBankDeposits s
+  let criticalJson := Json.arr ((critical.map (fun n => Json.num (Int.ofNat n))).toArray)
   let depsJson := Json.arr ((deps.map
     (fun cq => Json.arr #[Json.num (Int.ofNat cq.1), Json.num (Int.ofNat cq.2)])).toArray)
-  Json.mkObj [("keep", keepJson), ("deposits", depsJson)]
+  Json.mkObj [("critical", criticalJson), ("deposits", depsJson)]
 
 /-- Compute one stuck_detector result using the proved `detect` / `recentSince`.
 

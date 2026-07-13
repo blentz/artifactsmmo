@@ -19,27 +19,23 @@ another reason all 18 were hoarded). A BiS target is wanted ONCE, so the
 profile-less case is served by the EQUIPPED / RECIPE_DEMAND arms
 (`useful_quantity_cap`'s `EQUIPPABLE_KEEP = 1`) — keep 1, the rest disposable.
 
-INERT (Task 1 of the item-protection-authority epic): nothing in this module
-is wired into a consumer yet — `bank_selection._keep_codes`,
-`recycle_surplus`'s `protected_codes`/`kit`, and `guards._gear_protected`
-still carry the old set-based logic. This module only builds the replacement
-authority as a pure core so it can be reviewed and tested standalone before
-any migration.
+MIGRATION (item-protection-authority epic): `bank_selection.select_bank_deposits`
+is LIVE on this authority (Task 6) — DepositAll banks `bankable(code)` copies of
+every held code, which is what finally sheds the 17 surplus copper_axe. The
+remaining set-based consumers (`recycle_surplus`'s `protected_codes`/`kit`,
+`guards._gear_protected`) are migrated by Tasks 7-9.
 """
 
 from enum import Enum
 
-from artifactsmmo_cli.ai.bank_selection import (
-    _best_fighting_weapon,
-    _best_gathering_tools,
-)
 from artifactsmmo_cli.ai.consumable_supply import HEAL_STOCK_FLOOR, heal_stock_target
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_caps import (
     _task_chain_demand_pure,
     useful_quantity_cap,
 )
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext
+from artifactsmmo_cli.ai.kit_selection import best_fighting_weapon, best_gathering_tools
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 KEEP_ALL = 1_000_000
@@ -167,12 +163,12 @@ def _healing_consumable(code: str, state: WorldState, game_data: GameData,
 
 def _combat_weapon(code: str, state: WorldState, game_data: GameData,
                    ctx: SelectionContext) -> int:
-    return 1 if code == _best_fighting_weapon(state, game_data) else 0
+    return 1 if code == best_fighting_weapon(state, game_data) else 0
 
 
 def _working_kit(code: str, state: WorldState, game_data: GameData,
                  ctx: SelectionContext) -> int:
-    return 1 if code in _best_gathering_tools(state, game_data) else 0
+    return 1 if code in best_gathering_tools(state, game_data) else 0
 
 
 def _committed_recipe(code: str, state: WorldState, game_data: GameData,

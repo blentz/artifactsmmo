@@ -602,11 +602,11 @@ def _action_disposal(action: Action, code: str, state: WorldState,
 
     `DepositAllAction` names no code: it banks whatever `select_bank_deposits`
     picks at execution time, so the quantity is read from THAT production
-    selector at the action's own state — which is precisely the function the
-    hoard bug lives in (its `_keep_codes` blanket is why 18 copper_axe were
-    never selected)."""
+    selector at the action's own state and under the action's own ctx — which is
+    precisely the function the hoard bug lived in (its `_keep_codes` blanket is
+    why 18 copper_axe were never selected; it now banks `bankable(code)`)."""
     if isinstance(action, DepositAllAction):
-        deposits = dict(select_bank_deposits(state, game_data, action.profile_codes))
+        deposits = dict(select_bank_deposits(state, game_data, action.ctx))
         return deposits.get(code, 0), 0
     if isinstance(action, DepositItemAction):
         return (action.quantity if action.code == code else 0), 0

@@ -47,6 +47,7 @@ PREREQUISITE_GRAPH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "p
 OBJECTIVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "objective.py"
 STRATEGY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "strategy.py"
 BANK_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_selection.py"
+KIT_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "kit_selection.py"
 STUCK_DETECTOR_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recovery.py"
 PRIORITY_BAND_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "priority_band.py"
 OWNED_COUNT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "owned_count.py"
@@ -1288,38 +1289,57 @@ REACHABILITY_MUTATIONS = [
 # and was not added.
 
 
-# bank_selection mutations -- old strings matched to current bank_selection.py text.
+# bank_selection mutations -- anchors matched to current bank_selection.py text.
+# Deposit is now QUANTITY-typed (it banks `inventory_keep.bankable(code)`), so the
+# mutants target the surplus arithmetic, the deposit filter, the sell-value order,
+# and the LAST-RESORT criticality ranking (`hard_critical_codes`). All are killed by
+# formal/diff/test_bank_selection_diff.py, which pins BOTH the deposit list
+# (quantities AND order) and the critical set against the proved Lean oracle.
+# The old keep-SET mutants died with the keep-set: "keep ALL copies of a protected
+# code" is no longer expressible, which is the point of the migration. The
+# protection QUANTITIES are mutated in INVENTORY_KEEP_MUTATIONS instead.
 BANK_SELECTION_MUTATIONS = [
-    # drop task-input protection: no longer protect the items-task item's recipe
-    # materials, so banking the task's own inputs becomes possible (the freeze bug).
-    ("bank_selection: drop items-task recipe-material protection",
-     '    if state.task_type == "items" and state.task_code:\n'
-     "        recipe_roots.append(state.task_code)",
-     '    if state.task_type == "items" and state.task_code:\n'
+    # bank the WHOLE stack instead of the surplus above the keep cap — the blanket
+    # bug from the other side: the working tool / task inputs / heal stock get banked.
+    ("bank_selection: deposit the whole stack, not the surplus above the keep cap",
+     "        surplus = bankable(code, state, game_data, ctx)",
+     "        surplus = qty"),
+    # admit zero-surplus codes: every protected code appears with quantity 0, so a
+    # consumer that trusts the list banks copies the authority reserved.
+    ("bank_selection: deposit filter admits zero-surplus (protected) codes",
+     "        if surplus > 0:",
+     "        if surplus >= 0:"),
+    # sell-value order flip: cheapest banked first (wrong bank-trip ordering).
+    ("bank_selection: deposit order flip (sell value ascending)",
+     "    deposits.sort(key=lambda cq: (-_sell_value(cq[0], game_data), cq[0]))",
+     "    deposits.sort(key=lambda cq: (_sell_value(cq[0], game_data), cq[0]))"),
+    # LAST-RESORT criticality: drop the task item -> the one item PursueTask needs is
+    # the first stack shed when the bag must free a slot.
+    ("bank_selection: last-resort drops task-item criticality",
+     "    if state.task_code:\n"
+     "        critical.add(state.task_code)",
+     "    if state.task_code:\n"
      "        pass"),
-    # drop HP-consumable protection: HP-restore items become depositable (wrong keep).
-    ("bank_selection: drop HP-restore protection",
+    # LAST-RESORT criticality: drop HP consumables -> the heal stock is shed first.
+    ("bank_selection: last-resort drops HP-consumable criticality",
      "        if stats is not None and stats.hp_restore > 0:\n"
-     "            keep.add(code)",
+     "            critical.add(code)",
      "        if stats is not None and stats.hp_restore > 0:\n"
      "            pass"),
-    # drop best-fighting-weapon protection: the combat weapon becomes depositable.
-    ("bank_selection: drop best-weapon protection",
-     "    weapon = _best_fighting_weapon(state, game_data)\n"
+    # LAST-RESORT criticality: drop the best fighting weapon -> combat gear is shed
+    # before recoverable junk.
+    ("bank_selection: last-resort drops best-weapon criticality",
+     "    weapon = best_fighting_weapon(state, game_data)\n"
      "    if weapon is not None:\n"
-     "        keep.add(weapon)",
-     "    weapon = _best_fighting_weapon(state, game_data)\n"
+     "        critical.add(weapon)",
+     "    weapon = best_fighting_weapon(state, game_data)\n"
      "    if weapon is not None:\n"
      "        pass"),
-    # wrong deposit filter: deposit kept items too (drop the `not in keep` guard),
-    # so protected items get banked — the freeze invariant the proof pins.
-    ("bank_selection: deposit filter includes kept items",
-     "        if qty > 0 and code not in keep",
-     "        if qty > 0"),
-    # weapon tie/argmax flip: prefer LOWER attack (> becomes <), wrong best weapon.
-    ("bank_selection: best-weapon argmax flip (attack > -> <)",
-     "        if best is None or attack > best[0] or (attack == best[0] and code < best[1]):",
-     "        if best is None or attack < best[0] or (attack == best[0] and code < best[1]):"),
+    # LAST-RESORT criticality: drop the working kit -> the tool the WithdrawTools
+    # ferry just fetched is the first thing banked again (the bare-handed grind).
+    ("bank_selection: last-resort drops working-kit criticality",
+     "    critical |= best_gathering_tools(state, game_data)",
+     "    critical |= set()"),
 ]
 
 
@@ -2334,18 +2354,24 @@ OPTIMIZE_COOLDOWN_MUTATIONS = [
      "                state = UnequipAction(slot=slot).execute(state, client)"),
 ]
 
-BANK_KEEP_TOOLS_MUTATIONS = [
-    ("bank_selection: drop gathering-tool protection (tool banked again)",
-     "    keep |= _best_gathering_tools(state, game_data)",
-     "    keep |= set()"),
-    ("bank_selection: tool keep accepts zero-value items (keeps non-tools)",
+# kit_selection mutations -- the WORKING-KIT / COMBAT-WEAPON selectors (moved out of
+# bank_selection.py so `inventory_keep` can import them without an import cycle).
+# These pick WHICH code is the working one; the keep authority turns that into the
+# quantity 1. Killed by tests/test_ai/test_bank_selection.py, which asserts through
+# the deposit selector that the BEST tool/weapon is the copy kept and the outclassed
+# ones bank.
+KIT_SELECTION_MUTATIONS = [
+    ("kit_selection: tool keep accepts zero-value items (keeps non-tools)",
      "            if value > 0 and (best is None or value > best[0]",
      "            if value >= 0 and (best is None or value > best[0]"),
-    ("bank_selection: best-tool argmax flip (keeps the WORSE tool)",
+    ("kit_selection: best-tool argmax flip (keeps the WORSE tool)",
      "            if value > 0 and (best is None or value > best[0]\n"
      "                              or (value == best[0] and code < best[1])):",
      "            if value > 0 and (best is None or value < best[0]\n"
      "                              or (value == best[0] and code < best[1])):"),
+    ("kit_selection: best-weapon argmax flip (attack > -> <)",
+     "        if best is None or attack > best[0] or (attack == best[0] and code < best[1]):",
+     "        if best is None or attack < best[0] or (attack == best[0] and code < best[1]):"),
 ]
 
 
@@ -2492,7 +2518,7 @@ _ALL_SRCS = [
     OPTIMIZE_LOADOUT_SRC,
     GEAR_VALUE_SRC,
     SKILL_XP_CURVE_SRC, RECIPE_CLOSURE_SRC, TASK_FEASIBILITY_SRC, PREREQUISITE_GRAPH_SRC,
-    OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, STUCK_DETECTOR_SRC,
+    OBJECTIVE_SRC, STRATEGY_SRC, BANK_SELECTION_SRC, KIT_SELECTION_SRC, STUCK_DETECTOR_SRC,
     PRIORITY_BAND_SRC, OWNED_COUNT_SRC, UPGRADE_SELECTION_SRC, SCALAR_CORE_SRC,
     PLANNER_SRC, ARBITER_SELECT_SRC, TASK_DECISION_CORE_SRC, OBJECTIVE_COMPLETION_SRC,
     LOW_YIELD_BOUNDARY_SRC, OBJECTIVE_STEP_FIGHT_CORE_SRC, DECIDE_KEY_SRC,
@@ -2712,9 +2738,9 @@ INVENTORY_KEEP_MUTATIONS = [
     # verbatim. Killed by test_working_kit_keeps_ONE_in_bag_not_the_hoard
     # (reason_quantity == 1, bankable == 17 of 18).
     ("inventory_keep: WORKING_KIT keeps ALL copies (the blanket bug)",
-     "    return 1 if code in _best_gathering_tools(state, game_data) else 0",
+     "    return 1 if code in best_gathering_tools(state, game_data) else 0",
      "    return (state.inventory.get(code, 0)\n"
-     "            if code in _best_gathering_tools(state, game_data) else 0)"),
+     "            if code in best_gathering_tools(state, game_data) else 0)"),
     # HEALING_CONSUMABLE charges the whole held stack instead of its share of the
     # aggregate stock target -- the heal-stock blanket. Killed by
     # test_healing_consumable_caps_at_stock_target_not_the_whole_stack (5, not 40)
@@ -4868,7 +4894,7 @@ def _run_all_groups() -> int:
               "tests/ai/test_bank_tool_fills.py", survivors)
     run_group(STRATEGY_DRIVER_SRC, WITHDRAW_TOOLS_BAND_MUTATIONS,
               "tests/ai/test_withdraw_tools_arbiter.py", survivors)
-    run_group(BANK_SELECTION_SRC, BANK_KEEP_TOOLS_MUTATIONS,
+    run_group(KIT_SELECTION_SRC, KIT_SELECTION_MUTATIONS,
               "tests/test_ai/test_bank_selection.py", survivors)
     run_group(RECYCLE_SURPLUS_SRC, RECYCLE_SURPLUS_ELIGIBILITY_MUTATIONS,
               "tests/test_ai/test_recycle_surplus.py", survivors)

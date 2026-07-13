@@ -50,14 +50,20 @@ def test_run_cell_records_a_passing_safety_cell() -> None:
 
 
 def test_run_cell_records_gap_on_failure() -> None:
-    """The live hoard bug: WORKING_KIT's in_bag LIVENESS cell fails because
-    `bank_selection` still blanket-keeps the best gathering tool, so the
-    CellResult records passed=False with an INVENTORY_BUG gap."""
+    """A FAILing cell records `passed=False` and the classified gap.
+
+    GOAL_MATERIALS' in_bag LIVENESS cell is the residual failure after the Task-6
+    deposit migration: `select_bank_deposits` DOES offer the surplus ash_wood, but
+    the arbiter takes the objective-step Craft instead of the deposit guard, so no
+    disposal happens in the plan — an INVENTORY_BUG the census keeps flagging until
+    the ladder-ordering residual is closed. (WORKING_KIT, the cell this test used
+    to pin RED, now PASSes: see
+    `test_working_kit_liveness_cell_PASSES_against_the_real_arbiter`.)"""
     gd = _gd()
     cells = inventory_grid(gd)
-    cell = _cell_of(cells, KeepReason.WORKING_KIT, "liveness", "in_bag", "slot_full")
+    cell = _cell_of(cells, KeepReason.GOAL_MATERIALS, "liveness", "in_bag", "slot_full")
     result = run_cell(cell, gd)
-    assert result.reason == "working_kit"
+    assert result.reason == "goal_materials"
     assert result.passed is False
     assert result.gap == "inventory_bug"
 
@@ -105,21 +111,25 @@ def test_reason_coverage_currency_exempt_even_with_no_liveness_cell() -> None:
     assert not any(r.kind == "liveness" and r.reason == "currency" for r in results)
 
 
-def test_reason_coverage_reports_the_known_red_baseline() -> None:
-    """The RED baseline this task must faithfully report: the five in-bag-only
-    reasons whose deposit route is still blanket-keep have NO passing
-    liveness cell; the owned-cap reasons (and ACTIVE_TASK's owned side) do."""
+def test_reason_coverage_after_the_deposit_migration() -> None:
+    """Task 6 (deposit -> `bankable`) turned FOUR of the five uncovered reasons
+    green: HEALING_CONSUMABLE, COMBAT_WEAPON, WORKING_KIT and COMMITTED_RECIPE all
+    now have a PASSing liveness cell, because DepositAll sheds the surplus above
+    each one's keep quantity instead of blanket-keeping the code.
+
+    GOAL_MATERIALS remains uncovered: its surplus IS offered by
+    `select_bank_deposits`, but the arbiter takes the objective-step Craft over the
+    deposit guard, so nothing is shed in the plan (a ladder-ordering residual, not
+    a keep-authority one)."""
     gd = _gd()
     results = run_census(gd, inventory_grid(gd))
     coverage = reason_coverage(results)
     uncovered = {r for r, ok in coverage.items() if not ok}
-    assert uncovered == {
-        KeepReason.HEALING_CONSUMABLE,
-        KeepReason.COMBAT_WEAPON,
-        KeepReason.WORKING_KIT,
-        KeepReason.COMMITTED_RECIPE,
-        KeepReason.GOAL_MATERIALS,
-    }
+    assert uncovered == {KeepReason.GOAL_MATERIALS}
+    assert coverage[KeepReason.HEALING_CONSUMABLE] is True
+    assert coverage[KeepReason.COMBAT_WEAPON] is True
+    assert coverage[KeepReason.WORKING_KIT] is True
+    assert coverage[KeepReason.COMMITTED_RECIPE] is True
     assert coverage[KeepReason.ACTIVE_TASK] is True
     assert coverage[KeepReason.EQUIPPED] is True
     assert coverage[KeepReason.GEAR_DEMAND] is True
@@ -135,18 +145,34 @@ def test_reason_coverage_total_over_keepreason() -> None:
     assert set(coverage) == set(KeepReason)
 
 
-def test_census_full_grid_matches_expected_red_baseline() -> None:
-    """The documented Task-5 RED baseline: 56 cells, 42 PASS, 13
-    INVENTORY_BUG, 1 NO_ROUTE_AVAILABLE. A regression here means either a
-    consumer got migrated (should be caught by Tasks 6-9, not silently here)
-    or the census stopped seeing the bug class it exists to catch."""
+def test_census_full_grid_matches_the_post_deposit_migration_baseline() -> None:
+    """The baseline after Task 6 (deposit -> `bankable`): 56 cells, 52 PASS, 3
+    INVENTORY_BUG, 1 NO_ROUTE_AVAILABLE — down from the Task-5 RED baseline of 42
+    PASS / 13 INVENTORY_BUG.
+
+    The 3 residual INVENTORY_BUG cells are NOT deposit-selection bugs:
+      * goal_materials in_bag/liveness (x2 pressure states) — the surplus IS
+        offered by `select_bank_deposits`; the arbiter takes the objective-step
+        Craft instead of the deposit guard, so the plan sheds nothing;
+      * active_task owned/liveness/slot_full — a DESTRUCTIVE-route cell
+        (recycle/sell/delete), owned by the `destroyable` migration (Tasks 7-9).
+
+    A regression here means either a consumer got migrated (should be caught by
+    the owning task, not silently here) or the census stopped seeing the bug class
+    it exists to catch."""
     gd = _gd()
     results = run_census(gd, inventory_grid(gd))
     assert len(results) == 56
     passed = sum(1 for r in results if r.passed)
-    assert passed == 42
+    assert passed == 52
     gap_counts: dict[str, int] = {}
     for r in results:
         if r.gap is not None:
             gap_counts[r.gap] = gap_counts.get(r.gap, 0) + 1
-    assert gap_counts == {"inventory_bug": 13, "no_route_available": 1}
+    assert gap_counts == {"inventory_bug": 3, "no_route_available": 1}
+    bugs = {(r.reason, r.cap, r.pressure) for r in results if r.gap == "inventory_bug"}
+    assert bugs == {
+        ("goal_materials", "in_bag", "slot_full"),
+        ("goal_materials", "in_bag", "qty_full"),
+        ("active_task", "owned", "slot_full"),
+    }

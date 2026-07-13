@@ -182,14 +182,14 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.StrategyTraversal.reachable_implies_actionable -- reachable-implies-actionable: is_reachable ⇒ actionable_step ≠ none (the decide assert)
 #check @Formal.StrategyTraversal.grounded_unmet_has_actionable -- bridge: unmet Grounded node has reachable ActionableNode
 -- BankSelection required roles:
-#check @Formal.BankSelection.deposits_exact                -- candidates = qty>0 inventory ∉ keep
-#check @Formal.BankSelection.deposits_mem_iff              -- sorted list = same set (permutation)
-#check @Formal.BankSelection.freeze_invariant             -- deposits ∩ keep = ∅ (never bank protected)
-#check @Formal.BankSelection.task_inputs_protected        -- recipe materials of protected roots ⊆ keep
-#check @Formal.BankSelection.task_material_not_deposited   -- a protected material is NEVER deposited
-#check @Formal.BankSelection.keep_closed                  -- material captured ⇒ kept ∧ StepReachable
-#check @Formal.BankSelection.recipeMaterials_closed       -- materials closed under recipe children
-#check @Formal.BankSelection.recipeMaterialList_complete  -- material capture COMPLETE within fuel
+#check @Formal.BankSelection.deposits_exact               -- candidates = the surplus above keep_in_bag
+#check @Formal.BankSelection.deposits_mem_iff             -- sorted list = same entries (permutation)
+#check @Formal.BankSelection.deposit_leaves_keep          -- banking leaves EXACTLY the keep cap in the bag
+#check @Formal.BankSelection.kept_code_not_deposited      -- held ≤ cap ⇒ NEVER deposited (task inputs, kit)
+#check @Formal.BankSelection.currency_never_deposited     -- KEEP_ALL: tasks_coin never banked
+#check @Formal.BankSelection.copper_axe_hoard_refuted     -- the 18-axe row: 17 DO bank (non-vacuity)
+#check @Formal.BankSelection.copper_axe_working_copy_kept -- ...and the working copy never does
+#check @Formal.BankSelection.keep_respected_of_free_pos   -- freeze holds while the bag can admit an item
 #check @Formal.BankSelection.best_weapon_argmax           -- best weapon = max-attack non-tool over inv∪equip
 #check @Formal.BankSelection.best_weapon_is_fighting      -- best weapon is a non-tool weapon
 -- StuckDetector required roles:

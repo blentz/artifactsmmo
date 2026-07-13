@@ -102,20 +102,22 @@ def _cell_of(cells: list[InventoryCell], reason: KeepReason, kind: str,
     return matches[0]
 
 
-def test_working_kit_liveness_cell_FAILS_against_the_real_arbiter(
+def test_working_kit_liveness_cell_PASSES_against_the_real_arbiter(
         bundle_game_data: GameData) -> None:
-    """THE census self-check. `bank_selection._keep_codes` blanket-keeps the
-    best gathering tool, so a bag holding SEVEN copper_axe banks NONE of them —
-    the live 18-axe hoard in a slot-pressured bag, in miniature.
+    """THE census self-check, now GREEN (Task 6). This cell is the live 18-axe
+    hoard in miniature: a slot-pressured bag holding SEVEN copper_axe, the best
+    woodcutting tool.
 
-    Everything the disposal path needs is present: the bank is reachable and has
-    room, DEPOSIT_FULL fires (slot pressure 19/20 = 0.95, above the 0.90
-    watermark), and the plan really is a DepositAll — it banks the 18 junk stacks
-    and skips the axes, because the keep-set is a CODE-set that cannot say "keep
-    ONE". The keep authority says 6 copies are `bankable`; production sheds 0.
+    It used to FAIL. `bank_selection._keep_codes` returned a CODE-set, which can
+    only say "keep ALL copies", so DepositAll banked the 18 junk stacks and NONE
+    of the axes while the keep authority said 6 were `bankable`. Deposit now asks
+    that authority (`bankable(code)`) instead of a code-set, so the working tool
+    stays and its 6 spares bank.
 
-    If this cell ever PASSES before the consumer migration (Tasks 6-9), the census
-    has gone blind and must be fixed before it is trusted."""
+    Everything the disposal path needs is present and asserted below: the bank is
+    reachable and has room, DEPOSIT_FULL fires (slot pressure 19/20 = 0.95, above
+    the 0.90 watermark), the plan really is a DepositAll, and the axes really do
+    leave the bag."""
     gd = bundle_game_data
     cell = _cell_of(inventory_grid(gd), KeepReason.WORKING_KIT,
                     "liveness", "in_bag", "slot_full")
@@ -134,17 +136,17 @@ def test_working_kit_liveness_cell_FAILS_against_the_real_arbiter(
     # ...and the deposit relief really does fire.
     assert GuardKind.DEPOSIT_FULL in active_guards(state, gd, None, ctx, ctx.step_profile)
 
-    # But the production deposit selector banks the junk and NONE of the axes.
-    deposits = dict(select_bank_deposits(state, gd, frozenset()))
-    assert deposits and "copper_axe" not in deposits
+    # And the production deposit selector now sheds EXACTLY the surplus: the
+    # working axe stays, its spares go to the bank (recoverable).
+    deposits = dict(select_bank_deposits(state, gd, ctx))
+    assert deposits["copper_axe"] == SURPLUS
+    assert state.inventory["copper_axe"] - deposits["copper_axe"] == 1
 
     plan = plan_inventory(cell, state, gd)
     assert plan and any(isinstance(a, DepositAllAction) for a in plan), \
         [repr(a) for a in plan]
-    assert disposed_quantity(cell, plan, state, gd) == 0
-    assert inventory_cell_verdict(cell, plan, state, gd) is False
-    # And the FAIL is UNEXPLAINED — no honest gap class covers it.
-    assert classify_gap(cell, state, gd) is InventoryGapClass.INVENTORY_BUG
+    assert disposed_quantity(cell, plan, state, gd) == SURPLUS
+    assert inventory_cell_verdict(cell, plan, state, gd) is True
 
 
 def test_currency_safety_cell_passes_against_the_real_arbiter(
@@ -483,14 +485,16 @@ def test_action_disposal_counts_each_route_against_the_right_cap() -> None:
 
 def test_action_disposal_reads_deposit_all_through_the_production_selector() -> None:
     """`DepositAll` names no code — it banks whatever `select_bank_deposits` picks,
-    which is the very function the hoard bug lives in. The census must therefore
-    ASK that selector, not assume "DepositAll banks everything"."""
+    which is the very function the hoard bug lived in. The census must therefore
+    ASK that selector, not assume "DepositAll banks everything" (nor, as the bug
+    did, that it banks nothing of a protected code)."""
     gd = _disposal_gd()
     state = make_state(inventory={"copper_axe": 8, "copper_bar": 3}, bank_items={})
     action = DepositAllAction(bank_location=(7, 13), game_data=gd)
-    # The axe is the best woodcutting tool -> blanket-kept -> banked 0 of 8.
-    assert _action_disposal(action, "copper_axe", state, gd) == (0, 0)
-    # The bar is not in the keep-set (no crafting target) -> banked.
+    # The axe is the best woodcutting tool -> WORKING_KIT keeps ONE -> 7 of 8 bank
+    # (from the BAG only: a deposit never touches ownership).
+    assert _action_disposal(action, "copper_axe", state, gd) == (7, 0)
+    # The bar has no demand at all (no crafting target) -> the whole stack banks.
     assert _action_disposal(action, "copper_bar", state, gd) == (3, 0)
 
 

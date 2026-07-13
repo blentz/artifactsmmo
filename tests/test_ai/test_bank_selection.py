@@ -22,6 +22,8 @@ def _gd(**overrides) -> GameData:
                                     attack={"earth": 5}, skill_effects={"mining": -10}),
         "rusty_pickaxe": ItemStats(code="rusty_pickaxe", level=1, type_="weapon",
                                    attack={"earth": 2}, skill_effects={"mining": -5}),
+        "copper_axe": ItemStats(code="copper_axe", level=1, type_="weapon",
+                                attack={"earth": 3}, skill_effects={"woodcutting": -10}),
         "iron_bar": ItemStats(code="iron_bar", level=1, type_="resource"),
         "spruce_plank": ItemStats(code="spruce_plank", level=1, type_="resource"),
     }
@@ -44,10 +46,38 @@ def test_unknown_price_sorts_last():
 
 
 def test_keeps_task_item_and_task_coins():
+    """The task item is kept at its REMAINING demand (9 needed, 9 held → none
+    bankable) and the coins are kept absolutely (CURRENCY = KEEP_ALL)."""
     gd = _gd()
     state = make_state(inventory={"copper_ore": 9, "tasks_coin": 3, "sap": 1},
-                       task_code="copper_ore", task_type="items")
+                       task_code="copper_ore", task_type="items", task_total=9)
     assert select_bank_deposits(state, gd) == [("sap", 1)]
+
+
+def test_task_item_surplus_above_the_remaining_demand_banks():
+    """De-blanketing, the other half: the task needs 4 MORE copper_ore (5 of 9
+    already delivered), so the 5 spares above that bank while the 4 stay. The old
+    code-set kept all 9 forever."""
+    gd = _gd()
+    state = make_state(inventory={"copper_ore": 9}, task_code="copper_ore",
+                       task_type="items", task_total=9, task_progress=5)
+    assert select_bank_deposits(state, gd) == [("copper_ore", 5)]
+
+
+def test_tasks_coin_is_never_banked_at_any_holdable_quantity():
+    """KEEP_ALL guard at the deposit boundary. `keep_in_bag("tasks_coin")` is the
+    `KEEP_ALL` sentinel (1e6), so the arithmetic a naive consumer would do —
+    "how many can I shed" — must not produce an absurd number. `bankable` clamps
+    at 0, so the coin yields NO deposit at any quantity the server can put in a
+    bag (`inventory_max` is a low-hundreds number even with every bag slot), and
+    the sentinel's 1e6 ceiling is never approached."""
+    gd = _gd()
+    for held in (1, 3, 40, 999, 10_000):
+        state = make_state(inventory={"tasks_coin": held, "sap": 1},
+                           inventory_max=max(20, held + 1))
+        deposits = dict(select_bank_deposits(state, gd))
+        assert "tasks_coin" not in deposits
+        assert deposits == {"sap": 1}
 
 
 def test_keeps_items_task_recipe_materials():
@@ -61,8 +91,23 @@ def test_keeps_items_task_recipe_materials():
         inventory={"iron_bar": 12, "spruce_plank": 4, "sap": 1},
         task_code="iron_dagger",
         task_type="items",
+        task_total=1,
     )
-    # iron_bar + spruce_plank are task-recipe inputs -> kept; only sap is bankable.
+    # The one iron_dagger the task still wants needs 6 iron_bar + 2 spruce_plank:
+    # those copies are NEVER banked. The SURPLUS above the recipe demand is (that
+    # is the fix — the old code-set pinned all 12 bars in the bag).
+    deposits = dict(select_bank_deposits(state, gd))
+    assert deposits == {"sap": 1, "iron_bar": 6, "spruce_plank": 2}
+    assert state.inventory["iron_bar"] - deposits["iron_bar"] == 6
+    assert state.inventory["spruce_plank"] - deposits["spruce_plank"] == 2
+
+
+def test_task_recipe_demand_scales_with_the_remaining_task_quantity():
+    """COMMITTED_RECIPE is task-quantity scaled: 3 daggers still owed → 18 bars
+    demanded, so all 12 held stay (nothing bankable)."""
+    gd = _gd()
+    state = make_state(inventory={"iron_bar": 12, "sap": 1}, task_code="iron_dagger",
+                       task_type="items", task_total=3)
     assert select_bank_deposits(state, gd) == [("sap", 1)]
 
 
@@ -99,6 +144,21 @@ def test_tool_is_not_treated_as_fighting_weapon():
     codes = [c for c, _ in select_bank_deposits(state, gd)]
     assert "rusty_pickaxe" in codes  # outclassed tool -> bankable
     assert "wooden_stick" not in codes  # best fighting weapon -> kept
+
+
+def test_deposit_banks_the_kit_tool_spares_not_the_working_tool():
+    """THE live hoard (Robby 2026-07-12): 18 copper_axe in the bag — the axe is
+    the best woodcutting tool, so the old `_keep_codes` code-SET blanket-kept the
+    whole CODE and DepositAll banked ZERO of them while the weaponcrafting grind
+    kept manufacturing more. A code-set can only say "keep ALL copies"; the keep
+    authority says WORKING_KIT wants exactly ONE. Bank 17, keep the 1 the gather
+    re-arm will equip."""
+    gd = _gd()
+    state = make_state(level=10, skills={"weaponcrafting": 2},
+                       inventory={"copper_axe": 18})
+    deposits = dict(select_bank_deposits(state, gd))
+    assert deposits["copper_axe"] == 17
+    assert state.inventory["copper_axe"] - deposits["copper_axe"] == 1
 
 
 def test_keeps_best_gathering_tool_per_skill():
@@ -142,12 +202,16 @@ def test_keeps_materials_via_shared_submaterial():
         "right_hilt": {"shared_bar": 1},  # shared_bar reached twice → visited guard
     }
     state = make_state(inventory={"shared_bar": 4, "sap": 1}, crafting_target="twin_blade")
-    assert select_bank_deposits(state, gd) == [("sap", 1)]
+    # twin_blade wants shared_bar through BOTH hilts → a transitive demand of 2.
+    # Those 2 stay; the 2 spares bank.
+    deposits = dict(select_bank_deposits(state, gd))
+    assert deposits == {"sap": 1, "shared_bar": 2}
 
 
 def test_empty_when_everything_kept():
     gd = _gd()
-    state = make_state(inventory={"tasks_coin": 1, "copper_ore": 5}, task_code="copper_ore")
+    state = make_state(inventory={"tasks_coin": 1, "copper_ore": 5},
+                       task_code="copper_ore", task_type="items", task_total=5)
     assert select_bank_deposits(state, gd) == []
 
 
@@ -165,7 +229,7 @@ def test_last_resort_frees_a_slot_when_full_of_kept_items():
     # max=20, used=20 → free==0; everything is keep-set (task item, coins, recipe mats).
     state = make_state(
         inventory={"iron_dagger": 1, "tasks_coin": 5, "iron_bar": 12, "spruce_plank": 2},
-        task_code="iron_dagger", task_type="items", inventory_max=20,
+        task_code="iron_dagger", task_type="items", task_total=2, inventory_max=20,
     )
     assert state.inventory_free == 0
     result = select_bank_deposits(state, gd)
@@ -180,7 +244,8 @@ def test_last_resort_inactive_while_slack_remains():
     """With even one free slot, the keep-set is untouched (no last-resort)."""
     gd = _gd()
     state = make_state(inventory={"tasks_coin": 1, "copper_ore": 5},
-                       task_code="copper_ore", inventory_max=20)
+                       task_code="copper_ore", task_type="items", task_total=5,
+                       inventory_max=20)
     assert state.inventory_free > 0
     assert select_bank_deposits(state, gd) == []
 
@@ -192,7 +257,7 @@ def test_last_resort_prefers_non_critical_then_lowest_value():
     state = make_state(
         inventory={"iron_dagger": 1, "copper_dagger": 1, "cooked_chicken": 1,
                    "iron_bar": 15, "spruce_plank": 2},
-        task_code="iron_dagger", task_type="items", inventory_max=20,
+        task_code="iron_dagger", task_type="items", task_total=3, inventory_max=20,
     )
     assert state.inventory_free == 0
     result = select_bank_deposits(state, gd)
@@ -222,7 +287,7 @@ def test_last_resort_frees_a_slot_when_slots_full_but_quantity_headroom():
     # 4 keep-set stacks (task item, coins, two recipe mats), each low count.
     inventory = {"iron_dagger": 1, "tasks_coin": 1, "iron_bar": 1, "spruce_plank": 1}
     slots_full = make_state(
-        inventory=inventory, task_code="iron_dagger", task_type="items",
+        inventory=inventory, task_code="iron_dagger", task_type="items", task_total=1,
         inventory_max=100, inventory_slots_max=4,
     )
     assert slots_full.inventory_free > 0       # quantity cap NOT hit
@@ -235,7 +300,7 @@ def test_last_resort_frees_a_slot_when_slots_full_but_quantity_headroom():
 
     # Same bag, but with a free slot → keep-set untouched (non-vacuous contrast).
     slots_slack = make_state(
-        inventory=inventory, task_code="iron_dagger", task_type="items",
+        inventory=inventory, task_code="iron_dagger", task_type="items", task_total=1,
         inventory_max=100, inventory_slots_max=5,
     )
     assert slots_slack.inventory_free > 0
@@ -243,15 +308,49 @@ def test_last_resort_frees_a_slot_when_slots_full_but_quantity_headroom():
     assert select_bank_deposits(slots_slack, gd) == []
 
 
+def test_last_resort_never_sheds_the_weapon_kit_heals_or_task_item_first():
+    """The last-resort criticality ranking, made discriminating. The bag is full and
+    NOTHING is bankable (every code sits exactly at its keep cap), so one protected
+    stack must go. The recipe material is the ONLY non-critical stack — and it is
+    shed even though it is by far the most VALUABLE thing in the bag (sell 50 vs 0),
+    because criticality outranks sell value.
+
+    Drop any one of the four criticality arms — task item, HP consumable, best
+    fighting weapon, working kit — and that stack becomes the cheap non-critical
+    pick instead, shedding the very thing the bot cannot act without."""
+    gd = _gd()
+    gd._npc_sell_prices = {"merchant": {"iron_bar": 50}}  # the material is the RICH one
+    state = make_state(
+        inventory={"iron_dagger": 1,      # task item        (ACTIVE_TASK = 1)
+                   "cooked_chicken": 5,   # heal stock       (HEALING_CONSUMABLE = 5)
+                   "copper_dagger": 1,    # fighting weapon  (COMBAT_WEAPON = 1)
+                   "copper_pickaxe": 1,   # working kit      (WORKING_KIT = 1)
+                   "iron_bar": 6},        # task recipe input (COMMITTED_RECIPE = 6)
+        task_code="iron_dagger", task_type="items", task_total=1,
+        inventory_max=14,
+    )
+    assert state.inventory_free == 0
+    result = select_bank_deposits(state, gd)
+    assert len(result) == 1, "nothing is bankable, so exactly one stack is shed"
+    assert result[0][0] == "iron_bar", (
+        "the recoverable, non-critical material sheds first — never the weapon, the "
+        "working tool, the heal stock or the task item"
+    )
+
+
 def test_last_resort_sheds_critical_only_as_final_fallback():
     """If the full bag is ALL hard-critical items, still free a slot (recoverable)
     rather than stall — the lowest-value critical item is banked."""
     gd = _gd()
-    # full bag of only HP consumables + task coins (all hard-critical).
+    # Full bag of only HP consumables + task coins, with NOTHING above its keep cap:
+    # the heal stock target is 5 and exactly 5 chickens are held, the coins are
+    # KEEP_ALL. Every stack is hard-critical, so criticality cannot break the tie —
+    # lowest sell value then code ascending picks the chicken.
     state = make_state(
-        inventory={"cooked_chicken": 15, "tasks_coin": 5},
+        inventory={"cooked_chicken": 5, "tasks_coin": 15},
         inventory_max=20,
     )
     assert state.inventory_free == 0
     result = select_bank_deposits(state, gd)
     assert len(result) == 1  # frees a slot even though everything is critical
+    assert result[0][0] == "cooked_chicken"

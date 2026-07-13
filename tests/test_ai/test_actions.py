@@ -1328,16 +1328,18 @@ class TestDepositAllSelective:
         gd = self._gd()
         action = DepositAllAction(bank_location=(4, 1), accessible=True, game_data=gd)
         state = make_state(x=0, y=0, inventory={"gold_ore": 1, "copper_ore": 5},
-                           task_code="copper_ore", task_type="items", bank_items={})
+                           task_code="copper_ore", task_type="items", task_total=5,
+                           bank_items={})
         new_state = action.apply(state, gd)
-        assert new_state.inventory == {"copper_ore": 5}   # task item kept
+        assert new_state.inventory == {"copper_ore": 5}   # task item kept (5 still owed)
         assert new_state.bank_items == {"gold_ore": 1}    # junk banked
         assert (new_state.x, new_state.y) == (4, 1)
 
     def test_not_applicable_when_nothing_bankable(self):
         gd = self._gd()
         action = DepositAllAction(bank_location=(4, 1), accessible=True, game_data=gd)
-        state = make_state(inventory={"copper_ore": 5}, task_code="copper_ore")
+        state = make_state(inventory={"copper_ore": 5}, task_code="copper_ore",
+                           task_type="items", task_total=5)
         assert action.is_applicable(state, gd) is False
 
     def test_not_applicable_without_game_data(self):

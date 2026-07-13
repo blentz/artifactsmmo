@@ -73,6 +73,7 @@ from artifactsmmo_cli.ai.tiers.guards import (
     _used_fraction,
     active_guards,
     active_profile,
+    deposit_context,
     recycle_protected_codes,
 )
 from artifactsmmo_cli.ai.tiers.means import (
@@ -260,10 +261,13 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
     if kind is GuardKind.REACH_UNLOCK_LEVEL:
         return ReachUnlockLevelGoal(target_level=ctx.bank_required_level)
     if kind is GuardKind.DEPOSIT_FULL:
-        profile_codes = (frozenset(active_profile(state, game_data, ctx, step_profile))
-                         if state is not None else frozenset())
+        # The goal deposits `inventory_keep.bankable` copies, so it needs the SAME
+        # ctx the firing predicate used — its `step_profile` is the GOAL_MATERIALS
+        # keep reason. (`active_profile`'s blanket code-set is gone: every reason it
+        # merged is now a QUANTITY in the keep registry.)
         return DepositInventoryGoal(bank_accessible=ctx.bank_accessible,
-                                    game_data=game_data, profile_codes=profile_codes)
+                                    game_data=game_data,
+                                    ctx=deposit_context(ctx, step_profile))
     if kind is GuardKind.CRAFT_RELIEF:
         if state is None:
             raise ValueError("CRAFT_RELIEF guard requires a state to pick a target")

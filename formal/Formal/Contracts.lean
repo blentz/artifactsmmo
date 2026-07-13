@@ -903,65 +903,70 @@ example : ∀ (g : Formal.StrategyTraversal.Graph),
 
 /-! ### BankSelection role contracts.
 
-`Recipe`, `Reachable`, `satN`, `closureItems`, `childrenOf` are REUSED from
-`RecipeClosure` (opened above); the `BankSelection` defs are namespaced. -/
+The deposit selector is QUANTITY-typed: it banks the copies of each held code
+above `keepInBag` (the opaque keep authority, proved in `Formal.InventoryKeep`).
+The old keep-SET contracts (`freeze_invariant`, `task_inputs_protected`,
+`keep_closed`, the recipe-material closure) are GONE with the `_keep_codes` set
+they pinned — a code-set could only say "keep ALL copies", and that was the hoard
+bug. Their guarantees survive, strengthened, as `deposit_leaves_keep` (what stays
+is EXACTLY the cap) and `kept_code_not_deposited` (a code demanded to its full held
+amount — a task input, the working tool, the currency — is never banked at all).
+The transitive task-input demand itself is now `COMMITTED_RECIPE` in the keep
+authority (`Formal.InventoryCaps` / `Formal.InventoryChainSafe`). -/
 
--- deposits_exact: the deposit candidates are EXACTLY the inventory entries with
--- qty>0 and code ∉ keep (membership characterization, pre-sort).
-example : ∀ (s : Formal.BankSelection.State) (fuel : Nat) (cq : Nat × Nat),
-    cq ∈ Formal.BankSelection.depositCandidates s fuel
-      ↔ cq ∈ s.inventory ∧ cq.2 > 0 ∧ cq.1 ∉ Formal.BankSelection.keepList s fuel :=
+-- deposits_exact: the deposit candidates are EXACTLY one (code, surplus) per held
+-- code whose held amount exceeds its bag keep cap (membership characterization,
+-- pre-sort).
+example : ∀ (s : Formal.BankSelection.State) (cq : Nat × Nat),
+    cq ∈ Formal.BankSelection.depositCandidates s
+      ↔ ∃ held, (cq.1, held) ∈ s.inventory ∧ held > 0
+          ∧ held > s.keepInBag cq.1 ∧ cq.2 = held - s.keepInBag cq.1 :=
   @Formal.BankSelection.deposits_exact
 -- deposits_mem_iff: the SORTED deposit list deposits exactly the same entries
--- (the sort is a permutation — same set, reordered).
-example : ∀ (s : Formal.BankSelection.State) (fuel : Nat) (cq : Nat × Nat),
-    cq ∈ Formal.BankSelection.deposits s fuel
-      ↔ cq ∈ s.inventory ∧ cq.2 > 0 ∧ cq.1 ∉ Formal.BankSelection.keepList s fuel :=
+-- (the sort is a permutation — same entries, reordered).
+example : ∀ (s : Formal.BankSelection.State) (cq : Nat × Nat),
+    cq ∈ Formal.BankSelection.deposits s
+      ↔ ∃ held, (cq.1, held) ∈ s.inventory ∧ held > 0
+          ∧ held > s.keepInBag cq.1 ∧ cq.2 = held - s.keepInBag cq.1 :=
   @Formal.BankSelection.deposits_mem_iff
--- freeze_invariant: NO deposited code is in the keep set (deposits ∩ keep = ∅) —
--- the PursueTask-freeze guarantee, a protected item is NEVER banked.
-example : ∀ (s : Formal.BankSelection.State) (fuel : Nat) (cq : Nat × Nat),
-    cq ∈ Formal.BankSelection.deposits s fuel →
-      cq.1 ∉ Formal.BankSelection.keepList s fuel :=
-  @Formal.BankSelection.freeze_invariant
--- task_inputs_protected: every captured recipe material of the protected roots
--- (crafting target ∪ items-task code) is in the keep set.
-example : ∀ (s : Formal.BankSelection.State) (fuel : Nat) {m : Nat},
-    m ∈ Formal.BankSelection.recipeMaterialList s fuel →
-      m ∈ Formal.BankSelection.keepList s fuel :=
-  @Formal.BankSelection.task_inputs_protected
--- task_material_not_deposited: a protected recipe material is NEVER deposited (the
--- direct freeze guarantee for task inputs — the documented Robby-8/20 freeze).
-example : ∀ (s : Formal.BankSelection.State) (fuel : Nat) (cq : Nat × Nat),
-    cq.1 ∈ Formal.BankSelection.recipeMaterialList s fuel →
-      cq ∉ Formal.BankSelection.deposits s fuel :=
-  @Formal.BankSelection.task_material_not_deposited
--- keep_closed: every captured recipe material is BOTH in the keep set AND a
--- genuine StepReachable material (the reused least-fixpoint walk is sound + the
--- keep set contains it).
-example : ∀ (s : Formal.BankSelection.State) (fuel : Nat) {m : Nat},
-    m ∈ Formal.BankSelection.recipeMaterialList s fuel →
-      m ∈ Formal.BankSelection.keepList s fuel ∧ Formal.BankSelection.recipeMaterials s m :=
-  @Formal.BankSelection.keep_closed
--- recipeMaterials_closed: the recipe-material set is CLOSED under taking further
--- recipe children — once a material is protected, all its sub-materials are too
--- (the closure property of the walk over the reused recipe-child relation).
-example : ∀ (s : Formal.BankSelection.State) {item child : Nat},
-    Formal.BankSelection.recipeMaterials s item →
-    child ∈ (s.recipe item).map Prod.fst →
-      Formal.BankSelection.recipeMaterials s child :=
-  @Formal.BankSelection.recipeMaterials_closed
--- recipeMaterialList_complete: any material reached via a recipe edge from an item
--- captured at round n ≤ fuel is in the material list (COMPLETENESS — with adequate
--- fuel the full StepReachable closure is kept).
-example : ∀ (s : Formal.BankSelection.State) (fuel n : Nat), n ≤ fuel →
-    ∀ {item m : Nat}, item ∈ satN s.recipe (Formal.BankSelection.recipeRoots s) n →
-    m ∈ (s.recipe item).map Prod.fst →
-      m ∈ Formal.BankSelection.recipeMaterialList s fuel :=
-  @Formal.BankSelection.recipeMaterialList_complete
+-- deposit_leaves_keep: THE safety contract. Banking a deposited quantity leaves
+-- EXACTLY the keep cap in the bag — nothing the authority demands ever leaves, and
+-- nothing above it ever stays (the 17-of-18 axe split).
+example : ∀ (s : Formal.BankSelection.State) (cq : Nat × Nat),
+    cq ∈ Formal.BankSelection.deposits s →
+      ∃ held, (cq.1, held) ∈ s.inventory ∧ held - cq.2 = s.keepInBag cq.1 :=
+  @Formal.BankSelection.deposit_leaves_keep
+-- kept_code_not_deposited: a code the authority demands to (at least) the full held
+-- amount is NEVER deposited, in any quantity — the general form of the old
+-- task_material_not_deposited (the PursueTask-freeze guarantee).
+example : ∀ (s : Formal.BankSelection.State) (c : Nat),
+    (∀ held, (c, held) ∈ s.inventory → held ≤ s.keepInBag c) →
+      ∀ q, (c, q) ∉ Formal.BankSelection.deposits s :=
+  @Formal.BankSelection.kept_code_not_deposited
+-- currency_never_deposited: the KEEP_ALL escape hatch at the deposit boundary —
+-- tasks_coin is never banked at any holdable quantity.
+example : ∀ (s : Formal.BankSelection.State),
+    s.keepInBag s.tasksCoin = 1000000 →
+    (∀ held, (s.tasksCoin, held) ∈ s.inventory → held ≤ 1000000) →
+      ∀ q, (s.tasksCoin, q) ∉ Formal.BankSelection.deposits s :=
+  @Formal.BankSelection.currency_never_deposited
+-- copper_axe_hoard_refuted: NON-VACUITY on the live incident. 18 axes held, the
+-- working kit demands 1 → (axe, 17) IS a deposit candidate. Under the deleted
+-- code-set the whole code was "kept" and zero copies moved.
+example : ∀ (s : Formal.BankSelection.State) (c : Nat),
+    s.keepInBag c = 1 → (c, 18) ∈ s.inventory →
+      (c, 17) ∈ Formal.BankSelection.depositCandidates s :=
+  @Formal.BankSelection.copper_axe_hoard_refuted
+-- copper_axe_working_copy_kept: ...and the SAME code, held down to its cap, is
+-- never deposited. Both halves of one code — expressible only with a quantity.
+example : ∀ (s : Formal.BankSelection.State) (c : Nat),
+    s.keepInBag c = 1 → (∀ held, (c, held) ∈ s.inventory → held ≤ 1) →
+      ∀ q, (c, q) ∉ Formal.BankSelection.deposits s :=
+  @Formal.BankSelection.copper_axe_working_copy_kept
 -- best_weapon_argmax: the best fighting weapon's attack is ≥ EVERY fighting-weapon
 -- candidate's attack — the genuine argmax (max-attack non-tool weapon) over
--- inventory ∪ equipped.
+-- inventory ∪ equipped. (`kit_selection.best_fighting_weapon`; the keep authority's
+-- COMBAT_WEAPON reason turns the chosen code into the quantity 1.)
 example : ∀ (s : Formal.BankSelection.State) (c : Nat),
     Formal.BankSelection.bestWeaponCode s = some c →
     ∀ y ∈ Formal.BankSelection.weaponCandidates s,
@@ -973,25 +978,25 @@ example : ∀ (s : Formal.BankSelection.State) (c : Nat),
     Formal.BankSelection.bestWeaponCode s = some c →
       Formal.BankSelection.isFightingWeapon s c = true :=
   @Formal.BankSelection.best_weapon_is_fighting
--- freeze_invariant_of_free_pos: while the bag can still admit an item (quantity
--- room AND slot room both remain), the full production selectBankDeposits keeps the
--- freeze (deposits ∩ keep = ∅). The relaxed safety contract — the last-resort relief
+-- keep_respected_of_free_pos: while the bag can still admit an item (quantity room
+-- AND slot room both remain), the full production selectBankDeposits respects the
+-- keep cap on every deposit. The relaxed safety contract — the last-resort relief
 -- only fires when free == 0 OR slots_free == 0 (SLOT-AWARE).
-example : ∀ (s : Formal.BankSelection.State) (fuel : Nat) (cq : Nat × Nat),
+example : ∀ (s : Formal.BankSelection.State) (cq : Nat × Nat),
     Formal.BankSelection.inventoryFree s > 0 →
     Formal.BankSelection.inventorySlotsFree s > 0 →
-    cq ∈ Formal.BankSelection.selectBankDeposits s fuel →
-      cq.1 ∉ Formal.BankSelection.keepList s fuel :=
-  @Formal.BankSelection.freeze_invariant_of_free_pos
+    cq ∈ Formal.BankSelection.selectBankDeposits s →
+      ∃ held, (cq.1, held) ∈ s.inventory ∧ held - cq.2 = s.keepInBag cq.1 :=
+  @Formal.BankSelection.keep_respected_of_free_pos
 -- selectBankDeposits_frees_slot_when_full: when the bag can admit no more items —
--- quantity-full (free == 0) OR slots-full (slots_free == 0) — with nothing normally
--- bankable, the last-resort banks exactly one real inventory stack — so a slot frees
--- and FightAction can fire (the livelock-breaking guarantee, now SLOT-AWARE).
-example : ∀ (s : Formal.BankSelection.State) (fuel : Nat),
-    Formal.BankSelection.deposits s fuel = [] →
+-- quantity-full (free == 0) OR slots-full (slots_free == 0) — with nothing bankable,
+-- the last-resort banks exactly one real inventory stack — so a slot frees and
+-- FightAction can fire (the livelock-breaking guarantee, SLOT-AWARE).
+example : ∀ (s : Formal.BankSelection.State),
+    Formal.BankSelection.deposits s = [] →
     (Formal.BankSelection.inventoryFree s = 0 ∨ Formal.BankSelection.inventorySlotsFree s = 0) →
     ∀ (cq : Nat × Nat), Formal.BankSelection.lastResortDeposit s = some cq →
-      Formal.BankSelection.selectBankDeposits s fuel = [cq] ∧ cq ∈ s.inventory ∧ cq.2 > 0 :=
+      Formal.BankSelection.selectBankDeposits s = [cq] ∧ cq ∈ s.inventory ∧ cq.2 > 0 :=
   @Formal.BankSelection.selectBankDeposits_frees_slot_when_full
 
 /-! ### StuckDetector role contracts.

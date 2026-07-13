@@ -1768,7 +1768,7 @@ class TestDepositInventorySelective:
         gd = self._gd()
         goal = DepositInventoryGoal(bank_accessible=True, game_data=gd)
         state = make_state(inventory={"copper_ore": 100}, inventory_max=104,
-                           task_code="copper_ore")
+                           task_code="copper_ore", task_type="items", task_total=100)
         assert goal.is_satisfied(state) is True
         assert goal.value(state, gd) == 0.0
 
@@ -1798,7 +1798,7 @@ class TestDepositInventorySelective:
             x=0, y=0, inventory_max=104, bank_items={},
             inventory={"gold_ore": 5, "sap": 5, "copper_ore": 5,
                        "tasks_coin": 2, "cooked_chicken": 3, "copper_dagger": 1},
-            task_code="copper_ore", task_type="items",
+            task_code="copper_ore", task_type="items", task_total=5,
         )
         plan = GOAPPlanner().plan(state, goal, [action], gd)
         assert plan, "expected a deposit plan"

@@ -25,9 +25,9 @@ Pure: reads state/game_data only, no I/O.
 """
 
 from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
-from artifactsmmo_cli.ai.bank_selection import _best_gathering_tools
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_caps import useful_quantity_cap
+from artifactsmmo_cli.ai.kit_selection import best_gathering_tools
 from artifactsmmo_cli.ai.world_state import WorldState
 
 URGENCY_STEP = 5
@@ -73,7 +73,7 @@ def recyclable_surplus(
     # 7 fishing_net (both best-in-skill kit) in a 17/20-slot bag while
     # recyclable_surplus reported neither. Same blanket-vs-cap flaw the
     # equipped-code skip already fixed (copper_helmet x41).
-    kit = _best_gathering_tools(state, game_data)
+    kit = best_gathering_tools(state, game_data)
     out: dict[str, int] = {}
     for code, qty in state.inventory.items():
         # No blanket equipped-code skip: `qty` counts only BAG copies (the worn
