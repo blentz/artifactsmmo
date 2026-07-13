@@ -92,11 +92,19 @@ For every item code `c` in bag ∪ bank with `n = destroyable(c, state, game_dat
 and every `(mat, qty)` in `game_data.crafting_recipe(c)`:
 
 ```
-recoverable[mat] += max(1, (qty * n) // 2)
+recoverable[mat] += n * max(1, qty // 2)
 ```
 
-The yield expression **mirrors `RecycleAction.apply` exactly**. If the two ever
-diverge, the descent promises materials the executor cannot deliver.
+The yield expression **must mirror what the executor actually does**. The factory
+emits **quantity=1** `RecycleAction`s into the shared pool, so GOAP recovers `n`
+copies by applying a unit recycle `n` times — each yielding
+`max(1, (qty * 1) // 2)` per `RecycleAction.apply`. That totals
+`n * max(1, qty // 2)`, which is NOT the batch expression
+`max(1, (qty * n) // 2)`: the two differ whenever `qty == 1` (4 unit recycles of a
+1-qty ingredient recover 4, the batch formula predicts 2). Using the batch form
+would under-promise and leave the leaf rule inert on 1-qty ingredients. If this
+term ever drifts from `RecycleAction.apply`, the descent promises materials the
+executor cannot deliver.
 
 **The authority is `destroyable`, unchanged.** "May I recycle this for parts?"
 is the same question as "may I destroy this?", and the keep-unification epic
