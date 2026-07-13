@@ -40,12 +40,18 @@ class CellResult:
 
 
 def run_cell(cell: InventoryCell, game_data: GameData) -> CellResult:
-    """Drive the Task-4 cores for one grid cell and record the outcome."""
+    """Drive the Task-4 cores for one grid cell and record the outcome.
+
+    `planner_failed` (an inconclusive search — budget timeout or node cap) rides from
+    `plan_inventory` into `classify_gap`, which turns it into the UNEXPLAINED residual:
+    a gap class may only be earned by a fact about the WORLD, never by the planner
+    running out of budget (see `classify_gap`)."""
     state = census_state(cell.reason, cell.cap, cell.pressure, cell.held,
                          game_data, cell.band)
-    plan = plan_inventory(cell, state, game_data)
+    plan, planner_failed = plan_inventory(cell, state, game_data)
     passed = inventory_cell_verdict(cell, plan, state, game_data)
-    gap = None if passed else classify_gap(cell, state, game_data).value
+    gap = (None if passed
+           else classify_gap(cell, state, game_data, planner_failed).value)
     return CellResult(
         reason=cell.reason.value,
         cap=cell.cap,

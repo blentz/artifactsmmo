@@ -68,6 +68,12 @@ def _gd() -> GameData:
                                    crafting_skill="weaponcrafting", crafting_level=1),
         "copper_helmet": ItemStats(code="copper_helmet", level=1, type_="helmet",
                                    crafting_skill="gearcrafting", crafting_level=1),
+        # A SECOND helmet, so a profile can speak for the helmet SLOT while naming
+        # a different CODE — the difference between "superseded gear" (reclaimable)
+        # and "a slot the profile never covered" (keep 1).
+        "iron_helmet": ItemStats(code="iron_helmet", level=1, type_="helmet",
+                                 hp_bonus=40, crafting_skill="gearcrafting",
+                                 crafting_level=1),
         "copper_boots": ItemStats(code="copper_boots", level=1, type_="boots",
                                   crafting_skill="gearcrafting", crafting_level=1),
         "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
@@ -118,16 +124,42 @@ def _ctx(**kw: object):
 # 1. Reclaim: un-profiled, not-in-flight gear becomes reclaimable.
 # --------------------------------------------------------------------------- #
 def test_unprofiled_gear_becomes_reclaimable():
+    """Gear the profile SUPERSEDES is reclaimable — that is the de-blanketing.
+
+    "Un-profiled" means the profile named this item's SLOT and chose someone else,
+    not merely that the profile is silent about it: a recorded profile is
+    `pick_loadout` under a Combat/Gather purpose and NEITHER purpose fills every slot
+    (a combat profile names no ring/rune/utility; a gather profile names only
+    artifacts). Reading silence as "destroy it" was a real hole — see
+    `test_gear_in_a_slot_the_profile_never_names_is_kept` below.
+    """
     gd = _gd()
     state = make_state(level=5, skills={"gearcrafting": 1},
                        inventory={"copper_helmet": 1})
-    # gear_keep protects only copper_boots — copper_helmet is in NO profile and
-    # not in-flight, so its keep drops to 0 → the held unit is reclaimable.
-    gear_keep = {"copper_boots": 1}
+    # The profile speaks for the helmet slot and wants the iron one — the copper
+    # helmet is superseded, keep 0, reclaimable.
+    gear_keep = {"iron_helmet": 1}
     assert recyclable_surplus(state, gd, _ctx(gear_keep=gear_keep)) == {"copper_helmet": 1}
     # No profile info at all (legacy fallback): EQUIPPABLE_KEEP=1 → keep 1 → not
     # surplus. The keep authority reads BOTH modes off the ctx.
     assert recyclable_surplus(state, gd, _ctx()) == {}
+
+
+def test_gear_in_a_slot_the_profile_never_names_is_kept():
+    """THE DESTRUCTION HOLE (whole-branch review, finding 4). A boots-only profile
+    is NON-EMPTY, which switches `EQUIPPABLE_KEEP` off for EVERY equippable — so the
+    character's only copper_helmet had keep 0 and RecycleSurplus was licensed to melt
+    it. A profile can only speak for the slots `pick_loadout` filled; the slots it
+    never covered keep their one copy (`inventory_keep._gear_demand`)."""
+    gd = _gd()
+    state = make_state(level=5, skills={"gearcrafting": 1},
+                       inventory={"copper_helmet": 1})
+    assert recyclable_surplus(state, gd, _ctx(gear_keep={"copper_boots": 1})) == {}
+    # The SURPLUS above that one copy is still reclaimable — keep-1, never keep-all.
+    surplus_state = make_state(level=5, skills={"gearcrafting": 1},
+                               inventory={"copper_helmet": 3})
+    assert recyclable_surplus(
+        surplus_state, gd, _ctx(gear_keep={"copper_boots": 1})) == {"copper_helmet": 2}
 
 
 # --------------------------------------------------------------------------- #

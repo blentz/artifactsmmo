@@ -207,6 +207,26 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
     return kind is MeansKind.WAIT
 
 
+def means_fires(kind: MeansKind, state: WorldState, game_data: GameData,
+                history: LearningStore | None, ctx: SelectionContext) -> bool:
+    """Whether ONE means kind fires — the single-kind public face of `_fires`.
+
+    `StrategyArbiter.select` needs exactly one predicate BEFORE the rest:
+    `PURSUE_TASK`, which decides whether the objective step is task-suppressed and
+    therefore whether the step has a protection profile to bind onto the ctx. The
+    remaining kinds are evaluated (via `active_means`) AFTER that binding, because
+    three of them — SELL_IDLE, RECYCLE_SURPLUS, DRAIN_BANK_JUNK — read the keep
+    authority, which reads `ctx.step_profile`. Evaluating them on the unbound ctx
+    made the predicate and the goal it maps to disagree (the predicate saw an EMPTY
+    step profile, the goal saw the full one), so a means could fire on surplus its
+    goal then refused to shed: a zero-length plan candidate.
+
+    PURSUE_TASK itself reads only `state.task_*` and the learning history — no ctx
+    field at all — so evaluating it before the binding is exactly the same verdict
+    as after, which is what makes the ordering sound."""
+    return _fires(kind, state, game_data, history, ctx)
+
+
 def active_means(
     state: WorldState,
     game_data: GameData,
@@ -216,6 +236,10 @@ def active_means(
     """Return (collect_reward, discretionary) — triggered means in declared band order.
 
     history accepted for parity / used by the cancel predicates (low-yield, pivot).
+
+    CALL ORDER (load-bearing): the caller must bind `ctx.step_profile` BEFORE
+    calling this — SELL_IDLE / RECYCLE_SURPLUS / DRAIN_BANK_JUNK read the keep
+    authority, which reads that field. See `means_fires`.
     """
     collect = [k for k in COLLECT_REWARD_ORDER if _fires(k, state, game_data, history, ctx)]
     discretionary = [k for k in DISCRETIONARY_ORDER if _fires(k, state, game_data, history, ctx)]

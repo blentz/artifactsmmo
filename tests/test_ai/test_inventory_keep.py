@@ -340,8 +340,9 @@ def test_reason_cap_sets_are_exactly_the_registry():
 
 def test_working_kit_is_the_sole_reason_in_BOTH_caps():
     """Behavioural half of the cap-set pin, with NOTHING to hide behind: a
-    non-empty `gear_keep` that omits the axe suppresses `EQUIPPABLE_KEEP` in
-    RECIPE_DEMAND, so WORKING_KIT is the ONLY non-zero reason for the axe. It
+    non-empty `gear_keep` that SPEAKS FOR THE WEAPON SLOT but omits the axe
+    suppresses `EQUIPPABLE_KEEP` in RECIPE_DEMAND *and* `_gear_demand`'s
+    slot-silence floor, so WORKING_KIT is the ONLY non-zero reason for the axe. It
     must carry BOTH caps: keep 1 in the bag (17 of 18 bank) AND keep 1 owned
     (17 of 18 destroyable — never the last tool).
 
@@ -351,7 +352,7 @@ def test_working_kit_is_the_sole_reason_in_BOTH_caps():
     gd = _gd()
     state = make_state(level=10, skills={"weaponcrafting": 2},
                        inventory={"copper_axe": 18})
-    ctx = _ctx(gear_keep={"copper_bar": 1})
+    ctx = _ctx(gear_keep={"copper_dagger": 1})
     live = {r for r in KeepReason
             if reason_quantity(r, "copper_axe", state, gd, ctx) > 0}
     assert live == {KeepReason.WORKING_KIT}
@@ -364,11 +365,12 @@ def test_working_kit_is_the_sole_reason_in_BOTH_caps():
 
 def test_combat_weapon_is_the_sole_reason_in_BOTH_caps():
     """The COMBAT_WEAPON half of the same pin: the best fighting weapon is the
-    only live reason (gear_keep omits it), and it carries both caps — one stays
-    in the bag, and at least one stays OWNED."""
+    only live reason (the profile speaks for the weapon slot but omits it — so
+    neither the gear demand nor its slot-silence floor covers the dagger), and it
+    carries both caps: one stays in the bag, and at least one stays OWNED."""
     gd = _gd()
     state = make_state(level=10, inventory={"copper_dagger": 18})
-    ctx = _ctx(gear_keep={"copper_bar": 1})
+    ctx = _ctx(gear_keep={"copper_axe": 1})
     live = {r for r in KeepReason
             if reason_quantity(r, "copper_dagger", state, gd, ctx) > 0}
     assert live == {KeepReason.COMBAT_WEAPON}
@@ -789,3 +791,155 @@ def test_chain_reasons_feed_BOTH_caps():
     # CONSUMABLE_KEEP=999 blanket RECIPE_DEMAND already gives it.
     assert KeepReason.HEALING_CONSUMABLE in IN_BAG_REASONS
     assert KeepReason.HEALING_CONSUMABLE not in OWNED_REASONS
+
+
+# ---------------------------------------------------------------------------
+# GEAR_DEMAND's slot-silence floor (whole-branch review, finding 4).
+# ---------------------------------------------------------------------------
+
+def _slot_gd() -> GameData:
+    """Three equippable types across three DIFFERENT slots — the shape a recorded
+    profile cannot cover: `pick_loadout` under a `Combat` purpose names no ring
+    (a ring's benefit against the monster is 0, so the empty-slot gate skips it)
+    and under a `Gather` purpose names almost nothing at all."""
+    gd = GameData()
+    gd._item_stats = {
+        "copper_dagger": ItemStats(code="copper_dagger", level=1, type_="weapon",
+                                   attack={"attack_fire": 12},
+                                   crafting_skill="weaponcrafting", crafting_level=1),
+        "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
+                                 hp_bonus=10, crafting_skill="jewelrycrafting",
+                                 crafting_level=1),
+        "iron_ring": ItemStats(code="iron_ring", level=1, type_="ring",
+                               hp_bonus=40, crafting_skill="jewelrycrafting",
+                               crafting_level=1),
+        "copper_helmet": ItemStats(code="copper_helmet", level=1, type_="helmet",
+                                   hp_bonus=15, crafting_skill="gearcrafting",
+                                   crafting_level=1),
+        "iron_helmet": ItemStats(code="iron_helmet", level=1, type_="helmet",
+                                 hp_bonus=60, crafting_skill="gearcrafting",
+                                 crafting_level=1),
+    }
+    gd._crafting_recipes = {}
+    gd._workshop_locations = {"weaponcrafting": (3, 1), "gearcrafting": (2, 1),
+                              "jewelrycrafting": (5, 1)}
+    return gd
+
+
+def test_gear_in_a_slot_the_profile_never_names_keeps_one():
+    """THE DESTRUCTION HOLE (2026-07-13). A profile is recorded from `pick_loadout`
+    under a Combat or Gather purpose, and NEITHER covers every slot — probed against
+    the committed bundle, a Combat profile names no ring/rune/utility and a Gather
+    profile names only artifacts. But ANY non-empty `gear_keep` switches
+    `EQUIPPABLE_KEEP` off for EVERY equippable (`useful_quantity_cap`'s
+    profiles-aware mode), so the character's only copper_ring had `keep_owned = 0`
+    and every copy was recycle/sell/delete fodder.
+
+    The profile omitting a slot it cannot speak about is not a licence to destroy
+    what sits in it: keep 1, exactly the profile-less floor."""
+    gd = _slot_gd()
+    state = make_state(level=10, inventory={"copper_ring": 3})
+    ctx = _ctx(gear_keep={"copper_dagger": 1})  # a combat profile: weapon slot only
+    assert reason_quantity(KeepReason.GEAR_DEMAND, "copper_ring", state, gd, ctx) == 1
+    assert keep_owned("copper_ring", state, gd, ctx) == 1
+    assert destroyable("copper_ring", state, gd, ctx) == 2
+
+
+def test_gear_in_a_slot_the_profile_DOES_name_is_reclaimable():
+    """The de-blanketing this epic is about is untouched: where the profile CAN
+    speak, its number is the whole answer. 3 copper_helmet under a profile that
+    wants an iron_helmet keeps ZERO — the helmet slot is spoken for."""
+    gd = _slot_gd()
+    state = make_state(level=10, inventory={"copper_helmet": 3},
+                       bank_items={"iron_helmet": 1})
+    ctx = _ctx(gear_keep={"iron_helmet": 1})
+    assert reason_quantity(KeepReason.GEAR_DEMAND, "copper_helmet", state, gd, ctx) == 0
+    assert keep_owned("copper_helmet", state, gd, ctx) == 0
+    assert destroyable("copper_helmet", state, gd, ctx) == 3
+
+
+def test_slot_silent_gear_that_is_DOMINATED_is_still_reclaimable():
+    """The floor is keep-1-WITH-DOMINANCE, not keep-1-blindly: a slot-silent code
+    whose strictly-better owned peers already fill every slot it could take is the
+    first thing the discard ladder should pick (the `wooden_stick` rule)."""
+    gd = _slot_gd()
+    # 2 iron_ring owned fills BOTH ring slots and out-values copper_ring.
+    state = make_state(level=10, inventory={"copper_ring": 3, "iron_ring": 2})
+    ctx = _ctx(gear_keep={"copper_dagger": 1})
+    assert reason_quantity(KeepReason.GEAR_DEMAND, "copper_ring", state, gd, ctx) == 0
+    assert destroyable("copper_ring", state, gd, ctx) == 3
+    # ...while the dominator itself keeps its slot-silent copy.
+    assert reason_quantity(KeepReason.GEAR_DEMAND, "iron_ring", state, gd, ctx) == 1
+
+
+def test_slot_silence_floor_is_off_when_no_profile_is_active():
+    """With an EMPTY `gear_keep` the floor is not this reason's job at all — the
+    profile-less case is served by RECIPE_DEMAND's `EQUIPPABLE_KEEP` blanket, and
+    charging it here too would double-count nothing but confuse the census's
+    binding check."""
+    gd = _slot_gd()
+    state = make_state(level=10, inventory={"copper_ring": 3})
+    ctx = _ctx()
+    assert reason_quantity(KeepReason.GEAR_DEMAND, "copper_ring", state, gd, ctx) == 0
+    assert keep_owned("copper_ring", state, gd, ctx) == 1  # RECIPE_DEMAND's blanket
+
+
+def test_slot_silence_floor_ignores_non_equippables():
+    """A resource has no slot to be silent about."""
+    gd = _slot_gd()
+    state = make_state(level=10, inventory={"copper_ore": 30})
+    ctx = _ctx(gear_keep={"copper_dagger": 1})
+    assert reason_quantity(KeepReason.GEAR_DEMAND, "copper_ore", state, gd, ctx) == 0
+
+
+# ---------------------------------------------------------------------------
+# The means predicates must see the BOUND step profile (whole-branch review,
+# finding 3).
+# ---------------------------------------------------------------------------
+
+def test_means_predicates_fire_on_the_BOUND_step_profile():
+    """`active_means` used to be called with the ctx BEFORE `step_profile` was bound
+    onto it, so the three means that ask the keep authority what may be shed —
+    SELL_IDLE, RECYCLE_SURPLUS, DRAIN_BANK_JUNK — evaluated on an EMPTY profile while
+    the goals they map to ran on the full one. The predicate over-fires, the goal
+    reports itself satisfied, and the arbiter carries a zero-length plan candidate.
+
+    Here the bank holds EXACTLY the wood the active step's 40 ash_plank need. On the
+    unbound ctx the drain licenses 350 of them (the control below); on the bound ctx
+    it licenses none, so DRAIN_BANK_JUNK must not fire at all."""
+    gd = _gather_gd()
+    wood = 400  # closure of 40 ash_plank
+    state = make_state(level=10, hp=100, max_hp=100, skills={"woodcutting": 1},
+                       inventory={}, inventory_max=110,
+                       bank_items={"ash_wood": wood})
+    step = ObtainItem("ash_plank", 40)
+    decision = StrategyDecision(interrupt=None, chosen_root=step, chosen_step=step,
+                                desired_state={})
+    arbiter = _CtxSpyArbiter(GOAPPlanner())
+    arbiter.set_cycle(0)
+    arbiter.select(decision, state, gd, [], _ctx())
+
+    ctx = arbiter.seen_ctx
+    assert ctx is not None and ctx.step_profile.get("ash_wood") == wood
+    assert bank_drain_excess(state, gd, ctx) == {}
+    assert MeansKind.DRAIN_BANK_JUNK.value not in arbiter.last_fires["discretionary"]
+
+    # Control: on the ctx the predicate USED to see (no step profile), the drain
+    # licenses hundreds of the step's own materials — which is exactly the
+    # over-fire.
+    assert bank_drain_excess(state, gd, _ctx())["ash_wood"] > 0
+
+
+def test_slot_silence_floor_ignores_codes_the_catalog_does_not_know():
+    """A `gear_keep` entry (or a queried code) the catalog has no stats for cannot
+    contribute a SLOT — the authority reads game data or reads nothing, it never
+    invents a slot for an unknown item."""
+    gd = _slot_gd()
+    state = make_state(level=10, inventory={"copper_ring": 3})
+    # An unknown code in the profile contributes no covered slot, so the ring's slot
+    # is still silent and its floor still applies.
+    ctx = _ctx(gear_keep={"phantom_item": 1})
+    assert reason_quantity(KeepReason.GEAR_DEMAND, "copper_ring", state, gd, ctx) == 1
+    # An unknown QUERIED code has no slots at all -> no floor.
+    assert reason_quantity(KeepReason.GEAR_DEMAND, "phantom_item", state, gd, ctx) == 1
+    assert reason_quantity(KeepReason.GEAR_DEMAND, "other_phantom", state, gd, ctx) == 0

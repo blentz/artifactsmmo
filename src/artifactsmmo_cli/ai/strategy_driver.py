@@ -20,6 +20,7 @@ from artifactsmmo_cli.ai.arbiter_select import (
 from artifactsmmo_cli.ai.consumable_supply import best_held_heal
 from artifactsmmo_cli.ai.craft_plan_gen import generate_next_craft_action
 from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
+from artifactsmmo_cli.ai.destructive_license import license_destructive_actions
 from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
 from artifactsmmo_cli.ai.equipment.bank_tool_fills import bank_tool_fills
 from artifactsmmo_cli.ai.equipment.empty_slot_fills import empty_slot_rank_fills
@@ -77,6 +78,7 @@ from artifactsmmo_cli.ai.tiers.means import (
     SELL_PRESSURE_FRACTION,
     MeansKind,
     active_means,
+    means_fires,
 )
 from artifactsmmo_cli.ai.tiers.means_worth import means_serves
 from artifactsmmo_cli.ai.tiers.meta_goal import (
@@ -899,11 +901,19 @@ class StrategyArbiter:
         fallback_steps: list[MetaGoal] = getattr(decision, "fallback_steps", [])
         fallback_roots: list[MetaGoal] = getattr(decision, "fallback_roots", [])
 
-        collect_kinds, discretionary_kinds = active_means(state, game_data, self._history, ctx)
-
         step_goal = self._resolve_step_goal(
             chosen_step, chosen_root, fallback_steps, fallback_roots, state, game_data, ctx)
-        step_goal = self._suppress_step_for_task(step_goal, discretionary_kinds, state, game_data)
+        # Task suppression needs ONE means predicate (PURSUE_TASK), and that one
+        # reads no ctx field at all (state.task_* + history), so it is evaluated
+        # here — before the step profile exists. Every OTHER means is evaluated
+        # below, on the BOUND ctx: SELL_IDLE / RECYCLE_SURPLUS / DRAIN_BANK_JUNK
+        # ask the keep authority what may be shed, and the authority reads
+        # `ctx.step_profile`. Firing them on the unbound (empty-profile) ctx let a
+        # means fire on surplus its own goal — running on the FULL profile — then
+        # refused to shed, producing a satisfied goal and a zero-length plan.
+        task_means = [k for k in (MeansKind.PURSUE_TASK,)
+                      if means_fires(k, state, game_data, self._history, ctx)]
+        step_goal = self._suppress_step_for_task(step_goal, task_means, state, game_data)
 
         # The step goal is resolved BEFORE the guards so its needed map can
         # join the deposit/discard protection profile. Trace 2026-06-11 22:36
@@ -920,7 +930,20 @@ class StrategyArbiter:
         # WITHOUT the fallback walk and task suppression above, and the two
         # derivations would drift. Re-binding the frozen ctx here keeps one source.
         ctx = replace(ctx, step_profile=dict(step_profile or {}))
+        # EVERY consumer of the ctx below sees the bound profile: the means/guard
+        # predicates, the goals they map to, and the destructive-action licence.
+        collect_kinds, discretionary_kinds = active_means(state, game_data, self._history, ctx)
         guard_kinds = active_guards(state, game_data, self._history, ctx, step_profile)
+        # THE DESTRUCTION CHOKEPOINT (item-protection-authority epic): the factory's
+        # shared pool carries a quantity=1 Recycle / NpcSell / Delete for codes it
+        # knows nothing about, and `Goal.relevant_actions` DEFAULTS to the whole pool
+        # — so ~10 goals that have no business destroying anything (CompleteTask,
+        # AcceptTask, ClaimPending, …) could satisfy a Fight's `inventory_free >= 1`
+        # precondition by DELETING an item, and `delete_cost` ranks a sellable item
+        # (25) CHEAPER than an ingredient (50), which made the working copper_axe a
+        # PREFERRED victim. Licence the pool HERE, at the one point where the ctx is
+        # fully bound, so no goal can bypass the authority.
+        actions = license_destructive_actions(actions, state, game_data, ctx)
         # Phase B3: snapshot the fired kinds for the trace (selection-time
         # truth; recomputing at emit time would drift on ctx-dependent flags).
         self.last_fires = {

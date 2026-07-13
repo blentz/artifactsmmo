@@ -671,8 +671,9 @@ def inventory_grid(game_data: GameData) -> list[InventoryCell]:
 
 
 def plan_inventory(cell: InventoryCell, state: WorldState,
-                   game_data: GameData) -> list[Action]:
-    """The plan the REAL production planner produces for `cell`'s state.
+                   game_data: GameData) -> tuple[list[Action], bool]:
+    """The plan the REAL production planner produces for `cell`'s state, and whether
+    any goal's search was INCONCLUSIVE (budget timeout or node cap).
 
     Drives `StrategyArbiter.select` — the WHOLE production selection seam the live
     bot runs each cycle (`ai/player.py`): the guard ladder (deposit/discard/
@@ -682,6 +683,17 @@ def plan_inventory(cell: InventoryCell, state: WorldState,
     be a second implementation of the very ordering under test — and a mocked
     planner would prove nothing at all.
 
+    THE SECOND RETURN VALUE IS AN ANTI-LAUNDERING DEVICE. `goals_tried` records
+    `timed_out` per attempt (`GOAPPlanner.last_stats`, which also sets it on a node
+    cap — a capped search is inconclusive, not proof of impossibility). A cell whose
+    plan is empty BECAUSE the planner ran out of budget has learned NOTHING about the
+    world, and `classify_gap`'s world-limit arms (no venue / no route / bank full)
+    would happily "explain" it: a `GOAL_MATERIALS` scenario once produced a GREEN grid
+    whose cells were actually failing on a `DiscardOverstock` TIMEOUT (49,569 nodes)
+    and classified VENUE_UNREACHABLE. A gap class that can swallow a planner bug
+    destroys the census's entire value, so the flag rides out with the plan and forces
+    the UNEXPLAINED residual.
+
     `history=None`: the census is offline and must be deterministic (a
     LearningStore would make plans depend on a live SQLite record)."""
     ctx = census_ctx(cell.reason, state, game_data)
@@ -690,9 +702,9 @@ def plan_inventory(cell: InventoryCell, state: WorldState,
                             bank_accessible=True, task_exchange_min_coins=0)
     arbiter = StrategyArbiter(GOAPPlanner(), None)
     arbiter.set_cycle(0)
-    _goal, plan, _tried = arbiter.select(
+    _goal, plan, tried = arbiter.select(
         census_decision(cell.reason, game_data), state, game_data, actions, ctx)
-    return plan
+    return plan, any(bool(attempt.get("timed_out")) for attempt in tried)
 
 
 def _action_disposal(action: Action, code: str, state: WorldState,
@@ -856,39 +868,60 @@ def _delete_pressure(state: WorldState) -> bool:
     could fire this cycle. Quantity-only, exactly as `guards._fires` reads it: the
     discard ladder is deliberately blind to SLOT pressure so slot-full never
     deletes what banking could have saved. A state below the watermark simply has
-    no delete route — the item is not junk, it is just held."""
+    no delete route — the item is not junk, it is just held.
+
+    DELETE NEEDS NO VENUE (it is `POST /action/delete`, executable anywhere), which
+    is why `classify_gap` consults this FIRST among the owned-cap arms: once the
+    watermark is reached a destruction route is open regardless of workshops, buyers
+    or spawn windows, so no VENUE arm may excuse the cell."""
     if state.inventory_max <= 0:
         return False
     return (state.inventory_used * PRESSURE_HIGH_DEN
             >= state.inventory_max * PRESSURE_HIGH_NUM)
 
 
-def classify_gap(cell: InventoryCell, state: WorldState,
-                 game_data: GameData) -> InventoryGapClass:
-    """Classify a FAIL cell's root cause. Pure over (`cell`, `state`,
-    `game_data`); INVENTORY_BUG is the FALL-THROUGH, never a positive match, so a
+def classify_gap(cell: InventoryCell, state: WorldState, game_data: GameData,
+                 planner_failed: bool) -> InventoryGapClass:
+    """Classify a FAIL cell's root cause. Pure over (`cell`, `state`, `game_data`,
+    `planner_failed`); INVENTORY_BUG is the FALL-THROUGH, never a positive match, so a
     cell is blamed on the planner only after every world-limit explanation is
     ruled out.
 
-    Precedence — KEEP_ALL_SENTINEL -> VENUE_UNREACHABLE -> BANK_FULL ->
-    NO_ROUTE_AVAILABLE -> INVENTORY_BUG — runs most-specific-first:
+    Precedence — KEEP_ALL_SENTINEL -> PLANNER FAILURE -> VENUE_UNREACHABLE /
+    BANK_FULL / open DELETE route -> NO_ROUTE_AVAILABLE -> INVENTORY_BUG:
 
     * KEEP_ALL_SENTINEL is the DECLARED exemption and only ever applies to a
       CURRENCY LIVENESS obligation (which `inventory_grid` never generates — the
       exemption is declared here rather than discovered). A failing CURRENCY
       SAFETY cell is a plan disposing currency: it falls through to the cascade.
+    * `planner_failed` (a budget timeout or a node cap — `plan_inventory`) is
+      INVENTORY_BUG, unconditionally and before every world arm. A gap class may
+      only be earned by a fact about the WORLD: no venue, no route, a full bank.
+      "The planner ran out of budget" is a fact about the PLANNER, and admitting it
+      as a gap is how a `DiscardOverstock` 49,569-node timeout once wore the
+      VENUE_UNREACHABLE badge on a GREEN grid. The residual is the only honest home
+      for it — and if that turns a cell red, the cell WAS red.
     * VENUE_UNREACHABLE outranks the capacity/route arms: if the route's venue
       cannot be reached, its capacity is moot.
     * BANK_FULL only explains a BAG-cap cell (deposit is not an ownership route).
+    * An open DELETE route (`_delete_pressure`) outranks the owned-cap VENUE arms:
+      delete has no venue, so a shut merchant window cannot explain a cell whose
+      surplus production was free to delete.
     * NO_ROUTE_AVAILABLE is the last world-limit: nothing could have fired.
     * INVENTORY_BUG: a route was there and the authority licensed the shed."""
     if cell.reason is KeepReason.CURRENCY and cell.kind == "liveness":
         return InventoryGapClass.KEEP_ALL_SENTINEL
+    if planner_failed:
+        return InventoryGapClass.INVENTORY_BUG
     if cell.cap == "in_bag":
         if game_data.bank_location_or_none is None:
             return InventoryGapClass.VENUE_UNREACHABLE
         if not bank_has_room(True, state.bank_items, game_data.bank_capacity):
             return InventoryGapClass.BANK_FULL
+        return InventoryGapClass.INVENTORY_BUG
+    if _delete_pressure(state):
+        # A venue-free destruction route was open this cycle: nothing about the
+        # WORLD explains the surplus surviving.
         return InventoryGapClass.INVENTORY_BUG
     recyclable = _recyclable(cell.code, game_data)
     sellable = _sellable(cell.code, state, game_data)
@@ -901,6 +934,6 @@ def classify_gap(cell: InventoryCell, state: WorldState,
     if not sellable and game_data.npcs_buying_item(cell.code):
         # A buyer exists in the catalog but sits on no reachable tile.
         return InventoryGapClass.VENUE_UNREACHABLE
-    if not recyclable and not sellable and not _delete_pressure(state):
+    if not recyclable and not sellable:
         return InventoryGapClass.NO_ROUTE_AVAILABLE
     return InventoryGapClass.INVENTORY_BUG

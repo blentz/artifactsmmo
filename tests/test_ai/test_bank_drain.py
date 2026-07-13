@@ -38,6 +38,12 @@ def _gd() -> GameData:
         # Equippable craftable -> useful cap = EQUIPPABLE_KEEP (1) when not dominated.
         "copper_helmet": ItemStats(code="copper_helmet", level=1, type_="helmet",
                                    crafting_skill="gearcrafting", crafting_level=1),
+        # A second helmet, so a profile can SPEAK FOR the helmet slot while naming a
+        # different code — the difference between gear a profile SUPERSEDED (keep 0)
+        # and a slot the profile never covered at all (keep 1).
+        "iron_helmet": ItemStats(code="iron_helmet", level=1, type_="helmet",
+                                 hp_bonus=40, crafting_skill="gearcrafting",
+                                 crafting_level=1),
         "copper_boots": ItemStats(code="copper_boots", level=1, type_="boots",
                                   crafting_skill="gearcrafting", crafting_level=1),
         # The woodcutting tool at the heart of the hoard bug — and of the DESTRUCTION
@@ -217,16 +223,29 @@ def test_objective_target_gear_no_longer_blankets_the_bank():
         state, gd, _ctx(target_gear=frozenset({"copper_boots"}))) == {"copper_boots": 4}
 
 
-def test_bank_drain_unprofiled_gear_drains_fully_with_gear_keep():
-    """With a populated gear_keep map, equippable gear NOT in any profile has demand
-    0 and no ownership demand at all -> drains completely from the bank. Without
-    gear_keep (legacy), EQUIPPABLE_KEEP=1 (via RECIPE_DEMAND) protects one spare."""
+def test_bank_drain_superseded_gear_drains_fully_with_gear_keep():
+    """Gear the active profile SUPERSEDED (it names the slot, and picks someone else)
+    has demand 0 and no ownership demand at all -> drains completely from the bank.
+    Without gear_keep (legacy), EQUIPPABLE_KEEP=1 (via RECIPE_DEMAND) protects one
+    spare."""
     gd = _gd()
     state = make_state(level=5, bank_items={"copper_helmet": 5})
     assert bank_drain_excess(state, gd, _ctx()) == {"copper_helmet": 4}
     assert bank_drain_excess(
-        state, gd, _ctx(gear_keep={"copper_boots": 1}),  # helmet absent -> demand 0
+        state, gd, _ctx(gear_keep={"iron_helmet": 1}),  # the helmet slot, not this code
     ) == {"copper_helmet": 5}
+
+
+def test_bank_drain_keeps_one_of_gear_in_a_slot_the_profile_never_names():
+    """The other side of the same coin (whole-branch review, finding 4): a profile is
+    `pick_loadout` under a Combat or Gather purpose and NEITHER fills every slot, so
+    a boots-only profile is SILENT about helmets — it never had the chance to want
+    one. Silence is not a licence to drain the character's only helmet into the
+    discard ladder's mouth; the slot-silence floor keeps 1 and drains the rest."""
+    gd = _gd()
+    state = make_state(level=5, bank_items={"copper_helmet": 5})
+    assert bank_drain_excess(
+        state, gd, _ctx(gear_keep={"copper_boots": 1})) == {"copper_helmet": 4}
 
 
 def test_bank_drain_profiled_gear_keeps_demand():

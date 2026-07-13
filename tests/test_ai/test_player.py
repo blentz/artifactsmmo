@@ -1076,9 +1076,19 @@ class TestBuildGoalsTier1:
         ore_qtys = {a.quantity for a in withdraws if a.code == "copper_ore"}
         assert 10 in ore_qtys and 60 in ore_qtys
 
-    def test_build_actions_skips_recycle_for_protected_target_gear(self):
-        """Recycle actions are NOT built for codes the objective protects as
-        target_gear (recycling them destroys objective progress) — line 1002-1003."""
+    def test_build_actions_recycle_menu_carries_every_craftable_equippable(self):
+        """The factory emits the RECYCLE MENU, and protects nothing.
+
+        It used to skip the codes in `protected_gear or (target_gear | target_tools)`
+        — a `frozenset[str]`, i.e. keep-ALL-copies. That was the LAST code-set
+        protection in the codebase (the type the item-protection-authority epic
+        exists to kill), and as a defence it was both too strong (all 18 copies of a
+        BiS tool, hoarded) and far too weak (it guarded RECYCLE only, while the
+        Delete/NpcSell emissions in the same factory had NO protection at all and
+        `Goal.relevant_actions` hands the whole pool to every goal by default).
+        WHAT may be destroyed is now the keep authority's single answer, applied to
+        this pool in `StrategyArbiter.select` (`ai/destructive_license`), so the
+        target-gear code appears in the MENU exactly like any other."""
         from artifactsmmo_cli.ai.actions.recycle import RecycleAction
         weapon = ItemStats(code="copper_dagger", level=1, type_="weapon",
                            crafting_skill="weaponcrafting", crafting_level=1)
@@ -1100,8 +1110,8 @@ class TestBuildGoalsTier1:
         player.state = make_state(skills={"weaponcrafting": 1, "gearcrafting": 1})
         actions = player._build_actions()
         recycle_codes = {a.code for a in actions if isinstance(a, RecycleAction)}
-        assert "copper_dagger" not in recycle_codes  # protected target_gear
-        assert "copper_helmet" in recycle_codes       # unprotected -> recyclable
+        assert "copper_dagger" in recycle_codes
+        assert "copper_helmet" in recycle_codes
 
 
 class TestLogAction:

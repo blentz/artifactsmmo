@@ -47,9 +47,14 @@ def build_actions(
     objective: CharacterObjective | None,
     bank_accessible: bool,
     task_exchange_min_coins: int,
-    protected_gear: frozenset[str] = frozenset(),
 ) -> list[Action]:
-    """Build the action list. Each action handles its own movement in execute() and cost()."""
+    """Build the action list. Each action handles its own movement in execute() and cost().
+
+    The DESTRUCTIVE emissions (Recycle / NpcSell / Delete) are the raw MENU, not a
+    decision: the keep authority licenses them per-cycle in `StrategyArbiter.select`
+    (`ai/destructive_license`). The old `protected_gear` code-set parameter is gone —
+    see the recycle block below.
+    """
     bank = game_data.bank_location()
     taskmaster = game_data.taskmaster_location()
 
@@ -235,34 +240,34 @@ def build_actions(
     for slot in all_slots:
         actions.append(UnequipAction(slot=slot))
 
-    # Recycle actions: one per craftable equippable item, EXCEPT
-    # target_gear and target_tools — the objective wants those at
-    # hand, recycling destroys them. Trace 2026-06-06 16:34 verify
-    # showed a plan recycling copper_axe + copper_dagger + copper_pickaxe
-    # (all target_tools / target_gear codes) just to free inventory
-    # slots / recover bars for boots crafting. That trades long-term
-    # gathering capability for a one-shot copper_bar windfall — net
-    # loss because the recycled tools take dozens of cycles to remake.
-    # Gear protection (spec 2026-06-28-gear-loadout-profiles): the active-profile
-    # gear set ∪ in-flight upgrade (`protected_gear`, threaded in by the player)
-    # is the recycle exclusion. When absent (legacy callers / no profile info)
-    # fall back to the objective's target_gear/target_tools so a profile-less bot
-    # keeps the original protection.
-    protected_codes: set[str] = set(protected_gear)
-    if not protected_codes and objective is not None:
-        protected_codes.update(objective.target_gear.values())
-        protected_codes.update(objective.target_tools.values())
+    # Recycle actions: one per craftable equippable item.
+    #
+    # NO CODE-SET EXCLUSION (item-protection-authority epic). This loop used to skip
+    # `protected_codes = protected_gear or (target_gear | target_tools)` — a
+    # `frozenset[str]`, i.e. keep-ALL-copies, the exact type this epic exists to kill.
+    # It was also the WRONG shape of defence: it shielded BiS codes (all 18 copies of
+    # the axe, because the axe is a `target_tools` member) while leaving the heal
+    # stock, the active task's own item and any non-BiS last tool wide open. WHAT may
+    # be destroyed, and HOW MANY copies, is now the keep authority's single answer:
+    # `ai/destructive_license.license_destructive_actions` filters this pool (and the
+    # NpcSell / Delete emissions below) in `StrategyArbiter.select`, where the ctx the
+    # authority reads is fully bound. Emitting the menu here and licensing it there is
+    # deliberate: the factory runs BEFORE the strategy decision exists, so a gate
+    # applied at this line would ask the authority with an empty `step_profile` and no
+    # `crafting_target` — and would still licence destroying an active step's own
+    # materials.
     for item_code in game_data.crafting_recipes:
         stats = game_data.item_stats(item_code)
         if stats is None or not ITEM_TYPE_TO_SLOTS.get(stats.type_):
             continue
-        if item_code in protected_codes:
-            continue
         workshop_loc = game_data.workshop_location(stats.crafting_skill) if stats.crafting_skill else None
         actions.append(RecycleAction(code=item_code, quantity=1, workshop_location=workshop_loc))
 
-    # Delete actions: built from current inventory when bank is locked.
-    # Cost weights: ingredient=50 (harsher), sellable=25, worthless=5 (cheaper to delete).
+    # Delete actions: built from current inventory when bank is locked (with the bank
+    # open, banking is always the better slot-relief route). Cost weights:
+    # ingredient=50 (harsher), sellable=25, worthless=5 (cheaper to delete) — a RANKING
+    # among LICENSED victims only: `license_destructive_actions` removes the ones the
+    # keep authority protects before the planner ever ranks them.
     if not bank_accessible and state is not None:
         equipped = set(state.equipment.values()) - {None}
         for item_code, qty in state.inventory.items():
@@ -291,7 +296,10 @@ def build_actions(
                 npc_location=npc_loc,
             ))
 
-    # NPC sell actions: one per (npc, item) pair where the NPC buys the item
+    # NPC sell actions: one per (npc, item) pair where the NPC buys the item. Sales
+    # DESTROY the copies they sell, so this menu is licensed by the keep authority in
+    # `StrategyArbiter.select` (`ai/destructive_license`) — the unlicensed pool is what
+    # let a bank-locked full bag sell the task's own item or the last tool for slots.
     for npc_code, sell_prices in game_data.npc_sell_prices.items():
         npc_loc = game_data.npc_location(npc_code)
         for item_code in sell_prices:

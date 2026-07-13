@@ -18,6 +18,11 @@ module exists to kill (`copper_axe` is a `target_tools` member, which is
 another reason all 18 were hoarded). A BiS target is wanted ONCE, so the
 profile-less case is served by the EQUIPPED / RECIPE_DEMAND arms
 (`useful_quantity_cap`'s `EQUIPPABLE_KEEP = 1`) — keep 1, the rest disposable.
+De-blanketing is NOT de-protection, though: a recorded profile can only speak
+for the slots `pick_loadout` filled under a Combat/Gather purpose (a combat
+profile names no ring/rune/utility; a gather profile names only artifacts), so
+`_gear_demand` carries a keep-1-with-dominance floor for the slots the active
+profiles are SILENT about. See its docstring.
 
 MIGRATION (item-protection-authority epic): `bank_selection.select_bank_deposits`
 is LIVE on this authority (Task 6) — DepositAll banks `bankable(code)` copies of
@@ -35,14 +40,30 @@ same `min` — it is a BAG-side destruction) and the BANK DRAIN
 by `destroyable` ALONE — `keep_in_bag` says nothing about a bank copy, and a `min`
 with `bankable` would freeze the drain of a code held 0-in-bag, i.e. exactly the
 hoard it exists to clear. `guards.protected_gear_codes`, `guards._gear_protected` and
-`guards.active_profile` are DELETED with it: NO code-set protection remains anywhere.
+`guards.active_profile` are DELETED with it.
+
+THE LAST CODE-SET (2026-07-13) was `actions/factory.py`'s
+`protected_codes = protected_gear or (target_gear | target_tools)`, and it was worse
+than a blanket: it was an UNLICENSED DESTRUCTION PATH. The factory emits a quantity=1
+Recycle / NpcSell / (bank-locked) Delete into the SHARED action pool, and
+`Goal.relevant_actions` DEFAULTS to that whole pool — so ~10 goals that never override
+it could destroy anything the code-set did not name (the heal stock, the task's own
+item, a non-BiS last tool), and `delete_cost` ranks a SELLABLE item BELOW an ingredient,
+which made the working axe a PREFERRED victim of a Fight's `inventory_free >= 1`
+precondition. That set is DELETED and the pool is now licensed by this authority —
+`ai/destructive_license.license_destructive_actions`, applied in
+`StrategyArbiter.select` where the ctx is fully bound. NO code-set protection remains
+anywhere, and every destructive action in production answers to these two caps.
 """
 
 from enum import Enum
 
+from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.consumable_supply import HEAL_STOCK_FLOOR, heal_stock_target
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_caps import (
+    EQUIPPABLE_KEEP,
+    _is_equippable_dominated,
     _task_chain_demand_pure,
     useful_quantity_cap,
 )
@@ -305,13 +326,63 @@ def _equipped(code: str, state: WorldState, game_data: GameData,
     return 1 if code in state.equipment.values() else 0
 
 
+def _profile_slots(ctx: SelectionContext, game_data: GameData) -> set[str]:
+    """Every equipment SLOT the active profiles name a code for. A profile is a
+    `{slot: code}` loadout, so the slots its codes can fill are the slots it speaks
+    for; anything else it is SILENT about (see `_gear_demand`)."""
+    slots: set[str] = set()
+    for kept_code in ctx.gear_keep or {}:
+        stats = game_data.item_stats(kept_code)
+        if stats is None:
+            continue
+        slots.update(ITEM_TYPE_TO_SLOTS.get(stats.type_, []))
+    return slots
+
+
 def _gear_demand(code: str, state: WorldState, game_data: GameData,
                  ctx: SelectionContext) -> int:
-    """The active-profile gear demand. Deliberately has NO profile-less
-    fallback to `ctx.target_gear | ctx.target_tools` — see the module
-    docstring: that fallback is a code-SET (keep-all), and the profile-less
-    case is correctly served with keep-1 by EQUIPPED / RECIPE_DEMAND."""
-    return (ctx.gear_keep or {}).get(code, 0)
+    """The active-profile gear demand, plus a keep-1 floor for the slots the profile
+    is SILENT about.
+
+    NO CODE-SET FALLBACK. There is deliberately no profile-less fallback to
+    `ctx.target_gear | ctx.target_tools` — see the module docstring: that fallback is
+    a code-SET (keep-ALL-copies), and the profile-less case (`gear_keep` empty) is
+    correctly served with keep-1 by EQUIPPED / RECIPE_DEMAND
+    (`useful_quantity_cap`'s `EQUIPPABLE_KEEP` blanket, which `_recipe_demand` only
+    switches off once a profile exists).
+
+    THE SLOT-SILENCE FLOOR (2026-07-13) is the other half, and it closes a real
+    DESTRUCTION hole. The profiles are recorded from `pick_loadout` under exactly two
+    purposes — `Combat(monster)` and `Gather(skill)` (`player._record_loadout_for_action`)
+    — and NEITHER covers every slot. Probed against the committed bundle with one of
+    every equippable type owned: a `Combat` profile names no `ring`, `rune` or
+    `utility` code (their benefit against the monster is 0, so the empty-slot gate
+    skips them), and a `Gather` profile names ONLY artifacts. A NON-EMPTY `gear_keep`
+    switches the blanket OFF for EVERY equippable, so an owned-but-unequipped
+    `copper_ring` — or a freshly crafted `copper_helmet` while only a gather profile
+    is active — had `keep_owned = 0` and every copy was RECYCLE/SELL/DELETE fodder.
+    "The profile omits it" cannot mean "destroy it" when the profile was never able
+    to speak about that slot.
+
+    So: a code whose slots the active profiles DO name takes the profile's number and
+    nothing else (that is the de-blanketing this epic is about — 3 `copper_helmet`
+    under a profile that wants 1 `iron_helmet` keeps ZERO, and the surplus is
+    reclaimable). A code whose slots NO active profile names falls back to the same
+    keep-1-with-dominance the profile-less case gets: keep the one copy the equipment
+    optimizer would swap in, UNLESS strictly-better owned peers already fill every
+    slot it could (`_is_equippable_dominated` — the `wooden_stick` after the
+    `copper_dagger`). Keep-1, never keep-all: the 18-copper_axe hoard cannot come
+    back through this door (the axe is a weapon, a slot every combat profile names,
+    and its last copy is WORKING_KIT's job)."""
+    keep = ctx.gear_keep or {}
+    demand = keep.get(code, 0)
+    if demand > 0 or not keep:
+        return demand
+    stats = game_data.item_stats(code)
+    slots = ITEM_TYPE_TO_SLOTS.get(stats.type_, []) if stats is not None else []
+    if not slots or any(slot in _profile_slots(ctx, game_data) for slot in slots):
+        return 0
+    return 0 if _is_equippable_dominated(code, state, game_data) else EQUIPPABLE_KEEP
 
 
 def _recipe_demand(code: str, state: WorldState, game_data: GameData,

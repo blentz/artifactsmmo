@@ -150,7 +150,8 @@ def test_working_kit_liveness_cell_PASSES_against_the_real_arbiter(
     assert deposits["copper_axe"] == SURPLUS
     assert state.inventory["copper_axe"] - deposits["copper_axe"] == 1
 
-    plan = plan_inventory(cell, state, gd)
+    plan, planner_failed = plan_inventory(cell, state, gd)
+    assert planner_failed is False
     assert plan and any(isinstance(a, DepositAllAction) for a in plan), \
         [repr(a) for a in plan]
     assert disposed_quantity(cell, plan, state, gd) == SURPLUS
@@ -168,7 +169,8 @@ def test_currency_safety_cell_passes_against_the_real_arbiter(
     assert (cell.code, cell.held, cell.keep) == (TASKS_COIN_CODE, SENTINEL_HELD, KEEP_ALL)
     state = census_state(cell.reason, cell.cap, cell.pressure, cell.held, gd,
                          cell.band)
-    plan = plan_inventory(cell, state, gd)
+    plan, planner_failed = plan_inventory(cell, state, gd)
+    assert planner_failed is False
     assert disposed_quantity(cell, plan, state, gd) == 0
     assert inventory_cell_verdict(cell, plan, state, gd) is True
 
@@ -187,7 +189,8 @@ def test_owned_liveness_cell_drives_the_real_arbiter_under_a_full_bank(
     ctx = census_ctx(cell.reason, state, gd)
     assert state.bank_items is not None and len(state.bank_items) == gd.bank_capacity
     assert destroyable(cell.code, state, gd, ctx) == SURPLUS
-    plan = plan_inventory(cell, state, gd)
+    plan, planner_failed = plan_inventory(cell, state, gd)
+    assert planner_failed is False
     assert inventory_cell_verdict(cell, plan, state, gd) is True
     assert disposed_quantity(cell, plan, state, gd) > 0
 
@@ -657,9 +660,9 @@ def test_keep_all_sentinel_classifies_only_the_declared_liveness_exemption() -> 
     gd = _disposal_gd()
     state = make_state(inventory={TASKS_COIN_CODE: 9}, bank_items={})
     live = _gap_cell(KeepReason.CURRENCY, "in_bag", TASKS_COIN_CODE)
-    assert classify_gap(live, state, gd) is InventoryGapClass.KEEP_ALL_SENTINEL
+    assert classify_gap(live, state, gd, False) is InventoryGapClass.KEEP_ALL_SENTINEL
     safety = _gap_cell(KeepReason.CURRENCY, "in_bag", TASKS_COIN_CODE, kind="safety")
-    assert classify_gap(safety, state, gd) is InventoryGapClass.INVENTORY_BUG
+    assert classify_gap(safety, state, gd, False) is InventoryGapClass.INVENTORY_BUG
 
 
 def test_in_bag_gap_classes() -> None:
@@ -667,15 +670,15 @@ def test_in_bag_gap_classes() -> None:
     cell = _gap_cell(KeepReason.WORKING_KIT, "in_bag", "copper_axe")
     # Bank located + room -> nothing excuses the FAIL.
     assert classify_gap(cell, make_state(inventory={"copper_axe": 9}, bank_items={}),
-                        gd) is InventoryGapClass.INVENTORY_BUG
+                        gd, False) is InventoryGapClass.INVENTORY_BUG
     # Bank at capacity -> DEPOSIT genuinely cannot take it.
     full = make_state(inventory={"copper_axe": 9},
                       bank_items={f"junk_{i}": 1 for i in range(gd.bank_capacity)})
-    assert classify_gap(cell, full, gd) is InventoryGapClass.BANK_FULL
+    assert classify_gap(cell, full, gd, False) is InventoryGapClass.BANK_FULL
     # No bank on the map at all -> the route's venue is unreachable.
     gd._bank_location = None
     assert classify_gap(cell, make_state(inventory={"copper_axe": 9}, bank_items={}),
-                        gd) is InventoryGapClass.VENUE_UNREACHABLE
+                        gd, False) is InventoryGapClass.VENUE_UNREACHABLE
 
 
 def test_owned_gap_classes() -> None:
@@ -686,11 +689,11 @@ def test_owned_gap_classes() -> None:
                              inventory_max=100)
     # copper_axe is weaponcrafting-crafted at a PLACED workshop -> recyclable,
     # so a FAIL has no excuse.
-    assert classify_gap(axe, roomy_state, gd) is InventoryGapClass.INVENTORY_BUG
+    assert classify_gap(axe, roomy_state, gd, False) is InventoryGapClass.INVENTORY_BUG
 
     # Same item, workshop off the map: the route exists but its venue does not.
     gd._workshop_locations = {}
-    assert classify_gap(axe, roomy_state, gd) is InventoryGapClass.VENUE_UNREACHABLE
+    assert classify_gap(axe, roomy_state, gd, False) is InventoryGapClass.VENUE_UNREACHABLE
 
     # A material with no recycle route, no buyer, and a roomy bag: production has
     # no destructive route to fire — the DELETE watermark is deliberately
@@ -698,11 +701,11 @@ def test_owned_gap_classes() -> None:
     bar = _gap_cell(KeepReason.RECIPE_DEMAND, "owned", "copper_bar")
     assert classify_gap(bar, make_state(inventory={"copper_bar": 9},
                                         bank_items=full_bank, inventory_max=100),
-                        gd) is InventoryGapClass.NO_ROUTE_AVAILABLE
+                        gd, False) is InventoryGapClass.NO_ROUTE_AVAILABLE
     # ...but at the discard watermark, DELETE is a route -> no excuse left.
     assert classify_gap(bar, make_state(inventory={"copper_bar": 9},
                                         bank_items=full_bank, inventory_max=10),
-                        gd) is InventoryGapClass.INVENTORY_BUG
+                        gd, False) is InventoryGapClass.INVENTORY_BUG
 
 
 def test_owned_gap_venue_unreachable_for_an_unplaced_buyer() -> None:
@@ -714,11 +717,11 @@ def test_owned_gap_venue_unreachable_for_an_unplaced_buyer() -> None:
     state = make_state(inventory={"copper_bar": 9},
                        bank_items={f"junk_{i}": 1 for i in range(gd.bank_capacity)},
                        inventory_max=100)
-    assert classify_gap(cell, state, gd) is InventoryGapClass.VENUE_UNREACHABLE
+    assert classify_gap(cell, state, gd, False) is InventoryGapClass.VENUE_UNREACHABLE
     # Place the vendor and the route is real again -> the FAIL is unexplained.
     gd.world.npc_tiles = {"floating_merchant": (4, 4)}
     assert _sellable("copper_bar", state, gd)
-    assert classify_gap(cell, state, gd) is InventoryGapClass.INVENTORY_BUG
+    assert classify_gap(cell, state, gd, False) is InventoryGapClass.INVENTORY_BUG
 
 
 def test_owned_gap_venue_unreachable_for_a_dormant_event_merchant() -> None:
@@ -736,7 +739,7 @@ def test_owned_gap_venue_unreachable_for_a_dormant_event_merchant() -> None:
                        bank_items={f"junk_{i}": 1 for i in range(gd.bank_capacity)},
                        inventory_max=100)
     assert _sellable("copper_bar", state, gd) is False
-    assert classify_gap(cell, state, gd) is InventoryGapClass.VENUE_UNREACHABLE
+    assert classify_gap(cell, state, gd, False) is InventoryGapClass.VENUE_UNREACHABLE
 
 
 def test_recyclable_is_intrinsic_to_the_item_and_the_world() -> None:
@@ -765,3 +768,57 @@ def test_delete_pressure_reads_the_quantity_watermark_only() -> None:
     assert _delete_pressure(make_state(inventory={"copper_bar": 5},
                                        inventory_max=20)) is False
     assert _delete_pressure(make_state(inventory={}, inventory_max=0)) is False
+
+
+def test_a_planner_failure_can_never_wear_a_gap_class() -> None:
+    """THE LAUNDERING CHANNEL, closed (whole-branch review, finding 2). A gap class
+    may only be earned by a fact about the WORLD — no venue, no route, a full bank.
+    "The planner ran out of budget" is a fact about the PLANNER: a `DiscardOverstock`
+    49,569-node timeout once wore the VENUE_UNREACHABLE badge on a GREEN grid, and a
+    gap class that can swallow a planner bug destroys the census's entire value.
+
+    Same cell, same world, same shut merchant window — the ONLY difference is that
+    the search was inconclusive, and that alone forces the UNEXPLAINED residual."""
+    gd = _disposal_gd()
+    gd.world.npc_sell_prices = {"nomadic_merchant": {"copper_bar": 4}}
+    gd.world.npc_tiles = {"nomadic_merchant": (4, 4)}
+    gd._npc_event_code["nomadic_merchant"] = "nomadic_merchant"
+    gd._event_npc_spawns["nomadic_merchant"] = (4, 4)
+    cell = _gap_cell(KeepReason.RECIPE_DEMAND, "owned", "copper_bar")
+    state = make_state(inventory={"copper_bar": 9},
+                       bank_items={f"junk_{i}": 1 for i in range(gd.bank_capacity)},
+                       inventory_max=100)
+    # The world arm that USED to absorb it.
+    assert classify_gap(cell, state, gd, False) is InventoryGapClass.VENUE_UNREACHABLE
+    # ...and cannot any more, once the search is known to be inconclusive.
+    assert classify_gap(cell, state, gd, True) is InventoryGapClass.INVENTORY_BUG
+    # It outranks the in-bag arms too (a roomy bank would have said INVENTORY_BUG
+    # anyway; a FULL one would have said BANK_FULL and hidden the timeout).
+    bag_cell = _gap_cell(KeepReason.WORKING_KIT, "in_bag", "copper_axe")
+    full = make_state(inventory={"copper_axe": 9},
+                      bank_items={f"junk_{i}": 1 for i in range(gd.bank_capacity)})
+    assert classify_gap(bag_cell, full, gd, False) is InventoryGapClass.BANK_FULL
+    assert classify_gap(bag_cell, full, gd, True) is InventoryGapClass.INVENTORY_BUG
+
+
+def test_an_open_delete_route_outranks_the_owned_venue_arms() -> None:
+    """DELETE needs no venue (`POST /action/delete` runs anywhere), so once the
+    discard watermark is reached a destruction route is open no matter what the
+    merchants and workshops are doing. A shut event-merchant window cannot explain a
+    cell whose surplus production was free to delete — that ordering is what kept the
+    VENUE arm from quietly covering a live disposal bug."""
+    gd = _disposal_gd()
+    gd.world.npc_sell_prices = {"nomadic_merchant": {"copper_bar": 4}}
+    gd.world.npc_tiles = {"nomadic_merchant": (4, 4)}
+    gd._npc_event_code["nomadic_merchant"] = "nomadic_merchant"
+    gd._event_npc_spawns["nomadic_merchant"] = (4, 4)
+    cell = _gap_cell(KeepReason.RECIPE_DEMAND, "owned", "copper_bar")
+    full_bank = {f"junk_{i}": 1 for i in range(gd.bank_capacity)}
+    # Roomy bag: no delete route -> the shut window is a genuine world limit.
+    roomy = make_state(inventory={"copper_bar": 9}, bank_items=full_bank,
+                       inventory_max=100)
+    assert classify_gap(cell, roomy, gd, False) is InventoryGapClass.VENUE_UNREACHABLE
+    # At the watermark: DELETE is open -> nothing about the world excuses the FAIL.
+    pressured = make_state(inventory={"copper_bar": 9}, bank_items=full_bank,
+                           inventory_max=10)
+    assert classify_gap(cell, pressured, gd, False) is InventoryGapClass.INVENTORY_BUG

@@ -1423,26 +1423,24 @@ class GamePlayer:
         self._detector.acknowledge(signal)
 
     def _build_actions(self) -> list[Action]:
-        """Build the action list (delegates to the actions factory)."""
+        """Build the action list (delegates to the actions factory).
+
+        NO protection is applied here any more. The factory used to take a
+        `protected_gear` frozenset (the active-profile gear codes) as its recycle
+        exclusion — a keep-ALL code-set, the type the item-protection-authority epic
+        exists to kill, and one that covered only BiS gear. The pool's destructive
+        actions (Recycle / NpcSell / Delete) are licensed by the keep authority in
+        `StrategyArbiter.select`, which is the one place the ctx it reads is fully
+        bound (`ai/destructive_license`); this method runs BEFORE the cycle's strategy
+        decision exists, so it cannot ask the authority a complete question.
+        """
         assert self.game_data is not None
-        # The factory recycle-exclusion is the ACTIVE-PROFILE gear set (spec
-        # 2026-06-28-gear-loadout-profiles). Empty for a profile-less bot (no
-        # history / no recorded profiles), in which case the factory falls back
-        # to the objective's target_gear/target_tools protection. The in-flight
-        # +1 spare is enforced at the goal/cap level (recyclable_surplus), not
-        # here, so action-building stays decoupled from the objective.
-        protected_gear: frozenset[str] = frozenset()
-        if self.state is not None and self.history is not None:
-            protected_gear = frozenset(active_profile_gear(
-                self.state, self.game_data, self.history,
-                self._winnable_farm_target(), frozenset()))
         built = build_actions(
             game_data=self.game_data,
             state=self.state,
             objective=self._objective,
             bank_accessible=not self._blockers.is_blocked("bank"),
             task_exchange_min_coins=self._task_exchange_min_coins,
-            protected_gear=protected_gear,
         )
         # Route around actions the REPEATED_ACTION_FAILURE recovery has blocked,
         # so a repeatedly-failing action (even guard-driven) is dropped from the
