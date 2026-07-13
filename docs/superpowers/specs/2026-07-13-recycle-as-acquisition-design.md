@@ -201,11 +201,35 @@ withdraws for the recycle **source** codes, not only for closure materials.
 
 ### 2.6 Eligibility must match the executor
 
-`recoverable_materials` must apply the **same gates** `RecycleAction.is_applicable`
-applies, or the descent leafs a node the executor cannot serve and the bot stalls:
-the item has a crafting recipe, has a known `crafting_skill`, the character meets
-its `crafting_level`, and the skill's workshop location is known. These are the
-gates `recycle_surplus.recyclable_surplus` already enumerates.
+`recoverable_materials` must apply the same gates the executor applies, or the
+descent leafs a node the executor cannot serve and the bot stalls. There are
+**five**, and one of them does NOT live in `RecycleAction.is_applicable`:
+
+1. the item has a crafting recipe;
+2. it has a known `crafting_skill`;
+3. the character meets its `crafting_level`;
+4. the skill's workshop location is known;
+5. **the item is EQUIPPABLE** (`ITEM_TYPE_TO_SLOTS.get(stats.type_)`).
+
+Gate 5 is the one to watch. `RecycleAction` objects are only ever CONSTRUCTED by
+`actions/factory.py:259`, which skips every non-equippable code. So an item can
+pass all four `is_applicable` gates and still have **no `RecycleAction` in
+existence** — `is_applicable` is never consulted, because there is nothing to
+consult it on. Against the live snapshot, **50 craftable codes** have a recipe and
+a `crafting_skill` but a non-equippable `type_` (`resource`: bars and planks like
+`ash_plank`; `consumable`: cooked food). Omitting gate 5 declares every one of
+them recoverable, and the descent leafs a node with no plan.
+
+`recycle_surplus.recyclable_surplus` already enforces all five — it is the
+disposal face of the same question and the right thing to mirror. The lesson
+generalizes: **eligibility must mirror what the ACTION POOL actually contains, not
+merely what `is_applicable` would say if asked.**
+
+Note that `is_applicable` also carries a slot-floor check (`inventory_free` vs the
+net items recovered). That one is a per-cycle affordability condition, not a static
+property of the item, and GOAP re-checks the real `is_applicable` at search time —
+so omitting it makes the map an imprecise hint, never an undeliverable promise. It
+is deliberately out of scope.
 
 ### 2.5 Plumbing
 
