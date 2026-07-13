@@ -52,20 +52,21 @@ def test_run_cell_records_a_passing_safety_cell() -> None:
 def test_run_cell_records_gap_on_failure() -> None:
     """A FAILing cell records `passed=False` and the classified gap.
 
-    GOAL_MATERIALS' in_bag LIVENESS cell is the residual failure after the Task-6
-    deposit migration: `select_bank_deposits` DOES offer the surplus ash_wood, but
-    the arbiter takes the objective-step Craft instead of the deposit guard, so no
-    disposal happens in the plan — an INVENTORY_BUG the census keeps flagging until
-    the ladder-ordering residual is closed. (WORKING_KIT, the cell this test used
-    to pin RED, now PASSes: see
-    `test_working_kit_liveness_cell_PASSES_against_the_real_arbiter`.)"""
+    ACTIVE_TASK's owned LIVENESS cell is a WORLD-limit failure, not a bug:
+    `golden_egg` has no recipe (no RECYCLE route), its only buyer is the dormant
+    event `nomadic_merchant` (no SELL route), and slot pressure deliberately does
+    not open the DELETE route — so production is right to keep holding it, and the
+    cell classifies VENUE_UNREACHABLE. (GOAL_MATERIALS, the cell this test used to
+    pin as the last INVENTORY_BUG, now PASSes: the CRAFT_RELIEF slot gate stopped
+    the remainder-leaving craft from preempting the DEPOSIT_FULL that sheds the
+    surplus — see `test_craft_relief.TestSlotHonestRelief`.)"""
     gd = _gd()
     cells = inventory_grid(gd)
-    cell = _cell_of(cells, KeepReason.GOAL_MATERIALS, "liveness", "in_bag", "slot_full")
+    cell = _cell_of(cells, KeepReason.ACTIVE_TASK, "liveness", "owned", "slot_full")
     result = run_cell(cell, gd)
-    assert result.reason == "goal_materials"
+    assert result.reason == "active_task"
     assert result.passed is False
-    assert result.gap == "inventory_bug"
+    assert result.gap == "venue_unreachable"
 
 
 def test_census_cells_is_the_grid() -> None:
@@ -111,21 +112,26 @@ def test_reason_coverage_currency_exempt_even_with_no_liveness_cell() -> None:
     assert not any(r.kind == "liveness" and r.reason == "currency" for r in results)
 
 
-def test_reason_coverage_after_the_deposit_migration() -> None:
-    """Task 6 (deposit -> `bankable`) turned FOUR of the five uncovered reasons
-    green: HEALING_CONSUMABLE, COMBAT_WEAPON, WORKING_KIT and COMMITTED_RECIPE all
-    now have a PASSing liveness cell, because DepositAll sheds the surplus above
-    each one's keep quantity instead of blanket-keeping the code.
+def test_reason_coverage_is_complete() -> None:
+    """EVERY non-CURRENCY KeepReason now has a PASSing LIVENESS cell (census
+    Gate 2 CLEAN).
 
-    GOAL_MATERIALS remains uncovered: its surplus IS offered by
-    `select_bank_deposits`, but the arbiter takes the objective-step Craft over the
-    deposit guard, so nothing is shed in the plan (a ladder-ordering residual, not
-    a keep-authority one)."""
+    Task 6 (deposit -> `bankable`) turned four of the five uncovered reasons
+    green: HEALING_CONSUMABLE, COMBAT_WEAPON, WORKING_KIT and COMMITTED_RECIPE all
+    got a PASSing liveness cell, because DepositAll sheds the surplus above each
+    one's keep quantity instead of blanket-keeping the code.
+
+    GOAL_MATERIALS was the last one, and it was NOT a deposit-selection gap:
+    `select_bank_deposits` DID offer the surplus ash_wood, but CRAFT_RELIEF (which
+    out-ranks DEPOSIT_FULL) fired on a craft that only freed QUANTITY while ADDING
+    a stack, preempting the deposit that would actually have relieved the
+    slot-limited bag. The slot gate in `craft_relief._slot_delta` closed it."""
     gd = _gd()
     results = run_census(gd, inventory_grid(gd))
     coverage = reason_coverage(results)
     uncovered = {r for r, ok in coverage.items() if not ok}
-    assert uncovered == {KeepReason.GOAL_MATERIALS}
+    assert uncovered == set()
+    assert coverage[KeepReason.GOAL_MATERIALS] is True
     assert coverage[KeepReason.HEALING_CONSUMABLE] is True
     assert coverage[KeepReason.COMBAT_WEAPON] is True
     assert coverage[KeepReason.WORKING_KIT] is True
@@ -145,23 +151,23 @@ def test_reason_coverage_total_over_keepreason() -> None:
     assert set(coverage) == set(KeepReason)
 
 
-def test_census_full_grid_matches_the_post_deposit_migration_baseline() -> None:
-    """The baseline after Task 7b (WORKING_KIT / COMBAT_WEAPON filed under the
-    OWNED cap as well): 66 cells, 62 PASS, 3 INVENTORY_BUG, 1 NO_ROUTE_AVAILABLE
-    — down from the Task-5 RED baseline of 42 PASS / 13 INVENTORY_BUG.
+def test_census_full_grid_reaches_zero_inventory_bug() -> None:
+    """THE ACCEPTANCE: 66 cells, 64 PASS, **0 INVENTORY_BUG** — down from the
+    Task-5 RED baseline of 42 PASS / 13 INVENTORY_BUG.
 
-    The grid GREW by 10 because cells are DERIVED from the cap sets: the two kit
-    reasons now feed `keep_owned` too, so each gained an owned column (3 SAFETY +
-    2 LIVENESS cells). All 10 PASS — a banked kit surplus is genuinely destroyed
-    by the production recycle route, and the last copy survives.
+    The grid GREW by 10 over the Task-5 baseline because cells are DERIVED from
+    the cap sets: the two kit reasons now feed `keep_owned` too, so each gained an
+    owned column (3 SAFETY + 2 LIVENESS cells). All 10 PASS — a banked kit surplus
+    is genuinely destroyed by the production recycle route, and the last copy
+    survives.
 
-    The 3 residual INVENTORY_BUG cells are UNCHANGED by this task and are NOT
-    deposit-selection bugs:
-      * goal_materials in_bag/liveness (x2 pressure states) — the surplus IS
-        offered by `select_bank_deposits`; the arbiter takes the objective-step
-        Craft instead of the deposit guard, so the plan sheds nothing;
-      * active_task owned/liveness/slot_full — a DESTRUCTIVE-route cell
-        (recycle/sell/delete), owned by the `destroyable` migration (Tasks 8-9).
+    The 2 residual FAILs are WORLD limits, not planner defects — both are cells
+    whose surplus has no route that could fire this cycle:
+      * active_task owned/liveness/slot_full (`golden_egg`) — VENUE_UNREACHABLE:
+        no recipe (no recycle), and its only buyer is a dormant event merchant;
+      * recipe_demand owned/liveness/slot_full (`copper_bar`) — NO_ROUTE_AVAILABLE:
+        the bank is full (an owned-cap cell's precondition), it is not sellable,
+        and slot pressure deliberately does not open the DELETE route.
 
     A regression here means either a consumer got migrated (should be caught by
     the owning task, not silently here) or the census stopped seeing the bug class
@@ -170,7 +176,7 @@ def test_census_full_grid_matches_the_post_deposit_migration_baseline() -> None:
     results = run_census(gd, inventory_grid(gd))
     assert len(results) == 66
     passed = sum(1 for r in results if r.passed)
-    assert passed == 62
+    assert passed == 64
     # The kit reasons' new OWNED cells all pass — the ownership cap is both SAFE
     # (the last tool/weapon survives) and LIVE (the surplus above it is shed).
     kit_owned = [r for r in results if r.cap == "owned"
@@ -181,13 +187,15 @@ def test_census_full_grid_matches_the_post_deposit_migration_baseline() -> None:
     for r in results:
         if r.gap is not None:
             gap_counts[r.gap] = gap_counts.get(r.gap, 0) + 1
-    assert gap_counts == {"inventory_bug": 2, "no_route_available": 1,
-                          "venue_unreachable": 1}
-    bugs = {(r.reason, r.cap, r.pressure) for r in results if r.gap == "inventory_bug"}
-    assert bugs == {
-        ("goal_materials", "in_bag", "slot_full"),
-        ("goal_materials", "in_bag", "qty_full"),
-    }
+    assert gap_counts == {"no_route_available": 1, "venue_unreachable": 1}
+    # THE residual class is EMPTY. The two `goal_materials in_bag/liveness` cells
+    # (slot_full + qty_full) were the last INVENTORY_BUGs: CRAFT_RELIEF fired on a
+    # craft that freed 9 QUANTITY units while ADDING a stack (16 ash_wood -> 6
+    # ash_wood + 1 ash_plank), preempting DEPOSIT_FULL — which it out-ranks — and
+    # eating the ash_wood `keep_in_bag` protects. The slot gate closed them.
+    assert not any(r.gap == "inventory_bug" for r in results)
+    assert all(r.passed for r in results
+               if r.reason == "goal_materials" and r.kind == "liveness")
     # `active_task owned/slot_full` (golden_egg) left INVENTORY_BUG when the SELL
     # migration (Task 8) taught the classifier what a sale actually costs: its only
     # buyer is the `nomadic_merchant` EVENT NPC, dormant in this bundle, so there is

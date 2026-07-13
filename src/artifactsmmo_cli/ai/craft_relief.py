@@ -28,6 +28,18 @@ spot and the workshop per single item. Relief candidacy therefore requires
 net relief (input units consumed > output units produced per craft), and
 the candidate quantity batches up to what relieves pressure below the
 firing threshold in ONE activation instead of x1 per cycle.
+
+Inventory census 2026-07-12 (the SLOT gate — `_slot_delta`): net QUANTITY
+relief is not relief at all when the bag's binding constraint is SLOTS. With
+16 ash_wood in ONE stack, crafting 1 ash_plank frees 9 units but leaves 6
+ash_wood + 1 ash_plank — slots 1 -> 2, strictly WORSE — and because
+CRAFT_RELIEF out-ranks DEPOSIT_FULL ("craft before deposit") it PREEMPTED the
+deposit that would actually have freed the bag, while eating the ash_wood the
+keep authority reserves for the active goal (KeepReason.GOAL_MATERIALS). This
+is the same quantity-vs-slot confusion as the HTTP-497 livelock. A craft is
+relief only when it does not INCREASE the stack count, measured at the batch
+it will actually perform — the ordering ("craft before deposit") is right once
+the gate is honest, so GUARD_ORDER and CRAFT_RELIEF_FRACTION are unchanged.
 """
 
 from dataclasses import dataclass
@@ -43,12 +55,12 @@ from artifactsmmo_cli.ai.world_state import WorldState
 class ReliefCandidate:
     """One item the bot can craft from current inventory to relieve pressure.
 
-    `quantity` is the number of crafts for ONE guard activation: the maximum
-    simultaneously-craftable units bounded by the smallest recipe input
-    stack, by `cap` (e.g. task remaining, BATCH_CAP), and by the crafts
-    needed to push inventory pressure back below CRAFT_RELIEF_FRACTION.
-    `priority_class` orders candidates: 0=task item, 1=active-step chain
-    materials. Lower wins."""
+    `quantity` is the number of crafts for ONE guard activation: the crafts
+    needed to push inventory pressure back below CRAFT_RELIEF_FRACTION, raised
+    to the smallest SLOT-HONEST batch (`_slot_honest_batch`) and bounded above
+    by the simultaneously-craftable units, by `cap` (e.g. task remaining) and
+    by BATCH_CAP. `priority_class` orders candidates: 0=task item, 1=active-step
+    chain materials. Lower wins."""
     item_code: str
     quantity: int
     priority_class: int
@@ -91,15 +103,59 @@ def _crafts_to_relieve(state: WorldState, net_per_craft: int) -> int | None:
     return int(excess // net_per_craft) + 1
 
 
+def _slot_delta(item_code: str, recipe: dict[str, int], quantity: int,
+                state: WorldState) -> int:
+    """Change in occupied inventory SLOTS from crafting `quantity` units of
+    `item_code` out of the current bag. Negative/zero = the craft consolidates.
+
+    The bag is SLOT-limited (20 stacks) long before it is QUANTITY-limited
+    (~124 units) — `guards._used_fraction` already models pressure as
+    `max(quantity_fraction, slot_fraction)` for exactly that reason. A craft
+    that frees units can still ADD a stack:
+
+        hold 16 ash_wood (1 stack) -> craft 1 ash_plank (consumes 10)
+        leaves 6 ash_wood + 1 ash_plank  ->  SLOTS 1 -> 2  (WORSE)
+
+    * a source stack is FREED iff the batch consumes it to zero (a remainder
+      keeps its slot, however small);
+    * the product costs a NEW slot unless a stack of that code is already held
+      (then it merges and costs nothing).
+    """
+    freed = sum(1 for mat, per_craft in recipe.items()
+                if state.inventory.get(mat, 0) - per_craft * quantity <= 0)
+    gained = 0 if state.inventory.get(item_code, 0) > 0 else 1
+    return gained - freed
+
+
+def _slot_honest_batch(item_code: str, recipe: dict[str, int], floor_qty: int,
+                       max_qty: int, state: WorldState) -> int | None:
+    """The SMALLEST batch in `[floor_qty, max_qty]` that does not increase the
+    slot count, or None when no batch in range is slot-honest.
+
+    `floor_qty` is the pressure-relief batch (`_crafts_to_relieve`); the search
+    walks UP from it because a craft only frees a slot by consuming its source
+    stack WHOLE, so under-crafting is what leaves the remainder that adds a
+    stack: with 20 ash_wood, x1 frees nothing (10 left + a plank = 2 stacks)
+    while x2 clears the stack (1 -> 1). Nothing above `max_qty` is reachable
+    (it is bounded by the on-hand inputs, the task remainder and BATCH_CAP), so
+    a range with no slot-honest batch means the item is not relief AT ALL."""
+    for quantity in range(floor_qty, max_qty + 1):
+        if _slot_delta(item_code, recipe, quantity, state) <= 0:
+            return quantity
+    return None
+
+
 def craft_relief_candidates(
     state: WorldState, game_data: GameData,
     batch_cap: int = 10,
     step_items: frozenset[str] = frozenset(),
 ) -> list[ReliefCandidate]:
     """Intermediate items the bot can craft from inventory NOW that advance an
-    active goal AND free inventory units (net relief gate): the items-task
-    deliverable and the active step's chain materials. End-stage gear/tools
-    are NOT considered — relief is inventory management, not final assembly.
+    active goal AND relieve the bag on BOTH axes — it frees QUANTITY units (the
+    net-relief gate) and does not ADD a stack (the SLOT gate, `_slot_delta`):
+    the items-task deliverable and the active step's chain materials. End-stage
+    gear/tools are NOT considered — relief is inventory management, not final
+    assembly.
     A step candidate whose recipe would consume reserved task materials
     (task_reservation) is excluded; the task item itself is exempt — producing
     it IS the reserved pipeline.
@@ -124,10 +180,12 @@ def craft_relief_candidates(
         if priority_class > 0 and consumes_reserved(
                 {item_code: 1}, state, game_data):
             return  # would eat the active task's reserved materials.
-        quantity = min(qty, cap, batch_cap)
+        max_qty = min(qty, cap, batch_cap)
         relief_cap = _crafts_to_relieve(state, net)
-        if relief_cap is not None:
-            quantity = min(quantity, relief_cap)
+        floor_qty = 1 if relief_cap is None else min(relief_cap, max_qty)
+        quantity = _slot_honest_batch(item_code, recipe, floor_qty, max_qty, state)
+        if quantity is None:
+            return  # every reachable batch ADDS a stack — not relief.
         candidates.append(ReliefCandidate(
             item_code=item_code,
             quantity=quantity,

@@ -140,15 +140,20 @@ def _ctx(**overrides: object) -> SelectionContext:
 
 class TestCraftReliefCandidates:
     def test_task_item_with_materials_in_inventory_is_candidate(self):
-        """Robby trace 2026-06-05: 67 ash_wood, task=ash_plank(3/13).
+        """Robby trace 2026-06-05: ash_wood, task=ash_plank(3/13).
         ash_plank<-10 ash_wood with craft_lvl=1; recipe inputs in inv =>
         candidate emitted, capped by simultaneously-craftable units (6);
-        usage 67/104 is below the relief threshold so no relief cap binds."""
+        usage 60/104 is below the relief threshold so no relief cap binds.
+
+        60 (not the trace's 67): the batch must CLEAR the ash_wood stack to be
+        relief at all (`TestSlotHonestRelief`) — 6 crafts consume all 60, so
+        slots go 1 -> 1. At 67 the same 6 crafts would strand 7 ash_wood and
+        ADD the plank stack on top of it."""
         gd = _gd_ash_plank()
         state = make_state(
             task_code="ash_plank", task_type="items",
             task_progress=3, task_total=13,
-            inventory={"ash_wood": 67}, inventory_max=104,
+            inventory={"ash_wood": 60}, inventory_max=104,
         )
         candidates = craft_relief_candidates(state, gd)
         assert len(candidates) == 1
@@ -172,10 +177,13 @@ class TestCraftReliefCandidates:
         assert state.inventory_used / state.inventory_max >= CRAFT_RELIEF_FRACTION
         assert craft_relief_candidates(state, gd) == []
 
-    def test_net_positive_recipe_is_selected_with_relief_batch(self):
-        """10 copper_ore -> 1 copper_bar frees 9 units per craft. At 80/100
-        pressure the candidate batches exactly the crafts needed to push
-        usage strictly below the 70% threshold (2 crafts: 80 -> 62)."""
+    def test_relief_batch_is_raised_to_the_slot_honest_craft(self):
+        """10 copper_ore -> 1 copper_bar frees 9 units per craft. At 80/100 the
+        crafts needed to push usage strictly below the 70% threshold are 2
+        (80 -> 62) — that is the FLOOR of the batch, not its value: stopping at
+        x2 would strand 60 copper_ore in their stack and ADD a copper_bar stack
+        (slots 1 -> 2). The batch is raised to the smallest SLOT-HONEST craft,
+        x8, which consumes the ore stack whole (slots 1 -> 1, units 80 -> 8)."""
         gd = _gd_copper()
         state = make_state(
             task_code="copper_bar", task_type="items",
@@ -184,7 +192,7 @@ class TestCraftReliefCandidates:
         )
         candidates = craft_relief_candidates(state, gd)
         assert candidates == [ReliefCandidate(
-            item_code="copper_bar", quantity=2, priority_class=0,
+            item_code="copper_bar", quantity=8, priority_class=0,
         )]
 
     def test_quantity_bounded_by_simultaneously_craftable(self):
@@ -332,15 +340,15 @@ class TestCraftReliefCandidates:
 
 class TestCraftReliefGuard:
     def test_fires_above_threshold_with_craftable(self):
-        """Guard predicate: inv >= CRAFT_RELIEF_FRACTION AND a craftable
-        candidate exists. With 73/104 (70.2%) and ash_wood->ash_plank
-        recipe ready, CRAFT_RELIEF must fire and rank ahead of
-        DEPOSIT_FULL (which would also fire at 90%+) when applicable."""
+        """Guard predicate: inv >= CRAFT_RELIEF_FRACTION AND a SLOT-HONEST
+        craftable candidate exists. With 80/104 (76.9%) and ash_wood->ash_plank
+        ready (x8 consumes the whole stack), CRAFT_RELIEF must fire and rank
+        ahead of DEPOSIT_FULL (which would also fire at 90%+) when applicable."""
         gd = _gd_ash_plank()
         state = make_state(
             task_code="ash_plank", task_type="items",
             task_progress=3, task_total=13,
-            inventory={"ash_wood": 73}, inventory_max=104,
+            inventory={"ash_wood": 80}, inventory_max=104,
         )
         used = state.inventory_used / state.inventory_max
         assert used >= CRAFT_RELIEF_FRACTION
@@ -401,7 +409,9 @@ class TestCraftReliefGuard:
         state = make_state(
             task_code="ash_plank", task_type="items",
             task_progress=3, task_total=13,
-            inventory={"ash_wood": 84, "gold_ore": 10},
+            # 80 ash_wood is a SLOT-HONEST batch (x8 clears the stack); the
+            # gold_ore makes up the pressure and is the deposit candidate.
+            inventory={"ash_wood": 80, "gold_ore": 14},
             # 94/104 = 90.4% >= DEPOSIT_FULL_FRACTION (0.90, raised from 0.80
             # per spec 2026-06-07 to stay strictly above the 0.85 deposit ramp).
             inventory_max=104,
@@ -432,19 +442,20 @@ class TestCraftReliefGuard:
 
 class TestMapGuardCraftRelief:
     def test_map_guard_builds_craft_relief_goal_with_relief_batch(self):
-        """map_guard wires the top candidate's batched quantity into the
-        goal: at 75/104 (72.1%) one 10:1 craft frees 9 units and lands below
-        the threshold, so the goal demands exactly +1 ash_plank."""
+        """map_guard wires the top candidate's batched quantity into the goal:
+        at 70/90 (77.8%) ONE 10:1 craft already frees enough units to land below
+        the threshold — but it would strand 60 ash_wood and add the plank stack,
+        so the batch is the slot-honest x7 and the goal demands +7 ash_plank."""
         gd = _gd_ash_plank()
         state = make_state(
             task_code="ash_plank", task_type="items",
             task_progress=3, task_total=13,
-            inventory={"ash_wood": 75}, inventory_max=104,
+            inventory={"ash_wood": 70}, inventory_max=90,
         )
         goal = map_guard(GuardKind.CRAFT_RELIEF, gd, _ctx(), state)
         assert isinstance(goal, CraftReliefGoal)
         assert repr(goal) == "CraftRelief(ash_plank)"
-        assert goal.desired_state(state, gd) == {"inventory": {"ash_plank": 1}}
+        assert goal.desired_state(state, gd) == {"inventory": {"ash_plank": 7}}
 
 
 class TestCraftReliefGoalApi:
@@ -579,6 +590,105 @@ class TestStepMaterialRelief:
         assert goal._target_item == "ash_plank"
 
 
+class TestSlotHonestRelief:
+    """The bag is SLOT-limited, so "relief" must be measured in SLOTS.
+
+    Census repro (`goal_materials in_bag/liveness`, 2026-07-12): 16 ash_wood
+    sit in ONE stack. Crafting 1 ash_plank consumes 10 and leaves 6 ash_wood
+    + 1 ash_plank — TWO stacks. The quantity-only gate saw 9 units freed and
+    called it relief, so CRAFT_RELIEF fired, INCREASED slot usage, preempted
+    the DEPOSIT_FULL that would actually have relieved the bag (it out-ranks
+    it in GUARD_ORDER), and ate the ash_wood `keep_in_bag` protects for the
+    active goal. A craft is relief only when it does not ADD a stack."""
+
+    def test_remainder_craft_is_not_relief(self):
+        """THE CENSUS REPRO. 16 ash_wood (1 stack) -> craft x1 leaves 6 wood
+        + 1 plank = 2 stacks. Slots 1 -> 2: NOT relief, no candidate — even
+        though 9 quantity units are freed."""
+        gd = _gd_ash_plank()
+        state = make_state(
+            task_code="ash_plank", task_type="items",
+            task_progress=0, task_total=13,
+            inventory={"ash_wood": 16}, inventory_max=20,
+            inventory_slots_max=20,
+        )
+        assert state.inventory_used / state.inventory_max >= CRAFT_RELIEF_FRACTION
+        assert craft_relief_candidates(state, gd) == []
+
+    def test_guard_stays_silent_on_a_remainder_craft(self):
+        """Same state at the guard: CRAFT_RELIEF must NOT fire, so the ladder
+        falls through to the DEPOSIT_FULL that actually frees the bag."""
+        gd = _gd_ash_plank()
+        gd._bank_capacity = 100
+        state = make_state(
+            task_code="ash_plank", task_type="items",
+            task_progress=0, task_total=13,
+            inventory={"ash_wood": 16}, inventory_max=20,
+            inventory_slots_max=20, bank_items={},
+        )
+        guards = active_guards(state, gd, None, _ctx())
+        assert GuardKind.CRAFT_RELIEF not in guards
+
+    def test_whole_stack_craft_is_relief(self):
+        """Exactly 10 ash_wood: the craft consumes the WHOLE stack, so the
+        source slot is freed and the plank takes it — 1 stack -> 1 stack, and
+        quantity drops 10 -> 1. THAT is relief."""
+        gd = _gd_ash_plank()
+        state = make_state(
+            task_code="ash_plank", task_type="items",
+            task_progress=0, task_total=13,
+            inventory={"ash_wood": 10}, inventory_max=12,
+            inventory_slots_max=20,
+        )
+        assert craft_relief_candidates(state, gd) == [ReliefCandidate(
+            item_code="ash_plank", quantity=1, priority_class=0,
+        )]
+
+    def test_batch_consuming_the_whole_stack_is_relief(self):
+        """20 ash_wood -> 2 ash_plank, no remainder: still 1 stack. The batch
+        is sized to the slot-honest craft (x2) even though the pressure-relief
+        cap alone would have stopped at x1 (which would leave 10 ash_wood
+        behind and ADD a stack)."""
+        gd = _gd_ash_plank()
+        state = make_state(
+            task_code="ash_plank", task_type="items",
+            task_progress=0, task_total=13,
+            inventory={"ash_wood": 20}, inventory_max=24,
+            inventory_slots_max=20,
+        )
+        assert craft_relief_candidates(state, gd) == [ReliefCandidate(
+            item_code="ash_plank", quantity=2, priority_class=0,
+        )]
+
+    def test_product_merging_into_an_existing_stack_is_relief(self):
+        """The product takes NO new slot when a stack of it is already held,
+        so even a remainder-leaving craft is slot-neutral (1 wood stack + 1
+        plank stack, before and after) while quantity drops 9."""
+        gd = _gd_ash_plank()
+        state = make_state(
+            task_code="ash_plank", task_type="items",
+            task_progress=0, task_total=13,
+            inventory={"ash_wood": 16, "ash_plank": 1}, inventory_max=20,
+            inventory_slots_max=20,
+        )
+        assert craft_relief_candidates(state, gd) == [ReliefCandidate(
+            item_code="ash_plank", quantity=1, priority_class=0,
+        )]
+
+    def test_no_batch_can_clear_the_stack(self):
+        """25 ash_wood: x1 leaves 15, x2 leaves 5 — NO batch clears the source
+        stack, and the plank is a new one, so no quantity is slot-honest and
+        the item is not a relief candidate at all."""
+        gd = _gd_ash_plank()
+        state = make_state(
+            task_code="ash_plank", task_type="items",
+            task_progress=0, task_total=13,
+            inventory={"ash_wood": 25}, inventory_max=30,
+            inventory_slots_max=20,
+        )
+        assert craft_relief_candidates(state, gd) == []
+
+
 class TestSoleOutputMaterialRelief:
     def test_sole_output_material_is_a_candidate(self):
         """A held material whose ONLY craftable output is one item (copper_ore ->
@@ -673,8 +783,10 @@ class TestArbiterEndToEnd:
     def test_arbiter_picks_craft_relief_over_deposit_with_batched_craft(self):
         """Full driver path: inv at 86.5%, ash_wood->ash_plank (10:1) ready;
         arbiter must return CraftReliefGoal whose plan crafts the WHOLE
-        relief batch in one CraftAction (x2 frees 18 units: 90 -> 72 < 70%
-        of 104), not one item per cycle."""
+        relief batch in one CraftAction, not one item per cycle. The batch is
+        x9: it consumes the 90-ash_wood stack whole (slots 1 -> 1, units
+        90 -> 9). Stopping at the x2 that alone clears the 70% quantity
+        watermark would leave 70 ash_wood behind AND add a plank stack."""
         gd = _gd_ash_plank()
         state = make_state(
             x=2, y=3,  # already at the woodcutting workshop tile
@@ -698,7 +810,7 @@ class TestArbiterEndToEnd:
         crafts = [a for a in plan if isinstance(a, CraftAction)]
         assert len(crafts) == 1
         assert crafts[0].code == "ash_plank"
-        assert crafts[0].quantity == 2
+        assert crafts[0].quantity == 9
 
     def test_planner_emits_one_batched_craft_not_n_singles(self):
         """8 crafts' worth of inputs on hand → the plan is ONE CraftAction

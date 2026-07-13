@@ -516,9 +516,13 @@ def _state_with_craft() -> tuple[GameData, "WorldState"]:
     """CRAFT_RELIEF sub-case: bank full, inventory at 75%, ash_wood craftable
     into ash_plank (10:1 recipe → net 9 units freed per craft).
 
-    Active task = ash_plank(3). At 75 ash_wood / inventory_max=100 the
-    CRAFT_RELIEF fraction (0.70) is met; DISCARD thresholds (0.85/0.95) are
-    NOT met, so DISCARD_CRITICAL stays quiet and CRAFT_RELIEF is first."""
+    Active task = ash_plank(3), so the batch is capped at 3 crafts — and 30
+    ash_wood is exactly what those 3 crafts consume, which makes the craft
+    SLOT-HONEST (the ash_wood stack is cleared and the plank takes its slot;
+    a remainder would ADD a stack and would not be relief at all). The 45 junk
+    units carry the pressure: at 75/100 the CRAFT_RELIEF fraction (0.70) is
+    met while the DISCARD thresholds (0.85/0.95) are NOT, so DISCARD_CRITICAL
+    stays quiet and CRAFT_RELIEF is first."""
     gd = _cascade_gd_base()
     gd._crafting_recipes = {"ash_plank": {"ash_wood": 10}}
     gd._item_stats = {
@@ -530,7 +534,7 @@ def _state_with_craft() -> tuple[GameData, "WorldState"]:
     state = make_state(
         hp=150, max_hp=150,
         skills={"woodcutting": 5},
-        inventory={"ash_wood": 75},
+        inventory={"ash_wood": 30, "junk": 45},
         inventory_max=100,
         bank_items={"x": 1},
         task_code="ash_plank",

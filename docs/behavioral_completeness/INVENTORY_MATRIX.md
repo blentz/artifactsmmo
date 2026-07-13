@@ -5,7 +5,7 @@
 > Census drives the REAL `StrategyArbiter.select` seam over the committed bundle. The cell grid is DERIVED from the `KeepReason` registry (`inventory_grid`) — nothing here is hand-picked.
 
 
-66 cells; PASS 62 (94%); gaps: keep_all_sentinel 0, venue_unreachable 1, bank_full 0, no_route_available 1, inventory_bug 2
+66 cells; PASS 64 (97%); gaps: keep_all_sentinel 0, venue_unreachable 1, bank_full 0, no_route_available 1, inventory_bug 0
 
 Legend: KA=keep_all_sentinel, VU=venue_unreachable, BF=bank_full, NR=no_route_available, IB=inventory_bug.
 
@@ -22,7 +22,7 @@ Legend: KA=keep_all_sentinel, VU=venue_unreachable, BF=bank_full, NR=no_route_av
 | equipped | safety | copper_dagger | owned/below_threshold PASS · owned/qty_full PASS · owned/slot_full PASS |
 | gear_demand | liveness | copper_boots | owned/qty_full PASS · owned/slot_full PASS |
 | gear_demand | safety | copper_boots | owned/below_threshold PASS · owned/qty_full PASS · owned/slot_full PASS |
-| goal_materials | liveness | ash_wood | in_bag/qty_full IB · in_bag/slot_full IB |
+| goal_materials | liveness | ash_wood | in_bag/qty_full PASS · in_bag/slot_full PASS |
 | goal_materials | safety | ash_wood | in_bag/below_threshold PASS · in_bag/qty_full PASS · in_bag/slot_full PASS |
 | healing_consumable | liveness | cooked_chicken | in_bag/qty_full PASS · in_bag/slot_full PASS |
 | healing_consumable | safety | cooked_chicken | in_bag/below_threshold PASS · in_bag/qty_full PASS · in_bag/slot_full PASS |
@@ -43,7 +43,7 @@ Every `KeepReason` except `CURRENCY` must have at least one PASSing LIVENESS cel
 | combat_weapon | PASS |
 | working_kit | PASS |
 | committed_recipe | PASS |
-| goal_materials | FAIL |
+| goal_materials | PASS |
 | equipped | PASS |
 | gear_demand | PASS |
 | recipe_demand | PASS |
