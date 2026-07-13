@@ -17,17 +17,34 @@ differs whenever qty == 1 (4 unit recycles of a 1-qty ingredient recover 4; the
 batch form predicts 2). If this term drifts from `RecycleAction.apply`, the tier
 descent promises materials the executor cannot deliver and the bot stalls.
 
-ELIGIBILITY MIRRORS THE EXECUTOR. Every gate `RecycleAction.is_applicable`
-enforces is enforced here (recipe exists, crafting skill known, character meets
-the crafting level, workshop location known). A material declared recoverable
-that the executor then refuses to recycle is a LEAF WITH NO PLAN — the livelock
-shape of 3166d390.
+ELIGIBILITY MIRRORS THE ACTION POOL — NOT MERELY `is_applicable`. Five static
+item/world properties gate a code here: a recipe exists, a crafting skill is
+known, the character meets the crafting level, a workshop for that skill is
+known, AND the item's type is EQUIPPABLE (`ITEM_TYPE_TO_SLOTS`). The last gate
+is not one `RecycleAction.is_applicable` itself checks — it lives in
+`actions/factory`, which constructs a `RecycleAction` ONLY for equippable
+codes and silently skips every `resource`/`consumable` craftable (bars,
+planks, cooked food). `is_applicable` is never even consulted for those codes
+because no action instance exists to ask. The lesson: eligibility must mirror
+what the ACTION POOL CONTAINS, not merely what `is_applicable` would answer if
+asked — a gate enforced only by construction-time filtering is just as real as
+one written inside `is_applicable`, and omitting it here is the same LEAF WITH
+NO PLAN livelock shape as 3166d390.
+
+DELIBERATELY OUT OF SCOPE: `is_applicable`'s slot-floor check (`recovered =
+sum(...); net = recovered - quantity; return not (net > 0 and
+state.inventory_free < net)`). That is a per-cycle AFFORDABILITY condition —
+whether there is bag room to receive the recovered materials right now — not a
+static property of the item. GOAP re-checks the real `is_applicable` at search
+time, so omitting the slot-floor here does not make the map an undeliverable
+promise; it makes it an imprecise HINT, which is fine for an oracle.
 
 Pure: reads state/game_data/ctx only, no I/O. INERT — nothing calls this yet
 (see the module's own epic notes); a later behavioral census will use this
 function AS ITS ORACLE.
 """
 
+from artifactsmmo_cli.ai.actions.equip import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.inventory_keep import destroyable
 from artifactsmmo_cli.ai.selection_context import SelectionContext
@@ -48,6 +65,8 @@ def recoverable_materials(state: WorldState, game_data: GameData,
         stats = game_data.item_stats(code)
         if stats is None or not stats.crafting_skill:
             continue
+        if not ITEM_TYPE_TO_SLOTS.get(stats.type_):
+            continue  # not equippable -> factory never builds a RecycleAction
         if state.skills.get(stats.crafting_skill, 1) < stats.crafting_level:
             continue  # skill gate: the server rejects the recycle
         if game_data.workshop_location(stats.crafting_skill) is None:

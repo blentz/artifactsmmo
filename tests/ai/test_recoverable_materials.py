@@ -54,6 +54,12 @@ def _build_game_data(with_workshops: bool) -> GameData:
         # test_two_sources_of_one_material_accumulate).
         "copper_boots": ItemStats(code="copper_boots", level=1, type_="boots",
                                   crafting_skill="gearcrafting", crafting_level=1),
+        # Craftable but NON-equippable: `type_="consumable"`, so
+        # `ITEM_TYPE_TO_SLOTS` has no slot for it and `actions/factory` never
+        # builds a RecycleAction for this code at all — the equippable gate
+        # this suite pins (test_non_equippable_craftable_is_not_recoverable).
+        "cooked_chicken": ItemStats(code="cooked_chicken", level=1, type_="consumable",
+                                    crafting_skill="cooking", crafting_level=1),
     }
     gd._crafting_recipes = {
         "fishing_net": {"ash_plank": 6},
@@ -61,13 +67,15 @@ def _build_game_data(with_workshops: bool) -> GameData:
         "copper_boots": {"copper_bar": 8},
         "sticky_thing": {"glue": 1},
         "fire_staff": {"ash_wood": 10},
+        "cooked_chicken": {"raw_chicken": 2},
         # A recipe with NO matching `ItemStats` entry (malformed/dropped gear
         # data) — the eligibility check must refuse it via `stats is None`
         # before ever asking `destroyable`.
         "mystery_part": {"copper_bar": 4},
     }
     gd._workshop_locations = ({"gearcrafting": (2, 1), "weaponcrafting": (3, 1),
-                               "jewelrycrafting": (5, 1)} if with_workshops else {})
+                               "jewelrycrafting": (5, 1), "cooking": (4, 1)}
+                              if with_workshops else {})
     return gd
 
 
@@ -188,4 +196,17 @@ def test_recipe_without_item_stats_is_not_recoverable(game_data, ctx):
     be refused, not crash — `RecycleAction.is_applicable` refuses it the same
     way (`stats is None`)."""
     state = make_state(inventory={"mystery_part": 5})
+    assert recoverable_materials(state, game_data, ctx) == {}
+
+
+def test_non_equippable_craftable_is_not_recoverable(game_data, ctx):
+    """`cooked_chicken` has a recipe, a crafting_skill, a satisfied crafting
+    level, and a known workshop — every gate `RecycleAction.is_applicable`
+    itself checks passes. But its `type_` is `consumable`, not a member of
+    `ITEM_TYPE_TO_SLOTS`, so `actions/factory` never constructs a
+    RecycleAction for it at all: there is nothing for `is_applicable` to be
+    asked about. Declaring it recoverable here would promise a recycle the
+    executor can never even attempt — the LEAF WITH NO PLAN livelock shape."""
+    state = make_state(inventory={"cooked_chicken": 7},
+                       skills={"cooking": 1})
     assert recoverable_materials(state, game_data, ctx) == {}
