@@ -123,7 +123,10 @@ structure State where
   unlockMonsterLevel : Nat
   /-- ctx — `SelectionContext.bank_required_level` (guards.py:27). -/
   bankRequiredLevel : Nat
-  /-- `bool(overstocked_items(state, game_data))` (guards.py:82, 87). -/
+  /-- `bool(discard_surplus.discardable_surplus(state, game_data, ctx))` — the
+  space-pressure gate (`overstocked_items`) INTERSECTED with the keep authority's
+  licence `min(bankable, destroyable)` (guards.py `_fires(DISCARD_*)`). Opaque:
+  derived from the REAL production helper by the differential harness. -/
   hasOverstockItems : Bool
   /-- `bool(select_bank_deposits(state, game_data))` — opaque
       (guards.py:85). -/

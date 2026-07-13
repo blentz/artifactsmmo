@@ -22,7 +22,6 @@ from artifactsmmo_cli.ai.task_decision import PIVOT, PURSUE, task_decision
 from artifactsmmo_cli.ai.thresholds import PRESSURE_HIGH_FRACTION
 from artifactsmmo_cli.ai.tiers.guards import (
     SelectionContext,
-    _gear_protected,
     _has_sellable,
     _used_fraction,
 )
@@ -161,12 +160,12 @@ def _fires(kind: MeansKind, state: WorldState, game_data: GameData,
     if kind is MeansKind.DRAIN_BANK_JUNK:
         # Idle/low-pressure only: the withdraw mints items into the bag, so it
         # needs free slots to land (under pressure the deposit/discard guards
-        # handle space). Fires when over-cap bank junk exists that is not the
-        # committed objective gear.
+        # handle space). Fires when the keep authority (`ai/inventory_keep`)
+        # licenses the destruction of over-cap BANK junk — copies above
+        # `keep_owned`, so the last tool, the last weapon and the profile's gear
+        # demand are never withdrawn into the discard ladder's mouth.
         return (_used_fraction(state) < SELL_PRESSURE_FRACTION
-                and bool(bank_drain_excess(
-                    state, game_data, _gear_protected(ctx),
-                    gear_keep=ctx.gear_keep or None)))
+                and bool(bank_drain_excess(state, game_data, ctx)))
 
     if kind is MeansKind.MAINTAIN_CONSUMABLES:
         # Only when combat is the active means (a target is selected): keep a

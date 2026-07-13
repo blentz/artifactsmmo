@@ -524,26 +524,24 @@ def useful_quantity_cap_excl_equipped(
 def overstocked_items(
     state: WorldState, game_data: GameData,
     batch_buffer: int = BATCH_BUFFER, safety_floor: int = SAFETY_FLOOR,
-    profile: dict[str, int] | None = None,
     watermark: tuple[int, int] = (DISCARD_WATERMARK_NUM, DISCARD_WATERMARK_DEN),
 ) -> dict[str, int]:
-    """Return {item_code: excess_quantity} for every overstocked item.
+    """Return {item_code: excess_quantity} for every item held beyond its USEFUL
+    quantity, under genuine space pressure.
 
-    SPACE-DRIVEN + profile-preserving (spec 2026-06-07). An item is overstock
-    only when the bag is under real space pressure
-    (`inventory_used / inventory_max >= watermark`) AND `held` exceeds the
-    protected floor `max(profile_target, useful_quantity_cap)`. Below the
-    watermark — with free slots — NOTHING is overstock, so the per-item
-    `useful_quantity_cap` is no longer a space-blind dump trigger; it only
-    tiebreaks WHICH overstock to shed once the bag is genuinely full. An item
-    at or below its profile target is never overstock (the active goal's
-    materials are protected).
+    SPACE-DRIVEN (spec 2026-06-07). An item is overstock only when the bag is under
+    real space pressure (`inventory_used / inventory_max >= watermark`) AND `held`
+    exceeds `useful_quantity_cap`. Below the watermark — with free slots — NOTHING is
+    overstock, so the per-item cap is not a space-blind dump trigger.
 
-    `profile` is the active goal's soft target map (item_code -> target_qty);
-    `None`/absent means an empty profile (the per-item useful floor still
-    applies under pressure).
+    THIS IS A GATE, NOT A PROTECTION (item-protection-authority epic, Task 9). It
+    answers "WHEN is the bag full enough to start shedding, and which items are past
+    their useful quantity" — the useful cap is a heuristic, and the `profile` code-set
+    closure that used to be merged in here (`guards.active_profile`, rooted on the
+    `target_gear | target_tools` blanket) is GONE. WHAT may actually be shed, and HOW
+    MANY copies, is the keep authority's answer alone: `ai/discard_surplus`
+    intersects this gate with `min(bankable, destroyable)`.
     """
-    profile = profile or {}
     used = state.inventory_used
     cap = state.inventory_max
     # SLOTS-FULL livelock fix (Task 7, slot-aware-inventory-room): 20/20
@@ -564,7 +562,7 @@ def overstocked_items(
         if qty <= 0:
             continue
         useful_floor = useful_quantity_cap(code, state, game_data, batch_buffer, safety_floor)
-        over = overstock_excess(qty, profile.get(code, 0), useful_floor,
+        over = overstock_excess(qty, 0, useful_floor,
                                 used, cap, watermark_num, watermark_den)
         if over > 0:
             excess[code] = over

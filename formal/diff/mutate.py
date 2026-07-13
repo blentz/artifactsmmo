@@ -22,6 +22,8 @@ TASK_BATCH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_batch.py"
 INVENTORY_CAPS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "inventory_caps.py"
 LOADOUT_PROFILES_CORE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "loadout_profiles_core.py"
 ACCUMULATION_SELL_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "accumulation_sell.py"
+DISCARD_SURPLUS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "discard_surplus.py"
+BANK_DRAIN_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_drain.py"
 DOMINANCE_PARETO_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "dominance_pareto.py"
 COMBAT_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "combat.py"
 PROJECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "equipment" / "projection.py"
@@ -3907,11 +3909,85 @@ LADDER_MEANS_FIRES_MUTATIONS = [
     ),
     (
         "ladder/means: DRAIN_BANK_JUNK drop bank_drain_excess conjunct (fires on empty bank)",
-        "                and bool(bank_drain_excess(\n"
-        "                    state, game_data, _gear_protected(ctx),\n"
-        "                    gear_keep=ctx.gear_keep or None)))",
+        "                and bool(bank_drain_excess(state, game_data, ctx)))",
         "                and True)",
     ),
+]
+
+
+# The BANK-DRAIN's keep composition (item-protection-authority epic, Task 9 — the
+# LAST code-set consumer). A drain WITHDRAWS bank copies so the discard ladder can
+# destroy them, so it is bounded by the keep authority's OWNERSHIP cap ALONE:
+#
+#     drainable = min(destroyable, junk_excess)
+#
+# NOT `min(bankable, destroyable)` like the BAG-side routes — `keep_in_bag` says
+# nothing about a copy that is in the BANK, and `bankable` for a code held 0-in-bag is
+# 0, so that `min` would freeze the drain of exactly the hoard it exists to clear.
+# One mutant per term:
+#   * drop `destroyable` → the code-set era, exactly: 18 `copper_axe` banked and the
+#     axe in no active profile drains ALL EIGHTEEN — the character's only woodcutting
+#     tool, straight into DiscardOverstock's mouth (live probe 2026-07-13). This is
+#     THE hole `WORKING_KIT`/`COMBAT_WEAPON` were filed into OWNED_REASONS to close
+#     (Task 7b), and the drain is the consumer that would have fallen into it;
+#   * drop the junk POLICY → a far-skill-gated but future-useful material (the banked
+#     level-10 gold_ore whose recipe is 10 levels out) is withdrawn the moment the
+#     authority licenses it, and `disposal_route` routes it straight back to DEPOSIT:
+#     a withdraw↔deposit churn loop;
+#   * `min` → `max` → the strictly weaker of the two bounds wins, so either hole opens.
+# Killed by tests/test_ai/test_bank_drain.py.
+BANK_DRAIN_KEEP_MUTATIONS = [
+    ("bank_drain: ignore keep_owned (melts the last tool when every copy is banked)",
+     "        licensed = destroyable(code, state, game_data, ctx)\n"
+     "        if licensed <= 0:\n"
+     "            continue",
+     "        licensed = bank_qty\n"
+     "        if licensed <= 0:\n"
+     "            continue"),
+
+    ("bank_drain: drop the worth-hoarding cap (drains future recipe demand)",
+     "        cap = max(useful_quantity_cap(code, state, game_data,\n"
+     "                                      gear_keep=ctx.gear_keep or None),\n"
+     "                  game_data.max_recipe_demand(code))",
+     "        cap = 0"),
+
+    ("bank_drain: min -> max over the licence and the policy (either bound leaks)",
+     "        excess = junk_excess if junk_excess < licensed else licensed",
+     "        excess = junk_excess if junk_excess > licensed else licensed"),
+]
+
+
+# The DISCARD path's keep composition (item-protection-authority epic, Task 9).
+# DISCARD is the LAST-RESORT route and its DELETE arm recovers NOTHING, so the
+# licensed quantity is `min(bankable, destroyable)` — the same BAG-side destruction
+# composition RECYCLE and SELL ship. One mutant per term:
+#   * drop `destroyable` → the OWNED demands (EQUIPPED / GEAR_DEMAND / RECIPE_DEMAND /
+#     ACTIVE_TASK / CURRENCY) stop licensing, so the profile's gear and the task's own
+#     item are deleted;
+#   * drop `bankable` → the IN-BAG demands go with it (WORKING_KIT / COMBAT_WEAPON /
+#     HEALING_CONSUMABLE / GOAL_MATERIALS / COMMITTED_RECIPE): 1 axe ferried into the
+#     bag + 17 banked is `keep_owned` 1 → 17 destroyable, and the ONE reachable copy
+#     is the working tool the gather re-arm is about to equip;
+#   * take the gate's raw excess → BOTH caps gone, i.e. the pre-migration behaviour:
+#     the `useful_quantity_cap` heuristic plus the `active_profile` code-set blanket.
+# Killed by tests/test_ai/test_discard_protection.py.
+DISCARD_KEEP_MUTATIONS = [
+    ("discardable_surplus: ignore keep_owned (deletes gear the profile demands)",
+     "        surplus = min(bankable(code, state, game_data, ctx),\n"
+     "                      destroyable(code, state, game_data, ctx))",
+     "        surplus = bankable(code, state, game_data, ctx)"),
+
+    ("discardable_surplus: ignore keep_in_bag (deletes the working tool)",
+     "        surplus = min(bankable(code, state, game_data, ctx),\n"
+     "                      destroyable(code, state, game_data, ctx))",
+     "        surplus = destroyable(code, state, game_data, ctx)"),
+
+    ("discardable_surplus: no keep authority at all (the gate becomes the licence)",
+     "    for code in overstocked_items(state, game_data):\n"
+     "        surplus = min(bankable(code, state, game_data, ctx),\n"
+     "                      destroyable(code, state, game_data, ctx))",
+     "    for code, surplus in overstocked_items(state, game_data).items():\n"
+     "        surplus = surplus"),
 ]
 
 
@@ -4689,6 +4765,10 @@ def _run_all_groups() -> int:
               "formal/diff/test_accumulation_sell_diff.py", survivors)
     run_group(ACCUMULATION_SELL_SRC, SELL_KEEP_MUTATIONS,
               "tests/test_ai/test_sell_protection.py", survivors)
+    run_group(DISCARD_SURPLUS_SRC, DISCARD_KEEP_MUTATIONS,
+              "tests/test_ai/test_discard_protection.py", survivors)
+    run_group(BANK_DRAIN_SRC, BANK_DRAIN_KEEP_MUTATIONS,
+              "tests/test_ai/test_bank_drain.py", survivors)
     run_group(LOADOUT_PROFILES_CORE_SRC, LOADOUT_PROFILES_CORE_MUTATIONS,
               "formal/diff/test_loadout_profiles_diff.py", survivors)
     run_group(EXPAND_BANK_GOAL_SRC, EXPAND_BANK_FLOOR_MUTATIONS,

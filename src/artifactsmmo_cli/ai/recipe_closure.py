@@ -270,10 +270,11 @@ def closure_demand(
     `yields` maps item code to output quantity per craft run; omit (or pass None)
     for all-Y=1 behaviour (today's data, exact no-op).
 
-    The ONE shared closure-demand implementation: `inventory_profile` (soft
-    keep-targets) and `task_reservation` (step-tier reservation) both consume
-    it. Mirrored by the proved Lean `closureDemand`
-    (formal/Formal/TaskReservation.lean)."""
+    The ONE shared closure-demand implementation: `task_reservation` (step-tier
+    reservation) and the objective-step protection profile
+    (`strategy_driver._step_protection_profile`, which feeds the keep authority's
+    GOAL_MATERIALS reason) both consume it. Mirrored by the proved Lean
+    `closureDemand` (formal/Formal/TaskReservation.lean)."""
     recipes = game_data.crafting_recipes
     result = _closure_demand(len(recipes) + 1, root, multiplier, recipes,
                              yields if yields is not None else game_data.craft_yields,

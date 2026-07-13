@@ -69,10 +69,8 @@ from artifactsmmo_cli.ai.thresholds import UTILITY_SLOT_MAX_STACK
 from artifactsmmo_cli.ai.tiers.guards import (
     GuardKind,
     SelectionContext,
-    _gear_protected,
     _used_fraction,
     active_guards,
-    active_profile,
     deposit_context,
 )
 from artifactsmmo_cli.ai.tiers.means import (
@@ -238,7 +236,7 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
     callers / tests that constructed guards without a state.
 
     `step_profile` is the resolved step goal's needed map; it must reach the
-    deposit/discard goals through the SAME `active_profile` merge the firing
+    deposit/discard goals through the SAME `deposit_context` merge the firing
     predicate used (trace 2026-06-11 22:36 cycle 30: DiscardOverstock deleted
     the active grind goal's own wooden_shield), so predicate and goal stay
     coherent."""
@@ -247,9 +245,12 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
     if kind is GuardKind.REST_FOR_COMBAT:
         return RestoreHPGoal()
     if kind is GuardKind.DISCARD_CRITICAL or kind is GuardKind.DISCARD_HIGH:
-        profile = (active_profile(state, game_data, ctx, step_profile)
-                   if state is not None else None)
-        return DiscardOverstockGoal(game_data=game_data, profile=profile,
+        # The goal sheds `discard_surplus.discardable_surplus` copies, so it needs the
+        # SAME ctx the firing predicate used — its `step_profile` is the
+        # GOAL_MATERIALS keep reason. (`active_profile`'s blanket code-set is gone:
+        # every reason it merged is now a QUANTITY in the keep registry.)
+        return DiscardOverstockGoal(game_data=game_data,
+                                    ctx=deposit_context(ctx, step_profile),
                                     bank_accessible=ctx.bank_accessible)
     if kind is GuardKind.BANK_UNLOCK:
         return UnlockBankGoal(
@@ -347,8 +348,7 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
             initial_total=sum(recyclable_surplus(
                 state, game_data, ctx).values()))
     if kind is MeansKind.DRAIN_BANK_JUNK:
-        return DrainBankJunkGoal(game_data=game_data,
-                                 protected_codes=_gear_protected(ctx),
+        return DrainBankJunkGoal(game_data=game_data, ctx=ctx,
                                  bank_accessible=ctx.bank_accessible)
     if kind is MeansKind.LOW_YIELD_CANCEL:
         return LowYieldCancelGoal()
@@ -913,7 +913,7 @@ class StrategyArbiter:
         step_profile = _step_protection_profile(step_goal, state, game_data)
         # ...and the SAME map rides the ctx from here down, so the keep authority
         # (`ai/inventory_keep.KeepReason.GOAL_MATERIALS`) protects exactly the
-        # quantities the guards' `active_profile` merge protects. This is the one
+        # quantities the guards' disposal predicates protect. This is the one
         # point where the resolved step goal exists: the goal is resolved FROM
         # `ctx` (`_resolve_step_goal`), so the player cannot fill `step_profile`
         # in when it builds the ctx — it would have to re-resolve the step goal

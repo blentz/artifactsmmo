@@ -161,9 +161,9 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
+from artifactsmmo_cli.ai.discard_surplus import discardable_surplus
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
-from artifactsmmo_cli.ai.inventory_caps import overstocked_items
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
@@ -462,10 +462,13 @@ def _bank_junk_nonempty(scn: Scenario) -> bool:
 
 
 def _has_overstock(scn: Scenario) -> bool:
-    """Empty-catalog `overstocked_items`: JUNK has cap 0, so it is overstock
-    iff held under genuine space pressure (fill >= DISCARD_HIGH watermark 0.85).
-    Mirrors `overstock_excess`'s cross-multiplied gate exactly (20*used >=
-    17*max). tasks_coin has action-cap 999, never overstock at these counts."""
+    """Empty-catalog `discardable_surplus`: JUNK has no catalog stats, so the useful
+    cap and EVERY keep reason are 0 — the authority licenses all of it, so the
+    space-pressure GATE is the only question. JUNK is shed-eligible iff held under
+    genuine space pressure (fill >= DISCARD_HIGH watermark 0.85); mirrors
+    `overstock_excess`'s cross-multiplied gate exactly (20*used >= 17*max).
+    tasks_coin is CURRENCY (KEEP_ALL) — the authority licenses NONE of it, at any
+    count, so it is never shed-eligible."""
     if scn.junk_qty <= 0 or scn.inventory_max <= 0:
         return False
     used = scn.junk_qty + (scn.coin_qty if scn.coin_qty > 0 else 0)
@@ -807,7 +810,7 @@ def _rich_oracle_args(
         # 19/20/22: derive the opaque structural Bools from production's REAL
         # helpers on (w, gd) — NOT from the slot verdicts (which fold in the
         # fraction gates and would make the input tautological with the output).
-        1 if overstocked_items(w, gd) else 0,        # 19 hasOverstockItems
+        1 if discardable_surplus(w, gd, ctx) else 0,  # 19 hasOverstockItems
         1 if select_bank_deposits(w, gd) else 0,     # 20 selectBankDepositsNonempty
         1 if w.pending_items else 0,                 # 21 pendingItemsNonempty
         1 if _has_sellable(w, gd) else 0,            # 22 sellableInventoryNonempty
@@ -821,7 +824,7 @@ def _rich_oracle_args(
         1 if w.bank_items is not None else 0,        # 30 bankItemsKnown
         # 31: derive from production's REAL bank_drain_excess helper (like 19/20/22),
         # NOT the slot verdict — the helper IS the opaque nonempty signal.
-        1 if bank_drain_excess(w, gd, frozenset(ctx.target_gear | ctx.target_tools)) else 0,  # 31 bankJunkNonempty
+        1 if bank_drain_excess(w, gd, ctx) else 0,    # 31 bankJunkNonempty
         # 32 craftPotionsFires: opaque CRAFT_POTIONS latch — derive from the SAME
         # production verdict (like gearReview/craftRelief/maintainConsumables).
         1 if prod[LadderMeans.CRAFT_POTIONS] else 0,  # 32 craftPotionsFires
@@ -1108,14 +1111,16 @@ def _drain_gd() -> GameData:
 
 
 def _drain_ctx(*, protect_sap: bool = False) -> SelectionContext:
-    # Protect via target_TOOLS (like the recycle test): bank_drain_excess protects
-    # on `target_gear | target_tools`, and using target_tools keeps the acceptTask
-    # gear-deferral (which reads only target_gear) == Lean at phase none.
+    # Protect via the keep authority's GEAR_DEMAND quantity (`gear_keep`), NOT a
+    # code-set: `bank_drain_excess` is bounded by `destroyable` (= owned - keep_owned)
+    # since the Task-9 migration, and `target_gear`/`target_tools` are ACQUISITION
+    # roles only. `gear_keep` is read by no other ladder slot at phase none, so the
+    # acceptTask gear-deferral (which reads target_gear) stays == Lean.
     return SelectionContext(
         bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
         initial_xp=0, task_exchange_min_coins=5, combat_monster=None,
-        target_gear=frozenset(),
-        target_tools=frozenset({"sap"}) if protect_sap else frozenset(),
+        target_gear=frozenset(), target_tools=frozenset(),
+        gear_keep={"sap": 5} if protect_sap else {},
         gear_review_active=False)
 
 
@@ -1146,8 +1151,9 @@ def test_drain_bank_junk_drives_true() -> None:
 
 
 def test_drain_bank_junk_near_miss_protected() -> None:
-    """Near-miss: sap IS a committed objective code -> bank_drain_excess excludes
-    it -> DRAIN_BANK_JUNK does NOT fire."""
+    """Near-miss: the keep authority's OWNERSHIP cap covers every banked copy
+    (`gear_keep` demands 5, 5 are banked) -> `destroyable` is 0 -> nothing is
+    drainable -> DRAIN_BANK_JUNK does NOT fire."""
     w = _drain_world(bank_sap_qty=5)
     gd = _drain_gd()
     prod, _, lean, _ = drive_and_contest(w, gd, _drain_ctx(protect_sap=True))

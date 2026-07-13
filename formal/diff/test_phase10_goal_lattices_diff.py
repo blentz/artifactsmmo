@@ -13,6 +13,7 @@ This Python-side test verifies the same contracts directly against the
 live Python implementations so that Lean and Python remain in lockstep
 as the source evolves. Each test maps 1:1 to a Lean theorem name.
 """
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.deposit_inventory import DepositInventoryGoal
 from artifactsmmo_cli.ai.goals.discard_overstock import (
@@ -102,7 +103,7 @@ def test_overstock_tier_constants_ordered():
 def test_overstock_satisfied_returns_zero():
     """When no overstock exists (empty inventory), value == 0."""
     gd = GameData()
-    g = DiscardOverstockGoal(gd)
+    g = DiscardOverstockGoal(gd, ctx=NO_PROFILE_CONTEXT)
     state = _mk()
     assert g.value(state, gd) == 0.0
 

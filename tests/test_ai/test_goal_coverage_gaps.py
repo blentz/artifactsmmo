@@ -4,6 +4,7 @@ Each test asserts the goal's observable contract (value / is_satisfied /
 desired_state / relevant_actions), never just line execution.
 """
 
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.actions.bank_expansion import BuyBankExpansionAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
@@ -27,7 +28,7 @@ class TestDiscardOverstockGaps:
         return gd
 
     def test_desired_state_flags_overstock_cleared(self):
-        goal = DiscardOverstockGoal(game_data=self._gd())
+        goal = DiscardOverstockGoal(game_data=self._gd(), ctx=NO_PROFILE_CONTEXT)
         state = make_state(inventory={"sap": 50})
         assert goal.desired_state(state, self._gd()) == {
             "inventory_overstock_cleared": True
@@ -36,15 +37,15 @@ class TestDiscardOverstockGaps:
     def test_max_depth_high_enough_for_many_items(self):
         """One Delete/Sell per overstocked item — depth must exceed the
         default 15 or large overstock yields plan_len=0."""
-        assert DiscardOverstockGoal(game_data=self._gd()).max_depth == 64
+        assert DiscardOverstockGoal(game_data=self._gd(), ctx=NO_PROFILE_CONTEXT).max_depth == 64
 
     def test_relevant_actions_empty_when_no_overstock(self):
-        goal = DiscardOverstockGoal(game_data=self._gd())
+        goal = DiscardOverstockGoal(game_data=self._gd(), ctx=NO_PROFILE_CONTEXT)
         state = make_state(inventory={"sap": 2})
         assert goal.relevant_actions([], state, self._gd()) == []
 
     def test_repr(self):
-        assert repr(DiscardOverstockGoal(game_data=self._gd())) == "DiscardOverstock"
+        assert repr(DiscardOverstockGoal(game_data=self._gd(), ctx=NO_PROFILE_CONTEXT)) == "DiscardOverstock"
 
 
 # --- ExpandBankGoal -------------------------------------------------------

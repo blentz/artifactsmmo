@@ -18,17 +18,18 @@ from datetime import datetime, timezone
 import pytest
 
 from artifactsmmo_cli.ai.accumulation_sell import sellable_accumulation
+from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
 from artifactsmmo_cli.ai.bank_selection import select_bank_deposits
+from artifactsmmo_cli.ai.discard_surplus import discardable_surplus
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.inventory_caps import useful_quantity_cap
-from artifactsmmo_cli.ai.inventory_keep import destroyable, keep_in_bag
+from artifactsmmo_cli.ai.inventory_keep import destroyable, keep_in_bag, keep_owned
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.loadout_profiles import active_profile_gear
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
-from artifactsmmo_cli.ai.strategy_driver import _gear_protected
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
-from artifactsmmo_cli.ai.tiers.guards import SelectionContext, active_profile
+from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 _ALL_SLOTS: dict[str, str | None] = {
@@ -226,23 +227,42 @@ def test_nongear_protection_unchanged():
 
 
 # --------------------------------------------------------------------------- #
-# Wiring: protected-set source + finished-gear deposit/discard floor.
+# Wiring: gear protection is a QUANTITY on every consumer, never a code-SET.
+#
+# `guards.protected_gear_codes` / `_gear_protected` / `active_profile` are DELETED
+# (item-protection-authority epic, Task 9). They were `frozenset[str]`, and a
+# frozenset can only say "keep ALL copies". These two tests replace the two that
+# pinned them, guarding the SAME obligation as the NEW invariant: the profile's
+# demand is honoured EXACTLY, on the DESTRUCTIVE paths (discard + bank drain) and in
+# BOTH modes (profiled and profile-less).
 # --------------------------------------------------------------------------- #
-def test_gear_protected_source_switches_with_profile_presence():
-    # Profiles present → the protected set is the active-profile gear set.
-    ctx = _ctx(gear_keep={"copper_dagger": 1},
-               target_gear=frozenset({"copper_boots"}))
-    assert _gear_protected(ctx) == frozenset({"copper_dagger"})
-    # No profile info → legacy target_gear|target_tools fallback.
-    legacy = _ctx(target_gear=frozenset({"copper_boots"}),
-                  target_tools=frozenset({"iron_pick"}))
-    assert _gear_protected(legacy) == frozenset({"copper_boots", "iron_pick"})
-
-
-def test_active_profile_protects_finished_profile_gear():
+def test_profile_gear_demand_is_honoured_by_the_destructive_paths():
     gd = _gd()
-    state = make_state(skills={"weaponcrafting": 1}, inventory={"copper_dagger": 1})
-    # A profile that wants 2 copper_dagger → the finished gear is floored at 2 in
-    # the active profile so deposit/discard never bank/delete it below 2.
-    profile = active_profile(state, gd, _ctx(gear_keep={"copper_dagger": 2}))
-    assert profile["copper_dagger"] == 2
+    # A profile that wants 2 copper_dagger: the finished gear is floored at 2 in the
+    # OWNERSHIP cap, so neither DISCARD nor the bank DRAIN may take it below 2.
+    ctx = _ctx(gear_keep={"copper_dagger": 2})
+    bagged = make_state(skills={"weaponcrafting": 1},
+                        inventory={"copper_dagger": 6}, inventory_max=6)
+    assert keep_owned("copper_dagger", bagged, gd, ctx) == 2
+    assert discardable_surplus(bagged, gd, ctx) == {"copper_dagger": 4}
+    banked = make_state(skills={"weaponcrafting": 1},
+                        bank_items={"copper_dagger": 6})
+    assert bank_drain_excess(banked, gd, ctx) == {"copper_dagger": 4}
+
+
+def test_objective_target_gear_is_ACQUISITION_only_not_protection():
+    """`target_gear` / `target_tools` name what to PURSUE. The old `_gear_protected`
+    fallback turned them into "keep EVERY copy of every BiS code" — the blanket that
+    hid all 18 copper_axe. Naming a code there now protects exactly NOTHING extra:
+    the authority's profile-less EQUIPPABLE_KEEP=1 is the whole floor."""
+    gd = _gd()
+    ctx = _ctx(target_gear=frozenset({"copper_dagger"}),
+               target_tools=frozenset({"iron_pick"}))
+    bagged = make_state(skills={"weaponcrafting": 1},
+                        inventory={"copper_dagger": 6}, inventory_max=6)
+    # keep 1 (the swap candidate / last combat weapon), shed the other 5 — NOT 0.
+    assert keep_owned("copper_dagger", bagged, gd, ctx) == 1
+    assert discardable_surplus(bagged, gd, ctx) == {"copper_dagger": 5}
+    banked = make_state(skills={"weaponcrafting": 1},
+                        bank_items={"copper_dagger": 6})
+    assert bank_drain_excess(banked, gd, ctx) == {"copper_dagger": 5}

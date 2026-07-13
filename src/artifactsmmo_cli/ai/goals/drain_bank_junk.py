@@ -6,6 +6,7 @@ from artifactsmmo_cli.ai.bank_drain import bank_drain_excess
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
 DRAIN_BANK_JUNK_VALUE = 15.0
@@ -18,19 +19,26 @@ otherwise sit in the bank forever."""
 
 
 class DrainBankJunkGoal(Goal):
-    """Withdraw bank holdings held above their useful keep-cap.
+    """Withdraw bank holdings the keep authority licenses for disposal.
 
-    Targets non-objective codes whose bank quantity exceeds
-    `useful_quantity_cap` (after crediting what inventory already holds toward
-    the cap). The withdrawn excess becomes inventory overstock, which the
-    existing DiscardOverstock guard sheds (sell if a buyer is active, else
-    delete) on a later cycle. See `ai/bank_drain.bank_drain_excess`.
+    Targets the BANK copies above BOTH the worth-hoarding cap and the authority's
+    OWNERSHIP cap (`keep_owned`) — so the last tool, the last combat weapon, the
+    active profile's gear demand, the recipe demand, the task item and the currency
+    all survive a drain that would otherwise feed them straight to the discard
+    ladder. The withdrawn excess becomes inventory overstock, which the
+    DiscardOverstock guard sheds on a later cycle. See
+    `ai/bank_drain.bank_drain_excess` for why the BAG cap (`keep_in_bag`) does NOT
+    bound a bank-side drain.
     """
 
-    def __init__(self, game_data: GameData, protected_codes: frozenset[str],
+    def __init__(self, game_data: GameData, ctx: SelectionContext,
                  bank_accessible: bool) -> None:
         self._gd = game_data
-        self._protected = protected_codes
+        # The per-cycle SelectionContext the keep authority reads (gear_keep,
+        # step_profile). It REPLACES the `protected_codes` frozenset — protection is
+        # a QUANTITY the authority owns, not a code-set this goal carries
+        # (item-protection-authority epic, Task 9).
+        self._ctx = ctx
         self._accessible = bank_accessible
 
     def value(self, state: WorldState, game_data: GameData,
@@ -40,7 +48,7 @@ class DrainBankJunkGoal(Goal):
         return DRAIN_BANK_JUNK_VALUE
 
     def is_satisfied(self, state: WorldState) -> bool:
-        return not bank_drain_excess(state, self._gd, self._protected)
+        return not bank_drain_excess(state, self._gd, self._ctx)
 
     def desired_state(self, state: WorldState, game_data: GameData) -> dict[str, object]:
         return {"bank_junk_drained": True}
@@ -57,7 +65,7 @@ class DrainBankJunkGoal(Goal):
         bank_loc = game_data.bank_location_or_none
         if bank_loc is None:
             return []
-        excess = bank_drain_excess(state, game_data, self._protected)
+        excess = bank_drain_excess(state, game_data, self._ctx)
         result: list[Action] = []
         for code, excess_qty in excess.items():
             start = excess_qty if excess_qty < state.inventory_free else state.inventory_free

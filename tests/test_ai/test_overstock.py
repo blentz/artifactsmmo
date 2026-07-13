@@ -1,5 +1,6 @@
 """Tests for inventory_caps + DiscardOverstockGoal."""
 
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -403,7 +404,7 @@ class TestDiscardOverstockGoal:
         even at 50 sap. The player uses its inventory; the per-item cap is no
         longer a space-blind dump trigger."""
         gd = _gd_with_sap_recipes()
-        goal = DiscardOverstockGoal(game_data=gd)
+        goal = DiscardOverstockGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT)
         # Large inventory_max so pressure is low (50/200=25%): no overstock.
         state = make_state(level=1, inventory={"sap": 50}, inventory_max=200)
         assert goal.value(state, gd) == 0.0
@@ -412,33 +413,33 @@ class TestDiscardOverstockGoal:
     def test_priority_escalates_under_high_pressure(self):
         """Inventory pressure >= 0.85 → DISCARD_OVERSTOCK_HIGH_PRESSURE (55)."""
         gd = _gd_with_sap_recipes()
-        goal = DiscardOverstockGoal(game_data=gd)
+        goal = DiscardOverstockGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT)
         state = make_state(level=1, inventory={"sap": 50}, inventory_max=55)  # 50/55 = 0.91
         assert goal.value(state, gd) == _DISCARD_OVERSTOCK_HIGH_PRESSURE
 
     def test_priority_escalates_under_critical_pressure(self):
         """Inventory pressure >= 0.95 → DISCARD_OVERSTOCK_CRITICAL (85)."""
         gd = _gd_with_sap_recipes()
-        goal = DiscardOverstockGoal(game_data=gd)
+        goal = DiscardOverstockGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT)
         state = make_state(level=1, inventory={"sap": 50}, inventory_max=52)  # 50/52 = 0.96
         assert goal.value(state, gd) == _DISCARD_OVERSTOCK_CRITICAL
 
     def test_high_pressure_beats_gather_materials(self):
         """At high pressure (>=0.85), overstock outranks GatherMaterials (50)."""
         gd = _gd_with_sap_recipes()
-        goal = DiscardOverstockGoal(game_data=gd)
+        goal = DiscardOverstockGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT)
         state = make_state(level=1, inventory={"sap": 50}, inventory_max=55)
         assert goal.value(state, gd) > 50.0  # GATHER_MATERIALS was 50.0
 
     def test_zero_when_no_overstock(self):
         gd = _gd_with_sap_recipes()
-        goal = DiscardOverstockGoal(game_data=gd)
+        goal = DiscardOverstockGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT)
         state = make_state(level=1, inventory={"sap": 3})
         assert goal.value(state, gd) == 0.0
 
     def test_satisfied_when_no_overstock(self):
         gd = _gd_with_sap_recipes()
-        goal = DiscardOverstockGoal(game_data=gd)
+        goal = DiscardOverstockGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT)
         assert goal.is_satisfied(make_state(level=1, inventory={"sap": 3})) is True
         assert goal.is_satisfied(make_state(level=1, inventory={"sap": 50})) is False
 
@@ -447,7 +448,7 @@ class TestDiscardOverstockGoal:
         gd = _gd_with_sap_recipes()
         gd._npc_sell_prices = {"npc1": {"sap": 2}}
         gd._npc_locations = {"npc1": (3, 3)}
-        goal = DiscardOverstockGoal(game_data=gd)
+        goal = DiscardOverstockGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT)
         state = make_state(level=1, inventory={"sap": 50})
         relevant = goal.relevant_actions([], state, gd)
         # Exactly one batch NpcSell with the full excess quantity.
@@ -467,7 +468,7 @@ class TestDiscardOverstockGoal:
         gd = GameData()
         gd._item_stats = {"gudgeon": ItemStats(code="gudgeon", level=1, type_="resource")}
         gd._crafting_recipes = {}  # no recipes — only task_cap protects it
-        goal = DiscardOverstockGoal(game_data=gd)
+        goal = DiscardOverstockGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT)
         # Holding 30 gudgeon mid-batch toward a 353 task
         state = make_state(level=1,
                             inventory={"gudgeon": 30, "junk": 50},
@@ -492,7 +493,7 @@ class TestDiscardOverstockGoal:
         gd = _gd_with_sap_recipes()
         gd._npc_sell_prices = {"event_merchant": {"sap": 2}}  # buyer in table
         gd._npc_locations = {}  # location NOT loaded → dormant
-        goal = DiscardOverstockGoal(game_data=gd)
+        goal = DiscardOverstockGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT)
         state = make_state(level=1, inventory={"sap": 50})
         relevant = goal.relevant_actions([], state, gd)
         # Dormant buyer → Delete emitted so the slot is freed.
@@ -503,7 +504,7 @@ class TestDiscardOverstockGoal:
     def test_relevant_actions_falls_back_to_batch_delete(self):
         """No NPC buys → batch DeleteItem with full excess quantity."""
         gd = _gd_with_sap_recipes()
-        goal = DiscardOverstockGoal(game_data=gd)
+        goal = DiscardOverstockGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT)
         state = make_state(level=1, inventory={"sap": 50})
         relevant = goal.relevant_actions([], state, gd)
         assert len(relevant) == 1
@@ -515,7 +516,7 @@ class TestDiscardOverstockGoal:
     def test_relevant_actions_one_per_overstocked_item(self):
         """Multiple overstocked items → multiple batch actions, one each."""
         gd = _gd_with_sap_recipes()
-        goal = DiscardOverstockGoal(game_data=gd)
+        goal = DiscardOverstockGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT)
         state = make_state(level=1, inventory={"sap": 50, "extra": 99})
         relevant = goal.relevant_actions([], state, gd)
         # One batch per overstocked code (sap + extra)
@@ -535,7 +536,7 @@ class TestDiscardOverstockGoal:
         # 'junk' has a reachable NPC buyer; 'rock' does not.
         gd._npc_sell_prices = {"vendor1": {"junk": 5}}
         gd._npc_locations = {"vendor1": (1, 2)}  # reachable now
-        goal = DiscardOverstockGoal(game_data=gd)
+        goal = DiscardOverstockGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT)
         # Both items overstocked (no recipe use → cap 0; high inventory pressure).
         state = make_state(level=1,
                            inventory={"junk": 50, "rock": 50},
@@ -566,7 +567,7 @@ class TestDiscardOverstockGoal:
         # Event merchant in price table but NOT in _npc_locations → dormant.
         gd._npc_sell_prices = {"event_merchant": {"festival_token": 10}}
         # No entry in _npc_locations → npc_location returns None.
-        goal = DiscardOverstockGoal(game_data=gd)
+        goal = DiscardOverstockGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT)
         # inventory_max=55 → 50/55 ≈ 91% ≥ DISCARD_WATERMARK (0.85) → overstock detected.
         state = make_state(level=1,
                            inventory={"festival_token": 50},

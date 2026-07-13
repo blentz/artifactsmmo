@@ -28,8 +28,14 @@ irreversible and answers to OWNERSHIP, `bankable` because the destruction happen
 BAG-side and a copy the bag must keep (WORKING_KIT: the tool the gather re-arm is
 about to equip) must not be eaten when banking it was the correct move. Its
 `protected_codes` frozenset, its `kit` code-set and `guards.recycle_protected_codes`
-are all DELETED. The remaining set-based consumer (`guards._gear_protected`, on
-the bank-drain path) is migrated by Tasks 8-9.
+are all DELETED. Task 8 migrated SELL (`accumulation_sell.sellable_surplus`, same
+`min`), and Task 9 the last two: DISCARD (`discard_surplus.discardable_surplus`,
+same `min` — it is a BAG-side destruction) and the BANK DRAIN
+(`bank_drain.bank_drain_excess`), which destroys copies IN THE BANK and so is bounded
+by `destroyable` ALONE — `keep_in_bag` says nothing about a bank copy, and a `min`
+with `bankable` would freeze the drain of a code held 0-in-bag, i.e. exactly the
+hoard it exists to clear. `guards.protected_gear_codes`, `guards._gear_protected` and
+`guards.active_profile` are DELETED with it: NO code-set protection remains anywhere.
 """
 
 from enum import Enum
@@ -252,7 +258,7 @@ def _goal_materials(code: str, state: WorldState, game_data: GameData,
     each needed item's still-missing quantity), as computed by
     `strategy_driver._step_protection_profile` and bound onto the ctx by
     `StrategyArbiter.select` — the SAME map the deposit/discard guards merge via
-    `guards.active_profile`, so the keep authority and the guards protect the
+    `guards.deposit_context`, so the keep authority and the guards protect the
     same quantities.
 
     A QUANTITY, not the old `bank_selection` blanket: without ANY protection an

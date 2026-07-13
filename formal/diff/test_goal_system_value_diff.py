@@ -366,7 +366,7 @@ def test_unlock_bank_active_returns_90():
 
 def test_discard_overstock_satisfied_returns_zero():
     gd = _gd()
-    goal = DiscardOverstockGoal(gd)
+    goal = DiscardOverstockGoal(gd, ctx=NO_PROFILE_CONTEXT)
     # Nothing in inventory → no overstock → satisfied.
     s = make_state(inventory={})
     assert Fraction(goal.value(s, gd)) == discard_overstock_value_model(True, Fraction(0))

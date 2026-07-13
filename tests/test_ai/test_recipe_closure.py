@@ -220,6 +220,15 @@ def test_pure_cores_fuel_zero_base_cases():
     assert _closure_demand(0, "a", 5, recipes, {}, dict(visited), dict(out)) == out
 
 
+def test_closure_demand_skips_non_positive_recipe_quantities():
+    """A recipe entry with a non-positive quantity contributes NO demand and is not
+    walked: it is not a material the craft consumes, so recording it would reserve bag
+    space (and protect from disposal) an item the chain never needs. The `qty_per <= 0`
+    guard is what makes the demand map a demand map."""
+    recipes = {"a": {"b": 0, "c": 2}}
+    assert _closure_demand(4, "a", 1, recipes, {}, {}, {}) == {"a": 1, "c": 2}
+
+
 def test_cyclic_recipe_terminates_via_visited_guard_not_fuel():
     # a <-> b cycle: the wrapper seeds fuel len(recipes) + 1 = 3; the visited
     # guard fires first on every path, so doubling the fuel changes nothing.

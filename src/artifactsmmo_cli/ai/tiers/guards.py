@@ -14,9 +14,8 @@ from artifactsmmo_cli.ai.craft_relief import (
     CRAFT_RELIEF_FRACTION,
     craft_relief_candidates,
 )
+from artifactsmmo_cli.ai.discard_surplus import discardable_surplus
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.inventory_caps import overstocked_items
-from artifactsmmo_cli.ai.inventory_profile import inventory_profile
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
@@ -55,29 +54,19 @@ MAX_ACHIEVABLE_GAP = 5
 # `from artifactsmmo_cli.ai.tiers.guards import SelectionContext` still resolves.
 
 
-def protected_gear_codes(ctx: SelectionContext) -> frozenset[str]:
-    """The set of gear codes the keep economy protects: the active-profile gear
-    set UNION the in-flight upgrade codes (the keys of `ctx.gear_keep`). Empty
-    when no profile info is available — callers then use their legacy fallback."""
-    return frozenset(ctx.gear_keep)
-
-
-# `recycle_protected_codes` is GONE (item-protection-authority epic, Task 7):
-# the recycle path asks `ai/inventory_keep` how many copies it may destroy
-# (`min(bankable, destroyable)`), so there is no protected code-SET left to
-# compute. Its profile-less arm returned `target_gear | target_tools`, i.e.
-# "keep ALL copies of every BiS gear/tool code" — the blanket that hid all 18
-# `copper_axe` from every recycle path while the grind kept making more.
-
-
-def _gear_protected(ctx: SelectionContext) -> frozenset[str]:
-    """The GEAR codes the keep economy protects (recycle/sell/drain exclusion):
-    the active-profile gear set ∪ in-flight upgrade (spec
-    2026-06-28-gear-loadout-profiles) when profile info exists, else the legacy
-    `target_gear | target_tools` fallback so a profile-less bot is unchanged."""
-    if ctx.gear_keep:
-        return protected_gear_codes(ctx)
-    return ctx.target_gear | ctx.target_tools
+# EVERY protection-role CODE-SET IS GONE (item-protection-authority epic, Tasks 6-9).
+# `recycle_protected_codes` (Task 7), then `protected_gear_codes` / `_gear_protected`
+# and the `active_profile` merge (Task 9): each returned a `frozenset[str]`, a type
+# that can only say "keep ALL copies", and each had a profile-less arm that returned
+# `target_gear | target_tools` — "keep every copy of every BiS gear/tool code". That
+# blanket is the bug class the keep authority (`ai/inventory_keep`) exists to kill: it
+# hid all 18 `copper_axe` from every disposal path while the grind kept making more.
+#
+# Every disposal consumer now asks the authority HOW MANY copies it may take:
+# DEPOSIT `bankable`, RECYCLE / SELL / DISCARD `min(bankable, destroyable)`, and the
+# bank DRAIN `destroyable` (a bank copy is not a bag copy — see `ai/bank_drain`).
+# `ctx.target_gear` / `ctx.target_tools` survive ONLY in their ACQUISITION role (they
+# name what to PURSUE — the CRAFT_RELIEF / ACCEPT_TASK gear-deferral reads).
 
 
 class GuardKind(Enum):
@@ -167,54 +156,21 @@ def _used_fraction(state: WorldState) -> float:
     return max(_quantity_fraction(state), slot_fraction)
 
 
-def active_profile(state: WorldState, game_data: GameData,
-                   ctx: SelectionContext,
-                   step_profile: dict[str, int] | None = None) -> dict[str, int]:
-    """The active goal's SOFT inventory profile, derived from the
-    SelectionContext's long-term gear/tool codes + the committed
-    crafting_target + active items-task (spec 2026-06-07). Deposit/discard
-    never bank/delete a profile item below its target.
-
-    `step_profile` is the resolved objective-step goal's needed map
-    (item_code -> target_qty), merged at per-code max. Trace 2026-06-11 22:36
-    (cycle 30): DISCARD_HIGH deleted a wooden_shield the active
-    GatherMaterials grind goal was accumulating (held 2, needed 3) because the
-    step goal's targets were invisible to this profile — it only covered
-    crafting_target/gear/tools/task.
-
-    Gear portion (spec 2026-06-28-gear-loadout-profiles): the recipe-closure
-    roots and the finished-gear floor come from the ACTIVE-PROFILE gear set
-    (`ctx.gear_keep`) when available, REPLACING the `target_gear`/`target_tools`
-    closure. With no profile info (empty `gear_keep`) it falls back to the legacy
-    `target_gear | target_tools` roots so a freshly-started bot is unchanged."""
-    gear_codes: frozenset[str] = (protected_gear_codes(ctx) if ctx.gear_keep
-                                  else ctx.target_gear | ctx.target_tools)
-    profile = inventory_profile(state, game_data, gear_codes=gear_codes)
-    # Active-profile finished gear (and the in-flight +1 spare) is protected at
-    # its demand so deposit/discard never bank/delete it below that count.
-    for code, keep in ctx.gear_keep.items():
-        if keep > profile.get(code, 0):
-            profile[code] = keep
-    if step_profile:
-        for code, qty in step_profile.items():
-            if qty > profile.get(code, 0):
-                profile[code] = qty
-    return profile
-
-
 def deposit_context(ctx: SelectionContext,
                     step_profile: dict[str, int] | None = None) -> SelectionContext:
     """`ctx` with the resolved step goal's `needed` map merged (per-code max) into
-    `step_profile` — the context the DEPOSIT decision is taken under.
+    `step_profile` — the context every DISPOSAL decision is taken under
+    (deposit, recycle, sell and, since Task 9, discard).
 
     `StrategyArbiter.select` already binds the same map onto the ctx before the
     ladder runs, so this is normally the identity. It exists because the guard
     predicate ALSO receives `step_profile` as an argument (older callers, and the
-    goal mapper, thread it that way), and the deposit selector must never see a
+    goal mapper, thread it that way), and a disposal selector must never see a
     SMALLER profile than the one the firing predicate used: the keep authority's
     GOAL_MATERIALS reason reads `ctx.step_profile`, so a step profile that never
-    reached the ctx would let DepositAll bank the very materials the active gather
-    step is accumulating (the withdraw↔deposit livelock, trace 2026-06-11 23:05)."""
+    reached the ctx would let DepositAll bank — or DiscardOverstock DELETE — the very
+    materials the active gather step is accumulating (the withdraw↔deposit livelock,
+    trace 2026-06-11 23:05; the wooden_shield deletion, trace 2026-06-11 22:36)."""
     if not step_profile:
         return ctx
     merged = dict(ctx.step_profile)
@@ -262,16 +218,20 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
                 and state.level < ctx.bank_required_level
                 and ctx.bank_required_level - state.level <= MAX_ACHIEVABLE_GAP)
     if kind is GuardKind.DISCARD_CRITICAL:
-        # Overstock is genuine excess ABOVE the need/value inventory cap (the
-        # active profile protects everything the goal still needs), so shedding it
-        # is correct whether or not the bank has room — banking junk we will not
-        # use for ~15 levels (e.g. 62 sap, target 1) just hoards it and, when the
-        # bag is full, lets the deposit thrash on the active craft input instead
-        # of clearing the junk (live Robby 2026-06-24: Withdraw(ash_plank)↔Deposit
-        # loop, all "ok", no stuck signal). NOT gated on bank-full anymore.
-        return (bool(overstocked_items(state, game_data,
-                                       profile=active_profile(state, game_data, ctx,
-                                                              step_profile)))
+        # The shed-eligible surplus is the keep authority's licence
+        # (`min(bankable, destroyable)`) over the codes the space-pressure gate
+        # reports as overstock, so shedding it is correct whether or not the bank
+        # has room — banking junk we will not use for ~15 levels (e.g. 62 sap,
+        # target 1) just hoards it and, when the bag is full, lets the deposit
+        # thrash on the active craft input instead of clearing the junk (live Robby
+        # 2026-06-24: Withdraw(ash_plank)↔Deposit loop, all "ok", no stuck signal).
+        # NOT gated on bank-full anymore. The ctx carries the protection
+        # (gear_keep + step_profile) — `deposit_context` merges the resolved step
+        # goal's needed map exactly as the DEPOSIT_FULL / RECYCLE_RELIEF arms do, so
+        # the materials the active step is accumulating are never DELETED out from
+        # under it (destruction is the irreversible half of the same protection).
+        return (bool(discardable_surplus(state, game_data,
+                                         deposit_context(ctx, step_profile)))
                 and _quantity_fraction(state) >= DISCARD_CRITICAL_FRACTION)
     if kind is GuardKind.CRAFT_RELIEF:
         if _used_fraction(state) < CRAFT_RELIEF_FRACTION:
@@ -304,14 +264,13 @@ def _fires(kind: GuardKind, state: WorldState, game_data: GameData,
                 and bool(select_bank_deposits(
                     state, game_data, deposit_context(ctx, step_profile))))
     if kind is GuardKind.DISCARD_HIGH:
-        # Same as DISCARD_CRITICAL: overstock above the need/value cap is shed
+        # Same as DISCARD_CRITICAL: the authority-licensed surplus is shed
         # regardless of bank room (don't hoard junk). Fires at the lower
         # DISCARD_HIGH watermark, BELOW DEPOSIT_FULL in priority — so a bag merely
         # high (not critical) deposits its retrievable buffer first, then sheds
         # the residual junk overstock.
-        return (bool(overstocked_items(state, game_data,
-                                       profile=active_profile(state, game_data, ctx,
-                                                              step_profile)))
+        return (bool(discardable_surplus(state, game_data,
+                                         deposit_context(ctx, step_profile)))
                 and _quantity_fraction(state) >= DISCARD_HIGH_FRACTION)
     if kind is GuardKind.GEAR_REVIEW:
         return ctx.gear_review_active
@@ -326,8 +285,8 @@ def active_guards(state: WorldState, game_data: GameData,
     """Triggered guards in ladder (preemption) order.
 
     history is accepted for signature parity with future learning-aware guards (currently unused).
-    `step_profile` (the resolved step goal's needed map) joins the
-    deposit/discard protection profile — see `active_profile`.
+    `step_profile` (the resolved step goal's needed map) reaches every disposal
+    predicate through the ctx — see `deposit_context`.
     """
     return [k for k in GUARD_ORDER
             if _fires(k, state, game_data, history, ctx, step_profile)]

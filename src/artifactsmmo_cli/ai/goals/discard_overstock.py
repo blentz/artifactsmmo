@@ -1,14 +1,16 @@
-"""DiscardOverstockGoal: sell, recycle, bank, or delete items held beyond their useful cap."""
+"""DiscardOverstockGoal: sell, recycle, bank, or delete the copies the keep authority
+licenses, for items the space-pressure gate reports as overstock."""
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.ge_fill import GeFillBuyOrderAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
+from artifactsmmo_cli.ai.discard_surplus import discardable_surplus
 from artifactsmmo_cli.ai.disposal_route import overstock_disposal
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
-from artifactsmmo_cli.ai.inventory_caps import overstocked_items
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.liquidation_venue import Venue, liquidation_venue
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.thresholds import (
     PRESSURE_CRITICAL_FRACTION,
     PRESSURE_HIGH_FRACTION,
@@ -39,17 +41,27 @@ shared pressure-ladder CRITICAL rung (single source: ai/thresholds.py)."""
 
 
 class DiscardOverstockGoal(Goal):
-    """Sell (if NPC buys), else recycle/bank/delete items held beyond their useful cap."""
+    """Sell (if an NPC buys), else recycle/bank/delete the copies the keep authority
+    licenses, for the items the space-pressure gate reports as overstock.
 
-    def __init__(self, game_data: GameData,
-                 profile: dict[str, int] | None = None,
+    WHAT MAY BE SHED IS THE KEEP AUTHORITY'S ANSWER, not this goal's
+    (item-protection-authority epic, Task 9): `ai/discard_surplus.discardable_surplus`
+    licenses `min(bankable, destroyable)` copies, so the equipped copy, the active
+    profile's gear demand, the recipe demand, the task's own item, the currency, the
+    heal stock and — through the in-bag half of the `min` — the last WORKING tool /
+    COMBAT weapon all survive the DELETE. The goal used to take a `profile` code-set
+    closure (`guards.active_profile`, rooted on the `target_gear | target_tools`
+    blanket) merged with the `useful_quantity_cap` heuristic; both are gone.
+    """
+
+    def __init__(self, game_data: GameData, ctx: SelectionContext,
                  bank_accessible: bool = False) -> None:
         # game_data stashed so is_satisfied (which only receives state per
-        # the Goal protocol) can still compute overstock during planning.
+        # the Goal protocol) can still compute the surplus during planning.
         self._gd = game_data
-        # The active goal's soft inventory profile — never discard a profile
-        # item below its target (spec 2026-06-07).
-        self._profile = profile or {}
+        # The per-cycle SelectionContext the keep authority reads (gear_keep,
+        # step_profile). It REPLACES the `profile` code-set closure.
+        self._ctx = ctx
         # Threaded from SelectionContext at the strategy_driver build site
         # (not a WorldState field): gates the disposal-route DEPOSIT arm.
         self._bank_accessible = bank_accessible
@@ -71,7 +83,7 @@ class DiscardOverstockGoal(Goal):
         return _DISCARD_OVERSTOCK_HIGH_PRESSURE
 
     def is_satisfied(self, state: WorldState) -> bool:
-        return not overstocked_items(state, self._gd, profile=self._profile)
+        return not discardable_surplus(state, self._gd, self._ctx)
 
     @property
     def max_depth(self) -> int:
@@ -86,15 +98,15 @@ class DiscardOverstockGoal(Goal):
     def relevant_actions(
         self, actions: list[Action], state: WorldState, game_data: GameData,
     ) -> list[Action]:
-        """Construct one BATCH Sell / Recycle / Deposit / Delete per overstocked item.
+        """Construct one BATCH Sell / Recycle / Deposit / Delete per shed-eligible item.
 
         Bypasses the pre-built quantity=1 actions in `actions` and emits a
         single-cycle batch action per item so one cycle clears one item's
-        overstock entirely. Sell wins when any NPC buys — gold > zero; Sell
+        licensed surplus entirely. Sell wins when any NPC buys — gold > zero; Sell
         picks the highest-paying NPC. With no executable sale the item is
         routed by the proved `disposal_route`: recycle > deposit > delete.
         """
-        excess = overstocked_items(state, game_data, profile=self._profile)
+        excess = discardable_surplus(state, game_data, self._ctx)
         if not excess:
             return []
         result: list[Action] = []

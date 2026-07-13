@@ -8,6 +8,7 @@ future-value + bank room, and the true-junk / bank-closed delete fallbacks.
 
 import pytest
 
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
 from artifactsmmo_cli.ai.actions.deposit_item import DepositItemAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
@@ -265,7 +266,7 @@ class TestDiscardOverstockRouting:
         # The trace bug end-to-end: overstocked copper_helmet under bag
         # pressure, no NPC buyer -> the goal emits a Recycle, not a Delete.
         gd = _gear_gd()
-        goal = DiscardOverstockGoal(game_data=gd, bank_accessible=True)
+        goal = DiscardOverstockGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT, bank_accessible=True)
         state = make_state(inventory={"copper_helmet": 18}, inventory_max=20,
                            bank_items={}, skills={"gearcrafting": 5})
         relevant = goal.relevant_actions([], state, gd)
@@ -283,7 +284,7 @@ class TestDiscardOverstockRouting:
             },
             recipes={"emerald_ring": {"emerald_stone": 2}},
         )
-        goal = DiscardOverstockGoal(game_data=gd, bank_accessible=True)
+        goal = DiscardOverstockGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT, bank_accessible=True)
         state = make_state(inventory={"emerald_stone": 18}, inventory_max=20,
                            bank_items={})
         relevant = goal.relevant_actions([], state, gd)
@@ -294,7 +295,7 @@ class TestDiscardOverstockRouting:
     def test_fallback_still_deletes_junk_with_bank_open(self):
         # sap-livelock regression guard: junk keeps deleting even at the bank.
         gd = _gd(item_stats={"sap": ItemStats(code="sap", level=1, type_="resource")})
-        goal = DiscardOverstockGoal(game_data=gd, bank_accessible=True)
+        goal = DiscardOverstockGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT, bank_accessible=True)
         state = make_state(inventory={"sap": 18}, inventory_max=20, bank_items={})
         relevant = goal.relevant_actions([], state, gd)
         assert len(relevant) == 1
@@ -307,7 +308,7 @@ class TestDiscardOverstockRouting:
             item_stats={"emerald_stone": ItemStats(code="emerald_stone", level=5, type_="resource")},
             recipes={"emerald_ring": {"emerald_stone": 2}},
         )
-        goal = DiscardOverstockGoal(game_data=gd)
+        goal = DiscardOverstockGoal(game_data=gd, ctx=NO_PROFILE_CONTEXT)
         state = make_state(inventory={"emerald_stone": 18}, inventory_max=20,
                            bank_items={})
         relevant = goal.relevant_actions([], state, gd)

@@ -9,6 +9,7 @@ only the NpcSell path is offered (Venue.NPC) — the behavior is unchanged. This
 the live caller that makes formal/Formal/LiquidationVenue.lean's proof non-inert.
 """
 
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.actions.ge_fill import GeFillBuyOrderAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -41,7 +42,7 @@ def test_surplus_with_better_ge_buy_order_emits_ge_fill_action():
     # the 0.85 discard watermark) so the space-driven overstock fires and the
     # GE-liquidation path is exercised (spec 2026-06-07).
     state = make_state(inventory={"iron_ore": 10}, inventory_max=11)
-    goal = DiscardOverstockGoal(gd)
+    goal = DiscardOverstockGoal(gd, ctx=NO_PROFILE_CONTEXT)
 
     emitted = goal.relevant_actions([], state, gd)
 
@@ -66,7 +67,7 @@ def test_surplus_without_ge_order_emits_only_npc_sell():
     # the 0.85 discard watermark) so the space-driven overstock fires and the
     # GE-liquidation path is exercised (spec 2026-06-07).
     state = make_state(inventory={"iron_ore": 10}, inventory_max=11)
-    goal = DiscardOverstockGoal(gd)
+    goal = DiscardOverstockGoal(gd, ctx=NO_PROFILE_CONTEXT)
 
     emitted = goal.relevant_actions([], state, gd)
 
@@ -81,7 +82,7 @@ def test_surplus_with_ge_order_priced_below_npc_emits_only_npc_sell():
     # the 0.85 discard watermark) so the space-driven overstock fires and the
     # GE-liquidation path is exercised (spec 2026-06-07).
     state = make_state(inventory={"iron_ore": 10}, inventory_max=11)
-    goal = DiscardOverstockGoal(gd)
+    goal = DiscardOverstockGoal(gd, ctx=NO_PROFILE_CONTEXT)
 
     emitted = goal.relevant_actions([], state, gd)
 
@@ -97,7 +98,7 @@ def test_surplus_with_ge_order_too_small_emits_only_npc_sell():
     # the 0.85 discard watermark) so the space-driven overstock fires and the
     # GE-liquidation path is exercised (spec 2026-06-07).
     state = make_state(inventory={"iron_ore": 10}, inventory_max=11)
-    goal = DiscardOverstockGoal(gd)
+    goal = DiscardOverstockGoal(gd, ctx=NO_PROFILE_CONTEXT)
 
     emitted = goal.relevant_actions([], state, gd)
 
@@ -115,7 +116,7 @@ def test_surplus_no_npc_buyer_but_ge_order_emits_ge_fill_not_delete():
     # the 0.85 discard watermark) so the space-driven overstock fires and the
     # GE-liquidation path is exercised (spec 2026-06-07).
     state = make_state(inventory={"iron_ore": 10}, inventory_max=11)
-    goal = DiscardOverstockGoal(gd)
+    goal = DiscardOverstockGoal(gd, ctx=NO_PROFILE_CONTEXT)
 
     emitted = goal.relevant_actions([], state, gd)
 
