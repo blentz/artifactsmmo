@@ -108,27 +108,30 @@ def _active_task(code: str, state: WorldState, game_data: GameData,
     return max(0, state.task_total - state.task_progress)
 
 
-def _best_heal_code(state: WorldState, game_data: GameData) -> str | None:
-    """The held heal code that carries the stock target: strongest `hp_restore`
-    among HELD heal codes, ties broken on the lexically smallest code.
+def _held_heals(state: WorldState, game_data: GameData) -> list[tuple[str, int, int]]:
+    """Every HELD heal code as `(code, qty, hp_restore)`, strongest first, ties
+    broken on the lexically smallest code (a stable sort over `sorted()` keys).
+
+    The population is EXACTLY the one `consumable_supply.heal_stock` sums over
+    (`state.inventory`, `qty > 0`, `hp_restore > 0`) — the keep authority must
+    range over the same set the target is measured against.
 
     NOT `consumable_supply.best_held_heal`: that selector additionally requires
     the heal to map to a `utility1_slot`, because its caller equips heals for
-    marginal-fight provisioning. The keep authority must range over the SAME
-    population `consumable_supply.heal_stock` sums (every `hp_restore > 0`
-    code, eaten food included) — using the utility-filtered selector would
-    return None for a food-only bag and drop the ENTIRE heal stock to keep 0,
+    marginal-fight provisioning. Using the utility-filtered selector would find
+    nothing in a food-only bag and drop the ENTIRE heal stock to keep 0,
     re-creating the "banked the healing stock, now Rest forever" livelock."""
-    best_code: str | None = None
-    best_restore = 0
-    for code in sorted(state.inventory):
-        if state.inventory[code] <= 0:
+    held: list[tuple[str, int, int]] = []
+    for held_code in sorted(state.inventory):
+        qty = state.inventory[held_code]
+        if qty <= 0:
             continue
-        stats = game_data.item_stats(code)
-        if stats is None or stats.hp_restore <= best_restore:
+        stats = game_data.item_stats(held_code)
+        if stats is None or stats.hp_restore <= 0:
             continue
-        best_code, best_restore = code, stats.hp_restore
-    return best_code
+        held.append((held_code, qty, stats.hp_restore))
+    held.sort(key=lambda entry: -entry[2])
+    return held
 
 
 def _healing_consumable(code: str, state: WorldState, game_data: GameData,
@@ -138,17 +141,28 @@ def _healing_consumable(code: str, state: WorldState, game_data: GameData,
     to — `heal_stock_target(HEAL_STOCK_FLOOR)`, its default/only call-site value.
 
     The target is an AGGREGATE (`heal_stock` sums across ALL heal codes), so it
-    is charged to the BEST held heal code ONLY; every other heal code keeps 0.
-    Returning the target for each heal code would keep N × target — over-
-    protection in the exact place this epic frees slots. Surplus (and every
-    weaker heal code) becomes bankable — never sold or deleted, because
-    HEALING_CONSUMABLE feeds `in_bag` only."""
-    stats = game_data.item_stats(code)
-    if stats is None or stats.hp_restore <= 0:
-        return 0
-    if code != _best_heal_code(state, game_data):
-        return 0
-    return heal_stock_target(HEAL_STOCK_FLOOR)
+    is FILLED GREEDILY across the held heal codes, strongest first, until the
+    aggregate is met; `code`'s share is what the fill assigns it. Two failure
+    modes are avoided at once:
+
+      * charging the whole target to EVERY heal code keeps N x target — over-
+        protection in the exact place this epic frees slots;
+      * charging the whole target to ONE code UNDER-fills when that code is
+        short (3 cooked_chicken held against a target of 5 keeps 3 and leaves
+        every apple bankable — after DepositAll the real `heal_stock` is 3,
+        below target, so `MaintainConsumables` re-fires and crafts more: churn).
+
+    Surplus beyond the aggregate stays bankable — never sold or deleted,
+    because HEALING_CONSUMABLE feeds `in_bag` only."""
+    remaining = heal_stock_target(HEAL_STOCK_FLOOR)
+    for held_code, qty, _restore in _held_heals(state, game_data):
+        if remaining <= 0:
+            break
+        share = min(qty, remaining)
+        if held_code == code:
+            return share
+        remaining -= share
+    return 0
 
 
 def _combat_weapon(code: str, state: WorldState, game_data: GameData,
@@ -178,20 +192,26 @@ def _committed_recipe(code: str, state: WorldState, game_data: GameData,
     (`copper_ore` under `copper_bar` under `copper_axe`), so DepositAll would
     bank the task's own sub-material and PursueTask would freeze; and an
     unscaled lookup returns one axe's worth of bars when the task wants five.
-    The two roots combine by `max` (not `sum`) so a task item that is also the
-    crafting target is not double-counted."""
+
+    The roots are collected into a per-root demand MAP and their chain walks
+    ADD, because DISJOINT roots want disjoint copies: an in-flight
+    `copper_dagger` (8 copper_ore) alongside an items-task for `copper_axe`
+    (36 copper_ore) needs 44 ore, and a `max` would keep only 36 — the
+    8-ore shortfall gets banked and must be withdrawn straight back (churn).
+    The map is what stops the double-count `max` was there to prevent: when the
+    task item IS the crafting target it is ONE root, counted once, at the larger
+    of the two quantities."""
     recipes = game_data.crafting_recipes
     fuel = len(recipes) + 1
-    demand = 0
+    root_qty: dict[str, int] = {}
     if state.crafting_target:
-        demand = max(demand, _task_chain_demand_pure(
-            fuel, code, state.crafting_target, 1, recipes, {}))
+        root_qty[state.crafting_target] = 1
     if state.task_type == "items" and state.task_code:
         remaining = max(0, state.task_total - state.task_progress)
         if remaining > 0:
-            demand = max(demand, _task_chain_demand_pure(
-                fuel, code, state.task_code, remaining, recipes, {}))
-    return demand
+            root_qty[state.task_code] = max(root_qty.get(state.task_code, 0), remaining)
+    return sum(_task_chain_demand_pure(fuel, code, root, qty, recipes, {})
+               for root, qty in root_qty.items())
 
 
 def _goal_materials(code: str, state: WorldState, game_data: GameData,

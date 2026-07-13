@@ -26,7 +26,11 @@ def _gd() -> GameData:
     """Two-level recipe chain, deliberately: `copper_axe <- 6 copper_bar` and
     `copper_bar <- 6 copper_ore`. A depth-1 fixture cannot see the difference
     between a DIRECT and a TRANSITIVE COMMITTED_RECIPE demand — that blind spot
-    hid a bug where the task's own deep sub-material was bankable."""
+    hid a bug where the task's own deep sub-material was bankable.
+
+    `copper_dagger <- 8 copper_ore` is a SECOND, DISJOINT root over the same
+    leaf material: one root alone cannot see the difference between combining
+    the two committed roots with `max` and with `sum`."""
     gd = GameData()
     gd._item_stats = {
         "copper_axe": ItemStats(code="copper_axe", level=1, type_="weapon",
@@ -44,6 +48,7 @@ def _gd() -> GameData:
     gd._crafting_recipes = {
         "copper_axe": {"copper_bar": 6},
         "copper_bar": {"copper_ore": 6},
+        "copper_dagger": {"copper_ore": 8},
     }
     gd._workshop_locations = {"weaponcrafting": (3, 1), "mining": (1, 5)}
     return gd
@@ -292,6 +297,100 @@ def test_working_kit_is_bag_only_when_it_is_the_sole_reason():
     assert reason_quantity(KeepReason.WORKING_KIT, "copper_axe", state, gd, ctx) == 1
     assert keep_owned("copper_axe", state, gd, ctx) == 0
     assert destroyable("copper_axe", state, gd, ctx) == 18
+
+
+def test_committed_recipe_ADDS_the_demand_of_two_disjoint_roots():
+    """The two committed roots are DIFFERENT items, so their material demands
+    ADD. `copper_dagger` (in-flight craft, 8 copper_ore) and an items-task for
+    `copper_axe` (36 copper_ore) together need 44 ore. Combining by `max` keeps
+    only 36: the 8-ore shortfall is banked by DepositAll and must be withdrawn
+    straight back — deposit/withdraw churn.
+
+    Both roots are exercised in both directions (the deeper root is not always
+    the larger contributor) via `copper_bar`, which only the axe root wants."""
+    gd = _gd()
+    state = make_state(level=10, inventory={"copper_ore": 60},
+                       crafting_target="copper_dagger",
+                       task_code="copper_axe", task_type="items",
+                       task_total=1, task_progress=0)
+    ctx = _ctx()
+    assert reason_quantity(KeepReason.COMMITTED_RECIPE, "copper_ore",
+                           state, gd, ctx) == 44
+    assert keep_in_bag("copper_ore", state, gd, ctx) == 44
+    assert bankable("copper_ore", state, gd, ctx) == 16
+    # The axe root alone wants bars; the dagger root contributes nothing there.
+    assert reason_quantity(KeepReason.COMMITTED_RECIPE, "copper_bar",
+                           state, gd, ctx) == 6
+
+
+def test_committed_recipe_counts_a_shared_root_ONCE_not_twice():
+    """The guard `max` was there for: when the in-flight craft IS the task item,
+    the two roots are ONE root. It is counted once, at the larger quantity — a
+    5-axe task with an axe in flight wants 180 ore, not 180 + 36."""
+    gd = _gd()
+    state = make_state(level=10, inventory={"copper_ore": 300},
+                       crafting_target="copper_axe",
+                       task_code="copper_axe", task_type="items",
+                       task_total=5, task_progress=0)
+    ctx = _ctx()
+    assert reason_quantity(KeepReason.COMMITTED_RECIPE, "copper_ore",
+                           state, gd, ctx) == 180
+    assert reason_quantity(KeepReason.COMMITTED_RECIPE, "copper_bar",
+                           state, gd, ctx) == 30
+
+    # ...and the shared root never DROPS below the in-flight craft's own unit:
+    # a fully-delivered task contributes no root at all, the craft still does.
+    spent = make_state(level=10, inventory={"copper_ore": 300},
+                       crafting_target="copper_axe",
+                       task_code="copper_axe", task_type="items",
+                       task_total=5, task_progress=5)
+    assert reason_quantity(KeepReason.COMMITTED_RECIPE, "copper_ore",
+                           spent, gd, ctx) == 36
+
+
+def test_healing_target_is_GREEDILY_FILLED_across_held_heals():
+    """The aggregate target (5) may not be charged to one code that cannot
+    carry it. cooked_chicken x3 (the stronger heal) + apple x10: charging all 5
+    to the chicken keeps 3 real copies and leaves all 10 apples bankable — after
+    DepositAll the actual `heal_stock` is 3, BELOW the target, so
+    `MaintainConsumables` re-fires and crafts more. Churn.
+
+    Greedy fill, strongest first: chicken keeps its 3, apple keeps the missing
+    2, and the AGGREGATE kept is exactly the target."""
+    gd = _gd()
+    state = make_state(level=10, inventory={"cooked_chicken": 3, "apple": 10})
+    ctx = _ctx()
+    chicken = reason_quantity(KeepReason.HEALING_CONSUMABLE, "cooked_chicken",
+                              state, gd, ctx)
+    apple = reason_quantity(KeepReason.HEALING_CONSUMABLE, "apple", state, gd, ctx)
+    assert chicken == 3
+    assert apple == 2
+    assert chicken + apple == 5  # == heal_stock_target(HEAL_STOCK_FLOOR)
+    assert bankable("cooked_chicken", state, gd, ctx) == 0
+    assert bankable("apple", state, gd, ctx) == 8
+
+
+def test_healing_fill_stops_at_the_target_and_never_over_keeps():
+    """The fill is a CAP, not a floor: once the target is met the weaker heals
+    keep 0, and a heal code that is not held at all keeps 0 (no phantom fill).
+    Held heals short of the target keep everything they have — the fill never
+    invents copies."""
+    gd = _gd()
+    # Target met by the strongest alone -> the weaker heal keeps nothing.
+    met = make_state(level=10, inventory={"cooked_chicken": 5, "apple": 10})
+    ctx = _ctx()
+    assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "cooked_chicken",
+                           met, gd, ctx) == 5
+    assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "apple", met, gd, ctx) == 0
+
+    # Whole stock short of the target -> every held copy is kept, none invented.
+    short = make_state(level=10, inventory={"cooked_chicken": 1, "apple": 2})
+    assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "cooked_chicken",
+                           short, gd, ctx) == 1
+    assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "apple", short, gd, ctx) == 2
+    # A heal code that is not held keeps 0 rather than reserving a share.
+    assert reason_quantity(KeepReason.HEALING_CONSUMABLE, "cooked_chicken",
+                           make_state(level=10, inventory={"apple": 9}), gd, ctx) == 0
 
 
 def test_gear_demand_is_owned_only_when_it_is_the_sole_reason():
