@@ -82,6 +82,14 @@ class SelectionContext:
     # profile info → consumers fall back to the legacy blanket equippable keep,
     # so a freshly-started bot with no recorded profiles never strips its gear.
     gear_keep: dict[str, int] = field(default_factory=dict)
+    # Active objective-step goal's material profile {code: needed_qty} — the
+    # GOAL_MATERIALS keep reason (`ai/inventory_keep.py`) reads it so the
+    # materials the current step is accumulating are never banked out from
+    # under it. Empty (the default) means "no active step profile"; the player
+    # populates it per cycle. A DEFAULT is mandatory: ~26 formal/diff helpers
+    # construct SelectionContext positionally-by-keyword and a required field
+    # would break every one of them.
+    step_profile: dict[str, int] = field(default_factory=dict)
 
 
 def protected_gear_codes(ctx: SelectionContext) -> frozenset[str]:
