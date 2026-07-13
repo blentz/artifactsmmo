@@ -40,7 +40,12 @@ from artifactsmmo_cli.ai.inventory_caps import (
     _task_chain_demand_pure,
     useful_quantity_cap,
 )
-from artifactsmmo_cli.ai.kit_selection import best_fighting_weapon, best_gathering_tools
+from artifactsmmo_cli.ai.kit_selection import (
+    best_fighting_weapon,
+    best_gathering_tools,
+    best_owned_fighting_weapon,
+    best_owned_gathering_tools,
+)
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
@@ -86,6 +91,8 @@ surplus potion un-destroyable forever."""
 OWNED_REASONS: frozenset[KeepReason] = frozenset({
     KeepReason.CURRENCY,
     KeepReason.ACTIVE_TASK,
+    KeepReason.COMBAT_WEAPON,
+    KeepReason.WORKING_KIT,
     KeepReason.EQUIPPED,
     KeepReason.GEAR_DEMAND,
     KeepReason.RECIPE_DEMAND,
@@ -95,7 +102,15 @@ Destroying (recycle/sell/discard) is NOT reversible, so this ladder is
 narrower: only genuine future demand, not "might be handy in the bag".
 Membership is load-bearing and pinned by test: an owned-only reason leaking
 into `IN_BAG_REASONS` would pin bank-worthy gear demand into the bag and eat
-the slots this epic exists to free."""
+the slots this epic exists to free.
+
+WORKING_KIT and COMBAT_WEAPON are in BOTH ladders (quantity 1 in each): "keep
+ONE in the bag" (the copy the gather re-arm equips) and "never melt your LAST
+one" are DIFFERENT obligations, and the second is an OWNERSHIP invariant. Filed
+bag-only they left a DESTRUCTION hole: the tool the deposit migration leaves at
+0-in-bag/17-in-bank has no bag copy to protect, so `keep_owned` was 0 and a
+consumer reading `destroyable` (the bank drain) would melt every copy of the
+character's best axe — strictly worse than the hoard bug this module fixes."""
 
 
 def _currency(code: str, state: WorldState, game_data: GameData,
@@ -169,12 +184,27 @@ def _healing_consumable(code: str, state: WorldState, game_data: GameData,
 
 def _combat_weapon(code: str, state: WorldState, game_data: GameData,
                    ctx: SelectionContext) -> int:
-    return 1 if code == best_fighting_weapon(state, game_data) else 0
+    """ONE copy of the best fighting weapon — the one being swung (bag-scoped)
+    and the best one OWNED (bank-scoped). Both, because this reason feeds BOTH
+    caps: the working copy must not be BANKED, and the last owned copy must not
+    be DESTROYED (see `_working_kit`)."""
+    return 1 if (code == best_fighting_weapon(state, game_data)
+                 or code == best_owned_fighting_weapon(state, game_data)) else 0
 
 
 def _working_kit(code: str, state: WorldState, game_data: GameData,
                  ctx: SelectionContext) -> int:
-    return 1 if code in best_gathering_tools(state, game_data) else 0
+    """ONE copy of the best gathering tool per skill.
+
+    Ranged over BOTH scopes (`kit_selection`): what is to HAND (bag + equipped),
+    whose copy the bag cap pins so the gather re-arm has a tool to equip; and
+    what is OWNED (bag + bank + equipped), whose copy the ownership cap refuses
+    to destroy. The bank scope is load-bearing for the OWNED cap: once the one
+    bag copy is spent or equipped the tool sits ENTIRELY in the bank, invisible
+    to the bag-scoped selector — and a `destroyable` computed from a 0 cap would
+    melt all 18 copies of the character's only axe."""
+    return 1 if (code in best_gathering_tools(state, game_data)
+                 or code in best_owned_gathering_tools(state, game_data)) else 0
 
 
 def _committed_recipe(code: str, state: WorldState, game_data: GameData,

@@ -293,40 +293,154 @@ def test_reason_cap_sets_are_exactly_the_registry():
     """The two cap sets are load-bearing, so pin them DIRECTLY. Every `max()`
     over a cap set can mask a mis-filed reason behind a larger sibling, which
     is how a mis-filed WORKING_KIT / GEAR_DEMAND survived the behavioural
-    tests alone."""
+    tests alone.
+
+    WORKING_KIT and COMBAT_WEAPON are in BOTH ladders: "keep ONE in the bag"
+    (the copy the gather re-arm equips) and "never melt your LAST one" are two
+    different obligations, and the second is an OWNERSHIP invariant."""
     assert frozenset({
         KeepReason.CURRENCY, KeepReason.ACTIVE_TASK, KeepReason.HEALING_CONSUMABLE,
         KeepReason.COMBAT_WEAPON, KeepReason.WORKING_KIT, KeepReason.COMMITTED_RECIPE,
         KeepReason.GOAL_MATERIALS,
     }) == IN_BAG_REASONS
     assert frozenset({
-        KeepReason.CURRENCY, KeepReason.ACTIVE_TASK, KeepReason.EQUIPPED,
-        KeepReason.GEAR_DEMAND, KeepReason.RECIPE_DEMAND,
+        KeepReason.CURRENCY, KeepReason.ACTIVE_TASK, KeepReason.COMBAT_WEAPON,
+        KeepReason.WORKING_KIT, KeepReason.EQUIPPED, KeepReason.GEAR_DEMAND,
+        KeepReason.RECIPE_DEMAND,
     }) == OWNED_REASONS
     assert frozenset(KeepReason) == IN_BAG_REASONS | OWNED_REASONS
-    # The bag-only reasons must never gate DESTRUCTION...
-    for bag_only in (KeepReason.HEALING_CONSUMABLE, KeepReason.COMBAT_WEAPON,
-                     KeepReason.WORKING_KIT, KeepReason.COMMITTED_RECIPE,
+    # The bag-only reasons must never gate DESTRUCTION: a surplus potion or a
+    # gather goal's material pile is BANKABLE, never disposable.
+    for bag_only in (KeepReason.HEALING_CONSUMABLE, KeepReason.COMMITTED_RECIPE,
                      KeepReason.GOAL_MATERIALS):
         assert bag_only not in OWNED_REASONS
     # ...and the ownership-only reasons must never pin BAG slots.
     for owned_only in (KeepReason.EQUIPPED, KeepReason.GEAR_DEMAND,
                        KeepReason.RECIPE_DEMAND):
         assert owned_only not in IN_BAG_REASONS
+    # The kit reasons are the ONLY ones in both ladders — keep ONE in the bag
+    # AND at least one owned.
+    assert frozenset({
+        KeepReason.CURRENCY, KeepReason.ACTIVE_TASK,
+        KeepReason.COMBAT_WEAPON, KeepReason.WORKING_KIT,
+    }) == IN_BAG_REASONS & OWNED_REASONS
 
 
-def test_working_kit_is_bag_only_when_it_is_the_sole_reason():
+def test_working_kit_is_the_sole_reason_in_BOTH_caps():
     """Behavioural half of the cap-set pin, with NOTHING to hide behind: a
-    non-empty `gear_keep` that omits the axe drives every OWNED reason to 0, so
-    all 18 axes are destroyable. If WORKING_KIT were (also) an OWNED reason,
-    keep_owned would be 1 and only 17 would be destroyable."""
+    non-empty `gear_keep` that omits the axe suppresses `EQUIPPABLE_KEEP` in
+    RECIPE_DEMAND, so WORKING_KIT is the ONLY non-zero reason for the axe. It
+    must carry BOTH caps: keep 1 in the bag (17 of 18 bank) AND keep 1 owned
+    (17 of 18 destroyable — never the last tool).
+
+    If WORKING_KIT were filed IN_BAG-only, keep_owned would be 0 and all 18
+    would be destroyable; if it were filed OWNED-only, keep_in_bag would be 0
+    and DepositAll would bank the working tool."""
     gd = _gd()
     state = make_state(level=10, skills={"weaponcrafting": 2},
                        inventory={"copper_axe": 18})
     ctx = _ctx(gear_keep={"copper_bar": 1})
+    live = {r for r in KeepReason
+            if reason_quantity(r, "copper_axe", state, gd, ctx) > 0}
+    assert live == {KeepReason.WORKING_KIT}
     assert reason_quantity(KeepReason.WORKING_KIT, "copper_axe", state, gd, ctx) == 1
-    assert keep_owned("copper_axe", state, gd, ctx) == 0
-    assert destroyable("copper_axe", state, gd, ctx) == 18
+    assert keep_in_bag("copper_axe", state, gd, ctx) == 1
+    assert bankable("copper_axe", state, gd, ctx) == 17
+    assert keep_owned("copper_axe", state, gd, ctx) == 1
+    assert destroyable("copper_axe", state, gd, ctx) == 17
+
+
+def test_combat_weapon_is_the_sole_reason_in_BOTH_caps():
+    """The COMBAT_WEAPON half of the same pin: the best fighting weapon is the
+    only live reason (gear_keep omits it), and it carries both caps — one stays
+    in the bag, and at least one stays OWNED."""
+    gd = _gd()
+    state = make_state(level=10, inventory={"copper_dagger": 18})
+    ctx = _ctx(gear_keep={"copper_bar": 1})
+    live = {r for r in KeepReason
+            if reason_quantity(r, "copper_dagger", state, gd, ctx) > 0}
+    assert live == {KeepReason.COMBAT_WEAPON}
+    assert keep_in_bag("copper_dagger", state, gd, ctx) == 1
+    assert bankable("copper_dagger", state, gd, ctx) == 17
+    assert keep_owned("copper_dagger", state, gd, ctx) == 1
+    assert destroyable("copper_dagger", state, gd, ctx) == 17
+
+
+def test_banked_working_tool_is_never_the_last_one_destroyed():
+    """THE DESTRUCTION HOLE. The state DepositAll now produces (1 axe kept in
+    the bag, 17 banked) and then the bag copy is spent/equipped, leaving the
+    character's ONLY woodcutting tool sitting entirely in the BANK.
+
+    `keep_in_bag` protects nothing there (there is nothing in the bag to
+    protect), so if WORKING_KIT answered only the BAG cap, `keep_owned` would be
+    0 and a destructive consumer reading `destroyable` (the bank-drain path)
+    would melt ALL 18 copies of the best tool the character owns. Zero tools
+    left — strictly worse than the hoard bug this authority exists to fix.
+
+    "Never destroy your last working tool" is an OWNERSHIP invariant: the kit
+    selectors range over what is OWNED (bag + bank + equipped), so one copy
+    survives wherever it is held."""
+    gd = _gd()
+    state = make_state(level=10, skills={"weaponcrafting": 2},
+                       inventory={}, bank_items={"copper_axe": 18})
+    ctx = _ctx(gear_keep={"copper_bar": 1})
+    assert reason_quantity(KeepReason.WORKING_KIT, "copper_axe", state, gd, ctx) == 1
+    assert keep_owned("copper_axe", state, gd, ctx) == 1
+    assert destroyable("copper_axe", state, gd, ctx) == 17
+    # The bag cap is inert on a code with no bag copies — nothing to hoard.
+    assert bankable("copper_axe", state, gd, ctx) == 0
+
+
+def test_banked_combat_weapon_is_never_the_last_one_destroyed():
+    """The COMBAT_WEAPON half of the destruction hole: the best fighting weapon
+    held entirely in the bank keeps ONE owned, so 17 of 18 are destroyable."""
+    gd = _gd()
+    state = make_state(level=10, inventory={}, bank_items={"copper_dagger": 18})
+    ctx = _ctx(gear_keep={"copper_bar": 1})
+    assert reason_quantity(KeepReason.COMBAT_WEAPON, "copper_dagger",
+                           state, gd, ctx) == 1
+    assert keep_owned("copper_dagger", state, gd, ctx) == 1
+    assert destroyable("copper_dagger", state, gd, ctx) == 17
+
+
+def test_working_tool_split_across_bag_and_bank_keeps_the_bag_copy():
+    """The exact DepositAll-produced state, before the bag copy is spent: 1 axe
+    in the bag, 17 in the bank. The bag copy is the one the gather re-arm
+    equips, so it is NOT bankable — and it must not be melted either: the
+    ownership cap keeps ONE of the 18, so 17 (the banked ones) are destroyable,
+    not 18.
+
+    `recycle_surplus` takes `min(bankable, destroyable)` and so was already safe
+    here; a consumer reading `destroyable` alone (bank drain) was not."""
+    gd = _gd()
+    state = make_state(level=10, skills={"weaponcrafting": 2},
+                       inventory={"copper_axe": 1}, bank_items={"copper_axe": 17})
+    ctx = _ctx(gear_keep={"copper_bar": 1})
+    assert keep_in_bag("copper_axe", state, gd, ctx) == 1
+    assert bankable("copper_axe", state, gd, ctx) == 0
+    assert keep_owned("copper_axe", state, gd, ctx) == 1
+    assert destroyable("copper_axe", state, gd, ctx) == 17
+
+
+def test_a_better_banked_tool_never_unprotects_the_one_in_the_bag():
+    """The ownership-scoped kit arm is ADDITIVE, never a displacement: with a
+    strictly better axe in the BANK, the bag copy is still the tool the
+    character is WORKING with, so it keeps its bag slot (bankable 0) — the bag
+    cap never regressed — while the banked better axe is the one ownership
+    protects from the melt."""
+    gd = _gd()
+    gd._item_stats["iron_axe"] = ItemStats(
+        code="iron_axe", level=1, type_="weapon", subtype="tool",
+        skill_effects={"woodcutting": -20}, crafting_skill="weaponcrafting",
+        crafting_level=1)
+    state = make_state(level=10, skills={"weaponcrafting": 2},
+                       inventory={"copper_axe": 1}, bank_items={"iron_axe": 4})
+    ctx = _ctx(gear_keep={"copper_bar": 1})
+    assert reason_quantity(KeepReason.WORKING_KIT, "copper_axe", state, gd, ctx) == 1
+    assert keep_in_bag("copper_axe", state, gd, ctx) == 1
+    assert bankable("copper_axe", state, gd, ctx) == 0
+    assert reason_quantity(KeepReason.WORKING_KIT, "iron_axe", state, gd, ctx) == 1
+    assert destroyable("iron_axe", state, gd, ctx) == 3
 
 
 def test_committed_recipe_ADDS_the_demand_of_two_disjoint_roots():

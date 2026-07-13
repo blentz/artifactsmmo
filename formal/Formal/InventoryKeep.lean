@@ -14,11 +14,16 @@ BiS `target_gear | target_tools` blanket; ...). The replacement gives every
 protection reason a QUANTITY, and the two caps are the MAX over their reasons:
 
 * `keep_in_bag`  — copies that must stay in the BAG (banking is REVERSIBLE),
-  max over `IN_BAG_REASONS`;
+  max over `IN_BAG_REASONS` (7 reasons);
 * `keep_owned`   — copies that must remain OWNED, bag+bank (destroying is NOT),
-  max over `OWNED_REASONS`;
+  max over `OWNED_REASONS` (7 reasons);
 * `bankable   = bag        - keep_in_bag`
 * `destroyable = (bag+bank) - keep_owned`.
+
+`WORKING_KIT` and `COMBAT_WEAPON` feed BOTH registries (quantity 1 in each):
+"keep ONE in the bag" (the copy the gather re-arm equips) and "never melt your
+LAST one" are different obligations, and the second is an OWNERSHIP invariant —
+`last_tool_never_melted` below is the row that hole showed up in.
 
 ## What is modelled, and what is deliberately OPAQUE
 
@@ -244,21 +249,36 @@ theorem surplus_is_disposable_nonvacuous :
 /-- The `blanket_requires_keep_ge_held` hypothesis is SATISFIABLE, and the ONLY
 legal witness is a genuine total: `CURRENCY` returns `KEEP_ALL`, so nothing of
 the 40 `tasks_coin` held is destroyable — and the theorem confirms the cap
-really does cover every held copy. -/
+really does cover every held copy. (OWNED vector, in registry order: currency,
+active_task, combat_weapon, working_kit, equipped, gear_demand, recipe_demand.) -/
 theorem currency_blanket_is_the_only_legal_blanket :
-    destroyable 40 0 [keepAll, 0, 0, 0, 0] = 0
-      ∧ keepOwned [keepAll, 0, 0, 0, 0] ≥ 40 + 0 := by
+    destroyable 40 0 [keepAll, 0, 0, 0, 0, 0, 0] = 0
+      ∧ keepOwned [keepAll, 0, 0, 0, 0, 0, 0] ≥ 40 + 0 := by
   refine ⟨by decide, ?_⟩
-  exact owned_blanket_requires_keep_ge_owned 40 0 [keepAll, 0, 0, 0, 0] (by decide)
+  exact owned_blanket_requires_keep_ge_owned 40 0 [keepAll, 0, 0, 0, 0, 0, 0] (by decide)
 
 /-- The `destroyable_counts_bank_copies` inequality is STRICT in the live case:
-1 in the bag, 5 in the bank, a gear demand of 2 ⇒ 4 destroyable. A bag-only
-accounting would report 0 and hoard the 5 banked copies forever. -/
+1 axe in the bag, 5 in the bank, a gear demand of 2 (and the kit/recipe reasons
+asking 1 each) ⇒ 4 destroyable. A bag-only accounting would report 0 and hoard
+the 5 banked copies forever. -/
 theorem destroyable_bank_copies_nonvacuous :
-    destroyable 1 5 [0, 0, 0, 2, 1] = 4 ∧ destroyable 1 0 [0, 0, 0, 2, 1] = 0 := by
+    destroyable 1 5 [0, 0, 0, 1, 0, 2, 1] = 4 ∧ destroyable 1 0 [0, 0, 0, 1, 0, 2, 1] = 0 := by
   constructor
   · decide
   · decide
+
+/-- **The last-tool melt, refuted.** The DESTRUCTION dual of the axe hoard: once
+the one bag copy of the best woodcutting tool is spent or equipped, all 18 copies
+sit in the BANK. With `WORKING_KIT` filed under the BAG cap ONLY, every owned
+reason contributes 0 (an un-profiled tool has `EQUIPPABLE_KEEP` suppressed), so
+`keepOwned = 0` and the bank drain is licensed to destroy ALL 18 — zero tools
+left. `WORKING_KIT`/`COMBAT_WEAPON` also feed the OWNED registry (contribution 1,
+4th slot), so 17 are destroyable and the last one is not. -/
+theorem last_tool_never_melted :
+    keepOwned [0, 0, 0, 1, 0, 0, 0] = 1
+      ∧ destroyable 0 18 [0, 0, 0, 1, 0, 0, 0] = 17
+      ∧ destroyable 0 18 [0, 0, 0, 0, 0, 0, 0] = 18 := by
+  refine ⟨by decide, by decide, by decide⟩
 
 /-- The healing-stock row: an aggregate target of 5 greedily filled across the
 held heals (chicken 3 + apple 2) keeps 3 of the 3 chickens and 2 of the 10

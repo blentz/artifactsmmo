@@ -5,7 +5,7 @@
 > Census drives the REAL `StrategyArbiter.select` seam over the committed bundle. The cell grid is DERIVED from the `KeepReason` registry (`inventory_grid`) — nothing here is hand-picked.
 
 
-56 cells; PASS 52 (93%); gaps: keep_all_sentinel 0, venue_unreachable 0, bank_full 0, no_route_available 1, inventory_bug 3
+66 cells; PASS 62 (94%); gaps: keep_all_sentinel 0, venue_unreachable 0, bank_full 0, no_route_available 1, inventory_bug 3
 
 Legend: KA=keep_all_sentinel, VU=venue_unreachable, BF=bank_full, NR=no_route_available, IB=inventory_bug.
 
@@ -13,8 +13,8 @@ Legend: KA=keep_all_sentinel, VU=venue_unreachable, BF=bank_full, NR=no_route_av
 |---|---|---|---|
 | active_task | liveness | golden_egg | in_bag/qty_full PASS · in_bag/slot_full PASS · owned/qty_full PASS · owned/slot_full IB |
 | active_task | safety | golden_egg | in_bag/below_threshold PASS · in_bag/qty_full PASS · in_bag/slot_full PASS · owned/below_threshold PASS · owned/qty_full PASS · owned/slot_full PASS |
-| combat_weapon | liveness | copper_dagger | in_bag/qty_full PASS · in_bag/slot_full PASS |
-| combat_weapon | safety | copper_dagger | in_bag/below_threshold PASS · in_bag/qty_full PASS · in_bag/slot_full PASS |
+| combat_weapon | liveness | copper_dagger | in_bag/qty_full PASS · in_bag/slot_full PASS · owned/qty_full PASS · owned/slot_full PASS |
+| combat_weapon | safety | copper_dagger | in_bag/below_threshold PASS · in_bag/qty_full PASS · in_bag/slot_full PASS · owned/below_threshold PASS · owned/qty_full PASS · owned/slot_full PASS |
 | committed_recipe | liveness | copper_bar | in_bag/qty_full PASS · in_bag/slot_full PASS |
 | committed_recipe | safety | copper_bar | in_bag/below_threshold PASS · in_bag/qty_full PASS · in_bag/slot_full PASS |
 | currency | safety | tasks_coin | in_bag/below_threshold PASS · in_bag/qty_full PASS · in_bag/slot_full PASS · owned/below_threshold PASS · owned/qty_full PASS · owned/slot_full PASS |
@@ -28,8 +28,8 @@ Legend: KA=keep_all_sentinel, VU=venue_unreachable, BF=bank_full, NR=no_route_av
 | healing_consumable | safety | cooked_chicken | in_bag/below_threshold PASS · in_bag/qty_full PASS · in_bag/slot_full PASS |
 | recipe_demand | liveness | copper_bar | owned/qty_full PASS · owned/slot_full NR |
 | recipe_demand | safety | copper_bar | owned/below_threshold PASS · owned/qty_full PASS · owned/slot_full PASS |
-| working_kit | liveness | copper_axe | in_bag/qty_full PASS · in_bag/slot_full PASS |
-| working_kit | safety | copper_axe | in_bag/below_threshold PASS · in_bag/qty_full PASS · in_bag/slot_full PASS |
+| working_kit | liveness | copper_axe | in_bag/qty_full PASS · in_bag/slot_full PASS · owned/qty_full PASS · owned/slot_full PASS |
+| working_kit | safety | copper_axe | in_bag/below_threshold PASS · in_bag/qty_full PASS · in_bag/slot_full PASS · owned/below_threshold PASS · owned/qty_full PASS · owned/slot_full PASS |
 
 ## Reason coverage (Gate 2 — anti-rot)
 

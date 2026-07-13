@@ -2743,10 +2743,38 @@ INVENTORY_KEEP_MUTATIONS = [
     # WORKING_KIT returns the WHOLE held stack instead of 1 -- the axe bug,
     # verbatim. Killed by test_working_kit_keeps_ONE_in_bag_not_the_hoard
     # (reason_quantity == 1, bankable == 17 of 18).
+    # (Re-anchored 2026-07-13: the reason now unions the bag-scoped selector with
+    # the OWNERSHIP-scoped one, so the return line moved.)
     ("inventory_keep: WORKING_KIT keeps ALL copies (the blanket bug)",
-     "    return 1 if code in best_gathering_tools(state, game_data) else 0",
+     "    return 1 if (code in best_gathering_tools(state, game_data)\n"
+     "                 or code in best_owned_gathering_tools(state, game_data)) else 0",
      "    return (state.inventory.get(code, 0)\n"
      "            if code in best_gathering_tools(state, game_data) else 0)"),
+    # WORKING_KIT stops seeing the copies held in the BANK -- the DESTRUCTION
+    # hole: a tool whose last bag copy was spent/equipped sits entirely in the
+    # bank, keep_owned collapses to 0 and the drain melts every copy. Killed by
+    # test_banked_working_tool_is_never_the_last_one_destroyed (keep_owned == 1,
+    # 17 of 18 destroyable -- not 18).
+    ("inventory_keep: WORKING_KIT is blind to banked copies (last-tool melt)",
+     "    return 1 if (code in best_gathering_tools(state, game_data)\n"
+     "                 or code in best_owned_gathering_tools(state, game_data)) else 0",
+     "    return 1 if code in best_gathering_tools(state, game_data) else 0"),
+    # COMBAT_WEAPON is blind to banked copies -- same hole, the weapon half.
+    # Killed by test_banked_combat_weapon_is_never_the_last_one_destroyed.
+    ("inventory_keep: COMBAT_WEAPON is blind to banked copies (last-weapon melt)",
+     "    return 1 if (code == best_fighting_weapon(state, game_data)\n"
+     "                 or code == best_owned_fighting_weapon(state, game_data)) else 0",
+     "    return 1 if code == best_fighting_weapon(state, game_data) else 0"),
+    # The kit reasons are FILED OUT of the OWNED ladder (the pre-fix split): a
+    # working tool / combat weapon becomes fully destroyable the moment no other
+    # reason covers it. Killed by test_reason_cap_sets_are_exactly_the_registry
+    # and by the sole-contributor pins
+    # (test_working_kit_is_the_sole_reason_in_BOTH_caps, keep_owned == 1).
+    ("inventory_keep: WORKING_KIT/COMBAT_WEAPON are not OWNED reasons",
+     "    KeepReason.COMBAT_WEAPON,\n"
+     "    KeepReason.WORKING_KIT,\n"
+     "    KeepReason.EQUIPPED,",
+     "    KeepReason.EQUIPPED,"),
     # HEALING_CONSUMABLE charges the whole held stack instead of its share of the
     # aggregate stock target -- the heal-stock blanket. Killed by
     # test_healing_consumable_caps_at_stock_target_not_the_whole_stack (5, not 40)

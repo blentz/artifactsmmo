@@ -146,25 +146,37 @@ def test_reason_coverage_total_over_keepreason() -> None:
 
 
 def test_census_full_grid_matches_the_post_deposit_migration_baseline() -> None:
-    """The baseline after Task 6 (deposit -> `bankable`): 56 cells, 52 PASS, 3
-    INVENTORY_BUG, 1 NO_ROUTE_AVAILABLE — down from the Task-5 RED baseline of 42
-    PASS / 13 INVENTORY_BUG.
+    """The baseline after Task 7b (WORKING_KIT / COMBAT_WEAPON filed under the
+    OWNED cap as well): 66 cells, 62 PASS, 3 INVENTORY_BUG, 1 NO_ROUTE_AVAILABLE
+    — down from the Task-5 RED baseline of 42 PASS / 13 INVENTORY_BUG.
 
-    The 3 residual INVENTORY_BUG cells are NOT deposit-selection bugs:
+    The grid GREW by 10 because cells are DERIVED from the cap sets: the two kit
+    reasons now feed `keep_owned` too, so each gained an owned column (3 SAFETY +
+    2 LIVENESS cells). All 10 PASS — a banked kit surplus is genuinely destroyed
+    by the production recycle route, and the last copy survives.
+
+    The 3 residual INVENTORY_BUG cells are UNCHANGED by this task and are NOT
+    deposit-selection bugs:
       * goal_materials in_bag/liveness (x2 pressure states) — the surplus IS
         offered by `select_bank_deposits`; the arbiter takes the objective-step
         Craft instead of the deposit guard, so the plan sheds nothing;
       * active_task owned/liveness/slot_full — a DESTRUCTIVE-route cell
-        (recycle/sell/delete), owned by the `destroyable` migration (Tasks 7-9).
+        (recycle/sell/delete), owned by the `destroyable` migration (Tasks 8-9).
 
     A regression here means either a consumer got migrated (should be caught by
     the owning task, not silently here) or the census stopped seeing the bug class
     it exists to catch."""
     gd = _gd()
     results = run_census(gd, inventory_grid(gd))
-    assert len(results) == 56
+    assert len(results) == 66
     passed = sum(1 for r in results if r.passed)
-    assert passed == 52
+    assert passed == 62
+    # The kit reasons' new OWNED cells all pass — the ownership cap is both SAFE
+    # (the last tool/weapon survives) and LIVE (the surplus above it is shed).
+    kit_owned = [r for r in results if r.cap == "owned"
+                 and r.reason in ("working_kit", "combat_weapon")]
+    assert len(kit_owned) == 10
+    assert all(r.passed for r in kit_owned)
     gap_counts: dict[str, int] = {}
     for r in results:
         if r.gap is not None:
