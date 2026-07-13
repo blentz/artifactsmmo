@@ -26,11 +26,23 @@ class RecycleAction(Action):
     code: str
     quantity: int = 1
     workshop_location: tuple[int, int] | None = field(default=None, repr=False)
+    bag_floor: int = field(default=0, repr=False)
+    """Bag copies of `code` that must SURVIVE this recycle (`keep_in_bag`).
+
+    The world model does not distinguish WHICH copy a recycle consumes — it just
+    decrements the count. Once bank copies are licensed as recycle SOURCES
+    (`destructive_license`), a recycle with no floor could satisfy itself by
+    eating the working tool sitting alone in the bag instead of withdrawing a
+    bank copy. The floor makes the protected bag copies UNREACHABLE, so GOAP is
+    forced to Withdraw first. Stamped at licence time, where the ctx is complete
+    — exactly as `workshop_location` is baked in. Default 0 = no floor."""
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         if self.workshop_location is None:
             return False
         if state.inventory.get(self.code, 0) < self.quantity:
+            return False
+        if state.inventory.get(self.code, 0) - self.quantity < self.bag_floor:
             return False
         recipe = game_data.crafting_recipe(self.code)
         if recipe is None:

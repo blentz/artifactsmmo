@@ -185,6 +185,34 @@ class TestRecycleAction:
         MockMove.assert_called_once_with(x=5, y=0)
         mock_recycle.assert_called_once()
 
+    def test_recycle_blocked_when_it_would_breach_the_bag_floor(self):
+        # The working copper_axe alone in the bag, 17 in the bank. bag_floor=1
+        # means the LAST BAG COPY IS UNREACHABLE -- GOAP must withdraw first.
+        action = RecycleAction(code="copper_axe", quantity=1, workshop_location=(2, 1), bag_floor=1)
+        stats = ItemStats(code="copper_axe", level=1, type_="tool",
+                          crafting_skill="gearcrafting", crafting_level=1)
+        state = make_state(inventory={"copper_axe": 1}, bank_items={"copper_axe": 17})
+        gd = make_gd(item_stats={"copper_axe": stats}, recipes={"copper_axe": {"copper": 6}})
+        assert action.is_applicable(state, gd) is False
+
+    def test_recycle_allowed_once_a_bank_copy_is_withdrawn(self):
+        # After Withdraw, the bag holds 2: recycling one still leaves the floor.
+        action = RecycleAction(code="copper_axe", quantity=1, workshop_location=(2, 1), bag_floor=1)
+        stats = ItemStats(code="copper_axe", level=1, type_="tool",
+                          crafting_skill="gearcrafting", crafting_level=1)
+        state = make_state(inventory={"copper_axe": 2}, bank_items={"copper_axe": 16})
+        gd = make_gd(item_stats={"copper_axe": stats}, recipes={"copper_axe": {"copper": 6}})
+        assert action.is_applicable(state, gd) is True
+
+    def test_recycle_bag_floor_defaults_to_zero(self):
+        # Default 0 preserves every existing call site's behavior exactly.
+        action = RecycleAction(code="copper_dagger", quantity=1, workshop_location=(5, 0))
+        stats = ItemStats(code="copper_dagger", level=1, type_="weapon", crafting_skill="weaponcrafting")
+        state = make_state(inventory={"copper_dagger": 1})
+        gd = make_gd(item_stats={"copper_dagger": stats}, recipes={"copper_dagger": {"copper_ore": 6}})
+        assert action.bag_floor == 0
+        assert action.is_applicable(state, gd) is True
+
 
 class TestNpcBuyAction:
     def test_repr(self):
