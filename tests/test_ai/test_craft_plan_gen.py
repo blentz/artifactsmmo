@@ -15,6 +15,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
+from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.craft_plan_gen import generate_next_craft_action
@@ -1011,3 +1012,217 @@ class TestDropLeafSuboptimalLoadoutRearm:
         assert result is not None
         assert [type(a).__name__ for a in result] == ["FightAction"], result
         assert result[0].monster_code == "chicken"
+
+
+# ---------------------------------------------------------------------------
+# THE RECYCLE ROUTE (recycle-as-acquisition epic, Task 8).
+#
+# The generator fires on exactly the deterministic gather-craft closure the epic
+# targets, so a generator with no Recycle leg silently OUT-RAN the A* that knew
+# about the route: it chopped ash_wood while the bag held bows whose recipe IS
+# ash_plank. Found by the recycle-source census (audit/recycle_source_
+# completeness.py), which drives the real StrategyArbiter.select seam.
+#
+# The RecycleActions handed in here stand for the LICENSED pool: production
+# filters it at `StrategyArbiter.select` (license_destructive_actions), so a
+# protected source simply HAS no RecycleAction — which is why the "unlicensed"
+# test below passes no Recycle at all rather than expecting the generator to
+# re-derive a protection rule it must never own.
+# ---------------------------------------------------------------------------
+
+def _gd_recyclable() -> GameData:
+    """copper_bar ← 10 copper_ore, and a copper_dagger (weapon) whose recipe is
+    6 copper_bar — so ONE unit recycle recovers max(1, 6 // 2) = 3 bars."""
+    gd = _gd_copper_ring()
+    gd._item_stats["copper_dagger"] = ItemStats(
+        code="copper_dagger", level=1, type_="weapon",
+        crafting_skill="weaponcrafting", crafting_level=1)
+    gd._item_stats["iron_dagger"] = ItemStats(
+        code="iron_dagger", level=10, type_="weapon",
+        crafting_skill="weaponcrafting", crafting_level=10)
+    gd._crafting_recipes["copper_dagger"] = {"copper_bar": 6}
+    gd._crafting_recipes["iron_dagger"] = {"copper_bar": 6}
+    gd._workshop_locations["weaponcrafting"] = (2, 2)
+    return gd
+
+
+def _bar_actions(*extra) -> list:
+    return [
+        GatherAction(resource_code="copper_rocks", locations=frozenset([(0, 1)])),
+        CraftAction(code="copper_bar", workshop_location=(1, 5)),
+        WithdrawItemAction(code="copper_bar", quantity=10, bank_location=(4, 0),
+                           accessible=True),
+        WithdrawItemAction(code="copper_dagger", quantity=1, bank_location=(4, 0),
+                           accessible=True),
+        *extra,
+    ]
+
+
+class TestRecycleAsASource:
+    def test_bag_surplus_is_recycled_instead_of_gathered(self):
+        """3 copper_bar needed, a spare copper_dagger in the bag: ONE recycle
+        recovers exactly 3 bars, so the plan must dismantle it rather than mine
+        30 copper_ore."""
+        gd = _gd_recyclable()
+        state = make_state(inventory={"copper_dagger": 1}, bank_items={},
+                           skills={"mining": 5, "weaponcrafting": 5})
+        goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 3})
+        actions = _bar_actions(RecycleAction(code="copper_dagger", quantity=1,
+                                             workshop_location=(2, 2)))
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        assert result is not None
+        assert [type(a).__name__ for a in result] == ["RecycleAction"], result
+        assert result[0].code == "copper_dagger"
+
+    def test_an_unlicensed_source_is_never_recycled(self):
+        """The keep authority protects the last copper_dagger, so production's
+        licence leaves NO RecycleAction in the pool. The generator must gather —
+        it may only ever take a recycle the authority already handed it."""
+        gd = _gd_recyclable()
+        state = make_state(inventory={"copper_dagger": 1}, bank_items={},
+                           skills={"mining": 5, "weaponcrafting": 5})
+        goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 3})
+
+        result = generate_next_craft_action(goal, state, gd, _bar_actions())
+
+        assert result is not None
+        assert isinstance(result[0], GatherAction)
+
+    def test_a_banked_source_is_withdrawn_then_recycled(self):
+        """The surplus lives in the bank (where DEPOSIT_FULL puts it): the plan
+        stages it itself."""
+        gd = _gd_recyclable()
+        state = make_state(inventory={}, bank_items={"copper_dagger": 2},
+                           skills={"mining": 5, "weaponcrafting": 5})
+        goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 3})
+        actions = _bar_actions(RecycleAction(code="copper_dagger", quantity=1,
+                                             workshop_location=(2, 2)))
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        assert result is not None
+        assert [type(a).__name__ for a in result] == [
+            "WithdrawItemAction", "RecycleAction"], result
+
+    def test_the_bag_floor_forces_the_withdraw(self):
+        """One copy in the bag is the WORKING one (bag_floor=1) and two sit in
+        the bank: the reachable copy is a BANK copy, so the plan withdraws rather
+        than eating the tool in hand."""
+        gd = _gd_recyclable()
+        state = make_state(inventory={"copper_dagger": 1},
+                           bank_items={"copper_dagger": 2},
+                           skills={"mining": 5, "weaponcrafting": 5})
+        goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 3})
+        actions = _bar_actions(RecycleAction(code="copper_dagger", quantity=1,
+                                             workshop_location=(2, 2),
+                                             bag_floor=1))
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        assert result is not None
+        assert [type(a).__name__ for a in result] == [
+            "WithdrawItemAction", "RecycleAction"], result
+
+    def test_a_partial_recovery_comes_out_as_ONE_mixed_plan(self):
+        """6 bars needed, one dagger recovers 3: the plan recycles for what it
+        can and GATHERS the rest — the mixed plan A* cannot find within budget."""
+        gd = _gd_recyclable()
+        state = make_state(inventory={"copper_dagger": 1}, bank_items={},
+                           skills={"mining": 5, "weaponcrafting": 5},
+                           inventory_max=200, inventory_slots_max=30)
+        goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 6})
+        actions = _bar_actions(RecycleAction(code="copper_dagger", quantity=1,
+                                             workshop_location=(2, 2)))
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        assert result is not None
+        kinds = [type(a).__name__ for a in result]
+        assert kinds[0] == "RecycleAction"
+        assert "GatherAction" in kinds and "CraftAction" in kinds, result
+
+    def test_nothing_is_recycled_when_the_material_is_already_owned(self):
+        """The demand is covered by OWNED stock (bag+bank), so the character is
+        short of nothing: destroying an item to duplicate what it already owns
+        would be pure loss. The prefix stops before it starts."""
+        gd = _gd_recyclable()
+        state = make_state(inventory={"copper_dagger": 1},
+                           bank_items={"copper_bar": 10},
+                           skills={"mining": 5, "weaponcrafting": 5})
+        goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 3})
+        actions = _bar_actions(RecycleAction(code="copper_dagger", quantity=1,
+                                             workshop_location=(2, 2)))
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        assert result is not None
+        assert not any(isinstance(a, RecycleAction) for a in result), result
+
+    def test_the_cheapest_serving_source_is_sacrificed(self):
+        """Two sources recover the same 3 bars; the LOWER-LEVEL one dies. A
+        semantic key (yield, then level, then waste) — never a name sort."""
+        gd = _gd_recyclable()
+        state = make_state(inventory={"iron_dagger": 1, "copper_dagger": 1},
+                           bank_items={},
+                           skills={"mining": 5, "weaponcrafting": 15})
+        goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 3})
+        actions = _bar_actions(
+            RecycleAction(code="iron_dagger", quantity=1,
+                          workshop_location=(2, 2)),
+            RecycleAction(code="copper_dagger", quantity=1,
+                          workshop_location=(2, 2)))
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        assert result is not None
+        assert result[0].code == "copper_dagger", result
+
+    def test_a_bank_source_with_no_withdraw_leg_falls_back_to_gathering(self):
+        """No Withdraw for the source in the menu → the recycle has no first leg,
+        so the prefix stops and the recipe descent answers alone."""
+        gd = _gd_recyclable()
+        state = make_state(inventory={}, bank_items={"copper_dagger": 2},
+                           skills={"mining": 5, "weaponcrafting": 5})
+        goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 3})
+        actions = [
+            GatherAction(resource_code="copper_rocks",
+                         locations=frozenset([(0, 1)])),
+            CraftAction(code="copper_bar", workshop_location=(1, 5)),
+            RecycleAction(code="copper_dagger", quantity=1,
+                          workshop_location=(2, 2)),
+        ]
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        assert result is not None
+        assert isinstance(result[0], GatherAction)
+
+    def test_a_source_that_serves_no_deficit_is_left_alone(self):
+        """The dagger's only output (copper_bar) is already covered by the bank,
+        so recycling it would buy the plan nothing. The menu still OFFERS it (its
+        recipe intersects the closure) — the prefix declines."""
+        gd = _gd_recyclable()
+        state = make_state(inventory={"copper_dagger": 1},
+                           bank_items={"copper_bar": 10},
+                           skills={"mining": 5, "weaponcrafting": 5,
+                                   "jewelrycrafting": 5})
+        goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
+        actions = [
+            GatherAction(resource_code="copper_rocks",
+                         locations=frozenset([(0, 1)])),
+            CraftAction(code="copper_bar", workshop_location=(1, 5)),
+            CraftAction(code="copper_ring", workshop_location=(3, 1)),
+            WithdrawItemAction(code="copper_bar", quantity=1,
+                               bank_location=(4, 0), accessible=True),
+            RecycleAction(code="copper_dagger", quantity=1,
+                          workshop_location=(2, 2)),
+        ]
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        assert result is not None
+        assert not any(isinstance(a, RecycleAction) for a in result), result
+        assert [type(a).__name__ for a in result] == [
+            "WithdrawItemAction", "CraftAction"], result

@@ -2441,6 +2441,30 @@ GATHER_REARM_MUTATIONS = [
      ""),
 ]
 
+# RECYCLE AS A SOURCE (recycle-as-acquisition epic, Task 8). The directed craft
+# generator fires on exactly the deterministic gather-craft closure the epic
+# targets, so a generator with no Recycle leg silently out-runs the A* that knows
+# about the route — the epic goes INERT for every roomy bag (found by the
+# recycle-source census). These three mutants are the load-bearing decisions:
+# take the route at all; take it only for a material the goal is SHORT of; and
+# stage a bank copy when the bag copy is unreachable (bag_floor — the working
+# tool). Killed by tests/test_ai/test_craft_plan_gen.py::TestRecycleAsASource.
+RECYCLE_SOURCE_MUTATIONS = [
+    ("craft_plan_gen: no recycle prefix (the acquisition route goes inert again)",
+     "    prefix, state_after = _recycle_prefix(needed, relevant, state, game_data)",
+     "    prefix, state_after = [], state"),
+    ("craft_plan_gen: recycle a source that serves NO deficit (destroy for nothing)",
+     "        gain = _recovered_units(recipe, deficits)\n"
+     "        if gain <= 0:\n"
+     "            continue  # recovers nothing the goal is short of",
+     "        gain = _recovered_units(recipe, deficits)\n"
+     "        if gain < 0:\n"
+     "            continue  # recovers nothing the goal is short of"),
+    ("craft_plan_gen: never stage a bank copy (Withdraw -> Recycle unplannable)",
+     "            leg = _staging_withdraw(source.code, relevant, sim, game_data)",
+     "            leg = None"),
+]
+
 # Composite-swap cooldown wait (2026-07-05 23:34 livelock): without blocking
 # out each call's cooldown the equip leg 499s, the slot sits empty half-swapped,
 # and EquipOwnedGear + the re-arm ping-pong forever. Killed by
@@ -5166,6 +5190,8 @@ def _run_all_groups() -> int:
               "tests/test_ai/test_gather_rearm.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, GATHER_REARM_MUTATIONS[:4],
               "tests/test_ai/test_gather_rearm.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, RECYCLE_SOURCE_MUTATIONS,
+              "tests/test_ai/test_craft_plan_gen.py", survivors)
     run_group(RECYCLE_SURPLUS_GOAL_SRC, RECYCLE_SNAPSHOT_MUTATIONS,
               "tests/test_ai/test_recycle_urgency.py", survivors)
     run_group(OPTIMIZE_LOADOUT_SRC, OPTIMIZE_COOLDOWN_MUTATIONS,

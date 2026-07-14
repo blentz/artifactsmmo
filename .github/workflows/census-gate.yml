@@ -3,6 +3,12 @@ name: census-gate
 # grid derived from production's own structure, and fails on an UNEXPLAINED cell.
 #
 #   craft:     can the planner plan every craftable recipe?   -> planner_bug == 0
+#   recycle:   does the planner RECYCLE to obtain a material? -> recycle_source_bug == 0
+#              LIVENESS/BANKED/PARTIAL prove the acquisition route fires (bag,
+#              bank, and a partial cover that must resolve WITHIN BUDGET — a
+#              planner TIMEOUT is classified as the bug, never as an explained
+#              gap). SAFETY is the one that matters most: it proves the last
+#              copper_axe (WORKING_KIT) is never dismantled for its copper_bar.
 #   inventory: does the planner obey the keep authority?      -> inventory_bug == 0
 #              plus REASON COVERAGE: every KeepReason (except CURRENCY, whose
 #              KEEP_ALL means nothing is ever disposable) must have a PASSing
@@ -11,13 +17,15 @@ name: census-gate
 #              disposable. It is what makes "keep ALL copies" — the type-level
 #              defect behind seven hoard bugs — unable to come back silently.
 #
-# Both gates were previously documented but never actually enforced in CI.
+# The craft + inventory gates were documented long before they were enforced
+# here; the recycle gate shipped with its epic (2026-07-14).
 on:
   pull_request:
     paths:
       - "src/**/*.py"
       - "scripts/gen_craft_completeness.py"
       - "scripts/gen_inventory_completeness.py"
+      - "scripts/gen_recycle_source_completeness.py"
       - ".github/workflows/census-gate.yml"
   push:
     branches: [main]
@@ -25,6 +33,7 @@ on:
       - "src/**/*.py"
       - "scripts/gen_craft_completeness.py"
       - "scripts/gen_inventory_completeness.py"
+      - "scripts/gen_recycle_source_completeness.py"
       - ".github/workflows/census-gate.yml"
   workflow_dispatch: {}
 
@@ -50,6 +59,9 @@ jobs:
 
       - name: inventory census — inventory_bug == 0 AND every KeepReason has a passing LIVENESS cell
         run: uv run python scripts/gen_inventory_completeness.py --check
+
+      - name: recycle-source census — recycle_source_bug == 0
+        run: uv run python scripts/gen_recycle_source_completeness.py --check
 
       - name: craft census — planner_bug == 0
         run: uv run python scripts/gen_craft_completeness.py --check
