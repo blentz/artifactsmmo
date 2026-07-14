@@ -73,6 +73,14 @@ def _build_game_data(with_workshops: bool) -> GameData:
         "boss_scale": ItemStats(code="boss_scale", level=1, type_="resource"),
         # No recipe; dropped by an easily-winnable monster -> a live DROP source.
         "slime_ball": ItemStats(code="slime_ball", level=1, type_="resource"),
+        # No recipe; dropped ONLY by an event resource whose event is
+        # inactive (no entry in `_resource_locations`) -> never a GATHER
+        # source, however its rate looks.
+        "moonpetal": ItemStats(code="moonpetal", level=1, type_="resource"),
+        # No recipe; dropped ONLY by an event monster whose event is
+        # inactive (no entry in `_monster_locations`) -> never a DROP source,
+        # however winnable its stats predict.
+        "event_shard": ItemStats(code="event_shard", level=1, type_="resource"),
     }
     gd._crafting_recipes = {
         "ash_plank": {"ash_wood": 5},
@@ -87,7 +95,8 @@ def _build_game_data(with_workshops: bool) -> GameData:
         # Same shape for the CRAFT gate's own "stats is None" branch.
         "phantom_part": {"copper_bar": 4},
     }
-    gd._resource_drops = {"ash_tree": "ash_wood"}
+    gd._resource_drops = {"ash_tree": "ash_wood", "event_flower": "moonpetal"}
+    gd._resource_locations = {"ash_tree": [(0, 1)]}  # event_flower: NO entry -> event inactive
     gd._workshop_locations = ({"woodcutting": (1, 1), "gearcrafting": (2, 1),
                                "weaponcrafting": (3, 1), "cooking": (4, 1)}
                               if with_workshops else {})
@@ -102,13 +111,16 @@ def _build_game_data(with_workshops: bool) -> GameData:
     # event-ness, not merely on a missing location.
     gd._npc_event_code["event_vendor"] = "gemstone_week"
     gd._event_npc_spawns["event_vendor"] = (2, 2)
-    gd._monster_level = {"boss": 10, "slime": 1}
-    gd._monster_hp = {"boss": 50, "slime": 10}
-    gd._monster_attack = {"boss": {"fire": 20}, "slime": {"earth": 1}}
+    gd._monster_level = {"boss": 10, "slime": 1, "event_beast": 1}
+    gd._monster_hp = {"boss": 50, "slime": 10, "event_beast": 10}
+    gd._monster_attack = {"boss": {"fire": 20}, "slime": {"earth": 1}, "event_beast": {"earth": 1}}
     gd._monster_drops = {
         "boss": [("boss_scale", 20, 1, 1)],
         "slime": [("slime_ball", 2, 1, 1)],
+        "event_beast": [("event_shard", 2, 1, 1)],
     }
+    # event_beast: NO entry in _monster_locations -> its event is inactive.
+    gd._monster_locations = {"boss": [(9, 9)], "slime": [(0, 2)]}
     fill_monster_stat_defaults(gd)
     return gd
 
@@ -308,3 +320,96 @@ def test_craft_source_yield_per_reflects_craft_yield(game_data, ctx):
              if s.kind is SourceKind.CRAFT]
     assert [s.code for s in craft] == ["ash_plank"]
     assert craft[0].yield_per == 1
+
+
+# ---------------------------------------------------------------------------
+# CRITICAL 1/2 + IMPORTANT 3: eligibility must mirror what the executor can
+# actually SERVE, not merely what is in the bank / a static drop catalog.
+# ---------------------------------------------------------------------------
+
+def test_bank_inaccessible_is_not_a_withdraw_source(game_data):
+    """`WithdrawItemAction.is_applicable` refuses unconditionally when
+    `not accessible`, and every factory.py construction site threads
+    `accessible=ctx.bank_accessible`. `bank_accessible=False` is the
+    persisted, level-gated early-game state where `state.bank_items` is
+    STILL populated (the bank sync runs unconditionally) -- without the
+    gate this is a WITHDRAW source with no action in existence to serve it."""
+    ctx = SelectionContext(bank_accessible=False, bank_required_level=10,
+                           bank_unlock_monster=None, initial_xp=0,
+                           task_exchange_min_coins=1, combat_monster=None)
+    state = make_state(bank_items={"ash_plank": 3})
+    assert not [s for s in obtain_sources("ash_plank", state, game_data, ctx)
+                if s.kind is SourceKind.WITHDRAW]
+
+
+def test_bank_accessible_withdraw_source_still_fires(game_data, ctx):
+    """Sanity companion to the gate above: with `bank_accessible=True` (the
+    fixture default) the WITHDRAW source is unaffected."""
+    state = make_state(bank_items={"ash_plank": 3})
+    assert [s.kind for s in obtain_sources("ash_plank", state, game_data, ctx)][0] \
+        is SourceKind.WITHDRAW
+
+
+def test_event_resource_with_no_live_tiles_is_not_a_gather_source(game_data, ctx):
+    """`moonpetal` is dropped only by `event_flower`, a resource with NO entry
+    in `_resource_locations` -- i.e. its event is inactive. `GatherAction` is
+    only constructed by factory.py from `all_resource_locations`, so this
+    would otherwise be a leaf with no plan."""
+    state = make_state()
+    assert not [s for s in obtain_sources("moonpetal", state, game_data, ctx)
+                if s.kind is SourceKind.GATHER]
+
+
+def test_event_monster_with_no_live_tiles_is_not_a_drop_source(game_data, ctx):
+    """`event_shard` is dropped only by `event_beast`, a winnable monster with
+    NO entry in `_monster_locations` -- i.e. its event is inactive.
+    `FightAction` is only constructed by factory.py from
+    `all_monster_locations`, so `is_winnable` alone must not be enough."""
+    state = _fighter_state()
+    assert not [s for s in obtain_sources("event_shard", state, game_data, ctx)
+                if s.kind is SourceKind.DROP]
+
+
+# ---------------------------------------------------------------------------
+# IMPORTANT 4: the priority order's TAIL. One fixture item eligible for ALL
+# SIX sources at once, pinning the full declared order in one assertion --
+# without this, a mutant swapping the `.extend()` call order for
+# gather/buy/drop inside `obtain_sources()` survives every other test.
+# ---------------------------------------------------------------------------
+
+def test_priority_order_pins_the_full_six_source_tail():
+    """A single item (`hexagem`) simultaneously eligible for WITHDRAW,
+    RECYCLE, CRAFT, GATHER, BUY and DROP -- asserts the FULL declared order."""
+    gd = GameData()
+    gd._item_stats = {
+        "hexagem": ItemStats(code="hexagem", level=1, type_="resource",
+                             crafting_skill="jewelrycrafting", crafting_level=1),
+        # Equippable surplus whose recipe consumes hexagem -> the RECYCLE source.
+        "gem_ring": ItemStats(code="gem_ring", level=1, type_="ring",
+                              crafting_skill="jewelrycrafting", crafting_level=1),
+    }
+    gd._crafting_recipes = {
+        "hexagem": {"ash_wood": 2},
+        "gem_ring": {"hexagem": 4},
+    }
+    gd._resource_drops = {"gem_vein": "hexagem"}
+    gd._resource_locations = {"gem_vein": [(9, 0)]}
+    gd._workshop_locations = {"jewelrycrafting": (1, 1)}
+    gd._npc_stock = {"bazaar": {"hexagem": 50}}
+    gd._npc_locations = {"bazaar": (2, 2)}
+    gd._monster_level = {"gem_mob": 1}
+    gd._monster_hp = {"gem_mob": 10}
+    gd._monster_attack = {"gem_mob": {"earth": 1}}
+    gd._monster_drops = {"gem_mob": [("hexagem", 5, 1, 1)]}
+    gd._monster_locations = {"gem_mob": [(8, 8)]}
+    fill_monster_stat_defaults(gd)
+
+    ctx = SelectionContext(bank_accessible=True, bank_required_level=0,
+                           bank_unlock_monster=None, initial_xp=0,
+                           task_exchange_min_coins=1, combat_monster=None)
+    state = _fighter_state(bank_items={"hexagem": 2}, inventory={"gem_ring": 7})
+    kinds = [s.kind for s in obtain_sources("hexagem", state, gd, ctx)]
+    assert kinds == [
+        SourceKind.WITHDRAW, SourceKind.RECYCLE, SourceKind.CRAFT,
+        SourceKind.GATHER, SourceKind.BUY, SourceKind.DROP,
+    ]

@@ -52,13 +52,27 @@ PLAN — the livelock shape of `3166d390`. In particular:
   UNIT-recycle yield `actions/factory` actually emits (quantity=1
   `RecycleAction`s), NOT the batch form `max(1, (mat_qty * n) // 2)`, which
   differs whenever `mat_qty == 1`.
+- WITHDRAW requires `ctx.bank_accessible` — `WithdrawItemAction.is_applicable`
+  refuses unconditionally when `not accessible`, and every construction site
+  in `factory.py` threads `accessible=ctx.bank_accessible`. `bank_accessible`
+  is a persisted, level-gated blocker that stays False for the whole early
+  game while `state.bank_items` is populated regardless (the bank sync runs
+  unconditionally), so without this gate a pre-unlock character would get a
+  WITHDRAW source with no action in existence to serve it.
 - CRAFT requires the skill gate met AND `workshop_location(skill)` known —
   a recipe with no workshop on file cannot be executed.
 - BUY requires a PERMANENT vendor (`not is_event_npc`) whose location is
   known — an event vendor is not reliably reachable, so it cannot anchor a
   plan.
-- DROP requires the dropper to be `is_winnable` — an unwinnable monster
-  cannot be farmed for its drop.
+- GATHER requires the sourcing resource to have a currently-live tile in
+  `game_data.all_resource_locations` — the same mapping `factory.py` builds
+  `GatherAction`s from, which merges an event resource's tiles only while
+  its event is active.
+- DROP requires the dropper to be `is_winnable` AND have a currently-live
+  tile in `game_data.all_monster_locations` — the same mapping `factory.py`
+  builds `FightAction`s from. `is_winnable` is a pure combat-stat prediction
+  and says nothing about reachability; an event monster whose event is
+  inactive has no `FightAction` in existence, whatever its stats predict.
 
 Pure: reads state/game_data/ctx only, no I/O. INERT — nothing calls this
 yet. The parity census (a later task) will use this function AS ITS ORACLE:
@@ -118,7 +132,7 @@ def obtain_sources(
     declared priority order (WITHDRAW, RECYCLE, CRAFT, GATHER, BUY, DROP).
     THE model — see the module docstring."""
     sources: list[Source] = []
-    sources.extend(_withdraw_sources(item, state))
+    sources.extend(_withdraw_sources(item, state, ctx))
     sources.extend(_recycle_sources(item, state, game_data, ctx))
     sources.extend(_craft_sources(item, state, game_data))
     sources.extend(_gather_sources(item, game_data))
@@ -134,8 +148,21 @@ def obtain_source_map(
     return {item: obtain_sources(item, state, game_data, ctx) for item in items}
 
 
-def _withdraw_sources(item: str, state: WorldState) -> list[Source]:
-    """A copy already sits in the bank."""
+def _withdraw_sources(
+    item: str, state: WorldState, ctx: SelectionContext
+) -> list[Source]:
+    """A copy already sits in the bank AND the bank is currently reachable.
+
+    `WithdrawItemAction.is_applicable` refuses unconditionally when
+    `not self.accessible`, and every construction site in `factory.py`
+    threads `accessible=ctx.bank_accessible`. `bank_accessible` is a
+    persisted, level-gated blocker (`not blockers.is_blocked("bank")`) that
+    stays False for the whole early game — and `state.bank_items` is
+    populated regardless (the bank sync runs unconditionally), so without
+    this gate a pre-unlock character would get a WITHDRAW source with no
+    action in existence to serve it."""
+    if not ctx.bank_accessible:
+        return []
     bank = state.bank_items or {}
     if bank.get(item, 0) > 0:
         return [Source(SourceKind.WITHDRAW, item, 1)]
@@ -188,7 +215,14 @@ def _craft_sources(item: str, state: WorldState, game_data: GameData) -> list[So
 
 
 def _gather_sources(item: str, game_data: GameData) -> list[Source]:
-    """Some resource drops `item`."""
+    """Some resource drops `item`, and that resource has a currently-live
+    gathering location.
+
+    `GatherAction` is only CONSTRUCTED by `factory.py` from
+    `game_data.all_resource_locations`, which merges an event resource's
+    tiles ONLY while its event is active. Gating on the same mapping (rather
+    than re-deriving event-liveness) keeps this in lockstep with what the
+    executor can actually serve."""
     if item not in game_data.gatherable_drop_items():
         return []
     found = game_data.resource_for_drop(item)
@@ -200,6 +234,8 @@ def _gather_sources(item: str, game_data: GameData) -> list[Source]:
         # source" rather than crashing the model.
         return []
     resource_code, _rate = found
+    if not game_data.all_resource_locations.get(resource_code):
+        return []  # no live tiles (e.g. event resource, event inactive)
     return [Source(SourceKind.GATHER, resource_code, 1)]
 
 
@@ -216,9 +252,20 @@ def _buy_sources(item: str, game_data: GameData) -> list[Source]:
 
 
 def _drop_sources(item: str, state: WorldState, game_data: GameData) -> list[Source]:
-    """Winnable monsters that drop `item`."""
+    """Winnable monsters that drop `item` AND are currently reachable.
+
+    `is_winnable` is a pure combat-stat prediction and says nothing about
+    reachability. `FightAction` is only CONSTRUCTED by `factory.py` from
+    `game_data.all_monster_locations`, which merges an event monster's tiles
+    ONLY while its event is active — `monsters_dropping` reads a static
+    content-drop catalog that is independent of event liveness. Gating on
+    the same mapping factory.py builds from (rather than re-deriving
+    event-liveness via `is_event_monster`) keeps this in lockstep with what
+    the executor can actually serve."""
     out: list[Source] = []
     for monster_code, _rate, _min_q, _max_q in game_data.monsters_dropping(item):
+        if not game_data.all_monster_locations.get(monster_code):
+            continue  # no live tiles (e.g. event monster, event inactive)
         if is_winnable(state, game_data, monster_code):
             out.append(Source(SourceKind.DROP, monster_code, 1))
     return out
