@@ -343,10 +343,9 @@ class GatherMaterialsGoal(Goal):
             # CraftPotionsGoal node-cap flood, derived 2026-07-08).
             if isinstance(action, CraftAction) and action.code in craftable_mats:
                 result.append(size_intermediate_craft(action, chain, state, game_data))
-            elif isinstance(action, RecycleAction) and action.code in recycle_sources:
-                result.append(action)
             elif (
-                "recovery" in action.tags
+                (isinstance(action, RecycleAction) and action.code in recycle_sources)
+                or "recovery" in action.tags
                 or "deposit" in action.tags
                 or ("skill_grind" in action.tags
                     and (getattr(action, "skill", ""),

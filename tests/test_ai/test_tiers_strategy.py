@@ -87,6 +87,19 @@ def test_unmet_closure_size_counts_unmet_nodes():
     assert unmet_closure_size(ObtainItem("copper_ore"), make_state(), gd) == 1
 
 
+def test_unmet_closure_size_shrinks_with_recoverable():
+    """A non-empty `recoverable` forward must actually reach `prerequisites`
+    inside the stack-extend loop: leafing copper_bar drops copper_ore from the
+    closure (copper_dagger, copper_bar/6 — copper_ore's recipe is never
+    descended), shrinking the count from 3 to 2. A regression that silently
+    drops the forward (e.g. `prerequisites(node, state, game_data)` losing the
+    trailing arg) would pass every OTHER test today but leave this one at 3."""
+    gd = _gd()
+    assert unmet_closure_size(ObtainItem("copper_dagger"), make_state(), gd) == 3
+    assert unmet_closure_size(ObtainItem("copper_dagger"), make_state(), gd,
+                              {"copper_bar": 18}) == 2
+
+
 def test_root_category():
     assert root_category(ReachCharLevel(50)) == "char_level"
     assert root_category(ObtainItem("x")) == "gear"
@@ -154,6 +167,18 @@ def test_root_cost_is_levels_remaining_for_char_level():
 def test_root_cost_for_gear_uses_closure_size():
     gd = _gd()
     assert root_cost(ObtainItem("copper_dagger"), make_state(), gd) == 3
+
+
+def test_root_cost_shrinks_with_recoverable():
+    """root_cost's ObtainItem branch delegates to unmet_closure_size — proving
+    the `recoverable` forward survives that delegation, not just the direct
+    unmet_closure_size call. A regression dropping the trailing arg in
+    `unmet_closure_size(root, state, game_data, recoverable)` inside root_cost
+    would leave the default-recoverable tests green but this one stuck at 3."""
+    gd = _gd()
+    assert root_cost(ObtainItem("copper_dagger"), make_state(), gd) == 3
+    assert root_cost(ObtainItem("copper_dagger"), make_state(), gd,
+                     {"copper_bar": 18}) == 2
 
 
 def test_rootscore_instrumental_always_false():

@@ -1173,6 +1173,31 @@ PREREQUISITE_GRAPH_MUTATIONS = [
      "    return all(predict_win(state, game_data, code) for code in game_data.monster_levels)"),
 ]
 
+# Recoverable-leaf mutations (recycle-as-acquisition epic, Task 5): the single
+# most load-bearing line in the epic — a material with ANY recoverable units
+# (recycling licensed surplus) becomes a LEAF instead of falling into its
+# recipe. Unit-bound group (bag-slot-urgency lesson: a unit-killed mutation
+# needs its OWN group), bound to tests/test_ai/test_tiers_prerequisite_graph.py
+# (test_recoverable_material_is_a_leaf, test_zero_recoverable_still_descends).
+RECOVERABLE_LEAF_MUTATIONS = [
+    # > 0 -> >= 0: a recoverable count of EXACTLY 0 would wrongly leaf too,
+    # collapsing the entire recipe descent for every material never seen by
+    # recycling. Killed by test_zero_recoverable_still_descends (recoverable=0
+    # must still descend into the recipe).
+    ("prerequisite_graph: recoverable leaf off-by-one (> 0 -> >= 0)",
+     "            if recoverable.get(node.code, 0) > 0:",
+     "            if recoverable.get(node.code, 0) >= 0:"),
+    # Drop the leaf branch entirely: always descend into the recipe regardless
+    # of recoverable, reverting to the pre-epic behavior (the live 2026-07-13
+    # ash_plank/fishing_net bug this whole epic fixes). Killed by
+    # test_recoverable_material_is_a_leaf (recoverable=18 must short-circuit
+    # to []).
+    ("prerequisite_graph: drop recoverable leaf branch (always descend)",
+     "            if recoverable.get(node.code, 0) > 0:\n"
+     "                return []  # recoverable by recycling licensed surplus → LEAF\n",
+     ""),
+]
+
 
 # objective mutations -- old strings matched to current objective.py text.
 OBJECTIVE_MUTATIONS = [
@@ -4396,6 +4421,18 @@ GATHERING_GOAL_MUTATIONS = [
      "        if total_needed <= 0:",
      "        if total_needed < 0:"),
 ]
+# Recycle-source admission (recycle-as-acquisition epic, Task 5): a licensed
+# RecycleAction is only a SOURCE for the material closure when its recipe
+# actually intersects the needed materials — dropping that filter admits
+# every recycle in the pool, over-widening the search. Unit-bound group
+# (bag-slot-urgency lesson), bound to tests/test_ai/test_gathering.py
+# (test_gather_goal_ignores_an_unrelated_recycle: copper_axe's recycle, whose
+# recipe yields copper_bar and NOT ash_plank, must be excluded).
+RECYCLE_SOURCE_ADMISSION_MUTATIONS = [
+    ("gathering: drop closure_materials intersection filter (admits every recycle)",
+     "            if set(source_recipe) & closure_materials:",
+     "            if True:"),
+]
 # Target D: EquipAction.is_applicable slot/type gate.
 EQUIP_MUTATIONS = [
     ("equip: drop slot/type membership check (resurrects mismatch bug)",
@@ -4845,6 +4882,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_task_feasibility_diff.py", survivors)
     run_group(PREREQUISITE_GRAPH_SRC, PREREQUISITE_GRAPH_MUTATIONS,
               "formal/diff/test_prerequisite_graph_diff.py", survivors)
+    run_group(PREREQUISITE_GRAPH_SRC, RECOVERABLE_LEAF_MUTATIONS,
+              "tests/test_ai/test_tiers_prerequisite_graph.py", survivors)
     run_group(OBJECTIVE_SRC, OBJECTIVE_MUTATIONS,
               "formal/diff/test_objective_diff.py", survivors)
     run_group(OBJECTIVE_SRC, OBJECTIVE_NOW_MUTATIONS,
@@ -4994,6 +5033,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_inventory_chain_safe_diff.py", survivors)
     run_group(GATHERING_GOAL_SRC, GATHERING_GOAL_MUTATIONS,
               "formal/diff/test_phase7_invariants_diff.py", survivors)
+    run_group(GATHERING_GOAL_SRC, RECYCLE_SOURCE_ADMISSION_MUTATIONS,
+              "tests/test_ai/test_gathering.py", survivors)
     run_group(EQUIP_SRC, EQUIP_MUTATIONS,
               "formal/diff/test_phase7_invariants_diff.py", survivors)
     run_group(EQUIP_SRC, DUPLICATE_ARTIFACT_MUTATIONS,
