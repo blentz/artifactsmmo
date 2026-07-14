@@ -2,7 +2,7 @@
 actionable subgoal. `decide` delegates to `progression_tree.decide_tree`
 (Phase 4b THE FLIP); the flat scalar ranking pipeline is deleted."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from fractions import Fraction
 
@@ -17,7 +17,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 )
 from artifactsmmo_cli.ai.tiers.objective import GOLD, CharacterObjective, _permanent_vendor_purchases
 from artifactsmmo_cli.ai.tiers.personality import Personality
-from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
+from artifactsmmo_cli.ai.tiers.prerequisite_graph import NO_RECOVERABLE, prerequisites
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -59,7 +59,8 @@ def _prereq_order(node: MetaGoal) -> tuple[int, str, int]:
     return (_PREREQ_KIND_RANK[ReachCharLevel], "", node.level)
 
 
-def actionable_step(root: MetaGoal, state: WorldState, game_data: GameData) -> MetaGoal | None:
+def actionable_step(root: MetaGoal, state: WorldState, game_data: GameData,
+                    recoverable: Mapping[str, int] = NO_RECOVERABLE) -> MetaGoal | None:
     """Deepest unmet node reachable from root whose DIRECT prerequisites are all
     satisfied (the 'singular loop' step). None when cyclically blocked.
 
@@ -71,7 +72,7 @@ def actionable_step(root: MetaGoal, state: WorldState, game_data: GameData) -> M
     def _step(node: MetaGoal, path: frozenset[MetaGoal]) -> MetaGoal | None:
         if node in path:
             return None
-        unmet = [p for p in prerequisites(node, state, game_data)
+        unmet = [p for p in prerequisites(node, state, game_data, recoverable)
                  if not p.is_satisfied(state, game_data)]
         if not unmet:
             if isinstance(node, ObtainItem) and not _producible(node.code, state, game_data):
@@ -87,7 +88,8 @@ def actionable_step(root: MetaGoal, state: WorldState, game_data: GameData) -> M
     return _step(root, frozenset())
 
 
-def unmet_closure_size(root: MetaGoal, state: WorldState, game_data: GameData) -> int:
+def unmet_closure_size(root: MetaGoal, state: WorldState, game_data: GameData,
+                       recoverable: Mapping[str, int] = NO_RECOVERABLE) -> int:
     """Structural cost proxy: count of unmet nodes in root's prereq closure (min 1)."""
     seen: set[MetaGoal] = set()
     stack: list[MetaGoal] = [root]
@@ -99,16 +101,17 @@ def unmet_closure_size(root: MetaGoal, state: WorldState, game_data: GameData) -
         seen.add(node)
         if not node.is_satisfied(state, game_data):
             count += 1
-            stack.extend(prerequisites(node, state, game_data))
+            stack.extend(prerequisites(node, state, game_data, recoverable))
     return max(count, 1)
 
 
-def root_cost(root: MetaGoal, state: WorldState, game_data: GameData) -> int:
+def root_cost(root: MetaGoal, state: WorldState, game_data: GameData,
+             recoverable: Mapping[str, int] = NO_RECOVERABLE) -> int:
     """Effort proxy in 'steps remaining': levels for leaf progression goals,
     craft/gather chain size for gear. Floored at 1."""
     if isinstance(root, ReachCharLevel):
         return max(1, root.level - state.level)
-    return unmet_closure_size(root, state, game_data)
+    return unmet_closure_size(root, state, game_data, recoverable)
 
 
 def _producible(code: str, state: WorldState, game_data: GameData) -> bool:
@@ -181,18 +184,19 @@ def _producible(code: str, state: WorldState, game_data: GameData) -> bool:
 
 
 def is_reachable(root: MetaGoal, state: WorldState, game_data: GameData,
-                 path: frozenset[MetaGoal] = frozenset()) -> bool:
+                 path: frozenset[MetaGoal] = frozenset(),
+                 recoverable: Mapping[str, int] = NO_RECOVERABLE) -> bool:
     """True when `root`'s entire prerequisite chain bottoms out in obtainable
     leaves. Cycle-safe (a node on the current path can't bottom out)."""
     if root.is_satisfied(state, game_data):
         return True
     if root in path:
         return False
-    prereqs = prerequisites(root, state, game_data)
+    prereqs = prerequisites(root, state, game_data, recoverable)
     if isinstance(root, ObtainItem) and not prereqs:
         return _producible(root.code, state, game_data)
     sub_path = path | {root}
-    return all(is_reachable(p, state, game_data, sub_path) for p in prereqs)
+    return all(is_reachable(p, state, game_data, sub_path, recoverable) for p in prereqs)
 
 
 @dataclass(frozen=True)

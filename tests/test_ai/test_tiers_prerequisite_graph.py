@@ -105,6 +105,32 @@ def test_best_attainable_weapon_highest_value_with_tiebreak():
     assert best_attainable_weapon(GameData()) is None   # no weapons
 
 
+def test_recoverable_material_is_a_leaf():
+    """copper_bar is craftable from 10 copper_ore, but recycling licensed
+    surplus (e.g. copper_dagger) yields recoverable copper_bar directly — so
+    it is directly actionable, not a recipe node. This is the whole epic:
+    stop re-deriving from raw resources what recycling already covers."""
+    gd = _gd()
+    node = ObtainItem("copper_bar", 6)
+    assert prerequisites(node, make_state(), gd) == [ObtainItem("copper_ore", 10)]
+    assert prerequisites(node, make_state(), gd, {"copper_bar": 18}) == []
+
+
+def test_leaf_rule_is_any_recoverable_not_fully_recoverable():
+    """recoverable > 0 leafs the node even when it does not cover the need;
+    GOAP mixes recycle + gather to make up the shortfall (user decision)."""
+    gd = _gd()
+    assert prerequisites(ObtainItem("copper_bar", 6), make_state(), gd,
+                         {"copper_bar": 1}) == []
+
+
+def test_zero_recoverable_still_descends():
+    """An entry of 0 is not a leaf — only a positive count is."""
+    gd = _gd()
+    assert prerequisites(ObtainItem("copper_bar", 6), make_state(), gd,
+                         {"copper_bar": 0}) == [ObtainItem("copper_ore", 10)]
+
+
 def test_cyclic_recipe_traversal_terminates():
     """prerequisites returns finite direct edges; a visited-set BFS over a
     cyclic recipe terminates (P2 adds no traversal; the test drives one)."""

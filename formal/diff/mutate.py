@@ -1286,9 +1286,9 @@ STRATEGY_MUTATIONS = [
     ("strategy: unmet_closure_size drop satisfied-interior pruning",
      "        if not node.is_satisfied(state, game_data):\n"
      "            count += 1\n"
-     "            stack.extend(prerequisites(node, state, game_data))",
+     "            stack.extend(prerequisites(node, state, game_data, recoverable))",
      "        count += 1\n"
-     "        stack.extend(prerequisites(node, state, game_data))"),
+     "        stack.extend(prerequisites(node, state, game_data, recoverable))"),
 ]
 
 # reachability-invariant mutations: both is_reachable AND actionable_step now use

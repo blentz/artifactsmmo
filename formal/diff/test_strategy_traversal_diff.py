@@ -58,7 +58,7 @@ class _Graph:
 def _install(graph, mp):
     """Wire the controlled graph into the strategy module + MetaGoal classes."""
 
-    def fake_prerequisites(node, state, game_data):
+    def fake_prerequisites(node, state, game_data, recoverable=None):
         return [graph.node(p) for p in graph.prereqs[graph.id_of(node)]]
 
     def fake_producible(code, state, game_data):

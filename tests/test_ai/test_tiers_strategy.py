@@ -49,6 +49,38 @@ def test_actionable_step_blocked_returns_none():
     assert actionable_step(ObtainItem("a"), make_state(), gd) is None
 
 
+def test_actionable_step_stops_at_the_recoverable_material():
+    """The live bug: actionable_step descended into copper_bar's recipe and
+    returned ObtainItem(copper_ore, 10) -> 10 gathers, re-deriving from raw
+    resources what recycling already covers. With copper_bar recoverable by
+    recycling licensed surplus, it returns copper_bar itself."""
+    gd = _gd()
+    assert actionable_step(ObtainItem("copper_dagger"), make_state(), gd) \
+        == ObtainItem("copper_ore", 10)
+    assert actionable_step(ObtainItem("copper_dagger"), make_state(), gd,
+                           {"copper_bar": 18}) == ObtainItem("copper_bar", 6)
+
+
+def test_is_reachable_agrees_with_the_descent_recoverable():
+    """If the descent leafs a node (any positive recoverable count), reachability
+    must not still descend its recipe — the two would disagree about the same
+    node. `part`'s only recipe bottoms out in an unproducible raw material, so
+    the chain is unreachable UNTIL `part` itself becomes recoverable, at which
+    point reachability is governed by `part`'s OWN craftability, not its raw
+    material's."""
+    gd = GameData()
+    gd._item_stats = {
+        "trinket": ItemStats(code="trinket", level=1, type_="ring"),
+        "part": ItemStats(code="part", level=1, type_="resource"),
+        "raw_unobtainium": ItemStats(code="raw_unobtainium", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"trinket": {"part": 5}, "part": {"raw_unobtainium": 2}}
+    state = make_state()
+    assert is_reachable(ObtainItem("trinket"), state, gd) is False
+    assert is_reachable(ObtainItem("trinket"), state, gd, frozenset(),
+                        {"part": 18}) is True
+
+
 def test_unmet_closure_size_counts_unmet_nodes():
     gd = _gd()
     assert unmet_closure_size(ObtainItem("copper_dagger"), make_state(), gd) == 3
