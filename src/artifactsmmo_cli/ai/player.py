@@ -73,6 +73,7 @@ from artifactsmmo_cli.ai.player_helpers import delete_cost as _delete_cost  # no
 from artifactsmmo_cli.ai.player_helpers import format_plan as _format_plan
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor
 from artifactsmmo_cli.ai.raid_info import RaidInfo
+from artifactsmmo_cli.ai.recoverable_materials import recoverable_materials
 from artifactsmmo_cli.ai.recovery import (
     REPEATED_ACTION_FAILURE_THRESHOLD,
     REPEATED_ACTION_WINDOW,
@@ -203,6 +204,12 @@ class GamePlayer:
         self._last_outcome: str | None = None
         self._plan_cache: PlanCache | None = None
         self._last_decide_crafting_target: str | None = None
+        # Materials recoverable by recycling licensed surplus (bag+bank), computed
+        # ONCE per cycle at the `_selection_context` seam (recycle-as-acquisition
+        # epic, Task 6) and threaded into `decide`/`next_grind_goal` so the tier
+        # descent stops at an already-recyclable material instead of falling into
+        # its recipe. Empty until the first decide/plan cycle runs.
+        self._last_recoverable: dict[str, int] = {}
 
     def set_cycle_observer(self, observer: "Callable[[CycleSnapshot], None] | None") -> None:
         """Allow callers (e.g. TUI host) to subscribe after construction."""
@@ -229,12 +236,14 @@ class GamePlayer:
         assert self._strategy is not None
         combat_monster = ctx_combat_monster
         ctx = self._selection_context(combat_monster)
+        self._last_recoverable = recoverable_materials(state, game_data, ctx)
         servable_pred = self._step_servable(state, game_data, ctx)
         self._notify_planning(True)
         decision = self._strategy.decide(
             state, game_data,
             step_servable=servable_pred,
             band_adequate=self._tree_band_adequate(),
+            recoverable=self._last_recoverable,
         )
         self._last_decision = decision
         cr, cs = decision.chosen_root, decision.chosen_step
@@ -461,10 +470,12 @@ class GamePlayer:
         self._arbiter.set_cycle(self._cycle_counter)
         combat_monster = self._winnable_farm_target()
         ctx = self._selection_context(combat_monster)
+        self._last_recoverable = recoverable_materials(state, game_data, ctx)
         decision = self._strategy.decide(
             state, game_data,
             step_servable=self._step_servable(state, game_data, ctx),
-            band_adequate=self._tree_band_adequate())
+            band_adequate=self._tree_band_adequate(),
+            recoverable=self._last_recoverable)
         self._last_decision = decision
         step = decision.chosen_step
         crafting_target = step.code if isinstance(step, ObtainItem) else None
@@ -780,7 +791,8 @@ class GamePlayer:
             raise RuntimeError(
                 f"cyclic skill-grind dependency for {action.skill}: "
                 f"{sorted(_grinding)}")
-        goal = next_grind_goal(action.skill, self.state, self.game_data)
+        goal = next_grind_goal(action.skill, self.state, self.game_data,
+                               self._last_recoverable)
         if goal is None:
             raise RuntimeError(
                 f"LevelSkill({action.skill}) has no grind rung at execution — "
@@ -1540,6 +1552,7 @@ class GamePlayer:
                     self._last_decision, self.state, self.game_data,
                     f"{selected_goal_name}: {action_name}"
                     if selected_goal_name and action_name else (selected_goal_name or action_name),
+                    self._last_recoverable,
                 )
                 if self._last_decision is not None and self.game_data is not None else ()
             ),

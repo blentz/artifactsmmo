@@ -3,6 +3,7 @@ existing goal.
 
 Lives above goals/ and tiers/ (imports both) to avoid the goals→tiers cycle."""
 
+from collections.abc import Mapping
 from dataclasses import replace
 
 from artifactsmmo_cli.ai.actions.base import Action
@@ -62,6 +63,7 @@ from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_figh
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.potion_provision_qty import potion_provision_qty_pure
 from artifactsmmo_cli.ai.recipe_closure import closure_demand
+from artifactsmmo_cli.ai.recoverable_materials import recoverable_materials
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus, recycle_urgency
 from artifactsmmo_cli.ai.task_batch import task_batch_size
 from artifactsmmo_cli.ai.task_feasibility import task_requirement
@@ -88,6 +90,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 )
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, _permanent_vendor_purchases
 from artifactsmmo_cli.ai.tiers.objective_needs import objective_needs
+from artifactsmmo_cli.ai.tiers.prerequisite_graph import NO_RECOVERABLE
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -324,7 +327,8 @@ def map_guard(kind: GuardKind, game_data: GameData, ctx: SelectionContext,
         committed = UpgradeEquipmentGoal(initial_equipment=state.equipment,
                                          committed_target=(item, slot))
         return _gather_goal_for_unreachable_equippable(
-            item, state, game_data, committed.max_depth)
+            item, state, game_data, committed.max_depth,
+            recoverable_materials(state, game_data, ctx))
     if kind is GuardKind.CRAFT_POTIONS:
         return CraftPotionsGoal(combat_monster=ctx.combat_monster, game_data=game_data,
                                 history=history)
@@ -398,9 +402,17 @@ def map_means(kind: MeansKind, game_data: GameData, ctx: SelectionContext,
 
 def _gather_goal_for_unreachable_equippable(
     code: str, state: WorldState, game_data: GameData, equip_max_depth: int,
+    recoverable: Mapping[str, int] = NO_RECOVERABLE,
 ) -> GatherMaterialsGoal:
     """Build a budget-FEASIBLE GatherMaterials goal for a depth-unreachable
     equippable `code` (its full craft chain exceeds `equip_max_depth`).
+
+    `recoverable` (materials recoverable by recycling licensed surplus —
+    `ai/recoverable_materials.recoverable_materials`, computed by the caller
+    from the in-scope `ctx`) is forwarded to `actionable_step` so the routed
+    step stops at an already-recyclable material instead of falling into its
+    recipe (recycle-as-acquisition epic, Task 6). Defaults to `NO_RECOVERABLE`
+    for every caller that doesn't wire it in.
 
     The naive fallback — GatherMaterials(code, code's DIRECT recipe) — must plan a
     chain that gathers `min_gathers(code)` raw units THROUGH the multi-level recipe;
@@ -428,7 +440,7 @@ def _gather_goal_for_unreachable_equippable(
     owned: dict[str, int] = dict(state.inventory)
     for owned_code, qty in (state.bank_items or {}).items():
         owned[owned_code] = owned.get(owned_code, 0) + qty
-    step = actionable_step(ObtainItem(code=code, quantity=1), state, game_data)
+    step = actionable_step(ObtainItem(code=code, quantity=1), state, game_data, recoverable)
     if step is not None and isinstance(step, ObtainItem) and step.code != code:
         tgt_code, tgt_qty = gather_step_target(
             code, step.code, step.quantity,
@@ -442,7 +454,8 @@ def _gather_goal_for_unreachable_equippable(
     return GatherMaterialsGoal(target_item=code, needed=dict(recipe))
 
 
-def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameData) -> Goal:
+def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameData,
+                     recoverable: Mapping[str, int] = NO_RECOVERABLE) -> Goal:
     """Map an equippable target to UpgradeEquipment when it is reachable, else to
     GatherMaterials for its recipe.
 
@@ -455,7 +468,10 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
     stall. Instead, while the target is depth-unreachable, drive GatherMaterials
     for its direct recipe so the materials accumulate across cycles; once they are
     in hand UpgradeEquipment becomes plannable and fires the craft+equip. (Mirrors
-    the GEAR_REVIEW guard's gather/upgrade split for the objective-step path.)"""
+    the GEAR_REVIEW guard's gather/upgrade split for the objective-step path.)
+
+    `recoverable` is forwarded to `_gather_goal_for_unreachable_equippable`
+    (recycle-as-acquisition epic, Task 6); defaults to `NO_RECOVERABLE`."""
     upgrade = UpgradeEquipmentGoal(initial_equipment=state.equipment, committed_target=(code, slot))
     owned = (state.inventory.get(code, 0) > 0
              or (state.bank_items or {}).get(code, 0) > 0)
@@ -501,7 +517,7 @@ def _equippable_goal(code: str, slot: str, state: WorldState, game_data: GameDat
         # plan must gather through the multi-level recipe and explodes the GOAP
         # search (see _gather_goal_for_unreachable_equippable).
         return _gather_goal_for_unreachable_equippable(
-            code, state, game_data, upgrade.max_depth)
+            code, state, game_data, upgrade.max_depth, recoverable)
     # Unreachable in practice: is_plannable is only False when min_gathers >
     # max_depth, which requires a non-empty recipe (a recipe-less item needs at
     # most one gather, so it is always plannable and returns above). Kept as a
@@ -622,7 +638,8 @@ def objective_step_goal(
         slots = ITEM_TYPE_TO_SLOTS.get(stats.type_) if stats is not None else None
         if slots:
             dest_slot = step.slot if step.slot is not None else slots[0]
-            return _equippable_goal(step.code, dest_slot, state, game_data)
+            return _equippable_goal(step.code, dest_slot, state, game_data,
+                                    recoverable_materials(state, game_data, ctx))
         # Intermediate step: if the chain root is an equippable, plan
         # against the root directly. UpgradeEquipmentGoal's planner
         # walks the recipe chain (craft intermediates + final + equip)

@@ -7,17 +7,20 @@ tree-level skill-grind dispatch did. This picks the rung and builds the
 skill_grind GatherMaterials goal; the caller plans it and executes its first leg.
 """
 
+from collections.abc import Mapping
+
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_skill_resource import best_gather_resource_drop
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem
+from artifactsmmo_cli.ai.tiers.prerequisite_graph import NO_RECOVERABLE
 from artifactsmmo_cli.ai.tiers.skill_grind_target import skill_grind_target
 from artifactsmmo_cli.ai.tiers.strategy import actionable_step
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
-def next_grind_goal(skill: str, state: WorldState,
-                    game_data: GameData) -> GatherMaterialsGoal | None:
+def next_grind_goal(skill: str, state: WorldState, game_data: GameData,
+                    recoverable: Mapping[str, int] = NO_RECOVERABLE) -> GatherMaterialsGoal | None:
     """The skill_grind GatherMaterials goal for one grind cycle of `skill`, or
     None when the skill cannot be ground from the current level.
 
@@ -42,10 +45,19 @@ def next_grind_goal(skill: str, state: WorldState,
     of the plan, and the deepest step's first action IS the rung plan's first
     action. Once the rung's materials are all in hand its actionable_step is the
     rung itself, so the goal targets the rung and the plan is the craft that
-    earns the skill XP (`held + 1` keeps that perpetual — craft ANOTHER)."""
+    earns the skill XP (`held + 1` keeps that perpetual — craft ANOTHER).
+
+    `recoverable` (`ai/recoverable_materials.recoverable_materials`, wired in by
+    the player at the per-cycle ctx seam) leafs a material recoverable by
+    recycling licensed surplus, so the descent stops there instead of falling
+    into its recipe (live Robby 2026-07-13: weaponcrafting's fire_staff needs
+    ash_plank, recoverable from the 7 held fishing_net, but without this the
+    descent fell all the way to ash_wood — 50 gathers of WOODCUTTING xp per
+    weaponcrafting grind cycle). Defaults to `NO_RECOVERABLE`, reproducing the
+    pre-epic descent byte-for-byte for every caller that doesn't wire it in."""
     rung = skill_grind_target(skill, state, game_data)
     if rung is not None:
-        step = actionable_step(ObtainItem(rung), state, game_data)
+        step = actionable_step(ObtainItem(rung), state, game_data, recoverable)
         if isinstance(step, ObtainItem) and step.code != rung:
             return GatherMaterialsGoal(target_item=step.code,
                                        needed={step.code: step.quantity},

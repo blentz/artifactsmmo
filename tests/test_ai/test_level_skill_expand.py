@@ -89,6 +89,29 @@ def test_next_grind_goal_descends_to_deepest_unmet_material() -> None:
     assert goal.needed == {"ash_wood": 10}
 
 
+def test_next_grind_goal_targets_the_recoverable_material() -> None:
+    """THE BUG, end to end (2026-07-13 live Robby trace): weaponcrafting rung
+    fire_staff needs 5 ash_plank. Bag holds 7 fishing_net (recipe: 6 ash_plank
+    each), so ash_plank is recoverable by recycling — without `recoverable`
+    threaded in, the grind goal falls all the way to GatherMaterials(ash_wood,
+    10) (50 gathers of WOODCUTTING xp instead of weaponcrafting progress). With
+    the recoverable map wired in, ash_plank itself is a leaf and the goal
+    targets it directly — the real planner (GatherMaterialsGoal.relevant_actions
+    already admits licensed RecycleActions) then finds the Recycle(fishing_net)
+    route."""
+    gd = _deep_gd()
+    state = scenario_state(
+        ScenarioCharacter(name="t", level=13, skills={"weaponcrafting": 6},
+                          bank={"red_slimeball": 20}), gd)
+    assert next_grind_goal("weaponcrafting", state, gd).needed == {"ash_wood": 10}
+
+    recoverable = {"ash_plank": 18}
+    goal = next_grind_goal("weaponcrafting", state, gd, recoverable)
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert goal.skill_grind is True
+    assert goal.needed == {"ash_plank": 5}
+
+
 def test_next_grind_goal_targets_rung_when_materials_in_hand() -> None:
     """Once the rung's materials are held, its actionable_step IS the rung — so
     the goal targets the rung itself and the plan is the (cheap) craft that earns

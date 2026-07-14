@@ -5,6 +5,8 @@ epic P3); non-chosen ranked roots are leaf stubs; the current step gets a
 synthetic serve child sourced from the running goal + action. No planning or
 I/O."""
 
+from collections.abc import Mapping
+
 from artifactsmmo_cli.ai.cycle_snapshot import PlanTreeNode
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.tiers.meta_goal import (
@@ -12,7 +14,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
 )
-from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
+from artifactsmmo_cli.ai.tiers.prerequisite_graph import NO_RECOVERABLE, prerequisites
 from artifactsmmo_cli.ai.tiers.strategy import StrategyDecision
 from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.tui.plan_format import short_root
@@ -34,7 +36,8 @@ def _label(node: MetaGoal) -> tuple[str, str]:
 
 def _expand(node: MetaGoal, decision: StrategyDecision, state: WorldState,
             game_data: GameData, serve_step: str | None,
-            visited: frozenset[MetaGoal], depth: int) -> PlanTreeNode:
+            visited: frozenset[MetaGoal], depth: int,
+            recoverable: Mapping[str, int] = NO_RECOVERABLE) -> PlanTreeNode:
     label, kind = _label(node)
     is_current = node == decision.chosen_step
     status = "current" if is_current else (
@@ -42,9 +45,10 @@ def _expand(node: MetaGoal, decision: StrategyDecision, state: WorldState,
     children: list[PlanTreeNode] = []
     if node not in visited and depth < _DEPTH_CAP:
         nxt = visited | {node}
-        for prereq in prerequisites(node, state, game_data):
+        for prereq in prerequisites(node, state, game_data, recoverable):
             children.append(
-                _expand(prereq, decision, state, game_data, serve_step, nxt, depth + 1))
+                _expand(prereq, decision, state, game_data, serve_step, nxt,
+                       depth + 1, recoverable))
     if is_current and serve_step:
         children.append(PlanTreeNode(
             key=f"step:{node!r}", label=serve_step, kind="step", status="current"))
@@ -53,15 +57,22 @@ def _expand(node: MetaGoal, decision: StrategyDecision, state: WorldState,
 
 
 def build_plan_tree(decision: StrategyDecision, state: WorldState,
-                    game_data: GameData, serve_step: str | None) -> tuple[PlanTreeNode, ...]:
+                    game_data: GameData, serve_step: str | None,
+                    recoverable: Mapping[str, int] = NO_RECOVERABLE,
+                    ) -> tuple[PlanTreeNode, ...]:
     """Chosen root expands its prerequisite subtree; other ranked roots become
     leaf stubs. The current step gains a synthetic serve child. Bounded by a
-    visited-set (frozen MetaGoals are hashable) + a depth cap."""
+    visited-set (frozen MetaGoals are hashable) + a depth cap.
+
+    `recoverable` (the player's per-cycle recoverable-materials map) is
+    forwarded to `prerequisites` so the TUI tree shows the SAME descent the
+    planner actually takes (recycle-as-acquisition epic, Task 6) rather than a
+    stale from-scratch recipe descent."""
     if decision.chosen_root is None:
         return ()
     roots: list[PlanTreeNode] = [
         _expand(decision.chosen_root, decision, state, game_data, serve_step,
-                frozenset(), 0)
+                frozenset(), 0, recoverable)
     ]
     chosen_repr = repr(decision.chosen_root)
     for i, r in enumerate(decision.ranking):

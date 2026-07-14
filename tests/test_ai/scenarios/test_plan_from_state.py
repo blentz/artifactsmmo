@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
@@ -47,3 +47,31 @@ def test_plan_from_state_decision_is_the_tree_decision() -> None:
     # The Phase-3/4a shadow surfaces are gone from the report.
     assert not hasattr(report, "tree_decision")
     assert not hasattr(report, "enacted_engine")
+
+
+def test_plan_from_state_wires_the_real_recoverable_map() -> None:
+    """THE ACTIVATION (recycle-as-acquisition epic, Task 6): the player must
+    compute `recoverable_materials` at the `_selection_context` seam and stash
+    it on `self._last_recoverable`, or every earlier task in the epic
+    (`prerequisites`/`actionable_step`/`next_grind_goal` all accepting a
+    `recoverable` map) stays INERT in production
+    (feedback_verify_runtime_activation). Bag holds 7 fishing_net (recipe: 6
+    ash_plank each) — licensed surplus recyclable for ash_plank."""
+    gd = GameData()
+    gd._item_stats = {
+        "fishing_net": ItemStats(code="fishing_net", level=1, type_="amulet",
+                                 crafting_skill="gearcrafting", crafting_level=1),
+    }
+    gd._crafting_recipes = {"fishing_net": {"ash_plank": 6}}
+    gd._workshop_locations = {"gearcrafting": (2, 1)}
+    gd._bank_location = (0, 0)
+    gd._taskmaster_location = (0, 0)
+    player = GamePlayer(character="scenario", history=None)
+    state = make_state(level=5, inventory={"fishing_net": 7}, bank_items={})
+    player.seed_offline(state, gd)
+
+    assert player._last_recoverable == {}  # nothing computed before the first cycle
+
+    player.plan_from_state()
+
+    assert player._last_recoverable == {"ash_plank": 18}  # 6 destroyable * (6 // 2)

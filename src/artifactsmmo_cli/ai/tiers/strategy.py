@@ -261,6 +261,7 @@ class StrategyEngine:
     def decide(self, state: WorldState, game_data: GameData,
                step_servable: Callable[[MetaGoal, MetaGoal], bool] | None = None,
                band_adequate: bool = False,
+               recoverable: Mapping[str, int] = NO_RECOVERABLE,
                ) -> StrategyDecision:
         """THE FLIP (Phase 4b): thin delegate to the progression tree — the
         flat scalar ranking pipeline is deleted (Task 2). The tree is
@@ -271,7 +272,12 @@ class StrategyEngine:
         `band_adequate` is the caller's progression-band verdict (see
         `GamePlayer._tree_band_adequate`); `step_servable` keeps the
         plannability demotion alive across the cutover (see
-        `progression_tree._servable_promotion`)."""
+        `progression_tree._servable_promotion`). `recoverable` is the caller's
+        per-cycle recoverable-materials map (see `GamePlayer._decide_band` /
+        `plan_from_state`, which compute it via `recoverable_materials` at the
+        `SelectionContext` seam); defaults to `NO_RECOVERABLE` for every
+        caller that doesn't wire it in (recycle-as-acquisition epic, Task 6)."""
         return progression_tree.decide_tree(
             state, game_data, self.objective,
-            band_adequate=band_adequate, step_servable=step_servable)
+            band_adequate=band_adequate, step_servable=step_servable,
+            recoverable=recoverable)

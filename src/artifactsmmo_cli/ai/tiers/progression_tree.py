@@ -14,7 +14,7 @@ actionable_step. Module-style access on both sides keeps either import
 order sound (nothing is dereferenced until after both modules finish
 executing)."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.game_data import GameData
@@ -22,6 +22,7 @@ from artifactsmmo_cli.ai.tiers import strategy
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
+from artifactsmmo_cli.ai.tiers.prerequisite_graph import NO_RECOVERABLE
 from artifactsmmo_cli.ai.tiers.progression_tree_core import (
     Branch,
     GearCandidate,
@@ -119,14 +120,16 @@ def _candidate_root(candidate: GearCandidate) -> ObtainItem:
 
 
 def _gear_ranking_rows(state: WorldState, game_data: GameData,
-                       ordered: list[GearCandidate]) -> "list[strategy.RootScore]":
+                       ordered: list[GearCandidate],
+                       recoverable: Mapping[str, int] = NO_RECOVERABLE,
+                       ) -> "list[strategy.RootScore]":
     """Semantics item 7: one row per gear candidate, best-first. Contribution
     mirrors score in every row (no separate weighting exists in this display
     path — the trunk row does the same: contribution == score == Fraction(1))."""
     rows = []
     for candidate in ordered:
         root = _candidate_root(candidate)
-        step = strategy.actionable_step(root, state, game_data) or root
+        step = strategy.actionable_step(root, state, game_data, recoverable) or root
         rows.append(strategy.RootScore(
             root_repr=repr(root), category="gear", contribution=candidate.gain,
             cost=0, score=candidate.gain, step_repr=repr(step)))
@@ -136,6 +139,7 @@ def _gear_ranking_rows(state: WorldState, game_data: GameData,
 def _candidate_fallbacks(state: WorldState, game_data: GameData,
                          ordered: list[GearCandidate],
                          skip: GearCandidate | None = None,
+                         recoverable: Mapping[str, int] = NO_RECOVERABLE,
                          ) -> tuple[list[MetaGoal], list[MetaGoal]]:
     """Root/step pairs for `ordered` (pick order), skipping `skip` (the
     candidate already promoted to chosen_root, when there is one). Shared by
@@ -147,7 +151,7 @@ def _candidate_fallbacks(state: WorldState, game_data: GameData,
         if candidate == skip:
             continue
         root = _candidate_root(candidate)
-        step = strategy.actionable_step(root, state, game_data) or root
+        step = strategy.actionable_step(root, state, game_data, recoverable) or root
         roots.append(root)
         steps.append(step)
     return roots, steps
@@ -185,6 +189,7 @@ def decide_tree(state: WorldState, game_data: GameData,
                 objective: CharacterObjective,
                 band_adequate: bool = False,
                 step_servable: Callable[[MetaGoal, MetaGoal], bool] | None = None,
+                recoverable: Mapping[str, int] = NO_RECOVERABLE,
                 ) -> "strategy.StrategyDecision":
     """The tree assembly: trunk milestone, gear/xp branch pivot, and the
     chosen root/step — composing the Task-1 pure cores exactly per the
@@ -199,7 +204,15 @@ def decide_tree(state: WorldState, game_data: GameData,
     call, not something a caller could second-guess.
 
     `step_servable` is the per-cycle plannability predicate (None in unit
-    tests that don't exercise plannability) — see `_servable_promotion`."""
+    tests that don't exercise plannability) — see `_servable_promotion`.
+
+    `recoverable` (materials recoverable by recycling licensed surplus, see
+    `ai/recoverable_materials.recoverable_materials`) is caller-supplied the
+    same way — the player wires the real per-cycle map in; it defaults to
+    `NO_RECOVERABLE`, reproducing the pre-epic descent for every caller that
+    doesn't wire it in. Forwarded to every `actionable_step` call so the
+    descent stops at an already-recyclable material instead of falling into
+    its recipe (recycle-as-acquisition epic, Task 6 — the activation)."""
     trunk = ReachCharLevel(level=milestone_pure(state.level))
 
     candidates = _structural_candidates(state, game_data, objective) \
@@ -225,10 +238,12 @@ def decide_tree(state: WorldState, game_data: GameData,
     if branch is Branch.GEAR:
         assert pick is not None  # gear_target_exists guarantees a non-empty list
         chosen_root: MetaGoal = _candidate_root(pick)
-        chosen_step: MetaGoal = strategy.actionable_step(chosen_root, state, game_data) or chosen_root
+        chosen_step: MetaGoal = strategy.actionable_step(
+            chosen_root, state, game_data, recoverable) or chosen_root
         # Semantics item 6: the other branch (xp trunk) first, then the
         # remaining gear candidates in pick order, each its own root/step.
-        extra_roots, extra_steps = _candidate_fallbacks(state, game_data, ordered, skip=pick)
+        extra_roots, extra_steps = _candidate_fallbacks(
+            state, game_data, ordered, skip=pick, recoverable=recoverable)
         fallback_roots = [trunk, *extra_roots]
         fallback_steps = [trunk, *extra_steps]
     else:
@@ -240,7 +255,8 @@ def decide_tree(state: WorldState, game_data: GameData,
         # trunk step yields no goal.
         chosen_root = trunk
         chosen_step = trunk
-        fallback_roots, fallback_steps = _candidate_fallbacks(state, game_data, ordered)
+        fallback_roots, fallback_steps = _candidate_fallbacks(
+            state, game_data, ordered, recoverable=recoverable)
 
     if step_servable is not None:
         chosen_root, chosen_step, fallback_roots, fallback_steps = _servable_promotion(
@@ -249,7 +265,7 @@ def decide_tree(state: WorldState, game_data: GameData,
     trunk_row = strategy.RootScore(
         root_repr=repr(trunk), category="char_level", contribution=Fraction(1),
         cost=0, score=Fraction(1), step_repr=repr(trunk))
-    ranking = [trunk_row, *_gear_ranking_rows(state, game_data, ordered)]
+    ranking = [trunk_row, *_gear_ranking_rows(state, game_data, ordered, recoverable)]
 
     # interrupt/desired_state are trace-shape compatibility only: RestoreHP
     # preemption lives in the engine-independent arbiter guard ladder, and
