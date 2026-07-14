@@ -204,4 +204,164 @@ theorem blanket_would_hide_the_whole_hoard :
     recycleApplicable 18 17 1 = true ∧ recycleApplicable 18 17 18 = false := by
   decide
 
+/-! ## Gate 3 — the OWNERSHIP FLOOR, and the COMPOSED invariant.
+
+EVERYTHING ABOVE IS ABOUT ONE ACTION. `licence_bounded_by_destroyable` bounds the
+quantity of a SINGLE `RecycleAction`, and every composed theorem above instantiates
+`keepBag = keepOwned` — the one regime in which the single-action bound accidentally
+composes. THE INVARIANT THE EPIC CLAIMS IS NOT ABOUT ONE ACTION: it is "`destroyable`
+bounds HOW MANY copies may cease to exist", i.e. a bound on the TOTAL over a PLAN.
+
+And the licence cannot enforce it. `license_destructive_actions` is a POOL-ADMISSION
+filter: it asks ONCE, of a `quantity=1` action, whether `quantity ≤ licence`, and then
+a plan may APPLY that one admitted action any number of times (in A*, in
+`craft_plan_gen._recycle_prefix`, or by replaying a cached plan — `should_replan`
+re-validates `step.is_applicable` and never re-derives the licence). The only
+per-application guard the epic shipped was `bag_floor = keepBag`, and
+
+    keepBag = 0 < 1 = keepOwned
+
+for EVERY spare, unequipped, non-dominated equippable (ring, amulet, helmet, boots,
+artifact, rune) — `IN_BAG_REASONS` carries no gear-keep reason at all. So with 2 spare
+copper_rings and `destroyable = 1`, the licensed unit recycle was applicable TWICE and
+BOTH rings died (`bag_floor_alone_over_destroys` — reproduced against production code).
+
+`RecycleAction.owned_floor = keep_owned(code)` is the missing gate, and it is the ONE
+quantity that survives composition: `owned = bag + bank` is INVARIANT under
+Withdraw/Deposit and decreases by exactly `qty` under a recycle, so a floor on it binds
+every application of every recycle in any sequence. That is
+`total_destroyed_le_destroyable` below — the epic's actual safety claim, stated over a
+RUN, and it is FALSE without gate 3. -/
+
+/-- Bag + bank holdings of one code. -/
+structure St where
+  bag : Nat
+  bank : Nat
+deriving DecidableEq, Repr
+
+/-- Copies OWNED — the dimension `destroyable` and `keep_owned` answer to. -/
+def owned (s : St) : Nat := s.bag + s.bank
+
+/-- The three plan steps that touch a code's holdings. Withdraw and Deposit are here
+because they are exactly what a plan interleaves with recycles (`_recycle_prefix`
+stages a bank copy before it melts one), and because they are what makes `bag` — and
+so `bag_floor` — an unsound basis for a destruction bound: they MOVE copies, and a
+bound that a mere move can restore bounds nothing. -/
+inductive Step where
+  | recycle (qty : Nat)
+  | withdraw (n : Nat)
+  | deposit (n : Nat)
+deriving DecidableEq, Repr
+
+/-- `RecycleAction.is_applicable`'s protection clauses, BOTH floors — the production
+predicate: `qty ≤ inventory[code]`, `bag_floor ≤ inventory[code] - qty`, and
+`owned_floor ≤ owned - qty` (written `floorOwned + qty ≤ owned` to match Python's
+integer arithmetic exactly: `owned - quantity < owned_floor` refuses). -/
+def recycleApplicableOwned (s : St) (qty floorBag floorOwned : Nat) : Bool :=
+  decide (qty ≤ s.bag) && decide (floorBag ≤ s.bag - qty)
+    && decide (floorOwned + qty ≤ owned s)
+
+/-- Applicability of any step. Withdraw/Deposit carry no destruction gate — they are
+reversible and retain ownership (`keep_in_bag` is what governs them). -/
+def stepApplicable (s : St) (floorBag floorOwned : Nat) : Step → Bool
+  | .recycle qty => recycleApplicableOwned s qty floorBag floorOwned
+  | .withdraw n => decide (n ≤ s.bank)
+  | .deposit n => decide (n ≤ s.bag)
+
+/-- The world-model transition of each step (mirrors `apply` on each Action). -/
+def stepApply (s : St) : Step → St
+  | .recycle qty => ⟨s.bag - qty, s.bank⟩
+  | .withdraw n => ⟨s.bag + n, s.bank - n⟩
+  | .deposit n => ⟨s.bag - n, s.bank + n⟩
+
+/-- Copies this step causes to CEASE TO EXIST. Only a recycle destroys. -/
+def destroyedBy : Step → Nat
+  | .recycle qty => qty
+  | .withdraw _ => 0
+  | .deposit _ => 0
+
+/-- A PLAN is valid when every step is applicable IN SEQUENCE — exactly what GOAP
+(and the plan cache's per-step `is_applicable` re-check) enforces. -/
+def runValid (s : St) (floorBag floorOwned : Nat) : List Step → Bool
+  | [] => true
+  | st :: rest =>
+      stepApplicable s floorBag floorOwned st
+        && runValid (stepApply s st) floorBag floorOwned rest
+
+/-- Total copies the plan destroys. -/
+def totalDestroyed : List Step → Nat
+  | [] => 0
+  | st :: rest => destroyedBy st + totalDestroyed rest
+
+/-- `owned_is_invariant_under_moves`: Withdraw and Deposit do not change what is
+OWNED. This is why `owned_floor` composes and `bag_floor` cannot: a plan can restore
+any bag count with a Withdraw, but it can never restore an owned count. -/
+theorem owned_is_invariant_under_moves (s : St) (n : Nat) :
+    (n ≤ s.bank → owned (stepApply s (.withdraw n)) = owned s)
+    ∧ (n ≤ s.bag → owned (stepApply s (.deposit n)) = owned s) := by
+  constructor <;> intro h <;> simp [owned, stepApply] <;> omega
+
+/-- **`total_destroyed_le_destroyable`** — THE SAFETY INVARIANT THE EPIC CLAIMS, over a
+RUN rather than a single action: for ANY sequence of steps each applicable in turn, the
+TOTAL number of copies destroyed is at most `destroyable = owned - keep_owned`. No
+bound on the pool's admission decision appears anywhere in it: the per-application
+`floorOwned` gate is what carries it, and the theorem is FALSE if that gate is dropped
+(`bag_floor_alone_over_destroys`). -/
+theorem total_destroyed_le_destroyable (floorBag floorOwned : Nat) :
+    ∀ (steps : List Step) (s : St),
+      runValid s floorBag floorOwned steps = true →
+        totalDestroyed steps ≤ destroyable s.bag s.bank floorOwned := by
+  intro steps
+  induction steps with
+  | nil => intro s _; exact Nat.zero_le _
+  | cons st rest ih =>
+    intro s h
+    simp only [runValid, Bool.and_eq_true] at h
+    have hIH := ih (stepApply s st) h.2
+    have happ := h.1
+    cases st with
+    | recycle qty =>
+      simp only [stepApplicable, recycleApplicableOwned, owned, Bool.and_eq_true,
+        decide_eq_true_eq] at happ
+      simp only [stepApply, destroyable] at hIH
+      simp only [totalDestroyed, destroyedBy, destroyable]
+      omega
+    | withdraw n =>
+      simp only [stepApplicable, decide_eq_true_eq] at happ
+      simp only [stepApply, destroyable] at hIH
+      simp only [totalDestroyed, destroyedBy, destroyable]
+      omega
+    | deposit n =>
+      simp only [stepApplicable, decide_eq_true_eq] at happ
+      simp only [stepApply, destroyable] at hIH
+      simp only [totalDestroyed, destroyedBy, destroyable]
+      omega
+
+/-- `bag_floor_alone_over_destroys`: THE BUG, as a theorem. Two spare copper_rings in
+the bag, bank empty; `keep_in_bag = 0` (no gear-keep reason is in `IN_BAG_REASONS`) and
+`keep_owned = 1`, so `destroyable = 1` — ONE ring may die. Under the bag floor ALONE
+the unit recycle is applicable at 2 copies AND again at 1, so the run
+`[recycle 1, recycle 1]` destroys 2 > 1. With the ownership floor the second recycle is
+refused, and the run is not valid. The composed theorem above is exactly what this
+refutes for the un-fixed predicate. -/
+theorem bag_floor_alone_over_destroys :
+    destroyable 2 0 1 = 1
+    ∧ recycleApplicable 2 1 0 = true
+    ∧ recycleApplicable 1 1 0 = true
+    ∧ recycleApplicableOwned ⟨2, 0⟩ 1 0 1 = true
+    ∧ recycleApplicableOwned ⟨1, 0⟩ 1 0 1 = false
+    ∧ runValid ⟨2, 0⟩ 0 1 [.recycle 1, .recycle 1] = false
+    ∧ runValid ⟨2, 0⟩ 0 1 [.recycle 1] = true := by
+  decide
+
+/-- `the_bank_route_still_composes`: the ownership floor does not re-break the bank
+route the epic exists to open. 1 working axe in the bag (`keep_in_bag = 1`), 17 in the
+bank, `keep_owned = 1`: `Withdraw → Recycle` is a VALID run that destroys a copy, while
+recycling the bag copy outright is not applicable at all. Safety without stalling. -/
+theorem the_bank_route_still_composes :
+    runValid ⟨1, 17⟩ 1 1 [.withdraw 1, .recycle 1] = true
+    ∧ totalDestroyed [Step.withdraw 1, Step.recycle 1] = 1
+    ∧ runValid ⟨1, 17⟩ 1 1 [.recycle 1] = false := by
+  decide
+
 end Formal.RecycleProtection

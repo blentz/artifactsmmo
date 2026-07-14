@@ -13,6 +13,7 @@ from artifactsmmo_api_client.models.recycling_schema import RecyclingSchema
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.inventory_room import has_room
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -35,7 +36,36 @@ class RecycleAction(Action):
     eating the working tool sitting alone in the bag instead of withdrawing a
     bank copy. The floor makes the protected bag copies UNREACHABLE, so GOAP is
     forced to Withdraw first. Stamped at licence time, where the ctx is complete
-    — exactly as `workshop_location` is baked in. Default 0 = no floor."""
+    — exactly as `workshop_location` is baked in. Default 0 = no floor.
+
+    IT IS NOT AN OWNERSHIP BOUND, and cannot be made into one: `IN_BAG_REASONS`
+    carries NO gear-keep reason, so `keep_in_bag` is 0 for every spare, unequipped,
+    non-dominated equippable — see `owned_floor`."""
+
+    owned_floor: int = field(default=0, repr=False)
+    """OWNED copies of `code` (bag+bank) that must SURVIVE this recycle
+    (`keep_owned`) — the per-application half of the destruction licence.
+
+    WHY IT EXISTS (whole-branch review, CRITICAL 1). `licensed_recycle_quantity` is
+    a POOL-ADMISSION predicate: it asks ONCE, of a quantity=1 action, whether
+    `quantity <= min(reachable, destroyable)`. Nothing then counts how many times
+    that single admitted action is APPLIED inside a plan. `bag_floor` cannot supply
+    the missing bound because it is a BAG quantity: for a spare unequipped ring /
+    amulet / helmet / boots / artifact / rune — exactly the population the
+    recycle-as-acquisition route dismantles — `keep_in_bag` is 0 while `keep_owned`
+    is 1. Two copper_rings in the bag with `destroyable == 1`: `is_applicable`
+    passed TWICE and BOTH rings died (reproduced against production code; it
+    survived to execution, since `GamePlayer._plan_or_reuse` replays a cached plan
+    re-validating only `step.is_applicable` and never re-derives the licence).
+
+    THE BOUND IS INVARIANT UNDER REPEATED APPLICATION, which is the whole point:
+    `owned` (bag+bank) is unchanged by Withdraw/Deposit and drops by exactly
+    `quantity` under `apply`, so N applications require `owned - N*quantity >=
+    owned_floor` — enforced step by step, in A*, in `craft_plan_gen._recycle_prefix`
+    and across a cached multi-step plan. `destroyable` bounds HOW MANY copies may
+    cease to exist; `bag_floor` bounds WHICH copies are reachable. Stamped at
+    licence time (`destructive_license`) and at the two goal-side batch sites
+    (`goals/recycle_surplus`, `disposal_route`). Default 0 = no floor."""
 
     def is_applicable(self, state: WorldState, game_data: GameData) -> bool:
         if self.workshop_location is None:
@@ -43,6 +73,9 @@ class RecycleAction(Action):
         if state.inventory.get(self.code, 0) < self.quantity:
             return False
         if state.inventory.get(self.code, 0) - self.quantity < self.bag_floor:
+            return False
+        owned = state.inventory.get(self.code, 0) + (state.bank_items or {}).get(self.code, 0)
+        if owned - self.quantity < self.owned_floor:
             return False
         recipe = game_data.crafting_recipe(self.code)
         if recipe is None:
@@ -55,13 +88,20 @@ class RecycleAction(Action):
             return False
         if state.skills.get(stats.crafting_skill, 1) < stats.crafting_level:
             return False
-        # `apply` mints recovered materials into the inventory. Without a
-        # slot-floor check, the post-state overflows inventory_max. Net delta
-        # = sum(max(1, mat_qty*qty // 2)) - quantity (the recycled item leaves
-        # the bag). When the net is positive we need that many free slots.
-        recovered = sum(max(1, (mat_qty * self.quantity) // 2) for mat_qty in recipe.values())
-        net = recovered - self.quantity
-        return not (net > 0 and state.inventory_free < net)
+        # `apply` mints recovered materials into the inventory, so a recycle is a
+        # stack-CREATING action and answers to BOTH inventory caps — the slot-aware
+        # `has_room` every other stack-creating action was migrated to by the
+        # slot-exhaustion epic (withdraw_item / gathering / equip /
+        # optimize_loadout). The quantity dimension alone (`inventory_free`) is
+        # blind to the 497 that bites here: recycle 1 of 7 fishing_nets (its stack
+        # SURVIVES → 0 slots freed) while the recipe mints ash_plank as a NEW
+        # stack. New stacks = recovered materials not already held, minus the
+        # source's own slot when this recycle exhausts it.
+        recovered_qty = sum(max(1, (mat_qty * self.quantity) // 2) for mat_qty in recipe.values())
+        minted = sum(1 for mat_code in recipe if mat_code not in state.inventory)
+        freed = 1 if state.inventory.get(self.code, 0) - self.quantity <= 0 else 0
+        return has_room(minted - freed, recovered_qty - self.quantity,
+                        state.inventory_slots_free, state.inventory_free)
 
     def apply(self, state: WorldState, game_data: GameData) -> WorldState:
         new_inventory = dict(state.inventory)

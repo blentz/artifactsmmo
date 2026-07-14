@@ -11,6 +11,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
+from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.craft_plan_gen import _with_rearm, generate_next_craft_action
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
@@ -97,6 +98,47 @@ def test_generator_plan_prepends_rearm_when_tool_in_bag() -> None:
     assert plan is not None
     assert isinstance(plan[0], OptimizeLoadoutAction), [type(a).__name__ for a in plan]
     assert plan[0].target_skill == "mining"
+
+
+def test_generator_rearms_AFTER_a_recycle_prefix() -> None:
+    """A recycle prefix must not DISARM the re-arm (whole-branch review,
+    IMPORTANT 2). `_with_rearm` inspects ONE leg, and with a non-empty prefix that
+    leg is a Recycle — so the re-arm was skipped while the plan went on to
+    `Gather(copper_rocks)`, and the plan cache executed that gather bare-handed:
+    the very bug `_with_rearm` exists to fix, re-created by the recycle-as-
+    acquisition epic. The re-arm belongs to the first Gather/Fight leg of the
+    REMAINDER, and its applicability is asked of the POST-PREFIX state."""
+    gd = _gd()
+    gd._item_stats["copper_bar"] = ItemStats(
+        code="copper_bar", level=1, type_="resource",
+        crafting_skill="mining", crafting_level=1)
+    gd._item_stats["copper_helmet"] = ItemStats(
+        code="copper_helmet", level=1, type_="helmet",
+        crafting_skill="gearcrafting", crafting_level=1)
+    gd._crafting_recipes = {"copper_bar": {"copper_ore": 10},
+                            "copper_helmet": {"copper_bar": 6}}
+    gd._workshop_locations = {"mining": (5, 0), "gearcrafting": (6, 0)}
+    goal = GatherMaterialsGoal(target_item="copper_bar", needed={"copper_bar": 4})
+    state = make_state(x=2, y=0,
+                       inventory={"copper_pickaxe": 1, "copper_helmet": 1},
+                       equipment={"weapon_slot": "copper_dagger"},
+                       skills={"mining": 12, "gearcrafting": 5})
+    actions = [*_actions(),
+               RecycleAction(code="copper_helmet", quantity=1,
+                             workshop_location=(6, 0))]
+
+    plan = generate_next_craft_action(goal, state, gd, actions)
+
+    assert plan is not None
+    kinds = [type(a).__name__ for a in plan]
+    # The recycle recovers 3 of the 4 bars; the 4th is still gathered — and that
+    # gather is armed.
+    assert kinds[0] == "RecycleAction", kinds
+    assert "OptimizeLoadoutAction" in kinds, kinds
+    rearm_at = kinds.index("OptimizeLoadoutAction")
+    gather_at = kinds.index("GatherAction")
+    assert rearm_at == gather_at - 1, kinds
+    assert plan[rearm_at].target_skill == "mining"
 
 
 def test_generator_plan_unchanged_when_loadout_already_optimal() -> None:

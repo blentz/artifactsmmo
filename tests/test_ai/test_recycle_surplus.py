@@ -3,7 +3,7 @@
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.recycle_surplus import RecycleSurplusGoal
-from artifactsmmo_cli.ai.inventory_keep import destroyable
+from artifactsmmo_cli.ai.inventory_keep import destroyable, keep_owned
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from tests.test_ai.fixtures import make_state
@@ -227,6 +227,25 @@ def test_goal_relevant_actions_recycles_surplus_not_deletes():
     assert a.workshop_location == (2, 1)
     assert 1 <= a.quantity <= 8
     assert a.is_applicable(state, gd)
+
+
+def test_goal_batch_recycle_is_stamped_with_the_owned_floor():
+    """The goal builds its BATCH actions OUTSIDE `destructive_license`, so it must
+    stamp `owned_floor = keep_owned` itself or the per-application bound is bypassed
+    on this route (whole-branch review, CRITICAL 1). The floor never blocks the
+    FIRST application — `recyclable_surplus` is bounded by `destroyable`, i.e. by
+    `owned - keep_owned` — it blocks the SECOND."""
+    gd = _gd()
+    state = make_state(level=5, skills={"gearcrafting": 1},
+                       inventory={"copper_helmet": 9}, inventory_max=200)
+    ctx = _ctx()
+    floor = keep_owned("copper_helmet", state, gd, ctx)
+    goal = RecycleSurplusGoal(game_data=gd, ctx=ctx)
+    action = goal.relevant_actions([], state, gd)[0]
+    assert action.owned_floor == floor
+    assert action.is_applicable(state, gd)
+    # Applying the same batch twice would destroy past `destroyable`: refused.
+    assert not action.is_applicable(action.apply(state, gd), gd)
 
 
 def test_goal_satisfied_when_no_surplus():

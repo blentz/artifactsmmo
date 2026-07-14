@@ -40,15 +40,27 @@ and ONLY Recycle, is also licensed off a BANK route (`licensed_recycle_quantity`
   Recycle(code, q) licensed  iff  destroyable(code) >= q
                               and (bankable(code) >= q  or  bank_copies(code) >= q)
 
-Admitting a bank copy this way is safe ONLY because of `RecycleAction.bag_floor`
-(landed first, on purpose): every surviving `RecycleAction` is stamped here with
-`bag_floor = keep_in_bag(code)`, and `RecycleAction.is_applicable` refuses when
-consuming `quantity` would cut the bag below that floor. The division of labour is the
-whole point — `destroyable` bounds HOW MANY copies may cease to exist; `bag_floor`
-bounds WHICH copies are reachable. So a bank copy can be withdrawn and recycled, while
-the working `copper_axe` alone in the bag can never be consumed: GOAP is forced to
-`Withdraw` first. The conservative bag-side `min` is not being loosened for Recycle —
-it is being replaced by this precise two-part guard.
+Admitting a bank copy this way is safe ONLY because every surviving `RecycleAction` is
+stamped here with TWO floors, and `RecycleAction.is_applicable` re-checks BOTH on every
+application:
+
+  * `owned_floor = keep_owned(code)` — HOW MANY copies may cease to exist. THE LICENCE
+    ABOVE CANNOT ENFORCE THIS. It is a POOL-ADMISSION test, asked once of a quantity=1
+    action; a plan may then APPLY that one action any number of times, and nothing here
+    counts. `owned` (bag+bank) is invariant under Withdraw/Deposit and drops by exactly
+    `quantity` per recycle, so the floor bounds the TOTAL destroyed over any sequence —
+    in A*, in `craft_plan_gen._recycle_prefix`, and across a cached multi-step plan
+    (`GamePlayer._plan_or_reuse` re-validates `step.is_applicable` only; it never
+    re-derives this licence). Without it, 2 spare copper_rings with `destroyable == 1`
+    both died (whole-branch review, CRITICAL 1): `bag_floor` cannot stand in, because
+    `IN_BAG_REASONS` has no gear-keep reason — `keep_in_bag == 0 < 1 == keep_owned` for
+    every spare unequipped equippable, which is the population this route dismantles.
+  * `bag_floor = keep_in_bag(code)` — WHICH copies are reachable. So a bank copy can be
+    withdrawn and recycled, while the working `copper_axe` alone in the bag can never be
+    consumed: GOAP is forced to `Withdraw` first.
+
+The conservative bag-side `min` is not being loosened for Recycle — it is being replaced
+by this precise two-part guard.
 
 WHERE IT IS APPLIED: `StrategyArbiter.select`, immediately after `step_profile` is bound
 onto the ctx — the ONE point in production where the ctx the authority reads is complete
@@ -67,7 +79,7 @@ from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.inventory_keep import bankable, destroyable, keep_in_bag
+from artifactsmmo_cli.ai.inventory_keep import bankable, destroyable, keep_in_bag, keep_owned
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
@@ -132,11 +144,21 @@ def license_destructive_actions(actions: list[Action], state: WorldState,
     all, and no goal can reach for one.
 
     A surviving RecycleAction is licensed by `licensed_recycle_quantity` (the
-    bank route included) and stamped with `bag_floor = keep_in_bag(code)`: the
-    licence says how many copies may die, the floor says which ones the planner
-    may reach — the working tool is never one of them."""
+    bank route included) and stamped with TWO floors — `bag_floor =
+    keep_in_bag(code)` and `owned_floor = keep_owned(code)`. The licence itself
+    is a POOL-ADMISSION test, asked ONCE of a quantity=1 action; it cannot count
+    how many times a plan APPLIES that action. Only a floor carried on the action
+    binds every application, and `bag_floor` alone does not bind the OWNERSHIP
+    quantity `destroyable` is about (`keep_in_bag` is 0 for a spare unequipped
+    ring while `keep_owned` is 1 — so both rings died: whole-branch review,
+    CRITICAL 1). `owned_floor` is exactly that per-application bound: it is
+    invariant under Withdraw/Deposit and drops by `quantity` per recycle, so
+    TOTAL destroyed <= destroyable holds over any sequence. The licence says how
+    many copies may die, `owned_floor` HOLDS them to it, and `bag_floor` says
+    which ones the planner may reach — the working tool is never one of them."""
     licensed: dict[str, int] = {}
     floors: dict[str, int] = {}
+    floors_owned: dict[str, int] = {}
     kept: list[Action] = []
     for action in actions:
         demand = destructive_demand(action)
@@ -147,9 +169,11 @@ def license_destructive_actions(actions: list[Action], state: WorldState,
         if isinstance(action, RecycleAction):
             if code not in floors:
                 floors[code] = keep_in_bag(code, state, game_data, ctx)
+                floors_owned[code] = keep_owned(code, state, game_data, ctx)
             allowed = licensed_recycle_quantity(code, state, game_data, ctx)
             if quantity <= allowed:
-                kept.append(dataclasses.replace(action, bag_floor=floors[code]))
+                kept.append(dataclasses.replace(action, bag_floor=floors[code],
+                                                owned_floor=floors_owned[code]))
             continue
         if code not in licensed:
             licensed[code] = licensed_quantity(code, state, game_data, ctx)

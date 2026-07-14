@@ -47,6 +47,8 @@ RECIPE_CLOSURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recipe_closure.
 TASK_FEASIBILITY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_feasibility.py"
 PREREQUISITE_GRAPH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "prerequisite_graph.py"
 RECOVERABLE_MATERIALS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recoverable_materials.py"
+RECYCLE_ACTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "recycle.py"
+DESTRUCTIVE_LICENSE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "destructive_license.py"
 OBJECTIVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "objective.py"
 STRATEGY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "strategy.py"
 BANK_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_selection.py"
@@ -2463,6 +2465,73 @@ RECYCLE_SOURCE_MUTATIONS = [
     ("craft_plan_gen: never stage a bank copy (Withdraw -> Recycle unplannable)",
      "            leg = _staging_withdraw(source.code, relevant, sim, game_data)",
      "            leg = None"),
+    # The goal's OWN target as a recycle source: melt the copper_ring you are
+    # trying to craft to get half its own copper_bar back (whole-branch review,
+    # MINOR 4). Killed by test_the_goals_own_target_is_never_recycled_for_its_own_parts.
+    ("craft_plan_gen: the goal's own closure is a licensed recycle source",
+     "        if action.code in excluded:\n"
+     "            continue  # never melt the goal's own target (or its chain) for parts\n",
+     ""),
+]
+
+# THE OWNERSHIP BOUND ON A RECYCLE (whole-branch review, CRITICAL 1). The licence
+# (`destructive_license`) is a POOL-ADMISSION test asked ONCE of a quantity=1
+# action; only a floor CARRIED ON THE ACTION bounds how many times a plan APPLIES
+# it. `bag_floor` cannot: `IN_BAG_REASONS` has no gear-keep reason, so
+# `keep_in_bag == 0 < 1 == keep_owned` for every spare unequipped equippable — the
+# exact population this epic dismantles, and 2 copper_rings with `destroyable == 1`
+# both died. Also the SLOT dimension (IMPORTANT 3): a recycle MINTS a stack, so it
+# answers to `inventory_room.has_room`, not to the quantity cap alone.
+# Killed by tests/test_ai/test_actions_tier2.py::TestRecycleAction.
+RECYCLE_OWNED_FLOOR_MUTATIONS = [
+    ("recycle: no ownership bound (the licence is admission-only -> over-destroy)",
+     "        owned = state.inventory.get(self.code, 0) + (state.bank_items or {}).get(self.code, 0)\n"
+     "        if owned - self.quantity < self.owned_floor:\n"
+     "            return False\n",
+     ""),
+    ("recycle: owned counts the BAG only (bank copies stop satisfying the keep)",
+     "        owned = state.inventory.get(self.code, 0) + (state.bank_items or {}).get(self.code, 0)",
+     "        owned = state.inventory.get(self.code, 0)"),
+    ("recycle: owned floor off by one (< -> <=; no licensed recycle survives)",
+     "        if owned - self.quantity < self.owned_floor:",
+     "        if owned - self.quantity <= self.owned_floor:"),
+    ("recycle: slot-blind again (minted stack needs no slot -> HTTP 497)",
+     "        return has_room(minted - freed, recovered_qty - self.quantity,",
+     "        return has_room(0, recovered_qty - self.quantity,"),
+    ("recycle: the exhausted source's slot is not credited (over-refuses)",
+     "        freed = 1 if state.inventory.get(self.code, 0) - self.quantity <= 0 else 0",
+     "        freed = 0"),
+]
+
+# The licence STAMPS the ownership floor, or the bound is inert on the pool route.
+# Killed by tests/test_ai/test_destructive_license.py.
+DESTRUCTIVE_LICENSE_FLOOR_MUTATIONS = [
+    ("destructive_license: recycle carries no ownership floor (over-destroy)",
+     "                kept.append(dataclasses.replace(action, bag_floor=floors[code],\n"
+     "                                                owned_floor=floors_owned[code]))",
+     "                kept.append(dataclasses.replace(action, bag_floor=floors[code]))"),
+    ("destructive_license: ownership floor stamped from keep_in_bag (0 for spare gear)",
+     "                floors_owned[code] = keep_owned(code, state, game_data, ctx)",
+     "                floors_owned[code] = keep_in_bag(code, state, game_data, ctx)"),
+]
+
+# The two BATCH-action sites OUTSIDE the licence must stamp the floor themselves,
+# or the bound is bypassed on their routes. Killed by
+# tests/test_ai/test_recycle_surplus.py::test_goal_batch_recycle_is_stamped_with_the_owned_floor.
+RECYCLE_SURPLUS_FLOOR_MUTATIONS = [
+    ("recycle_surplus goal: batch recycle carries no ownership floor",
+     "            floor = keep_owned(code, state, game_data, self._ctx)",
+     "            floor = 0"),
+]
+
+# The recycle prefix must not DISARM the loadout re-arm (whole-branch review,
+# IMPORTANT 2): `_with_rearm` inspects ONE leg, so with a prefix in front the leg
+# it sees is a Recycle and the Gather that follows runs bare-handed. Killed by
+# tests/test_ai/test_gather_rearm.py::test_generator_rearms_AFTER_a_recycle_prefix.
+RECYCLE_PREFIX_REARM_MUTATIONS = [
+    ("craft_plan_gen: re-arm reads plan[0] (a recycle prefix disarms it)",
+     "    result = [*prefix, *_with_rearm(mapped, state_after, game_data)]",
+     "    result = _with_rearm([*prefix, *mapped], state, game_data)"),
 ]
 
 # Composite-swap cooldown wait (2026-07-05 23:34 livelock): without blocking
@@ -3312,6 +3381,13 @@ DISPOSAL_ROUTE_ADAPTER_MUTATIONS = [
     ("disposal_route adapter: future_value blind to equippability",
      "    return stats is not None and bool(ITEM_TYPE_TO_SLOTS.get(stats.type_))",
      "    return False"),
+    # The routed BATCH recycle is built OUTSIDE the destruction licence, so it must
+    # stamp its own ownership floor or a plan can apply it twice and destroy past
+    # `destroyable` (whole-branch review, CRITICAL 1). Killed by
+    # test_routed_recycle_is_stamped_with_the_owned_floor.
+    ("disposal_route adapter: routed recycle carries no ownership floor",
+     "    floor = keep_owned(code, state, game_data, ctx)",
+     "    floor = 0"),
 ]
 
 # discard_overstock goal-wiring mutation: the goal stops threading the
@@ -5192,6 +5268,14 @@ def _run_all_groups() -> int:
               "tests/test_ai/test_gather_rearm.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, RECYCLE_SOURCE_MUTATIONS,
               "tests/test_ai/test_craft_plan_gen.py", survivors)
+    run_group(CRAFT_PLAN_GEN_SRC, RECYCLE_PREFIX_REARM_MUTATIONS,
+              "tests/test_ai/test_gather_rearm.py", survivors)
+    run_group(RECYCLE_ACTION_SRC, RECYCLE_OWNED_FLOOR_MUTATIONS,
+              "tests/test_ai/test_actions_tier2.py", survivors)
+    run_group(DESTRUCTIVE_LICENSE_SRC, DESTRUCTIVE_LICENSE_FLOOR_MUTATIONS,
+              "tests/test_ai/test_destructive_license.py", survivors)
+    run_group(RECYCLE_SURPLUS_GOAL_SRC, RECYCLE_SURPLUS_FLOOR_MUTATIONS,
+              "tests/test_ai/test_recycle_surplus.py", survivors)
     run_group(RECYCLE_SURPLUS_GOAL_SRC, RECYCLE_SNAPSHOT_MUTATIONS,
               "tests/test_ai/test_recycle_urgency.py", survivors)
     run_group(OPTIMIZE_LOADOUT_SRC, OPTIMIZE_COOLDOWN_MUTATIONS,

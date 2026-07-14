@@ -251,13 +251,13 @@ def generate_next_craft_action(
                 # remaining legs from the REAL post-fight inventory (the
                 # same grind-one-replan idiom the skill dispatch uses).
                 break
-        return _finish([*prefix, *mapped], state, game_data)
+        return _finish(prefix, mapped, state, state_after, game_data)
     # Every needed item is satisfied by the recipe descent — but a non-empty
     # recycle prefix IS the plan (the LIVENESS shape: the recovered materials
     # cover the whole demand, so `craft_plan_full` has nothing left to add).
     # Without this the prefix would be dropped on the floor and the goal would
     # fall back to A* — which finds the very same recycles, just after a search.
-    return _finish(prefix, state, game_data) if prefix else None
+    return _finish(prefix, [], state, state_after, game_data) if prefix else None
 
 
 RECYCLE_PREFIX_FUEL = 64
@@ -304,16 +304,39 @@ def _recovered_units(recipe: dict[str, int], materials: dict[str, int]) -> int:
                for code, qty in recipe.items() if code in materials)
 
 
+def _goal_closure(needed: dict[str, int], game_data: GameData) -> frozenset[str]:
+    """Every code the goal is TRYING TO OBTAIN — the needed items and their whole
+    recipe closure. A recycle source drawn from this set would destroy the very
+    thing the plan exists to produce.
+
+    `needed = {copper_ring: 5}` with copper_rings in hand: `_best_recycle` would
+    otherwise pick `Recycle(copper_ring)` (its recipe recovers `copper_bar`, a
+    genuine deficit) and plan `Recycle(copper_ring) -> Craft(copper_ring)` — melt
+    a ring to get back HALF of its own inputs, forever. Nothing but the keep
+    reasons driving `destroyable` to 0 prevented it, and that is INCIDENTAL: the
+    5th spare ring of an over-demand goal is destroyable. The exclusion is
+    STRUCTURAL instead (whole-branch review, MINOR 4)."""
+    chain: dict[str, int] = {}
+    for item, qty in needed.items():
+        closure_demand(item, qty, game_data, chain, frozenset())
+    return frozenset(chain) | frozenset(needed)
+
+
 def _best_recycle(relevant: list[Action], deficits: dict[str, int],
+                  excluded: frozenset[str],
                   game_data: GameData) -> RecycleAction | None:
     """The best licensed recycle SOURCE for the current deficits, or None.
 
     `relevant` is the goal's own menu, so every `RecycleAction` in it has already
     passed the destruction LICENCE (`StrategyArbiter.select` →
-    `license_destructive_actions`) and carries its `bag_floor` — this function can
-    only fail to pick one, never invent one the authority forbade. That is what
-    makes the working `copper_axe` unreachable here without re-deriving any
-    protection rule.
+    `license_destructive_actions`) and carries its `bag_floor` and `owned_floor` —
+    this function can only fail to pick one, never invent one the authority
+    forbade. That is what makes the working `copper_axe` unreachable here without
+    re-deriving any protection rule.
+
+    `excluded` (the goal's own closure, `_goal_closure`) is the one rule the
+    licence CANNOT supply: destroying a copy of what you are crafting is licensed
+    whenever it is surplus, and it is still self-defeating.
 
     Ranked by SEMANTICS, never by name: most units of a SHORT material recovered
     per copy first (the whole point of the route), then the LOWEST-level source (a
@@ -326,6 +349,8 @@ def _best_recycle(relevant: list[Action], deficits: dict[str, int],
     for action in relevant:
         if not isinstance(action, RecycleAction):
             continue
+        if action.code in excluded:
+            continue  # never melt the goal's own target (or its chain) for parts
         recipe = game_data.crafting_recipe(action.code) or {}
         gain = _recovered_units(recipe, deficits)
         if gain <= 0:
@@ -372,11 +397,12 @@ def _recycle_prefix(needed: dict[str, int], relevant: list[Action],
     give, and the `craft_plan_full` descent below gathers the rest."""
     legs: list[Action] = []
     sim = state
+    excluded = _goal_closure(needed, game_data)
     for _ in range(RECYCLE_PREFIX_FUEL):
         deficits = _material_deficits(needed, sim, game_data)
         if not deficits:
             break
-        source = _best_recycle(relevant, deficits, game_data)
+        source = _best_recycle(relevant, deficits, excluded, game_data)
         if source is None:
             break  # no licensed recycle serves what the goal still lacks
         leg: Action | None = source
@@ -391,9 +417,22 @@ def _recycle_prefix(needed: dict[str, int], relevant: list[Action],
     return legs, sim
 
 
-def _finish(mapped: list[Action], state: WorldState,
-            game_data: GameData) -> list[Action] | None:
-    """Re-arm the plan's first leg and gate it on applicability NOW.
+def _finish(prefix: list[Action], mapped: list[Action], state: WorldState,
+            state_after: WorldState, game_data: GameData) -> list[Action] | None:
+    """Re-arm the REMAINDER, keep the prefix in front, and gate the whole plan on
+    the first leg's applicability NOW.
+
+    THE RE-ARM IS EVALUATED ON THE REMAINDER, NOT ON `plan[0]` (whole-branch
+    review, IMPORTANT 2). `_with_rearm` inspects one leg — index 0 — and with a
+    non-empty recycle prefix that leg is a Recycle/Withdraw, so the re-arm was
+    SKIPPED even though the plan went on `..., Gather(copper_rocks), Craft(...)`:
+    the recycle prefix silently DISARMED the loadout re-arm, and the plan cache
+    executed the Gather bare-handed — the exact bug `_with_rearm`'s own docstring
+    documents (every generated helmet plan opened bare-handed while the ferried
+    copper_pickaxe rode in the bag). The remainder's own first leg is the one the
+    re-arm is about, and its applicability is asked of `state_after` — the
+    POST-PREFIX state the executor will actually be in when it reaches that leg,
+    not the initial state.
 
     The directed fast-path emits a deterministic recycle/gather/craft leg but does
     NOT model inventory-room preconditions. If the first leg is not applicable NOW
@@ -401,9 +440,10 @@ def _finish(mapped: list[Action], state: WorldState,
     case), defer to A*, which sequences the slot-freeing relief
     (DepositAll/Recycle/Sell) before the leg.
 
-    `mapped` is never empty at either call site (the recipe descent contributes at
-    least one leg, or the recycle prefix does), so `result[0]` always exists."""
-    result = _with_rearm(mapped, state, game_data)
+    At least one of `prefix` / `mapped` is non-empty at either call site (the
+    recipe descent contributes at least one leg, or the recycle prefix does), so
+    `result[0]` always exists."""
+    result = [*prefix, *_with_rearm(mapped, state_after, game_data)]
     if not result[0].is_applicable(state, game_data):
         return None
     return result
@@ -418,6 +458,12 @@ def _with_rearm(mapped: list[Action], state: WorldState,
     generated helmet plan opened bare-handed while the ferried
     copper_pickaxe rode in the bag. Plans opening with a Craft are left
     alone; a later Gather/Fight-first regeneration re-arms then.
+
+    `mapped` is the plan REMAINDER (the recipe-descent legs) and `state` the
+    POST-PREFIX state — never the raw plan/initial state. `_finish` splices the
+    result back behind the recycle prefix. A prefix leg at index 0 would otherwise
+    make every branch below fall through and disarm the re-arm entirely (see
+    `_finish`).
 
     Fight-first mirror (Task 5b Part 3): `_dropper_fight` admits a dropper
     on STRUCTURAL applicability only (Part 2), so a mapped plan's leading

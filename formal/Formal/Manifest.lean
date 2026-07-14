@@ -905,6 +905,14 @@ open Formal.PriorityBand
 #check @Formal.RecycleProtection.bag_licence_would_strand_the_bank_hoard
 #check @Formal.RecycleProtection.working_axe_survives_but_the_hoard_is_reachable
 #check @Formal.RecycleProtection.blanket_would_hide_the_whole_hoard
+-- ... and the COMPOSED invariant (owned_floor): over ANY sequence of applicable
+-- recycles, TOTAL destroyed ≤ destroyable. The licence is pool-ADMISSION only, so
+-- the single-action bound above does NOT compose; bag_floor cannot carry it
+-- (keepBag = 0 < keepOwned for every spare equippable).
+#check @Formal.RecycleProtection.owned_is_invariant_under_moves
+#check @Formal.RecycleProtection.total_destroyed_le_destroyable
+#check @Formal.RecycleProtection.bag_floor_alone_over_destroys
+#check @Formal.RecycleProtection.the_bank_route_still_composes
 
 -- PlannerDepthBound (planner never returns a plan longer than max_depth ⇒ a
 -- depth-based pre-plan skip is sound; copper_boots @ max_depth 15 is the bug):

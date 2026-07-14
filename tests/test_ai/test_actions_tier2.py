@@ -213,6 +213,96 @@ class TestRecycleAction:
         assert action.bag_floor == 0
         assert action.is_applicable(state, gd) is True
 
+    # --- owned_floor: the PER-APPLICATION half of the destruction licence ---
+    # (whole-branch review, CRITICAL 1). `licensed_recycle_quantity` admits a
+    # quantity=1 action ONCE; only a floor carried on the action bounds how many
+    # times a plan APPLIES it. `bag_floor` cannot: for a spare unequipped
+    # equippable, keep_in_bag == 0 while keep_owned >= 1.
+
+    def test_recycle_blocked_when_it_would_breach_the_owned_floor(self):
+        # The LAST owned copy (bag+bank) may not cease to exist: keep_owned=1.
+        action = RecycleAction(code="copper_ring", quantity=1, workshop_location=(5, 0),
+                               owned_floor=1)
+        stats = ItemStats(code="copper_ring", level=1, type_="ring",
+                          crafting_skill="jewelrycrafting", crafting_level=1)
+        state = make_state(inventory={"copper_ring": 1}, bank_items={},
+                           skills={"jewelrycrafting": 5})
+        gd = make_gd(item_stats={"copper_ring": stats},
+                     recipes={"copper_ring": {"copper_bar": 6}})
+        assert action.is_applicable(state, gd) is False
+
+    def test_owned_floor_counts_BANK_copies(self):
+        # owned = bag + bank, the same dimension `destroyable` is about: the bank
+        # copy satisfies the keep, so the bag copy is destroyable. A bag-only
+        # `owned` would refuse this and make the licensed recycle unplannable.
+        action = RecycleAction(code="copper_ring", quantity=1, workshop_location=(5, 0),
+                               owned_floor=1)
+        stats = ItemStats(code="copper_ring", level=1, type_="ring",
+                          crafting_skill="jewelrycrafting", crafting_level=1)
+        state = make_state(inventory={"copper_ring": 1}, bank_items={"copper_ring": 1},
+                           skills={"jewelrycrafting": 5})
+        gd = make_gd(item_stats={"copper_ring": stats},
+                     recipes={"copper_ring": {"copper_bar": 6}})
+        assert action.is_applicable(state, gd) is True
+
+    def test_owned_floor_bounds_a_BATCH_quantity_too(self):
+        # 3 owned, floor 1: a batch of 2 is the most that may die; 3 is refused.
+        stats = ItemStats(code="copper_ring", level=1, type_="ring",
+                          crafting_skill="jewelrycrafting", crafting_level=1)
+        state = make_state(inventory={"copper_ring": 3}, bank_items={},
+                           skills={"jewelrycrafting": 5},
+                           inventory_max=100, inventory_slots_max=20)
+        gd = make_gd(item_stats={"copper_ring": stats},
+                     recipes={"copper_ring": {"copper_bar": 6}})
+        ok = RecycleAction(code="copper_ring", quantity=2, workshop_location=(5, 0),
+                           owned_floor=1)
+        too_many = RecycleAction(code="copper_ring", quantity=3, workshop_location=(5, 0),
+                                 owned_floor=1)
+        assert ok.is_applicable(state, gd) is True
+        assert too_many.is_applicable(state, gd) is False
+
+    def test_recycle_owned_floor_defaults_to_zero(self):
+        action = RecycleAction(code="copper_dagger", quantity=1, workshop_location=(5, 0))
+        stats = ItemStats(code="copper_dagger", level=1, type_="weapon",
+                          crafting_skill="weaponcrafting")
+        state = make_state(inventory={"copper_dagger": 1})
+        gd = make_gd(item_stats={"copper_dagger": stats},
+                     recipes={"copper_dagger": {"copper_ore": 6}})
+        assert action.owned_floor == 0
+        assert action.is_applicable(state, gd) is True
+
+    # --- slot-awareness (whole-branch review, IMPORTANT 3) ---
+
+    def test_recycle_refused_when_the_minted_stack_has_no_SLOT(self):
+        # Bag slot-full but quantity-free: 7 fishing_nets, so the SOURCE STACK
+        # SURVIVES the recycle (0 slots freed) while the recipe mints ash_plank as
+        # a NEW stack -> server HTTP 497. `inventory_free` (the QUANTITY dimension)
+        # is blind to this and said True; `inventory_room.has_room` is not.
+        action = RecycleAction(code="fishing_net", quantity=1, workshop_location=(5, 0))
+        stats = ItemStats(code="fishing_net", level=1, type_="weapon",
+                          crafting_skill="weaponcrafting", crafting_level=1)
+        state = make_state(inventory={"fishing_net": 7, "a": 1, "b": 1},
+                           inventory_max=100, inventory_slots_max=3)
+        gd = make_gd(item_stats={"fishing_net": stats},
+                     recipes={"fishing_net": {"ash_plank": 4}})
+        assert state.inventory_free > 0  # quantity headroom exists...
+        assert state.inventory_slots_free == 0  # ...but no SLOT does
+        assert action.is_applicable(state, gd) is False
+
+    def test_recycle_allowed_when_the_exhausted_source_slot_pays_for_the_mint(self):
+        # The mirror: the last fishing_net's slot IS freed by this recycle, so the
+        # minted ash_plank stack has somewhere to go. Not over-refusing is the
+        # other half of the property.
+        action = RecycleAction(code="fishing_net", quantity=1, workshop_location=(5, 0))
+        stats = ItemStats(code="fishing_net", level=1, type_="weapon",
+                          crafting_skill="weaponcrafting", crafting_level=1)
+        state = make_state(inventory={"fishing_net": 1, "a": 1, "b": 1},
+                           inventory_max=100, inventory_slots_max=3)
+        gd = make_gd(item_stats={"fishing_net": stats},
+                     recipes={"fishing_net": {"ash_plank": 4}})
+        assert state.inventory_slots_free == 0
+        assert action.is_applicable(state, gd) is True
+
 
 class TestNpcBuyAction:
     def test_repr(self):

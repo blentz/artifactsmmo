@@ -1125,6 +1125,58 @@ class TestRecycleAsASource:
         assert [type(a).__name__ for a in result] == [
             "WithdrawItemAction", "RecycleAction"], result
 
+    def test_the_owned_floor_stops_the_prefix_at_the_destroyable_count(self):
+        """PARTIAL PROTECTION in the PLAN (whole-branch review, CRITICAL 1). Two
+        copper_daggers in the bag with `destroyable == 1` (the licence stamps
+        `owned_floor=1`): 6 bars are needed and each dagger recovers 3, so the
+        prefix WANTS both — and before `owned_floor` it took both, because the
+        only per-application guard was `bag_floor`, which is 0 for a spare
+        weapon. Exactly ONE recycle may appear; the rest is gathered."""
+        gd = _gd_recyclable()
+        state = make_state(inventory={"copper_dagger": 2}, bank_items={},
+                           skills={"mining": 5, "weaponcrafting": 5},
+                           inventory_max=200, inventory_slots_max=30)
+        goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 6})
+        actions = _bar_actions(RecycleAction(code="copper_dagger", quantity=1,
+                                             workshop_location=(2, 2),
+                                             owned_floor=1))
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        assert result is not None
+        recycles = [a for a in result if isinstance(a, RecycleAction)]
+        assert len(recycles) == 1, [type(a).__name__ for a in result]
+        assert any(isinstance(a, GatherAction) for a in result)
+
+    def test_the_goals_own_target_is_never_recycled_for_its_own_parts(self):
+        """STRUCTURAL exclusion (whole-branch review, MINOR 4). The goal needs 5
+        copper_rings and holds 2 spares; `Recycle(copper_ring)` recovers
+        copper_bar — a genuine deficit — so `_best_recycle` would pick it and plan
+        `Recycle(copper_ring) -> Craft(copper_ring)`: destroy a ring to get back
+        HALF of its own inputs. Only the keep reasons driving `destroyable` to 0
+        prevented it, which is incidental. The source must not be in the goal's
+        closure, full stop."""
+        gd = _gd_recyclable()
+        state = make_state(inventory={"copper_ring": 2}, bank_items={},
+                           skills={"mining": 5, "weaponcrafting": 5,
+                                   "jewelrycrafting": 5},
+                           inventory_max=200, inventory_slots_max=30)
+        goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 5})
+        actions = [
+            GatherAction(resource_code="copper_rocks",
+                         locations=frozenset([(0, 1)])),
+            CraftAction(code="copper_bar", workshop_location=(1, 5)),
+            CraftAction(code="copper_ring", workshop_location=(3, 1)),
+            RecycleAction(code="copper_ring", quantity=1,
+                          workshop_location=(3, 1)),
+        ]
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        assert result is not None
+        assert not any(isinstance(a, RecycleAction) for a in result), result
+        assert isinstance(result[0], GatherAction), result
+
     def test_a_partial_recovery_comes_out_as_ONE_mixed_plan(self):
         """6 bars needed, one dagger recovers 3: the plan recycles for what it
         can and GATHERS the rest — the mixed plan A* cannot find within budget."""

@@ -19,6 +19,7 @@ from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
+from artifactsmmo_cli.ai.inventory_keep import destroyable, keep_in_bag, keep_owned
 from artifactsmmo_cli.audit.recycle_source_completeness import (
     RecycleSourceCell,
     RecycleSourceGapClass,
@@ -56,7 +57,7 @@ def _actions(cell: RecycleSourceCell, game_data: GameData) -> list[object]:
 
 
 # ---------------------------------------------------------------------------
-# THE FOUR CELLS, through the real selector.
+# THE FIVE CELLS, through the real selector.
 # ---------------------------------------------------------------------------
 
 def test_liveness_cell_plans_a_recycle(bundle_game_data: GameData) -> None:
@@ -98,7 +99,7 @@ def test_safety_cell_is_falsifiable(bundle_game_data: GameData) -> None:
                for a in plan), (
         "the SAFETY cell is VACUOUS: with the protection lifted the planner still "
         "does not recycle, so its green proves nothing about the protection")
-    assert recycle_source_cell_verdict(cell, plan, False) is True
+    assert recycle_source_cell_verdict(cell, plan, False, 1) is True
 
 
 def test_banked_cell_withdraws_then_recycles(bundle_game_data: GameData) -> None:
@@ -123,6 +124,102 @@ def test_partial_cell_resolves_a_mixed_plan_within_budget(
     assert plan
     assert any(isinstance(a, RecycleAction) and a.code == "water_bow" for a in plan)
     assert any(isinstance(a, GatherAction) for a in plan)
+
+
+def test_partial_protection_source_has_NO_bag_floor(
+        bundle_game_data: GameData) -> None:
+    """THE CELL'S LOAD-BEARING PREMISE, pinned. The source must be one whose
+    `keep_in_bag` is 0 — otherwise `bag_floor` ALREADY bounds a second recycle and
+    the cell would pass without the ownership bound, proving nothing. That is
+    exactly why the source is a spare `copper_helmet` and NOT the `copper_axe`:
+    the axe is WORKING_KIT (keep_in_bag 1). `IN_BAG_REASONS` carries no gear-keep
+    reason at all, which is the structural fact CRITICAL 1 turned on."""
+    cell = _cells(bundle_game_data)[RecycleSourceKind.PARTIAL_PROTECTION]
+    state = census_state(cell, bundle_game_data)
+    ctx = census_ctx()
+    assert keep_in_bag(cell.source, state, bundle_game_data, ctx) == 0
+    assert keep_owned(cell.source, state, bundle_game_data, ctx) == 1
+    assert destroyable(cell.source, state, bundle_game_data, ctx) == 1
+
+
+def test_partial_protection_cell_destroys_ONLY_the_licensed_copy(
+        bundle_game_data: GameData) -> None:
+    """THE CELL THAT WOULD HAVE FAILED ON DAY ONE (whole-branch review, CRITICAL
+    1). TWO spare copper_helmets, `destroyable == 1`: 6 copper_bar are needed and
+    one recycle recovers 3, so melting BOTH is the cheapest route — and the planner
+    took it (verified: with the ownership bound removed this cell reports
+    `plan=[Recycle(copper_helmet×1), Recycle(copper_helmet×1)]`,
+    recycle_source_bug 1). The licence is a pool-admission test asked ONCE, and
+    `bag_floor` (`keep_in_bag`, 0 for a spare) cannot bound the APPLICATIONS. The
+    plan must destroy exactly ONE copy and gather the rest."""
+    cell = _cells(bundle_game_data)[RecycleSourceKind.PARTIAL_PROTECTION]
+    state = census_state(cell, bundle_game_data)
+    _goal, plan, failed = plan_recycle_source(cell, state, bundle_game_data)
+    assert failed is False
+    destroyed = sum(a.quantity for a in plan
+                    if isinstance(a, RecycleAction) and a.code == cell.source)
+    assert destroyed == destroyable(cell.source, state, bundle_game_data,
+                                    census_ctx()) == 1
+    assert any(isinstance(a, GatherAction) for a in plan), (
+        "the unlicensed half of the demand must still be gathered")
+
+
+def test_partial_protection_verdict_rejects_over_destruction(
+        bundle_game_data: GameData) -> None:
+    """The verdict counts COPIES, not legs: two unit recycles and one batch of 2
+    are the same over-destruction, and both must fail. A plan that recycles
+    NOTHING fails too — that is the epic going inert, not safety."""
+    cell = _cells(bundle_game_data)[RecycleSourceKind.PARTIAL_PROTECTION]
+    unit = RecycleAction(code=cell.source, quantity=1, workshop_location=(1, 1))
+    batch = RecycleAction(code=cell.source, quantity=2, workshop_location=(1, 1))
+    gather = GatherAction(resource_code="copper_rocks",
+                          locations=frozenset({(1, 1)}))
+    assert recycle_source_cell_verdict(cell, [unit, gather], False, 1) is True
+    assert recycle_source_cell_verdict(cell, [unit, unit, gather], False, 1) is False
+    assert recycle_source_cell_verdict(cell, [batch, gather], False, 1) is False
+    assert recycle_source_cell_verdict(cell, [gather], False, 1) is False
+    assert recycle_source_cell_verdict(cell, [unit], False, 1) is False
+
+
+def test_a_fully_protected_partial_protection_cell_raises(
+        bundle_game_data: GameData) -> None:
+    """A cell with NOTHING licensed cannot see an over-destruction — that is the
+    SAFETY cell's question, and this one would pass by protecting everything."""
+    cell = RecycleSourceCell(
+        kind=RecycleSourceKind.PARTIAL_PROTECTION, source="copper_helmet",
+        material="copper_bar", needed=6, bag_copies=1, bank_copies=0,
+        equip_slot="helmet_slot")
+    state = census_state(cell, bundle_game_data)
+    with pytest.raises(ValueError, match="not a PARTIAL licence"):
+        _check_cell(cell, state, bundle_game_data, None)
+
+
+def test_a_partial_protection_cell_the_licence_already_serves_raises(
+        bundle_game_data: GameData) -> None:
+    """If the LICENSED recycles already cover the demand, the planner has no
+    reason to reach for an unlicensed copy and the cell proves nothing."""
+    cell = RecycleSourceCell(
+        kind=RecycleSourceKind.PARTIAL_PROTECTION, source="copper_helmet",
+        material="copper_bar", needed=3, bag_copies=2, bank_copies=0,
+        equip_slot="helmet_slot")
+    state = census_state(cell, bundle_game_data)
+    with pytest.raises(ValueError, match="no incentive to over-destroy"):
+        _check_cell(cell, state, bundle_game_data, None)
+
+
+def test_the_equipped_copy_keeps_EquipOwnedGoal_from_preempting(
+        bundle_game_data: GameData) -> None:
+    """`cell.equip_slot` is not decoration: leave the helmet slot EMPTY with
+    helmets in the bag and the COLLECT-band `EquipOwnedGoal` outranks the objective
+    step, so the cell never reaches the planner it names — `_check_cell` says so
+    rather than letting a lying cell ship."""
+    cell = dataclasses.replace(
+        _cells(bundle_game_data)[RecycleSourceKind.PARTIAL_PROTECTION],
+        equip_slot=None)
+    state = census_state(cell, bundle_game_data)
+    goal, _plan, _failed = plan_recycle_source(cell, state, bundle_game_data)
+    with pytest.raises(ValueError, match="the arbiter ran"):
+        _check_cell(cell, state, bundle_game_data, goal)
 
 
 def test_the_whole_grid_is_clean(bundle_game_data: GameData) -> None:
@@ -158,7 +255,8 @@ def test_a_timed_out_search_fails_every_cell_kind(
     """Including SAFETY: a plan that contains no recycle BECAUSE the planner ran
     out of budget is not a protection, it is a stalled bot."""
     for cell in recycle_source_grid(bundle_game_data):
-        assert recycle_source_cell_verdict(cell, [], planner_failed=True) is False
+        assert recycle_source_cell_verdict(cell, [], planner_failed=True,
+                                           destroyable_copies=1) is False
 
 
 # ---------------------------------------------------------------------------
@@ -344,7 +442,8 @@ def test_verdict_rejects_an_unknown_kind(bundle_game_data: GameData) -> None:
                              material="ash_plank", needed=4, bag_copies=3,
                              bank_copies=0)
     with pytest.raises(ValueError, match="unknown cell kind"):
-        recycle_source_cell_verdict(cell, [], planner_failed=False)
+        recycle_source_cell_verdict(cell, [], planner_failed=False,
+                                    destroyable_copies=0)
 
 
 def test_banked_verdict_needs_the_withdraw_BEFORE_the_recycle(
@@ -354,10 +453,10 @@ def test_banked_verdict_needs_the_withdraw_BEFORE_the_recycle(
                             workshop_location=(1, 1))
     withdraw = WithdrawItemAction(code="water_bow", quantity=1,
                                   bank_location=(2, 2), accessible=True)
-    assert recycle_source_cell_verdict(cell, [withdraw, recycle], False) is True
-    assert recycle_source_cell_verdict(cell, [recycle, withdraw], False) is False
-    assert recycle_source_cell_verdict(cell, [recycle], False) is False
-    assert recycle_source_cell_verdict(cell, [withdraw], False) is False
+    assert recycle_source_cell_verdict(cell, [withdraw, recycle], False, 2) is True
+    assert recycle_source_cell_verdict(cell, [recycle, withdraw], False, 2) is False
+    assert recycle_source_cell_verdict(cell, [recycle], False, 2) is False
+    assert recycle_source_cell_verdict(cell, [withdraw], False, 2) is False
 
 
 def test_partial_verdict_needs_BOTH_routes(bundle_game_data: GameData) -> None:
@@ -365,9 +464,9 @@ def test_partial_verdict_needs_BOTH_routes(bundle_game_data: GameData) -> None:
     recycle = RecycleAction(code="water_bow", quantity=1,
                             workshop_location=(1, 1))
     gather = GatherAction(resource_code="ash_tree", locations=frozenset({(1, 1)}))
-    assert recycle_source_cell_verdict(cell, [recycle, gather], False) is True
-    assert recycle_source_cell_verdict(cell, [recycle], False) is False
-    assert recycle_source_cell_verdict(cell, [gather], False) is False
+    assert recycle_source_cell_verdict(cell, [recycle, gather], False, 2) is True
+    assert recycle_source_cell_verdict(cell, [recycle], False, 2) is False
+    assert recycle_source_cell_verdict(cell, [gather], False, 2) is False
 
 
 def test_run_cell_records_the_authority_and_the_plan(

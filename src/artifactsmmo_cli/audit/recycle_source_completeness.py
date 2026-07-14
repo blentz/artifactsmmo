@@ -28,6 +28,14 @@ needs, and asks whether the production plan takes it:
     MAIN path in production, since `DEPOSIT_FULL` banks exactly this surplus.
   * PARTIAL  (`0 < recoverable[m] < needed`, recipe depth >= 2): a MIXED
     recycle+gather plan, WITHIN BUDGET.
+  * PARTIAL_PROTECTION (`0 < destroyable(S) < copies held`): the plan may contain
+    EXACTLY `destroyable(S)` recycles of `S` — no more. The SAFETY cell above only
+    ever asked the ALL-OR-NOTHING question (`destroyable == 0`), and that is why
+    the whole-branch review's CRITICAL 1 slipped through on day one: the licence
+    is a POOL-ADMISSION test asked ONCE of a quantity=1 action, so with 2 copies
+    and 1 destroyable the plan applied that one action TWICE and destroyed both.
+    Partial protection is the ONLY cell that can see it, and the bound it checks
+    is the authority's own `destroyable`, never a hand-written number.
 
 A PLANNER TIMEOUT IS A BUG, NEVER AN EXPLAINED GAP (`classify_gap`'s
 `planner_failed` arm, which fires BEFORE every world arm). The PARTIAL cell is
@@ -157,15 +165,48 @@ leaf rule lets the descent inherit — the shape that hit a 1M-node cap in livel
 what it is: a bug."""
 
 
+PARTIAL_PROTECTION_SOURCE = "copper_helmet"
+PARTIAL_PROTECTION_MATERIAL = "copper_bar"
+PARTIAL_PROTECTION_BAG_COPIES = 2
+PARTIAL_PROTECTION_NEEDED = 6
+PARTIAL_PROTECTION_EQUIP_SLOT = "helmet_slot"
+"""THE CELL THAT WOULD HAVE FAILED ON DAY ONE (whole-branch review, CRITICAL 1).
+
+THE SOURCE IS A HELMET, NOT THE AXE, AND THAT IS THE ENTIRE POINT. `copper_axe` is
+WORKING_KIT, so `keep_in_bag` is 1 and `bag_floor` ALREADY bounds a second recycle
+of it — a partial-protection cell built on the axe would pass without the
+ownership bound and would be a LIE. `copper_helmet` is the real population this
+epic dismantles: a spare, unequipped, non-dominated equippable. `IN_BAG_REASONS`
+carries NO gear-keep reason, so its `keep_in_bag` is 0 (measured, not assumed —
+`test_partial_protection_source_has_NO_bag_floor` pins it) while `keep_owned` is 1
+(RECIPE_DEMAND). TWO copies held: `destroyable == 1`, `bag_floor == 0`.
+
+The temptation is exact. Six `copper_bar` are needed; one unit recycle recovers
+`max(1, 6 // 2) = 3`. The licensed recycle gives 3 and the SECOND (unlicensed) one
+would give the other 3 — cheaper than mining and smelting them, so every cost term
+says take it. Nothing stopped it: `licensed_recycle_quantity` admits the
+quantity=1 `RecycleAction` ONCE and never counts APPLICATIONS. Both helmets died —
+reproduced against production code, and it survived to EXECUTION (the plan cache
+re-validates `is_applicable` per step and never re-derives the licence).
+`RecycleAction.owned_floor` is the fix; this cell is the census's view of it.
+
+The helmet slot is filled with the same code (`PARTIAL_PROTECTION_EQUIP_SLOT`) for
+the same reason `CENSUS_WEAPON` exists: an EMPTY helmet slot with helmets in the
+bag would fire `EquipOwnedGoal` (COLLECT band, ABOVE the objective step) and the
+cell would never reach the planner it names. Wearing one does not change the
+arithmetic — EQUIPPED and RECIPE_DEMAND both keep 1."""
+
+
 class RecycleSourceKind(Enum):
-    """The four cells. The grid is TOTAL over this enum (`recycle_source_grid`
-    raises on a member with no scenario), so a fifth question cannot be added to
+    """The five cells. The grid is TOTAL over this enum (`recycle_source_grid`
+    raises on a member with no scenario), so a sixth question cannot be added to
     the epic without the census exercising it."""
 
     LIVENESS = "liveness"
     SAFETY = "safety"
     BANKED = "banked"
     PARTIAL = "partial"
+    PARTIAL_PROTECTION = "partial_protection"
 
 
 @dataclass(frozen=True)
@@ -180,6 +221,12 @@ class RecycleSourceCell:
     needed: int
     bag_copies: int
     bank_copies: int
+    equip_slot: str | None = None
+    """Wear one copy of the source in this slot (None = wear nothing). Needed only
+    where the source's own slot would otherwise be EMPTY with copies in the bag:
+    `EquipOwnedGoal` sits in the COLLECT band, ABOVE the objective step, and would
+    win the arbiter — the same preemption `CENSUS_WEAPON` exists to prevent for the
+    weapon-typed sources."""
 
 
 @dataclass(frozen=True)
@@ -235,6 +282,13 @@ def scenario_for(kind: RecycleSourceKind, game_data: GameData) -> RecycleSourceC
             kind=kind, source=_require(PARTIAL_SOURCE, game_data),
             material=_require(PARTIAL_MATERIAL, game_data),
             needed=PARTIAL_NEEDED, bag_copies=PARTIAL_BAG_COPIES, bank_copies=0)
+    if kind is RecycleSourceKind.PARTIAL_PROTECTION:
+        return RecycleSourceCell(
+            kind=kind, source=_require(PARTIAL_PROTECTION_SOURCE, game_data),
+            material=_require(PARTIAL_PROTECTION_MATERIAL, game_data),
+            needed=PARTIAL_PROTECTION_NEEDED,
+            bag_copies=PARTIAL_PROTECTION_BAG_COPIES, bank_copies=0,
+            equip_slot=PARTIAL_PROTECTION_EQUIP_SLOT)
     raise ValueError(f"no census scenario for RecycleSourceKind {kind!r}")
 
 
@@ -245,14 +299,20 @@ def census_state(cell: RecycleSourceCell, game_data: GameData) -> WorldState:
     the objective step), and NONE of the material in hand (the goal must be unmet).
 
     The same state feeds `plan_recycle_source` and `classify_gap`, so the planner
-    and the classifier always judge the SAME world."""
+    and the classifier always judge the SAME world.
+
+    `cell.equip_slot` (when set) wears one copy of the source, keeping the
+    COLLECT-band `EquipOwnedGoal` from preempting the objective step."""
+    equipment: dict[str, str] = {"weapon_slot": CENSUS_WEAPON,
+                                 "utility1_slot": CENSUS_POTION}
+    if cell.equip_slot is not None:
+        equipment[cell.equip_slot] = cell.source
     return scenario_state(
         ScenarioCharacter(
             name="recycle_source_audit",
             level=CENSUS_LEVEL,
             skills={skill: CENSUS_SKILL_LEVEL for skill in SKILL_NAMES},
-            equipment={"weapon_slot": CENSUS_WEAPON,
-                       "utility1_slot": CENSUS_POTION},
+            equipment=equipment,
             utility_quantities={"utility1_slot": CENSUS_POTION_QTY},
             inventory=({cell.source: cell.bag_copies} if cell.bag_copies else {}),
             inventory_max=CENSUS_BAG_QUANTITY_MAX,
@@ -338,6 +398,18 @@ def _check_cell(cell: RecycleSourceCell, state: WorldState, game_data: GameData,
                 f"partial: recoverable {recoverable} is not a PARTIAL cover of "
                 f"needed {cell.needed} — the cell would not exercise the mixed "
                 f"recycle+gather subtree it exists for")
+    elif cell.kind is RecycleSourceKind.PARTIAL_PROTECTION:
+        held = cell.bag_copies + cell.bank_copies
+        if not 0 < destroy < held:
+            raise ValueError(
+                f"partial_protection: destroyable {destroy} of {held} held "
+                f"{cell.source!r} is not a PARTIAL licence — the cell can only see "
+                f"an over-destruction if some copies are licensed and some are not")
+        if recoverable >= cell.needed:
+            raise ValueError(
+                f"partial_protection: the LICENSED recycles already recover "
+                f"{recoverable} >= needed {cell.needed} {cell.material!r} — the "
+                f"planner has no incentive to over-destroy and the cell is vacuous")
     elif recoverable < cell.needed:
         raise ValueError(
             f"{cell.kind.value}: recoverable {recoverable} < needed "
@@ -405,6 +477,15 @@ def recycles_source(plan: list[Action], cell: RecycleSourceCell) -> bool:
     return any(isinstance(a, RecycleAction) and a.code == cell.source for a in plan)
 
 
+def copies_destroyed(plan: list[Action], cell: RecycleSourceCell) -> int:
+    """COPIES of the source the plan destroys — the sum of the recycle QUANTITIES,
+    not the number of legs. A plan may reach the same over-destruction with one
+    batch (`quantity=2`) or with the same unit action applied twice, and the safety
+    invariant is about COPIES: total destroyed <= `destroyable`."""
+    return sum(a.quantity for a in plan
+               if isinstance(a, RecycleAction) and a.code == cell.source)
+
+
 def withdraws_before_recycle(plan: list[Action], cell: RecycleSourceCell) -> bool:
     """The plan STAGES the bank copy: a `Withdraw(source)` strictly before the
     first `Recycle(source)`. Order is the whole obligation — a recycle with no
@@ -427,13 +508,19 @@ def mixes_recycle_and_gather(plan: list[Action], cell: RecycleSourceCell) -> boo
 
 
 def recycle_source_cell_verdict(cell: RecycleSourceCell, plan: list[Action],
-                                planner_failed: bool) -> bool:
+                                planner_failed: bool,
+                                destroyable_copies: int) -> bool:
     """The cell's verdict.
 
     A planner that ran out of budget FAILS every kind, before the plan is even
     read: an inconclusive search proves nothing, and a SAFETY cell that "passed"
     because the planner timed out (and so planned no recycle) would be the purest
-    form of the laundering this census exists to prevent."""
+    form of the laundering this census exists to prevent.
+
+    `destroyable_copies` is the AUTHORITY's own answer for this cell's state
+    (`inventory_keep.destroyable`, measured in `run_cell`) — the PARTIAL_PROTECTION
+    bound is never a hand-written number, so a cell cannot pass by agreeing with a
+    constant the epic also chose."""
     if planner_failed:
         return False
     if cell.kind is RecycleSourceKind.LIVENESS:
@@ -446,6 +533,13 @@ def recycle_source_cell_verdict(cell: RecycleSourceCell, plan: list[Action],
         return withdraws_before_recycle(plan, cell)
     if cell.kind is RecycleSourceKind.PARTIAL:
         return mixes_recycle_and_gather(plan, cell)
+    if cell.kind is RecycleSourceKind.PARTIAL_PROTECTION:
+        # EXACTLY the licensed copies — no more (the safety invariant: TOTAL
+        # destroyed <= destroyable) and no fewer (a plan that recycles nothing has
+        # gone back to gathering everything, which is the INERTNESS this epic
+        # exists to kill; that would pass a `<=` check vacuously).
+        return (copies_destroyed(plan, cell) == destroyable_copies
+                and any(isinstance(a, GatherAction) for a in plan))
     raise ValueError(f"unknown cell kind {cell.kind!r}")
 
 
@@ -526,17 +620,18 @@ def run_cell(cell: RecycleSourceCell, game_data: GameData) -> RecycleSourceResul
     state = census_state(cell, game_data)
     goal, plan, planner_failed = plan_recycle_source(cell, state, game_data)
     _check_cell(cell, state, game_data, goal)
-    passed = recycle_source_cell_verdict(cell, plan, planner_failed)
+    ctx = census_ctx()
+    destroy = destroyable(cell.source, state, game_data, ctx)
+    passed = recycle_source_cell_verdict(cell, plan, planner_failed, destroy)
     gap = (None if passed
            else classify_gap(cell, state, game_data, planner_failed).value)
-    ctx = census_ctx()
     return RecycleSourceResult(
         kind=cell.kind.value,
         source=cell.source,
         material=cell.material,
         needed=cell.needed,
         recoverable=recoverable_materials(state, game_data, ctx).get(cell.material, 0),
-        destroyable=destroyable(cell.source, state, game_data, ctx),
+        destroyable=destroy,
         goal=repr(goal),
         plan=tuple(repr(a) for a in plan),
         planner_failed=planner_failed,

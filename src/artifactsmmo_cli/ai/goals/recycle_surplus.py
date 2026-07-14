@@ -4,6 +4,7 @@ from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.inventory_keep import keep_owned
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus, recycle_urgency
 from artifactsmmo_cli.ai.selection_context import SelectionContext
@@ -75,6 +76,16 @@ class RecycleSurplusGoal(Goal):
         capped at what `RecycleAction.is_applicable` accepts given current free
         slots (server HTTP 497). The remainder is reclaimed on a later idle
         cycle once the recovered materials are deposited.
+
+        These are BATCH actions built OUTSIDE `destructive_license` (the licence
+        filters the shared pool's quantity=1 arms; this goal sizes its own), so
+        the per-application `owned_floor` must be stamped HERE too or the plan
+        can apply the batch more than once and destroy past `destroyable`
+        (whole-branch review, CRITICAL 1). The floor is the SAME authority the
+        surplus came from: `recyclable_surplus` is `min(bankable, destroyable)`,
+        and `destroyable == owned - keep_owned`, so any `qty <= surplus_qty`
+        leaves `owned - qty >= keep_owned` — the first application always passes
+        its own floor, and a SECOND one cannot.
         """
         surplus = recyclable_surplus(state, game_data, self._ctx)
         result: list[Action] = []
@@ -84,8 +95,10 @@ class RecycleSurplusGoal(Goal):
             stats = game_data.item_stats(code)
             assert stats is not None and stats.crafting_skill is not None
             workshop = game_data.workshop_location(stats.crafting_skill)
+            floor = keep_owned(code, state, game_data, self._ctx)
             for qty in range(surplus_qty, 0, -1):
-                action = RecycleAction(code=code, quantity=qty, workshop_location=workshop)
+                action = RecycleAction(code=code, quantity=qty, workshop_location=workshop,
+                                       owned_floor=floor)
                 if action.is_applicable(state, game_data):
                     result.append(action)
                     break

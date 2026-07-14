@@ -1269,9 +1269,16 @@ class GamePlayer:
             # in the exact same to_trace shape as before (cycle lockstep
             # depends on it). The Phase-3/4a `record["tree"]`/`record["enacted"]`
             # shadow chrome died with the flag: one engine, one record.
+            # The fallback re-decide must see the SAME world the cycle decided in:
+            # `recoverable` (materials obtainable by recycling licensed surplus) is
+            # what makes a recoverable material a LEAF in the tier descent, so
+            # omitting it here traced a from-scratch descent the bot never ran
+            # (whole-branch review, MINOR 5). `_last_recoverable` is this cycle's
+            # map, computed in `_decide_band` / the decide path above.
             decision = self._last_decision or self._strategy.decide(
                 self.state, self.game_data,
-                band_adequate=self._tree_band_adequate())
+                band_adequate=self._tree_band_adequate(),
+                recoverable=self._last_recoverable)
             record["strategy"] = decision.to_trace()
         self.tracer.write_cycle(record)
         self._cycle_counter += 1

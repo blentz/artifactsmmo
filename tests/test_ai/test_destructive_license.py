@@ -28,6 +28,7 @@ from artifactsmmo_cli.ai.destructive_license import (
     licensed_recycle_quantity,
 )
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.inventory_keep import destroyable, keep_in_bag, keep_owned
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from tests.test_ai.fixtures import make_state
@@ -83,9 +84,11 @@ def test_the_surplus_above_both_caps_keeps_its_destructive_actions():
 
     Recycle now routes through `licensed_recycle_quantity`, which agrees with
     `licensed_quantity` here (no bank copies, so the bank route contributes
-    nothing new) but STAMPS the surviving action with `bag_floor = keep_in_bag`
-    (1, WORKING_KIT) — so the kept action is `dataclasses.replace(pool[0],
-    bag_floor=1)`, not the unstamped input object."""
+    nothing new) but STAMPS the surviving action with BOTH floors —
+    `bag_floor = keep_in_bag` and `owned_floor = keep_owned` (1 each here: the
+    WORKING_KIT axe is kept in the bag AND owned) — so the kept action is
+    `dataclasses.replace(pool[0], bag_floor=1, owned_floor=1)`, not the unstamped
+    input object."""
     gd = _gd()
     state = make_state(level=10, skills={"weaponcrafting": 2},
                        inventory={"copper_axe": 18})
@@ -93,13 +96,13 @@ def test_the_surplus_above_both_caps_keeps_its_destructive_actions():
     assert licensed_quantity("copper_axe", state, gd, ctx) == 17
     pool = [RecycleAction(code="copper_axe", quantity=1, workshop_location=(3, 1))]
     kept = license_destructive_actions(pool, state, gd, ctx)
-    assert kept == [dataclasses.replace(pool[0], bag_floor=1)]
+    assert kept == [dataclasses.replace(pool[0], bag_floor=1, owned_floor=1)]
 
 
 def test_a_quantity_above_the_licence_is_refused():
     """The check is per-QUANTITY, not per-code: a batch bigger than the authority
-    licenses is not admitted. The surviving action is stamped with its bag_floor
-    (WORKING_KIT keeps 1 in-bag), same reasoning as the test above."""
+    licenses is not admitted. The surviving action is stamped with BOTH floors
+    (WORKING_KIT keeps 1 in-bag AND 1 owned), same reasoning as the test above."""
     gd = _gd()
     state = make_state(level=10, skills={"weaponcrafting": 2},
                        inventory={"copper_axe": 3})
@@ -108,7 +111,7 @@ def test_a_quantity_above_the_licence_is_refused():
     ok = RecycleAction(code="copper_axe", quantity=2, workshop_location=(3, 1))
     too_many = RecycleAction(code="copper_axe", quantity=3, workshop_location=(3, 1))
     kept = license_destructive_actions([ok, too_many], state, gd, ctx)
-    assert kept == [dataclasses.replace(ok, bag_floor=1)]
+    assert kept == [dataclasses.replace(ok, bag_floor=1, owned_floor=1)]
 
 
 def test_an_unheld_code_is_licensed_for_nothing():
@@ -179,6 +182,78 @@ def test_bank_only_recycle_source_is_licensed():
     kept = license_destructive_actions(pool, state, gd, ctx)
     assert [a.code for a in kept] == ["fishing_net"]
     assert kept[0].bag_floor == 0
+
+
+def _ring_gd() -> GameData:
+    """A spare, unequipped, craftable RING — the population the recycle-as-
+    acquisition route dismantles, and the one with NO in-bag keep reason
+    (`IN_BAG_REASONS` carries no gear-keep reason at all)."""
+    gd = GameData()
+    gd._item_stats = {
+        "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
+                                 crafting_skill="jewelrycrafting", crafting_level=1),
+        "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource",
+                                crafting_skill="mining", crafting_level=1),
+    }
+    gd._crafting_recipes = {"copper_ring": {"copper_bar": 6}}
+    gd._workshop_locations = {"jewelrycrafting": (2, 2)}
+    gd.world.bank_tile = (4, 0)
+    return gd
+
+
+def test_the_owned_floor_holds_a_licensed_recycle_to_the_destroyable_count():
+    """PARTIAL PROTECTION — the whole-branch review's CRITICAL 1, and the case the
+    original SAFETY tests never covered (they only ever asserted destroyable == 0).
+
+    2 spare copper_rings, bank empty: `keep_owned` is 1 (GEAR_DEMAND: the ring is
+    still wanted), so exactly ONE copy may cease to exist. `keep_in_bag` is 0 — no
+    gear-keep reason is in `IN_BAG_REASONS` — so `bag_floor` is 0 and cannot bound
+    this at all. The licence admits the quantity=1 action ONCE, but a plan may APPLY
+    it any number of times: before `owned_floor`, `is_applicable` passed TWICE and
+    BOTH rings died. The floor is what makes the bound hold under REPEATED
+    application."""
+    gd = _ring_gd()
+    ctx = _ctx()
+    state = make_state(level=10, skills={"jewelrycrafting": 5},
+                       inventory={"copper_ring": 2}, bank_items={})
+    assert keep_in_bag("copper_ring", state, gd, ctx) == 0
+    assert keep_owned("copper_ring", state, gd, ctx) == 1
+    assert destroyable("copper_ring", state, gd, ctx) == 1
+
+    pool = [RecycleAction(code="copper_ring", quantity=1, workshop_location=(2, 2))]
+    kept = license_destructive_actions(pool, state, gd, ctx)
+    assert len(kept) == 1
+    recycle = kept[0]
+    assert recycle.bag_floor == 0
+    assert recycle.owned_floor == 1
+
+    applied = 0
+    sim = state
+    while recycle.is_applicable(sim, gd):
+        sim = recycle.apply(sim, gd)
+        applied += 1
+    assert applied == 1, "TOTAL destroyed must not exceed destroyable"
+    assert sim.inventory["copper_ring"] == 1
+
+
+def test_the_owned_floor_counts_BANK_copies_toward_the_keep():
+    """`owned` is bag+bank — the same dimension `destroyable` is about. 1 ring in
+    the bag and 1 in the bank, `keep_owned` 1: the BANK copy already satisfies the
+    keep, so the bag copy is destroyable and the recycle is applicable. A bag-only
+    floor would refuse it (1 - 1 < 1) and make the licensed recycle unplannable."""
+    gd = _ring_gd()
+    ctx = _ctx()
+    state = make_state(level=10, skills={"jewelrycrafting": 5},
+                       inventory={"copper_ring": 1}, bank_items={"copper_ring": 1})
+    assert destroyable("copper_ring", state, gd, ctx) == 1
+    kept = license_destructive_actions(
+        [RecycleAction(code="copper_ring", quantity=1, workshop_location=(2, 2))],
+        state, gd, ctx)
+    assert kept[0].owned_floor == 1
+    assert kept[0].is_applicable(state, gd)
+    # And the ONE licensed copy is all it gets: the bag is empty afterwards.
+    after = kept[0].apply(state, gd)
+    assert not kept[0].is_applicable(after, gd)
 
 
 def test_licensed_recycle_is_stamped_with_the_bag_floor():

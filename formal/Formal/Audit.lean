@@ -722,6 +722,10 @@ open Formal.WeightedRemaining in
 #print axioms Formal.RecycleProtection.bag_licence_would_strand_the_bank_hoard
 #print axioms Formal.RecycleProtection.working_axe_survives_but_the_hoard_is_reachable
 #print axioms Formal.RecycleProtection.blanket_would_hide_the_whole_hoard
+#print axioms Formal.RecycleProtection.owned_is_invariant_under_moves
+#print axioms Formal.RecycleProtection.total_destroyed_le_destroyable
+#print axioms Formal.RecycleProtection.bag_floor_alone_over_destroys
+#print axioms Formal.RecycleProtection.the_bank_route_still_composes
 -- GatherSelection (yield-rate lex-argmin gather-source selection)
 #print axioms Formal.GatherSelection.select_some_iff_nonempty
 #print axioms Formal.GatherSelection.select_mem

@@ -19,6 +19,7 @@ from artifactsmmo_cli.ai.disposal_route import (
 )
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
+from artifactsmmo_cli.ai.inventory_keep import keep_owned
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from tests.test_ai.fixtures import make_state
 
@@ -83,11 +84,29 @@ def test_recyclable_gear_routes_to_recycle():
     gd = _gear_gd()
     state = make_state(inventory={"copper_helmet": 8}, inventory_max=100,
                        bank_items={}, skills={"gearcrafting": 5})
-    action = overstock_disposal("copper_helmet", 7, state, gd, bank_accessible=True)
+    action = overstock_disposal("copper_helmet", 7, state, gd, bank_accessible=True,
+                              ctx=NO_PROFILE_CONTEXT)
     assert isinstance(action, RecycleAction)
     assert action.code == "copper_helmet"
     assert action.quantity == 7
     assert action.workshop_location == WORKSHOP_LOC
+
+
+def test_routed_recycle_is_stamped_with_the_owned_floor():
+    """The disposal route builds its BATCH Recycle OUTSIDE `destructive_license`,
+    so it stamps `owned_floor = keep_owned` itself — otherwise a plan could apply
+    the same batch twice and destroy past `destroyable` (whole-branch review,
+    CRITICAL 1). 8 copper_helmets, `keep_owned` 1: seven may die, and only once."""
+    gd = _gear_gd()
+    state = make_state(inventory={"copper_helmet": 8}, inventory_max=100,
+                       bank_items={}, skills={"gearcrafting": 5})
+    floor = keep_owned("copper_helmet", state, gd, NO_PROFILE_CONTEXT)
+    action = overstock_disposal("copper_helmet", 7, state, gd, bank_accessible=True,
+                                ctx=NO_PROFILE_CONTEXT)
+    assert isinstance(action, RecycleAction)
+    assert action.owned_floor == floor
+    assert action.is_applicable(state, gd)
+    assert not action.is_applicable(action.apply(state, gd), gd)
 
 
 def test_recycle_quantity_reduced_to_fit_minted_materials():
@@ -98,7 +117,8 @@ def test_recycle_quantity_reduced_to_fit_minted_materials():
     state = make_state(inventory={"copper_helmet": 8, "filler": 90},
                        inventory_max=100, bank_items={},
                        skills={"gearcrafting": 5})
-    action = overstock_disposal("copper_helmet", 7, state, gd, bank_accessible=True)
+    action = overstock_disposal("copper_helmet", 7, state, gd, bank_accessible=True,
+                              ctx=NO_PROFILE_CONTEXT)
     assert isinstance(action, RecycleAction)
     assert action.quantity < 7
 
@@ -110,7 +130,8 @@ def test_recycle_impossible_falls_to_deposit():
     state = make_state(inventory={"copper_helmet": 8, "filler": 92},
                        inventory_max=100, bank_items={},
                        skills={"gearcrafting": 5})
-    action = overstock_disposal("copper_helmet", 7, state, gd, bank_accessible=True)
+    action = overstock_disposal("copper_helmet", 7, state, gd, bank_accessible=True,
+                              ctx=NO_PROFILE_CONTEXT)
     assert isinstance(action, DepositItemAction)
     assert action.code == "copper_helmet"
     assert action.quantity == 7
@@ -125,7 +146,8 @@ def test_skill_gated_gear_deposits_instead_of_recycling():
         crafting_skill="gearcrafting", crafting_level=5)})
     state = make_state(inventory={"copper_helmet": 8}, inventory_max=100,
                        bank_items={}, skills={"gearcrafting": 1})
-    action = overstock_disposal("copper_helmet", 7, state, gd, bank_accessible=True)
+    action = overstock_disposal("copper_helmet", 7, state, gd, bank_accessible=True,
+                              ctx=NO_PROFILE_CONTEXT)
     assert isinstance(action, DepositItemAction)
 
 
@@ -142,7 +164,8 @@ def test_alchemy_craftable_is_not_recycled():
     )
     state = make_state(inventory={"recall_potion": 60}, inventory_max=100,
                        bank_items={}, skills={"alchemy": 10})
-    action = overstock_disposal("recall_potion", 58, state, gd, bank_accessible=True)
+    action = overstock_disposal("recall_potion", 58, state, gd, bank_accessible=True,
+                              ctx=NO_PROFILE_CONTEXT)
     assert isinstance(action, DepositItemAction)
 
 
@@ -160,7 +183,8 @@ def test_recipe_demanded_material_deposits():
     )
     state = make_state(inventory={"emerald_stone": 16}, inventory_max=100,
                        bank_items={})
-    action = overstock_disposal("emerald_stone", 16, state, gd, bank_accessible=True)
+    action = overstock_disposal("emerald_stone", 16, state, gd, bank_accessible=True,
+                              ctx=NO_PROFILE_CONTEXT)
     assert isinstance(action, DepositItemAction)
     assert action.quantity == 16
 
@@ -170,7 +194,8 @@ def test_true_junk_still_deletes():
     # -> Delete keeps clearing the bag; banking it would just hoard junk.
     gd = _gd(item_stats={"sap": ItemStats(code="sap", level=1, type_="resource")})
     state = make_state(inventory={"sap": 33}, inventory_max=100, bank_items={})
-    action = overstock_disposal("sap", 33, state, gd, bank_accessible=True)
+    action = overstock_disposal("sap", 33, state, gd, bank_accessible=True,
+                              ctx=NO_PROFILE_CONTEXT)
     assert isinstance(action, DeleteItemAction)
     assert action.quantity == 33
 
@@ -184,7 +209,8 @@ def test_bank_inaccessible_deletes_even_valuable():
     )
     state = make_state(inventory={"emerald_stone": 16}, inventory_max=100,
                        bank_items={})
-    action = overstock_disposal("emerald_stone", 16, state, gd, bank_accessible=False)
+    action = overstock_disposal("emerald_stone", 16, state, gd, bank_accessible=False,
+                              ctx=NO_PROFILE_CONTEXT)
     assert isinstance(action, DeleteItemAction)
 
 
@@ -196,7 +222,8 @@ def test_bank_full_deletes():
     )
     state = make_state(inventory={"emerald_stone": 16}, inventory_max=100,
                        bank_items={"a": 1, "b": 1})
-    action = overstock_disposal("emerald_stone", 16, state, gd, bank_accessible=True)
+    action = overstock_disposal("emerald_stone", 16, state, gd, bank_accessible=True,
+                              ctx=NO_PROFILE_CONTEXT)
     assert isinstance(action, DeleteItemAction)
 
 
@@ -208,7 +235,8 @@ def test_unknown_bank_location_deletes():
     )
     state = make_state(inventory={"emerald_stone": 16}, inventory_max=100,
                        bank_items={})
-    action = overstock_disposal("emerald_stone", 16, state, gd, bank_accessible=True)
+    action = overstock_disposal("emerald_stone", 16, state, gd, bank_accessible=True,
+                              ctx=NO_PROFILE_CONTEXT)
     assert isinstance(action, DeleteItemAction)
 
 
@@ -220,7 +248,8 @@ def test_unvisited_bank_deletes():
     )
     state = make_state(inventory={"emerald_stone": 16}, inventory_max=100,
                        bank_items=None)
-    action = overstock_disposal("emerald_stone", 16, state, gd, bank_accessible=True)
+    action = overstock_disposal("emerald_stone", 16, state, gd, bank_accessible=True,
+                              ctx=NO_PROFILE_CONTEXT)
     assert isinstance(action, DeleteItemAction)
 
 
@@ -239,7 +268,8 @@ def test_craftable_non_equippable_is_not_recycled():
     )
     state = make_state(inventory={"iron_bar": 20}, inventory_max=100,
                        bank_items={}, skills={"gearcrafting": 10})
-    action = overstock_disposal("iron_bar", 14, state, gd, bank_accessible=True)
+    action = overstock_disposal("iron_bar", 14, state, gd, bank_accessible=True,
+                              ctx=NO_PROFILE_CONTEXT)
     assert isinstance(action, DepositItemAction)
 
 
@@ -247,14 +277,16 @@ def test_no_workshop_known_deposits_gear():
     gd = _gear_gd(workshops={})
     state = make_state(inventory={"copper_helmet": 8}, inventory_max=100,
                        bank_items={}, skills={"gearcrafting": 5})
-    action = overstock_disposal("copper_helmet", 7, state, gd, bank_accessible=True)
+    action = overstock_disposal("copper_helmet", 7, state, gd, bank_accessible=True,
+                              ctx=NO_PROFILE_CONTEXT)
     assert isinstance(action, DepositItemAction)
 
 
 def test_unknown_item_stats_treated_as_junk():
     gd = _gd()
     state = make_state(inventory={"mystery": 5}, inventory_max=100, bank_items={})
-    action = overstock_disposal("mystery", 5, state, gd, bank_accessible=True)
+    action = overstock_disposal("mystery", 5, state, gd, bank_accessible=True,
+                              ctx=NO_PROFILE_CONTEXT)
     assert isinstance(action, DeleteItemAction)
 
 

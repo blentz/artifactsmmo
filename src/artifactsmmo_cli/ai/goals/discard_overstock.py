@@ -160,7 +160,8 @@ class DiscardOverstockGoal(Goal):
                 or not sell_action.is_applicable(state, game_data)
             ):
                 result.append(overstock_disposal(
-                    code, excess_qty, state, game_data, self._bank_accessible))
+                    code, excess_qty, state, game_data, self._bank_accessible,
+                    self._ctx))
         return result
 
     def __repr__(self) -> str:
