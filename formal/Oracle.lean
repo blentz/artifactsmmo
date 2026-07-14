@@ -561,24 +561,27 @@ def runTaskFeasibilityItems (args : Array Json) : Json :=
 
 /-- Compute one prerequisite_graph edge list using the proved `prereqEdges`.
 
-Models the DATA-DERIVED edges of an unsatisfied `ObtainItem code`: one item edge
-per recipe ingredient when craftable, else a leaf. No skill edge, no resource
-branch (retired in epic P3 — under-skill gear grinds planner-natively).
+Models the DATA-DERIVED edges of an unsatisfied `ObtainItem code`: a leaf when
+the code is RECOVERABLE (recycling licensed surplus supplies it), else one item
+edge per recipe ingredient when craftable, else a leaf. No skill edge, no
+resource branch (retired in epic P3 — under-skill gear grinds planner-natively).
 
 args layout (all Nat ≥ 0):
-* `[0]`              hasRecipe (0/1)
-* `[1]`              nIngredients
-* `[2 .. 2*n+1]`     ingredients flat: mat0 qty0 mat1 qty1 ...  (only read when hasRecipe=1)
+* `[0]`              recoverable (0/1) — `recoverable.get(code, 0) > 0`
+* `[1]`              hasRecipe (0/1)
+* `[2]`              nIngredients
+* `[3 .. 2*n+2]`     ingredients flat: mat0 qty0 mat1 qty1 ...  (only read when hasRecipe=1)
 
 Emits the edge list as tagged JSON objects: `{"kind":"item","a":code,"b":qty}`. -/
 def runPrerequisiteGraph (args : Array Json) : Json :=
   let g := fun i => (intArg args i).toNat
-  let hasRecipe := g 0 != 0
-  let nIng := g 1
+  let recoverable := g 0 != 0
+  let hasRecipe := g 1 != 0
+  let nIng := g 2
   let ingredients : List (Nat × Nat) :=
-    (List.range nIng).map (fun k => (g (2 + 2*k), g (3 + 2*k)))
+    (List.range nIng).map (fun k => (g (3 + 2*k), g (4 + 2*k)))
   let recipe : Option (List (Nat × Nat)) := if hasRecipe then some ingredients else none
-  let edges := Formal.PrerequisiteGraph.prereqEdges recipe
+  let edges := Formal.PrerequisiteGraph.prereqEdges recoverable recipe
   let edgeJson := fun (e : Formal.PrerequisiteGraph.Edge) => match e with
     | Formal.PrerequisiteGraph.Edge.item c q =>
       Json.mkObj [("kind", Json.str "item"), ("a", Json.num (Int.ofNat c)),

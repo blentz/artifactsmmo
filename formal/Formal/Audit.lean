@@ -67,6 +67,16 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #print axioms Formal.PrerequisiteGraph.combat_capable_iff
 #print axioms Formal.PrerequisiteGraph.combat_capable_demorgan
 #print axioms Formal.PrerequisiteGraph.combat_capable_empty
+#print axioms Formal.PrerequisiteGraph.prereqs_recoverable_leaf
+#print axioms Formal.PrerequisiteGraph.recoverable_flag_is_load_bearing
+#print axioms Formal.PrerequisiteGraph.recoverableYield_pos
+#print axioms Formal.PrerequisiteGraph.recoverableYield_zero_iff
+#print axioms Formal.PrerequisiteGraph.recoverableYield_qty_one
+#print axioms Formal.PrerequisiteGraph.yield_unit_exceeds_batch_at_qty_one
+#print axioms Formal.PrerequisiteGraph.yield_batch_exceeds_unit_at_qty_three
+#print axioms Formal.PrerequisiteGraph.yield_unit_and_batch_are_incomparable
+#print axioms Formal.PrerequisiteGraph.no_licensed_copy_still_descends
+#print axioms Formal.PrerequisiteGraph.one_licensed_copy_is_a_leaf
 #print axioms Formal.Objective.is_attainable_eq_grounding
 #print axioms Formal.Objective.groundedByN_sound
 #print axioms Formal.Objective.grounded_groundedByN
@@ -701,15 +711,17 @@ open Formal.WeightedRemaining in
 #print axioms Formal.WithdrawSetExpansion.perCraftQty_none_of_no_recipe
 #print axioms Formal.WithdrawSetExpansion.perCraftQty_some_when_in_recipe
 #print axioms Formal.WithdrawSetExpansion.trace_copper_chain_per_craft
--- RecycleProtection (de-Mathlib'd safety module)
-#print axioms Formal.RecycleProtection.protected_contains_target_gear
-#print axioms Formal.RecycleProtection.protected_contains_target_tools
-#print axioms Formal.RecycleProtection.protected_excluded_from_recycle
-#print axioms Formal.RecycleProtection.unprotected_craftable_in_recycle
-#print axioms Formal.RecycleProtection.recycle_subset_when_protection_grows
-#print axioms Formal.RecycleProtection.trace_copper_dagger_excluded
-#print axioms Formal.RecycleProtection.trace_copper_axe_excluded
-#print axioms Formal.RecycleProtection.trace_off_target_kept
+-- RecycleProtection (recycle licence + bag_floor; de-Mathlib'd safety module)
+#print axioms Formal.RecycleProtection.recycle_never_breaches_the_bag_floor
+#print axioms Formal.RecycleProtection.lone_working_tool_is_unreachable
+#print axioms Formal.RecycleProtection.withdraw_unlocks_the_recycle
+#print axioms Formal.RecycleProtection.licence_bounded_by_destroyable
+#print axioms Formal.RecycleProtection.fully_protected_code_is_never_recyclable
+#print axioms Formal.RecycleProtection.licence_is_monotone_in_bank_copies
+#print axioms Formal.RecycleProtection.licence_and_floor_are_independent
+#print axioms Formal.RecycleProtection.bag_licence_would_strand_the_bank_hoard
+#print axioms Formal.RecycleProtection.working_axe_survives_but_the_hoard_is_reachable
+#print axioms Formal.RecycleProtection.blanket_would_hide_the_whole_hoard
 -- GatherSelection (yield-rate lex-argmin gather-source selection)
 #print axioms Formal.GatherSelection.select_some_iff_nonempty
 #print axioms Formal.GatherSelection.select_mem

@@ -46,6 +46,7 @@ ACTION_FACTORY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "actions" / "fac
 RECIPE_CLOSURE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recipe_closure.py"
 TASK_FEASIBILITY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "task_feasibility.py"
 PREREQUISITE_GRAPH_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "prerequisite_graph.py"
+RECOVERABLE_MATERIALS_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "recoverable_materials.py"
 OBJECTIVE_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "objective.py"
 STRATEGY_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "tiers" / "strategy.py"
 BANK_SELECTION_SRC = ROOT / "src" / "artifactsmmo_cli" / "ai" / "bank_selection.py"
@@ -1196,6 +1197,30 @@ RECOVERABLE_LEAF_MUTATIONS = [
      "            if recoverable.get(node.code, 0) > 0:\n"
      "                return []  # recoverable by recycling licensed surplus → LEAF\n",
      ""),
+]
+
+# Recoverable YIELD mutations (recycle-as-acquisition epic, Task 7): the term
+# PINNED in Lean as `Formal.PrerequisiteGraph.recoverableYield copies qty =
+# copies * max 1 (qty / 2)`. `actions/factory` emits quantity=1 RecycleActions, so
+# GOAP recovers n copies by applying a UNIT recycle n times — the UNIT form. If
+# this drifts from `RecycleAction.apply`, the tier descent promises materials the
+# executor cannot deliver and the bot stalls at a leaf with no plan. Lean proves
+# the two forms are INCOMPARABLE (yield_unit_and_batch_are_incomparable), so
+# neither mutation is a harmless re-association. Bound to
+# tests/ai/test_recoverable_materials.py (test_recoverable_unit_yield_not_batch_yield).
+RECOVERABLE_YIELD_MUTATIONS = [
+    # Unit -> batch: `n * max(1, q//2)` becomes `max(1, (q*n)//2)`. They differ
+    # whenever q == 1: 4 unit recycles of a 1-qty ingredient recover 4, the batch
+    # form predicts 2 (an UNDER-promise that hides real recoverable surplus).
+    ("recoverable_materials: unit yield -> batch yield",
+     "            out[mat_code] = out.get(mat_code, 0) + copies * max(1, mat_qty // 2)",
+     "            out[mat_code] = out.get(mat_code, 0) + max(1, (mat_qty * copies) // 2)"),
+    # Drop the max-1 floor: a 1-qty ingredient then recovers 0 per recycle, so the
+    # material vanishes from the map and the leaf rule never fires for it — the
+    # pre-epic re-gather bug, back for every 1-qty ingredient.
+    ("recoverable_materials: drop the max-1 yield floor",
+     "            out[mat_code] = out.get(mat_code, 0) + copies * max(1, mat_qty // 2)",
+     "            out[mat_code] = out.get(mat_code, 0) + copies * (mat_qty // 2)"),
 ]
 
 
@@ -4884,6 +4909,8 @@ def _run_all_groups() -> int:
               "formal/diff/test_prerequisite_graph_diff.py", survivors)
     run_group(PREREQUISITE_GRAPH_SRC, RECOVERABLE_LEAF_MUTATIONS,
               "tests/test_ai/test_tiers_prerequisite_graph.py", survivors)
+    run_group(RECOVERABLE_MATERIALS_SRC, RECOVERABLE_YIELD_MUTATIONS,
+              "tests/ai/test_recoverable_materials.py", survivors)
     run_group(OBJECTIVE_SRC, OBJECTIVE_MUTATIONS,
               "formal/diff/test_objective_diff.py", survivors)
     run_group(OBJECTIVE_SRC, OBJECTIVE_NOW_MUTATIONS,

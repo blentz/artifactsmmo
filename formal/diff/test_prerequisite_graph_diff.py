@@ -5,18 +5,23 @@ proved Lean oracle over random recipe/drop tables and monster-beatable maps.
 ## prerequisites
 
 For an UNSATISFIED `ObtainItem(code)`, `prerequisites` emits:
-* if `code` has a recipe → one `ObtainItem(mat, qty)` per ingredient, in recipe
-  order, and NOTHING else. The crafting-skill gate is no longer emitted as a
-  prerequisite node (under-skill gear grinds planner-natively via the LevelSkill
-  action, epic P3);
+* if `recoverable.get(code, 0) > 0` (recycling licensed surplus can supply it,
+  per `ai/recoverable_materials`) → NO prerequisites: a LEAF. The descent must
+  not re-derive from raw resources what the bag already holds in crafted form;
+* else if `code` has a recipe → one `ObtainItem(mat, qty)` per ingredient, in
+  recipe order, and NOTHING else. The crafting-skill gate is no longer emitted as
+  a prerequisite node (under-skill gear grinds planner-natively via the
+  LevelSkill action, epic P3);
 * else → no prerequisites (leaf). The old resource-drop → `ReachSkillLevel`
   branch is retired.
 
 We use integer item codes (the model is `Nat`), a controlled fake GameData, and
 a fake unsatisfied WorldState (empty inventory). We normalize the produced
 `MetaGoal` list to comparable tuples and compare against the Lean oracle's
-tagged-edge list over >= 200 random tables (both the recipe branch and the leaf
-branch).
+tagged-edge list over >= 200 random tables, randomizing the recoverable count per
+trial so BOTH branches are exercised (asserted, not assumed) — including the
+`> 0` boundary, where the code IS in the map at ZERO units and must still
+descend.
 
 ## combat_capable
 
@@ -98,17 +103,24 @@ def _normalize_lean(lean: dict) -> list[tuple]:
     return out
 
 
-def _encode_prereq_args(has_recipe: bool, ingredients: list[tuple[int, int]]) -> list[int]:
-    args: list[int] = [1 if has_recipe else 0, len(ingredients)]
+def _encode_prereq_args(recoverable_units: int, has_recipe: bool,
+                        ingredients: list[tuple[int, int]]) -> list[int]:
+    # The Lean model takes the GATE (`recoverable.get(code, 0) > 0`), not the
+    # count: the boundary itself is what the differential must pin.
+    args: list[int] = [1 if recoverable_units > 0 else 0,
+                       1 if has_recipe else 0, len(ingredients)]
     for mat, qty in ingredients:
         args += [mat, qty]
     return args
 
 
 def _build_prereq(rng: random.Random):
-    """Random scenario hitting the recipe branch (item edges only) and the leaf
-    branch (no recipe). Item codes are distinct so the Python recipe dict does
-    not dedupe keys (the model keeps all edges)."""
+    """Random scenario hitting the recipe branch (item edges only), the leaf
+    branch (no recipe) and the RECOVERABLE branch (recycling licensed surplus
+    supplies the code → leaf). `recoverable_units` spans 0 (the `> 0` boundary:
+    a code seen by recycling with ZERO licensed copies must still descend) and
+    positive counts. Item codes are distinct so the Python recipe dict does not
+    dedupe keys (the model keeps all edges)."""
     has_recipe = rng.random() < 0.6
     ingredients: list[tuple[int, int]] = []
     if has_recipe:
@@ -116,31 +128,45 @@ def _build_prereq(rng: random.Random):
         mats = rng.sample(range(0, 21), n_ing)
         ingredients = [(mat, rng.randint(1, 9)) for mat in mats]
     code = rng.randint(0, 20)
-    return has_recipe, ingredients, code
+    # 0 exercises the boundary; None means "code absent from the map entirely".
+    recoverable_units = rng.choice([None, 0, 0, 1, 2, 18])
+    return has_recipe, ingredients, code, recoverable_units
 
 
-def _run_prereq(has_recipe, ingredients, code):
+def _run_prereq(has_recipe, ingredients, code, recoverable_units=None):
     recipe = {str(mat): qty for mat, qty in ingredients} if has_recipe else None
     # item_stats only gates ObtainItem.is_satisfied (type_=None → owned-count
     # rule → unsatisfied on the empty state); prerequisites no longer reads the
     # crafting skill or any resource table.
     stats = _FakeStats(None, 0) if has_recipe else None
     gd = _FakeGameData(recipe, stats, {}, {}, {})
+    recoverable = {} if recoverable_units is None else {str(code): recoverable_units}
 
     node = ObtainItem(str(code))
-    py = _normalize_py(prerequisites(node, _unsatisfied_state(), gd))
+    py = _normalize_py(prerequisites(node, _unsatisfied_state(), gd, recoverable))
 
-    args = _encode_prereq_args(has_recipe, ingredients)
+    args = _encode_prereq_args(recoverable_units or 0, has_recipe, ingredients)
     lean = _normalize_lean(run_oracle("prerequisite_graph", [args])[0])
     return py, lean
 
 
 def test_prerequisites_matches_lean():
     rng = random.Random(20260527)
+    seen_recoverable_leaf = 0
+    seen_descent = 0
     for _ in range(240):
         scenario = _build_prereq(rng)
         py, lean = _run_prereq(*scenario)
         assert py == lean, f"prereq mismatch: scenario={scenario} py={py} lean={lean}"
+        has_recipe, _ingredients, _code, units = scenario
+        if has_recipe and (units or 0) > 0:
+            seen_recoverable_leaf += 1
+        elif has_recipe:
+            seen_descent += 1
+    # BOTH branches must actually be exercised — a differential that only ever
+    # saw one of them would agree vacuously.
+    assert seen_recoverable_leaf > 0 and seen_descent > 0, (
+        f"branch coverage: recoverable={seen_recoverable_leaf} descent={seen_descent}")
 
 
 def test_combat_capable_matches_lean(monkeypatch):
@@ -163,7 +189,7 @@ def test_combat_capable_matches_lean(monkeypatch):
 
 
 def test_recipe_branch_item_edges_only():
-    """Concrete: craftable code 5, ingredients [(1,2),(3,4)].
+    """Concrete: craftable code 5, ingredients [(1,2),(3,4)], NOT recoverable.
     Edges = [item(1,2), item(3,4)] in order — NO skill edge. Pins recipe shape."""
     py, lean = _run_prereq(True, [(1, 2), (3, 4)], 5)
     assert py == [("item", 1, 2), ("item", 3, 4)]
@@ -180,5 +206,33 @@ def test_recipe_branch_no_ingredients_no_edges():
 def test_leaf_branch_no_edges():
     """Concrete: non-craftable code 9 ⇒ leaf (no prerequisites)."""
     py, lean = _run_prereq(False, [], 9)
+    assert py == []
+    assert py == lean
+
+
+def test_recoverable_craftable_is_a_leaf():
+    """Concrete: the live 2026-07-13 shape — code 5 IS craftable with a real
+    recipe, but 18 units are recoverable by recycling licensed surplus, so the
+    descent stops. Both sides must drop the ingredient edges."""
+    py, lean = _run_prereq(True, [(1, 2), (3, 4)], 5, 18)
+    assert py == []
+    assert py == lean
+
+
+def test_zero_recoverable_still_descends():
+    """Concrete boundary: the code IS in the recoverable map, at ZERO units. The
+    gate is `> 0`, so the full recipe descent still happens (a `>= 0` mutation
+    would collapse EVERY recipe to a leaf)."""
+    py, lean = _run_prereq(True, [(1, 2), (3, 4)], 5, 0)
+    assert py == [("item", 1, 2), ("item", 3, 4)]
+    assert py == lean
+
+
+def test_one_recoverable_unit_is_enough():
+    """Concrete: ONE recoverable unit leafs, even against a recipe needing more.
+    The rule is `> 0`, not "fully covers the need" — GOAP mixes recycle with
+    gather/craft to make up the shortfall rather than facing an all-or-nothing
+    cliff."""
+    py, lean = _run_prereq(True, [(1, 9)], 5, 1)
     assert py == []
     assert py == lean

@@ -711,22 +711,39 @@ example : ∀ (charLevel : Nat),
 
 /-! ### PrerequisiteGraph role contracts. -/
 
--- prereqs_recipe: craftable item ⇒ EXACTLY one item edge per ingredient, in
--- recipe order, and NO skill edge (data-derived edge set).
+-- prereqs_recipe: craftable, NON-recoverable item ⇒ EXACTLY one item edge per
+-- ingredient, in recipe order, and NO skill edge (data-derived edge set).
 example : ∀ (ingredients : List (Nat × Nat)),
-    Formal.PrerequisiteGraph.prereqEdges (some ingredients)
+    Formal.PrerequisiteGraph.prereqEdges false (some ingredients)
       = ingredients.map (fun p => Formal.PrerequisiteGraph.Edge.item p.1 p.2) :=
   @Formal.PrerequisiteGraph.prereqs_recipe
--- prereqs_membership: EXACT edge set for a craftable item — an edge is present
--- IFF it is an item edge of some ingredient (NO skill edge).
+-- prereqs_membership: EXACT edge set for a craftable, non-recoverable item — an
+-- edge is present IFF it is an item edge of some ingredient (NO skill edge).
 example : ∀ (ingredients : List (Nat × Nat)) (e : Formal.PrerequisiteGraph.Edge),
-    e ∈ Formal.PrerequisiteGraph.prereqEdges (some ingredients)
+    e ∈ Formal.PrerequisiteGraph.prereqEdges false (some ingredients)
       ↔ ∃ mat qty, (mat, qty) ∈ ingredients ∧ e = Formal.PrerequisiteGraph.Edge.item mat qty :=
   @Formal.PrerequisiteGraph.prereqs_membership
 -- prereqs_leaf: NON-craftable item ⇒ LEAF (no prerequisites; resource branch
 -- retired).
-example : Formal.PrerequisiteGraph.prereqEdges none = ([] : List Formal.PrerequisiteGraph.Edge) :=
+example : Formal.PrerequisiteGraph.prereqEdges false none
+    = ([] : List Formal.PrerequisiteGraph.Edge) :=
   @Formal.PrerequisiteGraph.prereqs_leaf
+-- prereqs_recoverable_leaf: a material RECOVERABLE by recycling licensed surplus
+-- is a LEAF whatever its recipe — the descent never re-derives from raw
+-- resources what the bag already holds in crafted form.
+example : ∀ (r : Option (List (Nat × Nat))),
+    Formal.PrerequisiteGraph.prereqEdges true r = ([] : List Formal.PrerequisiteGraph.Edge) :=
+  @Formal.PrerequisiteGraph.prereqs_recoverable_leaf
+-- recoverableYield_pos: ANY licensed copy recovers ≥ 1 unit of every ingredient
+-- (the `max 1` floor) — what makes the Python `> 0` gate faithful.
+example : ∀ (copies qty : Nat), 0 < copies →
+    0 < Formal.PrerequisiteGraph.recoverableYield copies qty :=
+  @Formal.PrerequisiteGraph.recoverableYield_pos
+-- recoverableYield_zero_iff: nothing is recoverable EXACTLY when no licensed
+-- copy exists — the leaf rule fires on copies, never on an empty map.
+example : ∀ (copies qty : Nat),
+    Formal.PrerequisiteGraph.recoverableYield copies qty = 0 ↔ copies = 0 :=
+  @Formal.PrerequisiteGraph.recoverableYield_zero_iff
 -- combat_capable_iff: combat_capable ↔ ∃ beatable monster (independent
 -- existential, NOT the any-fold reapplied).
 example : ∀ (beatable : Nat → Bool) (monsters : List Nat),

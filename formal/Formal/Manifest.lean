@@ -155,6 +155,13 @@ open Formal.CalculatePath Formal.TaskBatch Formal.InventoryCaps Formal.PredictWi
 #check @Formal.PrerequisiteGraph.combat_capable_iff        -- combat_capable ↔ ∃ beatable monster
 #check @Formal.PrerequisiteGraph.combat_capable_demorgan   -- ¬capable ↔ all unbeatable (any≠all)
 #check @Formal.PrerequisiteGraph.combat_capable_empty      -- no monsters ⇒ not capable
+#check @Formal.PrerequisiteGraph.prereqs_recoverable_leaf  -- recoverable ⇒ LEAF (no recipe descent)
+#check @Formal.PrerequisiteGraph.recoverable_flag_is_load_bearing -- the flag genuinely changes the edges
+#check @Formal.PrerequisiteGraph.recoverableYield_pos      -- any licensed copy yields ≥ 1 unit
+#check @Formal.PrerequisiteGraph.recoverableYield_zero_iff -- yield = 0 ⇔ no licensed copy
+#check @Formal.PrerequisiteGraph.yield_unit_and_batch_are_incomparable -- unit ≠ batch, neither dominates
+#check @Formal.PrerequisiteGraph.no_licensed_copy_still_descends -- 0 copies ⇒ full recipe descent (> 0 gate)
+#check @Formal.PrerequisiteGraph.one_licensed_copy_is_a_leaf     -- 1 copy is enough (> 0, not "covers need")
 -- Objective required roles:
 #check @Formal.Objective.is_attainable_eq_grounding  -- is_attainable = grounding fixpoint (sound+complete)
 #check @Formal.Objective.groundedByN_sound           -- saturation SOUND wrt Grounded
@@ -887,15 +894,17 @@ open Formal.PriorityBand
 #check @Formal.WithdrawSetExpansion.perCraftQty_some_when_in_recipe
 #check @Formal.WithdrawSetExpansion.trace_copper_chain_per_craft
 
--- RecycleProtection (target_gear / target_tools exclusion proof):
-#check @Formal.RecycleProtection.protected_contains_target_gear
-#check @Formal.RecycleProtection.protected_contains_target_tools
-#check @Formal.RecycleProtection.protected_excluded_from_recycle
-#check @Formal.RecycleProtection.unprotected_craftable_in_recycle
-#check @Formal.RecycleProtection.recycle_subset_when_protection_grows
-#check @Formal.RecycleProtection.trace_copper_dagger_excluded
-#check @Formal.RecycleProtection.trace_copper_axe_excluded
-#check @Formal.RecycleProtection.trace_off_target_kept
+-- RecycleProtection (licence + bag_floor: the working tool is never dismantled):
+#check @Formal.RecycleProtection.recycle_never_breaches_the_bag_floor
+#check @Formal.RecycleProtection.lone_working_tool_is_unreachable
+#check @Formal.RecycleProtection.withdraw_unlocks_the_recycle
+#check @Formal.RecycleProtection.licence_bounded_by_destroyable
+#check @Formal.RecycleProtection.fully_protected_code_is_never_recyclable
+#check @Formal.RecycleProtection.licence_is_monotone_in_bank_copies
+#check @Formal.RecycleProtection.licence_and_floor_are_independent
+#check @Formal.RecycleProtection.bag_licence_would_strand_the_bank_hoard
+#check @Formal.RecycleProtection.working_axe_survives_but_the_hoard_is_reachable
+#check @Formal.RecycleProtection.blanket_would_hide_the_whole_hoard
 
 -- PlannerDepthBound (planner never returns a plan longer than max_depth ⇒ a
 -- depth-based pre-plan skip is sound; copper_boots @ max_depth 15 is the bug):
