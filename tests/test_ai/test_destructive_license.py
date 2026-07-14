@@ -222,3 +222,21 @@ def test_npc_sell_keeps_the_bag_side_rule():
     pool = [NpcSellAction(npc_code="merchant", item_code="fishing_net",
                           quantity=1, npc_location=(1, 1))]
     assert license_destructive_actions(pool, state, gd, ctx) == []
+
+
+def test_npc_sell_survives_licensing_for_a_bag_side_surplus():
+    """The positive counterpart to `test_npc_sell_keeps_the_bag_side_rule` above,
+    and to `test_the_surplus_above_both_caps_keeps_its_destructive_actions` (same
+    18-copper_axe setup, both caps cleared). Recycle split into its own branch
+    ending in `continue` when it gained the bank route; this proves the ORIGINAL
+    bag-side rule still admits a surviving NpcSell/Delete action through the
+    final `kept.append(action)` path — that path is not dead, and a code with
+    surplus above both `keep_in_bag` and `keep_owned` still gets to sell it."""
+    gd = _gd()
+    state = make_state(level=10, skills={"weaponcrafting": 2},
+                       inventory={"copper_axe": 18})
+    ctx = _ctx()
+    assert licensed_quantity("copper_axe", state, gd, ctx) == 17
+    pool = [NpcSellAction(npc_code="merchant", item_code="copper_axe", quantity=1,
+                          npc_location=(1, 1))]
+    assert license_destructive_actions(pool, state, gd, ctx) == pool
