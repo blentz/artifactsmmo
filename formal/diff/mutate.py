@@ -3395,8 +3395,8 @@ DISPOSAL_ROUTE_ADAPTER_MUTATIONS = [
 # delete. Killed by TestDiscardOverstockRouting.test_fallback_deposits_recipe_demanded_material.
 DISCARD_OVERSTOCK_ROUTING_MUTATIONS = [
     ("discard_overstock: bank_accessible not threaded (deposit arm dead)",
-     "                result.append(overstock_disposal(\n                    code, excess_qty, state, game_data, self._bank_accessible))",
-     "                result.append(overstock_disposal(\n                    code, excess_qty, state, game_data, False))"),
+     "                result.append(overstock_disposal(\n                    code, excess_qty, state, game_data, self._bank_accessible,\n                    self._ctx))",
+     "                result.append(overstock_disposal(\n                    code, excess_qty, state, game_data, False,\n                    self._ctx))"),
 ]
 
 # buy_source_venue mutations (DUAL of liquidation_venue) -- old strings matched to
