@@ -8,8 +8,13 @@ Covers:
 
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.recycle import RecycleAction
+from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
+from artifactsmmo_cli.ai.destructive_license import license_destructive_actions
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.planner import GOAPPlanner
+from artifactsmmo_cli.ai.selection_context import SelectionContext
 from tests.test_ai.fixtures import make_state
 
 
@@ -136,3 +141,107 @@ class TestSecondaryDropAdmission:
         gathers = [(a.resource_code, a.drop_item_override)
                    for a in relevant if isinstance(a, GatherAction)]
         assert gathers == [("salmon_spot", "small_pearls")]
+
+
+class TestRecycleAsAcquisition:
+    """Recycle-as-acquisition, Task 5 (2026-07-13): a licensed RecycleAction
+    whose recipe yields a closure material is a SOURCE for that material, and
+    the WITHDRAW that feeds it must be admitted too — the source
+    (fishing_net) is upstream of the ash_plank closure, so the closure-built
+    `withdrawable` set alone would miss it.
+
+    Live bug: GatherMaterials(ash_plank) chopped 50 ash_wood at 1/cycle while
+    holding 7 fishing_net, whose recipe IS 6 ash_plank each. The goal admitted
+    ZERO RecycleActions — even one injected into the pool was discarded,
+    because `planner.py:124` re-filters every action through
+    `relevant_actions` before search."""
+
+    @staticmethod
+    def _gd_ash_plank() -> GameData:
+        gd = GameData()
+        gd._item_stats = {
+            "ash_wood": ItemStats(code="ash_wood", level=1, type_="resource"),
+            "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource",
+                                   crafting_skill="woodcutting", crafting_level=1),
+            "fishing_net": ItemStats(code="fishing_net", level=1, type_="amulet",
+                                     crafting_skill="gearcrafting", crafting_level=1),
+            "copper_axe": ItemStats(code="copper_axe", level=1, type_="weapon",
+                                    crafting_skill="weaponcrafting", crafting_level=1),
+            "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource"),
+        }
+        gd._crafting_recipes = {
+            "ash_plank": {"ash_wood": 10},
+            "fishing_net": {"ash_plank": 6},
+            # Recycles to copper_bar — NOT in the ash_plank closure — pins that
+            # admission is closure-precise, not "any RecycleAction in the pool."
+            "copper_axe": {"copper_bar": 6},
+        }
+        gd._resource_drops = {"ash_tree": "ash_wood"}
+        gd._workshop_locations = {"woodcutting": (1, 1), "gearcrafting": (2, 1),
+                                  "weaponcrafting": (3, 1)}
+        gd._bank_location = (4, 0)
+        gd._taskmaster_location = (1, 2)
+        return gd
+
+    def test_gather_goal_admits_a_licensed_recycle_source(self):
+        """GatherMaterials(ash_plank) must see Recycle(fishing_net): its
+        recipe IS ash_plank."""
+        gd = self._gd_ash_plank()
+        state = make_state(skills={"gearcrafting": 1, "woodcutting": 1})
+        goal = GatherMaterialsGoal(target_item="ash_plank", needed={"ash_plank": 5})
+        pool = [RecycleAction(code="fishing_net", quantity=1, workshop_location=(2, 1))]
+        kept = goal.relevant_actions(pool, state, gd)
+        assert [a.code for a in kept if isinstance(a, RecycleAction)] == ["fishing_net"]
+
+    def test_gather_goal_admits_the_withdraw_that_feeds_the_recycle(self):
+        """The recycle SOURCE is upstream of the material closure, so the
+        closure-built `withdrawable` set misses it. Without this the
+        bank->recycle chain is unplannable. The pool carries fishing_net's
+        licensed RecycleAction too — a Withdraw for a source with NO licensed
+        recycle in the pool is exactly what admission must no longer allow
+        (that source can never be fed)."""
+        gd = self._gd_ash_plank()
+        state = make_state(skills={"gearcrafting": 1, "woodcutting": 1})
+        goal = GatherMaterialsGoal(target_item="ash_plank", needed={"ash_plank": 5})
+        pool = [
+            WithdrawItemAction(code="fishing_net", quantity=1),
+            RecycleAction(code="fishing_net", quantity=1, workshop_location=(2, 1)),
+        ]
+        kept = goal.relevant_actions(pool, state, gd)
+        assert [a.code for a in kept if isinstance(a, WithdrawItemAction)] == ["fishing_net"]
+
+    def test_gather_goal_ignores_an_unrelated_recycle(self):
+        """copper_axe recycles to copper_bar, which is not in the ash_plank
+        closure."""
+        gd = self._gd_ash_plank()
+        state = make_state(skills={"gearcrafting": 1, "woodcutting": 1})
+        goal = GatherMaterialsGoal(target_item="ash_plank", needed={"ash_plank": 5})
+        pool = [RecycleAction(code="copper_axe", quantity=1, workshop_location=(3, 1))]
+        assert [a for a in goal.relevant_actions(pool, state, gd)
+                if isinstance(a, RecycleAction)] == []
+
+    def test_recycle_beats_gathering_on_cost(self):
+        """The payoff: recycling the fishing_net hoard resolves the goal with
+        FAR fewer than the 50 gathers a from-scratch chain would need
+        (10 ash_wood per ash_plank x 5 ash_plank)."""
+        gd = self._gd_ash_plank()
+        state = make_state(x=0, y=0, skills={"gearcrafting": 1, "woodcutting": 1},
+                          inventory={"fishing_net": 7}, inventory_max=100)
+        ctx = SelectionContext(bank_accessible=True, bank_required_level=0,
+                               bank_unlock_monster=None, initial_xp=0,
+                               task_exchange_min_coins=1, combat_monster=None)
+        raw_pool = [
+            GatherAction(resource_code="ash_tree", locations=frozenset([(0, 1)])),
+            CraftAction(code="ash_plank", workshop_location=(1, 1)),
+            RecycleAction(code="fishing_net", quantity=1, workshop_location=(2, 1)),
+        ]
+        # Simulate the arriving pool exactly as StrategyArbiter.select produces
+        # it: already licence-filtered, with bag_floor stamped onto any
+        # surviving RecycleAction.
+        pool = license_destructive_actions(raw_pool, state, gd, ctx)
+        goal = GatherMaterialsGoal(target_item="ash_plank", needed={"ash_plank": 5})
+        plan = GOAPPlanner().plan(state, goal, goal.relevant_actions(pool, state, gd),
+                                  gd, budget_seconds=30.0)
+        assert plan, "planner found no plan"
+        assert any(isinstance(a, RecycleAction) for a in plan)
+        assert sum(isinstance(a, GatherAction) for a in plan) < 10

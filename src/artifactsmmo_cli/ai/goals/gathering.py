@@ -10,6 +10,7 @@ from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
+from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.withdraw_gold import WithdrawGoldAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.buy_source_venue import BuyVenue, choose_buy_venue
@@ -202,6 +203,42 @@ class GatherMaterialsGoal(Goal):
             chain[currency] = chain.get(currency, 0) + unit_price * qty
         withdrawable |= set(chain)
 
+        # Recycle-as-acquisition: a licensed RecycleAction whose recipe yields a
+        # closure material is a SOURCE for that material, not merely disposal.
+        # Live 2026-07-13: the bot chopped 50 ash_wood at 1/cycle to craft 5
+        # ash_plank while holding 7 fishing_net — whose recipe IS 6 ash_plank each.
+        # Recycle costs 7.00 and returns 3 planks; a gather costs 25.00 and returns
+        # ONE ash_wood, of which TEN make one plank.
+        #
+        # Safety is structural, not conventional: this pool has ALREADY been filtered
+        # by `license_destructive_actions` at StrategyArbiter.select, so the recycles
+        # visible here are exactly the ones the keep authority permits (and each
+        # carries its `bag_floor`, so the working tool is unreachable). Admission can
+        # only fail to admit a licensed recycle — it cannot invent an unlicensed one.
+        # Derived from the RecycleActions ACTUALLY IN THE POOL, not a scan over ALL
+        # known recipes: the factory only ever emits a RecycleAction for an
+        # EQUIPPABLE code, so scanning every recipe over-admits non-equippable
+        # source codes (ash_plank, hardwood_plank, sap, ...) that can NEVER have a
+        # licensed recycle — measured 68 over-admitted sources on a deep gear-chain
+        # closure. A code with no licensed RecycleAction in the pool has no recycle
+        # to feed, so withdrawing it as a "source" buys nothing and only enlarges
+        # the search. Both admission arms (this one and the Recycle arm below) key
+        # off this SAME pool-derived set, so they agree about what a "source" is.
+        closure_materials = set(chain) | set(self._needed)
+        recycle_sources: set[str] = set()
+        for action in actions:
+            if not isinstance(action, RecycleAction):
+                continue
+            source_recipe = game_data.crafting_recipe(action.code) or {}
+            if set(source_recipe) & closure_materials:
+                recycle_sources.add(action.code)
+        # The SOURCE is UPSTREAM of the closure (fishing_net is not in the ash_plank
+        # closure), so the closure-built `withdrawable` set misses it. Without this a
+        # bank-only source is admitted as a recycle whose feeding withdraw is not, and
+        # the Withdraw -> Recycle chain — the MAIN path, since DEPOSIT_FULL banks the
+        # surplus — is unplannable.
+        withdrawable |= recycle_sources
+
         # Bank-aware gather pruning: the shopping_list credits inventory+bank at
         # every recipe level; a chain material with NET 0 is fully covered, so the
         # bot should WITHDRAW it, not re-gather. Prune the gather whose drop is
@@ -306,6 +343,8 @@ class GatherMaterialsGoal(Goal):
             # CraftPotionsGoal node-cap flood, derived 2026-07-08).
             if isinstance(action, CraftAction) and action.code in craftable_mats:
                 result.append(size_intermediate_craft(action, chain, state, game_data))
+            elif isinstance(action, RecycleAction) and action.code in recycle_sources:
+                result.append(action)
             elif (
                 "recovery" in action.tags
                 or "deposit" in action.tags
