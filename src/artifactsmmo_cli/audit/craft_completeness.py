@@ -26,6 +26,7 @@ from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.recipe_closure import closure_demand, recipe_closure
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
+from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.objective import (
     GOLD,
     CharacterObjective,
@@ -112,7 +113,11 @@ def plan_craft(recipe: str, state: WorldState,
         bank_accessible=True, task_exchange_min_coins=0)
     goal = GatherMaterialsGoal(target_item=recipe, needed={recipe: 1})
     arbiter = StrategyArbiter(GOAPPlanner(), None)
-    return arbiter._plans(goal, state, game_data, actions,
+    ctx = SelectionContext(
+        bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
+        initial_xp=0, task_exchange_min_coins=0, combat_monster=None,
+    )
+    return arbiter._plans(goal, state, game_data, actions, ctx,
                           budget_seconds=CRAFT_AUDIT_BUDGET_SECONDS)
 
 

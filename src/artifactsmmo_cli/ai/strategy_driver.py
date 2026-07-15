@@ -19,7 +19,7 @@ from artifactsmmo_cli.ai.arbiter_select import (
     select_pure,
 )
 from artifactsmmo_cli.ai.consumable_supply import best_held_heal
-from artifactsmmo_cli.ai.craft_plan_gen import generate_next_craft_action
+from artifactsmmo_cli.ai.craft_plan_gen import _closure_items, generate_next_craft_action
 from artifactsmmo_cli.ai.craft_relief import craft_relief_candidates
 from artifactsmmo_cli.ai.destructive_license import license_destructive_actions
 from artifactsmmo_cli.ai.doomed_memo import DoomedMemo
@@ -60,6 +60,7 @@ from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.goals.withdraw_tools import WithdrawToolsGoal
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.objective_step_fight_core import objective_step_is_fight_pure
+from artifactsmmo_cli.ai.obtain_sources import Source, obtain_source_map
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.potion_provision_qty import potion_provision_qty_pure
 from artifactsmmo_cli.ai.recipe_closure import closure_demand
@@ -806,6 +807,7 @@ class StrategyArbiter:
         state: WorldState,
         game_data: GameData,
         actions: list[Action],
+        ctx: SelectionContext,
         budget_seconds: float | None = None,
     ) -> list[Action]:
         """Attempt to plan goal; record attempt in goals_tried; return plan ([] = failed).
@@ -846,10 +848,20 @@ class StrategyArbiter:
             })
             return []
         # Fast-path: for a deterministic gather-craft closure (all leaves are
-        # gatherable raws or skill-gated-met craftables) skip A* entirely.
-        # O(closure) vs 52K-node search for copper_ring-style chains.
-        # Falls back to None for monster-drop / NPC-buy / unmet-skill-gate goals.
-        gen = generate_next_craft_action(goal, state, game_data, actions)
+        # gatherable raws, skill-gated-met craftables, or served by THE ONE
+        # OBTAIN MODEL) skip A* entirely. O(closure) vs 52K-node search for
+        # copper_ring-style chains. Falls back to None for genuinely
+        # unmodeled leaves / unmet-skill-gate goals with no grind rung.
+        #
+        # The source map is built ONCE here (not per closure item, and only
+        # for a GatherMaterialsGoal — every other goal shape short-circuits
+        # generate_next_craft_action immediately) via obtain_source_map, THE
+        # shared model every route beyond bare gather/craft/withdraw reads.
+        sources: dict[str, list[Source]] = {}
+        if isinstance(goal, GatherMaterialsGoal):
+            closure_items = _closure_items(dict(game_data.crafting_recipes), goal.needed)
+            sources = obtain_source_map(closure_items, state, game_data, ctx)
+        gen = generate_next_craft_action(goal, state, game_data, actions, sources)
         if gen is not None:
             self._last_timed_out = False
             self.goals_tried.append({
@@ -993,7 +1005,7 @@ class StrategyArbiter:
             objective, chosen_root, discretionary_kinds, state, game_data, ctx)
 
         chosen, plan, new_committed = self._arbitrate(
-            candidates, suppressed, worth_suppressed, state, game_data, actions)
+            candidates, suppressed, worth_suppressed, state, game_data, actions, ctx)
 
         self._committed_repr = new_committed
         self.goals_tried = self._dedupe_goals_tried()
@@ -1255,6 +1267,7 @@ class StrategyArbiter:
         state: WorldState,
         game_data: GameData,
         actions: list[Action],
+        ctx: SelectionContext,
     ) -> tuple[Goal | None, list[Action], str | None]:
         """Tier walk: cheap pass → full-budget escalation → worth-gate bypass → Wait fallback."""
 
@@ -1293,7 +1306,7 @@ class StrategyArbiter:
         def try_plan_cheap(goal: Goal) -> list[Action]:
             if _skip(goal):
                 return []
-            plan = self._plans(goal, state, game_data, actions, _budget_for(goal, cheap=True))
+            plan = self._plans(goal, state, game_data, actions, ctx, _budget_for(goal, cheap=True))
             # Cheap pass: memoize only a CONCLUSIVE no-plan (search exhausted, not a
             # budget timeout). A cheap timeout stays unmemoized so it can escalate.
             # This is the feather_coat 99%-CPU fix: a doomed goal passed over in the
@@ -1305,7 +1318,7 @@ class StrategyArbiter:
         def try_plan_full(goal: Goal) -> list[Action]:
             if _skip(goal):
                 return []
-            plan = self._plans(goal, state, game_data, actions, _budget_for(goal, cheap=False))
+            plan = self._plans(goal, state, game_data, actions, ctx, _budget_for(goal, cheap=False))
             # Full (last-resort) pass: mark on ANY no-plan, timeout included — the
             # pragmatic backoff trigger (the exponential window re-probes later).
             return self._record_attempt(goal, plan, self._last_timed_out, state,

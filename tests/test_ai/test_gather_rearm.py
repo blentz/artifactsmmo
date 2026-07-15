@@ -15,6 +15,7 @@ from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.craft_plan_gen import _with_rearm, generate_next_craft_action
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.obtain_sources import Source, SourceKind
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from tests.test_ai.fixtures import make_state
 
@@ -100,14 +101,14 @@ def test_generator_plan_prepends_rearm_when_tool_in_bag() -> None:
     assert plan[0].target_skill == "mining"
 
 
-def test_generator_rearms_AFTER_a_recycle_prefix() -> None:
-    """A recycle prefix must not DISARM the re-arm (whole-branch review,
-    IMPORTANT 2). `_with_rearm` inspects ONE leg, and with a non-empty prefix that
-    leg is a Recycle — so the re-arm was skipped while the plan went on to
-    `Gather(copper_rocks)`, and the plan cache executed that gather bare-handed:
-    the very bug `_with_rearm` exists to fix, re-created by the recycle-as-
-    acquisition epic. The re-arm belongs to the first Gather/Fight leg of the
-    REMAINDER, and its applicability is asked of the POST-PREFIX state."""
+def test_generator_rearms_AFTER_a_recycle_leg() -> None:
+    """A leading Recycle leg must not DISARM the re-arm (whole-branch review,
+    IMPORTANT 2, re-derived under the shared obtain model). `_with_rearm` used
+    to inspect ONLY `mapped[0]`, and recycle is now an ORDINARY leg in the
+    SAME plan `craft_plan_full` returns — so a plan opening `Recycle, Gather,
+    ...` would skip the re-arm and the plan cache would execute the Gather
+    bare-handed: the very bug `_with_rearm` exists to fix. The re-arm belongs
+    right before the first Gather/Fight leg, wherever it sits in the plan."""
     gd = _gd()
     gd._item_stats["copper_bar"] = ItemStats(
         code="copper_bar", level=1, type_="resource",
@@ -126,8 +127,12 @@ def test_generator_rearms_AFTER_a_recycle_prefix() -> None:
     actions = [*_actions(),
                RecycleAction(code="copper_helmet", quantity=1,
                              workshop_location=(6, 0))]
+    # One copper_helmet recycle recovers max(1, 6 // 2) = 3 bars — a licensed
+    # RECYCLE source for copper_bar, standing in for what
+    # `obtain_source_map` would derive from the licensed pool.
+    sources = {"copper_bar": [Source(SourceKind.RECYCLE, "copper_helmet", 3, 3)]}
 
-    plan = generate_next_craft_action(goal, state, gd, actions)
+    plan = generate_next_craft_action(goal, state, gd, actions, sources)
 
     assert plan is not None
     kinds = [type(a).__name__ for a in plan]

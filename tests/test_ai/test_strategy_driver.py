@@ -1044,7 +1044,7 @@ def test_plans_skips_unplannable_goal_without_searching():
     arbiter = StrategyArbiter(spy, history=None)
     goal = UpgradeEquipmentGoal(committed_target=("copper_boots", "boots_slot"))
     state = make_state(inventory={}, bank_items={})
-    plan = arbiter._plans(goal, state, gd, [])
+    plan = arbiter._plans(goal, state, gd, [], _ctx())
     assert plan == []
     assert spy.calls == 0, "unplannable goal must NOT invoke the planner"
     assert arbiter.goals_tried[-1]["plan_len"] == 0
@@ -1056,7 +1056,7 @@ def test_plans_runs_planner_for_plannable_goal():
     arbiter = StrategyArbiter(spy, history=None)
     goal = AcceptTaskGoal()
     state = make_state(task_code=None, task_total=0)
-    arbiter._plans(goal, state, _gd(), [AcceptTaskAction(taskmaster_location=(2, 1))])
+    arbiter._plans(goal, state, _gd(), [AcceptTaskAction(taskmaster_location=(2, 1))], _ctx())
     assert spy.calls == 1
 
 
@@ -1633,7 +1633,7 @@ def test_plans_forwards_budget_to_planner():
 
     arbiter = StrategyArbiter(_BudgetSpy(), history=None)
     arbiter._plans(AcceptTaskGoal(), make_state(task_code=None, task_total=0), _gd(),
-                   [AcceptTaskAction(taskmaster_location=(2, 1))], budget_seconds=1.0)
+                   [AcceptTaskAction(taskmaster_location=(2, 1))], _ctx(), budget_seconds=1.0)
     assert captured["budget"] == 1.0
 
 

@@ -43,9 +43,11 @@ from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.craft_plan_gen import generate_next_craft_action
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.obtain_sources import obtain_source_map
 from artifactsmmo_cli.ai.plan_report import PlanReport
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
+from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai.scenarios.search_bounds import assert_search_bounded
 
@@ -191,31 +193,43 @@ def test_drop_leaf_class_is_nonempty() -> None:
 
 
 @pytest.fixture(scope="module")
-def bare_sweep_env() -> tuple[WorldState, GameData, list[Action]]:
-    """One shared (bare state, game data, factory actions) triple for the
+def bare_sweep_env() -> tuple[WorldState, GameData, list[Action], SelectionContext]:
+    """One shared (bare state, game data, factory actions, ctx) tuple for the
     sweep: the l13 scenario stripped to EMPTY holdings (inventory + bank),
     seeded through the same offline seam the full-stack tests use, with the
     REAL action factory's output (not a hand-picked action list) — the
     sweep must exercise the exact surface the live planner hands the
-    generator."""
+    generator. The `ctx` is the player's OWN per-cycle SelectionContext
+    (`_selection_context`) — THE ACTIVATION (Task 4) made the generator read
+    DROP/RECYCLE/BUY routes from an externally-built `obtain_source_map`, and
+    that map needs the same ctx the live `_plans` seam builds it with."""
     gd = load_bundle_game_data(BUNDLE)
     state = scenario_state(SCENARIOS[L13], gd)
     bare: WorldState = dataclasses.replace(state, inventory={}, bank_items={})
     player = GamePlayer(character=L13, history=None)
     player.seed_offline(bare, gd)
-    return bare, gd, list(player._build_actions())
+    return bare, gd, list(player._build_actions()), player._selection_context()
 
 
 @pytest.mark.parametrize("code", DROP_LEAF_RECIPES)
 def test_drop_leaf_recipe_generates_plan(
-    code: str, bare_sweep_env: tuple[WorldState, GameData, list[Action]],
+    code: str,
+    bare_sweep_env: tuple[WorldState, GameData, list[Action], SelectionContext],
 ) -> None:
     """CLASS NET (BINDING user directive): from EMPTY holdings — so every
     monster-drop leaf genuinely needs its Fight leg, no bank cover — the
     generator must produce a non-empty plan for every reachable
     craftable-with-drop-leaf recipe. Before GAP-8 every one of these
-    returned None and rode the A* flood."""
-    bare, gd, actions = bare_sweep_env
+    returned None and rode the A* flood.
+
+    THE ACTIVATION (Task 4): the DROP leg now comes from the shared obtain
+    model, so the sweep builds the SAME `obtain_source_map` the live
+    `StrategyArbiter._plans` seam builds and threads it in — a 4-arg call
+    (no map) would lose exactly DROP/RECYCLE/BUY and regress every one of
+    these to None (the pre-GAP-8 A* flood)."""
+    bare, gd, actions, ctx = bare_sweep_env
     goal = GatherMaterialsGoal(code, {code: 1})
-    plan = generate_next_craft_action(goal, bare, gd, actions)
+    closure = _closure_items(dict(gd.crafting_recipes), code)
+    sources = obtain_source_map(closure, bare, gd, ctx)
+    plan = generate_next_craft_action(goal, bare, gd, actions, sources)
     assert plan, (code, plan)

@@ -4,52 +4,60 @@ Replaces an expensive GOAP A* search (~52K nodes/cycle for copper_ring) with an
 O(recipe-closure) lookup when the goal is a pure gather-craft chain — every leaf
 is either a gatherable raw resource or a craftable item whose skill gate is met.
 
+THE ONE OBTAIN MODEL (`ai/obtain_sources.Source`) is what this generator reads
+for everything beyond the bare recipe DAG. `sources` — a priority-ordered
+`{item: [Source, ...]}` map built ONCE per cycle by the caller via
+`obtain_sources.obtain_source_map` — is threaded straight into
+`craft_plan_driver_core.craft_plan_full`, which already knows how to walk
+WITHDRAW/RECYCLE/CRAFT/GATHER/BUY/DROP (Tasks 1-3 of this epic). This module
+used to hand-bolt three of those six routes on top of a bare 3-kind
+(gather/craft/withdraw) walk — a recycle prefix, a monster-drop-Fight lookup,
+and an NPC-buy decline — duplicating exactly what `obtain_sources` now models
+once. Task 4 (THE ACTIVATION) deleted all three bolt-ons: with `sources`
+non-empty, `craft_plan_full` itself emits the recycle/buy/drop legs, in the
+same single deterministic descent as gather/withdraw/craft, so a partial
+recycle recovery interleaves with a gather/craft remainder as ONE mixed plan
+instead of a separately-simulated prefix. `sources` defaults to empty, which
+degrades every closure walk here to the original 3-kind behavior byte-for-byte.
+
 Falls back to None (A* fallback) for:
 - non-GatherMaterialsGoal goals
-- closures that contain a monster-drop leaf with NO winnable-dropper Fight
-  in the goal's relevant_actions (GAP-8: a drop leaf whose dropper IS
-  emitted — winnable, xp-positive or grey-farm-allowed — gets a Fight leg
-  instead; the generated plan truncates at the Fight, one leg per cycle),
-  OR whose emitted dropper Fight fails FightAction.is_applicable right now
-  (level+2 suicide guard / HP floor / free inventory — `is_winnable` is a
-  stat-only prediction blind to these structural gates; see `_dropper_fight`)
-- closures that contain NPC-buy / currency leaves
+- closures that contain a raw (non-craftable) leaf that is neither a
+  gatherable resource drop NOR served by any source in `sources` (an
+  unmodeled monster-drop / NPC-buy leaf — GatherMaterials' buy arm / A* /
+  is_plannable own those honestly)
 - closures that have any craft whose skill gate is not yet met AND no matching
-  `LevelSkill(skill, craft_level)` is present in `actions` (P2: when one IS
+  `LevelSkill(skill, craft_level)` is present in `actions` (when one IS
   present, the generator emits `[LevelSkill]` instead — one leg per cycle,
-  mirroring the Fight truncation — so the next cycle's replan re-derives the
-  gather/craft legs once the grind lands)
+  mirroring the Fight/DROP truncation below — so the next cycle's replan
+  re-derives the gather/craft legs once the grind lands)
 - closures where a NON-TOP-LEVEL input/intermediate is both banked AND short in
   inventory: that banked material would need a WithdrawItemAction before use;
   the generator cannot emit withdraws, so A* handles Withdraw→Craft correctly.
   Top-level targets (goal._needed keys) are excluded from this check — a banked
   finished good is an output, not an input that needs withdrawing.
 
-RECYCLE IS A SOURCE HERE TOO (recycle-as-acquisition epic, Task 8). Before the
-recipe descent runs, `_recycle_prefix` mints the closure materials a LICENSED
-recycle can recover from held/banked surplus (`Withdraw` → `Recycle`), credits them
-into `owned`, and lets `craft_plan_full` plan only the remainder — so a partial
-recovery comes out as ONE mixed recycle+gather plan at nodes=0. Without it this
-generator, which fires on exactly the deterministic gather-craft closure the epic
-targets, silently OUT-RAN the A* that knew about the route: it planned
-`Gather(ash_tree)` while the bag held bows whose recipe IS `ash_plank`, and the
-epic was inert for every roomy bag. Deferring to A* instead is not an option — the
-mixed interleaving explodes (29,792 nodes, timeout, measured on the census's
-PARTIAL cell).
-
-The precise bank gate (rather than a blanket "any banked closure item → None")
-preserves the fast-path for the two common mid-game states:
-  - banked TARGET (finished output) — generator still fires, re-makes remainder
-  - banked SURPLUS input (inventory already covers the requirement) — also fires
+SAFETY NET, NOT ADMIT-TIME FILTERING. `sources` admits a DROP/RECYCLE leaf on
+`is_winnable` / `destroyable` capacity alone — it says nothing about a Fight's
+level+2 suicide guard, HP floor, free-inventory gate, or a Recycle's bag/owned
+floor, and it does not need to: the executor (`GamePlayer._plan_or_reuse` via
+`should_replan`) re-validates `is_applicable` on the CURRENT plan head every
+cycle before ever calling `execute`, so a leg that becomes inapplicable by the
+time it is reached is caught there, never blindly run. This generator supplies
+its OWN matching safety net for the leg it is about to hand back THIS cycle:
+the first-leg applicability gate in `_finish` below.
 """
 
 import dataclasses
+import math
+from collections.abc import Mapping
 
 from artifactsmmo_cli.ai.actions.base import Action
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
+from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
@@ -58,8 +66,8 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
 from artifactsmmo_cli.ai.next_craft_core import NextAction
+from artifactsmmo_cli.ai.obtain_sources import Source, SourceKind
 from artifactsmmo_cli.ai.recipe_closure import closure_demand
-from artifactsmmo_cli.ai.shopping_list import shopping_list
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -95,19 +103,20 @@ def generate_next_craft_action(
     state: WorldState,
     game_data: GameData,
     actions: list[Action],
+    sources: Mapping[str, list[Source]] | None = None,
 ) -> list[Action] | None:
-    """Return ``[next_action]`` for a deterministic gather-craft goal, or ``None``.
+    """Return the next action(s) for a deterministic gather-craft goal, or ``None``.
 
     Returns ``None`` (fall back to A*) when:
     - ``goal`` is not a :class:`~artifactsmmo_cli.ai.goals.gathering.GatherMaterialsGoal`
     - Any item in the recipe closure has no recipe, is not a gatherable raw
-      resource, AND has no winnable-dropper Fight in the goal's
-      relevant_actions (NPC-buy leaves, unwinnable/suppressed droppers —
-      GatherMaterials' buy arm / A* / is_plannable own those honestly)
+      resource, AND has no entry in `sources` (NPC-buy leaves the model
+      declined, or unwinnable/unreachable droppers — GatherMaterials' buy arm /
+      A* / is_plannable own those honestly)
     - Any craftable item in the closure has a skill gate the character has not
       met AND ``actions`` has no matching ``LevelSkill(skill, craft_level)``
       (when one IS present, returns ``[LevelSkill]`` instead — one leg per
-      cycle, same truncation idiom as the Fight leg below)
+      cycle, same truncation idiom as the Fight/DROP leg below)
     - A closure INPUT/INTERMEDIATE (not a top-level target in ``goal._needed``) is
       banked AND inventory is short of the required quantity: that item must be
       withdrawn before crafting; the generator has no "withdraw" step, so it defers
@@ -119,8 +128,8 @@ def generate_next_craft_action(
     - The banked item is a closure input/intermediate but inventory already covers
       the required quantity (the bank holds surplus; no withdraw needed).
 
-    When a single unambiguous next action can be derived, returns a one-element
-    list containing the matching action from
+    When a single unambiguous next action (or short deterministic chain) can be
+    derived, returns a list of concrete actions from
     :meth:`~artifactsmmo_cli.ai.goals.gathering.GatherMaterialsGoal.relevant_actions`.
     This avoids the 52K-node A* search that copper_ring-style goals otherwise
     trigger on every cycle.
@@ -131,6 +140,23 @@ def generate_next_craft_action(
     recipes: dict[str, dict[str, int]] = dict(game_data.crafting_recipes)
     needed: dict[str, int] = goal.needed
 
+    # THE WITHDRAW ROUTE IS OWNED BY THE RECIPE DESCENT, NOT THE SOURCE MAP.
+    # `next_craft_core._next` already withdraws a banked recipe INPUT with LIVE
+    # bank accounting (`min(bank[inp], shortfall)`, kernel-proved) — the common,
+    # load-bearing case. A WITHDRAW `Source` would only (a) DUPLICATE that for
+    # inputs and (b) for a recipe-LESS top-level target (a monster-drop leaf that
+    # happens to be banked) carry a STATIC `capacity` snapshot the multi-step
+    # driver never decrements, so a target short of full bank stock over-withdraws
+    # a PHANTOM copy past what the bank holds (feather: bank 2, need 3 → a bogus
+    # 3rd Withdraw). Dropping WITHDRAW here keeps exactly ONE withdraw mechanism
+    # (DRY — the proven descent), and a banked recipe-less target with no other
+    # route declines to A* exactly as it did before THE ACTIVATION. The epic's
+    # activation is RECYCLE/BUY/DROP; all three are kept. (A proper bank-live
+    # WITHDRAW capacity belongs in the shared core + its Lean mirror, out of
+    # this task's scope.)
+    sources = {item: [s for s in srcs if s.kind is not SourceKind.WITHDRAW]
+               for item, srcs in (sources or {}).items()}
+
     # Collect every item code in the recipe closure.
     closure = _closure_items(recipes, needed)
 
@@ -138,13 +164,12 @@ def generate_next_craft_action(
     gatherable_items: set[str] = set(game_data.gatherable_drop_items())
 
     # CAN-GENERATE gate: every closure item must be either a craftable (with met
-    # skill gate AND a known workshop), a gatherable raw, or a monster drop
-    # whose chosen dropper Fight the goal's relevant_actions emits (GAP-8).
-    # `relevant` is computed lazily on the first drop leaf so the pure
+    # skill gate AND a known workshop), a gatherable raw, or served by some
+    # source in the shared obtain model (RECYCLE/BUY/DROP). `relevant` is
+    # computed lazily on the first LevelSkill emission so the pure
     # gather-craft fast path and the early A*-fallback returns stay as cheap
     # as before; the successful path needs it anyway (mapping below).
     relevant: list[Action] | None = None
-    drop_fights: dict[str, FightAction] = {}
     for item in closure:
         recipe = recipes.get(item)
         if recipe is not None:
@@ -152,10 +177,15 @@ def generate_next_craft_action(
             stats = game_data.item_stats(item)
             if stats is None or stats.crafting_skill is None:
                 return None  # Unknown craft requirements → fall back to A*.
+            if game_data.workshop_location(stats.crafting_skill) is None:
+                return None  # No workshop for this skill → fall back to A*.
             if state.skills.get(stats.crafting_skill, 1) < stats.crafting_level:
-                # Skill gate not met: emit the matching LevelSkill leg
-                # (one-leg-per-cycle, mirroring the Fight truncation below)
-                # if the caller surfaced one; otherwise fall back to A*.
+                # Skill gate not met: a skill-gated craft is simply not a CRAFT
+                # source until the gate is met (obtain_sources._craft_sources
+                # would decline it too). Emit the matching LevelSkill leg
+                # instead (one-leg-per-cycle, mirroring the Fight/DROP
+                # truncation) if the caller surfaced one; otherwise fall back
+                # to A*.
                 lvl = next((a for a in actions
                             if isinstance(a, LevelSkill)
                             and a.skill == stats.crafting_skill
@@ -166,60 +196,21 @@ def generate_next_craft_action(
                 # Fall back to A* (also is_applicable-gated → won't pick it →
                 # honest no-plan) instead. Restores the safety net that
                 # build_actions' emit-per-(skill,level) otherwise bypasses.
-                if lvl is not None and lvl.is_applicable(state, game_data):
-                    return [lvl]
-                return None
-            if game_data.workshop_location(stats.crafting_skill) is None:
-                return None  # No workshop for this skill → fall back to A*.
-        elif item not in gatherable_items:
-            # Raw leaf that no resource drops: a monster-drop leaf is served
-            # by a Fight leg IF the goal's own relevant_actions emitted its
-            # dropper — the GAP-6-proven wiring (select_monster_for_drop
-            # winner, is_winnable-gated, xp-positive plain Fight or
-            # grey_farm_allowed drop_farm variant) already decided WHICH
-            # fight, and whether one is allowed at all. No emitted fight
-            # (unwinnable dropper, suppressed grey, or a pure NPC-buy leaf
-            # with no dropper) → fall back to A* honestly.
-            if relevant is None:
-                relevant = goal.relevant_actions(actions, state, game_data)
-            fight = _dropper_fight(item, relevant, game_data, state)
-            if fight is None:
-                return None  # No Fight leg for this leaf → fall back to A*.
-            drop_fights[item] = fight
+                if lvl is None or not lvl.is_applicable(state, game_data):
+                    return None
+                return _finish([lvl], state, game_data)
+        elif item not in gatherable_items and not sources.get(item):
+            # Raw leaf that no resource drops AND the shared obtain model has
+            # no RECYCLE/BUY/DROP source for it either (an unmodeled monster
+            # drop, an NPC-buy leaf the model declined, or a genuinely
+            # unreachable/unwinnable route) → fall back to A* honestly.
+            return None
 
     if relevant is None:
         relevant = goal.relevant_actions(actions, state, game_data)
 
-    # THE RECYCLE ROUTE, MINTED BEFORE THE RECIPE DESCENT (recycle-as-acquisition
-    # epic, Task 8 — found by the recycle-source census). `recoverable_materials`
-    # made a recoverable material a LEAF in the tier descent, and
-    # `GatherMaterialsGoal.relevant_actions` admits the licensed `RecycleAction`s
-    # that serve it — but A* only ever sees that menu when THIS generator declines.
-    # It fires on exactly the shape the epic is about (a deterministic gather-craft
-    # closure), and it had no Recycle leg, so it planned `Gather(ash_tree)` while
-    # holding bows whose recipe IS `ash_plank`: the epic was INERT at the plan level
-    # for every roomy bag. (It reached A* live only because Robby's bag was
-    # slot-full, which makes the first-leg applicability check below defer.) A LEAF
-    # THE PLAN DRIVER CANNOT DELIVER is the livelock shape of 3166d390.
-    #
-    # Deferring to A* instead was the other option and is WRONG: measured on the
-    # census's PARTIAL cell (4 of 8 planks recoverable, the rest a from-scratch
-    # 10x ash_wood subtree), A* burns 29,792 nodes and TIMES OUT at the 10s cheap
-    # budget — the super-linear gather/craft/recycle interleaving explosion the
-    # spec itself flags as this leaf rule's risk. The prefix is deterministic
-    # (nodes=0) and, because the recovered materials are credited into `owned`
-    # below, the remainder is planned by the SAME kernel-proved `craft_plan_full`
-    # descent — so a partial recovery comes out as one MIXED recycle+gather plan.
-    prefix, state_after = _recycle_prefix(needed, relevant, state, game_data)
-    bank: dict[str, int] = state_after.bank_items or {}
-    # owned = INVENTORY; the bank is passed SEPARATELY to the core.  A banked
-    # craftable intermediate (e.g. copper_bar) no longer forces an A* Withdraw→Craft
-    # search: the core emits a "withdraw" NextAction for the first short input that
-    # is in the bank (mirrors the kernel-proved Lean `nextHelper` withdraw arm),
-    # which we map to a WithdrawItemAction below.  Top-level targets are never
-    # withdrawn (the descent only checks INPUTS), so a banked finished output is
-    # still re-made from scratch.
-    owned: dict[str, int] = dict(state_after.inventory)
+    owned: dict[str, int] = dict(state.inventory)
+    bank: dict[str, int] = state.bank_items or {}
 
     # Build the FULL deterministic plan for the first needed item that isn't
     # already satisfied, then map each step to a concrete action.  The player's
@@ -230,18 +221,18 @@ def generate_next_craft_action(
     # genuine next move (craftPlan_steps_valid) and a complete plan reaches the
     # target (craftPlan_reaches).
     for item, qty in needed.items():
-        plan = craft_plan_full(recipes, owned, bank, item, qty)
+        plan = craft_plan_full(recipes, owned, bank, item, qty, sources)
         if not plan:
             continue  # this item already satisfied; try the next needed item
         chain: dict[str, int] = {}
         closure_demand(item, qty, game_data, chain, frozenset())
         mapped: list[Action] = []
         for na in plan:
-            action = _map_next_action(na, relevant, game_data, drop_fights)
+            action = _map_next_action(na, relevant, game_data, sources)
             if action is None:
                 return None  # a step has no concrete action → fall back to A*
             if isinstance(action, CraftAction):
-                action = size_intermediate_craft(action, chain, state_after, game_data)
+                action = size_intermediate_craft(action, chain, state, game_data)
             mapped.append(action)
             if isinstance(action, FightAction):
                 # One-leg-per-cycle (GAP-8): a kill's drop yield is
@@ -251,199 +242,26 @@ def generate_next_craft_action(
                 # remaining legs from the REAL post-fight inventory (the
                 # same grind-one-replan idiom the skill dispatch uses).
                 break
-        return _finish(prefix, mapped, state, state_after, game_data)
-    # Every needed item is satisfied by the recipe descent — but a non-empty
-    # recycle prefix IS the plan (the LIVENESS shape: the recovered materials
-    # cover the whole demand, so `craft_plan_full` has nothing left to add).
-    # Without this the prefix would be dropped on the floor and the goal would
-    # fall back to A* — which finds the very same recycles, just after a search.
-    return _finish(prefix, [], state, state_after, game_data) if prefix else None
+        return _finish(mapped, state, game_data)
+    return None  # every needed item already satisfied
 
 
-RECYCLE_PREFIX_FUEL = 64
-"""Belt-and-braces bound on the recycle prefix. Every iteration of
-`_recycle_prefix` either DESTROYS a source copy (strictly reducing a material
-deficit — a `RecycleAction` is only ever chosen while it yields a SHORT material)
-or MOVES one copy from the bank to the bag (strictly reducing the bank stock), so
-the loop is already monotone and terminates on its own; the fuel only bounds a
-pathological game-data shape. 64 legs is far beyond any plan the player — which
-executes ONE leg per cycle and re-plans — could consume."""
+def _finish(mapped: list[Action], state: WorldState,
+            game_data: GameData) -> list[Action] | None:
+    """Front an optimal-loadout re-arm when the plan opens with a suboptimal
+    Gather/Fight, then gate the whole plan on the first leg's applicability NOW.
 
+    The directed fast-path emits a deterministic recycle/withdraw/gather/craft/
+    buy/drop leg but does NOT model every inventory-room precondition. If the
+    first leg is not applicable NOW (e.g. a stack-creating gather blocked by a
+    full slot cap — the slot-exhaustion case, or a Fight that fails its
+    suicide guard, or a Recycle that violates its bag/owned floor), defer to
+    A*, which sequences the slot-freeing relief (DepositAll/Recycle/Sell)
+    before the leg, or finds no plan honestly.
 
-def _material_deficits(needed: dict[str, int], state: WorldState,
-                       game_data: GameData) -> dict[str, int]:
-    """Every item in `needed`'s recipe closure the character is genuinely SHORT of
-    — the NET demand after crediting bag AND bank at EVERY recipe level
-    (`shopping_list`, the proven core the goal's own gather-pruning reads).
-
-    The net walk is what keeps the prefix honest in two directions. A material
-    already OWNED is not a deficit — recycling for it would destroy an item to
-    duplicate something a Withdraw gets for free. And stock at one level
-    SHORT-CIRCUITS the subtree below it: once the recovered `ash_plank` covers the
-    demand, `ash_wood` is no longer short either, so a source whose recipe happens
-    to contain `ash_wood` is not fed a second, pointless copy of the tool."""
-    owned: dict[str, int] = dict(state.inventory)
-    for code, qty in (state.bank_items or {}).items():
-        owned[code] = owned.get(code, 0) + qty
-    deficits: dict[str, int] = {}
-    for code, qty in needed.items():
-        net = shopping_list(code, qty, game_data.crafting_recipes, owned)
-        for mat, short in net.items():
-            if short > 0:
-                deficits[mat] = max(deficits.get(mat, 0), short)
-    return deficits
-
-
-def _recovered_units(recipe: dict[str, int], materials: dict[str, int]) -> int:
-    """Units of `materials` one UNIT recycle of a source with `recipe` recovers —
-    `max(1, qty // 2)` per ingredient, the exact term `RecycleAction.apply` mints
-    (and `recoverable_materials` promises). Ingredients outside `materials` are
-    not counted: they are recovered too, but they are not what the goal is short
-    of."""
-    return sum(max(1, qty // 2)
-               for code, qty in recipe.items() if code in materials)
-
-
-def _goal_closure(needed: dict[str, int], game_data: GameData) -> frozenset[str]:
-    """Every code the goal is TRYING TO OBTAIN — the needed items and their whole
-    recipe closure. A recycle source drawn from this set would destroy the very
-    thing the plan exists to produce.
-
-    `needed = {copper_ring: 5}` with copper_rings in hand: `_best_recycle` would
-    otherwise pick `Recycle(copper_ring)` (its recipe recovers `copper_bar`, a
-    genuine deficit) and plan `Recycle(copper_ring) -> Craft(copper_ring)` — melt
-    a ring to get back HALF of its own inputs, forever. Nothing but the keep
-    reasons driving `destroyable` to 0 prevented it, and that is INCIDENTAL: the
-    5th spare ring of an over-demand goal is destroyable. The exclusion is
-    STRUCTURAL instead (whole-branch review, MINOR 4)."""
-    chain: dict[str, int] = {}
-    for item, qty in needed.items():
-        closure_demand(item, qty, game_data, chain, frozenset())
-    return frozenset(chain) | frozenset(needed)
-
-
-def _best_recycle(relevant: list[Action], deficits: dict[str, int],
-                  excluded: frozenset[str],
-                  game_data: GameData) -> RecycleAction | None:
-    """The best licensed recycle SOURCE for the current deficits, or None.
-
-    `relevant` is the goal's own menu, so every `RecycleAction` in it has already
-    passed the destruction LICENCE (`StrategyArbiter.select` →
-    `license_destructive_actions`) and carries its `bag_floor` and `owned_floor` —
-    this function can only fail to pick one, never invent one the authority
-    forbade. That is what makes the working `copper_axe` unreachable here without
-    re-deriving any protection rule.
-
-    `excluded` (the goal's own closure, `_goal_closure`) is the one rule the
-    licence CANNOT supply: destroying a copy of what you are crafting is licensed
-    whenever it is surplus, and it is still self-defeating.
-
-    Ranked by SEMANTICS, never by name: most units of a SHORT material recovered
-    per copy first (the whole point of the route), then the LOWEST-level source (a
-    tier-1 net before a tier-3 bow — sacrifice the cheapest gear that serves), then
-    the FEWEST wasted units (ingredients recovered that nothing needs). Ties keep
-    the first source the pool offered, so the pick is deterministic without ever
-    sorting on a code string."""
-    best: RecycleAction | None = None
-    best_key: tuple[int, int, int] | None = None
-    for action in relevant:
-        if not isinstance(action, RecycleAction):
-            continue
-        if action.code in excluded:
-            continue  # never melt the goal's own target (or its chain) for parts
-        recipe = game_data.crafting_recipe(action.code) or {}
-        gain = _recovered_units(recipe, deficits)
-        if gain <= 0:
-            continue  # recovers nothing the goal is short of
-        stats = game_data.item_stats(action.code)
-        waste = sum(max(1, qty // 2)
-                    for code, qty in recipe.items() if code not in deficits)
-        key = (-gain, stats.level if stats is not None else 0, waste)
-        if best_key is None or key < best_key:
-            best, best_key = action, key
-    return best
-
-
-def _staging_withdraw(code: str, relevant: list[Action], state: WorldState,
-                      game_data: GameData) -> WithdrawItemAction | None:
-    """The applicable `Withdraw(code)` that stages a BANK copy of a recycle source
-    into the bag, or None. The SMALLEST applicable quantity wins: a recycle
-    consumes one copy at a time, and over-withdrawing would pull protected stock
-    into a bag the deposit route then has to bank again."""
-    candidates = [a for a in relevant
-                  if isinstance(a, WithdrawItemAction) and a.code == code
-                  and a.is_applicable(state, game_data)]
-    if not candidates:
-        return None
-    return min(candidates, key=lambda a: a.quantity)
-
-
-def _recycle_prefix(needed: dict[str, int], relevant: list[Action],
-                    state: WorldState,
-                    game_data: GameData) -> tuple[list[Action], WorldState]:
-    """The recycle legs that MINT the closure materials the goal is short of, and
-    the state they leave behind.
-
-    One licensed unit recycle at a time, each simulated with the action's own
-    production `apply`, so the recovered materials, the destroyed copy and the bag
-    room are exactly what the executor will see. A source whose copies are all in
-    the BANK is staged with the Withdraw the goal already admits
-    (`goals/gathering.py` widens `withdrawable` by the recycle sources for exactly
-    this) — `RecycleAction.bag_floor` is what makes the bag copy unreachable and
-    forces that staging, so the working tool is never the copy that dies.
-
-    Stops when nothing licensed recovers a SHORT material any more — which is what
-    turns a PARTIAL recovery into a mixed plan: the prefix takes what recycling can
-    give, and the `craft_plan_full` descent below gathers the rest."""
-    legs: list[Action] = []
-    sim = state
-    excluded = _goal_closure(needed, game_data)
-    for _ in range(RECYCLE_PREFIX_FUEL):
-        deficits = _material_deficits(needed, sim, game_data)
-        if not deficits:
-            break
-        source = _best_recycle(relevant, deficits, excluded, game_data)
-        if source is None:
-            break  # no licensed recycle serves what the goal still lacks
-        leg: Action | None = source
-        if not source.is_applicable(sim, game_data):
-            # No reachable BAG copy (bag_floor, or the copies live in the bank):
-            # stage one from the bank, then the next iteration recycles it.
-            leg = _staging_withdraw(source.code, relevant, sim, game_data)
-        if leg is None:
-            break  # neither recyclable nor withdrawable now — A* has no more here
-        legs.append(leg)
-        sim = leg.apply(sim, game_data)
-    return legs, sim
-
-
-def _finish(prefix: list[Action], mapped: list[Action], state: WorldState,
-            state_after: WorldState, game_data: GameData) -> list[Action] | None:
-    """Re-arm the REMAINDER, keep the prefix in front, and gate the whole plan on
-    the first leg's applicability NOW.
-
-    THE RE-ARM IS EVALUATED ON THE REMAINDER, NOT ON `plan[0]` (whole-branch
-    review, IMPORTANT 2). `_with_rearm` inspects one leg — index 0 — and with a
-    non-empty recycle prefix that leg is a Recycle/Withdraw, so the re-arm was
-    SKIPPED even though the plan went on `..., Gather(copper_rocks), Craft(...)`:
-    the recycle prefix silently DISARMED the loadout re-arm, and the plan cache
-    executed the Gather bare-handed — the exact bug `_with_rearm`'s own docstring
-    documents (every generated helmet plan opened bare-handed while the ferried
-    copper_pickaxe rode in the bag). The remainder's own first leg is the one the
-    re-arm is about, and its applicability is asked of `state_after` — the
-    POST-PREFIX state the executor will actually be in when it reaches that leg,
-    not the initial state.
-
-    The directed fast-path emits a deterministic recycle/gather/craft leg but does
-    NOT model inventory-room preconditions. If the first leg is not applicable NOW
-    (e.g. a stack-creating gather blocked by a full slot cap — the slot-exhaustion
-    case), defer to A*, which sequences the slot-freeing relief
-    (DepositAll/Recycle/Sell) before the leg.
-
-    At least one of `prefix` / `mapped` is non-empty at either call site (the
-    recipe descent contributes at least one leg, or the recycle prefix does), so
-    `result[0]` always exists."""
-    result = [*prefix, *_with_rearm(mapped, state_after, game_data)]
+    `mapped` is always non-empty at both call sites (a LevelSkill leg, or a
+    non-empty `craft_plan_full` plan)."""
+    result = _with_rearm(mapped, state, game_data)
     if not result[0].is_applicable(state, game_data):
         return None
     return result
@@ -452,96 +270,56 @@ def _finish(prefix: list[Action], mapped: list[Action], state: WorldState,
 def _with_rearm(mapped: list[Action], state: WorldState,
                 game_data: GameData) -> list[Action]:
     """Front the per-skill (Gather) or per-monster (Fight) loadout optimizer
-    when the plan opens with a leg whose loadout is suboptimal. This
-    generated path bypasses A* entirely (nodes=0), so the loadout-penalty
-    cost terms never get a vote here — live trace 2026-07-05: every
-    generated helmet plan opened bare-handed while the ferried
-    copper_pickaxe rode in the bag. Plans opening with a Craft are left
-    alone; a later Gather/Fight-first regeneration re-arms then.
+    right before the FIRST Gather/Fight leg in `mapped`, when that leg's
+    loadout is suboptimal. This generated path bypasses A* entirely
+    (nodes=0), so the loadout-penalty cost terms never get a vote here —
+    live trace 2026-07-05: every generated helmet plan opened bare-handed
+    while the ferried copper_pickaxe rode in the bag.
 
-    `mapped` is the plan REMAINDER (the recipe-descent legs) and `state` the
-    POST-PREFIX state — never the raw plan/initial state. `_finish` splices the
-    result back behind the recycle prefix. A prefix leg at index 0 would otherwise
-    make every branch below fall through and disarm the re-arm entirely (see
-    `_finish`).
+    SCANS PAST any leading Recycle/Withdraw/Craft/Buy legs rather than only
+    inspecting `mapped[0]` (whole-branch review, IMPORTANT 2, re-derived
+    under the shared obtain model): recycle is now an ORDINARY leg in the
+    SAME plan `craft_plan_full` returns, so a plan can be
+    `[Recycle, Gather, Craft]` with the Recycle at index 0 — checking only
+    `mapped[0]` would silently skip the re-arm and let the plan cache
+    execute the Gather bare-handed, recreating the exact bug this helper
+    exists to fix. Equipping a tool is unaffected by a prior recycle/
+    withdraw/craft/buy leg, so `rearm.is_applicable` is still asked of the
+    CURRENT `state` (the legs ahead of the Gather/Fight don't touch
+    equipment) — only the INSERTION POINT moves, not the state it is judged
+    against. A plan with no Gather/Fight leg at all (pure
+    recycle/withdraw/craft/buy) is returned unchanged.
 
-    Fight-first mirror (Task 5b Part 3): `_dropper_fight` admits a dropper
-    on STRUCTURAL applicability only (Part 2), so a mapped plan's leading
-    Fight may be structurally fine but equipped suboptimally for the
-    monster — the Task 3 hard loadout gate would then reject it at
-    execution (player.py runs plan[0] directly, with no separate
-    applicability re-check). Front `OptimizeLoadout(target_monster_code=...)`
-    whenever it is `is_applicable`: `_swap_plan` is empty (and so
-    `is_applicable` False) when the equipped loadout is already optimal for
-    that monster, so this check is self-guarding — no separate
-    `equipped_matches_loadout` predicate needed here."""
-    first = mapped[0] if mapped else None
-    if isinstance(first, FightAction):
-        rearm = OptimizeLoadoutAction(
-            target_monster_code=first.monster_code, game_data=game_data
-        )
-        if not rearm.is_applicable(state, game_data):
-            return mapped  # loadout already optimal for this monster
-        return [rearm, *mapped]
-    if not isinstance(first, GatherAction):
-        return mapped
-    skill_req = game_data.resource_skill_level(first.resource_code)
-    if skill_req is None:
-        return mapped
-    rearm = OptimizeLoadoutAction(target_skill=skill_req[0], game_data=game_data)
-    if not rearm.is_applicable(state, game_data):
-        return mapped  # loadout already optimal for this skill
-    return [rearm, *mapped]
-
-
-def _dropper_fight(
-    item: str, relevant: list[Action], game_data: GameData, state: WorldState
-) -> FightAction | None:
-    """The Fight in `relevant` whose monster drops `item` AND that is
-    STRUCTURALLY GOAP-applicable right now, or None.
-
-    GatherMaterialsGoal.relevant_actions already narrowed every closure
-    drop item to at most ONE dropper fight (the expected-kills-optimal
-    winnable winner, formal/Formal/MonsterDropSelection.lean; grey droppers
-    arrive as the drop_farm variant under grey_farm_allowed) — this helper
-    re-associates that emitted fight with the leaf it serves.
-
-    Admit/emit chokepoint (GAP-8 follow-up): `relevant_actions` narrows by
-    `is_winnable` (a stat-only combat PREDICTION), which is blind to
-    FightAction._structurally_applicable's STRUCTURAL guards — the level+2
-    suicide cap, the HP floor, and free inventory space. A stat-winnable
-    dropper three levels above the character (or fought at <30% HP, or with
-    a full bag) would satisfy is_winnable yet fail _structurally_applicable,
-    so A* would never have planned it — but this generator, checking only
-    "is a Fight present", would have emitted it anyway and player.py
-    executes plan[0] with no separate applicability check. This is the ONLY
-    call site that turns a closure drop leaf into a Fight (both the
-    CAN-GENERATE gate's admit decision and `_map_next_action`'s emit both
-    read `drop_fights`, which this function alone populates), so gating on
-    `_structurally_applicable` here keeps admit and emit from ever diverging.
-
-    Deliberately does NOT gate on the loadout conjunct of
-    `is_applicable` (Task 3's hard optimal-loadout gate): a dropper whose
-    equipped loadout merely needs a swap is still a valid drop leg, not an
-    infeasible one — the loadout mismatch is a SEQUENCING precondition, not
-    structural infeasibility. `_with_rearm` fronts an `OptimizeLoadout`
-    (combat) leg when the mapped plan would otherwise open with this Fight
-    suboptimally equipped; if the Fight is truncated deeper in the plan
-    (GAP-8 one-leg-per-cycle), the next cycle's replan re-derives it and A*
-    sequences the swap as usual. Using the full `is_applicable` here
-    wrongly rejected a structurally-fine, merely-unswapped dropper and
-    flooded the A* fallback (31148 nodes, L13 water_bow regression)."""
-    droppers = {m for m, _rate, _mn, _mx in game_data.monsters_dropping(item)}
-    for action in relevant:
-        if (isinstance(action, FightAction) and action.monster_code in droppers
-                and action._structurally_applicable(state, game_data)):
-            return action
-    return None
+    Fight mirror (Task 5b Part 3): a mapped plan's Fight leg may be
+    structurally fine but equipped suboptimally for the monster — the hard
+    loadout gate would then reject it at execution (player.py runs plan[0]
+    directly). Front `OptimizeLoadout(target_monster_code=...)` whenever it is
+    `is_applicable`: `_swap_plan` is empty (and so `is_applicable` False) when
+    the equipped loadout is already optimal for that monster, so this check is
+    self-guarding — no separate `equipped_matches_loadout` predicate needed
+    here."""
+    for i, action in enumerate(mapped):
+        if isinstance(action, FightAction):
+            rearm = OptimizeLoadoutAction(
+                target_monster_code=action.monster_code, game_data=game_data
+            )
+            if not rearm.is_applicable(state, game_data):
+                return mapped  # loadout already optimal for this monster
+            return [*mapped[:i], rearm, *mapped[i:]]
+        if isinstance(action, GatherAction):
+            skill_req = game_data.resource_skill_level(action.resource_code)
+            if skill_req is None:
+                return mapped
+            rearm = OptimizeLoadoutAction(target_skill=skill_req[0], game_data=game_data)
+            if not rearm.is_applicable(state, game_data):
+                return mapped  # loadout already optimal for this skill
+            return [*mapped[:i], rearm, *mapped[i:]]
+    return mapped
 
 
 def _map_next_action(
     na: NextAction, relevant: list[Action], game_data: GameData,
-    drop_fights: dict[str, FightAction],
+    sources: Mapping[str, list[Source]],
 ) -> Action | None:
     """Map one NextAction to a concrete action from `relevant`, or None if absent."""
     if na.kind == "gather":
@@ -551,13 +329,7 @@ def _map_next_action(
                 and game_data.resource_drop_item(action.resource_code) == na.item
             ):
                 return action
-        # GAP-8: the core emits "gather" for ANY recipe-less leaf; a
-        # monster-drop leaf has no GatherAction — its leg is the dropper
-        # Fight the CAN-GENERATE gate collected (the caller truncates the
-        # plan there, one leg per cycle). Only consulted when the item is
-        # NOT gatherable: a gatherable leaf whose gather is missing from
-        # `relevant` still falls back to A* (return None) as before.
-        return drop_fights.get(na.item)
+        return None
     if na.kind == "withdraw":
         for action in relevant:
             if isinstance(action, WithdrawItemAction) and action.code == na.item:
@@ -571,8 +343,39 @@ def _map_next_action(
                 # action's bank_location/accessible, override the quantity.
                 return dataclasses.replace(action, quantity=na.qty)
         return None
-    # na.kind == "craft"
+    if na.kind == "craft":
+        for action in relevant:
+            if isinstance(action, CraftAction) and action.code == na.item:
+                return action
+        return None
+    if na.kind == "recycle":
+        # RECYCLE consumes na.code (the SOURCE item being destroyed), not the
+        # target -- yield_per lives on the matching Source (obtain_sources),
+        # not on NextAction, so it is looked up here to convert the target
+        # quantity the core asked for into the SOURCE quantity the concrete
+        # RecycleAction must carry (mirrors craft_plan_driver_core._apply_state's
+        # own ceil-debit, which this same `sources` map must agree with).
+        match = next(
+            (s for s in sources.get(na.item, ())
+             if s.kind is SourceKind.RECYCLE and s.code == na.code),
+            None,
+        )
+        if match is None:
+            return None
+        consumed = math.ceil(na.qty / match.yield_per)
+        for action in relevant:
+            if isinstance(action, RecycleAction) and action.code == na.code:
+                return dataclasses.replace(action, quantity=consumed)
+        return None
+    if na.kind == "buy":
+        for action in relevant:
+            if (isinstance(action, NpcBuyAction) and action.npc_code == na.code
+                    and action.item_code == na.item):
+                return dataclasses.replace(action, quantity=na.qty)
+        return None
+    # na.kind == "drop"
+    droppers = {m for m, _rate, _mn, _mx in game_data.monsters_dropping(na.item)}
     for action in relevant:
-        if isinstance(action, CraftAction) and action.code == na.item:
+        if isinstance(action, FightAction) and action.monster_code in droppers:
             return action
     return None

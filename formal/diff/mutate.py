@@ -2450,57 +2450,26 @@ RECYCLE_KIT_MUTATIONS = [
 GATHER_REARM_MUTATIONS = [
     ("craft_plan_gen: gather never front the re-arm (bare-handed gathers)",
      "        return mapped  # loadout already optimal for this skill\n"
-     "    return [rearm, *mapped]",
+     "            return [*mapped[:i], rearm, *mapped[i:]]",
      "        return mapped  # loadout already optimal for this skill\n"
-     "    return mapped"),
+     "            return mapped"),
     ("craft_plan_gen: gather front the re-arm unconditionally (equips on every gather plan)",
-     "    if not rearm.is_applicable(state, game_data):\n"
-     "        return mapped  # loadout already optimal for this skill\n",
+     "            if not rearm.is_applicable(state, game_data):\n"
+     "                return mapped  # loadout already optimal for this skill\n",
      ""),
     ("craft_plan_gen: fight never front the re-arm (bare-handed fights)",
      "        return mapped  # loadout already optimal for this monster\n"
-     "        return [rearm, *mapped]",
+     "            return [*mapped[:i], rearm, *mapped[i:]]",
      "        return mapped  # loadout already optimal for this monster\n"
-     "        return mapped"),
+     "            return mapped"),
     ("craft_plan_gen: fight front the re-arm unconditionally (equips on every fight plan)",
-     "        if not rearm.is_applicable(state, game_data):\n"
-     "            return mapped  # loadout already optimal for this monster\n",
+     "            if not rearm.is_applicable(state, game_data):\n"
+     "                return mapped  # loadout already optimal for this monster\n",
      ""),
 
     ("gathering goal: drop the OptimizeLoadout admission (re-arm inert again)",
      "                or (isinstance(action, OptimizeLoadoutAction)\n"
      "                    and action.target_skill in needed_skills)\n",
-     ""),
-]
-
-# RECYCLE AS A SOURCE (recycle-as-acquisition epic, Task 8). The directed craft
-# generator fires on exactly the deterministic gather-craft closure the epic
-# targets, so a generator with no Recycle leg silently out-runs the A* that knows
-# about the route — the epic goes INERT for every roomy bag (found by the
-# recycle-source census). These three mutants are the load-bearing decisions:
-# take the route at all; take it only for a material the goal is SHORT of; and
-# stage a bank copy when the bag copy is unreachable (bag_floor — the working
-# tool). Killed by tests/test_ai/test_craft_plan_gen.py::TestRecycleAsASource.
-RECYCLE_SOURCE_MUTATIONS = [
-    ("craft_plan_gen: no recycle prefix (the acquisition route goes inert again)",
-     "    prefix, state_after = _recycle_prefix(needed, relevant, state, game_data)",
-     "    prefix, state_after = [], state"),
-    ("craft_plan_gen: recycle a source that serves NO deficit (destroy for nothing)",
-     "        gain = _recovered_units(recipe, deficits)\n"
-     "        if gain <= 0:\n"
-     "            continue  # recovers nothing the goal is short of",
-     "        gain = _recovered_units(recipe, deficits)\n"
-     "        if gain < 0:\n"
-     "            continue  # recovers nothing the goal is short of"),
-    ("craft_plan_gen: never stage a bank copy (Withdraw -> Recycle unplannable)",
-     "            leg = _staging_withdraw(source.code, relevant, sim, game_data)",
-     "            leg = None"),
-    # The goal's OWN target as a recycle source: melt the copper_ring you are
-    # trying to craft to get half its own copper_bar back (whole-branch review,
-    # MINOR 4). Killed by test_the_goals_own_target_is_never_recycled_for_its_own_parts.
-    ("craft_plan_gen: the goal's own closure is a licensed recycle source",
-     "        if action.code in excluded:\n"
-     "            continue  # never melt the goal's own target (or its chain) for parts\n",
      ""),
 ]
 
@@ -2554,14 +2523,16 @@ RECYCLE_SURPLUS_FLOOR_MUTATIONS = [
      "            floor = 0"),
 ]
 
-# The recycle prefix must not DISARM the loadout re-arm (whole-branch review,
-# IMPORTANT 2): `_with_rearm` inspects ONE leg, so with a prefix in front the leg
-# it sees is a Recycle and the Gather that follows runs bare-handed. Killed by
-# tests/test_ai/test_gather_rearm.py::test_generator_rearms_AFTER_a_recycle_prefix.
-RECYCLE_PREFIX_REARM_MUTATIONS = [
-    ("craft_plan_gen: re-arm reads plan[0] (a recycle prefix disarms it)",
-     "    result = [*prefix, *_with_rearm(mapped, state_after, game_data)]",
-     "    result = _with_rearm([*prefix, *mapped], state, game_data)"),
+# _WITH_REARM SCANS PAST leading Recycle/Withdraw/Craft/Buy legs (Task 4, THE
+# ACTIVATION — re-derivation of whole-branch review IMPORTANT 2 under the shared
+# obtain model): recycle is now an ORDINARY leg in the SAME plan `craft_plan_full`
+# returns, so a plan can open `Recycle, Gather, ...` — checking only `mapped[0]`
+# would silently skip the re-arm and let the Gather run bare-handed. Killed by
+# tests/test_ai/test_gather_rearm.py::test_generator_rearms_AFTER_a_recycle_leg.
+CRAFT_PLAN_GEN_REARM_SCAN_MUTATIONS = [
+    ("craft_plan_gen: re-arm only ever inspects mapped[0] (a leading Recycle disarms it)",
+     "    for i, action in enumerate(mapped):",
+     "    for i, action in enumerate(mapped[:1]):"),
 ]
 
 # Composite-swap cooldown wait (2026-07-05 23:34 livelock): without blocking
@@ -5296,9 +5267,7 @@ def _run_all_groups() -> int:
               "tests/test_ai/test_gather_rearm.py", survivors)
     run_group(CRAFT_PLAN_GEN_SRC, GATHER_REARM_MUTATIONS[:4],
               "tests/test_ai/test_gather_rearm.py", survivors)
-    run_group(CRAFT_PLAN_GEN_SRC, RECYCLE_SOURCE_MUTATIONS,
-              "tests/test_ai/test_craft_plan_gen.py", survivors)
-    run_group(CRAFT_PLAN_GEN_SRC, RECYCLE_PREFIX_REARM_MUTATIONS,
+    run_group(CRAFT_PLAN_GEN_SRC, CRAFT_PLAN_GEN_REARM_SCAN_MUTATIONS,
               "tests/test_ai/test_gather_rearm.py", survivors)
     run_group(RECYCLE_ACTION_SRC, RECYCLE_OWNED_FLOOR_MUTATIONS,
               "tests/test_ai/test_actions_tier2.py", survivors)

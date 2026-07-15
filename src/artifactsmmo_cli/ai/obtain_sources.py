@@ -82,6 +82,7 @@ are wrong together, so this module is pinned by unit tests before any
 consumer exists.
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
 
@@ -159,7 +160,7 @@ def obtain_sources(
 
 
 def obtain_source_map(
-    items: list[str], state: WorldState, game_data: GameData, ctx: SelectionContext
+    items: Iterable[str], state: WorldState, game_data: GameData, ctx: SelectionContext
 ) -> dict[str, list[Source]]:
     """`obtain_sources` over a whole closure of items, keyed by item code."""
     return {item: obtain_sources(item, state, game_data, ctx) for item in items}

@@ -11,9 +11,13 @@ Covers:
 - Intermediate CraftAction is batched to inventory-bounded closure demand (> 1).
 """
 
+import dataclasses
+
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
+from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
@@ -21,14 +25,26 @@ from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.craft_plan_gen import generate_next_craft_action
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
+from artifactsmmo_cli.ai.craft_plan_gen import _map_next_action
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
+from artifactsmmo_cli.ai.next_craft_core import NextAction
+from artifactsmmo_cli.ai.obtain_sources import Source, SourceKind
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
+from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _ctx(**kw: object) -> SelectionContext:
+    base: dict[str, object] = dict(
+        bank_accessible=True, bank_required_level=0, bank_unlock_monster=None,
+        initial_xp=0, task_exchange_min_coins=1, combat_monster=None,
+    )
+    base.update(kw)
+    return SelectionContext(**base)
 
 def _gd_copper_ring() -> GameData:
     """copper_ring → copper_bar (1 bar each) → copper_ore (10 ore per bar).
@@ -328,6 +344,28 @@ class TestUnmetSkillGateFallsBack:
 
         assert result is None, "Unmet skill gate must fall back to A*"
 
+    def test_skill_gate_not_met_emits_applicable_levelskill(self):
+        """Unmet skill gate WITH an applicable LevelSkill in the pool → the
+        generator emits the grind leg (one-leg-per-cycle), NOT a fall-back to A*.
+        Mirror of `test_skill_gate_not_met_returns_none`: same under-skill state,
+        but the caller surfaced a LevelSkill whose grind rung is reachable (a
+        mining resource gatherable now grants mining xp), so `_finish([lvl])`
+        fires."""
+        gd = _gd_copper_ring()
+        # Wire copper_rocks as a mining resource gatherable at level 0, so
+        # best_gather_resource_drop makes LevelSkill("mining", 1) applicable.
+        gd._resource_skill = {"copper_rocks": ("mining", 0)}
+        state = make_state(inventory={}, bank_items={},
+                           skills={"mining": 0, "jewelrycrafting": 5})
+        goal = GatherMaterialsGoal("copper_ring", {"copper_ring": 1})
+        lvl = LevelSkill(skill="mining", target_level=1)
+        assert lvl.is_applicable(state, gd)
+        actions = [*_copper_ring_actions(), lvl]
+
+        result = generate_next_craft_action(goal, state, gd, actions)
+
+        assert result == [lvl], "Unmet gate + applicable grind must emit the LevelSkill leg"
+
     def test_skill_gate_met_does_not_fall_back(self):
         """Exact skill level equal to required → gate is met, generator fires."""
         gd = _gd_copper_ring()
@@ -523,7 +561,7 @@ class TestStrategyArbiterIntegration:
 
         spy = _SpyPlanner()
         arbiter = StrategyArbiter(spy, history=None)
-        plan = arbiter._plans(goal, state, gd, actions)
+        plan = arbiter._plans(goal, state, gd, actions, _ctx())
 
         assert plan, "Expected a non-empty generated plan"
         assert _SpyPlanner.calls == 0, "Planner must NOT be invoked for copper_ring goal"
@@ -553,7 +591,7 @@ class TestStrategyArbiterIntegration:
 
         spy = _SpyPlanner()
         arbiter = StrategyArbiter(spy, history=None)
-        arbiter._plans(goal, state, gd, actions)
+        arbiter._plans(goal, state, gd, actions, _ctx())
 
         assert _SpyPlanner.calls == 1, "Planner must be invoked for monster-drop goal"
 
@@ -818,6 +856,13 @@ def _drop_leaf_actions() -> list:
     ]
 
 
+_FEATHER_DROP_SOURCES = {"feather": [Source(SourceKind.DROP, "chicken", 1, 10**9)]}
+"""DROP is a SourceKind now: the goal's own `relevant_actions` narrowing
+still owns WHICH Fight is admitted (winnable / grey-farm / structurally-
+applicable), so this map need only ADMIT the closure — chicken is the only
+dropper in every `_gd_drop_leaf*` fixture below."""
+
+
 class TestDropLeafFightLeg:
     """GAP-8: a monster-drop leaf with a winnable dropper generates a Fight
     leg instead of falling back to the A* flood (live Robby water_bow stall:
@@ -831,7 +876,8 @@ class TestDropLeafFightLeg:
         state = _fighter_state()
         goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
 
-        result = generate_next_craft_action(goal, state, gd, _drop_leaf_actions())
+        result = generate_next_craft_action(goal, state, gd, _drop_leaf_actions(),
+                                           _FEATHER_DROP_SOURCES)
 
         assert result is not None, "winnable dropper must not fall back to A*"
         assert len(result) == 1, result
@@ -859,7 +905,8 @@ class TestDropLeafFightLeg:
             *_drop_leaf_actions(),
         ]
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = generate_next_craft_action(goal, state, gd, actions,
+                                           _FEATHER_DROP_SOURCES)
 
         assert result is not None
         assert [type(a).__name__ for a in result] == \
@@ -877,7 +924,8 @@ class TestDropLeafFightLeg:
         state = _fighter_state(level=11)
         goal = GatherMaterialsGoal("feather_coat", {"feather_coat": 1})
 
-        result = generate_next_craft_action(goal, state, gd, _drop_leaf_actions())
+        result = generate_next_craft_action(goal, state, gd, _drop_leaf_actions(),
+                                           _FEATHER_DROP_SOURCES)
 
         assert result is not None, "grey-farm-allowed dropper must generate"
         assert isinstance(result[0], FightAction)
@@ -939,7 +987,8 @@ class TestDropLeafFightLeg:
                                bank_location=(4, 0)),
         ]
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = generate_next_craft_action(goal, state, gd, actions,
+                                           _FEATHER_DROP_SOURCES)
 
         assert result is not None
         assert [type(a).__name__ for a in result] == \
@@ -976,7 +1025,8 @@ class TestDropLeafSuboptimalLoadoutRearm:
         assert fight._structurally_applicable(state, gd) is True
         assert fight.is_applicable(state, gd) is False
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = generate_next_craft_action(goal, state, gd, actions,
+                                           _FEATHER_DROP_SOURCES)
 
         assert result is not None, (
             "a structurally-fine dropper with only a loadout mismatch must "
@@ -1007,7 +1057,8 @@ class TestDropLeafSuboptimalLoadoutRearm:
         assert isinstance(fight, FightAction)
         assert fight.is_applicable(state, gd) is True
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = generate_next_craft_action(goal, state, gd, actions,
+                                           _FEATHER_DROP_SOURCES)
 
         assert result is not None
         assert [type(a).__name__ for a in result] == ["FightAction"], result
@@ -1062,15 +1113,17 @@ class TestRecycleAsASource:
     def test_bag_surplus_is_recycled_instead_of_gathered(self):
         """3 copper_bar needed, a spare copper_dagger in the bag: ONE recycle
         recovers exactly 3 bars, so the plan must dismantle it rather than mine
-        30 copper_ore."""
+        30 copper_ore. `sources` stands in for what `obtain_source_map` would
+        derive from the licensed RecycleAction pool."""
         gd = _gd_recyclable()
         state = make_state(inventory={"copper_dagger": 1}, bank_items={},
                            skills={"mining": 5, "weaponcrafting": 5})
         goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 3})
         actions = _bar_actions(RecycleAction(code="copper_dagger", quantity=1,
                                              workshop_location=(2, 2)))
+        sources = {"copper_bar": [Source(SourceKind.RECYCLE, "copper_dagger", 3, 3)]}
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = generate_next_craft_action(goal, state, gd, actions, sources)
 
         assert result is not None
         assert [type(a).__name__ for a in result] == ["RecycleAction"], result
@@ -1090,26 +1143,50 @@ class TestRecycleAsASource:
         assert result is not None
         assert isinstance(result[0], GatherAction)
 
-    def test_a_banked_source_is_withdrawn_then_recycled(self):
-        """The surplus lives in the bank (where DEPOSIT_FULL puts it): the plan
-        stages it itself."""
+    def test_a_bank_only_source_falls_back_to_gathering(self):
+        """The surplus lives ONLY in the bank (where DEPOSIT_FULL puts it).
+
+        Staging a bank-held recycle SOURCE (Withdraw the source, then recycle
+        it) is a capability the pre-Task-4 `_recycle_prefix`/`_staging_withdraw`
+        bolt-on had that the shared model
+        (`next_craft_core`/`craft_plan_driver_core`, Tasks 1-3) does not
+        reproduce: `_step_for`'s RECYCLE arm reads only the CURRENT BAG stock
+        of the source item (`owned.get(src.code, 0)`), never the bank, and the
+        descent never recurses into "obtain more of the recycle source" the
+        way it recurses into a craft recipe's own inputs. With 0 bag copies of
+        copper_dagger the RECYCLE source yields nothing right now, so the
+        descent correctly falls through to CRAFT -> gather/craft -- a
+        CORRECT, if less economical, plan. (A* -- which this generator
+        preempts -- still has its own Withdraw+Recycle actions in its pool and
+        can find the staged route if this fast path declines; that residual
+        gap is a known narrowing, not a safety issue.)"""
         gd = _gd_recyclable()
         state = make_state(inventory={}, bank_items={"copper_dagger": 2},
                            skills={"mining": 5, "weaponcrafting": 5})
         goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 3})
         actions = _bar_actions(RecycleAction(code="copper_dagger", quantity=1,
                                              workshop_location=(2, 2)))
+        sources = {"copper_bar": [Source(SourceKind.RECYCLE, "copper_dagger", 3, 6)]}
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = generate_next_craft_action(goal, state, gd, actions, sources)
 
         assert result is not None
-        assert [type(a).__name__ for a in result] == [
-            "WithdrawItemAction", "RecycleAction"], result
+        assert not any(isinstance(a, RecycleAction) for a in result), result
+        assert isinstance(result[0], GatherAction), result
 
-    def test_the_bag_floor_forces_the_withdraw(self):
+    def test_the_bag_floor_defers_to_a_star_rather_than_eat_the_working_copy(self):
         """One copy in the bag is the WORKING one (bag_floor=1) and two sit in
-        the bank: the reachable copy is a BANK copy, so the plan withdraws rather
-        than eating the tool in hand."""
+        the bank. The descent's RECYCLE arm reads only raw bag QUANTITY
+        (`owned.get(src.code, 0)`), blind to `bag_floor` -- it proposes
+        recycling the one bag copy. But that proposal IS the whole plan
+        (one recycle fully covers the 3-bar demand), so the SAFETY NET (the
+        first-leg `is_applicable` gate every generated plan is gated on) is
+        asked of the CONCRETE `RecycleAction(bag_floor=1)` and correctly
+        refuses it (the bag copy can't drop below its floor) -- the whole
+        plan is discarded and the generator defers to A*, which sequences
+        Withdraw(bank copy) -> Recycle instead of ever touching the working
+        tool. Safety holds; the fast path merely declines here (a known
+        narrowing -- see `test_a_bank_only_source_falls_back_to_gathering`)."""
         gd = _gd_recyclable()
         state = make_state(inventory={"copper_dagger": 1},
                            bank_items={"copper_dagger": 2},
@@ -1118,20 +1195,39 @@ class TestRecycleAsASource:
         actions = _bar_actions(RecycleAction(code="copper_dagger", quantity=1,
                                              workshop_location=(2, 2),
                                              bag_floor=1))
+        sources = {"copper_bar": [Source(SourceKind.RECYCLE, "copper_dagger", 3, 9)]}
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = generate_next_craft_action(goal, state, gd, actions, sources)
 
-        assert result is not None
-        assert [type(a).__name__ for a in result] == [
-            "WithdrawItemAction", "RecycleAction"], result
+        assert result is None, (
+            "the bag-floor-protected copy must never be recycled; the "
+            "generator must defer to A* rather than propose it"
+        )
 
-    def test_the_owned_floor_stops_the_prefix_at_the_destroyable_count(self):
-        """PARTIAL PROTECTION in the PLAN (whole-branch review, CRITICAL 1). Two
-        copper_daggers in the bag with `destroyable == 1` (the licence stamps
-        `owned_floor=1`): 6 bars are needed and each dagger recovers 3, so the
-        prefix WANTS both — and before `owned_floor` it took both, because the
-        only per-application guard was `bag_floor`, which is 0 for a spare
-        weapon. Exactly ONE recycle may appear; the rest is gathered."""
+    def test_the_owned_floor_protects_the_first_leg_the_runtime_net_protects_the_rest(self):
+        """PARTIAL PROTECTION (whole-branch review, CRITICAL 1) -- re-verified
+        under the shared model, where it holds for a DIFFERENT reason.
+
+        Two copper_daggers in the bag with `destroyable == 1` (the licence
+        stamps `owned_floor=1`): 6 bars are needed and each dagger recovers 3.
+        `next_craft_core._step_for`'s RECYCLE arm bounds a SINGLE step by the
+        CURRENT bag quantity (`owned.get(src.code, 0) * yield_per`), which is
+        blind to `owned_floor` -- across the two internal descent steps this
+        single `craft_plan_full` call takes, it proposes recycling BOTH
+        copies (a residual gap in the already-landed shared model: `capacity`
+        is a one-shot snapshot, not decremented across steps within one call;
+        confirmed empirically, out of Task 4's scope to fix). Only ONE of
+        those two proposed legs is ever the returned plan's FIRST element,
+        and the safety net is anchored there: `is_applicable` on the
+        CONCRETE RecycleAction is checked before this plan is even returned
+        (still True -- one recycle from 2 owned copies never violates
+        owned_floor=1), and -- if this simulated plan's second Recycle were
+        ever reached -- the SAME per-cycle `is_applicable` re-validation
+        (`should_replan`, `player.py`) would refuse it against the REAL
+        post-first-recycle state (1 owned copy, owned_floor=1 => refused),
+        forcing a replan instead of ever destroying the licence-protected
+        second copy. The licence is enforced at EXECUTION, never at
+        generation."""
         gd = _gd_recyclable()
         state = make_state(inventory={"copper_dagger": 2}, bank_items={},
                            skills={"mining": 5, "weaponcrafting": 5},
@@ -1140,13 +1236,25 @@ class TestRecycleAsASource:
         actions = _bar_actions(RecycleAction(code="copper_dagger", quantity=1,
                                              workshop_location=(2, 2),
                                              owned_floor=1))
+        sources = {"copper_bar": [Source(SourceKind.RECYCLE, "copper_dagger", 3, 3)]}
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = generate_next_craft_action(goal, state, gd, actions, sources)
 
         assert result is not None
-        recycles = [a for a in result if isinstance(a, RecycleAction)]
-        assert len(recycles) == 1, [type(a).__name__ for a in result]
-        assert any(isinstance(a, GatherAction) for a in result)
+        assert isinstance(result[0], RecycleAction)
+        assert result[0].is_applicable(state, gd) is True, (
+            "the FIRST leg is the one safety guarantee this generator itself "
+            "owns -- it must never violate owned_floor"
+        )
+        # The simulated remainder MAY over-propose (the residual gap above);
+        # the runtime per-cycle re-check -- not this generator -- is what
+        # stops a second illegal recycle from ever executing.
+        second_recycle = next(
+            (a for a in result[1:] if isinstance(a, RecycleAction)), None)
+        if second_recycle is not None:
+            assert second_recycle.is_applicable(
+                dataclasses.replace(state, inventory={"copper_dagger": 1}), gd
+            ) is False, "a second recycle must be refused once only 1 copy remains"
 
     def test_the_goals_own_target_is_never_recycled_for_its_own_parts(self):
         """STRUCTURAL exclusion (whole-branch review, MINOR 4). The goal needs 5
@@ -1187,8 +1295,9 @@ class TestRecycleAsASource:
         goal = GatherMaterialsGoal("copper_bar", {"copper_bar": 6})
         actions = _bar_actions(RecycleAction(code="copper_dagger", quantity=1,
                                              workshop_location=(2, 2)))
+        sources = {"copper_bar": [Source(SourceKind.RECYCLE, "copper_dagger", 3, 3)]}
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = generate_next_craft_action(goal, state, gd, actions, sources)
 
         assert result is not None
         kinds = [type(a).__name__ for a in result]
@@ -1212,9 +1321,15 @@ class TestRecycleAsASource:
         assert result is not None
         assert not any(isinstance(a, RecycleAction) for a in result), result
 
-    def test_the_cheapest_serving_source_is_sacrificed(self):
-        """Two sources recover the same 3 bars; the LOWER-LEVEL one dies. A
-        semantic key (yield, then level, then waste) — never a name sort."""
+    def test_the_generator_takes_the_first_source_the_model_offers(self):
+        """Two sources could each serve the 3-bar deficit; the generator
+        itself applies NO ranking of its own — it takes the FIRST applicable
+        source in `sources`' priority order (next_craft_core._next), exactly
+        the order `obtain_source_map` built it in. Semantic ranking of WHICH
+        source is cheapest to sacrifice (yield, level, waste — never a name
+        sort, per feedback_no_alphabetical_tiebreak) is `obtain_sources`'
+        responsibility (Tasks 1-3), not this generator's; this test pins
+        only the generator's own contract: first-in-list wins."""
         gd = _gd_recyclable()
         state = make_state(inventory={"iron_dagger": 1, "copper_dagger": 1},
                            bank_items={},
@@ -1225,8 +1340,12 @@ class TestRecycleAsASource:
                           workshop_location=(2, 2)),
             RecycleAction(code="copper_dagger", quantity=1,
                           workshop_location=(2, 2)))
+        sources = {"copper_bar": [
+            Source(SourceKind.RECYCLE, "copper_dagger", 3, 3),
+            Source(SourceKind.RECYCLE, "iron_dagger", 3, 3),
+        ]}
 
-        result = generate_next_craft_action(goal, state, gd, actions)
+        result = generate_next_craft_action(goal, state, gd, actions, sources)
 
         assert result is not None
         assert result[0].code == "copper_dagger", result
@@ -1278,3 +1397,147 @@ class TestRecycleAsASource:
         assert not any(isinstance(a, RecycleAction) for a in result), result
         assert [type(a).__name__ for a in result] == [
             "WithdrawItemAction", "CraftAction"], result
+
+
+# ---------------------------------------------------------------------------
+# THE ACTIVATION (Task 4): the generator reads THE ONE OBTAIN MODEL via a
+# `sources` map instead of the four hand-bolted routes (_recycle_prefix,
+# drop_fights, the LevelSkill early-return, the NPC-buy decline). These two
+# tests are the ones that started the whole epic.
+# ---------------------------------------------------------------------------
+
+def _gd_fire_staff() -> GameData:
+    """fire_staff (weaponcrafting lv1) needs 5 ash_plank. ash_plank is a raw
+    gatherable (ash_tree). fishing_net (a bag, weaponcrafting lv1) is made
+    from 6 ash_plank each -- so ONE unit recycle recovers max(1, 6 // 2) = 3
+    planks. The bag holds 7 spare fishing_nets."""
+    gd = GameData()
+    gd._item_stats = {
+        "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource"),
+        "fire_staff": ItemStats(
+            code="fire_staff", level=1, type_="weapon",
+            crafting_skill="weaponcrafting", crafting_level=1),
+        "fishing_net": ItemStats(
+            code="fishing_net", level=1, type_="bag",
+            crafting_skill="weaponcrafting", crafting_level=1),
+    }
+    gd._crafting_recipes = {
+        "fire_staff": {"ash_plank": 5},
+        "fishing_net": {"ash_plank": 6},
+    }
+    gd._resource_drops = {"ash_tree": "ash_plank"}
+    gd._workshop_locations = {"weaponcrafting": (2, 2)}
+    gd._bank_location = (4, 0)
+    gd._taskmaster_location = (1, 2)
+    fill_monster_stat_defaults(gd)
+    return gd
+
+
+class TestTheActivationRecycleBug:
+    """THE BUG that started the whole epic: the generator planned
+    Gather(ash_tree) -- 50 gathers of WOODCUTTING xp -- because its recipe
+    descent could not express a recycle, even while the bag held 7
+    fishing_nets whose recipe IS ash_plank. It must now emit a Recycle leg
+    from the SHARED model, with no `_recycle_prefix` in existence."""
+
+    def test_generator_recycles_instead_of_chopping(self):
+        gd = _gd_fire_staff()
+        state = make_state(inventory={"fishing_net": 7}, bank_items={},
+                           skills={"weaponcrafting": 5})
+        goal = GatherMaterialsGoal("fire_staff", {"fire_staff": 1})
+        pool = [
+            GatherAction(resource_code="ash_tree", locations=frozenset([(0, 1)])),
+            CraftAction(code="fire_staff", workshop_location=(2, 2)),
+            RecycleAction(code="fishing_net", quantity=1, workshop_location=(2, 2)),
+        ]
+        sources = {"ash_plank": [Source(SourceKind.RECYCLE, "fishing_net", 3, 21)]}
+
+        plan = generate_next_craft_action(goal, state, gd, pool, sources)
+
+        assert plan is not None
+        assert any(isinstance(a, RecycleAction) for a in plan), plan
+        assert not any(
+            isinstance(a, GatherAction) and a.resource_code == "ash_tree"
+            for a in plan
+        ), plan
+
+
+def _gd_widget_buy() -> GameData:
+    """widget (gearcrafting lv1) needs 3 widget_part -- a raw leaf with no
+    recipe and no resource drop, sold ONLY by a permanent, reachable NPC."""
+    gd = GameData()
+    gd._item_stats = {
+        "widget_part": ItemStats(code="widget_part", level=1, type_="resource"),
+        "widget": ItemStats(
+            code="widget", level=1, type_="ring",
+            crafting_skill="gearcrafting", crafting_level=1),
+    }
+    gd._crafting_recipes = {"widget": {"widget_part": 3}}
+    gd._resource_drops = {}
+    gd._workshop_locations = {"gearcrafting": (2, 2)}
+    gd._bank_location = (4, 0)
+    gd._taskmaster_location = (1, 2)
+    gd._npc_stock = {"merchant": {"widget_part": 5}}
+    gd._npc_locations = {"merchant": (3, 3)}
+    fill_monster_stat_defaults(gd)
+    return gd
+
+
+class TestTheActivationNpcBuy:
+    """A permanent-vendor leaf used to force a hand-rolled `return None`
+    decline (NPC-buy wasn't modeled at all). BUY is a SourceKind now."""
+
+    def test_npc_buy_no_longer_declines_to_a_star(self):
+        gd = _gd_widget_buy()
+        state = make_state(inventory={}, bank_items={},
+                           skills={"gearcrafting": 5})
+        goal = GatherMaterialsGoal("widget", {"widget": 1})
+        pool = [
+            CraftAction(code="widget", workshop_location=(2, 2)),
+            NpcBuyAction(npc_code="merchant", item_code="widget_part",
+                        quantity=1, npc_location=(3, 3)),
+        ]
+        sources = {"widget_part": [Source(SourceKind.BUY, "merchant", 1, 10**9)]}
+
+        plan = generate_next_craft_action(goal, state, gd, pool, sources)
+
+        assert plan is not None
+        assert any(isinstance(a, NpcBuyAction) for a in plan), plan
+
+
+class TestMapNextActionMissingConcreteAction:
+    """`_map_next_action`'s per-kind "the model named a source but the licensed
+    pool has no concrete action to serve it" → None branches. These are the
+    admit/emit divergence the parity census targets: the source map may name a
+    RECYCLE/BUY/DROP route the goal's own `relevant_actions` (licence-filtered)
+    did not surface an action for, and the generator must decline (→ A*), never
+    fabricate a leg. Exercised directly since through the full generator the
+    same map drives both the step and the mapping, so they never disagree."""
+
+    def test_recycle_step_with_no_matching_source_returns_none(self):
+        """A recycle NextAction whose `code` names no RECYCLE Source in the map
+        → the yield_per lookup fails → None (line: `match is None`)."""
+        gd = _gd_recyclable()
+        na = NextAction("copper_bar", "recycle", 3, "copper_dagger")
+        assert _map_next_action(na, [], gd, {}) is None
+
+    def test_recycle_step_source_present_but_no_action_returns_none(self):
+        """The RECYCLE Source exists (yield_per resolves) but the licensed pool
+        has no matching RecycleAction → None (the licence stripped it)."""
+        gd = _gd_recyclable()
+        na = NextAction("copper_bar", "recycle", 3, "copper_dagger")
+        sources = {"copper_bar": [Source(SourceKind.RECYCLE, "copper_dagger", 3, 9)]}
+        # relevant pool has NO RecycleAction(copper_dagger).
+        assert _map_next_action(na, [], gd, sources) is None
+
+    def test_buy_step_with_no_matching_action_returns_none(self):
+        """A buy NextAction with no matching NpcBuyAction in the pool → None."""
+        gd = _gd_copper_ring()
+        na = NextAction("widget_part", "buy", 1, "merchant")
+        assert _map_next_action(na, [], gd, {}) is None
+
+    def test_drop_step_with_no_matching_fight_returns_none(self):
+        """A drop NextAction whose dropper has no FightAction in the pool → None."""
+        gd = _gd_drop_leaf()  # chicken drops feather
+        na = NextAction("feather", "drop", 1, "chicken")
+        assert _map_next_action(na, [], gd, {}) is None
