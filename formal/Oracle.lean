@@ -2450,6 +2450,52 @@ def runCycleStepE (args : Array Json) : Json :=
     ("loadout_adequate", Json.bool post.loadoutAdequate),
     ("gear_gap", Json.num (Int.ofNat post.gearGap))]
 
+/-- Map a JSON kind string to the `Kind` enum (mirrors `SourceKind.value`). An
+unknown string falls to `.drop` (never emitted: the diff only sends the six
+declared strings). -/
+def kindOfStr (s : String) : Kind :=
+  if s = "gather" then .gather
+  else if s = "craft" then .craft
+  else if s = "withdraw" then .withdraw
+  else if s = "recycle" then .recycle
+  else if s = "buy" then .buy
+  else .drop
+
+/-- Map a `Kind` back to its JSON string (mirrors `SourceKind.value`). -/
+def kindToStr : Kind → String
+  | .gather => "gather" | .craft => "craft" | .withdraw => "withdraw"
+  | .recycle => "recycle" | .buy => "buy" | .drop => "drop"
+
+/-- Parse one item's source list: a JSON ARRAY of `[kindStr, code, yieldPer,
+capacity]` entries (order preserved — it is the declared priority order). -/
+def parseSourceList (j : Json) : List Source :=
+  match j.getArr? with
+  | .error _ => []
+  | .ok arr =>
+      arr.toList.filterMap (fun e =>
+        match e.getArr? with
+        | .error _ => none
+        | .ok a =>
+          if a.size < 4 then none
+          else
+            match (a[0]!.getStr?).toOption, (a[1]!.getStr?).toOption,
+                  (a[2]!.getInt?).toOption, (a[3]!.getInt?).toOption with
+            | some ks, some code, some yp, some cap =>
+                some ⟨kindOfStr ks, code, yp.toNat, cap.toNat⟩
+            | _, _, _, _ => none)
+
+/-- Parse THE obtain model: a JSON OBJECT mapping item code → source list. An
+absent arg or non-object yields the empty map (the 3-kind recipe-tree walk). -/
+def parseSources (j? : Option Json) : String → List Source :=
+  let assoc : List (String × List Source) :=
+    match j? with
+    | none => []
+    | some j =>
+      match j.getObj? with
+      | .error _ => []
+      | .ok kv => kv.toList.map (fun (item, sj) => (item, parseSourceList sj))
+  fun s => match assoc.find? (fun p => p.1 == s) with | some p => p.2 | none => []
+
 /-- Compute one next_craft_target result using the proved `nextCraftTarget`.
 
 args layout (mixed JSON):
@@ -2462,9 +2508,12 @@ args layout (mixed JSON):
 * `[3]` target     : string (item code).
 * `[4]` qty        : int ≥ 0 (how many of target needed).
 * `[5]` fuel       : int ≥ 0 (recursion budget; caller passes len(recipes)+1).
+* `[6]` sources_obj : OPTIONAL JSON OBJECT mapping item → array of
+        `[kindStr, code, yieldPer, capacity]` (THE obtain model). Absent ⇒ the
+        3-kind recipe-tree walk.
 
 Emits `null` when none (target already satisfied); otherwise:
-`{"item": str, "kind": "gather"|"craft"|"withdraw", "qty": int}`. -/
+`{"item": str, "kind": <one of the six>, "qty": int, "code": str}`. -/
 def runNextCraft (args : Array Json) : Json :=
   -- Parse recipes object into an assoc list, preserving per-item inputs order.
   let recipesJson := args[0]!
@@ -2523,21 +2572,21 @@ def runNextCraft (args : Array Json) : Json :=
   let target := strArg args 3
   let qty    := (intArg args 4).toNat
   let fuel   := (intArg args 5).toNat
-  match nextCraftTarget recipes owned bank target qty fuel with
+  let sources := parseSources args[6]?
+  match nextCraftTarget recipes sources owned bank target qty fuel with
   | none    => Json.null
   | some na =>
-      let kindStr : String := match na.kind with
-        | Kind.gather => "gather" | Kind.craft => "craft" | Kind.withdraw => "withdraw"
-      Json.mkObj [("item", Json.str na.item), ("kind", Json.str kindStr),
-                  ("qty", Json.num (Int.ofNat na.qty))]
+      Json.mkObj [("item", Json.str na.item), ("kind", Json.str (kindToStr na.kind)),
+                  ("qty", Json.num (Int.ofNat na.qty)), ("code", Json.str na.code)]
 
 /-- Compute the FULL craft plan using the proved `craftPlan`.
 
 args layout matches `runNextCraft` plus an outer fuel:
 * `[0]` recipes_obj, `[1]` owned_obj, `[2]` bank_obj, `[3]` target, `[4]` qty,
-* `[5]` fuel (outer step budget; caller passes a generous closure bound).
+* `[5]` fuel (outer step budget; caller passes a generous closure bound),
+* `[6]` sources_obj (OPTIONAL — THE obtain model, same shape as `runNextCraft`).
 
-Emits a JSON ARRAY of `{"item","kind","qty"}` objects (the ordered plan). -/
+Emits a JSON ARRAY of `{"item","kind","qty","code"}` objects (the ordered plan). -/
 def runCraftPlan (args : Array Json) : Json :=
   let recipesJson := args[0]!
   let recipeAssoc : List (String × List (String × Nat)) :=
@@ -2576,13 +2625,12 @@ def runCraftPlan (args : Array Json) : Json :=
   let target := strArg args 3
   let qty    := (intArg args 4).toNat
   let fuel   := (intArg args 5).toNat
+  let sources := parseSources args[6]?
   let innerFuel := recipeAssoc.length + 1
-  let plan := Formal.CraftPlanDriver.craftPlan recipes target qty innerFuel owned bank fuel
+  let plan := Formal.CraftPlanDriver.craftPlan recipes sources target qty innerFuel owned bank fuel
   let naJson : NextAction → Json := fun na =>
-    let k : String := match na.kind with
-      | Kind.gather => "gather" | Kind.craft => "craft" | Kind.withdraw => "withdraw"
-    Json.mkObj [("item", Json.str na.item), ("kind", Json.str k),
-                ("qty", Json.num (Int.ofNat na.qty))]
+    Json.mkObj [("item", Json.str na.item), ("kind", Json.str (kindToStr na.kind)),
+                ("qty", Json.num (Int.ofNat na.qty)), ("code", Json.str na.code)]
   Json.arr ((plan.map naJson).toArray)
 
 /-! ### Gear taxonomy (`Formal.GearTaxonomy`). -/

@@ -17,6 +17,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.next_craft_core import NextAction, next_craft_target_pure
+from formal.diff.obtain_source_scenarios import SIX_KINDS, scenario, sources_to_json
 from formal.diff.oracle_client import run_oracle_structured
 
 # Item universe: string codes "item0" .. "item{N-1}".
@@ -230,3 +231,39 @@ def test_copper_ring_withdraw_capped_by_bank() -> None:
     lean = _call_lean(_COPPER_RECIPES, owned, bank, "copper_ring", qty)
     assert py == NextAction(item="copper_bar", kind="withdraw", qty=2)
     _assert_agree(py, lean, "copper_ring_withdraw_capped")
+
+
+# ---------------------------------------------------------------------------
+# SIX-source obtain model: exercise ALL six kinds through the widened oracle.
+# ---------------------------------------------------------------------------
+
+
+def _call_lean_sources(recipes, owned, bank, target, qty, sources) -> dict | None:
+    """Invoke the widened oracle with a `sources` map (7th arg)."""
+    fuel = len(recipes) + 1
+    result = run_oracle_structured(
+        "next_craft",
+        [[_recipes_to_json(recipes), dict(owned), dict(bank), target, qty, fuel, sources_to_json(sources)]],
+    )[0]
+    return result if result is not None else None
+
+
+def test_next_craft_all_six_kinds_agree() -> None:
+    """Python `next_craft_target_pure(..., sources)` ≡ Lean over ALL six kinds.
+
+    300 trials cycle the featured kind (gather/craft/withdraw/recycle/buy/drop)
+    with rng-varied parameters; every trial asserts Python≡Lean, and the run
+    asserts every one of the six kinds was genuinely emitted (a differential
+    that only ever saw three kinds would agree vacuously).
+    """
+    rng = random.Random(20260714)
+    seen: set[str] = set()
+    for t in range(300):
+        featured = SIX_KINDS[t % len(SIX_KINDS)]
+        recipes, owned, bank, sources, target, qty = scenario(rng, featured)
+        py = next_craft_target_pure(recipes, owned, bank, target, qty, sources)
+        lean = _call_lean_sources(recipes, owned, bank, target, qty, sources)
+        _assert_agree(py, lean, (t, featured))
+        assert py is not None, f"trial {t} ({featured}) produced no action"
+        seen.add(py.kind)
+    assert seen == set(SIX_KINDS), f"kinds not all exercised: {seen}"

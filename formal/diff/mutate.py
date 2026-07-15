@@ -167,10 +167,11 @@ CRAFT_PLAN_DRIVER_MUTATIONS = [
 ]
 
 # craft_plan_driver_core recycle-branch mutations (CRITICAL 1/2: the recycle-
-# epic-review fix). NOT covered by the differential -- the Lean oracle in
-# test_craft_plan_driver_diff.py never exercises a `recycle` NextAction (it
-# calls craft_plan_full with the 3-kind arg shape only), so these are
-# unit-killed by tests/test_ai/test_craft_plan_driver_core.py instead.
+# epic-review fix). NOW covered by the differential: test_craft_plan_driver_diff.py
+# `test_craft_plan_all_six_kinds_agree_and_reach` drives a `recycle` NextAction
+# through the widened Lean oracle (`applyState` mirrors the ⌈qty/yield⌉ source
+# debit), so both the sign-flip and the floor-vs-ceil mutant diverge from Lean.
+# Still ALSO unit-killed by tests/test_ai/test_craft_plan_driver_core.py.
 CRAFT_PLAN_DRIVER_RECYCLE_MUTATIONS = [
     ("craft_plan_driver: recycle debit sign flip (- -> +, re-introduces the double-spend)",
      "        new_owned[na.code] = new_owned.get(na.code, 0) - consumed",
@@ -210,10 +211,11 @@ NEXT_CRAFT_MUTATIONS = [
 ]
 
 # next_craft_target_pure widened-obtain-model mutations (CRITICAL 1/2: the
-# recycle-epic-review fix). NOT covered by the differential -- the Lean
-# oracle/property in test_next_craft_diff.py never exercises `sources` at all
-# (it calls next_craft_target_pure with the 3-kind arg shape only), so these
-# are unit-killed by tests/test_ai/test_next_craft_core.py instead.
+# recycle-epic-review fix). NOW covered by the differential:
+# test_next_craft_diff.py `test_next_craft_all_six_kinds_agree` passes a real
+# `sources` map (7th oracle arg) and cycles all six kinds, so the recycle
+# capacity-cap drop and the CRAFT-break→continue mutant both diverge from the
+# widened Lean model. Still ALSO unit-killed by tests/test_ai/test_next_craft_core.py.
 NEXT_CRAFT_SOURCE_MUTATIONS = [
     ("next_craft: recycle capacity cap dropped (re-admits the full uncapped deficit)",
      "        qty = min(deficit, src.capacity, owned.get(src.code, 0) * src.yield_per)",

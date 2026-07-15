@@ -15,6 +15,7 @@ from hypothesis import strategies as st
 
 from artifactsmmo_cli.ai.craft_plan_driver_core import _apply_state, craft_plan_full
 from artifactsmmo_cli.ai.next_craft_core import NextAction
+from formal.diff.obtain_source_scenarios import SIX_KINDS, scenario, sources_to_json
 from formal.diff.oracle_client import run_oracle_structured
 
 _N = 6
@@ -107,3 +108,55 @@ def test_shared_intermediate_chain() -> None:
     lean = _call_lean(recipes, {}, {}, "item0", 1)
     _assert_agree(py, lean, "shared")
     assert sum(1 for na in py if na.kind == "gather") == 2  # item3 gathered twice
+
+
+# ---------------------------------------------------------------------------
+# SIX-source obtain model: full-plan agreement + reaches over ALL six kinds.
+# ---------------------------------------------------------------------------
+
+
+def _call_lean_sources(recipes, owned, bank, target, qty, sources) -> list[dict]:
+    """Invoke the widened craft_plan oracle with a `sources` map (7th arg)."""
+    return run_oracle_structured(
+        "craft_plan",
+        [
+            [
+                _recipes_to_json(recipes),
+                dict(owned),
+                dict(bank),
+                target,
+                qty,
+                _fuel(recipes, qty),
+                sources_to_json(sources),
+            ]
+        ],
+    )[0]
+
+
+def test_craft_plan_all_six_kinds_agree_and_reach() -> None:
+    """Python `craft_plan_full(..., sources)` ≡ Lean AND the executed plan reaches
+    the target, over ALL six kinds.
+
+    300 trials cycle the featured kind with rng-varied parameters (including the
+    recycle live-bound exhaustion MIXED plan). Every trial asserts Python≡Lean
+    step-for-step and that executing the plan with `_apply_state(..., sources)`
+    reaches `owned[target] >= qty` (the empirical `craftPlan_reaches` over the
+    widened, RECYCLE-debiting model). The run asserts every kind was emitted.
+    """
+    rng = random.Random(20260715)
+    seen: set[str] = set()
+    for t in range(300):
+        featured = SIX_KINDS[t % len(SIX_KINDS)]
+        recipes, owned, bank, sources, target, qty = scenario(rng, featured)
+        py = craft_plan_full(recipes, owned, bank, target, qty, sources)
+        lean = _call_lean_sources(recipes, owned, bank, target, qty, sources)
+        _assert_agree(py, lean, (t, featured))
+        cur_o, cur_b = dict(owned), dict(bank)
+        for na in py:
+            cur_o, cur_b = _apply_state(recipes, cur_o, cur_b, na, sources)
+        assert cur_o.get(target, 0) >= qty, (
+            f"plan did not reach target: {cur_o.get(target, 0)} < {qty}; trial={t} ({featured})"
+        )
+        for na in py:
+            seen.add(na.kind)
+    assert seen == set(SIX_KINDS), f"kinds not all exercised: {seen}"
