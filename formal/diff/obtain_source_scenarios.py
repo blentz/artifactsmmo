@@ -9,6 +9,7 @@ Lean oracle (`next_craft` / `craft_plan` with the 7th `sources` arg); the caller
 assert Python and Lean agree step-for-step.
 """
 
+import math
 import random
 
 from artifactsmmo_cli.ai.obtain_sources import Source, SourceKind
@@ -53,6 +54,21 @@ def scenario(
         cap = rng.randint(qty, qty + 3)
         return {}, {}, {}, {"top": [Source(SourceKind.WITHDRAW, "top", 1, cap)]}, target, qty
     if featured == "recycle":
+        if rng.random() < 0.5:
+            # CEIL-PINNING mixed recycle (Finding 2b). `capacity` binds the FIRST
+            # recycle at a NON-MULTIPLE of `yp` that is strictly below both the
+            # deficit and the live bound (owned*yp), so the debit ⌈cap/yp⌉ leaves
+            # a surplus count that a truncating ⌊cap/yp⌋ would NOT. `copies` is
+            # exactly ⌈cap/yp⌉ so the ceil debit EXHAUSTS the source on the
+            # revisit (→ craft descent) while a floor debit would leave one copy
+            # (→ a second recycle). The revisit thus emits a DIFFERENT plan under
+            # ceil vs floor — the differential goes red on a floored Lean debit.
+            yp = rng.randint(2, 3)
+            cap = yp * rng.randint(1, 2) + 1  # non-multiple of yp; ⌈cap/yp⌉ != ⌊cap/yp⌋
+            copies = math.ceil(cap / yp)  # ceil-debit exhausts, floor-debit does not
+            qty = cap + rng.randint(1, 3)  # deficit exceeds cap → a revisit occurs
+            sources = {"top": [Source(SourceKind.RECYCLE, "surplus", yp, cap)]}
+            return {"top": {"leaf": 1}}, {"surplus": copies}, {}, sources, target, qty
         # A RECYCLE source: destroy `surplus`, yield `yp` per copy, `copies`
         # owned. When copies*yp < qty the plan mixes recycle + craft descent.
         yp = rng.randint(1, 3)

@@ -23,7 +23,12 @@ widened kinds) unchanged. When supplied, two more effects apply, each
 mirroring its executor:
   * RECYCLE consumes the SOURCE item: `owned[item] += qty` AND
     `owned[src.code] -= ceil(qty / src.yield_per)` (mirrors `RecycleAction.apply`).
-    A plan that forgot this debit would double-spend the recycled item.
+    The `ceil` (not a truncating `//`) is what avoids over-crediting recovery.
+    This exact debit is NOT guarded by `craftPlan_reaches` (that theorem checks
+    only the TARGET item, which is never the debited surplus source — it is
+    structurally blind to the debit); it is pinned by the Lean ⌈·⌉ `decide`
+    witnesses + the craft-plan differential's live-bound recycle revisit, and
+    by the `tests/` unit that kills the floor mutant here.
   * BUY/DROP just add to inventory (`owned[item] += qty`). BUY's gold cost is
     NOT modelled here -- this core has no gold dimension; affordability is
     the action's own `is_applicable`, and a BUY source is only ever emitted
@@ -33,8 +38,10 @@ mirroring its executor:
     not "fixed" here either.
 
 Theorems backing the 3-kind path: `craftPlan_steps_valid` (no fabricated
-steps), `craftPlan_reaches` (a complete plan, executed, reaches the target),
-`craftPlan_head` (first action = the proved single step), `craftPlan_nil_iff`.
+steps), `craftPlan_reaches` (a complete plan, executed, reaches the TARGET item
+-- deliberately blind to source-item accounting, so it does NOT guard the
+recycle debit above), `craftPlan_head` (first action = the proved single step),
+`craftPlan_nil_iff`.
 """
 
 import math

@@ -15,10 +15,16 @@ Modelling note — the SIX-source obtain model (`ai/obtain_sources.Source`).
   * craft — add the output AND subtract `per * na.qty` of each recipe input
     (consumption; sound on shared intermediates, not just linear chains);
   * recycle — add the output AND debit the SOURCE item `na.code` by
-    `⌈na.qty / yieldPer⌉` (mirrors `RecycleAction.apply`). A plan that forgot
-    this debit would DOUBLE-SPEND the recycled source. `yieldPer` is looked up
-    from the matching recycle Source (as Python does), not carried on the
-    action.
+    `⌈na.qty / yieldPer⌉` (mirrors `RecycleAction.apply`). `yieldPer` is looked
+    up from the matching recycle Source (as Python does), not carried on the
+    action. WHAT GUARDS this exact debit — against a forgotten one, a
+    sign-flip, or a truncating `/` swapped in for the ceil — is NOT
+    `craftPlan_reaches` (it is structurally blind to it; see the
+    completion-correctness note below). It is the ⌈·⌉-pinning `decide`
+    witnesses at the foot of this file (which fix the post-fold SOURCE-item
+    count to the ceil value, distinct from the floor value at a non-multiple)
+    together with the craft-plan differential (whose live-bound recycle revisit
+    re-emits a DIFFERENT plan when the debit is wrong).
 
 The single-step `nextCraftTarget` only emits `craft` when every input is on hand
 (ORDERING, proved in NextCraftAction), so consumption never underflows on a
@@ -178,7 +184,15 @@ def foldPlan
 /-- **COMPLETION-CORRECTNESS.** When the plan stopped because the target became
 satisfied (rather than running out of fuel — captured by `length < fuel`),
 executing the whole plan in order reaches the target: `qty ≤ finalOwned target`.
-This is the soundness of the full driver over the widened six-source model. -/
+This is the soundness of the full driver over the widened six-source model.
+
+SCOPE (do not overclaim): this asserts satisfaction of the TARGET item only.
+The recycle debit lands on the surplus SOURCE item (`na.code`, ALWAYS ≠ target),
+so `craftPlan_reaches` is structurally BLIND to it — it holds for any
+`applyState` whatsoever, including one that forgot or sign-flipped the debit (a
+mixed-recovery plan would just emit a second recycle instead of a gather and
+still reach `qty`). The exact ⌈·⌉ debit is pinned by the source-count `decide`
+witnesses below + the differential, NOT by this theorem. -/
 theorem craftPlan_reaches
     (recipes : String → Option (List (String × Nat)))
     (sources : String → List Source)
@@ -272,5 +286,43 @@ example :
     (foldPlan copperRecipes recycleBarSources (owned5dagger, zero)
       (craftPlan copperRecipes recycleBarSources "copper_ring" 1 10 owned5dagger zero 10)).1
       "copper_dagger" = 4 := by decide
+
+/-! ### CEIL-PINNING witness (Finding 2) — ⌈·⌉ debit, NOT a truncating ⌊·⌋.
+
+The recycle-debit witnesses above all use `yieldPer = 1`, where `⌈q/1⌉ = ⌊q/1⌋`,
+so they cannot tell ceil from floor. Here `yieldPer = 2` and the recycle emits
+`qty = 3` — a NON-MULTIPLE of 2 — so the SOURCE debit is `⌈3/2⌉ = 2` (bringing
+`copper_dagger` from 2 to 0), whereas a truncating `⌊3/2⌋ = 1` would leave 1.
+The `= 0` post-fold witness therefore HOLDS under `ceilDiv` and FAILS under a
+floor debit — the model-level pin the differential/`decide` layer needs. -/
+
+-- yield 2, capacity 8; 2 daggers owned ⇒ live bound 2*2 = 4. For 3 rings the
+-- copper_bar deficit is 3, so the recycle emits min(3, 8, 4) = 3 (non-multiple).
+private def recycleY2Sources : String → List Source
+  | "copper_bar" => [⟨.recycle, "copper_dagger", 2, 8⟩]
+  | _            => []
+
+private def owned2dagger : String → Nat
+  | "copper_dagger" => 2
+  | _ => 0
+
+-- The plan itself is ceil/floor-agnostic (step qtys come from `sourceQty`, not
+-- the debit): recycle 3 bars, then craft 3 rings.
+example :
+    craftPlan copperRecipes recycleY2Sources "copper_ring" 3 10 owned2dagger zero 20 =
+      [⟨"copper_bar", .recycle, 3, "copper_dagger"⟩, ⟨"copper_ring", .craft, 3, ""⟩] := by decide
+
+-- THE PIN: executed, the source item is debited by ⌈3/2⌉ = 2 → daggers reach 0.
+-- Under a truncating ⌊3/2⌋ = 1 this would be 1, so this witness fails on floor.
+example :
+    (foldPlan copperRecipes recycleY2Sources (owned2dagger, zero)
+      (craftPlan copperRecipes recycleY2Sources "copper_ring" 3 10 owned2dagger zero 20)).1
+      "copper_dagger" = 0 := by decide
+
+-- Completion-correctness still holds on this plan (reaches 3 rings).
+example :
+    3 ≤ (foldPlan copperRecipes recycleY2Sources (owned2dagger, zero)
+          (craftPlan copperRecipes recycleY2Sources "copper_ring" 3 10 owned2dagger zero 20)).1
+        "copper_ring" := by decide
 
 end Formal.CraftPlanDriver
