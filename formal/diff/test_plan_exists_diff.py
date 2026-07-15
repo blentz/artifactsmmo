@@ -410,9 +410,12 @@ def test_planner_finds_plan_for_firing_means(means: LadderMeans) -> None:
         # WaitGoal. We pin THAT operational guarantee here (not the
         # planner's behaviour) — this is exactly the Lean honest weaker
         # claim `plan_exists_for_wait : ∃ p, applyPlan p s = s`.
+        from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
         from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
         arbiter = StrategyArbiter(GOAPPlanner(), history=None)
-        wait_plan = arbiter._plans(WaitGoal(), state, gd, actions)
+        # WaitGoal is short-circuited before the obtain-source map is built, so
+        # any valid ctx serves; NO_PROFILE_CONTEXT is the minimal one.
+        wait_plan = arbiter._plans(WaitGoal(), state, gd, actions, NO_PROFILE_CONTEXT)
         assert wait_plan and any(isinstance(a, WaitAction) for a in wait_plan), (
             "PLAN-EXISTS BUG: StrategyArbiter._plans(WaitGoal, ...) did NOT "
             "return a [WaitAction] plan — the post-20e-v2 last-resort fallback "
