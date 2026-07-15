@@ -1,6 +1,7 @@
 """Tests for next_craft_target_pure — deterministic next craft/gather/withdraw action."""
 
 from artifactsmmo_cli.ai.next_craft_core import NextAction, next_craft_target_pure
+from artifactsmmo_cli.ai.obtain_sources import Source, SourceKind
 
 COPPER_RECIPES: dict[str, dict[str, int]] = {
     "copper_ring": {"copper_bar": 6},
@@ -133,3 +134,69 @@ def test_unbanked_short_input_still_recurses() -> None:
         COPPER_RECIPES, {}, {"unrelated": 99}, "copper_ring", 3
     )
     assert result == NextAction("copper_ore", "gather", 180)
+
+
+# --- widened obtain-model sources (Task 2: the descent reads the model
+# instead of hard-coding "no recipe -> gather" as the only non-craft route) ---
+
+
+def test_recycle_source_emits_a_recycle_step() -> None:
+    """8 ash_plank needed, 0 held; 7 fishing_net are a licensed RECYCLE source
+    (yield 3 each). The descent must emit a RECYCLE step, not a GATHER of ash_wood.
+    THIS IS THE BUG: today the recipe descent cannot express this at all."""
+    sources = {"ash_plank": [Source(SourceKind.RECYCLE, "fishing_net", 3)]}
+    result = next_craft_target_pure({}, {}, {}, "ash_plank", 8, sources)
+    assert result == NextAction("ash_plank", "recycle", 8, "fishing_net")
+
+
+def test_withdraw_source_reaches_the_target_itself() -> None:
+    """A widened WITHDRAW source for the TARGET item (not merely a recipe
+    input) is honoured directly — a generalisation the old recipe-only walk
+    could never express (it only ever withdrew recipe INPUTS reached via
+    recursion, never the top-level item itself)."""
+    sources = {"copper_bar": [Source(SourceKind.WITHDRAW, "copper_bar", 1)]}
+    result = next_craft_target_pure(
+        COPPER_RECIPES, {}, {"copper_bar": 5}, "copper_bar", 3, sources
+    )
+    assert result == NextAction("copper_bar", "withdraw", 3)
+
+
+def test_buy_source_emits_a_buy_step() -> None:
+    sources = {"lifesteal_rune": [Source(SourceKind.BUY, "npc_merchant", 1)]}
+    result = next_craft_target_pure({}, {}, {}, "lifesteal_rune", 1, sources)
+    assert result == NextAction("lifesteal_rune", "buy", 1, "npc_merchant")
+
+
+def test_drop_source_emits_a_drop_step() -> None:
+    sources = {"dragon_scale": [Source(SourceKind.DROP, "dragon", 1)]}
+    result = next_craft_target_pure({}, {}, {}, "dragon_scale", 2, sources)
+    assert result == NextAction("dragon_scale", "drop", 2, "dragon")
+
+
+def test_craft_source_defers_to_recipe_descent_not_gather() -> None:
+    """A CRAFT-kind source for an item that ALSO has a recipe is not taken
+    directly — it defers to the pre-existing recipe descent, which decides
+    craft-now vs. descend-into-short-input exactly as before."""
+    sources = {
+        "copper_bar": [Source(SourceKind.CRAFT, "copper_bar", 1)],
+        "copper_ore": [Source(SourceKind.GATHER, "copper_ore", 1)],
+    }
+    result = next_craft_target_pure(COPPER_RECIPES, {}, {}, "copper_bar", 6, sources)
+    assert result == NextAction("copper_ore", "gather", 60)
+
+
+def test_craft_priority_over_lower_kind_when_both_present() -> None:
+    """CRAFT outranks GATHER in the declared priority order: when both a
+    CRAFT and a GATHER source exist for the SAME item, craft descent wins
+    (never the lower-priority gather), even though gather appears later in
+    the list — the `break` (not `continue`) on the CRAFT entry is load-bearing."""
+    sources = {
+        "copper_bar": [
+            Source(SourceKind.CRAFT, "copper_bar", 1),
+            Source(SourceKind.GATHER, "copper_bar", 1),
+        ],
+    }
+    result = next_craft_target_pure(
+        COPPER_RECIPES, {"copper_ore": 60}, {}, "copper_bar", 6, sources
+    )
+    assert result == NextAction("copper_bar", "craft", 6)
