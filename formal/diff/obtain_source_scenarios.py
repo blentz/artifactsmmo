@@ -54,7 +54,8 @@ def scenario(
         cap = rng.randint(qty, qty + 3)
         return {}, {}, {}, {"top": [Source(SourceKind.WITHDRAW, "top", 1, cap)]}, target, qty
     if featured == "recycle":
-        if rng.random() < 0.5:
+        roll = rng.random()
+        if roll < 0.25:
             # CEIL-PINNING mixed recycle (Finding 2b). `capacity` binds the FIRST
             # recycle at a NON-MULTIPLE of `yp` that is strictly below both the
             # deficit and the live bound (owned*yp), so the debit ⌈cap/yp⌉ leaves
@@ -69,12 +70,38 @@ def scenario(
             qty = cap + rng.randint(1, 3)  # deficit exceeds cap → a revisit occurs
             sources = {"top": [Source(SourceKind.RECYCLE, "surplus", yp, cap)]}
             return {"top": {"leaf": 1}}, {"surplus": copies}, {}, sources, target, qty
-        # A RECYCLE source: destroy `surplus`, yield `yp` per copy, `copies`
-        # owned. When copies*yp < qty the plan mixes recycle + craft descent.
+        if roll < 0.5:
+            # A RECYCLE source: destroy `surplus`, yield `yp` per copy, `copies`
+            # owned. When copies*yp < qty the plan mixes recycle + craft descent.
+            yp = rng.randint(1, 3)
+            copies = rng.randint(1, 6)
+            sources = {"top": [Source(SourceKind.RECYCLE, "surplus", yp, copies * yp)]}
+            return {"top": {"leaf": 1}}, {"surplus": copies}, {}, sources, target, qty
+        if roll < 0.75:
+            # CUMULATIVE-CAP: MORE physical copies than the LICENSED `capacity`
+            # covers (`phys * yp > cap`), and a deficit above the licence. The
+            # recycle is capped CUMULATIVELY at `cap` and the remainder is crafted
+            # from `leaf` -- the descent must NEVER dismantle the protected copies
+            # past `cap`. Binds the `capacity - consumed` bound: a mutant that
+            # re-reads the STATIC capacity each step recycles the protected copies
+            # and diverges from the (capped) oracle.
+            yp = rng.randint(1, 3)
+            licensed = rng.randint(1, 2)
+            cap = licensed * yp
+            phys = licensed + rng.randint(1, 3)   # physical copies exceed the licence
+            qty = cap + rng.randint(1, 4)          # deficit above what the licence covers
+            sources = {"top": [Source(SourceKind.RECYCLE, "surplus", yp, cap)]}
+            return {"top": {"leaf": 1}}, {"surplus": phys}, {}, sources, target, qty
+        # BANKED: the licensed copies sit in the BANK, bag empty. The descent must
+        # STAGE a Withdraw(surplus) before it can recycle -- binds the banked
+        # recycle-source staging (a mutant that omits the withdraw gathers/crafts
+        # the whole deficit and diverges from the oracle's withdraw→recycle plan).
         yp = rng.randint(1, 3)
-        copies = rng.randint(1, 6)
-        sources = {"top": [Source(SourceKind.RECYCLE, "surplus", yp, copies * yp)]}
-        return {"top": {"leaf": 1}}, {"surplus": copies}, {}, sources, target, qty
+        licensed = rng.randint(1, 3)
+        cap = licensed * yp
+        qty = rng.randint(1, cap)                  # within the licence: recycle alone serves it
+        sources = {"top": [Source(SourceKind.RECYCLE, "surplus", yp, cap)]}
+        return {"top": {"leaf": 1}}, {}, {"surplus": licensed + rng.randint(0, 2)}, sources, target, qty
     if featured == "buy":
         return {}, {}, {}, {"top": [Source(SourceKind.BUY, "npc", 1, _UNBOUNDED)]}, target, qty
     if featured == "drop":

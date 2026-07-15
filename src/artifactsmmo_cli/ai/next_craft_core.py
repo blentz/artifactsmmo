@@ -60,6 +60,7 @@ def next_craft_target_pure(
     target: str,
     qty: int,
     sources: Mapping[str, list[Source]] | None = None,
+    consumed: Mapping[str, int] | None = None,
 ) -> NextAction | None:
     """Return the next action needed to produce ``qty`` of ``target``, or ``None``.
 
@@ -83,6 +84,15 @@ def next_craft_target_pure(
                  priority-ordered list of `Source` per item. Defaults to
                  empty, which reduces this function to the original
                  recipe-tree-only walk.
+        consumed: TARGET units already recycled from each RECYCLE source item
+                 (keyed by the source item's own code) EARLIER in the same
+                 multi-step plan. `craft_plan_full` seeds this at all-zero and
+                 accumulates it across iterations so a source's per-step recycle
+                 stays bounded CUMULATIVELY by its `capacity` (the licensed
+                 budget), never re-spending capacity a prior step already used.
+                 Defaults to empty (all-zero), which is the correct seed for a
+                 single-step call and keeps the byte-identical single-step
+                 behaviour every direct caller relies on.
 
     Returns:
         A :class:`NextAction` describing the immediate next step, or ``None`` if
@@ -90,7 +100,7 @@ def next_craft_target_pure(
     """
     if owned.get(target, 0) >= qty:
         return None
-    return _next(recipes, sources or {}, owned, bank, target, qty, len(recipes) + 1)
+    return _next(recipes, sources or {}, owned, bank, consumed or {}, target, qty, len(recipes) + 1)
 
 
 def _next(
@@ -98,6 +108,7 @@ def _next(
     sources: Mapping[str, list[Source]],
     owned: Mapping[str, int],
     bank: Mapping[str, int],
+    consumed: Mapping[str, int],
     item: str,
     need: int,
     fuel: int,
@@ -129,7 +140,7 @@ def _next(
     for src in sources.get(item, ()):
         if src.kind is SourceKind.CRAFT:
             break
-        step = _step_for(src, item, deficit, owned, bank)
+        step = _step_for(src, item, deficit, owned, bank, consumed)
         if step is not None:
             return step
         # Source has nothing left to give RIGHT NOW (a RECYCLE source whose
@@ -153,45 +164,70 @@ def _next(
             # (capped at the shortfall) rather than re-gathering/re-crafting it;
             # otherwise descend to make it. Mirrors Lean `nextHelper` withdraw arm.
             if bank.get(inp, 0) == 0:
-                return _next(recipes, sources, owned, bank, inp, required, fuel - 1)
+                return _next(recipes, sources, owned, bank, consumed, inp, required, fuel - 1)
             return NextAction(inp, "withdraw", min(bank.get(inp, 0), required - owned.get(inp, 0)))
     return NextAction(item, "craft", deficit)  # all inputs on hand → craft
 
 
 def _step_for(
-    src: Source, item: str, deficit: int, owned: Mapping[str, int], bank: Mapping[str, int]
+    src: Source, item: str, deficit: int, owned: Mapping[str, int],
+    bank: Mapping[str, int], consumed: Mapping[str, int]
 ) -> NextAction | None:
     """Translate a non-CRAFT `Source` into the immediate next step for `item`,
     or `None` if the source is exhausted right now (the caller then falls
     through to the next-priority source, or the recipe descent).
 
-    Every kind is capped at `min(deficit, src.capacity)`: GATHER/BUY/DROP/CRAFT
-    carry `UNBOUNDED_CAPACITY`, so the cap is a no-op for them and each still
-    asks for the full deficit in one step, exactly as before. WITHDRAW and
-    RECYCLE are genuinely stock-limited, so the cap is load-bearing there --
-    without it a RECYCLE step could claim more of the target than its licensed
-    source stock could ever deliver (an impossible plan; `_apply_state` would
-    drive the source item negative).
+    GATHER/BUY/DROP carry `UNBOUNDED_CAPACITY`, so `min(deficit, src.capacity)`
+    asks for the full deficit in one step, exactly as before.
 
-    RECYCLE is additionally bounded by the CURRENTLY owned stock of the source
-    item (`owned.get(src.code, 0) * src.yield_per`): `src.capacity` is a
-    snapshot taken once by `obtain_sources`, but a single `craft_plan_full` run
-    can call this function on the SAME item multiple times as the plan
-    progresses (`_apply_state` debits `owned[src.code]` after each recycle
-    step). Reading the LIVE `owned` count is what lets a second call recognise
-    the source is now exhausted and return `None` (rather than re-spending
-    stock the first step already consumed) so the descent falls through to
-    gather/craft the remainder -- the partial-recovery MIXED plan.
+    RECYCLE is genuinely stock-limited and gets three cumulative bounds:
+
+    * REMAINING CAPACITY — `src.capacity - consumed[src.code]`. `src.capacity`
+      is the LICENSED budget (destroyable copies × yield) snapshotted once by
+      `obtain_sources`; `consumed[src.code]` is the target units this same plan
+      ALREADY recycled from the source earlier. Bounding by the REMAINING
+      capacity (not the static snapshot) is what stops a second visit from
+      re-spending the licensed budget and dismantling a PROTECTED copy — the
+      cumulative bound the static per-step `min(..., capacity, ...)` lacked
+      (2 copper_helmet, 1 licensed, needed 6: without this the descent recycled
+      BOTH into 6 copper_bar). Once the remaining capacity hits 0 the source is
+      exhausted → `None` → the descent gathers/crafts the remainder (the MIXED
+      plan).
+    * LIVE BAG STOCK — `owned.get(src.code, 0) * src.yield_per`. A recycle
+      consumes copies IN THE BAG (`RecycleAction.is_applicable` requires them
+      there), so the step can never deliver more than the bag physically holds.
+    * the deficit itself.
+
+    BANKED SOURCE STAGING. When the remaining capacity still allows a recycle
+    but the BAG holds too few source copies to serve it AND copies sit in the
+    BANK, emit a `Withdraw` of the SOURCE item first (moving bank→bag); the next
+    descent iteration then recycles the withdrawn copies. Without this a
+    bank-only recycle source (bag empty — the MAIN production shape, since
+    `DEPOSIT_FULL` banks exactly this surplus) has zero live bag stock, would
+    return `None`, and the descent would wastefully gather around it.
 
     `code` names the source's own item/resource/npc/monster code, left "" when
-    identical to `item` (WITHDRAW's own bank item, or a plain 1:1 GATHER of
-    the item itself).
+    identical to `item` (a plain 1:1 GATHER of the item itself); a staged
+    Withdraw carries the SOURCE code as its `item` and "" as its `code`.
     """
     code = "" if src.code == item else src.code
-    if src.kind is SourceKind.RECYCLE:
-        qty = min(deficit, src.capacity, owned.get(src.code, 0) * src.yield_per)
-    else:
+    if src.kind is not SourceKind.RECYCLE:
         qty = min(deficit, src.capacity)
-    if qty <= 0:
-        return None
-    return NextAction(item, src.kind.value, qty, code)
+        if qty <= 0:
+            return None
+        return NextAction(item, src.kind.value, qty, code)
+    remaining = max(0, src.capacity - consumed.get(src.code, 0))
+    bag_copies = owned.get(src.code, 0)
+    qty = min(deficit, remaining, bag_copies * src.yield_per)
+    if qty > 0:
+        return NextAction(item, "recycle", qty, code)
+    # Bag exhausted for this source. If the licensed budget still has room and
+    # copies wait in the bank, STAGE a Withdraw of the source item.
+    want = min(deficit, remaining)
+    bank_copies = bank.get(src.code, 0)
+    if want > 0 and bank_copies > 0 and bag_copies * src.yield_per < want:
+        copies_needed = (want + src.yield_per - 1) // src.yield_per  # ⌈want / yield⌉
+        withdraw = min(bank_copies, copies_needed - bag_copies)
+        if withdraw > 0:
+            return NextAction(src.code, "withdraw", withdraw, "")
+    return None

@@ -2573,7 +2573,7 @@ def runNextCraft (args : Array Json) : Json :=
   let qty    := (intArg args 4).toNat
   let fuel   := (intArg args 5).toNat
   let sources := parseSources args[6]?
-  match nextCraftTarget recipes sources owned bank target qty fuel with
+  match nextCraftTarget recipes sources owned bank (fun _ => 0) target qty fuel with
   | none    => Json.null
   | some na =>
       Json.mkObj [("item", Json.str na.item), ("kind", Json.str (kindToStr na.kind)),
@@ -2627,7 +2627,7 @@ def runCraftPlan (args : Array Json) : Json :=
   let fuel   := (intArg args 5).toNat
   let sources := parseSources args[6]?
   let innerFuel := recipeAssoc.length + 1
-  let plan := Formal.CraftPlanDriver.craftPlan recipes sources target qty innerFuel owned bank fuel
+  let plan := Formal.CraftPlanDriver.craftPlan recipes sources target qty innerFuel owned bank (fun _ => 0) fuel
   let naJson : NextAction → Json := fun na =>
     Json.mkObj [("item", Json.str na.item), ("kind", Json.str (kindToStr na.kind)),
                 ("qty", Json.num (Int.ofNat na.qty)), ("code", Json.str na.code)]

@@ -90,35 +90,56 @@ def ceilDiv (a b : Nat) : Nat := (a + b - 1) / b
 
 /-! ## Core definitions (mirror Python `_step_for` / `_next`) -/
 
-/-- The units a source delivers right now: capped at `min(deficit, capacity)`;
-RECYCLE additionally bounded by the LIVE owned stock of the source item. -/
-def sourceQty (src : Source) (deficit : Nat) (owned : String → Nat) : Nat :=
+/-- The RECYCLE units a source delivers right now: capped at the deficit, the
+REMAINING capacity (`src.capacity - consumed src.code`, the licensed budget net
+of what this plan already recycled from the source — the CUMULATIVE cap), and
+the LIVE owned bag stock of the source item. Non-recycle sources are capped at
+`min(deficit, capacity)`. -/
+def sourceQty (src : Source) (deficit : Nat) (owned consumed : String → Nat) : Nat :=
   match src.kind with
-  | Kind.recycle => min deficit (min src.capacity (owned src.code * src.yieldPer))
+  | Kind.recycle =>
+      min deficit (min (src.capacity - consumed src.code) (owned src.code * src.yieldPer))
   | _            => min deficit src.capacity
 
 /-- Translate one non-CRAFT source into the immediate step for `item`, or `none`
 if the source is exhausted right now (mirrors `next_craft_core._step_for`). The
 `code` is `""` when the source's own code equals `item`; a zero cap yields
-`none`. -/
+`none`.
+
+RECYCLE additionally STAGES a Withdraw: when the bag cannot serve the recycle but
+the licensed budget still has room and copies wait in the bank, emit a
+`withdraw` of the SOURCE item (bank→bag), so the next descent iteration recycles
+the withdrawn copies (the banked-source main path). -/
 def stepFor (src : Source) (item : String) (deficit : Nat)
-    (owned : String → Nat) : Option NextAction :=
-  if sourceQty src deficit owned = 0 then none
-  else some ⟨item, src.kind, sourceQty src deficit owned,
-             if src.code = item then "" else src.code⟩
+    (owned bank consumed : String → Nat) : Option NextAction :=
+  match src.kind with
+  | Kind.recycle =>
+      if sourceQty src deficit owned consumed = 0 then
+        let want := min deficit (src.capacity - consumed src.code)
+        if want ≠ 0 ∧ bank src.code ≠ 0 ∧ owned src.code * src.yieldPer < want then
+          let wd := min (bank src.code) (ceilDiv want src.yieldPer - owned src.code)
+          if wd = 0 then none else some ⟨src.code, Kind.withdraw, wd, ""⟩
+        else none
+      else
+        some ⟨item, Kind.recycle, sourceQty src deficit owned consumed,
+              if src.code = item then "" else src.code⟩
+  | _ =>
+      if sourceQty src deficit owned consumed = 0 then none
+      else some ⟨item, src.kind, sourceQty src deficit owned consumed,
+                 if src.code = item then "" else src.code⟩
 
 /-- Scan the priority-ordered sources for `item`, returning the first applicable
 non-CRAFT step; stop (→ `none`, deferring to the recipe descent) at the first
 CRAFT source. Mirrors the `for src in sources.get(item, ())` loop with its
 `break`-on-CRAFT. -/
-def firstStep (item : String) (deficit : Nat) (owned : String → Nat)
+def firstStep (item : String) (deficit : Nat) (owned bank consumed : String → Nat)
     : List Source → Option NextAction
   | []          => none
   | src :: rest =>
       if src.kind = Kind.craft then none
-      else match stepFor src item deficit owned with
+      else match stepFor src item deficit owned bank consumed with
         | some na => some na
-        | none    => firstStep item deficit owned rest
+        | none    => firstStep item deficit owned bank consumed rest
 
 /-- Walk the obtain model / recipe DAG to find the deepest actionable step.
 
@@ -130,16 +151,17 @@ the recipe descent runs exactly as the pre-existing recipe-tree walk did. -/
 def nextHelper
     (recipes : String → Option (List (String × Nat)))
     (sources : String → List Source)
-    (owned   : String → Nat)
-    (bank    : String → Nat)
+    (owned    : String → Nat)
+    (bank     : String → Nat)
+    (consumed : String → Nat)
     : String → Nat → Nat → NextAction
   | item, need, 0 =>
       -- fuel exhausted (totality guard): Python still consults sources here,
       -- then falls to a gather (recipe descent cannot recurse further).
-      (firstStep item (need - owned item) owned (sources item)).getD
+      (firstStep item (need - owned item) owned bank consumed (sources item)).getD
         ⟨item, .gather, need - owned item, ""⟩
   | item, need, fuel + 1 =>
-      match firstStep item (need - owned item) owned (sources item) with
+      match firstStep item (need - owned item) owned bank consumed (sources item) with
       | some na => na
       | none =>
         match recipes item with
@@ -149,52 +171,81 @@ def nextHelper
             | some p  =>
                 let req := p.2 * (need - owned item)
                 if bank p.1 = 0 then
-                  nextHelper recipes sources owned bank p.1 req fuel     -- not banked: recurse
+                  nextHelper recipes sources owned bank consumed p.1 req fuel  -- not banked: recurse
                 else
                   ⟨p.1, .withdraw, min (bank p.1) (req - owned p.1), ""⟩ -- banked input: withdraw
             | none    => ⟨item, .craft, need - owned item, ""⟩      -- all inputs on hand: craft
 
 /-- Entry point: returns `none` when the target is already satisfied, else `some`
-next action. Mirrors `next_craft_target_pure`; caller passes `fuel = |recipes| + 1`. -/
+next action. Mirrors `next_craft_target_pure`; caller passes `fuel = |recipes| + 1`
+and `consumed` seeded all-zero (accumulated across a multi-step plan). -/
 def nextCraftTarget
     (recipes : String → Option (List (String × Nat)))
     (sources : String → List Source)
-    (owned   : String → Nat)
-    (bank    : String → Nat)
+    (owned    : String → Nat)
+    (bank     : String → Nat)
+    (consumed : String → Nat)
     (target  : String)
     (qty fuel : Nat) : Option NextAction :=
   if qty ≤ owned target then none
-  else some (nextHelper recipes sources owned bank target qty fuel)
+  else some (nextHelper recipes sources owned bank consumed target qty fuel)
 
 /-! ## stepFor / firstStep spec lemmas -/
 
-/-- **STEPFOR-SPEC.** A `stepFor` result mirrors its source: same item, same
-kind, positive qty, and (for non-recycle kinds) qty ≤ capacity. -/
+/-- **STEPFOR-SPEC.** A `stepFor` result is EITHER the source's own step (same
+item, same kind, positive qty, and — for non-recycle kinds — qty ≤ capacity) OR,
+for a RECYCLE source with the bag exhausted, a STAGED `withdraw` of the source
+item (positive qty ≤ the bank stock of that item). -/
 theorem stepFor_some {src : Source} {item : String} {deficit : Nat}
-    {owned : String → Nat} {na : NextAction}
-    (h : stepFor src item deficit owned = some na) :
-    na.item = item ∧ na.kind = src.kind ∧ 1 ≤ na.qty ∧
-      (src.kind ≠ Kind.recycle → na.qty ≤ src.capacity) := by
-  simp only [stepFor] at h
+    {owned bank consumed : String → Nat} {na : NextAction}
+    (h : stepFor src item deficit owned bank consumed = some na) :
+    (na.item = item ∧ na.kind = src.kind ∧ 1 ≤ na.qty ∧
+        (src.kind ≠ Kind.recycle → na.qty ≤ src.capacity))
+    ∨ (src.kind = Kind.recycle ∧ na.item = src.code ∧ na.kind = Kind.withdraw ∧
+        1 ≤ na.qty ∧ na.qty ≤ bank src.code) := by
+  unfold stepFor at h
   split at h
-  · simp at h
-  · rename_i hne
-    simp only [Option.some.injEq] at h
-    subst h
-    refine ⟨rfl, rfl, Nat.one_le_iff_ne_zero.mpr hne, ?_⟩
-    intro hrec
-    simp only [sourceQty]
-    cases hk : src.kind <;>
-      first
-        | (exact absurd hk hrec)
-        | exact Nat.min_le_right _ _
+  · -- RECYCLE arm.
+    rename_i hk
+    by_cases hq : sourceQty src deficit owned consumed = 0
+    · rw [if_pos hq] at h
+      by_cases hcond :
+          (min deficit (src.capacity - consumed src.code) ≠ 0 ∧ bank src.code ≠ 0 ∧
+            owned src.code * src.yieldPer < min deficit (src.capacity - consumed src.code))
+      · rw [if_pos hcond] at h
+        by_cases hwd :
+            min (bank src.code)
+              (ceilDiv (min deficit (src.capacity - consumed src.code)) src.yieldPer
+                - owned src.code) = 0
+        · rw [if_pos hwd] at h; simp at h
+        · rw [if_neg hwd] at h
+          simp only [Option.some.injEq] at h
+          subst h
+          exact Or.inr ⟨hk, rfl, rfl, Nat.one_le_iff_ne_zero.mpr hwd, Nat.min_le_left _ _⟩
+      · rw [if_neg hcond] at h; simp at h
+    · rw [if_neg hq] at h
+      simp only [Option.some.injEq] at h
+      subst h
+      refine Or.inl ⟨rfl, hk.symm, Nat.one_le_iff_ne_zero.mpr hq, ?_⟩
+      intro hne; exact absurd hk hne
+  · -- non-RECYCLE arm.
+    rename_i hk
+    by_cases hq : sourceQty src deficit owned consumed = 0
+    · rw [if_pos hq] at h; simp at h
+    · rw [if_neg hq] at h
+      simp only [Option.some.injEq] at h
+      subst h
+      refine Or.inl ⟨rfl, rfl, Nat.one_le_iff_ne_zero.mpr hq, ?_⟩
+      intro _
+      simp only [sourceQty]
+      exact Nat.min_le_right _ _
 
 /-- **FIRSTSTEP-SPEC.** When the source loop returns `some na`, that step is the
 `stepFor` image of some non-CRAFT source in the list. -/
-theorem firstStep_spec (item : String) (deficit : Nat) (owned : String → Nat) :
+theorem firstStep_spec (item : String) (deficit : Nat) (owned bank consumed : String → Nat) :
     ∀ (srcs : List Source) (na : NextAction),
-      firstStep item deficit owned srcs = some na →
-      ∃ s, s ∈ srcs ∧ s.kind ≠ Kind.craft ∧ stepFor s item deficit owned = some na := by
+      firstStep item deficit owned bank consumed srcs = some na →
+      ∃ s, s ∈ srcs ∧ s.kind ≠ Kind.craft ∧ stepFor s item deficit owned bank consumed = some na := by
   intro srcs
   induction srcs with
   | nil => intro na h; simp [firstStep] at h
@@ -204,7 +255,7 @@ theorem firstStep_spec (item : String) (deficit : Nat) (owned : String → Nat) 
     by_cases hc : src.kind = Kind.craft
     · rw [if_pos hc] at h; simp at h
     · rw [if_neg hc] at h
-      cases hstep : stepFor src item deficit owned with
+      cases hstep : stepFor src item deficit owned bank consumed with
       | none =>
         simp only [hstep] at h
         obtain ⟨s, hmem, hnc, hs⟩ := ih na h
@@ -220,11 +271,12 @@ already satisfied (`qty ≤ owned target`). -/
 theorem nextCraftTarget_none_iff
     (recipes : String → Option (List (String × Nat)))
     (sources : String → List Source)
-    (owned   : String → Nat)
-    (bank    : String → Nat)
+    (owned    : String → Nat)
+    (bank     : String → Nat)
+    (consumed : String → Nat)
     (target  : String)
     (qty fuel : Nat) :
-    nextCraftTarget recipes sources owned bank target qty fuel = none ↔ qty ≤ owned target := by
+    nextCraftTarget recipes sources owned bank consumed target qty fuel = none ↔ qty ≤ owned target := by
   simp [nextCraftTarget]
 
 /-! ## Theorem 2: ordering (safety) -/
@@ -236,10 +288,11 @@ emits craft (the loop breaks on a CRAFT source). -/
 theorem nextHelper_craft_inputs_satisfied
     (recipes : String → Option (List (String × Nat)))
     (sources : String → List Source)
-    (owned   : String → Nat)
-    (bank    : String → Nat) :
+    (owned    : String → Nat)
+    (bank     : String → Nat)
+    (consumed : String → Nat) :
     ∀ (item : String) (need fuel : Nat) (result : NextAction),
-      nextHelper recipes sources owned bank item need fuel = result →
+      nextHelper recipes sources owned bank consumed item need fuel = result →
       result.kind = Kind.craft →
       ∃ inputs,
         recipes result.item = some inputs ∧
@@ -249,20 +302,28 @@ theorem nextHelper_craft_inputs_satisfied
   | zero =>
     intro result h hkind
     simp only [nextHelper] at h
-    cases hfs : firstStep item (need - owned item) owned (sources item) with
+    cases hfs : firstStep item (need - owned item) owned bank consumed (sources item) with
     | none => simp only [hfs, Option.getD_none] at h; subst h; simp at hkind
     | some na =>
       simp only [hfs, Option.getD_some] at h; subst h
-      obtain ⟨s, _, hnc, hstep⟩ := firstStep_spec item (need - owned item) owned _ _ hfs
-      rw [(stepFor_some hstep).2.1] at hkind; exact absurd hkind hnc
+      obtain ⟨s, _, hnc, hstep⟩ := firstStep_spec item (need - owned item) owned bank consumed _ _ hfs
+      have hkne : na.kind ≠ Kind.craft := by
+        rcases stepFor_some hstep with ⟨_, hknd, _, _⟩ | ⟨_, _, hknd, _, _⟩
+        · rw [hknd]; exact hnc
+        · rw [hknd]; decide
+      exact absurd hkind hkne
   | succ n ih =>
     intro result h hkind
     simp only [nextHelper] at h
-    cases hfs : firstStep item (need - owned item) owned (sources item) with
+    cases hfs : firstStep item (need - owned item) owned bank consumed (sources item) with
     | some na =>
       simp only [hfs] at h; subst h
-      obtain ⟨s, _, hnc, hstep⟩ := firstStep_spec item (need - owned item) owned _ _ hfs
-      rw [(stepFor_some hstep).2.1] at hkind; exact absurd hkind hnc
+      obtain ⟨s, _, hnc, hstep⟩ := firstStep_spec item (need - owned item) owned bank consumed _ _ hfs
+      have hkne : na.kind ≠ Kind.craft := by
+        rcases stepFor_some hstep with ⟨_, hknd, _, _⟩ | ⟨_, _, hknd, _, _⟩
+        · rw [hknd]; exact hnc
+        · rw [hknd]; decide
+      exact absurd hkind hkne
     | none =>
       simp only [hfs] at h
       split at h
@@ -284,30 +345,31 @@ is positive. -/
 theorem nextHelper_qty_pos
     (recipes : String → Option (List (String × Nat)))
     (sources : String → List Source)
-    (owned   : String → Nat)
-    (bank    : String → Nat) :
+    (owned    : String → Nat)
+    (bank     : String → Nat)
+    (consumed : String → Nat) :
     ∀ (item : String) (need fuel : Nat),
       owned item < need →
-      1 ≤ (nextHelper recipes sources owned bank item need fuel).qty := by
+      1 ≤ (nextHelper recipes sources owned bank consumed item need fuel).qty := by
   intro item need fuel
   induction fuel generalizing item need with
   | zero =>
     intro hdef
     simp only [nextHelper]
-    cases hfs : firstStep item (need - owned item) owned (sources item) with
+    cases hfs : firstStep item (need - owned item) owned bank consumed (sources item) with
     | none => simp only [Option.getD_none]; omega
     | some na =>
       simp only [Option.getD_some]
-      obtain ⟨s, _, _, hstep⟩ := firstStep_spec item (need - owned item) owned _ _ hfs
-      exact (stepFor_some hstep).2.2.1
+      obtain ⟨s, _, _, hstep⟩ := firstStep_spec item (need - owned item) owned bank consumed _ _ hfs
+      rcases stepFor_some hstep with ⟨_, _, hp, _⟩ | ⟨_, _, _, hp, _⟩ <;> exact hp
   | succ n ih =>
     intro hdef
     simp only [nextHelper]
-    cases hfs : firstStep item (need - owned item) owned (sources item) with
+    cases hfs : firstStep item (need - owned item) owned bank consumed (sources item) with
     | some na =>
       dsimp only
-      obtain ⟨s, _, _, hstep⟩ := firstStep_spec item (need - owned item) owned _ _ hfs
-      exact (stepFor_some hstep).2.2.1
+      obtain ⟨s, _, _, hstep⟩ := firstStep_spec item (need - owned item) owned bank consumed _ _ hfs
+      rcases stepFor_some hstep with ⟨_, _, hp, _⟩ | ⟨_, _, _, hp, _⟩ <;> exact hp
     | none =>
       dsimp only
       split
@@ -331,12 +393,13 @@ is ≥ 1 (a genuine positive deficit). -/
 theorem nextCraftTarget_qty_pos
     (recipes : String → Option (List (String × Nat)))
     (sources : String → List Source)
-    (owned   : String → Nat)
-    (bank    : String → Nat)
+    (owned    : String → Nat)
+    (bank     : String → Nat)
+    (consumed : String → Nat)
     (target  : String)
     (qty fuel : Nat)
     (result  : NextAction)
-    (h       : nextCraftTarget recipes sources owned bank target qty fuel = some result) :
+    (h       : nextCraftTarget recipes sources owned bank consumed target qty fuel = some result) :
     1 ≤ result.qty := by
   simp only [nextCraftTarget] at h
   split at h
@@ -363,11 +426,12 @@ source forces a positive bank. -/
 theorem nextHelper_withdraw_banked
     (recipes : String → Option (List (String × Nat)))
     (sources : String → List Source)
-    (owned   : String → Nat)
-    (bank    : String → Nat)
+    (owned    : String → Nat)
+    (bank     : String → Nat)
+    (consumed : String → Nat)
     (hwf     : WFWithdraw sources bank) :
     ∀ (item : String) (need fuel : Nat) (result : NextAction),
-      nextHelper recipes sources owned bank item need fuel = result →
+      nextHelper recipes sources owned bank consumed item need fuel = result →
       result.kind = Kind.withdraw →
       0 < bank result.item := by
   intro item need fuel
@@ -375,30 +439,30 @@ theorem nextHelper_withdraw_banked
   | zero =>
     intro result h hkind
     simp only [nextHelper] at h
-    cases hfs : firstStep item (need - owned item) owned (sources item) with
+    cases hfs : firstStep item (need - owned item) owned bank consumed (sources item) with
     | none => simp only [hfs, Option.getD_none] at h; subst h; simp at hkind
     | some na =>
       simp only [hfs, Option.getD_some] at h; subst h
-      obtain ⟨s, hmem, _, hstep⟩ := firstStep_spec item (need - owned item) owned _ _ hfs
-      have hspec := stepFor_some hstep
-      have hkw : s.kind = Kind.withdraw := by rw [← hspec.2.1]; exact hkind
-      have hle : na.qty ≤ s.capacity := hspec.2.2.2 (by rw [hkw]; decide)
-      have hpos : 1 ≤ na.qty := hspec.2.2.1
-      have hcap : s.capacity ≤ bank item := hwf item s hmem hkw
-      rw [hspec.1]; omega
+      obtain ⟨s, hmem, _, hstep⟩ := firstStep_spec item (need - owned item) owned bank consumed _ _ hfs
+      rcases stepFor_some hstep with ⟨hitem, hknd, hpos, hcap⟩ | ⟨_, hitem, _, hpos, hle⟩
+      · have hkw : s.kind = Kind.withdraw := by rw [← hknd]; exact hkind
+        have hcapb : na.qty ≤ s.capacity := hcap (by rw [hkw]; decide)
+        have hbank : s.capacity ≤ bank item := hwf item s hmem hkw
+        rw [hitem]; omega
+      · rw [hitem]; omega
   | succ n ih =>
     intro result h hkind
     simp only [nextHelper] at h
-    cases hfs : firstStep item (need - owned item) owned (sources item) with
+    cases hfs : firstStep item (need - owned item) owned bank consumed (sources item) with
     | some na =>
       simp only [hfs] at h; subst h
-      obtain ⟨s, hmem, _, hstep⟩ := firstStep_spec item (need - owned item) owned _ _ hfs
-      have hspec := stepFor_some hstep
-      have hkw : s.kind = Kind.withdraw := by rw [← hspec.2.1]; exact hkind
-      have hle : na.qty ≤ s.capacity := hspec.2.2.2 (by rw [hkw]; decide)
-      have hpos : 1 ≤ na.qty := hspec.2.2.1
-      have hcap : s.capacity ≤ bank item := hwf item s hmem hkw
-      rw [hspec.1]; omega
+      obtain ⟨s, hmem, _, hstep⟩ := firstStep_spec item (need - owned item) owned bank consumed _ _ hfs
+      rcases stepFor_some hstep with ⟨hitem, hknd, hpos, hcap⟩ | ⟨_, hitem, _, hpos, hle⟩
+      · have hkw : s.kind = Kind.withdraw := by rw [← hknd]; exact hkind
+        have hcapb : na.qty ≤ s.capacity := hcap (by rw [hkw]; decide)
+        have hbank : s.capacity ≤ bank item := hwf item s hmem hkw
+        rw [hitem]; omega
+      · rw [hitem]; omega
     | none =>
       simp only [hfs] at h
       split at h
@@ -416,11 +480,12 @@ theorem nextHelper_withdraw_banked
 theorem nextHelper_withdraw_le_bank
     (recipes : String → Option (List (String × Nat)))
     (sources : String → List Source)
-    (owned   : String → Nat)
-    (bank    : String → Nat)
+    (owned    : String → Nat)
+    (bank     : String → Nat)
+    (consumed : String → Nat)
     (hwf     : WFWithdraw sources bank) :
     ∀ (item : String) (need fuel : Nat) (result : NextAction),
-      nextHelper recipes sources owned bank item need fuel = result →
+      nextHelper recipes sources owned bank consumed item need fuel = result →
       result.kind = Kind.withdraw →
       result.qty ≤ bank result.item := by
   intro item need fuel
@@ -428,28 +493,30 @@ theorem nextHelper_withdraw_le_bank
   | zero =>
     intro result h hkind
     simp only [nextHelper] at h
-    cases hfs : firstStep item (need - owned item) owned (sources item) with
+    cases hfs : firstStep item (need - owned item) owned bank consumed (sources item) with
     | none => simp only [hfs, Option.getD_none] at h; subst h; simp at hkind
     | some na =>
       simp only [hfs, Option.getD_some] at h; subst h
-      obtain ⟨s, hmem, _, hstep⟩ := firstStep_spec item (need - owned item) owned _ _ hfs
-      have hspec := stepFor_some hstep
-      have hkw : s.kind = Kind.withdraw := by rw [← hspec.2.1]; exact hkind
-      have hle : na.qty ≤ s.capacity := hspec.2.2.2 (by rw [hkw]; decide)
-      have hcap : s.capacity ≤ bank item := hwf item s hmem hkw
-      rw [hspec.1]; omega
+      obtain ⟨s, hmem, _, hstep⟩ := firstStep_spec item (need - owned item) owned bank consumed _ _ hfs
+      rcases stepFor_some hstep with ⟨hitem, hknd, _, hcap⟩ | ⟨_, hitem, _, _, hle⟩
+      · have hkw : s.kind = Kind.withdraw := by rw [← hknd]; exact hkind
+        have hcapb : na.qty ≤ s.capacity := hcap (by rw [hkw]; decide)
+        have hbank : s.capacity ≤ bank item := hwf item s hmem hkw
+        rw [hitem]; omega
+      · rw [hitem]; exact hle
   | succ n ih =>
     intro result h hkind
     simp only [nextHelper] at h
-    cases hfs : firstStep item (need - owned item) owned (sources item) with
+    cases hfs : firstStep item (need - owned item) owned bank consumed (sources item) with
     | some na =>
       simp only [hfs] at h; subst h
-      obtain ⟨s, hmem, _, hstep⟩ := firstStep_spec item (need - owned item) owned _ _ hfs
-      have hspec := stepFor_some hstep
-      have hkw : s.kind = Kind.withdraw := by rw [← hspec.2.1]; exact hkind
-      have hle : na.qty ≤ s.capacity := hspec.2.2.2 (by rw [hkw]; decide)
-      have hcap : s.capacity ≤ bank item := hwf item s hmem hkw
-      rw [hspec.1]; omega
+      obtain ⟨s, hmem, _, hstep⟩ := firstStep_spec item (need - owned item) owned bank consumed _ _ hfs
+      rcases stepFor_some hstep with ⟨hitem, hknd, _, hcap⟩ | ⟨_, hitem, _, _, hle⟩
+      · have hkw : s.kind = Kind.withdraw := by rw [← hknd]; exact hkind
+        have hcapb : na.qty ≤ s.capacity := hcap (by rw [hkw]; decide)
+        have hbank : s.capacity ≤ bank item := hwf item s hmem hkw
+        rw [hitem]; omega
+      · rw [hitem]; exact hle
     | none =>
       simp only [hfs] at h
       split at h
@@ -467,11 +534,11 @@ theorem nextHelper_withdraw_le_bank
 theorem nextCraftTarget_withdraw_banked
     (recipes : String → Option (List (String × Nat)))
     (sources : String → List Source)
-    (owned bank : String → Nat)
+    (owned bank consumed : String → Nat)
     (hwf : WFWithdraw sources bank)
     (target : String) (qty fuel : Nat)
     (result : NextAction)
-    (h : nextCraftTarget recipes sources owned bank target qty fuel = some result)
+    (h : nextCraftTarget recipes sources owned bank consumed target qty fuel = some result)
     (hk : result.kind = Kind.withdraw) :
     0 < bank result.item := by
   simp only [nextCraftTarget] at h
@@ -479,7 +546,23 @@ theorem nextCraftTarget_withdraw_banked
   · simp at h
   · simp only [Option.some.injEq] at h
     subst h
-    exact nextHelper_withdraw_banked recipes sources owned bank hwf target qty fuel _ rfl hk
+    exact nextHelper_withdraw_banked recipes sources owned bank consumed hwf target qty fuel _ rfl hk
+
+/-! ## Theorem 5: recycle cumulative cap (safety) -/
+
+/-- **RECYCLE-CAP (step).** A RECYCLE source never delivers more than its
+REMAINING licensed capacity `src.capacity - consumed src.code`. Because
+`craftPlan` accumulates each recycle's `qty` into `consumed src.code`, this
+per-step bound compounds into "total recycled from a source ≤ its capacity":
+once the licensed budget is spent, `sourceQty = 0` and the descent falls through
+to gather/craft rather than dismantle a PROTECTED copy. This is the cumulative
+bound the static per-step `min(..., capacity, ...)` lacked. -/
+theorem sourceQty_recycle_le_remaining
+    (src : Source) (deficit : Nat) (owned consumed : String → Nat)
+    (hk : src.kind = Kind.recycle) :
+    sourceQty src deficit owned consumed ≤ src.capacity - consumed src.code := by
+  simp only [sourceQty, hk]
+  exact Nat.le_trans (Nat.min_le_right _ _) (Nat.min_le_left _ _)
 
 /-! ## Non-vacuity witnesses — copper_ring chain -/
 
@@ -498,9 +581,10 @@ private def copperRecipes : String → Option (List (String × Nat))
 private def noSources : String → List Source := fun _ => []
 private def ownedZero : String → Nat := fun _ => 0
 private def bankZero  : String → Nat := fun _ => 0
+private def consumedZero : String → Nat := fun _ => 0
 
 -- With 0 owned and empty bank, first action is gather copper_ore (30 needed).
-example : nextCraftTarget copperRecipes noSources ownedZero bankZero "copper_ring" 3 10 =
+example : nextCraftTarget copperRecipes noSources ownedZero bankZero consumedZero "copper_ring" 3 10 =
     some ⟨"copper_ore", .gather, 30, ""⟩ := by decide
 
 -- With 30 ore, next action is craft copper_bar (deficit = 3).
@@ -508,7 +592,7 @@ private def owned30ore : String → Nat
   | "copper_ore" => 30
   | _ => 0
 
-example : nextCraftTarget copperRecipes noSources owned30ore bankZero "copper_ring" 3 10 =
+example : nextCraftTarget copperRecipes noSources owned30ore bankZero consumedZero "copper_ring" 3 10 =
     some ⟨"copper_bar", .craft, 3, ""⟩ := by decide
 
 -- With 30 ore + 3 bars, next action is craft copper_ring (deficit = 3).
@@ -517,7 +601,7 @@ private def owned30ore3bar : String → Nat
   | "copper_bar" => 3
   | _ => 0
 
-example : nextCraftTarget copperRecipes noSources owned30ore3bar bankZero "copper_ring" 3 10 =
+example : nextCraftTarget copperRecipes noSources owned30ore3bar bankZero consumedZero "copper_ring" 3 10 =
     some ⟨"copper_ring", .craft, 3, ""⟩ := by decide
 
 -- Already satisfied → none.
@@ -525,14 +609,14 @@ private def owned3ring : String → Nat
   | "copper_ring" => 3
   | _ => 0
 
-example : nextCraftTarget copperRecipes noSources owned3ring bankZero "copper_ring" 3 10 = none := by decide
+example : nextCraftTarget copperRecipes noSources owned3ring bankZero consumedZero "copper_ring" 3 10 = none := by decide
 
 -- WITHDRAW non-vacuity: 0 owned but 5 copper_bar in the bank ⇒ withdraw copper_bar (min 5 3 = 3).
 private def bankCopperBar : String → Nat
   | "copper_bar" => 5
   | _ => 0
 
-example : nextCraftTarget copperRecipes noSources ownedZero bankCopperBar "copper_ring" 3 10 =
+example : nextCraftTarget copperRecipes noSources ownedZero bankCopperBar consumedZero "copper_ring" 3 10 =
     some ⟨"copper_bar", .withdraw, 3, ""⟩ := by decide
 
 -- WITHDRAW-BANKED non-vacuity: the withdrawn item is genuinely banked.
@@ -544,7 +628,7 @@ example : ∃ inputs,
     inputs.find? (fun p => decide (owned30ore p.1 < p.2 * 3)) = none := by decide
 
 -- SHORTNESS non-vacuity: qty ≥ 1 in a non-none case.
-example : 1 ≤ (nextCraftTarget copperRecipes noSources ownedZero bankZero "copper_ring" 3 10).get!.qty := by decide
+example : 1 ≤ (nextCraftTarget copperRecipes noSources ownedZero bankZero consumedZero "copper_ring" 3 10).get!.qty := by decide
 
 /-! ### Widened-source non-vacuity — RECYCLE / BUY / DROP genuinely fire. -/
 
@@ -560,7 +644,7 @@ private def owned30ore4dagger : String → Nat
   | "copper_dagger" => 4
   | _ => 0
 
-example : nextCraftTarget copperRecipes recycleBarSources owned30ore4dagger bankZero "copper_ring" 3 10 =
+example : nextCraftTarget copperRecipes recycleBarSources owned30ore4dagger bankZero consumedZero "copper_ring" 3 10 =
     some ⟨"copper_bar", .recycle, 3, "copper_dagger"⟩ := by decide
 
 -- RECYCLE live-bound non-vacuity: only 1 dagger owned ⇒ live cap min(3, 8, 2) = 2.
@@ -569,7 +653,7 @@ private def owned30ore1dagger : String → Nat
   | "copper_dagger" => 1
   | _ => 0
 
-example : nextCraftTarget copperRecipes recycleBarSources owned30ore1dagger bankZero "copper_ring" 3 10 =
+example : nextCraftTarget copperRecipes recycleBarSources owned30ore1dagger bankZero consumedZero "copper_ring" 3 10 =
     some ⟨"copper_bar", .recycle, 2, "copper_dagger"⟩ := by decide
 
 -- BUY source for a raw-ish item: copper_ore bought from npc `smith`.
@@ -577,7 +661,7 @@ private def buyOreSources : String → List Source
   | "copper_ore" => [⟨.buy, "smith", 1, 1000000000⟩]
   | _            => []
 
-example : nextCraftTarget copperRecipes buyOreSources ownedZero bankZero "copper_ring" 3 10 =
+example : nextCraftTarget copperRecipes buyOreSources ownedZero bankZero consumedZero "copper_ring" 3 10 =
     some ⟨"copper_ore", .buy, 30, "smith"⟩ := by decide
 
 -- DROP source: copper_ore dropped by monster `mole`.
@@ -585,7 +669,7 @@ private def dropOreSources : String → List Source
   | "copper_ore" => [⟨.drop, "mole", 1, 1000000000⟩]
   | _            => []
 
-example : nextCraftTarget copperRecipes dropOreSources ownedZero bankZero "copper_ring" 3 10 =
+example : nextCraftTarget copperRecipes dropOreSources ownedZero bankZero consumedZero "copper_ring" 3 10 =
     some ⟨"copper_ore", .drop, 30, "mole"⟩ := by decide
 
 -- CRAFT source defers to the recipe descent (break): a CRAFT source for
@@ -594,7 +678,7 @@ private def craftBarSources : String → List Source
   | "copper_bar" => [⟨.craft, "copper_bar", 1, 1000000000⟩]
   | _            => []
 
-example : nextCraftTarget copperRecipes craftBarSources ownedZero bankZero "copper_ring" 3 10 =
+example : nextCraftTarget copperRecipes craftBarSources ownedZero bankZero consumedZero "copper_ring" 3 10 =
     some ⟨"copper_ore", .gather, 30, ""⟩ := by decide
 
 end Formal.NextCraftAction

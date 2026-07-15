@@ -178,6 +178,9 @@ CRAFT_PLAN_DRIVER_RECYCLE_MUTATIONS = [
     ("craft_plan_driver: recycle consumed uses truncating floor-div, not ceil (under-counts consumption)",
      "        consumed = math.ceil(na.qty / match.yield_per)",
      "        consumed = na.qty // match.yield_per"),
+    ("craft_plan_driver: cumulative-cap ledger not advanced (consumed never accumulates → over-recycles protected copies)",
+     "            cur_consumed[na.code] = cur_consumed.get(na.code, 0) + na.qty",
+     "            cur_consumed[na.code] = cur_consumed.get(na.code, 0)"),
 ]
 
 # next_craft_target_pure mutations -- anchors for the deterministic craft-action
@@ -216,9 +219,15 @@ NEXT_CRAFT_MUTATIONS = [
 # capacity-cap drop and the CRAFT-break→continue mutant both diverge from the
 # widened Lean model. Still ALSO unit-killed by tests/test_ai/test_next_craft_core.py.
 NEXT_CRAFT_SOURCE_MUTATIONS = [
-    ("next_craft: recycle capacity cap dropped (re-admits the full uncapped deficit)",
-     "        qty = min(deficit, src.capacity, owned.get(src.code, 0) * src.yield_per)",
-     "        qty = deficit"),
+    ("next_craft: recycle bag/deficit cap dropped (re-admits the full uncapped deficit)",
+     "    qty = min(deficit, remaining, bag_copies * src.yield_per)",
+     "    qty = deficit"),
+    ("next_craft: recycle CUMULATIVE cap dropped (re-reads STATIC capacity, over-recycles the protected copy)",
+     "    remaining = max(0, src.capacity - consumed.get(src.code, 0))",
+     "    remaining = src.capacity"),
+    ("next_craft: banked recycle staging dropped (gathers around the banked source instead of Withdraw→Recycle)",
+     "    if want > 0 and bank_copies > 0 and bag_copies * src.yield_per < want:",
+     "    if False:"),
     ("next_craft: CRAFT priority break replaced with continue (falls through to a lower-priority source)",
      "        if src.kind is SourceKind.CRAFT:\n            break",
      "        if src.kind is SourceKind.CRAFT:\n            continue"),

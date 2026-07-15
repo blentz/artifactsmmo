@@ -149,6 +149,56 @@ def test_recycle_without_matching_source_raises() -> None:
         _apply_state(COPPER, {}, {}, NextAction("ash_plank", "recycle", 6, "fishing_net"), {})
 
 
+def test_banked_recycle_source_withdraws_then_recycles() -> None:
+    """BANKED source (bug 1): the recycle fuel is in the BANK, bag empty. The
+    descent must STAGE a Withdraw of the SOURCE item, then recycle it -- never
+    gather around a licensed banked source.
+
+    water_bow-shape: recipe 5 ash_plank → yield 2, 2 copies licensed (capacity
+    4), all in the bank. needed 4 ash_plank ⇒ withdraw 2 bows, recycle 4 planks."""
+    sources = {"ash_plank": [Source(SourceKind.RECYCLE, "water_bow", 2, 4)]}
+    owned: dict[str, int] = {}
+    bank = {"water_bow": 3}
+    plan = craft_plan_full({}, owned, bank, "ash_plank", 4, sources)
+    assert plan == [
+        NextAction("water_bow", "withdraw", 2, ""),
+        NextAction("ash_plank", "recycle", 4, "water_bow"),
+    ]
+    cur_owned: dict[str, int] = dict(owned)
+    cur_bank: dict[str, int] = dict(bank)
+    for na in plan:
+        cur_owned, cur_bank = _apply_state({}, cur_owned, cur_bank, na, sources)
+        assert cur_owned.get("water_bow", 0) >= 0
+        assert cur_bank.get("water_bow", 0) >= 0
+    assert cur_owned["ash_plank"] == 4
+    assert cur_bank.get("water_bow", 0) == 1  # 3 banked - 2 withdrawn
+
+
+def test_partial_protection_recycles_only_licensed_then_gathers() -> None:
+    """PARTIAL PROTECTION (bug 2): 2 copper_helmet held, only 1 LICENSED
+    (capacity 3 = 1 copy × yield 3). needed 6 copper_bar. The descent must
+    recycle EXACTLY the licensed copy (3 bar) and gather/craft the rest -- the
+    cumulative capacity bound must stop it from dismantling the PROTECTED copy.
+
+    Without the cumulative cap, `capacity` is re-checked against the decreasing
+    live `owned` and BOTH helmets die (6 bar recycled > capacity 3)."""
+    sources = {"copper_bar": [Source(SourceKind.RECYCLE, "copper_helmet", 3, 3)]}
+    owned = {"copper_helmet": 2}
+    plan = craft_plan_full({}, owned, {}, "copper_bar", 6, sources)
+    assert plan == [
+        NextAction("copper_bar", "recycle", 3, "copper_helmet"),
+        NextAction("copper_bar", "gather", 3),
+    ]
+    cur_owned: dict[str, int] = dict(owned)
+    cur_bank: dict[str, int] = {}
+    for na in plan:
+        cur_owned, cur_bank = _apply_state({}, cur_owned, cur_bank, na, sources)
+        assert cur_owned.get("copper_helmet", 0) >= 1  # protected copy survives
+    assert cur_owned["copper_bar"] == 6
+    total_recycled = sum(na.qty for na in plan if na.kind == "recycle")
+    assert total_recycled <= 3  # never exceed the licensed capacity
+
+
 def test_buy_adds_to_inventory_only() -> None:
     """BUY just adds to inventory — gold is NOT modelled in this pure core."""
     owned, _bank = _apply_state(COPPER, NO, NO, NextAction("lifesteal_rune", "buy", 1, "npc_merchant"))

@@ -1143,23 +1143,15 @@ class TestRecycleAsASource:
         assert result is not None
         assert isinstance(result[0], GatherAction)
 
-    def test_a_bank_only_source_falls_back_to_gathering(self):
-        """The surplus lives ONLY in the bank (where DEPOSIT_FULL puts it).
-
-        Staging a bank-held recycle SOURCE (Withdraw the source, then recycle
-        it) is a capability the pre-Task-4 `_recycle_prefix`/`_staging_withdraw`
-        bolt-on had that the shared model
-        (`next_craft_core`/`craft_plan_driver_core`, Tasks 1-3) does not
-        reproduce: `_step_for`'s RECYCLE arm reads only the CURRENT BAG stock
-        of the source item (`owned.get(src.code, 0)`), never the bank, and the
-        descent never recurses into "obtain more of the recycle source" the
-        way it recurses into a craft recipe's own inputs. With 0 bag copies of
-        copper_dagger the RECYCLE source yields nothing right now, so the
-        descent correctly falls through to CRAFT -> gather/craft -- a
-        CORRECT, if less economical, plan. (A* -- which this generator
-        preempts -- still has its own Withdraw+Recycle actions in its pool and
-        can find the staged route if this fast path declines; that residual
-        gap is a known narrowing, not a safety issue.)"""
+    def test_a_bank_only_source_stages_a_withdraw_then_recycles(self):
+        """The surplus lives ONLY in the bank (where DEPOSIT_FULL puts it) --
+        the MAIN production shape. The descent must STAGE a Withdraw of the
+        recycle SOURCE, then recycle it (bug-1 fix, restoring the capability the
+        retired `_recycle_prefix` had): `_step_for`'s RECYCLE arm, on finding the
+        bag empty but the licensed budget open and copies in the bank, emits a
+        `Withdraw(source)` first; the next descent iteration recycles the
+        withdrawn copy. Gathering around a licensed banked source is the
+        regression this test now guards against."""
         gd = _gd_recyclable()
         state = make_state(inventory={}, bank_items={"copper_dagger": 2},
                            skills={"mining": 5, "weaponcrafting": 5})
@@ -1171,8 +1163,11 @@ class TestRecycleAsASource:
         result = generate_next_craft_action(goal, state, gd, actions, sources)
 
         assert result is not None
-        assert not any(isinstance(a, RecycleAction) for a in result), result
-        assert isinstance(result[0], GatherAction), result
+        # Withdraw(copper_dagger) staged strictly before Recycle(copper_dagger).
+        kinds = [type(a).__name__ for a in result]
+        assert "WithdrawItemAction" in kinds and "RecycleAction" in kinds, result
+        assert kinds.index("WithdrawItemAction") < kinds.index("RecycleAction"), result
+        assert not any(isinstance(a, GatherAction) for a in result), result
 
     def test_the_bag_floor_defers_to_a_star_rather_than_eat_the_working_copy(self):
         """One copy in the bag is the WORKING one (bag_floor=1) and two sit in

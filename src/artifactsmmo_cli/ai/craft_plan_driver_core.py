@@ -119,15 +119,25 @@ def craft_plan_full(
     plan: list[NextAction] = []
     cur_owned: dict[str, int] = dict(owned)
     cur_bank: dict[str, int] = dict(bank)
+    # TARGET units already recycled from each RECYCLE source item, keyed by the
+    # source item's own code. Seeded at all-zero and accumulated across steps so
+    # each source's recycle contribution stays bounded CUMULATIVELY by its
+    # `capacity` (the licensed budget) — the descent never recycles more of a
+    # source than it is licensed to, across the whole plan. Threaded at this
+    # loop level (not inside `_apply_state`) so the per-action effect model stays
+    # a pure (owned, bank) transform; mirrors Lean `craftPlan`'s `consumed` arg.
+    cur_consumed: dict[str, int] = {}
     # Each emitted action reduces the total remaining deficit by >= 1
     # (qty_pos), so the closure demand bounds the number of steps. A generous
     # bound keeps the loop total without ever truncating a reachable plan.
     fuel = (len(recipes) + 1) * (qty + 1) + 1
     for _ in range(fuel):
-        na = next_craft_target_pure(recipes, cur_owned, cur_bank, target, qty, sources)
+        na = next_craft_target_pure(recipes, cur_owned, cur_bank, target, qty, sources, cur_consumed)
         if na is None:
             return plan
         plan.append(na)
+        if na.kind == "recycle":
+            cur_consumed[na.code] = cur_consumed.get(na.code, 0) + na.qty
         cur_owned, cur_bank = _apply_state(recipes, cur_owned, cur_bank, na, sources)
     return plan  # pragma: no cover
     # Unreachable via this API: `fuel` is the closure-bounded worst case and each

@@ -181,6 +181,36 @@ def test_withdraw_source_reaches_the_target_itself() -> None:
     assert result == NextAction("copper_bar", "withdraw", 3)
 
 
+def test_withdraw_source_with_no_stock_falls_through_to_descent() -> None:
+    """A non-RECYCLE source that can deliver nothing right now (a WITHDRAW
+    source with capacity 0 — nothing banked) yields no step and the descent
+    falls through to the recipe route (here: gather the raw target)."""
+    sources = {"ash_plank": [Source(SourceKind.WITHDRAW, "ash_plank", 1, 0)]}
+    result = next_craft_target_pure({}, {}, {}, "ash_plank", 4, sources)
+    assert result == NextAction("ash_plank", "gather", 4)
+
+
+def test_banked_recycle_source_stages_a_withdraw() -> None:
+    """BANKED recycle source: bag empty, licensed copies in the BANK. The step
+    must be a WITHDRAW of the SOURCE item (bank→bag) so the next descent
+    iteration can recycle it -- never a gather around the licensed source."""
+    sources = {"ash_plank": [Source(SourceKind.RECYCLE, "water_bow", 2, 4)]}
+    result = next_craft_target_pure({}, {}, {"water_bow": 3}, "ash_plank", 4, sources)
+    assert result == NextAction("water_bow", "withdraw", 2)
+
+
+def test_recycle_remaining_capacity_shrinks_with_consumed() -> None:
+    """The cumulative cap: once `consumed` has spent the licensed capacity, the
+    same source gives nothing more even while physical bag copies remain (the
+    protected-copy case) -- it falls through to the recipe descent."""
+    sources = {"copper_bar": [Source(SourceKind.RECYCLE, "copper_helmet", 3, 3)]}
+    # capacity 3 already fully consumed; 1 physical (protected) helmet remains.
+    result = next_craft_target_pure(
+        {}, {"copper_helmet": 1}, {}, "copper_bar", 3, sources, {"copper_helmet": 3}
+    )
+    assert result == NextAction("copper_bar", "gather", 3)
+
+
 def test_buy_source_emits_a_buy_step() -> None:
     sources = {"lifesteal_rune": [Source(SourceKind.BUY, "npc_merchant", 1, UNBOUNDED_CAPACITY)]}
     result = next_craft_target_pure({}, {}, {}, "lifesteal_rune", 1, sources)
