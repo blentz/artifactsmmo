@@ -4,11 +4,10 @@
 derived only from game data. Gathering and unknown-source items are leaves so
 chains terminate; cycles (if any) are left for P3's visited-set traversal."""
 
-from collections.abc import Mapping
-from types import MappingProxyType
-
 from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.obtain_sources import SourceKind, obtain_sources
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.meta_goal import (
     MetaGoal,
@@ -17,10 +16,6 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 )
 from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
 from artifactsmmo_cli.ai.world_state import WorldState
-
-NO_RECOVERABLE: Mapping[str, int] = MappingProxyType({})
-"""The empty recoverable map — the default, reproducing the pre-epic descent
-byte-for-byte. A MappingProxyType, never a mutable `{}` default."""
 
 
 def combat_capable(state: WorldState, game_data: GameData) -> bool:
@@ -45,22 +40,27 @@ def best_attainable_weapon(game_data: GameData) -> str | None:
 
 
 def prerequisites(node: MetaGoal, state: WorldState, game_data: GameData,
-                  recoverable: Mapping[str, int] = NO_RECOVERABLE) -> list[MetaGoal]:
+                  ctx: SelectionContext = NO_PROFILE_CONTEXT) -> list[MetaGoal]:
     """Direct prerequisites of `node`, derived from game data.
 
-    `recoverable` maps a material to the units obtainable by RECYCLING licensed
-    surplus (`ai/recoverable_materials`). A material with ANY recoverable units is
-    a LEAF — directly actionable — so the descent does NOT fall into its recipe.
+    A craftable material with ANY READY non-craft source — a bank withdraw, a
+    recyclable licensed surplus, a live gather, a located permanent vendor, or a
+    winnable drop, per the shared `ai/obtain_sources` model — is a LEAF: directly
+    actionable, so the descent does NOT fall into its recipe. Only when the
+    SOLE source is CRAFT (or there is no source at all) does the descent
+    continue into the recipe's ingredients.
 
     Without this, the descent re-derives from raw resources what the bag already
     holds in crafted form: live 2026-07-13, ObtainItem(ash_plank) descended to
     ObtainItem(ash_wood, 10) and the bot chopped 50 ash_wood at 1/cycle (~56 cycles
     of WOODCUTTING xp while the weaponcrafting grind it was serving stayed frozen)
-    — while holding 7 fishing_net, whose recipe IS 6 ash_plank each.
+    — while holding 7 fishing_net, whose recipe IS 6 ash_plank each (originally
+    fixed by a bespoke `recoverable: Mapping[str, int]` RECYCLE-only map; the
+    one-obtain-model epic generalizes the same leaf rule to every ready source).
 
-    The leaf rule is `> 0`, not "fully covers the need": GOAP mixes recycle with
-    gather/craft to make up any shortfall, finding the true optimum rather than an
-    all-or-nothing cliff."""
+    The leaf rule is "a source EXISTS", not "fully covers the need": GOAP mixes
+    the ready source with gather/craft to make up any shortfall, finding the true
+    optimum rather than an all-or-nothing cliff."""
     if isinstance(node, ObtainItem):
         if node.is_satisfied(state, game_data):
             return []
@@ -79,8 +79,9 @@ def prerequisites(node: MetaGoal, state: WorldState, game_data: GameData,
             return []
         recipe = game_data.crafting_recipe(node.code)
         if recipe is not None:
-            if recoverable.get(node.code, 0) > 0:
-                return []  # recoverable by recycling licensed surplus → LEAF
+            sources = obtain_sources(node.code, state, game_data, ctx)
+            if any(s.kind is not SourceKind.CRAFT for s in sources):
+                return []  # a ready non-craft source exists → LEAF
             # An ObtainItem's prereqs are just its material ObtainItems. The
             # crafting-skill gate is no longer emitted as a prerequisite node:
             # under-skill gear is grinded planner-natively by UpgradeEquipmentGoal

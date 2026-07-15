@@ -1,6 +1,7 @@
 import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
@@ -27,11 +28,20 @@ def _gd() -> GameData:
                                    attack={"fire": 12}, crafting_skill="weaponcrafting", crafting_level=1),
         "copper_bar": ItemStats(code="copper_bar", level=1, type_="resource"),
         "copper_ore": ItemStats(code="copper_ore", level=1, type_="resource"),
+        # A SEPARATE equippable (not the root itself) whose recipe consumes
+        # copper_bar, so holding spare copies exercises the RECYCLE arm of
+        # `ai/obtain_sources` without tripping the "root already owned" leaf
+        # (holding spare copies of copper_dagger ITSELF would satisfy that
+        # shortcut before the recipe/obtain_sources check is ever reached).
+        "copper_ring": ItemStats(code="copper_ring", level=1, type_="ring",
+                                 crafting_skill="weaponcrafting", crafting_level=1),
     }
-    gd._crafting_recipes = {"copper_dagger": {"copper_bar": 6}, "copper_bar": {"copper_ore": 10}}
+    gd._crafting_recipes = {"copper_dagger": {"copper_bar": 6}, "copper_bar": {"copper_ore": 10},
+                           "copper_ring": {"copper_bar": 3}}
     gd._resource_drops = {"copper_rocks": "copper_ore"}
     gd._resource_skill = {"copper_rocks": ("mining", 1)}
     gd._monster_level = {"chicken": 1}
+    gd._workshop_locations = {"weaponcrafting": (1, 1)}
     fill_monster_stat_defaults(gd)
     return gd
 
@@ -49,36 +59,43 @@ def test_actionable_step_blocked_returns_none():
     assert actionable_step(ObtainItem("a"), make_state(), gd) is None
 
 
-def test_actionable_step_stops_at_the_recoverable_material():
+def test_actionable_step_stops_at_the_ready_source_material():
     """The live bug: actionable_step descended into copper_bar's recipe and
     returned ObtainItem(copper_ore, 10) -> 10 gathers, re-deriving from raw
     resources what recycling already covers. With copper_bar recoverable by
-    recycling licensed surplus, it returns copper_bar itself."""
+    recycling 2 held copper_ring (destroyable 1, capacity 1), it returns
+    copper_bar itself."""
     gd = _gd()
     assert actionable_step(ObtainItem("copper_dagger"), make_state(), gd) \
         == ObtainItem("copper_ore", 10)
-    assert actionable_step(ObtainItem("copper_dagger"), make_state(), gd,
-                           {"copper_bar": 18}) == ObtainItem("copper_bar", 6)
+    state = make_state(inventory={"copper_ring": 2})
+    assert actionable_step(ObtainItem("copper_dagger"), state, gd, NO_PROFILE_CONTEXT) \
+        == ObtainItem("copper_bar", 6)
 
 
-def test_is_reachable_agrees_with_the_descent_recoverable():
-    """If the descent leafs a node (any positive recoverable count), reachability
-    must not still descend its recipe — the two would disagree about the same
-    node. `part`'s only recipe bottoms out in an unproducible raw material, so
-    the chain is unreachable UNTIL `part` itself becomes recoverable, at which
-    point reachability is governed by `part`'s OWN craftability, not its raw
-    material's."""
+def test_is_reachable_agrees_with_the_descent_ready_source():
+    """If the descent leafs a node (any ready non-craft `obtain_sources`
+    route), reachability must not still descend its recipe — the two would
+    disagree about the same node. `part`'s only recipe bottoms out in an
+    unproducible raw material, so the chain is unreachable UNTIL `part` itself
+    is recyclable from a held `part_source`, at which point reachability is
+    governed by `part`'s OWN craftability, not its raw material's."""
     gd = GameData()
     gd._item_stats = {
         "trinket": ItemStats(code="trinket", level=1, type_="ring"),
         "part": ItemStats(code="part", level=1, type_="resource"),
         "raw_unobtainium": ItemStats(code="raw_unobtainium", level=1, type_="resource"),
+        "part_source": ItemStats(code="part_source", level=1, type_="ring",
+                                 crafting_skill="jewelrycrafting", crafting_level=1),
     }
-    gd._crafting_recipes = {"trinket": {"part": 5}, "part": {"raw_unobtainium": 2}}
+    gd._crafting_recipes = {"trinket": {"part": 5}, "part": {"raw_unobtainium": 2},
+                           "part_source": {"part": 4}}
+    gd._workshop_locations = {"jewelrycrafting": (1, 1)}
     state = make_state()
     assert is_reachable(ObtainItem("trinket"), state, gd) is False
-    assert is_reachable(ObtainItem("trinket"), state, gd, frozenset(),
-                        {"part": 18}) is True
+    state2 = make_state(inventory={"part_source": 2})
+    assert is_reachable(ObtainItem("trinket"), state2, gd, frozenset(),
+                        NO_PROFILE_CONTEXT) is True
 
 
 def test_unmet_closure_size_counts_unmet_nodes():
@@ -87,17 +104,19 @@ def test_unmet_closure_size_counts_unmet_nodes():
     assert unmet_closure_size(ObtainItem("copper_ore"), make_state(), gd) == 1
 
 
-def test_unmet_closure_size_shrinks_with_recoverable():
-    """A non-empty `recoverable` forward must actually reach `prerequisites`
-    inside the stack-extend loop: leafing copper_bar drops copper_ore from the
-    closure (copper_dagger, copper_bar/6 — copper_ore's recipe is never
-    descended), shrinking the count from 3 to 2. A regression that silently
-    drops the forward (e.g. `prerequisites(node, state, game_data)` losing the
-    trailing arg) would pass every OTHER test today but leave this one at 3."""
+def test_unmet_closure_size_shrinks_with_a_ready_source():
+    """A wired `ctx` must actually reach `prerequisites` inside the
+    stack-extend loop: leafing copper_bar (2 held copper_ring) drops
+    copper_ore from the closure (copper_dagger, copper_bar/6 — copper_ore's
+    recipe is never descended), shrinking the count from 3 to 2. A regression
+    that silently drops the forward (e.g. `prerequisites(node, state,
+    game_data)` losing the trailing arg) would pass every OTHER test today but
+    leave this one at 3."""
     gd = _gd()
     assert unmet_closure_size(ObtainItem("copper_dagger"), make_state(), gd) == 3
-    assert unmet_closure_size(ObtainItem("copper_dagger"), make_state(), gd,
-                              {"copper_bar": 18}) == 2
+    state = make_state(inventory={"copper_ring": 2})
+    assert unmet_closure_size(ObtainItem("copper_dagger"), state, gd,
+                              NO_PROFILE_CONTEXT) == 2
 
 
 def test_root_category():
@@ -169,16 +188,16 @@ def test_root_cost_for_gear_uses_closure_size():
     assert root_cost(ObtainItem("copper_dagger"), make_state(), gd) == 3
 
 
-def test_root_cost_shrinks_with_recoverable():
+def test_root_cost_shrinks_with_a_ready_source():
     """root_cost's ObtainItem branch delegates to unmet_closure_size — proving
-    the `recoverable` forward survives that delegation, not just the direct
+    the `ctx` forward survives that delegation, not just the direct
     unmet_closure_size call. A regression dropping the trailing arg in
-    `unmet_closure_size(root, state, game_data, recoverable)` inside root_cost
-    would leave the default-recoverable tests green but this one stuck at 3."""
+    `unmet_closure_size(root, state, game_data, ctx)` inside root_cost would
+    leave the default-ctx tests green but this one stuck at 3."""
     gd = _gd()
     assert root_cost(ObtainItem("copper_dagger"), make_state(), gd) == 3
-    assert root_cost(ObtainItem("copper_dagger"), make_state(), gd,
-                     {"copper_bar": 18}) == 2
+    state = make_state(inventory={"copper_ring": 2})
+    assert root_cost(ObtainItem("copper_dagger"), state, gd, NO_PROFILE_CONTEXT) == 2
 
 
 def test_rootscore_instrumental_always_false():

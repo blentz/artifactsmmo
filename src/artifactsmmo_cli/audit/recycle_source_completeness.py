@@ -66,8 +66,8 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.goals.base import Goal
 from artifactsmmo_cli.ai.inventory_keep import destroyable
+from artifactsmmo_cli.ai.obtain_sources import SourceKind, obtain_sources
 from artifactsmmo_cli.ai.planner import GOAPPlanner
-from artifactsmmo_cli.ai.recoverable_materials import recoverable_materials
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.strategy_driver import StrategyArbiter
@@ -88,7 +88,7 @@ a plausible holding, and inside the tier-1/2 catalog the cells' recipes live in.
 
 CENSUS_SKILL_LEVEL = 10
 """Every skill at this level. Recycling is skill-gated by the SOURCE's
-`crafting_level` (`recoverable_materials`), and the materials are gathered with
+`crafting_level` (the RECYCLE arm of `ai/obtain_sources`), and the materials are gathered with
 mining/woodcutting — so a census character that could not smelt or chop would
 make the SAFETY cell pass for the wrong reason (no gather route either)."""
 
@@ -246,6 +246,19 @@ class RecycleSourceResult:
     gap: str | None
 
 
+def _recoverable(material: str, state: WorldState, game_data: GameData,
+                 ctx: SelectionContext) -> int:
+    """Units of `material` obtainable by RECYCLING licensed surplus, summed
+    across every held source item whose recipe consumes it — the RECYCLE arm
+    of the shared `ai/obtain_sources` model (one-obtain-model epic, Task 5),
+    which subsumes the retired `ai/recoverable_materials.recoverable_materials`
+    this census used to call directly. A `Source.capacity` for a RECYCLE
+    source IS `copies * yield_per` (see `obtain_sources._recycle_sources`),
+    the exact per-source-item term the old aggregate map summed."""
+    return sum(s.capacity for s in obtain_sources(material, state, game_data, ctx)
+              if s.kind is SourceKind.RECYCLE)
+
+
 def _require(code: str, game_data: GameData) -> str:
     """`code`, or a loud failure. The census runs on REAL game data: a missing
     catalog entry means the bundle changed under the census, and defaulting
@@ -363,8 +376,8 @@ def _check_cell(cell: RecycleSourceCell, state: WorldState, game_data: GameData,
       whose material is not fully recoverable, a PARTIAL cell that is fully (or
       not at all) recoverable, or a SAFETY cell whose source the authority would
       happily destroy. Then the cell's obligation is not the one its name states.
-      Measured with the production functions themselves (`recoverable_materials`,
-      `destroyable`), never re-derived here.
+      Measured with the production functions themselves (`obtain_sources`'
+      RECYCLE arm, `destroyable`), never re-derived here.
     * the goal is ALREADY SATISFIED (the material is in hand): the planner would
       have nothing to do and every kind would pass vacuously.
     * a DIFFERENT goal ran. The arbiter's ladder puts guards and the collect band
@@ -375,7 +388,7 @@ def _check_cell(cell: RecycleSourceCell, state: WorldState, game_data: GameData,
     Raises rather than shipping a lying cell — a census whose cells do not test
     what they name is worse than no census."""
     ctx = census_ctx()
-    recoverable = recoverable_materials(state, game_data, ctx).get(cell.material, 0)
+    recoverable = _recoverable(cell.material, state, game_data, ctx)
     destroy = destroyable(cell.source, state, game_data, ctx)
     held = (state.inventory.get(cell.material, 0)
             + (state.bank_items or {}).get(cell.material, 0))
@@ -630,7 +643,7 @@ def run_cell(cell: RecycleSourceCell, game_data: GameData) -> RecycleSourceResul
         source=cell.source,
         material=cell.material,
         needed=cell.needed,
-        recoverable=recoverable_materials(state, game_data, ctx).get(cell.material, 0),
+        recoverable=_recoverable(cell.material, state, game_data, ctx),
         destroyable=destroy,
         goal=repr(goal),
         plan=tuple(repr(a) for a in plan),

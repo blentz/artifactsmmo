@@ -2,12 +2,13 @@
 actionable subgoal. `decide` delegates to `progression_tree.decide_tree`
 (Phase 4b THE FLIP); the flat scalar ranking pipeline is deleted."""
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers import progression_tree
 from artifactsmmo_cli.ai.tiers.leaf_attainable_core import leaf_attainable_pure
 from artifactsmmo_cli.ai.tiers.meta_goal import (
@@ -17,7 +18,7 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
 )
 from artifactsmmo_cli.ai.tiers.objective import GOLD, CharacterObjective, _permanent_vendor_purchases
 from artifactsmmo_cli.ai.tiers.personality import Personality
-from artifactsmmo_cli.ai.tiers.prerequisite_graph import NO_RECOVERABLE, prerequisites
+from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -60,7 +61,7 @@ def _prereq_order(node: MetaGoal) -> tuple[int, str, int]:
 
 
 def actionable_step(root: MetaGoal, state: WorldState, game_data: GameData,
-                    recoverable: Mapping[str, int] = NO_RECOVERABLE) -> MetaGoal | None:
+                    ctx: SelectionContext = NO_PROFILE_CONTEXT) -> MetaGoal | None:
     """Deepest unmet node reachable from root whose DIRECT prerequisites are all
     satisfied (the 'singular loop' step). None when cyclically blocked.
 
@@ -72,7 +73,7 @@ def actionable_step(root: MetaGoal, state: WorldState, game_data: GameData,
     def _step(node: MetaGoal, path: frozenset[MetaGoal]) -> MetaGoal | None:
         if node in path:
             return None
-        unmet = [p for p in prerequisites(node, state, game_data, recoverable)
+        unmet = [p for p in prerequisites(node, state, game_data, ctx)
                  if not p.is_satisfied(state, game_data)]
         if not unmet:
             if isinstance(node, ObtainItem) and not _producible(node.code, state, game_data):
@@ -89,7 +90,7 @@ def actionable_step(root: MetaGoal, state: WorldState, game_data: GameData,
 
 
 def unmet_closure_size(root: MetaGoal, state: WorldState, game_data: GameData,
-                       recoverable: Mapping[str, int] = NO_RECOVERABLE) -> int:
+                       ctx: SelectionContext = NO_PROFILE_CONTEXT) -> int:
     """Structural cost proxy: count of unmet nodes in root's prereq closure (min 1)."""
     seen: set[MetaGoal] = set()
     stack: list[MetaGoal] = [root]
@@ -101,17 +102,17 @@ def unmet_closure_size(root: MetaGoal, state: WorldState, game_data: GameData,
         seen.add(node)
         if not node.is_satisfied(state, game_data):
             count += 1
-            stack.extend(prerequisites(node, state, game_data, recoverable))
+            stack.extend(prerequisites(node, state, game_data, ctx))
     return max(count, 1)
 
 
 def root_cost(root: MetaGoal, state: WorldState, game_data: GameData,
-             recoverable: Mapping[str, int] = NO_RECOVERABLE) -> int:
+             ctx: SelectionContext = NO_PROFILE_CONTEXT) -> int:
     """Effort proxy in 'steps remaining': levels for leaf progression goals,
     craft/gather chain size for gear. Floored at 1."""
     if isinstance(root, ReachCharLevel):
         return max(1, root.level - state.level)
-    return unmet_closure_size(root, state, game_data, recoverable)
+    return unmet_closure_size(root, state, game_data, ctx)
 
 
 def _producible(code: str, state: WorldState, game_data: GameData) -> bool:
@@ -185,18 +186,18 @@ def _producible(code: str, state: WorldState, game_data: GameData) -> bool:
 
 def is_reachable(root: MetaGoal, state: WorldState, game_data: GameData,
                  path: frozenset[MetaGoal] = frozenset(),
-                 recoverable: Mapping[str, int] = NO_RECOVERABLE) -> bool:
+                 ctx: SelectionContext = NO_PROFILE_CONTEXT) -> bool:
     """True when `root`'s entire prerequisite chain bottoms out in obtainable
     leaves. Cycle-safe (a node on the current path can't bottom out)."""
     if root.is_satisfied(state, game_data):
         return True
     if root in path:
         return False
-    prereqs = prerequisites(root, state, game_data, recoverable)
+    prereqs = prerequisites(root, state, game_data, ctx)
     if isinstance(root, ObtainItem) and not prereqs:
         return _producible(root.code, state, game_data)
     sub_path = path | {root}
-    return all(is_reachable(p, state, game_data, sub_path, recoverable) for p in prereqs)
+    return all(is_reachable(p, state, game_data, sub_path, ctx) for p in prereqs)
 
 
 @dataclass(frozen=True)
@@ -261,7 +262,7 @@ class StrategyEngine:
     def decide(self, state: WorldState, game_data: GameData,
                step_servable: Callable[[MetaGoal, MetaGoal], bool] | None = None,
                band_adequate: bool = False,
-               recoverable: Mapping[str, int] = NO_RECOVERABLE,
+               ctx: SelectionContext = NO_PROFILE_CONTEXT,
                ) -> StrategyDecision:
         """THE FLIP (Phase 4b): thin delegate to the progression tree — the
         flat scalar ranking pipeline is deleted (Task 2). The tree is
@@ -272,12 +273,15 @@ class StrategyEngine:
         `band_adequate` is the caller's progression-band verdict (see
         `GamePlayer._tree_band_adequate`); `step_servable` keeps the
         plannability demotion alive across the cutover (see
-        `progression_tree._servable_promotion`). `recoverable` is the caller's
-        per-cycle recoverable-materials map (see `GamePlayer._decide_band` /
-        `plan_from_state`, which compute it via `recoverable_materials` at the
-        `SelectionContext` seam); defaults to `NO_RECOVERABLE` for every
-        caller that doesn't wire it in (recycle-as-acquisition epic, Task 6)."""
+        `progression_tree._servable_promotion`). `ctx` is the caller's
+        per-cycle `SelectionContext` (see `GamePlayer._decide_band` /
+        `plan_from_state`), forwarded to every `actionable_step` call so the
+        descent stops at a node with any ready `ai/obtain_sources` route
+        instead of falling into its recipe (one-obtain-model epic, Task 5;
+        originally the recycle-as-acquisition epic's bespoke `recoverable`
+        map). Defaults to `NO_PROFILE_CONTEXT` for every caller that doesn't
+        wire it in."""
         return progression_tree.decide_tree(
             state, game_data, self.objective,
             band_adequate=band_adequate, step_servable=step_servable,
-            recoverable=recoverable)
+            ctx=ctx)

@@ -22,6 +22,7 @@ def _gd() -> GameData:
     gd._resource_drops = {"copper_rocks": "copper_ore"}
     gd._resource_skill = {"copper_rocks": ("mining", 1)}
     gd._monster_level = {"chicken": 1, "dragon": 40}
+    gd._workshop_locations = {"weaponcrafting": (1, 1)}
     fill_monster_stat_defaults(gd)
     return gd
 
@@ -105,30 +106,54 @@ def test_best_attainable_weapon_highest_value_with_tiebreak():
     assert best_attainable_weapon(GameData()) is None   # no weapons
 
 
-def test_recoverable_material_is_a_leaf():
+def test_a_material_with_a_ready_source_is_a_leaf():
     """copper_bar is craftable from 10 copper_ore, but recycling licensed
-    surplus (e.g. copper_dagger) yields recoverable copper_bar directly — so
-    it is directly actionable, not a recipe node. This is the whole epic:
-    stop re-deriving from raw resources what recycling already covers."""
+    surplus (2 held copper_dagger, whose recipe IS 6 copper_bar) yields a
+    RECYCLE source directly — so it is directly actionable, not a recipe
+    node. This is the whole epic: stop re-deriving from raw resources what a
+    ready `ai/obtain_sources` route already covers."""
     gd = _gd()
     node = ObtainItem("copper_bar", 6)
     assert prerequisites(node, make_state(), gd) == [ObtainItem("copper_ore", 10)]
-    assert prerequisites(node, make_state(), gd, {"copper_bar": 18}) == []
+    state = make_state(inventory={"copper_dagger": 2})
+    assert prerequisites(node, state, gd) == []
 
 
-def test_leaf_rule_is_any_recoverable_not_fully_recoverable():
-    """recoverable > 0 leafs the node even when it does not cover the need;
-    GOAP mixes recycle + gather to make up the shortfall (user decision)."""
+def test_leaf_rule_is_any_ready_source_not_fully_covering_the_need():
+    """A ready source leafs the node even when its capacity does not cover the
+    need (2 held copper_dagger -> 1 destroyable -> capacity 3, short of the 6
+    needed): GOAP mixes recycle + gather to make up the shortfall (user
+    decision)."""
     gd = _gd()
-    assert prerequisites(ObtainItem("copper_bar", 6), make_state(), gd,
-                         {"copper_bar": 1}) == []
+    state = make_state(inventory={"copper_dagger": 2})
+    assert prerequisites(ObtainItem("copper_bar", 6), state, gd) == []
 
 
-def test_zero_recoverable_still_descends():
-    """An entry of 0 is not a leaf — only a positive count is."""
+def test_no_destroyable_copies_still_descends():
+    """Exactly 1 held copper_dagger is fully protected (COMBAT_WEAPON keeps
+    the last copy) -> 0 destroyable -> no RECYCLE source, so the descent
+    still falls into copper_bar's own recipe."""
     gd = _gd()
-    assert prerequisites(ObtainItem("copper_bar", 6), make_state(), gd,
-                         {"copper_bar": 0}) == [ObtainItem("copper_ore", 10)]
+    state = make_state(inventory={"copper_dagger": 1})
+    assert prerequisites(ObtainItem("copper_bar", 6), state, gd) \
+        == [ObtainItem("copper_ore", 10)]
+
+
+def test_gatherable_craftable_is_a_leaf_via_gather_source():
+    """The ready-source leaf rule generalizes beyond RECYCLE (one-obtain-model
+    epic, Task 5): a craftable item that is ALSO directly gatherable from a
+    live resource tile is a leaf too — the descent never re-derives a raw
+    material the character can just walk up and gather."""
+    gd = GameData()
+    gd._item_stats = {
+        "iron_bar": ItemStats(code="iron_bar", level=1, type_="resource"),
+        "iron_ore": ItemStats(code="iron_ore", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"iron_bar": {"iron_ore": 3}}
+    gd._resource_drops = {"iron_bar_vein": "iron_bar", "iron_rocks": "iron_ore"}
+    gd._resource_skill = {"iron_bar_vein": ("mining", 1), "iron_rocks": ("mining", 1)}
+    gd._resource_locations = {"iron_bar_vein": [(2, 2)], "iron_rocks": [(1, 1)]}
+    assert prerequisites(ObtainItem("iron_bar"), make_state(), gd) == []
 
 
 def test_cyclic_recipe_traversal_terminates():

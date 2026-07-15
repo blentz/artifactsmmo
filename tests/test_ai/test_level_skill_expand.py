@@ -6,6 +6,7 @@ from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.level_skill_expand import next_grind_goal
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 
 
 def _gd() -> GameData:
@@ -89,24 +90,32 @@ def test_next_grind_goal_descends_to_deepest_unmet_material() -> None:
     assert goal.needed == {"ash_wood": 10}
 
 
-def test_next_grind_goal_targets_the_recoverable_material() -> None:
+def test_next_grind_goal_targets_the_ready_source_material() -> None:
     """THE BUG, end to end (2026-07-13 live Robby trace): weaponcrafting rung
     fire_staff needs 5 ash_plank. Bag holds 7 fishing_net (recipe: 6 ash_plank
-    each), so ash_plank is recoverable by recycling — without `recoverable`
-    threaded in, the grind goal falls all the way to GatherMaterials(ash_wood,
-    10) (50 gathers of WOODCUTTING xp instead of weaponcrafting progress). With
-    the recoverable map wired in, ash_plank itself is a leaf and the goal
-    targets it directly — the real planner (GatherMaterialsGoal.relevant_actions
-    already admits licensed RecycleActions) then finds the Recycle(fishing_net)
-    route."""
+    each, crafting_skill gearcrafting), so ash_plank has a ready RECYCLE
+    source — without `ctx` threaded in (the tier layer never asked
+    `ai/obtain_sources`), the grind goal falls all the way to
+    GatherMaterials(ash_wood, 10) (50 gathers of WOODCUTTING xp instead of
+    weaponcrafting progress). With `ctx` wired in, ash_plank itself is a leaf
+    and the goal targets it directly — the real planner
+    (GatherMaterialsGoal.relevant_actions already admits licensed
+    RecycleActions) then finds the Recycle(fishing_net) route."""
     gd = _deep_gd()
+    gd._item_stats = {**gd._item_stats, "fishing_net": ItemStats(
+        code="fishing_net", level=1, type_="amulet",
+        crafting_skill="gearcrafting", crafting_level=1)}
+    gd._crafting_recipes = {**gd._crafting_recipes, "fishing_net": {"ash_plank": 6}}
+    gd._workshop_locations = {**gd._workshop_locations, "gearcrafting": (3, 3)}
     state = scenario_state(
-        ScenarioCharacter(name="t", level=13, skills={"weaponcrafting": 6},
+        ScenarioCharacter(name="t", level=13, skills={"weaponcrafting": 6, "gearcrafting": 6},
                           bank={"red_slimeball": 20}), gd)
     assert next_grind_goal("weaponcrafting", state, gd).needed == {"ash_wood": 10}
 
-    recoverable = {"ash_plank": 18}
-    goal = next_grind_goal("weaponcrafting", state, gd, recoverable)
+    state_with_nets = scenario_state(
+        ScenarioCharacter(name="t", level=13, skills={"weaponcrafting": 6, "gearcrafting": 6},
+                          bank={"red_slimeball": 20}, inventory={"fishing_net": 7}), gd)
+    goal = next_grind_goal("weaponcrafting", state_with_nets, gd, NO_PROFILE_CONTEXT)
     assert isinstance(goal, GatherMaterialsGoal)
     assert goal.skill_grind is True
     assert goal.needed == {"ash_plank": 5}
