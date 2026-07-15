@@ -32,6 +32,7 @@ from artifactsmmo_cli.ai.tiers.progression_tree_core import (
     potion_type_weight,
 )
 from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
+from artifactsmmo_cli.ai.weapon_winnability import marginal_weapon_winnability
 from artifactsmmo_cli.ai.world_state import WorldState
 
 
@@ -50,6 +51,17 @@ def _structural_candidates(state: WorldState, game_data: GameData,
     for slot, code in objective.near_term_gear(state).items():
         stats = game_data.item_stats(code)
         if stats is None:
+            continue
+        # Weapon-slot winnability guard: pursuit_value/equip_value is damage-type
+        # BLIND, so it would arm a high-attack weapon that beats FEWER monsters
+        # (live: fire_bow, attack fire 17, over the equipped copper_axe, attack
+        # earth 5 — the local monsters resist fire, so the bot ground weaponcrafting
+        # toward a COMBAT DOWNGRADE). predict_win/pick_loadout is already
+        # damage-optimal PER MONSTER, so a weapon is worth grinding toward only if
+        # OWNING it unlocks a monster the character cannot beat now. Suppress a
+        # zero-marginal weapon target; every other slot keeps pursuit_value ranking.
+        if (stats.type_ == "weapon"
+                and marginal_weapon_winnability(code, state, game_data) <= 0):
             continue
         current_value = objective._item_value(state.equipment.get(slot))
         gain = Fraction(pursuit_value(stats) - current_value)

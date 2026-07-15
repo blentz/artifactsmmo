@@ -85,3 +85,25 @@ def test_marginal_adds_to_a_copy_not_the_live_inventory():
     before = dict(state.inventory)
     marginal_weapon_winnability("flame_rod", state, gd)
     assert state.inventory == before
+
+
+def test_memo_hit_returns_the_same_count_without_recomputing():
+    """Second call on an identical kit hits the memo (move_to_end path)."""
+    import artifactsmmo_cli.ai.weapon_winnability as ww
+    gd = _gd()
+    ww._MEMO.clear()
+    state = make_state(inventory={"stone_axe": 1})
+    first = beatable_count(state, gd)
+    assert beatable_count(state, gd) == first  # served from _MEMO
+
+
+def test_memo_evicts_the_oldest_entry_when_full(monkeypatch):
+    """Bounded cache: exceeding _MEMO_MAX pops the least-recently-used key."""
+    import artifactsmmo_cli.ai.weapon_winnability as ww
+    monkeypatch.setattr(ww, "_MEMO_MAX", 2)
+    ww._MEMO.clear()
+    gd = _gd()
+    # Three distinct kits (distinct hp -> distinct fingerprints) with a 2-entry cap.
+    for hp in (10, 20, 30):
+        beatable_count(make_state(inventory={"stone_axe": 1}, hp=hp, max_hp=30), gd)
+    assert len(ww._MEMO) == 2
