@@ -16,9 +16,20 @@ name: census-gate
 #              reason cannot be added without proving its surplus is still
 #              disposable. It is what makes "keep ALL copies" — the type-level
 #              defect behind seven hoard bugs — unable to come back silently.
+#   parity:    do the TWO plan producers agree on obtainability? -> obtain_parity_bug == 0
+#              The one-obtain-model ACCEPTANCE gate: for a grid of (material,
+#              world-state) cells the O(closure) descent and the A* search must
+#              agree — the pool a goal admits ⊆ the shared obtain model, the
+#              model ⊆ the pool, and both producers' plans use the SAME source
+#              KINDS (WITHDRAW carved out, since the descent serves it via a
+#              recipe-input withdraw, not a map leg). This is the gate that makes
+#              the SEVEN-INERT-COMMITS divergence bug — the recycle route that
+#              reached A* but not the generator — impossible to ship again. A
+#              planner TIMEOUT is classified as the bug, never an explained gap.
 #
 # The craft + inventory gates were documented long before they were enforced
-# here; the recycle gate shipped with its epic (2026-07-14).
+# here; the recycle gate shipped with its epic (2026-07-14), the parity gate
+# with the one-obtain-model epic (2026-07-15).
 on:
   pull_request:
     paths:
@@ -26,6 +37,7 @@ on:
       - "scripts/gen_craft_completeness.py"
       - "scripts/gen_inventory_completeness.py"
       - "scripts/gen_recycle_source_completeness.py"
+      - "scripts/gen_obtain_parity.py"
       - ".github/workflows/census-gate.yml"
   push:
     branches: [main]
@@ -34,6 +46,7 @@ on:
       - "scripts/gen_craft_completeness.py"
       - "scripts/gen_inventory_completeness.py"
       - "scripts/gen_recycle_source_completeness.py"
+      - "scripts/gen_obtain_parity.py"
       - ".github/workflows/census-gate.yml"
   workflow_dispatch: {}
 
@@ -65,3 +78,6 @@ jobs:
 
       - name: craft census — planner_bug == 0
         run: uv run python scripts/gen_craft_completeness.py --check
+
+      - name: obtain-parity census — obtain_parity_bug == 0
+        run: uv run python scripts/gen_obtain_parity.py --check
