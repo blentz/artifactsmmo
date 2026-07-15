@@ -1,7 +1,7 @@
 """Tests for next_craft_target_pure — deterministic next craft/gather/withdraw action."""
 
 from artifactsmmo_cli.ai.next_craft_core import NextAction, next_craft_target_pure
-from artifactsmmo_cli.ai.obtain_sources import Source, SourceKind
+from artifactsmmo_cli.ai.obtain_sources import UNBOUNDED_CAPACITY, Source, SourceKind
 
 COPPER_RECIPES: dict[str, dict[str, int]] = {
     "copper_ring": {"copper_bar": 6},
@@ -141,12 +141,32 @@ def test_unbanked_short_input_still_recurses() -> None:
 
 
 def test_recycle_source_emits_a_recycle_step() -> None:
-    """8 ash_plank needed, 0 held; 7 fishing_net are a licensed RECYCLE source
-    (yield 3 each). The descent must emit a RECYCLE step, not a GATHER of ash_wood.
-    THIS IS THE BUG: today the recipe descent cannot express this at all."""
-    sources = {"ash_plank": [Source(SourceKind.RECYCLE, "fishing_net", 3)]}
-    result = next_craft_target_pure({}, {}, {}, "ash_plank", 8, sources)
+    """8 ash_plank needed, 3 fishing_net held are a licensed RECYCLE source
+    (yield 3 each, capacity 9). The descent must emit a RECYCLE step, not a
+    GATHER of ash_wood. THIS IS THE BUG: today the recipe descent cannot
+    express this at all."""
+    sources = {"ash_plank": [Source(SourceKind.RECYCLE, "fishing_net", 3, 9)]}
+    result = next_craft_target_pure({}, {"fishing_net": 3}, {}, "ash_plank", 8, sources)
     assert result == NextAction("ash_plank", "recycle", 8, "fishing_net")
+
+
+def test_recycle_source_capped_below_deficit_by_capacity() -> None:
+    """CRITICAL 1: the source cannot deliver more than its licensed capacity.
+    2 fishing_net (yield 3 each) can deliver at most 6, even though 8 are
+    needed -- the descent must NOT hand back the full uncapped deficit."""
+    sources = {"ash_plank": [Source(SourceKind.RECYCLE, "fishing_net", 3, 6)]}
+    result = next_craft_target_pure({}, {"fishing_net": 2}, {}, "ash_plank", 8, sources)
+    assert result == NextAction("ash_plank", "recycle", 6, "fishing_net")
+
+
+def test_recycle_source_exhausted_falls_through_to_gather() -> None:
+    """Once the source item's LIVE stock is spent (0 held), the RECYCLE
+    source can give nothing more RIGHT NOW -- the descent must fall through
+    to the recipe descent (here: a raw item, so gather) rather than claim
+    more of the target from a source with no backing stock left."""
+    sources = {"ash_plank": [Source(SourceKind.RECYCLE, "fishing_net", 3, 6)]}
+    result = next_craft_target_pure({}, {"fishing_net": 0}, {}, "ash_plank", 4, sources)
+    assert result == NextAction("ash_plank", "gather", 4)
 
 
 def test_withdraw_source_reaches_the_target_itself() -> None:
@@ -154,7 +174,7 @@ def test_withdraw_source_reaches_the_target_itself() -> None:
     input) is honoured directly — a generalisation the old recipe-only walk
     could never express (it only ever withdrew recipe INPUTS reached via
     recursion, never the top-level item itself)."""
-    sources = {"copper_bar": [Source(SourceKind.WITHDRAW, "copper_bar", 1)]}
+    sources = {"copper_bar": [Source(SourceKind.WITHDRAW, "copper_bar", 1, 5)]}
     result = next_craft_target_pure(
         COPPER_RECIPES, {}, {"copper_bar": 5}, "copper_bar", 3, sources
     )
@@ -162,13 +182,13 @@ def test_withdraw_source_reaches_the_target_itself() -> None:
 
 
 def test_buy_source_emits_a_buy_step() -> None:
-    sources = {"lifesteal_rune": [Source(SourceKind.BUY, "npc_merchant", 1)]}
+    sources = {"lifesteal_rune": [Source(SourceKind.BUY, "npc_merchant", 1, UNBOUNDED_CAPACITY)]}
     result = next_craft_target_pure({}, {}, {}, "lifesteal_rune", 1, sources)
     assert result == NextAction("lifesteal_rune", "buy", 1, "npc_merchant")
 
 
 def test_drop_source_emits_a_drop_step() -> None:
-    sources = {"dragon_scale": [Source(SourceKind.DROP, "dragon", 1)]}
+    sources = {"dragon_scale": [Source(SourceKind.DROP, "dragon", 1, UNBOUNDED_CAPACITY)]}
     result = next_craft_target_pure({}, {}, {}, "dragon_scale", 2, sources)
     assert result == NextAction("dragon_scale", "drop", 2, "dragon")
 
@@ -178,8 +198,8 @@ def test_craft_source_defers_to_recipe_descent_not_gather() -> None:
     directly — it defers to the pre-existing recipe descent, which decides
     craft-now vs. descend-into-short-input exactly as before."""
     sources = {
-        "copper_bar": [Source(SourceKind.CRAFT, "copper_bar", 1)],
-        "copper_ore": [Source(SourceKind.GATHER, "copper_ore", 1)],
+        "copper_bar": [Source(SourceKind.CRAFT, "copper_bar", 1, UNBOUNDED_CAPACITY)],
+        "copper_ore": [Source(SourceKind.GATHER, "copper_ore", 1, UNBOUNDED_CAPACITY)],
     }
     result = next_craft_target_pure(COPPER_RECIPES, {}, {}, "copper_bar", 6, sources)
     assert result == NextAction("copper_ore", "gather", 60)
@@ -192,8 +212,8 @@ def test_craft_priority_over_lower_kind_when_both_present() -> None:
     the list — the `break` (not `continue`) on the CRAFT entry is load-bearing."""
     sources = {
         "copper_bar": [
-            Source(SourceKind.CRAFT, "copper_bar", 1),
-            Source(SourceKind.GATHER, "copper_bar", 1),
+            Source(SourceKind.CRAFT, "copper_bar", 1, UNBOUNDED_CAPACITY),
+            Source(SourceKind.GATHER, "copper_bar", 1, UNBOUNDED_CAPACITY),
         ],
     }
     result = next_craft_target_pure(

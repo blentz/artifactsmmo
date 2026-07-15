@@ -15,6 +15,7 @@ import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.obtain_sources import (
+    UNBOUNDED_CAPACITY,
     SourceKind,
     obtain_source_map,
     obtain_sources,
@@ -189,6 +190,31 @@ def test_recycle_source_names_the_SOURCE_item_not_the_target(game_data, ctx):
            if s.kind is SourceKind.RECYCLE]
     assert [s.code for s in rec] == ["fishing_net"]
     assert rec[0].yield_per == max(1, 6 // 2)   # 3 — the UNIT-recycle yield, not batch
+    # capacity == destroyable(fishing_net) * yield_per -- destroyable is 6, not
+    # the raw 7 owned: the profile-less EQUIPPABLE_KEEP=1 "swap candidate"
+    # floor protects one copy from destruction (see inventory_caps.py).
+    assert rec[0].capacity == 6 * 3
+
+
+def test_recycle_source_capacity_is_destroyable_times_yield(game_data):
+    """CRITICAL 1: capacity is the max the source can ACTUALLY deliver right
+    now -- licensed copies (destroyable) times per-copy yield, NOT the raw
+    deficit a caller might ask for. 2 fishing_net (yield 3 each) -> 6, the
+    exact reproduction from the bug report.
+
+    `gear_keep={"fishing_net": 0}` names the amulet slot in the active
+    profile (so the blanket EQUIPPABLE_KEEP=1 "swap candidate" floor the
+    profile-less default would otherwise apply is switched off) -- isolating
+    the assertion to the capacity formula itself rather than an incidental
+    keep-authority interaction."""
+    ctx = SelectionContext(bank_accessible=True, bank_required_level=0,
+                           bank_unlock_monster=None, initial_xp=0,
+                           task_exchange_min_coins=1, combat_monster=None,
+                           gear_keep={"fishing_net": 0})
+    state = make_state(inventory={"fishing_net": 2})
+    rec = [s for s in obtain_sources("ash_plank", state, game_data, ctx)
+           if s.kind is SourceKind.RECYCLE]
+    assert rec[0].capacity == 2 * 3
 
 
 def test_protected_item_is_not_a_recycle_source(game_data, ctx):
@@ -232,6 +258,7 @@ def test_raw_resource_has_exactly_one_gather_source(game_data, ctx):
     srcs = obtain_sources("ash_wood", state, game_data, ctx)
     assert [s.kind for s in srcs] == [SourceKind.GATHER]
     assert srcs[0].code == "ash_tree"
+    assert srcs[0].capacity == UNBOUNDED_CAPACITY
 
 
 def test_source_map_covers_a_whole_closure(game_data, ctx):
@@ -292,6 +319,7 @@ def test_permanent_reachable_vendor_is_a_buy_source(game_data, ctx):
            if s.kind is SourceKind.BUY]
     assert [s.code for s in buy] == ["general_store"]
     assert buy[0].yield_per == 1
+    assert buy[0].capacity == UNBOUNDED_CAPACITY
 
 
 def test_vendor_with_unknown_location_is_not_a_buy_source(game_data, ctx):
@@ -310,6 +338,7 @@ def test_winnable_dropper_is_a_drop_source(game_data, ctx):
             if s.kind is SourceKind.DROP]
     assert [s.code for s in drop] == ["slime"]
     assert drop[0].yield_per == 1
+    assert drop[0].capacity == UNBOUNDED_CAPACITY
 
 
 def test_craft_source_yield_per_reflects_craft_yield(game_data, ctx):
@@ -320,6 +349,7 @@ def test_craft_source_yield_per_reflects_craft_yield(game_data, ctx):
              if s.kind is SourceKind.CRAFT]
     assert [s.code for s in craft] == ["ash_plank"]
     assert craft[0].yield_per == 1
+    assert craft[0].capacity == UNBOUNDED_CAPACITY
 
 
 # ---------------------------------------------------------------------------
@@ -346,8 +376,9 @@ def test_bank_accessible_withdraw_source_still_fires(game_data, ctx):
     """Sanity companion to the gate above: with `bank_accessible=True` (the
     fixture default) the WITHDRAW source is unaffected."""
     state = make_state(bank_items={"ash_plank": 3})
-    assert [s.kind for s in obtain_sources("ash_plank", state, game_data, ctx)][0] \
-        is SourceKind.WITHDRAW
+    srcs = obtain_sources("ash_plank", state, game_data, ctx)
+    assert srcs[0].kind is SourceKind.WITHDRAW
+    assert srcs[0].capacity == 3   # capped at the bank's current stock
 
 
 def test_event_resource_with_no_live_tiles_is_not_a_gather_source(game_data, ctx):

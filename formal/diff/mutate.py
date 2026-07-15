@@ -166,6 +166,20 @@ CRAFT_PLAN_DRIVER_MUTATIONS = [
      "        new_bank[na.item] = new_bank.get(na.item, 0)"),
 ]
 
+# craft_plan_driver_core recycle-branch mutations (CRITICAL 1/2: the recycle-
+# epic-review fix). NOT covered by the differential -- the Lean oracle in
+# test_craft_plan_driver_diff.py never exercises a `recycle` NextAction (it
+# calls craft_plan_full with the 3-kind arg shape only), so these are
+# unit-killed by tests/test_ai/test_craft_plan_driver_core.py instead.
+CRAFT_PLAN_DRIVER_RECYCLE_MUTATIONS = [
+    ("craft_plan_driver: recycle debit sign flip (- -> +, re-introduces the double-spend)",
+     "        new_owned[na.code] = new_owned.get(na.code, 0) - consumed",
+     "        new_owned[na.code] = new_owned.get(na.code, 0) + consumed"),
+    ("craft_plan_driver: recycle consumed uses truncating floor-div, not ceil (under-counts consumption)",
+     "        consumed = math.ceil(na.qty / match.yield_per)",
+     "        consumed = na.qty // match.yield_per"),
+]
+
 # next_craft_target_pure mutations -- anchors for the deterministic craft-action
 # generator (churn fix). Each breaks one of the four load-bearing decisions;
 # killed by formal/diff/test_next_craft_diff.py (300-example property over random
@@ -193,6 +207,20 @@ NEXT_CRAFT_MUTATIONS = [
     ("next_craft: withdraw qty min -> max (over-withdraw)",
      '            return NextAction(inp, "withdraw", min(bank.get(inp, 0), required - owned.get(inp, 0)))',
      '            return NextAction(inp, "withdraw", max(bank.get(inp, 0), required - owned.get(inp, 0)))'),
+]
+
+# next_craft_target_pure widened-obtain-model mutations (CRITICAL 1/2: the
+# recycle-epic-review fix). NOT covered by the differential -- the Lean
+# oracle/property in test_next_craft_diff.py never exercises `sources` at all
+# (it calls next_craft_target_pure with the 3-kind arg shape only), so these
+# are unit-killed by tests/test_ai/test_next_craft_core.py instead.
+NEXT_CRAFT_SOURCE_MUTATIONS = [
+    ("next_craft: recycle capacity cap dropped (re-admits the full uncapped deficit)",
+     "        qty = min(deficit, src.capacity, owned.get(src.code, 0) * src.yield_per)",
+     "        qty = deficit"),
+    ("next_craft: CRAFT priority break replaced with continue (falls through to a lower-priority source)",
+     "        if src.kind is SourceKind.CRAFT:\n            break",
+     "        if src.kind is SourceKind.CRAFT:\n            continue"),
 ]
 
 # gear_taxonomy_core mutations -- the proved gear-classification core.
@@ -5293,9 +5321,17 @@ def _run_all_groups() -> int:
     # C5 — next_craft_target_pure: churn fix differential.
     run_group(NEXT_CRAFT_CORE_SRC, NEXT_CRAFT_MUTATIONS,
               "formal/diff/test_next_craft_diff.py", survivors)
+    # One-obtain-model review fix (CRITICAL 1/2): widened-source-model behaviour
+    # the differential never exercises -- unit-killed instead.
+    run_group(NEXT_CRAFT_CORE_SRC, NEXT_CRAFT_SOURCE_MUTATIONS,
+              "tests/test_ai/test_next_craft_core.py", survivors)
     # B2 — craft_plan_full full-plan driver (consuming model) differential.
     run_group(CRAFT_PLAN_DRIVER_SRC, CRAFT_PLAN_DRIVER_MUTATIONS,
               "formal/diff/test_craft_plan_driver_diff.py", survivors)
+    # One-obtain-model review fix (CRITICAL 1/2): recycle-branch behaviour the
+    # differential never exercises -- unit-killed instead.
+    run_group(CRAFT_PLAN_DRIVER_SRC, CRAFT_PLAN_DRIVER_RECYCLE_MUTATIONS,
+              "tests/test_ai/test_craft_plan_driver_core.py", survivors)
     # Gear taxonomy: field/family drops killed by the unit test; the
     # combat-minus-consumable set difference killed by the differential.
     run_group(GEAR_TAXONOMY_CORE_SRC, GEAR_TAXONOMY_CORE_MUTATIONS,

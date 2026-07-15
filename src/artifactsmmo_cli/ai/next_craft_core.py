@@ -129,7 +129,12 @@ def _next(
     for src in sources.get(item, ()):
         if src.kind is SourceKind.CRAFT:
             break
-        return _step_for(src, item, deficit, bank)
+        step = _step_for(src, item, deficit, owned, bank)
+        if step is not None:
+            return step
+        # Source has nothing left to give RIGHT NOW (a RECYCLE source whose
+        # backing stock this same plan already spent) -- try the next source
+        # in priority order instead of emitting a zero-progress step.
     recipe = recipes.get(item)
     if recipe is None:
         return NextAction(item, "gather", deficit)  # raw resource → gather the shortfall
@@ -153,18 +158,40 @@ def _next(
     return NextAction(item, "craft", deficit)  # all inputs on hand → craft
 
 
-def _step_for(src: Source, item: str, deficit: int, bank: Mapping[str, int]) -> NextAction:
-    """Translate a non-CRAFT `Source` into the immediate next step for `item`.
+def _step_for(
+    src: Source, item: str, deficit: int, owned: Mapping[str, int], bank: Mapping[str, int]
+) -> NextAction | None:
+    """Translate a non-CRAFT `Source` into the immediate next step for `item`,
+    or `None` if the source is exhausted right now (the caller then falls
+    through to the next-priority source, or the recipe descent).
 
-    WITHDRAW is capped at the bank's shortfall, mirroring the pre-existing
-    bank-withdraw branch exactly. RECYCLE/GATHER/BUY/DROP each ask for the
-    full deficit in one step; RECYCLE's source-item consumption is applied
-    later by `craft_plan_driver_core._apply_state` (it needs `yield_per`,
-    which a `NextAction` does not carry). `code` names the source's own
-    item/resource/npc/monster code, left "" when identical to `item`
-    (WITHDRAW's own bank item, or a plain 1:1 GATHER of the item itself).
+    Every kind is capped at `min(deficit, src.capacity)`: GATHER/BUY/DROP/CRAFT
+    carry `UNBOUNDED_CAPACITY`, so the cap is a no-op for them and each still
+    asks for the full deficit in one step, exactly as before. WITHDRAW and
+    RECYCLE are genuinely stock-limited, so the cap is load-bearing there --
+    without it a RECYCLE step could claim more of the target than its licensed
+    source stock could ever deliver (an impossible plan; `_apply_state` would
+    drive the source item negative).
+
+    RECYCLE is additionally bounded by the CURRENTLY owned stock of the source
+    item (`owned.get(src.code, 0) * src.yield_per`): `src.capacity` is a
+    snapshot taken once by `obtain_sources`, but a single `craft_plan_full` run
+    can call this function on the SAME item multiple times as the plan
+    progresses (`_apply_state` debits `owned[src.code]` after each recycle
+    step). Reading the LIVE `owned` count is what lets a second call recognise
+    the source is now exhausted and return `None` (rather than re-spending
+    stock the first step already consumed) so the descent falls through to
+    gather/craft the remainder -- the partial-recovery MIXED plan.
+
+    `code` names the source's own item/resource/npc/monster code, left "" when
+    identical to `item` (WITHDRAW's own bank item, or a plain 1:1 GATHER of
+    the item itself).
     """
     code = "" if src.code == item else src.code
-    if src.kind is SourceKind.WITHDRAW:
-        return NextAction(item, "withdraw", min(bank.get(src.code, 0), deficit), code)
-    return NextAction(item, src.kind.value, deficit, code)
+    if src.kind is SourceKind.RECYCLE:
+        qty = min(deficit, src.capacity, owned.get(src.code, 0) * src.yield_per)
+    else:
+        qty = min(deficit, src.capacity)
+    if qty <= 0:
+        return None
+    return NextAction(item, src.kind.value, qty, code)

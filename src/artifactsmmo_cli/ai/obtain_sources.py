@@ -92,6 +92,12 @@ from artifactsmmo_cli.ai.inventory_keep import destroyable
 from artifactsmmo_cli.ai.selection_context import SelectionContext
 from artifactsmmo_cli.ai.world_state import WorldState
 
+# Sentinel capacity for a source kind that is never stock-limited (GATHER,
+# BUY, DROP, CRAFT — you can always gather/buy/craft/fight again). A plain
+# large int rather than `None` so every consumer's `min(deficit, capacity)`
+# needs no None-branch.
+UNBOUNDED_CAPACITY = 10**9
+
 
 class SourceKind(Enum):
     """The six ways an item can be obtained, in ascending order of "creates
@@ -118,11 +124,22 @@ class Source:
         yield_per: Units of the TARGET obtained per single application of
             this source (one gather, one craft run, one unit recycle, one
             purchase, one kill).
+        capacity: Max units of the TARGET this source can deliver RIGHT NOW,
+            given currently-known stock. RECYCLE is genuinely bounded —
+            `destroyable(code) * yield_per`, the LICENSED (keep-authority
+            applied) copies of the source item times its per-copy yield, NOT
+            raw physical stock (which would license melting protected
+            copies). WITHDRAW is bounded by the bank's current stock of the
+            item (`yield_per` is always 1 there, so this equals the bank
+            count). GATHER/BUY/DROP/CRAFT are never stock-limited by this
+            model (you can always gather/buy/craft/fight again), so they
+            carry the `UNBOUNDED_CAPACITY` sentinel.
     """
 
     kind: SourceKind
     code: str
     yield_per: int
+    capacity: int
 
 
 def obtain_sources(
@@ -164,8 +181,9 @@ def _withdraw_sources(
     if not ctx.bank_accessible:
         return []
     bank = state.bank_items or {}
-    if bank.get(item, 0) > 0:
-        return [Source(SourceKind.WITHDRAW, item, 1)]
+    stock = bank.get(item, 0)
+    if stock > 0:
+        return [Source(SourceKind.WITHDRAW, item, 1, stock)]
     return []
 
 
@@ -194,7 +212,8 @@ def _recycle_sources(
         copies = destroyable(code, state, game_data, ctx)
         if copies <= 0:
             continue
-        out.append(Source(SourceKind.RECYCLE, code, max(1, recipe[item] // 2)))
+        yield_per = max(1, recipe[item] // 2)
+        out.append(Source(SourceKind.RECYCLE, code, yield_per, copies * yield_per))
     return out
 
 
@@ -211,7 +230,7 @@ def _craft_sources(item: str, state: WorldState, game_data: GameData) -> list[So
         return []
     if game_data.workshop_location(stats.crafting_skill) is None:
         return []
-    return [Source(SourceKind.CRAFT, item, game_data.craft_yield(item))]
+    return [Source(SourceKind.CRAFT, item, game_data.craft_yield(item), UNBOUNDED_CAPACITY)]
 
 
 def _gather_sources(item: str, game_data: GameData) -> list[Source]:
@@ -236,7 +255,7 @@ def _gather_sources(item: str, game_data: GameData) -> list[Source]:
     resource_code, _rate = found
     if not game_data.all_resource_locations.get(resource_code):
         return []  # no live tiles (e.g. event resource, event inactive)
-    return [Source(SourceKind.GATHER, resource_code, 1)]
+    return [Source(SourceKind.GATHER, resource_code, 1, UNBOUNDED_CAPACITY)]
 
 
 def _buy_sources(item: str, game_data: GameData) -> list[Source]:
@@ -247,7 +266,7 @@ def _buy_sources(item: str, game_data: GameData) -> list[Source]:
             continue  # not reliably reachable -> cannot anchor a plan
         if game_data.npc_location(npc_code) is None:
             continue
-        out.append(Source(SourceKind.BUY, npc_code, 1))
+        out.append(Source(SourceKind.BUY, npc_code, 1, UNBOUNDED_CAPACITY))
     return out
 
 
@@ -267,5 +286,5 @@ def _drop_sources(item: str, state: WorldState, game_data: GameData) -> list[Sou
         if not game_data.all_monster_locations.get(monster_code):
             continue  # no live tiles (e.g. event monster, event inactive)
         if is_winnable(state, game_data, monster_code):
-            out.append(Source(SourceKind.DROP, monster_code, 1))
+            out.append(Source(SourceKind.DROP, monster_code, 1, UNBOUNDED_CAPACITY))
     return out
