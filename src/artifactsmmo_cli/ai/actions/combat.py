@@ -63,7 +63,8 @@ class FightAction(Action):
         """Pre-loadout structural gates only: locations + inventory room, HP
         floor, level+2 suicide cap, and the xp/drop-farm gate. Deliberately
         excludes the loadout gate below — used by the directed craft generator
-        (craft_plan_gen._dropper_fight) to admit a dropper whose loadout merely
+        (the DROP arm of the shared obtain-model, `craft_plan_gen` mapping a
+        `SourceKind.DROP` source to its Fight) to admit a dropper whose loadout merely
         needs a swap (a sequencing precondition, not infeasibility), while still
         enforcing the structural guards is_winnable is blind to (level+2, HP,
         inventory room)."""

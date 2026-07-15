@@ -29,8 +29,9 @@ Exactly the `min` the licensed disposal goals take (`recycle_surplus.recyclable_
 STILL the rule for NpcSell and Delete.
 
 RECYCLE GAINED A SECOND ROUTE (recycle-as-acquisition epic, 2026-07-13). Recycle is no
-longer only a disposal action: `ai/recoverable_materials` teaches the planner that
-recycling a HELD item is how it OBTAINS that item's materials, and `DEPOSIT_FULL` now
+longer only a disposal action: `ai/obtain_sources` (its RECYCLE arm) teaches the
+planner that recycling a HELD item is how it OBTAINS that item's materials, and
+`DEPOSIT_FULL` now
 banks the surplus a recycle would want to consume — so the fuel routinely lives in the
 BANK, not the bag. The bag-side `min(bankable, destroyable)` short-circuits to 0 for any
 code with none in the bag (`licensed_quantity`), which dropped the `RecycleAction`
@@ -49,7 +50,8 @@ application:
     action; a plan may then APPLY that one action any number of times, and nothing here
     counts. `owned` (bag+bank) is invariant under Withdraw/Deposit and drops by exactly
     `quantity` per recycle, so the floor bounds the TOTAL destroyed over any sequence —
-    in A*, in `craft_plan_gen._recycle_prefix`, and across a cached multi-step plan
+    in A*, in the shared craft-plan descent (its per-source `consumed` ledger), and
+    across a cached multi-step plan
     (`GamePlayer._plan_or_reuse` re-validates `step.is_applicable` only; it never
     re-derives this licence). Without it, 2 spare copper_rings with `destroyable == 1`
     both died (whole-branch review, CRITICAL 1): `bag_floor` cannot stand in, because
@@ -118,7 +120,7 @@ def licensed_recycle_quantity(code: str, state: WorldState, game_data: GameData,
     """Copies of `code` the authority permits a RECYCLE to take.
 
     Recycle differs from NpcSell/Delete because it is also an ACQUISITION route
-    (`ai/recoverable_materials`): its source may legitimately be a BANK copy,
+    (`ai/obtain_sources`' RECYCLE arm): its source may legitimately be a BANK copy,
     reached by a Withdraw the planner stages first. So the bag short-circuit
     `licensed_quantity` applies is wrong here — it would drop the RecycleAction
     for a bank-only hoard and make `Withdraw -> Recycle` unplannable, which is

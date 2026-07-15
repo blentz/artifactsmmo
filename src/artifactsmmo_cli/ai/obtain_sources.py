@@ -41,7 +41,7 @@ ELIGIBILITY MIRRORS THE ACTION POOL, NOT MERELY WHAT `is_applicable` WOULD
 SAY IF ASKED. A source the executor cannot actually serve is a LEAF WITH NO
 PLAN — the livelock shape of `3166d390`. In particular:
 
-- RECYCLE reproduces `ai/recoverable_materials.recoverable_materials`'s gates
+- RECYCLE reproduces the retired `recoverable_materials`'s gates
   EXACTLY: the source item must have a recipe, a known `crafting_skill`, the
   character must meet its `crafting_level`, its workshop must be known, AND
   it must be EQUIPPABLE (`ITEM_TYPE_TO_SLOTS`) — `RecycleAction` objects are
@@ -192,7 +192,8 @@ def _recycle_sources(
     item: str, state: WorldState, game_data: GameData, ctx: SelectionContext
 ) -> list[Source]:
     """Licensed surplus items (bag + bank) whose recipe consumes `item` —
-    mirrors `recoverable_materials.recoverable_materials`'s gates exactly,
+    mirrors the retired `recoverable_materials`'s gates exactly (that module was
+    subsumed by this RECYCLE arm and deleted),
     per-source-item rather than aggregated into a material map."""
     out: list[Source] = []
     bank = state.bank_items or {}
