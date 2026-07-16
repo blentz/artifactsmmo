@@ -8,6 +8,7 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.ge_fill_sell import GeFillSellOrderAction
+from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.npc import NpcBuyAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
@@ -16,6 +17,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.buy_source_venue import BuyVenue, choose_buy_venue
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.craft_vs_buy import Method, acquisition_method
+from artifactsmmo_cli.ai.forced_craft_grind import forced_craft_grind
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gather_selection import GatherCandidate, select_gather_source
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -162,6 +164,24 @@ class GatherMaterialsGoal(Goal):
                     total_effective += craftable
         fraction_remaining = 1.0 - total_effective / total_needed
         return max(1.0, 40.0 * fraction_remaining)
+
+    def heuristic(self, state: WorldState, game_data: GameData) -> float:
+        """Same admissible+consistent skill-grind term as
+        `UpgradeEquipmentGoal.heuristic`, keyed on this goal's OWN
+        `_target_item` (rather than an upgrade-selection lookup): a
+        GatherMaterials search toward a craft-only, skill-gated material
+        takes the forced `LevelSkill` edge first instead of exhausting the
+        cheap gather/withdraw frontier first (BUG B). 0 when satisfied,
+        owned, skill-met, or the target has a non-craft route — see
+        `forced_craft_grind`'s admissibility guard."""
+        if self.is_satisfied(state):
+            return 0.0
+        needed = self._needed.get(self._target_item, 1)
+        grind = forced_craft_grind(self._target_item, needed, state, game_data)
+        if grind is None:
+            return 0.0
+        skill, level = grind
+        return LevelSkill(skill=skill, target_level=level).cost(state, game_data)
 
     def relevant_actions(self, actions: list[Action], state: WorldState, game_data: GameData) -> list[Action]:
         """Restrict planning to gather/smelt/deposit/withdraw — excludes

@@ -8,6 +8,7 @@ Covers:
 
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.destructive_license import license_destructive_actions
@@ -245,3 +246,37 @@ class TestRecycleAsAcquisition:
         assert plan, "planner found no plan"
         assert any(isinstance(a, RecycleAction) for a in plan)
         assert sum(isinstance(a, GatherAction) for a in plan) < 10
+
+
+def _forged_plate_gd() -> GameData:
+    """forged_plate: craft-only, gearcrafting-gated at level 20, built from a
+    gatherable iron_ore leaf (mirrors test_forced_craft_grind._gd /
+    test_goals._fire_bow_gd — craft-only, skill-gated, unowned target). No
+    resource drop / monster drop / NPC vendor exists for forged_plate ITSELF,
+    so `obtain_sources` names no non-CRAFT route for it and the grind is
+    forced whenever the skill gate is unmet."""
+    gd = GameData()
+    gd._item_stats = {
+        "forged_plate": ItemStats(code="forged_plate", level=20, type_="body_armor",
+                                  crafting_skill="gearcrafting", crafting_level=20),
+        "iron_ore": ItemStats(code="iron_ore", level=1, type_="resource"),
+    }
+    gd._crafting_recipes = {"forged_plate": {"iron_ore": 10}}
+    gd._resource_drops = {"iron_rocks": "iron_ore"}
+    gd._workshop_locations = {"gearcrafting": (2, 2)}
+    gd._bank_location = (3, 0)
+    gd._taskmaster_location = (1, 1)
+    return gd
+
+
+def test_gather_materials_heuristic_is_forced_grind_cost():
+    """A GatherMaterials goal whose target_item is a craft-only, skill-gated,
+    unowned craftable returns the forced LevelSkill.cost; 0 otherwise."""
+    gd = _forged_plate_gd()  # forged_plate: craft-only, gearcrafting 20
+    goal = GatherMaterialsGoal(target_item="forged_plate",
+                               needed={"forged_plate": 1})
+    under = make_state(skills={"gearcrafting": 12})
+    assert goal.heuristic(under, gd) == \
+        LevelSkill(skill="gearcrafting", target_level=20).cost(under, gd)
+    met = make_state(skills={"gearcrafting": 20})
+    assert goal.heuristic(met, gd) == 0.0
