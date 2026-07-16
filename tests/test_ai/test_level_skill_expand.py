@@ -134,6 +134,35 @@ def test_next_grind_goal_targets_rung_when_materials_in_hand() -> None:
     assert goal.needed == {"fire_staff": 1}
 
 
+def test_next_grind_goal_descends_when_rung_held_but_materials_absent() -> None:
+    """THE LIVELOCK (live Robby trace 2026-07-15, 38 error:other cycles @ ~10s
+    CPU each): the character HOLDS copies of the rung (fire_staff x3) but NOT
+    its materials (no ash_plank). `actionable_step(ObtainItem(fire_staff, 1))`
+    is trivially satisfied by the 3 held, so it returns the RUNG — the grind
+    goal became GatherMaterials(fire_staff, held+1=4), i.e. "craft a 4th
+    fire_staff", whose ash_plank<-ash_wood chain is NOT in hand, so the sub-plan
+    search EXPLODED to a 10s timeout / empty plan and `_execute_level_skill`
+    raised every cycle. Descend on the grind quantity (held+1), not the default
+    1: the deficit forces the recipe open and the goal targets the deepest
+    actionable material.
+
+    Here that material is ash_plank, not raw ash_wood: the 3 held fire_staff are
+    themselves a ready RECYCLE source for ash_plank (fire_staff <- 5 ash_plank),
+    so ash_plank has no unmet prerequisites and is the actionable leaf. The live
+    planner then plans it in ~0.09s as Recycle(fire_staff) — the intended
+    churn-grind — instead of exploding on "craft a 4th fire_staff"."""
+    gd = _deep_gd()
+    state = scenario_state(
+        ScenarioCharacter(name="t", level=13, skills={"weaponcrafting": 6},
+                          bank={"red_slimeball": 20},
+                          inventory={"fire_staff": 3}), gd)
+    goal = next_grind_goal("weaponcrafting", state, gd)
+    assert isinstance(goal, GatherMaterialsGoal)
+    assert goal.skill_grind is True
+    # ash_plank (recyclable from the held fire_staff), NOT fire_staff (held x3).
+    assert goal.needed == {"ash_plank": 5}
+
+
 def test_next_grind_goal_none_when_no_rung() -> None:
     gd = GameData()
     gd._item_stats = {

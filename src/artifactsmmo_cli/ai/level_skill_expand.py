@@ -56,7 +56,19 @@ def next_grind_goal(skill: str, state: WorldState, game_data: GameData,
     in."""
     rung = skill_grind_target(skill, state, game_data)
     if rung is not None:
-        step = actionable_step(ObtainItem(rung), state, game_data, ctx)
+        bank = state.bank_items or {}
+        held = state.inventory.get(rung, 0) + bank.get(rung, 0)
+        # Descend on the grind quantity (held + 1), NOT the default 1: when the
+        # character already HOLDS copies of the rung, ObtainItem(rung, 1) is
+        # trivially satisfied by them, so actionable_step short-circuits at the
+        # rung and the grind goal becomes GatherMaterials(rung, held+1) — "craft
+        # ANOTHER rung" — whose recipe materials are NOT in hand, exploding the
+        # sub-plan search to a timeout / empty plan and livelocking on
+        # error:other (live Robby 2026-07-15: fire_staff x3 held, no ash_plank,
+        # 38 cycles at ~10s CPU each). held + 1 makes the deficit unmet, so the
+        # descent enters the recipe and stops at the deepest actionable material.
+        step = actionable_step(ObtainItem(rung, quantity=held + 1),
+                               state, game_data, ctx)
         if isinstance(step, ObtainItem) and step.code != rung:
             return GatherMaterialsGoal(target_item=step.code,
                                        needed={step.code: step.quantity},
