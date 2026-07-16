@@ -50,9 +50,12 @@ def _deep_gd() -> GameData:
     1M nodes, no plan)."""
     gd = GameData()
     gd._item_stats = {
+        # attack -> pursuit_value ~15000 (>= RECYCLE_LEAF_VALUE_FLOOR 10000): a
+        # CURRENT-TIER weapon, so a grind will NOT churn it to source ash_plank —
+        # it descends to gather ash_wood instead.
         "fire_staff": ItemStats(code="fire_staff", level=5, type_="weapon",
                                 subtype="", crafting_skill="weaponcrafting",
-                                crafting_level=5),
+                                crafting_level=5, attack={"fire": 15}),
         "ash_plank": ItemStats(code="ash_plank", level=1, type_="resource",
                                subtype="craft", crafting_skill="woodcutting",
                                crafting_level=1),
@@ -143,17 +146,20 @@ def test_next_grind_goal_descends_when_rung_held_but_materials_absent() -> None:
     fire_staff", whose ash_plank<-ash_wood chain is NOT in hand, so the sub-plan
     search EXPLODED to a 10s timeout / empty plan and `_execute_level_skill`
     raised every cycle. Descend on the grind quantity (held+1), not the default
-    1: the deficit forces the recipe open and the goal targets the deepest
-    actionable material — ash_plank, whose ready RECYCLE source is the held
-    fire_staff.
+    1: the deficit forces the recipe open and the grind descends to the deepest
+    GATHERABLE raw material.
 
-    But recycling the rung (fire_staff) to source the rung's own material is a
-    NULL CYCLE (fire_staff -> ash_plank -> re-craft fire_staff — destroy the
-    weapon, remake the same weapon, burning red_slimeball for XP). So the grind
-    goal carries `exclude_recycle={rung}`: its relevant_actions never admits
-    Recycle(fire_staff), so the planner sources ash_plank by gathering fresh
-    ash_wood (or recycling a DIFFERENT surplus item) instead of churning the
-    rung (fix 2026-07-16)."""
+    That material is ash_wood, NOT ash_plank: the held fire_staff DO recycle to
+    ash_plank, but a SKILL GRIND gathers its materials fresh — it does not
+    recycle gear to source them (recycling gear is low-priority; the grind
+    produces new material). `next_grind_goal` runs the descent with
+    `exclude_recycle_leaf=True`, so a RECYCLE source never leafs a material for
+    the grind; ash_plank (recyclable-only) is not a leaf and the descent falls
+    through to ash_wood (gatherable). This keeps the grind PLANNABLE (a flat
+    gather, one leg) and cannot churn the rung — subsuming the null cycle. The
+    goal still carries `exclude_recycle={rung}` as a belt-and-suspenders guard
+    for any residual recyclable material the descent lands on
+    (fix 2026-07-16)."""
     gd = _deep_gd()
     state = scenario_state(
         ScenarioCharacter(name="t", level=13, skills={"weaponcrafting": 6},
@@ -162,9 +168,9 @@ def test_next_grind_goal_descends_when_rung_held_but_materials_absent() -> None:
     goal = next_grind_goal("weaponcrafting", state, gd)
     assert isinstance(goal, GatherMaterialsGoal)
     assert goal.skill_grind is True
-    # Descent still targets ash_plank (recyclable from the held fire_staff)...
-    assert goal.needed == {"ash_plank": 5}
-    # ...but the rung is excluded from recycle-acquisition, breaking the cycle.
+    # ash_wood (gathered fresh) — the grind never recycles gear to source its
+    # materials; ash_plank's recycle source does NOT leaf it for a grind.
+    assert goal.needed == {"ash_wood": 10}
     assert goal.exclude_recycle == frozenset({"fire_staff"})
 
 

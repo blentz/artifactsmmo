@@ -6,7 +6,7 @@ chains terminate; cycles (if any) are left for P3's visited-set traversal."""
 
 from artifactsmmo_cli.ai.combat import predict_win
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.obtain_sources import SourceKind, obtain_sources
+from artifactsmmo_cli.ai.obtain_sources import Source, SourceKind, obtain_sources
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
 from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.meta_goal import (
@@ -15,7 +15,34 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ReachCharLevel,
 )
 from artifactsmmo_cli.ai.tiers.owned_count import owned_count_pure
+from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
 from artifactsmmo_cli.ai.world_state import WorldState
+
+RECYCLE_LEAF_VALUE_FLOOR = 10000
+"""pursuit_value below which a recyclable item is JUNK (obsolete gear) a skill
+grind may recover cheaply, vs CURRENT-TIER gear it must not churn. Only consulted
+under a grind's `exclude_recycle_leaf` descent (see `prerequisites`): a RECYCLE
+source leafs a material iff the recycled item's pursuit_value is below this floor.
+Calibrated to the combat-dominant `pursuit_value` scale (live: obsolete
+fishing_net/copper_axe ~5000-8000 recover; current-tier wooden_staff/fire_staff
+13000-21000 and up are skipped so the grind gathers fresh). Tunable — a proxy for
+'current-tier', not load-bearing for correctness; the null-cycle guard
+(GatherMaterialsGoal.exclude_recycle) protects the rung independently."""
+
+
+def _source_leafs(source: Source, game_data: GameData,
+                  exclude_recycle_leaf: bool) -> bool:
+    """Whether `source` makes its material a descent LEAF. CRAFT never leafs (the
+    descent walks the recipe). Every other kind leafs — EXCEPT, under a grind's
+    `exclude_recycle_leaf`, a RECYCLE of a CURRENT-TIER item (pursuit_value >=
+    RECYCLE_LEAF_VALUE_FLOOR): the grind descends to gather rather than churn it.
+    A RECYCLE of JUNK still leafs (cheap recovery)."""
+    if source.kind is SourceKind.CRAFT:
+        return False
+    if exclude_recycle_leaf and source.kind is SourceKind.RECYCLE:
+        stats = game_data.item_stats(source.code)
+        return stats is not None and pursuit_value(stats) < RECYCLE_LEAF_VALUE_FLOOR
+    return True
 
 
 def combat_capable(state: WorldState, game_data: GameData) -> bool:
@@ -40,7 +67,8 @@ def best_attainable_weapon(game_data: GameData) -> str | None:
 
 
 def prerequisites(node: MetaGoal, state: WorldState, game_data: GameData,
-                  ctx: SelectionContext = NO_PROFILE_CONTEXT) -> list[MetaGoal]:
+                  ctx: SelectionContext = NO_PROFILE_CONTEXT,
+                  exclude_recycle_leaf: bool = False) -> list[MetaGoal]:
     """Direct prerequisites of `node`, derived from game data.
 
     A craftable material with ANY READY non-craft source — a bank withdraw, a
@@ -80,8 +108,21 @@ def prerequisites(node: MetaGoal, state: WorldState, game_data: GameData,
         recipe = game_data.crafting_recipe(node.code)
         if recipe is not None:
             sources = obtain_sources(node.code, state, game_data, ctx)
-            if any(s.kind is not SourceKind.CRAFT for s in sources):
-                return []  # a ready non-craft source exists → LEAF
+            # `exclude_recycle_leaf` (set by a SKILL GRIND): VALUE-AWARE recycle
+            # leafing. A grind gathers its materials fresh rather than churning
+            # CURRENT-TIER gear to source them, but still recovers surplus JUNK
+            # cheaply (a fast grind — recycling a worthless obsolete item beats
+            # 50 raw gathers). So a RECYCLE source leafs a material for the grind
+            # ONLY when the recycled item is JUNK (`pursuit_value <
+            # RECYCLE_LEAF_VALUE_FLOOR`); a current-tier item does NOT leaf, and
+            # the grind descends past the recyclable-only material to its
+            # GATHERABLE raw (a flat, always-plannable gather). The rung itself is
+            # forbidden separately by GatherMaterialsGoal.exclude_recycle (the
+            # null cycle). Withdraw/gather/buy/drop always leaf. For every other
+            # caller the flag is off and recycle leafs as before.
+            if any(_source_leafs(s, game_data, exclude_recycle_leaf)
+                   for s in sources):
+                return []  # a ready leaf source exists → LEAF
             # An ObtainItem's prereqs are just its material ObtainItems. The
             # crafting-skill gate is no longer emitted as a prerequisite node:
             # under-skill gear is grinded planner-natively by UpgradeEquipmentGoal

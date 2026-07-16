@@ -139,6 +139,38 @@ def test_no_destroyable_copies_still_descends():
         == [ObtainItem("copper_ore", 10)]
 
 
+def test_exclude_recycle_leaf_descends_past_a_recycle_only_material():
+    """A skill grind gathers its materials fresh — it does not recycle gear to
+    source them (recycling gear is low-priority; the grind produces new
+    material). With `exclude_recycle_leaf=True` a RECYCLE source no longer leafs
+    a material, so copper_bar (whose only ready source is recycling the held
+    copper_dagger) is NOT a leaf and the descent falls through to its gatherable
+    raw, copper_ore. Default (grind flag off): copper_bar still leafs via the
+    recycle source. copper_dagger/copper_bar mirror fire_staff/ash_plank."""
+    gd = _gd()
+    state = make_state(inventory={"copper_dagger": 2})
+    assert prerequisites(ObtainItem("copper_bar", 6), state, gd) == []
+    assert prerequisites(ObtainItem("copper_bar", 6), state, gd,
+                         exclude_recycle_leaf=True) == [ObtainItem("copper_ore", 10)]
+
+
+def test_exclude_recycle_leaf_still_leafs_a_junk_recycle():
+    """The grind's value-aware flag skips only CURRENT-TIER gear recycle. A JUNK
+    item (pursuit_value < RECYCLE_LEAF_VALUE_FLOOR) still leafs the material — a
+    fast grind recovers surplus junk instead of gathering raw (2026-07-13
+    behavior, preserved). rusty_scrap (attack 2 -> pursuit_value ~2000) recycles
+    to copper_bar."""
+    gd = _gd()
+    gd._item_stats = {**gd._item_stats,
+        "rusty_scrap": ItemStats(code="rusty_scrap", level=1, type_="weapon",
+                                 attack={"fire": 2}, crafting_skill="weaponcrafting",
+                                 crafting_level=1)}
+    gd._crafting_recipes = {**gd._crafting_recipes, "rusty_scrap": {"copper_bar": 6}}
+    state = make_state(inventory={"rusty_scrap": 2})
+    assert prerequisites(ObtainItem("copper_bar", 6), state, gd,
+                         exclude_recycle_leaf=True) == []
+
+
 def test_gatherable_craftable_is_a_leaf_via_gather_source():
     """The ready-source leaf rule generalizes beyond RECYCLE (one-obtain-model
     epic, Task 5): a craftable item that is ALSO directly gatherable from a

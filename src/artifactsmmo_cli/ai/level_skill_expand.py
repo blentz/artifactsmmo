@@ -67,8 +67,14 @@ def next_grind_goal(skill: str, state: WorldState, game_data: GameData,
         # error:other (live Robby 2026-07-15: fire_staff x3 held, no ash_plank,
         # 38 cycles at ~10s CPU each). held + 1 makes the deficit unmet, so the
         # descent enters the recipe and stops at the deepest actionable material.
+        # exclude_recycle_leaf=True: a skill grind GATHERS its materials fresh —
+        # the descent skips a recyclable-only intermediate (ash_plank via
+        # recycling gear) and lands on the gatherable raw (ash_wood), a flat,
+        # always-plannable gather. This keeps the grind plannable AND cannot
+        # churn gear to grind (recycling the rung to source its own material is
+        # a null cycle; recycling OTHER current-tier gear is low priority).
         step = actionable_step(ObtainItem(rung, quantity=held + 1),
-                               state, game_data, ctx)
+                               state, game_data, ctx, exclude_recycle_leaf=True)
         if isinstance(step, ObtainItem) and step.code != rung:
             # exclude_recycle={rung}: never recycle the rung to source its own
             # crafting material — that is the null cycle (rung -> material ->
