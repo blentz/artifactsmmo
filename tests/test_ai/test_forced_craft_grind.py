@@ -2,6 +2,7 @@
 
 from artifactsmmo_cli.ai.forced_craft_grind import forced_craft_grind
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
 
@@ -63,7 +64,6 @@ def test_no_grind_when_a_winnable_dropper_exists():
     gd._monster_hp = {"fire_imp": 1}
     gd._monster_drops = {"fire_imp": [("fire_bow", 100, 1, 1)]}
     gd._monster_locations = {"fire_imp": [(0, 1)]}
-    from tests.test_ai._monster_fixture import fill_monster_stat_defaults
     fill_monster_stat_defaults(gd)
     state = make_state(skills={"weaponcrafting": 7}, attack={"fire": 20}, dmg=0)
     assert forced_craft_grind("fire_bow", 1, state, gd) is None

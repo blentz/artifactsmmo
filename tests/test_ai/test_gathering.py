@@ -280,3 +280,20 @@ def test_gather_materials_heuristic_is_forced_grind_cost():
         LevelSkill(skill="gearcrafting", target_level=20).cost(under, gd)
     met = make_state(skills={"gearcrafting": 20})
     assert goal.heuristic(met, gd) == 0.0
+
+
+def test_gather_materials_heuristic_zero_for_finished_target_form():
+    """Finished-target form (`target_item` NOT a key of `needed`, e.g. the live
+    `GatherMaterialsGoal(target_item=code, needed=dict(recipe))` built by
+    strategy_driver.py:452): `is_satisfied` is met by the NEEDED MATERIALS
+    alone (see is_satisfied's docstring) -- obtaining the target is NOT
+    required, so the target's craft-skill grind is not a landmark and h must
+    stay 0, even though `forged_plate` is craft-only, gearcrafting-gated at
+    20, and unowned. Without the `target_item in needed` guard,
+    `forced_craft_grind` still fires (target unowned + craft-only + skill
+    unmet) and `heuristic` returns the positive `LevelSkill.cost` here too --
+    over-estimating h and violating admissibility (BUG B finding 1)."""
+    gd = _forged_plate_gd()  # forged_plate: craft-only, gearcrafting 20
+    goal = GatherMaterialsGoal(target_item="forged_plate", needed={"iron_ore": 6})
+    under = make_state(skills={"gearcrafting": 12}, inventory={"iron_ore": 5})
+    assert goal.heuristic(under, gd) == 0.0

@@ -95,7 +95,12 @@ class UpgradeEquipmentGoal(Goal):
         unavoidable, so h never over-estimates; `LevelSkill.cost` is the exact
         edge cost the plan pays, so taking the grind drops h by exactly that
         (consistency). 0 when satisfied, owned, skill-met, or the target has a
-        non-craft route — see the design's admissibility guard."""
+        non-craft route — see the design's admissibility guard.
+
+        NOTE (latent footgun): `LevelSkill` below is built with no `xp_curve`,
+        so `cost` takes the no-curve fallback, matching the factory's edge
+        cost today — if a future change populates observed curves on the
+        factory's LevelSkill but not here, admissibility could break."""
         if self.is_satisfied(state):
             return 0.0
         target = self.find_upgrade_target(state, game_data)

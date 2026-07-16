@@ -173,10 +173,29 @@ class GatherMaterialsGoal(Goal):
         takes the forced `LevelSkill` edge first instead of exhausting the
         cheap gather/withdraw frontier first (BUG B). 0 when satisfied,
         owned, skill-met, or the target has a non-craft route — see
-        `forced_craft_grind`'s admissibility guard."""
+        `forced_craft_grind`'s admissibility guard.
+
+        INVARIANT: the forced-grind term is admissible ONLY when obtaining
+        `_target_item` is what `is_satisfied` requires — i.e. `_target_item
+        in self._needed` (the raw-material/rung form). In the FINISHED-target
+        form (`_target_item` not a key of `_needed`, e.g.
+        GatherMaterials(iron_sword, {iron_ore: 6})), `is_satisfied` is met by
+        the NEEDED MATERIALS alone — crafting/obtaining the target is not
+        required to satisfy this goal, so the target's craft-skill grind is
+        not a landmark and h must stay 0. Counting it there over-estimates
+        (h > true remaining), breaking admissibility.
+
+        NOTE (latent footgun): `LevelSkill` is built below with no
+        `xp_curve`, so `cost` always takes the no-curve `gap*PER_LEVEL_COST`
+        fallback — matching the factory's edge cost today. If a future change
+        populates observed curves on the factory's LevelSkill but not here,
+        this equality (and hence admissibility) could break.
+        """
         if self.is_satisfied(state):
             return 0.0
-        needed = self._needed.get(self._target_item, 1)
+        if self._target_item not in self._needed:
+            return 0.0
+        needed = self._needed[self._target_item]
         grind = forced_craft_grind(self._target_item, needed, state, game_data)
         if grind is None:
             return 0.0
