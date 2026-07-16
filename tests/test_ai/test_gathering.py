@@ -194,6 +194,27 @@ class TestRecycleAsAcquisition:
         kept = goal.relevant_actions(pool, state, gd)
         assert [a.code for a in kept if isinstance(a, RecycleAction)] == ["fishing_net"]
 
+    def test_exclude_recycle_drops_the_rung_from_recycle_acquisition(self):
+        """Null-cycle guard (2026-07-16): a skill-grind crafting fishing_net
+        from ash_plank must NOT recycle fishing_net to source that ash_plank
+        (fishing_net -> ash_plank -> re-craft fishing_net — destroy the item,
+        remake the same item). `exclude_recycle={fishing_net}` drops
+        Recycle(fishing_net) from admission; without it, recycle-as-acquisition
+        admits it (the churn). Live: the weaponcrafting grind recycled surplus
+        fire_staff to grind fire_staff — fishing_net/ash_plank mirror
+        fire_staff/ash_plank here."""
+        gd = self._gd_ash_plank()
+        state = make_state(skills={"gearcrafting": 1, "woodcutting": 1})
+        pool = [RecycleAction(code="fishing_net", quantity=1, workshop_location=(2, 1))]
+        plain = GatherMaterialsGoal(target_item="ash_plank", needed={"ash_plank": 5})
+        assert [a.code for a in plain.relevant_actions(pool, state, gd)
+                if isinstance(a, RecycleAction)] == ["fishing_net"]
+        guarded = GatherMaterialsGoal(
+            target_item="ash_plank", needed={"ash_plank": 5},
+            exclude_recycle=frozenset({"fishing_net"}))
+        assert [a for a in guarded.relevant_actions(pool, state, gd)
+                if isinstance(a, RecycleAction)] == []
+
     def test_gather_goal_admits_the_withdraw_that_feeds_the_recycle(self):
         """The recycle SOURCE is upstream of the material closure, so the
         closure-built `withdrawable` set misses it. Without this the

@@ -144,13 +144,16 @@ def test_next_grind_goal_descends_when_rung_held_but_materials_absent() -> None:
     search EXPLODED to a 10s timeout / empty plan and `_execute_level_skill`
     raised every cycle. Descend on the grind quantity (held+1), not the default
     1: the deficit forces the recipe open and the goal targets the deepest
-    actionable material.
+    actionable material — ash_plank, whose ready RECYCLE source is the held
+    fire_staff.
 
-    Here that material is ash_plank, not raw ash_wood: the 3 held fire_staff are
-    themselves a ready RECYCLE source for ash_plank (fire_staff <- 5 ash_plank),
-    so ash_plank has no unmet prerequisites and is the actionable leaf. The live
-    planner then plans it in ~0.09s as Recycle(fire_staff) — the intended
-    churn-grind — instead of exploding on "craft a 4th fire_staff"."""
+    But recycling the rung (fire_staff) to source the rung's own material is a
+    NULL CYCLE (fire_staff -> ash_plank -> re-craft fire_staff — destroy the
+    weapon, remake the same weapon, burning red_slimeball for XP). So the grind
+    goal carries `exclude_recycle={rung}`: its relevant_actions never admits
+    Recycle(fire_staff), so the planner sources ash_plank by gathering fresh
+    ash_wood (or recycling a DIFFERENT surplus item) instead of churning the
+    rung (fix 2026-07-16)."""
     gd = _deep_gd()
     state = scenario_state(
         ScenarioCharacter(name="t", level=13, skills={"weaponcrafting": 6},
@@ -159,8 +162,10 @@ def test_next_grind_goal_descends_when_rung_held_but_materials_absent() -> None:
     goal = next_grind_goal("weaponcrafting", state, gd)
     assert isinstance(goal, GatherMaterialsGoal)
     assert goal.skill_grind is True
-    # ash_plank (recyclable from the held fire_staff), NOT fire_staff (held x3).
+    # Descent still targets ash_plank (recyclable from the held fire_staff)...
     assert goal.needed == {"ash_plank": 5}
+    # ...but the rung is excluded from recycle-acquisition, breaking the cycle.
+    assert goal.exclude_recycle == frozenset({"fire_staff"})
 
 
 def test_next_grind_goal_none_when_no_rung() -> None:

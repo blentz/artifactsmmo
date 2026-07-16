@@ -91,9 +91,18 @@ class GatherMaterialsGoal(Goal):
     """Gather resources needed to craft a specific upgrade item."""
 
     def __init__(self, target_item: str, needed: dict[str, int],
-                 skill_grind: bool = False) -> None:
+                 skill_grind: bool = False,
+                 exclude_recycle: frozenset[str] = frozenset()) -> None:
         self._target_item = target_item
         self._needed = needed  # {material_code: quantity_needed}
+        # exclude_recycle: item codes this goal must NEVER recycle-as-acquire.
+        # Set by a skill-grind to the RUNG it crafts: recycling item T to source
+        # T's own crafting material M is a null cycle (T -> M -> craft T) —
+        # live, the weaponcrafting grind recycled surplus fire_staff to get
+        # ash_plank to re-craft fire_staff (destroy the weapon, remake the same
+        # weapon, burning red_slimeball for XP). A non-cyclic recycle (a
+        # DIFFERENT surplus item) is unaffected.
+        self._exclude_recycle = exclude_recycle
         # skill_grind: this is a perpetual skill-XP grind gather (needed target is
         # `held + 1`, never satisfied) whose DROP is a byproduct, not a demand.
         # The deposit/discard protection profile caps its bag reserve so surplus
@@ -109,6 +118,12 @@ class GatherMaterialsGoal(Goal):
         resolved objective step (trace 2026-06-11 22:36 cycle 30: discard
         deleted this goal's own target item)."""
         return dict(self._needed)
+
+    @property
+    def exclude_recycle(self) -> frozenset[str]:
+        """Item codes this goal must never recycle-as-acquire (the grind rung —
+        see __init__)."""
+        return self._exclude_recycle
 
     def value(self, state: WorldState, game_data: GameData,
               history: LearningStore | None = None) -> float:
@@ -268,6 +283,8 @@ class GatherMaterialsGoal(Goal):
         for action in actions:
             if not isinstance(action, RecycleAction):
                 continue
+            if action.code in self._exclude_recycle:
+                continue  # never recycle the rung to source its own material
             source_recipe = game_data.crafting_recipe(action.code) or {}
             if set(source_recipe) & closure_materials:
                 recycle_sources.add(action.code)

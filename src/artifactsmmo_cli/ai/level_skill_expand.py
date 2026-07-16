@@ -70,9 +70,13 @@ def next_grind_goal(skill: str, state: WorldState, game_data: GameData,
         step = actionable_step(ObtainItem(rung, quantity=held + 1),
                                state, game_data, ctx)
         if isinstance(step, ObtainItem) and step.code != rung:
+            # exclude_recycle={rung}: never recycle the rung to source its own
+            # crafting material — that is the null cycle (rung -> material ->
+            # re-craft rung) that churned surplus fire_staff on live Robby.
             return GatherMaterialsGoal(target_item=step.code,
                                        needed={step.code: step.quantity},
-                                       skill_grind=True)
+                                       skill_grind=True,
+                                       exclude_recycle=frozenset({rung}))
     else:
         rung = best_gather_resource_drop(
             skill, state.skills.get(skill, 1), game_data)
@@ -81,4 +85,5 @@ def next_grind_goal(skill: str, state: WorldState, game_data: GameData,
     bank = state.bank_items or {}
     held = state.inventory.get(rung, 0) + bank.get(rung, 0)
     return GatherMaterialsGoal(target_item=rung, needed={rung: held + 1},
-                               skill_grind=True)
+                               skill_grind=True,
+                               exclude_recycle=frozenset({rung}))
