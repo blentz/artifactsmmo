@@ -1837,3 +1837,35 @@ class TestDepositInventorySelective:
             f"got {planner.last_stats.nodes_explored}"
         )
         assert not planner.last_stats.timed_out
+
+
+class TestAcceptTaskGoalBounded:
+    """AcceptTaskGoal.relevant_actions must restrict the pool to AcceptTaskAction.
+
+    Trace 2026-07-15 l35_boots_drop_farm: AcceptTaskGoal inherited the base
+    relevant_actions (the whole ~1908-action pool), so the planner branched over
+    every action and exploded to 26K nodes / timeout with NO plan — the same bug
+    DepositInventoryGoal already fixed. AcceptTaskAction self-moves to the
+    taskmaster and satisfies the goal in ONE step, so the filtered search is a
+    single node."""
+
+    def test_planner_bounded_by_relevant_actions_filter(self):
+        from artifactsmmo_cli.ai.actions.accept_task import AcceptTaskAction
+        from artifactsmmo_cli.ai.goals.accept_task_goal import AcceptTaskGoal
+        gd = GameData()
+        goal = AcceptTaskGoal()
+        accept = AcceptTaskAction(taskmaster_location=(1, 2))
+        decoys = [
+            MoveAction(x=2, y=0), MoveAction(x=3, y=0), RestAction(),
+            GatherAction(resource_code="copper_rocks", locations=frozenset([(1, 0)])),
+        ]
+        state = make_state(x=0, y=0, task_code=None, task_total=0)
+        assert not goal.is_satisfied(state)
+        relevant = goal.relevant_actions([accept, *decoys], state, gd)
+        assert relevant == [accept], f"expected only AcceptTaskAction, got {relevant!r}"
+        planner = GOAPPlanner()
+        plan = planner.plan(state, goal, [accept, *decoys], gd)
+        assert plan == [accept], f"expected single-step accept plan, got {plan!r}"
+        assert planner.last_stats.nodes_explored <= 2, (
+            f"filter should cap planner at ~2 nodes, got {planner.last_stats.nodes_explored}")
+        assert not planner.last_stats.timed_out
