@@ -7,18 +7,14 @@ from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import DUPLICATE_SLOT_TYPES, ITEM_TYPE_TO_SLOTS, EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.unequip import UnequipAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.combat import is_winnable
+from artifactsmmo_cli.ai.forced_craft_grind import forced_craft_grind
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.base import Goal
-from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
-from artifactsmmo_cli.ai.monster_drop_selection import (
-    MonsterDropCandidate,
-    select_monster_for_drop,
-)
-from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.goals.upgrade_selection import (
     UpgradeCandidate,
     best_by_key,
@@ -26,8 +22,14 @@ from artifactsmmo_cli.ai.goals.upgrade_selection import (
     craftable_key,
     inventory_key,
 )
+from artifactsmmo_cli.ai.intermediate_batch import size_intermediate_craft
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.min_plan_length import min_plan_length
+from artifactsmmo_cli.ai.monster_drop_selection import (
+    MonsterDropCandidate,
+    select_monster_for_drop,
+)
+from artifactsmmo_cli.ai.nearest_tile import nearest_or_error
 from artifactsmmo_cli.ai.recipe_closure import (
     closure_demand,
     gather_serves_closure,
@@ -86,6 +88,25 @@ class UpgradeEquipmentGoal(Goal):
         if self._upgrade_is_relevant_tool(upgrade, state, game_data):
             return _UPGRADE_EQUIPMENT_RELEVANT_TOOL
         return _UPGRADE_EQUIPMENT_BASE
+
+    def heuristic(self, state: WorldState, game_data: GameData) -> float:
+        """Admissible+consistent: the cost of the FORCED craft-skill grind the
+        target requires. `forced_craft_grind` counts it only when crafting is
+        unavoidable, so h never over-estimates; `LevelSkill.cost` is the exact
+        edge cost the plan pays, so taking the grind drops h by exactly that
+        (consistency). 0 when satisfied, owned, skill-met, or the target has a
+        non-craft route — see the design's admissibility guard."""
+        if self.is_satisfied(state):
+            return 0.0
+        target = self.find_upgrade_target(state, game_data)
+        if target is None:
+            return 0.0
+        target_item, _slot = target
+        grind = forced_craft_grind(target_item, 1, state, game_data)
+        if grind is None:
+            return 0.0
+        skill, level = grind
+        return LevelSkill(skill=skill, target_level=level).cost(state, game_data)
 
     def _upgrade_is_relevant_tool(self, upgrade: tuple[str, str],
                                    state: WorldState, game_data: GameData) -> bool:

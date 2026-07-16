@@ -6,7 +6,9 @@ import tempfile
 from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.deposit_all import DepositAllAction
+from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
+from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.rest import RestAction
@@ -426,6 +428,94 @@ class TestUpgradeEquipmentGoal:
                            bank_items={"iron_ore": 6})
         goal = UpgradeEquipmentGoal()
         assert goal.value(state, gd) == 35.0
+
+
+def _fire_bow_gd() -> GameData:
+    """Craft-only, skill-gated, unowned target (mirrors
+    `test_forced_craft_grind._gd`): fire_bow needs weaponcrafting 10, built
+    from a gatherable spruce_plank leaf + a red_slimeball leaf. Adds a
+    weaponcrafting workshop + a spruce_plank resource so a Craft/Gather action
+    for this target is buildable and `UpgradeEquipmentGoal.relevant_actions`
+    (find_upgrade_target/is_satisfied) behaves; the goal is pinned via
+    `committed_target`, so no arbiter ranking over these picks is exercised."""
+    gd = GameData()
+    gd._item_stats = {
+        "fire_bow": ItemStats(code="fire_bow", level=10, type_="weapon",
+                              crafting_skill="weaponcrafting", crafting_level=10),
+        "spruce_plank": ItemStats(code="spruce_plank", level=1, type_="resource",
+                                  subtype="craft"),
+        "red_slimeball": ItemStats(code="red_slimeball", level=1, type_="resource",
+                                   subtype="mob"),
+        # In-skill, in-level, obtainable rung (crafting_level 1 <= the fixture's
+        # weaponcrafting 7): LevelSkill.is_applicable delegates to
+        # skill_grind_target, which requires a same-skill craftable at or below
+        # the CURRENT skill level to justify the grind — fire_bow itself (level
+        # 10) can never serve as its own rung. Mirrors the "trinket" rung in
+        # test_upgrade_equipment_level_skill.py's _gd().
+        "practice_bow": ItemStats(code="practice_bow", level=1, type_="weapon",
+                                  crafting_skill="weaponcrafting", crafting_level=1),
+    }
+    gd._crafting_recipes = {
+        "fire_bow": {"spruce_plank": 6, "red_slimeball": 2},
+        "practice_bow": {"spruce_plank": 1},
+    }
+    gd._resource_drops = {"spruce_tree": "spruce_plank"}
+    gd._resource_skill = {"spruce_tree": ("woodcutting", 1)}
+    gd._resource_locations = {"spruce_tree": [(3, 3)]}
+    gd._workshop_locations = {"weaponcrafting": (2, 2)}
+    gd._bank_location = (0, 0)
+    gd._taskmaster_location = (1, 1)
+    return gd
+
+
+def _fire_bow_actions(gd: GameData) -> list:
+    """The LevelSkill/Craft/Equip triple that solves the committed fire_bow
+    target, plus a couple of cheap always-applicable decoys (RestAction, a
+    closure GatherAction for spruce_plank) giving the frontier a cheap
+    alternative to exhaust instead of taking the forced grind."""
+    return [
+        LevelSkill(skill="weaponcrafting", target_level=10),
+        CraftAction(code="fire_bow", quantity=1,
+                    workshop_location=gd._workshop_locations["weaponcrafting"]),
+        EquipAction(code="fire_bow", slot="weapon_slot"),
+        RestAction(),
+        GatherAction(resource_code="spruce_tree", locations=frozenset([(3, 3)])),
+    ]
+
+
+def test_upgrade_equipment_heuristic_is_forced_grind_cost():
+    """Pinned to a craft-only, skill-gated, unowned target, the heuristic is the
+    LevelSkill.cost of the forced grind; 0 once satisfied/owned/skill-met."""
+    from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
+    from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
+    gd = _fire_bow_gd()  # helper below: fire_bow craft-only, weaponcrafting 10
+    goal = UpgradeEquipmentGoal(committed_target=("fire_bow", "weapon_slot"))
+    under = make_state(level=13, skills={"weaponcrafting": 7})
+    expected = LevelSkill(skill="weaponcrafting", target_level=10).cost(under, gd)
+    assert goal.heuristic(under, gd) == expected
+    assert expected > 0
+    met = make_state(level=13, skills={"weaponcrafting": 10})
+    assert goal.heuristic(met, gd) == 0.0
+    owned = make_state(level=13, skills={"weaponcrafting": 7},
+                       inventory={"fire_bow": 1})
+    assert goal.heuristic(owned, gd) == 0.0
+
+
+def test_upgrade_equipment_heuristic_collapses_the_skill_gate_search():
+    """BEHAVIORAL proof (the BUG B collapse): with the mats in hand and the
+    skill unmet, the planner finds [LevelSkill, Craft, Equip] and creates far
+    fewer nodes than the same search with the heuristic forced to 0."""
+    from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
+    from artifactsmmo_cli.ai.planner import GOAPPlanner
+    gd = _fire_bow_gd()
+    goal = UpgradeEquipmentGoal(committed_target=("fire_bow", "weapon_slot"))
+    state = make_state(level=13, skills={"weaponcrafting": 7},
+                       inventory={"spruce_plank": 6, "red_slimeball": 2})
+    actions = _fire_bow_actions(gd)  # LevelSkill, Craft, Equip, + cheap decoys
+    plan = GOAPPlanner().plan(state, goal, actions, gd, budget_seconds=10.0)
+    assert [repr(a) for a in plan] == [
+        "LevelSkill(weaponcrafting->10)", "Craft(fire_bow×1)",
+        "Equip(fire_bow->weapon_slot)"], plan
 
 
 class TestUpgradeEquipmentGoalToolBias:
