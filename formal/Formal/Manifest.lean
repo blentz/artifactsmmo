@@ -267,8 +267,9 @@ open Formal.PriorityBand
 -- PlannerAdmissibility visited-set / consistency roles (BUG B fix: non-zero goal h + closed-set pruning):
 #check @Formal.PlannerAdmissibility.Consistent                   -- textbook consistency (monotonicity): h s ≤ cost + h s'
 #check @Formal.PlannerAdmissibility.zero_h_consistent            -- h ≡ 0 is consistent w.r.t. any cost/succ
-#check @Formal.PlannerAdmissibility.consistent_firstpop_is_least_g -- closed-set: first pop is least-g ⇒ pruning re-expansions is safe
-#check @Formal.PlannerAdmissibility.consistent_closedSet_preserves_optimal -- admissible+consistent ⇒ A*-with-visited optimal on both fronts
+#check @Formal.PlannerAdmissibility.fScore_monotone_along_edge_of_consistent -- LOAD-BEARING: consistency ⇒ f does not drop across a successor edge (false without hcon)
+#check @Formal.PlannerAdmissibility.fScore_monotone_along_path -- consistency ⇒ f non-decreasing along any path from the start
+#check @Formal.PlannerAdmissibility.consistent_closedSet_preserves_optimal -- admissible+consistent ⇒ A*-with-visited optimal on both fronts (front 2 via path-monotonicity)
 #check @Formal.PlannerAdmissibility.skillGrind_h_admissible      -- skill-grind landmark heuristic IS admissible
 #check @Formal.PlannerAdmissibility.skillGrind_h_consistent      -- skill-grind landmark heuristic IS consistent
 #check @Formal.PlannerAdmissibility.skillGrind_closedSet_preserves_optimal -- whole closed-set contract discharged on skill-grind instance

@@ -138,47 +138,87 @@ theorem firstSatisfied_least_cost_of_admissible
 
 /-! ## CLOSED-SET PRUNING (the `visited` set) is safe under CONSISTENCY.
 
-Model (faithful to planner.py:116, 153-156, kept minimal — mirrors `fScore`).
-Best-first pops the frontier in non-decreasing `f = g + h` order and records each
-popped state in `visited`; a state already in `visited` is skipped instead of
-re-expanded.  A "re-expansion" of a state `s` is therefore a SECOND frontier node
-for `s`, carrying some alternate `gAlt`, that is popped NO EARLIER than the first
-(so `f gFirst (h s) ≤ f gAlt (h s)`).  The pruning is safe exactly when that
-first pop already held the LEAST `g` for `s` — otherwise the skipped node would
-have been the cheaper route.  Consistency (in fact, this arithmetic alone: the
-shared `h s` cancels out of both f-scores) delivers precisely that. -/
+The REAL planner (planner.py:153-156) keeps a `visited` set and skips any state it
+has already popped.  This pruning is safe only when the FIRST pop of a state already
+carries its least `g` — otherwise the skipped re-expansion would have been the
+cheaper route.  The classical A* guarantee for this is CONSISTENCY (monotonicity),
+and the mechanism is: **`f` is non-decreasing along every path from the start.**
+So any cheaper route to a state `s` must, at every prefix, sit on the frontier with
+an `f`-score no larger than `f s`; best-first (which pops in non-decreasing `f`)
+therefore reaches `s` on that cheaper route no later than on a costlier one.
 
--- `hcon` is kept as the interface hypothesis (the consistency under which the
--- frontier premise holds); the cancellation of the shared `h s` closes the goal
--- without unfolding it, so the linter is silenced narrowly for this declaration.
-set_option linter.unusedVariables false in
-/-- LOAD-BEARING: when the second (pruned) frontier node for a state `s` is popped
-no earlier than the first (`f gFirst (h s) ≤ f gAlt (h s)`), the first pop's `g`
-is ≤ the pruned node's `g`.  The common `h s` cancels, so discarding a state
-already in `visited` never removes a cheaper path.  This is the guarantee a
-CONSISTENT h gives the closed-set search (`hcon` witnesses the hypothesis under
-which every frontier ordering that reaches `s` satisfies the premise; the
-cancellation itself is unconditional once the premise holds). -/
-theorem consistent_firstpop_is_least_g
+The two lemmas below make consistency LOAD-BEARING (they are FALSE for an
+inconsistent h — the linter warning that a previous draft suppressed was a symptom
+of a proof that used only the shared-`h` cancellation and never the hypothesis):
+
+* `fScore_monotone_along_edge_of_consistent` — the single-edge core: `f` does not
+  drop across a successor edge.  Unfolds to `h s ≤ cost s s' + h s'`, which is
+  EXACTLY `Consistent` applied to that edge; with no consistency hypothesis the
+  inequality can fail (a big `h s`), so `hcon` is essential.
+* `fScore_monotone_along_path` — folds the edge core along a whole path, giving
+  `f`-monotonicity from any start to any reachable state. -/
+
+/-- LOAD-BEARING EDGE MONOTONICITY.  Across a successor edge `s → s'`, the f-score
+never decreases: `f g (h s) ≤ f (g + cost s s') (h s')`.  Unfolding `fScore` turns
+the goal into `h s ≤ cost s s' + h s'`, which is precisely `Consistent h cost succ`
+applied to the edge `e`.  FALSE without consistency — `hcon` is essential. -/
+theorem fScore_monotone_along_edge_of_consistent
     {α : Type} (h : α → Nat) (cost : α → α → Nat) (succ : α → α → Prop)
-    (hcon : Consistent h cost succ)
-    (s : α) (gFirst gAlt : Nat)
-    (hpop : fScore gFirst (h s) ≤ fScore gAlt (h s)) :
-    gFirst ≤ gAlt := by
-  unfold fScore at hpop; omega
+    (hcon : Consistent h cost succ) {s s' : α} (e : succ s s') (g : Nat) :
+    fScore g (h s) ≤ fScore (g + cost s s') (h s') := by
+  have hc := hcon s s' e
+  simp only [fScore]; omega
 
-/-- CLOSED-SET OPTIMALITY.  With an admissible AND consistent h the closed-set
-graph search is optimal on BOTH fronts it must be:
+/-- A cost-carrying path in the search graph: `PathCost cost succ s t c` witnesses a
+chain of successor edges from `s` to `t` whose edge costs sum to `c`.  Faithful to
+the sequence of `g = node.g_score + action.cost` accumulations along a plan
+(planner.py:116). -/
+inductive PathCost {α : Type} (cost : α → α → Nat) (succ : α → α → Prop) :
+    α → α → Nat → Prop where
+  | nil (s : α) : PathCost cost succ s s 0
+  | cons {s s' t : α} {c : Nat} (e : succ s s')
+      (rest : PathCost cost succ s' t c) :
+      PathCost cost succ s t (cost s s' + c)
+
+/-- LOAD-BEARING PATH MONOTONICITY.  Folding the edge core along a whole path: for
+any path from `s` to `t` of total cost `c`, `f g (h s) ≤ f (g + c) (h t)`.  So `f`
+is non-decreasing along EVERY path from the start — the invariant that makes
+closed-set pruning sound.  Each `cons` step invokes the consistency-dependent edge
+lemma, so `hcon` is essential (the `nil` step alone does not carry the claim). -/
+theorem fScore_monotone_along_path
+    {α : Type} (h : α → Nat) (cost : α → α → Nat) (succ : α → α → Prop)
+    (hcon : Consistent h cost succ) {s t : α} {c : Nat}
+    (p : PathCost cost succ s t c) :
+    ∀ g : Nat, fScore g (h s) ≤ fScore (g + c) (h t) := by
+  induction p with
+  | nil s => intro g; simp only [fScore]; omega
+  | cons e rest ih =>
+      rename_i s s' _ _
+      intro g
+      have hedge := fScore_monotone_along_edge_of_consistent h cost succ hcon e g
+      have hrest := ih (g + cost s s')
+      simp only [fScore] at hedge hrest ⊢
+      omega
+
+/-- CLOSED-SET OPTIMALITY.  With an admissible AND consistent h the closed-set graph
+search is optimal on BOTH fronts it must be:
 
 1. among SATISFIED nodes, the first popped has least `g`
-   (`firstSatisfied_least_cost_of_admissible` — needs admissibility), and
-2. for ANY state, the first pop's `g` is ≤ a later re-expansion's `g`, so
-   discarding a state already in `visited` never drops a cheaper path
-   (`consistent_firstpop_is_least_g` — needs consistency).
+   (`firstSatisfied_least_cost_of_admissible` — needs ADMISSIBILITY); and
+2. the route by which a state is first popped is no costlier than ANY other route to
+   it, so discarding a `visited` state never drops a cheaper path — needs
+   CONSISTENCY, via path-monotonicity, NOT mere cancellation.
 
-Composing the two: the optimal satisfied node is both popped least-`g` among
-satisfied nodes AND never pruned away by the visited set.  This is the property
-`planner.py`'s A*-with-`visited` (planner.py:99, 153-156) actually relies on. -/
+For front 2 we model the pruned alternate route faithfully: `s` was first popped via
+route A at cost `gA`; the alternate (pruned) route reaches `s` through a state `w`
+that was still on the frontier when `s` popped (so best-first gives
+`f gA (h s) ≤ f gW (h w)`), and continues from `w` to `s` along a REAL path `pRest`
+of cost `cRest` (its full cost to `s` is `gW + cRest`).  Path-monotonicity lifts the
+frontier bound at `w` to `s` — `f gW (h w) ≤ f (gW + cRest) (h s)` — and only then
+does the shared `h s` cancel to give `gA ≤ gW + cRest`.  Delete `hcon` and the
+`w → s` lift is unavailable: `h w` and `h s` are unrelated and the conclusion fails.
+This is the property `planner.py`'s A*-with-`visited` (planner.py:99, 153-156)
+actually relies on. -/
 theorem consistent_closedSet_preserves_optimal
     {α : Type} (h trueRemaining : α → Nat) (cost : α → α → Nat) (succ : α → α → Prop)
     (sat : α → Prop)
@@ -186,12 +226,15 @@ theorem consistent_closedSet_preserves_optimal
     (hcon : Consistent h cost succ)
     (s₁ s₂ : α) (g₁ g₂ : Nat) (h₁ : sat s₁) (h₂ : sat s₂)
     (hpopSat : fScore g₁ (h s₁) ≤ fScore g₂ (h s₂))
-    (v : α) (gFirst gAlt : Nat)
-    (hpopVisited : fScore gFirst (h v) ≤ fScore gAlt (h v)) :
-    g₁ ≤ g₂ ∧ gFirst ≤ gAlt :=
-  ⟨firstSatisfied_least_cost_of_admissible h trueRemaining sat hadm hgz
-      s₁ s₂ g₁ g₂ h₁ h₂ hpopSat,
-   consistent_firstpop_is_least_g h cost succ hcon v gFirst gAlt hpopVisited⟩
+    (s w : α) (gA gW cRest : Nat)
+    (pRest : PathCost cost succ w s cRest)
+    (hfront : fScore gA (h s) ≤ fScore gW (h w)) :
+    g₁ ≤ g₂ ∧ gA ≤ gW + cRest := by
+  refine ⟨firstSatisfied_least_cost_of_admissible h trueRemaining sat hadm hgz
+      s₁ s₂ g₁ g₂ h₁ h₂ hpopSat, ?_⟩
+  have hmono := fScore_monotone_along_path h cost succ hcon pRest gW
+  simp only [fScore] at hfront hmono ⊢
+  omega
 
 /-! ## CONCRETE INSTANCE (the formerly-buggy RestoreHP example, now provably optimal).
 
@@ -352,18 +395,29 @@ theorem skillGrind_h_admissible : Admissible SGh SGtrueRemaining := by
 theorem skillGrind_h_consistent : Consistent SGh SGcostOf SGsucc := by
   intro s s' hss; cases s <;> cases s' <;> simp_all [SGh, SGcostOf, SGsucc]
 
+/-- The landmark grind edge `needsGrind → done` as a one-edge `PathCost` of cost
+`SGcostOf needsGrind done` (= `SGcost` = 40): the concrete alternate route the
+closed-set contract folds consistency along. -/
+def SGgrindPath : PathCost SGcostOf SGsucc needsGrind done (SGcostOf needsGrind done) :=
+  PathCost.cons (by simp [SGsucc]) (PathCost.nil done)
+
 /-- The whole closed-set contract discharged on the skill-grind instance: with the
-admissible AND consistent landmark heuristic, the A*-with-`visited` search is
-optimal on both fronts (least-g among satisfied nodes; no cheaper path pruned). -/
+admissible AND consistent landmark heuristic, the A*-with-`visited` search is optimal
+on both fronts — least-g among satisfied nodes, and (front 2) the first-pop route to
+`done` at cost `gA` is no costlier than the landmark grind route to it (`gW + 40`),
+so pruning the re-expansion drops nothing cheaper.  The consistency proof
+(`skillGrind_h_consistent`, tight at `40 ≤ 40 + 0`) feeds the load-bearing
+path-monotonicity step. -/
 theorem skillGrind_closedSet_preserves_optimal
     (s₁ s₂ : SGState) (g₁ g₂ : Nat) (h₁ : SGSat s₁) (h₂ : SGSat s₂)
     (hpopSat : fScore g₁ (SGh s₁) ≤ fScore g₂ (SGh s₂))
-    (v : SGState) (gFirst gAlt : Nat)
-    (hpopVisited : fScore gFirst (SGh v) ≤ fScore gAlt (SGh v)) :
-    g₁ ≤ g₂ ∧ gFirst ≤ gAlt :=
+    (gA gW : Nat)
+    (hfront : fScore gA (SGh done) ≤ fScore gW (SGh needsGrind)) :
+    g₁ ≤ g₂ ∧ gA ≤ gW + SGcostOf needsGrind done :=
   consistent_closedSet_preserves_optimal
     SGh SGtrueRemaining SGcostOf SGsucc SGSat
     skillGrind_h_admissible skillGrind_goalZero skillGrind_h_consistent
-    s₁ s₂ g₁ g₂ h₁ h₂ hpopSat v gFirst gAlt hpopVisited
+    s₁ s₂ g₁ g₂ h₁ h₂ hpopSat
+    done needsGrind gA gW (SGcostOf needsGrind done) SGgrindPath hfront
 
 end Formal.PlannerAdmissibility
