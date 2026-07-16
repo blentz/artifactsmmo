@@ -578,9 +578,18 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
             # IS an argmax under pursuit_value: wooden_club (weapon, recipe-less,
             # combat_raw 71, dropped by the grey L20 ogre). snakeskin_boots is
             # equipped here (fills boots at its combat argmax) so wooden_club is
-            # the SOLE remaining candidate and the drop-farm story isolates
-            # cleanly. weapon_slot deliberately stays dreadful_staff (55 < 71)
-            # so wooden_club remains a live upgrade.
+            # the SOLE remaining gear candidate and the drop-farm story isolates
+            # cleanly. weapon_slot deliberately stays dreadful_staff (55 < 71) so
+            # wooden_club remains a live pursuit_value upgrade.
+            #
+            # SUPERSEDED 2026-07-15 (weapon-winnability guard): wooden_club is
+            # marginal-0 at L35 (unlocks no monster the loadout cannot already
+            # beat), so the guard suppresses it as an ARBITER target and
+            # chosen_root falls to ReachCharLevel. The pursuit_value ranking
+            # above still holds; the guard is a later, orthogonal targeting gate.
+            # This scenario now backs the drop-farm MECHANISM test with the goal
+            # PINNED to wooden_club (see test_l35_boots_drop_farm_fights_grey_
+            # dropper), not an arbiter-level chosen_root assertion.
             "weapon_slot": "dreadful_staff", "helmet_slot": "piggy_helmet",
             "body_armor_slot": "bandit_armor", "leg_armor_slot": "piggy_pants",
             "boots_slot": "snakeskin_boots", "ring1_slot": "ring_of_the_adept",
@@ -594,10 +603,14 @@ SCENARIOS: dict[str, ScenarioCharacter] = {
         bank={"gold_ore": 10},
         derive_combat_stats=True,
         description="l35 loadout, artifacts pearl-stocked, boots filled at "
-                     "the combat argmax (snakeskin_boots): the sole gear "
-                     "target is the pure-drop wooden_club (weapon) and its "
-                     "grey dropper ogre is drop-farmed — Fight(ogre) -> "
-                     "Equip, the GAP-6 coverage keeper (Task-3 re-target)."),
+                     "the combat argmax (snakeskin_boots). State fixture for the "
+                     "GAP-6 drop-farm MECHANISM: UpgradeEquipmentGoal pinned to "
+                     "the pure-drop wooden_club (weapon) emits + plans its grey "
+                     "dropper ogre — Fight(ogre) -> Equip. NB (2026-07-15): the "
+                     "weapon-winnability guard now suppresses wooden_club at the "
+                     "ARBITER level (marginal 0 at L35), so chosen_root is no "
+                     "longer wooden_club; the mechanism is covered with the goal "
+                     "pinned. See test_l35_boots_drop_farm_fights_grey_dropper."),
 
     # --- Rune slot (deliverable 4). L30 at the near_term_gear fixed point
     # for every other slot (the equip_value argmax set — utility-stat gear

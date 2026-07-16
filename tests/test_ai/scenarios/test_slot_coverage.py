@@ -143,6 +143,7 @@ from artifactsmmo_cli.ai.scenario import (
     load_bundle_game_data,
     scenario_state,
 )
+from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective, is_attainable_now
 from artifactsmmo_cli.ai.world_state import WorldState
@@ -549,34 +550,48 @@ def test_l35_artifact_fill_pearl_route_plans() -> None:
 
 
 def test_l35_boots_drop_farm_fights_grey_dropper() -> None:
-    """GAP-6 coverage keeper — drop-farm a recipe-less, non-purchasable, pure
-    monster-drop equip target via its grey winnable dropper.
+    """GAP-6 coverage keeper — UpgradeEquipmentGoal drop-farms a recipe-less,
+    non-purchasable, pure monster-drop equip target via its grey winnable dropper.
 
-    RE-TARGETED 2026-07-08 (Task-3 pursuit_value): the original target,
-    old_boots (a pure-drop boots), is correctly outranked under combat-dominant
-    pursuit_value by the craftable snakeskin_boots (combat_raw 96 vs 90), so it
-    can no longer be a boots argmax — combat gear beating an under-ranked
-    efficiency/drop item is the bug fix, not a regression. The GAP-6 MECHANISM
-    is preserved with a target that IS an argmax under pursuit_value:
-    wooden_club (weapon, recipe-less, combat_raw 71, sole dropper the L20 ogre).
-    With snakeskin_boots equipped (boots filled at its combat argmax),
-    wooden_club is the SOLE candidate and the CHOSEN root. `_equippable_goal`
-    routes it to UpgradeEquipmentGoal whose `relevant_actions` emits the
-    target's winnable dropper: ogre (L20, grey at L35 — xp_per_kill == 0, 15
-    levels down), so the fight arrives as the drop_farm variant (proven xp-gate
-    bypass) plus the synthesized Equip(wooden_club->weapon_slot) leg. The cycle
-    plans Fight(ogre) -> Equip instead of Wait — a healthy character still never
-    idles on a farmable upgrade."""
-    report = _run("l35_boots_drop_farm")
-    assert report.decision.chosen_root == ObtainItem(
-        code="wooden_club", quantity=1, slot="weapon_slot")
-    assert repr(report.selected_goal).startswith("UpgradeEquipment"), (
-        repr(report.selected_goal), report.plan)
-    assert report.plan, report.goals_tried
-    fights = [a for a in report.plan if repr(a) == "Fight(ogre)"]
-    assert fights and all(a.drop_farm for a in fights), report.plan
-    assert any(repr(a) == "Equip(wooden_club->weapon_slot)" for a in report.plan), \
-        report.plan
+    RE-TARGETED 2026-07-15 (winnability guard): the prior version asserted the
+    ARBITER picks wooden_club as chosen_root. The predict_win weapon-winnability
+    guard now correctly SUPPRESSES wooden_club at the targeting layer — at L35
+    fully-geared its marginal winnability is 0 (owning it unlocks no monster the
+    character cannot already beat), so grinding/farming toward it is a combat
+    no-op and the arbiter rightly falls to ReachCharLevel. That guard is a
+    TARGETING decision; it is orthogonal to the drop-farm EMISSION mechanism this
+    test covers, which still fires for any pure-drop target that IS pursued.
+    We cover the mechanism directly: with the goal pinned to the pure-drop
+    wooden_club, UpgradeEquipmentGoal.relevant_actions emits its sole winnable
+    dropper — ogre (L20, grey at L35, xp_per_kill == 0, 15 levels down) — as the
+    drop_farm Fight (proven xp-gate bypass) plus the synthesized
+    Equip(wooden_club->weapon_slot) leg, and the goal PLANS Fight(ogre) -> Equip.
+    A healthy character never idles on a farmable upgrade it is actually pursuing.
+
+    LIMITATION (honest-outcome rule): no scenario in THIS bundle can drive a
+    guard-surviving pure-drop to chosen_root at the ARBITER level — every grey
+    weapon drop is marginal-0 (it is low-tier, and a character >=15 levels above
+    its dropper already out-damages it), and every non-weapon pure-drop is
+    outranked by an attainable-now craftable in its slot (verified: emptying any
+    non-weapon slot on this state makes near_term_gear pick a craftable, never a
+    drop). So the full arbiter path for a pure-drop root is no longer exercisable
+    here; this mechanism-level pin is the honest maximum. Fixing the bundle to
+    host a guard-surviving non-weapon pure-drop argmax should restore an
+    arbiter-level assertion and may fail this pin."""
+    gd = load_bundle_game_data(BUNDLE)
+    state = _state("l35_boots_drop_farm", gd)
+    player = GamePlayer(character="l35_boots_drop_farm", history=None)
+    player.seed_offline(state, gd)
+    actions = player._build_actions()
+    goal = UpgradeEquipmentGoal(committed_target=("wooden_club", "weapon_slot"))
+    relevant = goal.relevant_actions(actions, state, gd)
+    fights = [a for a in relevant if repr(a) == "Fight(ogre)"]
+    assert fights and all(a.drop_farm for a in fights), relevant
+    assert any(repr(a) == "Equip(wooden_club->weapon_slot)" for a in relevant), \
+        relevant
+    plan = player.planner.plan(state, goal, actions, gd, budget_seconds=10.0)
+    assert [repr(a) for a in plan] == \
+        ["Fight(ogre)", "Equip(wooden_club->weapon_slot)"], plan
 
 
 # --- Deliverable 4: rune slot ------------------------------------------------
