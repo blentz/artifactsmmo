@@ -51,6 +51,14 @@ class Goal(ABC):
         """
         return actions
 
+    def heuristic(self, state: WorldState, game_data: GameData) -> float:
+        """Admissible, CONSISTENT estimate of remaining plan cost (seconds), used
+        as the planner's A* heuristic. Default 0.0 — Dijkstra, trivially admissible
+        and consistent. An overriding goal MUST keep h ≤ true-remaining AND
+        h(s) ≤ cost(s,s') + h(s') (monotone), or the visited-set graph search loses
+        optimality (formal/Formal/PlannerAdmissibility.lean)."""
+        return 0.0
+
     def is_plannable(self, state: WorldState, game_data: GameData,
                      history: LearningStore | None = None) -> bool:
         """Cheap pre-plan reachability gate.

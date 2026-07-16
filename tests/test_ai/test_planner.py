@@ -223,3 +223,25 @@ def test_plan_caches_learned_queries(tmp_db_path):
     assert len(plan_no_store) == len(plan_with_store)
 
     store.close()
+
+
+class _RecordingHeuristicGoal(RestoreHPGoal):
+    """Records the states the planner asks a heuristic for; returns 0.0 so the
+    plan is byte-identical to Dijkstra (this proves the SEAM, not a bias)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.asked: list = []
+
+    def heuristic(self, state, game_data) -> float:
+        self.asked.append(state)
+        return 0.0
+
+
+def test_planner_invokes_goal_heuristic_on_root_and_children():
+    goal = _RecordingHeuristicGoal()
+    state = make_state(hp=50, max_hp=150)
+    plan = GOAPPlanner().plan(state, goal, [RestAction()], GameData())
+    assert goal.asked, "planner never called goal.heuristic"
+    assert state in goal.asked, "planner did not ask h for the ROOT state"
+    assert plan  # a rest plan still forms — h=0.0 leaves behavior unchanged

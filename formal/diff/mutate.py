@@ -1668,11 +1668,12 @@ PLANNER_MUTATIONS = [
     # (urgency, inadmissible). With h huge at non-goal HP-50 states, the
     # Move-prefix node sinks to the back of the heap and [Rest] (cost 10) pops
     # before [Move, Eat] — the now-affirmative optimality test fails.
-    ("planner: re-introduce urgency heuristic (h = 0.0 -> goal.value)",
-     "                    # h ≡ 0 (Dijkstra): see h0 above.  `goal.value` remains used\n"
-     "                    # by goal *selection* (StrategyArbiter, learning) — only the\n"
-     "                    # planner's heuristic role is zeroed for provable optimality.\n"
-     "                    h = 0.0",
+    ("planner: re-introduce urgency heuristic (h = goal.heuristic -> goal.value)",
+     "                    # h = goal.heuristic(next_state, game_data): see h0 above.\n"
+     "                    # `goal.value` remains used by goal *selection* (StrategyArbiter,\n"
+     "                    # learning) — the planner's heuristic role is a distinct,\n"
+     "                    # admissible+consistent estimate (default 0.0 = Dijkstra).\n"
+     "                    h = goal.heuristic(next_state, game_data)",
      "                    h = goal.value(next_state, game_data, history)"),
     # Negate `g` in the priority: `f_score=g + h` -> `f_score=-g + h`. With h=0
     # this orders the heap by -g (largest g first), so deep / expensive plans

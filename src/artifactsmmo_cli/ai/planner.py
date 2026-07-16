@@ -125,17 +125,21 @@ class GOAPPlanner:
 
         cache_ctx = history.search_cache() if history is not None else nullcontext()
         with cache_ctx:
-            # Heuristic h = 0 makes this Dijkstra / uniform-cost search.  Every
-            # `action.cost(...)` in this codebase returns a non-negative float
-            # (see e.g. rest.py:51 = 10.0, movement.py:58 = max(d*5, 1.0) ≥ 1.0,
-            # consumable.py:93 = 2.0, gathering.py:86, combat.py:97, crafting.py:103
-            # — all ≥ 0).  With h ≡ 0 (trivially admissible & consistent) and
-            # non-negative edge costs, A*'s "first satisfied node popped is least
-            # cost" reduces to Dijkstra optimality, which holds absolutely. A
-            # previous version used `goal.value(...)` as h (urgency, not seconds),
-            # which was non-admissible and made the planner return strictly
-            # suboptimal plans — see formal/Formal/PlannerAdmissibility.lean.
-            h0 = 0.0
+            # h = goal.heuristic(state, game_data): an admissible & CONSISTENT
+            # estimate of remaining plan cost (seconds), by contract (see
+            # Goal.heuristic's docstring). Every `action.cost(...)` in this
+            # codebase returns a non-negative float (see e.g. rest.py:51 = 10.0,
+            # movement.py:58 = max(d*5, 1.0) ≥ 1.0, consumable.py:93 = 2.0,
+            # gathering.py:86, combat.py:97, crafting.py:103 — all ≥ 0). With
+            # non-negative edge costs and an admissible+consistent h, A*'s
+            # "first satisfied node popped is least cost" holds. The default
+            # h ≡ 0.0 (trivially admissible & consistent) reduces this to
+            # Dijkstra optimality, which holds absolutely for every goal that
+            # does not override `heuristic`. A previous version used
+            # `goal.value(...)` as h (urgency, not seconds), which was
+            # non-admissible and made the planner return strictly suboptimal
+            # plans — see formal/Formal/PlannerAdmissibility.lean.
+            h0 = goal.heuristic(state, game_data)
             heap: list[_Node] = [_Node(f_score=h0, depth=0, state=state, plan=[], g_score=0.0)]
             while heap:
                 if time.monotonic() >= deadline:
@@ -180,10 +184,11 @@ class GOAPPlanner:
 
                     next_state = action.apply(node.state, game_data)
                     g = node.g_score + action.cost(node.state, game_data, history)
-                    # h ≡ 0 (Dijkstra): see h0 above.  `goal.value` remains used
-                    # by goal *selection* (StrategyArbiter, learning) — only the
-                    # planner's heuristic role is zeroed for provable optimality.
-                    h = 0.0
+                    # h = goal.heuristic(next_state, game_data): see h0 above.
+                    # `goal.value` remains used by goal *selection* (StrategyArbiter,
+                    # learning) — the planner's heuristic role is a distinct,
+                    # admissible+consistent estimate (default 0.0 = Dijkstra).
+                    h = goal.heuristic(next_state, game_data)
                     heapq.heappush(
                         heap,
                         _Node(

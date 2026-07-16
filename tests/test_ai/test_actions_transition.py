@@ -83,7 +83,7 @@ class TestRegionAwarePlanning:
         class KillLich(Goal):
             def is_satisfied(self, st):
                 return st.xp > 0
-            def heuristic(self, st):
+            def heuristic(self, st, gd_):
                 return 0.0
             def relevant_actions(self, actions, st, gd_):
                 return actions
