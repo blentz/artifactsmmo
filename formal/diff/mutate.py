@@ -1228,19 +1228,29 @@ RECOVERABLE_LEAF_MUTATIONS = [
     # non-craft route exists — exactly backwards. Killed by
     # test_a_material_with_a_ready_source_is_a_leaf (a RECYCLE-only source
     # must still short-circuit to []).
-    ("prerequisite_graph: ready-source leaf predicate inverted",
-     "            if any(s.kind is not SourceKind.CRAFT for s in sources):",
-     "            if any(s.kind is SourceKind.CRAFT for s in sources):"),
+    ("prerequisite_graph: _source_leafs CRAFT branch inverted (craft leafs)",
+     "    if source.kind is SourceKind.CRAFT:\n"
+     "        return False",
+     "    if source.kind is SourceKind.CRAFT:\n"
+     "        return True"),
     # Drop the leaf branch entirely: always descend into the recipe regardless
     # of any ready source, reverting to the pre-epic behavior (the live
     # 2026-07-13 ash_plank/fishing_net bug this whole epic fixes). Killed by
     # test_a_material_with_a_ready_source_is_a_leaf (a RECYCLE source must
     # short-circuit to []).
     ("prerequisite_graph: drop ready-source leaf branch (always descend)",
-     "            sources = obtain_sources(node.code, state, game_data, ctx)\n"
-     "            if any(s.kind is not SourceKind.CRAFT for s in sources):\n"
-     "                return []  # a ready non-craft source exists → LEAF\n",
+     "            if any(_source_leafs(s, game_data, exclude_recycle_leaf)\n"
+     "                   for s in sources):\n"
+     "                return []  # a ready leaf source exists → LEAF\n",
      ""),
+    # Grind value-aware recycle leafing: flip the JUNK-vs-current-tier floor
+    # comparison. Killed by test_exclude_recycle_leaf_descends_past_a_recycle_
+    # only_material (current-tier copper_dagger must NOT leaf -> descend) AND
+    # test_exclude_recycle_leaf_still_leafs_a_junk_recycle (junk rusty_scrap
+    # must leaf).
+    ("prerequisite_graph: grind recycle-leaf value floor comparison flipped",
+     "        return stats is not None and pursuit_value(stats) < RECYCLE_LEAF_VALUE_FLOOR",
+     "        return stats is not None and pursuit_value(stats) >= RECYCLE_LEAF_VALUE_FLOOR"),
 ]
 
 
