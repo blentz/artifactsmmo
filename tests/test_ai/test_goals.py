@@ -29,7 +29,7 @@ from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner
 from artifactsmmo_cli.ai.progression_reserve import reserve_floor
-from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
+from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 
@@ -463,31 +463,50 @@ def _fire_bow_gd() -> GameData:
     gd._resource_skill = {"spruce_tree": ("woodcutting", 1)}
     gd._resource_locations = {"spruce_tree": [(3, 3)]}
     gd._workshop_locations = {"weaponcrafting": (2, 2)}
-    gd._bank_location = (0, 0)
+    # Distance 3 from the default make_state x=0,y=0 -> WithdrawItemAction.cost
+    # (2.0 + dist) = 5.0, cheap next to LevelSkill's 150 grind cost.
+    gd._bank_location = (3, 0)
     gd._taskmaster_location = (1, 1)
     return gd
 
 
 def _fire_bow_actions(gd: GameData) -> list:
     """The LevelSkill/Craft/Equip triple that solves the committed fire_bow
-    target, plus a couple of cheap always-applicable decoys (RestAction, a
-    closure GatherAction for spruce_plank) giving the frontier a cheap
-    alternative to exhaust instead of taking the forced grind."""
+    target, plus cheap decoys that actually SURVIVE
+    `UpgradeEquipmentGoal.relevant_actions`: RestAction (one-shot HP-full dead
+    end) and a WithdrawItemAction(spruce_plank) — spruce_plank is a closure
+    material, so the withdraw passes the goal's withdrawable-set filter (a
+    GatherAction decoy does not: with mats already in hand the gather's drop
+    is fully covered and gets pruned, so it never reaches the planner — see
+    the vacuous-test finding this replaced). The withdraw is a genuine
+    off-optimal-path decoy: mats are already in hand, so it never contributes
+    to the plan, but at cost 5.0 (vs. LevelSkill's 150.0) a Dijkstra (h=0)
+    search pops it — repeatedly, while bank stock lasts — before the forced
+    grind edge, while the admissible heuristic-guided search does not."""
     return [
         LevelSkill(skill="weaponcrafting", target_level=10),
         CraftAction(code="fire_bow", quantity=1,
                     workshop_location=gd._workshop_locations["weaponcrafting"]),
         EquipAction(code="fire_bow", slot="weapon_slot"),
         RestAction(),
-        GatherAction(resource_code="spruce_tree", locations=frozenset([(3, 3)])),
+        WithdrawItemAction(code="spruce_plank", quantity=1,
+                           bank_location=gd._bank_location),
     ]
+
+
+class _ZeroHeuristicUpgradeGoal(UpgradeEquipmentGoal):
+    """Test-only Dijkstra control: identical goal, `heuristic` forced to 0.0.
+    NOT a monkeypatch of the unit under test — a distinct subclass so the same
+    state/actions/game_data can be planned twice, once with the real
+    admissible heuristic and once with h=0, to compare node counts."""
+
+    def heuristic(self, state: WorldState, game_data: GameData) -> float:
+        return 0.0
 
 
 def test_upgrade_equipment_heuristic_is_forced_grind_cost():
     """Pinned to a craft-only, skill-gated, unowned target, the heuristic is the
     LevelSkill.cost of the forced grind; 0 once satisfied/owned/skill-met."""
-    from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
-    from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
     gd = _fire_bow_gd()  # helper below: fire_bow craft-only, weaponcrafting 10
     goal = UpgradeEquipmentGoal(committed_target=("fire_bow", "weapon_slot"))
     under = make_state(level=13, skills={"weaponcrafting": 7})
@@ -504,18 +523,36 @@ def test_upgrade_equipment_heuristic_is_forced_grind_cost():
 def test_upgrade_equipment_heuristic_collapses_the_skill_gate_search():
     """BEHAVIORAL proof (the BUG B collapse): with the mats in hand and the
     skill unmet, the planner finds [LevelSkill, Craft, Equip] and creates far
-    fewer nodes than the same search with the heuristic forced to 0."""
-    from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
-    from artifactsmmo_cli.ai.planner import GOAPPlanner
+    fewer nodes than the SAME state/actions/goal searched with the heuristic
+    forced to 0 (Dijkstra). The bank-stocked WithdrawItemAction decoy in
+    `_fire_bow_actions` survives `relevant_actions` and is genuinely cheaper
+    (cost 5.0) than the forced LevelSkill grind (cost 150.0), so a h=0 search
+    exhausts it (repeatedly, while the 10-deep bank stock lasts) before ever
+    popping the grind edge; the admissible heuristic (h = the forced-grind
+    cost) ranks the grind edge first instead."""
     gd = _fire_bow_gd()
     goal = UpgradeEquipmentGoal(committed_target=("fire_bow", "weapon_slot"))
     state = make_state(level=13, skills={"weaponcrafting": 7},
-                       inventory={"spruce_plank": 6, "red_slimeball": 2})
+                       inventory={"spruce_plank": 6, "red_slimeball": 2},
+                       bank_items={"spruce_plank": 10})
     actions = _fire_bow_actions(gd)  # LevelSkill, Craft, Equip, + cheap decoys
-    plan = GOAPPlanner().plan(state, goal, actions, gd, budget_seconds=10.0)
-    assert [repr(a) for a in plan] == [
+    expected_plan = [
         "LevelSkill(weaponcrafting->10)", "Craft(fire_bow×1)",
-        "Equip(fire_bow->weapon_slot)"], plan
+        "Equip(fire_bow->weapon_slot)",
+    ]
+
+    planner = GOAPPlanner()
+    plan = planner.plan(state, goal, actions, gd, budget_seconds=10.0)
+    assert [repr(a) for a in plan] == expected_plan, plan
+    nodes_with = planner.last_stats.nodes_created
+
+    zero_goal = _ZeroHeuristicUpgradeGoal(committed_target=("fire_bow", "weapon_slot"))
+    zero_planner = GOAPPlanner()
+    zero_plan = zero_planner.plan(state, zero_goal, actions, gd, budget_seconds=10.0)
+    assert [repr(a) for a in zero_plan] == expected_plan, zero_plan
+    nodes_without = zero_planner.last_stats.nodes_created
+
+    assert nodes_with < nodes_without, (nodes_with, nodes_without)
 
 
 class TestUpgradeEquipmentGoalToolBias:
