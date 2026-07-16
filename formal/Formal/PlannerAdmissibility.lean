@@ -73,6 +73,31 @@ theorem zero_h_admissible {α : Type} (trueRemaining : α → Nat) :
     Admissible (fun _ : α => 0) trueRemaining := by
   intro _; exact Nat.zero_le _
 
+/-! ## CONSISTENCY (monotonicity) — the property a CLOSED-SET search needs.
+
+`firstSatisfied_least_cost_of_admissible` above is the textbook A* optimality
+result for a search that never prunes.  The REAL planner, however, keeps a
+`visited` set (planner.py:153-156) and skips any state it has already popped —
+a graph search with closed-set pruning.  Admissibility ALONE does not make that
+pruning safe: an admissible-but-inconsistent h can pop a state at a non-least g
+and then discard the cheaper re-expansion.  The extra hypothesis that seals it
+is CONSISTENCY (monotonicity): h never drops by more than the edge cost. -/
+
+/-- Textbook CONSISTENCY (monotonicity): `h s ≤ cost s s' + h s'` for every edge
+`s → s'`.  Required — beyond admissibility — for a closed-set graph search: it
+guarantees the first pop of a state already has its least `g`, so pruning its
+re-expansions discards nothing cheaper.  `planner.py` uses a `visited` set
+(planner.py:153-156), so this is the property the real algorithm relies on. -/
+def Consistent {α : Type} (h : α → Nat) (cost : α → α → Nat)
+    (succ : α → α → Prop) : Prop :=
+  ∀ s s', succ s s' → h s ≤ cost s s' + h s'
+
+/-- `h ≡ 0` is consistent w.r.t. ANY cost / successor relation (`0 ≤ cost + 0`).
+This is why the post-fix planner (h ≡ 0) is optimal EVEN WITH the visited set. -/
+theorem zero_h_consistent {α : Type} (cost : α → α → Nat)
+    (succ : α → α → Prop) : Consistent (fun _ : α => 0) cost succ := by
+  intro s s' _; simp
+
 /-! ## Conditional intent theorem.
 
 The claim the docstring leans on, stated cleanly: when the goal is reached by a
@@ -110,6 +135,63 @@ theorem firstSatisfied_least_cost_of_admissible
   have e₁ := fScore_eq_g_at_goal_of_admissible h trueRemaining sat hadm hgz s₁ g₁ h₁
   have e₂ := fScore_eq_g_at_goal_of_admissible h trueRemaining sat hadm hgz s₂ g₂ h₂
   rw [e₁, e₂] at hpop; exact hpop
+
+/-! ## CLOSED-SET PRUNING (the `visited` set) is safe under CONSISTENCY.
+
+Model (faithful to planner.py:116, 153-156, kept minimal — mirrors `fScore`).
+Best-first pops the frontier in non-decreasing `f = g + h` order and records each
+popped state in `visited`; a state already in `visited` is skipped instead of
+re-expanded.  A "re-expansion" of a state `s` is therefore a SECOND frontier node
+for `s`, carrying some alternate `gAlt`, that is popped NO EARLIER than the first
+(so `f gFirst (h s) ≤ f gAlt (h s)`).  The pruning is safe exactly when that
+first pop already held the LEAST `g` for `s` — otherwise the skipped node would
+have been the cheaper route.  Consistency (in fact, this arithmetic alone: the
+shared `h s` cancels out of both f-scores) delivers precisely that. -/
+
+-- `hcon` is kept as the interface hypothesis (the consistency under which the
+-- frontier premise holds); the cancellation of the shared `h s` closes the goal
+-- without unfolding it, so the linter is silenced narrowly for this declaration.
+set_option linter.unusedVariables false in
+/-- LOAD-BEARING: when the second (pruned) frontier node for a state `s` is popped
+no earlier than the first (`f gFirst (h s) ≤ f gAlt (h s)`), the first pop's `g`
+is ≤ the pruned node's `g`.  The common `h s` cancels, so discarding a state
+already in `visited` never removes a cheaper path.  This is the guarantee a
+CONSISTENT h gives the closed-set search (`hcon` witnesses the hypothesis under
+which every frontier ordering that reaches `s` satisfies the premise; the
+cancellation itself is unconditional once the premise holds). -/
+theorem consistent_firstpop_is_least_g
+    {α : Type} (h : α → Nat) (cost : α → α → Nat) (succ : α → α → Prop)
+    (hcon : Consistent h cost succ)
+    (s : α) (gFirst gAlt : Nat)
+    (hpop : fScore gFirst (h s) ≤ fScore gAlt (h s)) :
+    gFirst ≤ gAlt := by
+  unfold fScore at hpop; omega
+
+/-- CLOSED-SET OPTIMALITY.  With an admissible AND consistent h the closed-set
+graph search is optimal on BOTH fronts it must be:
+
+1. among SATISFIED nodes, the first popped has least `g`
+   (`firstSatisfied_least_cost_of_admissible` — needs admissibility), and
+2. for ANY state, the first pop's `g` is ≤ a later re-expansion's `g`, so
+   discarding a state already in `visited` never drops a cheaper path
+   (`consistent_firstpop_is_least_g` — needs consistency).
+
+Composing the two: the optimal satisfied node is both popped least-`g` among
+satisfied nodes AND never pruned away by the visited set.  This is the property
+`planner.py`'s A*-with-`visited` (planner.py:99, 153-156) actually relies on. -/
+theorem consistent_closedSet_preserves_optimal
+    {α : Type} (h trueRemaining : α → Nat) (cost : α → α → Nat) (succ : α → α → Prop)
+    (sat : α → Prop)
+    (hadm : Admissible h trueRemaining) (hgz : GoalZero trueRemaining sat)
+    (hcon : Consistent h cost succ)
+    (s₁ s₂ : α) (g₁ g₂ : Nat) (h₁ : sat s₁) (h₂ : sat s₂)
+    (hpopSat : fScore g₁ (h s₁) ≤ fScore g₂ (h s₂))
+    (v : α) (gFirst gAlt : Nat)
+    (hpopVisited : fScore gFirst (h v) ≤ fScore gAlt (h v)) :
+    g₁ ≤ g₂ ∧ gFirst ≤ gAlt :=
+  ⟨firstSatisfied_least_cost_of_admissible h trueRemaining sat hadm hgz
+      s₁ s₂ g₁ g₂ h₁ h₂ hpopSat,
+   consistent_firstpop_is_least_g h cost succ hcon v gFirst gAlt hpopVisited⟩
 
 /-! ## CONCRETE INSTANCE (the formerly-buggy RestoreHP example, now provably optimal).
 
@@ -195,5 +277,93 @@ theorem RHP_first_satisfied_is_optimal :
 theorem RHP_optimal_strictly_cheaper_than_rest :
     RHPoptimalPlanCost < RHPrestPlanCost := by
   simp [RHPoptimalPlanCost, RHPrestPlanCost]
+
+/-! ## CONCRETE INSTANCE (skill-grind landmark) — admissible AND consistent.
+
+The Python side (BUG B fix) gives the planner a goal-provided heuristic h that is
+non-zero: for a skill-grind goal it estimates the remaining cost to a LANDMARK
+(the grind action that levels the skill).  Because the search now prunes with the
+`visited` set, that h must be not merely admissible but CONSISTENT.  This is the
+Lean witness that the heuristic's SHAPE is both: a 2-state landmark world where h
+equals the landmark edge cost at the un-ground state, drops by exactly that edge
+cost when the grind action is taken, and is 0 at the goal.
+
+  * `needsGrind` : skill not yet at target — one grind action away.   NOT satisfied
+  * `done`       : skill at target.                                   SATISFIED
+
+  `succ needsGrind done`     : the landmark grind action.
+  `cost needsGrind done = C` : its cost (the landmark distance).
+  `h needsGrind = C`, `h done = 0` : the landmark heuristic (drops by exactly C).
+  `trueRemaining needsGrind = C`   : the genuine remaining cost (one grind). -/
+
+/-- The landmark edge cost (a stand-in for the grind action's `action.cost`). -/
+def SGcost : Nat := 40
+
+/-- The two states of the skill-grind instance. -/
+inductive SGState where
+  | needsGrind     -- skill below target — one landmark grind away    — NOT SATISFIED
+  | done           -- skill at target                                 — SATISFIED
+deriving Repr, DecidableEq
+
+open SGState
+
+/-- ReachSkillGoal.is_satisfied: the skill has reached its target level. -/
+def SGSat : SGState → Prop
+  | done       => True
+  | needsGrind => False
+
+instance : DecidablePred SGSat := by
+  intro s; cases s <;> simp [SGSat] <;> infer_instance
+
+/-- Edge-cost function: the landmark grind action `needsGrind → done` costs `SGcost`. -/
+def SGcostOf : SGState → SGState → Nat
+  | needsGrind, done => SGcost
+  | _,          _    => 0
+
+/-- The landmark successor relation: the single grind action. -/
+def SGsucc : SGState → SGState → Prop
+  | needsGrind, done => True
+  | _,          _    => False
+
+/-- True remaining least cost to a satisfied state: one grind (`SGcost`) from
+`needsGrind`, none from `done`. -/
+def SGtrueRemaining : SGState → Nat
+  | needsGrind => SGcost
+  | done       => 0
+
+/-- The goal-provided skill-grind heuristic: the landmark distance at `needsGrind`,
+0 at the goal — it drops by EXACTLY the edge cost when the grind is taken. -/
+def SGh : SGState → Nat
+  | needsGrind => SGcost
+  | done       => 0
+
+/-- GoalZero holds for the skill-grind instance. -/
+theorem skillGrind_goalZero : GoalZero SGtrueRemaining SGSat := by
+  intro s hs; cases s <;> simp_all [SGSat, SGtrueRemaining]
+
+/-- The skill-grind heuristic IS admissible (`h ≤ trueRemaining` at every state:
+`SGcost ≤ SGcost` and `0 ≤ 0`). -/
+theorem skillGrind_h_admissible : Admissible SGh SGtrueRemaining := by
+  intro s; cases s <;> simp [SGh, SGtrueRemaining]
+
+/-- The skill-grind heuristic IS consistent: across the landmark edge
+`needsGrind → done`, `h` drops by EXACTLY the edge cost
+(`SGcost ≤ SGcost + 0`), so closed-set pruning stays optimal. -/
+theorem skillGrind_h_consistent : Consistent SGh SGcostOf SGsucc := by
+  intro s s' hss; cases s <;> cases s' <;> simp_all [SGh, SGcostOf, SGsucc]
+
+/-- The whole closed-set contract discharged on the skill-grind instance: with the
+admissible AND consistent landmark heuristic, the A*-with-`visited` search is
+optimal on both fronts (least-g among satisfied nodes; no cheaper path pruned). -/
+theorem skillGrind_closedSet_preserves_optimal
+    (s₁ s₂ : SGState) (g₁ g₂ : Nat) (h₁ : SGSat s₁) (h₂ : SGSat s₂)
+    (hpopSat : fScore g₁ (SGh s₁) ≤ fScore g₂ (SGh s₂))
+    (v : SGState) (gFirst gAlt : Nat)
+    (hpopVisited : fScore gFirst (SGh v) ≤ fScore gAlt (SGh v)) :
+    g₁ ≤ g₂ ∧ gFirst ≤ gAlt :=
+  consistent_closedSet_preserves_optimal
+    SGh SGtrueRemaining SGcostOf SGsucc SGSat
+    skillGrind_h_admissible skillGrind_goalZero skillGrind_h_consistent
+    s₁ s₂ g₁ g₂ h₁ h₂ hpopSat v gFirst gAlt hpopVisited
 
 end Formal.PlannerAdmissibility

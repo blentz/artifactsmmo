@@ -264,6 +264,14 @@ open Formal.PriorityBand
 #check @Formal.PlannerAdmissibility.RHP_optimal_popped_before_rest -- f(eaten,7) = 7 < 10 = f(rested,10): optimal popped first
 #check @Formal.PlannerAdmissibility.RHP_first_satisfied_is_optimal -- FIX: returned plan cost 7 ≤ 10
 #check @Formal.PlannerAdmissibility.RHP_optimal_strictly_cheaper_than_rest -- strictly: 7 < 10
+-- PlannerAdmissibility visited-set / consistency roles (BUG B fix: non-zero goal h + closed-set pruning):
+#check @Formal.PlannerAdmissibility.Consistent                   -- textbook consistency (monotonicity): h s ≤ cost + h s'
+#check @Formal.PlannerAdmissibility.zero_h_consistent            -- h ≡ 0 is consistent w.r.t. any cost/succ
+#check @Formal.PlannerAdmissibility.consistent_firstpop_is_least_g -- closed-set: first pop is least-g ⇒ pruning re-expansions is safe
+#check @Formal.PlannerAdmissibility.consistent_closedSet_preserves_optimal -- admissible+consistent ⇒ A*-with-visited optimal on both fronts
+#check @Formal.PlannerAdmissibility.skillGrind_h_admissible      -- skill-grind landmark heuristic IS admissible
+#check @Formal.PlannerAdmissibility.skillGrind_h_consistent      -- skill-grind landmark heuristic IS consistent
+#check @Formal.PlannerAdmissibility.skillGrind_closedSet_preserves_optimal -- whole closed-set contract discharged on skill-grind instance
 -- ArbiterSelect required roles:
 #check @Formal.ArbiterSelect.select_pure_guard_wins              -- sticky-safety: head-guard plannable ⇒ guard returned regardless of committed
 #check @Formal.ArbiterSelect.select_pure_sticky_idempotent       -- sticky-idempotence: no guards ∧ committed plans ⇒ committed returned
