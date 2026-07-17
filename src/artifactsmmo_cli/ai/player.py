@@ -47,13 +47,20 @@ from artifactsmmo_cli.ai.constants import (
     STUCK_DETECTOR_WINDOW,
 )
 from artifactsmmo_cli.ai.consumable_supply import consumable_craft_quantity
-from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, GoalAttempt, GoalRankEntry, RootScoreView
+from artifactsmmo_cli.ai.cycle_snapshot import (
+    CycleSnapshot,
+    GoalAttempt,
+    GoalRankEntry,
+    PlanTreeNode,
+    RootScoreView,
+)
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_latch import GearLatch
 from artifactsmmo_cli.ai.gear_value_core import Combat, Gather
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
 from artifactsmmo_cli.ai.goals.base import Goal
+from artifactsmmo_cli.ai.grind_expansion import grind_leg_nodes
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.projections import PathPlan, cheapest_path_to_level
 from artifactsmmo_cli.ai.learning.scalarizer import _max_sell_back_price
@@ -212,6 +219,10 @@ class GamePlayer:
         # epic's bespoke `recoverable` map). `NO_PROFILE_CONTEXT` until the first
         # decide/plan cycle runs.
         self._last_ctx: SelectionContext = NO_PROFILE_CONTEXT
+        # The runtime skill-grind legs captured while executing the current
+        # cycle's LevelSkill step (empty on non-grind cycles). Surfaced to the
+        # TUI plan tree + log so the whole action chain below LevelSkill shows.
+        self._last_grind_expansion: tuple[PlanTreeNode, ...] = ()
 
     def set_cycle_observer(self, observer: "Callable[[CycleSnapshot], None] | None") -> None:
         """Allow callers (e.g. TUI host) to subscribe after construction."""
@@ -789,6 +800,12 @@ class GamePlayer:
         skills.
         """
         assert self.state is not None and self.game_data is not None
+        # Clear last cycle's captured legs on the top-level grind call only;
+        # recursive calls (non-empty _grinding) build on the same field. If a
+        # guard below raises before legs are captured, the TUI shows no chain
+        # for this errored grind cycle rather than a stale one.
+        if not _grinding:
+            self._last_grind_expansion = ()
         if action.skill in _grinding:
             raise RuntimeError(
                 f"cyclic skill-grind dependency for {action.skill}: "
@@ -807,8 +824,12 @@ class GamePlayer:
                 f"LevelSkill({action.skill}) grind produced no leg")
         first = sub_plan[0]
         if isinstance(first, LevelSkill):
-            return self._execute_level_skill(first, client,
-                                             _grinding | {action.skill})
+            result = self._execute_level_skill(first, client,
+                                               _grinding | {action.skill})
+            self._last_grind_expansion = grind_leg_nodes(
+                action.skill, sub_plan, self._last_grind_expansion)
+            return result
+        self._last_grind_expansion = grind_leg_nodes(action.skill, sub_plan)
         return self._execute(first, client)
 
     def _execute(self, action: Action, client: AuthenticatedClient) -> tuple[WorldState, str]:
@@ -1506,6 +1527,10 @@ class GamePlayer:
                 (self.state.cooldown_expires - datetime.now(tz=timezone.utc)).total_seconds(),
             )
         action_kind, action_target = action_kind_of(action) if action is not None else ("other", None)
+        # Only a LevelSkill cycle has a captured grind chain; gating on the
+        # action type keeps a prior grind's legs from leaking onto an unrelated
+        # cycle (the field is only cleared inside _execute_level_skill).
+        grind_children = self._last_grind_expansion if isinstance(action, LevelSkill) else ()
         snap = CycleSnapshot(
             cycle_index=self._cycle_counter,
             timestamp=datetime.now(tz=timezone.utc).isoformat(),
@@ -1562,9 +1587,11 @@ class GamePlayer:
                     f"{selected_goal_name}: {action_name}"
                     if selected_goal_name and action_name else (selected_goal_name or action_name),
                     self._last_ctx,
+                    grind_children,
                 )
                 if self._last_decision is not None and self.game_data is not None else ()
             ),
+            grind_expansion=grind_children,
         )
         self._cycle_observer(snap)
 

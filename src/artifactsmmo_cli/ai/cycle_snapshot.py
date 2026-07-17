@@ -103,3 +103,9 @@ class CycleSnapshot(BaseModel):
     strategy_ranking: list[RootScoreView] = Field(default_factory=list)
     bank_items: dict[str, int] | None = None
     plan_tree: tuple[PlanTreeNode, ...] = ()
+
+    # The runtime skill-grind legs captured this cycle when the executed action
+    # was a LevelSkill (the concrete gather/craft chain the planner re-derives
+    # per cycle and discards). Empty on non-grind cycles. Rendered under the
+    # current step in the plan tree and flattened into the log.
+    grind_expansion: tuple[PlanTreeNode, ...] = ()

@@ -17,7 +17,8 @@ from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
-from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, RootScoreView
+from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
+from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, PlanTreeNode, RootScoreView
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.models import Session as SessionModel
@@ -1918,6 +1919,90 @@ class TestNotifyObserverCooldown:
         snap = captured[0]
         assert snap.plan_tree != ()
         assert snap.plan_tree[0].label == "nonexistent_item"
+
+
+@dataclass(frozen=True)
+class _GrindLeg:
+    """A concrete (non-LevelSkill) grind leg stand-in for the capture tests."""
+
+    name: str
+
+    def __repr__(self) -> str:
+        return f"{self.name}()"
+
+
+class TestGrindExpansionCapture:
+    """The player captures the runtime skill-grind sub-plan legs so the TUI can
+    show the whole action chain below a LevelSkill step."""
+
+    def _player(self):
+        player = GamePlayer(character="hero")
+        player.game_data = make_game_data_mock()
+        player.state = make_state()
+        player._build_actions = lambda: []           # type: ignore[method-assign]
+        player.planner = MagicMock()
+        player._execute = lambda action, client: (player.state, "ok")  # type: ignore[method-assign]
+        return player
+
+    def test_captures_flat_legs(self):
+        player = self._player()
+        player.planner.plan.return_value = [_GrindLeg("GatherAsh"), _GrindLeg("CraftPlank")]
+        with patch("artifactsmmo_cli.ai.player.next_grind_goal", return_value=MagicMock()):
+            player._execute_level_skill(LevelSkill(skill="woodcutting", target_level=30),
+                                        MagicMock())
+        assert [n.label for n in player._last_grind_expansion] == ["GatherAsh()", "CraftPlank()"]
+
+    def test_captures_nested_cross_skill_grind(self):
+        player = self._player()
+        inner = LevelSkill(skill="fishing", target_level=20)
+        player.planner.plan.side_effect = [[inner], [_GrindLeg("GatherOak")]]
+        with patch("artifactsmmo_cli.ai.player.next_grind_goal", return_value=MagicMock()):
+            player._execute_level_skill(LevelSkill(skill="woodcutting", target_level=30),
+                                        MagicMock())
+        outer = player._last_grind_expansion
+        assert outer[0].kind == "step" and "fishing" in outer[0].label
+        assert outer[0].children[0].label == "GatherOak()"
+
+    def test_resets_between_top_level_grinds(self):
+        player = self._player()
+        player._last_grind_expansion = (
+            PlanTreeNode(key="stale", label="Stale()", kind="obtain", status="current"),)
+        player.planner.plan.return_value = [_GrindLeg("GatherAsh")]
+        with patch("artifactsmmo_cli.ai.player.next_grind_goal", return_value=MagicMock()):
+            player._execute_level_skill(LevelSkill(skill="woodcutting", target_level=30),
+                                        MagicMock())
+        assert [n.label for n in player._last_grind_expansion] == ["GatherAsh()"]
+
+    def test_notify_grafts_expansion_for_levelskill_action(self):
+        captured: list[CycleSnapshot] = []
+        player = GamePlayer(character="hero", cycle_observer=captured.append)
+        player.game_data = make_game_data_mock()
+        player.state = make_state(level=4)
+        root = ObtainItem("nonexistent_item")
+        player._last_decision = StrategyDecision(
+            interrupt=None, chosen_root=root, chosen_step=root,
+            desired_state={}, ranking=[])
+        legs = (PlanTreeNode(key="l0", label="GatherAsh()", kind="obtain", status="current"),)
+        player._last_grind_expansion = legs
+        action = LevelSkill(skill="woodcutting", target_level=30)
+        player._notify_observer("g", repr(action), "ok", [], action=action)
+        snap = captured[0]
+        assert snap.grind_expansion == legs
+        serve = next(c for c in snap.plan_tree[0].children if c.kind == "step")
+        assert serve.children == legs
+
+    def test_notify_ignores_stale_expansion_for_non_levelskill_action(self):
+        captured: list[CycleSnapshot] = []
+        player = GamePlayer(character="hero", cycle_observer=captured.append)
+        player.game_data = make_game_data_mock()
+        player.state = make_state(level=4)
+        player._last_decision = StrategyDecision(
+            interrupt=None, chosen_root=ObtainItem("nonexistent_item"),
+            chosen_step=None, desired_state={}, ranking=[])
+        player._last_grind_expansion = (
+            PlanTreeNode(key="stale", label="Stale()", kind="obtain", status="current"),)
+        player._notify_observer("g", "FightAction(cow)", "ok", [], action=None)
+        assert captured[0].grind_expansion == ()
 
 
 class TestNotifyObserverChosenRoot:

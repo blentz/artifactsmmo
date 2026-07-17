@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, RootScoreView
+from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, PlanTreeNode, RootScoreView
 from artifactsmmo_cli.tui.widgets.log_pane import LogPane, build_log_lines
 
 
@@ -167,3 +167,15 @@ class TestBuildLogLines:
         snap = _ranked_snap(chosen_root="NonexistentGoal")
         lines = build_log_lines(snap)
         assert len(lines) == 1
+
+
+class TestGrindExpansionLines:
+    def test_grind_legs_appended_below_decision_line(self):
+        legs = (PlanTreeNode(key="l0", label="GatherAsh()", kind="obtain", status="current"),
+                PlanTreeNode(key="l1", label="CraftPlank()", kind="obtain", status="unmet"))
+        lines = build_log_lines(_snap(action="LevelSkill(woodcutting)", grind_expansion=legs))
+        chain = "\n".join(lines)
+        assert "GatherAsh()" in chain and "CraftPlank()" in chain
+
+    def test_no_grind_expansion_leaves_single_line(self):
+        assert len(build_log_lines(_snap())) == 1

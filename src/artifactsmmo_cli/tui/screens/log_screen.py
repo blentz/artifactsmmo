@@ -8,6 +8,7 @@ from textual.screen import Screen
 from textual.widgets import RichLog
 
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
+from artifactsmmo_cli.tui.plan_format import grind_chain_lines
 
 
 def build_debug_log_line(snap: CycleSnapshot) -> str:
@@ -19,7 +20,9 @@ def build_debug_log_line(snap: CycleSnapshot) -> str:
       cooldown, position, path-next, projected cycles, path-blocked;
     - every planner attempt (goals_tried) with its own nodes/depth/plan_len;
     - the full goal-rank ranking (priority > 0);
-    - suppressed goals (only when any are active).
+    - suppressed goals (only when any are active);
+    - the captured grind chain (LevelSkill cycles only) — the concrete legs the
+      step expands into, indented below the record.
     """
     ts = snap.timestamp[11:19] if len(snap.timestamp) >= 19 else snap.timestamp
     outcome_color = {"ok": "green", "no_plan": "yellow"}.get(snap.outcome, "red")
@@ -49,6 +52,7 @@ def build_debug_log_line(snap: CycleSnapshot) -> str:
     lines.append(f"  [dim]rank[/dim] {ranks}")
     if snap.suppressed_goals:
         lines.append(f"  [dim]suppressed[/dim] {'  '.join(snap.suppressed_goals)}")
+    lines.extend(grind_chain_lines(snap.grind_expansion))
     return "\n".join(lines)
 
 

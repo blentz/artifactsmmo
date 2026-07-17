@@ -72,6 +72,37 @@ def _sample_with_unmet_child() -> tuple[PlanTreeNode, ...]:
     return (root,)
 
 
+def _sample_with_grind_legs() -> tuple[PlanTreeNode, ...]:
+    # The current step's synthetic serve child now carries the runtime grind
+    # legs (a leaf gather + a nested cross-skill grind wrapper) so the tree
+    # shows the whole action chain below a LevelSkill step.
+    inner = PlanTreeNode(key="inner0", label="GatherOak()", kind="obtain", status="current")
+    nested = PlanTreeNode(key="grind:fishing", label="grind fishing", kind="step",
+                          status="current", children=(inner,))
+    leg = PlanTreeNode(key="leg0", label="GatherAsh()", kind="obtain", status="current")
+    step = PlanTreeNode(key="step:sk", label="Upgrade: LevelSkill(gearcrafting)",
+                        kind="step", status="current", children=(leg, nested))
+    root = PlanTreeNode(key="bow", label="fire_bow", kind="obtain",
+                        status="current", children=(step,))
+    return (root,)
+
+
+@pytest.mark.asyncio
+async def test_grind_legs_render_and_autoexpand_below_step():
+    app = _Harness(_sample_with_grind_legs())
+    async with app.run_test():
+        tree = app.query_one("#pt", PlanTree)
+        root_node = tree.root.children[0]
+        step_node = root_node.children[0]
+        assert step_node.allow_expand is True          # step now has children
+        assert step_node.is_expanded                    # path-to-current auto-opens
+        labels = [n.data.label for n in step_node.children]
+        assert labels == ["GatherAsh()", "grind fishing"]
+        # the nested cross-skill grind wrapper carries its own leg
+        nested_node = step_node.children[1]
+        assert nested_node.children[0].data.label == "GatherOak()"
+
+
 @pytest.mark.asyncio
 async def test_unmet_child_glyph_fallback_and_collapse_updates_memory():
     app = _Harness(_sample_with_unmet_child())

@@ -1,4 +1,9 @@
-from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, GoalAttempt, GoalRankEntry
+from artifactsmmo_cli.ai.cycle_snapshot import (
+    CycleSnapshot,
+    GoalAttempt,
+    GoalRankEntry,
+    PlanTreeNode,
+)
 from artifactsmmo_cli.tui.screens.log_screen import build_debug_log_line
 
 
@@ -21,6 +26,18 @@ def _snap(**overrides) -> CycleSnapshot:
     )
     base.update(overrides)
     return CycleSnapshot(**base)
+
+
+def test_debug_line_shows_grind_chain():
+    legs = (PlanTreeNode(key="l0", label="GatherAsh()", kind="obtain", status="current"),
+            PlanTreeNode(key="l1", label="CraftPlank()", kind="obtain", status="unmet"))
+    line = build_debug_log_line(_snap(action="LevelSkill(woodcutting)", grind_expansion=legs))
+    assert "GatherAsh()" in line and "CraftPlank()" in line
+
+
+def test_debug_line_no_grind_chain_when_empty():
+    line = build_debug_log_line(_snap())
+    assert "↳" not in line
 
 
 def test_debug_line_has_core_fields():

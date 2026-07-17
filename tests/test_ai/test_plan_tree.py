@@ -68,6 +68,35 @@ def test_current_step_gets_synthetic_serve_child():
     assert steps[0].status == "current"
 
 
+def test_serve_child_carries_grind_children():
+    # The runtime skill-grind legs (captured by the player) graft onto the
+    # current step's synthetic serve child so the plan tree shows the whole
+    # action chain below a LevelSkill step.
+    gd = _gd()
+    state = make_state(skills={"jewelrycrafting": 1})
+    chosen = ObtainItem("life_amulet")
+    step = ObtainItem("golden_ring", 1)
+    legs = (PlanTreeNode(key="leg0", label="GatherAsh()", kind="obtain", status="current"),
+            PlanTreeNode(key="leg1", label="CraftPlank()", kind="obtain", status="unmet"))
+    tree = build_plan_tree(_decision(chosen, step, [_rs(chosen, 2)]), state, gd,
+                           "UpgradeEquipment: LevelSkill(woodcutting)", grind_children=legs)
+    ring = next(c for c in tree[0].children if c.label == "golden_ring")
+    serve = next(c for c in ring.children if c.kind == "step")
+    assert serve.children == legs
+
+
+def test_grind_children_default_empty_leaves_serve_child_a_leaf():
+    gd = _gd()
+    state = make_state(skills={"jewelrycrafting": 1})
+    chosen = ObtainItem("life_amulet")
+    step = ObtainItem("golden_ring", 1)
+    tree = build_plan_tree(_decision(chosen, step, [_rs(chosen, 2)]), state, gd,
+                           "UpgradeEquipment: LevelSkill(woodcutting)")
+    ring = next(c for c in tree[0].children if c.label == "golden_ring")
+    serve = next(c for c in ring.children if c.kind == "step")
+    assert serve.children == ()
+
+
 def test_no_serve_child_when_serve_step_none():
     gd = _gd()
     state = make_state(skills={"jewelrycrafting": 1})
@@ -166,3 +195,12 @@ def test_snapshot_carries_plan_tree():
                          plan_tree=(node,))
     assert snap.plan_tree[0].label == "life_amulet"
     assert snap.plan_tree[0].children == ()
+
+
+def test_snapshot_carries_grind_expansion():
+    leg = PlanTreeNode(key="leg0", label="GatherAsh()", kind="obtain", status="current")
+    snap = CycleSnapshot(cycle_index=1, timestamp="t", character="hero",
+                         x=0, y=0, level=1, xp=0, max_xp=1, hp=1, max_hp=1, gold=0,
+                         selected_goal="g", action="LevelSkill(woodcutting)", outcome="ok",
+                         grind_expansion=(leg,))
+    assert snap.grind_expansion[0].label == "GatherAsh()"

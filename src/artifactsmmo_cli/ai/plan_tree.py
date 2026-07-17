@@ -36,7 +36,8 @@ def _label(node: MetaGoal) -> tuple[str, str]:
 def _expand(node: MetaGoal, decision: StrategyDecision, state: WorldState,
             game_data: GameData, serve_step: str | None,
             visited: frozenset[MetaGoal], depth: int,
-            ctx: SelectionContext = NO_PROFILE_CONTEXT) -> PlanTreeNode:
+            ctx: SelectionContext = NO_PROFILE_CONTEXT,
+            grind_children: tuple[PlanTreeNode, ...] = ()) -> PlanTreeNode:
     label, kind = _label(node)
     is_current = node == decision.chosen_step
     status = "current" if is_current else (
@@ -47,10 +48,11 @@ def _expand(node: MetaGoal, decision: StrategyDecision, state: WorldState,
         for prereq in prerequisites(node, state, game_data, ctx):
             children.append(
                 _expand(prereq, decision, state, game_data, serve_step, nxt,
-                       depth + 1, ctx))
+                       depth + 1, ctx, grind_children))
     if is_current and serve_step:
         children.append(PlanTreeNode(
-            key=f"step:{node!r}", label=serve_step, kind="step", status="current"))
+            key=f"step:{node!r}", label=serve_step, kind="step", status="current",
+            children=grind_children))
     return PlanTreeNode(key=repr(node), label=label, kind=kind, status=status,
                         children=tuple(children))
 
@@ -58,6 +60,7 @@ def _expand(node: MetaGoal, decision: StrategyDecision, state: WorldState,
 def build_plan_tree(decision: StrategyDecision, state: WorldState,
                     game_data: GameData, serve_step: str | None,
                     ctx: SelectionContext = NO_PROFILE_CONTEXT,
+                    grind_children: tuple[PlanTreeNode, ...] = (),
                     ) -> tuple[PlanTreeNode, ...]:
     """Chosen root expands its prerequisite subtree; other ranked roots become
     leaf stubs. The current step gains a synthetic serve child. Bounded by a
@@ -66,12 +69,17 @@ def build_plan_tree(decision: StrategyDecision, state: WorldState,
     `ctx` (the player's per-cycle `SelectionContext`) is forwarded to
     `prerequisites` so the TUI tree shows the SAME descent the planner
     actually takes (one-obtain-model epic, Task 5) rather than a stale
-    from-scratch recipe descent."""
+    from-scratch recipe descent.
+
+    `grind_children` are the runtime skill-grind legs the player captured this
+    cycle (empty unless the executed action was a LevelSkill); they graft onto
+    the current step's synthetic serve child so the tree shows the whole action
+    chain below a LevelSkill step instead of stopping at it."""
     if decision.chosen_root is None:
         return ()
     roots: list[PlanTreeNode] = [
         _expand(decision.chosen_root, decision, state, game_data, serve_step,
-                frozenset(), 0, ctx)
+                frozenset(), 0, ctx, grind_children)
     ]
     chosen_repr = repr(decision.chosen_root)
     for i, r in enumerate(decision.ranking):
