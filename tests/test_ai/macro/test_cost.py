@@ -1,4 +1,4 @@
-from artifactsmmo_cli.ai.macro.cost import CostStat, cost_by_goal_type, parse_goal_type
+from artifactsmmo_cli.ai.macro.cost import cost_by_goal_type, parse_goal_type
 from artifactsmmo_cli.ai.macro.cycle_row import CycleRow
 
 

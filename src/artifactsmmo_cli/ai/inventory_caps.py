@@ -43,6 +43,7 @@ from artifactsmmo_cli.ai.gear_value_core import Rank
 from artifactsmmo_cli.ai.thresholds import PRESSURE_HIGH_DEN, PRESSURE_HIGH_NUM
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
+
 def _score_vector(stats: ItemStats, monsters: list[str], game_data: GameData) -> list[int]:
     """Per-monster combat score for a weapon (offense) or armor (defense) piece."""
     if stats.type_ == "weapon":

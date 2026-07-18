@@ -22,16 +22,16 @@ def test_skill_names_is_the_derived_schema_vocabulary():
         "gearcrafting", "jewelrycrafting", "cooking", "alchemy",
     }
     assert "combat" not in SKILL_NAMES  # combat xp is tracked separately
-    assert SKILL_NAMES == sorted(SKILL_NAMES)  # deterministic order
+    assert sorted(SKILL_NAMES) == SKILL_NAMES  # deterministic order
     assert len(SKILL_NAMES) == len(set(SKILL_NAMES))  # no dupes
 
 
 def test_sets_equal_the_historical_literals():
     """Value-preserving: the derived partition matches what strategy.py and
     prerequisite_graph.py hard-coded before."""
-    assert COMBAT_CRAFT_SKILLS == {"weaponcrafting", "gearcrafting", "jewelrycrafting"}
-    assert CONSUMABLE_CRAFT_SKILLS == {"alchemy", "cooking"}
-    assert GATHER_SKILLS == {"mining", "woodcutting", "fishing"}
+    assert {"weaponcrafting", "gearcrafting", "jewelrycrafting"} == COMBAT_CRAFT_SKILLS
+    assert {"alchemy", "cooking"} == CONSUMABLE_CRAFT_SKILLS
+    assert {"mining", "woodcutting", "fishing"} == GATHER_SKILLS
 
 
 def test_partition_is_disjoint_and_drawn_from_the_enums():
@@ -51,4 +51,4 @@ def test_combat_craft_is_craft_minus_gather_minus_kitchen():
     no independent membership list to drift."""
     craft = {s.value for s in CraftSkill}
     gather = {s.value for s in GatheringSkill}
-    assert COMBAT_CRAFT_SKILLS == craft - gather - CONSUMABLE_CRAFT_SKILLS
+    assert craft - gather - CONSUMABLE_CRAFT_SKILLS == COMBAT_CRAFT_SKILLS

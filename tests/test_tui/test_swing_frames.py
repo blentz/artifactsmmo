@@ -1,7 +1,11 @@
-from artifactsmmo_cli.tui.swing_frames import (
-    Mode, current_mode, glide_index, swing_frame_index, swing_overlay,
-)
 from artifactsmmo_cli.tui.sprites import HAMMER, PICKAXE, oriented_head
+from artifactsmmo_cli.tui.swing_frames import (
+    Mode,
+    current_mode,
+    glide_index,
+    swing_frame_index,
+    swing_overlay,
+)
 
 
 def test_planning_overrides_everything():

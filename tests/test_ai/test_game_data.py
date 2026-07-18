@@ -282,8 +282,10 @@ class TestGameDataLoadMaps:
         """PLAN #6b: each tile's map_id is indexed to its (x, y) so teleport
         destinations (whose effect value is a map_id) resolve to coordinates."""
         gd = GameData()
-        spawn = make_map_tile(0, 0, "bank", "bank"); spawn.map_id = 271
-        forest = make_map_tile(7, 13, "resource", "ash_tree"); forest.map_id = 955
+        spawn = make_map_tile(0, 0, "bank", "bank")
+        spawn.map_id = 271
+        forest = make_map_tile(7, 13, "resource", "ash_tree")
+        forest.map_id = 955
         with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=make_page([spawn, forest])):
             gd._load_maps(MagicMock())
         assert gd.world.map_location_by_id(271) == (0, 0)
@@ -360,7 +362,9 @@ class TestGameDataLoadItems:
         item.level = 35
         item.type_ = "amulet"
         item.craft = UNSET
-        eff = MagicMock(); eff.code = "threat"; eff.value = 10
+        eff = MagicMock()
+        eff.code = "threat"
+        eff.value = 10
         item.effects = [eff]
         with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=make_page([item])):
             gd._load_items(MagicMock())
@@ -379,7 +383,9 @@ class TestGameDataLoadItems:
         item.level = 1
         item.type_ = "utility"
         item.craft = UNSET
-        eff = MagicMock(); eff.code = "teleport"; eff.value = 271
+        eff = MagicMock()
+        eff.code = "teleport"
+        eff.value = 271
         item.effects = [eff]
         with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=make_page([item])):
             gd._load_items(MagicMock())
@@ -421,7 +427,9 @@ class TestGameDataLoadItems:
         effs = []
         for code, val in (("boost_dmg_fire", 20), ("boost_dmg_air", 20),
                           ("boost_res_water", 10), ("boost_hp", 250), ("antipoison", 30)):
-            e = MagicMock(); e.code = code; e.value = val
+            e = MagicMock()
+            e.code = code
+            e.value = val
             effs.append(e)
         item.effects = effs
         with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=make_page([item])):
@@ -438,8 +446,12 @@ class TestGameDataLoadItems:
         # antipoison → its own field (caps monster poison in predict_win) AND combat_buff.
         assert s.antipoison == 30
         # an item with no buff effects has combat_buff 0.
-        plain = MagicMock(); plain.code = "plain"; plain.level = 1
-        plain.type_ = "weapon"; plain.craft = UNSET; plain.effects = []
+        plain = MagicMock()
+        plain.code = "plain"
+        plain.level = 1
+        plain.type_ = "weapon"
+        plain.craft = UNSET
+        plain.effects = []
         with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=make_page([plain])):
             gd._load_items(MagicMock())
         assert gd._item_stats["plain"].combat_buff == 0
@@ -834,8 +846,12 @@ class TestGameDataLoadMonsters:
         monster.hp = 1200
         monster.critical_strike = 0
         monster.initiative = 100
-        eff_b = MagicMock(); eff_b.code = "berserker_rage"; eff_b.value = 20
-        eff_f = MagicMock(); eff_f.code = "frenzy"; eff_f.value = 60
+        eff_b = MagicMock()
+        eff_b.code = "berserker_rage"
+        eff_b.value = 20
+        eff_f = MagicMock()
+        eff_f.code = "frenzy"
+        eff_f.value = 60
         monster.effects = [eff_b, eff_f]
         with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=make_page([monster])):
             gd._load_monsters(MagicMock())
@@ -854,7 +870,9 @@ class TestGameDataLoadMonsters:
         monster.hp = 1800
         monster.critical_strike = 0
         monster.initiative = 100
-        eff = MagicMock(); eff.code = "protective_bubble"; eff.value = 65
+        eff = MagicMock()
+        eff.code = "protective_bubble"
+        eff.value = 65
         monster.effects = [eff]
         with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=make_page([monster])):
             gd._load_monsters(MagicMock())
@@ -874,7 +892,9 @@ class TestGameDataLoadMonsters:
         monster.hp = 1400
         monster.critical_strike = 0
         monster.initiative = 100
-        eff = MagicMock(); eff.code = "corrupted"; eff.value = 6
+        eff = MagicMock()
+        eff.code = "corrupted"
+        eff.value = 6
         monster.effects = [eff]
         with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=make_page([monster])):
             gd._load_monsters(MagicMock())
@@ -894,7 +914,9 @@ class TestGameDataLoadMonsters:
         monster.hp = 1500000
         monster.critical_strike = 0
         monster.initiative = 100
-        eff = MagicMock(); eff.code = "sun_shield"; eff.value = 50
+        eff = MagicMock()
+        eff.code = "sun_shield"
+        eff.value = 50
         monster.effects = [eff]
         with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=make_page([monster])):
             gd._load_monsters(MagicMock())
@@ -913,7 +935,9 @@ class TestGameDataLoadMonsters:
         monster.hp = 5000
         monster.critical_strike = 0
         monster.initiative = 100
-        eff = MagicMock(); eff.code = "greed"; eff.value = 20
+        eff = MagicMock()
+        eff.code = "greed"
+        eff.value = 20
         monster.effects = [eff]
         with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=make_page([monster])):
             gd._load_monsters(MagicMock())
@@ -931,7 +955,9 @@ class TestGameDataLoadMonsters:
         monster.hp = 600000
         monster.critical_strike = 0
         monster.initiative = 100
-        eff = MagicMock(); eff.code = "enchanted_mirror"; eff.value = 50
+        eff = MagicMock()
+        eff.code = "enchanted_mirror"
+        eff.value = 50
         monster.effects = [eff]
         with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=make_page([monster])):
             gd._load_monsters(MagicMock())
@@ -1045,7 +1071,9 @@ def test_load_npcs_captures_buy_currency(monkeypatch):
         if page == 1:
             return FakeResult([
                 FakeEntry("rune_vendor", "lifesteal_rune", buy_price=20000, sell_price=None, currency="gold"),
-                FakeEntry("trader", "greater_lifesteal_rune", buy_price=100, sell_price=None, currency="sandwhisper_coin"),
+                FakeEntry(
+                    "trader", "greater_lifesteal_rune", buy_price=100, sell_price=None, currency="sandwhisper_coin"
+                ),
                 FakeEntry("smith", "iron_ore", buy_price=None, sell_price=8, currency="gold"),  # not stocked
             ])
         return FakeResult([])
@@ -1293,17 +1321,19 @@ class TestGameDataLoad:
         client = MagicMock()
         cache = GameDataCache("https://api.artifactsmmo.com", cache_dir=tmp_path)
         empty_page = make_page([])
-        with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=empty_page):
-            with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=empty_page):
-                with patch("artifactsmmo_cli.ai.game_data.get_all_resources", return_value=empty_page):
-                    with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=empty_page):
-                        with patch("artifactsmmo_cli.ai.game_data.get_all_npc_items", return_value=empty_page):
-                            with patch("artifactsmmo_cli.ai.game_data.get_all_tasks", return_value=empty_page):
-                                with patch("artifactsmmo_cli.ai.game_data.get_all_events", return_value=empty_page):
-                                    with patch("artifactsmmo_cli.ai.game_data.get_all_effects", return_value=empty_page):
-                                        with patch("artifactsmmo_cli.ai.game_data.get_ge_orders", return_value=empty_page):
-                                            with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None):
-                                                gd = GameData.load(client, cache=cache)
+        with (
+            patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=empty_page),
+            patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=empty_page),
+            patch("artifactsmmo_cli.ai.game_data.get_all_resources", return_value=empty_page),
+            patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=empty_page),
+            patch("artifactsmmo_cli.ai.game_data.get_all_npc_items", return_value=empty_page),
+            patch("artifactsmmo_cli.ai.game_data.get_all_tasks", return_value=empty_page),
+            patch("artifactsmmo_cli.ai.game_data.get_all_events", return_value=empty_page),
+            patch("artifactsmmo_cli.ai.game_data.get_all_effects", return_value=empty_page),
+            patch("artifactsmmo_cli.ai.game_data.get_ge_orders", return_value=empty_page),
+            patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None),
+        ):
+            gd = GameData.load(client, cache=cache)
         assert isinstance(gd, GameData)
 
 

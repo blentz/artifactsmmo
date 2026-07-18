@@ -1,6 +1,7 @@
 """GameData task-reward loading: which item codes are earnable by completing tasks."""
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.game_data_error import GameDataCoverageError

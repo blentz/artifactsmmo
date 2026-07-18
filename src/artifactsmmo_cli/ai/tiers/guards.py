@@ -19,6 +19,7 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
 from artifactsmmo_cli.ai.recycle_surplus import recyclable_surplus
+
 # Explicit re-export (`X as X`): `SelectionContext` lives one layer down now, but
 # `tiers.guards` remains its public home for every existing importer.
 from artifactsmmo_cli.ai.selection_context import SelectionContext as SelectionContext

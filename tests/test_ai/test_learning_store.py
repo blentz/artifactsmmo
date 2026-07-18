@@ -1053,7 +1053,7 @@ def test_cycle_consumables_expended_json_roundtrips(tmp_path):
         character="hero", outcome="ok", action_repr="Fight(red_slime)",
         action_class="FightAction", consumables_expended_json='{"small_health_potion": 2}'))
     with SqlSession(store._engine) as s:
-        row = list(s.exec(select(Cycle).where(Cycle.action_repr == "Fight(red_slime)")))[0]
+        row = next(iter(s.exec(select(Cycle).where(Cycle.action_repr == "Fight(red_slime)"))))
     assert row.consumables_expended_json == '{"small_health_potion": 2}'
     store.close()
 
@@ -1065,7 +1065,7 @@ def test_cycle_consumables_expended_json_defaults_empty(tmp_path):
         cycle_index=1, character="hero", outcome="ok", action_repr="Rest",
         action_class="RestAction"))
     with SqlSession(store._engine) as s:
-        row = list(s.exec(select(Cycle).where(Cycle.action_repr == "Rest")))[0]
+        row = next(iter(s.exec(select(Cycle).where(Cycle.action_repr == "Rest"))))
     assert row.consumables_expended_json == "{}"
     store.close()
 

@@ -5,7 +5,6 @@ weapon that beats MORE monsters. The metric is MARGINAL: does OWNING a weapon le
 the character beat a monster it cannot beat now?
 """
 
-import dataclasses
 
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.weapon_winnability import (

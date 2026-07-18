@@ -34,12 +34,11 @@ from artifactsmmo_cli.tui.sprites import (
     RED_SLIME_SPRITE,
     RUNE_VENDOR_SPRITE,
     SAND_SNAKE_SPRITE,
-    SANDWHISPER_TRADER_SPRITE,
     SANDWARDEN_SPRITE,
+    SANDWHISPER_TRADER_SPRITE,
     SHEEP_SPRITE,
     SKELETON_SPRITE,
     SPIDER_SPRITE,
-    SpriteCategory,
     TAILOR_SPRITE,
     TASKS_MASTER_SPRITE,
     TASKS_TRADER_SPRITE,
@@ -47,6 +46,7 @@ from artifactsmmo_cli.tui.sprites import (
     WOLF_SPRITE,
     WORKSHOP_SPRITE,
     YELLOW_SLIME_SPRITE,
+    SpriteCategory,
     validate_sprite,
 )
 

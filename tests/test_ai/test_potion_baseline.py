@@ -1,3 +1,5 @@
+import itertools
+
 from artifactsmmo_cli.ai.potion_baseline import potion_baseline_pure
 
 
@@ -25,5 +27,5 @@ def test_linear_ramp_between():
 
 
 def test_monotone_non_decreasing():
-    vals = [_b(l) for l in range(1, 51)]
-    assert all(a <= b for a, b in zip(vals, vals[1:]))
+    vals = [_b(level) for level in range(1, 51)]
+    assert all(a <= b for a, b in itertools.pairwise(vals))

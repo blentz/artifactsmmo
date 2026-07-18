@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
 
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from artifactsmmo_cli.ai.plan_cache import PlanCache
 from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state
 
@@ -50,7 +49,7 @@ def test_first_call_replans_and_caches():
     plan = [_Act(), _Act(), _Act()]
     player, calls = _player_with_stub_plan(plan, goal)
     state = make_state()
-    sel, returned_plan, _tried, replanned = player._plan_or_reuse(state, None, [], None)
+    sel, _returned_plan, _tried, replanned = player._plan_or_reuse(state, None, [], None)
     assert replanned is True
     assert calls["n"] == 1
     assert player._plan_cache is not None
@@ -65,7 +64,7 @@ def test_second_call_reuses_without_replanning():
     player._plan_or_reuse(state, None, [], None)        # cycle 1: replan, cache
     player._plan_cache.advance()                         # simulate a successful execute
     player._last_outcome = "ok"
-    sel, returned_plan, _tried, replanned = player._plan_or_reuse(state, None, [], None)
+    _sel, returned_plan, _tried, replanned = player._plan_or_reuse(state, None, [], None)
     assert replanned is False
     assert calls["n"] == 1                               # decide NOT called again
     assert returned_plan[0] is plan[1]                   # serves the next step
@@ -92,7 +91,6 @@ def test_replan_persists_body_and_commitment(tmp_path):
 def test_advance_with_history_persists_cursor(tmp_path):
     """player.run() persists the cursor after each ok execute cycle (line 641 coverage)."""
     from artifactsmmo_cli.ai.actions.rest import RestAction
-    from artifactsmmo_cli.ai.game_data import GameData
 
     store = LearningStore(db_path=str(tmp_path / "l.db"), character="hero")
     store.start_session()
@@ -118,26 +116,29 @@ def test_advance_with_history_persists_cursor(tmp_path):
     store.save_plan_commitment("FakeGoal()", '{"type":"GatherMaterialsGoal","target_item":"copper_ring","needed":{}}',
                                [repr(rest), repr(rest)], 0, None, False)
 
-    with patch.object(MagicMock(), "client", MagicMock()) as _cm:
-        with patch("artifactsmmo_cli.ai.player.ClientManager", return_value=MagicMock(client=MagicMock())):
-            with patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=MagicMock(data=[])):
-                with patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=MagicMock(data=[])):
-                    with patch("artifactsmmo_cli.ai.game_data.get_all_resources", return_value=MagicMock(data=[])):
-                        with patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=MagicMock(data=[])):
-                            with patch("artifactsmmo_cli.ai.game_data.get_all_npc_items", return_value=MagicMock(data=[])):
-                                with patch("artifactsmmo_cli.ai.game_data.get_all_tasks", return_value=MagicMock(data=[])):
-                                    with patch("artifactsmmo_cli.ai.game_data.get_all_events", return_value=MagicMock(data=[])):
-                                        with patch("artifactsmmo_cli.ai.game_data.get_all_effects", return_value=MagicMock(data=[])):
-                                            with patch("artifactsmmo_cli.ai.game_data.get_ge_orders", return_value=MagicMock(data=[])):
-                                                with patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None):
-                                                    with patch("artifactsmmo_cli.ai.game_data.GameDataCache", _NoopCache):
-                                                        with patch.object(player, "_fetch_world_state", return_value=initial_state):
-                                                            with patch.object(player, "_wait_for_cooldown", side_effect=fake_wait):
-                                                                with patch.object(player, "_maybe_periodic_refresh"):
-                                                                    with patch.object(player, "_build_actions", return_value=[rest]):
-                                                                        import pytest
-                                                                        with pytest.raises(KeyboardInterrupt):
-                                                                            player.run()
+    import pytest
+
+    with (
+        patch.object(MagicMock(), "client", MagicMock()) as _cm,
+        patch("artifactsmmo_cli.ai.player.ClientManager", return_value=MagicMock(client=MagicMock())),
+        patch("artifactsmmo_cli.ai.game_data.get_all_maps", return_value=MagicMock(data=[])),
+        patch("artifactsmmo_cli.ai.game_data.get_all_items", return_value=MagicMock(data=[])),
+        patch("artifactsmmo_cli.ai.game_data.get_all_resources", return_value=MagicMock(data=[])),
+        patch("artifactsmmo_cli.ai.game_data.get_all_monsters", return_value=MagicMock(data=[])),
+        patch("artifactsmmo_cli.ai.game_data.get_all_npc_items", return_value=MagicMock(data=[])),
+        patch("artifactsmmo_cli.ai.game_data.get_all_tasks", return_value=MagicMock(data=[])),
+        patch("artifactsmmo_cli.ai.game_data.get_all_events", return_value=MagicMock(data=[])),
+        patch("artifactsmmo_cli.ai.game_data.get_all_effects", return_value=MagicMock(data=[])),
+        patch("artifactsmmo_cli.ai.game_data.get_ge_orders", return_value=MagicMock(data=[])),
+        patch("artifactsmmo_cli.ai.game_data.get_bank_details", return_value=None),
+        patch("artifactsmmo_cli.ai.game_data.GameDataCache", _NoopCache),
+        patch.object(player, "_fetch_world_state", return_value=initial_state),
+        patch.object(player, "_wait_for_cooldown", side_effect=fake_wait),
+        patch.object(player, "_maybe_periodic_refresh"),
+        patch.object(player, "_build_actions", return_value=[rest]),
+        pytest.raises(KeyboardInterrupt),
+    ):
+        player.run()
 
     # After one dry_run ok cycle, the cursor in the DB must have advanced.
     loaded = store.load_plan_commitment()

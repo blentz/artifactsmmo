@@ -3,9 +3,10 @@
 import tempfile
 from datetime import datetime, timezone
 
+from sqlmodel import create_engine
+
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
-from sqlmodel import create_engine
 
 
 def _break_engine(store: LearningStore) -> None:

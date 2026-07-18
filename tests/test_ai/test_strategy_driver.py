@@ -27,6 +27,7 @@ from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
 from artifactsmmo_cli.ai.goals.grind_character_xp import GrindCharacterXPGoal
 from artifactsmmo_cli.ai.goals.low_yield_cancel import LowYieldCancelGoal
 from artifactsmmo_cli.ai.goals.progression import UpgradeEquipmentGoal
+from artifactsmmo_cli.ai.goals.provision_marginal_fight import ProvisionMarginalFightGoal
 from artifactsmmo_cli.ai.goals.pursue_task import PursueTaskGoal  # noqa: F401 (used in repr checks)
 from artifactsmmo_cli.ai.goals.reach_currency import ReachCurrencyGoal
 from artifactsmmo_cli.ai.goals.reach_unlock_level import ReachUnlockLevelGoal
@@ -36,7 +37,6 @@ from artifactsmmo_cli.ai.goals.sell_inventory import SellInventoryGoal
 from artifactsmmo_cli.ai.goals.task_cancel import TaskCancelGoal
 from artifactsmmo_cli.ai.goals.task_exchange import TaskExchangeGoal
 from artifactsmmo_cli.ai.goals.unlock_bank import UnlockBankGoal
-from artifactsmmo_cli.ai.goals.provision_marginal_fight import ProvisionMarginalFightGoal
 from artifactsmmo_cli.ai.learning.models import Cycle
 from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.planner import GOAPPlanner, PlanStats
@@ -45,10 +45,10 @@ from artifactsmmo_cli.ai.strategy_driver import (
     StrategyArbiter,
     _equippable_goal,
     _gather_goal_for_unreachable_equippable,
+    _recipe_has_combat_drop_input,
     _task_recipe_inputs,
     map_guard,
     map_means,
-    _recipe_has_combat_drop_input,
     monster_drop_inputs,
     objective_step_goal,
 )
@@ -2050,7 +2050,8 @@ def test_reliable_target_still_grinds(tmp_path):
     state = make_state(level=3, inventory={"small_health_potion": 100})
     gd = _gd_with_utility_heal("small_health_potion", hp_restore=60)
     history = LearningStore(db_path=str(tmp_path / "l.db"), character="r")
-    _record_mixed(history, "Fight(green_slime)", wins=20, losses=0)  # no consumables_expended_json → learned HP-need=0; no monster entry → expected_damage=0 → qty=0 → grind
+    # no consumables_expended_json → learned HP-need=0; no monster entry → expected_damage=0 → qty=0 → grind
+    _record_mixed(history, "Fight(green_slime)", wins=20, losses=0)
     ctx = _ctx(combat_monster="green_slime")
     goal = objective_step_goal(ReachCharLevel(level=5), state, gd, ctx, history=history)
     assert isinstance(goal, GrindCharacterXPGoal)

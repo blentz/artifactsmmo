@@ -14,9 +14,13 @@ class LocationCatalog:
     # P5b data layer (docs/PLAN_multilayer_nav.md): ALL-layer, access-aware map
     # facts. Legacy indexes above stay OVERWORLD-only until the movement brick
     # teaches the planner layers/regions — consumers migrate then.
-    layered_content: dict[str, list[tuple[int, int, str]]] = field(default_factory=dict)  # content code -> [(x, y, layer)]
+    # content code -> [(x, y, layer)]
+    layered_content: dict[str, list[tuple[int, int, str]]] = field(default_factory=dict)
     restricted_tiles: set[tuple[int, int, str]] = field(default_factory=set)  # access.type == 'restricted'
-    transition_edges: dict[tuple[int, int, str], tuple[int, int, str, tuple[tuple[str, str, int], ...]]] = field(default_factory=dict)  # (x,y,layer) -> (dx,dy,dlayer, ((cond_code, operator, value), ...))
+    # (x,y,layer) -> (dx,dy,dlayer, ((cond_code, operator, value), ...))
+    transition_edges: dict[
+        tuple[int, int, str], tuple[int, int, str, tuple[tuple[str, str, int], ...]]
+    ] = field(default_factory=dict)
     bank_tile: tuple[int, int] | None = None
     bank_tile_open: bool = False  # True once bank_tile points at an unconditional bank
     taskmaster_tile: tuple[int, int] | None = None
@@ -61,7 +65,8 @@ class LocationCatalog:
     slots_per_expansion: int = 0  # learned after the first expansion (response delta)
     transition_tiles: set[tuple[int, int]] = field(default_factory=set)
     known_tiles: set[tuple[int, int]] = field(default_factory=set)  # every overworld tile that exists, content or not
-    map_id_to_loc: dict[int, tuple[int, int]] = field(default_factory=dict)  # MapSchema.map_id -> (x, y); resolves teleport destinations
+    # MapSchema.map_id -> (x, y); resolves teleport destinations
+    map_id_to_loc: dict[int, tuple[int, int]] = field(default_factory=dict)
 
     def map_location_by_id(self, map_id: int) -> tuple[int, int] | None:
         """Tile (x, y) of a map by its `MapSchema.map_id`, or None if that map
@@ -81,7 +86,9 @@ class LocationCatalog:
         """True when the tile's access type is 'restricted' (region-gated)."""
         return (x, y, layer) in self.restricted_tiles
 
-    def transition_edge(self, x: int, y: int, layer: str) -> tuple[int, int, str, tuple[tuple[str, str, int], ...]] | None:
+    def transition_edge(
+        self, x: int, y: int, layer: str
+    ) -> tuple[int, int, str, tuple[tuple[str, str, int], ...]] | None:
         """The transition leaving this tile as (dest_x, dest_y, dest_layer,
         conditions) — conditions like ('gold', 'cost', 5000); None if the tile
         has no transition."""

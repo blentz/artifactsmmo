@@ -1,5 +1,7 @@
 from artifactsmmo_cli.ai.gear_taxonomy_core import (
-    combat_gear_types, is_combat_bearing, is_consumable,
+    combat_gear_types,
+    is_combat_bearing,
+    is_consumable,
 )
 
 

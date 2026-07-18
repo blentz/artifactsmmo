@@ -10,11 +10,11 @@ from pathlib import Path
 
 import typer
 
-from artifactsmmo_cli.ai.player import GamePlayer
+from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.plan_report import PlanReport
+from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.scenario import SCENARIOS, load_bundle_game_data, scenario_state
 from artifactsmmo_cli.config import Config
-from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.utils.mutation_lock import check_mutation_lock, default_lock_path
 
 _DEFAULT_BUNDLE = (

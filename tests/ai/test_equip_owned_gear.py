@@ -1,8 +1,8 @@
 from artifactsmmo_cli.ai.actions.equip import EquipAction
-from artifactsmmo_cli.ai.goals.equip_owned_gear import EQUIP_GEAR_VALUE, EquipOwnedGoal
 from artifactsmmo_cli.ai.game_data import GameData
-from artifactsmmo_cli.ai.world_state import WorldState
+from artifactsmmo_cli.ai.goals.equip_owned_gear import EQUIP_GEAR_VALUE, EquipOwnedGoal
 from artifactsmmo_cli.ai.task_lifecycle import derive_task_lifecycle_phase
+from artifactsmmo_cli.ai.world_state import WorldState
 
 _ALL_SLOTS: dict[str, str | None] = {
     "weapon_slot": None, "shield_slot": None, "helmet_slot": None,

@@ -16,7 +16,6 @@ and the differential harness, so the element→index mapping stays consistent.
 """
 
 import attrs
-
 from artifactsmmo_api_client.models.monster_schema import MonsterSchema
 
 _ATTACK_PREFIX = "attack_"

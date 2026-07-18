@@ -1,7 +1,5 @@
 """Tests for CraftAction apply (yield credits) and execute yield-recording."""
 
-import os
-import tempfile
 from unittest.mock import MagicMock, patch
 
 from artifactsmmo_api_client.models.drop_schema import DropSchema
@@ -10,9 +8,9 @@ from artifactsmmo_api_client.models.skill_info_schema import SkillInfoSchema
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 from tests.test_ai.fixtures import make_state
 from tests.test_ai.test_actions_execute import make_char_schema
-from tests.test_ai._monster_fixture import fill_monster_stat_defaults
 
 
 def _make_crafting_game_data(

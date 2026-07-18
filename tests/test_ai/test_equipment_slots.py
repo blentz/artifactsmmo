@@ -2,7 +2,6 @@
 historical hand-typed maps (no behavior drift)."""
 
 import attrs
-
 from artifactsmmo_api_client.models.character_schema import CharacterSchema
 
 from artifactsmmo_cli.ai.actions.equip import (
@@ -31,12 +30,12 @@ _HISTORICAL_TYPE_TO_SLOTS = {
 
 def test_equipment_slots_is_schema_slot_fields():
     expected = [f.name for f in attrs.fields(CharacterSchema) if f.name.endswith("_slot")]
-    assert EQUIPMENT_SLOTS == expected
+    assert expected == EQUIPMENT_SLOTS
 
 
 def test_type_to_slots_matches_historical():
     assert ITEM_TYPE_TO_SLOTS == _HISTORICAL_TYPE_TO_SLOTS
-    assert ITEM_TYPE_TO_SLOT == {t: s[0] for t, s in _HISTORICAL_TYPE_TO_SLOTS.items()}
+    assert {t: s[0] for t, s in _HISTORICAL_TYPE_TO_SLOTS.items()} == ITEM_TYPE_TO_SLOT
 
 
 def test_every_slot_field_maps_to_exactly_one_type():
@@ -47,4 +46,4 @@ def test_every_slot_field_maps_to_exactly_one_type():
 
 def test_dup_fill_is_single_source():
     assert _DUPLICATE_FILL_TYPES is DUPLICATE_SLOT_TYPES
-    assert DUPLICATE_SLOT_TYPES == frozenset({"ring", "artifact"})
+    assert frozenset({"ring", "artifact"}) == DUPLICATE_SLOT_TYPES

@@ -1,6 +1,7 @@
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.gather_skill_resource import (
-    best_gather_resource_drop, first_craftable_level,
+    best_gather_resource_drop,
+    first_craftable_level,
 )
 
 

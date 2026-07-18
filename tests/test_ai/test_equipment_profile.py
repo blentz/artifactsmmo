@@ -15,8 +15,8 @@ from artifactsmmo_cli.ai.tiers.meta_goal import (
     ObtainItem,
     ReachCharLevel,
 )
-from artifactsmmo_cli.ai.tiers.strategy import root_category
 from artifactsmmo_cli.ai.tiers.strategic_value import STRATEGIC_SCALE
+from artifactsmmo_cli.ai.tiers.strategy import root_category
 
 
 class TestPresets:

@@ -22,10 +22,9 @@ from artifactsmmo_cli.ai.actions.optimize_loadout import OptimizeLoadoutAction
 from artifactsmmo_cli.ai.actions.recycle import RecycleAction
 from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.combat import is_winnable
-from artifactsmmo_cli.ai.craft_plan_gen import generate_next_craft_action
+from artifactsmmo_cli.ai.craft_plan_gen import _map_next_action, generate_next_craft_action
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.gathering import GatherMaterialsGoal
-from artifactsmmo_cli.ai.craft_plan_gen import _map_next_action
 from artifactsmmo_cli.ai.goals.wait import WaitGoal
 from artifactsmmo_cli.ai.next_craft_core import NextAction
 from artifactsmmo_cli.ai.obtain_sources import Source, SourceKind

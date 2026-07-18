@@ -1,7 +1,7 @@
 import pytest
 
 from artifactsmmo_cli.ai.macro.cycle_row import CycleRow
-from artifactsmmo_cli.ai.macro.segmentation import Band, segment_bands
+from artifactsmmo_cli.ai.macro.segmentation import segment_bands
 
 
 def _r(ci, level, goal, char="hero", sess="s1"):

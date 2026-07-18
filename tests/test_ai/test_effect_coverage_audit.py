@@ -1,8 +1,8 @@
 from artifactsmmo_cli.ai.game_data import (
-    GameData,
     _ITEM_EFFECT_CARVEOUTS,
     _MONSTER_EFFECT_CARVEOUTS,
     _RUNE_ABILITY_CARVEOUTS,
+    GameData,
 )
 
 

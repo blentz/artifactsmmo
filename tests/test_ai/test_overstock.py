@@ -1,6 +1,5 @@
 """Tests for inventory_caps + DiscardOverstockGoal."""
 
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.actions.delete import DeleteItemAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
@@ -25,6 +24,7 @@ from artifactsmmo_cli.ai.inventory_caps import (
     useful_quantity_cap,
     useful_quantity_cap_excl_equipped,
 )
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
 from tests.test_ai.fixtures import make_state
 

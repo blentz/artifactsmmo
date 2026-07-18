@@ -24,7 +24,6 @@ from artifactsmmo_api_client.api.my_account.get_bank_details_my_bank_get import 
 from artifactsmmo_api_client.api.np_cs.get_all_npcs_items_npcs_items_get import sync as get_all_npc_items
 from artifactsmmo_api_client.api.resources.get_all_resources_resources_get import sync as get_all_resources
 from artifactsmmo_api_client.api.tasks.get_all_tasks_tasks_list_get import sync as get_all_tasks
-from artifactsmmo_api_client.models.task_full_schema import TaskFullSchema
 from artifactsmmo_api_client.models.bank_schema import BankSchema
 from artifactsmmo_api_client.models.craft_skill import CraftSkill
 from artifactsmmo_api_client.models.effect_schema import EffectSchema
@@ -38,6 +37,7 @@ from artifactsmmo_api_client.models.map_schema import MapSchema
 from artifactsmmo_api_client.models.monster_schema import MonsterSchema
 from artifactsmmo_api_client.models.npc_item_schema import NPCItemSchema
 from artifactsmmo_api_client.models.resource_schema import ResourceSchema
+from artifactsmmo_api_client.models.task_full_schema import TaskFullSchema
 from artifactsmmo_api_client.types import Unset
 
 from artifactsmmo_cli.ai.elements import ELEMENTS
@@ -46,15 +46,16 @@ from artifactsmmo_cli.ai.game_data_error import GameDataCoverageError
 from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOTS, stats_is_combat_bearing
 from artifactsmmo_cli.ai.gear_taxonomy_core import (
     combat_gear_types as _core_combat_gear_types,
+)
+from artifactsmmo_cli.ai.gear_taxonomy_core import (
     is_consumable,
 )
 from artifactsmmo_cli.ai.item_catalog import _GATHERING_SKILLS, ItemCatalog, ItemStats
 from artifactsmmo_cli.ai.location_catalog import LocationCatalog
 from artifactsmmo_cli.ai.monster_catalog import MonsterCatalog
 from artifactsmmo_cli.ai.recipe_catalog import RecipeCatalog
-from artifactsmmo_cli.ai.world_state import WorldState
 from artifactsmmo_cli.ai.recipe_cost_memo import RecipeCostMemo
-from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE
+from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
 
 __all__ = ["_GATHERING_SKILLS", "GameData", "ItemStats"]
 
@@ -603,7 +604,9 @@ class GameData:
         """True when the tile is region-gated (access type 'restricted')."""
         return self.world.is_restricted(x, y, layer)
 
-    def transition_edge(self, x: int, y: int, layer: str) -> tuple[int, int, str, tuple[tuple[str, str, int], ...]] | None:
+    def transition_edge(
+        self, x: int, y: int, layer: str
+    ) -> tuple[int, int, str, tuple[tuple[str, str, int], ...]] | None:
         """Transition leaving the tile: (dest_x, dest_y, dest_layer, conditions)."""
         return self.world.transition_edge(x, y, layer)
 

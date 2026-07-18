@@ -83,9 +83,7 @@ def craft_utility_ladder(
                           - _held(a.item_code, state))
             result.append(a if a.quantity == buy_qty
                           else dataclasses.replace(a, quantity=buy_qty))
-        elif isinstance(a, WithdrawItemAction) and a.code in withdrawable:
-            result.append(a)
-        elif isinstance(a, MoveAction):
+        elif (isinstance(a, WithdrawItemAction) and a.code in withdrawable) or isinstance(a, MoveAction):
             result.append(a)
     result.append(EquipAction(code=target_code, slot=_TARGET_SLOT, quantity=equip_qty))
     return result

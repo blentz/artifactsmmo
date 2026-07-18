@@ -8,8 +8,8 @@ adapter that assembles inputs from GameData and delegates.
 
 from enum import Enum
 
-from artifactsmmo_cli.ai.gather_floor import ceil_gathers
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.ai.gather_floor import ceil_gathers
 from artifactsmmo_cli.ai.min_gathers import min_gathers
 from artifactsmmo_cli.ai.world_state import WorldState
 

@@ -13,10 +13,6 @@ from textual.strip import Strip
 from textual.timer import Timer
 from textual.widgets import Static
 
-# Standalone console for converting a line's rich Text into Strip segments
-# without a mounted Textual app (keeps render_line headless-testable).
-_RENDER_CONSOLE = Console()
-
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.tui.glyphs import UNMAPPED_COLOR, WALKABLE_COLOR
@@ -47,6 +43,10 @@ from artifactsmmo_cli.tui.swing_frames import (
     swing_frame_index,
     swing_overlay,
 )
+
+# Standalone console for converting a line's rich Text into Strip segments
+# without a mounted Textual app (keeps render_line headless-testable).
+_RENDER_CONSOLE = Console()
 
 TILE_W = 8   # chars per tile column (8 pixels wide)
 TILE_H = 4   # char-rows per tile (8 pixels tall, 2 px per char-row)

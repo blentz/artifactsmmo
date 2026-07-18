@@ -6,8 +6,9 @@ Fixture layout:
   - "combat:wolf"    profile  (not current, not recent → excluded)
 """
 
-import pytest
 from datetime import datetime, timezone
+
+import pytest
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -197,7 +198,7 @@ def test_active_profile_gear_empty_when_no_profiles(tmp_path):
 
 def test_active_bank_space_cost_excludes_equipped(profiles_fixture):
     """Items already equipped do not count toward bank space cost."""
-    state, game_data, history = profiles_fixture
+    _state, game_data, history = profiles_fixture
     # Equip wooden_stick so it's not a bank cost
     eq = dict(_ALL_SLOTS)
     eq["weapon_slot"] = "wooden_stick"

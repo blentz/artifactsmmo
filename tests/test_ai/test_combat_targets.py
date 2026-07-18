@@ -1,11 +1,12 @@
 """Tests for combat_target_monsters winnable near-level set."""
 
+import artifactsmmo_cli.ai.combat_targets as ct
 from artifactsmmo_cli.ai.combat_targets import (
-    LEVEL_BAND_BELOW, combat_target_monsters, _clear_cache,
+    _clear_cache,
+    combat_target_monsters,
 )
 from artifactsmmo_cli.ai.game_data import GameData
 from tests.test_ai.fixtures import make_state
-import artifactsmmo_cli.ai.combat_targets as ct
 
 
 def _gd(levels):

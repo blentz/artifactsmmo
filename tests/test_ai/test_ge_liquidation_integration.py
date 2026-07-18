@@ -9,11 +9,11 @@ only the NpcSell path is offered (Venue.NPC) — the behavior is unchanged. This
 the live caller that makes formal/Formal/LiquidationVenue.lean's proof non-inert.
 """
 
-from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from artifactsmmo_cli.ai.actions.ge_fill import GeFillBuyOrderAction
 from artifactsmmo_cli.ai.actions.npc_sell import NpcSellAction
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.goals.discard_overstock import DiscardOverstockGoal
+from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT
 from tests.test_ai.fixtures import make_state
 
 

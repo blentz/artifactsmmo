@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from artifactsmmo_cli.ai.game_data import GameData, _ITEM_EFFECT_CARVEOUTS
+from artifactsmmo_cli.ai.game_data import _ITEM_EFFECT_CARVEOUTS, GameData
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.config import Config
 

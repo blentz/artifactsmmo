@@ -1,8 +1,8 @@
 import json
 from dataclasses import dataclass
 
-from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.learning.store import LearningStore
+from artifactsmmo_cli.ai.player import GamePlayer
 from tests.test_ai.fixtures import make_state
 
 

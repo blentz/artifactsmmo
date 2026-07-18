@@ -35,23 +35,24 @@ def segment_bands(rows: list[CycleRow], kind: str) -> list[Band]:
         raise ValueError(f"unknown band kind: {kind}")
     bands: list[Band] = []
     by_owner = sorted(rows, key=lambda r: (r.character, r.session_id, r.cycle_index))
+
+    def flush(char: str, sess: str, current_key: str | None,
+              run: list[CycleRow]) -> None:
+        if current_key is not None and run:
+            bands.append(Band(char, sess, kind, current_key, tuple(run)))
+
     for (char, sess), session_rows in groupby(
         by_owner, key=lambda r: (r.character, r.session_id)
     ):
         current_key: str | None = None
         run: list[CycleRow] = []
-
-        def flush() -> None:
-            if current_key is not None and run:
-                bands.append(Band(char, sess, kind, current_key, tuple(run)))
-
         for r in session_rows:
             k = _segment_key(r, kind)
             if k != current_key:
-                flush()
+                flush(char, sess, current_key, run)
                 run = []
                 current_key = k
             if k is not None:
                 run.append(r)
-        flush()
+        flush(char, sess, current_key, run)
     return bands

@@ -15,9 +15,9 @@ Scenario 2 (negative): the same character with no alchemy-craftable utility
 potion in the catalog -> the guard stays quiet, so nothing preempts the grind.
 """
 
+from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
-from artifactsmmo_cli.ai.actions.combat import FightAction
 from artifactsmmo_cli.ai.actions.gathering import GatherAction
 from artifactsmmo_cli.ai.actions.movement import MoveAction
 from artifactsmmo_cli.ai.boost_selection import best_boost_potion, project_equip
@@ -27,12 +27,12 @@ from artifactsmmo_cli.ai.goals.craft_potions import CraftPotionsGoal
 from artifactsmmo_cli.ai.potion_supply import craft_potions_fires
 from artifactsmmo_cli.ai.strategy_driver import map_guard
 from artifactsmmo_cli.ai.tiers.guards import GuardKind, SelectionContext, active_guards
-from artifactsmmo_cli.ai.world_state import WorldState
-from tests.test_ai.fixtures import make_state
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.personality import BalancedPersonality
 from artifactsmmo_cli.ai.tiers.strategy import StrategyEngine
+from artifactsmmo_cli.ai.world_state import WorldState
 from tests.test_ai._monster_fixture import fill_monster_stat_defaults
+from tests.test_ai.fixtures import make_state
 
 _POTION = "small_health_potion"
 _INGREDIENT = "sunflower"

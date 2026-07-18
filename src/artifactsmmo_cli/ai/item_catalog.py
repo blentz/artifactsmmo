@@ -31,12 +31,17 @@ class ItemStats:
     hp_bonus: int = 0                                            # flat max-HP bonus (gear)
     wisdom: int = 0                                              # +xp gain % (1% per 10 wisdom); utility/artifacts
     prospecting: int = 0                                         # +drop chance % (1% per 10 PP); utility/artifacts
-    inventory_space: int = 0                                     # +inventory slots (bags); server raises inventory_max on equip
-    haste: int = 0                                               # +cooldown reduction % on fights (faster actions); efficiency utility
+    # +inventory slots (bags); server raises inventory_max on equip
+    inventory_space: int = 0
+    # +cooldown reduction % on fights (faster actions); efficiency utility
+    haste: int = 0
     lifesteal: int = 0                                           # heal % of total attack on a crit; combat sustain
-    combat_buff: int = 0                                         # summed utility-slot combat-buff value (boost_dmg + antipoison); fight-active potions
-    antipoison: int = 0                                          # removes N poison/turn (utility potion); caps monster poison in predict_win (PLAN #3b2)
-    teleport_map_id: int = 0                                     # `teleport` effect value = destination MapSchema.map_id (0 = not a teleport item); PLAN #6b
+    # summed utility-slot combat-buff value (boost_dmg + antipoison); fight-active potions
+    combat_buff: int = 0
+    # removes N poison/turn (utility potion); caps monster poison in predict_win (PLAN #3b2)
+    antipoison: int = 0
+    # `teleport` effect value = destination MapSchema.map_id (0 = not a teleport item); PLAN #6b
+    teleport_map_id: int = 0
     gold_value: int = 0   # +gold granted when a gold-bag consumable is used (effect `gold`)
     # OpenAPI conformance (Item 14 drift remediation): every ItemSchema
     # field the bot's decision-making logic touches must round-trip

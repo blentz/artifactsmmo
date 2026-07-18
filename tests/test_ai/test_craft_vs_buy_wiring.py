@@ -100,8 +100,8 @@ def test_relevant_actions_must_buy_noncraftable_npc_only_item() -> None:
     gd._npc_locations = {"rune_vendor": (8, 13)}
     # CRAFT is what the craft-vs-buy gate returns for this non-craftable item —
     # proving the must-buy path is NOT going through that gate.
-    assert acquisition_method("lifesteal_rune", 1, state := make_state(
-        level=20, gold=100000, x=0, y=0), gd, _RESERVE) == Method.CRAFT
+    state = make_state(level=20, gold=100000, x=0, y=0)
+    assert acquisition_method("lifesteal_rune", 1, state, gd, _RESERVE) == Method.CRAFT
     goal = GatherMaterialsGoal(target_item="lifesteal_rune", needed={"lifesteal_rune": 1})
     relevant = goal.relevant_actions([], state, gd)
     buys = [a for a in relevant if isinstance(a, NpcBuyAction) and a.item_code == "lifesteal_rune"]

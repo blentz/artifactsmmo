@@ -1,12 +1,21 @@
 # tests/test_tui/test_map_pane_animation.py
-from artifactsmmo_cli.tui.widgets.map_pane import MapPane, select_swing_head
-from artifactsmmo_cli.tui.sprites import (
-    PLAYER_SPRITE, PLANNING_SPRITE, AXE, PICKAXE, HAMMER, SWORD, oriented_head,
-    CLOUD_LEFT_A, CLOUD_LEFT_B, CLOUD_RIGHT_A, CLOUD_RIGHT_B,
-)
-from artifactsmmo_cli.tui.swing_frames import Mode
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
+from artifactsmmo_cli.tui.sprites import (
+    AXE,
+    CLOUD_LEFT_A,
+    CLOUD_LEFT_B,
+    CLOUD_RIGHT_A,
+    CLOUD_RIGHT_B,
+    HAMMER,
+    PICKAXE,
+    PLANNING_SPRITE,
+    PLAYER_SPRITE,
+    SWORD,
+    oriented_head,
+)
+from artifactsmmo_cli.tui.swing_frames import Mode
+from artifactsmmo_cli.tui.widgets.map_pane import MapPane, select_swing_head
 
 
 def _snap(**kw):

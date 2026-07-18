@@ -2,7 +2,7 @@
 
 import pytest
 
-from artifactsmmo_cli.ai.game_data import GameData, _ITEM_EFFECT_CARVEOUTS, _RUNE_ABILITY_CARVEOUTS
+from artifactsmmo_cli.ai.game_data import _RUNE_ABILITY_CARVEOUTS, GameData
 from artifactsmmo_cli.ai.game_data_error import GameDataCoverageError
 
 

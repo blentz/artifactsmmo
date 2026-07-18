@@ -1,7 +1,6 @@
 """ELEMENTS is derived from the API schema, and the re-exports are consistent."""
 
 import attrs
-
 from artifactsmmo_api_client.models.monster_schema import MonsterSchema
 
 from artifactsmmo_cli.ai.elements import ELEMENTS
@@ -16,7 +15,7 @@ def test_elements_match_schema_attack_fields():
         for f in attrs.fields(MonsterSchema)
         if f.name.startswith("attack_")
     )
-    assert ELEMENTS == expected
+    assert expected == ELEMENTS
     assert ELEMENTS == ("fire", "earth", "water", "air")
 
 

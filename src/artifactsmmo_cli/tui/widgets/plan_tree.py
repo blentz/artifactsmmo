@@ -52,7 +52,7 @@ def default_expanded(roots: tuple[PlanTreeNode, ...]) -> set[str]:
     keys: set[str] = set()
 
     def walk(node: PlanTreeNode, chain: list[str]) -> None:
-        chain = chain + [node.key]
+        chain = [*chain, node.key]
         if node.status == "current":
             keys.update(chain)
         for child in node.children:

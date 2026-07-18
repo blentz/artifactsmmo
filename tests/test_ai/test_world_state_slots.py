@@ -13,6 +13,7 @@ import json
 from pathlib import Path
 
 from artifactsmmo_api_client.models.character_schema import CharacterSchema
+
 from artifactsmmo_cli.ai.world_state import WorldState
 
 FIXTURE = Path("tests/test_ai/fixtures/character_with_empty_slots.json")

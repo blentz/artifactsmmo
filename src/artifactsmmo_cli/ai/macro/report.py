@@ -41,7 +41,9 @@ def format_report(cost: list[CostStat], candidates: list[MacroCandidate],
         "A high mean nodes/band with low distinct chars is a volatile single-character chain, "
         "not a stable macro.")
     lines.append("")
-    lines.append("| kind | value | occurrences | distinct chars | total nodes | mean nodes/band | chain | example keys |")
+    lines.append(
+        "| kind | value | occurrences | distinct chars | total nodes | mean nodes/band | chain | example keys |"
+    )
     lines.append("|---|---|---|---|---|---|---|---|")
     for c in candidates[:top_n]:
         mean_nodes = c.total_nodes / c.occurrences

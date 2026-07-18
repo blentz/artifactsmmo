@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-import pytest
 from typer.testing import CliRunner
 
 from artifactsmmo_cli.ai.learning.store import LearningStore

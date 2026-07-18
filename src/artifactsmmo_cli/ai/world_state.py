@@ -5,7 +5,6 @@ from datetime import datetime
 from typing import Any
 
 import attrs
-
 from artifactsmmo_api_client.models.character_schema import CharacterSchema
 from artifactsmmo_api_client.models.craft_skill import CraftSkill
 from artifactsmmo_api_client.models.gathering_skill import GatheringSkill

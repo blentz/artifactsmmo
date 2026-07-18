@@ -55,7 +55,7 @@ async def test_expansion_memory_reapplied_on_rebuild():
         # simulate the user having opened the 'golden_ring' branch's parent chain
         tree._expanded_keys.add("ring")
         tree.set_nodes(_sample())
-        ring = next(n for n in tree.root.children[0].children if n.data.key == "ring")
+        _ring = next(n for n in tree.root.children[0].children if n.data.key == "ring")
         # 'ring' has no children so it cannot expand, but its key is retained
         assert "ring" in tree._expanded_keys
 

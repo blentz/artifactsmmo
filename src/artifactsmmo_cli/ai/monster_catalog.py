@@ -20,15 +20,21 @@ class MonsterCatalog:
     barrier: dict[str, int] = field(default_factory=dict)  # code -> absorbing-shield HP (effect; 0 if absent)
     burn: dict[str, int] = field(default_factory=dict)  # code -> burn DoT % of player attack (effect; 0 if absent)
     healing: dict[str, int] = field(default_factory=dict)  # code -> regen % of monster HP (effect; 0 if absent)
-    reconstitution: dict[str, int] = field(default_factory=dict)  # code -> full-heal period in turns (effect; 0 if absent)
-    void_drain: dict[str, int] = field(default_factory=dict)  # code -> drain % of player HP per cycle (effect; 0 if absent)
+    # code -> full-heal period in turns (effect; 0 if absent)
+    reconstitution: dict[str, int] = field(default_factory=dict)
+    # code -> drain % of player HP per cycle (effect; 0 if absent)
+    void_drain: dict[str, int] = field(default_factory=dict)
     berserker_rage: dict[str, int] = field(default_factory=dict)  # code -> +% damage below 25% HP (effect; 0 if absent)
     frenzy: dict[str, int] = field(default_factory=dict)  # code -> +% damage on crit (effect; 0 if absent)
-    protective_bubble: dict[str, int] = field(default_factory=dict)  # code -> % resist on rotating element (effect; 0 if absent)
-    corrupted: dict[str, int] = field(default_factory=dict)  # code -> per-hit resist-reduction % (effect; 0 if absent). HELPS the player.
-    sun_shield: dict[str, int] = field(default_factory=dict)  # code -> first-hit-per-turn damage-reduction % (effect; 0 if absent)
+    # code -> % resist on rotating element (effect; 0 if absent)
+    protective_bubble: dict[str, int] = field(default_factory=dict)
+    # code -> per-hit resist-reduction % (effect; 0 if absent). HELPS the player.
+    corrupted: dict[str, int] = field(default_factory=dict)
+    # code -> first-hit-per-turn damage-reduction % (effect; 0 if absent)
+    sun_shield: dict[str, int] = field(default_factory=dict)
     greed: dict[str, int] = field(default_factory=dict)  # code -> +% damage per 10% max-HP lost (effect; 0 if absent)
-    enchanted_mirror: dict[str, int] = field(default_factory=dict)  # code -> reflect % of damage taken, once/3 turns (effect; 0 if absent)
+    # code -> reflect % of damage taken, once/3 turns (effect; 0 if absent)
+    enchanted_mirror: dict[str, int] = field(default_factory=dict)
     # OpenAPI conformance (Item 14 remediation): monster reward + loot fields.
     drops: dict[str, list[tuple[str, int, int, int]]] = field(default_factory=dict)
     """code -> [(item_code, rate, min_quantity, max_quantity), ...]. Drop rate is

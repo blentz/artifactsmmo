@@ -31,6 +31,4 @@ def should_replan(
         return True
     if cache.cycles_since_replan >= replan_interval:
         return True
-    if not step_applicable:
-        return True
-    return False
+    return not step_applicable

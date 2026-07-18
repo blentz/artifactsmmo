@@ -14,10 +14,10 @@ from artifactsmmo_cli.ai.learning.store import LearningStore
 from artifactsmmo_cli.ai.null_tracer import NullTracer
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.recovery import StuckExit
-from artifactsmmo_cli.server_unavailable_error import ServerUnavailableError
 from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.client_manager import ClientManager
 from artifactsmmo_cli.config import Config
+from artifactsmmo_cli.server_unavailable_error import ServerUnavailableError
 from artifactsmmo_cli.tui.app import WatchApp
 from artifactsmmo_cli.tui.observer import ThreadSafeBridge
 from artifactsmmo_cli.utils.mutation_lock import check_mutation_lock, default_lock_path

@@ -15,9 +15,9 @@ from sqlmodel import Session, select
 
 from artifactsmmo_cli.ai.actions.api_action_error import ApiActionError
 from artifactsmmo_cli.ai.actions.crafting import CraftAction
-from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.actions.equip import EquipAction
 from artifactsmmo_cli.ai.actions.level_skill import LevelSkill
+from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot, PlanTreeNode, RootScoreView
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.learning.models import Cycle
@@ -737,9 +737,12 @@ class TestExecute:
 
         action = WithdrawItemAction(code="ash_plank", quantity=7, bank_location=(4, 0))
         char = make_char_schema(x=4, y=0)
-        empty_events = MagicMock(); empty_events.data = []
-        real_bank = MagicMock(); real_bank.data = []          # bank actually empty
-        bank_details = MagicMock(); bank_details.data = MagicMock()
+        empty_events = MagicMock()
+        empty_events.data = []
+        real_bank = MagicMock()
+        real_bank.data = []          # bank actually empty
+        bank_details = MagicMock()
+        bank_details.data = MagicMock()
         bank_details.data.gold = 0
         bank_details.data.slots = 60
 
@@ -772,7 +775,8 @@ class TestExecute:
         client = MagicMock()
         action = WithdrawItemAction(code="ash_plank", quantity=7, bank_location=(4, 0))
         char = make_char_schema(x=4, y=0)
-        empty_events = MagicMock(); empty_events.data = []
+        empty_events = MagicMock()
+        empty_events.data = []
 
         import io
         from contextlib import redirect_stdout
@@ -921,11 +925,11 @@ class TestExecute:
 
     def test_execute_craft_action_wires_history(self, tmp_path):
         """_execute sets action.history before calling execute on a CraftAction."""
-        import os
-        from artifactsmmo_cli.ai.actions.crafting import CraftAction
-        from artifactsmmo_cli.ai.learning.store import LearningStore
         from artifactsmmo_api_client.models.drop_schema import DropSchema
         from artifactsmmo_api_client.models.skill_info_schema import SkillInfoSchema
+
+        from artifactsmmo_cli.ai.actions.crafting import CraftAction
+        from artifactsmmo_cli.ai.learning.store import LearningStore
 
         store = LearningStore(db_path=str(tmp_path / "l.db"), character="hero")
         player = GamePlayer(character="hero", history=store)
@@ -941,7 +945,7 @@ class TestExecute:
         result.data.details = details
 
         with patch("artifactsmmo_cli.ai.actions.crafting.action_crafting", return_value=result):
-            new_state, outcome = player._execute(action, client=MagicMock())
+            _new_state, outcome = player._execute(action, client=MagicMock())
 
         assert outcome == "ok"
         assert store.observed_craft_yield("copper_dagger") == (1, 10)

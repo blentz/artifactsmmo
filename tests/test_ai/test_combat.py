@@ -32,13 +32,11 @@ def _record_losses(store: LearningStore, action_repr: str, n: int) -> None:
 def _record_mixed(store: LearningStore, action_repr: str, wins: int, losses: int) -> None:
     """Record `wins` won + `losses` lost fights so success_rate = wins/(wins+losses)."""
     store.start_session()
-    i = 0
-    for outcome in ["ok"] * wins + ["error:fight_lost"] * losses:
+    for i, outcome in enumerate(["ok"] * wins + ["error:fight_lost"] * losses):
         store.record_cycle(Cycle(
             ts=f"2026-05-25T00:00:{i:02d}+00:00", session_id="x", cycle_index=i,
             character="x", outcome=outcome, action_repr=action_repr,
         ))
-        i += 1
 
 
 def _gd(hp, attack=None, resist=None, crit=0, initiative=0, code="mob", lifesteal=0,

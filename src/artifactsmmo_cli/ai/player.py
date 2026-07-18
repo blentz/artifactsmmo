@@ -923,7 +923,7 @@ class GamePlayer:
                 # and the craft-plan generator re-emits the identical failing
                 # withdraw every cycle — a no-cooldown livelock that spins CPU
                 # (live Robby trace 2026-06-24: 4502 cycles of Withdraw→478).
-                try:
+                try:  # noqa: SIM105 - keep explicit except to document the transient-retry rationale
                     refreshed = self._sync_bank(client, refreshed)
                 except httpx.HTTPError:
                     pass  # transient; the periodic refresh retries

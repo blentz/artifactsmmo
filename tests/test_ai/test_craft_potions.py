@@ -273,7 +273,7 @@ def test_gather_path_filters_closure_and_keeps_moves():
                WithdrawItemAction(code="gold_ore", quantity=1, bank_location=(4, 0)),
                MoveAction(x=1, y=1)]
     out = CraftPotionsGoal().relevant_actions(actions, state, gd)
-    assert [g.resource_code for g in out if isinstance(a := g, GatherAction)] == [_RESOURCE]
+    assert [g.resource_code for g in out if isinstance(g, GatherAction)] == [_RESOURCE]
     assert [w.code for w in out if isinstance(w, WithdrawItemAction)] == [_INGREDIENT]
     assert any(isinstance(a, MoveAction) for a in out)
 

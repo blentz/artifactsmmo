@@ -93,9 +93,7 @@ class MaintainConsumablesGoal(Goal):
                     game_data.resource_drops, chain):
                 # GAP-7 admission precision: EFFECTIVE drop in the closure.
                 result.append(a)
-            elif isinstance(a, WithdrawItemAction) and a.code in withdrawable:
-                result.append(a)
-            elif isinstance(a, MoveAction):
+            elif (isinstance(a, WithdrawItemAction) and a.code in withdrawable) or isinstance(a, MoveAction):
                 result.append(a)
         return result
 

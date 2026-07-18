@@ -1,10 +1,33 @@
 from artifactsmmo_cli.tui.sprites import (
-    AXE, AXE_HEAD, AXE_NE, CLOUD_LEFT_A, CLOUD_LEFT_B, CLOUD_RIGHT_A, CLOUD_RIGHT_B,
-    FIGHT_HEAD, FIGHT_NE, HAMMER,
-    HAMMER_NE, PICKAXE, PICKAXE_NE, SWORD, ToolHeads, oriented_head, rot90cw,
-    PICKAXE_HEAD, HAMMER_HEAD, gather_head,
-    BLANK_SPRITE, PLANNING_SPRITE, PLAYER_SPRITE,
-    SPRITE_SIZE, Sprite, TRANSPARENT, grip_overlay, overlay_sprites, validate_sprite,
+    AXE,
+    AXE_HEAD,
+    AXE_NE,
+    BLANK_SPRITE,
+    CLOUD_LEFT_A,
+    CLOUD_LEFT_B,
+    CLOUD_RIGHT_A,
+    CLOUD_RIGHT_B,
+    FIGHT_HEAD,
+    FIGHT_NE,
+    HAMMER,
+    HAMMER_HEAD,
+    HAMMER_NE,
+    PICKAXE,
+    PICKAXE_HEAD,
+    PICKAXE_NE,
+    PLANNING_SPRITE,
+    PLAYER_SPRITE,
+    SPRITE_SIZE,
+    SWORD,
+    TRANSPARENT,
+    Sprite,
+    ToolHeads,
+    gather_head,
+    grip_overlay,
+    oriented_head,
+    overlay_sprites,
+    rot90cw,
+    validate_sprite,
 )
 
 
@@ -102,10 +125,10 @@ def test_ne_heads_and_bundles_valid():
     for name, s in [("axe_ne", AXE_NE), ("pick_ne", PICKAXE_NE),
                     ("ham_ne", HAMMER_NE), ("sword_ne", FIGHT_NE)]:
         validate_sprite(name, s)
-    assert AXE == ToolHeads(AXE_HEAD, AXE_NE)
-    assert PICKAXE == ToolHeads(PICKAXE_HEAD, PICKAXE_NE)
-    assert HAMMER == ToolHeads(HAMMER_HEAD, HAMMER_NE)
-    assert SWORD == ToolHeads(FIGHT_HEAD, FIGHT_NE)
+    assert ToolHeads(AXE_HEAD, AXE_NE) == AXE
+    assert ToolHeads(PICKAXE_HEAD, PICKAXE_NE) == PICKAXE
+    assert ToolHeads(HAMMER_HEAD, HAMMER_NE) == HAMMER
+    assert ToolHeads(FIGHT_HEAD, FIGHT_NE) == SWORD
 
 
 def test_cloud_halves_valid_and_conjoined():

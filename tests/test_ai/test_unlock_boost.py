@@ -124,7 +124,9 @@ def test_unlock_none_when_a_monster_already_winnable():
 def test_unlock_skips_heal_potions_and_uncraftable_boosts():
     """Heal potion is filtered; alchemy=5 gates fire_boost_potion (needs 10) → None."""
     gd, st = _gd_unlock(), _state_stalled()
-    del gd._monster_level["weak"]; gd._monster_attack.pop("weak", None); gd._monster_hp.pop("weak", None)
+    del gd._monster_level["weak"]
+    gd._monster_attack.pop("weak", None)
+    gd._monster_hp.pop("weak", None)
     st2 = dataclasses.replace(st, skills={**st.skills, "alchemy": 5})  # can't craft L10 boost
     assert unlock_boost_target(st2, gd) is None  # boost skill-gated, heal doesn't flip
 
