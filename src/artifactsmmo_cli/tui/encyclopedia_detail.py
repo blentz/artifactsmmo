@@ -125,6 +125,57 @@ def _recipe_detail(game_data: GameData, code: str) -> DetailView:
     return DetailView(renderable=t, links=tuple(links))
 
 
+def _npc_detail(game_data: GameData, code: str) -> DetailView:
+    w = game_data.world
+    tile = w.npc_tiles.get(code)
+    if tile is None:
+        raise EncyclopediaDetailError(f"unknown npc: {code}")
+    t = _kv_table(code)
+    t.add_row("location", f"({tile[0]},{tile[1]})")
+    links: list[Ref] = []
+    for item, price in sorted(w.npc_stock.get(code, {}).items()):
+        t.add_row("sells", f"{item} @ {price}")
+        links.append(Ref("item", item, f"buy {price}"))
+    for item, price in sorted(w.npc_sell_prices.get(code, {}).items()):
+        t.add_row("buys", f"{item} @ {price}")
+        links.append(Ref("item", item, f"sell {price}"))
+    return DetailView(renderable=t, links=tuple(links))
+
+
+def _location_detail(game_data: GameData, code: str) -> DetailView:
+    w = game_data.world
+    t = _kv_table(code)
+    kind, _, name = code.partition(":")
+    if kind == "workshop":
+        tile = w.workshop_locations.get(name)
+        if tile is None:
+            raise EncyclopediaDetailError(f"unknown workshop: {name}")
+        t.add_row("workshop", name)
+        t.add_row("location", f"({tile[0]},{tile[1]})")
+    elif kind == "raid":
+        tiles = w.raid_location_tiles(name)
+        if not tiles:
+            raise EncyclopediaDetailError(f"unknown raid: {name}")
+        t.add_row("raid", name)
+        t.add_row("tiles", ", ".join(f"({x},{y})" for x, y in tiles))
+    else:
+        raise EncyclopediaDetailError(f"unknown location: {code}")
+    return DetailView(renderable=t, links=())
+
+
+def _task_detail(game_data: GameData, code: str) -> DetailView:
+    coin = game_data._task_coin_rewards.get(code)
+    gold = game_data._task_gold_rewards.get(code)
+    if coin is None and gold is None:
+        raise EncyclopediaDetailError(f"unknown task: {code}")
+    t = _kv_table(code)
+    if coin is not None:
+        t.add_row("task coins", str(coin))
+    if gold is not None:
+        t.add_row("gold", str(gold))
+    return DetailView(renderable=t, links=())
+
+
 def build_detail(game_data: GameData, kind: str, code: str) -> DetailView:
     if kind == "item":
         return _item_detail(game_data, code)
@@ -134,4 +185,10 @@ def build_detail(game_data: GameData, kind: str, code: str) -> DetailView:
         return _resource_detail(game_data, code)
     if kind == "recipe":
         return _recipe_detail(game_data, code)
+    if kind == "npc":
+        return _npc_detail(game_data, code)
+    if kind == "location":
+        return _location_detail(game_data, code)
+    if kind == "task":
+        return _task_detail(game_data, code)
     raise EncyclopediaDetailError(f"unknown kind: {kind}")

@@ -11,6 +11,7 @@ from artifactsmmo_cli.tui.encyclopedia_detail import (
     Ref,
     build_detail,
 )
+from artifactsmmo_cli.tui.encyclopedia_index import build_index
 
 
 def _seed() -> GameData:
@@ -140,3 +141,80 @@ def test_monster_detail_shows_lifesteal_and_locations() -> None:
     text = _render(view)
     assert "10%" in text
     assert "(3,4)" in text
+
+
+def _seed_full() -> GameData:
+    gd = _seed_world()
+    gd.world.npc_tiles["smith"] = (4, 1)
+    gd.world.npc_stock["smith"] = {"copper_dagger": 50}
+    gd.world.npc_sell_prices["smith"] = {"copper": 2}
+    gd.world.workshop_locations["mining"] = (1, 2)
+    gd.world.raid_locations["dragon_raid"] = [(9, 9)]
+    gd._task_coin_rewards["kill_chickens"] = 25
+    gd._task_gold_rewards["kill_chickens"] = 100
+    return gd
+
+
+def test_npc_detail_links_stock_and_sells() -> None:
+    view = build_detail(_seed_full(), "npc", "smith")
+    text = _render(view)
+    assert "(4,1)" in text
+    assert Ref("item", "copper_dagger", "buy 50") in view.links
+    assert Ref("item", "copper", "sell 2") in view.links
+
+
+def test_location_workshop_detail() -> None:
+    view = build_detail(_seed_full(), "location", "workshop:mining")
+    text = _render(view)
+    assert "(1,2)" in text
+
+
+def test_location_raid_detail() -> None:
+    view = build_detail(_seed_full(), "location", "raid:dragon_raid")
+    text = _render(view)
+    assert "(9,9)" in text
+
+
+def test_task_detail_shows_rewards() -> None:
+    view = build_detail(_seed_full(), "task", "kill_chickens")
+    text = _render(view)
+    assert "25" in text
+    assert "100" in text
+    assert view.links == ()  # per-task item rewards are not in the catalog
+
+
+def test_unknown_npc_code_raises() -> None:
+    with pytest.raises(EncyclopediaDetailError):
+        build_detail(_seed_full(), "npc", "does_not_exist")
+
+
+def test_unknown_workshop_raises() -> None:
+    with pytest.raises(EncyclopediaDetailError):
+        build_detail(_seed_full(), "location", "workshop:does_not_exist")
+
+
+def test_unknown_raid_raises() -> None:
+    with pytest.raises(EncyclopediaDetailError):
+        build_detail(_seed_full(), "location", "raid:does_not_exist")
+
+
+def test_unknown_location_prefix_raises() -> None:
+    with pytest.raises(EncyclopediaDetailError):
+        build_detail(_seed_full(), "location", "swamp:mystery")
+
+
+def test_unknown_task_code_raises() -> None:
+    with pytest.raises(EncyclopediaDetailError):
+        build_detail(_seed_full(), "task", "does_not_exist")
+
+
+def test_every_link_resolves_no_dangling() -> None:
+    gd = _seed_full()
+    idx = build_index(gd)
+    for kind, _count in idx.categories():
+        for entry in idx.entries(kind):
+            view = build_detail(gd, kind, entry.code)
+            for ref in view.links:
+                assert idx.lookup(ref.kind, ref.code) is not None, (
+                    f"dangling link {ref} from {kind}:{entry.code}"
+                )
