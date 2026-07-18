@@ -3,35 +3,20 @@
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import Screen
-from textual.widgets import Input, Label, ListItem, ListView, Static
+from textual.widgets import Input, ListView, Static
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.tui.encyclopedia_detail import DetailView, Ref, build_detail
 from artifactsmmo_cli.tui.encyclopedia_index import (
     EncyclopediaIndex,
-    IndexEntry,
     build_index,
     rank_entries,
 )
-
-
-class _CategoryItem(ListItem):
-    def __init__(self, kind: str, label: str) -> None:
-        super().__init__(Label(label))
-        self.enc_kind = kind
-
-
-class _EntityItem(ListItem):
-    def __init__(self, entry: IndexEntry) -> None:
-        super().__init__(Label(entry.display))
-        self.enc_kind = entry.kind
-        self.enc_code = entry.code
-
-
-class _LinkItem(ListItem):
-    def __init__(self, ref: Ref) -> None:
-        super().__init__(Label(f"{ref.code}  ({ref.label})" if ref.label else ref.code))
-        self.enc_ref = ref
+from artifactsmmo_cli.tui.screens.encyclopedia_row_items import (
+    CategoryItem,
+    EntityItem,
+    LinkItem,
+)
 
 
 class EncyclopediaScreen(Screen[None]):
@@ -64,7 +49,7 @@ class EncyclopediaScreen(Screen[None]):
         with Horizontal(id="enc-cols"):
             with ListView(id="enc-cats"):
                 for kind, count in self._index.categories():
-                    yield _CategoryItem(kind, f"{kind} ({count})")
+                    yield CategoryItem(kind, f"{kind} ({count})")
             with Vertical(id="enc-mid"):
                 yield Input(placeholder="search", id="enc-search")
                 yield ListView(id="enc-entities")
@@ -82,7 +67,7 @@ class EncyclopediaScreen(Screen[None]):
         entities = self.query_one("#enc-entities", ListView)
         entities.clear()
         for entry in rank_entries(self._index.entries(self._active_kind), query):
-            entities.append(_EntityItem(entry))
+            entities.append(EntityItem(entry))
 
     def _render_detail(self, ref: Ref) -> None:
         view: DetailView = build_detail(self._game_data, ref.kind, ref.code)
@@ -90,7 +75,7 @@ class EncyclopediaScreen(Screen[None]):
         links = self.query_one("#enc-links", ListView)
         links.clear()
         for link in view.links:
-            links.append(_LinkItem(link))
+            links.append(LinkItem(link))
 
     def _navigate(self, ref: Ref) -> None:
         self._nav.append(ref)
@@ -107,7 +92,7 @@ class EncyclopediaScreen(Screen[None]):
             self.query_one("#enc-links", ListView).clear()
 
     def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
-        if event.list_view.id == "enc-cats" and isinstance(event.item, _CategoryItem):
+        if event.list_view.id == "enc-cats" and isinstance(event.item, CategoryItem):
             self._active_kind = event.item.enc_kind
             self._nav.clear()
             self.query_one("#enc-search", Input).value = ""
@@ -117,9 +102,9 @@ class EncyclopediaScreen(Screen[None]):
 
     def on_list_view_selected(self, event: ListView.Selected) -> None:
         item = event.item
-        if isinstance(item, _EntityItem):
+        if isinstance(item, EntityItem):
             self._navigate(Ref(item.enc_kind, item.enc_code, ""))
-        elif isinstance(item, _LinkItem):
+        elif isinstance(item, LinkItem):
             self._navigate(item.enc_ref)
 
     def on_input_changed(self, event: Input.Changed) -> None:

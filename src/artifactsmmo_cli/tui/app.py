@@ -117,9 +117,10 @@ class WatchApp(App[None]):
         if isinstance(top, (CharacterScreen, LogScreen, PlanScreen)):
             top.update_snapshot(snap)
 
-    # The three modal screens. Each mounts with a FIXED widget id
-    # (character-modal / log-modal / plan-modal), so two of the same kind in the
-    # screen stack collide with DuplicateIds. Toggles enforce ONE modal at a time.
+    # The four modal screens. Each mounts with a FIXED widget id
+    # (character-modal / log-modal / plan-modal / encyclopedia-modal), so two of the
+    # same kind in the screen stack collide with DuplicateIds. Toggles enforce ONE
+    # modal at a time.
     _MODAL_SCREENS = (CharacterScreen, LogScreen, PlanScreen, EncyclopediaScreen)
 
     def _open_modal(self, screen_type: type[Screen[None]],

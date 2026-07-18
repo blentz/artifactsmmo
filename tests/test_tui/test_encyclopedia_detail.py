@@ -76,8 +76,11 @@ def test_item_detail_shows_resistance_and_hp_fields() -> None:
     view = build_detail(gd, "item", "iron_shield")
     text = _render(view)
     assert "water" in text
-    assert "20" in text
-    assert "+15" in text
+    lines = text.splitlines()
+    heals_row = next(line for line in lines if "heals" in line)
+    assert "20" in heals_row
+    hp_row = next(line for line in lines if line.strip().startswith("hp"))
+    assert "+15" in hp_row
 
 
 def _seed_world() -> GameData:
