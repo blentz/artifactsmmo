@@ -15,6 +15,7 @@ from artifactsmmo_cli.ai.actions.withdraw_item import WithdrawItemAction
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData, ItemStats
 from artifactsmmo_cli.ai.scenario import ScenarioCharacter, scenario_state
+from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.audit.craft_completeness import (
     CraftCell,
     CraftVerdict,
@@ -820,3 +821,21 @@ def test_classify_gap_combat_blocked_survives_geared_loadout_against_overleveled
     assert not is_winnable(geared, gd, "cow")
 
     assert classify_gap("beast_armor", cell, gd) is GapClass.COMBAT_BLOCKED
+
+
+def test_near_term_gear_targets_both_ring_slots_for_a_ring() -> None:
+    """Regression pin for the ring2 starvation class: near_term_gear must assign
+    the best ring to BOTH ring1_slot and ring2_slot (the aspirational target the
+    runtime aging path then realizes sequentially). If this ever drops ring2,
+    the runtime can never even form the ring2 root."""
+    gd = GameData()
+    gd._item_stats = {
+        "iron_ring": ItemStats(code="iron_ring", level=1, type_="ring",
+                               subtype="", attack={"fire": 20}),
+    }
+    gd._resource_drops = {"iron_vein": "iron_ring"}
+    bare = scenario_state(
+        ScenarioCharacter(name="census_bare", level=5, skills={}), gd)
+    gear = CharacterObjective.from_game_data(gd).near_term_gear(bare)
+    assert gear.get("ring1_slot") == "iron_ring"
+    assert gear.get("ring2_slot") == "iron_ring"
