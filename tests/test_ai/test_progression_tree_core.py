@@ -6,10 +6,14 @@ group binds these tests to the source."""
 from fractions import Fraction
 
 from artifactsmmo_cli.ai.tiers.progression_tree_core import (
+    FOCUS_FLAT,
+    FOCUS_FLOOR,
+    FOCUS_SPAN,
     POTION_TYPE_WEIGHTS,
     Branch,
     GearCandidate,
     branch_pick_pure,
+    falloff,
     gear_target_pick,
     milestone_pure,
     potion_type_weight,
@@ -84,3 +88,32 @@ class TestGearTargetPick:
         c = GearCandidate(slot="ring2_slot", code="aaa_ring", gain=Fraction(4), level=5)
         assert gear_target_pick([c, a]) == a
         assert gear_target_pick([a, c]) == a
+
+
+def test_falloff_flat_full_weight_through_flat_window():
+    for level in range(0, FOCUS_FLAT + 1):
+        assert falloff(level) == Fraction(1)
+
+
+def test_falloff_reaches_floor_at_and_after_span_end():
+    end = FOCUS_FLAT + FOCUS_SPAN
+    assert falloff(end) == FOCUS_FLOOR
+    assert falloff(end + 50) == FOCUS_FLOOR
+
+
+def test_falloff_monotone_non_increasing():
+    prev = falloff(0)
+    for level in range(1, FOCUS_FLAT + FOCUS_SPAN + 20):
+        cur = falloff(level)
+        assert cur <= prev
+        prev = cur
+
+
+def test_falloff_strictly_decreases_inside_decay_window():
+    a = falloff(FOCUS_FLAT + 1)
+    b = falloff(FOCUS_FLAT + FOCUS_SPAN - 1)
+    assert b < a < Fraction(1)
+
+
+def test_falloff_floor_is_positive():
+    assert FOCUS_FLOOR > 0

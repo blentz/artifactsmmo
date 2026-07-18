@@ -51,6 +51,39 @@ def potion_type_weight(family: str) -> Fraction:
     return POTION_TYPE_WEIGHTS.get(family, Fraction(0))
 
 
+FOCUS_FLAT = 10
+"""Iterations a freshly-focused root farms at FULL weight before decay begins.
+Below this the aging pick is bit-identical to the plain `gear_target_pick`
+argmax (see `focus_aging_pick`)."""
+
+FOCUS_SPAN = 100
+"""Iterations over which a focused root's weight decays from 1 to FOCUS_FLOOR.
+Decay runs on focus levels (FOCUS_FLAT, FOCUS_FLAT + FOCUS_SPAN]."""
+
+FOCUS_FLOOR = Fraction(1, 8)
+"""Minimum weight multiplier (> 0): a stuck drop root is NEVER fully abandoned,
+so if its drop finally lands it resumes. Tuning surface — calibrated live
+(Task 11)."""
+
+
+def falloff(focus_level: int) -> Fraction:
+    """Selection-weight multiplier for a root that has been the committed focus
+    for `focus_level` iterations.
+
+    Flat at 1 through FOCUS_FLAT (farm window), convex (quadratic ease-in)
+    decay to FOCUS_FLOOR across the next FOCUS_SPAN iterations, then held at
+    FOCUS_FLOOR. Convex so the hand-off is gentle early (keep farming) and
+    steepens later. Exact `Fraction` — no float in the decision path. The
+    constants are the ONLY tuning surface; the shape (flat -> convex -> floor)
+    is pinned by the tests."""
+    if focus_level <= FOCUS_FLAT:
+        return Fraction(1)
+    if focus_level >= FOCUS_FLAT + FOCUS_SPAN:
+        return FOCUS_FLOOR
+    t = Fraction(focus_level - FOCUS_FLAT, FOCUS_SPAN)
+    return Fraction(1) - (Fraction(1) - FOCUS_FLOOR) * t * t
+
+
 @dataclass(frozen=True)
 class GearCandidate:
     """One upgrade candidate for the gear branch. `gain` is the WEIGHTED
