@@ -323,7 +323,7 @@ theorem falloffT_le_one {l : Nat} (h : ¬ focusFlat + focusSpan ≤ l) :
       ≤ (focusSpan : Rat) / (focusSpan : Rat) := ratDivMono hcast focusSpan_pos
     _ = 1 := focusSpan_div_self
 
-/-- `1 - focusFloor = 7/8 ≥ 0` (the decay coefficient is nonneg). -/
+/-- `1 - focusFloor = 8/9 ≥ 0` (the decay coefficient is nonneg). -/
 theorem oneSubFloor_nonneg : (0 : Rat) ≤ 1 - focusFloor := by
   have : focusFloor ≤ 1 := by decide
   grind
