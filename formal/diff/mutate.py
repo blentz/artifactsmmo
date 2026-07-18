@@ -2671,6 +2671,34 @@ PROGRESSION_TREE_MUTATIONS = [
     ("tree: argmax gain sign flipped (worst upgrade wins)",
      "    return min(candidates, key=lambda c: (-c.gain, -c.level, c.code, c.slot))",
      "    return min(candidates, key=lambda c: (c.gain, -c.level, c.code, c.slot))"),
+    # Focus-aging pure functions (Task 7, 2026-07-18): unit-killed group.
+    # falloff: flat-window floor swap.
+    ("falloff: floor instead of full weight in flat window",
+     "    if focus_level <= FOCUS_FLAT:\n        return Fraction(1)",
+     "    if focus_level <= FOCUS_FLAT:\n        return FOCUS_FLOOR"),
+    # falloff: drop the convex decay term (weight never decays past FOCUS_FLAT).
+    ("falloff: drop the convex decay term",
+     "    return Fraction(1) - (Fraction(1) - FOCUS_FLOOR) * t * t",
+     "    return Fraction(1)"),
+    # interleave_due: ignore seats already handed out in the d'Hondt quotient
+    # (breaks proportionality — the same top-weight key wins every cycle).
+    ("interleave: ignore seats in the quotient (breaks proportionality)",
+     "            key=lambda kw: (kw[1] / (seats[kw[0]] + 1), kw[1], kw[0]),",
+     "            key=lambda kw: (kw[1], kw[1], kw[0]),"),
+    # interleave_due: lowest-quotient wins instead of highest.
+    ("interleave: lowest-averages instead of highest",
+     "        winner = max(\n            weighted,",
+     "        winner = min(\n            weighted,"),
+    # focus_aging_pick: never take the bit-identical argmax fast-path.
+    ("aging pick: never take the argmax fast-path",
+     "    if all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in candidates):\n        return gear_target_pick(candidates)",
+     "    if False:\n        return gear_target_pick(candidates)"),
+    # _scaled_weights: key the returned weight by code instead of slot, so two
+    # same-code candidates in different slots (e.g. a ring in ring1/ring2)
+    # collapse into one interleave entry.
+    ("scaled weights: key by code instead of slot (collapses dual-slot candidates)",
+     "    return [(c.slot, c.gain * falloff(focus.get((c.slot, c.code), 0)))\n            for c in candidates]",
+     "    return [(c.code, c.gain * falloff(focus.get((c.slot, c.code), 0)))\n            for c in candidates]"),
 ]
 
 # equipment_profile.profile_for selector (2026-07-08; utility axis retired in P3b):
