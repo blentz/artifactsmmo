@@ -11,6 +11,7 @@ from textual.widgets import Footer, Header
 from artifactsmmo_cli.ai.cycle_snapshot import CycleSnapshot
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.tui.screens.character_screen import CharacterScreen
+from artifactsmmo_cli.tui.screens.encyclopedia_screen import EncyclopediaScreen
 from artifactsmmo_cli.tui.screens.log_screen import LogScreen
 from artifactsmmo_cli.tui.screens.plan_screen import PlanScreen
 from artifactsmmo_cli.tui.sprite_coverage_audit import SpriteCoverageAudit
@@ -32,7 +33,7 @@ class WatchApp(App[None]):
     }
     /* The bare `Screen` grid above also matches pushed modals; reset them to a
        full-screen vertical layout. App CSS outranks a screen's DEFAULT_CSS. */
-    #character-modal, #log-modal, #plan-modal {
+    #character-modal, #log-modal, #plan-modal, #encyclopedia-modal {
         layout: vertical;
     }
     /* Textual has no explicit cell-placement (`column`/`row`) props: cells are
@@ -79,6 +80,7 @@ class WatchApp(App[None]):
         ("c", "toggle_character", "Character"),
         ("l", "toggle_log", "Log"),
         ("p", "toggle_plan", "Plan"),
+        ("e", "toggle_encyclopedia", "Encyclopedia"),
     ]
 
     def __init__(self, character: str, game_data: GameData) -> None:
@@ -118,7 +120,7 @@ class WatchApp(App[None]):
     # The three modal screens. Each mounts with a FIXED widget id
     # (character-modal / log-modal / plan-modal), so two of the same kind in the
     # screen stack collide with DuplicateIds. Toggles enforce ONE modal at a time.
-    _MODAL_SCREENS = (CharacterScreen, LogScreen, PlanScreen)
+    _MODAL_SCREENS = (CharacterScreen, LogScreen, PlanScreen, EncyclopediaScreen)
 
     def _open_modal(self, screen_type: type[Screen[None]],
                     factory: Callable[[], Screen[None] | None]) -> None:
@@ -156,3 +158,9 @@ class WatchApp(App[None]):
             PlanScreen,
             lambda: PlanScreen(self._last_snapshot, self._game_data)
             if self._last_snapshot is not None else None)
+
+    def action_toggle_encyclopedia(self) -> None:
+        self._open_modal(
+            EncyclopediaScreen,
+            lambda: EncyclopediaScreen(self._game_data),
+        )

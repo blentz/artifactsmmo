@@ -342,6 +342,16 @@ class TestWatchAppModals:
             await pilot.press("p")
             assert not isinstance(app.screen, PlanScreen)
 
+    async def test_e_opens_encyclopedia(self) -> None:
+        app = _make_app()
+        async with app.run_test(size=(120, 50)) as pilot:
+            await pilot.press("e")
+            await pilot.pause()
+            assert app.screen.id == "encyclopedia-modal"
+            await pilot.press("e")
+            await pilot.pause()
+            assert app.screen.id != "encyclopedia-modal"
+
 
 class TestWatchAppSetPlanning:
     @pytest.mark.asyncio
