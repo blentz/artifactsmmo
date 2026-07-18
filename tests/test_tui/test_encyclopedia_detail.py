@@ -77,3 +77,66 @@ def test_item_detail_shows_resistance_and_hp_fields() -> None:
     assert "water" in text
     assert "20" in text
     assert "+15" in text
+
+
+def _seed_world() -> GameData:
+    gd = _seed()
+    gd.monsters.levels["chicken"] = 1
+    gd.monsters.hp["chicken"] = 60
+    gd.monsters.attack["chicken"] = {"fire": 4}
+    gd.monsters.resistance["chicken"] = {"water": 2}
+    gd.monsters.critical_strike["chicken"] = 5
+    gd.monsters.lifesteal["chicken"] = 0
+    gd.monsters.drops["chicken"] = [("copper", 100, 1, 1)]
+    gd.recipes_catalog.resource_skill["copper_rocks"] = ("mining", 1)
+    gd.recipes_catalog.resource_drops_full["copper_rocks"] = [("copper", 80, 1, 1)]
+    gd.recipes_catalog.locations["copper_rocks"] = [(2, 0)]
+    return gd
+
+
+def test_monster_detail_links_to_drops() -> None:
+    view = build_detail(_seed_world(), "monster", "chicken")
+    text = _render(view)
+    assert "chicken" in text
+    assert "60" in text  # hp
+    assert Ref("item", "copper", "drops") in view.links
+
+
+def test_resource_detail_links_to_drops() -> None:
+    view = build_detail(_seed_world(), "resource", "copper_rocks")
+    text = _render(view)
+    assert "mining" in text
+    assert Ref("item", "copper", "drops") in view.links
+
+
+def test_recipe_detail_links_inputs_and_output() -> None:
+    view = build_detail(_seed_world(), "recipe", "copper_dagger")
+    text = _render(view)
+    assert "weaponcrafting" in text
+    assert Ref("item", "copper_dagger", "makes") in view.links
+    assert Ref("item", "copper", "needs 6") in view.links
+
+
+def test_unknown_monster_code_raises() -> None:
+    with pytest.raises(EncyclopediaDetailError):
+        build_detail(_seed_world(), "monster", "does_not_exist")
+
+
+def test_unknown_resource_code_raises() -> None:
+    with pytest.raises(EncyclopediaDetailError):
+        build_detail(_seed_world(), "resource", "does_not_exist")
+
+
+def test_unknown_recipe_code_raises() -> None:
+    with pytest.raises(EncyclopediaDetailError):
+        build_detail(_seed_world(), "recipe", "does_not_exist")
+
+
+def test_monster_detail_shows_lifesteal_and_locations() -> None:
+    gd = _seed_world()
+    gd.monsters.lifesteal["chicken"] = 10
+    gd.monsters.locations["chicken"] = [(3, 4)]
+    view = build_detail(gd, "monster", "chicken")
+    text = _render(view)
+    assert "10%" in text
+    assert "(3,4)" in text

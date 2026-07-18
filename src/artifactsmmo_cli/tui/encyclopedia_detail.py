@@ -66,7 +66,72 @@ def _item_detail(game_data: GameData, code: str) -> DetailView:
     return DetailView(renderable=t, links=tuple(links))
 
 
+def _monster_detail(game_data: GameData, code: str) -> DetailView:
+    m = game_data.monsters
+    if code not in m.levels:
+        raise EncyclopediaDetailError(f"unknown monster: {code}")
+    t = _kv_table(code)
+    t.add_row("level", str(m.levels[code]))
+    t.add_row("hp", str(m.hp.get(code, 0)))
+    if m.attack.get(code):
+        t.add_row("attack", ", ".join(f"{el} {v}" for el, v in sorted(m.attack[code].items())))
+    if m.resistance.get(code):
+        t.add_row("resist", ", ".join(f"{el} {v}" for el, v in sorted(m.resistance[code].items())))
+    if m.critical_strike.get(code):
+        t.add_row("crit", f"{m.critical_strike[code]}%")
+    if m.lifesteal.get(code):
+        t.add_row("lifesteal", f"{m.lifesteal[code]}%")
+    locs = m.locations.get(code, [])
+    if locs:
+        t.add_row("locations", ", ".join(f"({x},{y})" for x, y in locs))
+    links = tuple(
+        Ref("item", item, "drops")
+        for item, _rate, _lo, _hi in m.drops.get(code, [])
+    )
+    return DetailView(renderable=t, links=links)
+
+
+def _resource_detail(game_data: GameData, code: str) -> DetailView:
+    rc = game_data.recipes_catalog
+    skill = rc.resource_skill.get(code)
+    if skill is None:
+        raise EncyclopediaDetailError(f"unknown resource: {code}")
+    t = _kv_table(code)
+    t.add_row("skill", f"{skill[0]} L{skill[1]}")
+    locs = rc.resource_locations(code)
+    if locs:
+        t.add_row("locations", ", ".join(f"({x},{y})" for x, y in locs))
+    links = tuple(
+        Ref("item", item, "drops")
+        for item, _rate, _lo, _hi in rc.resource_drops_full.get(code, [])
+    )
+    return DetailView(renderable=t, links=links)
+
+
+def _recipe_detail(game_data: GameData, code: str) -> DetailView:
+    rc = game_data.recipes_catalog
+    inputs = rc.crafting_recipes.get(code)
+    if inputs is None:
+        raise EncyclopediaDetailError(f"unknown recipe: {code}")
+    stats = game_data.items.stats.get(code)
+    t = _kv_table(code)
+    if stats is not None and stats.crafting_skill:
+        t.add_row("skill", f"{stats.crafting_skill} L{stats.crafting_level}")
+    t.add_row("yields", str(rc.craft_yields.get(code, 1)))
+    for item, qty in sorted(inputs.items()):
+        t.add_row("needs", f"{qty} {item}")
+    links = [Ref("item", code, "makes")]
+    links += [Ref("item", item, f"needs {qty}") for item, qty in sorted(inputs.items())]
+    return DetailView(renderable=t, links=tuple(links))
+
+
 def build_detail(game_data: GameData, kind: str, code: str) -> DetailView:
     if kind == "item":
         return _item_detail(game_data, code)
+    if kind == "monster":
+        return _monster_detail(game_data, code)
+    if kind == "resource":
+        return _resource_detail(game_data, code)
+    if kind == "recipe":
+        return _recipe_detail(game_data, code)
     raise EncyclopediaDetailError(f"unknown kind: {kind}")
