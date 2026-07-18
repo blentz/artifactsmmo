@@ -4,7 +4,6 @@ from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.tui.encyclopedia_index import (
     CATEGORY_ORDER,
-    EncyclopediaIndex,
     IndexEntry,
     build_index,
     rank_entries,
@@ -51,9 +50,13 @@ def test_entries_sorted_by_code() -> None:
 
 def test_lookup_hit_and_miss() -> None:
     idx = build_index(_seed())
-    assert idx.lookup("item", "copper_dagger").kind == "item"
+    dagger = idx.lookup("item", "copper_dagger")
+    assert dagger is not None
+    assert dagger.kind == "item"
     assert idx.lookup("item", "no_such") is None
-    assert idx.lookup("monster", "chicken").code == "chicken"
+    chicken = idx.lookup("monster", "chicken")
+    assert chicken is not None
+    assert chicken.code == "chicken"
 
 
 def test_rank_prefix_before_contains_case_insensitive() -> None:
