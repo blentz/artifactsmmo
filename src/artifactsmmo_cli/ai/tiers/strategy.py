@@ -263,6 +263,16 @@ class StrategyDecision:
     # be used (planner crafts bars + boots in one chain) rather than
     # GatherMaterials(copper_bar) which only crafts bars and stops.
     fallback_roots: list[MetaGoal] = field(default_factory=list)
+    # Whether the committed gear pick went through the focus-aging INTERLEAVE
+    # this decision (Task 12): True iff a gear candidate was chosen AND at least
+    # one candidate had aged past FOCUS_FLAT (the negation of `focus_aging_pick`'s
+    # fast-path condition, over the SAME candidates). The player gates its
+    # d'Hondt SEAT bump on this — a seat is consumed only on an interleaved
+    # decision, so a stale ledger entry for a root that has LEFT the candidate
+    # set (e.g. its slot got filled by equipping owned gear, no reset) can no
+    # longer pollute the schedule. Defaulted False: fast-path / non-gear / XP
+    # decisions consume no seat, and every non-tree constructor is unaffected.
+    aged_pick: bool = False
 
     def to_trace(self) -> dict[str, object]:
         return {

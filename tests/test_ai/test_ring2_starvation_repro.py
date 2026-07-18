@@ -118,16 +118,17 @@ def test_stuck_drop_root_does_not_starve_the_craftable_second_ring() -> None:
         chosen = repr(d.chosen_root)
         if "ring2_slot" in chosen:
             chosen_ring2 = True
-        # simulate the ledger + seat bump the player does after every cycle;
-        # seats advance only once aging has engaged (some focus > FOCUS_FLAT).
-        aged = any(level > FOCUS_FLAT for level in focus.values())
+        # simulate the ledger + seat bump the player does after every cycle:
+        # focus bumps every committed cycle; the d'Hondt seat bumps only when
+        # THIS decision's gear pick went through the interleave (d.aged_pick),
+        # keyed by the committed slot (mirrors GamePlayer._bump_focus, Task 12).
         if "helmet_slot" in chosen:
             focus[wk] = focus.get(wk, 0) + 1
-            if aged:
+            if d.aged_pick:
                 seats["helmet_slot"] = seats.get("helmet_slot", 0) + 1
         elif "ring2_slot" in chosen:
             focus[key] = focus.get(key, 0) + 1
-            if aged:
+            if d.aged_pick:
                 seats["ring2_slot"] = seats.get("ring2_slot", 0) + 1
     assert chosen_ring2, "ring2 iron_ring was never chosen — still starved"
 

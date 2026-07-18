@@ -27,9 +27,10 @@ def _reach_char_level(level: int) -> ReachCharLevel:
     return ReachCharLevel(level=level)
 
 
-def _decision_with_root(root: ObtainItem) -> StrategyDecision:
+def _decision_with_root(root, aged_pick: bool = False) -> StrategyDecision:
     return StrategyDecision(
         interrupt=None, chosen_root=root, chosen_step=root, desired_state={},
+        aged_pick=aged_pick,
     )
 
 
@@ -70,29 +71,45 @@ def test_bump_increments_chosen_gear_root():
     assert p._gear_focus[("helmet_slot", "wolf_ears")] == 2
 
 
-def test_seat_bump_gated_on_unaged_regime_does_not_touch_seats():
-    """Task 12: while every committed root is still in its flat farm window
-    (no focus > FOCUS_FLAT), the interleave is not consulted, so `_bump_focus`
-    advances the focus ledger but leaves the d'Hondt seat accumulator empty —
-    an unaged cycle must never pollute the schedule."""
+def test_seat_bump_gated_on_aged_pick_false_does_not_touch_seats():
+    """Task 12 fix: `_bump_focus` bumps the FOCUS ledger every committed cycle
+    but the d'Hondt SEAT only when `decision.aged_pick` is True (this decision's
+    gear pick went through the interleave). A fast-path decision (aged_pick
+    False) advances focus but leaves seats empty — even when the ledger already
+    holds an aged entry, so a stale ledger cannot pollute the schedule."""
+    p = _bare_player()
+    # stale aged entry (e.g. a root that has since left the candidate set) —
+    # a whole-ledger `any(> FOCUS_FLAT)` scan would falsely bump here.
+    p._gear_focus = {("helmet_slot", "wolf_ears"): FOCUS_FLAT + 50}
+    p._interleave_seats = {}
+    p._bump_focus(_decision_with_root(_obtain_item("iron_ring", "ring2_slot"),
+                                      aged_pick=False))
+    assert p._gear_focus[("ring2_slot", "iron_ring")] == 1  # focus still bumps
+    assert p._interleave_seats == {}  # but no seat consumed on a fast-path cycle
+
+
+def test_seat_bump_advances_on_aged_pick():
+    """Task 12: when the decision's gear pick came from the interleave
+    (`aged_pick` True), `_bump_focus` advances one d'Hondt seat for the
+    committed SLOT in lockstep with the focus bump."""
     p = _bare_player()
     p._gear_focus = {}
     p._interleave_seats = {}
-    for _ in range(FOCUS_FLAT):  # focus climbs 1..FOCUS_FLAT, all still unaged
-        p._bump_focus(_decision_with_root(_obtain_item("wolf_ears", "helmet_slot")))
-    assert p._gear_focus[("helmet_slot", "wolf_ears")] == FOCUS_FLAT
-    assert p._interleave_seats == {}
-
-
-def test_seat_bump_advances_once_aging_engaged():
-    """Task 12: once a committed root has passed the flat window (focus >
-    FOCUS_FLAT), the aged pick draws from the interleave, so `_bump_focus`
-    advances one d'Hondt seat for the committed SLOT in lockstep with focus."""
-    p = _bare_player()
-    p._gear_focus = {("helmet_slot", "wolf_ears"): FOCUS_FLAT + 1}  # already aged
-    p._interleave_seats = {}
-    p._bump_focus(_decision_with_root(_obtain_item("iron_ring", "ring2_slot")))
+    p._bump_focus(_decision_with_root(_obtain_item("iron_ring", "ring2_slot"),
+                                      aged_pick=True))
     assert p._interleave_seats == {"ring2_slot": 1}  # keyed by the committed slot
+
+
+def test_bump_focus_non_gear_root_is_noop():
+    """Coverage: a non-gear committed root (ReachCharLevel — no slot/code)
+    yields `_gear_root_key is None`, so `_bump_focus` early-returns without
+    touching either ledger, regardless of `aged_pick`."""
+    p = _bare_player()
+    p._gear_focus = {("helmet_slot", "wolf_ears"): 5}
+    p._interleave_seats = {"helmet_slot": 2}
+    p._bump_focus(_decision_with_root(_reach_char_level(20), aged_pick=True))
+    assert p._gear_focus == {("helmet_slot", "wolf_ears"): 5}
+    assert p._interleave_seats == {"helmet_slot": 2}
 
 
 def test_reset_on_level_up_clears_ledger():

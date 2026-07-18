@@ -490,3 +490,31 @@ class TestFocusAging:
                          seats={"helmet_slot": 7})
         assert repr(d0.chosen_root) == repr(d1.chosen_root)
         assert d0.chosen_root == ObtainItem(code="wolf_ears", quantity=1, slot="helmet_slot")
+
+    def test_aged_pick_false_when_all_candidates_unaged(self):
+        """Task 12 fix: `aged_pick` reflects the CANDIDATE-scoped fast-path
+        verdict. Empty focus -> every candidate unaged -> the fast-path argmax
+        was taken, no interleave -> aged_pick False (no seat should be
+        consumed)."""
+        state, gd, objective = _two_gear_candidate_fixture()
+        d = decide_tree(state, gd, objective, band_adequate=False, focus={}, seats={})
+        assert d.aged_pick is False
+
+    def test_aged_pick_ignores_stale_non_candidate_ledger_entry(self):
+        """Task 12 fix (the latent divergence pinned): a stale aged focus entry
+        for a root that has LEFT the candidate set (e.g. its slot filled by
+        equipping owned gear, no reset) must NOT flip `aged_pick`. Every real
+        candidate is unaged, so the fast path was taken and no seat is consumed
+        — a whole-ledger `any(> FOCUS_FLAT)` scan would wrongly report aged."""
+        state, gd, objective = _two_gear_candidate_fixture()
+        stale = {("boots_slot", "copper_boots"): FOCUS_FLAT + 50}  # not a candidate
+        d = decide_tree(state, gd, objective, band_adequate=False, focus=stale, seats={})
+        assert d.aged_pick is False
+
+    def test_aged_pick_true_when_a_candidate_is_aged(self):
+        """The gear branch's pick goes through the interleave IFF some CANDIDATE
+        has aged past the flat window -> aged_pick True (a seat is consumed)."""
+        state, gd, objective = _two_gear_candidate_fixture()
+        focus = {("helmet_slot", "wolf_ears"): FOCUS_FLAT + 50}  # a real candidate
+        d = decide_tree(state, gd, objective, band_adequate=False, focus=focus, seats={})
+        assert d.aged_pick is True

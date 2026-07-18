@@ -25,6 +25,7 @@ from artifactsmmo_cli.ai.tiers.equip_value import equip_value
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal, ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.progression_tree_core import (
+    FOCUS_FLAT,
     Branch,
     GearCandidate,
     branch_pick_pure,
@@ -268,6 +269,19 @@ def decide_tree(state: WorldState, game_data: GameData,
             "path may never disagree with it"
         )
 
+    # Task 12 (candidate-scoped aged verdict): the gear pick went through the
+    # focus-aging INTERLEAVE this decision IFF the gear branch is chosen AND
+    # some candidate has aged past the flat window — the negation of
+    # `focus_aging_pick`'s fast-path condition, over the SAME candidates. The
+    # player gates its d'Hondt seat bump on this (not on a whole-ledger scan),
+    # so a stale ledger entry for a root that has LEFT the candidate set (e.g.
+    # its slot got filled by equipping owned gear — no level-up, no equippable
+    # craft, so no focus reset) can no longer make the player consume a seat on
+    # a cycle that actually took the fast path. `all(...)` is over the non-empty
+    # candidate list whenever the branch is GEAR (gear_target_exists holds).
+    aged_pick = branch is Branch.GEAR and not all(
+        focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in candidates)
+
     fallback_roots: list[MetaGoal]
     fallback_steps: list[MetaGoal]
 
@@ -314,4 +328,5 @@ def decide_tree(state: WorldState, game_data: GameData,
         ranking=ranking,
         fallback_steps=fallback_steps,
         fallback_roots=fallback_roots,
+        aged_pick=aged_pick,
     )

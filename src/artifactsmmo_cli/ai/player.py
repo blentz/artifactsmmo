@@ -109,7 +109,6 @@ from artifactsmmo_cli.ai.tiers import (
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal
 from artifactsmmo_cli.ai.tiers.progression_tree import has_structural_upgrade
-from artifactsmmo_cli.ai.tiers.progression_tree_core import FOCUS_FLAT
 from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.ai.winnable_cascade import CascadeInputs, winnable_farm_target_pure
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
@@ -292,16 +291,17 @@ class GamePlayer:
         key = self._gear_root_key(decision.chosen_root)
         if key is None:
             return
-        # Seat accumulator (Task 12) must advance in lockstep with the focus
-        # ledger, but ONLY once aging has engaged — i.e. some committed root has
-        # already passed the flat farm window (`focus_aging_pick`'s aged
-        # condition, evaluated on the PRE-bump ledger the decision was made
-        # with). On unaged (fast-path argmax) cycles the interleave is not
-        # consulted, so bumping a seat then would pollute the schedule. Keyed by
-        # the committed root's SLOT — the same slot `dhondt_step` returns.
-        aged = any(level > FOCUS_FLAT for level in self._gear_focus.values())
         self._gear_focus[key] = self._gear_focus.get(key, 0) + 1
-        if aged:
+        # Seat accumulator (Task 12) advances in lockstep with the focus ledger,
+        # but ONLY when THIS decision's gear pick actually went through the
+        # focus-aging interleave (`decision.aged_pick`, the candidate-scoped
+        # verdict computed in `decide_tree`). A whole-ledger scan would diverge:
+        # a stale `(slot,code)` entry past FOCUS_FLAT for a root that has LEFT
+        # the candidate set (its slot filled by equipping owned gear — no reset)
+        # would falsely bump a seat on a fast-path cycle where no interleave
+        # ran, polluting the d'Hondt schedule. Keyed by the committed root's
+        # SLOT — the same slot `dhondt_step` returns.
+        if decision.aged_pick:
             slot = key[0]
             self._interleave_seats[slot] = self._interleave_seats.get(slot, 0) + 1
 
@@ -1436,11 +1436,12 @@ class GamePlayer:
             # `_last_ctx` is this cycle's context, computed in `_decide_band` /
             # the decide path above.
             # NOTE (Fix 2): the `self._strategy.decide(...)` fallback below
-            # omits `focus=`/`cycle=`, so on the rare `_last_decision is
+            # omits `focus=`/`seats=`, so on the rare `_last_decision is
             # None` path (trace emitted before any real decide() this
             # session) it may show the UN-aged argmax pick — trace-record
-            # only. It never feeds `self._gear_focus` and never drives the
-            # real chosen root (that's `_last_decision`/`_plan_cache`).
+            # only. It never feeds `self._gear_focus`/`self._interleave_seats`
+            # and never drives the real chosen root (that's
+            # `_last_decision`/`_plan_cache`).
             decision = self._last_decision or self._strategy.decide(
                 self.state, self.game_data,
                 band_adequate=self._tree_band_adequate(),
