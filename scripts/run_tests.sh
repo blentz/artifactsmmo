@@ -24,6 +24,14 @@ cd "$(dirname "$0")/.."
 # tests. Clearing both is the only combination that keeps every suite green.
 unset FORCE_COLOR NO_COLOR
 
+# The scenario suite drives the arbiter's cheap-pass planner search under a
+# WALL-CLOCK budget (strategy_driver.CHEAP_BUDGET_SECONDS, default 10s). Slower
+# CI hardware squeezes that budget so a legitimately node-bounded search
+# spuriously times out (e.g. l12_bag_pursuit's ReachCurrency search). Give it
+# generous headroom here — census results are budget-insensitive, so this only
+# lets slow-hardware searches finish; it never changes a completed verdict.
+export ARTIFACTSMMO_CHEAP_BUDGET_SECONDS="${ARTIFACTSMMO_CHEAP_BUDGET_SECONDS:-60}"
+
 SCENARIOS=tests/test_ai/scenarios
 CENSUS=tests/test_audit/test_inventory_census.py
 

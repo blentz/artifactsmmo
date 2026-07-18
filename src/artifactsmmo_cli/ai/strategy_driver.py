@@ -3,6 +3,7 @@ existing goal.
 
 Lives above goals/ and tiers/ (imports both) to avoid the goals→tiers cycle."""
 
+import os
 from dataclasses import replace
 
 from artifactsmmo_cli.ai.actions.base import Action
@@ -99,7 +100,7 @@ largest pile = +1x) at which RecycleSurplus is materialized in the COLLECT band
 instead of waiting in the starved discretionary tier — i.e. >5 spares of the
 grind output. Below it, the pile is normal working slack."""
 
-CHEAP_BUDGET_SECONDS = 10.0
+CHEAP_BUDGET_SECONDS = float(os.environ.get("ARTIFACTSMMO_CHEAP_BUDGET_SECONDS", "10.0"))
 """Per-candidate budget for the arbiter's cheap first pass. Sized ABOVE the
 I/O-bound planning time of a reachable goal under `--learn` (~7.5s; each A* node
 issues LearningStore SQLite queries) so a legitimately-plannable goal — e.g. the
@@ -107,7 +108,13 @@ gear-chain GatherMaterials step — is found in the cheap pass instead of being
 starved and forcing escalation. Width-unfindable goals still exceed 10s here and
 are memoized. Guards bypass this and always get the full (300s) budget. Tunable;
 see the tiered-budget spec. (A 1s value starved real goals on the live --learn
-bot, which then escalated every doomed candidate at the full budget.)"""
+bot, which then escalated every doomed candidate at the full budget.)
+
+Overridable via `ARTIFACTSMMO_CHEAP_BUDGET_SECONDS` (default 10.0): the scenario
+suite drives this same cheap pass, and a 10s WALL-CLOCK budget that a fast dev
+box clears is squeezed on slower CI hardware, so a legitimately-bounded search
+(well under the 200k node cap) spuriously times out. The runner exports a larger
+value so those searches complete; production and the census gate keep 10s."""
 
 LEVEL_LOOKAHEAD = 3
 """How many levels ahead the objective step / task skill-gate targets, replacing
