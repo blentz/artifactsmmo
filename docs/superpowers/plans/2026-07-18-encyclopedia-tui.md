@@ -16,7 +16,7 @@
 - Never `catch Exception`. No multi-level error handling.
 - One behavioral class per file. Pure value objects (dataclasses) may share a module with the pure functions that produce them.
 - Use only game-API data or fail with an error — never fabricate or default-fill missing catalog data.
-- Tests: 0 errors, 0 warnings, 0 skipped, 100% coverage. All tests in `tests/`.
+- Tests: 0 errors, 0 warnings, 0 skipped, 100% coverage. All tests in `tests/`. TUI tests live under `tests/test_tui/`. `pyproject.toml` sets `asyncio_mode = "auto"` — write async tests as plain `async def` with NO `@pytest.mark.asyncio` marker.
 - Follow the existing TUI modal pattern: `Screen[None]` subclass with `DEFAULT_CSS` + `BINDINGS`, pushed/popped via `WatchApp._open_modal`.
 
 ## Categories (final)
@@ -29,7 +29,7 @@
 - Create `src/artifactsmmo_cli/tui/encyclopedia_detail.py` — `Ref`, `DetailView` value objects; `build_detail(game_data, kind, code)`. Pure.
 - Create `src/artifactsmmo_cli/tui/screens/encyclopedia_screen.py` — `EncyclopediaScreen(Screen[None])`. Behavioral shell.
 - Modify `src/artifactsmmo_cli/tui/app.py` — import + `e` binding + `action_toggle_encyclopedia` + `_open_modal` wiring.
-- Create tests: `tests/tui/test_encyclopedia_index.py`, `tests/tui/test_encyclopedia_detail.py`, `tests/tui/test_encyclopedia_screen.py`, and a case in the app test for the binding.
+- Create tests: `tests/test_tui/test_encyclopedia_index.py`, `tests/test_tui/test_encyclopedia_detail.py`, `tests/test_tui/test_encyclopedia_screen.py`, and a case in the app test for the binding.
 
 ---
 
@@ -37,7 +37,7 @@
 
 **Files:**
 - Create: `src/artifactsmmo_cli/tui/encyclopedia_index.py`
-- Test: `tests/tui/test_encyclopedia_index.py`
+- Test: `tests/test_tui/test_encyclopedia_index.py`
 
 **Interfaces:**
 - Consumes: `artifactsmmo_cli.ai.game_data.GameData`, `artifactsmmo_cli.ai.item_catalog.ItemStats`.
@@ -50,7 +50,7 @@
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/tui/test_encyclopedia_index.py`:
+Create `tests/test_tui/test_encyclopedia_index.py`:
 
 ```python
 """Unit tests for the pure encyclopaedia index."""
@@ -133,7 +133,7 @@ def test_search_text_covers_subtype() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run pytest tests/tui/test_encyclopedia_index.py -q`
+Run: `uv run pytest tests/test_tui/test_encyclopedia_index.py -q`
 Expected: FAIL — `ModuleNotFoundError: ...encyclopedia_index`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -249,13 +249,13 @@ Note: `game_data._task_coin_rewards` / `_task_gold_rewards` are the existing dat
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run pytest tests/tui/test_encyclopedia_index.py -q`
+Run: `uv run pytest tests/test_tui/test_encyclopedia_index.py -q`
 Expected: PASS (6 passed).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/artifactsmmo_cli/tui/encyclopedia_index.py tests/tui/test_encyclopedia_index.py
+git add src/artifactsmmo_cli/tui/encyclopedia_index.py tests/test_tui/test_encyclopedia_index.py
 git commit -m "feat(tui): pure encyclopaedia index over game-data catalogs"
 ```
 
@@ -265,7 +265,7 @@ git commit -m "feat(tui): pure encyclopaedia index over game-data catalogs"
 
 **Files:**
 - Create: `src/artifactsmmo_cli/tui/encyclopedia_detail.py`
-- Test: `tests/tui/test_encyclopedia_detail.py`
+- Test: `tests/test_tui/test_encyclopedia_detail.py`
 
 **Interfaces:**
 - Consumes: `GameData`, `EncyclopediaIndex` / `build_index` (for the soundness test), `rich.console.RenderableType`, `rich.table.Table`.
@@ -277,7 +277,7 @@ git commit -m "feat(tui): pure encyclopaedia index over game-data catalogs"
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/tui/test_encyclopedia_detail.py`:
+Create `tests/test_tui/test_encyclopedia_detail.py`:
 
 ```python
 """Unit tests for pure encyclopaedia detail rendering + link soundness."""
@@ -341,7 +341,7 @@ def test_unknown_kind_raises() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run pytest tests/tui/test_encyclopedia_detail.py -q`
+Run: `uv run pytest tests/test_tui/test_encyclopedia_detail.py -q`
 Expected: FAIL — `ModuleNotFoundError: ...encyclopedia_detail`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -425,13 +425,13 @@ def build_detail(game_data: GameData, kind: str, code: str) -> DetailView:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run pytest tests/tui/test_encyclopedia_detail.py -q`
+Run: `uv run pytest tests/test_tui/test_encyclopedia_detail.py -q`
 Expected: PASS (3 passed).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/artifactsmmo_cli/tui/encyclopedia_detail.py tests/tui/test_encyclopedia_detail.py
+git add src/artifactsmmo_cli/tui/encyclopedia_detail.py tests/test_tui/test_encyclopedia_detail.py
 git commit -m "feat(tui): encyclopaedia detail framework + item branch"
 ```
 
@@ -441,7 +441,7 @@ git commit -m "feat(tui): encyclopaedia detail framework + item branch"
 
 **Files:**
 - Modify: `src/artifactsmmo_cli/tui/encyclopedia_detail.py`
-- Modify: `tests/tui/test_encyclopedia_detail.py`
+- Modify: `tests/test_tui/test_encyclopedia_detail.py`
 
 **Interfaces:**
 - Consumes: `MonsterCatalog.drops` (`dict[code, list[(item, rate, min, max)]]`), `MonsterCatalog.levels/hp/attack/resistance/critical_strike/lifesteal`, `RecipeCatalog.resource_skill` / `resource_drops_full` / `resource_locations(code)` / `crafting_recipes` / `craft_yields`, `ItemStats.crafting_skill/crafting_level`.
@@ -449,7 +449,7 @@ git commit -m "feat(tui): encyclopaedia detail framework + item branch"
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `tests/tui/test_encyclopedia_detail.py`:
+Append to `tests/test_tui/test_encyclopedia_detail.py`:
 
 ```python
 def _seed_world() -> GameData:
@@ -492,7 +492,7 @@ def test_recipe_detail_links_inputs_and_output() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run pytest tests/tui/test_encyclopedia_detail.py -q`
+Run: `uv run pytest tests/test_tui/test_encyclopedia_detail.py -q`
 Expected: FAIL — `EncyclopediaDetailError: unknown kind: monster`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -576,13 +576,13 @@ def build_detail(game_data: GameData, kind: str, code: str) -> DetailView:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run pytest tests/tui/test_encyclopedia_detail.py -q`
+Run: `uv run pytest tests/test_tui/test_encyclopedia_detail.py -q`
 Expected: PASS (6 passed).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/artifactsmmo_cli/tui/encyclopedia_detail.py tests/tui/test_encyclopedia_detail.py
+git add src/artifactsmmo_cli/tui/encyclopedia_detail.py tests/test_tui/test_encyclopedia_detail.py
 git commit -m "feat(tui): encyclopaedia detail branches for monster/resource/recipe"
 ```
 
@@ -592,7 +592,7 @@ git commit -m "feat(tui): encyclopaedia detail branches for monster/resource/rec
 
 **Files:**
 - Modify: `src/artifactsmmo_cli/tui/encyclopedia_detail.py`
-- Modify: `tests/tui/test_encyclopedia_detail.py`
+- Modify: `tests/test_tui/test_encyclopedia_detail.py`
 
 **Interfaces:**
 - Consumes: `LocationCatalog.npc_tiles` / `npc_stock` / `npc_sell_prices` / `workshop_locations` / `raid_locations` / `raid_location_tiles(code)`, `GameData._task_coin_rewards` / `_task_gold_rewards`.
@@ -600,7 +600,7 @@ git commit -m "feat(tui): encyclopaedia detail branches for monster/resource/rec
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `tests/tui/test_encyclopedia_detail.py`:
+Append to `tests/test_tui/test_encyclopedia_detail.py`:
 
 ```python
 def _seed_full() -> GameData:
@@ -657,7 +657,7 @@ def test_every_link_resolves_no_dangling() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run pytest tests/tui/test_encyclopedia_detail.py -q`
+Run: `uv run pytest tests/test_tui/test_encyclopedia_detail.py -q`
 Expected: FAIL — `EncyclopediaDetailError: unknown kind: npc`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -731,18 +731,18 @@ Extend `build_detail` with the three new kinds:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run pytest tests/tui/test_encyclopedia_detail.py -q`
+Run: `uv run pytest tests/test_tui/test_encyclopedia_detail.py -q`
 Expected: PASS (11 passed).
 
 Also confirm full coverage of both pure modules:
 
-Run: `uv run pytest tests/tui/test_encyclopedia_detail.py tests/tui/test_encyclopedia_index.py --cov=src/artifactsmmo_cli/tui/encyclopedia_index --cov=src/artifactsmmo_cli/tui/encyclopedia_detail --cov-report=term-missing -q`
+Run: `uv run pytest tests/test_tui/test_encyclopedia_detail.py tests/test_tui/test_encyclopedia_index.py --cov=src/artifactsmmo_cli/tui/encyclopedia_index --cov=src/artifactsmmo_cli/tui/encyclopedia_detail --cov-report=term-missing -q`
 Expected: 100% for both modules. If any line is uncovered, add a targeted test before committing.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/artifactsmmo_cli/tui/encyclopedia_detail.py tests/tui/test_encyclopedia_detail.py
+git add src/artifactsmmo_cli/tui/encyclopedia_detail.py tests/test_tui/test_encyclopedia_detail.py
 git commit -m "feat(tui): encyclopaedia npc/location/task branches + link soundness test"
 ```
 
@@ -752,7 +752,7 @@ git commit -m "feat(tui): encyclopaedia npc/location/task branches + link soundn
 
 **Files:**
 - Create: `src/artifactsmmo_cli/tui/screens/encyclopedia_screen.py`
-- Test: `tests/tui/test_encyclopedia_screen.py`
+- Test: `tests/test_tui/test_encyclopedia_screen.py`
 
 **Interfaces:**
 - Consumes: `build_index`, `rank_entries`, `EncyclopediaIndex`, `IndexEntry`, `build_detail`, `Ref`, `DetailView`, `GameData`. Textual: `Screen`, `ListView`, `ListItem`, `Label`, `Input`, `Static`, `Horizontal`, `Vertical`, `VerticalScroll`.
@@ -774,12 +774,11 @@ Design notes for the implementer:
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/tui/test_encyclopedia_screen.py`:
+Create `tests/test_tui/test_encyclopedia_screen.py`:
 
 ```python
 """Pilot tests for the encyclopaedia modal shell."""
 
-import pytest
 from textual.app import App, ComposeResult
 from textual.widgets import Input, ListView
 
@@ -812,7 +811,6 @@ class _Host(App[None]):
         await self.push_screen(EncyclopediaScreen(self._gd))
 
 
-@pytest.mark.asyncio
 async def test_search_filters_entities() -> None:
     app = _Host(_seed())
     async with app.run_test() as pilot:
@@ -824,7 +822,6 @@ async def test_search_filters_entities() -> None:
         assert codes == ["copper_dagger"]
 
 
-@pytest.mark.asyncio
 async def test_follow_link_pushes_nav() -> None:
     app = _Host(_seed())
     async with app.run_test() as pilot:
@@ -838,7 +835,6 @@ async def test_follow_link_pushes_nav() -> None:
         assert Ref("recipe", "copper_dagger", "recipe") in refs
 
 
-@pytest.mark.asyncio
 async def test_back_pops_nav() -> None:
     app = _Host(_seed())
     async with app.run_test() as pilot:
@@ -853,7 +849,7 @@ async def test_back_pops_nav() -> None:
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run pytest tests/tui/test_encyclopedia_screen.py -q`
+Run: `uv run pytest tests/test_tui/test_encyclopedia_screen.py -q`
 Expected: FAIL — `ModuleNotFoundError: ...encyclopedia_screen`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -990,22 +986,22 @@ class EncyclopediaScreen(Screen[None]):
             self._refill_entities(event.value)
 ```
 
-Note: `pytest-asyncio` is already used by the existing TUI pilot tests; confirm with `grep -rl "run_test" tests/` and match their marker/config. If those tests use a different async runner (e.g. `pytest.mark.asyncio` vs an anyio backend), copy that convention exactly instead of the marker shown above.
+Note: `asyncio_mode = "auto"` is set in `pyproject.toml`, so async tests are plain `async def` with no decorator (matches the existing `tests/test_tui/test_app.py`). Do not add `@pytest.mark.asyncio`.
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run pytest tests/tui/test_encyclopedia_screen.py -q`
+Run: `uv run pytest tests/test_tui/test_encyclopedia_screen.py -q`
 Expected: PASS (3 passed).
 
 Then coverage for the shell:
 
-Run: `uv run pytest tests/tui/test_encyclopedia_screen.py --cov=src/artifactsmmo_cli/tui/screens/encyclopedia_screen --cov-report=term-missing -q`
+Run: `uv run pytest tests/test_tui/test_encyclopedia_screen.py --cov=src/artifactsmmo_cli/tui/screens/encyclopedia_screen --cov-report=term-missing -q`
 Expected: 100%. Add tests for any uncovered branch (e.g. `action_back` with empty `_nav`, category re-highlight) before committing.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/artifactsmmo_cli/tui/screens/encyclopedia_screen.py tests/tui/test_encyclopedia_screen.py
+git add src/artifactsmmo_cli/tui/screens/encyclopedia_screen.py tests/test_tui/test_encyclopedia_screen.py
 git commit -m "feat(tui): EncyclopediaScreen three-pane browser shell"
 ```
 
@@ -1015,21 +1011,20 @@ git commit -m "feat(tui): EncyclopediaScreen three-pane browser shell"
 
 **Files:**
 - Modify: `src/artifactsmmo_cli/tui/app.py`
-- Modify: existing app test (find with `grep -rl "WatchApp" tests/`); add the binding case there.
+- Modify: `tests/test_tui/test_app.py` (add the binding case there).
 
 **Interfaces:**
-- Consumes: `EncyclopediaScreen`, `WatchApp._open_modal`, `WatchApp._game_data`.
-- Produces: `action_toggle_encyclopedia` bound to `e`; `#encyclopedia-modal` added to the modal-reset CSS selector.
+- Consumes: `EncyclopediaScreen`, `WatchApp._open_modal`, `WatchApp._MODAL_SCREENS`, `WatchApp._game_data`. Existing test helper `_make_app(character="hero") -> WatchApp` (builds `WatchApp(character=..., game_data=GameData())`).
+- Produces: `action_toggle_encyclopedia` bound to `e`; `EncyclopediaScreen` added to `_MODAL_SCREENS`; `#encyclopedia-modal` added to the modal-reset CSS selector.
 
 - [ ] **Step 1: Write the failing test**
 
-Add to the existing WatchApp pilot test module (same file that already drives `WatchApp` with `run_test`; mirror its fixture for constructing the app with a character + `GameData`):
+Add to `tests/test_tui/test_app.py` (it already drives `WatchApp` via `run_test` and defines `_make_app`). Plain `async def`, no marker (`asyncio_mode = "auto"`):
 
 ```python
-@pytest.mark.asyncio
 async def test_e_opens_encyclopedia() -> None:
-    app = _make_watch_app()  # reuse the module's existing helper/fixture
-    async with app.run_test() as pilot:
+    app = _make_app()
+    async with app.run_test(size=(120, 50)) as pilot:
         await pilot.press("e")
         await pilot.pause()
         assert app.screen.id == "encyclopedia-modal"
@@ -1038,11 +1033,11 @@ async def test_e_opens_encyclopedia() -> None:
         assert app.screen.id != "encyclopedia-modal"
 ```
 
-If the module builds the app inline rather than via a helper, construct it the same way the neighbouring tests do (e.g. `WatchApp("char", game_data)` with a seeded `GameData`).
+`_make_app` seeds an empty `GameData()`; the encyclopaedia mounts fine with empty catalogs (zero-count categories), and this test only asserts the screen toggles.
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `uv run pytest <that_test_file>::test_e_opens_encyclopedia -q`
+Run: `uv run pytest tests/test_tui/test_app.py::test_e_opens_encyclopedia -q`
 Expected: FAIL — pressing `e` does nothing; screen id is not `encyclopedia-modal`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -1077,7 +1072,21 @@ to:
         ("e", "toggle_encyclopedia", "Encyclopedia"),
 ```
 
-4. Add the action method next to `action_toggle_plan`:
+4. Add `EncyclopediaScreen` to the `_MODAL_SCREENS` tuple so the single-modal toggle pops/closes it correctly — change:
+
+```python
+    _MODAL_SCREENS = (CharacterScreen, LogScreen, PlanScreen)
+```
+
+to:
+
+```python
+    _MODAL_SCREENS = (CharacterScreen, LogScreen, PlanScreen, EncyclopediaScreen)
+```
+
+(Without this, `_open_modal` won't recognise the encyclopaedia as an open modal: pressing `e` again — or another modal key — won't pop it, and it stacks/duplicates. This is load-bearing, not cosmetic.)
+
+5. Add the action method next to `action_toggle_plan`:
 
 ```python
     def action_toggle_encyclopedia(self) -> None:
@@ -1091,7 +1100,7 @@ Confirm `_open_modal`'s signature matches this call shape by reading the existin
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run pytest <that_test_file>::test_e_opens_encyclopedia -q`
+Run: `uv run pytest tests/test_tui/test_app.py::test_e_opens_encyclopedia -q`
 Expected: PASS.
 
 - [ ] **Step 5: Full gate**
@@ -1099,7 +1108,7 @@ Expected: PASS.
 Run the TUI suite + lint + types on the touched files:
 
 ```
-uv run pytest tests/tui/ -q
+uv run pytest tests/test_tui/ -q
 uv run ruff check src/artifactsmmo_cli/tui/
 uv run mypy src/artifactsmmo_cli/tui/encyclopedia_index.py src/artifactsmmo_cli/tui/encyclopedia_detail.py src/artifactsmmo_cli/tui/screens/encyclopedia_screen.py src/artifactsmmo_cli/tui/app.py
 ```
@@ -1109,7 +1118,7 @@ Expected: all green, 0 warnings. Fix anything before committing.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/artifactsmmo_cli/tui/app.py tests/<that_test_file>
+git add src/artifactsmmo_cli/tui/app.py tests/test_tui/test_app.py
 git commit -m "feat(tui): bind 'e' to open the encyclopaedia modal"
 ```
 
