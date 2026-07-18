@@ -36,6 +36,10 @@ TRACKED_SCHEMAS: dict[str, set[str]] = {
     "ItemSchema": {
         "code", "name", "type", "subtype", "description", "level",
         "conditions", "effects", "craft", "tradeable",
+        # Season-8 addition. Acknowledged here so the strict audit passes; GameData
+        # does not yet ingest it (recyclability is still derived from the craft
+        # recipe). Ingesting the explicit flag is a possible follow-up.
+        "recyclable",
     },
     "MonsterSchema": {
         "code", "name", "type", "level", "hp",
