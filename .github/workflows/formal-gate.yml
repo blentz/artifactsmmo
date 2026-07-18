@@ -82,11 +82,10 @@ jobs:
           cd formal && lake build oracle
           cd "$GITHUB_WORKSPACE" && uv run pytest formal/diff/ -q --no-cov -n auto \
             --ignore=formal/diff/test_game_data_fixture_diff.py
-      - name: Mutation tests
-        # The full suite runs ~36 min locally and slower on CI hardware;
-        # 40 min silently truncated it (continue-on-error hid the timeout).
-        timeout-minutes: 55
-        continue-on-error: true
-        run: uv run python formal/diff/mutate.py
+      # Mutation testing (formal/diff/mutate.py) runs in the dedicated nightly
+      # mutation-gate.yml workflow, not here: it took ~36 min (the dominator of
+      # this gate), was continue-on-error (never blocked the result), and peaks
+      # ~22GB — above the 16GB runner. Keeping it out drops per-push formal-gate
+      # from ~40 min to ~10 min with no loss of mutation coverage.
       - name: OpenAPI conformance (strict)
         run: uv run python formal/diff/openapi_conformance.py --strict
