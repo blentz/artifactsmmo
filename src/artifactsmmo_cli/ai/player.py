@@ -57,6 +57,7 @@ from artifactsmmo_cli.ai.cycle_snapshot import (
 from artifactsmmo_cli.ai.equipment.loadout_cache import pick_loadout_cached
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.gear_latch import GearLatch
+from artifactsmmo_cli.ai.gear_taxonomy import ITEM_TYPE_TO_SLOTS
 from artifactsmmo_cli.ai.gear_value_core import Combat, Gather
 from artifactsmmo_cli.ai.goal_serialization import goal_from_dict, goal_to_dict
 from artifactsmmo_cli.ai.goals.base import Goal
@@ -117,6 +118,13 @@ _BANK_RETRY_SECONDS = 60.0  # retry bank access this long after an HTTP 496 bloc
 _ACHIEVEMENT_CODE_RE = re.compile(r"\((\w+) achievement_unlocked")
 _BANK_TILE = None  # resolved from game_data at runtime
 
+# Item types that occupy a real equipment slot, EXCLUDING "utility" (potions /
+# consumables occupy a utility slot but are not gear the focus-aging arbiter
+# should treat as "real progress" — see GamePlayer._maybe_reset_focus). Reuses
+# the same generic API-derived taxonomy as the rest of the keep/junk logic
+# (gear_taxonomy.ITEM_TYPE_TO_SLOTS) rather than a hand-maintained set.
+EQUIPMENT_SLOT_TYPES: frozenset[str] = frozenset(ITEM_TYPE_TO_SLOTS) - {"utility"}
+
 
 class GamePlayer:
     """Autonomous GOAP AI player for a single character."""
@@ -174,6 +182,16 @@ class GamePlayer:
         self._max_healthy_streak: dict[StuckSignal, int] = {s: 0 for s in StuckSignal}
         self._prev_cycle_state_key: tuple[object, ...] | None = None
         self._last_goal_name: str | None = None
+        # Arbiter anti-starvation epic (Task 6): per-(slot, code) count of
+        # consecutive cycles this cycle's chosen gear root has been picked,
+        # fed into StrategyEngine.decide's aging pick/order (Task 4) so a
+        # root that keeps losing ties to a higher-scoring but perpetually
+        # unservable sibling eventually ages past it. Bumped in
+        # `_bump_focus` right after each `decide()` call; cleared wholesale
+        # in `_maybe_reset_focus` on real progress (level-up or a successful
+        # non-consumable-equippable craft) so aging never persists past the
+        # event that actually resolves starvation.
+        self._gear_focus: dict[tuple[str, str], int] = {}
         self.tracer: Tracer = tracer or NullTracer()
         self._cycle_counter: int = 0
         # Tier-3 strategy engine (built after game-data load); P3a runs it in
@@ -235,6 +253,49 @@ class GamePlayer:
         if self._planning_observer is not None:
             self._planning_observer(active)
 
+    @staticmethod
+    def _gear_root_key(root: "MetaGoal | None") -> tuple[str, str] | None:
+        """(slot, code) for a slot-tagged gear obtain root, else None.
+        Non-gear roots (ReachCharLevel, task roots, and slot-less ObtainItem
+        recipe-input steps) do not age — only a root that targets a specific
+        equipment slot competes with siblings for that slot."""
+        slot = getattr(root, "slot", None)
+        code = getattr(root, "code", None)
+        if isinstance(slot, str) and isinstance(code, str):
+            return (slot, code)
+        return None
+
+    def _bump_focus(self, decision: "StrategyDecision") -> None:
+        """Age the chosen gear root one more cycle. Called right after each
+        `decide()` call (both the live `_decide_band` and the offline
+        `plan_from_state` seam) so `self._gear_focus` reflects exactly the
+        cycles a decision was actually made — a cache-hit cycle that reuses
+        the prior plan without calling `decide()` does not bump."""
+        key = self._gear_root_key(decision.chosen_root)
+        if key is not None:
+            self._gear_focus[key] = self._gear_focus.get(key, 0) + 1
+
+    def _maybe_reset_focus(
+        self, prev_level: int, cur_level: int,
+        executed_action: "Action | None", outcome: str,
+    ) -> None:
+        """Clear the aging ledger on real progress: a level-up, or a
+        successful craft of a non-consumable EQUIPPABLE item. Consumables/
+        potions (item type "utility") and failed actions do NOT reset — the
+        drop root must not get a free farm window for churning potions."""
+        if cur_level > prev_level:
+            self._gear_focus.clear()
+            return
+        if outcome != "ok" or not isinstance(executed_action, CraftAction):
+            return
+        if self.game_data is None:
+            return
+        stats = self.game_data.item_stats(executed_action.code)
+        if stats is None:
+            return
+        if stats.type_ in EQUIPMENT_SLOT_TYPES:
+            self._gear_focus.clear()
+
     def _decide_band(
         self,
         state: "WorldState",
@@ -257,7 +318,10 @@ class GamePlayer:
             step_servable=servable_pred,
             band_adequate=self._tree_band_adequate(),
             ctx=ctx,
+            focus=self._gear_focus,
+            cycle=self._cycle_counter,
         )
+        self._bump_focus(decision)
         self._last_decision = decision
         cr, cs = decision.chosen_root, decision.chosen_step
         self._last_servability_diag = {
@@ -488,7 +552,10 @@ class GamePlayer:
             state, game_data,
             step_servable=self._step_servable(state, game_data, ctx),
             band_adequate=self._tree_band_adequate(),
-            ctx=ctx)
+            ctx=ctx,
+            focus=self._gear_focus,
+            cycle=self._cycle_counter)
+        self._bump_focus(decision)
         self._last_decision = decision
         step = decision.chosen_step
         crafting_target = step.code if isinstance(step, ObtainItem) else None
@@ -653,6 +720,18 @@ class GamePlayer:
                     outcome = "ok"
                 else:
                     new_state, outcome = self._execute(action, client)
+
+                # Arbiter anti-starvation epic (Task 6): clear the gear-focus
+                # aging ledger on real progress from THIS action (level-up or
+                # a successful non-consumable-equippable craft). Must run here
+                # — the only point in the loop where the executed action, its
+                # outcome, and the level straddling it (pre-action
+                # `prev_state_for_learning.level` vs post-action
+                # `new_state.level`) are all known together; `decide()` is not
+                # even guaranteed to have run this cycle (a cache-hit reuses
+                # the prior plan without a fresh decision).
+                self._maybe_reset_focus(
+                    prev_state_for_learning.level, new_state.level, action, outcome)
 
                 now = datetime.now(tz=timezone.utc)
                 cooldown_remaining = 0.0
