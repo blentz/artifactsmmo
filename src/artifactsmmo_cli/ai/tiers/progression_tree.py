@@ -14,8 +14,9 @@ actionable_step. Module-style access on both sides keeps either import
 order sound (nothing is dereferenced until after both modules finish
 executing)."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from fractions import Fraction
+from types import MappingProxyType
 
 from artifactsmmo_cli.ai.game_data import GameData
 from artifactsmmo_cli.ai.selection_context import NO_PROFILE_CONTEXT, SelectionContext
@@ -27,13 +28,20 @@ from artifactsmmo_cli.ai.tiers.progression_tree_core import (
     Branch,
     GearCandidate,
     branch_pick_pure,
-    gear_target_pick,
+    focus_aging_order,
+    focus_aging_pick,
     milestone_pure,
     potion_type_weight,
 )
 from artifactsmmo_cli.ai.tiers.pursuit_value import pursuit_value
 from artifactsmmo_cli.ai.weapon_winnability import marginal_weapon_winnability
 from artifactsmmo_cli.ai.world_state import WorldState
+
+_NO_FOCUS: Mapping[tuple[str, str], int] = MappingProxyType({})
+"""Immutable empty-focus default (mirrors the `NO_PROFILE_CONTEXT` convention):
+avoids a mutable `{}` default (ruff B006). `decide_tree` only reads it
+(`.get`), never mutates it — the anti-starvation ledger is owned and mutated
+by `GamePlayer` (Task 6)."""
 
 
 def _structural_candidates(state: WorldState, game_data: GameData,
@@ -42,11 +50,12 @@ def _structural_candidates(state: WorldState, game_data: GameData,
     strictly beats the currently-equipped item, weight 1 (no scaling).
 
     Scored on `pursuit_value` (combat-dominant efficiency budget), NOT the flat
-    `equip_value`: cross-slot GAIN ranking (`_ordered`) must let a combat weapon
-    outrank a pure-utility artifact instead of chasing the prospecting artifact
-    that flat equip_value mistakenly scored highest (the cross-slot bug). Both
-    the candidate stats AND the current-equipped baseline (`_item_value`, also
-    pursuit_value) are on the SAME ruler, so the gain is consistent."""
+    `equip_value`: cross-slot GAIN ranking (`focus_aging_order`) must let a
+    combat weapon outrank a pure-utility artifact instead of chasing the
+    prospecting artifact that flat equip_value mistakenly scored highest
+    (the cross-slot bug). Both the candidate stats AND the current-equipped
+    baseline (`_item_value`, also pursuit_value) are on the SAME ruler, so
+    the gain is consistent."""
     candidates = []
     for slot, code in objective.near_term_gear(state).items():
         stats = game_data.item_stats(code)
@@ -117,14 +126,6 @@ def _utility_candidates(state: WorldState, game_data: GameData,
         if gain > 0:
             candidates.append(GearCandidate(slot=slot, code=code, gain=gain, level=stats.level))
     return candidates
-
-
-def _ordered(candidates: list[GearCandidate]) -> list[GearCandidate]:
-    """The same canonical total order gear_target_pick's argmax uses: biggest
-    weighted gain, then higher item level, then code/slot as pure
-    disambiguators. Element 0 is exactly what gear_target_pick returns —
-    reusing this order lets the remaining fallbacks fall out for free."""
-    return sorted(candidates, key=lambda c: (-c.gain, -c.level, c.code, c.slot))
 
 
 def _candidate_root(candidate: GearCandidate) -> ObtainItem:
@@ -202,6 +203,8 @@ def decide_tree(state: WorldState, game_data: GameData,
                 band_adequate: bool = False,
                 step_servable: Callable[[MetaGoal, MetaGoal], bool] | None = None,
                 ctx: SelectionContext = NO_PROFILE_CONTEXT,
+                focus: Mapping[tuple[str, str], int] = _NO_FOCUS,
+                cycle: int = 0,
                 ) -> "strategy.StrategyDecision":
     """The tree assembly: trunk milestone, gear/xp branch pivot, and the
     chosen root/step — composing the Task-1 pure cores exactly per the
@@ -224,7 +227,17 @@ def decide_tree(state: WorldState, game_data: GameData,
     that doesn't wire it in. Forwarded to every `actionable_step` call so the
     descent stops at a node with any ready `ai/obtain_sources` route instead
     of falling into its recipe (one-obtain-model epic, Task 5 — subsuming the
-    recycle-as-acquisition epic's bespoke `recoverable` map)."""
+    recycle-as-acquisition epic's bespoke `recoverable` map).
+
+    `focus`/`cycle` (arbiter anti-starvation epic, Task 4) drive the pick/order
+    aging: `focus` is the caller's per-(slot, code) commitment ledger (how many
+    consecutive cycles that candidate has been the committed root — see
+    `focus_aging_pick`'s `falloff`), `cycle` is the caller's monotonic decision
+    counter feeding the deterministic interleave. Both default to the
+    empty-focus / cycle-0 case, which `focus_aging_pick`/`focus_aging_order`
+    guarantee is bit-identical to the plain `gear_target_pick` argmax (the
+    old `_ordered` display order it replaces) — every existing caller that
+    doesn't wire the ledger in is unaffected."""
     trunk = ReachCharLevel(level=milestone_pure(state.level))
 
     candidates = _structural_candidates(state, game_data, objective) \
@@ -232,16 +245,17 @@ def decide_tree(state: WorldState, game_data: GameData,
     gear_target_exists = candidates != []
     branch = branch_pick_pure(band_adequate, gear_target_exists)
 
-    ordered = _ordered(candidates)
-    pick = gear_target_pick(candidates) if candidates else None
+    ordered = focus_aging_order(candidates, focus, cycle)
+    pick = focus_aging_pick(candidates, focus, cycle) if candidates else None
     if candidates:
         # Drift-risk hardening: the display order's element 0 must always
-        # agree with the proven core's argmax — gear_target_pick is the
-        # authority, _ordered is a display convenience over the same rule.
+        # agree with the aging pick — focus_aging_order is built FROM
+        # focus_aging_pick (Task 3), so this is a same-cycle consistency
+        # check, not a separate authority.
         assert ordered[0] == pick, (
-            "_ordered(candidates)[0] must equal gear_target_pick(candidates) — "
-            "gear_target_pick is the proven authority; the display path may "
-            "never disagree with it"
+            "focus_aging_order(...)[0] must equal focus_aging_pick(...) — "
+            "focus_aging_order is built from focus_aging_pick; the display "
+            "path may never disagree with it"
         )
 
     fallback_roots: list[MetaGoal]

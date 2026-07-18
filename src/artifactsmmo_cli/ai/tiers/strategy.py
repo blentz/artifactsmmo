@@ -2,9 +2,10 @@
 actionable subgoal. `decide` delegates to `progression_tree.decide_tree`
 (Phase 4b THE FLIP); the flat scalar ranking pipeline is deleted."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from fractions import Fraction
+from types import MappingProxyType
 
 from artifactsmmo_cli.ai.combat import is_winnable
 from artifactsmmo_cli.ai.game_data import GameData
@@ -20,6 +21,13 @@ from artifactsmmo_cli.ai.tiers.objective import GOLD, CharacterObjective, _perma
 from artifactsmmo_cli.ai.tiers.personality import Personality
 from artifactsmmo_cli.ai.tiers.prerequisite_graph import prerequisites
 from artifactsmmo_cli.ai.world_state import WorldState
+
+_NO_FOCUS: Mapping[tuple[str, str], int] = MappingProxyType({})
+"""Immutable empty-focus default, sibling of `progression_tree._NO_FOCUS` (not
+imported directly: `progression_tree` imports this module at its top, so a
+reverse name-import here would race the circular load order). Avoids a
+mutable `{}` default (ruff B006); read-only, forwarded straight through to
+`decide_tree`."""
 
 
 def root_category(node: MetaGoal) -> str:
@@ -269,6 +277,8 @@ class StrategyEngine:
                step_servable: Callable[[MetaGoal, MetaGoal], bool] | None = None,
                band_adequate: bool = False,
                ctx: SelectionContext = NO_PROFILE_CONTEXT,
+               focus: Mapping[tuple[str, str], int] = _NO_FOCUS,
+               cycle: int = 0,
                ) -> StrategyDecision:
         """THE FLIP (Phase 4b): thin delegate to the progression tree — the
         flat scalar ranking pipeline is deleted (Task 2). The tree is
@@ -286,8 +296,14 @@ class StrategyEngine:
         instead of falling into its recipe (one-obtain-model epic, Task 5;
         originally the recycle-as-acquisition epic's bespoke `recoverable`
         map). Defaults to `NO_PROFILE_CONTEXT` for every caller that doesn't
-        wire it in."""
+        wire it in.
+
+        `focus`/`cycle` (arbiter anti-starvation epic, Task 4) are forwarded
+        straight through to `decide_tree`'s aging pick/order — see that
+        docstring. Both default to the empty-focus / cycle-0 case, reproducing
+        today's plain argmax for every caller that doesn't wire the ledger
+        in."""
         return progression_tree.decide_tree(
             state, game_data, self.objective,
             band_adequate=band_adequate, step_servable=step_servable,
-            ctx=ctx)
+            ctx=ctx, focus=focus, cycle=cycle)

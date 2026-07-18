@@ -14,6 +14,7 @@ from artifactsmmo_cli.ai.scenario import SCENARIOS, ScenarioCharacter, scenario_
 from artifactsmmo_cli.ai.tiers.meta_goal import ObtainItem, ReachCharLevel
 from artifactsmmo_cli.ai.tiers.objective import CharacterObjective
 from artifactsmmo_cli.ai.tiers.progression_tree import decide_tree, has_structural_upgrade
+from artifactsmmo_cli.ai.tiers.progression_tree_core import FOCUS_FLAT, FOCUS_SPAN
 
 BUNDLE = (Path(__file__).parent / "scenarios" / "fixtures"
           / "gamedata_bundle.json")
@@ -420,3 +421,63 @@ class TestSyntheticBranches:
         assert d.chosen_step == d.chosen_root
         assert d.fallback_roots == []
         assert d.fallback_steps == []
+
+
+# --- focus/cycle aging parameters (arbiter anti-starvation epic, Task 4) ----
+#
+# decide_tree's pick/order swap from the plain gear_target_pick/_ordered
+# argmax to focus_aging_pick/focus_aging_order (Task 3's cores). The empty-
+# focus/cycle-0 default must reproduce today's argmax exactly; a fully-decayed
+# focus must hand cycles off to a reachable alternative without abandoning the
+# stuck root outright.
+
+def _two_gear_candidate_fixture() -> tuple:
+    """Two structural gear candidates with a wide gain gap: `wolf_ears`
+    (helmet_slot, hp_bonus=100 -> pursuit_value 100000, the argmax) and
+    `iron_ring` (ring1_slot AND ring2_slot -- rings are a DUPLICATE_SLOT_TYPE,
+    so one candidate item fills both -- hp_bonus=1 -> pursuit_value 1000, far
+    behind). Both items are held in inventory so `is_attainable_now`'s
+    stock_ok short-circuit fires without needing a recipe or a gatherable
+    resource (see objective.py's `_attainable_closure`/`is_attainable_now`).
+    Level 1 items, character level 5, so both clear near_term_gear's
+    `stats.level <= state.level` filter and neither slot is pre-equipped, so
+    every candidate's gain is strictly positive."""
+    gd = GameData(items=ItemCatalog(stats={
+        "wolf_ears": ItemStats(code="wolf_ears", level=1, type_="helmet", hp_bonus=100),
+        "iron_ring": ItemStats(code="iron_ring", level=1, type_="ring", hp_bonus=1),
+    }))
+    objective = CharacterObjective.from_game_data(gd)
+    state = scenario_state(ScenarioCharacter(
+        name="synthetic_two_gear", level=5, max_hp=100,
+        inventory={"wolf_ears": 1, "iron_ring": 1},
+    ))
+    return state, gd, objective
+
+
+class TestFocusAging:
+    def test_decide_tree_aging_hands_off_stuck_top(self):
+        """A helmet fully decayed past FOCUS_FLAT + FOCUS_SPAN never fully
+        starves the alternative (ring2_slot) over 40 cycles, and never fully
+        abandons the decayed top either -- FOCUS_FLOOR keeps it alive."""
+        state, gd, objective = _two_gear_candidate_fixture()
+        stuck_key = ("helmet_slot", "wolf_ears")
+        focus = {stuck_key: FOCUS_FLAT + FOCUS_SPAN}
+        seen = set()
+        for cyc in range(40):
+            d = decide_tree(state, gd, objective, band_adequate=False,
+                            focus=focus, cycle=cyc)
+            seen.add(repr(d.chosen_root))
+        assert any("ring2_slot" in r for r in seen), (
+            "starved alternative root must run within 40 aged cycles")
+        assert any("helmet_slot" in r for r in seen), (
+            "FOCUS_FLOOR keeps the decayed drop root alive, not abandoned")
+
+    def test_decide_tree_empty_focus_matches_argmax(self):
+        """Defaults (no focus arg, no cycle arg) and an explicit empty
+        focus/cycle=7 both agree with the plain argmax: the aging swap must
+        not perturb any caller that doesn't wire the ledger in."""
+        state, gd, objective = _two_gear_candidate_fixture()
+        d0 = decide_tree(state, gd, objective, band_adequate=False)
+        d1 = decide_tree(state, gd, objective, band_adequate=False, focus={}, cycle=7)
+        assert repr(d0.chosen_root) == repr(d1.chosen_root)
+        assert d0.chosen_root == ObtainItem(code="wolf_ears", quantity=1, slot="helmet_slot")
