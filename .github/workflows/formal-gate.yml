@@ -74,9 +74,13 @@ jobs:
         run: bash formal/gate/check_extraction.sh
       - name: Differential tests (Python<->Lean)
         timeout-minutes: 25
+        # `-n auto`: the 104 diff modules are deterministic input/output checks
+        # against a per-call subprocess oracle (no shared state, no wall-clock
+        # assertions), so xdist is safe and cuts this from >25 min (the old
+        # timeout) to a few minutes on CI cores.
         run: |
           cd formal && lake build oracle
-          cd "$GITHUB_WORKSPACE" && uv run pytest formal/diff/ -q --no-cov \
+          cd "$GITHUB_WORKSPACE" && uv run pytest formal/diff/ -q --no-cov -n auto \
             --ignore=formal/diff/test_game_data_fixture_diff.py
       - name: Mutation tests
         # The full suite runs ~36 min locally and slower on CI hardware;
