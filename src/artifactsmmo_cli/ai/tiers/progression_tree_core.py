@@ -85,29 +85,35 @@ def falloff(focus_level: int) -> Fraction:
 
 
 def interleave_due(weighted: list[tuple[str, Fraction]], cycle: int) -> str | None:
-    """Stateless deterministic weighted round-robin (largest-remainder /
-    Bresenham). Over N cycles, key i receives approximately `weight_i / total`
-    of the cycles, and the assignment for any single `cycle` is a pure function
-    of `(weighted, cycle)` — no accumulator, no RNG, no wall-clock, so it is
-    replayable and Lean-mirrorable.
+    """Deterministic proportional scheduler (d'Hondt / highest-averages).
 
-    A key is "due" at `cycle` when its exact cumulative allocation increments
-    from `cycle` to `cycle + 1`: floor(w_i*(cycle+1)/total) > floor(w_i*cycle/
-    total). When several are due (or none are, at the very first cycles for
-    tiny weights) the tie is broken by higher weight then key string — the same
-    canonical, hash-independent order `gear_target_pick` uses. `None` only for
-    an empty list."""
+    Returns the key that receives the (cycle+1)-th seat when seats are handed
+    out one at a time, each to the key maximizing `w_i / (seats_i + 1)`. The
+    method is house-monotone (no Alabama paradox), so each added seat goes to
+    exactly one key; over any window each key wins about `w_i / total` of the
+    seats, and every strictly-positive-weight key wins a seat within
+    `total / w_i` cycles (the no-starvation bound). The winning quotient ties
+    break by higher weight then key string — a canonical, list-order-independent
+    total order — so the schedule depends only on the SET of (key, weight) pairs
+    and the cycle, never on input ordering. Pure function of (weighted, cycle):
+    no persisted accumulator, no RNG, no wall-clock. `None` only for an empty
+    list.
+
+    A naive `max(pool, key=(weight, key))` over a per-key "due" set is WRONG
+    (it collapses to one winner every cycle — fails the equal-weight 1:1 and
+    3:1 cases), and `cycle % len` rotation is list-order-dependent; d'Hondt is
+    the correct order-independent proportional method."""
     if not weighted:
         return None
-    total = sum(w for _, w in weighted)
-    due: list[tuple[str, Fraction]] = []
-    for key, w in weighted:
-        prev = (w * cycle) // total
-        now = (w * (cycle + 1)) // total
-        if now > prev:
-            due.append((key, w))
-    pool = due if due else list(weighted)
-    return pool[cycle % len(pool)][0]
+    seats: dict[str, int] = {key: 0 for key, _ in weighted}
+    winner = weighted[0][0]
+    for _ in range(cycle + 1):
+        winner = max(
+            weighted,
+            key=lambda kw: (kw[1] / (seats[kw[0]] + 1), kw[1], kw[0]),
+        )[0]
+        seats[winner] += 1
+    return winner
 
 
 @dataclass(frozen=True)

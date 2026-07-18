@@ -153,3 +153,11 @@ def test_interleave_dominant_weight_gets_every_cycle_when_others_tiny():
 def test_interleave_is_pure_function_of_cycle():
     w = [("a", Fraction(5)), ("b", Fraction(2)), ("c", Fraction(1))]
     assert [interleave_due(w, c) for c in range(20)] == [interleave_due(w, c) for c in range(20)]
+
+
+def test_interleave_is_order_independent():
+    # the schedule depends only on the SET of (key, weight) pairs, not list order
+    fwd = [("a", Fraction(5)), ("b", Fraction(2)), ("c", Fraction(1))]
+    rev = list(reversed(fwd))
+    for c in range(60):
+        assert interleave_due(fwd, c) == interleave_due(rev, c)
