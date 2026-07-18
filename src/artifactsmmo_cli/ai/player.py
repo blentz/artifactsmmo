@@ -266,14 +266,35 @@ class GamePlayer:
         return None
 
     def _bump_focus(self, decision: "StrategyDecision") -> None:
-        """Age the chosen gear root one more cycle. Called right after each
-        `decide()` call (both the live `_decide_band` and the offline
-        `plan_from_state` seam) so `self._gear_focus` reflects exactly the
-        cycles a decision was actually made — a cache-hit cycle that reuses
-        the prior plan without calling `decide()` does not bump."""
+        """Age `decision.chosen_root` one more cycle-committed. This counts
+        cycles the root is COMMITTED to, not merely cycles `decide()` was
+        called: the live loop's `_plan_or_reuse` calls this once per
+        run-loop iteration off the EFFECTIVE committed decision — the fresh
+        one on a replan, or the still-active `self._last_decision` on a
+        cache-hit cycle that reuses a prior plan without calling `decide()`
+        again (Fix 2) — so a root pursued across a long cached plan ages by
+        wall-clock cycles, matching the FOCUS_FLAT/FOCUS_SPAN "iterations"
+        the aging pick/order (Task 4) is calibrated against. The offline
+        `plan_from_state` seam (no plan-cache concept — one decide() per CLI
+        invocation) calls this directly after its own `decide()`."""
         key = self._gear_root_key(decision.chosen_root)
         if key is not None:
             self._gear_focus[key] = self._gear_focus.get(key, 0) + 1
+
+    def _bump_committed_focus(self) -> None:
+        """Bump the ledger for whichever gear root is EFFECTIVELY committed
+        this run-loop iteration: `self._last_decision` is authoritative
+        whether this iteration replanned (in which case `_decide_band` just
+        set it to the fresh decision) or hit the plan cache (in which case
+        it still holds the decision that originally produced the active
+        `self._plan_cache` — nothing can swap `self._plan_cache` without
+        also going through a fresh `_decide_band` call that updates
+        `self._last_decision` in lockstep, see `should_replan`). `None` only
+        on a resumed-from-history cache that was rehydrated by
+        `_resume_plan_cache` before any `decide()` ever ran this session —
+        that one cycle abstains rather than bump a guessed root."""
+        if self._last_decision is not None:
+            self._bump_focus(self._last_decision)
 
     def _maybe_reset_focus(
         self, prev_level: int, cur_level: int,
@@ -321,7 +342,10 @@ class GamePlayer:
             focus=self._gear_focus,
             cycle=self._cycle_counter,
         )
-        self._bump_focus(decision)
+        # Focus-ledger bump lives at the `_plan_or_reuse` seam (once per
+        # run-loop iteration, fresh-decide OR cache-hit), NOT here — bumping
+        # on every decide() call would undercount a root pursued across a
+        # multi-cycle cached plan (Fix 2, arbiter anti-starvation epic).
         self._last_decision = decision
         cr, cs = decision.chosen_root, decision.chosen_step
         self._last_servability_diag = {
@@ -401,11 +425,19 @@ class GamePlayer:
                         self._last_decide_crafting_target, self._gear_latch.active)
             else:
                 self._plan_cache = None
+            self._bump_committed_focus()
             return selected_goal, plan, goals_tried, True
-        # cache hit
+        # cache hit — the plan being reused is STILL the currently-committed
+        # gear root's plan (it was cached from `self._last_decision` on the
+        # fresh-decide cycle that populated it, and nothing between then and
+        # now can change `self._last_decision` without also invalidating the
+        # cache — see should_replan). Bump it here too so a root pursued
+        # across a long cached plan ages by wall-clock cycles-committed, not
+        # by how often the planner happened to re-decide (Fix 2).
         assert cache is not None
         self.state = replace(state, crafting_target=cache.crafting_target)
         self._notify_planning(False)
+        self._bump_committed_focus()
         return cache.selected_goal, cache.plan[cache.cursor:], [], False
 
     def _resume_plan_cache(self, state: WorldState, game_data: GameData | None) -> None:
@@ -1377,6 +1409,12 @@ class GamePlayer:
             # descent the bot never ran (whole-branch review, MINOR 5).
             # `_last_ctx` is this cycle's context, computed in `_decide_band` /
             # the decide path above.
+            # NOTE (Fix 2): the `self._strategy.decide(...)` fallback below
+            # omits `focus=`/`cycle=`, so on the rare `_last_decision is
+            # None` path (trace emitted before any real decide() this
+            # session) it may show the UN-aged argmax pick — trace-record
+            # only. It never feeds `self._gear_focus` and never drives the
+            # real chosen root (that's `_last_decision`/`_plan_cache`).
             decision = self._last_decision or self._strategy.decide(
                 self.state, self.game_data,
                 band_adequate=self._tree_band_adequate(),
