@@ -61,10 +61,18 @@ FOCUS_SPAN = 100
 """Iterations over which a focused root's weight decays from 1 to FOCUS_FLOOR.
 Decay runs on focus levels (FOCUS_FLAT, FOCUS_FLAT + FOCUS_SPAN]."""
 
-FOCUS_FLOOR = Fraction(1, 8)
+FOCUS_FLOOR = Fraction(1, 9)
 """Minimum weight multiplier (> 0): a stuck drop root is NEVER fully abandoned,
 so if its drop finally lands it resumes. Tuning surface — calibrated live
-(Task 11)."""
+(Task 11) against the real Robby trace ratio (wolf_ears gain 18100 : iron_ring
+gain 2000, ~9.05:1): at this floor the asymptotic split once a stuck root is
+fully decayed (focus >= FOCUS_FLAT + FOCUS_SPAN) is ~50/50 (18100/9 = 2011
+vs 2000), matching the design intent's near-even hand-off. The literal "50%
+share by iteration 60" anchor is unreachable for a ratio this large under the
+pinned convex (quadratic ease-in) curve with FOCUS_SPAN=100 -- the curve is
+provably still >= 0.75 at the span midpoint regardless of floor -- so the
+~50/50 split lands at the floor (iteration ~110) instead; see
+task-11-report.md."""
 
 
 def falloff(focus_level: int) -> Fraction:

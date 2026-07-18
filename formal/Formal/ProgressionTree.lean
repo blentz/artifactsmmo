@@ -254,7 +254,10 @@ Exact `Rat`; the constants are the only tuning surface. -/
 
 def focusFlat : Nat := 10
 def focusSpan : Nat := 100
-def focusFloor : Rat := mkRat 1 8
+/-- Calibrated (Task 11) against the real Robby trace ratio wolf_ears:iron_ring
+= 18100:2000 (~9.05:1): at this floor the asymptotic split once fully decayed
+is ~50/50 (18100/9 ≈ 2011 vs 2000). -/
+def focusFloor : Rat := mkRat 1 9
 
 /-- Normalised aging parameter `t := (focusLevel - focusFlat) / focusSpan`
 (Python `Fraction(focus_level - FOCUS_FLAT, FOCUS_SPAN)`). Over the rationals
