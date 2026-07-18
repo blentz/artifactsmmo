@@ -134,6 +134,39 @@ def test_min_task_gold_reward_no_data_raises():
         GameData().min_task_gold_reward()
 
 
+# ── exact (non-defaulting) accessors used by the encyclopaedia ────────────────
+
+def _seed_both(coin: dict[str, int], gold: dict[str, int]) -> GameData:
+    gd = GameData()
+    gd._task_coin_rewards = dict(coin)
+    gd._task_gold_rewards = dict(gold)
+    return gd
+
+
+def test_task_codes_empty_by_default():
+    assert GameData().task_codes == frozenset()
+
+
+def test_task_codes_union_of_coin_and_gold():
+    gd = _seed_both({"chicken": 3}, {"cow": 90})
+    assert gd.task_codes == frozenset({"chicken", "cow"})
+
+
+def test_task_rewards_known_returns_exact_pair():
+    gd = _seed_both({"chicken": 3}, {"chicken": 150})
+    assert gd.task_rewards("chicken") == (3, 150)
+
+
+def test_task_rewards_partial_returns_none_for_missing_field():
+    gd = _seed_both({"chicken": 3}, {})
+    assert gd.task_rewards("chicken") == (3, None)
+
+
+def test_task_rewards_unknown_does_not_floor_default():
+    gd = _seed_both({"chicken": 3}, {"cow": 90})
+    assert gd.task_rewards("__pending__") == (None, None)
+
+
 def test_build_tasks_collects_gold_rewards():
     gd = GameData()
     gd._build_tasks([_FakeCoinTask("chicken", 3, gold=150),

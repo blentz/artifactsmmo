@@ -5,6 +5,7 @@ Rich renderable plus the cross-reference `Ref`s the shell turns into a
 navigable list. No Textual import; no fabricated data.
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from rich.console import RenderableType
@@ -39,6 +40,16 @@ def _kv_table(title: str) -> Table:
     t.add_column("k", style="dim")
     t.add_column("v")
     return t
+
+
+def _format_tiles(tiles: Iterable[tuple[int, int]]) -> str:
+    """Render an (x, y) coordinate sequence as `(x,y), (x,y), ...`."""
+    return ", ".join(f"({x},{y})" for x, y in tiles)
+
+
+def _drop_links(drops: Iterable[tuple[str, int, int, int]]) -> tuple[Ref, ...]:
+    """Turn a `(item, rate, min, max)` drop table into item cross-link Refs."""
+    return tuple(Ref("item", item, "drops") for item, _rate, _lo, _hi in drops)
 
 
 def _item_detail(game_data: GameData, code: str) -> DetailView:
@@ -83,11 +94,8 @@ def _monster_detail(game_data: GameData, code: str) -> DetailView:
         t.add_row("lifesteal", f"{m.lifesteal[code]}%")
     locs = m.locations.get(code, [])
     if locs:
-        t.add_row("locations", ", ".join(f"({x},{y})" for x, y in locs))
-    links = tuple(
-        Ref("item", item, "drops")
-        for item, _rate, _lo, _hi in m.drops.get(code, [])
-    )
+        t.add_row("locations", _format_tiles(locs))
+    links = _drop_links(m.drops.get(code, []))
     return DetailView(renderable=t, links=links)
 
 
@@ -100,11 +108,8 @@ def _resource_detail(game_data: GameData, code: str) -> DetailView:
     t.add_row("skill", f"{skill[0]} L{skill[1]}")
     locs = rc.resource_locations(code)
     if locs:
-        t.add_row("locations", ", ".join(f"({x},{y})" for x, y in locs))
-    links = tuple(
-        Ref("item", item, "drops")
-        for item, _rate, _lo, _hi in rc.resource_drops_full.get(code, [])
-    )
+        t.add_row("locations", _format_tiles(locs))
+    links = _drop_links(rc.resource_drops_full.get(code, []))
     return DetailView(renderable=t, links=links)
 
 
@@ -157,15 +162,14 @@ def _location_detail(game_data: GameData, code: str) -> DetailView:
         if not tiles:
             raise EncyclopediaDetailError(f"unknown raid: {name}")
         t.add_row("raid", name)
-        t.add_row("tiles", ", ".join(f"({x},{y})" for x, y in tiles))
+        t.add_row("tiles", _format_tiles(tiles))
     else:
         raise EncyclopediaDetailError(f"unknown location: {code}")
     return DetailView(renderable=t, links=())
 
 
 def _task_detail(game_data: GameData, code: str) -> DetailView:
-    coin = game_data._task_coin_rewards.get(code)
-    gold = game_data._task_gold_rewards.get(code)
+    coin, gold = game_data.task_rewards(code)
     if coin is None and gold is None:
         raise EncyclopediaDetailError(f"unknown task: {code}")
     t = _kv_table(code)

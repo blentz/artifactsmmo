@@ -969,6 +969,19 @@ class GameData:
         known = self._task_gold_rewards.get(task_code)
         return known if known is not None else self.min_task_gold_reward()
 
+    @property
+    def task_codes(self) -> frozenset[str]:
+        """Every task code with loaded reward data (coin or gold). Read-only
+        projection used to enumerate tasks for display (encyclopaedia)."""
+        return frozenset(self._task_coin_rewards) | frozenset(self._task_gold_rewards)
+
+    def task_rewards(self, task_code: str) -> tuple[int | None, int | None]:
+        """Exact (tasks_coin, gold) awards for `task_code`, or None per field
+        when no reward of that type is loaded. Unlike `task_coin_reward` /
+        `task_gold_reward`, does NOT floor-default — callers that must tell a
+        known task apart from an unknown code use this."""
+        return self._task_coin_rewards.get(task_code), self._task_gold_rewards.get(task_code)
+
     def ge_best_buy_order(self, item_code: str) -> tuple[str, int, int] | None:
         """The highest-price OPEN BUY order for item_code as (order_id, price,
         quantity), or None if no such standing order exists. This is the order the

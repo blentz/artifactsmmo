@@ -80,8 +80,7 @@ def build_index(game_data: GameData) -> EncyclopediaIndex:
     locations += [_entry("location", f"raid:{code}", "raid") for code in game_data.world.raid_locations]
     by_category["location"] = tuple(sorted(locations, key=lambda e: e.code))
 
-    task_codes = set(game_data._task_coin_rewards) | set(game_data._task_gold_rewards)
-    tasks = [_entry("task", code) for code in task_codes]
+    tasks = [_entry("task", code) for code in game_data.task_codes]
     by_category["task"] = tuple(sorted(tasks, key=lambda e: e.code))
 
     lookup = {(e.kind, e.code): e for group in by_category.values() for e in group}
