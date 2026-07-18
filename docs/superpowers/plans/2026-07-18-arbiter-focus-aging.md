@@ -174,6 +174,13 @@ def test_interleave_dominant_weight_gets_every_cycle_when_others_tiny():
 def test_interleave_is_pure_function_of_cycle():
     w = [("a", Fraction(5)), ("b", Fraction(2)), ("c", Fraction(1))]
     assert [interleave_due(w, c) for c in range(20)] == [interleave_due(w, c) for c in range(20)]
+
+def test_interleave_is_order_independent():
+    # the schedule depends only on the SET of (key, weight) pairs, not list order
+    fwd = [("a", Fraction(5)), ("b", Fraction(2)), ("c", Fraction(1))]
+    rev = list(reversed(fwd))
+    for c in range(60):
+        assert interleave_due(fwd, c) == interleave_due(rev, c)
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -187,33 +194,41 @@ Add to `progression_tree_core.py`:
 
 ```python
 def interleave_due(weighted: list[tuple[str, Fraction]], cycle: int) -> str | None:
-    """Stateless deterministic weighted round-robin (largest-remainder /
-    Bresenham). Over N cycles, key i receives approximately `weight_i / total`
-    of the cycles, and the assignment for any single `cycle` is a pure function
-    of `(weighted, cycle)` — no accumulator, no RNG, no wall-clock, so it is
-    replayable and Lean-mirrorable.
+    """Deterministic proportional scheduler (d'Hondt / highest-averages).
 
-    A key is "due" at `cycle` when its exact cumulative allocation increments
-    from `cycle` to `cycle + 1`: floor(w_i*(cycle+1)/total) > floor(w_i*cycle/
-    total). When several are due (or none are, at the very first cycles for
-    tiny weights) the tie is broken by higher weight then key string — the same
-    canonical, hash-independent order `gear_target_pick` uses. `None` only for
-    an empty list."""
+    Returns the key that receives the (cycle+1)-th seat when seats are handed
+    out one at a time, each to the key maximizing `w_i / (seats_i + 1)`. The
+    method is house-monotone (no Alabama paradox), so each added seat goes to
+    exactly one key; over any window each key wins about `w_i / total` of the
+    seats, and every strictly-positive-weight key wins a seat within
+    `total / w_i` cycles (the no-starvation bound). The winning quotient ties
+    break by higher weight then key string — a canonical, list-order-independent
+    total order — so the schedule depends only on the SET of (key, weight) pairs
+    and the cycle, never on input ordering. Pure function of (weighted, cycle):
+    no persisted accumulator, no RNG, no wall-clock. `None` only for an empty
+    list.
+
+    A naive `max(pool, key=(weight, key))` over a per-key "due" set is WRONG
+    (it collapses to one winner every cycle — fails the equal-weight 1:1 and
+    3:1 cases), and `cycle % len` rotation is list-order-dependent; d'Hondt is
+    the correct order-independent proportional method."""
     if not weighted:
         return None
-    total = sum(w for _, w in weighted)
-    due: list[tuple[str, Fraction]] = []
-    for key, w in weighted:
-        prev = (w * cycle) // total
-        now = (w * (cycle + 1)) // total
-        if now > prev:
-            due.append((key, w))
-    pool = due if due else list(weighted)
-    return max(pool, key=lambda kw: (kw[1], kw[0]))[0]
+    seats: dict[str, int] = {key: 0 for key, _ in weighted}
+    winner = weighted[0][0]
+    for _ in range(cycle + 1):
+        winner = max(
+            weighted,
+            key=lambda kw: (kw[1] / (seats[kw[0]] + 1), kw[1], kw[0]),
+        )[0]
+        seats[winner] += 1
+    return winner
 ```
 
-Note: `(w * cycle) // total` is exact-`Fraction` floor division yielding an
-integer `Fraction`; comparison is exact.
+Notes: `kw[1] / (seats[...] + 1)` is `Fraction / int → Fraction` (exact). Cost
+is `O(cycle * len(weighted))` per call (recomputes the apportionment from seat
+0) — negligible beside the per-cycle GOAP search; windowing `cycle` is an
+available perf follow-up, not a correctness concern.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -411,7 +426,13 @@ Expected: FAIL — `decide_tree() got an unexpected keyword argument 'focus'`.
 - [ ] **Step 3: Modify `decide_tree`**
 
 In `progression_tree.py`:
-- Add imports: `from collections.abc import Mapping`, and add `focus_aging_pick, focus_aging_order` to the existing `from ...progression_tree_core import (...)` block (keep `gear_target_pick`, `_ordered` may stay for other uses).
+- Add imports: `from collections.abc import Mapping`, `from types import MappingProxyType`, and add `focus_aging_pick, focus_aging_order` to the existing `from ...progression_tree_core import (...)` block (keep `gear_target_pick`, `_ordered` may stay for other uses).
+- Add a module-level immutable empty-mapping default next to the other module constants (mirrors the `NO_PROFILE_CONTEXT` convention; avoids a mutable `{}` default that ruff B006 would flag):
+
+```python
+_NO_FOCUS: Mapping[tuple[str, str], int] = MappingProxyType({})
+```
+
 - Change the signature (line 200-205) to add the two params before the return type:
 
 ```python
@@ -420,7 +441,7 @@ def decide_tree(state: WorldState, game_data: GameData,
                 band_adequate: bool = False,
                 step_servable: Callable[[MetaGoal, MetaGoal], bool] | None = None,
                 ctx: SelectionContext = NO_PROFILE_CONTEXT,
-                focus: Mapping[tuple[str, str], int] = {},
+                focus: Mapping[tuple[str, str], int] = _NO_FOCUS,
                 cycle: int = 0,
                 ) -> "strategy.StrategyDecision":
 ```
@@ -444,14 +465,17 @@ owned and mutated by `GamePlayer`, Task 6.)
 
 - [ ] **Step 4: Modify `StrategyEngine.decide`**
 
-In `strategy.py`, add the two params to `decide` and forward them:
+In `strategy.py`, add the two params to `decide` and forward them. Reuse the
+same immutable default — import it: `from artifactsmmo_cli.ai.tiers.progression_tree import _NO_FOCUS`
+(or define a sibling `MappingProxyType({})` constant if importing a private name
+is undesirable — either is fine, just not a bare `{}` default):
 
 ```python
     def decide(self, state: WorldState, game_data: GameData,
                step_servable: Callable[[MetaGoal, MetaGoal], bool] | None = None,
                band_adequate: bool = False,
                ctx: SelectionContext = NO_PROFILE_CONTEXT,
-               focus: Mapping[tuple[str, str], int] = {},
+               focus: Mapping[tuple[str, str], int] = _NO_FOCUS,
                cycle: int = 0,
                ) -> StrategyDecision:
         ...
@@ -489,7 +513,7 @@ git commit -m "feat(arbiter): thread focus/cycle through decide_tree + StrategyE
 
 **Process:** Invoke the `formal-development` skill / `lean4:prove` + `lean4:proof-repair` agents to develop the proofs. This task is done when `lake build` is green with no `sorry` and no new axioms.
 
-- [ ] **Step 1: Add the Lean definitions** mirroring the Python exactly (constants `focusFlat := 10`, `focusSpan := 100`, `focusFloor := (1 : Rat)/8`; convex decay `1 - (1 - focusFloor) * t^2` with `t := (focusLevel - focusFlat)/focusSpan`). `interleaveDue` uses `Rat` floor (`⌊w * cycle / total⌋`) for the "due" test and the `(weight, key)` max tiebreak. `focusAgingPick` returns `gearTargetPick cs` when all focus levels `≤ focusFlat`, else maps `interleaveDue` over scaled weights.
+- [ ] **Step 1: Add the Lean definitions** mirroring the Python exactly (constants `focusFlat := 10`, `focusSpan := 100`, `focusFloor := (1 : Rat)/8`; convex decay `1 - (1 - focusFloor) * t^2` with `t := (focusLevel - focusFlat)/focusSpan`). `interleaveDue` mirrors the d'Hondt / highest-averages apportionment: fold `cycle+1` seats, each seat to the key maximizing `w_i / (seats_i + 1)` with the canonical `(quotient, weight, key)` tiebreak (list-order-independent). `focusAgingPick` returns `gearTargetPick cs` when all focus levels `≤ focusFlat`, else maps `interleaveDue` over scaled weights.
 
 - [ ] **Step 2: State and prove the theorems** (statements to add; prove each):
 
@@ -710,12 +734,12 @@ Append to `PROGRESSION_TREE_MUTATIONS` (each `(description, old_string, new_stri
     ("falloff: drop the convex decay term",
      "    return Fraction(1) - (Fraction(1) - FOCUS_FLOOR) * t * t",
      "    return Fraction(1)"),
-    ("interleave: invert due test",
-     "        if now > prev:",
-     "        if now < prev:"),
-    ("interleave: tiebreak on lowest weight",
-     "    return max(pool, key=lambda kw: (kw[1], kw[0]))[0]",
-     "    return min(pool, key=lambda kw: (kw[1], kw[0]))[0]"),
+    ("interleave: ignore seats in the quotient (breaks proportionality)",
+     "            key=lambda kw: (kw[1] / (seats[kw[0]] + 1), kw[1], kw[0]),",
+     "            key=lambda kw: (kw[1], kw[1], kw[0]),"),
+    ("interleave: lowest-averages instead of highest",
+     "        winner = max(\n            weighted,",
+     "        winner = min(\n            weighted,"),
     ("aging pick: never take the argmax fast-path",
      "    if all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in candidates):\n        return gear_target_pick(candidates)",
      "    if False:\n        return gear_target_pick(candidates)"),
