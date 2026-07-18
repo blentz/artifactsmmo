@@ -12,7 +12,9 @@ from artifactsmmo_cli.ai.tiers.progression_tree_core import (
     POTION_TYPE_WEIGHTS,
     Branch,
     GearCandidate,
+    _scaled_weights,
     branch_pick_pure,
+    dhondt_step,
     falloff,
     focus_aging_order,
     focus_aging_pick,
@@ -165,46 +167,100 @@ def test_interleave_is_order_independent():
         assert interleave_due(fwd, c) == interleave_due(rev, c)
 
 
+def test_dhondt_step_empty_is_none():
+    assert dhondt_step([], {}) is None
+
+
+def test_dhondt_step_single_key():
+    assert dhondt_step([("a", Fraction(3))], {}) == "a"
+    assert dhondt_step([("a", Fraction(3))], {"a": 99}) == "a"
+
+
+def test_dhondt_step_no_seats_picks_max_quotient():
+    # seats={}: every quotient is w/1, so the heaviest weight wins.
+    w = [("a", Fraction(1)), ("b", Fraction(3)), ("c", Fraction(2))]
+    assert dhondt_step(w, {}) == "b"
+
+
+def test_dhondt_step_seats_can_flip_the_winner():
+    # heavy key already seated enough that its quotient drops below the light
+    # key's: 3/(3+1)=3/4 < 1/(0+1)=1 -> the light key wins this seat.
+    w = [("a", Fraction(1)), ("b", Fraction(3))]
+    assert dhondt_step(w, {}) == "b"           # unseated: heavy wins
+    assert dhondt_step(w, {"b": 3}) == "a"     # heavy saturated: light flips in
+
+
+def test_dhondt_step_is_order_independent():
+    fwd = [("a", Fraction(5)), ("b", Fraction(2)), ("c", Fraction(1))]
+    rev = list(reversed(fwd))
+    for seats in ({}, {"a": 4}, {"a": 2, "b": 1}, {"c": 3}):
+        assert dhondt_step(fwd, seats) == dhondt_step(rev, seats)
+
+
 def _gc(slot, code, gain, level=1):
     return GearCandidate(slot=slot, code=code, gain=Fraction(gain), level=level)
 
 
 def test_aging_pick_empty_focus_equals_argmax():
     cands = [_gc("helmet_slot", "wolf_ears", 18100), _gc("ring2_slot", "iron_ring", 2000)]
+    # Unaged fast-path: the seats argument is not consulted; vary it to prove so.
     for c in range(50):
-        assert focus_aging_pick(cands, {}, c) == gear_target_pick(cands)
+        assert focus_aging_pick(cands, {}, {"helmet_slot": c}) == gear_target_pick(cands)
 
 
 def test_aging_pick_below_flat_window_equals_argmax():
     cands = [_gc("helmet_slot", "wolf_ears", 18100), _gc("ring2_slot", "iron_ring", 2000)]
     focus = {("helmet_slot", "wolf_ears"): FOCUS_FLAT}  # exactly at flat edge
     for c in range(50):
-        assert focus_aging_pick(cands, focus, c) == gear_target_pick(cands)
+        assert focus_aging_pick(cands, focus, {"helmet_slot": c}) == gear_target_pick(cands)
 
 
 def test_aging_pick_decayed_top_yields_some_cycles_to_alt():
     cands = [_gc("helmet_slot", "wolf_ears", 18100), _gc("ring2_slot", "iron_ring", 2000)]
     # push the stuck root deep into decay so its scaled gain approaches the alt
     focus = {("helmet_slot", "wolf_ears"): FOCUS_FLAT + FOCUS_SPAN}  # weight = FOCUS_FLOOR
-    picks = {focus_aging_pick(cands, focus, c).code for c in range(40)}
+    seats: dict[str, int] = {}
+    picks = set()
+    for _ in range(40):
+        pick = focus_aging_pick(cands, focus, seats)
+        picks.add(pick.code)
+        seats[pick.slot] = seats.get(pick.slot, 0) + 1  # accumulate one seat
     assert "iron_ring" in picks   # ring2 is no longer starved
     assert "wolf_ears" in picks   # floor keeps the drop root alive
+
+
+def test_aging_pick_incremental_seats_match_batch_interleave_schedule():
+    """FIXED weights: the incremental-seats pick sequence reproduces the batch
+    `interleave_due(scaled, cycle)` schedule seat-for-seat — the
+    `dhondt_step`/`interleave_due` fold identity, so behavior is preserved for
+    fixed weights (the whole point of the perf refactor)."""
+    cands = [_gc("helmet_slot", "wolf_ears", 18100), _gc("ring2_slot", "iron_ring", 2000)]
+    focus = {("helmet_slot", "wolf_ears"): FOCUS_FLAT + FOCUS_SPAN}
+    scaled = _scaled_weights(cands, focus)
+    seats: dict[str, int] = {}
+    for c in range(60):
+        pick = focus_aging_pick(cands, focus, seats)
+        assert pick.slot == interleave_due(scaled, c)
+        seats[pick.slot] = seats.get(pick.slot, 0) + 1
 
 
 def test_aging_order_head_equals_pick():
     cands = [_gc("helmet_slot", "wolf_ears", 18100), _gc("ring2_slot", "iron_ring", 2000)]
     focus = {("helmet_slot", "wolf_ears"): FOCUS_FLAT + FOCUS_SPAN}
-    for c in range(20):
-        assert focus_aging_order(cands, focus, c)[0] == focus_aging_pick(cands, focus, c)
+    seats: dict[str, int] = {}
+    for _ in range(20):
+        assert focus_aging_order(cands, focus, seats)[0] == focus_aging_pick(cands, focus, seats)
+        seats[focus_aging_pick(cands, focus, seats).slot] = \
+            seats.get(focus_aging_pick(cands, focus, seats).slot, 0) + 1
 
 
 def test_aging_order_is_permutation_of_input():
     cands = [_gc("helmet_slot", "wolf_ears", 18100), _gc("ring2_slot", "iron_ring", 2000)]
     focus = {("helmet_slot", "wolf_ears"): 50}
-    out = focus_aging_order(cands, focus, 3)
+    out = focus_aging_order(cands, focus, {"helmet_slot": 3})
     assert sorted(out, key=lambda c: c.code) == sorted(cands, key=lambda c: c.code)
 
 
 def test_aging_pick_empty_candidates_is_none():
-    assert focus_aging_pick([], {}, 0) is None
-    assert focus_aging_order([], {}, 0) == []
+    assert focus_aging_pick([], {}, {}) is None
+    assert focus_aging_order([], {}, {}) == []

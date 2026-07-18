@@ -93,6 +93,31 @@ def falloff(focus_level: int) -> Fraction:
     return Fraction(1) - (Fraction(1) - FOCUS_FLOOR) * t * t
 
 
+def dhondt_step(weighted: list[tuple[str, Fraction]],
+                seats: Mapping[str, int]) -> str | None:
+    """One seat of the d'Hondt / highest-averages apportionment: the key
+    maximizing `w_i / (seats_i + 1)` GIVEN the seats already handed out.
+
+    This is the single-step PRIMITIVE the scheduler is built from — O(len
+    (weighted)), no loop over a cycle index. The winning quotient ties break by
+    higher weight then key string (`(quotient, weight, key)` via `max`), a
+    canonical, list-order-independent total order, so the winner depends only on
+    the SET of (key, weight) pairs and the seat counts, never on input ordering.
+    An unseated key defaults to 0 seats (`seats.get(k, 0)`) — the closed
+    universe: a key absent from `seats` is fresh. `None` only for an empty list.
+
+    Callers accumulate seats incrementally across decisions (one bump for the
+    returned key), giving an O(candidates)-per-decision proportional schedule
+    instead of recomputing from a global cycle index — see `interleave_due`,
+    which is exactly the (cycle+1)-fold of this step from empty seats."""
+    if not weighted:
+        return None
+    return max(
+        weighted,
+        key=lambda kw: (kw[1] / (seats.get(kw[0], 0) + 1), kw[1], kw[0]),
+    )[0]
+
+
 def interleave_due(weighted: list[tuple[str, Fraction]], cycle: int) -> str | None:
     """Deterministic proportional scheduler (d'Hondt / highest-averages).
 
@@ -108,20 +133,22 @@ def interleave_due(weighted: list[tuple[str, Fraction]], cycle: int) -> str | No
     no persisted accumulator, no RNG, no wall-clock. `None` only for an empty
     list.
 
-    A naive `max(pool, key=(weight, key))` over a per-key "due" set is WRONG
-    (it collapses to one winner every cycle — fails the equal-weight 1:1 and
-    3:1 cases), and `cycle % len` rotation is list-order-dependent; d'Hondt is
-    the correct order-independent proportional method."""
+    This is the REFERENCE BATCH scheduler, defined as the fold of `dhondt_step`
+    over an accumulating `seats` dict for `cycle+1` steps: seat-for-seat
+    identical to recomputing the whole d'Hondt allocation from seat 0 (its
+    former body), so it stays byte-for-byte behavior-identical for fixed
+    weights. Live callers instead advance seats incrementally and take ONE
+    `dhondt_step` per decision — the fold identity guarantees that reproduces
+    this same schedule while costing O(candidates) rather than O(cycle)."""
     if not weighted:
         return None
-    seats: dict[str, int] = {key: 0 for key, _ in weighted}
+    seats: dict[str, int] = {}
     winner = weighted[0][0]
     for _ in range(cycle + 1):
-        winner = max(
-            weighted,
-            key=lambda kw: (kw[1] / (seats[kw[0]] + 1), kw[1], kw[0]),
-        )[0]
-        seats[winner] += 1
+        step = dhondt_step(weighted, seats)
+        assert step is not None  # weighted is non-empty here
+        winner = step
+        seats[winner] = seats.get(winner, 0) + 1
     return winner
 
 
@@ -158,34 +185,41 @@ def _scaled_weights(candidates: list[GearCandidate],
 
 def focus_aging_pick(candidates: list[GearCandidate],
                      focus: Mapping[tuple[str, str], int],
-                     cycle: int) -> GearCandidate | None:
+                     seats: Mapping[str, int]) -> GearCandidate | None:
     """The gear root to pursue THIS cycle, with anti-starvation aging.
 
     While every candidate is still inside its flat farm window (focus <=
     FOCUS_FLAT) the result is bit-identical to the proven `gear_target_pick`
     argmax — no jitter for fresh roots. Once any candidate has been focused
     past the flat window, its selection weight decays (see `falloff`) and the
-    pick is drawn by the deterministic weighted interleave over scaled gains,
-    so a decayed stuck root hands cycles to reachable alternatives without ever
-    being fully abandoned (FOCUS_FLOOR > 0)."""
+    pick is the single `dhondt_step` over scaled gains GIVEN the seats handed
+    out so far (the caller accumulates one seat per aged decision — see
+    `GamePlayer._interleave_seats`), so a decayed stuck root hands cycles to
+    reachable alternatives without ever being fully abandoned (FOCUS_FLOOR > 0).
+
+    Seats are held on the caller (like the focus ledger) rather than recomputed
+    from a global cycle index: for fixed weights, incrementally accumulated
+    seats reproduce the old `interleave_due(scaled, cycle)` schedule seat-for-
+    seat (the `dhondt_step`/`interleave_due` fold identity) at O(candidates)
+    cost per decision."""
     if not candidates:
         return None
     if all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in candidates):
         return gear_target_pick(candidates)
-    winner_slot = interleave_due(_scaled_weights(candidates, focus), cycle)
+    winner_slot = dhondt_step(_scaled_weights(candidates, focus), seats)
     return next(c for c in candidates if c.slot == winner_slot)
 
 
 def focus_aging_order(candidates: list[GearCandidate],
                       focus: Mapping[tuple[str, str], int],
-                      cycle: int) -> list[GearCandidate]:
+                      seats: Mapping[str, int]) -> list[GearCandidate]:
     """Display/fallback order whose head is exactly `focus_aging_pick` and
     whose tail is the remaining candidates in the canonical argmax order
     (`gear_target_pick`'s total order). Keeps `decide_tree`'s
     `ordered[0] == pick` invariant intact under aging."""
     if not candidates:
         return []
-    pick = focus_aging_pick(candidates, focus, cycle)
+    pick = focus_aging_pick(candidates, focus, seats)
     assert pick is not None
     rest = sorted((c for c in candidates if c is not pick),
                   key=lambda c: (-c.gain, -c.level, c.code, c.slot))

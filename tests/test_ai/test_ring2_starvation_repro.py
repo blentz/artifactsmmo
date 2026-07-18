@@ -107,19 +107,28 @@ def test_stuck_drop_root_does_not_starve_the_craftable_second_ring() -> None:
     state, gd, objective = _stuck_wolf_ears_plus_craftable_ring2()
     engine = StrategyEngine(objective, BalancedPersonality())
     focus: dict[tuple[str, str], int] = {}
+    seats: dict[str, int] = {}
     chosen_ring2 = False
-    for cyc in range(FOCUS_FLAT + FOCUS_SPAN + 20):
-        d = engine.decide(state, gd, band_adequate=False, focus=focus, cycle=cyc)
+    for _ in range(FOCUS_FLAT + FOCUS_SPAN + 20):
+        # mirror the player: the focus ledger AND the incremental d'Hondt seat
+        # accumulator (Task 12) both drive the aging pick.
+        d = engine.decide(state, gd, band_adequate=False, focus=focus, seats=seats)
         key = ("ring2_slot", "iron_ring")
         wk = ("helmet_slot", "wolf_ears")
         chosen = repr(d.chosen_root)
         if "ring2_slot" in chosen:
             chosen_ring2 = True
-        # simulate the ledger bump the player does after every decide() call
+        # simulate the ledger + seat bump the player does after every cycle;
+        # seats advance only once aging has engaged (some focus > FOCUS_FLAT).
+        aged = any(level > FOCUS_FLAT for level in focus.values())
         if "helmet_slot" in chosen:
             focus[wk] = focus.get(wk, 0) + 1
+            if aged:
+                seats["helmet_slot"] = seats.get("helmet_slot", 0) + 1
         elif "ring2_slot" in chosen:
             focus[key] = focus.get(key, 0) + 1
+            if aged:
+                seats["ring2_slot"] = seats.get("ring2_slot", 0) + 1
     assert chosen_ring2, "ring2 iron_ring was never chosen — still starved"
 
 
@@ -131,6 +140,6 @@ def test_pre_fix_behavior_absent_aging_would_starve() -> None:
     exactly the starvation the aging (Tasks 1-7) fixes."""
     state, gd, objective = _stuck_wolf_ears_plus_craftable_ring2()
     engine = StrategyEngine(objective, BalancedPersonality())
-    picks = {repr(engine.decide(state, gd, band_adequate=False, focus={}, cycle=c).chosen_root)
-             for c in range(30)}
+    picks = {repr(engine.decide(state, gd, band_adequate=False, focus={}, seats={}).chosen_root)
+             for _ in range(30)}
     assert picks == {"ObtainItem(code='wolf_ears', quantity=1, slot='helmet_slot')"}

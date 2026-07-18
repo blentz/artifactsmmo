@@ -2680,15 +2680,21 @@ PROGRESSION_TREE_MUTATIONS = [
     ("falloff: drop the convex decay term",
      "    return Fraction(1) - (Fraction(1) - FOCUS_FLOOR) * t * t",
      "    return Fraction(1)"),
-    # interleave_due: ignore seats already handed out in the d'Hondt quotient
-    # (breaks proportionality — the same top-weight key wins every cycle).
-    ("interleave: ignore seats in the quotient (breaks proportionality)",
-     "            key=lambda kw: (kw[1] / (seats[kw[0]] + 1), kw[1], kw[0]),",
-     "            key=lambda kw: (kw[1], kw[1], kw[0]),"),
-    # interleave_due: lowest-quotient wins instead of highest.
-    ("interleave: lowest-averages instead of highest",
-     "        winner = max(\n            weighted,",
-     "        winner = min(\n            weighted,"),
+    # dhondt_step: ignore seats already handed out in the d'Hondt quotient
+    # (breaks proportionality — the same top-weight key wins every seat, so
+    # interleave_due collapses to one winner every cycle).
+    ("dhondt_step: ignore seats in the quotient (breaks proportionality)",
+     "        key=lambda kw: (kw[1] / (seats.get(kw[0], 0) + 1), kw[1], kw[0]),",
+     "        key=lambda kw: (kw[1], kw[1], kw[0]),"),
+    # dhondt_step: multiply by (seats+1) instead of dividing — favours the most
+    # saturated key (inverts highest-averages), so the quotient rewards seats.
+    ("dhondt_step: multiply seats into the quotient instead of dividing",
+     "        key=lambda kw: (kw[1] / (seats.get(kw[0], 0) + 1), kw[1], kw[0]),",
+     "        key=lambda kw: (kw[1] * (seats.get(kw[0], 0) + 1), kw[1], kw[0]),"),
+    # dhondt_step: lowest-quotient wins instead of highest.
+    ("dhondt_step: lowest-averages instead of highest",
+     "    return max(\n        weighted,",
+     "    return min(\n        weighted,"),
     # focus_aging_pick: never take the bit-identical argmax fast-path.
     ("aging pick: never take the argmax fast-path",
      "    if all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in candidates):\n        return gear_target_pick(candidates)",

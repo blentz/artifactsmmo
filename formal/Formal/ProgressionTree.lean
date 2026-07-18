@@ -539,6 +539,26 @@ theorem selectMax_quot_max (weighted : List (String × Rat)) (s : String → Nat
     ∀ e ∈ weighted, dhondtQuot e.2 (s e.1) ≤ dhondtQuot r.2 (s r.1) :=
   (selectMax_fold_max weighted s none r hr).2
 
+/-- The winning KEY of one d'Hondt seat given the seat counts already handed
+out — the direct mirror of Python `dhondt_step(weighted, seats)`, which (unlike
+the state-threading `dhondtStep` above) returns the winning key rather than the
+updated state. `none` only for an empty list. -/
+def dhondtStepKey (weighted : List (String × Rat)) (s : String → Nat) :
+    Option String :=
+  (selectMax weighted s).map Prod.fst
+
+/-- QUOTIENT-MAXIMAL (Python `dhondt_step` correctness): the key it returns is
+one whose d'Hondt quotient dominates every candidate's — exactly one seat of
+highest-averages apportionment given prior seats. Reuses `selectMax_quot_max`
+(the single-step optimality also underlying `interleaveDue`, of which
+`dhondtStep` is the fold step). -/
+theorem dhondtStepKey_quot_max (weighted : List (String × Rat)) (s : String → Nat)
+    (r : String × Rat) (hr : selectMax weighted s = some r) :
+    dhondtStepKey weighted s = some r.1 ∧
+      ∀ e ∈ weighted, dhondtQuot e.2 (s e.1) ≤ dhondtQuot r.2 (s r.1) := by
+  refine ⟨?_, selectMax_quot_max weighted s r hr⟩
+  simp [dhondtStepKey, hr]
+
 /-- The key that receives the `(cycle + 1)`-th seat. `none` only for an empty
 list. Mirrors Python `interleave_due`. -/
 def interleaveDue (weighted : List (String × Rat)) (cycle : Nat) : Option String :=

@@ -109,6 +109,7 @@ from artifactsmmo_cli.ai.tiers import (
 from artifactsmmo_cli.ai.tiers.guards import SelectionContext
 from artifactsmmo_cli.ai.tiers.meta_goal import MetaGoal
 from artifactsmmo_cli.ai.tiers.progression_tree import has_structural_upgrade
+from artifactsmmo_cli.ai.tiers.progression_tree_core import FOCUS_FLAT
 from artifactsmmo_cli.ai.tracer import Tracer
 from artifactsmmo_cli.ai.winnable_cascade import CascadeInputs, winnable_farm_target_pure
 from artifactsmmo_cli.ai.world_state import TASKS_COIN_CODE, WorldState
@@ -192,6 +193,17 @@ class GamePlayer:
         # non-consumable-equippable craft) so aging never persists past the
         # event that actually resolves starvation.
         self._gear_focus: dict[tuple[str, str], int] = {}
+        # Arbiter perf (Task 12): incremental d'Hondt seat accumulator for the
+        # focus-aging interleave, keyed by equipment SLOT. Advanced by one seat
+        # (for the committed root's slot) on each AGED committed cycle in
+        # `_bump_focus`, and CLEARED in lockstep with `_gear_focus` on real
+        # progress (`_maybe_reset_focus`). Replaces feeding the unbounded global
+        # `_cycle_counter` into the interleave (was O(global cycle) per replan —
+        # a CPU-peg risk on a long-lived stuck character); one `dhondt_step`
+        # over accumulated seats is O(candidates). For fixed weights the
+        # accumulated seats reproduce the old `interleave_due(scaled, cycle)`
+        # schedule seat-for-seat (the fold identity).
+        self._interleave_seats: dict[str, int] = {}
         self.tracer: Tracer = tracer or NullTracer()
         self._cycle_counter: int = 0
         # Tier-3 strategy engine (built after game-data load); P3a runs it in
@@ -278,8 +290,20 @@ class GamePlayer:
         `plan_from_state` seam (no plan-cache concept — one decide() per CLI
         invocation) calls this directly after its own `decide()`."""
         key = self._gear_root_key(decision.chosen_root)
-        if key is not None:
-            self._gear_focus[key] = self._gear_focus.get(key, 0) + 1
+        if key is None:
+            return
+        # Seat accumulator (Task 12) must advance in lockstep with the focus
+        # ledger, but ONLY once aging has engaged — i.e. some committed root has
+        # already passed the flat farm window (`focus_aging_pick`'s aged
+        # condition, evaluated on the PRE-bump ledger the decision was made
+        # with). On unaged (fast-path argmax) cycles the interleave is not
+        # consulted, so bumping a seat then would pollute the schedule. Keyed by
+        # the committed root's SLOT — the same slot `dhondt_step` returns.
+        aged = any(level > FOCUS_FLAT for level in self._gear_focus.values())
+        self._gear_focus[key] = self._gear_focus.get(key, 0) + 1
+        if aged:
+            slot = key[0]
+            self._interleave_seats[slot] = self._interleave_seats.get(slot, 0) + 1
 
     def _bump_committed_focus(self) -> None:
         """Bump the ledger for whichever gear root is EFFECTIVELY committed
@@ -306,6 +330,7 @@ class GamePlayer:
         drop root must not get a free farm window for churning potions."""
         if cur_level > prev_level:
             self._gear_focus.clear()
+            self._interleave_seats.clear()  # lockstep with the focus ledger
             return
         if outcome != "ok" or not isinstance(executed_action, CraftAction):
             return
@@ -316,6 +341,7 @@ class GamePlayer:
             return
         if stats.type_ in EQUIPMENT_SLOT_TYPES:
             self._gear_focus.clear()
+            self._interleave_seats.clear()  # lockstep with the focus ledger
 
     def _decide_band(
         self,
@@ -340,7 +366,7 @@ class GamePlayer:
             band_adequate=self._tree_band_adequate(),
             ctx=ctx,
             focus=self._gear_focus,
-            cycle=self._cycle_counter,
+            seats=self._interleave_seats,
         )
         # Focus-ledger bump lives at the `_plan_or_reuse` seam (once per
         # run-loop iteration, fresh-decide OR cache-hit), NOT here — bumping
@@ -586,7 +612,7 @@ class GamePlayer:
             band_adequate=self._tree_band_adequate(),
             ctx=ctx,
             focus=self._gear_focus,
-            cycle=self._cycle_counter)
+            seats=self._interleave_seats)
         self._bump_focus(decision)
         self._last_decision = decision
         step = decision.chosen_step

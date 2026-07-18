@@ -462,22 +462,31 @@ class TestFocusAging:
         state, gd, objective = _two_gear_candidate_fixture()
         stuck_key = ("helmet_slot", "wolf_ears")
         focus = {stuck_key: FOCUS_FLAT + FOCUS_SPAN}
+        seats: dict[str, int] = {}
         seen = set()
-        for cyc in range(40):
+        for _ in range(40):
             d = decide_tree(state, gd, objective, band_adequate=False,
-                            focus=focus, cycle=cyc)
-            seen.add(repr(d.chosen_root))
+                            focus=focus, seats=seats)
+            root = d.chosen_root
+            seen.add(repr(root))
+            # accumulate one d'Hondt seat for the committed slot, mirroring the
+            # player's incremental interleave (Task 12)
+            slot = getattr(root, "slot", None)
+            if isinstance(slot, str):
+                seats[slot] = seats.get(slot, 0) + 1
         assert any("ring2_slot" in r for r in seen), (
             "starved alternative root must run within 40 aged cycles")
         assert any("helmet_slot" in r for r in seen), (
             "FOCUS_FLOOR keeps the decayed drop root alive, not abandoned")
 
     def test_decide_tree_empty_focus_matches_argmax(self):
-        """Defaults (no focus arg, no cycle arg) and an explicit empty
-        focus/cycle=7 both agree with the plain argmax: the aging swap must
-        not perturb any caller that doesn't wire the ledger in."""
+        """Defaults (no focus arg, no seats arg) and an explicit empty focus
+        with arbitrary non-empty seats both agree with the plain argmax: the
+        aging swap must not perturb any caller that doesn't wire the ledger in,
+        and seats are not consulted while every candidate is unaged."""
         state, gd, objective = _two_gear_candidate_fixture()
         d0 = decide_tree(state, gd, objective, band_adequate=False)
-        d1 = decide_tree(state, gd, objective, band_adequate=False, focus={}, cycle=7)
+        d1 = decide_tree(state, gd, objective, band_adequate=False, focus={},
+                         seats={"helmet_slot": 7})
         assert repr(d0.chosen_root) == repr(d1.chosen_root)
         assert d0.chosen_root == ObtainItem(code="wolf_ears", quantity=1, slot="helmet_slot")

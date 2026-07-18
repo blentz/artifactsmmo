@@ -11,6 +11,7 @@ from artifactsmmo_cli.ai.item_catalog import ItemStats
 from artifactsmmo_cli.ai.player import GamePlayer
 from artifactsmmo_cli.ai.tiers import ObtainItem, StrategyDecision
 from artifactsmmo_cli.ai.tiers.meta_goal import ReachCharLevel
+from artifactsmmo_cli.ai.tiers.progression_tree_core import FOCUS_FLAT
 from tests.test_ai.fixtures import make_state
 
 
@@ -69,19 +70,48 @@ def test_bump_increments_chosen_gear_root():
     assert p._gear_focus[("helmet_slot", "wolf_ears")] == 2
 
 
+def test_seat_bump_gated_on_unaged_regime_does_not_touch_seats():
+    """Task 12: while every committed root is still in its flat farm window
+    (no focus > FOCUS_FLAT), the interleave is not consulted, so `_bump_focus`
+    advances the focus ledger but leaves the d'Hondt seat accumulator empty —
+    an unaged cycle must never pollute the schedule."""
+    p = _bare_player()
+    p._gear_focus = {}
+    p._interleave_seats = {}
+    for _ in range(FOCUS_FLAT):  # focus climbs 1..FOCUS_FLAT, all still unaged
+        p._bump_focus(_decision_with_root(_obtain_item("wolf_ears", "helmet_slot")))
+    assert p._gear_focus[("helmet_slot", "wolf_ears")] == FOCUS_FLAT
+    assert p._interleave_seats == {}
+
+
+def test_seat_bump_advances_once_aging_engaged():
+    """Task 12: once a committed root has passed the flat window (focus >
+    FOCUS_FLAT), the aged pick draws from the interleave, so `_bump_focus`
+    advances one d'Hondt seat for the committed SLOT in lockstep with focus."""
+    p = _bare_player()
+    p._gear_focus = {("helmet_slot", "wolf_ears"): FOCUS_FLAT + 1}  # already aged
+    p._interleave_seats = {}
+    p._bump_focus(_decision_with_root(_obtain_item("iron_ring", "ring2_slot")))
+    assert p._interleave_seats == {"ring2_slot": 1}  # keyed by the committed slot
+
+
 def test_reset_on_level_up_clears_ledger():
     p = _bare_player()
     p._gear_focus = {("helmet_slot", "wolf_ears"): 40}
+    p._interleave_seats = {"helmet_slot": 5}
     p._maybe_reset_focus(prev_level=14, cur_level=15, executed_action=None, outcome="ok")
     assert p._gear_focus == {}
+    assert p._interleave_seats == {}  # seats reset in lockstep with focus
 
 
 def test_reset_on_equippable_craft_clears_ledger():
     p = _player_with_items()
     p._gear_focus = {("helmet_slot", "wolf_ears"): 40}
+    p._interleave_seats = {"helmet_slot": 5}
     craft = _craft_action("iron_ring")  # iron_ring is a ring (equippable)
     p._maybe_reset_focus(prev_level=15, cur_level=15, executed_action=craft, outcome="ok")
     assert p._gear_focus == {}
+    assert p._interleave_seats == {}  # seats reset in lockstep with focus
 
 
 def test_no_reset_on_consumable_craft():

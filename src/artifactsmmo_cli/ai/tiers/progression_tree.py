@@ -43,6 +43,14 @@ avoids a mutable `{}` default (ruff B006). `decide_tree` only reads it
 (`.get`), never mutates it — the anti-starvation ledger is owned and mutated
 by `GamePlayer` (Task 6)."""
 
+_NO_SEATS: Mapping[str, int] = MappingProxyType({})
+"""Immutable empty-seats default (sibling of `_NO_FOCUS`): the d'Hondt seat
+accumulator for the focus-aging interleave. `decide_tree` only reads it
+(`.get`), never mutates it — the accumulator is owned and bumped by
+`GamePlayer._interleave_seats` in lockstep with the focus ledger (Task 12).
+Empty seats + unaged focus reproduce the plain `gear_target_pick` argmax, so
+every default-arg caller is unaffected."""
+
 
 def _structural_candidates(state: WorldState, game_data: GameData,
                             objective: CharacterObjective) -> list[GearCandidate]:
@@ -204,7 +212,7 @@ def decide_tree(state: WorldState, game_data: GameData,
                 step_servable: Callable[[MetaGoal, MetaGoal], bool] | None = None,
                 ctx: SelectionContext = NO_PROFILE_CONTEXT,
                 focus: Mapping[tuple[str, str], int] = _NO_FOCUS,
-                cycle: int = 0,
+                seats: Mapping[str, int] = _NO_SEATS,
                 ) -> "strategy.StrategyDecision":
     """The tree assembly: trunk milestone, gear/xp branch pivot, and the
     chosen root/step — composing the Task-1 pure cores exactly per the
@@ -229,15 +237,17 @@ def decide_tree(state: WorldState, game_data: GameData,
     of falling into its recipe (one-obtain-model epic, Task 5 — subsuming the
     recycle-as-acquisition epic's bespoke `recoverable` map).
 
-    `focus`/`cycle` (arbiter anti-starvation epic, Task 4) drive the pick/order
-    aging: `focus` is the caller's per-(slot, code) commitment ledger (how many
-    consecutive cycles that candidate has been the committed root — see
-    `focus_aging_pick`'s `falloff`), `cycle` is the caller's monotonic decision
-    counter feeding the deterministic interleave. Both default to the
-    empty-focus / cycle-0 case, which `focus_aging_pick`/`focus_aging_order`
-    guarantee is bit-identical to the plain `gear_target_pick` argmax (the
-    old `_ordered` display order it replaces) — every existing caller that
-    doesn't wire the ledger in is unaffected."""
+    `focus`/`seats` (arbiter anti-starvation epic, Task 4; Task 12 perf) drive
+    the pick/order aging: `focus` is the caller's per-(slot, code) commitment
+    ledger (how many consecutive cycles that candidate has been the committed
+    root — see `focus_aging_pick`'s `falloff`), `seats` is the caller's
+    incremental d'Hondt seat accumulator (one seat bumped per aged decision,
+    reset in lockstep with `focus`) feeding the single-step interleave
+    `dhondt_step`. Both default to the empty-focus / empty-seats case, which
+    `focus_aging_pick`/`focus_aging_order` guarantee is bit-identical to the
+    plain `gear_target_pick` argmax (the old `_ordered` display order it
+    replaces) — every existing caller that doesn't wire the ledger in is
+    unaffected."""
     trunk = ReachCharLevel(level=milestone_pure(state.level))
 
     candidates = _structural_candidates(state, game_data, objective) \
@@ -245,8 +255,8 @@ def decide_tree(state: WorldState, game_data: GameData,
     gear_target_exists = candidates != []
     branch = branch_pick_pure(band_adequate, gear_target_exists)
 
-    ordered = focus_aging_order(candidates, focus, cycle)
-    pick = focus_aging_pick(candidates, focus, cycle) if candidates else None
+    ordered = focus_aging_order(candidates, focus, seats)
+    pick = focus_aging_pick(candidates, focus, seats) if candidates else None
     if candidates:
         # Drift-risk hardening: the display order's element 0 must always
         # agree with the aging pick — focus_aging_order is built FROM

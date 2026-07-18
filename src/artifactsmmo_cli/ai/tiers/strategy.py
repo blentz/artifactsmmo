@@ -29,6 +29,14 @@ reverse name-import here would race the circular load order). Avoids a
 mutable `{}` default (ruff B006); read-only, forwarded straight through to
 `decide_tree`."""
 
+_NO_SEATS: Mapping[str, int] = MappingProxyType({})
+"""Immutable empty-seats default, sibling of `_NO_FOCUS` and
+`progression_tree._NO_SEATS` (same circular-load reason it is redeclared here
+rather than imported). The d'Hondt seat accumulator for the focus-aging
+interleave; read-only, forwarded straight through to `decide_tree` (Task 12
+perf: O(candidates) incremental seats replace the unbounded global cycle
+index)."""
+
 
 def root_category(node: MetaGoal) -> str:
     if isinstance(node, ReachCharLevel):
@@ -278,7 +286,7 @@ class StrategyEngine:
                band_adequate: bool = False,
                ctx: SelectionContext = NO_PROFILE_CONTEXT,
                focus: Mapping[tuple[str, str], int] = _NO_FOCUS,
-               cycle: int = 0,
+               seats: Mapping[str, int] = _NO_SEATS,
                ) -> StrategyDecision:
         """THE FLIP (Phase 4b): thin delegate to the progression tree — the
         flat scalar ranking pipeline is deleted (Task 2). The tree is
@@ -298,12 +306,14 @@ class StrategyEngine:
         map). Defaults to `NO_PROFILE_CONTEXT` for every caller that doesn't
         wire it in.
 
-        `focus`/`cycle` (arbiter anti-starvation epic, Task 4) are forwarded
-        straight through to `decide_tree`'s aging pick/order — see that
-        docstring. Both default to the empty-focus / cycle-0 case, reproducing
+        `focus`/`seats` (arbiter anti-starvation epic, Task 4; Task 12 perf)
+        are forwarded straight through to `decide_tree`'s aging pick/order —
+        see that docstring. `seats` is the incremental d'Hondt seat accumulator
+        (O(candidates) per decision, replacing the unbounded global cycle
+        index). Both default to the empty-focus / empty-seats case, reproducing
         today's plain argmax for every caller that doesn't wire the ledger
         in."""
         return progression_tree.decide_tree(
             state, game_data, self.objective,
             band_adequate=band_adequate, step_servable=step_servable,
-            ctx=ctx, focus=focus, cycle=cycle)
+            ctx=ctx, focus=focus, seats=seats)
