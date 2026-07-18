@@ -15,6 +15,7 @@ from artifactsmmo_cli.ai.tiers.progression_tree_core import (
     branch_pick_pure,
     falloff,
     gear_target_pick,
+    interleave_due,
     milestone_pure,
     potion_type_weight,
 )
@@ -117,3 +118,38 @@ def test_falloff_strictly_decreases_inside_decay_window():
 
 def test_falloff_floor_is_positive():
     assert FOCUS_FLOOR > 0
+
+
+def test_interleave_empty_is_none():
+    assert interleave_due([], 0) is None
+
+
+def test_interleave_single_key_always_that_key():
+    for c in range(0, 20):
+        assert interleave_due([("a", Fraction(3))], c) == "a"
+
+
+def test_interleave_equal_weights_alternate():
+    w = [("a", Fraction(1)), ("b", Fraction(1))]
+    got = [interleave_due(w, c) for c in range(6)]
+    # 1:1 split, deterministic
+    assert got.count("a") == 3 and got.count("b") == 3
+    assert got == [interleave_due(w, c) for c in range(6)]  # reproducible
+
+
+def test_interleave_proportional_over_window():
+    # weight 3:1 -> "a" gets ~3x the cycles of "b" over a full window
+    w = [("a", Fraction(3)), ("b", Fraction(1))]
+    got = [interleave_due(w, c) for c in range(4)]
+    assert got.count("a") == 3 and got.count("b") == 1
+
+
+def test_interleave_dominant_weight_gets_every_cycle_when_others_tiny():
+    # 1000:1 -> "b" is due at most once per 1001 cycles; the first cycles are all "a"
+    w = [("a", Fraction(1000)), ("b", Fraction(1))]
+    assert all(interleave_due(w, c) == "a" for c in range(8))
+
+
+def test_interleave_is_pure_function_of_cycle():
+    w = [("a", Fraction(5)), ("b", Fraction(2)), ("c", Fraction(1))]
+    assert [interleave_due(w, c) for c in range(20)] == [interleave_due(w, c) for c in range(20)]

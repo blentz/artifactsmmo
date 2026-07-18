@@ -84,6 +84,32 @@ def falloff(focus_level: int) -> Fraction:
     return Fraction(1) - (Fraction(1) - FOCUS_FLOOR) * t * t
 
 
+def interleave_due(weighted: list[tuple[str, Fraction]], cycle: int) -> str | None:
+    """Stateless deterministic weighted round-robin (largest-remainder /
+    Bresenham). Over N cycles, key i receives approximately `weight_i / total`
+    of the cycles, and the assignment for any single `cycle` is a pure function
+    of `(weighted, cycle)` — no accumulator, no RNG, no wall-clock, so it is
+    replayable and Lean-mirrorable.
+
+    A key is "due" at `cycle` when its exact cumulative allocation increments
+    from `cycle` to `cycle + 1`: floor(w_i*(cycle+1)/total) > floor(w_i*cycle/
+    total). When several are due (or none are, at the very first cycles for
+    tiny weights) the tie is broken by higher weight then key string — the same
+    canonical, hash-independent order `gear_target_pick` uses. `None` only for
+    an empty list."""
+    if not weighted:
+        return None
+    total = sum(w for _, w in weighted)
+    due: list[tuple[str, Fraction]] = []
+    for key, w in weighted:
+        prev = (w * cycle) // total
+        now = (w * (cycle + 1)) // total
+        if now > prev:
+            due.append((key, w))
+    pool = due if due else list(weighted)
+    return pool[cycle % len(pool)][0]
+
+
 @dataclass(frozen=True)
 class GearCandidate:
     """One upgrade candidate for the gear branch. `gain` is the WEIGHTED
