@@ -1,4 +1,4 @@
--- GENERATED from src/artifactsmmo_cli/ai/inventory_caps.py (sha256: c34d68957617bdc40cfe15d2fe90bf5bc5d1e64876e0ee397bb797ec6d2bd002) — DO NOT EDIT
+-- GENERATED from src/artifactsmmo_cli/ai/inventory_caps.py (sha256: f59807580d631811492d21fab4c939203f15bab3faa9c22723d9f169101cb25a) — DO NOT EDIT
 -- Regenerate: `uv run python scripts/extract_lean.py` (drift gate: --check).
 
 namespace Extracted.InventoryCaps
@@ -18,13 +18,13 @@ def _dictSet {α : Type} (m : List (String × α)) (k : String) (v : α) : List 
   | [] => [(k, v)]
   | (k', v') :: rest => if k' == k then (k', v) :: rest else (k', v') :: _dictSet rest k v
 
-/-- Extracted module constant `EQUIPPABLE_KEEP` (line 116). -/
+/-- Extracted module constant `EQUIPPABLE_KEEP` (line 117). -/
 def EQUIPPABLE_KEEP : Int := 1
 
-/-- Extracted module constant `CONSUMABLE_KEEP` (line 128). -/
+/-- Extracted module constant `CONSUMABLE_KEEP` (line 129). -/
 def CONSUMABLE_KEEP : Int := 999
 
-/-- Extracted from `overstock_excess` (line 86). -/
+/-- Extracted from `overstock_excess` (line 87). -/
 def overstock_excess (held : Int) (profile_target : Int) (useful_floor : Int) (used : Int) (cap : Int) (watermark_num : Int) (watermark_den : Int) :
     Int :=
   (if ((decide (cap ≤ 0)) || (decide ((used * watermark_den) < (cap * watermark_num))))
@@ -38,7 +38,7 @@ def overstock_excess (held : Int) (profile_target : Int) (useful_floor : Int) (u
      else
       0))
 
-/-- Extracted from `_is_dominated_pure` (line 244). -/
+/-- Extracted from `_is_dominated_pure` (line 245). -/
 def _is_dominated_pure (peers : List (Bool × Bool × Bool × Int)) (slot_count : Int) :
     Bool :=
   let dominator_owned := 0
@@ -53,7 +53,7 @@ def _is_dominated_pure (peers : List (Bool × Bool × Bool × Int)) (slot_count 
     dominator_owned peers
   (decide (dominator_owned ≥ slot_count))
 
-/-- Extracted from `_task_chain_demand_pure` (line 376; the Python `fuel <= 0` guard
+/-- Extracted from `_task_chain_demand_pure` (line 377; the Python `fuel <= 0` guard
 is the `Nat` fuel-zero arm — recursion is structural on the fuel). -/
 def _task_chain_demand_pure :
     Nat → String → String → Int → (List (String × List (String × Int))) → (List (String × Int)) → Int
@@ -81,7 +81,7 @@ def _task_chain_demand_pure :
           total recipe
         total))
 
-/-- Extracted from `useful_quantity_cap_excl_equipped_pure` (line 402). -/
+/-- Extracted from `useful_quantity_cap_excl_equipped_pure` (line 403). -/
 def useful_quantity_cap_excl_equipped_pure (item_code : String) (recipe_max : Int) (batch_buffer : Int) (safety_floor : Int) (task_type : String) (task_code : String) (task_total : Int) (task_progress : Int) (recipes : List (String × List (String × Int))) (action_cap : Int) (is_equippable : Bool) (is_dominated : Bool) (hp_restore : Int) :
     Int :=
   let recipe_cap := (if (decide (recipe_max > 0)) then (recipe_max * batch_buffer) else 0)
@@ -218,7 +218,7 @@ def useful_quantity_cap_excl_equipped_pure (item_code : String) (recipe_max : In
          else
           (max recipe_cap (max task_cap (max action_cap (max equippable_cap consumable_cap))))))))
 
-/-- Extracted from `useful_quantity_cap_pure` (line 449). -/
+/-- Extracted from `useful_quantity_cap_pure` (line 450). -/
 def useful_quantity_cap_pure (item_code : String) (recipe_max : Int) (batch_buffer : Int) (safety_floor : Int) (task_type : String) (task_code : String) (task_total : Int) (task_progress : Int) (recipes : List (String × List (String × Int))) (action_cap : Int) (is_equippable : Bool) (is_dominated : Bool) (hp_restore : Int) (equipped : Bool) :
     Int :=
   let base := (useful_quantity_cap_excl_equipped_pure item_code recipe_max batch_buffer safety_floor task_type task_code task_total task_progress recipes action_cap is_equippable is_dominated hp_restore)
