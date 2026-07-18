@@ -12,6 +12,7 @@ on:
       - "uv.lock"
       - "openapi.json"
       - ".github/workflows/pytest.yml"
+      - "scripts/run_tests.sh"
   push:
     branches: [main]
     paths:
@@ -21,12 +22,13 @@ on:
       - "uv.lock"
       - "openapi.json"
       - ".github/workflows/pytest.yml"
+      - "scripts/run_tests.sh"
   workflow_dispatch: {}
 
 jobs:
   pytest:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       PYTHONDONTWRITEBYTECODE: "1"
       # The suite is fully stubbed (no live API calls), but CLI init requires
@@ -45,5 +47,9 @@ jobs:
           bash generate_openapi_client.sh
       - name: Sync deps
         run: uv sync --dev
-      - name: pytest (full suite, 100% coverage gate)
-        run: uv run pytest
+      - name: pytest (two-lane parallel runner, 100% coverage gate)
+        # Plain `uv run pytest` runs fully serial and was timing out: the
+        # inventory census alone dominated the suite. run_tests.sh parallelizes
+        # the bulk with -n auto and runs the census + wall-clock scenarios in a
+        # serial lane, combining coverage to enforce the 100% gate.
+        run: bash scripts/run_tests.sh
