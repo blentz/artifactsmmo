@@ -4,6 +4,7 @@ GameData/WorldState — plain data only, mirrored by Formal/ProgressionTree.lean
 The tree replaces the flat scalar root ranking: trunk (L10..L50 milestones),
 two branches (gear | xp) switched by band adequacy, tertiary untouched."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 from fractions import Fraction
@@ -133,3 +134,51 @@ def gear_target_pick(candidates: list[GearCandidate]) -> GearCandidate | None:
     if not candidates:
         return None
     return min(candidates, key=lambda c: (-c.gain, -c.level, c.code, c.slot))
+
+
+def _scaled_weights(candidates: list[GearCandidate],
+                    focus: Mapping[tuple[str, str], int]
+                    ) -> list[tuple[str, Fraction]]:
+    """(slot-keyed weight) = base gain * falloff(focus level) per candidate.
+    Keyed by SLOT — unique per candidate (one gear candidate per slot), so two
+    same-code candidates (e.g. iron_ring targeting ring1_slot AND ring2_slot)
+    stay distinct; keying by code would collapse them. The caller maps the
+    winning slot back to its GearCandidate."""
+    return [(c.slot, c.gain * falloff(focus.get((c.slot, c.code), 0)))
+            for c in candidates]
+
+
+def focus_aging_pick(candidates: list[GearCandidate],
+                     focus: Mapping[tuple[str, str], int],
+                     cycle: int) -> GearCandidate | None:
+    """The gear root to pursue THIS cycle, with anti-starvation aging.
+
+    While every candidate is still inside its flat farm window (focus <=
+    FOCUS_FLAT) the result is bit-identical to the proven `gear_target_pick`
+    argmax — no jitter for fresh roots. Once any candidate has been focused
+    past the flat window, its selection weight decays (see `falloff`) and the
+    pick is drawn by the deterministic weighted interleave over scaled gains,
+    so a decayed stuck root hands cycles to reachable alternatives without ever
+    being fully abandoned (FOCUS_FLOOR > 0)."""
+    if not candidates:
+        return None
+    if all(focus.get((c.slot, c.code), 0) <= FOCUS_FLAT for c in candidates):
+        return gear_target_pick(candidates)
+    winner_slot = interleave_due(_scaled_weights(candidates, focus), cycle)
+    return next(c for c in candidates if c.slot == winner_slot)
+
+
+def focus_aging_order(candidates: list[GearCandidate],
+                      focus: Mapping[tuple[str, str], int],
+                      cycle: int) -> list[GearCandidate]:
+    """Display/fallback order whose head is exactly `focus_aging_pick` and
+    whose tail is the remaining candidates in the canonical argmax order
+    (`gear_target_pick`'s total order). Keeps `decide_tree`'s
+    `ordered[0] == pick` invariant intact under aging."""
+    if not candidates:
+        return []
+    pick = focus_aging_pick(candidates, focus, cycle)
+    assert pick is not None
+    rest = sorted((c for c in candidates if c is not pick),
+                  key=lambda c: (-c.gain, -c.level, c.code, c.slot))
+    return [pick, *rest]

@@ -14,6 +14,8 @@ from artifactsmmo_cli.ai.tiers.progression_tree_core import (
     GearCandidate,
     branch_pick_pure,
     falloff,
+    focus_aging_order,
+    focus_aging_pick,
     gear_target_pick,
     interleave_due,
     milestone_pure,
@@ -161,3 +163,48 @@ def test_interleave_is_order_independent():
     rev = list(reversed(fwd))
     for c in range(60):
         assert interleave_due(fwd, c) == interleave_due(rev, c)
+
+
+def _gc(slot, code, gain, level=1):
+    return GearCandidate(slot=slot, code=code, gain=Fraction(gain), level=level)
+
+
+def test_aging_pick_empty_focus_equals_argmax():
+    cands = [_gc("helmet_slot", "wolf_ears", 18100), _gc("ring2_slot", "iron_ring", 2000)]
+    for c in range(50):
+        assert focus_aging_pick(cands, {}, c) == gear_target_pick(cands)
+
+
+def test_aging_pick_below_flat_window_equals_argmax():
+    cands = [_gc("helmet_slot", "wolf_ears", 18100), _gc("ring2_slot", "iron_ring", 2000)]
+    focus = {("helmet_slot", "wolf_ears"): FOCUS_FLAT}  # exactly at flat edge
+    for c in range(50):
+        assert focus_aging_pick(cands, focus, c) == gear_target_pick(cands)
+
+
+def test_aging_pick_decayed_top_yields_some_cycles_to_alt():
+    cands = [_gc("helmet_slot", "wolf_ears", 18100), _gc("ring2_slot", "iron_ring", 2000)]
+    # push the stuck root deep into decay so its scaled gain approaches the alt
+    focus = {("helmet_slot", "wolf_ears"): FOCUS_FLAT + FOCUS_SPAN}  # weight = FOCUS_FLOOR
+    picks = {focus_aging_pick(cands, focus, c).code for c in range(40)}
+    assert "iron_ring" in picks   # ring2 is no longer starved
+    assert "wolf_ears" in picks   # floor keeps the drop root alive
+
+
+def test_aging_order_head_equals_pick():
+    cands = [_gc("helmet_slot", "wolf_ears", 18100), _gc("ring2_slot", "iron_ring", 2000)]
+    focus = {("helmet_slot", "wolf_ears"): FOCUS_FLAT + FOCUS_SPAN}
+    for c in range(20):
+        assert focus_aging_order(cands, focus, c)[0] == focus_aging_pick(cands, focus, c)
+
+
+def test_aging_order_is_permutation_of_input():
+    cands = [_gc("helmet_slot", "wolf_ears", 18100), _gc("ring2_slot", "iron_ring", 2000)]
+    focus = {("helmet_slot", "wolf_ears"): 50}
+    out = focus_aging_order(cands, focus, 3)
+    assert sorted(out, key=lambda c: c.code) == sorted(cands, key=lambda c: c.code)
+
+
+def test_aging_pick_empty_candidates_is_none():
+    assert focus_aging_pick([], {}, 0) is None
+    assert focus_aging_order([], {}, 0) == []
