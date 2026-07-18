@@ -100,6 +100,30 @@ def test_no_reset_on_failed_craft():
     assert p._gear_focus == {("helmet_slot", "wolf_ears"): 40}
 
 
+def test_no_reset_when_game_data_unloaded():
+    """A successful gear craft cannot classify the item (equippable vs
+    consumable) without game data, so `_maybe_reset_focus` abstains rather
+    than clear on an unclassifiable action — the bare player has no
+    game_data yet (`self.game_data is None`)."""
+    p = _bare_player()
+    assert p.game_data is None
+    p._gear_focus = {("helmet_slot", "wolf_ears"): 40}
+    craft = _craft_action("iron_ring")
+    p._maybe_reset_focus(prev_level=15, cur_level=15, executed_action=craft, outcome="ok")
+    assert p._gear_focus == {("helmet_slot", "wolf_ears"): 40}
+
+
+def test_no_reset_on_craft_of_item_without_stats():
+    """A successful craft whose code has no item stats (unknown to the
+    catalog) is unclassifiable, so the ledger is left intact rather than
+    cleared."""
+    p = _player_with_items()
+    p._gear_focus = {("helmet_slot", "wolf_ears"): 40}
+    craft = _craft_action("phantom_widget")  # not in the item catalog -> stats None
+    p._maybe_reset_focus(prev_level=15, cur_level=15, executed_action=craft, outcome="ok")
+    assert p._gear_focus == {("helmet_slot", "wolf_ears"): 40}
+
+
 @dataclass
 class _FakeGoal:
     """Minimal Goal stand-in for `_plan_or_reuse` (its collaborator
