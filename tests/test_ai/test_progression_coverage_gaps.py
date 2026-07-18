@@ -342,3 +342,17 @@ class TestCraftableUpgradeSkipsNonUpgrade:
         # wooden_stick is same-level, lower stats, not relevant tool -> not an
         # upgrade over the equipped steel_sword -> no craftable target.
         assert goal._find_craftable_upgrade_target(state, gd) is None
+
+
+class TestHeuristicNoUpgradeTarget:
+    def test_heuristic_is_zero_when_no_upgrade_target_exists(self):
+        """The heuristic short-circuits to 0 when the goal is unsatisfied yet
+        find_upgrade_target finds nothing — empty catalog, no committed target,
+        an empty slot to fill. Exercises the target-is-None arm, distinct from
+        the satisfied arm and the no-grind arm."""
+        gd = GameData()
+        goal = UpgradeEquipmentGoal()
+        state = make_state(level=5, equipment={"weapon_slot": None})
+        assert goal.is_satisfied(state) is False
+        assert goal.find_upgrade_target(state, gd) is None
+        assert goal.heuristic(state, gd) == 0.0

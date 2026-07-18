@@ -7,6 +7,7 @@ lives here — it is the orchestration layer between the proven cores and the
 doc renderer / generator script, mirroring `audit/craft_census.py`."""
 
 from collections.abc import Callable
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 
 from artifactsmmo_cli.ai.game_data import GameData
@@ -66,19 +67,53 @@ def run_cell(cell: InventoryCell, game_data: GameData) -> CellResult:
     )
 
 
+# Process-local handle set once per worker by `_init_census_worker`, so the
+# (large) GameData is pickled once at pool startup rather than once per cell.
+_WORKER_GAME_DATA: GameData | None = None
+
+
+def _init_census_worker(game_data: GameData) -> None:
+    global _WORKER_GAME_DATA
+    _WORKER_GAME_DATA = game_data
+
+
+def _run_cell_in_worker(cell: InventoryCell) -> CellResult:
+    assert _WORKER_GAME_DATA is not None
+    return run_cell(cell, _WORKER_GAME_DATA)
+
+
 def run_census(
     game_data: GameData,
     cells: list[InventoryCell],
     progress: Callable[[int, int], None] | None = None,
+    *,
+    max_workers: int | None = None,
 ) -> list[CellResult]:
     """Run the census over `cells` (the caller supplies the grid — the
     generator passes `inventory_grid(gd)`; tests pass a tiny explicit list).
-    `progress(done, total)` is called after each cell if supplied."""
+    `progress(done, total)` is called after each cell if supplied.
+
+    Each cell is an INDEPENDENT, deterministic, pure-CPU planner search
+    (`plan_inventory` runs `history=None`), so cells are fanned out across a
+    process pool — a GOAP search is GIL-bound, so processes (not threads) are
+    what give the speedup. `ProcessPoolExecutor.map` yields results in `cells`
+    order, so both the returned list and the `progress` sequence keep the exact
+    order the serial loop produced."""
+    if not cells:
+        return []
     results: list[CellResult] = []
-    for i, cell in enumerate(cells):
-        results.append(run_cell(cell, game_data))
-        if progress is not None:
-            progress(i + 1, len(cells))
+    total = len(cells)
+    with ProcessPoolExecutor(
+        max_workers=max_workers,
+        initializer=_init_census_worker,
+        initargs=(game_data,),
+    ) as executor:
+        for done, result in enumerate(
+            executor.map(_run_cell_in_worker, cells), start=1
+        ):
+            results.append(result)
+            if progress is not None:
+                progress(done, total)
     return results
 
 

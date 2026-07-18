@@ -87,6 +87,14 @@ branch = false
 source = ["src/artifactsmmo_cli"]
 # scripts/ are live-I/O wrappers (need API/token); exercised manually, not by the test suite.
 omit = ["scripts/*"]
+# The inventory census fans cells out over a ProcessPoolExecutor; without
+# "multiprocessing" the worker processes' execution (run_cell and everything it
+# drives) goes unmeasured and the 100% gate breaks. "thread" must stay in the
+# list too — it is coverage's default, and dropping it stops tracing threaded
+# code such as the play command's bot worker/excepthook. pytest-cov combines the
+# per-worker data files.
+concurrency = ["multiprocessing", "thread"]
+sigterm = true
 
 [tool.uv.sources]
 artifactsmmo-api-client = { path = "artifactsmmo-api-client", editable = true }

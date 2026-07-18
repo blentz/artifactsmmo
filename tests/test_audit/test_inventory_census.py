@@ -15,6 +15,7 @@ from artifactsmmo_cli.audit.inventory_census import (
     run_census,
 )
 from artifactsmmo_cli.audit.inventory_completeness import InventoryCell, inventory_grid
+from tests.test_audit.conftest import FullCensus
 
 BUNDLE = Path("tests/test_ai/scenarios/fixtures/gamedata_bundle.json")
 
@@ -78,17 +79,10 @@ def test_census_cells_is_the_grid() -> None:
     assert census_cells(gd) == inventory_grid(gd)
 
 
-def test_run_census_full_grid_with_progress() -> None:
+def test_run_census_full_grid_with_progress(full_census: FullCensus) -> None:
     """run_census over the full grid yields one CellResult per cell and fires
     the progress callback once per cell, in order."""
-    gd = _gd()
-    cells = inventory_grid(gd)
-    seen: list[tuple[int, int]] = []
-
-    def progress(done: int, total: int) -> None:
-        seen.append((done, total))
-
-    results = run_census(gd, cells, progress=progress)
+    results, cells, seen = full_census.results, full_census.cells, full_census.progress
     assert len(results) == len(cells)
     assert all(isinstance(r, CellResult) for r in results)
     assert seen == [(i, len(cells)) for i in range(1, len(cells) + 1)]
@@ -103,18 +97,22 @@ def test_run_census_no_progress() -> None:
     assert len(results) == 3
 
 
-def test_reason_coverage_currency_exempt_even_with_no_liveness_cell() -> None:
+def test_run_census_empty_grid_returns_empty(bundle_game_data: GameData) -> None:
+    """An empty cell list short-circuits before any process pool is spawned."""
+    assert run_census(bundle_game_data, []) == []
+
+
+def test_reason_coverage_currency_exempt_even_with_no_liveness_cell(full_census: FullCensus) -> None:
     """CURRENCY has no LIVENESS cell at all (the declared exemption), yet
     reason_coverage reports it True unconditionally — never penalized for the
     one reason that structurally cannot earn a passing liveness cell."""
-    gd = _gd()
-    results = run_census(gd, inventory_grid(gd))
+    results = full_census.results
     coverage = reason_coverage(results)
     assert coverage[KeepReason.CURRENCY] is True
     assert not any(r.kind == "liveness" and r.reason == "currency" for r in results)
 
 
-def test_reason_coverage_is_complete() -> None:
+def test_reason_coverage_is_complete(full_census: FullCensus) -> None:
     """EVERY non-CURRENCY KeepReason now has a PASSing LIVENESS cell (census
     Gate 2 CLEAN).
 
@@ -128,8 +126,7 @@ def test_reason_coverage_is_complete() -> None:
     out-ranks DEPOSIT_FULL) fired on a craft that only freed QUANTITY while ADDING
     a stack, preempting the deposit that would actually have relieved the
     slot-limited bag. The slot gate in `craft_relief._slot_delta` closed it."""
-    gd = _gd()
-    results = run_census(gd, inventory_grid(gd))
+    results = full_census.results
     coverage = reason_coverage(results)
     uncovered = {r for r, ok in coverage.items() if not ok}
     assert uncovered == set()
@@ -144,16 +141,15 @@ def test_reason_coverage_is_complete() -> None:
     assert coverage[KeepReason.RECIPE_DEMAND] is True
 
 
-def test_reason_coverage_total_over_keepreason() -> None:
+def test_reason_coverage_total_over_keepreason(full_census: FullCensus) -> None:
     """reason_coverage is total over the enum, not merely over what appears in
     the results list — every KeepReason member has a key."""
-    gd = _gd()
-    results = run_census(gd, inventory_grid(gd))
+    results = full_census.results
     coverage = reason_coverage(results)
     assert set(coverage) == set(KeepReason)
 
 
-def test_census_full_grid_reaches_zero_inventory_bug() -> None:
+def test_census_full_grid_reaches_zero_inventory_bug(full_census: FullCensus) -> None:
     """THE ACCEPTANCE: 152 cells, 144 PASS, **0 INVENTORY_BUG**.
 
     The grid DOUBLED (66 -> 132) when the LEVEL-DISTANCE band was added, and then
@@ -183,8 +179,7 @@ def test_census_full_grid_reaches_zero_inventory_bug() -> None:
     A regression here means either a consumer got migrated (should be caught by
     the owning task, not silently here) or the census stopped seeing the bug class
     it exists to catch."""
-    gd = _gd()
-    results = run_census(gd, inventory_grid(gd))
+    results = full_census.results
     assert len(results) == 152
     passed = sum(1 for r in results if r.passed)
     assert passed == 144
