@@ -118,3 +118,26 @@ async def test_select_link_pushes_nav_via_list_view() -> None:
         links.post_message(ListView.Selected(links, item, index))
         await pilot.pause()
         assert screen._nav[-1] == item.enc_ref
+
+
+async def test_category_switch_clears_populated_nav_search_detail() -> None:
+    app = _Host(_seed())
+    async with app.run_test() as pilot:
+        screen = app.screen
+        screen._navigate(Ref("item", "copper_dagger", ""))
+        screen.query_one("#enc-search", Input).value = "cop"
+        await pilot.pause()
+        # precondition: state is actually populated before the switch
+        assert screen._nav != []
+        assert screen.query_one("#enc-search", Input).value != ""
+
+        cats = screen.query_one("#enc-cats", ListView)
+        target = next(i for i in cats.children if i.enc_kind == "recipe")
+        index = list(cats.children).index(target)
+        cats.index = index
+        await pilot.pause()
+
+        assert screen._active_kind == "recipe"
+        assert screen._nav == []
+        assert screen.query_one("#enc-search", Input).value == ""
+        assert list(screen.query_one("#enc-links", ListView).children) == []
