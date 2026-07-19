@@ -109,3 +109,16 @@ class CycleSnapshot(BaseModel):
     # per cycle and discards). Empty on non-grind cycles. Rendered under the
     # current step in the plan tree and flattened into the log.
     grind_expansion: tuple[PlanTreeNode, ...] = ()
+
+    # Arbiter anti-starvation epic follow-up: the runtime gear-focus aging
+    # ledger, so a trace can verify the fall-off climbs and SUSTAINS across
+    # level-ups instead of resetting. `GamePlayer._gear_focus` is keyed by
+    # the `(slot, code)` tuple; JSON object keys must be strings, so each key
+    # is encoded as `f"{slot}|{code}"` (see `GamePlayer._focus_key_str`).
+    gear_focus: dict[str, int] = Field(default_factory=dict)
+    # Whether THIS cycle's committed gear pick went through the focus-aging
+    # interleave (`StrategyDecision.aged_pick`) rather than the plain argmax.
+    aged_pick: bool = False
+    # The d'Hondt seat accumulator (`GamePlayer._interleave_seats`), keyed by
+    # equipment slot.
+    interleave_seats: dict[str, int] = Field(default_factory=dict)

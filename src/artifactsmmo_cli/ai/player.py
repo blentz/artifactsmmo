@@ -276,6 +276,14 @@ class GamePlayer:
             return (slot, code)
         return None
 
+    @staticmethod
+    def _focus_key_str(key: tuple[str, str]) -> str:
+        """Stringify a `_gear_focus`/`_gear_root_key` `(slot, code)` tuple
+        for JSON (object keys must be strings) — used to serialize the
+        ledger onto `CycleSnapshot.gear_focus`."""
+        slot, code = key
+        return f"{slot}|{code}"
+
     def _bump_focus(self, decision: "StrategyDecision") -> None:
         """Age `decision.chosen_root` one more cycle-committed. This counts
         cycles the root is COMMITTED to, not merely cycles `decide()` was
@@ -324,13 +332,42 @@ class GamePlayer:
         self, prev_level: int, cur_level: int,
         executed_action: "Action | None", outcome: str,
     ) -> None:
-        """Clear the aging ledger on real progress: a level-up, or a
-        successful craft of a non-consumable EQUIPPABLE item. Consumables/
-        potions (item type "utility") and failed actions do NOT reset — the
-        drop root must not get a free farm window for churning potions."""
+        """On a level-up, PRUNE the aging ledger to the current decision's
+        live gear candidates instead of wiping it: the bot levels up BY
+        GRINDING the very monster the fall-off exists to decay (e.g. wolves
+        for wolf_ears), so a full clear on level-up defeats the
+        anti-starvation for exactly the scenario it was built for. A root
+        still live this cycle (`decision.chosen_root` or one of
+        `decision.fallback_roots`) KEEPS its accumulated fall-off; a stale
+        entry for a root that has LEFT the candidate set (its slot filled or
+        superseded) is dropped. Newly-unlocked gear needs no special-casing:
+        a new `(slot, code)` is simply absent from the ledger already (focus
+        0). On a successful craft of a non-consumable EQUIPPABLE item, the
+        ledger is still FULLY cleared — that is real, freshly-earned gear
+        progress and deserves a clean farm window, unlike a level-up bought
+        with the stuck root's own grind. Consumables/potions (item type
+        "utility") and failed actions do NOT reset either branch — the drop
+        root must not get a free farm window for churning potions."""
         if cur_level > prev_level:
-            self._gear_focus.clear()
-            self._interleave_seats.clear()  # lockstep with the focus ledger
+            decision = self._last_decision
+            if decision is None:
+                # No decide() has run yet this session (e.g. resumed from
+                # history before the first cycle) — nothing to prune
+                # against. Preserve the ledger rather than guess or clear.
+                return
+            candidate_roots = [decision.chosen_root, *decision.fallback_roots]
+            live_keys: set[tuple[str, str]] = {
+                key for key in (self._gear_root_key(r) for r in candidate_roots)
+                if key is not None
+            }
+            self._gear_focus = {
+                k: v for k, v in self._gear_focus.items() if k in live_keys
+            }
+            live_slots = {k[0] for k in live_keys}
+            self._interleave_seats = {
+                slot: s for slot, s in self._interleave_seats.items()
+                if slot in live_slots
+            }  # lockstep with the pruned focus ledger
             return
         if outcome != "ok" or not isinstance(executed_action, CraftAction):
             return
@@ -1736,6 +1773,14 @@ class GamePlayer:
                 if self._last_decision is not None and self.game_data is not None else ()
             ),
             grind_expansion=grind_children,
+            gear_focus={
+                self._focus_key_str(k): v for k, v in self._gear_focus.items()
+            },
+            aged_pick=(
+                self._last_decision.aged_pick
+                if self._last_decision is not None else False
+            ),
+            interleave_seats=dict(self._interleave_seats),
         )
         self._cycle_observer(snap)
 
